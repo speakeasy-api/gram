@@ -474,15 +474,21 @@ export function useMcpGuideOperations(): {
       operation.report({
         type: "progress",
         scope: operation.scope,
-        message: `Installing ${name} into this project`,
+        message: "Reading the server's tool list",
         progress: 0.2,
+      });
+      operation.report({
+        type: "progress",
+        scope: operation.scope,
+        message: `Installing ${name} into this project`,
+        progress: 0.5,
       });
       if (extractAuthType(selectedServer) === "oauth") {
         operation.report({
           type: "progress",
           scope: operation.scope,
           message: `Configuring OAuth for ${name}`,
-          progress: 0.5,
+          progress: 0.75,
         });
       }
     }

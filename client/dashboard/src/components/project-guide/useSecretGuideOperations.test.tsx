@@ -207,6 +207,24 @@ describe("useSecretGuideOperations", () => {
         result: "Secrets policy created · block on match",
       }),
     );
+    expect(report).toHaveBeenNthCalledWith(1, {
+      type: "progress",
+      scope: POLICY_SCOPE,
+      message: "Detecting and enabling the Secrets category",
+      progress: 0.25,
+    });
+    expect(report).toHaveBeenNthCalledWith(2, {
+      type: "progress",
+      scope: POLICY_SCOPE,
+      message: "Scoping user prompts",
+      progress: 0.5,
+    });
+    expect(report).toHaveBeenNthCalledWith(3, {
+      type: "progress",
+      scope: POLICY_SCOPE,
+      message: "Setting the action to deny",
+      progress: 0.75,
+    });
   });
 
   it("reports policy creation errors for retry", async () => {
@@ -277,6 +295,18 @@ describe("useSecretGuideOperations", () => {
       type: "success",
       scope,
       result: "Observability plugin downloaded · gram-observability.zip",
+    });
+    expect(report).toHaveBeenNthCalledWith(1, {
+      type: "progress",
+      scope,
+      message: "Building the Claude Code observability plugin",
+      progress: 0.25,
+    });
+    expect(report).toHaveBeenNthCalledWith(2, {
+      type: "progress",
+      scope,
+      message: "Signing the observability plugin bundle",
+      progress: 0.5,
     });
     expect(hook.current.installCommand).toBe(
       "unzip -oq gram-observability.zip -d ~/.claude/plugins/",

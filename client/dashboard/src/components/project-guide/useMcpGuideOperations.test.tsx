@@ -273,9 +273,21 @@ describe("useMcpGuideOperations", () => {
         type: "progress",
         scope: SERVER_SCOPE,
         message: "Configuring OAuth for Notion",
-        progress: 0.5,
+        progress: 0.75,
       }),
     );
+    expect(report).toHaveBeenNthCalledWith(1, {
+      type: "progress",
+      scope: SERVER_SCOPE,
+      message: "Reading the server's tool list",
+      progress: 0.2,
+    });
+    expect(report).toHaveBeenNthCalledWith(2, {
+      type: "progress",
+      scope: SERVER_SCOPE,
+      message: "Installing Notion into this project",
+      progress: 0.5,
+    });
   });
 
   it("starts the existing project-scoped install workflow only after start", async () => {
@@ -297,6 +309,12 @@ describe("useMcpGuideOperations", () => {
       type: "progress",
       scope: SERVER_SCOPE,
       message: "Installing Linear into this project",
+      progress: 0.5,
+    });
+    expect(report).toHaveBeenCalledWith({
+      type: "progress",
+      scope: SERVER_SCOPE,
+      message: "Reading the server's tool list",
       progress: 0.2,
     });
     expect(queryHooks.servers).toHaveBeenCalledWith(

@@ -34,6 +34,7 @@ import { firstIncompleteStepIndex } from "@/components/project-guide/journeyStat
 import {
   getProjectGuideCurrentStep,
   projectGuideMachine,
+  PROJECT_GUIDE_MICRO_STEP_DELAY_MS,
   type ProjectGuideDisplayState,
   type ProjectGuideEvent,
   type ProjectGuideOperationReport,
@@ -58,8 +59,6 @@ import { useSearchParams } from "react-router";
 
 type McpGuideOperations = ReturnType<typeof useMcpGuideOperations>;
 type SecretGuideOperations = ReturnType<typeof useSecretGuideOperations>;
-
-const PROJECT_GUIDE_MICRO_STEP_DELAY_MS = 2000;
 
 export function ProjectGuide({
   onOperationSignal,
@@ -493,6 +492,9 @@ function ProjectGuideStepContent({
       <ProjectGuideMcpStepContent
         journey={journey}
         step={step}
+        displayState={displayState}
+        operationProgress={operationProgress}
+        error={error}
         operations={mcpOperations}
         onMcpPromptCopied={onMcpPromptCopied}
       />
@@ -517,6 +519,11 @@ function ProjectGuideStepContent({
   );
 }
 
+const MCP_CATALOG_PHASES = [
+  "Read the server's tool list",
+  "Install it into this project",
+] as const;
+
 const SECRET_POLICY_PHASES = [
   "Detect · enable the Secrets category",
   "Scope · user prompts, the recommended surface",
@@ -528,7 +535,7 @@ const SECRET_PLUGIN_PHASES = [
   "Sign the bundle",
 ] as const;
 
-type SecretPolicyPhaseStatus =
+type ProjectGuidePhaseStatus =
   | "not run"
   | "queued"
   | "running"
@@ -539,13 +546,16 @@ function secretPolicyPhaseStatuses(
   displayState: ProjectGuideDisplayState,
   operationProgress: number | null,
   hasError: boolean,
-): SecretPolicyPhaseStatus[] {
+): ProjectGuidePhaseStatus[] {
   if (hasError) return ["failed", "queued", "queued"];
   if (displayState !== "running" && displayState !== "paused") {
     return ["not run", "not run", "not run"];
   }
+  if (operationProgress === null) {
+    return ["not run", "not run", "not run"];
+  }
 
-  const progress = operationProgress ?? 0;
+  const progress = operationProgress;
   const currentPhase = Math.min(
     SECRET_POLICY_PHASES.length - 1,
     Math.floor(progress * SECRET_POLICY_PHASES.length),
@@ -561,13 +571,16 @@ function secretPluginPhaseStatuses(
   displayState: ProjectGuideDisplayState,
   operationProgress: number | null,
   hasError: boolean,
-): SecretPolicyPhaseStatus[] {
+): ProjectGuidePhaseStatus[] {
   if (hasError) return ["failed", "queued"];
   if (displayState !== "running" && displayState !== "paused") {
     return ["not run", "not run"];
   }
+  if (operationProgress === null) {
+    return ["not run", "not run"];
+  }
 
-  const progress = operationProgress ?? 0;
+  const progress = operationProgress;
   if (progress >= 1) return ["ok", "ok"];
   return progress >= 0.75 ? ["ok", "running"] : ["running", "queued"];
 }
@@ -588,7 +601,7 @@ function SecretPolicyPhases({
   );
 
   return (
-    <SecretPhaseChecklist
+    <ProjectGuidePhaseChecklist
       title="What the wizard does"
       labels={SECRET_POLICY_PHASES}
       statuses={statuses}
@@ -596,14 +609,54 @@ function SecretPolicyPhases({
   );
 }
 
-function SecretPhaseChecklist({
+function mcpCatalogPhaseStatuses(
+  displayState: ProjectGuideDisplayState,
+  operationProgress: number | null,
+  hasError: boolean,
+): ProjectGuidePhaseStatus[] {
+  if (hasError) return ["failed", "queued"];
+  if (displayState !== "running" && displayState !== "paused") {
+    return ["not run", "not run"];
+  }
+  if (operationProgress === null) {
+    return ["not run", "not run"];
+  }
+
+  const progress = operationProgress;
+  if (progress >= 1) return ["ok", "ok"];
+  return progress >= 0.5 ? ["ok", "running"] : ["running", "queued"];
+}
+
+function McpCatalogPhases({
+  displayState,
+  operationProgress,
+  hasError,
+}: {
+  displayState: ProjectGuideDisplayState;
+  operationProgress: number | null;
+  hasError: boolean;
+}): JSX.Element {
+  return (
+    <ProjectGuidePhaseChecklist
+      title="What the wizard does"
+      labels={MCP_CATALOG_PHASES}
+      statuses={mcpCatalogPhaseStatuses(
+        displayState,
+        operationProgress,
+        hasError,
+      )}
+    />
+  );
+}
+
+function ProjectGuidePhaseChecklist({
   title,
   labels,
   statuses,
 }: {
   title: string;
   labels: readonly string[];
-  statuses: readonly SecretPolicyPhaseStatus[];
+  statuses: readonly ProjectGuidePhaseStatus[];
 }): JSX.Element {
   return (
     <div className="grid gap-2 pt-2">
@@ -797,7 +850,7 @@ function SecretPluginPhases({
   );
 
   return (
-    <SecretPhaseChecklist
+    <ProjectGuidePhaseChecklist
       title="What you get"
       labels={SECRET_PLUGIN_PHASES}
       statuses={statuses}
@@ -808,11 +861,17 @@ function SecretPluginPhases({
 function ProjectGuideMcpStepContent({
   journey,
   step,
+  displayState,
+  operationProgress,
+  error,
   operations,
   onMcpPromptCopied,
 }: {
   journey: JourneyMeta;
   step: number;
+  displayState: ProjectGuideDisplayState;
+  operationProgress: number | null;
+  error: string | null;
   operations: McpGuideOperations;
   onMcpPromptCopied: () => void;
 }): JSX.Element {
@@ -823,6 +882,9 @@ function ProjectGuideMcpStepContent({
       </p>
       <McpStepBody
         step={step}
+        displayState={displayState}
+        operationProgress={operationProgress}
+        error={error}
         operations={operations}
         onMcpPromptCopied={onMcpPromptCopied}
       />
@@ -832,16 +894,29 @@ function ProjectGuideMcpStepContent({
 
 function McpStepBody({
   step,
+  displayState,
+  operationProgress,
+  error,
   operations,
   onMcpPromptCopied,
 }: {
   step: number;
+  displayState: ProjectGuideDisplayState;
+  operationProgress: number | null;
+  error: string | null;
   operations: McpGuideOperations;
   onMcpPromptCopied: () => void;
 }): JSX.Element | null {
   switch (step) {
     case 0:
-      return <McpCatalogSelection operations={operations} />;
+      return (
+        <McpCatalogSelection
+          displayState={displayState}
+          operationProgress={operationProgress}
+          error={error}
+          operations={operations}
+        />
+      );
     case 1:
       return <McpClientConnection operations={operations} />;
     case 2:
@@ -859,8 +934,14 @@ function McpStepBody({
 }
 
 function McpCatalogSelection({
+  displayState,
+  operationProgress,
+  error,
   operations,
 }: {
+  displayState: ProjectGuideDisplayState;
+  operationProgress: number | null;
+  error: string | null;
   operations: McpGuideOperations;
 }): JSX.Element {
   if (operations.catalogPending) {
@@ -899,29 +980,36 @@ function McpCatalogSelection({
   }
 
   return (
-    <div className="grid gap-2 sm:grid-cols-3">
-      {operations.catalogServers.map((server) => {
-        const name = server.title ?? server.registrySpecifier;
-        const selected = operations.selectedServer === server;
-        return (
-          <button
-            key={server.registrySpecifier}
-            type="button"
-            aria-pressed={selected}
-            onClick={() => operations.selectServer(server)}
-            className={cn(
-              "border-border flex items-center gap-2 border px-3 py-2 text-left",
-              selected && "border-foreground",
-            )}
-          >
-            <span aria-hidden="true" className="bg-foreground size-1.5" />
-            <span className="text-sm">{name}</span>
-            <span className="text-muted-foreground ml-auto font-mono text-xs">
-              {server.toolCount} tools
-            </span>
-          </button>
-        );
-      })}
+    <div className="grid gap-3">
+      <div className="grid gap-2 sm:grid-cols-3">
+        {operations.catalogServers.map((server) => {
+          const name = server.title ?? server.registrySpecifier;
+          const selected = operations.selectedServer === server;
+          return (
+            <button
+              key={server.registrySpecifier}
+              type="button"
+              aria-pressed={selected}
+              onClick={() => operations.selectServer(server)}
+              className={cn(
+                "border-border flex items-center gap-2 border px-3 py-2 text-left",
+                selected && "border-foreground",
+              )}
+            >
+              <span aria-hidden="true" className="bg-foreground size-1.5" />
+              <span className="text-sm">{name}</span>
+              <span className="text-muted-foreground ml-auto font-mono text-xs">
+                {server.toolCount} tools
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <McpCatalogPhases
+        displayState={displayState}
+        operationProgress={operationProgress}
+        hasError={Boolean(error) || operations.catalogError}
+      />
     </div>
   );
 }

@@ -15,7 +15,10 @@ import {
   type JourneyId,
   type JourneyStatus,
 } from "./journeys";
-import { LISTEN_TIMEOUT_SECONDS } from "./projectGuideMachine";
+import {
+  LISTEN_TIMEOUT_SECONDS,
+  PROJECT_GUIDE_MICRO_STEP_DELAY_MS,
+} from "./projectGuideMachine";
 import type {
   ProjectGuideOperationReport,
   ProjectGuideOperationScope,
@@ -303,6 +306,9 @@ describe("ProjectGuide", () => {
         "The catalog lists servers from the official MCP Registry. Installing one creates a governed endpoint in front of the vendor's server — the vendor's URL is already known, and nothing upstream changes.",
       ),
     ).toBeTruthy();
+    expect(screen.getByText("What the wizard does")).toBeTruthy();
+    expect(screen.getByText("Read the server's tool list")).toBeTruthy();
+    expect(screen.getByText("Install it into this project")).toBeTruthy();
     expect(
       screen.getByRole("log", { name: "Journey A activity" }).textContent,
     ).toContain("Ready · Pick and set up a server");
@@ -348,6 +354,54 @@ describe("ProjectGuide", () => {
     expect(
       screen.getByRole("log", { name: "Journey A activity" }).textContent,
     ).toContain("Started · Pick and set up a server");
+  });
+
+  it("paces automated MCP sub-steps before advancing the step", async () => {
+    vi.useFakeTimers();
+    render(
+      <ProjectGuide
+        onOperationSignal={(signal, report) => {
+          if (signal.type !== "start" || signal.scope.step !== 0) return;
+          report({
+            type: "progress",
+            scope: signal.scope,
+            message: "Read the server's tool list",
+            progress: 0.2,
+          });
+          report({
+            type: "progress",
+            scope: signal.scope,
+            message: "Install it into this project",
+            progress: 0.5,
+          });
+          report({
+            type: "success",
+            scope: signal.scope,
+            result: "Server installed",
+          });
+        }}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
+
+    const activity = screen.getByRole("log", { name: "Journey A activity" });
+    expect(activity.textContent).not.toContain("Read the server's tool list");
+    await act(() => vi.advanceTimersByTime(PROJECT_GUIDE_MICRO_STEP_DELAY_MS));
+    expect(activity.textContent).toContain("Read the server's tool list");
+    expect(activity.textContent).not.toContain("Install it into this project");
+    await act(() => vi.advanceTimersByTime(PROJECT_GUIDE_MICRO_STEP_DELAY_MS));
+    expect(activity.textContent).toContain("Install it into this project");
+    expect(screen.getByTestId("project-guide-run").dataset.displayState).toBe(
+      "running",
+    );
+    await act(() => vi.advanceTimersByTime(PROJECT_GUIDE_MICRO_STEP_DELAY_MS));
+    expect(screen.getByTestId("project-guide-run").dataset.displayState).toBe(
+      "checkpoint",
+    );
   });
 
   it("renders checkpoint, waiting, and observed-event completion from adapter reports", () => {

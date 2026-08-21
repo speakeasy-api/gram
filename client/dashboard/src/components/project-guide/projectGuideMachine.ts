@@ -14,6 +14,7 @@ export type ProjectGuideEventCard = {
 
 export const PROJECT_GUIDE_OUTPUT_LIMIT = 18;
 export const LISTEN_TIMEOUT_SECONDS = 90;
+export const PROJECT_GUIDE_MICRO_STEP_DELAY_MS = 3000;
 
 export type ProjectGuideDisplayState =
   | "opening"
@@ -437,7 +438,7 @@ export const projectGuideMachine = setup({
               }
             : null,
         error: null,
-        operationProgress: 0,
+        operationProgress: null,
         attempt: 0,
         runId: mode === "checkpoint" ? context.runId : context.runId + 1,
       };

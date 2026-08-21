@@ -407,12 +407,18 @@ export function useSecretGuideOperations(): {
     const key = operationKey(operation.scope);
     if (startedFor.current.has(key)) return;
     startedFor.current.add(key);
-    operation.report({
-      type: "progress",
-      scope: operation.scope,
-      message: "Creating a blocking secrets policy for this project",
-      progress: 0.25,
-    });
+    for (const [message, progress] of [
+      ["Detecting and enabling the Secrets category", 0.25],
+      ["Scoping user prompts", 0.5],
+      ["Setting the action to deny", 0.75],
+    ] as const) {
+      operation.report({
+        type: "progress",
+        scope: operation.scope,
+        message,
+        progress,
+      });
+    }
     void createPolicy
       .mutateAsync({
         request: {
@@ -478,12 +484,20 @@ export function useSecretGuideOperations(): {
     const key = operationKey(operation.scope);
     if (startedFor.current.has(key)) return;
     startedFor.current.add(key);
-    operation.report({
-      type: "progress",
-      scope: operation.scope,
-      message: `Downloading the ${SECRET_GUIDE_CLIENTS[client].label} observability plugin`,
-      progress: 0.5,
-    });
+    for (const [message, progress] of [
+      [
+        `Building the ${SECRET_GUIDE_CLIENTS[client].label} observability plugin`,
+        0.25,
+      ],
+      ["Signing the observability plugin bundle", 0.5],
+    ] as const) {
+      operation.report({
+        type: "progress",
+        scope: operation.scope,
+        message,
+        progress,
+      });
+    }
     void authFetch(
       `/rpc/plugins.downloadObservabilityPlugin?platform=${client}`,
       {},
