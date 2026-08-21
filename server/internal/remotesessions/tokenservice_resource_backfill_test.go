@@ -216,6 +216,58 @@ func TestResolveAccessToken_RefreshBackfillIsIdempotent(t *testing.T) {
 	require.Equal(t, used, spy.form.Get("resource"), "the second grant must replay the stamped binding")
 }
 
+// The live-E2E blip: with a second bound credential present, per-upstream
+// routing depends on each entry's Resource, so the request whose refresh
+// backfills a legacy NULL resource must itself return the backfilled value.
+// Returning the pre-refresh empty resource fails routing closed
+// (legacy_null_resource) on exactly the request that healed the row, leaving
+// only the NEXT request to succeed.
+func TestResolveAccessTokens_RefreshingRequestCarriesBackfilledResource(t *testing.T) {
+	t.Parallel()
+
+	var spy upstreamSpy
+	ctx, mgr, ti, clientID, subject := setupRefreshFixtureWithHandler(t, "backfill-same-request", pgtype.Text{String: "", Valid: false}, spyRefreshHandler(&spy))
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	row := getRemoteSessionRow(t, ctx, ti, clientID, subject)
+	require.False(t, row.Resource.Valid, "fixture must seed a legacy NULL-resource row")
+
+	refreshedClient, err := repo.New(ti.conn).GetRemoteSessionClientWithIssuerByID(ctx, clientID)
+	require.NoError(t, err)
+
+	// Second bound credential on a distinct remote issuer with a still-valid
+	// token — the multi-upstream shape that makes routing depend on Resource.
+	enc := testenv.NewEncryptionClient(t)
+	secondClient, secondIssuer := seedActiveClient(t, ctx, ti.conn, *authCtx.ProjectID, row.UserSessionIssuerID, authCtx.ActiveOrganizationID, "rsi-backfill-same-request")
+	secondAccess, err := enc.Encrypt([]byte("second-token"))
+	require.NoError(t, err)
+	_, err = repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+		SubjectUrn:            subject,
+		UserSessionIssuerID:   row.UserSessionIssuerID,
+		RemoteSessionClientID: secondClient,
+		AccessTokenEncrypted:  secondAccess,
+		AccessExpiresAt:       conv.ToPGTimestamptz(time.Now().Add(time.Hour)),
+		Scopes:                []string{},
+		Resource:              conv.ToPGText("https://second.example.com/mcp"),
+	})
+	require.NoError(t, err)
+
+	const derived = "https://mcp.example.com/mcp"
+	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, row.UserSessionIssuerID, subject, derived)
+	require.NoError(t, err)
+	require.NoError(t, spy.handlerErr)
+	require.Equal(t, derived, spy.form.Get("resource"), "the refresh grant must have carried the derived resource")
+
+	require.Equal(t, remotesessions.UpstreamToken{Token: "refreshed-access", Resource: derived, RemoteSessionClientID: clientID}, tokens[refreshedClient.RemoteSessionIssuerID],
+		"the request that backfills the resource must itself carry it, not the pre-refresh empty value")
+	require.Equal(t, remotesessions.UpstreamToken{Token: "second-token", Resource: "https://second.example.com/mcp", RemoteSessionClientID: secondClient}, tokens[secondIssuer])
+
+	sess := getRemoteSessionRow(t, ctx, ti, clientID, subject)
+	require.Equal(t, derived, conv.FromPGTextOrEmpty[string](sess.Resource), "the backfill must also have been persisted")
+}
+
 // seedRemoteMCPServerForIssuer binds one remote MCP server at mcpURL to the
 // user session issuer so FallbackResourceForClient derives it unambiguously.
 func seedRemoteMCPServerForIssuer(t *testing.T, ctx context.Context, ti *testInstance, userIssuerID uuid.UUID, slug, mcpURL string) {
