@@ -1154,115 +1154,355 @@ function JourneyGraphic({
   const isMcp = journey.id === "third-party-mcp";
   const plates = isMcp
     ? [
-        [
-          "Your client",
-          "claude code · cursor · codex",
-          "connected",
-          "not connected",
-        ],
-        [
-          "Your endpoint",
-          "tool access · tool logs",
-          "verified",
-          "not installed",
-        ],
-        ["Upstream", "linear · vendor server", "27 tools", "not picked"],
+        {
+          zone: "Your client",
+          name: "claude code · cursor · codex",
+          on: "connected",
+          off: "not connected",
+        },
+        {
+          zone: "Your endpoint",
+          name: "tool access · tool logs",
+          nameOff: "no endpoint yet",
+          on: "verified",
+          off: "not installed",
+        },
+        {
+          zone: "Upstream",
+          name: "linear · vendor server",
+          on: "27 tools",
+          off: "not picked",
+        },
       ]
     : [
-        [
-          "Your agent",
-          "claude code + observability plugin",
-          "streaming",
-          "no plugin",
-        ],
-        ["Secrets policy", "deny on match", "enforcing", "off"],
-        [
-          "Model provider",
-          "anthropic · openai",
-          "unsafe prompt not received",
-          "unproven",
-        ],
+        {
+          zone: "Your agent",
+          name: "claude code + observability plugin",
+          nameOff: "claude code · cursor",
+          on: "streaming",
+          off: "no plugin",
+        },
+        {
+          zone: "Secrets policy",
+          name: "deny on match",
+          nameOff: "no policy yet",
+          on: "enforcing",
+          off: "off",
+        },
+        {
+          zone: "Model provider",
+          name: "anthropic · openai",
+          on: "unsafe prompt not received",
+          off: "unproven",
+        },
       ];
   const active = status !== "not-started" && status !== "unreadable";
+  const animated = !reducedMotion && status === "not-started";
 
   return (
-    <motion.span
-      animate={
-        reducedMotion || status !== "not-started"
-          ? undefined
-          : { opacity: [0.9, 1, 0.9] }
-      }
-      transition={{ duration: 9, ease: "linear", repeat: Infinity }}
+    <span
+      data-testid={`project-guide-graphic-${journey.id}`}
+      data-animated={animated}
       className="flex min-h-[400px] flex-col items-center justify-center px-6 pt-10 pb-8"
     >
-      {plates.map(([zone, name, onStatus, offStatus], index) => (
-        <span key={zone} className="flex w-full flex-col items-center">
-          <span
-            className={cn(
-              "relative flex w-4/5 flex-col gap-2 bg-[#FAFAFA] p-[13px_15px] shadow-[inset_0_0_0_1px_#DBDBDB]",
-              index === 1 && "w-full bg-[#F2F2F2] p-[17px_18px_15px_20px]",
-            )}
-          >
-            {index === 1 && (
-              <span
-                aria-hidden="true"
-                className="absolute inset-y-0 left-0 w-[5px] opacity-40"
-                style={{
-                  background:
-                    "linear-gradient(180deg,#320F1E,#FA873C,#5A8250,#00143C,#9BC3FF)",
-                }}
-              />
-            )}
-            <span className="flex items-center gap-3">
-              <span className="flex min-w-0 flex-1 flex-col gap-1">
-                <span className="font-mono text-[9.5px] tracking-[0.09em] text-[#121212]/42 uppercase">
-                  {zone}
-                </span>
-                <span
-                  className={cn(
-                    "truncate text-[12.5px]",
-                    index === 1 && "text-[18px]",
-                  )}
-                >
-                  {name}
-                </span>
-              </span>
-              <span className="font-mono text-[9.5px] text-[#121212]/40">
-                {active ? onStatus : offStatus}
-              </span>
-            </span>
-            {index === 1 && (
-              <span className="flex gap-[3px] pl-2">
-                {Array.from({ length: 12 }, (_, tick) => (
-                  <span
-                    key={tick}
-                    aria-hidden="true"
-                    className="h-[5px] flex-1"
-                    style={{
-                      backgroundColor: fixture.accent,
-                      opacity: active ? 1 : 0.16,
-                    }}
-                  />
-                ))}
-              </span>
-            )}
-          </span>
+      {plates.map((plate, index) => (
+        <span key={plate.zone} className="flex w-full flex-col items-center">
+          <JourneyGraphicPlate
+            key={`${plate.zone}-${animated ? "animated" : "static"}`}
+            accent={fixture.accent}
+            active={active}
+            animated={animated}
+            index={index}
+            plate={plate}
+          />
           {index < 2 && (
-            <span className="relative h-[34px] w-3 border-x border-dashed border-[#C4C4C4]">
-              <span className="absolute left-5 top-1/2 -translate-y-1/2 whitespace-nowrap font-mono text-[9.5px] tracking-[0.07em] text-[#121212]/35 uppercase">
-                {isMcp
+            <JourneyGraphicPipe
+              key={`${plate.zone}-pipe-${animated ? "animated" : "static"}`}
+              accent={fixture.accent}
+              active={active}
+              animated={animated}
+              label={
+                isMcp
                   ? index === 0
                     ? "requests"
                     : "governed hop"
                   : index === 0
                     ? "every prompt"
-                    : "denied here"}
-              </span>
-            </span>
+                    : "denied here"
+              }
+            />
           )}
         </span>
       ))}
+    </span>
+  );
+}
+
+type JourneyGraphicPlateData = {
+  zone: string;
+  name: string;
+  nameOff?: string;
+  on: string;
+  off: string;
+};
+
+const graphicLiveOpacity = [0, 0, 1, 1, 0];
+const graphicOffOpacity = [1, 1, 0, 0, 1];
+const graphicLoopTimes = [0, 0.46, 0.52, 0.94, 0.99];
+
+function JourneyGraphicPlate({
+  accent,
+  active,
+  animated,
+  index,
+  plate,
+}: {
+  accent: string;
+  active: boolean;
+  animated: boolean;
+  index: number;
+  plate: JourneyGraphicPlateData;
+}): JSX.Element {
+  const isCenter = index === 1;
+  const offName = plate.nameOff ?? plate.name;
+  const liveOpacity = animated
+    ? { opacity: graphicLiveOpacity }
+    : { opacity: active ? 1 : 0 };
+  const offOpacity = animated
+    ? { opacity: graphicOffOpacity }
+    : { opacity: active ? 0 : 1 };
+  const liveTransition = animated
+    ? {
+        duration: 9,
+        ease: "linear" as const,
+        repeat: Infinity,
+        times: graphicLoopTimes,
+      }
+    : { duration: 0 };
+  const offTransition = animated
+    ? {
+        duration: 9,
+        ease: "linear" as const,
+        repeat: Infinity,
+        times: [0, 0.4, 0.46, 0.96, 1],
+      }
+    : { duration: 0 };
+
+  return (
+    <motion.span
+      animate={animated && isCenter ? { scale: [1, 1.018, 1] } : { scale: 1 }}
+      transition={
+        animated
+          ? { duration: 9, ease: "linear", repeat: Infinity }
+          : { duration: 0 }
+      }
+      className={cn(
+        "relative flex w-4/5 flex-col gap-2 bg-[#FAFAFA] p-[13px_15px] shadow-[inset_0_0_0_1px_#DBDBDB]",
+        isCenter && "w-full bg-[#F2F2F2] p-[17px_18px_15px_20px]",
+      )}
+    >
+      {isCenter && (
+        <motion.span
+          aria-hidden="true"
+          animate={
+            animated
+              ? {
+                  opacity: [0.35, 0.35, 1, 1, 0.35],
+                  boxShadow: [
+                    `inset 0 0 0 1px ${accent}`,
+                    `inset 0 0 0 1px ${accent}`,
+                    `inset 0 0 0 1px ${accent}, 0 0 18px ${accent}66`,
+                    `inset 0 0 0 1px ${accent}, 0 0 18px ${accent}66`,
+                    `inset 0 0 0 1px ${accent}`,
+                  ],
+                }
+              : { opacity: active ? 1 : 0.35, boxShadow: "none" }
+          }
+          transition={
+            animated
+              ? {
+                  duration: 2.6,
+                  ease: "easeInOut",
+                  repeat: Infinity,
+                }
+              : { duration: 0 }
+          }
+          className="pointer-events-none absolute inset-0"
+        />
+      )}
+      {isCenter && (
+        <span
+          aria-hidden="true"
+          className="absolute inset-y-0 left-0 w-[5px] opacity-40"
+          style={{
+            background:
+              "linear-gradient(180deg,#320F1E,#FA873C,#5A8250,#00143C,#9BC3FF)",
+          }}
+        />
+      )}
+      <span className="flex items-center gap-3">
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="font-mono text-[9.5px] tracking-[0.09em] text-[#121212]/42 uppercase">
+            {plate.zone}
+          </span>
+          <span
+            className={cn(
+              "relative min-w-0 truncate text-[12.5px]",
+              isCenter && "text-[18px]",
+            )}
+          >
+            <motion.span
+              animate={offOpacity}
+              transition={offTransition}
+              className="block truncate"
+            >
+              {offName}
+            </motion.span>
+            <motion.span
+              animate={liveOpacity}
+              transition={liveTransition}
+              className="absolute inset-x-0 top-0 block truncate"
+            >
+              {plate.name}
+            </motion.span>
+          </span>
+        </span>
+        <span className="relative min-w-[100px] text-right font-mono text-[9.5px]">
+          <motion.span
+            animate={offOpacity}
+            transition={offTransition}
+            className="block whitespace-nowrap text-[#121212]/40"
+          >
+            {plate.off}
+          </motion.span>
+          <motion.span
+            animate={liveOpacity}
+            transition={liveTransition}
+            className="absolute inset-x-0 top-0 block whitespace-nowrap"
+            style={{ color: accent }}
+          >
+            {plate.on}
+          </motion.span>
+        </span>
+      </span>
+      {isCenter && (
+        <motion.span
+          animate={liveOpacity}
+          transition={liveTransition}
+          className="flex gap-[3px] pl-2"
+        >
+          {Array.from({ length: 12 }, (_, tick) => (
+            <motion.span
+              key={tick}
+              aria-hidden="true"
+              animate={
+                animated
+                  ? { opacity: [0.16, 1, 0.16] }
+                  : { opacity: active ? 1 : 0.16 }
+              }
+              transition={
+                animated
+                  ? {
+                      duration: 2.4,
+                      ease: "linear",
+                      repeat: Infinity,
+                      delay: -2.4 + tick * 0.2,
+                    }
+                  : { duration: 0 }
+              }
+              className="h-[5px] flex-1"
+              style={{ backgroundColor: accent }}
+            />
+          ))}
+        </motion.span>
+      )}
     </motion.span>
+  );
+}
+
+function JourneyGraphicPipe({
+  accent,
+  active,
+  animated,
+  label,
+}: {
+  accent: string;
+  active: boolean;
+  animated: boolean;
+  label: string;
+}): JSX.Element {
+  const offOpacity = animated ? [1, 1, 0, 0, 1] : active ? 0 : 1;
+  const liveOpacity = animated ? [0, 0, 1, 1, 0] : active ? 1 : 0;
+
+  return (
+    <span className="relative flex h-[34px] w-3 justify-center">
+      <motion.span
+        animate={
+          animated ? { opacity: [0, 0, 1, 1, 0] } : { opacity: active ? 0 : 1 }
+        }
+        transition={
+          animated
+            ? {
+                duration: 9,
+                ease: "linear",
+                repeat: Infinity,
+                times: graphicLoopTimes,
+              }
+            : { duration: 0 }
+        }
+        className="absolute inset-0 border-x border-dashed border-[#C4C4C4]"
+      />
+      <motion.span
+        animate={{ opacity: offOpacity }}
+        transition={
+          animated
+            ? {
+                duration: 9,
+                ease: "linear",
+                repeat: Infinity,
+                times: [0, 0.3, 0.36, 0.96, 1],
+              }
+            : { duration: 0 }
+        }
+        className="absolute inset-0 overflow-hidden bg-[#121212]/88"
+      >
+        <GraphicPipeStripes animated={animated} />
+      </motion.span>
+      <motion.span
+        animate={{ opacity: liveOpacity }}
+        transition={
+          animated
+            ? {
+                duration: 9,
+                ease: "linear",
+                repeat: Infinity,
+                times: graphicLoopTimes,
+              }
+            : { duration: 0 }
+        }
+        className="absolute inset-0 overflow-hidden"
+        style={{ backgroundColor: `${accent}24` }}
+      >
+        <GraphicPipeStripes animated={animated} />
+      </motion.span>
+      <span className="absolute left-5 top-1/2 -translate-y-1/2 whitespace-nowrap font-mono text-[9.5px] tracking-[0.07em] text-[#121212]/35 uppercase">
+        {label}
+      </span>
+    </span>
+  );
+}
+
+function GraphicPipeStripes({ animated }: { animated: boolean }): JSX.Element {
+  return (
+    <motion.span
+      animate={animated ? { y: [0, 14] } : { y: 0 }}
+      transition={
+        animated
+          ? { duration: 0.5, ease: "linear", repeat: Infinity }
+          : { duration: 0 }
+      }
+      className="absolute inset-x-0 -top-3 -bottom-3 bg-[repeating-linear-gradient(180deg,rgba(255,255,255,.7)_0_4px,rgba(255,255,255,0)_4px_14px)]"
+    />
   );
 }
 

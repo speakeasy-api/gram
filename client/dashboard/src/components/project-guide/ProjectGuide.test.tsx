@@ -218,6 +218,33 @@ describe("ProjectGuide", () => {
     ).toContain("Not started");
   });
 
+  it("animates only journeys that have not started", () => {
+    const { rerender } = render(<ProjectGuide />);
+
+    expect(
+      screen
+        .getByTestId("project-guide-graphic-third-party-mcp")
+        .getAttribute("data-animated"),
+    ).toBe("true");
+
+    statusByJourney.current = {
+      "third-party-mcp": "in-progress",
+      "secret-block": "not-started",
+    };
+    rerender(<ProjectGuide />);
+
+    expect(
+      screen
+        .getByTestId("project-guide-graphic-third-party-mcp")
+        .getAttribute("data-animated"),
+    ).toBe("false");
+    expect(
+      screen
+        .getByTestId("project-guide-graphic-secret-block")
+        .getAttribute("data-animated"),
+    ).toBe("true");
+  });
+
   it("keeps the other journey switchable when a selected path opens", () => {
     render(<ProjectGuide />);
 
