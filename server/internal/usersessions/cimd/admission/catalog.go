@@ -253,6 +253,18 @@ var catalog = []Preset{
 		DisplayOnly: false,
 		Enabled:     true,
 	},
+
+	// Verified 2026-08-21. Hermes Agent is served from GitHub Pages
+	// (nousresearch.github.io). Exact-match admission keeps this scoped to
+	// the single document path; the shared github.io apex is not a widening
+	// concern.
+	{
+		VendorKey:   "nousresearch",
+		DisplayName: "Hermes Agent",
+		URL:         "https://nousresearch.github.io/hermes-agent/docs/oauth/client-metadata.json",
+		DisplayOnly: false,
+		Enabled:     true,
+	},
 }
 
 // catalogURLs and catalogPatterns index the enabled catalog entries for the
