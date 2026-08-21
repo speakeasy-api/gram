@@ -17,7 +17,17 @@ import (
 
 // Endpoints wraps the "otel" service endpoints.
 type Endpoints struct {
+	Logs   goa.Endpoint
 	Traces goa.Endpoint
+}
+
+// LogsRequestData holds both the payload and the HTTP request body reader of
+// the "logs" method.
+type LogsRequestData struct {
+	// Payload is the method payload.
+	Payload *LogsPayload
+	// Body streams the HTTP request body.
+	Body io.ReadCloser
 }
 
 // TracesRequestData holds both the payload and the HTTP request body reader of
@@ -34,13 +44,50 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
+		Logs:   NewLogsEndpoint(s, a.APIKeyAuth),
 		Traces: NewTracesEndpoint(s, a.APIKeyAuth),
 	}
 }
 
 // Use applies the given middleware to all the "otel" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
+	e.Logs = m(e.Logs)
 	e.Traces = m(e.Traces)
+}
+
+// NewLogsEndpoint returns an endpoint function that calls the method "logs" of
+// service "otel".
+func NewLogsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		ep := req.(*LogsRequestData)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"hooks"},
+		}
+		var key string
+		if ep.Payload.ApikeyToken != nil {
+			key = *ep.Payload.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"hooks"},
+			}
+			var key string
+			if ep.Payload.ProjectSlugInput != nil {
+				key = *ep.Payload.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.Logs(ctx, ep.Payload, ep.Body)
+	}
 }
 
 // NewTracesEndpoint returns an endpoint function that calls the method

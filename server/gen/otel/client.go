@@ -16,14 +16,34 @@ import (
 
 // Client is the "otel" service client.
 type Client struct {
+	LogsEndpoint   goa.Endpoint
 	TracesEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "otel" service client given the endpoints.
-func NewClient(traces goa.Endpoint) *Client {
+func NewClient(logs, traces goa.Endpoint) *Client {
 	return &Client{
+		LogsEndpoint:   logs,
 		TracesEndpoint: traces,
 	}
+}
+
+// Logs calls the "logs" endpoint of the "otel" service.
+// Logs may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) Logs(ctx context.Context, p *LogsPayload, req io.ReadCloser) (err error) {
+	_, err = c.LogsEndpoint(ctx, &LogsRequestData{Payload: p, Body: req})
+	return
 }
 
 // Traces calls the "traces" endpoint of the "otel" service.

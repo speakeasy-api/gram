@@ -137,7 +137,7 @@ func UsageCommands() []string {
 		"meta-mcp (create-meta-mcp-server|get-meta-mcp-server|list-meta-mcp-servers|update-meta-mcp-server|delete-meta-mcp-server|list-meta-mcp-members|add-meta-mcp-member|update-meta-mcp-member|remove-meta-mcp-member)",
 		"model-keys (list-keys|upsert-key|set-key-enabled|delete-key)",
 		"organizations (get|send-invite|revoke-invite|update-invite-role|list-invites|list-users|remove-user|enable-webhooks|disable-webhooks|create-portal-session|get-onboarding-status|verify-onboarding-hooks-setup|send-enterprise-admin-onboarding-email|generate-work-os-admin-portal-link)",
-		"otel traces",
+		"otel (logs|traces)",
 		"otel-forwarding (get-config|upsert-config|delete-config)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
 		"admin-assets upload-platform-image",
@@ -1654,6 +1654,12 @@ func ParseEndpoint(
 		organizationsGenerateWorkOSAdminPortalLinkSessionTokenFlag = organizationsGenerateWorkOSAdminPortalLinkFlags.String("session-token", "", "")
 
 		otelFlags = flag.NewFlagSet("otel", flag.ContinueOnError)
+
+		otelLogsFlags                = flag.NewFlagSet("logs", flag.ExitOnError)
+		otelLogsApikeyTokenFlag      = otelLogsFlags.String("apikey-token", "", "")
+		otelLogsProjectSlugInputFlag = otelLogsFlags.String("project-slug-input", "", "")
+		otelLogsContentEncodingFlag  = otelLogsFlags.String("content-encoding", "", "")
+		otelLogsStreamFlag           = otelLogsFlags.String("stream", "REQUIRED", "path to file containing the streamed request body")
 
 		otelTracesFlags                = flag.NewFlagSet("traces", flag.ExitOnError)
 		otelTracesApikeyTokenFlag      = otelTracesFlags.String("apikey-token", "", "")
@@ -3953,6 +3959,7 @@ func ParseEndpoint(
 	organizationsGenerateWorkOSAdminPortalLinkFlags.Usage = organizationsGenerateWorkOSAdminPortalLinkUsage
 
 	otelFlags.Usage = otelUsage
+	otelLogsFlags.Usage = otelLogsUsage
 	otelTracesFlags.Usage = otelTracesUsage
 
 	otelForwardingFlags.Usage = otelForwardingUsage
@@ -5499,6 +5506,9 @@ func ParseEndpoint(
 
 		case "otel":
 			switch epn {
+			case "logs":
+				epf = otelLogsFlags
+
 			case "traces":
 				epf = otelTracesFlags
 
@@ -7654,6 +7664,12 @@ func ParseEndpoint(
 		case "otel":
 			c := otelc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
+			case "logs":
+				endpoint = c.Logs()
+				data, err = otelc.BuildLogsPayload(*otelLogsApikeyTokenFlag, *otelLogsProjectSlugInputFlag, *otelLogsContentEncodingFlag)
+				if err == nil {
+					data, err = otelc.BuildLogsStreamPayload(data, *otelLogsStreamFlag)
+				}
 			case "traces":
 				endpoint = c.Traces()
 				data, err = otelc.BuildTracesPayload(*otelTracesApikeyTokenFlag, *otelTracesProjectSlugInputFlag, *otelTracesContentEncodingFlag)
@@ -15397,11 +15413,36 @@ func otelUsage() {
 	fmt.Fprintln(os.Stderr, `Receives OpenTelemetry signals from LLM providers and harnesses.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] otel COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    logs: Endpoint to receive OTEL logs data from LLM providers and harnesses.`)
 	fmt.Fprintln(os.Stderr, `    traces: Endpoint to receive OTEL traces data from LLM providers and harnesses.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s otel COMMAND --help\n", os.Args[0])
 }
+func otelLogsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] otel logs", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprint(os.Stderr, " -content-encoding STRING")
+	fmt.Fprint(os.Stderr, " -stream STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Endpoint to receive OTEL logs data from LLM providers and harnesses.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+	fmt.Fprintln(os.Stderr, `    -content-encoding STRING: `)
+	fmt.Fprintln(os.Stderr, `    -stream STRING: path to file containing the streamed request body`)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "otel logs --apikey-token \"abc123\" --project-slug-input \"abc123\" --content-encoding \"abc123\" --stream \"goa.png\"")
+}
+
 func otelTracesUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] otel traces", os.Args[0])

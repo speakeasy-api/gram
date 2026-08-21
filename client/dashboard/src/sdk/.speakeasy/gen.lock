@@ -334,6 +334,7 @@ trackedFiles:
   src/funcs/otelForwardingDeleteConfig.ts: {}
   src/funcs/otelForwardingGetConfig.ts: {}
   src/funcs/otelForwardingUpsertConfig.ts: {}
+  src/funcs/otelUploadLogs.ts: {}
   src/funcs/otelUploadTraces.ts: {}
   src/funcs/packagesCreate.ts: {}
   src/funcs/packagesList.ts: {}
@@ -2031,6 +2032,7 @@ trackedFiles:
   src/models/operations/uploadchatattachment.ts: {}
   src/models/operations/uploadfunctions.ts: {}
   src/models/operations/uploadimage.ts: {}
+  src/models/operations/uploadlogs.ts: {}
   src/models/operations/uploadopenapiv3asset.ts: {}
   src/models/operations/uploadorganizationimage.ts: {}
   src/models/operations/uploadplatformimage.ts: {}
@@ -2849,6 +2851,7 @@ trackedFiles:
   src/react-query/uploadFunctions.ts: {}
   src/react-query/uploadImage.ts: {}
   src/react-query/uploadOpenAPIv3.ts: {}
+  src/react-query/uploadOpenTelemetryLogs.ts: {}
   src/react-query/uploadOpenTelemetryTraces.ts: {}
   src/react-query/uploadOrganizationImage.ts: {}
   src/react-query/uploadPlatformImage.ts: {}
@@ -9378,6 +9381,13 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  uploadLogs:
+    speakeasy-default-upload-logs:
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   uploadOpenAPIv3Asset:
     speakeasy-default-upload-open-AP-iv3-asset:
       parameters:

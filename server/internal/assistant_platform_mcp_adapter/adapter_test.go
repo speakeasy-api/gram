@@ -21,19 +21,19 @@ func TestTargetPolicyReplacesTheProjectArgument(t *testing.T) {
 
 	tool := Tool{
 		descriptor: platformmcp.Descriptor{
-			Name:        "list_project_mcps",
-			InputSchema: []byte(`{"type":"object","properties":{"project_id":{"type":"string"},"limit":{"type":"integer"}},"required":["project_id"]}`),
+			Name:        "find_mcp",
+			InputSchema: []byte(`{"type":"object","properties":{"project_id":{"type":"string"},"project_slug":{"type":"string"},"query":{"type":"string"}},"required":[]}`),
 			Meta:        platformmcp.ToolMeta{ProjectScope: platformmcp.ProjectScopeExplicit},
 		},
 	}
 
-	arguments, err := tool.applyTargetPolicy(projectPolicy(), []byte(`{"project_id":"someone-elses-project","limit":5}`))
+	arguments, err := tool.applyTargetPolicy(projectPolicy(), []byte(`{"project_id":"someone-elses-project","query":"server"}`))
 	require.NoError(t, err)
 
 	var decoded map[string]any
 	require.NoError(t, json.Unmarshal(arguments, &decoded))
 	require.Equal(t, projectPolicy().ProjectID, decoded["project_id"], "the policy's project wins over the model's")
-	require.EqualValues(t, 5, decoded["limit"], "other arguments are untouched")
+	require.Equal(t, "server", decoded["query"], "other arguments are untouched")
 }
 
 // A field the policy fills must not be advertised: asking for it invites a
@@ -44,8 +44,8 @@ func TestAdvertisedSchemaHidesPolicySuppliedFields(t *testing.T) {
 
 	tool := Tool{
 		descriptor: platformmcp.Descriptor{
-			Name:        "list_project_mcps",
-			InputSchema: []byte(`{"type":"object","properties":{"project_id":{"type":"string"},"limit":{"type":"integer"}},"required":["project_id","limit"]}`),
+			Name:        "find_mcp",
+			InputSchema: []byte(`{"type":"object","properties":{"project_id":{"type":"string"},"project_slug":{"type":"string"},"query":{"type":"string"}},"required":["query"]}`),
 			Meta:        platformmcp.ToolMeta{ProjectScope: platformmcp.ProjectScopeExplicit},
 		},
 	}
@@ -57,8 +57,9 @@ func TestAdvertisedSchemaHidesPolicySuppliedFields(t *testing.T) {
 	require.NoError(t, json.Unmarshal(tool.assistantInputSchema(), &schema))
 	require.NotContains(t, schema.Properties, "project_id")
 	require.NotContains(t, schema.Required, "project_id")
-	require.Contains(t, schema.Properties, "limit", "only the policy's own fields are removed")
-	require.Contains(t, schema.Required, "limit")
+	require.NotContains(t, schema.Properties, "project_slug")
+	require.Contains(t, schema.Properties, "query", "only the policy's own fields are removed")
+	require.Contains(t, schema.Required, "query")
 }
 
 // A tool that does not act on a single project keeps its schema verbatim.

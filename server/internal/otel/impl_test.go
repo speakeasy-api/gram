@@ -63,6 +63,7 @@ func TestTracesRejectsInvalidExportBeforePublishing(t *testing.T) {
 		logger:        testenv.NewLogger(t),
 		tracer:        testenv.NewTracerProvider(t).Tracer("test"),
 		auth:          nil,
+		logPublisher:  nil,
 		spanPublisher: publisher,
 	}
 	projectID := uuid.New()

@@ -1,4 +1,8 @@
-import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
+import {
+  StatTile,
+  StatTileGroup,
+  StatTileSkeleton,
+} from "@/components/chart/stat-tile";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { defineFilters, useFilterState } from "@/components/filters";
 import {
@@ -579,10 +583,10 @@ function KPIRow({
   if (!data && isLoading) {
     return (
       <StatTileGroup>
-        <Skeleton className="h-[100px] flex-1" />
-        <Skeleton className="h-[100px] flex-1" />
-        <Skeleton className="h-[100px] flex-1" />
-        <Skeleton className="h-[100px] flex-1" />
+        <StatTileSkeleton />
+        <StatTileSkeleton />
+        <StatTileSkeleton />
+        <StatTileSkeleton />
       </StatTileGroup>
     );
   }

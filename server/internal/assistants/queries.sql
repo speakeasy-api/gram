@@ -37,6 +37,12 @@ SELECT project_id
 FROM assistant_threads
 WHERE id = @thread_id;
 
+-- name: GetAssistantThreadSourceKind :one
+SELECT source_kind
+FROM assistant_threads
+WHERE id = @thread_id
+  AND project_id = @project_id;
+
 -- name: LoadAssistantThreadForBootstrap :one
 SELECT
   t.id,

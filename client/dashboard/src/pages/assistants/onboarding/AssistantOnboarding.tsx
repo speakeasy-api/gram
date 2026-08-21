@@ -105,10 +105,10 @@ function OnboardingShell() {
           direction="horizontal"
           className="[&>[role='separator']]:bg-neutral-softest [&>[role='separator']]:hover:bg-primary h-full [&>[role='separator']]:relative [&>[role='separator']]:w-px [&>[role='separator']]:border-0 [&>[role='separator']]:before:absolute [&>[role='separator']]:before:inset-y-0 [&>[role='separator']]:before:-right-1 [&>[role='separator']]:before:-left-1 [&>[role='separator']]:before:cursor-col-resize"
         >
-          <ResizablePanel.Pane minSize={35}>
+          <ResizablePanel.Pane minSize="35%">
             <ChatPane mode={mode} />
           </ResizablePanel.Pane>
-          <ResizablePanel.Pane minSize={24} defaultSize={36}>
+          <ResizablePanel.Pane minSize="24%" defaultSize="36%">
             <AssistantDraftPanel />
           </ResizablePanel.Pane>
         </ResizablePanel>

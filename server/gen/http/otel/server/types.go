@@ -12,6 +12,186 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// LogsUnauthorizedResponseBody is the type of the "otel" service "logs"
+// endpoint HTTP response body for the "unauthorized" error.
+type LogsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// LogsForbiddenResponseBody is the type of the "otel" service "logs" endpoint
+// HTTP response body for the "forbidden" error.
+type LogsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// LogsBadRequestResponseBody is the type of the "otel" service "logs" endpoint
+// HTTP response body for the "bad_request" error.
+type LogsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// LogsNotFoundResponseBody is the type of the "otel" service "logs" endpoint
+// HTTP response body for the "not_found" error.
+type LogsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// LogsConflictResponseBody is the type of the "otel" service "logs" endpoint
+// HTTP response body for the "conflict" error.
+type LogsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// LogsUnsupportedMediaResponseBody is the type of the "otel" service "logs"
+// endpoint HTTP response body for the "unsupported_media" error.
+type LogsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// LogsInvalidResponseBody is the type of the "otel" service "logs" endpoint
+// HTTP response body for the "invalid" error.
+type LogsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// LogsInvariantViolationResponseBody is the type of the "otel" service "logs"
+// endpoint HTTP response body for the "invariant_violation" error.
+type LogsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// LogsUnexpectedResponseBody is the type of the "otel" service "logs" endpoint
+// HTTP response body for the "unexpected" error.
+type LogsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// LogsGatewayErrorResponseBody is the type of the "otel" service "logs"
+// endpoint HTTP response body for the "gateway_error" error.
+type LogsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // TracesUnauthorizedResponseBody is the type of the "otel" service "traces"
 // endpoint HTTP response body for the "unauthorized" error.
 type TracesUnauthorizedResponseBody struct {
@@ -192,6 +372,146 @@ type TracesGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// NewLogsUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "logs" endpoint of the "otel" service.
+func NewLogsUnauthorizedResponseBody(res *goa.ServiceError) *LogsUnauthorizedResponseBody {
+	body := &LogsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewLogsForbiddenResponseBody builds the HTTP response body from the result
+// of the "logs" endpoint of the "otel" service.
+func NewLogsForbiddenResponseBody(res *goa.ServiceError) *LogsForbiddenResponseBody {
+	body := &LogsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewLogsBadRequestResponseBody builds the HTTP response body from the result
+// of the "logs" endpoint of the "otel" service.
+func NewLogsBadRequestResponseBody(res *goa.ServiceError) *LogsBadRequestResponseBody {
+	body := &LogsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewLogsNotFoundResponseBody builds the HTTP response body from the result of
+// the "logs" endpoint of the "otel" service.
+func NewLogsNotFoundResponseBody(res *goa.ServiceError) *LogsNotFoundResponseBody {
+	body := &LogsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewLogsConflictResponseBody builds the HTTP response body from the result of
+// the "logs" endpoint of the "otel" service.
+func NewLogsConflictResponseBody(res *goa.ServiceError) *LogsConflictResponseBody {
+	body := &LogsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewLogsUnsupportedMediaResponseBody builds the HTTP response body from the
+// result of the "logs" endpoint of the "otel" service.
+func NewLogsUnsupportedMediaResponseBody(res *goa.ServiceError) *LogsUnsupportedMediaResponseBody {
+	body := &LogsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewLogsInvalidResponseBody builds the HTTP response body from the result of
+// the "logs" endpoint of the "otel" service.
+func NewLogsInvalidResponseBody(res *goa.ServiceError) *LogsInvalidResponseBody {
+	body := &LogsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewLogsInvariantViolationResponseBody builds the HTTP response body from the
+// result of the "logs" endpoint of the "otel" service.
+func NewLogsInvariantViolationResponseBody(res *goa.ServiceError) *LogsInvariantViolationResponseBody {
+	body := &LogsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewLogsUnexpectedResponseBody builds the HTTP response body from the result
+// of the "logs" endpoint of the "otel" service.
+func NewLogsUnexpectedResponseBody(res *goa.ServiceError) *LogsUnexpectedResponseBody {
+	body := &LogsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewLogsGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "logs" endpoint of the "otel" service.
+func NewLogsGatewayErrorResponseBody(res *goa.ServiceError) *LogsGatewayErrorResponseBody {
+	body := &LogsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewTracesUnauthorizedResponseBody builds the HTTP response body from the
 // result of the "traces" endpoint of the "otel" service.
 func NewTracesUnauthorizedResponseBody(res *goa.ServiceError) *TracesUnauthorizedResponseBody {
@@ -330,6 +650,16 @@ func NewTracesGatewayErrorResponseBody(res *goa.ServiceError) *TracesGatewayErro
 		Fault:     res.Fault,
 	}
 	return body
+}
+
+// NewLogsPayload builds a otel service logs endpoint payload.
+func NewLogsPayload(apikeyToken *string, projectSlugInput *string, contentEncoding *string) *otel.LogsPayload {
+	v := &otel.LogsPayload{}
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+	v.ContentEncoding = contentEncoding
+
+	return v
 }
 
 // NewTracesPayload builds a otel service traces endpoint payload.

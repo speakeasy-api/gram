@@ -67,6 +67,7 @@ import {
 } from "@/elements/components/assistant-ui/reasoning";
 import { ThinkingIndicator } from "@/elements/components/assistant-ui/thinking-indicator";
 import { ToolFallback } from "@/elements/components/assistant-ui/tool-fallback";
+import { DEFAULT_TOOL_COMPONENTS } from "@/elements/components/assistant-ui/default-tool-components";
 import { UserMessageText } from "@/elements/components/assistant-ui/user-message-text";
 import { ToolMentionAutocomplete } from "@/elements/components/assistant-ui/tool-mention-autocomplete";
 import { TooltipIconButton } from "@/elements/components/assistant-ui/tooltip-icon-button";
@@ -1977,7 +1978,9 @@ const AssistantMessage: FC = () => {
       Text: withToolCallAnnotationSuppression(components?.Text ?? MarkdownText),
       Image: components?.Image ?? Image,
       tools: {
-        by_name: toolsComponents,
+        // Built-in renderers come first so a host override of the same tool
+        // name still wins.
+        by_name: { ...DEFAULT_TOOL_COMPONENTS, ...toolsComponents },
         Fallback: components?.ToolFallback ?? ToolFallback,
       },
       Reasoning: components?.Reasoning ?? Reasoning,

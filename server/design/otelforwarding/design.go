@@ -19,10 +19,10 @@ var HeaderModel = Type("OtelForwardingHeader", func() {
 })
 
 var HeaderInput = Type("OtelForwardingHeaderInput", func() {
-	Description("HTTP header value provided when upserting a forwarding config.")
-	Required("name", "value")
+	Description("HTTP header provided when upserting a forwarding config. Omit the value to preserve the existing encrypted value for the same name.")
+	Required("name")
 	Attribute("name", String, "Header name.")
-	Attribute("value", String, "Header value. Stored encrypted at rest; never returned on reads.")
+	Attribute("value", String, "Header value. Omit to preserve an existing value; provide to create, replace, or clear it. Stored encrypted at rest and never returned on reads.")
 })
 
 var Config = Type("OtelForwardingConfig", func() {
@@ -86,7 +86,7 @@ var _ = Service("otelForwarding", func() {
 			security.SessionPayload()
 			Attribute("endpoint_url", String, "URL to forward OTEL payloads to.")
 			Attribute("enabled", Boolean, "Whether forwarding should be active.")
-			Attribute("headers", ArrayOf(HeaderInput), "Full set of headers to attach. Replaces any existing headers.")
+			Attribute("headers", ArrayOf(HeaderInput), "Complete desired header set. Omitted entries are removed; entries with an omitted value preserve the existing encrypted value for the same name.")
 			Required("endpoint_url", "enabled")
 		})
 

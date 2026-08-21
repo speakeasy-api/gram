@@ -5,7 +5,7 @@
 import * as z from "zod/v4-mini";
 
 /**
- * HTTP header value provided when upserting a forwarding config.
+ * HTTP header provided when upserting a forwarding config. Omit the value to preserve the existing encrypted value for the same name.
  */
 export type OtelForwardingHeaderInput = {
   /**
@@ -13,15 +13,15 @@ export type OtelForwardingHeaderInput = {
    */
   name: string;
   /**
-   * Header value. Stored encrypted at rest; never returned on reads.
+   * Header value. Omit to preserve an existing value; provide to create, replace, or clear it. Stored encrypted at rest and never returned on reads.
    */
-  value: string;
+  value?: string | undefined;
 };
 
 /** @internal */
 export type OtelForwardingHeaderInput$Outbound = {
   name: string;
-  value: string;
+  value?: string | undefined;
 };
 
 /** @internal */
@@ -30,7 +30,7 @@ export const OtelForwardingHeaderInput$outboundSchema: z.ZodMiniType<
   OtelForwardingHeaderInput
 > = z.object({
   name: z.string(),
-  value: z.string(),
+  value: z.optional(z.string()),
 });
 
 export function otelForwardingHeaderInputToJSON(

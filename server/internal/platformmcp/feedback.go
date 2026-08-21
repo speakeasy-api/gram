@@ -384,7 +384,7 @@ func optionalFeedbackText(value string) pgtype.Text {
 var knownPlatformMCPToolNames = map[string]struct{}{
 	"get_platform_context":                  {},
 	"list_projects":                         {},
-	"list_project_mcps":                     {},
+	"find_mcp":                              {},
 	"get_mcp":                               {},
 	"search_mcp_catalog":                    {},
 	"inspect_mcp_candidate":                 {},

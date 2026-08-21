@@ -19,6 +19,7 @@ import (
 // Server lists the otel service endpoint HTTP handlers.
 type Server struct {
 	Mounts []*MountPoint
+	Logs   http.Handler
 	Traces http.Handler
 }
 
@@ -49,8 +50,10 @@ func New(
 ) *Server {
 	return &Server{
 		Mounts: []*MountPoint{
+			{"Logs", "POST", "/otel/v1/logs"},
 			{"Traces", "POST", "/otel/v1/traces"},
 		},
+		Logs:   NewLogsHandler(e.Logs, mux, decoder, encoder, errhandler, formatter),
 		Traces: NewTracesHandler(e.Traces, mux, decoder, encoder, errhandler, formatter),
 	}
 }
@@ -60,6 +63,7 @@ func (s *Server) Service() string { return "otel" }
 
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
+	s.Logs = m(s.Logs)
 	s.Traces = m(s.Traces)
 }
 
@@ -68,12 +72,67 @@ func (s *Server) MethodNames() []string { return otel.MethodNames[:] }
 
 // Mount configures the mux to serve the otel endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
+	MountLogsHandler(mux, h.Logs)
 	MountTracesHandler(mux, h.Traces)
 }
 
 // Mount configures the mux to serve the otel endpoints.
 func (s *Server) Mount(mux goahttp.Muxer) {
 	Mount(mux, s)
+}
+
+// MountLogsHandler configures the mux to serve the "otel" service "logs"
+// endpoint.
+func MountLogsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/otel/v1/logs", f)
+}
+
+// NewLogsHandler creates a HTTP handler which loads the HTTP request and calls
+// the "otel" service "logs" endpoint.
+func NewLogsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeLogsRequest(mux, decoder)
+		encodeResponse = EncodeLogsResponse(encoder)
+		encodeError    = EncodeLogsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "logs")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "otel")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		data := &otel.LogsRequestData{Payload: payload, Body: r.Body}
+		res, err := endpoint(ctx, data)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
 }
 
 // MountTracesHandler configures the mux to serve the "otel" service "traces"

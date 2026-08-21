@@ -92,12 +92,14 @@ type OtelForwardingHeader struct {
 	HasValue bool
 }
 
-// HTTP header value provided when upserting a forwarding config.
+// HTTP header provided when upserting a forwarding config. Omit the value to
+// preserve the existing encrypted value for the same name.
 type OtelForwardingHeaderInput struct {
 	// Header name.
 	Name string
-	// Header value. Stored encrypted at rest; never returned on reads.
-	Value string
+	// Header value. Omit to preserve an existing value; provide to create,
+	// replace, or clear it. Stored encrypted at rest and never returned on reads.
+	Value *string
 }
 
 // UpsertConfigPayload is the payload type of the otelForwarding service
@@ -109,7 +111,8 @@ type UpsertConfigPayload struct {
 	EndpointURL string
 	// Whether forwarding should be active.
 	Enabled bool
-	// Full set of headers to attach. Replaces any existing headers.
+	// Complete desired header set. Omitted entries are removed; entries with an
+	// omitted value preserve the existing encrypted value for the same name.
 	Headers []*OtelForwardingHeaderInput
 }
 

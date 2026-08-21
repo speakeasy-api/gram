@@ -111,14 +111,15 @@ func resolveClientIdentity(ctx context.Context, logger *slog.Logger, store sessi
 	// predating that header, which is why it is best-effort by design.
 	//
 	// The stored value is what the client asked for at initialize. The
-	// negotiated half is deterministic rather than stored: this store is only
-	// written by the hosted toolset handler, which answers
-	// ServedHostedToolset unconditionally. Recording it here is what gives
-	// pre-header clients a negotiated attribute at all, since the middleware
-	// has no header to read for them. A session that handshaked before a
-	// change to that constant would be attributed the current value, which is
-	// the one inaccuracy the determinism costs.
-	recordMCPProtocolVersionSpan(ctx, info.ProtocolVersion, mcpversions.ServedHostedToolset)
+	// negotiated half is derived rather than stored: this store is only
+	// written by the hosted toolset handler, whose negotiation is a pure
+	// function of the requested version and the surface's supported set, so
+	// re-running it here reproduces the handshake's answer. Recording it is
+	// what gives pre-header clients a negotiated attribute at all, since the
+	// middleware has no header to read for them. A session that handshaked
+	// before a change to the supported set would be attributed the answer the
+	// current set produces, which is the one inaccuracy the derivation costs.
+	recordMCPProtocolVersionSpan(ctx, info.ProtocolVersion, mcpversions.Negotiate(info.ProtocolVersion, mcpversions.SupportedHostedToolset()))
 
 	return identity, info.ProtocolVersion
 }
