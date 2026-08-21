@@ -37,6 +37,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/billingnotifications"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -555,8 +556,20 @@ func newStreamsCommand() *cli.Command {
 
 				mustReceive(rg, &authzv1.Challenge{}, &authzv1.ChallengeCHWriter{}, authz.NewChallengeCHWriter(logger, chConn))
 
-				mustReceive(rg, &otelv1.InboundLogRecord{}, &otelv1.InboundLogRecordTransformer{}, otelsvc.NewLogTransformHandler(logger, meterProvider, logPub))
-				mustReceive(rg, &otelv1.InboundSpan{}, &otelv1.InboundSpanTransformer{}, otelsvc.NewSpanTransformHandler(logger, meterProvider, spanPub))
+				mustReceive(rg, &otelv1.InboundLogRecord{}, &otelv1.InboundLogRecordTransformer{}, otelsvc.NewLogTransformHandler(
+					logger,
+					meterProvider,
+					logPub,
+					replicaDB,
+					cache.NewRedisCacheAdapter(redisClient),
+				))
+				mustReceive(rg, &otelv1.InboundSpan{}, &otelv1.InboundSpanTransformer{}, otelsvc.NewSpanTransformHandler(
+					logger,
+					meterProvider,
+					spanPub,
+					replicaDB,
+					cache.NewRedisCacheAdapter(redisClient),
+				))
 				mustReceiveBatchWithResult(rg, &otelv1.LogRecord{}, &otelv1.LogRelay{}, logRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
 				mustReceiveBatchWithResult(rg, &otelv1.Span{}, &otelv1.SpanRelay{}, spanRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
 

@@ -13,6 +13,8 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/database"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
@@ -29,6 +31,8 @@ func NewSpanTransformHandler(
 	logger *slog.Logger,
 	meterProvider metric.MeterProvider,
 	spanPublisher gcp.Publisher[*otelv1.Span],
+	replicaDB database.DBTX,
+	cacheImpl cache.Cache,
 ) *SpanTransformHandler {
 	logger = logger.With(attr.SlogComponent("span-transform-handler"))
 
@@ -39,6 +43,7 @@ func NewSpanTransformHandler(
 		enrichers: []SpanEnricher{
 			&enrichTenancy{},
 			NewEnrichSpeakeasyTokens(),
+			NewEnrichDirectory(logger, replicaDB, cacheImpl),
 		},
 	}
 }

@@ -6,6 +6,7 @@ import (
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -39,7 +40,7 @@ func TestLogTransformHandlerNormalizesEnrichesAndPublishes(t *testing.T) {
 		require.True(t, ok)
 		published = record
 	}).Return(gcp.NewSuccessPublishResult()).Once()
-	handler := NewLogTransformHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), publisher)
+	handler := NewLogTransformHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), publisher, newTestDatabase(t), cache.NoopCache)
 
 	err := handler.Handle(t.Context(), inbound, gcp.MessageMetadata{})
 
@@ -139,7 +140,7 @@ func TestMaxSizeLogRecordFitsRelayExportAfterFullEnrichment(t *testing.T) {
 		require.True(t, ok)
 		published = record
 	}).Return(gcp.NewSuccessPublishResult()).Once()
-	handler := NewLogTransformHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), publisher)
+	handler := NewLogTransformHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), publisher, newTestDatabase(t), cache.NoopCache)
 
 	err := handler.Handle(t.Context(), inbound, gcp.MessageMetadata{})
 

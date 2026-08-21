@@ -13,6 +13,8 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/database"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
@@ -29,6 +31,8 @@ func NewLogTransformHandler(
 	logger *slog.Logger,
 	meterProvider metric.MeterProvider,
 	logPublisher gcp.Publisher[*otelv1.LogRecord],
+	replicaDB database.DBTX,
+	cacheImpl cache.Cache,
 ) *LogTransformHandler {
 	logger = logger.With(attr.SlogComponent("log-transform-handler"))
 
@@ -39,6 +43,7 @@ func NewLogTransformHandler(
 		enrichers: []LogEnricher{
 			&enrichLogTenancy{},
 			newEnrichLogSpeakeasyTokens(),
+			newEnrichLogDirectory(logger, replicaDB, cacheImpl),
 		},
 	}
 }
