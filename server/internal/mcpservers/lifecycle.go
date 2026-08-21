@@ -10,6 +10,8 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
@@ -39,6 +41,85 @@ type LifecycleUpdateInput struct {
 }
 
 const maxLifecycleMCPServerNameBytes = 256
+
+// MCPServerVisibilityResult reports only the post-update server and root domains
+// that need reconciliation after the caller commits its transaction.
+type MCPServerVisibilityResult struct {
+	Server               repo.McpServer
+	ClearedRootDomainIDs []uuid.UUID
+}
+
+// LockMCPServerVisibilityDependencies preserves the domain -> root endpoint ->
+// MCP-server lock order used by deletion and root-selection paths. Call it before
+// locking the MCP server for a disabling transition.
+func LockMCPServerVisibilityDependencies(ctx context.Context, tx pgx.Tx, projectID, serverID uuid.UUID) error {
+	if tx == nil || projectID == uuid.Nil || serverID == uuid.Nil {
+		return fmt.Errorf("invalid MCP server visibility lock input")
+	}
+	domainIDs, err := mcpendpointsrepo.New(tx).ListCustomDomainIDsByMCPServerID(ctx, mcpendpointsrepo.ListCustomDomainIDsByMCPServerIDParams{McpServerID: serverID, ProjectID: projectID})
+	if err != nil {
+		return fmt.Errorf("list MCP server custom domains: %w", err)
+	}
+	if err := lockMcpServerCustomDomains(ctx, tx, domainIDs); err != nil {
+		return fmt.Errorf("lock MCP server custom domains: %w", err)
+	}
+	if _, err := mcpendpointsrepo.New(tx).LockRootMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.LockRootMCPEndpointsByMCPServerIDParams{McpServerID: serverID, ProjectID: projectID}); err != nil {
+		return fmt.Errorf("lock MCP server root endpoints: %w", err)
+	}
+	return nil
+}
+
+// UpdateMCPServerVisibilityInTransaction applies the shared visibility state
+// transition without selecting or changing any plugin attachment. Its caller
+// must first lock dependencies through LockMCPServerVisibilityDependencies, then
+// lock the server. It clears roots and audits the automatic route cleanup in the
+// same transaction; callers reconcile returned domains only after commit.
+func UpdateMCPServerVisibilityInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, existing repo.McpServer, input LifecycleUpdateInput) (MCPServerVisibilityResult, error) {
+	if input.Visibility != VisibilityDisabled && input.Visibility != VisibilityPrivate {
+		return MCPServerVisibilityResult{}, fmt.Errorf("invalid MCP server lifecycle visibility")
+	}
+	updated, err := UpdateMCPServerLifecycleInTransaction(ctx, tx, auditLogger, existing, input)
+	if err != nil {
+		return MCPServerVisibilityResult{}, err
+	}
+	var cleared []mcpendpointsrepo.McpEndpoint
+	if updated.Visibility == VisibilityDisabled {
+		cleared, err = mcpendpointsrepo.New(tx).ClearRootMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ClearRootMCPEndpointsByMCPServerIDParams{McpServerID: updated.ID, ProjectID: input.ProjectID})
+		if err != nil {
+			return MCPServerVisibilityResult{}, fmt.Errorf("clear MCP server root endpoints: %w", err)
+		}
+		if err := logMCPServerRootAutoClears(ctx, tx, auditLogger, input, cleared); err != nil {
+			return MCPServerVisibilityResult{}, err
+		}
+	}
+	return MCPServerVisibilityResult{Server: updated, ClearedRootDomainIDs: rootDomainIDs(cleared)}, nil
+}
+
+func logMCPServerRootAutoClears(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, input LifecycleUpdateInput, rootEndpoints []mcpendpointsrepo.McpEndpoint) error {
+	repository := customdomainsrepo.New(tx)
+	for _, endpoint := range rootEndpoints {
+		if !endpoint.CustomDomainID.Valid {
+			continue
+		}
+		domain, err := repository.GetCustomDomainByID(ctx, endpoint.CustomDomainID.UUID)
+		if err != nil {
+			return fmt.Errorf("load custom domain for MCP root cleanup audit: %w", err)
+		}
+		if err := auditLogger.LogCustomDomainUpdate(ctx, tx, audit.LogCustomDomainUpdateEvent{
+			OrganizationID:             input.OrganizationID,
+			Actor:                      urn.NewPrincipal(urn.PrincipalTypeUser, input.ActorUserID),
+			ActorDisplayName:           input.ActorEmail,
+			ActorSlug:                  nil,
+			CustomDomainURN:            urn.NewCustomDomain(domain.ID),
+			DomainName:                 domain.Domain,
+			CustomDomainSnapshotBefore: mv.BuildCustomDomainView(domain, false, endpoint.ID),
+			CustomDomainSnapshotAfter:  mv.BuildCustomDomainView(domain, false, uuid.Nil),
+		}); err != nil {
+			return fmt.Errorf("audit MCP root cleanup: %w", err)
+		}
+	}
+	return nil
+}
 
 // UpdateMCPServerLifecycleInTransaction updates only the name-derived slug and
 // visibility of a locked MCP server. It synchronizes auto-derived plugin display

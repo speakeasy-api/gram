@@ -79,6 +79,7 @@ type RegistrationService struct {
 	identityProviderAttachment CatalogIdentityProviderAttachment
 	directRemoteInspector      DirectRemoteInspector
 	lifecycleMetadata          *LifecycleMetadataService
+	lifecycleVisibility        *LifecycleVisibilityService
 	budgets                    OperationBudgets
 	telemetry                  LifecycleTelemetry
 }
@@ -166,6 +167,27 @@ func (s *RegistrationService) UpdateMCPMetadata(ctx context.Context, principal P
 		return UpdateMCPMetadataResult{}, ErrRegistrationUnavailable
 	}
 	return s.lifecycleMetadata.Update(ctx, principal, input)
+}
+
+func (s *RegistrationService) WithLifecycleVisibility(visibility *LifecycleVisibilityService) *RegistrationService {
+	if s != nil {
+		s.lifecycleVisibility = visibility
+	}
+	return s
+}
+
+func (s *RegistrationService) DisableMCP(ctx context.Context, principal Principal, input UpdateMCPVisibilityInput) (UpdateMCPVisibilityResult, error) {
+	if s == nil || s.lifecycleVisibility == nil {
+		return UpdateMCPVisibilityResult{}, ErrRegistrationUnavailable
+	}
+	return s.lifecycleVisibility.Disable(ctx, principal, input)
+}
+
+func (s *RegistrationService) EnableMCP(ctx context.Context, principal Principal, input UpdateMCPVisibilityInput) (UpdateMCPVisibilityResult, error) {
+	if s == nil || s.lifecycleVisibility == nil {
+		return UpdateMCPVisibilityResult{}, ErrRegistrationUnavailable
+	}
+	return s.lifecycleVisibility.Enable(ctx, principal, input)
 }
 
 // WithDashboardURL supplies the configured dashboard origin used only to build

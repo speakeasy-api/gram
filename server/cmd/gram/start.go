@@ -1547,6 +1547,7 @@ func newStartCommand() *cli.Command {
 				RemoteChallengeManager: remoteChallengeManager,
 				AuditLogger:            auditLogger,
 				PluginPublisher:        pluginPublisher,
+				TemporalEnv:            temporalEnv,
 				Skills:                 skillsService,
 				LocalFixture:           platformFixture,
 			})

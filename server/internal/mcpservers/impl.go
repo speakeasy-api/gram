@@ -565,30 +565,11 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 
 	txRepo := repo.New(dbtx)
 
-	var affectedDomainIDs []uuid.UUID
 	if payload.Visibility == VisibilityDisabled {
-		affectedDomainIDs, err = mcpendpointsrepo.New(dbtx).ListCustomDomainIDsByMCPServerID(ctx, mcpendpointsrepo.ListCustomDomainIDsByMCPServerIDParams{
-			McpServerID: serverID,
-			ProjectID:   *authCtx.ProjectID,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "list custom domains for mcp server").LogError(ctx, logger)
+		if err := LockMCPServerVisibilityDependencies(ctx, dbtx, *authCtx.ProjectID, serverID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock mcp server visibility dependencies").LogError(ctx, logger)
 		}
 	}
-
-	if err := lockMcpServerCustomDomains(ctx, dbtx, affectedDomainIDs); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "lock custom domains").LogError(ctx, logger)
-	}
-	if payload.Visibility == VisibilityDisabled {
-		_, err = mcpendpointsrepo.New(dbtx).LockRootMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.LockRootMCPEndpointsByMCPServerIDParams{
-			McpServerID: serverID,
-			ProjectID:   *authCtx.ProjectID,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "lock root mcp endpoints").LogError(ctx, logger)
-		}
-	}
-
 	existing, err := txRepo.LockMCPServerByIDAndProjectID(ctx, repo.LockMCPServerByIDAndProjectIDParams{
 		ID:        serverID,
 		ProjectID: *authCtx.ProjectID,
@@ -643,7 +624,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		}
 	}
 
-	updated, err := UpdateMCPServerLifecycleInTransaction(ctx, dbtx, s.audit, existing, LifecycleUpdateInput{
+	lifecycleInput := LifecycleUpdateInput{
 		OrganizationID:        authCtx.ActiveOrganizationID,
 		ProjectID:             *authCtx.ProjectID,
 		ActorUserID:           authCtx.UserID,
@@ -658,7 +639,15 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		ToolsetID:             ids.ToolsetID,
 		UnproxiedMcpServerID:  ids.UnproxiedMcpServerID,
 		ToolVariationsGroupID: ids.ToolVariationsGroupID,
-	})
+	}
+	var clearedRootDomainIDs []uuid.UUID
+	var updated repo.McpServer
+	if payload.Visibility == VisibilityDisabled {
+		visibilityResult, updateErr := UpdateMCPServerVisibilityInTransaction(ctx, dbtx, s.audit, existing, lifecycleInput)
+		updated, clearedRootDomainIDs, err = visibilityResult.Server, visibilityResult.ClearedRootDomainIDs, updateErr
+	} else {
+		updated, err = UpdateMCPServerLifecycleInTransaction(ctx, dbtx, s.audit, existing, lifecycleInput)
+	}
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
@@ -678,20 +667,6 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	}
 
 	afterView := mv.BuildMcpServerView(updated)
-
-	var clearedRootEndpoints []mcpendpointsrepo.McpEndpoint
-	if updated.Visibility == VisibilityDisabled {
-		clearedRootEndpoints, err = mcpendpointsrepo.New(dbtx).ClearRootMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ClearRootMCPEndpointsByMCPServerIDParams{
-			McpServerID: updated.ID,
-			ProjectID:   *authCtx.ProjectID,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "clear root mcp endpoints").LogError(ctx, logger)
-		}
-		if err := s.logMcpServerRootAutoClears(ctx, dbtx, authCtx, clearedRootEndpoints); err != nil {
-			return nil, err
-		}
-	}
 
 	// A server that was just enabled is publishable if it already has an
 	// endpoint — attach it to the Default plugin so it reaches the
@@ -714,7 +689,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	}
 
 	s.triggerInitialPublishIfNeeded(ctx, authCtx, pluginCreated)
-	if err := s.reconcileMcpServerCustomDomains(ctx, rootDomainIDs(clearedRootEndpoints)); err != nil {
+	if err := s.reconcileMcpServerCustomDomains(ctx, clearedRootDomainIDs); err != nil {
 		return nil, err
 	}
 
