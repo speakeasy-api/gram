@@ -92,8 +92,9 @@ func resolveIssuerTunnelBinding(ctx context.Context, logger *slog.Logger, q *rep
 		return none, oops.E(oops.CodeBadRequest, err, "invalid tunneled_mcp_server_id").LogError(ctx, logger)
 	}
 	if _, err := q.GetTunneledMcpServerBinding(ctx, repo.GetTunneledMcpServerBindingParams{
-		ID:        tunnelID,
-		ProjectID: projectID.UUID,
+		ID:             tunnelID,
+		ProjectID:      projectID.UUID,
+		OrganizationID: authCtx.ActiveOrganizationID,
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return none, oops.E(oops.CodeNotFound, err, "tunneled MCP server not found in this project").LogError(ctx, logger)

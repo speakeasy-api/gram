@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -233,12 +235,14 @@ func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) er
 
 	// Registration through a tunnel sends a request into customer
 	// infrastructure before any client row exists to hang authorization off,
-	// so v1 keeps it white-glove: platform admins only, validated against a
-	// live tunnel, and audit-logged after the upstream accepts.
-	var tunnel *repo.GetTunneledMcpServerBindingUnscopedRow
-	if conv.PtrValOr(req.TunneledMcpServerID, "") != "" {
+	// so it stays white-glove: platform admins only, scoped to the active project
+	// and organization, and durably audit-logged as an attempt before the POST.
+	if req.TunneledMcpServerID != nil {
+		if strings.TrimSpace(*req.TunneledMcpServerID) == "" {
+			return oops.E(oops.CodeBadRequest, nil, "tunneled_mcp_server_id cannot be empty").LogError(ctx, s.logger)
+		}
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
-		if !ok || authCtx == nil {
+		if !ok || authCtx == nil || authCtx.ProjectID == nil {
 			return oops.C(oops.CodeUnauthorized)
 		}
 		if !authCtx.IsAdmin {
@@ -248,14 +252,37 @@ func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) er
 		if terr != nil {
 			return oops.E(oops.CodeBadRequest, terr, "invalid tunneled_mcp_server_id").LogError(ctx, s.logger)
 		}
-		row, terr := repo.New(s.db).GetTunneledMcpServerBindingUnscoped(ctx, tunnelID)
+		row, terr := repo.New(s.db).GetTunneledMcpServerBinding(ctx, repo.GetTunneledMcpServerBindingParams{
+			ID:             tunnelID,
+			ProjectID:      *authCtx.ProjectID,
+			OrganizationID: authCtx.ActiveOrganizationID,
+		})
 		if terr != nil {
 			if errors.Is(terr, pgx.ErrNoRows) {
-				return oops.E(oops.CodeNotFound, terr, "tunneled MCP server not found").LogError(ctx, s.logger)
+				return oops.E(oops.CodeNotFound, terr, "active tunneled MCP server not found in the current project and organization").LogError(ctx, s.logger)
 			}
 			return oops.E(oops.CodeUnexpected, terr, "get tunneled mcp server").LogError(ctx, s.logger)
 		}
-		tunnel = &row
+		dbtx, terr := s.db.Begin(ctx)
+		if terr != nil {
+			return oops.E(oops.CodeUnexpected, terr, "begin tunnel registration audit transaction").LogError(ctx, s.logger)
+		}
+		defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+		if terr := s.auditLogger.LogTunneledMcpServerDynamicClientRegistration(ctx, dbtx, audit.LogTunneledMcpServerDynamicClientRegistrationEvent{
+			OrganizationID:        authCtx.ActiveOrganizationID,
+			ProjectID:             row.ProjectID,
+			Actor:                 urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName:      authCtx.Email,
+			ActorSlug:             nil,
+			TunneledMcpServerURN:  urn.NewTunneledMcpServer(row.ID),
+			TunneledMcpServerName: row.Name,
+			RegistrationEndpoint:  req.RegistrationEndpoint,
+		}); terr != nil {
+			return oops.E(oops.CodeUnexpected, terr, "log tunneled dynamic client registration attempt").LogError(ctx, s.logger)
+		}
+		if terr := dbtx.Commit(ctx); terr != nil {
+			return oops.E(oops.CodeUnexpected, terr, "commit tunnel registration audit").LogError(ctx, s.logger)
+		}
 	}
 
 	registered, err := RegisterDynamicClient(ctx, s.policy, s.tunnels, s.serverURL, req)
@@ -268,22 +295,6 @@ func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) er
 			return oops.E(oops.CodeBadRequest, err, "identity provider rejected the client registration: %s", registrationErr.Detail).LogWarn(ctx, s.logger)
 		}
 		return oops.E(oops.CodeGatewayError, err, "failed to register client with identity provider").LogError(ctx, s.logger)
-	}
-
-	if tunnel != nil {
-		authCtx, _ := contextvalues.GetAuthContext(ctx)
-		if err := s.auditLogger.LogTunneledMcpServerDynamicClientRegistration(ctx, s.db, audit.LogTunneledMcpServerDynamicClientRegistrationEvent{
-			OrganizationID:        authCtx.ActiveOrganizationID,
-			ProjectID:             tunnel.ProjectID,
-			Actor:                 urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-			ActorDisplayName:      authCtx.Email,
-			ActorSlug:             nil,
-			TunneledMcpServerURN:  urn.NewTunneledMcpServer(tunnel.ID),
-			TunneledMcpServerName: tunnel.Name,
-			RegistrationEndpoint:  req.RegistrationEndpoint,
-		}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "log tunneled dynamic client registration").LogError(ctx, s.logger)
-		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
