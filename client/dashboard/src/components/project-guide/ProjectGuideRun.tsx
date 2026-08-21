@@ -122,7 +122,7 @@ export function ProjectGuideRun({
 
   if (resolvedCurrentContent === undefined) {
     resolvedCurrentContent = (
-      <p className="max-w-[52ch] pt-3 text-[13px] leading-[1.6] text-[#121212]/62">
+      <p className="max-w-md pt-3 text-body-sm text-muted-foreground">
         {journey.stepBlurbs[currentStep]}
       </p>
     );
@@ -171,29 +171,25 @@ export function ProjectGuideRun({
         data-testid="project-guide-run"
         data-display-state={displayState}
       >
-        <div className="flex items-center gap-3 border-b border-[#EBEBEB] bg-[#FAFAF9] px-[22px] py-[13px]">
+        <div className="border-border bg-background flex items-center gap-3 border-b px-6 py-3">
           <span
             aria-hidden="true"
-            className="size-[9px]"
+            className="size-2.5"
             style={{ backgroundColor: fixture.accent }}
           />
-          <span className="font-mono text-[10px] tracking-[0.08em] uppercase">
-            Journey
-          </span>
-          <span className="font-mono text-[10px] tracking-[0.06em] text-[#121212]/35 uppercase">
-            {fixture.meta}
-          </span>
+          <span className="text-eyebrow">Journey</span>
+          <span className="text-eyebrow text-disabled">{fixture.meta}</span>
           <span
-            className="ml-auto font-mono text-[9.5px] tracking-[0.06em] uppercase"
+            className="text-eyebrow ml-auto"
             style={{ color: fixture.accent }}
           >
             {completedSteps.length} of {journey.steps.length} done
           </span>
         </div>
-        <div className="grid min-h-0 min-w-0 flex-1 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_480px] lg:overflow-hidden">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
           <ol
             aria-label={`${journey.id === "third-party-mcp" ? "Journey A" : "Journey B"} steps`}
-            className="min-w-0 overflow-hidden px-[22px] pt-2 pb-5 lg:overflow-y-auto"
+            className="min-w-0 overflow-hidden px-6 pt-2 pb-5 lg:flex-1 lg:overflow-y-auto"
           >
             {journey.steps.map((step, index) => {
               const complete = completedSteps.includes(index);
@@ -202,24 +198,23 @@ export function ProjectGuideRun({
                 <li
                   key={step}
                   aria-current={current ? "step" : undefined}
-                  className="min-w-0 border-l-2 border-b border-[#F0EFED] py-3 pl-4"
+                  className={cn(
+                    "border-neutral-softest min-w-0 border-b border-l-2 py-3 pl-4",
+                    current && "border-l-foreground",
+                  )}
                   style={{
-                    borderLeftColor: complete
-                      ? fixture.accent
-                      : current
-                        ? "#121212"
-                        : "#EFEEEC",
+                    borderLeftColor: complete ? fixture.accent : undefined,
                   }}
                 >
                   <div className="flex items-baseline gap-3">
-                    <span className="font-mono text-[10px] text-[#121212]/35">
+                    <span className="text-eyebrow text-disabled">
                       {String(index + 1).padStart(2, "0")}
                     </span>
                     <span
                       className={cn(
-                        "text-[13px] leading-[1.25]",
-                        current && "text-[19px]",
-                        !current && !complete && "text-[#121212]/45",
+                        "text-sm leading-tight",
+                        current && "text-xl",
+                        !current && !complete && "text-muted-foreground",
                       )}
                     >
                       {step}
@@ -229,12 +224,12 @@ export function ProjectGuideRun({
                         type="button"
                         onClick={() => onRewind(index)}
                         aria-label={`Rewind to ${step}`}
-                        className="ml-auto font-mono text-[9.5px] tracking-[0.06em] text-[#121212]/40 uppercase"
+                        className="text-eyebrow text-disabled ml-auto"
                       >
                         redo
                       </button>
                     ) : (
-                      <span className="ml-auto font-mono text-[9.5px] tracking-[0.06em] text-[#121212]/40 uppercase">
+                      <span className="text-eyebrow text-disabled ml-auto">
                         {complete
                           ? "done"
                           : current
@@ -250,17 +245,15 @@ export function ProjectGuideRun({
             {isEndStep && (
               <li
                 aria-current="step"
-                className="min-w-0 border-l-2 border-b border-[#F0EFED] py-3 pl-4"
+                className="border-neutral-softest min-w-0 border-b border-l-2 py-3 pl-4"
                 style={{ borderLeftColor: fixture.accent }}
               >
                 <div className="flex items-baseline gap-3">
-                  <span className="font-mono text-[10px] text-[#121212]/35">
-                    END
-                  </span>
-                  <span className="text-[19px] leading-[1.25]">
+                  <span className="text-eyebrow text-disabled">END</span>
+                  <span className="text-xl leading-tight">
                     Journey complete
                   </span>
-                  <span className="ml-auto font-mono text-[9.5px] tracking-[0.06em] text-[#121212]/40 uppercase">
+                  <span className="text-eyebrow text-disabled ml-auto">
                     done
                   </span>
                 </div>
@@ -270,36 +263,33 @@ export function ProjectGuideRun({
           </ol>
           <aside
             aria-label={`${journey.id === "third-party-mcp" ? "Journey A" : "Journey B"} run panel`}
-            className="flex min-h-[390px] min-w-0 flex-col gap-[13px] border-l border-[#EBEBEB] bg-[#FCFCFC] px-5 pt-[18px] pb-5 lg:min-h-0 lg:overflow-y-auto"
+            className="border-border bg-card flex min-h-96 min-w-0 flex-col gap-3 border-l px-5 pt-5 pb-5 lg:min-h-0 lg:w-2/5 lg:overflow-y-auto"
           >
             <div className="flex items-baseline gap-2.5">
-              <span
-                className="font-mono text-[10px]"
-                style={{ color: fixture.accent }}
-              >
+              <span className="text-eyebrow" style={{ color: fixture.accent }}>
                 {isEndStep ? "END" : String(currentStep + 1).padStart(2, "0")}
               </span>
-              <h3 className="text-[13px] leading-[1.3]">
+              <h3 className="text-sm leading-tight">
                 {journey.steps[currentStep] ?? "Journey complete"}
               </h3>
             </div>
-            <span className="h-px bg-[#EBEBEB]" />
+            <span className="bg-border h-px" />
             <div
               ref={activityLogRef}
               role="log"
               aria-label={`${journey.id === "third-party-mcp" ? "Journey A" : "Journey B"} activity`}
               aria-live="polite"
-              className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto bg-[#F7F7F6] p-3.5 shadow-[inset_0_0_0_1px_#E6E5E3]"
+              className="border-neutral-softest bg-muted/40 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto border p-4"
             >
-              <span className="font-mono text-[9px] tracking-[0.09em] text-[#121212]/45 uppercase">
+              <span className="text-eyebrow text-muted-foreground">
                 Activity
               </span>
-              <div className="font-mono text-[11px] leading-[1.5] text-[#121212]/55">
+              <div className="font-mono text-xs leading-normal text-muted-foreground">
                 {resolvedOutput}
                 {resolvedEventCard}
               </div>
               {displayState === "waiting" && (
-                <div className="flex gap-1 font-mono text-[10px] text-[#121212]/50">
+                <div className="text-muted-foreground flex gap-1 font-mono text-xs">
                   <span role="status">Listening for an event</span>
                   <span aria-hidden="true">·</span>
                   <span aria-hidden="true">
@@ -351,31 +341,29 @@ export function ProjectGuideObservedEvent({
   event: ProjectGuideEventCard;
   label: string;
 }): JSX.Element {
-  const tone = event.tone === "deny" ? "#C83228" : "#5A8250";
+  const toneClasses =
+    event.tone === "deny"
+      ? {
+          border: "border-destructive-default",
+          text: "text-default-destructive",
+        }
+      : { border: "border-success-default", text: "text-default-success" };
   return (
     <section
-      className="grid gap-1.5 border-l-2 p-2.5"
-      style={{ borderLeftColor: tone }}
+      className={cn("grid gap-1.5 border-l-2 p-2.5", toneClasses.border)}
     >
-      <span className="font-mono text-[9.5px] tracking-[0.09em] text-[#121212]/45 uppercase">
-        {label}
-      </span>
-      <span
-        className="font-mono text-[9px] tracking-[0.09em] uppercase"
-        style={{ color: tone }}
-      >
-        {event.kind}
-      </span>
-      <span className="font-mono text-[11.5px]">{event.title}</span>
+      <span className="text-eyebrow text-muted-foreground">{label}</span>
+      <span className={cn("text-eyebrow", toneClasses.text)}>{event.kind}</span>
+      <span className="font-mono text-sm">{event.title}</span>
       {event.rows.map((row) => (
-        <span key={row.key} className="flex gap-2 font-mono text-[10.5px]">
-          <span className="w-16 shrink-0 text-[9.5px] tracking-[0.07em] text-[#121212]/42 uppercase">
+        <span key={row.key} className="flex gap-2 font-mono text-xs">
+          <span className="text-eyebrow text-disabled w-16 shrink-0">
             {row.key}
           </span>
           {row.value}
         </span>
       ))}
-      <span className="border-t border-[#E6E5E3] pt-1.5 text-[11.5px] leading-[1.5] text-[#121212]/55">
+      <span className="border-neutral-softest text-muted-foreground border-t pt-1.5 text-sm leading-normal">
         {event.note}
       </span>
     </section>
@@ -393,17 +381,15 @@ function CompletionStepBody({
 }): JSX.Element {
   return (
     <div className="grid gap-3 pt-3">
-      <h4 className="max-w-[24ch] font-display text-[28px] leading-[1] font-thin tracking-[-0.03em]">
-        {journey.completion.heading}
-      </h4>
-      <p className="max-w-[56ch] text-[13px] leading-[1.6] text-[#121212]/62">
+      <h4 className="text-display-xs max-w-48">{journey.completion.heading}</h4>
+      <p className="text-muted-foreground max-w-md text-body-sm">
         {body ?? journey.completion.body}
       </p>
-      <div className="mt-3 border-t border-[#DBDBDB] pt-4">
+      <div className="border-border mt-3 border-t pt-4">
         <button
           type="button"
           onClick={onSwitchJourney}
-          className="w-fit border border-[#DBDBDB] px-[18px] py-[10px] font-mono text-[11px] tracking-[0.06em] text-[#121212]/60 uppercase"
+          className="border-border text-muted-foreground w-fit border px-4 py-2 font-mono text-xs uppercase"
         >
           Start the other journey
         </button>

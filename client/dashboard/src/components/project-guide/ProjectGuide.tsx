@@ -209,9 +209,9 @@ export function ProjectGuide({
 
   return (
     <GuideCanvas>
-      <section className="bg-card border-border mx-auto flex min-h-[400px] w-full max-w-[1200px] flex-col overflow-hidden border shadow-[0_1px_2px_rgba(18,18,18,.04)]">
-        <header className="flex items-baseline gap-3.5 border-b border-[#121212]/10 px-6 py-[18px] pb-[14px]">
-          <h2 className="font-display text-[28px] leading-[.95] font-thin tracking-[-0.03em]">
+      <section className="border-border bg-card mx-auto flex min-h-96 w-full max-w-6xl flex-col overflow-hidden border shadow-sm">
+        <header className="border-border flex items-baseline gap-3.5 border-b px-6 py-5 pb-3">
+          <h2 className="text-display-xs">
             {selectedJourney?.title ?? "Put your agent traffic under control"}
           </h2>
           {selected && (
@@ -221,14 +221,14 @@ export function ProjectGuide({
                 onClick={() => send({ type: "BACK" })}
                 aria-controls={selectedContentId}
                 aria-expanded="true"
-                className="font-mono text-[10.5px] tracking-[0.05em] text-[#121212]/40 uppercase hover:text-[#121212]"
+                className="text-eyebrow text-disabled hover:text-foreground"
               >
                 ← Back to start
               </button>
             </div>
           )}
         </header>
-        <div className="flex min-h-[400px] flex-col md:flex-row">
+        <div className="flex min-h-96 flex-col md:flex-row">
           {PROJECT_GUIDE_JOURNEYS.map((journey) => {
             const status = statusByJourney[journey.id];
             const isSelected = selected === journey.id;
@@ -240,11 +240,8 @@ export function ProjectGuide({
                 data-state={isSelected ? "open" : isSpine ? "spine" : "closed"}
                 className={cn(
                   "min-w-0 overflow-hidden",
-                  isSpine
-                    ? "bg-[#F7F7F7] md:w-[54px] md:flex-none"
-                    : "md:flex-1",
-                  journey.id === "third-party-mcp" &&
-                    "border-l border-[#121212]/10",
+                  isSpine ? "bg-background md:w-14 md:flex-none" : "md:flex-1",
+                  journey.id === "third-party-mcp" && "border-border border-l",
                 )}
               >
                 {isSpine ? (
@@ -501,7 +498,7 @@ function ProjectGuideStepContent({
 
   return (
     <div className="grid min-w-0 gap-3 pt-3">
-      <p className="max-w-[52ch] text-[13px] leading-[1.6] text-[#121212]/62">
+      <p className="text-muted-foreground max-w-md text-body-sm">
         {journey.stepBlurbs[step]}
       </p>
       <SecretStepBody
@@ -607,37 +604,30 @@ function SecretPhaseChecklist({
 }): JSX.Element {
   return (
     <div className="grid gap-2 pt-2">
-      <span className="font-mono text-[10px] tracking-[0.09em] text-[#121212]/40 uppercase">
-        {title}
-      </span>
+      <span className="text-eyebrow text-disabled">{title}</span>
       <div>
         {labels.map((label, index) => {
           const status = statuses[index] ?? "not run";
           const statusClassName = {
-            "not run": "border-[#C4C4C4] text-[#121212]/30",
-            queued: "border-[#C4C4C4] text-[#121212]/40",
-            running: "animate-pulse border-[#121212] text-[#121212]",
-            ok: "border-[#5A8250] text-[#5A8250]",
-            failed: "border-[#C83228] text-[#C83228]",
+            "not run": "border-neutral-default text-disabled",
+            queued: "border-neutral-default text-disabled",
+            running: "animate-pulse border-foreground text-foreground",
+            ok: "border-success-default text-default-success",
+            failed: "border-destructive-default text-default-destructive",
           }[status];
 
           return (
             <div
               key={label}
-              className="flex items-center gap-2 border-t border-[#121212]/10 py-3 last:border-b"
+              className="border-border flex items-center gap-2 border-t py-3 last:border-b"
             >
               <span
                 aria-hidden="true"
-                className={cn("size-[11px] shrink-0 border", statusClassName)}
+                className={cn("size-3 shrink-0 border", statusClassName)}
               />
-              <span className="text-[12.5px] text-[#121212]/62">{label}</span>
-              <span className="flex-1 border-t border-[#121212]/10" />
-              <span
-                className={cn(
-                  "font-mono text-[9.5px] uppercase",
-                  statusClassName,
-                )}
-              >
+              <span className="text-muted-foreground text-sm">{label}</span>
+              <span className="border-border flex-1 border-t" />
+              <span className={cn("text-eyebrow", statusClassName)}>
                 {status}
               </span>
             </div>
@@ -678,7 +668,7 @@ function SecretStepBody({
             <button
               type="button"
               onClick={operations.retryPolicy}
-              className="border-border w-fit border px-3 py-2 font-mono text-[10px] uppercase"
+              className="border-border w-fit border px-3 py-2 font-mono text-xs uppercase"
             >
               Retry policy check
             </button>
@@ -723,7 +713,7 @@ function SecretStepBody({
       return (
         <div className="grid min-w-0 gap-2">
           <div className="grid gap-2">
-            <span className="font-mono text-[10px] text-[#121212]/50">
+            <span className="font-mono text-xs text-muted-foreground">
               Copy into {SECRET_GUIDE_CLIENTS[operations.client].label}
             </span>
             <div className="min-w-0">
@@ -758,9 +748,7 @@ function SecretAgentPicker({
 }): JSX.Element {
   return (
     <fieldset className="grid gap-2 pt-2">
-      <legend className="font-mono text-[10px] tracking-[0.09em] text-[#121212]/40 uppercase">
-        Choose your agent
-      </legend>
+      <legend className="text-eyebrow text-disabled">Choose your agent</legend>
       <div className="flex min-w-0 gap-2 overflow-x-auto pb-1">
         {(Object.keys(SECRET_GUIDE_CLIENTS) as SecretGuideClient[]).map(
           (option) => {
@@ -773,10 +761,10 @@ function SecretAgentPicker({
                 disabled={disabled}
                 onClick={() => onSelect(option)}
                 className={cn(
-                  "shrink-0 border px-3 py-2 text-left text-[12px] whitespace-nowrap transition-colors",
+                  "shrink-0 border px-3 py-2 text-left text-sm whitespace-nowrap transition-colors",
                   selected
-                    ? "border-[#121212] bg-[#121212] text-[#FAFAFA]"
-                    : "border-[#121212]/15 text-[#121212]/60 hover:border-[#121212]/45 hover:text-[#121212]",
+                    ? "border-foreground bg-foreground text-background"
+                    : "border-border text-muted-foreground hover:border-foreground hover:text-foreground",
                   disabled && !selected && "cursor-default opacity-50",
                 )}
               >
@@ -827,7 +815,7 @@ function ProjectGuideMcpStepContent({
 }): JSX.Element {
   return (
     <div className="grid gap-3 pt-3">
-      <p className="max-w-[52ch] text-[13px] leading-[1.6] text-[#121212]/62">
+      <p className="text-muted-foreground max-w-md text-body-sm">
         {journey.stepBlurbs[step]}
       </p>
       <McpStepBody
@@ -874,7 +862,7 @@ function McpCatalogSelection({
 }): JSX.Element {
   if (operations.catalogPending) {
     return (
-      <span className="font-mono text-[10px] text-[#121212]/50 uppercase">
+      <span className="text-eyebrow text-muted-foreground">
         Loading automatic servers
       </span>
     );
@@ -884,7 +872,7 @@ function McpCatalogSelection({
       <button
         type="button"
         onClick={operations.retryCatalog}
-        className="border-border w-fit border px-3 py-2 font-mono text-[10px] uppercase"
+        className="border-border w-fit border px-3 py-2 font-mono text-xs uppercase"
       >
         Retry catalog
       </button>
@@ -893,13 +881,13 @@ function McpCatalogSelection({
   if (operations.catalogServers.length === 0) {
     return (
       <div className="grid gap-2">
-        <p className="text-[12px] text-[#121212]/55">
+        <p className="text-muted-foreground text-sm">
           No curated hosted servers are available right now.
         </p>
         <button
           type="button"
           onClick={operations.retryCatalog}
-          className="border-border w-fit border px-3 py-2 font-mono text-[10px] uppercase"
+          className="border-border w-fit border px-3 py-2 font-mono text-xs uppercase"
         >
           Retry catalog
         </button>
@@ -924,8 +912,8 @@ function McpCatalogSelection({
             )}
           >
             <span aria-hidden="true" className="bg-foreground size-1.5" />
-            <span className="text-[12px]">{name}</span>
-            <span className="ml-auto font-mono text-[10px] text-[#121212]/50">
+            <span className="text-sm">{name}</span>
+            <span className="text-muted-foreground ml-auto font-mono text-xs">
               {server.toolCount} tools
             </span>
           </button>
@@ -1035,20 +1023,17 @@ function ProjectGuideOutput({
   return (
     <ol className="grid gap-1.5">
       {entries.map((entry) => (
-        <li key={entry.id} className="grid grid-cols-[44px_1fr] gap-2">
-          <span className="text-[9px] tracking-[0.06em] text-[#121212]/35 uppercase">
+        <li key={entry.id} className="flex gap-2">
+          <span className="text-eyebrow text-disabled w-11 shrink-0">
             {entry.kind}
           </span>
-          <span>{entry.message}</span>
+          <span className="min-w-0">{entry.message}</span>
         </li>
       ))}
       {error && (
-        <li
-          role="alert"
-          className="grid grid-cols-[44px_1fr] gap-2 text-[#8F2A22]"
-        >
-          <span className="text-[9px] tracking-[0.06em] uppercase">error</span>
-          <span>{error}</span>
+        <li role="alert" className="text-default-destructive flex gap-2">
+          <span className="text-eyebrow w-11 shrink-0">error</span>
+          <span className="min-w-0">{error}</span>
         </li>
       )}
     </ol>
@@ -1095,7 +1080,7 @@ function GuideCanvas({ children }: { children: React.ReactNode }): JSX.Element {
     <div
       className={cn(
         BRAND_MESH_SURFACE_CLASS,
-        "relative flex min-h-[calc(100dvh-var(--header-height))] w-full p-4 sm:p-8",
+        "relative flex min-h-dvh w-full p-4 sm:p-8",
       )}
     >
       <BrandMeshLayers />
@@ -1142,31 +1127,32 @@ function JourneyChoice({
       className="flex h-full w-full flex-col text-left"
     >
       <JourneyGraphic journey={journey} status={status} />
-      <span className="flex flex-col gap-2 border-t border-[#121212]/10 bg-[#FAFAFA] p-[22px] transition-[background,box-shadow] hover:bg-card hover:shadow-[inset_0_-3px_0_#121212]">
+      <span className="border-border bg-background flex flex-col gap-2 border-t p-6 transition-all hover:bg-card hover:shadow-inner">
         <span className="flex items-center gap-2.5">
           {journey.steps.map((step, index) => (
             <span
               key={step}
               aria-hidden="true"
-              className="h-[3px] w-4"
-              style={{
-                backgroundColor:
-                  isComplete || (isInProgress && index === 0)
-                    ? fixture.accent
-                    : "#DCDCDC",
-              }}
+              className={cn(
+                "h-1 w-4",
+                !(isComplete || (isInProgress && index === 0)) &&
+                  "bg-neutral-softest",
+              )}
+              style={
+                isComplete || (isInProgress && index === 0)
+                  ? { backgroundColor: fixture.accent }
+                  : undefined
+              }
             />
           ))}
-          <span className="font-mono text-[9.5px] tracking-[0.07em] text-[#121212]/40 uppercase">
-            {progressLabel}
-          </span>
+          <span className="text-eyebrow text-disabled">{progressLabel}</span>
         </span>
-        <span className="text-[18px] leading-[1.2]">{journey.title}</span>
-        <span className="text-[12.5px] leading-[1.55] text-[#121212]/62">
+        <span className="text-xl leading-tight">{journey.title}</span>
+        <span className="text-muted-foreground text-sm leading-relaxed">
           {journey.win}
         </span>
         <span className="flex items-center gap-3 pt-1">
-          <span className="font-mono text-[11.5px]">
+          <span className="font-mono text-sm">
             {isComplete
               ? "Review"
               : isInProgress
@@ -1177,13 +1163,10 @@ function JourneyChoice({
             className="h-px flex-1"
             style={{ backgroundColor: fixture.accent }}
           />
-          <span className="font-mono text-[11px] text-[#121212]/40">
+          <span className="text-disabled font-mono text-xs">
             {journey.steps.length} steps · ~4 min
           </span>
-          <span
-            className="font-mono text-[11.5px]"
-            style={{ color: fixture.accent }}
-          >
+          <span className="font-mono text-sm" style={{ color: fixture.accent }}>
             →
           </span>
         </span>
@@ -1254,7 +1237,7 @@ function JourneyGraphic({
     <span
       data-testid={`project-guide-graphic-${journey.id}`}
       data-animated={animated}
-      className="flex min-h-[400px] flex-col items-center justify-center px-16 pt-10 pb-8"
+      className="flex min-h-96 flex-col items-center justify-center px-16 pt-10 pb-8"
     >
       {plates.map((plate, index) => (
         <span key={plate.zone} className="flex w-full flex-col items-center">
@@ -1348,8 +1331,8 @@ function JourneyGraphicPlate({
           : { duration: 0 }
       }
       className={cn(
-        "relative flex w-4/5 flex-col gap-2 bg-[#FAFAFA] p-[13px_15px] shadow-[inset_0_0_0_1px_#DBDBDB]",
-        isCenter && "w-full bg-[#F2F2F2] p-[17px_18px_15px_20px]",
+        "border-border bg-background relative flex w-4/5 flex-col gap-2 border p-4",
+        isCenter && "w-full bg-muted p-5",
       )}
     >
       {isCenter && (
@@ -1384,7 +1367,7 @@ function JourneyGraphicPlate({
       {isCenter && (
         <span
           aria-hidden="true"
-          className="absolute inset-y-0 left-0 w-[5px] opacity-40"
+          className="absolute inset-y-0 left-0 w-1 opacity-40"
           style={{
             background:
               "linear-gradient(180deg,#320F1E,#FA873C,#5A8250,#00143C,#9BC3FF)",
@@ -1393,13 +1376,13 @@ function JourneyGraphicPlate({
       )}
       <span className="flex items-center gap-3">
         <span className="flex min-w-0 flex-1 flex-col gap-1">
-          <span className="font-mono text-[9.5px] tracking-[0.09em] text-[#121212]/42 uppercase">
+          <span className="text-eyebrow text-muted-foreground">
             {plate.zone}
           </span>
           <span
             className={cn(
-              "relative min-w-0 truncate text-[12.5px]",
-              isCenter && "text-[18px]",
+              "relative min-w-0 truncate text-sm",
+              isCenter && "text-xl",
             )}
           >
             <motion.span
@@ -1418,11 +1401,11 @@ function JourneyGraphicPlate({
             </motion.span>
           </span>
         </span>
-        <span className="relative min-w-[100px] text-right font-mono text-[9.5px]">
+        <span className="text-eyebrow relative min-w-24 text-right">
           <motion.span
             animate={offOpacity}
             transition={offTransition}
-            className="block whitespace-nowrap text-[#121212]/40"
+            className="text-disabled block whitespace-nowrap"
           >
             {plate.off}
           </motion.span>
@@ -1440,7 +1423,7 @@ function JourneyGraphicPlate({
         <motion.span
           animate={liveOpacity}
           transition={liveTransition}
-          className="flex gap-[3px] pl-2"
+          className="flex gap-1 pl-2"
         >
           {Array.from({ length: 12 }, (_, tick) => (
             <motion.span
@@ -1461,7 +1444,7 @@ function JourneyGraphicPlate({
                     }
                   : { duration: 0 }
               }
-              className="h-[5px] flex-1"
+              className="h-1 flex-1"
               style={{ backgroundColor: accent }}
             />
           ))}
@@ -1486,7 +1469,7 @@ function JourneyGraphicPipe({
   const liveOpacity = animated ? [0, 0, 1, 1, 0] : active ? 1 : 0;
 
   return (
-    <span className="relative flex h-[34px] w-3 justify-center">
+    <span className="relative flex h-9 w-3 justify-center">
       <motion.span
         animate={
           animated ? { opacity: [0, 0, 1, 1, 0] } : { opacity: active ? 0 : 1 }
@@ -1501,7 +1484,7 @@ function JourneyGraphicPipe({
               }
             : { duration: 0 }
         }
-        className="absolute inset-0 border-x border-dashed border-[#C4C4C4]"
+        className="border-neutral-default absolute inset-0 border-x border-dashed"
       />
       <motion.span
         animate={{ opacity: offOpacity }}
@@ -1515,7 +1498,7 @@ function JourneyGraphicPipe({
               }
             : { duration: 0 }
         }
-        className="absolute inset-0 overflow-hidden bg-[#121212]/88"
+        className="bg-foreground/90 absolute inset-0 overflow-hidden"
       >
         <GraphicPipeStripes animated={animated} />
       </motion.span>
@@ -1536,7 +1519,7 @@ function JourneyGraphicPipe({
       >
         <GraphicPipeStripes animated={animated} />
       </motion.span>
-      <span className="absolute left-5 top-1/2 -translate-y-1/2 whitespace-nowrap font-mono text-[9.5px] tracking-[0.07em] text-[#121212]/35 uppercase">
+      <span className="text-eyebrow text-disabled absolute top-1/2 left-5 -translate-y-1/2 whitespace-nowrap">
         {label}
       </span>
     </span>
@@ -1589,13 +1572,10 @@ function JourneySpine({
         className="size-2"
         style={{ backgroundColor: fixture.accent }}
       />
-      <span className="flex-1 [writing-mode:vertical-rl] font-mono text-[10.5px] tracking-[0.08em] text-[#121212]/50 uppercase">
+      <span className="text-eyebrow text-muted-foreground flex-1 [writing-mode:vertical-rl]">
         Journey · {meta}
       </span>
-      <span
-        aria-hidden="true"
-        className="font-mono text-[11px] text-[#121212]/35"
-      >
+      <span aria-hidden="true" className="text-disabled font-mono text-xs">
         ↔
       </span>
     </button>
@@ -1619,22 +1599,22 @@ function ProjectGuideComplete({
           ? { duration: 0 }
           : { duration: 0.4, ease: [0.2, 0.7, 0.3, 1] }
       }
-      className="bg-card border-border grid w-full max-w-[1200px] gap-4 border p-6"
+      className="border-border bg-card grid w-full max-w-6xl gap-4 border p-6"
     >
       <span className="text-eyebrow text-primary">
         {PROJECT_GUIDE_COMPLETE.eyebrow}
       </span>
-      <h2 className="max-w-[24ch] font-display text-[32px] leading-[1.05] font-thin tracking-[-0.03em]">
+      <h2 className="text-display-xs max-w-48">
         {PROJECT_GUIDE_COMPLETE.heading}
       </h2>
-      <p className="max-w-[56ch] text-[13px] leading-[1.6] text-muted-foreground">
+      <p className="text-muted-foreground max-w-md text-body-sm">
         {PROJECT_GUIDE_COMPLETE.body}
       </p>
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
           onClick={onReturnToProjectHome}
-          className="bg-foreground px-4 py-2 font-mono text-[11px] tracking-[0.05em] text-background uppercase"
+          className="bg-foreground text-background px-4 py-2 font-mono text-xs uppercase"
         >
           {PROJECT_GUIDE_COMPLETE.primaryAction}
         </button>
