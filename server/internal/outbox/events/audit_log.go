@@ -36,6 +36,8 @@ var (
 	EnvironmentV1                          = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.environment_event_v1", "Emitted when changes to environments are made")
 	GcpIamCredentialV1                     = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.gcp_iam_credential_event_v1", "Emitted when changes to GCP IAM external credentials are made")
 	GcpKmsKeyV1                            = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.gcp_kms_key_event_v1", "Emitted when changes to GCP KMS external keys are made")
+	JsonWebKeyV1                           = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.json_web_key_event_v1", "Emitted when changes to published JSON Web Keys are made")
+	JsonWebKeySetV1                        = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.json_web_key_set_event_v1", "Emitted when changes to JSON Web Key Sets are made")
 	LiteLLMInstanceV1                      = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.litellm_instance_event_v1", "Emitted when changes to LiteLLM instances are made")
 	McpApprovalRequestV1                   = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.mcp_approval_request_event_v1", "Emitted when changes to MCP approval requests are made")
 	McpCollectionV1                        = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.mcp_collection_event_v1", "Emitted when changes to MCP collections are made")
