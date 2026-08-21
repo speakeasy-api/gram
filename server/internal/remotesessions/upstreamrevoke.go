@@ -250,8 +250,9 @@ func (r *UpstreamRevoker) RevokeDetached(ctx context.Context, cred RevokedCreden
 }
 
 // RevokeAllDetached runs upstream revocations for a batch of sessions that have
-// already been soft-deleted together — every session on a client, whether the
-// operator revoked them explicitly or deleted the client out from under them.
+// already been soft-deleted together — every session on a client (operator
+// revoke or client delete), or every session across the clients one issuer
+// deletion orphaned, which may span several upstream hosts.
 //
 // Post-commit and off the caller's cancellation for the same reasons as
 // RevokeDetached. Two bounds on top of that, because a batch is unbounded in a

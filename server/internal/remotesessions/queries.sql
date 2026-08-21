@@ -502,6 +502,17 @@ WHERE link.user_session_issuer_id = @user_session_issuer_id
 ORDER BY c.id
 FOR UPDATE OF c;
 
+-- name: LockRemoteSessionClientForSessionWrite :one
+-- Serializes a remote-login callback's session write against the issuer-delete
+-- orphan cascade, which locks the same client row before sweeping the client's
+-- sessions. A callback that acquires the lock after that cascade committed
+-- re-reads the (issuer, client) binding as dead and rejects the write instead
+-- of resurrecting an orphaned grant. No rows means the client itself is gone.
+SELECT id
+FROM remote_session_clients
+WHERE id = @id AND deleted IS FALSE
+FOR UPDATE;
+
 -- name: ListRemoteSessionClientsOrphanedByUserSessionIssuer :many
 -- Clients whose only live binding belongs to this issuer: once its bindings
 -- go, no live issuer can reach their sessions. Tenancy mirrors

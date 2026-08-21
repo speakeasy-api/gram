@@ -703,7 +703,41 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 		autoRefresh = *state.AutoRefresh
 	}
 
-	if _, err := queries.UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+	// The upstream exchange has already happened, so the token pair exists
+	// either way; this transaction decides whether Gram stores it. The
+	// client-row lock serializes the write against the issuer-delete orphan
+	// cascade, which locks the same row before sweeping the client's
+	// sessions: a callback that acquires the lock after that cascade
+	// committed re-reads the binding as dead and is rejected here, instead
+	// of resurrecting a grant no live issuer can reach or revoke.
+	dbtx, err := m.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "begin remote session transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	txQueries := remotesessions_repo.New(dbtx)
+
+	if _, err := txQueries.LockRemoteSessionClientForSessionWrite(ctx, state.RemoteSessionClientID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeUnauthorized, err, "the remote session client was deleted while the login was in progress").LogWarn(ctx, logger)
+		}
+		return oops.E(oops.CodeUnexpected, err, "lock remote session client").LogError(ctx, logger)
+	}
+
+	bound, err := txQueries.CheckRemoteSessionClientBindingForUserSessionIssuer(ctx, remotesessions_repo.CheckRemoteSessionClientBindingForUserSessionIssuerParams{
+		RemoteSessionClientID: state.RemoteSessionClientID,
+		UserSessionIssuerID:   state.UserSessionIssuerID,
+		ProjectID:             state.ProjectID,
+		OrganizationID:        state.OrganizationID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "recheck remote session client binding").LogError(ctx, logger)
+	}
+	if !bound {
+		return oops.E(oops.CodeUnauthorized, nil, "the connection this login was started from no longer exists").LogWarn(ctx, logger)
+	}
+
+	if _, err := txQueries.UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
 		SubjectUrn:            *state.Subject,
 		UserSessionIssuerID:   state.UserSessionIssuerID,
 		RemoteSessionClientID: state.RemoteSessionClientID,
@@ -719,6 +753,10 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 		AutoRefresh:      autoRefresh,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "store remote session").LogError(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "commit remote session").LogError(ctx, logger)
 	}
 
 	routeBase := state.RouteBase
