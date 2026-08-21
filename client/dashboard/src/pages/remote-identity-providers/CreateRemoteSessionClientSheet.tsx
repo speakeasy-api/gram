@@ -196,6 +196,7 @@ export function CreateRemoteSessionClientSheet({
           // RFC 7591 §2: scope is a space-separated string at registration time.
           scope: parsedScopes.length > 0 ? parsedScopes.join(" ") : undefined,
           tokenEndpointAuthMethod: tokenEndpointAuthMethod || undefined,
+          tunneledMcpServerId: issuer.tunneledMcpServerId,
         });
         const narrowedDcrMethod = narrowTokenEndpointAuthMethod(
           registered.tokenEndpointAuthMethod,

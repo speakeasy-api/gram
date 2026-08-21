@@ -1,5 +1,6 @@
 import { AssetImageUploadField } from "@/components/asset-image-upload-field";
 import { RequireScope } from "@/components/require-scope";
+import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { Text } from "@/components/ui/Text";
 import { useOrgRoutes } from "@/routes";
@@ -25,6 +26,7 @@ import { DeleteIssuerDialog } from "../../RemoteIdentityProviders";
 import { issuerDisplayName } from "../../issuerDisplay";
 import { SettingsField, SettingsSection } from "../../issuerSettingsFields";
 import { buildUpdateIssuerForm } from "../../issuerSettingsForm";
+import { IssuerTunnelSelector } from "./IssuerTunnelSelector";
 
 export function SettingsTab({
   issuer,
@@ -44,7 +46,11 @@ export function SettingsTab({
   const [slug, setSlug] = useState(issuer.slug);
   const [clientSetupDocumentationUrl, setClientSetupDocumentationUrl] =
     useState(issuer.clientSetupDocumentationUrl ?? "");
+  const [tunneledMcpServerId, setTunneledMcpServerId] = useState(
+    issuer.tunneledMcpServerId ?? "",
+  );
   const [showDelete, setShowDelete] = useState(false);
+  const isPlatformAdmin = useIsPlatformAdmin();
   const { hasAnyScope } = useRBAC();
   const hasOrgAdminScope = hasAnyScope(["org:admin"]);
 
@@ -203,6 +209,10 @@ export function SettingsTab({
           registrationEndpoint,
           jwksUri,
           discoveredSnapshot,
+          tunneledMcpServerId:
+            isPlatformAdmin && issuer.projectId
+              ? tunneledMcpServerId
+              : undefined,
         }),
       },
     });
@@ -225,6 +235,12 @@ export function SettingsTab({
           description="Shown beside this provider in the dashboard and on the connect consent page. Saved with your other changes."
         />
       </SettingsSection>
+
+      <IssuerTunnelSelector
+        projectId={issuer.projectId}
+        value={tunneledMcpServerId}
+        onChange={setTunneledMcpServerId}
+      />
 
       <SettingsSection
         title="Issuer configuration"
