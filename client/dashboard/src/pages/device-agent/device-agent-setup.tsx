@@ -1028,7 +1028,7 @@ msiexec /i speakeasy-agent.msi`;
         <SubLabel>Run the download + install script</SubLabel>
         <StepNote>
           Run from an elevated (Administrator) PowerShell. The download URL
-          always resolves to the latest signed installer.
+          resolves to the latest signed installer.
         </StepNote>
         <CodeBlock language="powershell">{downloadScript}</CodeBlock>
       </div>
