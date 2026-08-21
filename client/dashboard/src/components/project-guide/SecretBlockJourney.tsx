@@ -35,8 +35,8 @@ type PluginStage = "download" | "install";
 
 const CLIENTS: Record<Client, { label: string; directory: string }> = {
   claude: { label: "Claude Code", directory: "~/.claude/plugins/" },
-  cursor: { label: "Cursor", directory: "~/.cursor/extensions/" },
   codex: { label: "Codex", directory: "~/.codex/plugins/" },
+  cursor: { label: "Cursor", directory: "~/.cursor/extensions/" },
 };
 
 const SYNTHETIC_SECRET_PROMPT =

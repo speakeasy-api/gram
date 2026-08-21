@@ -123,7 +123,7 @@ export const PROJECT_GUIDE_JOURNEYS: JourneyMeta[] = [
     steps: PROJECT_GUIDE_MCP_STEPS,
     stepBlurbs: [
       "The catalog lists servers from the official MCP Registry. Installing one creates a governed endpoint in front of the vendor's server — the vendor's URL is already known, and nothing upstream changes.",
-      "Point the client at your endpoint instead of the vendor's URL. The proxy drops the client's own Authorization header and substitutes the credential resolved for that caller, so no vendor key sits on a developer's machine.",
+      "Run the command below to add the governed endpoint to your client. Complete OAuth when the client connects; the proxy keeps vendor credentials off the developer's machine.",
       "Run this in the client you just configured. Listing tools reads nothing and writes nothing — it puts the first real request on the governed path.",
       "The endpoint checks the call against the caller's tool access and records it before forwarding. This is the first entry.",
     ],

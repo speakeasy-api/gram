@@ -53,15 +53,15 @@ vi.mock("@/contexts/Sdk", () => ({
 }));
 
 vi.mock("./useMcpGuideOperations", () => ({
-  MCP_GUIDE_CLIENTS: ["claude", "cursor", "codex"],
+  MCP_GUIDE_CLIENTS: ["claude", "codex", "cursor"],
   useMcpGuideOperations: () => mcpOperations.current,
 }));
 
 vi.mock("./useSecretGuideOperations", () => ({
   SECRET_GUIDE_CLIENTS: {
     claude: { label: "Claude Code", directory: "~/.claude/plugins/" },
-    cursor: { label: "Cursor", directory: "~/.cursor/extensions/" },
     codex: { label: "Codex", directory: "~/.codex/plugins/" },
+    cursor: { label: "Cursor", directory: "~/.cursor/extensions/" },
     opencode: { label: "OpenCode", directory: ".opencode/" },
   },
   useSecretGuideOperations: () => secretOperations.current,
@@ -139,7 +139,7 @@ function resetMcpOperations(): void {
     projectStateError: false,
     projectStatePending: false,
     prompt:
-      "Using the Linear MCP server at this exact URL, https://api.example/mcp/linear-endpoint, first list the available tools. If multiple servers have the same name, use only the one at this URL. Then choose one tool marked read-only and call it with a harmless request. Do not create, update, or delete anything.",
+      "Using the Linear_Governed MCP server at this exact URL, https://api.example/mcp/linear-endpoint, first list the available tools. If multiple servers have the same name, use only the one at this URL. Then choose one tool marked read-only and call it with a harmless request. Do not create, update, or delete anything.",
     promptCopied: true,
     retryActivity: vi.fn(),
     retryCatalog: vi.fn(),
@@ -148,11 +148,11 @@ function resetMcpOperations(): void {
     setClient: vi.fn(),
     connectionPrompts: {
       claude:
-        "Configure the remote Linear MCP server in my local Claude Code setup only.\n\nServer URL:\nhttps://api.example/mcp/linear-endpoint\n\nComplete OAuth if prompted. Verify only that the configuration exists and is enabled.",
+        "claude mcp add --transport http --scope user 'Linear_Governed' 'https://api.example/mcp/linear-endpoint'",
       cursor:
-        "Configure the remote Linear MCP server in my local Cursor setup only.\n\nServer URL:\nhttps://api.example/mcp/linear-endpoint\n\nComplete OAuth if prompted. Verify only that the configuration exists and is enabled.",
+        '{\n  "mcpServers": {\n    "Linear_Governed": {\n      "type": "http",\n      "url": "https://api.example/mcp/linear-endpoint"\n    }\n  }\n}',
       codex:
-        "Configure the remote Linear MCP server in my local Codex setup only.\n\nServer URL:\nhttps://api.example/mcp/linear-endpoint\n\nComplete OAuth if prompted. Verify only that the configuration exists and is enabled.",
+        "codex mcp add 'Linear_Governed' --url 'https://api.example/mcp/linear-endpoint'",
     },
     toolLogsHref: "/projects/request-project/logs",
   };
@@ -1115,6 +1115,16 @@ describe("ProjectGuide", () => {
     expect(screen.getByRole("tab", { name: "Claude" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "Cursor" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "Codex" })).toBeTruthy();
+    expect(
+      screen.getByText((_, element) => {
+        if (element?.tagName !== "PRE") return false;
+        return Boolean(
+          element.textContent?.includes(
+            "claude mcp add --transport http --scope user 'Linear_Governed'",
+          ),
+        );
+      }),
+    ).toBeTruthy();
     expect(
       screen.queryByText("https://api.example/mcp/linear-endpoint"),
     ).toBeNull();

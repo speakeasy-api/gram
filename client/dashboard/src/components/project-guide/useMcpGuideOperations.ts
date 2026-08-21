@@ -48,7 +48,7 @@ type ActivityBaseline = {
   totalToolCalls: number;
 };
 
-const CLIENTS: McpGuideClient[] = ["claude", "cursor", "codex"];
+const CLIENTS: McpGuideClient[] = ["claude", "codex", "cursor"];
 
 function serverName(server: PulseMCPServer): string {
   return server.title ?? server.registrySpecifier;
@@ -84,32 +84,45 @@ function curateCatalogServers(
     .sort(compareCatalogServers);
 }
 
-function connectionPromptFor(
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+function governedClientName(name: string): string {
+  return `${name}_Governed`;
+}
+
+function connectionCommandFor(
   client: McpGuideClient,
   serverName: string,
   endpointUrl: string,
 ): string {
-  const clientName = {
-    claude: "Claude Code",
-    cursor: "Cursor",
-    codex: "Codex",
-  }[client];
-  return `Configure the remote ${serverName} MCP server in my local ${clientName} setup only.
-
-Server URL:
-${endpointUrl}
-
-Complete OAuth if prompted. Verify only that the configuration exists and is enabled.`;
+  switch (client) {
+    case "claude":
+      return `claude mcp add --transport http --scope user ${shellQuote(serverName)} ${shellQuote(endpointUrl)}`;
+    case "codex":
+      return `codex mcp add ${shellQuote(serverName)} --url ${shellQuote(endpointUrl)}`;
+    case "cursor":
+      return JSON.stringify(
+        {
+          mcpServers: {
+            [serverName]: { type: "http", url: endpointUrl },
+          },
+        },
+        null,
+        2,
+      );
+  }
 }
 
-function connectionPromptsFor(
+function connectionCommandsFor(
   serverName: string,
   endpointUrl: string,
 ): Record<McpGuideClient, string> {
   return {
-    claude: connectionPromptFor("claude", serverName, endpointUrl),
-    cursor: connectionPromptFor("cursor", serverName, endpointUrl),
-    codex: connectionPromptFor("codex", serverName, endpointUrl),
+    claude: connectionCommandFor("claude", serverName, endpointUrl),
+    cursor: connectionCommandFor("cursor", serverName, endpointUrl),
+    codex: connectionCommandFor("codex", serverName, endpointUrl),
   };
 }
 
@@ -289,6 +302,9 @@ export function useMcpGuideOperations(): {
     mcpServer?.name ??
     (selectedServer ? serverName(selectedServer) : undefined) ??
     (matchedCatalogServer ? serverName(matchedCatalogServer) : undefined);
+  const clientName = resolvedName
+    ? governedClientName(resolvedName)
+    : undefined;
 
   const workflowServers = useMemo(
     () =>
@@ -324,13 +340,11 @@ export function useMcpGuideOperations(): {
   const serverActivity = activityFor(activityQuery.data?.activity, mcpServer);
 
   const connectionPrompts =
-    endpointUrl && resolvedName
-      ? connectionPromptsFor(resolvedName, endpointUrl)
+    endpointUrl && clientName
+      ? connectionCommandsFor(clientName, endpointUrl)
       : undefined;
   const prompt =
-    resolvedName && endpointUrl
-      ? promptFor(resolvedName, endpointUrl)
-      : undefined;
+    clientName && endpointUrl ? promptFor(clientName, endpointUrl) : undefined;
   const installStatuses =
     workflow.phase === "installing" || workflow.phase === "complete"
       ? workflow.statuses

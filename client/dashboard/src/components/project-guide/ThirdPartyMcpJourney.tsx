@@ -622,13 +622,13 @@ export function ThirdPartyMcpJourney({
               onValueChange={(value) => setClient(value as Client)}
             >
               <PageTabsList aria-label="MCP client">
-                {(["claude", "cursor", "codex"] as const).map((name) => (
+                {(["claude", "codex", "cursor"] as const).map((name) => (
                   <PageTabsTrigger key={name} value={name}>
                     {clientLabel(name)}
                   </PageTabsTrigger>
                 ))}
               </PageTabsList>
-              {(["claude", "cursor", "codex"] as const).map((name) => {
+              {(["claude", "codex", "cursor"] as const).map((name) => {
                 const tabConfig = clientConfig(name, serverSlug!, endpointUrl!);
                 return (
                   <TabsContent key={name} value={name}>

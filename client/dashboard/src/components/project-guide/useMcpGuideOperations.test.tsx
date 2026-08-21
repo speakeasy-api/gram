@@ -387,19 +387,20 @@ describe("useMcpGuideOperations", () => {
     expect(incomplete.result.current.deploymentReady).toBe(false);
   });
 
-  it("returns client connection prompts and a list-plus-read-only-call prompt", () => {
+  it("returns namespaced client commands and a list-plus-read-only-call prompt", () => {
     setExistingServer();
     const { result } = renderHook(() => useMcpGuideOperations());
 
     expect(result.current.connectionPrompts?.claude).toContain(
-      "Configure the remote Linear MCP server in my local Claude Code setup only.",
+      "claude mcp add --transport http --scope user 'Linear_Governed'",
     );
     expect(result.current.connectionPrompts?.cursor).toContain(
-      "in my local Cursor setup only.",
+      '"Linear_Governed"',
     );
     expect(result.current.connectionPrompts?.codex).toContain(
-      "in my local Codex setup only.",
+      "codex mcp add 'Linear_Governed'",
     );
+    expect(result.current.prompt).toContain("Linear_Governed MCP server");
     expect(result.current.prompt).toMatch(/first list the available tools/i);
     expect(result.current.prompt).toContain(
       "https://api.example/mcp/linear-endpoint",

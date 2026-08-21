@@ -35,15 +35,15 @@ export const SECRET_GUIDE_CLIENTS: Record<
     installDirectory: "~/.claude/plugins/",
     label: "Claude Code",
   },
-  cursor: {
-    hookSource: "cursor",
-    installDirectory: "~/.cursor/extensions/",
-    label: "Cursor",
-  },
   codex: {
     hookSource: "codex",
     installDirectory: "~/.codex/plugins/",
     label: "Codex",
+  },
+  cursor: {
+    hookSource: "cursor",
+    installDirectory: "~/.cursor/extensions/",
+    label: "Cursor",
   },
   opencode: {
     hookSource: "opencode",
