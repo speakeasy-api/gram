@@ -28,15 +28,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-func setupRefreshFixtureWithAudience(t *testing.T, audience pgtype.Text, spy *upstreamSpy) (context.Context, *remotesessions.ChallengeManager, *testInstance, uuid.UUID, urn.SessionSubject) {
-	t.Helper()
-
-	ctx, ti := newTestService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// spyRefreshHandler is the standard success token endpoint: it captures the
+// inbound form + Authorization header into spy and returns a rotated pair.
+func spyRefreshHandler(spy *upstreamSpy) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			spy.handlerErr = err
@@ -54,7 +49,30 @@ func setupRefreshFixtureWithAudience(t *testing.T, audience pgtype.Text, spy *up
 
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"access_token":"refreshed-access","token_type":"Bearer","expires_in":3600,"refresh_token":"refreshed-refresh"}`))
-	}))
+	}
+}
+
+func setupRefreshFixtureWithAudience(t *testing.T, audience pgtype.Text, spy *upstreamSpy) (context.Context, *remotesessions.ChallengeManager, *testInstance, uuid.UUID, urn.SessionSubject) {
+	t.Helper()
+
+	slugSuffix := "aud-set"
+	if !audience.Valid {
+		slugSuffix = "aud-unset"
+	}
+	return setupRefreshFixtureWithHandler(t, slugSuffix, audience, spyRefreshHandler(spy))
+}
+
+// setupRefreshFixtureWithHandler seeds issuer + client + expired NULL-resource
+// session rows against a custom token endpoint handler, with per-test slugs.
+func setupRefreshFixtureWithHandler(t *testing.T, slugSuffix string, audience pgtype.Text, handler http.HandlerFunc) (context.Context, *remotesessions.ChallengeManager, *testInstance, uuid.UUID, urn.SessionSubject) {
+	t.Helper()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	tokenServer := httptest.NewServer(handler)
 	t.Cleanup(tokenServer.Close)
 
 	enc := testenv.NewEncryptionClient(t)
@@ -74,10 +92,6 @@ func setupRefreshFixtureWithAudience(t *testing.T, audience pgtype.Text, spy *up
 	)
 
 	q := repo.New(ti.conn)
-	slugSuffix := "aud-set"
-	if !audience.Valid {
-		slugSuffix = "aud-unset"
-	}
 	issuer, err := q.CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
 		ProjectID:                         uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 		Slug:                              "refresh-" + slugSuffix,
