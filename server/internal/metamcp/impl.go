@@ -532,6 +532,17 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 		return nil, oops.E(oops.CodeUnexpected, err, "lock mcp server").LogError(ctx, logger)
 	}
 
+	// The gateway addresses members by qualified serverslug--toolname, so a
+	// slugless server (legacy pre-2026-05 rows never updated since) can never
+	// be reached; updating the server generates a slug. Unproxied backends
+	// have no gateway-side dispatch path.
+	if !server.Slug.Valid {
+		return nil, oops.E(oops.CodeInvalid, nil, "mcp server has no slug; update the server to generate one before attaching it").LogError(ctx, logger)
+	}
+	if server.UnproxiedMcpServerID.Valid {
+		return nil, oops.E(oops.CodeInvalid, nil, "unproxied mcp servers cannot be meta mcp members").LogError(ctx, logger)
+	}
+
 	member, err := txRepo.CreateMetaMCPMember(ctx, repo.CreateMetaMCPMemberParams{
 		ProjectID:       *authCtx.ProjectID,
 		MetaMcpServerID: metaID,

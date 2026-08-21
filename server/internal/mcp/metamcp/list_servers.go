@@ -1,8 +1,13 @@
 package metamcp
 
-// StatusUnknown is the fixed member connection state until the meta-server
-// runtime (AGE-3291) holds live member sessions to report on.
-const StatusUnknown = "unknown"
+// Member connection states. Hosted (toolset-backed) members execute
+// in-process, so they are always available; proxied members report
+// StatusUnknown until the runtime holds live member sessions to report on
+// (AGE-3291 PR 2).
+const (
+	StatusUnknown   = "unknown"
+	StatusAvailable = "available"
+)
 
 // ListedServer is one member entry in a list_servers result.
 type ListedServer struct {

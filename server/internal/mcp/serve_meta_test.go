@@ -312,30 +312,6 @@ func TestServePublic_MetaEndpoint_ListServers_HidesDisabledMembers(t *testing.T)
 	require.Equal(t, liveSlug, result.StructuredContent.Servers[0].Slug)
 }
 
-func TestServePublic_MetaEndpoint_DrillDownToolsNotYetAvailable(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
-	slug := "meta-" + uuid.NewString()
-	createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
-
-	for _, tool := range []string{"describe_server", "describe_tools", "execute_tool"} {
-		w, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, "tools/call", map[string]any{
-			"name":      tool,
-			"arguments": map[string]any{},
-		}), "", nil)
-		require.NoError(t, err)
-		require.Equal(t, http.StatusOK, w.Code)
-
-		envelope := decodeRPCResponse(t, w)
-		require.Contains(t, string(envelope["error"]), "not yet available", "tool %s must answer deterministically", tool)
-	}
-}
-
 func TestServePublic_MetaEndpoint_UnsupportedDeclaredVersion(t *testing.T) {
 	t.Parallel()
 
