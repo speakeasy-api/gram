@@ -13,6 +13,7 @@ export type ProxyRegisterUpstreamClientInput = {
   registrationEndpoint: string;
   scope?: string;
   tokenEndpointAuthMethod?: string;
+  tunneledMcpServerId?: string;
 };
 
 export class ProxyRegistrationError extends Error {
@@ -37,6 +38,9 @@ export async function proxyRegisterUpstreamClient(
   if (input.scope !== undefined) body.scope = input.scope;
   if (input.tokenEndpointAuthMethod !== undefined) {
     body.token_endpoint_auth_method = input.tokenEndpointAuthMethod;
+  }
+  if (input.tunneledMcpServerId !== undefined) {
+    body.tunneled_mcp_server_id = input.tunneledMcpServerId;
   }
 
   const response = await authedFetch("/oauth/proxy-register", {

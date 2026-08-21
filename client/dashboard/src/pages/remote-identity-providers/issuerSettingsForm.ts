@@ -19,6 +19,9 @@ export type IssuerSettingsFormState = {
   registrationEndpoint: string;
   jwksUri: string;
   discoveredSnapshot: DiscoveredEndpoints | null;
+  // Undefined omits the admin-only field; an empty string explicitly clears
+  // an existing issuer binding.
+  tunneledMcpServerId?: string;
 };
 
 // buildUpdateIssuerForm turns the Settings tab state into the update payload.
@@ -73,6 +76,9 @@ export function buildUpdateIssuerForm(
     serviceDocumentation: fromDiscovery?.serviceDocumentation,
     opPolicyUri: fromDiscovery?.opPolicyUri,
     opTosUri: fromDiscovery?.opTosUri,
+    ...(state.tunneledMcpServerId === undefined
+      ? {}
+      : { tunneledMcpServerId: state.tunneledMcpServerId.trim() }),
   };
 }
 
@@ -142,5 +148,6 @@ export function buildCreateIssuerForm(
     serviceDocumentation: fromDiscovery?.serviceDocumentation || undefined,
     opPolicyUri: fromDiscovery?.opPolicyUri || undefined,
     opTosUri: fromDiscovery?.opTosUri || undefined,
+    tunneledMcpServerId: state.tunneledMcpServerId?.trim() || undefined,
   };
 }

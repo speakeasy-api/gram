@@ -33,6 +33,27 @@ describe("proxyRegisterUpstreamClient", () => {
     });
   });
 
+  it("forwards the issuer tunnel binding for registration", async () => {
+    const authedFetch: AuthedFetch = vi.fn(async () =>
+      jsonResponse({ client_id: "abc" }),
+    );
+
+    await proxyRegisterUpstreamClient(authedFetch, {
+      registrationEndpoint: "https://idp.example/register",
+      tunneledMcpServerId: "019c001e-b43d-7000-8000-000000000001",
+    });
+
+    const call = vi.mocked(authedFetch).mock.calls[0];
+    expect(call).toBeDefined();
+    const [, init] = call!;
+    if (typeof init.body !== "string") {
+      throw new Error("expected a JSON request body");
+    }
+    expect(JSON.parse(init.body)).toMatchObject({
+      tunneled_mcp_server_id: "019c001e-b43d-7000-8000-000000000001",
+    });
+  });
+
   it("surfaces the passed-through upstream message on a 4xx", async () => {
     const authedFetch: AuthedFetch = vi.fn(async () =>
       jsonResponse(
