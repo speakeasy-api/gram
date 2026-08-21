@@ -2,6 +2,7 @@ package risk
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"math"
 	"strings"
@@ -35,6 +36,19 @@ type RiskFindingInserter interface {
 // matched value: only its length, a partial-mask display string (maskdisplay),
 // and one-way fingerprints. The verbatim value stays in Postgres for the
 // audited unmask path.
+//
+// Delivery contract: at-least-once into ClickHouse. A failed insert or a
+// failed attribution read nacks the whole batch for redelivery; a message the
+// writer can never persist — malformed id or timestamp — nacks only itself so
+// it retries alone without dragging the rest of the batch along. There is no
+// dead-letter queue by design: transient failures self-heal under the
+// subscription's retry backoff, and a poison message (always an internal
+// producer bug — every publisher is ours) redelivers within the
+// subscription's retention window, surfaced by the skipped metric and
+// oldest-unacked-age monitoring so the bug is fixed and the still-retained
+// message then processes. Redelivered duplicates are expected and converge at
+// read time: rows share their deterministic id and the read paths resolve
+// each id to one winning copy.
 type FindingCHWriter struct {
 	logger        *slog.Logger
 	metrics       *metrics
@@ -65,8 +79,34 @@ func NewFindingCHWriter(logger *slog.Logger, db repo.DBTX, meterProvider metric.
 	}
 }
 
-func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Finding, _ []gcp.MessageMetadata) error {
+// HandleBatchWithResult adapts ProcessBatch to the streams runner: per-message
+// failures are staged as individual nacks, a batch-level error nacks the whole
+// batch.
+func (w *FindingCHWriter) HandleBatchWithResult(ctx context.Context, batch []gcp.BatchMessage[*riskv1.Finding]) error {
+	messages := make([]*riskv1.Finding, len(batch))
+	for i, m := range batch {
+		messages[i] = m.Message
+	}
+	failed, err := w.ProcessBatch(ctx, messages)
+	if err != nil {
+		return err
+	}
+	for i, ferr := range failed {
+		if ferr != nil {
+			batch[i].Fail(ferr)
+		}
+	}
+	return nil
+}
+
+// ProcessBatch writes one batch of findings to ClickHouse. The returned slice
+// is parallel to messages: a non-nil entry is a per-message rejection (the
+// message can never be persisted and should redeliver on its own). A non-nil
+// error means the whole batch failed (attribution read or insert) and must be
+// redelivered.
+func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.Finding) ([]error, error) {
 	logger := w.logger
+	failed := make([]error, len(messages))
 
 	// Cache per-tenant derived keys for the lifetime of this batch so repeated
 	// findings from the same org don't each re-run HKDF.
@@ -74,28 +114,38 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 
 	// Batch-resolve the denormalized attribution (chat id, user ids) for every
 	// finding that carries a well-formed anchor — one Postgres query per anchor
-	// kind, best-effort. Both reads are bounded to the projects present in the
-	// batch; findings whose project id is unparseable contribute nothing, so
-	// an anchor they carry simply resolves no attribution.
+	// kind. Both reads are bounded to the projects present in the batch;
+	// findings whose project id is unparseable contribute nothing, so an
+	// anchor they carry simply resolves no attribution. A query error fails
+	// the batch: attribution is stamped once at ingest, so proceeding through
+	// a transient Postgres blip would persist permanently unattributed rows.
 	projectIDs := findingAnchorIDs(messages, func(message *riskv1.Finding) string {
 		return message.GetProjectId()
 	})
-	messageAttribution := w.chatMessageAttribution(ctx, messages, projectIDs)
-	contentPartAttribution := w.chatContentPartAttribution(ctx, messages, projectIDs)
+	messageAttribution, err := w.chatMessageAttribution(ctx, messages, projectIDs)
+	if err != nil {
+		return nil, err
+	}
+	contentPartAttribution, err := w.chatContentPartAttribution(ctx, messages, projectIDs)
+	if err != nil {
+		return nil, err
+	}
 
 	rows := make([]chrepo.RiskFindingRow, 0, len(messages))
-	for _, message := range messages {
+	for msgIdx, message := range messages {
 		orgID := strings.TrimSpace(message.GetOrganizationId())
 		match := message.GetMatch()
 		deadLetter := message.GetDeadLetterReason() != ""
 
 		// The id maps to a ClickHouse UUID column. Parse it here so a malformed
-		// or missing id skips only that finding rather than failing the binding
-		// for the whole multi-row batch insert.
+		// or missing id rejects only that finding (nacked to retry on its own)
+		// rather than failing the binding for the whole multi-row batch
+		// insert.
 		id, err := uuid.Parse(message.GetId())
 		if err != nil {
 			logger.ErrorContext(ctx, "finding has invalid uuid id", attr.SlogError(err), attr.SlogValueString(message.GetId()))
 			w.metrics.RecordFindingCHSkipped(ctx, "invalid_id")
+			failed[msgIdx] = fmt.Errorf("parse finding id: %w", err)
 			continue
 		}
 
@@ -103,7 +153,28 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 		if err != nil {
 			logger.ErrorContext(ctx, "finding has invalid rfc3339 timestamp", attr.SlogError(err), attr.SlogValueString(message.GetCreatedAt()))
 			w.metrics.RecordFindingCHSkipped(ctx, "invalid_timestamp")
+			failed[msgIdx] = fmt.Errorf("parse finding created_at: %w", err)
 			continue
+		}
+
+		// Resolve the event-log kind before any ingest-time exclusion stamping:
+		// deriving suppression must key off the message-carried state only — a
+		// rule exclusion the writer stamps below is per-ingest recomputed state
+		// on a finding copy, not a state change. Producers that predate the
+		// field (and any unknown value) derive: a carried suppression stamp
+		// means a state-change republish, anything else is scanner output.
+		eventKind := message.GetEventKind()
+		switch eventKind {
+		case chrepo.EventKindFinding, chrepo.EventKindSuppression, chrepo.EventKindUnsuppression:
+		default:
+			if eventKind != "" {
+				logger.WarnContext(ctx, "finding has unknown event kind, deriving from suppression state", attr.SlogValueString(eventKind))
+			}
+			if message.GetExcludedAt() != "" || message.GetFalsePositiveAt() != "" {
+				eventKind = chrepo.EventKindSuppression
+			} else {
+				eventKind = chrepo.EventKindFinding
+			}
 		}
 
 		// Suppression annotation. A message-carried excluded_at (set only on
@@ -129,6 +200,7 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 			if err != nil {
 				logger.ErrorContext(ctx, "finding has invalid excluded_at timestamp", attr.SlogError(err), attr.SlogValueString(raw))
 				w.metrics.RecordFindingCHSkipped(ctx, "invalid_excluded_at")
+				failed[msgIdx] = fmt.Errorf("parse finding excluded_at: %w", err)
 				continue
 			}
 			utc := t.UTC()
@@ -255,6 +327,7 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 			if err != nil {
 				logger.ErrorContext(ctx, "finding has invalid false_positive_at timestamp", attr.SlogError(err), attr.SlogValueString(raw))
 				w.metrics.RecordFindingCHSkipped(ctx, "invalid_false_positive_at")
+				failed[msgIdx] = fmt.Errorf("parse finding false_positive_at: %w", err)
 				continue
 			}
 			utc := t.UTC()
@@ -302,36 +375,39 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 			Field:                    message.GetField(),
 			Path:                     message.GetPath(),
 			ToolCallID:               message.GetToolCallId(),
+			EventKind:                eventKind,
 		})
 	}
 
 	if len(rows) == 0 {
-		return nil
+		return failed, nil
 	}
 
-	err := w.inserter.InsertRiskFindings(ctx, rows)
-	if err != nil {
-		// Log the error rather than returning it: a failed analytics insert must
-		// not nack and redrive the finding.
-		logger.ErrorContext(ctx, "failed to insert batch into clickhouse", attr.SlogError(err))
-	}
-
+	// Return the insert error so the whole batch nacks and redelivers:
+	// ClickHouse is the findings store of record, so an acked message must
+	// mean a durably written row. Redelivered rows that did land converge at
+	// read time via their shared id.
+	err = w.inserter.InsertRiskFindings(ctx, rows)
 	w.metrics.RecordFindingCHInserts(ctx, len(rows), o11y.OutcomeFromError(err))
+	if err != nil {
+		return nil, fmt.Errorf("insert risk findings batch: %w", err)
+	}
 
-	return nil
+	return failed, nil
 }
 
 // chatMessageAttribution batch-fetches the denormalized attribution stamped
 // onto risk_findings rows, keyed by chat message id and bounded to the given
-// batch project ids. Fail-open like the exclusion lookup: message ids that are
-// empty, malformed, or fail to resolve simply get no attribution; a query
-// error logs and enriches nothing rather than dropping or redriving findings.
-func (w *FindingCHWriter) chatMessageAttribution(ctx context.Context, messages []*riskv1.Finding, projectIDs []uuid.UUID) map[uuid.UUID]repo.GetChatMessageAttributionRow {
+// batch project ids. Anchor ids that are empty, malformed, or fail to resolve
+// simply get no attribution, but a query error fails the batch for
+// redelivery: attribution is stamped once at ingest and a transient Postgres
+// blip must not persist permanently unattributed rows.
+func (w *FindingCHWriter) chatMessageAttribution(ctx context.Context, messages []*riskv1.Finding, projectIDs []uuid.UUID) (map[uuid.UUID]repo.GetChatMessageAttributionRow, error) {
 	ids := findingAnchorIDs(messages, func(message *riskv1.Finding) string {
 		return message.GetChatMessageId()
 	})
 	if len(ids) == 0 || len(projectIDs) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	rows, err := repo.New(w.db).GetChatMessageAttribution(ctx, repo.GetChatMessageAttributionParams{
@@ -339,27 +415,26 @@ func (w *FindingCHWriter) chatMessageAttribution(ctx context.Context, messages [
 		ProjectIds: projectIDs,
 	})
 	if err != nil {
-		w.logger.ErrorContext(ctx, "resolve chat message attribution", attr.SlogError(err))
-		return nil
+		return nil, fmt.Errorf("resolve chat message attribution: %w", err)
 	}
 
 	out := make(map[uuid.UUID]repo.GetChatMessageAttributionRow, len(rows))
 	for _, row := range rows {
 		out[row.ID] = row
 	}
-	return out
+	return out, nil
 }
 
 // chatContentPartAttribution batch-fetches denormalized attribution for
 // content-part findings, keyed by content part id and bounded to the given
 // batch project ids. It resolves via the content part's parent message when
 // present and falls back to the chat.
-func (w *FindingCHWriter) chatContentPartAttribution(ctx context.Context, messages []*riskv1.Finding, projectIDs []uuid.UUID) map[uuid.UUID]repo.GetChatContentPartAttributionRow {
+func (w *FindingCHWriter) chatContentPartAttribution(ctx context.Context, messages []*riskv1.Finding, projectIDs []uuid.UUID) (map[uuid.UUID]repo.GetChatContentPartAttributionRow, error) {
 	ids := findingAnchorIDs(messages, func(message *riskv1.Finding) string {
 		return message.GetContentPartId()
 	})
 	if len(ids) == 0 || len(projectIDs) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	rows, err := repo.New(w.db).GetChatContentPartAttribution(ctx, repo.GetChatContentPartAttributionParams{
@@ -367,15 +442,14 @@ func (w *FindingCHWriter) chatContentPartAttribution(ctx context.Context, messag
 		ProjectIds: projectIDs,
 	})
 	if err != nil {
-		w.logger.ErrorContext(ctx, "resolve chat content part attribution", attr.SlogError(err))
-		return nil
+		return nil, fmt.Errorf("resolve chat content part attribution: %w", err)
 	}
 
 	out := make(map[uuid.UUID]repo.GetChatContentPartAttributionRow, len(rows))
 	for _, row := range rows {
 		out[row.ID] = row
 	}
-	return out
+	return out, nil
 }
 
 func findingAnchorIDs(messages []*riskv1.Finding, getRawID func(*riskv1.Finding) string) []uuid.UUID {

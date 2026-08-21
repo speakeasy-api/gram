@@ -279,7 +279,10 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 
 		switch policy.PolicyType {
 		case PolicyTypePromptBased:
-			findings = a.scanPromptPolicy(ctx, args, policy, messages, masks)
+			findings, err = a.scanPromptPolicy(ctx, args, policy, messages, masks)
+			if err != nil {
+				return nil, err
+			}
 		default:
 			findings, err = a.scanStandardPolicy(ctx, args, messages, policy.CustomRuleIds, exclusions, masks)
 			if err != nil {
@@ -305,10 +308,12 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	// that have no stream publisher (ClickHouse would otherwise never see
 	// them). Only after a committed write: a batch dropped because its policy
 	// was deleted mid-analysis must not leak findings into ClickHouse that
-	// Postgres never stored. Best-effort — a publish failure logs and never
-	// fails the activity.
+	// Postgres never stored. A publish failure fails the activity — the
+	// redriven batch repeats only idempotent writes, so the retry converges.
 	if written {
-		a.publishBatchOnlyFindings(ctx, args, ids, findings)
+		if err := a.publishBatchOnlyFindings(ctx, args, ids, findings); err != nil {
+			return nil, err
+		}
 	}
 
 	span.SetAttributes(

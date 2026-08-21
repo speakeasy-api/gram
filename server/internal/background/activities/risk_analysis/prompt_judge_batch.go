@@ -11,7 +11,6 @@ import (
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
-	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
@@ -84,11 +83,11 @@ func judgeFanout(
 	}
 }
 
-func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, masks CategoryScopeMasks) [][]scanners.Finding {
+func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, masks CategoryScopeMasks) ([][]scanners.Finding, error) {
 	out := make([][]scanners.Finding, len(messages))
 	cfg := promptpolicy.ParseConfig(policy.ModelConfig)
 	if !a.projectFlagEnabled(ctx, args.OrganizationID, args.ProjectID, feature.FlagPromptPolicies) {
-		return out
+		return out, nil
 	}
 
 	indices := make([]int, 0, len(messages))
@@ -99,7 +98,7 @@ func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchAr
 		indices = append(indices, i)
 	}
 	if len(indices) == 0 {
-		return out
+		return out, nil
 	}
 
 	if a.judge == nil || !policy.Prompt.Valid || strings.TrimSpace(policy.Prompt.String) == "" {
@@ -110,10 +109,12 @@ func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchAr
 			setEventMatch(findings, messages[idx])
 			out[idx] = findings
 		}
-		return out
+		return out, nil
 	}
 
-	a.publishPromptPolicyScanRequests(ctx, args, policy, messages, indices)
+	if err := a.publishPromptPolicyScanRequests(ctx, args, policy, messages, indices); err != nil {
+		return nil, err
+	}
 
 	judgeFanout(
 		ctx, a.judge,
@@ -126,19 +127,20 @@ func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchAr
 		},
 		func(end int) { activity.RecordHeartbeat(ctx, promptpolicy.Source, end) },
 	)
-	return out
+	return out, nil
 }
 
 func (a *AnalyzeBatch) projectFlagEnabled(ctx context.Context, orgID string, projectID uuid.UUID, flag feature.Flag) bool {
 	return policyflags.ProjectFlagEnabled(ctx, a.logger, repo.New(a.db), a.flags, orgID, projectID, flag)
 }
 
-func (a *AnalyzeBatch) publishPromptPolicyScanRequests(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, indices []int) {
-	requestID, err := uuid.NewV7()
-	if err != nil {
-		a.logger.WarnContext(ctx, "failed to generate prompt policy scan request id", attr.SlogError(err))
-		return
-	}
+func (a *AnalyzeBatch) publishPromptPolicyScanRequests(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, indices []int) error {
+	// Deterministic per batch (with a discriminator separating it from the
+	// standard-policy request id) so a Temporal retry republishes identical
+	// requests: the request id feeds the analyzer's deterministic finding ids,
+	// and a fresh random id per attempt would mint new ClickHouse rows the
+	// read-time dedup could never collapse.
+	requestID := batchScanRequestID(args, "prompt_policy")
 
 	createdAt := time.Now().UTC().Format(time.RFC3339)
 	publishResults := make([]gcp.PublishResult, 0, len(indices))
@@ -174,5 +176,5 @@ func (a *AnalyzeBatch) publishPromptPolicyScanRequests(ctx context.Context, args
 			ToolCalls:   toolCalls,
 		}.Build()))
 	}
-	drainPublishAcks(ctx, a.logger, "failed to publish prompt policy scan request", publishResults)
+	return drainPublishAcks(ctx, "publish prompt policy scan requests", publishResults)
 }
