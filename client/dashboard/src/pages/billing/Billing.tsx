@@ -35,6 +35,7 @@ import { PaygUsageSection } from "@/components/billing/payg-usage-section";
 import { StartPaygCheckoutCTA } from "@/components/billing/start-payg-checkout-cta";
 import { PaygPriceList } from "@/components/billing/payg-price-list";
 import { TopUpCTA, UsageProgress } from "@/components/billing/usage-controls";
+import { InferenceSpendHistorySection } from "@/components/billing/inference-spend-history-section";
 import { TumAdminSection } from "@/components/billing/tum-admin-section";
 import { TumUsageSection } from "@/components/billing/tum-section";
 
@@ -73,6 +74,7 @@ function BillingInner() {
       <>
         <StartPaygCheckoutCTA label="Add payment method" />
         <TumUsageSection />
+        <InferenceSpendHistorySection />
         {/* Renders only during an active trial — the section owns that rule. */}
         <InferenceCapsSection />
         <PaygPriceList />
@@ -88,6 +90,7 @@ function BillingInner() {
           invoice estimate. Every other self-serve tier still meters against
           Polar period usage, which says nothing about a Stripe invoice. */}
       {productTier === "payg" ? <PaygUsageSection /> : <UsageSection />}
+      <InferenceSpendHistorySection />
       {/* Renders only for pay as you go — the section owns that rule. */}
       <PaygPlanSection />
       {/* Renders only for pay as you go — the section owns that rule. */}

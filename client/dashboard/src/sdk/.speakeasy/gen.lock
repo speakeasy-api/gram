@@ -568,6 +568,7 @@ trackedFiles:
   src/funcs/usageCreateTopUpCheckout.ts: {}
   src/funcs/usageGetBillingEmail.ts: {}
   src/funcs/usageGetInferenceSpendCaps.ts: {}
+  src/funcs/usageGetInferenceSpendHistory.ts: {}
   src/funcs/usageGetPaygBillingSummary.ts: {}
   src/funcs/usageGetPeriodUsage.ts: {}
   src/funcs/usageGetStripeSubscription.ts: {}
@@ -890,6 +891,9 @@ trackedFiles:
   src/models/components/hookusagedata.ts: {}
   src/models/components/httptooldefinition.ts: {}
   src/models/components/inferencespendcap.ts: {}
+  src/models/components/inferencespendhistory.ts: {}
+  src/models/components/inferencespendmonth.ts: {}
+  src/models/components/inferencespendmonthkey.ts: {}
   src/models/components/inforesponsebody.ts: {}
   src/models/components/ingesthookresult.ts: {}
   src/models/components/ingestrequestbody.ts: {}
@@ -1641,6 +1645,7 @@ trackedFiles:
   src/models/operations/getglobalremotesessionissuermigratepreflight.ts: {}
   src/models/operations/gethookssummary.ts: {}
   src/models/operations/getinferencespendcaps.ts: {}
+  src/models/operations/getinferencespendhistory.ts: {}
   src/models/operations/getinstance.ts: {}
   src/models/operations/getlatestdeployment.ts: {}
   src/models/operations/getmanagedassistant.ts: {}
@@ -2246,6 +2251,8 @@ trackedFiles:
   src/react-query/getHooksSummary.ts: {}
   src/react-query/getInferenceSpendCaps.core.ts: {}
   src/react-query/getInferenceSpendCaps.ts: {}
+  src/react-query/getInferenceSpendHistory.core.ts: {}
+  src/react-query/getInferenceSpendHistory.ts: {}
   src/react-query/getMCPSetupDocs.core.ts: {}
   src/react-query/getMCPSetupDocs.ts: {}
   src/react-query/getMcpApprovalRequest.core.ts: {}
@@ -5102,6 +5109,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  getInferenceSpendHistory:
+    speakeasy-default-get-inference-spend-history:
+      responses:
+        "200":
+          application/json: {"months": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   getInstance:
     speakeasy-default-get-instance:
       parameters:

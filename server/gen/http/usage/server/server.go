@@ -32,6 +32,7 @@ type Server struct {
 	CreateStripeCheckout      http.Handler
 	GetStripeSubscription     http.Handler
 	GetPaygBillingSummary     http.Handler
+	GetInferenceSpendHistory  http.Handler
 	CreateStripePortalSession http.Handler
 	CancelStripeSubscription  http.Handler
 	ResumeStripeSubscription  http.Handler
@@ -78,6 +79,7 @@ func New(
 			{"CreateStripeCheckout", "POST", "/rpc/usage.createStripeCheckout"},
 			{"GetStripeSubscription", "GET", "/rpc/usage.getStripeSubscription"},
 			{"GetPaygBillingSummary", "GET", "/rpc/usage.getPaygBillingSummary"},
+			{"GetInferenceSpendHistory", "GET", "/rpc/usage.getInferenceSpendHistory"},
 			{"CreateStripePortalSession", "POST", "/rpc/usage.createStripePortalSession"},
 			{"CancelStripeSubscription", "POST", "/rpc/usage.cancelStripeSubscription"},
 			{"ResumeStripeSubscription", "POST", "/rpc/usage.resumeStripeSubscription"},
@@ -96,6 +98,7 @@ func New(
 		CreateStripeCheckout:      NewCreateStripeCheckoutHandler(e.CreateStripeCheckout, mux, decoder, encoder, errhandler, formatter),
 		GetStripeSubscription:     NewGetStripeSubscriptionHandler(e.GetStripeSubscription, mux, decoder, encoder, errhandler, formatter),
 		GetPaygBillingSummary:     NewGetPaygBillingSummaryHandler(e.GetPaygBillingSummary, mux, decoder, encoder, errhandler, formatter),
+		GetInferenceSpendHistory:  NewGetInferenceSpendHistoryHandler(e.GetInferenceSpendHistory, mux, decoder, encoder, errhandler, formatter),
 		CreateStripePortalSession: NewCreateStripePortalSessionHandler(e.CreateStripePortalSession, mux, decoder, encoder, errhandler, formatter),
 		CancelStripeSubscription:  NewCancelStripeSubscriptionHandler(e.CancelStripeSubscription, mux, decoder, encoder, errhandler, formatter),
 		ResumeStripeSubscription:  NewResumeStripeSubscriptionHandler(e.ResumeStripeSubscription, mux, decoder, encoder, errhandler, formatter),
@@ -121,6 +124,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CreateStripeCheckout = m(s.CreateStripeCheckout)
 	s.GetStripeSubscription = m(s.GetStripeSubscription)
 	s.GetPaygBillingSummary = m(s.GetPaygBillingSummary)
+	s.GetInferenceSpendHistory = m(s.GetInferenceSpendHistory)
 	s.CreateStripePortalSession = m(s.CreateStripePortalSession)
 	s.CancelStripeSubscription = m(s.CancelStripeSubscription)
 	s.ResumeStripeSubscription = m(s.ResumeStripeSubscription)
@@ -145,6 +149,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreateStripeCheckoutHandler(mux, h.CreateStripeCheckout)
 	MountGetStripeSubscriptionHandler(mux, h.GetStripeSubscription)
 	MountGetPaygBillingSummaryHandler(mux, h.GetPaygBillingSummary)
+	MountGetInferenceSpendHistoryHandler(mux, h.GetInferenceSpendHistory)
 	MountCreateStripePortalSessionHandler(mux, h.CreateStripePortalSession)
 	MountCancelStripeSubscriptionHandler(mux, h.CancelStripeSubscription)
 	MountResumeStripeSubscriptionHandler(mux, h.ResumeStripeSubscription)
@@ -816,6 +821,60 @@ func NewGetPaygBillingSummaryHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getPaygBillingSummary")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "usage")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetInferenceSpendHistoryHandler configures the mux to serve the "usage"
+// service "getInferenceSpendHistory" endpoint.
+func MountGetInferenceSpendHistoryHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/usage.getInferenceSpendHistory", f)
+}
+
+// NewGetInferenceSpendHistoryHandler creates a HTTP handler which loads the
+// HTTP request and calls the "usage" service "getInferenceSpendHistory"
+// endpoint.
+func NewGetInferenceSpendHistoryHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetInferenceSpendHistoryRequest(mux, decoder)
+		encodeResponse = EncodeGetInferenceSpendHistoryResponse(encoder)
+		encodeError    = EncodeGetInferenceSpendHistoryError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getInferenceSpendHistory")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "usage")
 		payload, err := decodeRequest(r)
 		if err != nil {

@@ -104,6 +104,11 @@ export function inferenceCapLabel(keyType: InferenceSpendCapKeyType): string {
   return `${CAP_COPY[keyType].name} cap`;
 }
 
+/** The key's name without "cap", for spend history that is not a limit. */
+export function inferenceSpendLabel(keyType: InferenceSpendCapKeyType): string {
+  return CAP_COPY[keyType].name;
+}
+
 /** The anchor for a cap's own control, unique per key and free of identifiers. */
 export function inferenceCapAnchor(keyType: InferenceSpendCapKeyType): string {
   return `${INFERENCE_CAPS_ANCHOR}-${CAP_COPY[keyType].slug}`;

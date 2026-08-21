@@ -72,6 +72,11 @@ func GetPaygBillingSummaryUsagePath() string {
 	return "/rpc/usage.getPaygBillingSummary"
 }
 
+// GetInferenceSpendHistoryUsagePath returns the URL path to the usage service getInferenceSpendHistory HTTP endpoint.
+func GetInferenceSpendHistoryUsagePath() string {
+	return "/rpc/usage.getInferenceSpendHistory"
+}
+
 // CreateStripePortalSessionUsagePath returns the URL path to the usage service createStripePortalSession HTTP endpoint.
 func CreateStripePortalSessionUsagePath() string {
 	return "/rpc/usage.createStripePortalSession"

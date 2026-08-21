@@ -178,6 +178,44 @@ var PaygBillingSummary = Type("PaygBillingSummary", func() {
 	Required("period_start", "period_end", "tum_tokens", "tum_unit_price_usd", "tum_cost_usd", "other_inference_spend_usd", "estimated_total_usd")
 })
 
+// InferenceSpendMonthKey is durable spend for one platform-managed key in a
+// UTC calendar month.
+var InferenceSpendMonthKey = Type("InferenceSpendMonthKey", func() {
+	Attribute("key_type", String, "The platform-managed inference function", func() {
+		Enum("chat", "internal")
+	})
+	Attribute("spend_usd", String, "Exact durable spend in USD for this key through recorded_through")
+
+	Required("key_type", "spend_usd")
+})
+
+// InferenceSpendMonth is durable inference spend for one UTC calendar month.
+var InferenceSpendMonth = Type("InferenceSpendMonth", func() {
+	Attribute("month_start", String, "Start of the UTC calendar month", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("month_end", String, "End of the UTC calendar month (exclusive)", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("spend_usd", String, "Exact durable inference spend in USD through recorded_through")
+	Attribute("recorded_through", String, "Most recent completed durable UTC spend day included in this month", func() {
+		Format(FormatDate)
+	})
+	Attribute("current", Boolean, "Whether this is the current UTC calendar month")
+	Attribute("key_spend", ArrayOf(InferenceSpendMonthKey), "Spend by platform-managed key type. Keys with no recorded days in the month are omitted.")
+
+	Required("month_start", "month_end", "spend_usd", "current", "key_spend")
+})
+
+// InferenceSpendHistory is calendar-month inference spend recorded going
+// forward from durable daily OpenRouter collection. Months before tracking
+// began are omitted rather than reconstructed from upstream history.
+var InferenceSpendHistory = Type("InferenceSpendHistory", func() {
+	Attribute("months", ArrayOf(InferenceSpendMonth), "UTC calendar months with recorded spend, newest first. The current month is always present.")
+
+	Required("months")
+})
+
 var _ = Service("usage", func() {
 	Description("Read usage for gram.")
 	Security(security.Session)
@@ -464,6 +502,26 @@ var _ = Service("usage", func() {
 		Meta("openapi:operationId", "getPaygBillingSummary")
 		Meta("openapi:extension:x-speakeasy-name-override", "getPaygBillingSummary")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "getPaygBillingSummary"}`)
+	})
+
+	Method("getInferenceSpendHistory", func() {
+		Description("Get calendar-month inference spend recorded going forward from durable daily collection")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(InferenceSpendHistory)
+
+		HTTP(func() {
+			GET("/rpc/usage.getInferenceSpendHistory")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getInferenceSpendHistory")
+		Meta("openapi:extension:x-speakeasy-name-override", "getInferenceSpendHistory")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "getInferenceSpendHistory"}`)
 	})
 
 	Method("createStripePortalSession", func() {

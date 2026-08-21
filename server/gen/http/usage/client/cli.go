@@ -265,6 +265,21 @@ func BuildGetPaygBillingSummaryPayload(usageGetPaygBillingSummarySessionToken st
 	return v, nil
 }
 
+// BuildGetInferenceSpendHistoryPayload builds the payload for the usage
+// getInferenceSpendHistory endpoint from CLI flags.
+func BuildGetInferenceSpendHistoryPayload(usageGetInferenceSpendHistorySessionToken string) (*usage.GetInferenceSpendHistoryPayload, error) {
+	var sessionToken *string
+	{
+		if usageGetInferenceSpendHistorySessionToken != "" {
+			sessionToken = &usageGetInferenceSpendHistorySessionToken
+		}
+	}
+	v := &usage.GetInferenceSpendHistoryPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildCreateStripePortalSessionPayload builds the payload for the usage
 // createStripePortalSession endpoint from CLI flags.
 func BuildCreateStripePortalSessionPayload(usageCreateStripePortalSessionSessionToken string) (*usage.CreateStripePortalSessionPayload, error) {

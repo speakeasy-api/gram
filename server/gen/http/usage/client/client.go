@@ -69,6 +69,10 @@ type Client struct {
 	// getPaygBillingSummary endpoint.
 	GetPaygBillingSummaryDoer goahttp.Doer
 
+	// GetInferenceSpendHistory Doer is the HTTP client used to make requests to
+	// the getInferenceSpendHistory endpoint.
+	GetInferenceSpendHistoryDoer goahttp.Doer
+
 	// CreateStripePortalSession Doer is the HTTP client used to make requests to
 	// the createStripePortalSession endpoint.
 	CreateStripePortalSessionDoer goahttp.Doer
@@ -118,6 +122,7 @@ func NewClient(
 		CreateStripeCheckoutDoer:      doer,
 		GetStripeSubscriptionDoer:     doer,
 		GetPaygBillingSummaryDoer:     doer,
+		GetInferenceSpendHistoryDoer:  doer,
 		CreateStripePortalSessionDoer: doer,
 		CancelStripeSubscriptionDoer:  doer,
 		ResumeStripeSubscriptionDoer:  doer,
@@ -432,6 +437,30 @@ func (c *Client) GetPaygBillingSummary() goa.Endpoint {
 		resp, err := c.GetPaygBillingSummaryDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("usage", "getPaygBillingSummary", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetInferenceSpendHistory returns an endpoint that makes HTTP requests to the
+// usage service getInferenceSpendHistory server.
+func (c *Client) GetInferenceSpendHistory() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetInferenceSpendHistoryRequest(c.encoder)
+		decodeResponse = DecodeGetInferenceSpendHistoryResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetInferenceSpendHistoryRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetInferenceSpendHistoryDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("usage", "getInferenceSpendHistory", err)
 		}
 		return decodeResponse(resp)
 	}
