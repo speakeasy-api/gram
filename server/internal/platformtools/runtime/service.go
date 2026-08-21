@@ -266,7 +266,7 @@ func PlatformMCPReadTools(reader platformmcp.Reader) []platformtools.ExternalToo
 	return []platformtools.ExternalTool{
 		{Executor: platformplatform.NewGetPlatformContextTool(), RequiredFeature: ""},
 		{Executor: platformplatform.NewListProjectsTool(reader), RequiredFeature: ""},
-		{Executor: platformplatform.NewListProjectMCPsTool(reader), RequiredFeature: ""},
+		{Executor: platformplatform.NewFindMCPTool(reader), RequiredFeature: ""},
 		{Executor: platformplatform.NewGetMCPTool(reader), RequiredFeature: ""},
 	}
 }
