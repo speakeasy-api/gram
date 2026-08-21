@@ -133,13 +133,15 @@ type CustomDomainMcpEndpoint struct {
 	ProjectName string
 	// The url-friendly slug of the project the endpoint belongs to
 	ProjectSlug string
-	// The ID of the parent MCP server
-	McpServerID string
-	// The display name of the parent MCP server. May be empty if the parent has no
+	// The ID of the parent MCP server. Null for meta-MCP-backed endpoints.
+	McpServerID *string
+	// The ID of the parent meta MCP server. Null for MCP-server-backed endpoints.
+	MetaMcpServerID *string
+	// The display name of the parent server. May be empty if the parent has no
 	// configured name.
 	McpServerName *string
 	// The url-friendly slug of the parent MCP server. May be empty if the parent
-	// has no configured slug.
+	// has no configured slug or is a meta MCP server.
 	McpServerSlug *string
 	// Whether this endpoint is mapped to the custom-domain root
 	IsDomainRoot bool

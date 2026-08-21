@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -31,7 +32,7 @@ func TestDeleteMcpEndpoint(t *testing.T) {
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		CustomDomainID:   nil,
-		McpServerID:      mcpServerID,
+		McpServerID:      conv.PtrEmpty(mcpServerID),
 		Slug:             types.McpEndpointSlug(authCtx.OrganizationSlug + "-delete-me"),
 	})
 	require.NoError(t, err)
@@ -80,7 +81,7 @@ func TestDeleteMcpEndpoint_RootAutoClearsAndAuditsMapping(t *testing.T) {
 	endpoint, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:      *authCtx.ProjectID,
 		CustomDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true},
-		McpServerID:    serverID,
+		McpServerID:    uuid.NullUUID{UUID: serverID, Valid: true},
 		Slug:           "root",
 	})
 	require.NoError(t, err)

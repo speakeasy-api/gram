@@ -788,7 +788,7 @@ func (s *RegistrationStore) createPrivateRegistrationComponents(ctx context.Cont
 	}
 	endpoint, err := mcpendpointsrepo.New(tx).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:   project.ID,
-		McpServerID: server.ID,
+		McpServerID: uuid.NullUUID{UUID: server.ID, Valid: true},
 		Slug:        platformMCPEndpointSlug(organization.Slug, suffix),
 	})
 	if err != nil {

@@ -21523,7 +21523,7 @@ paths:
         name: CheckMcpEndpointSlugAvailability
   /rpc/mcpEndpoints.create:
     post:
-      description: Create a new MCP endpoint for an MCP server
+      description: Create a new MCP endpoint for an MCP server or a meta MCP server. Provide exactly one of mcp_server_id or meta_mcp_server_id.
       operationId: createMcpEndpoint
       parameters:
         - allowEmptyValue: true
@@ -21856,7 +21856,7 @@ paths:
         name: GetMcpEndpoint
   /rpc/mcpEndpoints.list:
     get:
-      description: List MCP endpoints for a project. Optionally filter to only those associated with a specific MCP server.
+      description: List MCP endpoints for a project. Optionally filter to only those associated with a specific MCP server or meta MCP server (not both).
       operationId: listMcpEndpoints
       parameters:
         - allowEmptyValue: true
@@ -21865,6 +21865,14 @@ paths:
           name: mcp_server_id
           schema:
             description: 'Optional filter: only return endpoints associated with this MCP server.'
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: 'Optional filter: only return endpoints associated with this meta MCP server.'
+          in: query
+          name: meta_mcp_server_id
+          schema:
+            description: 'Optional filter: only return endpoints associated with this meta MCP server.'
             format: uuid
             type: string
         - allowEmptyValue: true
@@ -21963,7 +21971,7 @@ paths:
         name: McpEndpoints
   /rpc/mcpEndpoints.update:
     post:
-      description: 'Update an MCP endpoint. This is a full-record replace: fields omitted from the request become null on the stored record. The id, mcp_server_id, and slug fields are required.'
+      description: 'Update an MCP endpoint. This is a full-record replace: fields omitted from the request become null on the stored record. The id and slug fields are required, along with exactly one of mcp_server_id or meta_mcp_server_id.'
       operationId: updateMcpEndpoint
       parameters:
         - allowEmptyValue: true
@@ -24240,6 +24248,949 @@ paths:
       x-speakeasy-name-override: update
       x-speakeasy-react-hook:
         name: UpdateMcpServer
+  /rpc/metaMcp.addMember:
+    post:
+      description: Add an MCP server to a meta MCP server's member set
+      operationId: addMetaMcpMember
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddMetaMcpMemberForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetaMcpMember'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: addMetaMcpMember metaMcp
+      tags:
+        - metaMcp
+      x-speakeasy-name-override: addMember
+      x-speakeasy-react-hook:
+        name: AddMetaMcpMember
+  /rpc/metaMcp.create:
+    post:
+      description: Create a new meta MCP server
+      operationId: createMetaMcpServer
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMetaMcpServerForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetaMcpServer'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: createMetaMcpServer metaMcp
+      tags:
+        - metaMcp
+      x-speakeasy-name-override: create
+      x-speakeasy-react-hook:
+        name: CreateMetaMcpServer
+  /rpc/metaMcp.delete:
+    delete:
+      description: Delete a meta MCP server. Its live memberships and MCP endpoints are deleted along with it.
+      operationId: deleteMetaMcpServer
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the meta MCP server to delete
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The ID of the meta MCP server to delete
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: deleteMetaMcpServer metaMcp
+      tags:
+        - metaMcp
+      x-speakeasy-name-override: delete
+      x-speakeasy-react-hook:
+        name: DeleteMetaMcpServer
+  /rpc/metaMcp.get:
+    get:
+      description: Get a meta MCP server by id
+      operationId: getMetaMcpServer
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the meta MCP server
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The ID of the meta MCP server
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetaMcpServer'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: getMetaMcpServer metaMcp
+      tags:
+        - metaMcp
+      x-speakeasy-name-override: get
+      x-speakeasy-react-hook:
+        name: GetMetaMcpServer
+  /rpc/metaMcp.list:
+    get:
+      description: List meta MCP servers for a project
+      operationId: listMetaMcpServers
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListMetaMcpServersResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: listMetaMcpServers metaMcp
+      tags:
+        - metaMcp
+      x-speakeasy-name-override: list
+      x-speakeasy-react-hook:
+        name: MetaMcpServers
+  /rpc/metaMcp.listMembers:
+    get:
+      description: List the members of a meta MCP server, ordered by sort order
+      operationId: listMetaMcpMembers
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the meta MCP server
+          in: query
+          name: meta_mcp_server_id
+          required: true
+          schema:
+            description: The ID of the meta MCP server
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListMetaMcpMembersResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: listMetaMcpMembers metaMcp
+      tags:
+        - metaMcp
+      x-speakeasy-name-override: listMembers
+      x-speakeasy-react-hook:
+        name: MetaMcpMembers
+  /rpc/metaMcp.removeMember:
+    delete:
+      description: Remove a member from a meta MCP server
+      operationId: removeMetaMcpMember
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the membership to remove
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The ID of the membership to remove
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: removeMetaMcpMember metaMcp
+      tags:
+        - metaMcp
+      x-speakeasy-name-override: removeMember
+      x-speakeasy-react-hook:
+        name: RemoveMetaMcpMember
+  /rpc/metaMcp.update:
+    post:
+      description: 'Update a meta MCP server. This is a full-record replace: a user_session_issuer_id omitted from the request becomes null on the stored record.'
+      operationId: updateMetaMcpServer
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMetaMcpServerForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetaMcpServer'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: updateMetaMcpServer metaMcp
+      tags:
+        - metaMcp
+      x-speakeasy-name-override: update
+      x-speakeasy-react-hook:
+        name: UpdateMetaMcpServer
+  /rpc/metaMcp.updateMember:
+    post:
+      description: Update a meta MCP membership's sort order
+      operationId: updateMetaMcpMember
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMetaMcpMemberForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetaMcpMember'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: updateMetaMcpMember metaMcp
+      tags:
+        - metaMcp
+      x-speakeasy-name-override: updateMember
+      x-speakeasy-react-hook:
+        name: UpdateMetaMcpMember
   /rpc/modelKeys.deleteKey:
     delete:
       description: Delete a model provider key. Completions on the affected slot fall back to the project default key or the platform key.
@@ -58166,6 +59117,25 @@ components:
         - name
         - slug
         - runtime
+    AddMetaMcpMemberForm:
+      type: object
+      properties:
+        mcp_server_id:
+          type: string
+          description: The ID of the MCP server to add as a member
+          format: uuid
+        meta_mcp_server_id:
+          type: string
+          description: The ID of the meta MCP server
+          format: uuid
+        sort_order:
+          type: integer
+          description: The position of the member in the ordered member set. Defaults to 0.
+          format: int64
+      description: Form for adding an MCP server to a meta MCP server's member set.
+      required:
+        - meta_mcp_server_id
+        - mcp_server_id
     AddOpenAPIv3DeploymentAssetForm:
       type: object
       properties:
@@ -61415,16 +62385,19 @@ components:
           format: uuid
         mcp_server_id:
           type: string
-          description: The ID of the MCP server this endpoint addresses
+          description: The ID of the MCP server this endpoint addresses. Mutually exclusive with meta_mcp_server_id.
+          format: uuid
+        meta_mcp_server_id:
+          type: string
+          description: The ID of the meta MCP server this endpoint addresses. Mutually exclusive with mcp_server_id.
           format: uuid
         slug:
           type: string
           description: A url-friendly label (up to 128 characters) that addresses an MCP server through a slug-based URL. Platform-domain slugs (no custom domain) must be prefixed with the organization slug.
           pattern: ^[a-z0-9_-]{1,128}$
           maxLength: 128
-      description: Form for creating a new MCP endpoint. Platform-domain endpoint slugs (no custom_domain_id) must be prefixed with the organization slug.
+      description: Form for creating a new MCP endpoint. Provide exactly one of mcp_server_id or meta_mcp_server_id. Platform-domain endpoint slugs (no custom_domain_id) must be prefixed with the organization slug.
       required:
-        - mcp_server_id
         - slug
     CreateMcpServerForm:
       type: object
@@ -61467,6 +62440,21 @@ components:
       required:
         - name
         - visibility
+    CreateMetaMcpServerForm:
+      type: object
+      properties:
+        name:
+          type: string
+          description: The display name of the meta MCP server
+          minLength: 1
+          maxLength: 100
+        user_session_issuer_id:
+          type: string
+          description: The ID of the user session issuer used to authenticate callers. Omit for no issuer.
+          format: uuid
+      description: Form for creating a new meta MCP server. URL addressability is managed separately through MCP endpoints.
+      required:
+        - name
     CreateOrganizationRemoteSessionClientForm:
       type: object
       properties:
@@ -62712,14 +63700,18 @@ components:
           description: Whether this endpoint is mapped to the custom-domain root
         mcp_server_id:
           type: string
-          description: The ID of the parent MCP server
+          description: The ID of the parent MCP server. Null for meta-MCP-backed endpoints.
           format: uuid
         mcp_server_name:
           type: string
-          description: The display name of the parent MCP server. May be empty if the parent has no configured name.
+          description: The display name of the parent server. May be empty if the parent has no configured name.
         mcp_server_slug:
           type: string
-          description: The url-friendly slug of the parent MCP server. May be empty if the parent has no configured slug.
+          description: The url-friendly slug of the parent MCP server. May be empty if the parent has no configured slug or is a meta MCP server.
+        meta_mcp_server_id:
+          type: string
+          description: The ID of the parent meta MCP server. Null for MCP-server-backed endpoints.
+          format: uuid
         project_id:
           type: string
           description: The ID of the project the endpoint belongs to
@@ -62740,7 +63732,6 @@ components:
         - project_id
         - project_name
         - project_slug
-        - mcp_server_id
         - is_domain_root
     DeclineRiskPolicyChallengeResponseBody:
       type: object
@@ -67566,6 +68557,26 @@ components:
           description: The members in your organization.
       required:
         - members
+    ListMetaMcpMembersResult:
+      type: object
+      properties:
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/MetaMcpMember'
+      description: Result type for listing meta MCP members
+      required:
+        - members
+    ListMetaMcpServersResult:
+      type: object
+      properties:
+        meta_mcp_servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/MetaMcpServer'
+      description: Result type for listing meta MCP servers
+      required:
+        - meta_mcp_servers
     ListOrganizationMcpServersResult:
       type: object
       properties:
@@ -69039,7 +70050,11 @@ components:
           description: Whether this endpoint is mapped to its custom-domain root
         mcp_server_id:
           type: string
-          description: The ID of the MCP server this endpoint addresses
+          description: The ID of the MCP server this endpoint addresses. Null for meta-MCP-backed endpoints.
+          format: uuid
+        meta_mcp_server_id:
+          type: string
+          description: The ID of the meta MCP server this endpoint addresses. Null for MCP-server-backed endpoints.
           format: uuid
         project_id:
           type: string
@@ -69054,11 +70069,10 @@ components:
           type: string
           description: When the MCP endpoint was last updated
           format: date-time
-      description: 'An MCP endpoint: a url-friendly slug identifier that addresses an MCP server.'
+      description: 'An MCP endpoint: a url-friendly slug identifier that addresses an MCP server or a meta MCP server. Exactly one of mcp_server_id and meta_mcp_server_id is set.'
       required:
         - id
         - project_id
-        - mcp_server_id
         - slug
         - is_domain_root
         - created_at
@@ -69346,6 +70360,69 @@ components:
         - target_label
         - total_tool_calls
         - recent_tool_calls
+    MetaMcpMember:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The ID of the membership
+          format: uuid
+        mcp_server_id:
+          type: string
+          description: The ID of the member MCP server
+          format: uuid
+        mcp_server_name:
+          type: string
+          description: The name of the member MCP server, when configured
+        mcp_server_slug:
+          type: string
+          description: The slug of the member MCP server, when configured
+        sort_order:
+          type: integer
+          description: The position of the member in the ordered member set
+          format: int64
+      description: A membership row linking an MCP server into a meta MCP server's member set.
+      required:
+        - id
+        - mcp_server_id
+        - sort_order
+    MetaMcpServer:
+      type: object
+      properties:
+        created_at:
+          type: string
+          description: When the meta MCP server was created
+          format: date-time
+        id:
+          type: string
+          description: The ID of the meta MCP server
+          format: uuid
+        name:
+          type: string
+          description: The display name of the meta MCP server
+        organization_id:
+          type: string
+          description: The organization this meta MCP server belongs to
+        project_id:
+          type: string
+          description: The project this meta MCP server belongs to
+          format: uuid
+        updated_at:
+          type: string
+          description: When the meta MCP server was last updated
+          format: date-time
+        user_session_issuer_id:
+          type: string
+          description: The ID of the user session issuer used to authenticate callers. Null when no issuer is attached.
+          format: uuid
+      description: 'A meta MCP server: an aggregate server fronting an explicitly managed set of MCP servers. URL addressability lives on its MCP endpoints.'
+      required:
+        - id
+        - organization_id
+        - project_id
+        - name
+        - created_at
+        - updated_at
     MigrateIssuerRequestBody:
       type: object
       properties:
@@ -80176,17 +81253,20 @@ components:
           format: uuid
         mcp_server_id:
           type: string
-          description: The ID of the MCP server this endpoint addresses
+          description: The ID of the MCP server this endpoint addresses. Mutually exclusive with meta_mcp_server_id.
+          format: uuid
+        meta_mcp_server_id:
+          type: string
+          description: The ID of the meta MCP server this endpoint addresses. Mutually exclusive with mcp_server_id.
           format: uuid
         slug:
           type: string
           description: A url-friendly label (up to 128 characters) that addresses an MCP server through a slug-based URL. Platform-domain slugs (no custom domain) must be prefixed with the organization slug.
           pattern: ^[a-z0-9_-]{1,128}$
           maxLength: 128
-      description: 'Form for updating an MCP endpoint. This is a full-record replace: the custom_domain_id field omitted from the request becomes null on the stored record. Platform-domain endpoint slugs (no custom_domain_id) must be prefixed with the organization slug.'
+      description: 'Form for updating an MCP endpoint. This is a full-record replace: the custom_domain_id field omitted from the request becomes null on the stored record. Provide exactly one of mcp_server_id or meta_mcp_server_id. Platform-domain endpoint slugs (no custom_domain_id) must be prefixed with the organization slug.'
       required:
         - id
-        - mcp_server_id
         - slug
     UpdateMcpServerForm:
       type: object
@@ -80247,6 +81327,41 @@ components:
       required:
         - user_id
         - role_ids
+    UpdateMetaMcpMemberForm:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The ID of the membership to update
+          format: uuid
+        sort_order:
+          type: integer
+          description: The position of the member in the ordered member set
+          format: int64
+      description: Form for updating a meta MCP membership.
+      required:
+        - id
+        - sort_order
+    UpdateMetaMcpServerForm:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The ID of the meta MCP server to update
+          format: uuid
+        name:
+          type: string
+          description: The display name of the meta MCP server
+          minLength: 1
+          maxLength: 100
+        user_session_issuer_id:
+          type: string
+          description: The ID of the user session issuer used to authenticate callers. Omit for no issuer.
+          format: uuid
+      description: 'Form for updating a meta MCP server. This is a full-record replace: a user_session_issuer_id omitted from the request becomes null on the stored record.'
+      required:
+        - id
+        - name
     UpdateOrganizationRequestBody:
       type: object
       properties:
@@ -82314,11 +83429,13 @@ tags:
   - name: mcpApproval
     description: Dashboard API for reviewing and deciding MCP server approval requests.
   - name: mcpEndpoints
-    description: Managing MCP endpoints, the url-friendly slug identifiers that address MCP servers.
+    description: Managing MCP endpoints, the url-friendly slug identifiers that address MCP servers and meta MCP servers.
   - name: mcpMetadata
     description: Manages metadata for the MCP install page shown to users.
   - name: mcpServers
     description: Managing MCP servers, which configure authentication, environment, and backend selection for an MCP server.
+  - name: metaMcp
+    description: 'Managing meta MCP servers: aggregate servers that front an explicitly managed set of MCP servers through a single endpoint.'
   - name: modelKeys
     description: Manage customer-supplied model provider API keys, scoped per project and responsibility slot.
   - name: organizations

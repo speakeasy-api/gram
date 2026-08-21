@@ -118,7 +118,7 @@ func TestUpdateMcpServer_DisableClearsNewlyCommittedRoot(t *testing.T) {
 	endpoint, err := mcpendpointsrepo.New(setterTx).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:      *authCtx.ProjectID,
 		CustomDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true},
-		McpServerID:    uuid.MustParse(server.ID),
+		McpServerID:    uuid.NullUUID{UUID: uuid.MustParse(server.ID), Valid: true},
 		Slug:           "new-root",
 	})
 	require.NoError(t, err)
@@ -260,7 +260,7 @@ func createPublicServerWithRoot(t *testing.T, ctx context.Context, ti *testInsta
 	endpoint, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:      *authCtx.ProjectID,
 		CustomDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true},
-		McpServerID:    uuid.MustParse(server.ID),
+		McpServerID:    uuid.NullUUID{UUID: uuid.MustParse(server.ID), Valid: true},
 		Slug:           slug,
 	})
 	require.NoError(t, err)

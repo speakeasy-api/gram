@@ -282,7 +282,11 @@ const NO_ROOT_MCP_ENDPOINT = "__none__";
 
 function mcpServerLabel(endpoint: CustomDomainMcpEndpoint): string {
   return (
-    endpoint.mcpServerName ?? endpoint.mcpServerSlug ?? endpoint.mcpServerId
+    endpoint.mcpServerName ??
+    endpoint.mcpServerSlug ??
+    endpoint.mcpServerId ??
+    endpoint.metaMcpServerId ??
+    endpoint.id
   );
 }
 
@@ -1004,9 +1008,7 @@ function OrgDomainsInner() {
                         </span>{" "}
                         <Text variant="small" as="span" muted>
                           &middot; {endpoint.projectName} &middot;{" "}
-                          {endpoint.mcpServerName ??
-                            endpoint.mcpServerSlug ??
-                            endpoint.mcpServerId}
+                          {mcpServerLabel(endpoint)}
                         </Text>
                       </Text>
                     </li>

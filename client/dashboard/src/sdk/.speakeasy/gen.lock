@@ -278,6 +278,15 @@ trackedFiles:
   src/funcs/mcpServersSetToolMetadata.ts: {}
   src/funcs/mcpServersSetToolMetadataBatch.ts: {}
   src/funcs/mcpServersUpdate.ts: {}
+  src/funcs/metaMcpAddMember.ts: {}
+  src/funcs/metaMcpCreate.ts: {}
+  src/funcs/metaMcpDelete.ts: {}
+  src/funcs/metaMcpGet.ts: {}
+  src/funcs/metaMcpList.ts: {}
+  src/funcs/metaMcpListMembers.ts: {}
+  src/funcs/metaMcpRemoveMember.ts: {}
+  src/funcs/metaMcpUpdate.ts: {}
+  src/funcs/metaMcpUpdateMember.ts: {}
   src/funcs/modelKeysDeleteKey.ts: {}
   src/funcs/modelKeysListKeys.ts: {}
   src/funcs/modelKeysSetKeyEnabled.ts: {}
@@ -628,6 +637,7 @@ trackedFiles:
   src/models/components/addexternalmcpform.ts: {}
   src/models/components/addexternaloauthserverrequestbody.ts: {}
   src/models/components/addfunctionsform.ts: {}
+  src/models/components/addmetamcpmemberform.ts: {}
   src/models/components/addopenapiv3deploymentassetform.ts: {}
   src/models/components/addpackageform.ts: {}
   src/models/components/addpluginserverform.ts: {}
@@ -711,6 +721,7 @@ trackedFiles:
   src/models/components/createkeyform.ts: {}
   src/models/components/createmcpendpointform.ts: {}
   src/models/components/createmcpserverform.ts: {}
+  src/models/components/createmetamcpserverform.ts: {}
   src/models/components/createorganizationremotesessionclientform.ts: {}
   src/models/components/createpackageform.ts: {}
   src/models/components/createpackageresult.ts: {}
@@ -945,6 +956,8 @@ trackedFiles:
   src/models/components/listmcpendpointsresult.ts: {}
   src/models/components/listmcpserversresult.ts: {}
   src/models/components/listmembersresult.ts: {}
+  src/models/components/listmetamcpmembersresult.ts: {}
+  src/models/components/listmetamcpserversresult.ts: {}
   src/models/components/listorganizationmcpserversresult.ts: {}
   src/models/components/listorganizationremotesessionclientsresult.ts: {}
   src/models/components/listorganizationremotesessionissuersresult.ts: {}
@@ -1038,6 +1051,8 @@ trackedFiles:
   src/models/components/mcpserveractivity.ts: {}
   src/models/components/mcpsetupguide.ts: {}
   src/models/components/mcpsetupguideremote.ts: {}
+  src/models/components/metamcpmember.ts: {}
+  src/models/components/metamcpserver.ts: {}
   src/models/components/migrateissuerrequestbody.ts: {}
   src/models/components/migrateorganizationremotesessionissuerresult.ts: {}
   src/models/components/migrateremotesessionissuerrequestbody.ts: {}
@@ -1390,6 +1405,8 @@ trackedFiles:
   src/models/components/updatemcpendpointform.ts: {}
   src/models/components/updatemcpserverform.ts: {}
   src/models/components/updatememberrolesform.ts: {}
+  src/models/components/updatemetamcpmemberform.ts: {}
+  src/models/components/updatemetamcpserverform.ts: {}
   src/models/components/updatepackageform.ts: {}
   src/models/components/updatepackageresult.ts: {}
   src/models/components/updatepluginform.ts: {}
@@ -1463,6 +1480,7 @@ trackedFiles:
   src/models/operations/acknowledgeriskpolicychallenge.ts: {}
   src/models/operations/addexternaloauthserver.ts: {}
   src/models/operations/addmcpservertoolmetadatabatch.ts: {}
+  src/models/operations/addmetamcpmember.ts: {}
   src/models/operations/addpluginserver.ts: {}
   src/models/operations/addskillversion.ts: {}
   src/models/operations/approveallskillsuggestions.ts: {}
@@ -1508,6 +1526,7 @@ trackedFiles:
   src/models/operations/createmcpapprovalrequest.ts: {}
   src/models/operations/createmcpendpoint.ts: {}
   src/models/operations/createmcpserver.ts: {}
+  src/models/operations/createmetamcpserver.ts: {}
   src/models/operations/createorganizationremotesessionclient.ts: {}
   src/models/operations/createorganizationremotesessionissuer.ts: {}
   src/models/operations/createpackage.ts: {}
@@ -1558,6 +1577,7 @@ trackedFiles:
   src/models/operations/deletemcpendpoint.ts: {}
   src/models/operations/deletemcpserver.ts: {}
   src/models/operations/deletemcpservertoolmetadata.ts: {}
+  src/models/operations/deletemetamcpserver.ts: {}
   src/models/operations/deletemodelproviderkey.ts: {}
   src/models/operations/deleteorganizationremotesessionclient.ts: {}
   src/models/operations/deleteorganizationremotesessionissuer.ts: {}
@@ -1652,6 +1672,7 @@ trackedFiles:
   src/models/operations/getmcpserveractivity.ts: {}
   src/models/operations/getmcpserverdetails.ts: {}
   src/models/operations/getmcpsetupdocs.ts: {}
+  src/models/operations/getmetamcpserver.ts: {}
   src/models/operations/getobservabilityoverview.ts: {}
   src/models/operations/getonboardingstatus.ts: {}
   src/models/operations/getorganization.ts: {}
@@ -1783,6 +1804,8 @@ trackedFiles:
   src/models/operations/listmcpservertoolfilters.ts: {}
   src/models/operations/listmcpservertoolmetadata.ts: {}
   src/models/operations/listmembers.ts: {}
+  src/models/operations/listmetamcpmembers.ts: {}
+  src/models/operations/listmetamcpservers.ts: {}
   src/models/operations/listmodelproviderkeys.ts: {}
   src/models/operations/listorganizationremotesessionclientmcpservers.ts: {}
   src/models/operations/listorganizationremotesessionclients.ts: {}
@@ -1877,6 +1900,7 @@ trackedFiles:
   src/models/operations/refreshusersessionclientcimd.ts: {}
   src/models/operations/register.ts: {}
   src/models/operations/registerdomain.ts: {}
+  src/models/operations/removemetamcpmember.ts: {}
   src/models/operations/removeoauthserver.ts: {}
   src/models/operations/removeorganizationremotesessionclientfrommcpserver.ts: {}
   src/models/operations/removeorganizationuser.ts: {}
@@ -1983,6 +2007,8 @@ trackedFiles:
   src/models/operations/updatemcpendpoint.ts: {}
   src/models/operations/updatemcpserver.ts: {}
   src/models/operations/updatememberroles.ts: {}
+  src/models/operations/updatemetamcpmember.ts: {}
+  src/models/operations/updatemetamcpserver.ts: {}
   src/models/operations/updateorganizationremotesessionclient.ts: {}
   src/models/operations/updateorganizationremotesessionissuer.ts: {}
   src/models/operations/updatepackage.ts: {}
@@ -2035,6 +2061,7 @@ trackedFiles:
   src/react-query/activeDeployment.ts: {}
   src/react-query/addExternalOAuthServer.ts: {}
   src/react-query/addMcpServerToolMetadataBatch.ts: {}
+  src/react-query/addMetaMcpMember.ts: {}
   src/react-query/addPluginServer.ts: {}
   src/react-query/addSkillVersion.ts: {}
   src/react-query/adminOpenRouterKeyUsage.core.ts: {}
@@ -2124,6 +2151,7 @@ trackedFiles:
   src/react-query/createMcpApprovalRequest.ts: {}
   src/react-query/createMcpEndpoint.ts: {}
   src/react-query/createMcpServer.ts: {}
+  src/react-query/createMetaMcpServer.ts: {}
   src/react-query/createOrganizationRemoteSessionClient.ts: {}
   src/react-query/createOrganizationRemoteSessionIssuer.ts: {}
   src/react-query/createPackage.ts: {}
@@ -2164,6 +2192,7 @@ trackedFiles:
   src/react-query/deleteMcpEndpoint.ts: {}
   src/react-query/deleteMcpServer.ts: {}
   src/react-query/deleteMcpServerToolMetadata.ts: {}
+  src/react-query/deleteMetaMcpServer.ts: {}
   src/react-query/deleteModelProviderKey.ts: {}
   src/react-query/deleteOrganizationRemoteSessionClient.ts: {}
   src/react-query/deleteOrganizationRemoteSessionIssuer.ts: {}
@@ -2258,6 +2287,8 @@ trackedFiles:
   src/react-query/getMcpServer.ts: {}
   src/react-query/getMcpServerActivity.core.ts: {}
   src/react-query/getMcpServerActivity.ts: {}
+  src/react-query/getMetaMcpServer.core.ts: {}
+  src/react-query/getMetaMcpServer.ts: {}
   src/react-query/getObservabilityOverview.core.ts: {}
   src/react-query/getObservabilityOverview.ts: {}
   src/react-query/getPaygBillingSummary.core.ts: {}
@@ -2460,6 +2491,10 @@ trackedFiles:
   src/react-query/mcpServers.ts: {}
   src/react-query/members.core.ts: {}
   src/react-query/members.ts: {}
+  src/react-query/metaMcpMembers.core.ts: {}
+  src/react-query/metaMcpMembers.ts: {}
+  src/react-query/metaMcpServers.core.ts: {}
+  src/react-query/metaMcpServers.ts: {}
   src/react-query/migrateOrganizationRemoteSessionIssuer.ts: {}
   src/react-query/migrateToGlobalRemoteSessionIssuer.ts: {}
   src/react-query/mintUserSession.ts: {}
@@ -2550,6 +2585,7 @@ trackedFiles:
   src/react-query/remoteSessionIssuers.ts: {}
   src/react-query/remoteSessions.core.ts: {}
   src/react-query/remoteSessions.ts: {}
+  src/react-query/removeMetaMcpMember.ts: {}
   src/react-query/removeOAuthServer.ts: {}
   src/react-query/removeOrganizationRemoteSessionClientFromMcpServer.ts: {}
   src/react-query/removeOrganizationUser.ts: {}
@@ -2792,6 +2828,8 @@ trackedFiles:
   src/react-query/updateMcpEndpoint.ts: {}
   src/react-query/updateMcpServer.ts: {}
   src/react-query/updateMemberRoles.ts: {}
+  src/react-query/updateMetaMcpMember.ts: {}
+  src/react-query/updateMetaMcpServer.ts: {}
   src/react-query/updateOrganizationRemoteSessionClient.ts: {}
   src/react-query/updateOrganizationRemoteSessionIssuer.ts: {}
   src/react-query/updatePackage.ts: {}
@@ -2902,6 +2940,7 @@ trackedFiles:
   src/sdk/mcpmetadata.ts: {}
   src/sdk/mcpregistries.ts: {}
   src/sdk/mcpservers.ts: {}
+  src/sdk/metamcp.ts: {}
   src/sdk/modelkeys.ts: {}
   src/sdk/organizationassets.ts: {}
   src/sdk/organizationremotesessionclients.ts: {}
@@ -2988,6 +3027,17 @@ examples:
       responses:
         "200":
           application/json: {"tools": [{"created_at": "2024-12-06T18:28:59.938Z", "mcp_server_id": "f63917fb-db89-49e8-966e-dfd1206e5862", "tool_name": "<value>", "updated_at": "2025-04-08T11:05:27.175Z"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  addMetaMcpMember:
+    speakeasy-default-add-meta-mcp-member:
+      requestBody:
+        application/json: {"mcp_server_id": "73c99a8f-4e96-436b-90c9-dabe485d1a32", "meta_mcp_server_id": "38dfc9ee-2a1c-49a0-a5c3-529451335428"}
+      responses:
+        "200":
+          application/json: {"id": "8227d3f0-3115-4b80-9940-1129c7ca4560", "mcp_server_id": "9fa00a0c-5527-4e77-aa1c-2f3ba51fbddf", "sort_order": 880845}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -3538,10 +3588,10 @@ examples:
   createMcpEndpoint:
     speakeasy-default-create-mcp-endpoint:
       requestBody:
-        application/json: {"mcp_server_id": "e63f0f94-b02c-44d6-bd59-3db5c78eb608", "slug": "<value>"}
+        application/json: {"slug": "<value>"}
       responses:
         "200":
-          application/json: {"created_at": "2025-07-20T10:02:36.305Z", "id": "c612d199-9934-461f-82e0-bbea02c52303", "is_domain_root": false, "mcp_server_id": "38fff4ad-b080-4dd1-bcb6-35f488992e2e", "project_id": "69a9c4c7-2703-4aac-948f-9c171189259e", "slug": "<value>", "updated_at": "2024-11-22T19:47:31.864Z"}
+          application/json: {"created_at": "2025-07-20T10:02:36.305Z", "id": "c612d199-9934-461f-82e0-bbea02c52303", "is_domain_root": false, "project_id": "69a9c4c7-2703-4aac-948f-9c171189259e", "slug": "<value>", "updated_at": "2024-11-22T19:47:31.864Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -3557,6 +3607,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  createMetaMcpServer:
+    speakeasy-default-create-meta-mcp-server:
+      requestBody:
+        application/json: {"name": "<value>"}
+      responses:
+        "200":
+          application/json: {"created_at": "2024-04-05T20:51:34.626Z", "id": "c1f8fb42-7fd9-42e9-bae3-198f35870cf2", "name": "<value>", "organization_id": "<id>", "project_id": "1abf2652-3b94-4afb-912b-38b23c9447e1", "updated_at": "2024-04-03T09:54:44.150Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   createOrganizationRemoteSessionClient:
     speakeasy-default-create-organization-remote-session-client:
       requestBody:
@@ -4118,6 +4179,16 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  deleteMetaMcpServer:
+    speakeasy-default-delete-meta-mcp-server:
+      parameters:
+        query:
+          id: "3b3954bc-3079-4468-a2c8-b905303073ac"
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   deleteModelProviderKey:
     speakeasy-default-delete-model-provider-key:
       parameters:
@@ -5183,7 +5254,7 @@ examples:
     speakeasy-default-get-mcp-endpoint:
       responses:
         "200":
-          application/json: {"created_at": "2025-10-07T05:04:39.898Z", "id": "582ad397-2eda-464c-a385-694e07a2aa6b", "is_domain_root": false, "mcp_server_id": "acf7a5e8-e3c1-45d9-bc37-05dd8b5ffe61", "project_id": "2985206d-da71-409d-b627-bb1a60991e46", "slug": "<value>", "updated_at": "2024-08-08T19:06:56.329Z"}
+          application/json: {"created_at": "2025-10-07T05:04:39.898Z", "id": "582ad397-2eda-464c-a385-694e07a2aa6b", "is_domain_root": false, "project_id": "2985206d-da71-409d-b627-bb1a60991e46", "slug": "<value>", "updated_at": "2024-08-08T19:06:56.329Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -5220,6 +5291,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getMetaMcpServer:
+    speakeasy-default-get-meta-mcp-server:
+      parameters:
+        query:
+          id: "8dc5f443-a256-489e-9176-477844ab4d52"
+      responses:
+        "200":
+          application/json: {"created_at": "2024-06-24T04:56:25.716Z", "id": "ae1a33a6-20a8-47d9-b3be-f8d19435c0f9", "name": "<value>", "organization_id": "<id>", "project_id": "ba9012a9-da63-4c6b-821a-5c5b2cfaa7bd", "updated_at": "2024-03-24T06:19:24.439Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   getObservabilityOverview:
     speakeasy-default-get-observability-overview:
       requestBody:
@@ -6682,6 +6765,27 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listMetaMcpMembers:
+    speakeasy-default-list-meta-mcp-members:
+      parameters:
+        query:
+          meta_mcp_server_id: "146f00da-32ca-4e5a-b8df-3cdf783c6740"
+      responses:
+        "200":
+          application/json: {"members": [{"id": "1057116b-4226-42e3-9188-0cf3f3ce53e7", "mcp_server_id": "8a91510c-45da-41e2-8cc8-5e6c07a02cbc", "sort_order": 871612}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  listMetaMcpServers:
+    speakeasy-default-list-meta-mcp-servers:
+      responses:
+        "200":
+          application/json: {"meta_mcp_servers": [{"created_at": "2026-11-18T21:37:16.963Z", "id": "c817b326-c217-4058-be33-839a6adfca21", "name": "<value>", "organization_id": "<id>", "project_id": "3057172a-67b4-4632-8c85-542e95603d80", "updated_at": "2026-10-03T03:43:27.201Z"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   listModelProviderKeys:
     speakeasy-default-list-model-provider-keys:
       responses:
@@ -7766,6 +7870,16 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  removeMetaMcpMember:
+    speakeasy-default-remove-meta-mcp-member:
+      parameters:
+        query:
+          id: "5b1ce6c9-7812-46f4-ac22-236ebcfc0d9c"
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   removeOAuthServer:
     speakeasy-default-remove-O-auth-server:
       parameters:
@@ -8916,10 +9030,10 @@ examples:
   updateMcpEndpoint:
     speakeasy-default-update-mcp-endpoint:
       requestBody:
-        application/json: {"id": "34af84a7-b505-4ed8-90f2-3279fbef3b89", "mcp_server_id": "e365e808-c8a5-4d4b-bf0a-622a484c6194", "slug": "<value>"}
+        application/json: {"id": "34af84a7-b505-4ed8-90f2-3279fbef3b89", "slug": "<value>"}
       responses:
         "200":
-          application/json: {"created_at": "2026-11-09T02:02:44.350Z", "id": "09091fa5-6078-49bc-bf27-5523608dd9ba", "is_domain_root": true, "mcp_server_id": "62a78373-d024-4139-a697-dc643ad0d7a2", "project_id": "6f2e4b1f-7ae3-4209-bf20-d630b432a5ac", "slug": "<value>", "updated_at": "2024-06-04T09:09:41.724Z"}
+          application/json: {"created_at": "2026-11-09T02:02:44.350Z", "id": "09091fa5-6078-49bc-bf27-5523608dd9ba", "is_domain_root": true, "project_id": "6f2e4b1f-7ae3-4209-bf20-d630b432a5ac", "slug": "<value>", "updated_at": "2024-06-04T09:09:41.724Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -8946,6 +9060,28 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  updateMetaMcpMember:
+    speakeasy-default-update-meta-mcp-member:
+      requestBody:
+        application/json: {"id": "619a6b98-f36b-43e4-970f-ffb4e1bca70a", "sort_order": 673817}
+      responses:
+        "200":
+          application/json: {"id": "74515b9c-caae-4289-b22b-126ff5c1a81d", "mcp_server_id": "f16d1993-06fc-42ab-8152-c9ed6b81dc1d", "sort_order": 645583}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  updateMetaMcpServer:
+    speakeasy-default-update-meta-mcp-server:
+      requestBody:
+        application/json: {"id": "0ed4533c-c894-4b99-a315-ba1ec8947783", "name": "<value>"}
+      responses:
+        "200":
+          application/json: {"created_at": "2026-07-10T17:29:02.697Z", "id": "f5a95ca4-055d-47f6-b62c-b93212fbea06", "name": "<value>", "organization_id": "<id>", "project_id": "0f17506b-1037-4306-ba27-4e8d05871c35", "updated_at": "2025-10-10T20:16:25.755Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   updateOAuthProxyServer:
     speakeasy-default-update-O-auth-proxy-server:
       parameters:

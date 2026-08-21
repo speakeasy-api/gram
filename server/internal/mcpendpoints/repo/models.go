@@ -13,7 +13,7 @@ type McpEndpoint struct {
 	ID              uuid.UUID
 	ProjectID       uuid.UUID
 	CustomDomainID  uuid.NullUUID
-	McpServerID     uuid.UUID
+	McpServerID     uuid.NullUUID
 	MetaMcpServerID uuid.NullUUID
 	Slug            string
 	IsDomainRoot    pgtype.Bool

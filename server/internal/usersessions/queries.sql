@@ -47,6 +47,19 @@ SET
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
+-- name: LockUserSessionIssuer :one
+-- Lock a live issuer row before checking for active owners. Attach flows
+-- that reference a pre-existing issuer (meta MCP create/update) hold this
+-- same row lock while writing their reference, so acquiring it first
+-- guarantees the follow-up ownership statements read a snapshot that
+-- includes any reference committed by a concurrent attach.
+SELECT id
+FROM user_session_issuers
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+FOR UPDATE;
+
 -- name: DeleteUserSessionIssuer :one
 -- Recheck active owners in the write so an owner added after the handler's
 -- preflight check prevents the issuer from being soft-deleted.
@@ -69,12 +82,20 @@ WHERE issuer.id = @id
     WHERE toolset.project_id = @project_id
       AND toolset.user_session_issuer_id = issuer.id
       AND toolset.deleted IS FALSE
+
+    UNION ALL
+
+    SELECT 1
+    FROM meta_mcp_servers AS meta_mcp_server
+    WHERE meta_mcp_server.project_id = @project_id
+      AND meta_mcp_server.user_session_issuer_id = issuer.id
+      AND meta_mcp_server.deleted IS FALSE
   )
 RETURNING issuer.*;
 
 -- name: UserSessionIssuerHasActiveOwner :one
--- An issuer can be referenced by an MCP server or toolset. Only delete it once
--- no active owner remains.
+-- An issuer can be referenced by an MCP server, toolset, or meta MCP server.
+-- Only delete it once no active owner remains.
 SELECT EXISTS (
     SELECT 1
     FROM mcp_servers AS server
@@ -89,6 +110,14 @@ SELECT EXISTS (
     WHERE toolset.project_id = sqlc.arg('project_id')
       AND toolset.user_session_issuer_id = sqlc.arg('user_session_issuer_id')::uuid
       AND toolset.deleted IS FALSE
+
+    UNION ALL
+
+    SELECT 1
+    FROM meta_mcp_servers AS meta_mcp_server
+    WHERE meta_mcp_server.project_id = sqlc.arg('project_id')
+      AND meta_mcp_server.user_session_issuer_id = sqlc.arg('user_session_issuer_id')::uuid
+      AND meta_mcp_server.deleted IS FALSE
 );
 
 -- name: DeleteRemoteSessionClientAttachmentsForUserSessionIssuer :exec

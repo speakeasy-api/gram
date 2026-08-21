@@ -8,6 +8,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_endpoints"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -42,7 +43,7 @@ func TestListMcpEndpoints_Multiple(t *testing.T) {
 			ApikeyToken:      nil,
 			ProjectSlugInput: nil,
 			CustomDomainID:   nil,
-			McpServerID:      mcpServerID,
+			McpServerID:      conv.PtrEmpty(mcpServerID),
 			Slug:             types.McpEndpointSlug(authCtx.OrganizationSlug + "-" + name),
 		})
 		require.NoError(t, err)
@@ -81,7 +82,7 @@ func TestListMcpEndpoints_FilteredByFrontend(t *testing.T) {
 			ApikeyToken:      nil,
 			ProjectSlugInput: nil,
 			CustomDomainID:   nil,
-			McpServerID:      tc.frontend,
+			McpServerID:      conv.PtrEmpty(tc.frontend),
 			Slug:             types.McpEndpointSlug(authCtx.OrganizationSlug + "-" + tc.suffix),
 		})
 		require.NoError(t, err)
@@ -97,7 +98,8 @@ func TestListMcpEndpoints_FilteredByFrontend(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result.McpEndpoints, 2)
 	for _, s := range result.McpEndpoints {
-		require.Equal(t, frontendA, s.McpServerID)
+		require.NotNil(t, s.McpServerID)
+		require.Equal(t, frontendA, *s.McpServerID)
 	}
 }
 

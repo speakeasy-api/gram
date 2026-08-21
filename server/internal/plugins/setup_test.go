@@ -382,7 +382,7 @@ func createTestMcpServerWithEndpoint(t *testing.T, ctx context.Context, conn *pg
 		_, err = mcpendpointsrepo.New(conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 			ProjectID:      *authCtx.ProjectID,
 			CustomDomainID: uuid.NullUUID{},
-			McpServerID:    serverID,
+			McpServerID:    uuid.NullUUID{UUID: serverID, Valid: true},
 			Slug:           endpointSlug,
 		})
 		require.NoError(t, err)

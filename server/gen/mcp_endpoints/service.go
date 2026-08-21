@@ -16,19 +16,20 @@ import (
 )
 
 // Managing MCP endpoints, the url-friendly slug identifiers that address MCP
-// servers.
+// servers and meta MCP servers.
 type Service interface {
-	// Create a new MCP endpoint for an MCP server
+	// Create a new MCP endpoint for an MCP server or a meta MCP server. Provide
+	// exactly one of mcp_server_id or meta_mcp_server_id.
 	CreateMcpEndpoint(context.Context, *CreateMcpEndpointPayload) (res *types.McpEndpoint, err error)
 	// Get an MCP endpoint by id or by (custom_domain_id, slug). Provide either id,
 	// or slug with an optional custom_domain_id — not both.
 	GetMcpEndpoint(context.Context, *GetMcpEndpointPayload) (res *types.McpEndpoint, err error)
 	// List MCP endpoints for a project. Optionally filter to only those associated
-	// with a specific MCP server.
+	// with a specific MCP server or meta MCP server (not both).
 	ListMcpEndpoints(context.Context, *ListMcpEndpointsPayload) (res *ListMcpEndpointsResult, err error)
 	// Update an MCP endpoint. This is a full-record replace: fields omitted from
-	// the request become null on the stored record. The id, mcp_server_id, and
-	// slug fields are required.
+	// the request become null on the stored record. The id and slug fields are
+	// required, along with exactly one of mcp_server_id or meta_mcp_server_id.
 	UpdateMcpEndpoint(context.Context, *UpdateMcpEndpointPayload) (res *types.McpEndpoint, err error)
 	// Check whether an MCP endpoint slug is available. The uniqueness scope
 	// depends on whether a custom_domain_id is provided: platform-domain slugs are
@@ -83,8 +84,12 @@ type CreateMcpEndpointPayload struct {
 	// The ID of the custom domain to register the endpoint slug under. Omit for a
 	// platform-domain endpoint.
 	CustomDomainID *string
-	// The ID of the MCP server this endpoint addresses
-	McpServerID string
+	// The ID of the MCP server this endpoint addresses. Mutually exclusive with
+	// meta_mcp_server_id.
+	McpServerID *string
+	// The ID of the meta MCP server this endpoint addresses. Mutually exclusive
+	// with mcp_server_id.
+	MetaMcpServerID *string
 	// The slug
 	Slug types.McpEndpointSlug
 }
@@ -118,7 +123,9 @@ type GetMcpEndpointPayload struct {
 // listMcpEndpoints method.
 type ListMcpEndpointsPayload struct {
 	// Optional filter: only return endpoints associated with this MCP server.
-	McpServerID      *string
+	McpServerID *string
+	// Optional filter: only return endpoints associated with this meta MCP server.
+	MetaMcpServerID  *string
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
@@ -141,8 +148,12 @@ type UpdateMcpEndpointPayload struct {
 	// The ID of the custom domain to register the endpoint slug under. Omit to
 	// move the endpoint to a platform domain.
 	CustomDomainID *string
-	// The ID of the MCP server this endpoint addresses
-	McpServerID string
+	// The ID of the MCP server this endpoint addresses. Mutually exclusive with
+	// meta_mcp_server_id.
+	McpServerID *string
+	// The ID of the meta MCP server this endpoint addresses. Mutually exclusive
+	// with mcp_server_id.
+	MetaMcpServerID *string
 	// The slug
 	Slug types.McpEndpointSlug
 }

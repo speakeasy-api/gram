@@ -15,15 +15,6 @@ overrides:
           import: "github.com/google/uuid"
           type: "NullUUID"
         nullable: true
-      # Temporary pin while the schema ships ahead of the application layer:
-      # the column became nullable for the meta MCP endpoint backend, but no
-      # code writes meta-backed rows yet, so it is never NULL on this branch.
-      # The application PR removes this override together with the code that
-      # handles the nullable type.
-      - column: mcp_endpoints.mcp_server_id
-        go_type:
-          import: "github.com/google/uuid"
-          type: "UUID"
       - column: http_tool_definitions.response_filter
         go_type:
           import: github.com/speakeasy-api/gram/server/internal/tools/repo/models
@@ -416,6 +407,16 @@ sql:
       go:
         package: "repo"
         out: "../internal/mcpservers/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/metamcp/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/metamcp/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
 

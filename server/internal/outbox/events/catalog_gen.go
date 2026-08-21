@@ -33,6 +33,7 @@ var All = []outbox.EventRegistration{
 	McpCollectionV1,
 	McpEndpointV1,
 	McpServerV1,
+	MetaMcpServerV1,
 	ModelProviderKeyV1,
 	OpenRouterAPIKeyV1,
 	OrganizationBillingV1,
