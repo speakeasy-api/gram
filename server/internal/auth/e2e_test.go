@@ -382,6 +382,71 @@ func TestE2E_Callback_NewOrganizationSyncsMemberRoleWithoutAdmin(t *testing.T) {
 	require.Equal(t, oops.CodeForbidden, shareable.Code)
 }
 
+func TestE2E_Callback_LoginSyncPreservesWorkOSAssignmentEventMetadata(t *testing.T) {
+	t.Parallel()
+
+	const (
+		workosUserID = "user_01WORKOS_RBAC_CURSOR"
+		workosOrgID  = "org_01WORKOS_RBAC_CURSOR"
+		orgName      = "RBAC Cursor Corp"
+		eventID      = "event_01KEEP"
+	)
+	eventUpdatedAt := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			workosUserID: {
+				{ID: "om_01RBAC_CURSOR", UserID: workosUserID, OrganizationID: workosOrgID, Organization: orgName, RoleSlugs: []string{"admin"}},
+			},
+		},
+		orgs: map[string]*workos.Organization{
+			workosOrgID: {ID: workosOrgID, Name: orgName},
+		},
+	}
+
+	userInfo := &MockUserInfo{
+		UserID:        workosUserID,
+		Email:         "cursor@rbac.example",
+		Organizations: []MockOrganizationEntry{},
+	}
+
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+	result, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	require.NotEmpty(t, result.SessionToken)
+
+	ctx, err = inst.sessionManager.Authenticate(ctx, result.SessionToken)
+	require.NoError(t, err)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	orgQueries := orgRepo.New(inst.conn)
+	require.NoError(t, orgQueries.SyncUserOrganizationRoleAssignments(ctx, orgRepo.SyncUserOrganizationRoleAssignmentsParams{
+		OrganizationID:     authCtx.ActiveOrganizationID,
+		WorkosUserID:       workosUserID,
+		UserID:             conv.ToPGText(authCtx.UserID),
+		WorkosMembershipID: conv.ToPGText("om_01RBAC_CURSOR"),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(eventUpdatedAt),
+		WorkosLastEventID:  conv.ToPGText(eventID),
+		WorkosRoleSlugs:    []string{authz.SystemRoleAdmin},
+	}))
+
+	require.NoError(t, inst.identityResolver.SyncMembershipsFromWorkOS(ctx, authCtx.UserID, workosUserID))
+
+	assignments, err := orgQueries.ListOrganizationRoleAssignmentsByWorkOSUser(ctx, orgRepo.ListOrganizationRoleAssignmentsByWorkOSUserParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		WorkosUserID:   workosUserID,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, assignments)
+	for _, assignment := range assignments {
+		require.False(t, assignment.DeletedAt.Valid)
+		require.Equal(t, eventID, assignment.WorkosLastEventID.String)
+		require.True(t, assignment.WorkosUpdatedAt.Valid)
+		require.True(t, assignment.WorkosUpdatedAt.Time.Equal(eventUpdatedAt))
+	}
+}
+
 // TestE2E_Callback_WithoutAccessSeederSkipsRoleProvisioning covers processes
 // that sync memberships without a seeder (for example the worker). Memberships
 // still sync; role assignments are left alone.

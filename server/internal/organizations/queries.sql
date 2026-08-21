@@ -443,7 +443,9 @@ ON CONFLICT (workos_membership_id) WHERE deleted IS FALSE DO UPDATE SET
 -- name: SyncUserOrganizationRoleAssignments :exec
 -- Declaratively set all WorkOS role assignments for a known Gram user in an
 -- org. Role slugs are resolved from role sync tables and stale assignments for
--- this WorkOS user are removed.
+-- this WorkOS user are removed. NULL WorkOS event metadata is coalesced so
+-- login and invite repairs can rewrite slugs without wiping webhook cursors
+-- or inventing a WorkOS timestamp.
 WITH input_role_urns AS (
     SELECT 'role:organization:' || id::text AS role_urn
     FROM organization_roles
@@ -481,15 +483,15 @@ upserted AS (
         -- COALESCE preserves a backfilled user_id if the sync fires before the Gram user exists.
         user_id = COALESCE(EXCLUDED.user_id, organization_role_assignments.user_id),
         workos_membership_id = EXCLUDED.workos_membership_id,
-        workos_updated_at = EXCLUDED.workos_updated_at,
-        workos_last_event_id = EXCLUDED.workos_last_event_id,
+        workos_updated_at = COALESCE(EXCLUDED.workos_updated_at, organization_role_assignments.workos_updated_at),
+        workos_last_event_id = COALESCE(EXCLUDED.workos_last_event_id, organization_role_assignments.workos_last_event_id),
         deleted_at = NULL,
         updated_at = clock_timestamp()
     RETURNING role_urn
 )
 UPDATE organization_role_assignments
-SET workos_updated_at = @workos_updated_at,
-    workos_last_event_id = @workos_last_event_id,
+SET workos_updated_at = COALESCE(@workos_updated_at, workos_updated_at),
+    workos_last_event_id = COALESCE(@workos_last_event_id, workos_last_event_id),
     deleted_at = COALESCE(deleted_at, clock_timestamp()),
     updated_at = clock_timestamp()
 WHERE organization_role_assignments.organization_id = @organization_id

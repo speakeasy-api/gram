@@ -76,6 +76,18 @@ func SeedSystemRoleGrants(ctx context.Context, db *pgxpool.Pool, organizationID 
 	return nil
 }
 
+// systemRoleSeedOrder returns built-in role slugs in a stable order so
+// concurrent first-login seeds acquire the same lock sequence and cannot
+// deadlock on admin vs member upserts.
+func systemRoleSeedOrder() []string {
+	slugs := make([]string, 0, len(SystemRoleGrants))
+	for slug := range SystemRoleGrants {
+		slugs = append(slugs, slug)
+	}
+	slices.Sort(slugs)
+	return slugs
+}
+
 // SeedSystemRoleGrantsTx seeds the fixed grant sets for system roles using the
 // caller's transaction. Use this when seeding must be atomic with other writes
 // in an existing transaction (e.g. provisioning an org from a WorkOS webhook).
@@ -83,7 +95,8 @@ func SeedSystemRoleGrants(ctx context.Context, db *pgxpool.Pool, organizationID 
 // roles that already hold grants are skipped.
 func SeedSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, organizationID string) error {
 	q := repo.New(dbtx)
-	for roleSlug, grants := range SystemRoleGrants {
+	for _, roleSlug := range systemRoleSeedOrder() {
+		grants := SystemRoleGrants[roleSlug]
 		existingRole, err := q.GetGlobalRoleBySlug(ctx, roleSlug)
 		seedRole := false
 		switch {

@@ -460,7 +460,7 @@ func (r *Resolver) provisionAccessFromMemberships(ctx context.Context, gramUserI
 			WorkosUserID:       workosUserID,
 			UserID:             conv.ToPGText(gramUserID),
 			WorkosMembershipID: conv.ToPGTextEmpty(m.ID),
-			WorkosUpdatedAt:    conv.ToPGTimestamptz(membershipUpdatedAt(m)),
+			WorkosUpdatedAt:    membershipUpdatedAt(m),
 			WorkosLastEventID:  conv.ToPGTextEmpty(""),
 			WorkosRoleSlugs:    m.RoleSlugs,
 		}); err != nil {
@@ -471,11 +471,11 @@ func (r *Resolver) provisionAccessFromMemberships(ctx context.Context, gramUserI
 	return nil
 }
 
-func membershipUpdatedAt(m workos.Member) time.Time {
+func membershipUpdatedAt(m workos.Member) pgtype.Timestamptz {
 	if t, err := time.Parse(time.RFC3339, m.UpdatedAt); err == nil {
-		return t.UTC()
+		return conv.ToPGTimestamptz(t.UTC())
 	}
-	return time.Now().UTC()
+	return pgtype.Timestamptz{}
 }
 
 func (r *Resolver) UpdateOrganizationMembershipRole(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (string, error) {

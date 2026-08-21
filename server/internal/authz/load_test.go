@@ -34,6 +34,12 @@ func TestLoadGrants_loadsUserAndRoleGrants(t *testing.T) {
 	require.NoError(t, engine.Require(ctx, Check{Scope: ScopeMCPConnect, ResourceID: "toolA"}))
 }
 
+func TestSystemRoleSeedOrderIsStable(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, []string{SystemRoleAdmin, SystemRoleMember}, systemRoleSeedOrder())
+}
+
 func TestSeedSystemRoleGrantsBootstrapsGlobalRoles(t *testing.T) {
 	t.Parallel()
 
