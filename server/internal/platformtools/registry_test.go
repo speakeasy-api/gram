@@ -114,9 +114,7 @@ func TestBuildToolsetsIncludesPlatformMCPReadToolset(t *testing.T) {
 	}
 
 	toolsets := BuildToolsets(ToolsetDependencies{
-		AssistantMemoryTools:          nil,
-		AssistantSkillTools:           nil,
-		AssistantTriggerTools:         nil,
+		AssistantTools:                nil,
 		ManagedAssistantInsightsTools: nil,
 		PlatformMCPReadTools:          []ExternalTool{tool},
 	})

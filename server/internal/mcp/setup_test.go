@@ -248,9 +248,7 @@ func newTestMCPServiceWithTunnelPublicConfig(t *testing.T, identityResolver mcp.
 	feedbackRecorder := feedbackrecorder.NewRecorder(conn, logger, nil)
 	assistantSkillTools := platformtoolsruntime.AssistantSkillTools(logger, conn, feedbackRecorder)
 	platformToolsets := platformtools.BuildToolsets(platformtools.ToolsetDependencies{
-		AssistantMemoryTools:          nil,
-		AssistantSkillTools:           assistantSkillTools,
-		AssistantTriggerTools:         nil,
+		AssistantTools:                assistantSkillTools,
 		ManagedAssistantInsightsTools: managedLogsTools,
 		// Composed the way the server composes it: descriptors admitted to the
 		// assistant audience, called directly by the adapter.

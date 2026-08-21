@@ -989,7 +989,6 @@ func newStartCommand() *cli.Command {
 			memoryTools := platformtoolsruntime.MemoryExternalTools(memorySvc)
 			feedbackRecorder := feedbackrecorder.NewRecorder(db, logger, &background.TemporalSkillSuggestionSignaler{TemporalEnv: temporalEnv, Logger: logger, StartDelay: 0})
 			skillTools := platformtoolsruntime.AssistantSkillTools(logger, db, feedbackRecorder, platformskills.WithEfficacySignaler(efficacySignaler))
-			triggerTools := platformtoolsruntime.TriggerExternalTools(db, triggerApp, auditLogger)
 			platformToolsets := map[string]platformtools.Toolset{}
 			// Runner-callable platform tools the runtime must be able to execute
 			// (trigger tools are wired separately via WithTriggerTools).
@@ -1648,6 +1647,15 @@ func newStartCommand() *cli.Command {
 			// Take the larger bound so the shared client stays correct if either
 			// tool's timeout is tuned independently later.
 			marketingSiteClient.Timeout = max(platformchangelog.FetchTimeout, platformdocs.FetchTimeout)
+			assistantToolsetTools := platformtoolsruntime.AssistantsToolset(platformtoolsruntime.AssistantsToolsetDeps{
+				Memory:           memorySvc,
+				Logger:           logger,
+				DB:               db,
+				FeedbackRecorder: feedbackRecorder,
+				SkillLoadOptions: []platformskills.LoadOption{platformskills.WithEfficacySignaler(efficacySignaler)},
+				Triggers:         triggerApp,
+				Audit:            auditLogger,
+			})
 			// Composed in one call so the served set has a single statement:
 			// the managed assistant's prompt names these tools inline, and a
 			// drift test holds it to this composition.
@@ -1663,9 +1671,7 @@ func newStartCommand() *cli.Command {
 				MarketingSite: marketingSiteClient,
 			})
 			maps.Copy(platformToolsets, platformtools.BuildToolsets(platformtools.ToolsetDependencies{
-				AssistantMemoryTools:          memoryTools,
-				AssistantSkillTools:           skillTools,
-				AssistantTriggerTools:         triggerTools,
+				AssistantTools:                assistantToolsetTools,
 				ManagedAssistantInsightsTools: managedInsightsTools,
 				PlatformMCPReadTools:          assistant_platform_mcp_adapter.ExternalTools(platformMCPAssistant.Tools, platformMCPAssistant.Authorizer),
 			}))

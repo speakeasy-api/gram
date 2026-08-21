@@ -36,9 +36,13 @@ type Toolset struct {
 // platform toolset registry. Add a field here when a new toolset needs an
 // external service or pre-built tool slice.
 type ToolsetDependencies struct {
-	AssistantMemoryTools          []ExternalTool
-	AssistantSkillTools           []ExternalTool
-	AssistantTriggerTools         []ExternalTool
+	// AssistantTools and ManagedAssistantInsightsTools each arrive composed,
+	// from one function in platformtools/runtime, so the served set has a
+	// single statement. The managed assistant's system prompt names these
+	// tools inline and a drift test holds it to those compositions; splitting
+	// a toolset across several fields here would give the test a mirror to
+	// check rather than the thing being served.
+	AssistantTools                []ExternalTool
 	ManagedAssistantInsightsTools []ExternalTool
 	PlatformMCPReadTools          []ExternalTool
 }
@@ -47,11 +51,7 @@ type toolsetBuilder func(deps ToolsetDependencies) Toolset
 
 var toolsetRegistry = []toolsetBuilder{
 	func(deps ToolsetDependencies) Toolset {
-		tools := make([]ExternalTool, 0, len(deps.AssistantMemoryTools)+len(deps.AssistantSkillTools)+len(deps.AssistantTriggerTools))
-		tools = append(tools, deps.AssistantMemoryTools...)
-		tools = append(tools, deps.AssistantSkillTools...)
-		tools = append(tools, deps.AssistantTriggerTools...)
-		return NewAssistantsToolset(tools...)
+		return NewAssistantsToolset(deps.AssistantTools...)
 	},
 	func(deps ToolsetDependencies) Toolset {
 		tools := make([]ExternalTool, 0, len(deps.ManagedAssistantInsightsTools))
