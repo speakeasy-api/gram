@@ -2576,11 +2576,11 @@ func TestPluginsService_PublishProject_PlatformMCPAdmissionTransitions(t *testin
 	require.NoError(t, json.Unmarshal(connection.PublishedMcpFingerprints, &fingerprints))
 	require.Contains(t, fingerprints, "__platform_mcp__")
 	platformFilesBefore := map[string][]byte{
-		"platform-mcp/.claude-plugin/plugin.json":                 mock.lastPushedFiles["platform-mcp/.claude-plugin/plugin.json"],
-		"platform-mcp/.mcp.json":                                  mock.lastPushedFiles["platform-mcp/.mcp.json"],
-		"platform-mcp/skills/add-mcp-from-catalog/SKILL.md":       mock.lastPushedFiles["platform-mcp/skills/add-mcp-from-catalog/SKILL.md"],
-		"agent-plugins/platform-mcp/plugin.json": mock.lastPushedFiles["agent-plugins/platform-mcp/plugin.json"],
-		"agent-plugins/platform-mcp/mcp.json":    mock.lastPushedFiles["agent-plugins/platform-mcp/mcp.json"],
+		"platform-mcp/.claude-plugin/plugin.json":           mock.lastPushedFiles["platform-mcp/.claude-plugin/plugin.json"],
+		"platform-mcp/.mcp.json":                            mock.lastPushedFiles["platform-mcp/.mcp.json"],
+		"platform-mcp/skills/add-mcp-from-catalog/SKILL.md": mock.lastPushedFiles["platform-mcp/skills/add-mcp-from-catalog/SKILL.md"],
+		"agent-plugins/platform-mcp/plugin.json":            mock.lastPushedFiles["agent-plugins/platform-mcp/plugin.json"],
+		"agent-plugins/platform-mcp/mcp.json":               mock.lastPushedFiles["agent-plugins/platform-mcp/mcp.json"],
 	}
 
 	// An indeterminate result preserves the prior package and fingerprint. It
