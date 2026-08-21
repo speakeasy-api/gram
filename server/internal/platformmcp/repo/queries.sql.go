@@ -1273,8 +1273,16 @@ DELETE FROM platform_mcp_readiness AS stale
 WHERE stale.organization_id = $1
   AND stale.project_id = $2
   AND stale.registration_id = $3
-  AND stale.connection_id = $4
-  AND stale.connection_generation = $5
+  AND (
+      ($4::uuid IS NOT NULL
+          AND stale.connection_id = $4::uuid
+          AND stale.connection_generation = $5::uuid)
+      OR
+      ($4::uuid IS NULL
+          AND stale.connection_id IS NULL
+          AND stale.user_id = $6
+          AND stale.acting_surface = $7)
+  )
   AND stale.expires_at <= clock_timestamp()
   AND EXISTS (
       SELECT 1
@@ -1282,8 +1290,16 @@ WHERE stale.organization_id = $1
       WHERE newer.organization_id = stale.organization_id
         AND newer.project_id = stale.project_id
         AND newer.registration_id = stale.registration_id
-        AND newer.connection_id = stale.connection_id
-        AND newer.connection_generation = stale.connection_generation
+        AND (
+            (stale.connection_id IS NOT NULL
+                AND newer.connection_id = stale.connection_id
+                AND newer.connection_generation = stale.connection_generation)
+            OR
+            (stale.connection_id IS NULL
+                AND newer.connection_id IS NULL
+                AND newer.user_id = stale.user_id
+                AND newer.acting_surface = stale.acting_surface)
+        )
         AND (newer.checked_at, newer.id) > (stale.checked_at, stale.id)
   )
 `
@@ -1294,10 +1310,13 @@ type DeleteExpiredPlatformMCPReadinessParams struct {
 	RegistrationID       uuid.UUID
 	ConnectionID         uuid.NullUUID
 	ConnectionGeneration uuid.NullUUID
+	UserID               pgtype.Text
+	ActingSurface        pgtype.Text
 }
 
 // Retain the newest expired projection as stale repair evidence. Only an older
 // expired row that has been superseded by later evidence is safe to remove.
+// A connectionless assistant projection is keyed by its real user and surface.
 func (q *Queries) DeleteExpiredPlatformMCPReadiness(ctx context.Context, arg DeleteExpiredPlatformMCPReadinessParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteExpiredPlatformMCPReadiness,
 		arg.OrganizationID,
@@ -1305,6 +1324,8 @@ func (q *Queries) DeleteExpiredPlatformMCPReadiness(ctx context.Context, arg Del
 		arg.RegistrationID,
 		arg.ConnectionID,
 		arg.ConnectionGeneration,
+		arg.UserID,
+		arg.ActingSurface,
 	)
 	if err != nil {
 		return 0, err
@@ -1667,21 +1688,29 @@ JOIN platform_mcp_catalog_registrations AS registration
  AND registration.organization_id = readiness.organization_id
  AND registration.project_id = readiness.project_id
  AND registration.deleted IS FALSE
- JOIN projects AS project
-   ON project.id = readiness.project_id
-  AND project.organization_id = readiness.organization_id
-  AND project.deleted IS FALSE
- JOIN platform_mcp_connections AS connection
-   ON connection.id = readiness.connection_id
+JOIN projects AS project
+  ON project.id = readiness.project_id
+ AND project.organization_id = readiness.organization_id
+ AND project.deleted IS FALSE
+LEFT JOIN platform_mcp_connections AS connection
+  ON connection.id = readiness.connection_id
  AND connection.organization_id = readiness.organization_id
 WHERE readiness.organization_id = $1
   AND readiness.project_id = $2
   AND readiness.registration_id = $3
-  AND readiness.connection_id = $4
-  AND readiness.connection_generation = $5
-  AND connection.subject_urn = $6
-  AND connection.active_generation = readiness.connection_generation
-  AND connection.revoked_at IS NULL
+  AND (
+      ($4::uuid IS NOT NULL
+          AND readiness.connection_id = $4::uuid
+          AND readiness.connection_generation = $5::uuid
+          AND connection.subject_urn = $6
+          AND connection.active_generation = readiness.connection_generation
+          AND connection.revoked_at IS NULL)
+      OR
+      ($4::uuid IS NULL
+          AND readiness.connection_id IS NULL
+          AND readiness.user_id = $7
+          AND readiness.acting_surface = $8)
+  )
 ORDER BY readiness.checked_at DESC, readiness.id DESC
 LIMIT 1
 `
@@ -1693,8 +1722,12 @@ type GetLatestPlatformMCPReadinessForLifecycleParams struct {
 	ConnectionID         uuid.NullUUID
 	ConnectionGeneration uuid.NullUUID
 	SubjectUrn           string
+	UserID               pgtype.Text
+	ActingSurface        pgtype.Text
 }
 
+// External callers retain live connection/generation checks. A connectionless
+// caller may only read evidence attributed to that same real user and surface.
 func (q *Queries) GetLatestPlatformMCPReadinessForLifecycle(ctx context.Context, arg GetLatestPlatformMCPReadinessForLifecycleParams) (PlatformMcpReadiness, error) {
 	row := q.db.QueryRow(ctx, getLatestPlatformMCPReadinessForLifecycle,
 		arg.OrganizationID,
@@ -1703,6 +1736,8 @@ func (q *Queries) GetLatestPlatformMCPReadinessForLifecycle(ctx context.Context,
 		arg.ConnectionID,
 		arg.ConnectionGeneration,
 		arg.SubjectUrn,
+		arg.UserID,
+		arg.ActingSurface,
 	)
 	var i PlatformMcpReadiness
 	err := row.Scan(
@@ -2573,30 +2608,40 @@ func (q *Queries) GetPlatformMCPOperationReceipt(ctx context.Context, arg GetPla
 const getPlatformMCPReadiness = `-- name: GetPlatformMCPReadiness :one
 SELECT readiness.id, readiness.organization_id, readiness.project_id, readiness.registration_id, readiness.connection_id, readiness.connection_generation, readiness.user_id, readiness.acting_surface, readiness.provider_authorization_fingerprint, readiness.state, readiness.evidence_code, readiness.checked_at, readiness.expires_at, readiness.created_at, readiness.updated_at
 FROM platform_mcp_readiness AS readiness
- JOIN platform_mcp_catalog_registrations AS registration
-   ON registration.id = readiness.registration_id
-  AND registration.organization_id = readiness.organization_id
-  AND registration.project_id = readiness.project_id
-  AND registration.deleted IS FALSE
- JOIN projects AS project
-   ON project.id = readiness.project_id
-  AND project.organization_id = readiness.organization_id
-  AND project.deleted IS FALSE
- WHERE readiness.organization_id = $1
+JOIN platform_mcp_catalog_registrations AS registration
+  ON registration.id = readiness.registration_id
+ AND registration.organization_id = readiness.organization_id
+ AND registration.project_id = readiness.project_id
+ AND registration.deleted IS FALSE
+JOIN projects AS project
+  ON project.id = readiness.project_id
+ AND project.organization_id = readiness.organization_id
+ AND project.deleted IS FALSE
+WHERE readiness.organization_id = $1
   AND readiness.project_id = $2
   AND readiness.registration_id = $3
-  AND readiness.connection_id = $4
-  AND readiness.connection_generation = $5
-  AND readiness.provider_authorization_fingerprint = $6
+  AND readiness.provider_authorization_fingerprint = $4
+  AND (
+      ($5::uuid IS NOT NULL
+          AND readiness.connection_id = $5::uuid
+          AND readiness.connection_generation = $6::uuid)
+      OR
+      ($5::uuid IS NULL
+          AND readiness.connection_id IS NULL
+          AND readiness.user_id = $7
+          AND readiness.acting_surface = $8)
+  )
 `
 
 type GetPlatformMCPReadinessParams struct {
 	OrganizationID                   string
 	ProjectID                        uuid.UUID
 	RegistrationID                   uuid.UUID
+	ProviderAuthorizationFingerprint string
 	ConnectionID                     uuid.NullUUID
 	ConnectionGeneration             uuid.NullUUID
-	ProviderAuthorizationFingerprint string
+	UserID                           pgtype.Text
+	ActingSurface                    pgtype.Text
 }
 
 func (q *Queries) GetPlatformMCPReadiness(ctx context.Context, arg GetPlatformMCPReadinessParams) (PlatformMcpReadiness, error) {
@@ -2604,9 +2649,11 @@ func (q *Queries) GetPlatformMCPReadiness(ctx context.Context, arg GetPlatformMC
 		arg.OrganizationID,
 		arg.ProjectID,
 		arg.RegistrationID,
+		arg.ProviderAuthorizationFingerprint,
 		arg.ConnectionID,
 		arg.ConnectionGeneration,
-		arg.ProviderAuthorizationFingerprint,
+		arg.UserID,
+		arg.ActingSurface,
 	)
 	var i PlatformMcpReadiness
 	err := row.Scan(
@@ -5555,6 +5602,8 @@ INSERT INTO platform_mcp_readiness (
     registration_id,
     connection_id,
     connection_generation,
+    user_id,
+    acting_surface,
     provider_authorization_fingerprint,
     state,
     evidence_code,
@@ -5571,7 +5620,9 @@ SELECT
     $7,
     $8,
     $9,
-    $10
+    $10,
+    $11,
+    $12
 WHERE EXISTS (
     SELECT 1
      FROM platform_mcp_catalog_registrations AS registration
@@ -5601,6 +5652,8 @@ type UpsertPlatformMCPReadinessParams struct {
 	RegistrationID                   uuid.UUID
 	ConnectionID                     uuid.NullUUID
 	ConnectionGeneration             uuid.NullUUID
+	UserID                           pgtype.Text
+	ActingSurface                    pgtype.Text
 	ProviderAuthorizationFingerprint string
 	State                            string
 	EvidenceCode                     pgtype.Text
@@ -5615,6 +5668,8 @@ func (q *Queries) UpsertPlatformMCPReadiness(ctx context.Context, arg UpsertPlat
 		arg.RegistrationID,
 		arg.ConnectionID,
 		arg.ConnectionGeneration,
+		arg.UserID,
+		arg.ActingSurface,
 		arg.ProviderAuthorizationFingerprint,
 		arg.State,
 		arg.EvidenceCode,
