@@ -20876,11 +20876,11 @@ paths:
       operationId: listMcpApprovalRequests
       parameters:
         - allowEmptyValue: true
-          description: Only return requests in this status.
+          description: 'Only return requests in this status: unreviewed, requested, approved, denied, or superseded.'
           in: query
           name: status
           schema:
-            description: Only return requests in this status.
+            description: 'Only return requests in this status: unreviewed, requested, approved, denied, or superseded.'
             type: string
         - allowEmptyValue: true
           description: The number of requests to return per page
@@ -59862,7 +59862,7 @@ components:
           description: The Shadow MCP inventory page slug for a server_url target — the same identifier the inventory derives from the canonical URL, so a request links to the server page it describes. Absent for stdio targets.
         status:
           type: string
-          description: The request's current status.
+          description: 'The request''s current status: unreviewed, requested, approved, denied, or superseded (the latest decision was explicitly displaced by a policy URL-list edit; history preserved, no enforcement derives from it until re-decided).'
         target_kind:
           type: string
           description: The namespace of the requested reference, such as server_url or stdio_command.
@@ -76650,6 +76650,58 @@ components:
           type: string
           description: The user_session_issuer id to link, or null to unlink.
           format: uuid
+    ShadowMCPAccessSummary:
+      type: object
+      properties:
+        allowed_for:
+          type: string
+          description: 'Reach of explicit allow grants: everyone when every deny-by-default policy''s audience is covered (an all-users grant, or grants naming the policy''s whole audience), selected when grants free only part of an audience, none without grants. A role grant whose membership happens to span the organization still reads selected — reach compares principal sets, not expanded memberships.'
+          enum:
+            - everyone
+            - selected
+            - none
+        blocked_for:
+          type: string
+          description: 'Reach of explicit block mechanisms: an everyone-audience block rule, a targeted rule or targeted deny-by-default policy, or none.'
+          enum:
+            - everyone
+            - some
+            - none
+        blocking_default:
+          type: string
+          description: 'What happens to a user no rule names: deny under an everyone-audience deny-by-default policy, allow when blocking exists without one, none when no blocking policy is enabled.'
+          enum:
+            - deny
+            - allow
+            - none
+        decision:
+          type: string
+          description: The recorded review decision, when one exists.
+          enum:
+            - approved
+            - denied
+        decision_coverage:
+          type: string
+          description: 'How much of the recorded decision enforcement delivers. full: the decision''s own writes are intact — an approval''s grants survive unoverridden (a scoped blast radius is the decision as recorded, not a shortfall), or a denial lands as a project-wide block. partial: something carries the decision but not all of it, such as a denial only a targeted policy enforces, or an approval whose grants were later removed or overridden. none: nothing carries it — no blocking policy exists, the target is a local command (stdio decisions are recorded without writing enforcement), or no decision is recorded at all.'
+          enum:
+            - full
+            - partial
+            - none
+        state:
+          type: string
+          description: 'The shape of the user-to-access function: allowed and blocked are uniform, restricted varies by user, unenforced means no blocking policy applies.'
+          enum:
+            - allowed
+            - restricted
+            - blocked
+            - unenforced
+      description: The enforcement verdict for a shadow MCP server, computed server-side from policies, grants, and the recorded decision. state is the canonical compression of who may call the server; the remaining fields name the mechanisms so a client renders wording without re-deriving enforcement.
+      required:
+        - state
+        - allowed_for
+        - blocked_for
+        - blocking_default
+        - decision_coverage
     ShadowMCPInventoryApprovalRequest:
       type: object
       properties:
@@ -76664,13 +76716,21 @@ components:
           type: integer
           description: How many distinct people have asked for this server.
           format: int64
+        standing_decision:
+          type: string
+          description: The latest recorded decision still standing for this server, independent of the request's lifecycle status — a reopened request's prior decision keeps enforcing until re-decided, and clients checking an edit against standing intent must read this rather than status. Absent when nothing was ever decided or the decision was superseded.
+          enum:
+            - approved
+            - denied
         status:
           type: string
+          description: 'superseded means the latest decision was explicitly displaced by a policy URL-list edit: the history is preserved but no enforcement derives from it until someone re-decides.'
           enum:
             - unreviewed
             - requested
             - approved
             - denied
+            - superseded
       description: The MCP approval request tracking review status for a server. Status records the review outcome, which may cover only selected principals; the server's access field reports enforcement state.
       required:
         - id
@@ -76721,11 +76781,14 @@ components:
       properties:
         access:
           type: string
+          description: 'Deprecated: read access_summary.state. Kept one release so older clients keep rendering, then removed together with making access_summary required. Note the values themselves are corrected in this release: URLs whose bypass grants cover only part of a policy''s audience now read restricted where they previously read allowed.'
           enum:
             - none
             - allowed
             - blocked
             - restricted
+        access_summary:
+          $ref: '#/components/schemas/ShadowMCPAccessSummary'
         allowed_policy_ids:
           type: array
           items:
@@ -76793,11 +76856,14 @@ components:
       properties:
         access:
           type: string
+          description: 'Deprecated: read access_summary.state. Kept one release so older clients keep rendering, then removed together with making access_summary required. Note the values themselves are corrected in this release: URLs whose bypass grants cover only part of a policy''s audience now read restricted where they previously read allowed.'
           enum:
             - none
             - allowed
             - blocked
             - restricted
+        access_summary:
+          $ref: '#/components/schemas/ShadowMCPAccessSummary'
         allowed_policy_ids:
           type: array
           items:
@@ -81804,6 +81870,9 @@ components:
           items:
             type: string
           description: Detection sources to enable.
+        supersede_decisions:
+          type: boolean
+          description: Confirms that this edit may displace standing MCP approval decisions its URL lists contradict, transitioning them to superseded (audit-logged, decision history preserved). Without it, a contradicting edit is rejected with a conflict naming the affected servers.
         user_message:
           type: string
           description: Optional message shown to end users when this policy blocks an action or surfaces a flagged finding. Send an empty string to clear.

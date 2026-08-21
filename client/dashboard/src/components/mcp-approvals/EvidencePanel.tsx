@@ -1174,6 +1174,15 @@ export function StatusBadge({ status }: { status: string }): JSX.Element {
       return <Badge variant="destructive">Denied</Badge>;
     case "requested":
       return <Badge variant="information">Awaiting decision</Badge>;
+    case "superseded":
+      // Neutral, not destructive: the history stands, nothing is pending.
+      // The default (softest) neutral border washes out against the table
+      // backgrounds, hence the stronger theme-aware border.
+      return (
+        <Badge variant="neutral" className="border-neutral-default">
+          Superseded
+        </Badge>
+      );
     case "unreviewed":
       // "Unreviewed", not "Review requested": this state means a dossier was
       // gathered and nobody has asked for anything — the request states are

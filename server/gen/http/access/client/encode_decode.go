@@ -4751,6 +4751,9 @@ func unmarshalShadowMCPInventoryServerResponseBodyToAccessShadowMCPInventoryServ
 	for i, val := range v.TopUsers {
 		res.TopUsers[i] = val
 	}
+	if v.AccessSummary != nil {
+		res.AccessSummary = unmarshalShadowMCPAccessSummaryResponseBodyToAccessShadowMCPAccessSummary(v.AccessSummary)
+	}
 	if v.LatestRequest != nil {
 		res.LatestRequest = unmarshalShadowMCPInventoryRequestSummaryResponseBodyToAccessShadowMCPInventoryRequestSummary(v.LatestRequest)
 	}
@@ -4764,6 +4767,25 @@ func unmarshalShadowMCPInventoryServerResponseBodyToAccessShadowMCPInventoryServ
 	res.BlockedPolicyIds = make([]string, len(v.BlockedPolicyIds))
 	for i, val := range v.BlockedPolicyIds {
 		res.BlockedPolicyIds[i] = val
+	}
+
+	return res
+}
+
+// unmarshalShadowMCPAccessSummaryResponseBodyToAccessShadowMCPAccessSummary
+// builds a value of type *access.ShadowMCPAccessSummary from a value of type
+// *ShadowMCPAccessSummaryResponseBody.
+func unmarshalShadowMCPAccessSummaryResponseBodyToAccessShadowMCPAccessSummary(v *ShadowMCPAccessSummaryResponseBody) *access.ShadowMCPAccessSummary {
+	if v == nil {
+		return nil
+	}
+	res := &access.ShadowMCPAccessSummary{
+		State:            *v.State,
+		AllowedFor:       *v.AllowedFor,
+		BlockedFor:       *v.BlockedFor,
+		BlockingDefault:  *v.BlockingDefault,
+		Decision:         v.Decision,
+		DecisionCoverage: *v.DecisionCoverage,
 	}
 
 	return res
@@ -4797,6 +4819,7 @@ func unmarshalShadowMCPInventoryApprovalRequestResponseBodyToAccessShadowMCPInve
 	res := &access.ShadowMCPInventoryApprovalRequest{
 		ID:                *v.ID,
 		Status:            *v.Status,
+		StandingDecision:  v.StandingDecision,
 		RequesterCount:    *v.RequesterCount,
 		EvidenceChangedAt: v.EvidenceChangedAt,
 	}

@@ -32,6 +32,22 @@ if [ ${#args[@]} -eq 0 ]; then
   args=("-tags=inv.debug" "./...")
 fi
 
+# The container-heavy packages run an order of magnitude slower under a full
+# parallel suite than they do alone. Go's 10m default kills the whole test
+# binary with a panic, so every result in that package is lost; a higher
+# ceiling keeps the run reporting real pass/fail.
+has_timeout=false
+for arg in "${args[@]}"; do
+  case $arg in
+    -timeout|-timeout=*|--timeout|--timeout=*)
+      has_timeout=true ;;
+  esac
+done
+
+if [ "$has_timeout" = false ]; then
+  args=("-timeout=20m" "${args[@]}")
+fi
+
 # A rerun invokes 'go test' again for the failed package alone, which overwrites
 # cover.out with a profile covering only that package. Rather than report
 # coverage that is quietly missing everything else, refuse the combination.

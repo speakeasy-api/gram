@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import { formatShortDate } from "@/components/access/shadow-mcp-utils";
 import ShadowMCPServerDetail from "./ShadowMCPServerDetail";
+import { testAccessSummary } from "@/components/shadow-mcp/shadowMCPInventoryTestFixtures";
 
 const mocks = vi.hoisted(() => ({
   useMembers: vi.fn(),
@@ -362,6 +363,9 @@ function inventoryServer(
     urlHost: "github.example.com",
     userCount: 2,
     ...overrides,
+    accessSummary:
+      overrides.accessSummary ??
+      testAccessSummary(overrides.access ?? "allowed"),
   };
 }
 
