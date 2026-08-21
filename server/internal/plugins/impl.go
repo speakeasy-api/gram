@@ -1388,7 +1388,7 @@ func (s *Service) DownloadPlatformMCPPlugin(ctx context.Context, payload *gen.Do
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "build Platform MCP plugin zip").LogError(ctx, s.logger)
 	}
 
-	filename := fmt.Sprintf("speakeasy-aicp-platform-mcp-%s.zip", payload.Platform)
+	filename := platformMCPPackageFilename(payload.Platform)
 	return &gen.DownloadPlatformMCPPluginResult{
 		ContentType:        "application/zip",
 		ContentDisposition: fmt.Sprintf(`attachment; filename="%s"`, filename),
@@ -1627,8 +1627,8 @@ func (s *Service) platformMCPPackageStatusWithProject(ctx context.Context, ac *c
 		Admission:               "indeterminate",
 		Available:               false,
 		PackageName:             platformMCPPluginName,
-		ClaudeFilename:          "speakeasy-aicp-platform-mcp-claude.zip",
-		AgentPluginFilename:     "speakeasy-aicp-platform-mcp-agent-plugin.zip",
+		ClaudeFilename:          platformMCPPackageFilename("claude"),
+		AgentPluginFilename:     platformMCPPackageFilename("agent-plugin"),
 		CanonicalProjectSlug:    nil,
 		MarketplaceName:         nil,
 		MarketplaceConnected:    false,
