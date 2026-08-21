@@ -25,9 +25,10 @@ import {
   PencilIcon,
   SettingsIcon,
 } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
+import { usePylonChat } from "@/hooks/usePylonChat";
 
 export function SidebarUserMenu(): JSX.Element {
   const user = useUser();
@@ -43,15 +44,7 @@ export function SidebarUserMenu(): JSX.Element {
   const isMultiOrg = session.organizations.length > 1;
 
   const [menuOpen, setMenuOpen] = useState(false);
-  const [pylonOpen, setPylonOpen] = useState(false);
-  const togglePylon = useCallback(() => {
-    if (pylonOpen) {
-      window.Pylon?.("hide");
-    } else {
-      window.Pylon?.("show");
-    }
-    setPylonOpen((prev) => !prev);
-  }, [pylonOpen]);
+  const { isOpen: pylonOpen, toggle: togglePylon } = usePylonChat();
 
   const userInitials =
     user.displayName

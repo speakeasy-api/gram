@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/contexts/Auth", () => ({
@@ -65,7 +71,13 @@ vi.mock("@/components/ui/ThemeSwitcher", () => ({
 
 import { SidebarUserMenu } from "./sidebar-user-menu";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  if (typeof window.Pylon === "function") {
+    window.Pylon("hide");
+  }
+  Reflect.deleteProperty(window, "Pylon");
+});
 
 describe("SidebarUserMenu", () => {
   it("renders the inline theme switcher and the user name", () => {
@@ -90,4 +102,66 @@ describe("SidebarUserMenu", () => {
     expect(status?.getAttribute("target")).toBe("_blank");
     expect(status?.getAttribute("rel")).toBe("noopener noreferrer");
   });
+
+  it("labels the support item Get Support, then Close Support while the chat is open", () => {
+    installMockPylon();
+    render(<SidebarUserMenu />);
+
+    expect(screen.getByText("Get Support")).toBeTruthy();
+
+    fireEvent.click(screen.getByText("Get Support"));
+    expect(screen.getByText("Close Support")).toBeTruthy();
+    expect(screen.queryByText("Get Support")).toBeNull();
+  });
+
+  it("returns the support item to Get Support when the chat window is hidden", () => {
+    const pylon = installMockPylon();
+    render(<SidebarUserMenu />);
+
+    fireEvent.click(screen.getByText("Get Support"));
+    expect(screen.getByText("Close Support")).toBeTruthy();
+
+    act(() => {
+      pylon.emitHide();
+    });
+
+    expect(screen.getByText("Get Support")).toBeTruthy();
+    expect(screen.queryByText("Close Support")).toBeNull();
+  });
 });
+
+type MockPylon = typeof window.Pylon & {
+  emitHide: () => void;
+};
+
+function installMockPylon(): MockPylon {
+  let onShow: (() => void) | null = null;
+  let onHide: (() => void) | null = null;
+
+  const pylon = Object.assign(
+    (action: string, ...args: unknown[]) => {
+      if (action === "onShow" && typeof args[0] === "function") {
+        onShow = args[0] as () => void;
+      }
+      if (action === "onHide" && typeof args[0] === "function") {
+        onHide = args[0] as () => void;
+      }
+      if (action === "show") {
+        onShow?.();
+      }
+      if (action === "hide") {
+        onHide?.();
+      }
+    },
+    {
+      q: [] as unknown[],
+      e: () => undefined,
+      emitHide: () => {
+        onHide?.();
+      },
+    },
+  ) as MockPylon;
+
+  window.Pylon = pylon;
+  return pylon;
+}
