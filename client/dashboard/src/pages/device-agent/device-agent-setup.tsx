@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { useAgentToken } from "@/hooks/useAgentToken";
-import { cn } from "@/lib/utils";
+import { cn, getServerURL } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
@@ -140,11 +140,12 @@ type BaseOsSpec = {
   invertLogoInDark?: boolean;
 };
 
-// Windows and Linux still ship as raw binaries registered via a manual
-// service-install script; only macOS moved to a signed, notarized .pkg.
+// Linux still ships as raw binaries registered via a manual service-install
+// script; macOS moved to a signed, notarized .pkg and Windows to a signed
+// .msi (their install steps are bespoke components, not script fields).
 // Keeping this as its own type (instead of leaving these fields optional on
-// a single OsSpec) means macOS can't silently carry stale script fields that
-// nothing renders anymore.
+// a single OsSpec) means macOS/Windows can't silently carry stale script
+// fields that nothing renders anymore.
 type ScriptOsSpec = BaseOsSpec & {
   lang: "bash" | "powershell";
   archNote?: React.ReactNode;
@@ -163,7 +164,7 @@ type ScriptOsSpec = BaseOsSpec & {
 
 const OS_CONFIG: {
   macos: BaseOsSpec;
-  windows: ScriptOsSpec;
+  windows: BaseOsSpec;
   linux: ScriptOsSpec;
 } = {
   macos: {
@@ -178,20 +179,6 @@ const OS_CONFIG: {
     tileDesc: "x64",
     logo: "/icons/platforms/windows.svg",
     logoSize: "h-7 w-7",
-    lang: "powershell",
-    download: (version) => `${psVersionAssign(version)}
-$BASE = "${RELEASES_BASE}/v$VERSION"
-Invoke-WebRequest "$BASE/speakeasyd_\${VERSION}_windows_amd64.exe" -OutFile speakeasyd.exe
-Invoke-WebRequest "$BASE/speakeasy_\${VERSION}_windows_amd64.exe"  -OutFile speakeasy.exe`,
-    serviceNote: (
-      <>
-        Installs <code>speakeasyd</code> as a Windows service.
-      </>
-    ),
-    serviceRegister: `.\\speakeasyd.exe -service install
-.\\speakeasyd.exe -service start`,
-    verify: `.\\speakeasy.exe status`,
-    downloadKeys: ["windows/amd64"],
   },
   linux: {
     label: "Linux",
@@ -334,10 +321,10 @@ function BinaryDownloadButton({
 }
 
 // ManualDownload lists the direct binary links for the selected OS only (the
-// alternative to the curl/PowerShell download script). Degrades to a manifest
-// link if the fetch fails. Windows/Linux only — macOS installs from the pkg
-// (MacInstallStep), not the raw-binary manifest.
-function ManualDownload({ os }: { os: "windows" | "linux" }) {
+// alternative to the curl download script). Degrades to a manifest link if
+// the fetch fails. Linux only — macOS installs from the pkg (MacInstallStep)
+// and Windows from the msi (WinInstallStep), not the raw-binary manifest.
+function ManualDownload({ os }: { os: "linux" }) {
   const { data, isLoading, isError } = useAgentReleases();
 
   if (isLoading) {
@@ -428,10 +415,11 @@ function ManualDownload({ os }: { os: "windows" | "linux" }) {
   );
 }
 
-// DownloadStep is the first setup step on Windows/Linux: two ways to get the
+// DownloadStep is the first setup step on Linux: two ways to get the
 // binaries (script or direct download), separated by an OR so it's clear
-// they're alternatives. macOS uses MacInstallStep instead.
-function DownloadStep({ os }: { os: "windows" | "linux" }) {
+// they're alternatives. macOS uses MacInstallStep and Windows WinInstallStep
+// instead.
+function DownloadStep({ os }: { os: "linux" }) {
   const { data } = useAgentReleases();
   const version = safeVersion(data?.latest?.["speakeasyd"]?.version);
   const cfg = OS_CONFIG[os];
@@ -551,13 +539,16 @@ curl -fsSL "$BASE/checksums.txt" | grep " $PKG$" | sha256sum -c - &&
 
 // ManualIdentity is the personal/PoC identity path: sign in once with the CLI.
 function ManualIdentity({ os }: { os: OsKey }) {
-  // macOS: bare `speakeasy` is command-not-found (see MacVerifyStep for why
-  // the CLI isn't on PATH there). Windows/Linux keep the bare command: their
-  // raw binaries land in the shell's cwd/PATH per the download step above.
-  const command =
-    os === "macos"
-      ? `"$HOME/Library/Application Support/Speakeasy/bin/speakeasy" enroll`
-      : "speakeasy enroll";
+  // macOS and Windows: bare `speakeasy` is command-not-found — neither the
+  // pkg nor the msi puts the CLI on PATH (see MacVerifyStep for the macOS
+  // rationale), so invoke it by its install path. Linux keeps the bare
+  // command: the raw binaries move into /usr/local/bin per the install steps.
+  const commands: Record<OsKey, string> = {
+    macos: `"$HOME/Library/Application Support/Speakeasy/bin/speakeasy" enroll`,
+    windows: `& "C:\\Program Files\\Speakeasy\\speakeasy.exe" enroll`,
+    linux: "speakeasy enroll",
+  };
+  const command = commands[os];
 
   return (
     <div className="flex flex-col gap-4">
@@ -998,6 +989,107 @@ launchctl print "gui/$(id -u)/com.speakeasy.daemon"
   );
 }
 
+// WinInstallStep is the first (and only pre-verify) setup step on Windows:
+// install from the signed .msi, which lays down the daemon, CLI, and UI under
+// C:\Program Files\Speakeasy\ and registers the machine-wide LocalSystem
+// service itself — no separate service-registration step. The primary snippet
+// uses this Gram server's stable /v1/install URL, which 302-redirects to the
+// current version's signed msi, so the copy never goes stale. Like the macOS
+// pkg, the msi is deliberately not listed in releases.json (it's the
+// manual/MDM on-ramp), so the direct-download URL is built from the resolved
+// version rather than read off the manifest artifacts.
+function WinInstallStep() {
+  const { data, isError } = useAgentReleases();
+  const version = safeVersion(data?.latest?.["speakeasyd"]?.version);
+  const msiUrl = version
+    ? `${RELEASES_BASE}/v${version}/speakeasy-agent_${version}.msi`
+    : null;
+  const stableMsiUrl = `${getServerURL()}/v1/install/device-agent-windows.msi`;
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-2">
+        <SubLabel>Tooling breakdown</SubLabel>
+        <BinaryLegend />
+      </div>
+      <div className="flex flex-col gap-2">
+        <SubLabel>Run the download + install script</SubLabel>
+        <StepNote>
+          Run from an elevated (Administrator) PowerShell. The stable URL always
+          redirects to the latest signed installer.
+        </StepNote>
+        <CodeBlock language="powershell">{`Invoke-WebRequest "${stableMsiUrl}" -OutFile speakeasy-agent.msi
+msiexec /i speakeasy-agent.msi`}</CodeBlock>
+      </div>
+      <OrDivider />
+      <div className="flex flex-col gap-2">
+        <SubLabel>Download the installer directly</SubLabel>
+        {msiUrl ? (
+          <BinaryDownloadButton
+            href={msiUrl}
+            role="Installer"
+            name="speakeasy-agent.msi"
+            version={version ?? ""}
+          />
+        ) : (
+          <Text small muted>
+            {isError
+              ? "Couldn't load the latest release — use the "
+              : "Loading the latest release… or use the "}
+            <ExternalLink href={stableMsiUrl} iconSuffixName="external-link">
+              stable installer link
+            </ExternalLink>
+            , which always serves the current version.
+          </Text>
+        )}
+      </div>
+      <OrDivider />
+      <div className="flex flex-col gap-2">
+        <SubLabel>Scripted install with raw binaries</SubLabel>
+        <StepNote>
+          Raw binaries remain supported for scripted installs. Unlike the
+          MSI&apos;s machine-wide LocalSystem service, this registers the
+          service for the current user only.
+        </StepNote>
+        <CodeBlock language="powershell">{`${psVersionAssign(version)}
+$BASE = "${RELEASES_BASE}/v$VERSION"
+Invoke-WebRequest "$BASE/speakeasyd_\${VERSION}_windows_amd64.exe" -OutFile speakeasyd.exe
+Invoke-WebRequest "$BASE/speakeasy_\${VERSION}_windows_amd64.exe"  -OutFile speakeasy.exe
+.\\speakeasyd.exe -service install
+.\\speakeasyd.exe -service start`}</CodeBlock>
+      </div>
+      <div className="flex flex-col gap-2">
+        <SubLabel>Or push it as a fleet via MDM</SubLabel>
+        <Text small muted>
+          Upload the msi to Intune (or your MDM) as a{" "}
+          <strong className="font-medium">Win32 / line-of-business app</strong>{" "}
+          and assign it per machine — no script needed. Get it from the stable
+          link above, and pair it with a <code>managed.json</code> pushed to{" "}
+          <code>%ProgramData%\Speakeasy\</code> (see the identity step) so
+          enrollment is set centrally.
+        </Text>
+        <Text small muted>
+          Keep <code>auto_update: "notify"</code> on Windows fleets: the agent
+          can&apos;t replace its own running binaries on Windows, so version
+          bumps ship as MSI re-pushes from your MDM.
+        </Text>
+      </div>
+    </div>
+  );
+}
+
+// The MSI registers a machine-wide SCM service, so status comes from the SCM
+// rather than a per-user unit. sc.exe is deliberate — bare `sc` is
+// PowerShell's Set-Content alias. The CLI isn't on PATH (see ManualIdentity),
+// so it's invoked by its install path; the daemon's named pipe grants
+// interactive users client access, so no elevation is needed here.
+function WinVerifyStep() {
+  return (
+    <CodeBlock language="powershell">{`sc.exe query com.speakeasy.daemon
+& "C:\\Program Files\\Speakeasy\\speakeasy.exe" status`}</CodeBlock>
+  );
+}
+
 // IdentityStep is the final sheet step: pick how the agent learns who's on the
 // device (fleet MDM vs personal enrollment). Takes os because ManualIdentity's
 // enroll command differs on macOS (see there).
@@ -1064,9 +1156,9 @@ type SetupStep = { title: string; body: React.ReactNode };
 
 // buildSteps assembles the ordered setup steps for a platform. Remote sessions
 // have their own cloud-environment flow; local platforms follow the OS-specific
-// installation path below. macOS installs from
-// a signed .pkg (one combined install step, no chmod/move or separate service
-// registration); Windows/Linux still ship raw binaries via a download script,
+// installation path below. macOS installs from a signed .pkg and Windows from
+// a signed .msi (one combined install step each, no chmod/move or separate
+// service registration); Linux still ships raw binaries via a download script,
 // so the list length (and numbering) varies by OS.
 function buildSteps(platform: PlatformKey): SetupStep[] {
   if (platform === "remote") {
@@ -1090,6 +1182,17 @@ function buildSteps(platform: PlatformKey): SetupStep[] {
     return [
       { title: "Download and install the agent", body: <MacInstallStep /> },
       { title: "Verify it's running", body: <MacVerifyStep /> },
+      {
+        title: "Set the user's identity",
+        body: <IdentityStep os={platform} />,
+      },
+    ];
+  }
+
+  if (platform === "windows") {
+    return [
+      { title: "Download and install the agent", body: <WinInstallStep /> },
+      { title: "Verify it's running", body: <WinVerifyStep /> },
       {
         title: "Set the user's identity",
         body: <IdentityStep os={platform} />,
