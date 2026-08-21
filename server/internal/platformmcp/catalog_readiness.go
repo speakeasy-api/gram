@@ -164,7 +164,7 @@ func (p *RemoteMCPReadinessProber) probe(ctx context.Context, remoteURL string, 
 	}
 	httpClient.Transport = roundTripper
 
-	client := mcp.NewClient(&mcp.Implementation{Name: "speakeasy-aicp-platform-mcp-readiness", Version: "1.0.0"}, nil)
+	client := mcp.NewClient(&mcp.Implementation{Name: "platform-mcp-readiness", Version: "1.0.0"}, nil)
 	session, err := client.Connect(ctx, &mcp.StreamableClientTransport{Endpoint: remoteURL, HTTPClient: httpClient, MaxRetries: 0, DisableStandaloneSSE: true}, nil)
 	if err != nil {
 		return catalogProbeFailure(err, roundTripper)

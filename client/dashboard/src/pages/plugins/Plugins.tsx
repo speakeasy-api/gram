@@ -677,7 +677,7 @@ function PlatformMCPPluginCard(): JSX.Element {
       if (!response.ok) throw new Error("download failed");
       await downloadResponse(
         response,
-        `speakeasy-aicp-platform-mcp-${platform}.zip`,
+        `platform-mcp-${platform}.zip`,
       );
     } catch (error) {
       toast.error("Could not download the Platform MCP package");
