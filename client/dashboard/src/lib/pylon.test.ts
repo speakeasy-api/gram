@@ -1,10 +1,11 @@
 import { act, renderHook } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { usePylonChat } from "@/hooks/usePylonChat";
 
 import {
   bindPylonChatListeners,
+  hidePylonChat,
   isPylonChatOpen,
   showPylonChat,
   subscribePylonChatOpen,
@@ -12,12 +13,20 @@ import {
 } from "./pylon";
 import { installMockPylon, type MockPylon } from "./pylon-test-mock";
 
+function removePylonDom(): void {
+  document.getElementById("pylon-chat-styles")?.remove();
+  document
+    .querySelectorAll('script[src*="widget.usepylon.com"]')
+    .forEach((el) => {
+      el.remove();
+    });
+}
+
 function closeChat(): void {
   if (typeof window.Pylon !== "function") {
     installMockPylon();
   }
-  bindPylonChatListeners();
-  window.Pylon("hide");
+  hidePylonChat();
 }
 
 beforeEach(() => {
@@ -27,6 +36,7 @@ beforeEach(() => {
 
 afterEach(() => {
   closeChat();
+  removePylonDom();
   Reflect.deleteProperty(window, "Pylon");
 });
 
@@ -73,6 +83,37 @@ describe("pylon chat visibility", () => {
     unsubscribe();
 
     expect(seen).toEqual([false]);
+  });
+
+  it("rebinds listeners after the widget script loads", async () => {
+    vi.resetModules();
+    const { initializePylon, isPylonChatOpen, showPylonChat, PYLON_APP_ID } =
+      await import("./pylon");
+
+    initializePylon({
+      app_id: PYLON_APP_ID,
+      email: "test@example.com",
+      name: "Test User",
+    });
+
+    expect(window.Pylon.q).toEqual(
+      expect.arrayContaining([
+        ["onShow", expect.any(Function)],
+        ["onHide", expect.any(Function)],
+      ]),
+    );
+
+    const widget = installMockPylon();
+    const script = document.querySelector('script[src*="widget.usepylon.com"]');
+    expect(script).not.toBeNull();
+    script!.dispatchEvent(new Event("load"));
+
+    showPylonChat();
+    expect(isPylonChatOpen()).toBe(true);
+    expect(widget).toHaveBeenCalledWith("show");
+
+    widget.emitHide();
+    expect(isPylonChatOpen()).toBe(false);
   });
 
   it("keeps hook consumers in sync with widget hide", () => {

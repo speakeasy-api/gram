@@ -10,10 +10,6 @@ interface OnboardingHeaderProps {
 export function OnboardingHeader({
   onLeave,
 }: OnboardingHeaderProps): JSX.Element {
-  const handleGetSupport = () => {
-    showPylonChat();
-  };
-
   return (
     <header className="border-border bg-background w-full border-b">
       <div className="mx-auto flex w-full max-w-5xl items-center justify-between py-4">
@@ -43,7 +39,7 @@ export function OnboardingHeader({
           <Button
             variant="tertiary"
             size="sm"
-            onClick={handleGetSupport}
+            onClick={showPylonChat}
             className="text-muted-foreground hover:text-foreground gap-1.5"
           >
             <LifeBuoy className="h-4 w-4" />

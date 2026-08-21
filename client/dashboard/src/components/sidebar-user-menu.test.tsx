@@ -69,15 +69,14 @@ vi.mock("@/components/ui/ThemeSwitcher", () => ({
   ThemeSwitcher: () => <div data-testid="theme-switcher" />,
 }));
 
+import { hidePylonChat } from "@/lib/pylon";
 import { installMockPylon } from "@/lib/pylon-test-mock";
 
 import { SidebarUserMenu } from "./sidebar-user-menu";
 
 afterEach(() => {
+  hidePylonChat();
   cleanup();
-  if (typeof window.Pylon === "function") {
-    window.Pylon("hide");
-  }
   Reflect.deleteProperty(window, "Pylon");
 });
 
