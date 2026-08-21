@@ -1553,6 +1553,7 @@ func newStartCommand() *cli.Command {
 				PluginPublisher:        pluginPublisher,
 				Skills:                 skillsService,
 				Telemetry:              telemetryrepo.New(chDB),
+				TelemetryDrilldown:     telemetryrepo.New(chDB),
 				SessionCapture:         platformmcp.FeatureChecker(sessionCaptureEnabled),
 				LocalFixture:           platformFixture,
 			})

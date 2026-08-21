@@ -113,8 +113,12 @@ type OperationBudgets struct {
 	// queries over Gram-owned telemetry, so the cost being metered is the
 	// ClickHouse scan, not an external egress.
 	Diagnostics OperationBudget
+	// SensitiveDiagnostics meters the one drill-down that reaches personal
+	// data. It is separate so exhausting it is not possible by spending the
+	// ordinary diagnostic allowance, and so it can be tightened on its own.
+	SensitiveDiagnostics OperationBudget
 }
 
 func (b OperationBudgets) Valid() bool {
-	return b.Catalog.valid() && b.Registration.valid() && b.Handoff.valid() && b.SetupStart.valid() && b.Repair.valid() && b.Docs.valid() && b.Skills.valid() && b.Diagnostics.valid()
+	return b.Catalog.valid() && b.Registration.valid() && b.Handoff.valid() && b.SetupStart.valid() && b.Repair.valid() && b.Docs.valid() && b.Skills.valid() && b.Diagnostics.valid() && b.SensitiveDiagnostics.valid()
 }
