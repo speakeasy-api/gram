@@ -287,7 +287,11 @@ describe("MultiSelect disabled selected options", () => {
       <MultiSelect
         options={[
           { label: "Everyone", value: "*" },
-          { label: "Engineering", value: "role:engineering", className: "opacity-60" },
+          {
+            label: "Engineering",
+            value: "role:engineering",
+            className: "opacity-60",
+          },
         ]}
         defaultValue={["*"]}
         onValueChange={onValueChange}

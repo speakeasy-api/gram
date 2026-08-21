@@ -155,13 +155,12 @@ describe("plugin audience selection", () => {
     ).toEqual(["*"]);
   });
 
-  it("normalizes existing everyone assignments to the wildcard alone", () => {
-    expect(
-      selectMutuallyExclusivePluginAudiences(
-        [],
-        ["*", "role:organization:abc", "email:external@example.test"],
-      ),
-    ).toEqual(["*"]);
+  it("preserves a preexisting mixed selection until an audience is added", () => {
+    const existing = ["*", "role:organization:abc", "user:u-123"];
+
+    expect(selectMutuallyExclusivePluginAudiences(existing, existing)).toEqual(
+      existing,
+    );
   });
 
   it("clears everyone when a targeted audience is added", () => {

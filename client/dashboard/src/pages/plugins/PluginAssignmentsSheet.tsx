@@ -209,12 +209,10 @@ function AssignmentsEditor({
   );
   const memberByUrn = useMemo(() => memberMapByUrn(members), [members]);
 
+  // Preserve existing assignments exactly as stored. Exclusivity is only
+  // applied after the user changes the selection in this editor.
   const initialUrns = useMemo(
-    () =>
-      selectMutuallyExclusivePluginAudiences(
-        [],
-        assignments.map((a) => a.principalUrn),
-      ),
+    () => assignments.map((a) => a.principalUrn),
     [assignments],
   );
   const [selected, setSelected] = useState<string[]>(initialUrns);
