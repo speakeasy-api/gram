@@ -1,6 +1,7 @@
 package platformmcp
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -20,16 +21,22 @@ const StaleWatermarkThreshold = 5 * time.Minute
 type Freshness string
 
 const (
-	FreshnessFresh Freshness = "fresh"
-	FreshnessStale Freshness = "stale"
-	// FreshnessNoObservations means nothing was observed for the scope at all.
-	// A caller must not read it as "nothing went wrong".
-	FreshnessNoObservations Freshness = "no_observations"
+	// FreshnessCurrent means the watermark is within StaleWatermarkThreshold of
+	// the read, or already past the end of the window.
+	FreshnessCurrent Freshness = "current"
+	FreshnessStale   Freshness = "stale"
+	// FreshnessUnavailable means the scope holds no observations at all. It is
+	// paired with DataEnvelope.NoObservations, which says the same thing
+	// positively: a caller must not read either as "nothing went wrong".
+	FreshnessUnavailable Freshness = "unavailable"
 )
 
 // DiagnosticWindow is the closed set of windows a diagnostic may be asked for.
 // Callers name a window rather than supplying timestamps: an open time grammar
 // is a query language, and this surface deliberately has none.
+//
+// Each tool additionally caps how far back it will look, because the cost of a
+// read is not the same for a summary and for a row-level drill-down.
 type DiagnosticWindow string
 
 const (
@@ -39,12 +46,35 @@ const (
 	DiagnosticWindowLastMonth DiagnosticWindow = "30d"
 )
 
-// DefaultDiagnosticWindow is what an unspecified window resolves to.
+// DefaultDiagnosticWindow is what an unspecified window resolves to when a tool
+// states no narrower default.
 const DefaultDiagnosticWindow = DiagnosticWindowLastDay
+
+// windowSpec is one tool's window policy: what an unspecified window means and
+// how far back the tool will look at all.
+type windowSpec struct {
+	Fallback DiagnosticWindow
+	Max      DiagnosticWindow
+}
+
+// Per-tool window policies. A summary may look back a month; a row-level
+// drill-down may not.
+var (
+	overviewWindowSpec    = windowSpec{Fallback: DiagnosticWindowLastDay, Max: DiagnosticWindowLastMonth}
+	diagnosticsWindowSpec = windowSpec{Fallback: DiagnosticWindowLastHour, Max: DiagnosticWindowLastDay}
+	drilldownWindowSpec   = windowSpec{Fallback: DiagnosticWindowLastDay, Max: DiagnosticWindowLastDay}
+	metricsWindowSpec     = windowSpec{Fallback: DiagnosticWindowLastDay, Max: DiagnosticWindowLastWeek}
+)
 
 // ErrDiagnosticWindowInvalid is returned for a window outside the closed set.
 var ErrDiagnosticWindowInvalid = fmt.Errorf("window must be one of %s, %s, %s, %s",
 	DiagnosticWindowLastHour, DiagnosticWindowLastDay, DiagnosticWindowLastWeek, DiagnosticWindowLastMonth)
+
+// ErrDiagnosticWindowTooLong is returned for a window this tool will not look
+// back over. It is refused rather than clamped for the same reason an unknown
+// window is: a caller must never be told about a different interval than the
+// one it asked for.
+var ErrDiagnosticWindowTooLong = errors.New("window is longer than this tool allows")
 
 func (w DiagnosticWindow) duration() (time.Duration, bool) {
 	switch w {
@@ -76,14 +106,20 @@ type ResolvedWindow struct {
 // An empty request resolves to DefaultDiagnosticWindow; anything outside the
 // closed set is refused rather than silently clamped, so a caller never
 // receives a different window than it believes it asked for.
-func resolveWindow(requested string, now time.Time) (ResolvedWindow, error) {
+func resolveWindow(requested string, now time.Time, spec windowSpec) (ResolvedWindow, error) {
 	window := DiagnosticWindow(strings.ToLower(strings.TrimSpace(requested)))
 	if window == "" {
-		window = DefaultDiagnosticWindow
+		window = spec.Fallback
+		if window == "" {
+			window = DefaultDiagnosticWindow
+		}
 	}
 	duration, ok := window.duration()
 	if !ok {
 		return ResolvedWindow{}, ErrDiagnosticWindowInvalid
+	}
+	if maxDuration, ok := spec.Max.duration(); ok && duration > maxDuration {
+		return ResolvedWindow{}, fmt.Errorf("%w: %s allows at most %s", ErrDiagnosticWindowTooLong, window, spec.Max)
 	}
 	// Truncated to the second the window is advertised at, so the interval a
 	// caller is told about is exactly the interval that was queried. Formatting
@@ -104,9 +140,13 @@ func resolveWindow(requested string, now time.Time) (ResolvedWindow, error) {
 // computed, how far the underlying observations reach, and whether that is
 // current enough to act on.
 type DataEnvelope struct {
-	QueriedAt      string         `json:"queried_at"`
-	DataThrough    string         `json:"data_through,omitempty"`
-	Freshness      Freshness      `json:"freshness"`
+	QueriedAt   string    `json:"queried_at"`
+	DataThrough string    `json:"data_through,omitempty"`
+	Freshness   Freshness `json:"freshness"`
+	// NoObservations states positively that the scope produced nothing in the
+	// window. Freshness alone cannot carry this: "unavailable" describes the
+	// pipeline, and a caller must not read either as evidence of health.
+	NoObservations bool           `json:"no_observations"`
 	ResolvedWindow ResolvedWindow `json:"resolved_window"`
 }
 
@@ -116,11 +156,16 @@ type DataEnvelope struct {
 // covered, so a historical read stays fresh instead of being reported stale
 // merely for being about the past. Otherwise the lag is measured against the
 // moment of the read.
-func newDataEnvelope(now time.Time, watermark time.Time, window ResolvedWindow) DataEnvelope {
+//
+// observed is the scoped result, not the watermark: a project may be busy while
+// the one MCP being asked about produced nothing, and deriving "no observations"
+// from the watermark would report that silence as activity.
+func newDataEnvelope(now time.Time, watermark time.Time, window ResolvedWindow, observed bool) DataEnvelope {
 	envelope := DataEnvelope{
 		QueriedAt:      now.UTC().Format(time.RFC3339),
 		DataThrough:    "",
-		Freshness:      FreshnessNoObservations,
+		Freshness:      FreshnessUnavailable,
+		NoObservations: !observed,
 		ResolvedWindow: window,
 	}
 	if watermark.IsZero() {
@@ -129,11 +174,11 @@ func newDataEnvelope(now time.Time, watermark time.Time, window ResolvedWindow) 
 	envelope.DataThrough = watermark.UTC().Format(time.RFC3339)
 	switch {
 	case !watermark.Before(window.end):
-		envelope.Freshness = FreshnessFresh
+		envelope.Freshness = FreshnessCurrent
 	case now.Sub(watermark) > StaleWatermarkThreshold:
 		envelope.Freshness = FreshnessStale
 	default:
-		envelope.Freshness = FreshnessFresh
+		envelope.Freshness = FreshnessCurrent
 	}
 	return envelope
 }

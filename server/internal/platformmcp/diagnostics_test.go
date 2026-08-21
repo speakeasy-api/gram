@@ -48,12 +48,12 @@ func TestGetProjectOverviewOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
-	window, err := resolveWindow("24h", now)
+	window, err := resolveWindow("24h", now, overviewWindowSpec)
 	require.NoError(t, err)
 
 	output := GetProjectOverviewOutput{
 		ProjectID:       "00000000-0000-0000-0000-000000000001",
-		Envelope:        newDataEnvelope(now, now.Add(-time.Minute), window),
+		Envelope:        newDataEnvelope(now, now.Add(-time.Minute), window, true),
 		MetricsMode:     "tool_call",
 		ToolCalls:       120,
 		FailedToolCalls: 4,
@@ -64,7 +64,7 @@ func TestGetProjectOverviewOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 
 	require.ElementsMatch(t, []string{
 		"project_id",
-		"data", "queried_at", "data_through", "freshness", "resolved_window", "window", "from", "to",
+		"data", "queried_at", "data_through", "freshness", "no_observations", "resolved_window", "window", "from", "to",
 		"metrics_mode",
 		"tool_calls", "failed_tool_calls", "active_servers", "active_users",
 		"top_servers", "name", "tool_calls",
@@ -78,13 +78,13 @@ func TestGetMCPDiagnosticsOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
-	window, err := resolveWindow("7d", now)
+	window, err := resolveWindow("7d", now, overviewWindowSpec)
 	require.NoError(t, err)
 
 	output := GetMCPDiagnosticsOutput{
 		ProjectID:                   "00000000-0000-0000-0000-000000000001",
 		MCPID:                       "00000000-0000-0000-0000-000000000002",
-		Envelope:                    newDataEnvelope(now, now.Add(-time.Minute), window),
+		Envelope:                    newDataEnvelope(now, now.Add(-time.Minute), window, true),
 		Readiness:                   MCPDiagnosticsReadiness{State: string(ReadinessReady), Freshness: "fresh", CheckedAt: now.Format(time.RFC3339)},
 		Outcomes:                    MCPOutcomeSummary{Total: 10, Success: 4, Unauthorized: 6},
 		OrganizationOutcomes:        MCPOutcomeSummary{Total: 100, Success: 98, ServerError: 2},
@@ -101,7 +101,7 @@ func TestGetMCPDiagnosticsOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 
 	require.ElementsMatch(t, []string{
 		"project_id", "mcp_id",
-		"data", "queried_at", "data_through", "freshness", "resolved_window", "window", "from", "to",
+		"data", "queried_at", "data_through", "freshness", "no_observations", "resolved_window", "window", "from", "to",
 		"readiness", "state", "freshness", "checked_at",
 		"outcomes", "total", "success", "unauthorized", "client_error", "server_error", "failed", "unknown",
 		"organization_outcomes", "total", "success", "unauthorized", "client_error", "server_error", "failed", "unknown",
