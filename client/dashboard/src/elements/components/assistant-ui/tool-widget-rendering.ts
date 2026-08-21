@@ -1,5 +1,8 @@
 import { groupAssistantMessageParts } from "@/elements/lib/messagePartGrouping";
-import { isCatalogBrowseSearch } from "@/elements/components/assistant-ui/tool-search-result.helpers";
+import {
+  extractPayload,
+  isCatalogBrowseSearch,
+} from "@/elements/components/assistant-ui/tool-search-result.helpers";
 
 /**
  * Which of a tool's calls Elements' own card actually draws for. A built-in
@@ -22,6 +25,7 @@ interface ToolPartLike {
   readonly toolCallId?: string;
   readonly toolName?: string;
   readonly args?: unknown;
+  readonly result?: unknown;
   readonly text?: string;
 }
 
@@ -109,13 +113,17 @@ export function toolSearchVerdict(
         found = true;
         ownRunDraws = runDraws;
       }
-      // Only a browse the group would hoist can hold the card. A browse
-      // stranded in a collapsed run does not claim it and does not deny it to
-      // an earlier one that can draw.
+      // Only a browse the group would hoist, and whose result is a catalog
+      // this can actually render, holds the card. A browse that is stranded in
+      // a collapsed run, still running, or back with an unreadable result
+      // neither claims it nor denies it to an earlier one that can draw —
+      // otherwise a second search would blank the card the first one had
+      // already put on screen.
       if (
         runDraws &&
         part.toolName === "tool_search" &&
-        isCatalogBrowseSearch(part.args)
+        isCatalogBrowseSearch(part.args) &&
+        extractPayload(part.result) !== null
       ) {
         drawn = part.toolCallId;
       }
@@ -123,5 +131,8 @@ export function toolSearchVerdict(
   }
 
   if (found && drawn === toolCallId) return "draw";
+  // A hoisted browse that is not the chosen one renders nothing only while
+  // another one is drawing: a lone browse still waiting on its result keeps
+  // the generic card, which is where its running state shows.
   return ownRunDraws && drawn !== undefined ? "suppress" : "fallback";
 }

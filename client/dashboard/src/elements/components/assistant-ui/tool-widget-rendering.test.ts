@@ -5,15 +5,26 @@ import {
   toolSearchVerdict,
 } from "./tool-widget-rendering";
 
+// A readable catalog: `extractPayload` needs at least one server with tools.
+const CATALOG = {
+  servers: [
+    { id: "_p-platform", tools: ["mcp__p-platform_get_platform_context"] },
+  ],
+};
+
 let nextId = 0;
-const search = (args: Record<string, unknown>) => ({
+const search = (args: Record<string, unknown>, result: unknown = CATALOG) => ({
   type: "tool-call",
   toolCallId: `call_${++nextId}`,
   toolName: "tool_search",
   args,
+  result,
 });
-const browse = () => search({ query: "", browse: true });
+const browse = (result: unknown = CATALOG) =>
+  search({ query: "", browse: true }, result);
 const discovery = () => search({ query: "logs" });
+/** A browse whose result has not arrived yet. */
+const runningBrowse = () => ({ ...browse(), result: undefined });
 const plainCall = (toolName = "mcp__p-platform_get_platform_context") => ({
   type: "tool-call",
   toolCallId: `call_${++nextId}`,
@@ -91,6 +102,23 @@ describe("toolSearchVerdict", () => {
   it("still hands the card to the last drawable browse", () => {
     const parts = [browse(), prose(), browse()];
     expect(verdicts(parts)).toEqual(["suppress", undefined, "draw"]);
+  });
+
+  it("keeps the earlier card when a repeat browse has no catalog yet", () => {
+    // The second search is still running. Handing it the card on position
+    // alone would blank the catalog the first one already put on screen, then
+    // bring it back — and leave nothing at all if that search never returns a
+    // readable result.
+    expect(verdicts([browse(), runningBrowse()])).toEqual(["draw", "suppress"]);
+    expect(verdicts([browse(), browse({ servers: [] })])).toEqual([
+      "draw",
+      "suppress",
+    ]);
+  });
+
+  it("falls back for a lone browse with no catalog yet", () => {
+    // Nothing else is drawing, so the generic card carries its running state.
+    expect(verdicts([runningBrowse()])).toEqual(["fallback"]);
   });
 
   it("falls back for a call that is not in the message", () => {

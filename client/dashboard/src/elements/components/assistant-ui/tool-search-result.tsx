@@ -9,28 +9,12 @@ import { useMemo } from "react";
 
 import { ToolFallback } from "@/elements/components/assistant-ui/tool-fallback";
 import {
-  asRecord,
-  asString,
+  extractPayload,
+  type ServerStatus,
 } from "@/elements/components/assistant-ui/tool-search-result.helpers";
 import { toolSearchVerdict } from "@/elements/components/assistant-ui/tool-widget-rendering";
 import { useElements } from "@/elements/hooks/useElements";
 import { appendToken } from "@/elements/lib/tool-mentions";
-
-/**
- * The runner's `tool_search` result: full schemas for the query's matches, a
- * name index of the whole catalog, and the live status of every attached MCP
- * server. See `agents/runner/src/tools/tool_search.rs`.
- */
-interface ToolSearchPayload {
-  servers: ServerStatus[];
-  /** Tool name -> one-line description, from the catalog index. */
-  briefs: Map<string, string>;
-}
-
-interface ServerStatus {
-  id: string;
-  tools: string[];
-}
 
 interface RowTool {
   /** Catalog name, as the model must call it. */
@@ -45,81 +29,6 @@ interface ToolRow {
   /** Server the row's tools came from; shown only when more than one is attached. */
   server: string;
   tools: RowTool[];
-}
-
-/**
- * The payload arrives either as the structured object or as a text content
- * item holding that same JSON — which one depends on whether the transport
- * preserved structured content, so both are unwrapped rather than assumed.
- */
-function extractPayload(result: unknown): ToolSearchPayload | null {
-  // The runner hands the structured body back as a JSON string.
-  if (typeof result === "string") {
-    try {
-      return extractPayload(JSON.parse(result) as unknown);
-    } catch {
-      return null;
-    }
-  }
-
-  const record = asRecord(result);
-  if (!record) return null;
-
-  const content = record["content"];
-  // Live turns deliver the body as `{content: "<json>"}`; a reloaded
-  // transcript delivers the same JSON as a bare string.
-  if (typeof content === "string") {
-    try {
-      const payload = extractPayload(JSON.parse(content) as unknown);
-      if (payload) return payload;
-    } catch {
-      // Not the JSON payload — fall through to the structured shapes.
-    }
-  }
-  if (Array.isArray(content)) {
-    for (const item of content) {
-      const text = asString(asRecord(item)?.["text"]);
-      if (!text) continue;
-      try {
-        const payload = extractPayload(JSON.parse(text) as unknown);
-        if (payload) return payload;
-      } catch {
-        // Not the JSON payload — keep looking through the content items.
-      }
-    }
-  }
-
-  const rawServers = record["servers"];
-  if (!Array.isArray(rawServers)) return null;
-
-  // Only servers that answered the handshake carry tools. One that is
-  // unavailable or still awaiting authorization has nothing to browse, so it
-  // is left out rather than rendered as an empty or disabled group.
-  const servers: ServerStatus[] = [];
-  for (const item of rawServers) {
-    const entry = asRecord(item);
-    const id = asString(entry?.["id"]);
-    const tools = entry?.["tools"];
-    if (!id || !Array.isArray(tools)) continue;
-    const names = tools.filter(
-      (name): name is string => typeof name === "string",
-    );
-    if (names.length > 0) servers.push({ id, tools: names });
-  }
-  if (servers.length === 0) return null;
-
-  const briefs = new Map<string, string>();
-  const catalog = record["catalog"];
-  if (Array.isArray(catalog)) {
-    for (const item of catalog) {
-      const entry = asRecord(item);
-      const name = asString(entry?.["name"]);
-      const brief = asString(entry?.["brief"]);
-      if (name && brief) briefs.set(name, brief);
-    }
-  }
-
-  return { servers, briefs };
 }
 
 /**
@@ -219,7 +128,7 @@ function buildRows(servers: ServerStatus[]): ToolRow[] {
  * works out the arguments, and calls it.
  */
 export const ToolSearchResult: ToolCallMessagePartComponent = (props) => {
-  const { status, result, toolCallId } = props;
+  const { result, toolCallId } = props;
   const aui = useAui();
   const { config } = useElements();
   const composerText = useAuiState(({ thread }) => thread.composer.text);
@@ -236,12 +145,12 @@ export const ToolSearchResult: ToolCallMessagePartComponent = (props) => {
     [parts, toolCallId, hostComponents],
   );
 
+  // No status check of its own: `extractPayload` is null for a call that has
+  // not come back with a readable catalog, which is the same test the verdict
+  // used to pick this call.
   const payload = useMemo(
-    () =>
-      status.type === "complete" && verdict === "draw"
-        ? extractPayload(result)
-        : null,
-    [status.type, result, verdict],
+    () => (verdict === "draw" ? extractPayload(result) : null),
+    [result, verdict],
   );
 
   if (!payload) {
