@@ -18,6 +18,7 @@ const testState = vi.hoisted(() => ({
     endpointUrl: "https://collector.example.com",
     headers: [] as Array<{ name: string; hasValue: boolean }>,
   },
+  returnData: true,
   upsert: vi.fn(),
   deleteConfig: vi.fn(),
 }));
@@ -29,8 +30,8 @@ vi.mock("@/components/require-scope", () => ({
 vi.mock("@gram/client/react-query/otelForwardingConfig", () => ({
   invalidateAllOtelForwardingConfig: vi.fn(),
   useOtelForwardingConfig: () => ({
-    data: testState.data,
-    isLoading: false,
+    data: testState.returnData ? testState.data : undefined,
+    isLoading: !testState.returnData,
   }),
 }));
 
@@ -63,6 +64,7 @@ beforeEach(() => {
     endpointUrl: "https://collector.example.com",
     headers: [],
   };
+  testState.returnData = true;
   testState.upsert.mockReset();
   testState.deleteConfig.mockReset();
   testState.upsert.mockImplementation(async () => testState.data);
@@ -72,6 +74,57 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("OtelForwardingSection", () => {
+  it("hydrates untouched defaults when the query resolves", () => {
+    testState.data.headers = [{ name: "Authorization", hasValue: true }];
+    testState.returnData = false;
+    const { rerender } = render(<OtelForwardingSection />);
+
+    expect(
+      (screen.getByLabelText("Endpoint URL") as HTMLInputElement).value,
+    ).toBe("");
+
+    testState.returnData = true;
+    rerender(<OtelForwardingSection />);
+
+    expect(
+      (screen.getByLabelText("Endpoint URL") as HTMLInputElement).value,
+    ).toBe(testState.data.endpointUrl);
+    expect(screen.getByPlaceholderText("••••")).not.toBeNull();
+  });
+
+  it("requires a replacement value when a stored header is renamed", async () => {
+    testState.data.headers = [{ name: "foo", hasValue: true }];
+    render(<OtelForwardingSection />);
+
+    fireEvent.change(screen.getByPlaceholderText("Header name"), {
+      target: { value: "renamed" },
+    });
+
+    const saveButton = screen.getByRole("button", {
+      name: "Save",
+    }) as HTMLButtonElement;
+    expect(screen.getByPlaceholderText("Header value")).not.toBeNull();
+    expect(saveButton.disabled).toBe(true);
+
+    fireEvent.change(screen.getByPlaceholderText("Header value"), {
+      target: { value: "replacement" },
+    });
+    await waitFor(() => expect(saveButton.disabled).toBe(false));
+    fireEvent.click(saveButton);
+
+    await waitFor(() =>
+      expect(testState.upsert).toHaveBeenCalledWith({
+        request: {
+          upsertConfigRequestBody3: {
+            endpointUrl: testState.data.endpointUrl,
+            enabled: testState.data.enabled,
+            headers: [{ name: "renamed", value: "replacement" }],
+          },
+        },
+      }),
+    );
+  });
+
   it("preserves unsaved headers across a background config refresh", () => {
     const { rerender } = render(<OtelForwardingSection />);
 

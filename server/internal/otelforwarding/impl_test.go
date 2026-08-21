@@ -28,6 +28,18 @@ func TestNormalizeHeaderInputsPreservesOmittedExistingValue(t *testing.T) {
 	}, headers)
 }
 
+func TestNormalizeHeaderInputsPreservesValueAcrossNameCasing(t *testing.T) {
+	t.Parallel()
+
+	headers, err := normalizeHeaderInputs(
+		[]*gen.OtelForwardingHeaderInput{{Name: "authorization", Value: nil}},
+		map[string]string{"Authorization": "original secret"},
+	)
+
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{"authorization": "original secret"}, headers)
+}
+
 func TestNormalizeHeaderInputsRemovesOmittedHeaderEntry(t *testing.T) {
 	t.Parallel()
 

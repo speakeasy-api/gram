@@ -26,11 +26,10 @@ type EditableHeader = {
   // place without unmounting the row.
   rowID: string;
   name: string;
-  // Empty string with hasStoredValue=true means "keep existing encrypted
-  // value." A non-empty string overwrites it. A row whose hasStoredValue is
-  // false and value is empty is a brand-new blank row.
+  // Original server name for a write-only value this row may preserve.
+  // Renaming the row requires a replacement value.
+  storedName: string | null;
   value: string;
-  hasStoredValue: boolean;
 };
 
 function rowFromServer(h: OtelForwardingHeader, idx: number): EditableHeader {
@@ -38,7 +37,7 @@ function rowFromServer(h: OtelForwardingHeader, idx: number): EditableHeader {
     rowID: `existing-${idx}-${h.name}`,
     name: h.name,
     value: "",
-    hasStoredValue: h.hasValue,
+    storedName: h.hasValue ? h.name : null,
   };
 }
 
@@ -49,7 +48,7 @@ function blankRow(): EditableHeader {
     rowID: `new-${newRowCounter}`,
     name: "",
     value: "",
-    hasStoredValue: false,
+    storedName: null,
   };
 }
 
@@ -69,10 +68,18 @@ function formValuesFromConfig(
   };
 }
 
+function preservesStoredValue(header: EditableHeader): boolean {
+  return (
+    header.storedName !== null &&
+    header.value === "" &&
+    header.name.trim().toLowerCase() === header.storedName.toLowerCase()
+  );
+}
+
 function hasValidHeaders(headers: EditableHeader[]): boolean {
   return headers.every((header) => {
     if (header.name.trim() === "") return false;
-    return header.value !== "" || header.hasStoredValue;
+    return header.value !== "" || preservesStoredValue(header);
   });
 }
 
@@ -80,7 +87,7 @@ function headerInputFromForm(
   header: EditableHeader,
 ): OtelForwardingHeaderInput {
   const name = header.name.trim();
-  if (header.hasStoredValue && header.value === "") return { name };
+  if (preservesStoredValue(header)) return { name };
   return { name, value: header.value };
 }
 
@@ -276,7 +283,9 @@ export function OtelForwardingSection(): JSX.Element {
                                     <HeaderRow
                                       name={nameField.state.value}
                                       value={valueField.state.value}
-                                      hasStoredValue={header.hasStoredValue}
+                                      hasStoredValue={preservesStoredValue(
+                                        header,
+                                      )}
                                       nameInputName={nameField.name}
                                       valueInputName={valueField.name}
                                       disabled={formDisabled}
