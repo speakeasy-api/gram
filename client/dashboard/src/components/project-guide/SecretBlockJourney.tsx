@@ -554,9 +554,6 @@ export function SecretBlockJourney({
       >
         <div className="grid gap-4">
           <div className="grid gap-2">
-            <span className="font-mono text-[10px] tracking-[0.05em] uppercase text-destructive">
-              Journey B complete
-            </span>
             <p className="text-muted-foreground max-w-[52ch] text-[13px] leading-[1.6]">
               The prompt matched the secrets policy and was rejected before the
               model answered.

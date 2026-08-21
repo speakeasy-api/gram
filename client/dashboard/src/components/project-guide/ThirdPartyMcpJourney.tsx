@@ -841,9 +841,6 @@ function JourneyCompletion({
       className="border-l-2 border-l-success-default grid gap-3 pl-3"
     >
       <div className="grid gap-1">
-        <span className="text-success-default font-mono text-[10px] tracking-[0.05em] uppercase">
-          Journey A complete
-        </span>
         <h5 className="text-[24px] leading-[1.1]">The path is governed.</h5>
         <p className="text-muted-foreground text-[13px] leading-[1.6]">
           {serverName} is connected through your governed endpoint, and its

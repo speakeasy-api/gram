@@ -93,7 +93,11 @@ export function ProjectGuideRun({
     suppliedCompletedSteps ??
     Array.from({ length: currentStep }, (_, index) => index);
   let resolvedCurrentContent = isEndStep ? (
-    <CompletionStepBody journey={journey} body={completionBody} />
+    <CompletionStepBody
+      journey={journey}
+      body={completionBody}
+      onSwitchJourney={onSwitchJourney}
+    />
   ) : (
     currentContent
   );
@@ -127,12 +131,6 @@ export function ProjectGuideRun({
     if (isComplete) label = journey.completion.primaryAction;
     resolvedPrimaryAction = { label, disabled: !isComplete };
   }
-  const resolvedSecondaryAction = isComplete
-    ? {
-        label: "Start the other journey",
-        onClick: onSwitchJourney,
-      }
-    : undefined;
   const isStartAction =
     resolvedPrimaryAction !== null &&
     (displayState === "ready" || displayState === "checkpoint") &&
@@ -292,17 +290,17 @@ export function ProjectGuideRun({
                 {resolvedOutput}
                 {resolvedEventCard}
               </div>
+              {displayState === "waiting" && (
+                <div className="flex gap-1 font-mono text-[10px] text-[#121212]/50">
+                  <span role="status">Listening for an event</span>
+                  <span aria-hidden="true">·</span>
+                  <span aria-hidden="true">
+                    {Math.floor(listeningElapsedSeconds)}s elapsed
+                  </span>
+                </div>
+              )}
             </div>
-            {displayState === "waiting" && (
-              <div className="flex gap-1 font-mono text-[10px] text-[#121212]/50">
-                <span role="status">Listening for an event</span>
-                <span aria-hidden="true">·</span>
-                <span aria-hidden="true">
-                  {Math.floor(listeningElapsedSeconds)}s elapsed
-                </span>
-              </div>
-            )}
-            {(resolvedPrimaryAction || resolvedSecondaryAction) && (
+            {resolvedPrimaryAction && (
               <div className="mt-auto grid gap-2">
                 {resolvedPrimaryAction?.href ? (
                   <Link
@@ -334,15 +332,6 @@ export function ProjectGuideRun({
                       {resolvedPrimaryAction.label}
                     </button>
                   )
-                )}
-                {resolvedSecondaryAction && (
-                  <button
-                    type="button"
-                    onClick={resolvedSecondaryAction.onClick}
-                    className="w-full border border-[#DBDBDB] px-[18px] py-[10px] font-mono text-[11px] tracking-[0.06em] text-[#121212]/60 uppercase"
-                  >
-                    {resolvedSecondaryAction.label}
-                  </button>
                 )}
               </div>
             )}
@@ -394,25 +383,29 @@ export function ProjectGuideObservedEvent({
 function CompletionStepBody({
   journey,
   body,
+  onSwitchJourney,
 }: {
   journey: JourneyMeta;
   body?: string;
+  onSwitchJourney: () => void;
 }): JSX.Element {
-  const fixture = PROJECT_GUIDE_FIXTURES[journey.id];
   return (
     <div className="grid gap-3 pt-3">
-      <span
-        className="font-mono text-[10px] tracking-[0.08em] uppercase"
-        style={{ color: fixture.accent }}
-      >
-        {journey.completion.eyebrow}
-      </span>
       <h4 className="max-w-[24ch] font-display text-[28px] leading-[1] font-thin tracking-[-0.03em]">
         {journey.completion.heading}
       </h4>
       <p className="max-w-[56ch] text-[13px] leading-[1.6] text-[#121212]/62">
         {body ?? journey.completion.body}
       </p>
+      <div className="mt-3 border-t border-[#DBDBDB] pt-4">
+        <button
+          type="button"
+          onClick={onSwitchJourney}
+          className="w-fit border border-[#DBDBDB] px-[18px] py-[10px] font-mono text-[11px] tracking-[0.06em] text-[#121212]/60 uppercase"
+        >
+          Start the other journey
+        </button>
+      </div>
     </div>
   );
 }

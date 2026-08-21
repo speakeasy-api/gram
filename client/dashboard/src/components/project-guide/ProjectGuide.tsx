@@ -311,7 +311,15 @@ export function ProjectGuide({
                       />
                     }
                     output={
-                      <ProjectGuideOutput entries={snapshot.context.output} />
+                      <ProjectGuideOutput
+                        entries={snapshot.context.output}
+                        error={guideStepError(
+                          journey,
+                          currentStep,
+                          mcpOperations,
+                          secretOperations,
+                        )}
+                      />
                     }
                     eventCard={
                       snapshot.context.observedEvent ? (
@@ -482,7 +490,6 @@ function ProjectGuideStepContent({
       <ProjectGuideMcpStepContent
         journey={journey}
         step={step}
-        error={error}
         operations={mcpOperations}
         onMcpPromptCopied={onMcpPromptCopied}
       />
@@ -503,11 +510,6 @@ function ProjectGuideStepContent({
         onSecretPromptCopied={onSecretPromptCopied}
         onSelectAgent={onSelectAgent}
       />
-      {error && !(journey.id === "secret-block" && step >= 3) && (
-        <p role="alert" className="text-destructive text-[12px]">
-          {error}
-        </p>
-      )}
     </div>
   );
 }
@@ -670,18 +672,13 @@ function SecretStepBody({
             hasError={Boolean(error) || operations.policyError}
           />
           {operations.policyError && (
-            <div className="grid gap-2">
-              <p role="alert" className="text-destructive text-[12px]">
-                Could not read this project's risk policies.
-              </p>
-              <button
-                type="button"
-                onClick={operations.retryPolicy}
-                className="border-border w-fit border px-3 py-2 font-mono text-[10px] uppercase"
-              >
-                Retry policy check
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={operations.retryPolicy}
+              className="border-border w-fit border px-3 py-2 font-mono text-[10px] uppercase"
+            >
+              Retry policy check
+            </button>
           )}
         </div>
       );
@@ -705,11 +702,7 @@ function SecretStepBody({
       );
     case 2:
       if (!operations.installCommand) {
-        return (
-          <p role="alert" className="text-destructive text-[12px]">
-            The observability ZIP is not ready. Retry the download step.
-          </p>
-        );
+        return null;
       }
       return (
         <div className="min-w-0">
@@ -821,13 +814,11 @@ function SecretPluginPhases({
 function ProjectGuideMcpStepContent({
   journey,
   step,
-  error,
   operations,
   onMcpPromptCopied,
 }: {
   journey: JourneyMeta;
   step: number;
-  error: string | null;
   operations: McpGuideOperations;
   onMcpPromptCopied: () => void;
 }): JSX.Element {
@@ -841,11 +832,6 @@ function ProjectGuideMcpStepContent({
         operations={operations}
         onMcpPromptCopied={onMcpPromptCopied}
       />
-      {error && step !== 3 && (
-        <p role="alert" className="text-destructive text-[12px]">
-          {error}
-        </p>
-      )}
     </div>
   );
 }
@@ -892,18 +878,13 @@ function McpCatalogSelection({
   }
   if (operations.catalogError || !operations.catalogServers) {
     return (
-      <div className="grid gap-2">
-        <p role="alert" className="text-destructive text-[12px]">
-          Could not load the automatic catalog servers.
-        </p>
-        <button
-          type="button"
-          onClick={operations.retryCatalog}
-          className="border-border w-fit border px-3 py-2 font-mono text-[10px] uppercase"
-        >
-          Retry catalog
-        </button>
-      </div>
+      <button
+        type="button"
+        onClick={operations.retryCatalog}
+        className="border-border w-fit border px-3 py-2 font-mono text-[10px] uppercase"
+      >
+        Retry catalog
+      </button>
     );
   }
   if (operations.catalogServers.length === 0) {
@@ -966,13 +947,9 @@ function McpClientConnection({
   operations,
 }: {
   operations: McpGuideOperations;
-}): JSX.Element {
+}): JSX.Element | null {
   if (!operations.endpointUrl || !operations.connectionPrompts) {
-    return (
-      <p role="alert" className="text-destructive text-[12px]">
-        The governed endpoint is not ready yet.
-      </p>
-    );
+    return null;
   }
 
   return (
@@ -1017,13 +994,9 @@ function McpSafePrompt({
 }: {
   operations: McpGuideOperations;
   onMcpPromptCopied: () => void;
-}): JSX.Element {
+}): JSX.Element | null {
   if (!operations.prompt) {
-    return (
-      <p role="alert" className="text-destructive text-[12px]">
-        The safe prompt is unavailable until the server is ready.
-      </p>
-    );
+    return null;
   }
 
   return (
@@ -1047,10 +1020,12 @@ function mcpCompletionBody(name: string | undefined): string {
 
 function ProjectGuideOutput({
   entries,
+  error,
 }: {
   entries: ProjectGuideOutputEntry[];
+  error?: string | null;
 }): JSX.Element {
-  if (entries.length === 0) {
+  if (entries.length === 0 && !error) {
     return <span>Nothing has run for this step yet</span>;
   }
 
@@ -1064,8 +1039,48 @@ function ProjectGuideOutput({
           <span>{entry.message}</span>
         </li>
       ))}
+      {error && (
+        <li
+          role="alert"
+          className="grid grid-cols-[44px_1fr] gap-2 text-[#8F2A22]"
+        >
+          <span className="text-[9px] tracking-[0.06em] uppercase">error</span>
+          <span>{error}</span>
+        </li>
+      )}
     </ol>
   );
+}
+
+function guideStepError(
+  journey: JourneyMeta,
+  step: number,
+  mcpOperations: McpGuideOperations,
+  secretOperations: SecretGuideOperations,
+): string | null {
+  if (journey.id === "third-party-mcp") {
+    if (step === 0 && mcpOperations.catalogError) {
+      return "Could not load the automatic catalog servers.";
+    }
+    if (
+      step === 1 &&
+      (!mcpOperations.endpointUrl || !mcpOperations.connectionPrompts)
+    ) {
+      return "The governed endpoint is not ready yet.";
+    }
+    if (step === 2 && !mcpOperations.prompt) {
+      return "The safe prompt is unavailable until the server is ready.";
+    }
+    return null;
+  }
+
+  if (step === 0 && secretOperations.policyError) {
+    return "Could not read this project's risk policies.";
+  }
+  if (step === 2 && !secretOperations.installCommand) {
+    return "The observability ZIP is not ready. Retry the download step.";
+  }
+  return null;
 }
 
 function projectGuideContentId(journeyId: JourneyId): string {

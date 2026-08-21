@@ -520,12 +520,6 @@ function CompletionSummary({
   const isA = journeyId === "third-party-mcp";
   return (
     <div className="grid gap-3 px-0 pt-8 pb-4 animate-[jrises_.4s_cubic-bezier(.2,.7,.3,1)_both]">
-      <span
-        className="font-mono text-[10px] tracking-[0.08em] uppercase"
-        style={{ color: accent }}
-      >
-        {isA ? "Journey A complete" : "Journey B complete"}
-      </span>
       <h3 className="max-w-[24ch] font-display text-[32px] leading-[.95] font-thin tracking-[-0.03em]">
         {isA ? "The path is governed." : "The prompt was denied."}
       </h3>
@@ -552,7 +546,7 @@ function CompletionSummary({
           </div>
         )}
       </div>
-      <div className="flex flex-wrap gap-2">
+      <div className="mt-4 flex flex-wrap gap-2 border-t border-[#DBDBDB] pt-4">
         {primaryAction ?? (
           <button
             type="button"

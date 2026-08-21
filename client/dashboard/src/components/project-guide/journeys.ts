@@ -35,7 +35,6 @@ export type JourneyMeta = {
   /** The observable win, stated as the user would describe it afterwards. */
   win: string;
   completion: {
-    eyebrow: string;
     heading: string;
     body: string;
     primaryAction: string;
@@ -95,7 +94,6 @@ export const PROJECT_GUIDE_JOURNEYS: JourneyMeta[] = [
     title: "Block a leaked credential mid-prompt",
     win: "A secrets policy denies any prompt carrying a credential. The attempt lands in Risk Events with the rule that caught it, the matched span, and who sent it.",
     completion: {
-      eyebrow: "Journey B complete",
       heading: "The prompt was denied.",
       body: "The prompt matched the secrets policy and was rejected before the model answered. The finding sits in Risk Events with the rule that fired, the matched span, the severity, and who sent it.",
       primaryAction: "Open Risk Events",
@@ -115,7 +113,6 @@ export const PROJECT_GUIDE_JOURNEYS: JourneyMeta[] = [
     title: "Govern a third-party MCP",
     win: "Install a vendor's MCP server, connect your agent to it, and watch the first call arrive with the actor, the tools, and the result attached.",
     completion: {
-      eyebrow: "Journey A complete",
       heading: "The path is governed.",
       body: "Your client now reaches the selected server through an endpoint you own. Tool lists are filtered to what each caller may use, every call lands in tool logs, and the vendor's server never changed. Remove the server and the path closes.",
       primaryAction: "Open tool logs",

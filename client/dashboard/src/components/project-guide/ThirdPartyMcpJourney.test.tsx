@@ -849,7 +849,7 @@ describe("ThirdPartyMcpJourney", () => {
     );
 
     await waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
-    expect(screen.getByText("Journey A complete")).toBeTruthy();
+    expect(screen.queryByText("Journey A complete")).toBeNull();
     expect(screen.getByText("The path is governed.")).toBeTruthy();
     expect(screen.getByText("Governed call")).toBeTruthy();
     expect(screen.getByText("List issues")).toBeTruthy();
@@ -887,7 +887,7 @@ describe("ThirdPartyMcpJourney", () => {
     );
 
     await waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
-    expect(screen.getByText("Journey A complete")).toBeTruthy();
+    expect(screen.queryByText("Journey A complete")).toBeNull();
   });
 
   it("does not restore from unrelated activity", async () => {

@@ -809,7 +809,7 @@ describe("SecretBlockJourney", () => {
       />,
     );
 
-    expect(screen.getByText("Journey B complete")).toBeTruthy();
+    expect(screen.queryByText("Journey B complete")).toBeNull();
     expect(screen.getByText("The event you watched")).toBeTruthy();
     expect(screen.getByText("Denied · risk event")).toBeTruthy();
     expect(screen.queryByText("must-not-render")).toBeNull();
