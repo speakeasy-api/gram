@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   periodUsage: vi.fn(),
   paygBillingSummary: vi.fn(),
   inferenceCaps: vi.fn(),
+  inferenceHistory: vi.fn(),
   usageTiers: vi.fn(),
 }));
 
@@ -110,6 +111,10 @@ vi.mock("@gram/client/react-query/getPaygBillingSummary.js", () => ({
   useGetPaygBillingSummary: () =>
     mocks.paygBillingSummary() as { data: undefined; isError: boolean },
 }));
+vi.mock("@gram/client/react-query/getInferenceSpendHistory.js", () => ({
+  useGetInferenceSpendHistory: () =>
+    mocks.inferenceHistory() as { data: undefined; isError: boolean },
+}));
 vi.mock("@gram/client/react-query/getUsageTiers.js", () => ({
   useGetUsageTiers: (...args: unknown[]) => mocks.usageTiers(...args),
 }));
@@ -180,6 +185,9 @@ const billingEmailField = () =>
 const inferenceCapsSection = () =>
   screen.queryByRole("heading", { name: /inference caps/i });
 
+const inferenceSpendSection = () =>
+  screen.queryByRole("heading", { name: /^inference spend$/i });
+
 const planSection = () => screen.queryByRole("heading", { name: /^plan$/i });
 
 // Both usage sections are titled "Usage"; their descriptions are what say which
@@ -217,6 +225,10 @@ describe("Billing", () => {
     mocks.flagResult.mockReturnValue({ status: "enabled" });
     mocks.hasScope.mockReturnValue(true);
     mocks.inferenceCaps.mockReturnValue({ data: undefined, isError: false });
+    mocks.inferenceHistory.mockReturnValue({
+      data: undefined,
+      isError: false,
+    });
     mocks.session.mockReturnValue({
       trial: {
         startedAt: new Date(Date.now() - 2 * DAY),
@@ -342,6 +354,17 @@ describe("Billing", () => {
       renderBilling();
 
       expect(inferenceCapsSection()).not.toBeNull();
+    },
+  );
+
+  it.each<ProductTier>(["base", "payg", "enterprise"])(
+    "places inference spend history on the %s view",
+    (tier) => {
+      mocks.productTier.mockReturnValue(tier);
+
+      renderBilling();
+
+      expect(inferenceSpendSection()).not.toBeNull();
     },
   );
 

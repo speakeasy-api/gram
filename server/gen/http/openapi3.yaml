@@ -57747,6 +57747,87 @@ paths:
             x-speakeasy-name-override: getInferenceSpendCaps
             x-speakeasy-react-hook:
                 name: getInferenceSpendCaps
+    /rpc/usage.getInferenceSpendHistory:
+        get:
+            description: Get calendar-month inference spend recorded going forward from durable daily collection
+            operationId: getInferenceSpendHistory
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/InferenceSpendHistory'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getInferenceSpendHistory usage
+            tags:
+                - usage
+            x-speakeasy-name-override: getInferenceSpendHistory
+            x-speakeasy-react-hook:
+                name: getInferenceSpendHistory
     /rpc/usage.getPaygBillingSummary:
         get:
             description: Get exact billable usage and estimated cost for the organization's live paid Stripe service period
@@ -70062,6 +70143,63 @@ components:
                 - credits_used
                 - monthly_credits
                 - disabled
+        InferenceSpendHistory:
+            type: object
+            properties:
+                months:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/InferenceSpendMonth'
+                    description: UTC calendar months with recorded spend, newest first. The current month is always present.
+            required:
+                - months
+        InferenceSpendMonth:
+            type: object
+            properties:
+                current:
+                    type: boolean
+                    description: Whether this is the current UTC calendar month
+                key_spend:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/InferenceSpendMonthKey'
+                    description: Spend by platform-managed key type. Keys with no recorded days in the month are omitted.
+                month_end:
+                    type: string
+                    description: End of the UTC calendar month (exclusive)
+                    format: date-time
+                month_start:
+                    type: string
+                    description: Start of the UTC calendar month
+                    format: date-time
+                recorded_through:
+                    type: string
+                    description: Most recent completed durable UTC spend day included in this month
+                    format: date
+                spend_usd:
+                    type: string
+                    description: Exact durable inference spend in USD through recorded_through
+            required:
+                - month_start
+                - month_end
+                - spend_usd
+                - current
+                - key_spend
+        InferenceSpendMonthKey:
+            type: object
+            properties:
+                key_type:
+                    type: string
+                    description: The platform-managed inference function
+                    enum:
+                        - chat
+                        - internal
+                spend_usd:
+                    type: string
+                    description: Exact durable spend in USD for this key through recorded_through
+            required:
+                - key_type
+                - spend_usd
         InfoResponseBody:
             type: object
             properties:

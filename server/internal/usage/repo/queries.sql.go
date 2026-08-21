@@ -1232,6 +1232,82 @@ func (q *Queries) ListOpenRouterInferenceSpendByMonth(ctx context.Context, arg L
 	return items, nil
 }
 
+const listOpenRouterSpendByMonth = `-- name: ListOpenRouterSpendByMonth :many
+WITH monthly_keys AS (
+  SELECT
+      date_trunc('month', day)::date AS month_start
+    , key_type
+    , SUM(spend_usd) AS spend_usd
+    , MAX(day)::date AS recorded_through
+  FROM openrouter_spend_daily
+  WHERE organization_id = $1::text
+    AND key_type = ANY($2::text[])
+    AND day >= $3::date
+    AND day < $4::date
+  GROUP BY 1, 2
+)
+SELECT
+    month_start
+  , key_type
+  , spend_usd::numeric(30, 6)::text AS spend_usd
+  , recorded_through
+  , SUM(spend_usd) OVER (PARTITION BY month_start)::numeric(30, 6)::text AS month_spend_usd
+  , MAX(recorded_through) OVER (PARTITION BY month_start)::date AS month_recorded_through
+FROM monthly_keys
+ORDER BY month_start DESC, key_type
+`
+
+type ListOpenRouterSpendByMonthParams struct {
+	OrganizationID  string
+	KeyTypes        []string
+	EarliestDay     pgtype.Date
+	ExclusiveEndDay pgtype.Date
+}
+
+type ListOpenRouterSpendByMonthRow struct {
+	MonthStart           pgtype.Date
+	KeyType              string
+	SpendUsd             string
+	RecordedThrough      pgtype.Date
+	MonthSpendUsd        string
+	MonthRecordedThrough pgtype.Date
+}
+
+// Calendar-month spend from durable daily rows. exclusive_end_day is the first
+// UTC day that must not be counted, so callers pass today to keep the current
+// month on completed days only. Months with no stored days are omitted.
+func (q *Queries) ListOpenRouterSpendByMonth(ctx context.Context, arg ListOpenRouterSpendByMonthParams) ([]ListOpenRouterSpendByMonthRow, error) {
+	rows, err := q.db.Query(ctx, listOpenRouterSpendByMonth,
+		arg.OrganizationID,
+		arg.KeyTypes,
+		arg.EarliestDay,
+		arg.ExclusiveEndDay,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOpenRouterSpendByMonthRow
+	for rows.Next() {
+		var i ListOpenRouterSpendByMonthRow
+		if err := rows.Scan(
+			&i.MonthStart,
+			&i.KeyType,
+			&i.SpendUsd,
+			&i.RecordedThrough,
+			&i.MonthSpendUsd,
+			&i.MonthRecordedThrough,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listStaleTUMMeterReportCycles = `-- name: ListStaleTUMMeterReportCycles :many
 SELECT
     stripe_meter_reports.billing_cycle_usage_id

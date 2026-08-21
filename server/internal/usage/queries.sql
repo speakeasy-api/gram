@@ -112,6 +112,33 @@ SELECT
 FROM latest_months
 ORDER BY period_start;
 
+-- name: ListOpenRouterSpendByMonth :many
+-- Calendar-month spend from durable daily rows. exclusive_end_day is the first
+-- UTC day that must not be counted, so callers pass today to keep the current
+-- month on completed days only. Months with no stored days are omitted.
+WITH monthly_keys AS (
+  SELECT
+      date_trunc('month', day)::date AS month_start
+    , key_type
+    , SUM(spend_usd) AS spend_usd
+    , MAX(day)::date AS recorded_through
+  FROM openrouter_spend_daily
+  WHERE organization_id = sqlc.arg(organization_id)::text
+    AND key_type = ANY(sqlc.arg(key_types)::text[])
+    AND day >= sqlc.arg(earliest_day)::date
+    AND day < sqlc.arg(exclusive_end_day)::date
+  GROUP BY 1, 2
+)
+SELECT
+    month_start
+  , key_type
+  , spend_usd::numeric(30, 6)::text AS spend_usd
+  , recorded_through
+  , SUM(spend_usd) OVER (PARTITION BY month_start)::numeric(30, 6)::text AS month_spend_usd
+  , MAX(recorded_through) OVER (PARTITION BY month_start)::date AS month_recorded_through
+FROM monthly_keys
+ORDER BY month_start DESC, key_type;
+
 -- name: ListMaterializedOpenRouterInferenceKeys :many
 SELECT key_type, monthly_credits, disabled
 FROM openrouter_api_keys

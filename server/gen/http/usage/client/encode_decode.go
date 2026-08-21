@@ -3002,6 +3002,237 @@ func DecodeGetPaygBillingSummaryResponse(decoder func(*http.Response) goahttp.De
 	}
 }
 
+// BuildGetInferenceSpendHistoryRequest instantiates a HTTP request object with
+// method and path set to call the "usage" service "getInferenceSpendHistory"
+// endpoint
+func (c *Client) BuildGetInferenceSpendHistoryRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetInferenceSpendHistoryUsagePath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("usage", "getInferenceSpendHistory", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetInferenceSpendHistoryRequest returns an encoder for requests sent
+// to the usage getInferenceSpendHistory server.
+func EncodeGetInferenceSpendHistoryRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*usage.GetInferenceSpendHistoryPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("usage", "getInferenceSpendHistory", "*usage.GetInferenceSpendHistoryPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeGetInferenceSpendHistoryResponse returns a decoder for responses
+// returned by the usage getInferenceSpendHistory endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeGetInferenceSpendHistoryResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetInferenceSpendHistoryResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetInferenceSpendHistoryResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getInferenceSpendHistory", err)
+			}
+			err = ValidateGetInferenceSpendHistoryResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getInferenceSpendHistory", err)
+			}
+			res := NewGetInferenceSpendHistoryInferenceSpendHistoryOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetInferenceSpendHistoryUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getInferenceSpendHistory", err)
+			}
+			err = ValidateGetInferenceSpendHistoryUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getInferenceSpendHistory", err)
+			}
+			return nil, NewGetInferenceSpendHistoryUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetInferenceSpendHistoryForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getInferenceSpendHistory", err)
+			}
+			err = ValidateGetInferenceSpendHistoryForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getInferenceSpendHistory", err)
+			}
+			return nil, NewGetInferenceSpendHistoryForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetInferenceSpendHistoryBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getInferenceSpendHistory", err)
+			}
+			err = ValidateGetInferenceSpendHistoryBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getInferenceSpendHistory", err)
+			}
+			return nil, NewGetInferenceSpendHistoryBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetInferenceSpendHistoryNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getInferenceSpendHistory", err)
+			}
+			err = ValidateGetInferenceSpendHistoryNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getInferenceSpendHistory", err)
+			}
+			return nil, NewGetInferenceSpendHistoryNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetInferenceSpendHistoryConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getInferenceSpendHistory", err)
+			}
+			err = ValidateGetInferenceSpendHistoryConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getInferenceSpendHistory", err)
+			}
+			return nil, NewGetInferenceSpendHistoryConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetInferenceSpendHistoryUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getInferenceSpendHistory", err)
+			}
+			err = ValidateGetInferenceSpendHistoryUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getInferenceSpendHistory", err)
+			}
+			return nil, NewGetInferenceSpendHistoryUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetInferenceSpendHistoryInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getInferenceSpendHistory", err)
+			}
+			err = ValidateGetInferenceSpendHistoryInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getInferenceSpendHistory", err)
+			}
+			return nil, NewGetInferenceSpendHistoryInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetInferenceSpendHistoryInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "getInferenceSpendHistory", err)
+				}
+				err = ValidateGetInferenceSpendHistoryInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "getInferenceSpendHistory", err)
+				}
+				return nil, NewGetInferenceSpendHistoryInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetInferenceSpendHistoryUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "getInferenceSpendHistory", err)
+				}
+				err = ValidateGetInferenceSpendHistoryUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "getInferenceSpendHistory", err)
+				}
+				return nil, NewGetInferenceSpendHistoryUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("usage", "getInferenceSpendHistory", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetInferenceSpendHistoryGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getInferenceSpendHistory", err)
+			}
+			err = ValidateGetInferenceSpendHistoryGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getInferenceSpendHistory", err)
+			}
+			return nil, NewGetInferenceSpendHistoryGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("usage", "getInferenceSpendHistory", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildCreateStripePortalSessionRequest instantiates a HTTP request object
 // with method and path set to call the "usage" service
 // "createStripePortalSession" endpoint
@@ -3986,6 +4217,41 @@ func unmarshalTierLimitsResponseBodyToUsageTierLimits(v *TierLimitsResponseBody)
 		for i, val := range v.AddOnBullets {
 			res.AddOnBullets[i] = val
 		}
+	}
+
+	return res
+}
+
+// unmarshalInferenceSpendMonthResponseBodyToUsageInferenceSpendMonth builds a
+// value of type *usage.InferenceSpendMonth from a value of type
+// *InferenceSpendMonthResponseBody.
+func unmarshalInferenceSpendMonthResponseBodyToUsageInferenceSpendMonth(v *InferenceSpendMonthResponseBody) *usage.InferenceSpendMonth {
+	res := &usage.InferenceSpendMonth{
+		MonthStart:      *v.MonthStart,
+		MonthEnd:        *v.MonthEnd,
+		SpendUsd:        *v.SpendUsd,
+		RecordedThrough: v.RecordedThrough,
+		Current:         *v.Current,
+	}
+	res.KeySpend = make([]*usage.InferenceSpendMonthKey, len(v.KeySpend))
+	for i, val := range v.KeySpend {
+		if val == nil {
+			res.KeySpend[i] = nil
+			continue
+		}
+		res.KeySpend[i] = unmarshalInferenceSpendMonthKeyResponseBodyToUsageInferenceSpendMonthKey(val)
+	}
+
+	return res
+}
+
+// unmarshalInferenceSpendMonthKeyResponseBodyToUsageInferenceSpendMonthKey
+// builds a value of type *usage.InferenceSpendMonthKey from a value of type
+// *InferenceSpendMonthKeyResponseBody.
+func unmarshalInferenceSpendMonthKeyResponseBodyToUsageInferenceSpendMonthKey(v *InferenceSpendMonthKeyResponseBody) *usage.InferenceSpendMonthKey {
+	res := &usage.InferenceSpendMonthKey{
+		KeyType:  *v.KeyType,
+		SpendUsd: *v.SpendUsd,
 	}
 
 	return res
