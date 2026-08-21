@@ -96,7 +96,13 @@ describe("pylon chat visibility", () => {
     document.head.appendChild(placeholder);
 
     const inserted: HTMLScriptElement[] = [];
-    const originalInsertBefore = Node.prototype.insertBefore;
+    const originalInsertBefore = Object.getOwnPropertyDescriptor(
+      Node.prototype,
+      "insertBefore",
+    )?.value as typeof Node.prototype.insertBefore | undefined;
+    if (typeof originalInsertBefore !== "function") {
+      throw new Error("expected Node.prototype.insertBefore");
+    }
     const insertSpy = vi
       .spyOn(Node.prototype, "insertBefore")
       .mockImplementation(function (this: Node, node, child) {
