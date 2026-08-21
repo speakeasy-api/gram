@@ -61,12 +61,23 @@ func ValidatePublicOnly(raw json.RawMessage) error {
 	return nil
 }
 
+// privateKeyMembers are the JWK members that only appear on a private key:
+// "d" (RSA / EC / OKP private component) plus the optional RFC 7518 §6.3.2
+// RSA CRT parameters and additional-primes member. The CRT members matter
+// even though "d" accompanies them in a well-formed private key: a malformed
+// key carrying only "p"/"q" would fail go-jose's parser and be tolerated out
+// of the set, which must not let the private material it carries slip past
+// the fatal screen.
+var privateKeyMembers = []string{"d", "p", "q", "dp", "dq", "qi", "oth"}
+
 // screenKeyMaterial is the per-key half of the public-only rule, shared
 // between ValidatePublicOnly's whole-document walk and parseKeySet's
 // single-pass parse so the two can never screen differently.
 func screenKeyMaterial(key map[string]json.RawMessage) error {
-	if _, ok := key["d"]; ok {
-		return ErrPrivateKeyMaterial
+	for _, member := range privateKeyMembers {
+		if _, ok := key[member]; ok {
+			return ErrPrivateKeyMaterial
+		}
 	}
 	if _, ok := key["k"]; ok {
 		return ErrSymmetricKeyMaterial
@@ -103,6 +114,12 @@ func parseKeySet(raw json.RawMessage) (jose.JSONWebKeySet, error) {
 	}
 	if err := json.Unmarshal(raw, &envelope); err != nil {
 		return jose.JSONWebKeySet{Keys: nil}, fmt.Errorf("parse key set envelope: %w", ErrKeySetInvalid)
+	}
+	// RFC 7517 §5 makes "keys" the set's one required member, so "null",
+	// "{}", and {"keys":null} are malformed documents, not empty sets; only
+	// an actual (possibly empty) array is accepted.
+	if envelope.Keys == nil {
+		return jose.JSONWebKeySet{Keys: nil}, fmt.Errorf(`key set missing "keys" array: %w`, ErrKeySetInvalid)
 	}
 
 	keys := make([]jose.JSONWebKey, 0, len(envelope.Keys))

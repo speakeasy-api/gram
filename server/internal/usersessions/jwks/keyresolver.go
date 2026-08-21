@@ -220,6 +220,13 @@ func (k *KeyResolver) refreshShared(ctx context.Context, source Source) (*Result
 		}
 		resolved, err := k.resolver.Resolve(ctx, source, forced)
 		if err != nil {
+			// A failed consult still stamps the cooldown: the upstream was
+			// genuinely contacted, and without the marker every unknown-kid
+			// probe against an unreachable source would charge the limiter
+			// and retry the origin instead of being negative-cached like a
+			// successful consult. Everything else about the stored state is
+			// kept as it was.
+			k.markConsultFailure(ctx, source, state)
 			return nil, err
 		}
 		k.store(ctx, source, state, resolved)
@@ -264,6 +271,25 @@ func (k *KeyResolver) store(ctx context.Context, source Source, prior CacheState
 	}
 	if err := k.cache.Put(ctx, source.CacheKey(), state); err != nil {
 		k.logger.WarnContext(ctx, "jwks key set cache write failed",
+			attr.SlogURLFull(source.uri),
+			attr.SlogJWKSOrigin(source.origin),
+			attr.SlogError(err),
+		)
+	}
+}
+
+// markConsultFailure re-stamps RefreshedAt on the stored state after a forced
+// refresh whose upstream consult failed, so the cooldown applies to failures
+// the same as to successes. The write failure policy matches store: log only.
+func (k *KeyResolver) markConsultFailure(ctx context.Context, source Source, prior CacheState) {
+	marked := CacheState{
+		Document:    prior.Document,
+		ETag:        prior.ETag,
+		ExpiresAt:   prior.ExpiresAt,
+		RefreshedAt: time.Now(),
+	}
+	if err := k.cache.Put(ctx, source.CacheKey(), marked); err != nil {
+		k.logger.WarnContext(ctx, "jwks consult-failure cooldown write failed",
 			attr.SlogURLFull(source.uri),
 			attr.SlogJWKSOrigin(source.origin),
 			attr.SlogError(err),

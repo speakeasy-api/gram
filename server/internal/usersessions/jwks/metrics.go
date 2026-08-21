@@ -44,13 +44,15 @@ const (
 )
 
 // validationReason is the machine-readable label recorded on
-// jwks.validation.failures for each screening rejection.
+// jwks.validation.failures for each screening rejection. Parse failures
+// (ErrKeySetInvalid) deliberately carry no reason: they are counted as
+// parse_error on the fetch metrics, mirroring cimd, and the validation
+// counter records only well-formed sets the screening rules refused.
 type validationReason string
 
 const (
-	reasonKeySetInvalid validationReason = "keyset_invalid"
-	reasonPrivateKey    validationReason = "private_key"
-	reasonSymmetricKey  validationReason = "symmetric_key"
+	reasonPrivateKey   validationReason = "private_key"
+	reasonSymmetricKey validationReason = "symmetric_key"
 )
 
 // resultOfParseError classifies a parseKeySet failure: rejected key material
@@ -71,8 +73,6 @@ func validationReasonOf(err error) validationReason {
 		return reasonPrivateKey
 	case errors.Is(err, ErrSymmetricKeyMaterial):
 		return reasonSymmetricKey
-	case errors.Is(err, ErrKeySetInvalid):
-		return reasonKeySetInvalid
 	default:
 		return ""
 	}

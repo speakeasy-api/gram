@@ -129,6 +129,28 @@ func TestVerificationKey_RefreshRateLimited(t *testing.T) {
 	require.Equal(t, 1, server.Fetches())
 }
 
+func TestVerificationKey_FailedConsultEntersCooldown(t *testing.T) {
+	t.Parallel()
+
+	server := newKeySetServer(t, keySetJSON(t, testKey(t, "a")))
+	kr, cache := newTestKeyResolver(t, server, ratelimit.PerMinute(1))
+	source := remoteSourceFor(t, server)
+	primeRotatable(t, cache, source, keySetJSON(t, testKey(t, "a")))
+	server.SetStatus(500)
+
+	// The first probe charges the limiter and consults the failing origin.
+	_, err := kr.VerificationKey(t.Context(), source, "unknown")
+	require.ErrorContains(t, err, "status 500")
+	require.Equal(t, 1, server.Fetches())
+
+	// Follow-up probes inside the cooldown answer from the stored set with
+	// no fetch and no limiter spend: with a burst-1 bucket already empty,
+	// reaching the limiter would surface ErrRefreshRateLimited instead.
+	_, err = kr.VerificationKey(t.Context(), source, "unknown")
+	require.ErrorIs(t, err, ErrKeyNotFound)
+	require.Equal(t, 1, server.Fetches(), "a failed consult negative-caches like a successful one")
+}
+
 func TestVerificationKey_ConcurrentRotationCoalesces(t *testing.T) {
 	t.Parallel()
 

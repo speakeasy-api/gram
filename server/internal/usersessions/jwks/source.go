@@ -24,9 +24,7 @@ const (
 
 // Source identifies where a verification key set comes from: an inline JWK
 // Set document (no fetch at all) or a remote HTTPS URL. Construct one with
-// NewInlineSource, NewClientSource, or NewRemoteSource — the constructor is
-// where each consumer's origin policy is enforced, so the resolver itself
-// stays policy-agnostic.
+// NewInlineSource or NewRemoteSource.
 type Source struct {
 	kind   sourceKind
 	inline json.RawMessage
@@ -106,7 +104,9 @@ func parseJWKSURI(raw string) (*url.URL, error) {
 	if parsed.User != nil {
 		return nil, errors.New("jwks_uri must not contain a userinfo component")
 	}
-	if parsed.Host == "" {
+	// Hostname rather than Host: a port-only authority like https://:443
+	// leaves Host non-empty while naming no host at all.
+	if parsed.Hostname() == "" {
 		return nil, errors.New("jwks_uri must include a host")
 	}
 	return parsed, nil

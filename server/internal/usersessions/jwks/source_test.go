@@ -38,6 +38,7 @@ func TestNewRemoteSource_InvalidURIRejected(t *testing.T) {
 		"https://user:pass@example.com/jwks.json",
 		"https://user@example.com/jwks.json",
 		"https://",
+		"https://:443/jwks.json",
 		"https://example.com/" + strings.Repeat("a", maxJWKSURILength),
 	} {
 		_, err := NewRemoteSource(uri)

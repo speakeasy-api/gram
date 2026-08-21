@@ -40,6 +40,16 @@ func TestValidatePublicOnly_MalformedRejected(t *testing.T) {
 	require.ErrorIs(t, ValidatePublicOnly(json.RawMessage(`{"keys": 42}`)), ErrKeySetInvalid)
 }
 
+func TestValidatePublicOnly_RSAPrivateCRTParamsRejected(t *testing.T) {
+	t.Parallel()
+
+	// A malformed key carrying CRT parameters without "d" still holds
+	// private material; it must trip the screen, not slip past it by
+	// failing a stricter parser.
+	raw := json.RawMessage(`{"keys":[{"kty":"RSA","n":"AA","e":"AQAB","p":"secret","q":"secret"}]}`)
+	require.ErrorIs(t, ValidatePublicOnly(raw), ErrPrivateKeyMaterial)
+}
+
 func TestParseKeySet_ParsesUsableKeys(t *testing.T) {
 	t.Parallel()
 
@@ -55,6 +65,33 @@ func TestParseKeySet_EmptyDocumentRejected(t *testing.T) {
 
 	_, err := parseKeySet(nil)
 	require.ErrorIs(t, err, ErrKeySetInvalid)
+}
+
+func TestParseKeySet_MissingKeysArrayRejected(t *testing.T) {
+	t.Parallel()
+
+	// RFC 7517 §5 makes "keys" the set's one required member: "null", "{}",
+	// and a null member are malformed documents, not empty sets.
+	for _, raw := range []string{`null`, `{}`, `{"keys":null}`} {
+		_, err := parseKeySet(json.RawMessage(raw))
+		require.ErrorIs(t, err, ErrKeySetInvalid, "document %s should be rejected", raw)
+	}
+
+	set, err := parseKeySet(json.RawMessage(`{"keys":[]}`))
+	require.NoError(t, err, "an actual empty array is a valid, empty set")
+	require.Empty(t, set.Keys)
+}
+
+func TestParseKeySet_RSAPrivateCRTParamsFatal(t *testing.T) {
+	t.Parallel()
+
+	good := testKey(t, "good")
+	goodJSON, err := good.MarshalJSON()
+	require.NoError(t, err)
+	raw := json.RawMessage(`{"keys":[` + string(goodJSON) + `,{"kty":"RSA","n":"AA","e":"AQAB","p":"secret"}]}`)
+
+	_, err = parseKeySet(raw)
+	require.ErrorIs(t, err, ErrPrivateKeyMaterial)
 }
 
 func TestParseKeySet_PrivateMaterialFatal(t *testing.T) {

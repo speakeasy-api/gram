@@ -38,14 +38,15 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// newTestLimiter returns a Redis-backed refresh limiter namespaced by the
-// test name so parallel tests never share a bucket.
+// newTestLimiter returns a Redis-backed refresh limiter namespaced uniquely
+// per test invocation, so neither parallel tests nor repeated runs against a
+// reused Redis can inherit another run's bucket state.
 func newTestLimiter(t *testing.T, rate ratelimit.Rate) *ratelimit.Limiter {
 	t.Helper()
 
 	client, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
-	return ratelimit.New(ratelimit.NewRedisStore(client), t.Name(), rate)
+	return ratelimit.New(ratelimit.NewRedisStore(client), string(testenv.NewCacheSuffix(t, "jwks")), rate)
 }
 
 // testKey generates an ES256 key pair and returns the public half as a JWK
@@ -81,6 +82,7 @@ type keySetServer struct {
 	body    []byte
 	etag    string
 	header  http.Header
+	status  int
 	fetches int
 }
 
@@ -95,6 +97,7 @@ func newKeySetServer(t *testing.T, body []byte) *keySetServer {
 		body:    body,
 		etag:    "",
 		header:  http.Header{},
+		status:  0,
 		fetches: 0,
 	}
 	s.server = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -102,6 +105,10 @@ func newKeySetServer(t *testing.T, body []byte) *keySetServer {
 		defer s.mu.Unlock()
 		s.fetches++
 
+		if s.status != 0 {
+			w.WriteHeader(s.status)
+			return
+		}
 		for name, values := range s.header {
 			for _, value := range values {
 				w.Header().Add(name, value)
@@ -141,6 +148,14 @@ func (s *keySetServer) SetETag(etag string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.etag = etag
+}
+
+// SetStatus makes the host answer every request with the given status and no
+// body; zero restores normal serving.
+func (s *keySetServer) SetStatus(status int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.status = status
 }
 
 // Fetches reports how many requests reached the host.
