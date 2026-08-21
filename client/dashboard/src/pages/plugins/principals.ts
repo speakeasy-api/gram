@@ -96,6 +96,13 @@ export function isIndividualMemberPrincipal(urn: string): boolean {
   return urn.startsWith("user:") && urn !== "user:all";
 }
 
+// Email principals target one person too, but they are not necessarily current
+// organization members. They remain separately identifiable so existing email
+// assignments can be preserved without converting their delivery semantics.
+export function isIndividualUserAssignmentPrincipal(urn: string): boolean {
+  return isIndividualMemberPrincipal(urn) || urn.startsWith(EMAIL_PREFIX);
+}
+
 // Resolve a plugin's individually-assigned members to facepile entries. Role,
 // email, and everyone principals are excluded — only "user:<id>" assignments
 // map to a specific person's avatar.

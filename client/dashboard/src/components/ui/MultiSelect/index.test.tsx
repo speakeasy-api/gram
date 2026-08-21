@@ -8,6 +8,7 @@ vi.mock("@/components/ui/Icon", () => ({
 }));
 
 import { MultiSelect } from "@/components/ui/MultiSelect";
+import { MemberFacepile } from "@/components/member-facepile";
 
 // This vitest project does not enable `globals`, so RTL's automatic cleanup is
 // not registered. Without this, mounted popovers accumulate across tests.
@@ -211,6 +212,94 @@ describe("MultiSelect disabled selected options", () => {
     );
 
     expect(onValueChange).toHaveBeenCalledWith([]);
+  });
+});
+
+describe("MultiSelect collapsed selections", () => {
+  it("retains collapsed values when removing extra visible badges", () => {
+    const onValueChange = vi.fn<(values: string[]) => void>();
+    render(
+      <MultiSelect
+        options={[
+          { label: "Collapsed one", value: "collapsed-1" },
+          { label: "Visible one", value: "visible-1" },
+          { label: "Visible two", value: "visible-2" },
+          { label: "Visible three", value: "visible-3" },
+          { label: "Visible four", value: "visible-4" },
+          { label: "Visible five", value: "visible-5" },
+          { label: "Collapsed two", value: "collapsed-2" },
+        ]}
+        defaultValue={[
+          "collapsed-1",
+          "visible-1",
+          "visible-2",
+          "visible-3",
+          "visible-4",
+          "visible-5",
+          "collapsed-2",
+        ]}
+        onValueChange={onValueChange}
+        maxCount={3}
+        collapseSelectedValues={(values) => ({
+          values: values.filter((value) => value.startsWith("collapsed")),
+          summary: <span>Collapsed members</span>,
+        })}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByText("+ 2 more").parentElement!.querySelector("svg")!,
+    );
+
+    expect(onValueChange).toHaveBeenCalledWith([
+      "collapsed-1",
+      "visible-1",
+      "visible-2",
+      "visible-3",
+      "collapsed-2",
+    ]);
+  });
+
+  it("opens a custom summary without opening the options list", () => {
+    render(
+      <MultiSelect
+        options={[{ label: "Selected", value: "selected" }]}
+        defaultValue={["selected"]}
+        onValueChange={() => undefined}
+        collapseSelectedValues={(values) => ({
+          values,
+          summary: (
+            <MemberFacepile
+              members={[
+                {
+                  id: "member-1",
+                  name: "Test Member",
+                  email: "member@example.test",
+                },
+              ]}
+              renderTrigger={({ label, onClick, onKeyDown }) => (
+                <span
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Show ${label}`}
+                  onClick={onClick}
+                  onKeyDown={onKeyDown}
+                >
+                  {label}
+                </span>
+              )}
+            />
+          ),
+        })}
+      />,
+    );
+
+    fireEvent.keyDown(screen.getByRole("button", { name: "Show 1 member" }), {
+      key: "Enter",
+    });
+
+    expect(screen.getByText("member@example.test")).toBeTruthy();
+    expect(screen.queryByRole("listbox")).toBeNull();
   });
 });
 

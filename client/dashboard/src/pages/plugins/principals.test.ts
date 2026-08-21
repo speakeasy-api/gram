@@ -6,6 +6,7 @@ import {
   audienceKindForPrincipal,
   audienceMapByUrn,
   describePrincipal,
+  isIndividualUserAssignmentPrincipal,
   memberMapByUrn,
   normalizeToPrincipalUrn,
   roleMapByUrn,
@@ -129,5 +130,15 @@ describe("describePrincipal", () => {
     expect(audienceKindForPrincipal(unavailableUrn, new Map())).toBe(
       "directory_group",
     );
+  });
+});
+
+describe("isIndividualUserAssignmentPrincipal", () => {
+  it("includes individual user and email assignments but not user:all", () => {
+    expect(isIndividualUserAssignmentPrincipal("user:u-123")).toBe(true);
+    expect(isIndividualUserAssignmentPrincipal("email:jane@corp.com")).toBe(
+      true,
+    );
+    expect(isIndividualUserAssignmentPrincipal("user:all")).toBe(false);
   });
 });

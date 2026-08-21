@@ -104,6 +104,7 @@ export function MemberFacepile({
   renderTrigger?: (props: {
     label: string;
     onClick: (event: React.MouseEvent) => void;
+    onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void;
   }) => React.ReactElement;
 }): React.JSX.Element {
   const [hoveredId, setHoveredId] = React.useState<string | null>(null);
@@ -117,8 +118,18 @@ export function MemberFacepile({
   const overflow = sorted.length - shown.length;
   const label = `${members.length} member${members.length === 1 ? "" : "s"}`;
   const stopParentClick = (event: React.MouseEvent) => event.stopPropagation();
+  const activateTrigger = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.click();
+  };
   const trigger = renderTrigger ? (
-    renderTrigger({ label, onClick: stopParentClick })
+    renderTrigger({
+      label,
+      onClick: stopParentClick,
+      onKeyDown: activateTrigger,
+    })
   ) : (
     <button
       type="button"

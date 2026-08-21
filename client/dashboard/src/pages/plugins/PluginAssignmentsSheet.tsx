@@ -28,6 +28,7 @@ import {
   describePrincipal,
   individualMemberFacepileForUrns,
   isIndividualMemberPrincipal,
+  isIndividualUserAssignmentPrincipal,
   memberMapByUrn,
   memberCountDescription,
   principalIcon,
@@ -43,18 +44,13 @@ function MemberAssignmentSummary({
   return (
     <MemberFacepile
       members={members}
-      renderTrigger={({ label, onClick }) => (
+      renderTrigger={({ label, onClick, onKeyDown }) => (
         <span
           role="button"
           tabIndex={0}
           aria-label={`Show ${label}`}
           onClick={onClick}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" || event.key === " ") {
-              event.preventDefault();
-              event.stopPropagation();
-            }
-          }}
+          onKeyDown={onKeyDown}
           className="bg-muted hover:bg-accent flex h-6 shrink-0 items-center gap-1.5 px-2 font-sans text-xs normal-case tracking-normal transition-colors"
         >
           <Users
@@ -261,7 +257,9 @@ function AssignmentsEditor({
     () =>
       selected
         .filter(
-          (urn) => isIndividualMemberPrincipal(urn) && !memberByUrn.has(urn),
+          (urn) =>
+            isIndividualUserAssignmentPrincipal(urn) &&
+            (!isIndividualMemberPrincipal(urn) || !memberByUrn.has(urn)),
         )
         .map((urn) =>
           existingAssignmentOption(
@@ -308,7 +306,7 @@ function AssignmentsEditor({
       selected
         .filter(
           (urn) =>
-            !isIndividualMemberPrincipal(urn) &&
+            !isIndividualUserAssignmentPrincipal(urn) &&
             !audienceKindForPrincipal(urn, audienceByUrn),
         )
         .map((urn) =>
@@ -375,7 +373,9 @@ function AssignmentsEditor({
           modalPopover
           maxCount={20}
           collapseSelectedValues={(values) => {
-            const memberUrns = values.filter(isIndividualMemberPrincipal);
+            const memberUrns = values.filter(
+              (urn) => isIndividualMemberPrincipal(urn) && memberByUrn.has(urn),
+            );
             if (memberUrns.length <= COLLAPSE_MEMBER_ASSIGNMENTS_AT) {
               return null;
             }
