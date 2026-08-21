@@ -104,6 +104,49 @@ func TestDiscoverOAuthMetadata_PreservesProtectedResourceScopes(t *testing.T) {
 	require.Equal(t, []string{"resource.read", "resource.write"}, result.ScopesSupported)
 }
 
+func TestDiscoverOAuthMetadataCIMDWithoutRegistration(t *testing.T) {
+	t.Parallel()
+
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/.well-known/oauth-authorization-server":
+			if err := json.NewEncoder(w).Encode(authServerMetadata{
+				Issuer:                            server.URL,
+				AuthorizationEndpoint:             server.URL + "/authorize",
+				TokenEndpoint:                     server.URL + "/token",
+				RegistrationEndpoint:              "",
+				ScopesSupported:                   []string{"mcp"},
+				TokenEndpointAuthMethodsSupported: []string{"none"},
+				ClientIDMetadataDocumentSupported: true,
+			}); err != nil {
+				t.Errorf("encode authorization server metadata: %v", err)
+			}
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+
+	result, err := DiscoverOAuthMetadata(
+		t.Context(),
+		testenv.NewLogger(t),
+		policy,
+		"",
+		server.URL+"/mcp",
+	)
+	require.NoError(t, err)
+	require.Equal(t, OAuthVersion21, result.Version)
+	require.True(t, result.ClientIDMetadataDocumentSupported)
+	require.Equal(t, []string{"none"}, result.TokenEndpointAuthMethodsSupported)
+	require.Empty(t, result.RegistrationEndpoint)
+	require.Equal(t, server.URL, result.Issuer)
+}
+
 func TestDiscoverOAuthMetadataRejectsIssuerMismatch(t *testing.T) {
 	t.Parallel()
 

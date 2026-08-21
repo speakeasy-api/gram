@@ -22,7 +22,7 @@ import (
 // OAuthVersion represents the detected OAuth version/capability level.
 const (
 	OAuthVersionNone = "none" // No OAuth required
-	OAuthVersion21   = "2.1"  // MCP OAuth with RFC 8414 discovery + dynamic registration
+	OAuthVersion21   = "2.1"  // MCP OAuth with RFC 8414 discovery + DCR and/or CIMD
 	OAuthVersion20   = "2.0"  // Legacy OAuth 2.0 (no AS discovery, requires static client config)
 )
 
@@ -34,6 +34,18 @@ type OAuthDiscoveryResult struct {
 	TokenEndpoint         string
 	RegistrationEndpoint  string
 	ScopesSupported       []string
+
+	// ClientIDMetadataDocumentSupported reports whether the authorization
+	// server advertises client_id_metadata_document_supported (OAuth CIMD
+	// draft). When true, a client may send a metadata-document URL as
+	// client_id instead of dynamically registering.
+	ClientIDMetadataDocumentSupported bool
+
+	// TokenEndpointAuthMethodsSupported is the authorization server's
+	// advertised token_endpoint_auth_methods_supported. Empty means the
+	// document omitted the field; CIMD public clients require "none" only
+	// when the server enumerated methods.
+	TokenEndpointAuthMethodsSupported []string
 
 	// ProbeIncomplete reports that at least one discovery request failed
 	// without the server cleanly saying the document is not there (only a
@@ -107,6 +119,17 @@ type authServerMetadata struct {
 	TokenEndpoint         string   `json:"token_endpoint"`
 	RegistrationEndpoint  string   `json:"registration_endpoint,omitempty"`
 	ScopesSupported       []string `json:"scopes_supported,omitempty"`
+
+	// TokenEndpointAuthMethodsSupported is omitted when the document does
+	// not advertise the field. An empty slice after a present field is
+	// distinct from omission only on the wire; encoding/json collapses both
+	// to nil/empty, which matches the CIMD preflight (empty means "do not
+	// second-guess").
+	TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported,omitempty"`
+
+	// ClientIDMetadataDocumentSupported reports the CIMD draft advertisement.
+	// Absent from the document unmarshals as false.
+	ClientIDMetadataDocumentSupported bool `json:"client_id_metadata_document_supported"`
 }
 
 // protectedResourceMetadata represents OAuth 2.0 Protected Resource Metadata (RFC 9728).
@@ -230,13 +253,15 @@ func DiscoverOAuthMetadata(ctx context.Context, logger *slog.Logger, guardianPol
 
 	// Determine the OAuth version based on what we found
 	result := &OAuthDiscoveryResult{
-		Version:               OAuthVersionNone,
-		Issuer:                "",
-		AuthorizationEndpoint: "",
-		TokenEndpoint:         "",
-		RegistrationEndpoint:  "",
-		ScopesSupported:       nil,
-		ProbeIncomplete:       probeFailed,
+		Version:                           OAuthVersionNone,
+		Issuer:                            "",
+		AuthorizationEndpoint:             "",
+		TokenEndpoint:                     "",
+		RegistrationEndpoint:              "",
+		ScopesSupported:                   nil,
+		ClientIDMetadataDocumentSupported: false,
+		TokenEndpointAuthMethodsSupported: nil,
+		ProbeIncomplete:                   probeFailed,
 	}
 
 	if authServerMeta != nil {
@@ -245,6 +270,8 @@ func DiscoverOAuthMetadata(ctx context.Context, logger *slog.Logger, guardianPol
 		result.TokenEndpoint = authServerMeta.TokenEndpoint
 		result.RegistrationEndpoint = authServerMeta.RegistrationEndpoint
 		result.ScopesSupported = authServerMeta.ScopesSupported
+		result.ClientIDMetadataDocumentSupported = authServerMeta.ClientIDMetadataDocumentSupported
+		result.TokenEndpointAuthMethodsSupported = authServerMeta.TokenEndpointAuthMethodsSupported
 		if resourceMeta != nil && len(resourceMeta.ScopesSupported) > 0 {
 			// Protected-resource scopes describe the permissions accepted by
 			// this MCP server. Prefer them over the authorization server's
@@ -253,9 +280,9 @@ func DiscoverOAuthMetadata(ctx context.Context, logger *slog.Logger, guardianPol
 			result.ScopesSupported = resourceMeta.ScopesSupported
 		}
 
-		// If we have a registration endpoint, it's full MCP OAuth (2.1)
-		// Otherwise it's legacy OAuth 2.0
-		if authServerMeta.RegistrationEndpoint != "" {
+		// If we have a registration endpoint or CIMD support, it's MCP
+		// OAuth 2.1. CIMD-capable servers may omit dynamic registration.
+		if authServerMeta.RegistrationEndpoint != "" || authServerMeta.ClientIDMetadataDocumentSupported {
 			result.Version = OAuthVersion21
 		} else {
 			result.Version = OAuthVersion20
