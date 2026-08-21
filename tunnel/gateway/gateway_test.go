@@ -84,6 +84,14 @@ func TestForwardHandlerAcceptsValidTokenAndStripsIt(t *testing.T) {
 	require.Empty(t, req.Header.Get(wire.HeaderTunnelForwardToken))
 }
 
+func TestStripUpstreamTunnelError(t *testing.T) {
+	t.Parallel()
+
+	resp := &http.Response{Header: http.Header{wire.HeaderTunnelError: []string{wire.TunnelErrorNoLiveSession}}}
+	require.NoError(t, stripUpstreamTunnelError(resp))
+	require.Empty(t, resp.Header.Get(wire.HeaderTunnelError))
+}
+
 func TestForwardHandlerRejectsMissingForwardTokenConfig(t *testing.T) {
 	t.Parallel()
 

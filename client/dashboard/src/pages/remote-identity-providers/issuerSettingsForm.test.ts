@@ -65,6 +65,27 @@ describe("buildUpdateIssuerForm", () => {
     expect(form).toHaveProperty("logoAssetId", "");
   });
 
+  it("omits the platform-admin tunnel field unless the caller supplies it", () => {
+    expect(buildUpdateIssuerForm(baseState)).not.toHaveProperty(
+      "tunneledMcpServerId",
+    );
+  });
+
+  it("sets and clears the issuer tunnel binding", () => {
+    expect(
+      buildUpdateIssuerForm({
+        ...baseState,
+        tunneledMcpServerId: " 019c001e-b43d-7000-8000-000000000001 ",
+      }).tunneledMcpServerId,
+    ).toBe("019c001e-b43d-7000-8000-000000000001");
+    expect(
+      buildUpdateIssuerForm({
+        ...baseState,
+        tunneledMcpServerId: "",
+      }).tunneledMcpServerId,
+    ).toBe("");
+  });
+
   // Without a discovery for the current URL the server must keep the metadata
   // it already has (COALESCE narg semantics), so the arrays are omitted.
   it("omits the RFC 8414 arrays when no discovery has run", () => {

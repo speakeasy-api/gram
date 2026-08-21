@@ -40,6 +40,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -55,6 +56,7 @@ type Service struct {
 	enc          *encryption.Client
 	environments *environments.EnvironmentEntries
 	policy       *guardian.Policy
+	tunnels      *tunnelrouting.HTTPClient
 	auditLogger  *audit.Logger
 	serverURL    *url.URL
 	refresher    *RefreshService
@@ -78,7 +80,7 @@ var (
 	_ adminrsgen.Auther      = (*Service)(nil)
 )
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, env *environments.EnvironmentEntries, policy *guardian.Policy, auditLogger *audit.Logger, serverURL *url.URL, refresher *RefreshService) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, env *environments.EnvironmentEntries, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, auditLogger *audit.Logger, serverURL *url.URL, refresher *RefreshService) *Service {
 	logger = logger.With(attr.SlogComponent("remotesessions"))
 
 	return &Service{
@@ -91,10 +93,11 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		enc:          enc,
 		environments: env,
 		policy:       policy,
+		tunnels:      tunnels,
 		auditLogger:  auditLogger,
 		serverURL:    serverURL,
 		refresher:    refresher,
-		revoker:      NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy),
+		revoker:      NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy, tunnels),
 	}
 }
 

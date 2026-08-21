@@ -69,6 +69,7 @@ func setupRefreshFixtureWithAudience(t *testing.T, audience pgtype.Text, spy *up
 		ti.conn,
 		enc,
 		policy,
+		nil,
 		cache.NoopCache,
 		mustURL(t, "http://localhost"),
 	)

@@ -6,6 +6,7 @@ import (
 	cryptorand "crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math/big"
 	"net/http"
@@ -108,11 +109,12 @@ func Retryer(routes route.Store, tunnelID, selectedAddr, clientAffinityKey, forw
 		}
 
 		tunnelErr := resp.Header.Get(ErrorHeader)
+		var unpublishErr error
 		switch tunnelErr {
 		case wire.TunnelErrorNoLiveSession:
 			if selectedAddr != "" {
 				if err := routes.Unpublish(ctx, tunnelID, selectedAddr); err != nil {
-					return nil, fmt.Errorf("unpublish stale tunnel route: %w", err)
+					unpublishErr = fmt.Errorf("unpublish stale tunnel route: %w", err)
 				}
 			}
 		case wire.TunnelErrorTunnelBusy:
@@ -136,7 +138,7 @@ func Retryer(routes route.Store, tunnelID, selectedAddr, clientAffinityKey, forw
 
 		candidates, err := routes.Candidates(ctx, tunnelID)
 		if err != nil {
-			return nil, fmt.Errorf("list tunnel retry routes: %w", err)
+			return nil, errors.Join(fmt.Errorf("list tunnel retry routes: %w", err), unpublishErr)
 		}
 		exclude := map[string]struct{}{selectedAddr: {}}
 		if tunnelErr == wire.TunnelErrorSubstreamFailed {
@@ -144,11 +146,11 @@ func Retryer(routes route.Store, tunnelID, selectedAddr, clientAffinityKey, forw
 		}
 		addr, ok := SelectRoute(clientAffinityKey, candidates, exclude)
 		if !ok {
-			return nil, nil
+			return nil, unpublishErr
 		}
 		gatewayURL, err := GatewayURL(addr)
 		if err != nil {
-			return nil, fmt.Errorf("build tunnel retry route URL: %w", err)
+			return nil, errors.Join(fmt.Errorf("build tunnel retry route URL: %w", err), unpublishErr)
 		}
 		return &proxy.UpstreamResponseRetry{
 			RemoteURL: gatewayURL,

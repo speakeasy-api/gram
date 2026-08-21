@@ -113,6 +113,7 @@ func newCIMDChallengeManager(t *testing.T, ti *testInstance, serverURL string) *
 		ti.conn,
 		testenv.NewEncryptionClient(t),
 		policy,
+		nil,
 		cache.NoopCache,
 		mustURL(t, serverURL),
 	)
@@ -379,7 +380,7 @@ func TestCIMD_RefreshUsesMetadataURLAsClientIDWithoutBasicAuth(t *testing.T) {
 	tracerProvider := testenv.NewTracerProvider(t)
 	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
-	mgr := remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, enc, policy, cache.NoopCache, mustURL(t, cimdServerURL))
+	mgr := remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, enc, policy, nil, cache.NoopCache, mustURL(t, cimdServerURL))
 
 	issuerID := createCIMDIssuer(t, ctx, ti, "cimd-refresh", tokenServer.URL+"/authorize", tokenServer.URL+"/token")
 	userIssuer := createUserSessionIssuer(t, ctx, ti.conn, "cimd-refresh-usi")

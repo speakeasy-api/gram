@@ -181,6 +181,7 @@ export const AUDIT_ACTIONS = [
   "trigger-instance:update",
   "tunneled-mcp:create",
   "tunneled-mcp:delete",
+  "tunneled-mcp:dynamic-client-registration-attempt",
   "tunneled-mcp:rotate-key",
   "tunneled-mcp:update",
   "unproxied-mcp:create",
@@ -608,6 +609,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated tunneled MCP server";
     case "tunneled-mcp:delete":
       return "removed tunneled MCP server";
+    case "tunneled-mcp:dynamic-client-registration-attempt":
+      return "attempted OAuth client registration through tunneled MCP server";
     case "tunneled-mcp:rotate-key":
       return "rotated the key for tunneled MCP server";
     case "unproxied-mcp:create":

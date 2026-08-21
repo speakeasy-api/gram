@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -59,20 +60,22 @@ type RefreshResult struct {
 // deliberately constructible without any HTTP-serving context so the
 // background worker can hold one alongside the request-path callers.
 type RefreshService struct {
-	logger *slog.Logger
-	db     *pgxpool.Pool
-	enc    *encryption.Client
-	policy *guardian.Policy
-	locks  cache.Cache
+	logger  *slog.Logger
+	db      *pgxpool.Pool
+	enc     *encryption.Client
+	policy  *guardian.Policy
+	tunnels *tunnelrouting.HTTPClient
+	locks   cache.Cache
 }
 
-func NewRefreshService(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy, locks cache.Cache) *RefreshService {
+func NewRefreshService(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, locks cache.Cache) *RefreshService {
 	return &RefreshService{
-		logger: logger.With(attr.SlogComponent("remotesessions_refresh")),
-		db:     db,
-		enc:    enc,
-		policy: policy,
-		locks:  locks,
+		logger:  logger.With(attr.SlogComponent("remotesessions_refresh")),
+		db:      db,
+		enc:     enc,
+		policy:  policy,
+		tunnels: tunnels,
+		locks:   locks,
 	}
 }
 
@@ -220,7 +223,7 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 		resource = fallbackResource
 	}
 
-	updated, accessToken, refreshErr := refreshSessionTokens(ctx, q, s.enc, s.policy, sess, resource)
+	updated, accessToken, refreshErr := refreshSessionTokens(ctx, q, s.enc, s.policy, s.tunnels, sess, resource)
 	if refreshErr == nil {
 		return RefreshResult{Session: updated, AccessToken: accessToken, Outcome: RefreshOutcomeRefreshed}, nil
 	}

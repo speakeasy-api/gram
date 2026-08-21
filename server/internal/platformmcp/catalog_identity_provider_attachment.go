@@ -156,10 +156,11 @@ func (s *CatalogIdentityProviderAttachmentService) attachLocked(ctx context.Cont
 	// This is server-to-server; any client secret stays in the stack frame only
 	// until createAndAttachClient encrypts it for persistence.
 	scope := strings.Join(resourceMetadata.ScopesSupported, " ")
-	registered, err := remotesessions.RegisterDynamicClient(ctx, s.policy, s.serverURL, remotesessions.ProxyRegisterRequest{
+	registered, err := remotesessions.RegisterDynamicClient(ctx, s.policy, nil, s.serverURL, remotesessions.ProxyRegisterRequest{
 		RegistrationEndpoint:    metadata.RegistrationEndpoint,
 		Scope:                   optionalString(scope),
 		TokenEndpointAuthMethod: optionalString(browserCatalogDCRAuthMethod),
+		TunneledMcpServerID:     nil,
 	})
 	if err != nil {
 		return CatalogIdentityProviderAttachmentResult{}, identityProviderDynamicRegistrationError(err)
@@ -272,6 +273,7 @@ func (s *CatalogIdentityProviderAttachmentService) ensureIssuer(ctx context.Cont
 		ClientIDMetadataDocumentSupported: metadata.ClientIDMetadataDocumentSupported,
 		Oidc:                              false,
 		Passthrough:                       false,
+		TunneledMcpServerID:               uuid.NullUUID{},
 	})
 	if err != nil {
 		return remotesessionsrepo.RemoteSessionIssuer{}, fmt.Errorf("create discovered identity provider: %w", err)

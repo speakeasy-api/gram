@@ -34,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -103,7 +104,7 @@ var (
 // signer + serverURL drive mintUserSession; pass an empty serverURL to
 // disable that handler (it will 503 on call — used in tests that don't
 // need the surface).
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, chatSessionsManager TokenRevoker, authzEngine *authz.Engine, auditLogger *audit.Logger, guardianPolicy *guardian.Policy, enc *encryption.Client, signer *Signer, serverURL string, verifyStore ratelimit.Store) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, chatSessionsManager TokenRevoker, authzEngine *authz.Engine, auditLogger *audit.Logger, guardianPolicy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, enc *encryption.Client, signer *Signer, serverURL string, verifyStore ratelimit.Store) *Service {
 	logger = logger.With(attr.SlogComponent("usersessions"))
 
 	return &Service{
@@ -117,7 +118,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		signer:       signer,
 		serverURL:    serverURL,
 		cimdResolver: cimd.NewResolver(guardianPolicy, meterProvider, logger),
-		revoker:      remotesessions.NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, guardianPolicy),
+		revoker:      remotesessions.NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnels),
 		verifyLimiter: ratelimit.New(verifyStore, "cimd-url-verify",
 			ratelimit.PerMinute(verifyRatePerMin).WithBurst(verifyRateBurst),
 			ratelimit.WithMetrics(meterProvider)),

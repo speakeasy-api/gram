@@ -426,8 +426,9 @@ func (g *Gateway) newSessionProxy(tunnelID string, session *yamux.Session) http.
 			req.URL.Scheme = "http"
 			req.URL.Host = "tunnel" // ignored; substreamTransport dials the session
 		},
-		Transport:     substreamTransport(session),
-		FlushInterval: -1, // stream SSE immediately
+		Transport:      substreamTransport(session),
+		FlushInterval:  -1, // stream SSE immediately
+		ModifyResponse: stripUpstreamTunnelError,
 		ErrorHandler: func(rw http.ResponseWriter, _ *http.Request, err error) {
 			g.logger.Warn("tunnel forward failed",
 				slog.String("tunnel_id", tunnelID), slog.Any("error", err))
@@ -435,6 +436,13 @@ func (g *Gateway) newSessionProxy(tunnelID string, session *yamux.Session) http.
 			rw.WriteHeader(http.StatusBadGateway)
 		},
 	}
+}
+
+func stripUpstreamTunnelError(resp *http.Response) error {
+	// Only the gateway may instruct gram-server to retry or unpublish a route.
+	// Never trust this internal control header from an upstream.
+	resp.Header.Del(wire.HeaderTunnelError)
+	return nil
 }
 
 // RevokeTunnel clears live routes/sessions; durable revocation stays in the key resolver.

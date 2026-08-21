@@ -180,6 +180,9 @@ func endpointMismatches(source, target repo.RemoteSessionIssuer) []string {
 	if !pgTextEqual(source.AuthorizationEndpoint, target.AuthorizationEndpoint) {
 		mismatches = append(mismatches, "authorization_endpoint")
 	}
+	if source.TunneledMcpServerID != target.TunneledMcpServerID {
+		mismatches = append(mismatches, "tunneled_mcp_server_id")
+	}
 
 	return mismatches
 }

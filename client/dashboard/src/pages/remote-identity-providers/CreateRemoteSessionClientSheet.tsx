@@ -131,9 +131,12 @@ export function CreateRemoteSessionClientSheet({
   const { data: projectsData } = useListProjects(
     { organizationId: organization.id },
     undefined,
-    { enabled: isOrganizational },
+    { enabled: isOrganizational || !!issuer.tunneledMcpServerId },
   );
   const projects = useMemo(() => projectsData?.projects ?? [], [projectsData]);
+  const issuerProjectSlug = projects.find(
+    (project) => project.id === issuer.projectId,
+  )?.slug;
 
   // For an organization-level issuer the client is either created at the
   // organization level (no project, attachable by every project) or downscoped
@@ -196,6 +199,8 @@ export function CreateRemoteSessionClientSheet({
           // RFC 7591 §2: scope is a space-separated string at registration time.
           scope: parsedScopes.length > 0 ? parsedScopes.join(" ") : undefined,
           tokenEndpointAuthMethod: tokenEndpointAuthMethod || undefined,
+          tunneledMcpServerId: issuer.tunneledMcpServerId,
+          projectSlug: issuerProjectSlug,
         });
         const narrowedDcrMethod = narrowTokenEndpointAuthMethod(
           registered.tokenEndpointAuthMethod,

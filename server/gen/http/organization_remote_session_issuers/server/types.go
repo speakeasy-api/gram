@@ -75,6 +75,9 @@ type CreateIssuerRequestBody struct {
 	// (OAuth CIMD draft). Discovered from the issuer metadata document and used to
 	// pre-flight outbound CIMD. Default false.
 	ClientIDMetadataDocumentSupported *bool `form:"client_id_metadata_document_supported,omitempty" json:"client_id_metadata_document_supported,omitempty" xml:"client_id_metadata_document_supported,omitempty"`
+	// Route this issuer's OAuth endpoint calls through an MCP tunnel in the same
+	// project. Platform admins only.
+	TunneledMcpServerID *string `form:"tunneled_mcp_server_id,omitempty" json:"tunneled_mcp_server_id,omitempty" xml:"tunneled_mcp_server_id,omitempty"`
 }
 
 // UpdateIssuerRequestBody is the type of the
@@ -129,6 +132,10 @@ type UpdateIssuerRequestBody struct {
 	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
 	// (OAuth CIMD draft).
 	ClientIDMetadataDocumentSupported *bool `form:"client_id_metadata_document_supported,omitempty" json:"client_id_metadata_document_supported,omitempty" xml:"client_id_metadata_document_supported,omitempty"`
+	// Set or clear this issuer's MCP tunnel binding. Omission keeps the binding;
+	// an empty string clears it; any other value must be a tunneled MCP server in
+	// the same project. Platform admins only.
+	TunneledMcpServerID *string `form:"tunneled_mcp_server_id,omitempty" json:"tunneled_mcp_server_id,omitempty" xml:"tunneled_mcp_server_id,omitempty"`
 }
 
 // MoveIssuerRequestBody is the type of the "organizationRemoteSessionIssuers"
@@ -222,9 +229,12 @@ type CreateIssuerResponseBody struct {
 	Passthrough bool `form:"passthrough" json:"passthrough" xml:"passthrough"`
 	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
 	// (OAuth CIMD draft).
-	ClientIDMetadataDocumentSupported bool   `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
-	CreatedAt                         string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                         string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	ClientIDMetadataDocumentSupported bool `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
+	// When set, calls to this issuer's OAuth endpoints ride this MCP tunnel
+	// instead of dialing directly.
+	TunneledMcpServerID *string `form:"tunneled_mcp_server_id,omitempty" json:"tunneled_mcp_server_id,omitempty" xml:"tunneled_mcp_server_id,omitempty"`
+	CreatedAt           string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt           string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ListIssuersResponseBody is the type of the
@@ -289,9 +299,12 @@ type GetIssuerResponseBody struct {
 	Passthrough bool `form:"passthrough" json:"passthrough" xml:"passthrough"`
 	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
 	// (OAuth CIMD draft).
-	ClientIDMetadataDocumentSupported bool   `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
-	CreatedAt                         string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                         string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	ClientIDMetadataDocumentSupported bool `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
+	// When set, calls to this issuer's OAuth endpoints ride this MCP tunnel
+	// instead of dialing directly.
+	TunneledMcpServerID *string `form:"tunneled_mcp_server_id,omitempty" json:"tunneled_mcp_server_id,omitempty" xml:"tunneled_mcp_server_id,omitempty"`
+	CreatedAt           string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt           string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // GetIssuerDeletePreflightResponseBody is the type of the
@@ -371,9 +384,12 @@ type UpdateIssuerResponseBody struct {
 	Passthrough bool `form:"passthrough" json:"passthrough" xml:"passthrough"`
 	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
 	// (OAuth CIMD draft).
-	ClientIDMetadataDocumentSupported bool   `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
-	CreatedAt                         string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                         string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	ClientIDMetadataDocumentSupported bool `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
+	// When set, calls to this issuer's OAuth endpoints ride this MCP tunnel
+	// instead of dialing directly.
+	TunneledMcpServerID *string `form:"tunneled_mcp_server_id,omitempty" json:"tunneled_mcp_server_id,omitempty" xml:"tunneled_mcp_server_id,omitempty"`
+	CreatedAt           string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt           string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // MoveIssuerResponseBody is the type of the "organizationRemoteSessionIssuers"
@@ -429,9 +445,12 @@ type MoveIssuerResponseBody struct {
 	Passthrough bool `form:"passthrough" json:"passthrough" xml:"passthrough"`
 	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
 	// (OAuth CIMD draft).
-	ClientIDMetadataDocumentSupported bool   `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
-	CreatedAt                         string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                         string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	ClientIDMetadataDocumentSupported bool `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
+	// When set, calls to this issuer's OAuth endpoints ride this MCP tunnel
+	// instead of dialing directly.
+	TunneledMcpServerID *string `form:"tunneled_mcp_server_id,omitempty" json:"tunneled_mcp_server_id,omitempty" xml:"tunneled_mcp_server_id,omitempty"`
+	CreatedAt           string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt           string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // GetIssuerMigratePreflightResponseBody is the type of the
@@ -2874,9 +2893,12 @@ type RemoteSessionIssuerResponseBody struct {
 	Passthrough bool `form:"passthrough" json:"passthrough" xml:"passthrough"`
 	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
 	// (OAuth CIMD draft).
-	ClientIDMetadataDocumentSupported bool   `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
-	CreatedAt                         string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                         string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	ClientIDMetadataDocumentSupported bool `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
+	// When set, calls to this issuer's OAuth endpoints ride this MCP tunnel
+	// instead of dialing directly.
+	TunneledMcpServerID *string `form:"tunneled_mcp_server_id,omitempty" json:"tunneled_mcp_server_id,omitempty" xml:"tunneled_mcp_server_id,omitempty"`
+	CreatedAt           string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt           string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // RemoteSessionIssuerDuplicateMatchResponseBody is used to define fields on
@@ -2927,6 +2949,7 @@ func NewCreateIssuerResponseBody(res *types.RemoteSessionIssuer) *CreateIssuerRe
 		Oidc:                              res.Oidc,
 		Passthrough:                       res.Passthrough,
 		ClientIDMetadataDocumentSupported: res.ClientIDMetadataDocumentSupported,
+		TunneledMcpServerID:               res.TunneledMcpServerID,
 		CreatedAt:                         res.CreatedAt,
 		UpdatedAt:                         res.UpdatedAt,
 	}
@@ -3007,6 +3030,7 @@ func NewGetIssuerResponseBody(res *types.RemoteSessionIssuer) *GetIssuerResponse
 		Oidc:                              res.Oidc,
 		Passthrough:                       res.Passthrough,
 		ClientIDMetadataDocumentSupported: res.ClientIDMetadataDocumentSupported,
+		TunneledMcpServerID:               res.TunneledMcpServerID,
 		CreatedAt:                         res.CreatedAt,
 		UpdatedAt:                         res.UpdatedAt,
 	}
@@ -3105,6 +3129,7 @@ func NewUpdateIssuerResponseBody(res *types.RemoteSessionIssuer) *UpdateIssuerRe
 		Oidc:                              res.Oidc,
 		Passthrough:                       res.Passthrough,
 		ClientIDMetadataDocumentSupported: res.ClientIDMetadataDocumentSupported,
+		TunneledMcpServerID:               res.TunneledMcpServerID,
 		CreatedAt:                         res.CreatedAt,
 		UpdatedAt:                         res.UpdatedAt,
 	}
@@ -3164,6 +3189,7 @@ func NewMoveIssuerResponseBody(res *types.RemoteSessionIssuer) *MoveIssuerRespon
 		Oidc:                              res.Oidc,
 		Passthrough:                       res.Passthrough,
 		ClientIDMetadataDocumentSupported: res.ClientIDMetadataDocumentSupported,
+		TunneledMcpServerID:               res.TunneledMcpServerID,
 		CreatedAt:                         res.CreatedAt,
 		UpdatedAt:                         res.UpdatedAt,
 	}
@@ -5156,6 +5182,7 @@ func NewCreateIssuerPayload(body *CreateIssuerRequestBody, sessionToken *string,
 		Oidc:                              body.Oidc,
 		Passthrough:                       body.Passthrough,
 		ClientIDMetadataDocumentSupported: body.ClientIDMetadataDocumentSupported,
+		TunneledMcpServerID:               body.TunneledMcpServerID,
 	}
 	if body.ScopesSupported != nil {
 		v.ScopesSupported = make([]string, len(body.ScopesSupported))
@@ -5260,6 +5287,7 @@ func NewUpdateIssuerPayload(body *UpdateIssuerRequestBody, sessionToken *string,
 		Oidc:                              body.Oidc,
 		Passthrough:                       body.Passthrough,
 		ClientIDMetadataDocumentSupported: body.ClientIDMetadataDocumentSupported,
+		TunneledMcpServerID:               body.TunneledMcpServerID,
 	}
 	if body.ScopesSupported != nil {
 		v.ScopesSupported = make([]string, len(body.ScopesSupported))
@@ -5385,6 +5413,9 @@ func ValidateCreateIssuerRequestBody(body *CreateIssuerRequestBody) (err error) 
 	}
 	if body.LogoAssetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.logo_asset_id", *body.LogoAssetID, goa.FormatUUID))
+	}
+	if body.TunneledMcpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.tunneled_mcp_server_id", *body.TunneledMcpServerID, goa.FormatUUID))
 	}
 	return
 }

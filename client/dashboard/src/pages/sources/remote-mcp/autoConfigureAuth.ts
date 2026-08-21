@@ -230,6 +230,7 @@ export async function autoConfigureRemoteMcpAuth({
       registrationEndpoint: draft.registrationEndpoint,
       scope: scopes.length > 0 ? scopes.join(" ") : undefined,
       tokenEndpointAuthMethod: preferredAuthMethod,
+      tunneledMcpServerId: remoteSessionIssuer.tunneledMcpServerId,
     });
   } catch (error) {
     console.info("Remote MCP upstream DCR failed.", {

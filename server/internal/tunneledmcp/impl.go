@@ -454,7 +454,8 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	deleted, err := repo.New(dbtx).DeleteServer(ctx, repo.DeleteServerParams{
+	txRepo := repo.New(dbtx)
+	deleted, err := txRepo.DeleteServer(ctx, repo.DeleteServerParams{
 		ID:        serverID,
 		ProjectID: *authCtx.ProjectID,
 	})
@@ -463,6 +464,13 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 			return nil
 		}
 		return oops.E(oops.CodeUnexpected, err, "delete tunneled mcp server").LogError(ctx, logger)
+	}
+
+	if err := txRepo.ClearRemoteSessionIssuerBindings(ctx, repo.ClearRemoteSessionIssuerBindingsParams{
+		ID:        serverID,
+		ProjectID: *authCtx.ProjectID,
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "clear remote session issuer tunnel bindings").LogError(ctx, logger)
 	}
 
 	if err := s.audit.LogTunneledMcpServerDelete(ctx, dbtx, audit.LogTunneledMcpServerDeleteEvent{

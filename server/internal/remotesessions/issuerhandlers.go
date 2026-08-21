@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -68,6 +69,39 @@ type rfc8414Document struct {
 	// the issuer accepts a Client ID Metadata Document URL as client_id. Used to
 	// pre-flight outbound CIMD opt-in.
 	ClientIDMetadataDocumentSupported bool `json:"client_id_metadata_document_supported"`
+}
+
+// resolveIssuerTunnelBinding validates a non-empty issuer tunnel binding. The
+// binding is platform-admin-only and both resources must belong to the same
+// project. An absent or empty value resolves to no binding so create callers
+// can use it directly; update callers enforce authorization before treating an
+// empty value as the clear sentinel.
+func resolveIssuerTunnelBinding(ctx context.Context, logger *slog.Logger, q *repo.Queries, authCtx *contextvalues.AuthContext, projectID uuid.NullUUID, raw *string) (uuid.NullUUID, error) {
+	none := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	if raw == nil || strings.TrimSpace(*raw) == "" {
+		return none, nil
+	}
+	if !authCtx.IsAdmin {
+		return none, oops.E(oops.CodeForbidden, nil, "binding an identity provider to an MCP tunnel requires a platform admin").LogError(ctx, logger)
+	}
+	if !projectID.Valid {
+		return none, oops.E(oops.CodeBadRequest, nil, "an organization-level identity provider cannot be bound to a project tunnel").LogError(ctx, logger)
+	}
+	tunnelID, err := uuid.Parse(*raw)
+	if err != nil {
+		return none, oops.E(oops.CodeBadRequest, err, "invalid tunneled_mcp_server_id").LogError(ctx, logger)
+	}
+	if _, err := q.GetTunneledMcpServerBinding(ctx, repo.GetTunneledMcpServerBindingParams{
+		ID:             tunnelID,
+		ProjectID:      projectID.UUID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return none, oops.E(oops.CodeNotFound, err, "tunneled MCP server not found in this project").LogError(ctx, logger)
+		}
+		return none, oops.E(oops.CodeUnexpected, err, "get tunneled mcp server").LogError(ctx, logger)
+	}
+	return uuid.NullUUID{UUID: tunnelID, Valid: true}, nil
 }
 
 // FetchRemoteSessionIssuerMetadata fetches the upstream issuer's RFC 8414
@@ -146,7 +180,7 @@ func (s *Service) RefreshRemoteSessionIssuerMetadata(ctx context.Context, payloa
 		return nil, oops.E(oops.CodeUnexpected, err, "get remote session issuer").LogError(ctx, logger)
 	}
 
-	params, warnings, err := refreshIssuerMetadata(ctx, s.policy, existing)
+	params, warnings, err := refreshIssuerMetadata(ctx, s.policy, s.tunnels, existing)
 	if err != nil {
 		return nil, mapDiscoveryError(ctx, logger, err, oops.CodeGatewayError)
 	}
@@ -173,6 +207,9 @@ func (s *Service) RefreshRemoteSessionIssuerMetadata(ctx context.Context, payloa
 			return nil, oops.E(oops.CodeConflict, err, "%s", refreshConflictMessage).LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "lock remote session issuer").LogError(ctx, logger)
+	}
+	if locked.TunneledMcpServerID != existing.TunneledMcpServerID {
+		return nil, oops.E(oops.CodeConflict, nil, "%s", refreshConflictMessage).LogError(ctx, logger)
 	}
 
 	beforeView := mv.BuildRemoteSessionIssuerView(locked)
@@ -242,6 +279,11 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid logo asset id").LogError(ctx, logger)
 	}
 
+	tunnelID, err := resolveIssuerTunnelBinding(ctx, logger, repo.New(s.db), authCtx, uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true}, payload.TunneledMcpServerID)
+	if err != nil {
+		return nil, err
+	}
+
 	// Revocation endpoint must be HTTPS, or HTTP on loopback where a token
 	// never crosses a network: tokens are sensitive credentials that must not
 	// be transmitted in plaintext. An empty value stays legal.
@@ -295,6 +337,7 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 		ClientIDMetadataDocumentSupported: conv.PtrValOr(payload.ClientIDMetadataDocumentSupported, false),
 		Oidc:                              conv.PtrValOr(payload.Oidc, false),
 		Passthrough:                       conv.PtrValOr(payload.Passthrough, false),
+		TunneledMcpServerID:               tunnelID,
 	})
 	if err != nil {
 		if isRemoteSessionIssuerSlugConflict(err) {
@@ -378,9 +421,17 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 	if payload.Issuer != nil && *payload.Issuer == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "issuer cannot be set to empty").LogError(ctx, logger)
 	}
+	if payload.TunneledMcpServerID != nil && !authCtx.IsAdmin {
+		return nil, oops.E(oops.CodeForbidden, nil, "changing an identity provider's MCP tunnel binding requires a platform admin").LogError(ctx, logger)
+	}
 
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
+	}
+	if v := conv.PtrValOr(payload.TunneledMcpServerID, ""); v != "" {
+		if _, err := resolveIssuerTunnelBinding(ctx, logger, repo.New(s.db), authCtx, uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true}, payload.TunneledMcpServerID); err != nil {
+			return nil, err
+		}
 	}
 
 	// Operator-supplied and later rendered as a link, so it is validated here.
@@ -472,6 +523,7 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 		ClientIDMetadataDocumentSupported: conv.PtrToPGBool(payload.ClientIDMetadataDocumentSupported),
 		Oidc:                              conv.PtrToPGBool(payload.Oidc),
 		Passthrough:                       conv.PtrToPGBool(payload.Passthrough),
+		TunneledMcpServerID:               conv.PtrToPGText(payload.TunneledMcpServerID),
 		ID:                                issuerID,
 		ProjectID:                         uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 	})
@@ -911,6 +963,23 @@ func DiscoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 }
 
 func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuerURL string) (rfc8414Document, []string, error) {
+	return discoverIssuerMetadataWithDoer(ctx, issuerDiscoveryHTTPClient(policy), issuerURL)
+}
+
+func issuerDiscoveryHTTPClient(policy *guardian.Policy) *guardian.HTTPClient {
+	client := policy.Client()
+	// Guardian owns the transport and its SSRF protections. Keep redirect policy
+	// narrow here without changing TLS verification or the transport itself.
+	client.CheckRedirect = func(req *http.Request, _ []*http.Request) error {
+		if !validIssuerDiscoveryURL(req.URL) {
+			return errors.New("issuer discovery redirect target must use HTTPS outside local loopback")
+		}
+		return nil
+	}
+	return client
+}
+
+func discoverIssuerMetadataWithDoer(ctx context.Context, client httpDoer, issuerURL string) (rfc8414Document, []string, error) {
 	candidates, err := issuerProbeCandidates(issuerURL)
 	if err != nil {
 		return rfc8414Document{}, nil, &discoveryError{
@@ -922,16 +991,6 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 
 	reqCtx, cancel := context.WithTimeout(ctx, discoveryHTTPTimeout)
 	defer cancel()
-
-	client := policy.Client()
-	// Guardian owns the transport and its SSRF protections. Keep redirect policy
-	// narrow here without changing TLS verification or the transport itself.
-	client.CheckRedirect = func(req *http.Request, _ []*http.Request) error {
-		if !validIssuerDiscoveryURL(req.URL) {
-			return errors.New("issuer discovery redirect target must use HTTPS outside local loopback")
-		}
-		return nil
-	}
 
 	var firstErr *discoveryError
 	var fallbackDoc rfc8414Document
@@ -970,7 +1029,7 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 // attemptIssuerProbe issues a single GET against an issuer well-known URL and
 // returns either the parsed RFC 8414 / OIDC document or a typed error annotated
 // with the probed URL and upstream status.
-func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKnown string) (rfc8414Document, *discoveryError) {
+func attemptIssuerProbe(ctx context.Context, client httpDoer, wellKnown string) (rfc8414Document, *discoveryError) {
 	requestURL, err := url.Parse(wellKnown)
 	if err != nil || !validIssuerDiscoveryURL(requestURL) {
 		return rfc8414Document{}, &discoveryError{
