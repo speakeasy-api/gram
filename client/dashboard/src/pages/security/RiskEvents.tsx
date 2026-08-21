@@ -414,11 +414,11 @@ export default function RiskEvents(): JSX.Element {
               selectedCount={selection.selectedCount}
               actions={[
                 {
-                  label: "Mark as false positive",
+                  label: "Suppress Once",
                   onClick: handleDismissSelected,
                 },
                 {
-                  label: "Set up exclusion rule",
+                  label: "Create Rule",
                   onClick: handleSetupExclusionSelected,
                 },
               ]}
@@ -690,8 +690,8 @@ function RiskEventsRow({
     ...(result.chatId
       ? [{ label: "Copy link", onClick: () => void handleShare() }]
       : []),
-    { label: "Mark as false positive", onClick: () => onDismiss(result) },
-    { label: "Set up exclusion rule", onClick: () => onSetupExclusion(result) },
+    { label: "Suppress Once", onClick: () => onDismiss(result) },
+    { label: "Create Rule", onClick: () => onSetupExclusion(result) },
   ];
 
   return (
