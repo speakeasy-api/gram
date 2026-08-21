@@ -105,7 +105,7 @@ func TestDirectRemoteRequestRejectsOversizedOutboundSessionID(t *testing.T) {
 func TestDirectRemoteOAuthDiscoveryScansForDCR(t *testing.T) {
 	t.Parallel()
 
-	requests := make([]string, 0, 3)
+	requests := make([]string, 0, 4)
 	client := directRemoteTestClient(t, func(request *http.Request) *http.Response {
 		requests = append(requests, request.URL.String())
 		switch request.URL.String() {
@@ -122,7 +122,12 @@ func TestDirectRemoteOAuthDiscoveryScansForDCR(t *testing.T) {
 	result := directRemoteOAuthDiscovery(t.Context(), directRemoteTestPolicy(t), client, "https://remote.example.test/mcp", &directRemoteResponseBudget{remaining: 4096, requestsRemaining: 8})
 
 	require.Equal(t, "available_dcr", result)
-	require.Len(t, requests, 3)
+	require.Equal(t, []string{
+		"https://remote.example.test/.well-known/oauth-protected-resource/mcp",
+		"https://first.example.test/.well-known/oauth-authorization-server",
+		"https://first.example.test/.well-known/openid-configuration",
+		"https://second.example.test/.well-known/oauth-authorization-server",
+	}, requests)
 }
 
 func TestDirectRemoteOAuthDiscoveryUsesOIDCCompatibleCandidate(t *testing.T) {
