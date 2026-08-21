@@ -155,6 +155,15 @@ describe("plugin audience selection", () => {
     ).toEqual(["*"]);
   });
 
+  it("normalizes existing everyone assignments to the wildcard alone", () => {
+    expect(
+      selectMutuallyExclusivePluginAudiences(
+        [],
+        ["*", "role:organization:abc", "email:external@example.test"],
+      ),
+    ).toEqual(["*"]);
+  });
+
   it("clears everyone when a targeted audience is added", () => {
     expect(
       selectMutuallyExclusivePluginAudiences(
@@ -180,6 +189,48 @@ describe("plugin audience selection", () => {
         ["user:all", "email:external@example.test"],
       ),
     ).toEqual(["user:all", "email:external@example.test"]);
+  });
+
+  it("clears member-scoped assignments when all members is added", () => {
+    expect(
+      selectMutuallyExclusivePluginAudiences(
+        [
+          "role:organization:abc",
+          "user:u-123",
+          "email:external@example.test",
+          "directory_group:example",
+        ],
+        [
+          "role:organization:abc",
+          "user:u-123",
+          "email:external@example.test",
+          "directory_group:example",
+          "user:all",
+        ],
+      ),
+    ).toEqual([
+      "email:external@example.test",
+      "directory_group:example",
+      "user:all",
+    ]);
+  });
+
+  it("clears all members when a member-scoped assignment is added", () => {
+    expect(
+      selectMutuallyExclusivePluginAudiences(
+        ["user:all", "email:external@example.test"],
+        ["user:all", "email:external@example.test", "user:u-123"],
+      ),
+    ).toEqual(["email:external@example.test", "user:u-123"]);
+  });
+
+  it("keeps all members when a directory audience is added", () => {
+    expect(
+      selectMutuallyExclusivePluginAudiences(
+        ["user:all"],
+        ["user:all", "directory_group:example"],
+      ),
+    ).toEqual(["user:all", "directory_group:example"]);
   });
 
   it("keeps an existing mixed assignment removable without rewriting it", () => {

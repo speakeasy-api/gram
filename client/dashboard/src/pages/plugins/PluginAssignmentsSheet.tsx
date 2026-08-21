@@ -33,6 +33,7 @@ import {
   memberCountDescription,
   principalIcon,
   selectMutuallyExclusivePluginAudiences,
+  WILDCARD_PRINCIPAL,
 } from "./principals";
 
 const COLLAPSE_MEMBER_ASSIGNMENTS_AT = 5;
@@ -209,10 +210,15 @@ function AssignmentsEditor({
   const memberByUrn = useMemo(() => memberMapByUrn(members), [members]);
 
   const initialUrns = useMemo(
-    () => assignments.map((a) => a.principalUrn),
+    () =>
+      selectMutuallyExclusivePluginAudiences(
+        [],
+        assignments.map((a) => a.principalUrn),
+      ),
     [assignments],
   );
   const [selected, setSelected] = useState<string[]>(initialUrns);
+  const isEveryoneSelected = selected.includes(WILDCARD_PRINCIPAL);
 
   const audienceByUrn = useMemo(() => audienceMapByUrn(audiences), [audiences]);
   const canSelectAudiences =
@@ -334,6 +340,20 @@ function AssignmentsEditor({
         : options,
     [legacyOptions, options],
   );
+  const pickerOptions = useMemo(
+    () =>
+      groupedOptions.map((group) => ({
+        ...group,
+        options: group.options.map((option) => ({
+          ...option,
+          className:
+            isEveryoneSelected && option.value !== WILDCARD_PRINCIPAL
+              ? "opacity-60"
+              : undefined,
+        })),
+      })),
+    [groupedOptions, isEveryoneSelected],
+  );
 
   const mutation = useSetPluginAssignmentsMutation({
     onSuccess: () => {
@@ -368,7 +388,7 @@ function AssignmentsEditor({
           Assigned audiences
         </label>
         <MultiSelect
-          options={groupedOptions}
+          options={pickerOptions}
           value={selected}
           onValueChange={handleSelectionChange}
           placeholder="Select audiences"

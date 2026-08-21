@@ -240,6 +240,67 @@ describe("MultiSelect disabled selected options", () => {
       ).disabled,
     ).toBe(true);
   });
+
+  it("does not toggle the options list when removing a selection by keyboard", () => {
+    const onValueChange = vi.fn<(values: string[]) => void>();
+    render(
+      <MultiSelect
+        options={[{ label: "Selected", value: "selected" }]}
+        defaultValue={["selected"]}
+        onValueChange={onValueChange}
+      />,
+    );
+
+    const removeButton = screen.getByRole("button", {
+      name: "Remove Selected from selection",
+    });
+    fireEvent.keyDown(removeButton, { key: "Enter" });
+    fireEvent.click(removeButton);
+
+    expect(onValueChange).toHaveBeenCalledWith([]);
+    expect(screen.queryByRole("listbox")).toBeNull();
+  });
+
+  it("does not toggle the options list when clearing selections by keyboard", () => {
+    const onValueChange = vi.fn<(values: string[]) => void>();
+    render(
+      <MultiSelect
+        options={[{ label: "Selected", value: "selected" }]}
+        defaultValue={["selected"]}
+        onValueChange={onValueChange}
+      />,
+    );
+
+    const clearButton = screen.getByRole("button", {
+      name: "Clear all 1 selected options",
+    });
+    fireEvent.keyDown(clearButton, { key: " " });
+    fireEvent.click(clearButton);
+
+    expect(onValueChange).toHaveBeenCalledWith([]);
+    expect(screen.queryByRole("listbox")).toBeNull();
+  });
+
+  it("keeps visually muted options selectable", () => {
+    const onValueChange = vi.fn<(values: string[]) => void>();
+    render(
+      <MultiSelect
+        options={[
+          { label: "Everyone", value: "*" },
+          { label: "Engineering", value: "role:engineering", className: "opacity-60" },
+        ]}
+        defaultValue={["*"]}
+        onValueChange={onValueChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("combobox"));
+    const engineering = screen.getByRole("option", { name: /Engineering/ });
+    expect(engineering.className).toContain("opacity-60");
+
+    fireEvent.click(engineering);
+    expect(onValueChange).toHaveBeenCalledWith(["*", "role:engineering"]);
+  });
 });
 
 describe("MultiSelect collapsed selections", () => {

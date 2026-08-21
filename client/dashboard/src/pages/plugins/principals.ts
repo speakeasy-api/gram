@@ -34,22 +34,39 @@ export function isEveryoneAssignmentPrincipal(urn: string): boolean {
   return urn === WILDCARD_PRINCIPAL || urn === "user:all";
 }
 
+function isMemberScopedAssignmentPrincipal(urn: string): boolean {
+  return isIndividualMemberPrincipal(urn) || urn.startsWith(ROLE_PREFIX);
+}
+
 // The wildcard reaches every synced identity and therefore subsumes every
-// targeted audience. `user:all` is intentionally excluded: it reaches only
-// synced identities that resolve to organization members, so it can coexist
-// with email assignments for non-members.
+// targeted audience. `user:all` reaches only organization members, so it
+// subsumes member and role assignments but can coexist with an email or a
+// directory audience that may reach a non-member synced identity.
 export function selectMutuallyExclusivePluginAudiences(
   previous: string[],
   next: string[],
 ): string[] {
   const previousValues = new Set(previous);
   const addedValues = next.filter((value) => !previousValues.has(value));
-  const addedWildcard = addedValues.find(
-    (value) => value === WILDCARD_PRINCIPAL,
-  );
+  const addedWildcard = addedValues.includes(WILDCARD_PRINCIPAL);
+  const addedAllMembers = addedValues.includes("user:all");
 
-  if (addedWildcard) return [addedWildcard];
+  if (addedWildcard) return [WILDCARD_PRINCIPAL];
+
+  if (addedAllMembers) {
+    return next.filter(
+      (value) =>
+        value !== WILDCARD_PRINCIPAL &&
+        !isMemberScopedAssignmentPrincipal(value),
+    );
+  }
+
   if (addedValues.some((value) => value !== WILDCARD_PRINCIPAL)) {
+    if (addedValues.some(isMemberScopedAssignmentPrincipal)) {
+      return next.filter(
+        (value) => value !== WILDCARD_PRINCIPAL && value !== "user:all",
+      );
+    }
     return next.filter((value) => value !== WILDCARD_PRINCIPAL);
   }
   return next;
