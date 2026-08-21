@@ -71400,11 +71400,10 @@ components:
                     description: Header name.
                 value:
                     type: string
-                    description: Header value. Stored encrypted at rest; never returned on reads.
-            description: HTTP header value provided when upserting a forwarding config.
+                    description: Header value. Omit to preserve an existing value; provide to create, replace, or clear it. Stored encrypted at rest and never returned on reads.
+            description: HTTP header provided when upserting a forwarding config. Omit the value to preserve the existing encrypted value for the same name.
             required:
                 - name
-                - value
         Package:
             type: object
             properties:
@@ -82480,7 +82479,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/OtelForwardingHeaderInput'
-                    description: Full set of headers to attach. Replaces any existing headers.
+                    description: Complete desired header set. Omitted entries are removed; entries with an omitted value preserve the existing encrypted value for the same name.
             required:
                 - endpoint_url
                 - enabled
