@@ -56,6 +56,37 @@ func TestServePlatformToolset_ManagedAssistantReachesManagedToolset(t *testing.T
 
 // The swap cuts both ways: an org on the platformmcp variant must lose the
 // legacy toolset, not merely gain the platform one.
+// The rollout is dashboard-scoped. A Slack thread on the same managed
+// assistant keeps the legacy toolset even while the org is on the platformmcp
+// variant — attachment grants it, so the serve path must not 404 it.
+func TestServePlatformToolset_NonDashboardThreadKeepsLegacyToolset(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	managedID := createAssistant(t, ti, authCtx, "Managed")
+	err := assistantsrepo.New(ti.conn).CreateProjectManagedAssistant(t.Context(), assistantsrepo.CreateProjectManagedAssistantParams{
+		ProjectID:   *authCtx.ProjectID,
+		AssistantID: managedID,
+	})
+	require.NoError(t, err)
+
+	ti.features.SetFlagVariant(feature.FlagAssistantPlatformMCP, authCtx.ActiveOrganizationID, feature.VariantAssistantToolsPlatformMCP)
+
+	token := mintSourceKindAssistantToken(t, ti, authCtx, managedID, "slack-thread", "slack")
+
+	w, err := servePlatformHTTP(t, ti, platformtools.ManagedAssistantPlatformToolsetSlug, toolsListBody(), token)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, "a slack thread must keep the legacy toolset: %s", w.Body.String())
+
+	_, err = servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, toolsListBody(), token)
+	require.Error(t, err, "a slack thread must not reach the platform toolset")
+}
+
 func TestServePlatformToolset_ManagedToolsetRejectedOnPlatformMCPVariant(t *testing.T) {
 	t.Parallel()
 
@@ -74,7 +105,9 @@ func TestServePlatformToolset_ManagedToolsetRejectedOnPlatformMCPVariant(t *test
 
 	ti.features.SetFlagVariant(feature.FlagAssistantPlatformMCP, authCtx.ActiveOrganizationID, feature.VariantAssistantToolsPlatformMCP)
 
-	token := mintAssistantToken(t, ti, authCtx, managedID)
+	// The rollout is dashboard-scoped, so the calling thread decides:
+	// mint a token bound to a dashboard thread.
+	token, _ := mintThreadAssistantToken(t, ti, authCtx, managedID, "rmmcpvariant")
 	_, err = servePlatformHTTP(t, ti, platformtools.ManagedAssistantPlatformToolsetSlug, toolsListBody(), token)
 	require.Error(t, err, "the legacy toolset must stay hidden on the platformmcp variant")
 	require.Contains(t, err.Error(), "not found")
@@ -260,6 +293,21 @@ func mintAssistantToken(t *testing.T, ti *testInstance, authCtx *contextvalues.A
 func mintThreadAssistantToken(t *testing.T, ti *testInstance, authCtx *contextvalues.AuthContext, assistantID uuid.UUID, correlationPrefix string) (string, uuid.UUID) {
 	t.Helper()
 
+	return mintSourceKindThreadToken(t, ti, authCtx, assistantID, correlationPrefix, "dashboard")
+}
+
+// mintSourceKindAssistantToken is mintSourceKindThreadToken without the thread
+// id, for callers that only need the token.
+func mintSourceKindAssistantToken(t *testing.T, ti *testInstance, authCtx *contextvalues.AuthContext, assistantID uuid.UUID, correlationPrefix, sourceKind string) string {
+	t.Helper()
+
+	token, _ := mintSourceKindThreadToken(t, ti, authCtx, assistantID, correlationPrefix, sourceKind)
+	return token
+}
+
+func mintSourceKindThreadToken(t *testing.T, ti *testInstance, authCtx *contextvalues.AuthContext, assistantID uuid.UUID, correlationPrefix, sourceKind string) (string, uuid.UUID) {
+	t.Helper()
+
 	chatID := uuid.New()
 	err := assistantsrepo.New(ti.conn).UpsertAssistantChat(t.Context(), assistantsrepo.UpsertAssistantChatParams{
 		ChatID:         chatID,
@@ -274,7 +322,7 @@ func mintThreadAssistantToken(t *testing.T, ti *testInstance, authCtx *contextva
 		ProjectID:     *authCtx.ProjectID,
 		CorrelationID: correlationPrefix + "-" + uuid.NewString()[:8],
 		ChatID:        chatID,
-		SourceKind:    "dashboard",
+		SourceKind:    sourceKind,
 		SourceRefJson: []byte("{}"),
 	})
 	require.NoError(t, err)
@@ -335,7 +383,9 @@ func TestServePlatformToolset_PlatformMCPReadVariantListsTools(t *testing.T) {
 
 	ti.features.SetFlagVariant(feature.FlagAssistantPlatformMCP, authCtx.ActiveOrganizationID, feature.VariantAssistantToolsPlatformMCP)
 
-	token := mintAssistantToken(t, ti, authCtx, managedID)
+	// The rollout is dashboard-scoped, so the calling thread decides:
+	// mint a token bound to a dashboard thread.
+	token, _ := mintThreadAssistantToken(t, ti, authCtx, managedID, "ntliststools")
 	w, err := servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, toolsListBody(), token)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, "managed assistant must reach the platform toolset when the flag is on: %s", w.Body.String())
@@ -426,7 +476,9 @@ func TestServePlatformToolset_PlatformMCPReadListProjectsCall(t *testing.T) {
 	// an earlier decision, so the grant has to exist for real.
 	grantLiveOrgAdmin(t, ti, authCtx)
 
-	token := mintAssistantToken(t, ti, authCtx, managedID)
+	// The rollout is dashboard-scoped, so the calling thread decides:
+	// mint a token bound to a dashboard thread.
+	token, _ := mintThreadAssistantToken(t, ti, authCtx, managedID, "projectscall")
 
 	body, err := json.Marshal(map[string]any{
 		"jsonrpc": "2.0",

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	"io"
 	"log/slog"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -167,15 +169,21 @@ func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, aut
 		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
 	}
 
-	// The two managed-only toolsets are rollout variants of each other: an org
-	// reaches exactly one, never both. The attachment decision in the
+	// The two managed-only toolsets are rollout variants of each other: a
+	// thread reaches exactly one, never both. The attachment decision in the
 	// assistants service resolves the same variant, but the assistant token
 	// lives inside the runner VM, so the serve path re-resolves rather than
 	// trusting attachment. A variant that cannot be resolved falls back to
 	// legacy, matching attachment, so an outage never leaves the managed
 	// assistant with no toolset at all.
+	//
+	// The rollout is scoped to dashboard threads, so the calling thread's
+	// source kind is part of the decision — the same managed assistant serves
+	// Slack, cron and wake turns on the legacy toolsets. The principal carries
+	// the thread it was minted for, which is what makes that resolvable here
+	// without trusting anything the runner sends.
 	variant := feature.VariantAssistantToolsLegacy
-	if s.features != nil {
+	if s.features != nil && s.threadIsDashboard(ctx, principal.ThreadID) {
 		resolved, err := feature.FlagVariant(ctx, s.features, feature.FlagAssistantPlatformMCP,
 			authCtx.ActiveOrganizationID, feature.OrgProjectGroups(authCtx.OrganizationSlug, ""))
 		if err != nil {
@@ -190,6 +198,20 @@ func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, aut
 	}
 
 	return nil
+}
+
+// threadIsDashboard reports whether the calling thread was opened from the
+// dashboard. A thread that cannot be read — deleted mid-turn, or a database
+// blip — is reported as not-dashboard, which lands the caller on the legacy
+// toolsets: the same direction every other failure path here takes, and the
+// one that cannot strip a Slack thread of tools it already had.
+func (s *Service) threadIsDashboard(ctx context.Context, threadID uuid.UUID) bool {
+	sourceKind, err := assistantrepo.New(s.db).GetAssistantThreadSourceKind(ctx, threadID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "resolve assistant thread source kind", attr.SlogError(err))
+		return false
+	}
+	return sourceKind == bgtriggers.DefinitionSlugDashboard
 }
 
 // wantedToolsetSlug maps a resolved rollout variant to the single managed-only

@@ -1294,6 +1294,19 @@ func (q *Queries) GetAssistantThreadIDByCorrelation(ctx context.Context, arg Get
 	return id, err
 }
 
+const getAssistantThreadSourceKind = `-- name: GetAssistantThreadSourceKind :one
+SELECT source_kind
+FROM assistant_threads
+WHERE id = $1
+`
+
+func (q *Queries) GetAssistantThreadSourceKind(ctx context.Context, threadID uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getAssistantThreadSourceKind, threadID)
+	var source_kind string
+	err := row.Scan(&source_kind)
+	return source_kind, err
+}
+
 const getLatestAssistantRuntimeByThreadID = `-- name: GetLatestAssistantRuntimeByThreadID :one
 SELECT id, assistant_thread_id, assistant_id, project_id, backend, state, warm_until, lease_owner, last_heartbeat_at, backend_metadata_json, ended_at, runtime_version, created_at, updated_at, deleted_at, deleted, ended FROM assistant_runtimes
 WHERE assistant_thread_id = $1

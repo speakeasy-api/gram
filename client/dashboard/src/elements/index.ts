@@ -20,6 +20,7 @@ export { ActiveChatTitle } from "@/elements/components/ActiveChatTitle";
 export { ShareButton } from "@/elements/components/ShareButton";
 export type { ShareButtonProps } from "@/elements/components/ShareButton";
 export { ToolFallback } from "@/elements/components/assistant-ui/tool-fallback";
+export { ToolSearchResult } from "@/elements/components/assistant-ui/tool-search-result";
 export { MessageContent } from "@/elements/components/MessageContent";
 export type { MessageContentProps } from "@/elements/components/MessageContent";
 export { Markdown } from "@/elements/components/Markdown";
