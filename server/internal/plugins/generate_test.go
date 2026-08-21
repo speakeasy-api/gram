@@ -148,6 +148,9 @@ func TestGeneratePluginPackagesIncludesPlatformMCPOnlyWhenEnabled(t *testing.T) 
 	require.Contains(t, string(files["README.md"]), "## "+platformMCPDisplayName)
 	require.Contains(t, string(files["README.md"]), "`"+platformMCPPluginName+"`")
 	require.NotContains(t, strings.ToLower(string(files["README.md"])), "aicp")
+
+	var claude marketplaceManifest
+	require.NoError(t, json.Unmarshal(files[".claude-plugin/marketplace.json"], &claude))
 	require.Len(t, claude.Plugins, len(fingerprintTestPlugins())+2)
 	require.Equal(t, "acme-corp-observability", claude.Plugins[0].Name)
 	require.Equal(t, marketplaceEntry{
