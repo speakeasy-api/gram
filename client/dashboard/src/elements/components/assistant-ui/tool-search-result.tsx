@@ -8,6 +8,12 @@ import { PlusIcon } from "lucide-react";
 import { useMemo } from "react";
 
 import { ToolFallback } from "@/elements/components/assistant-ui/tool-fallback";
+import {
+  asRecord,
+  asString,
+  isCatalogBrowseSearch,
+} from "@/elements/components/assistant-ui/tool-search-result.helpers";
+import { useElements } from "@/elements/hooks/useElements";
 import { appendToken } from "@/elements/lib/tool-mentions";
 
 /**
@@ -39,16 +45,6 @@ interface ToolRow {
   /** Server the row's tools came from; shown only when more than one is attached. */
   server: string;
   tools: RowTool[];
-}
-
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
-}
-
-function asString(value: unknown): string | undefined {
-  return typeof value === "string" && value ? value : undefined;
 }
 
 /**
@@ -210,8 +206,11 @@ function buildRows(servers: ServerStatus[]): ToolRow[] {
 /**
  * Renders a `tool_search` result as a browsable catalog of the tools attached
  * to this session, grouped by the MCP server serving each one. Clicking a tool
- * runs it: the mention is sent as a turn of its own, so the discovery pass the
- * model just ran doubles as a launcher.
+ * runs it: the mention is sent as a turn of its own, so the search doubles as
+ * a launcher.
+ *
+ * Only a browse search draws the card (see `isCatalogBrowseSearch`); a
+ * discovery search renders the generic tool row instead.
  *
  * It goes through the model rather than calling the tool directly because the
  * tools live in the assistant's runtime, not in the page — and most of them
@@ -219,17 +218,24 @@ function buildRows(servers: ServerStatus[]): ToolRow[] {
  * works out the arguments, and calls it.
  */
 export const ToolSearchResult: ToolCallMessagePartComponent = (props) => {
-  const { status, result, toolCallId } = props;
+  const { status, result, args, toolCallId } = props;
   const aui = useAui();
+  const { config } = useElements();
   const composerText = useAuiState(({ thread }) => thread.composer.text);
 
   // A model often searches several times before it answers, and every search
-  // carries the same whole-catalog view — so only the last one in the message
-  // draws a card. Rendering each would stack identical copies.
-  const isLastSearch = useAuiState(({ message }) => {
+  // carries the same whole-catalog view — so only the last browse in the
+  // message draws a card. Rendering each would stack identical copies.
+  // Discovery searches are skipped rather than counted: a turn that discovers
+  // and then browses must still draw the browse.
+  const isLastBrowse = useAuiState(({ message }) => {
     let last: string | undefined;
     for (const part of message.parts) {
-      if (part.type === "tool-call" && part.toolName === "tool_search") {
+      if (
+        part.type === "tool-call" &&
+        part.toolName === "tool_search" &&
+        isCatalogBrowseSearch(part.args)
+      ) {
         last = part.toolCallId;
       }
     }
@@ -237,17 +243,23 @@ export const ToolSearchResult: ToolCallMessagePartComponent = (props) => {
   });
 
   const payload = useMemo(
-    () => (status.type === "complete" ? extractPayload(result) : null),
-    [status.type, result],
+    () =>
+      status.type === "complete" && isCatalogBrowseSearch(args)
+        ? extractPayload(result)
+        : null,
+    [status.type, result, args],
   );
 
-  // Anything this component can't read — a run still streaming, a denied call,
-  // an error payload, a search that reached no connected server — belongs to
-  // the generic tool card, which already renders those states.
+  // Anything this component can't read — a discovery search, a run still
+  // streaming, a denied call, an error payload, a search that reached no
+  // connected server — belongs to the generic tool card, which already renders
+  // those states. A host that replaced that card keeps it here: declining is
+  // the common path now that discovery searches take it.
+  const Fallback = config.components?.ToolFallback ?? ToolFallback;
   if (!payload) {
-    return <ToolFallback {...props} />;
+    return <Fallback {...props} />;
   }
-  if (!isLastSearch) return null;
+  if (!isLastBrowse) return null;
 
   const rows = buildRows(payload.servers);
   const total = payload.servers.reduce(
