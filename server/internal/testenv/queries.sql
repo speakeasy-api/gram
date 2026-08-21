@@ -419,6 +419,13 @@ UPDATE remote_sessions
 SET access_expires_at = clock_timestamp() - interval '1 minute'
 WHERE id = @id;
 
+-- name: SetRemoteSessionResourceFixture :exec
+-- Test-only fixture stamping a stored RFC 8707 resource binding on a row.
+UPDATE remote_sessions
+SET resource = @resource
+WHERE subject_urn = @subject_urn
+  AND remote_session_client_id = @remote_session_client_id;
+
 -- name: GetToolCallBlockLinksFixture :one
 -- Test-only. The block page query deliberately does not expose the optional
 -- foreign keys, but asserting that the salvage cleared exactly the link the
