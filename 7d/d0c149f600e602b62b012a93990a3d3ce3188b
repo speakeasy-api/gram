@@ -1,0 +1,33 @@
+client/dashboard/src/components/ui/MultiSelect/index.tsx
+  s_5987dba16de244::t_8097fe8ea7b683 879
+  s_5987dba16de244::t_37436555ef7fe3 139-144,412,439,441-452,520-522,526,536,539,557,778,789,803,822,831,860,870,883,887-893,1044,1124-1126,1141,1170-1177,1182-1183,1189-1190,1195-1197,1206
+  s_5987dba16de244::t_a83ded74ed5ad1 1184-1188
+  s_5987dba16de244::t_931f3324a403ad 138
+client/dashboard/src/pages/plugins/PluginAssignmentsSheet.tsx
+  s_5987dba16de244::t_86e9a88ec387fe 372
+client/dashboard/src/components/ui/MultiSelect/index.test.tsx
+  s_5987dba16de244::t_a83ded74ed5ad1 229-233,236-240
+  s_5987dba16de244::t_86e9a88ec387fe 216-226,228,235,242,278-280,292-319
+  s_5987dba16de244::t_d5bff132a1a9fa 227,234,241
+  s_5987dba16de244::t_a189f367903bc4 320
+client/dashboard/src/pages/plugins/principals.test.ts
+  s_5987dba16de244::t_93df8c1b25a5e1 176-184
+client/dashboard/src/pages/plugins/principals.ts
+  s_5987dba16de244::t_93df8c1b25a5e1 37-40,47-49,51-53
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "7dd0c149f600e602b62b012a93990a3d3ce3188b",
+  "prompts": {},
+  "sessions": {
+    "s_5987dba16de244": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a01959-19dd-7eb1-8706-1fa16b5d07e0",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
