@@ -40,6 +40,8 @@ import {
   type ProjectGuideOutputEntry,
 } from "@/components/project-guide/projectGuideMachine";
 import { useSlugs } from "@/contexts/Sdk";
+import { Icon } from "@/components/ui/Icon";
+import type { IconName } from "@/components/ui/Icon/names";
 import { cn } from "@/lib/utils";
 import { CodeSnippet } from "@/components/ui/CodeSnippet";
 import {
@@ -310,6 +312,7 @@ export function ProjectGuide({
                     output={
                       <ProjectGuideOutput
                         entries={snapshot.context.output}
+                        accent={PROJECT_GUIDE_FIXTURES[journey.id].accent}
                         error={guideStepError(
                           journey,
                           currentStep,
@@ -1011,9 +1014,11 @@ function mcpCompletionBody(name: string | undefined): string {
 
 function ProjectGuideOutput({
   entries,
+  accent,
   error,
 }: {
   entries: ProjectGuideOutputEntry[];
+  accent: string;
   error?: string | null;
 }): JSX.Element {
   if (entries.length === 0 && !error) {
@@ -1023,20 +1028,89 @@ function ProjectGuideOutput({
   return (
     <ol className="grid gap-1.5">
       {entries.map((entry) => (
-        <li key={entry.id} className="flex gap-2">
-          <span className="text-eyebrow text-disabled w-11 shrink-0">
-            {entry.kind}
-          </span>
-          <span className="min-w-0">{entry.message}</span>
-        </li>
+        <ProjectGuideOutputRow
+          key={entry.id}
+          accent={accent}
+          kind={entry.kind}
+          message={entry.message}
+        />
       ))}
       {error && (
-        <li role="alert" className="text-default-destructive flex gap-2">
-          <span className="text-eyebrow w-11 shrink-0">error</span>
-          <span className="min-w-0">{error}</span>
-        </li>
+        <ProjectGuideOutputRow
+          accent={accent}
+          kind="error"
+          message={error}
+          role="alert"
+        />
       )}
     </ol>
+  );
+}
+
+type ProjectGuideOutputKind = ProjectGuideOutputEntry["kind"] | "error";
+
+const PROJECT_GUIDE_OUTPUT_ENTRY_STYLES: Record<
+  ProjectGuideOutputKind,
+  { icon: IconName; iconClass: string; message: string; useAccent?: boolean }
+> = {
+  start: {
+    icon: "play",
+    iconClass: "text-disabled",
+    message: "text-foreground",
+  },
+  note: {
+    icon: "info",
+    iconClass: "text-muted-foreground",
+    message: "text-muted-foreground",
+  },
+  next: {
+    icon: "arrow-right",
+    iconClass: "font-medium",
+    message: "font-medium",
+    useAccent: true,
+  },
+  result: {
+    icon: "check",
+    iconClass: "text-default-success",
+    message: "text-default-success font-medium",
+  },
+  error: {
+    icon: "circle-alert",
+    iconClass: "text-default-destructive",
+    message: "text-default-destructive",
+  },
+};
+
+function ProjectGuideOutputRow({
+  accent,
+  kind,
+  message,
+  role,
+}: {
+  accent: string;
+  kind: ProjectGuideOutputKind;
+  message: string;
+  role?: "alert";
+}): JSX.Element {
+  const styles = PROJECT_GUIDE_OUTPUT_ENTRY_STYLES[kind];
+  const accentStyle = styles.useAccent ? { color: accent } : undefined;
+
+  return (
+    <li role={role} className="flex items-start gap-4">
+      <span
+        className={cn(
+          "flex size-4 shrink-0 items-center justify-center",
+          styles.iconClass,
+        )}
+        style={accentStyle}
+      >
+        <Icon name={styles.icon} className="size-3.5" aria-hidden="true" />
+        <span className="sr-only">{kind}</span>
+      </span>
+      <span className={cn("min-w-0", styles.message)} style={accentStyle}>
+        {message}
+      </span>
+    </li>
   );
 }
 
