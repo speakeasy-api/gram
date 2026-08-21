@@ -355,6 +355,8 @@ func operationBudgetToolResult(err error) (*mcp.CallToolResult, bool) {
 		result = operationBudgetResult{Code: "invalid_request", Reason: "remote_url_rejected", Message: "The remote MCP URL is unsafe, unsupported, or did not complete the required Streamable HTTP inspection. Use an HTTPS URL without credentials, query parameters, or fragments."}
 	case errors.Is(err, ErrDirectRemoteUnavailable):
 		result = operationBudgetResult{Code: unavailableCode, Reason: "remote_inspection_unavailable", Message: "The remote MCP could not be inspected safely right now. Retry after a short delay."}
+	case errors.Is(err, ErrLifecycleVisibilityUnavailable):
+		result = operationBudgetResult{Code: unavailableCode, Reason: "unsupported_lifecycle_target", Message: "This MCP is not Platform-managed, so lifecycle visibility changes are unavailable. Use its supported dashboard management path."}
 	case errors.Is(err, ErrOperationBudgetUnavailable), errors.Is(err, ErrRegistrationUnavailable):
 		result = operationBudgetResult{Code: unavailableCode, Message: "This Platform MCP operation is temporarily unavailable."}
 	case errors.Is(err, ErrRegistrationCap):
