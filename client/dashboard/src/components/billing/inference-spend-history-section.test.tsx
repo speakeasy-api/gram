@@ -1,5 +1,6 @@
 import type { InferenceSpendHistory } from "@gram/client/models/components/inferencespendhistory.js";
 import type { InferenceSpendMonth } from "@gram/client/models/components/inferencespendmonth.js";
+import { RFCDate } from "@gram/client/types/rfcdate.js";
 import { cleanup, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -73,7 +74,7 @@ describe("InferenceSpendHistorySection", () => {
           monthStart: new Date("2026-08-01T00:00:00.000Z"),
           monthEnd: new Date("2026-09-01T00:00:00.000Z"),
           spendUsd: "1.500000",
-          recordedThrough: { toString: () => "2026-08-20" },
+          recordedThrough: new RFCDate("2026-08-20"),
           keySpend: [
             { keyType: "chat", spendUsd: "1.200000" },
             { keyType: "internal", spendUsd: "0.300000" },
@@ -81,7 +82,7 @@ describe("InferenceSpendHistorySection", () => {
         }),
         month({
           spendUsd: "4.500000",
-          recordedThrough: { toString: () => "2026-07-31" },
+          recordedThrough: new RFCDate("2026-07-31"),
           keySpend: [
             { keyType: "chat", spendUsd: "4.000000" },
             { keyType: "internal", spendUsd: "0.500000" },
