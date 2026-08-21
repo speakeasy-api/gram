@@ -15,9 +15,9 @@ import (
 func TestEnrichDirectoryIncludesProfileGroupsAndRoles(t *testing.T) {
 	t.Parallel()
 
-	userContext := directoryUserContext{
-		DirectoryUserID: "directory-user-id",
-		UserAttributes: map[string]any{
+	directory := directoryContext{
+		ID: "directory-user-id",
+		Attributes: map[string]any{
 			"active":     true,
 			"department": nil,
 			"mixed":      []any{"one", float64(2), true},
@@ -42,7 +42,7 @@ func TestEnrichDirectoryIncludesProfileGroupsAndRoles(t *testing.T) {
 		DirectoryGroupIDs([]string{"directory-group-id"}),
 		DirectoryGroupNames([]string{"Developers"}),
 		GramUserRoles([]string{"member", "tool-author"}),
-	}, userContext.attributes())
+	}, directory.attributes())
 	require.Equal(t, "directory.attribute.active", string(DirectoryAttribute("active")))
 }
 
@@ -55,15 +55,15 @@ func TestEnrichLogDirectoryIncludesCachedUserContext(t *testing.T) {
 	emailHash := hex.EncodeToString(emailDigest[:])
 
 	directoryEnricher := NewEnrichDirectory(testenv.NewLogger(t), newTestDatabase(t), testenv.NewMemoryCache())
-	require.NoError(t, directoryEnricher.cache.Store(t.Context(), cachedDirectoryUserContext{
+	require.NoError(t, directoryEnricher.cache.Store(t.Context(), cachedDirectoryContext{
 		OrganizationID: organizationID,
 		EmailHash:      emailHash,
-		Context: directoryUserContext{
-			DirectoryUserID: "directory-user-id",
-			UserAttributes:  map[string]any{"department": "Engineering"},
-			GroupIDs:        []string{"directory-group-id"},
-			GroupNames:      []string{"Developers"},
-			Roles:           []string{"member"},
+		Context: directoryContext{
+			ID:         "directory-user-id",
+			Attributes: map[string]any{"department": "Engineering"},
+			GroupIDs:   []string{"directory-group-id"},
+			GroupNames: []string{"Developers"},
+			Roles:      []string{"member"},
 		},
 	}))
 
@@ -71,7 +71,7 @@ func TestEnrichLogDirectoryIncludesCachedUserContext(t *testing.T) {
 		Provenance: (&otelv1.InboundLogRecord_Provenance_builder{OrganizationId: new(organizationID)}).Build(),
 		Attributes: []*otelv1.InboundLogRecord_KeyValue{logStringAttribute("user.email", " User@Example.Invalid ")},
 	}).Build()
-	got, err := (&enrichLogDirectory{directory: directoryEnricher}).Enrich(t.Context(), record)
+	got, err := (&enrichLogDirectory{enrichDirectory: directoryEnricher}).Enrich(t.Context(), record)
 
 	require.NoError(t, err)
 	require.ElementsMatch(t, []attribute.KeyValue{

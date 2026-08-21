@@ -25,12 +25,12 @@ import (
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
-const directoryUserContextTTL = 5 * time.Minute
+const directoryContextTTL = 5 * time.Minute
 
 type enrichDirectory struct {
 	logger *slog.Logger
 	db     database.DBTX
-	cache  cache.TypedCacheObject[cachedDirectoryUserContext]
+	cache  cache.TypedCacheObject[cachedDirectoryContext]
 	loads  singleflight.Group
 }
 
@@ -39,8 +39,8 @@ func NewEnrichDirectory(logger *slog.Logger, db database.DBTX, cacheImpl cache.C
 	return &enrichDirectory{
 		logger: logger,
 		db:     db,
-		cache: cache.NewTypedObjectCache[cachedDirectoryUserContext](
-			logger.With(attr.SlogCacheNamespace("otel_directory_user_context")),
+		cache: cache.NewTypedObjectCache[cachedDirectoryContext](
+			logger.With(attr.SlogCacheNamespace("otel_directory_context")),
 			cacheImpl,
 			cache.SuffixNone,
 		),
@@ -59,28 +59,10 @@ func (e *enrichDirectory) Enrich(ctx context.Context, span *otelv1.InboundSpan) 
 		e.logger.WarnContext(ctx, "failed to read user email for directory span enrichment", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
 		return nil, nil
 	}
-	return e.enrichUser(ctx, organizationID, email), nil
+	return e.enrich(ctx, organizationID, email), nil
 }
 
-type enrichLogDirectory struct {
-	directory *enrichDirectory
-}
-
-func (e *enrichLogDirectory) Name() string {
-	return e.directory.Name()
-}
-
-func (e *enrichLogDirectory) Enrich(ctx context.Context, record *otelv1.InboundLogRecord) ([]attribute.KeyValue, error) {
-	organizationID := record.GetProvenance().GetOrganizationId()
-	_, email, err := dialect.ForLog(record).ExternalUserEmail(record)
-	if err != nil {
-		e.directory.logger.WarnContext(ctx, "failed to read user email for directory log enrichment", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
-		return nil, nil
-	}
-	return e.directory.enrichUser(ctx, organizationID, email), nil
-}
-
-func (e *enrichDirectory) enrichUser(ctx context.Context, organizationID string, email string) []attribute.KeyValue {
+func (e *enrichDirectory) enrich(ctx context.Context, organizationID string, email string) []attribute.KeyValue {
 	if organizationID == "" {
 		return nil
 	}
@@ -94,26 +76,26 @@ func (e *enrichDirectory) enrichUser(ctx context.Context, organizationID string,
 	emailHash := hex.EncodeToString(emailDigest[:])
 	resolved, err := e.resolve(ctx, organizationID, emailHash, email)
 	if err != nil {
-		e.logger.WarnContext(ctx, "failed to resolve directory user context", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
+		e.logger.WarnContext(ctx, "failed to resolve directory context", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
 	}
 	return resolved.attributes()
 }
 
-func (e *enrichDirectory) load(ctx context.Context, organizationID string, email string) (directoryUserContext, error) {
+func (e *enrichDirectory) load(ctx context.Context, organizationID string, email string) (directoryContext, error) {
 	user, err := usersrepo.New(e.db).GetConnectedUserByEmail(ctx, usersrepo.GetConnectedUserByEmailParams{
 		Email:          email,
 		OrganizationID: organizationID,
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		var result directoryUserContext
+		var result directoryContext
 		return result, nil
 	case err != nil:
-		var result directoryUserContext
+		var result directoryContext
 		return result, fmt.Errorf("resolve connected user by email: %w", err)
 	}
 
-	var result directoryUserContext
+	var result directoryContext
 	var profileErr error
 	profile, err := directory.NewService(e.db).GetUserProfile(ctx, organizationID, user.ID)
 	switch {
@@ -121,8 +103,8 @@ func (e *enrichDirectory) load(ctx context.Context, organizationID string, email
 	case err != nil:
 		profileErr = fmt.Errorf("load directory user profile: %w", err)
 	default:
-		result.DirectoryUserID = profile.ExternalID
-		result.UserAttributes = profile.RawAttributes
+		result.ID = profile.ExternalID
+		result.Attributes = profile.RawAttributes
 		result.GroupIDs = make([]string, len(profile.Groups))
 		result.GroupNames = profile.GroupNames()
 		for i, group := range profile.Groups {
@@ -145,8 +127,8 @@ func (e *enrichDirectory) load(ctx context.Context, organizationID string, email
 	return result, profileErr
 }
 
-func (e *enrichDirectory) resolve(ctx context.Context, organizationID string, emailHash string, email string) (directoryUserContext, error) {
-	cacheKey := directoryUserContextCacheKey(organizationID, emailHash)
+func (e *enrichDirectory) resolve(ctx context.Context, organizationID string, emailHash string, email string) (directoryContext, error) {
+	cacheKey := directoryContextCacheKey(organizationID, emailHash)
 	if cached, err := e.cache.Get(ctx, cacheKey); err == nil {
 		return cached.Context, nil
 	}
@@ -157,37 +139,37 @@ func (e *enrichDirectory) resolve(ctx context.Context, organizationID string, em
 		}
 
 		resolved, loadErr := e.load(ctx, organizationID, email)
-		cacheErr := e.cache.Store(ctx, cachedDirectoryUserContext{
+		cacheErr := e.cache.Store(ctx, cachedDirectoryContext{
 			OrganizationID: organizationID,
 			EmailHash:      emailHash,
 			Context:        resolved,
 		})
 		return resolved, errors.Join(loadErr, cacheErr)
 	})
-	resolved, ok := value.(directoryUserContext)
+	resolved, ok := value.(directoryContext)
 	if !ok {
-		var empty directoryUserContext
-		return empty, fmt.Errorf("resolve directory span context: unexpected result type %T", value)
+		var empty directoryContext
+		return empty, fmt.Errorf("resolve directory context: unexpected result type %T", value)
 	}
 	return resolved, err
 }
 
-type directoryUserContext struct {
-	DirectoryUserID string         `json:"directory_user_id,omitempty"`
-	UserAttributes  map[string]any `json:"user_attributes,omitempty"`
-	GroupIDs        []string       `json:"group_ids,omitempty"`
-	GroupNames      []string       `json:"group_names,omitempty"`
-	Roles           []string       `json:"roles,omitempty"`
+type directoryContext struct {
+	ID         string         `json:"id,omitempty"`
+	Attributes map[string]any `json:"attributes,omitempty"`
+	GroupIDs   []string       `json:"group_ids,omitempty"`
+	GroupNames []string       `json:"group_names,omitempty"`
+	Roles      []string       `json:"roles,omitempty"`
 }
 
-func (c directoryUserContext) attributes() []attribute.KeyValue {
-	attrs := make([]attribute.KeyValue, 0, len(c.UserAttributes)+4)
-	if c.DirectoryUserID != "" {
-		attrs = append(attrs, DirectoryID(c.DirectoryUserID))
+func (c directoryContext) attributes() []attribute.KeyValue {
+	attrs := make([]attribute.KeyValue, 0, len(c.Attributes)+4)
+	if c.ID != "" {
+		attrs = append(attrs, DirectoryID(c.ID))
 	}
 
-	for name, value := range c.UserAttributes {
-		if attr, ok := directoryUserAttribute(name, value); ok {
+	for name, value := range c.Attributes {
+		if attr, ok := directoryAttribute(name, value); ok {
 			attrs = append(attrs, attr)
 		}
 	}
@@ -204,7 +186,7 @@ func (c directoryUserContext) attributes() []attribute.KeyValue {
 	return attrs
 }
 
-func directoryUserAttribute(name string, value any) (attribute.KeyValue, bool) {
+func directoryAttribute(name string, value any) (attribute.KeyValue, bool) {
 	var empty attribute.KeyValue
 	if name == "" || value == nil {
 		return empty, false
@@ -247,22 +229,22 @@ func directoryAttributeValue(value any) (attribute.Value, bool) {
 	}
 }
 
-type cachedDirectoryUserContext struct {
-	OrganizationID string               `json:"organization_id"`
-	EmailHash      string               `json:"email_hash"`
-	Context        directoryUserContext `json:"context"`
+type cachedDirectoryContext struct {
+	OrganizationID string           `json:"organization_id"`
+	EmailHash      string           `json:"email_hash"`
+	Context        directoryContext `json:"context"`
 }
 
-var _ cache.CacheableObject[cachedDirectoryUserContext] = (*cachedDirectoryUserContext)(nil)
+var _ cache.CacheableObject[cachedDirectoryContext] = (*cachedDirectoryContext)(nil)
 
-func (c cachedDirectoryUserContext) CacheKey() string {
-	return directoryUserContextCacheKey(c.OrganizationID, c.EmailHash)
+func (c cachedDirectoryContext) CacheKey() string {
+	return directoryContextCacheKey(c.OrganizationID, c.EmailHash)
 }
 
-func (c cachedDirectoryUserContext) TTL() time.Duration {
-	return directoryUserContextTTL
+func (c cachedDirectoryContext) TTL() time.Duration {
+	return directoryContextTTL
 }
 
-func directoryUserContextCacheKey(organizationID string, emailHash string) string {
-	return fmt.Sprintf("otelDirectoryUserContext:v1:%s:%s", organizationID, emailHash)
+func directoryContextCacheKey(organizationID string, emailHash string) string {
+	return fmt.Sprintf("otelDirectoryContext:v1:%s:%s", organizationID, emailHash)
 }

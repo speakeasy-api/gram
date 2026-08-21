@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/stokens"
 	"go.opentelemetry.io/otel/attribute"
@@ -75,4 +76,18 @@ func (e *enrichLogSpeakeasyTokens) Enrich(ctx context.Context, record *otelv1.In
 		TokensCount(inputCount + outputCount),
 		TokensCodec(e.codec.Name()),
 	}, nil
+}
+
+type enrichLogDirectory struct {
+	*enrichDirectory
+}
+
+func (e *enrichLogDirectory) Enrich(ctx context.Context, record *otelv1.InboundLogRecord) ([]attribute.KeyValue, error) {
+	organizationID := record.GetProvenance().GetOrganizationId()
+	_, email, err := dialect.ForLog(record).ExternalUserEmail(record)
+	if err != nil {
+		e.logger.WarnContext(ctx, "failed to read user email for directory log enrichment", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
+		return nil, nil
+	}
+	return e.enrich(ctx, organizationID, email), nil
 }
