@@ -32,6 +32,19 @@ const (
 	// queries rather than to protect a backend.
 	DocsQueriesPerConnectionPerMinute   = 10
 	DocsQueriesPerOrganizationPerMinute = 100
+
+	// DiagnosticQueriesPer* bound the aggregate diagnostic reads. They are
+	// generous because an administrator investigating an incident legitimately
+	// makes many of them in a short burst, and none of them reach personal
+	// data.
+	DiagnosticQueriesPerConnectionPerMinute   = 60
+	DiagnosticQueriesPerOrganizationPerMinute = 600
+
+	// SensitiveDiagnosticQueriesPer* bound the reads that reach personal data.
+	// Lower than the ordinary allowance, and metered separately so the two
+	// cannot be traded against each other.
+	SensitiveDiagnosticQueriesPerConnectionPerMinute   = 30
+	SensitiveDiagnosticQueriesPerOrganizationPerMinute = 300
 )
 
 var (

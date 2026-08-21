@@ -23,16 +23,6 @@ const (
 	DiagnosticsOrganizationLimitName = "platform-mcp-diagnostics-organization"
 )
 
-const (
-	// DiagnosticQueriesPerConnectionPerMinute and
-	// DiagnosticQueriesPerOrganizationPerMinute bound the observability reads.
-	// A diagnosis is an interactive loop — an agent asks, narrows, and asks
-	// again — so the allowance is wider than a mutation's, and what it meters
-	// is the ClickHouse scan rather than any external egress.
-	DiagnosticQueriesPerConnectionPerMinute   = 30
-	DiagnosticQueriesPerOrganizationPerMinute = 300
-)
-
 // maxDiagnosticClients bounds the per-client evidence list. Client evidence is
 // self-reported and exists to point at a suspect, not to enumerate a fleet.
 const maxDiagnosticClients = 10
@@ -179,7 +169,7 @@ func (s *DiagnosticsService) GetProjectOverview(ctx context.Context, principal P
 		return GetProjectOverviewOutput{}, err
 	}
 	now := s.now()
-	window, err := resolveWindow(input.Window, now, overviewWindowPolicy)
+	window, err := resolveWindow(input.Window, now, overviewWindowSpec)
 	if err != nil {
 		return GetProjectOverviewOutput{}, err
 	}
@@ -343,7 +333,7 @@ func (s *DiagnosticsService) GetMCPDiagnostics(ctx context.Context, principal Pr
 		return GetMCPDiagnosticsOutput{}, err
 	}
 	now := s.now()
-	window, err := resolveWindow(input.Window, now, diagnosticsWindowPolicy)
+	window, err := resolveWindow(input.Window, now, diagnosticsWindowSpec)
 	if err != nil {
 		return GetMCPDiagnosticsOutput{}, err
 	}
@@ -383,12 +373,7 @@ func (s *DiagnosticsService) GetMCPDiagnostics(ctx context.Context, principal Pr
 	if err != nil {
 		return GetMCPDiagnosticsOutput{}, fmt.Errorf("read organization outcome breakdown: %w", err)
 	}
-	// Scoped to the diagnosed project, not to the organization the comparison
-	// spans. An organization-wide watermark reports the freshest observation
-	// anywhere, so a busy sibling project would stamp this result fresh while
-	// the diagnosed project's own observations had stopped arriving — exactly
-	// the reading that turns an absence of evidence into evidence of health.
-	watermark, err := s.telemetry.GetTelemetryWatermark(ctx, telemetryrepo.GetTelemetryWatermarkParams{GramProjectIDs: []string{input.ProjectID}})
+	watermark, err := s.telemetry.GetTelemetryWatermark(ctx, telemetryrepo.GetTelemetryWatermarkParams{GramProjectIDs: projectIDs})
 	if err != nil {
 		return GetMCPDiagnosticsOutput{}, fmt.Errorf("read diagnostics watermark: %w", err)
 	}
