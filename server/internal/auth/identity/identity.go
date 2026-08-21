@@ -475,7 +475,7 @@ func membershipUpdatedAt(m workos.Member) pgtype.Timestamptz {
 	if t, err := time.Parse(time.RFC3339, m.UpdatedAt); err == nil {
 		return conv.ToPGTimestamptz(t.UTC())
 	}
-	return pgtype.Timestamptz{}
+	return pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite}
 }
 
 func (r *Resolver) UpdateOrganizationMembershipRole(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (string, error) {
