@@ -15,13 +15,6 @@ export function asString(value: unknown): string | undefined {
 }
 
 /**
- * The `browse:` query prefix reserved for a catalog request. The system prompt
- * tells the assistant to use it when the user asked what tools or capabilities
- * exist, and nothing else.
- */
-const BROWSE_QUERY_PREFIX = "browse:";
-
-/**
  * Whether a `tool_search` call is a catalog request rather than discovery.
  *
  * Discovery is the common case: the runner tells the model that MCP tools are
@@ -30,16 +23,17 @@ const BROWSE_QUERY_PREFIX = "browse:";
  * their logs, not about the catalog — and drawing the card for them put a
  * browsable tool list on top of nearly every answer.
  *
- * The card therefore renders only for a search the model marked as a browse.
+ * The card therefore renders only for a search the model flagged as a browse.
  * Intent is the model's to know and the result carries none of it: every
- * search returns the same whole-catalog view whatever was asked for. When the
- * prefix is missing (an older prompt, a model that skipped it), the call falls
- * back to the generic collapsed tool row, which is the safe direction.
+ * search returns the same whole-catalog view whatever was asked for, so the
+ * runner declares a `browse` parameter for the model to set (see
+ * `agents/runner/src/tools/tool_search.rs`). Read from the arguments rather
+ * than the echo in the result: the flag is then known before the search
+ * returns, and on a reloaded transcript whose result shape varies.
+ *
+ * An unflagged call — an older prompt, a model that skipped it — falls back to
+ * the generic collapsed tool row, which is the safe direction.
  */
 export function isCatalogBrowseSearch(args: unknown): boolean {
-  const query = asString(asRecord(args)?.["query"]);
-  return (
-    query !== undefined &&
-    query.trimStart().toLowerCase().startsWith(BROWSE_QUERY_PREFIX)
-  );
+  return asRecord(args)?.["browse"] === true;
 }

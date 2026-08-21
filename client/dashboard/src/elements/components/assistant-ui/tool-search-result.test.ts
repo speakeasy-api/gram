@@ -4,12 +4,9 @@ import { rendersDefaultToolWidget } from "./default-tool-components";
 import { isCatalogBrowseSearch } from "./tool-search-result.helpers";
 
 describe("isCatalogBrowseSearch", () => {
-  it("accepts the browse marker, however the model spaced or cased it", () => {
-    expect(isCatalogBrowseSearch({ query: "browse:" })).toBe(true);
-    expect(isCatalogBrowseSearch({ query: "browse: logs" })).toBe(true);
-    expect(isCatalogBrowseSearch({ query: "  Browse:observability" })).toBe(
-      true,
-    );
+  it("accepts a search the model flagged as a browse", () => {
+    expect(isCatalogBrowseSearch({ query: "", browse: true })).toBe(true);
+    expect(isCatalogBrowseSearch({ query: "logs", browse: true })).toBe(true);
   });
 
   it("rejects a discovery search", () => {
@@ -18,25 +15,25 @@ describe("isCatalogBrowseSearch", () => {
     expect(isCatalogBrowseSearch({ query: "logs telemetry errors" })).toBe(
       false,
     );
-    expect(isCatalogBrowseSearch({ query: "select: mcp__p-platform_x" })).toBe(
+    expect(isCatalogBrowseSearch({ query: "tools", browse: false })).toBe(
       false,
     );
-    // A keyword that merely starts like the marker is not one.
-    expect(isCatalogBrowseSearch({ query: "browse the catalog" })).toBe(false);
   });
 
-  it("rejects anything that is not a query string", () => {
+  it("takes only a literal true, not a value that merely looks set", () => {
+    // Arguments are a partial parse while the model streams them, and a
+    // half-written flag must not draw the card.
+    expect(isCatalogBrowseSearch({ browse: "true" })).toBe(false);
+    expect(isCatalogBrowseSearch({ browse: 1 })).toBe(false);
     expect(isCatalogBrowseSearch({})).toBe(false);
-    expect(isCatalogBrowseSearch({ query: "" })).toBe(false);
-    expect(isCatalogBrowseSearch({ query: 7 })).toBe(false);
     expect(isCatalogBrowseSearch(undefined)).toBe(false);
-    expect(isCatalogBrowseSearch("browse:")).toBe(false);
+    expect(isCatalogBrowseSearch("browse")).toBe(false);
   });
 });
 
 describe("rendersDefaultToolWidget", () => {
   it("draws the catalog only for a browse", () => {
-    expect(rendersDefaultToolWidget("tool_search", { query: "browse:" })).toBe(
+    expect(rendersDefaultToolWidget("tool_search", { browse: true })).toBe(
       true,
     );
     expect(rendersDefaultToolWidget("tool_search", { query: "logs" })).toBe(
@@ -45,7 +42,7 @@ describe("rendersDefaultToolWidget", () => {
   });
 
   it("says nothing about a tool Elements has no card for", () => {
-    expect(rendersDefaultToolWidget("search_docs", { query: "browse:" })).toBe(
+    expect(rendersDefaultToolWidget("search_docs", { browse: true })).toBe(
       false,
     );
   });

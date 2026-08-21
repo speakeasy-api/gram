@@ -17,12 +17,6 @@ const MAX_MATCHES: usize = 8;
 
 const BRIEF_DESCRIPTION_CHARS: usize = 140;
 
-/// Query prefix marking a catalog request: the user asked what tools exist,
-/// rather than the model looking for the tools a task needs. It carries intent
-/// for the host — which may present such a search to the user as a browsable
-/// catalog — and nothing for ranking, so it is stripped before matching.
-const BROWSE_PREFIX: &str = "browse:";
-
 pub struct ToolSearchTool {
     catalog: CatalogReader,
     cmd_tx: mpsc::Sender<McpCmd>,
@@ -42,6 +36,14 @@ impl ToolSearchTool {
 #[derive(Debug, Deserialize)]
 struct ToolSearchInput {
     query: String,
+    /// The user asked what tools exist, rather than the model looking for the
+    /// tools a task needs. Nothing here reads it — ranking is the same either
+    /// way — but a tool can only be sent parameters it declares, and a host
+    /// needs the distinction: every search returns the same whole-catalog
+    /// view, so the result alone cannot tell the two apart. Echoed back in the
+    /// body so a renderer that sees only the result can read it too.
+    #[serde(default)]
+    browse: bool,
 }
 
 fn build_spec() -> ToolSpec {
@@ -51,8 +53,14 @@ fn build_spec() -> ToolSpec {
             "query": {
                 "type": "string",
                 "description": "Keywords to match against tool names and descriptions, \
-                    `select:` followed by comma-separated exact tool names, or `browse:` \
-                    (optionally followed by keywords) when the user asked what tools exist.",
+                    or `select:` followed by comma-separated exact tool names.",
+            },
+            "browse": {
+                "type": "boolean",
+                "description": "Set true when the user asked what tools or capabilities are \
+                    available, rather than when searching for a tool to complete a task. \
+                    A host may present such a search to the user as a browsable catalog. \
+                    Leave the query empty alongside it unless the user named one area.",
             },
         },
         "required": ["query"],
@@ -63,10 +71,9 @@ fn build_spec() -> ToolSpec {
 Those tools are not listed in your declared tool schema; this is how you discover them. \
 Results carry full input schemas for matches, a compact name index of the whole catalog, \
 and the connection status of every attached MCP server (including authorization links \
-for servers that require auth). When the user is asking what tools or capabilities exist \
-rather than looking for one to complete a task, prefix the query with `browse:` \
-(alone, or followed by keywords to lead with one area); the host may present that search \
-to the user as a browsable catalog. A discovered tool is invoked by its exact name — \
+for servers that require auth). Set `browse` when the user is asking what tools or \
+capabilities exist rather than looking for one to complete a task; the host may present \
+that search to the user as a browsable catalog. A discovered tool is invoked by its exact name — \
 directly, or from a compose script via tool(name, input); it never appears in your \
 declared tool list. Also callable from inside compose scripts.";
 
@@ -145,6 +152,7 @@ impl Tool for ToolSearchTool {
             "matched_tools": matched_tools,
             "catalog": catalog_index,
             "servers": servers,
+            "browse": input.browse,
         });
 
         Ok(ToolResult::new(ToolResultPart::success(
@@ -163,24 +171,8 @@ fn brief(description: &str) -> String {
     out
 }
 
-/// Drops a leading `browse:` marker, case-insensitively, along with the
-/// whitespace after it. `get` rather than a slice: the query is arbitrary text
-/// and indexing it could land inside a multi-byte character.
-fn strip_browse_prefix(query: &str) -> &str {
-    match query.get(..BROWSE_PREFIX.len()) {
-        Some(head) if head.eq_ignore_ascii_case(BROWSE_PREFIX) => {
-            query[BROWSE_PREFIX.len()..].trim_start()
-        }
-        _ => query,
-    }
-}
-
 fn rank<'a>(specs: &'a [ToolSpec], query: &str) -> Vec<&'a ToolSpec> {
-    // A browse marker is for the host, not for matching. Stripping it keeps
-    // `browse:` alone equivalent to an empty query — the catalog index carries
-    // the whole list already, so a browse needs no full schemas — and lets
-    // `browse: logs` still lead with the area the user named.
-    let query = strip_browse_prefix(query.trim());
+    let query = query.trim();
     if let Some(selection) = query.strip_prefix("select:") {
         let wanted: Vec<&str> = selection
             .split(',')
@@ -275,28 +267,15 @@ mod tests {
     }
 
     #[test]
-    fn rank_ignores_the_browse_marker() {
-        let specs = vec![
-            spec("mcp_srv_search_logs", "Reads logs."),
-            spec("mcp_srv_get_weather", "Reads a forecast."),
-        ];
-        assert!(rank(&specs, "browse:").is_empty());
-        assert!(rank(&specs, "  BROWSE:  ").is_empty());
-        let names: Vec<&str> = rank(&specs, "browse: logs")
-            .iter()
-            .map(|s| s.name.0.as_str())
-            .collect();
-        assert_eq!(names, ["mcp_srv_search_logs"]);
-    }
-
-    #[test]
-    fn rank_leaves_a_non_marker_query_alone() {
-        let specs = vec![spec("mcp_srv_browse_catalog", "Browses the catalog.")];
-        let names: Vec<&str> = rank(&specs, "browse")
-            .iter()
-            .map(|s| s.name.0.as_str())
-            .collect();
-        assert_eq!(names, ["mcp_srv_browse_catalog"]);
+    fn browse_defaults_off_and_parses_when_set() {
+        // The flag is the whole contract with the host, so its name and its
+        // absence both matter: an ordinary discovery search omits it.
+        let discovery: ToolSearchInput =
+            serde_json::from_value(json!({"query": "weather"})).unwrap();
+        assert!(!discovery.browse);
+        let browse: ToolSearchInput =
+            serde_json::from_value(json!({"query": "", "browse": true})).unwrap();
+        assert!(browse.browse);
     }
 
     #[test]
