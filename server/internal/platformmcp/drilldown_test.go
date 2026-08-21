@@ -175,6 +175,35 @@ func TestToolEvents_OrdersBrokenToolsFirstAndReportsTruncation(t *testing.T) {
 	require.Len(t, capped, maxDrilldownTools)
 }
 
+// TestSummaryIdentityParams_UsesExactlyOneIdentityFilter pins that the summary
+// read never ANDs the two identity filters. Hosted telemetry carries a toolset
+// slug and no mcp_server id, so requiring both matches nothing — and the
+// failure is silent, surfacing as a latency of zero rather than an error.
+func TestSummaryIdentityParams_UsesExactlyOneIdentityFilter(t *testing.T) {
+	t.Parallel()
+
+	hosted := drilldownTarget{
+		toolsetSlugs: []string{"billing"},
+		projectID:    "project-1",
+		mcpServerID:  "mcp-1",
+	}
+	params := summaryIdentityParams(hosted, 1, 2)
+	require.Equal(t, "billing", params.ToolsetSlug)
+	require.Empty(t, params.MCPServerID)
+
+	// A remote, tunneled, or unproxied server carries no slug, so it is scoped
+	// by its server id instead — never by neither, which would read as "no
+	// filter" and return the whole project.
+	remote := drilldownTarget{
+		projectID:   "project-1",
+		mcpServerID: "mcp-1",
+	}
+	params = summaryIdentityParams(remote, 1, 2)
+	require.Empty(t, params.ToolsetSlug)
+	require.Equal(t, "mcp-1", params.MCPServerID)
+	require.Equal(t, "project-1", params.GramProjectID)
+}
+
 func TestValidOutcomeClass_IsAClosedSet(t *testing.T) {
 	t.Parallel()
 

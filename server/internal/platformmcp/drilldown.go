@@ -292,6 +292,27 @@ func (s *DiagnosticsService) QueryMCPTraces(ctx context.Context, principal Princ
 	return output, nil
 }
 
+// summaryIdentityParams scopes the summary read to exactly one identity filter.
+//
+// The two are recorded on different traffic: hosted calls carry
+// gram.toolset.slug and no mcp_server id, so ANDing both matches nothing and
+// silently reports zero latency. The mcp_server id is what scopes the models
+// that carry no slug, where an empty slug would otherwise read as "no filter"
+// and return the whole project under this MCP's name.
+func summaryIdentityParams(target drilldownTarget, start, end int64) telemetryrepo.GetOverviewSummaryParams {
+	params := telemetryrepo.GetOverviewSummaryParams{
+		GramProjectID: target.projectID,
+		TimeStart:     start,
+		TimeEnd:       end,
+	}
+	if slug := target.hostedToolsetSlug(); slug != "" {
+		params.ToolsetSlug = slug
+		return params
+	}
+	params.MCPServerID = target.mcpServerID
+	return params
+}
+
 // QueryMCPMetricsInput asks for one MCP's aggregate levels over a window.
 type QueryMCPMetricsInput struct {
 	ProjectID string `json:"project_id" jsonschema:"AICP project ID that owns the MCP"`
@@ -336,16 +357,7 @@ func (s *DiagnosticsService) QueryMCPMetrics(ctx context.Context, principal Prin
 	if err != nil {
 		return QueryMCPMetricsOutput{}, fmt.Errorf("read mcp metrics outcomes: %w", err)
 	}
-	summary, err := s.telemetry.GetOverviewSummary(ctx, telemetryrepo.GetOverviewSummaryParams{
-		GramProjectID: target.projectID,
-		TimeStart:     start,
-		TimeEnd:       end,
-		ToolsetSlug:   toolsetSlug,
-		// Scopes the read for a remote, tunneled, or unproxied server, which
-		// carries no toolset slug. Without it an empty slug would read as "no
-		// filter" and return the whole project under this MCP's name.
-		MCPServerID: target.mcpServerID,
-	})
+	summary, err := s.telemetry.GetOverviewSummary(ctx, summaryIdentityParams(target, start, end))
 	if err != nil {
 		return QueryMCPMetricsOutput{}, fmt.Errorf("read mcp metrics summary: %w", err)
 	}
