@@ -615,6 +615,7 @@ INSERT INTO platform_mcp_distributions (
     project_id,
     registration_id,
     default_plugin_id,
+    plugin_id,
     plugin_server_id,
     state,
     version,
@@ -626,6 +627,7 @@ SELECT
     $1,
     $2,
     $3,
+    $4,
     $4,
     $5,
     $6,
@@ -2204,6 +2206,9 @@ type GetPlatformMCPDistributionParams struct {
 	DefaultPluginID uuid.UUID
 }
 
+// This is a neutral desired-state lookup used by inventory and write paths.
+// Default-only mutations revalidate plugins.is_default in their write queries;
+// inventory intentionally projects COALESCE(plugin_id, default_plugin_id).
 func (q *Queries) GetPlatformMCPDistribution(ctx context.Context, arg GetPlatformMCPDistributionParams) (PlatformMcpDistribution, error) {
 	row := q.db.QueryRow(ctx, getPlatformMCPDistribution,
 		arg.OrganizationID,
@@ -2690,12 +2695,18 @@ JOIN projects AS project
   ON project.id = distribution.project_id
  AND project.organization_id = distribution.organization_id
  AND project.deleted IS FALSE
-JOIN platform_mcp_catalog_registrations AS registration
-  ON registration.id = distribution.registration_id
- AND registration.project_id = distribution.project_id
- AND registration.organization_id = distribution.organization_id
- AND registration.deleted IS FALSE
-JOIN plugin_servers AS plugin_server
+ JOIN platform_mcp_catalog_registrations AS registration
+   ON registration.id = distribution.registration_id
+  AND registration.project_id = distribution.project_id
+  AND registration.organization_id = distribution.organization_id
+  AND registration.deleted IS FALSE
+ JOIN plugins AS plugin
+   ON plugin.id = distribution.default_plugin_id
+  AND plugin.organization_id = distribution.organization_id
+  AND plugin.project_id = distribution.project_id
+  AND plugin.is_default IS TRUE
+  AND plugin.deleted IS FALSE
+ JOIN plugin_servers AS plugin_server
   ON plugin_server.id = distribution.plugin_server_id
   AND plugin_server.plugin_id = distribution.default_plugin_id
   AND plugin_server.deleted IS FALSE
@@ -2749,6 +2760,8 @@ type GetPlatformMCPSelectedUseTargetRow struct {
 	ConnectionGeneration uuid.NullUUID
 }
 
+// Resolve a target only through the literal Default plugin during the
+// compatibility rollout. Named-plugin rows remain excluded from selected use.
 func (q *Queries) GetPlatformMCPSelectedUseTarget(ctx context.Context, arg GetPlatformMCPSelectedUseTargetParams) (GetPlatformMCPSelectedUseTargetRow, error) {
 	row := q.db.QueryRow(ctx, getPlatformMCPSelectedUseTarget,
 		arg.InitiatingSubjectUrn,
@@ -3170,13 +3183,19 @@ SELECT EXISTS (
      AND registration.organization_id = distribution.organization_id
      AND registration.project_id = distribution.project_id
      AND registration.deleted IS FALSE
-    JOIN projects AS project
-      ON project.id = distribution.project_id
-     AND project.organization_id = distribution.organization_id
-     AND project.deleted IS FALSE
-    WHERE distribution.organization_id = $1
-      AND distribution.project_id = $2
-      AND distribution.state = 'attached'
+     JOIN projects AS project
+       ON project.id = distribution.project_id
+      AND project.organization_id = distribution.organization_id
+      AND project.deleted IS FALSE
+     JOIN plugins AS plugin
+       ON plugin.id = distribution.default_plugin_id
+      AND plugin.organization_id = distribution.organization_id
+      AND plugin.project_id = distribution.project_id
+      AND plugin.is_default IS TRUE
+      AND plugin.deleted IS FALSE
+     WHERE distribution.organization_id = $1
+       AND distribution.project_id = $2
+       AND distribution.state = 'attached'
       AND registration.status = 'registered'
       AND registration.mcp_server_id IS NOT NULL
 )
@@ -3187,6 +3206,8 @@ type HasAttachedPlatformMCPOnboardingDistributionForProjectParams struct {
 	ProjectID      uuid.UUID
 }
 
+// This is intentionally Default-only during the compatibility rollout; named
+// rows added by a later release must not satisfy onboarding distribution.
 func (q *Queries) HasAttachedPlatformMCPOnboardingDistributionForProject(ctx context.Context, arg HasAttachedPlatformMCPOnboardingDistributionForProjectParams) (bool, error) {
 	row := q.db.QueryRow(ctx, hasAttachedPlatformMCPOnboardingDistributionForProject, arg.OrganizationID, arg.ProjectID)
 	var exists bool
@@ -3403,16 +3424,24 @@ SELECT EXISTS (
     UNION ALL
     SELECT 1
     FROM platform_mcp_distributions AS distribution
-    JOIN platform_mcp_catalog_registrations AS registration
-      ON registration.id = distribution.registration_id
-     AND registration.organization_id = distribution.organization_id
-     AND registration.project_id = distribution.project_id
-     AND registration.deleted IS FALSE
-    WHERE distribution.organization_id = $1
-      AND distribution.state = 'attached'
+     JOIN platform_mcp_catalog_registrations AS registration
+       ON registration.id = distribution.registration_id
+      AND registration.organization_id = distribution.organization_id
+      AND registration.project_id = distribution.project_id
+      AND registration.deleted IS FALSE
+     JOIN plugins AS plugin
+       ON plugin.id = distribution.default_plugin_id
+      AND plugin.organization_id = distribution.organization_id
+      AND plugin.project_id = distribution.project_id
+      AND plugin.is_default IS TRUE
+      AND plugin.deleted IS FALSE
+     WHERE distribution.organization_id = $1
+       AND distribution.state = 'attached'
 ) AS setup_complete
 `
 
+// Default-only setup completion must not be satisfied by a future named-plugin
+// row. A missing or no-longer-Default plugin therefore correctly does not count.
 func (q *Queries) HasPlatformMCPOrganizationSetupComplete(ctx context.Context, organizationID string) (bool, error) {
 	row := q.db.QueryRow(ctx, hasPlatformMCPOrganizationSetupComplete, organizationID)
 	var setup_complete bool
@@ -3430,11 +3459,17 @@ SELECT EXISTS (
      AND distribution.registration_id = evidence.registration_id
      AND distribution.version = evidence.distribution_version
      AND distribution.state = 'attached'
-    JOIN projects AS project
-      ON project.id = distribution.project_id
-     AND project.organization_id = distribution.organization_id
-     AND project.deleted IS FALSE
-    JOIN platform_mcp_connections AS connection
+     JOIN projects AS project
+       ON project.id = distribution.project_id
+      AND project.organization_id = distribution.organization_id
+      AND project.deleted IS FALSE
+     JOIN plugins AS plugin
+       ON plugin.id = distribution.default_plugin_id
+      AND plugin.organization_id = distribution.organization_id
+      AND plugin.project_id = distribution.project_id
+      AND plugin.is_default IS TRUE
+      AND plugin.deleted IS FALSE
+     JOIN platform_mcp_connections AS connection
       ON connection.id = distribution.connection_id
      AND connection.organization_id = distribution.organization_id
      AND connection.active_generation = distribution.connection_generation
@@ -3453,6 +3488,8 @@ type HasPlatformMCPSelectedUseEvidenceParams struct {
 	InitiatingSubjectUrn string
 }
 
+// Selected-use credit remains Default-only until the exact-plugin contract is
+// live, so a future named distribution cannot produce onboarding evidence.
 func (q *Queries) HasPlatformMCPSelectedUseEvidence(ctx context.Context, arg HasPlatformMCPSelectedUseEvidenceParams) (bool, error) {
 	row := q.db.QueryRow(ctx, hasPlatformMCPSelectedUseEvidence,
 		arg.OrganizationID,
@@ -5388,20 +5425,21 @@ func (q *Queries) UpdatePlatformMCPCatalogRegistrationComponents(ctx context.Con
 
 const updatePlatformMCPDistribution = `-- name: UpdatePlatformMCPDistribution :one
 UPDATE platform_mcp_distributions
-SET plugin_server_id = $1,
-    state = $2,
-    version = $3,
-    attachment_was_created = $4,
+SET plugin_id = $1,
+    plugin_server_id = $2,
+    state = $3,
+    version = $4,
+    attachment_was_created = $5,
     publication_state = 'pending',
     publication_updated_at = NULL,
-    connection_id = $5,
-    connection_generation = $6,
+    connection_id = $6,
+    connection_generation = $7,
     updated_at = clock_timestamp()
-WHERE platform_mcp_distributions.id = $7
-  AND platform_mcp_distributions.organization_id = $8
-  AND platform_mcp_distributions.project_id = $9
-  AND platform_mcp_distributions.registration_id = $10
-  AND platform_mcp_distributions.default_plugin_id = $11
+WHERE platform_mcp_distributions.id = $8
+  AND platform_mcp_distributions.organization_id = $9
+  AND platform_mcp_distributions.project_id = $10
+  AND platform_mcp_distributions.registration_id = $11
+  AND platform_mcp_distributions.default_plugin_id = $1
   AND EXISTS (
       SELECT 1
       FROM projects AS project
@@ -5417,9 +5455,9 @@ WHERE platform_mcp_distributions.id = $7
        AND plugin.is_default IS TRUE
        AND plugin.deleted IS FALSE
       JOIN platform_mcp_connections AS connection
-        ON connection.id = $5
+        ON connection.id = $6
        AND connection.organization_id = project.organization_id
-       AND connection.active_generation = $6
+       AND connection.active_generation = $7
        AND connection.revoked_at IS NULL
       WHERE project.id = platform_mcp_distributions.project_id
         AND project.organization_id = platform_mcp_distributions.organization_id
@@ -5429,6 +5467,7 @@ RETURNING id, organization_id, project_id, registration_id, default_plugin_id, p
 `
 
 type UpdatePlatformMCPDistributionParams struct {
+	DefaultPluginID      uuid.NullUUID
 	PluginServerID       uuid.NullUUID
 	State                string
 	Version              int64
@@ -5439,11 +5478,11 @@ type UpdatePlatformMCPDistributionParams struct {
 	OrganizationID       string
 	ProjectID            uuid.UUID
 	RegistrationID       uuid.UUID
-	DefaultPluginID      uuid.UUID
 }
 
 func (q *Queries) UpdatePlatformMCPDistribution(ctx context.Context, arg UpdatePlatformMCPDistributionParams) (PlatformMcpDistribution, error) {
 	row := q.db.QueryRow(ctx, updatePlatformMCPDistribution,
+		arg.DefaultPluginID,
 		arg.PluginServerID,
 		arg.State,
 		arg.Version,
@@ -5454,7 +5493,6 @@ func (q *Queries) UpdatePlatformMCPDistribution(ctx context.Context, arg UpdateP
 		arg.OrganizationID,
 		arg.ProjectID,
 		arg.RegistrationID,
-		arg.DefaultPluginID,
 	)
 	var i PlatformMcpDistribution
 	err := row.Scan(
