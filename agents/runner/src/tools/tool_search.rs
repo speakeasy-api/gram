@@ -36,6 +36,14 @@ impl ToolSearchTool {
 #[derive(Debug, Deserialize)]
 struct ToolSearchInput {
     query: String,
+    /// The user asked what tools exist, rather than the model looking for the
+    /// tools a task needs. Nothing here reads it — ranking is the same either
+    /// way — but a tool can only be sent parameters it declares, and a host
+    /// needs the distinction: every search returns the same whole-catalog
+    /// view, so the result alone cannot tell the two apart. Echoed back in the
+    /// body so a renderer that sees only the result can read it too.
+    #[serde(default)]
+    browse: bool,
 }
 
 fn build_spec() -> ToolSpec {
@@ -47,6 +55,13 @@ fn build_spec() -> ToolSpec {
                 "description": "Keywords to match against tool names and descriptions, \
                     or `select:` followed by comma-separated exact tool names.",
             },
+            "browse": {
+                "type": "boolean",
+                "description": "Set true when the user asked what tools or capabilities are \
+                    available, rather than when searching for a tool to complete a task. \
+                    A host may present such a search to the user as a browsable catalog. \
+                    Leave the query empty alongside it unless the user named one area.",
+            },
         },
         "required": ["query"],
         "additionalProperties": false,
@@ -56,7 +71,9 @@ fn build_spec() -> ToolSpec {
 Those tools are not listed in your declared tool schema; this is how you discover them. \
 Results carry full input schemas for matches, a compact name index of the whole catalog, \
 and the connection status of every attached MCP server (including authorization links \
-for servers that require auth). A discovered tool is invoked by its exact name — \
+for servers that require auth). Set `browse` when the user is asking what tools or \
+capabilities exist rather than looking for one to complete a task; the host may present \
+that search to the user as a browsable catalog. A discovered tool is invoked by its exact name — \
 directly, or from a compose script via tool(name, input); it never appears in your \
 declared tool list. Also callable from inside compose scripts.";
 
@@ -135,6 +152,7 @@ impl Tool for ToolSearchTool {
             "matched_tools": matched_tools,
             "catalog": catalog_index,
             "servers": servers,
+            "browse": input.browse,
         });
 
         Ok(ToolResult::new(ToolResultPart::success(
@@ -246,6 +264,18 @@ mod tests {
             .map(|i| spec(&format!("mcp_srv_widget_{i}"), "Manages widgets."))
             .collect();
         assert_eq!(rank(&specs, "widget").len(), MAX_MATCHES);
+    }
+
+    #[test]
+    fn browse_defaults_off_and_parses_when_set() {
+        // The flag is the whole contract with the host, so its name and its
+        // absence both matter: an ordinary discovery search omits it.
+        let discovery: ToolSearchInput =
+            serde_json::from_value(json!({"query": "weather"})).unwrap();
+        assert!(!discovery.browse);
+        let browse: ToolSearchInput =
+            serde_json::from_value(json!({"query": "", "browse": true})).unwrap();
+        assert!(browse.browse);
     }
 
     #[test]

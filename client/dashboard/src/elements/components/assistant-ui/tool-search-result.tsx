@@ -8,23 +8,13 @@ import { PlusIcon } from "lucide-react";
 import { useMemo } from "react";
 
 import { ToolFallback } from "@/elements/components/assistant-ui/tool-fallback";
+import {
+  catalogPayload,
+  type ServerStatus,
+} from "@/elements/components/assistant-ui/tool-search-result.helpers";
+import { toolSearchVerdict } from "@/elements/components/assistant-ui/tool-widget-rendering";
+import { useElements } from "@/elements/hooks/useElements";
 import { appendToken } from "@/elements/lib/tool-mentions";
-
-/**
- * The runner's `tool_search` result: full schemas for the query's matches, a
- * name index of the whole catalog, and the live status of every attached MCP
- * server. See `agents/runner/src/tools/tool_search.rs`.
- */
-interface ToolSearchPayload {
-  servers: ServerStatus[];
-  /** Tool name -> one-line description, from the catalog index. */
-  briefs: Map<string, string>;
-}
-
-interface ServerStatus {
-  id: string;
-  tools: string[];
-}
 
 interface RowTool {
   /** Catalog name, as the model must call it. */
@@ -39,91 +29,6 @@ interface ToolRow {
   /** Server the row's tools came from; shown only when more than one is attached. */
   server: string;
   tools: RowTool[];
-}
-
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
-}
-
-function asString(value: unknown): string | undefined {
-  return typeof value === "string" && value ? value : undefined;
-}
-
-/**
- * The payload arrives either as the structured object or as a text content
- * item holding that same JSON — which one depends on whether the transport
- * preserved structured content, so both are unwrapped rather than assumed.
- */
-function extractPayload(result: unknown): ToolSearchPayload | null {
-  // The runner hands the structured body back as a JSON string.
-  if (typeof result === "string") {
-    try {
-      return extractPayload(JSON.parse(result) as unknown);
-    } catch {
-      return null;
-    }
-  }
-
-  const record = asRecord(result);
-  if (!record) return null;
-
-  const content = record["content"];
-  // Live turns deliver the body as `{content: "<json>"}`; a reloaded
-  // transcript delivers the same JSON as a bare string.
-  if (typeof content === "string") {
-    try {
-      const payload = extractPayload(JSON.parse(content) as unknown);
-      if (payload) return payload;
-    } catch {
-      // Not the JSON payload — fall through to the structured shapes.
-    }
-  }
-  if (Array.isArray(content)) {
-    for (const item of content) {
-      const text = asString(asRecord(item)?.["text"]);
-      if (!text) continue;
-      try {
-        const payload = extractPayload(JSON.parse(text) as unknown);
-        if (payload) return payload;
-      } catch {
-        // Not the JSON payload — keep looking through the content items.
-      }
-    }
-  }
-
-  const rawServers = record["servers"];
-  if (!Array.isArray(rawServers)) return null;
-
-  // Only servers that answered the handshake carry tools. One that is
-  // unavailable or still awaiting authorization has nothing to browse, so it
-  // is left out rather than rendered as an empty or disabled group.
-  const servers: ServerStatus[] = [];
-  for (const item of rawServers) {
-    const entry = asRecord(item);
-    const id = asString(entry?.["id"]);
-    const tools = entry?.["tools"];
-    if (!id || !Array.isArray(tools)) continue;
-    const names = tools.filter(
-      (name): name is string => typeof name === "string",
-    );
-    if (names.length > 0) servers.push({ id, tools: names });
-  }
-  if (servers.length === 0) return null;
-
-  const briefs = new Map<string, string>();
-  const catalog = record["catalog"];
-  if (Array.isArray(catalog)) {
-    for (const item of catalog) {
-      const entry = asRecord(item);
-      const name = asString(entry?.["name"]);
-      const brief = asString(entry?.["brief"]);
-      if (name && brief) briefs.set(name, brief);
-    }
-  }
-
-  return { servers, briefs };
 }
 
 /**
@@ -210,8 +115,12 @@ function buildRows(servers: ServerStatus[]): ToolRow[] {
 /**
  * Renders a `tool_search` result as a browsable catalog of the tools attached
  * to this session, grouped by the MCP server serving each one. Clicking a tool
- * runs it: the mention is sent as a turn of its own, so the discovery pass the
- * model just ran doubles as a launcher.
+ * runs it: the mention is sent as a turn of its own, so the search doubles as
+ * a launcher.
+ *
+ * Only a browse search draws the card, and only where the card can render
+ * outside its run's collapsible; anything else renders the generic tool row
+ * instead. See `toolSearchVerdict`.
  *
  * It goes through the model rather than calling the tool directly because the
  * tools live in the assistant's runtime, not in the page — and most of them
@@ -219,35 +128,38 @@ function buildRows(servers: ServerStatus[]): ToolRow[] {
  * works out the arguments, and calls it.
  */
 export const ToolSearchResult: ToolCallMessagePartComponent = (props) => {
-  const { status, result, toolCallId } = props;
+  const { result, toolCallId } = props;
   const aui = useAui();
+  const { config } = useElements();
   const composerText = useAuiState(({ thread }) => thread.composer.text);
 
-  // A model often searches several times before it answers, and every search
-  // carries the same whole-catalog view — so only the last one in the message
-  // draws a card. Rendering each would stack identical copies.
-  const isLastSearch = useAuiState(({ message }) => {
-    let last: string | undefined;
-    for (const part of message.parts) {
-      if (part.type === "tool-call" && part.toolName === "tool_search") {
-        last = part.toolCallId;
-      }
-    }
-    return last === toolCallId;
-  });
-
-  const payload = useMemo(
-    () => (status.type === "complete" ? extractPayload(result) : null),
-    [status.type, result],
+  // Which of the message's searches draws is a question about the whole
+  // message — see `toolSearchVerdict`. Derived inside the selector so the
+  // subscription is to this one verdict: the parts array itself changes
+  // identity on every streaming update.
+  const verdict = useAuiState(({ message }) =>
+    toolSearchVerdict(message.parts, toolCallId, config.tools?.components),
   );
 
-  // Anything this component can't read — a run still streaming, a denied call,
-  // an error payload, a search that reached no connected server — belongs to
-  // the generic tool card, which already renders those states.
+  // No status check of its own: the payload is null for a call that has not
+  // come back with a readable catalog, which is the same test the verdict used
+  // to pick this call.
+  const payload = useMemo(
+    () => (verdict === "draw" ? catalogPayload(result) : null),
+    [result, verdict],
+  );
+
   if (!payload) {
-    return <ToolFallback {...props} />;
+    // A duplicate browse renders nothing; everything else — a discovery
+    // search, a browse stranded in a collapsed run, a call still streaming, a
+    // denied call, an error, a search that reached no connected server —
+    // belongs to the generic tool card, which already renders those states. A
+    // host that replaced that card keeps it here: declining is the common path
+    // now that discovery searches take it.
+    if (verdict === "suppress") return null;
+    const Fallback = config.components?.ToolFallback ?? ToolFallback;
+    return <Fallback {...props} />;
   }
-  if (!isLastSearch) return null;
 
   const rows = buildRows(payload.servers);
   const total = payload.servers.reduce(
