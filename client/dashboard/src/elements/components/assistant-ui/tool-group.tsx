@@ -1,6 +1,5 @@
 import { useAuiState } from "@assistant-ui/react";
 import { useMemo, useRef, type FC, type PropsWithChildren } from "react";
-import { CollapsedToolRunProvider } from "@/elements/contexts/CollapsedToolRunContext";
 import { useElements } from "@/elements/hooks/useElements";
 import { humanizeToolName } from "@/elements/lib/humanize";
 import {
@@ -10,7 +9,7 @@ import {
   trailingAnnotationLine,
 } from "@/elements/lib/toolCallAnnotation";
 import { ToolUIGroup } from "@/elements/components/ui/tool-ui";
-import { rendersDefaultToolWidget } from "@/elements/components/assistant-ui/default-tool-components";
+import { runDrawsEveryWidget } from "@/elements/components/assistant-ui/tool-widget-rendering";
 import { DocsCitations } from "@/elements/components/assistant-ui/docs-citations";
 import {
   excerptFromReadDoc,
@@ -46,22 +45,9 @@ export const ToolGroup: FC<PropsWithChildren<{ indices: number[] }>> = ({
     return undefined;
   });
 
-  // Joined rather than returned as an array: useAuiState compares snapshots by
-  // identity, and a fresh array every render would never settle. Each entry
-  // carries whether Elements' own card for that tool is drawing anything for
-  // this call, because a built-in can decline one — a `tool_search` the model
-  // ran to discover tools rather than to show them renders the generic row,
-  // and a run of those must stay collapsed like any other.
-  const toolPartsKey = useAuiState(({ message }) => {
-    const entries: string[] = [];
-    for (const i of indices) {
-      const part = message.parts[i];
-      if (part?.type !== "tool-call") continue;
-      const drawn = rendersDefaultToolWidget(part.toolName, part.args);
-      entries.push(`${part.toolName}\u0001${drawn ? "1" : "0"}`);
-    }
-    return entries.join("\u0000");
-  });
+  // The state's own array, not one built in the selector: useAuiState compares
+  // snapshots by identity, and a fresh array every render would never settle.
+  const parts = useAuiState(({ message }) => message.parts);
 
   const anyMessagePartsAreRunning = useAuiState(({ message }) => {
     for (const i of indices) {
@@ -196,13 +182,11 @@ export const ToolGroup: FC<PropsWithChildren<{ indices: number[] }>> = ({
   // repeat searches a model fires before it answers — but keep the annotation
   // visible, since AssistantText has suppressed its prose render. A host
   // override is taken at its word; a built-in is asked, since it may decline.
-  const toolParts = toolPartsKey ? toolPartsKey.split("\u0000") : [];
-  const everyToolHasComponent =
-    toolParts.length > 0 &&
-    toolParts.every((entry) => {
-      const [name = "", drawn] = entry.split("\u0001");
-      return config.tools?.components?.[name] !== undefined || drawn === "1";
-    });
+  const everyToolHasComponent = runDrawsEveryWidget(
+    parts,
+    indices,
+    config.tools?.components,
+  );
   if (everyToolHasComponent) {
     return (
       <>
@@ -227,13 +211,7 @@ export const ToolGroup: FC<PropsWithChildren<{ indices: number[] }>> = ({
         status={status}
         defaultExpanded={defaultExpanded}
       >
-        {/* Marked collapsed for the whole subtree, not just when the
-            disclosure is shut: the group keeps its children mounted and
-            hidden, so a card in here is one the reader has to go looking
-            for. A built-in renders its fallback instead. */}
-        <CollapsedToolRunProvider value={true}>
-          {children}
-        </CollapsedToolRunProvider>
+        {children}
       </ToolUIGroup>
       {excerpts.length > 0 && (
         <DocsCitations excerpts={excerpts} className="mt-2 border" />

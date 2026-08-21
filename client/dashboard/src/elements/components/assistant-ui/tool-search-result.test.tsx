@@ -2,8 +2,6 @@ import type { ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-import { CollapsedToolRunProvider } from "@/elements/contexts/CollapsedToolRunContext";
-
 const mocks = vi.hoisted(() => ({
   state: {
     thread: { composer: { text: "" } },
@@ -45,44 +43,67 @@ const result = {
   ],
 };
 
-function render(args: Record<string, unknown>, collapsedRun: boolean): string {
-  const props = {
+let nextId = 0;
+function searchPart(args: Record<string, unknown>) {
+  return {
     type: "tool-call",
-    toolCallId: "call_1",
+    toolCallId: `call_${++nextId}`,
     toolName: "tool_search",
     args,
     argsText: JSON.stringify(args),
     result,
     status: { type: "complete" },
-  } as unknown as ComponentProps<typeof ToolSearchResult>;
-  mocks.state.message.parts = [props];
+  };
+}
 
-  return renderToStaticMarkup(
-    <CollapsedToolRunProvider value={collapsedRun}>
-      <ToolSearchResult {...props} />
-    </CollapsedToolRunProvider>,
-  );
+const plainCallPart = () => ({
+  type: "tool-call",
+  toolCallId: `call_${++nextId}`,
+  toolName: "mcp__p-platform_get_platform_context",
+  args: {},
+  result: {},
+  status: { type: "complete" },
+});
+
+/** Renders one part of a message, as the thread would. */
+function render(parts: object[], index: number): string {
+  mocks.state.message.parts = parts;
+  const props = parts[index] as unknown as ComponentProps<
+    typeof ToolSearchResult
+  >;
+  return renderToStaticMarkup(<ToolSearchResult {...props} />);
 }
 
 describe("ToolSearchResult", () => {
-  it("draws the catalog for a browse the run hoisted", () => {
-    expect(render({ query: "", browse: true }, false)).toContain(CARD_TEXT);
+  it("draws the catalog for a browse its run hoists", () => {
+    expect(render([searchPart({ query: "", browse: true })], 0)).toContain(
+      CARD_TEXT,
+    );
   });
 
-  it("falls back inside a collapsed run", () => {
-    // The run held a plain tool call too, so the group could not be hoisted.
-    // A catalog folded into a disclosure is worse than no catalog: in there
-    // this is one more call among the mechanics.
-    const markup = render({ query: "", browse: true }, true);
+  it("falls back for a browse batched with a plain call", () => {
+    // The run cannot be hoisted, so a card here would sit behind the
+    // disclosure that exists to hide a turn's mechanics.
+    const markup = render(
+      [searchPart({ query: "", browse: true }), plainCallPart()],
+      0,
+    );
     expect(markup).toContain(FALLBACK_TEXT);
     expect(markup).not.toContain(CARD_TEXT);
   });
 
-  it("falls back for a discovery search either way", () => {
-    for (const collapsed of [false, true]) {
-      const markup = render({ query: "logs telemetry" }, collapsed);
-      expect(markup).toContain(FALLBACK_TEXT);
-      expect(markup).not.toContain(CARD_TEXT);
-    }
+  it("falls back for a discovery search", () => {
+    const markup = render([searchPart({ query: "logs telemetry" })], 0);
+    expect(markup).toContain(FALLBACK_TEXT);
+    expect(markup).not.toContain(CARD_TEXT);
+  });
+
+  it("renders nothing for a repeated browse", () => {
+    const parts = [
+      searchPart({ query: "", browse: true }),
+      searchPart({ query: "", browse: true }),
+    ];
+    expect(render(parts, 0)).toBe("");
+    expect(render(parts, 1)).toContain(CARD_TEXT);
   });
 });

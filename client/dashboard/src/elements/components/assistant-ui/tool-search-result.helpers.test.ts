@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-import { rendersDefaultToolWidget } from "./default-tool-components";
 import { isCatalogBrowseSearch } from "./tool-search-result.helpers";
 
 describe("isCatalogBrowseSearch", () => {
@@ -28,22 +27,5 @@ describe("isCatalogBrowseSearch", () => {
     expect(isCatalogBrowseSearch({})).toBe(false);
     expect(isCatalogBrowseSearch(undefined)).toBe(false);
     expect(isCatalogBrowseSearch("browse")).toBe(false);
-  });
-});
-
-describe("rendersDefaultToolWidget", () => {
-  it("draws the catalog only for a browse", () => {
-    expect(rendersDefaultToolWidget("tool_search", { browse: true })).toBe(
-      true,
-    );
-    expect(rendersDefaultToolWidget("tool_search", { query: "logs" })).toBe(
-      false,
-    );
-  });
-
-  it("says nothing about a tool Elements has no card for", () => {
-    expect(rendersDefaultToolWidget("search_docs", { browse: true })).toBe(
-      false,
-    );
   });
 });

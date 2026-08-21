@@ -11,9 +11,8 @@ import { ToolFallback } from "@/elements/components/assistant-ui/tool-fallback";
 import {
   asRecord,
   asString,
-  isCatalogBrowseSearch,
 } from "@/elements/components/assistant-ui/tool-search-result.helpers";
-import { useIsCollapsedToolRun } from "@/elements/contexts/CollapsedToolRunContext";
+import { toolSearchVerdict } from "@/elements/components/assistant-ui/tool-widget-rendering";
 import { useElements } from "@/elements/hooks/useElements";
 import { appendToken } from "@/elements/lib/tool-mentions";
 
@@ -210,9 +209,9 @@ function buildRows(servers: ServerStatus[]): ToolRow[] {
  * runs it: the mention is sent as a turn of its own, so the search doubles as
  * a launcher.
  *
- * Only a browse search draws the card (see `isCatalogBrowseSearch`), and only
- * where the card can render outside its run's collapsible; anything else
- * renders the generic tool row instead.
+ * Only a browse search draws the card, and only where the card can render
+ * outside its run's collapsible; anything else renders the generic tool row
+ * instead. See `toolSearchVerdict`.
  *
  * It goes through the model rather than calling the tool directly because the
  * tools live in the assistant's runtime, not in the page — and most of them
@@ -220,53 +219,42 @@ function buildRows(servers: ServerStatus[]): ToolRow[] {
  * works out the arguments, and calls it.
  */
 export const ToolSearchResult: ToolCallMessagePartComponent = (props) => {
-  const { status, result, args, toolCallId } = props;
+  const { status, result, toolCallId } = props;
   const aui = useAui();
   const { config } = useElements();
-  const isCollapsedRun = useIsCollapsedToolRun();
   const composerText = useAuiState(({ thread }) => thread.composer.text);
 
-  // A model often searches several times before it answers, and every search
-  // carries the same whole-catalog view — so only the last browse in the
-  // message draws a card. Rendering each would stack identical copies.
-  // Discovery searches are skipped rather than counted: a turn that discovers
-  // and then browses must still draw the browse.
-  const isLastBrowse = useAuiState(({ message }) => {
-    let last: string | undefined;
-    for (const part of message.parts) {
-      if (
-        part.type === "tool-call" &&
-        part.toolName === "tool_search" &&
-        isCatalogBrowseSearch(part.args)
-      ) {
-        last = part.toolCallId;
-      }
-    }
-    return last === toolCallId;
-  });
+  // The state's own array, not one built in the selector: useAuiState compares
+  // snapshots by identity, and a fresh array every render would never settle.
+  const parts = useAuiState(({ message }) => message.parts);
+
+  // Which of the message's searches draws is a question about the whole
+  // message — see `toolSearchVerdict`.
+  const hostComponents = config.tools?.components;
+  const verdict = useMemo(
+    () => toolSearchVerdict(parts, toolCallId, hostComponents),
+    [parts, toolCallId, hostComponents],
+  );
 
   const payload = useMemo(
     () =>
-      status.type === "complete" && isCatalogBrowseSearch(args)
+      status.type === "complete" && verdict === "draw"
         ? extractPayload(result)
         : null,
-    [status.type, result, args],
+    [status.type, result, verdict],
   );
 
-  // Anything this component can't read — a discovery search, a run still
-  // streaming, a denied call, an error payload, a search that reached no
-  // connected server — belongs to the generic tool card, which already renders
-  // those states. A host that replaced that card keeps it here: declining is
-  // the common path now that discovery searches take it.
-  //
-  // A browse that could not be hoisted out of its run declines too. The
-  // catalog is an answer, and an answer folded into a disclosure is worse than
-  // no card at all — inside the run this is one more call among the mechanics.
-  const Fallback = config.components?.ToolFallback ?? ToolFallback;
-  if (!payload || isCollapsedRun) {
+  if (!payload) {
+    // A duplicate browse renders nothing; everything else — a discovery
+    // search, a browse stranded in a collapsed run, a call still streaming, a
+    // denied call, an error, a search that reached no connected server —
+    // belongs to the generic tool card, which already renders those states. A
+    // host that replaced that card keeps it here: declining is the common path
+    // now that discovery searches take it.
+    if (verdict === "suppress") return null;
+    const Fallback = config.components?.ToolFallback ?? ToolFallback;
     return <Fallback {...props} />;
   }
-  if (!isLastBrowse) return null;
 
   const rows = buildRows(payload.servers);
   const total = payload.servers.reduce(
