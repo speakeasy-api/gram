@@ -174,6 +174,9 @@ func (s *DiagnosticsService) GetProjectOverview(ctx context.Context, principal P
 		GramProjectID: input.ProjectID,
 		TimeStart:     start,
 		TimeEnd:       end,
+		// Carried so the active-server count is aggregated the same way the
+		// dashboard aggregates it for this organization's metrics mode.
+		SessionMode: sessionMode,
 	})
 	if err != nil {
 		return GetProjectOverviewOutput{}, fmt.Errorf("read project overview active counts: %w", err)
