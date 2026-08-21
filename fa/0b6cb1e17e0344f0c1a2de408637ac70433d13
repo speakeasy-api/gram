@@ -1,0 +1,32 @@
+server/internal/otel/enrich_span_directory_test.go
+  s_a45598db4a4df7::t_0be54f7bff8079 15,23-27,30-35,43
+server/internal/otel/enrich_log_directory.go
+  s_a45598db4a4df7::t_8251008fa07935 1-53
+server/internal/otel/enrich_log_tenancy.go
+  s_a45598db4a4df7::t_8251008fa07935 1-33
+server/internal/otel/user_enrichment_test.go
+  s_a45598db4a4df7::t_67fafec1100d70 1-97,99-110,112-124,126-238
+  s_a45598db4a4df7::t_a2555110b08560 98,111,125
+server/internal/otel/enrich_span_directory.go
+  s_a45598db4a4df7::t_0be54f7bff8079 1-54
+server/internal/otel/user_enrichment.go
+  s_a45598db4a4df7::t_7e2c62e906204e 24,26-33,35-36,41-42,47-49,51-70,73-74,80-81,83-84,87,89,95-98,100,104,119-124,127-130,133,139-140,142-143,145-146,194-197,200,202-203,206-207,210-211
+server/internal/otel/handler_ilog_transforms.go
+  s_a45598db4a4df7::t_2399327b234160 46
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "fa0b6cb1e17e0344f0c1a2de408637ac70433d13",
+  "prompts": {},
+  "sessions": {
+    "s_a45598db4a4df7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a02004-6932-7dc0-8650-7782e08db883",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
