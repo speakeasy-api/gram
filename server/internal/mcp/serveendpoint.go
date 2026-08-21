@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -260,20 +261,50 @@ func routeUpstreamToken(ctx context.Context, logger *slog.Logger, tokens map[uui
 
 	want := strings.TrimRight(upstreamResource, "/")
 	if want == "" {
+		logRouteFailClosed(ctx, logger, "backend_no_resource", tokens, upstreamResource)
 		return "", fmt.Errorf("proxied MCP backend has no upstream resource to route by, but %d remote_session tokens resolved; cannot determine which upstream token to forward", len(tokens))
 	}
 	var match string
-	found := 0
+	found, nullResources := 0, 0
 	for _, entry := range tokens {
+		if entry.Resource == "" {
+			nullResources++
+		}
 		if strings.TrimRight(entry.Resource, "/") == want {
 			found++
 			match = entry.Token
 		}
 	}
 	if found != 1 {
+		// Distinguish routing failures by cause: legacy grants minted before
+		// the resource column vs genuine duplicates.
+		reason := "duplicate_resource"
+		if found == 0 {
+			reason = "no_match"
+			if nullResources > 0 {
+				reason = "legacy_null_resource"
+			}
+		}
+		logRouteFailClosed(ctx, logger, reason, tokens, upstreamResource)
 		return "", fmt.Errorf("%d of %d resolved remote_session tokens match the backend's upstream resource; cannot determine which upstream token to forward", found, len(tokens))
 	}
 	return match, nil
+}
+
+// logRouteFailClosed emits one structured line per fail-closed routing
+// outcome so legacy-NULL, unmatched, duplicate, and resourceless-backend
+// causes are distinguishable in aggregate.
+func logRouteFailClosed(ctx context.Context, logger *slog.Logger, reason string, tokens map[uuid.UUID]remotesessions.UpstreamToken, upstreamResource string) {
+	recorded := make([]string, 0, len(tokens))
+	for _, entry := range tokens {
+		recorded = append(recorded, entry.Resource)
+	}
+	slices.Sort(recorded)
+	logger.ErrorContext(ctx, "remote_session token routing failed closed",
+		attr.SlogReason(reason),
+		attr.SlogResourceURI(upstreamResource),
+		attr.SlogOAuthResource(strings.Join(recorded, ",")),
+	)
 }
 
 // ResolveMCPEndpointAndServer walks the runtime addressing chain shared by
