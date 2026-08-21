@@ -990,10 +990,6 @@ func newStartCommand() *cli.Command {
 			feedbackRecorder := feedbackrecorder.NewRecorder(db, logger, &background.TemporalSkillSuggestionSignaler{TemporalEnv: temporalEnv, Logger: logger, StartDelay: 0})
 			skillTools := platformtoolsruntime.AssistantSkillTools(logger, db, feedbackRecorder, platformskills.WithEfficacySignaler(efficacySignaler))
 			triggerTools := platformtoolsruntime.TriggerExternalTools(db, triggerApp, auditLogger)
-			// mcpService captures this map by reference now; the remaining
-			// insights tools (chat/orgs/risk/deployments/skills) are merged in once
-			// their backing services exist further down.
-			managedInsightsTools := append([]platformtools.ExternalTool{}, platformtoolsruntime.ManagedAssistantLogsTools(telemSvc)...)
 			platformToolsets := map[string]platformtools.Toolset{}
 			// Runner-callable platform tools the runtime must be able to execute
 			// (trigger tools are wired separately via WithTriggerTools).
@@ -1643,12 +1639,6 @@ func newStartCommand() *cli.Command {
 			)
 			telemLogger.AddObserver(spendUsageTrigger)
 
-			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantChatsTools(chatService)...)
-			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantUsersTools(organizationsService)...)
-			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantRiskTools(riskService)...)
-			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantDeploymentsTools(deploymentsService)...)
-			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantSkillsTools(skillsService, telemetryrepo.New(chDB))...)
-			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantPluginsTools(pluginsSvc)...)
 			// One-off fetches on a cold cache; a pooled client would only hold
 			// idle connections to the marketing site. Bound the whole request
 			// so a stalled marketing-site response can't hang the fetch; the
@@ -1658,8 +1648,20 @@ func newStartCommand() *cli.Command {
 			// Take the larger bound so the shared client stays correct if either
 			// tool's timeout is tuned independently later.
 			marketingSiteClient.Timeout = max(platformchangelog.FetchTimeout, platformdocs.FetchTimeout)
-			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantChangelogTools(marketingSiteClient)...)
-			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantDocsTools(marketingSiteClient)...)
+			// Composed in one call so the served set has a single statement:
+			// the managed assistant's prompt names these tools inline, and a
+			// drift test holds it to this composition.
+			managedInsightsTools := platformtoolsruntime.ManagedAssistantToolset(platformtoolsruntime.ManagedAssistantToolsetDeps{
+				Telemetry:     telemSvc,
+				Chats:         chatService,
+				Users:         organizationsService,
+				Risk:          riskService,
+				Deployments:   deploymentsService,
+				Skills:        skillsService,
+				SkillInsights: telemetryrepo.New(chDB),
+				Plugins:       pluginsSvc,
+				MarketingSite: marketingSiteClient,
+			})
 			maps.Copy(platformToolsets, platformtools.BuildToolsets(platformtools.ToolsetDependencies{
 				AssistantMemoryTools:          memoryTools,
 				AssistantSkillTools:           skillTools,
