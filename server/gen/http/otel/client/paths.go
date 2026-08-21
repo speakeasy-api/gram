@@ -7,6 +7,11 @@
 
 package client
 
+// LogsOtelPath returns the URL path to the otel service logs HTTP endpoint.
+func LogsOtelPath() string {
+	return "/otel/v1/logs"
+}
+
 // TracesOtelPath returns the URL path to the otel service traces HTTP endpoint.
 func TracesOtelPath() string {
 	return "/otel/v1/traces"

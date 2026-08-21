@@ -90,6 +90,7 @@ type Publishers struct {
 	CustomRulesAnalysis     gcp.Publisher[*riskv1.CustomRulesAnalysis]
 	RiskFindings            gcp.Publisher[*riskv1.Finding]
 	TelemetryLogs           gcp.Publisher[*telemetryv1.LogRecord]
+	OTELLogs                gcp.Publisher[*otelv1.InboundLogRecord]
 	OTELSpans               gcp.Publisher[*otelv1.InboundSpan]
 	Outbox                  topics.Publisher
 }

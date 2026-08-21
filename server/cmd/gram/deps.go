@@ -1197,18 +1197,25 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	}
 	pubs = append(pubs, labelledStop{label: "telemetryLogs", pub: telemetryLogs})
 
-	// OTLP trace ingest publishes on the request path and waits for the result
-	// before answering the exporter, so a Pub/Sub stall must surface as a
-	// rejected export the client can retry rather than as a request held open
-	// behind an unbounded buffer.
-	otelSpanPublishSettings := pubsub.DefaultPublishSettings
-	otelSpanPublishSettings.Timeout = 10 * time.Second
-	otelSpanPublishSettings.FlowControlSettings.MaxOutstandingMessages = 10_000
-	otelSpanPublishSettings.FlowControlSettings.MaxOutstandingBytes = 128 * 1024 * 1024
-	otelSpanPublishSettings.FlowControlSettings.LimitExceededBehavior = pubsub.FlowControlSignalError
+	// OTLP ingest publishes on the request path and waits for the result before
+	// answering the exporter. Bound buffering so Pub/Sub stalls reject exports
+	// that clients can retry instead of holding requests open indefinitely.
+	otelPublishSettings := pubsub.DefaultPublishSettings
+	otelPublishSettings.Timeout = 10 * time.Second
+	otelPublishSettings.FlowControlSettings.MaxOutstandingMessages = 10_000
+	otelPublishSettings.FlowControlSettings.MaxOutstandingBytes = 128 * 1024 * 1024
+	otelPublishSettings.FlowControlSettings.LimitExceededBehavior = pubsub.FlowControlSignalError
+
+	otelLogs, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &otelv1.InboundLogRecord{},
+		gcp.WithPubSubPublishSettings(&otelPublishSettings),
+	)
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for otel logs: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "otelLogs", pub: otelLogs})
 
 	otelSpans, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &otelv1.InboundSpan{},
-		gcp.WithPubSubPublishSettings(&otelSpanPublishSettings),
+		gcp.WithPubSubPublishSettings(&otelPublishSettings),
 	)
 	if err != nil {
 		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for otel spans: %w", err)
@@ -1256,6 +1263,7 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 		CustomRulesAnalysis:     customRulesAnalysis,
 		RiskFindings:            riskFindings,
 		TelemetryLogs:           telemetryLogs,
+		OTELLogs:                otelLogs,
 		OTELSpans:               otelSpans,
 	}, shutdown, nil
 }

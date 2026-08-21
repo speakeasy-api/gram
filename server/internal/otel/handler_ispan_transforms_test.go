@@ -101,19 +101,26 @@ func TestApplySpanEnrichments(t *testing.T) {
 			},
 		},
 		{
-			name: "generic slice",
-			enrichment: otelattr.Slice("generic slice",
-				otelattr.StringValue("value"),
-				otelattr.Float64Value(2),
-				otelattr.BoolValue(true),
+			name: "heterogeneous slice",
+			enrichment: otelattr.Slice(
+				"heterogeneous slice",
+				otelattr.StringValue("text"),
+				otelattr.Int64Value(42),
+				otelattr.SliceValue(
+					otelattr.BoolValue(true),
+					otelattr.ByteSliceValue([]byte{0xde, 0xad}),
+				),
 			),
 			check: func(t *testing.T, got *otelv1.Span_AnyValue) {
 				t.Helper()
 				values := got.GetArrayValue().GetValues()
 				require.Len(t, values, 3)
-				require.Equal(t, "value", values[0].GetStringValue())
-				require.InDelta(t, 2, values[1].GetDoubleValue(), 0)
-				require.True(t, values[2].GetBoolValue())
+				require.Equal(t, "text", values[0].GetStringValue())
+				require.Equal(t, int64(42), values[1].GetIntValue())
+				nested := values[2].GetArrayValue().GetValues()
+				require.Len(t, nested, 2)
+				require.True(t, nested[0].GetBoolValue())
+				require.Equal(t, []byte{0xde, 0xad}, nested[1].GetBytesValue())
 			},
 		},
 	}
@@ -144,7 +151,7 @@ func TestApplySpanEnrichments(t *testing.T) {
 	}
 }
 
-func TestApplySpanEnrichmentsRejectsInvalidValue(t *testing.T) {
+func TestApplySpanEnrichmentsPreservesEmptyValue(t *testing.T) {
 	t.Parallel()
 
 	out := (&otelv1.Span_builder{
@@ -154,11 +161,13 @@ func TestApplySpanEnrichmentsRejectsInvalidValue(t *testing.T) {
 	}).Build()
 
 	err := applySpanEnrichments(out, []otelattr.KeyValue{{
-		Key:   "invalid",
+		Key:   "empty",
 		Value: otelattr.Value{},
 	}})
-	require.ErrorContains(t, err, "convert enrichment \"invalid\"")
-	require.Len(t, out.GetAttributes(), 1)
+	require.NoError(t, err)
+	require.Len(t, out.GetAttributes(), 2)
+	require.Equal(t, "empty", out.GetAttributes()[1].GetKey())
+	require.Equal(t, otelv1.Span_AnyValue_Value_not_set_case, out.GetAttributes()[1].GetValue().WhichValue())
 }
 
 func TestRewriteInstrumentationScopePreservesOriginalName(t *testing.T) {

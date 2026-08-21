@@ -184,9 +184,10 @@ func spanAnyValue(value otelattr.Value) (*otelv1.Span_AnyValue, error) {
 		return (&otelv1.Span_AnyValue_builder{
 			ArrayValue: (&otelv1.Span_ArrayValue_builder{Values: values}).Build(),
 		}).Build(), nil
-	default:
-		return nil, fmt.Errorf("unsupported OpenTelemetry attribute type %v", value.Type())
+	case otelattr.EMPTY:
+		return (&otelv1.Span_AnyValue_builder{}).Build(), nil
 	}
+	return nil, fmt.Errorf("unsupported OpenTelemetry attribute type %v", value.Type())
 }
 
 func spanFromInboundSpan(inbound *otelv1.InboundSpan) (*otelv1.Span, error) {
