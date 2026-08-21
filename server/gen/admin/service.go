@@ -39,6 +39,10 @@ type Service interface {
 	// Re-enables a disabled organization by clearing disabled_at. Idempotent: an
 	// organization that is already active is unaffected.
 	EnableOrganization(context.Context, *EnableOrganizationPayload) (res *AdminOrganization, err error)
+	// Seeds the built-in roles and their core grants for a legacy organization.
+	// Idempotent: roles that already hold grants are left unchanged. New
+	// organizations receive this setup automatically.
+	SetupRBAC(context.Context, *SetupRBACPayload) (err error)
 	// Returns full admin details for a single organization by id or slug.
 	GetOrganization(context.Context, *GetOrganizationPayload) (res *AdminOrganization, err error)
 	// Lists members of an organization (admin view, no auth scoping).
@@ -101,7 +105,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [21]string{"login", "callback", "logout", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "getPaygBillingSummary", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription"}
+var MethodNames = [22]string{"login", "callback", "logout", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "setupRBAC", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "getPaygBillingSummary", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -509,6 +513,13 @@ type RearmTrialPayload struct {
 type ResumeStripeSubscriptionPayload struct {
 	AdminSessionToken *string
 	OrganizationID    string
+}
+
+// SetupRBACPayload is the payload type of the admin service setupRBAC method.
+type SetupRBACPayload struct {
+	AdminSessionToken *string
+	// Organization ID.
+	ID string
 }
 
 // UpdateOrganizationPayload is the payload type of the admin service

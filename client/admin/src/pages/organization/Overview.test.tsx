@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
   listOrganizationProjects: vi.fn(),
   listOrganizations: vi.fn(),
   getOrganizationStats: vi.fn(),
+  setupOrganizationRBAC: vi.fn(),
   updateOrganization: vi.fn(),
 }));
 
@@ -35,6 +36,7 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
     listOrganizationProjects: mocks.listOrganizationProjects,
     listOrganizations: mocks.listOrganizations,
     getOrganizationStats: mocks.getOrganizationStats,
+    setupOrganizationRBAC: mocks.setupOrganizationRBAC,
     updateOrganization: mocks.updateOrganization,
   };
 });
@@ -146,6 +148,8 @@ beforeEach(() => {
   mocks.listOrganizationProjects.mockResolvedValue({ projects: [] });
   mocks.listOrganizations.mockReset();
   mocks.getOrganizationStats.mockReset();
+  mocks.setupOrganizationRBAC.mockReset();
+  mocks.setupOrganizationRBAC.mockResolvedValue(undefined);
   mocks.updateOrganization.mockReset();
 });
 
@@ -651,7 +655,47 @@ describe("Overview", () => {
       "Updated",
     ]);
     expect(labelsIn("Plan")).toEqual(["Account type", "Trial"]);
-    expect(labelsIn("Access")).toEqual(["Whitelisted", "Disabled at"]);
+    expect(labelsIn("Access")).toEqual(["Whitelisted", "Disabled at", "RBAC"]);
+  });
+
+  it("marks RBAC setup as a legacy-only repair", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    expect(
+      await screen.findByRole("button", { name: "Setup RBAC" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Legacy organizations only. New organizations should have RBAC configured automatically.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("sets up RBAC after confirming the legacy repair", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Setup RBAC" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByRole("heading").textContent).toBe(
+      `Setup RBAC for ${ORG.name}?`,
+    );
+    expect(
+      within(dialog).getByText(/Use this only for legacy organizations/),
+    ).toBeTruthy();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Setup RBAC" }));
+    await waitFor(() => {
+      expect(mocks.setupOrganizationRBAC).toHaveBeenCalledWith({ id: ORG.id });
+    });
+    await waitFor(() => {
+      expect(liveRegion().textContent).toContain(
+        `RBAC set up for ${ORG.name}.`,
+      );
+    });
   });
 
   it("nests the group headings under the record's own heading", async () => {

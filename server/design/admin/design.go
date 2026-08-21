@@ -411,6 +411,28 @@ var _ = Service("admin", func() {
 		Meta("openapi:operationId", "adminEnableOrganization")
 	})
 
+	Method("setupRBAC", func() {
+		Description("Seeds the built-in roles and their core grants for a legacy organization. Idempotent: roles that already hold grants are left unchanged. New organizations receive this setup automatically.")
+
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("id")
+
+			Meta("openapi:typename", "SetupRBACRequestBody")
+
+			Attribute("id", String, "Organization ID.", func() {
+				MinLength(1)
+			})
+		})
+
+		HTTP(func() {
+			POST("/admin/organization.setupRBAC")
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "adminSetupRBAC")
+	})
+
 	Method("getOrganization", func() {
 		Description("Returns full admin details for a single organization by id or slug.")
 

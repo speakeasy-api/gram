@@ -75481,6 +75481,15 @@ components:
           type: string
           description: The user_session_issuer id to link, or null to unlink.
           format: uuid
+    SetupRBACRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Organization ID.
+          minLength: 1
+      required:
+        - id
     ShadowMCPInventoryApprovalRequest:
       type: object
       properties:

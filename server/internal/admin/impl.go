@@ -800,6 +800,25 @@ func (s *Service) EnableOrganization(ctx context.Context, payload *gen.EnableOrg
 	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after enable")
 }
 
+func (s *Service) SetupRBAC(ctx context.Context, payload *gen.SetupRBACPayload) error {
+	_, err := repo.New(s.db).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
+		ID:        payload.ID,
+		AllowSlug: false,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return oops.C(oops.CodeNotFound)
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "find organization for RBAC setup").LogError(ctx, s.logger)
+	}
+
+	if err := authz.SeedSystemRoleGrants(ctx, s.db, payload.ID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "set up organization RBAC").LogError(ctx, s.logger.With(attr.SlogOrganizationID(payload.ID)))
+	}
+
+	return nil
+}
+
 func (s *Service) ExtendTrial(ctx context.Context, payload *gen.ExtendTrialPayload) (*gen.AdminOrganization, error) {
 	// The design bounds this too, but that validation is generated into the
 	// request decoder and only runs at the HTTP boundary. Repeating it here is

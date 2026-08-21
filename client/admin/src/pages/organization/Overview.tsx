@@ -5,6 +5,7 @@ import { useParams } from "@tanstack/react-router";
 import { useConfirmDialog } from "@/components/ConfirmDialog";
 import { CopyValue } from "@/components/CopyValue";
 import { Trial } from "@/components/Trial";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -22,6 +23,7 @@ import {
 } from "@/lib/adminQueries";
 import {
   errorMessage,
+  setupOrganizationRBAC,
   updateOrganization,
   type AdminOrganization,
 } from "@/lib/gramAdminApi";
@@ -95,6 +97,7 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
   // `DialogTrigger`, so Radix's own restore drops focus on `document.body`.
   const accountTypeControl = useRef<HTMLButtonElement>(null);
   const whitelistedControl = useRef<HTMLButtonElement>(null);
+  const setupRBACControl = useRef<HTMLButtonElement>(null);
   const openedFrom = useRef<HTMLButtonElement | null>(null);
 
   const mut = useMutation({
@@ -109,6 +112,10 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
     // A failed write replaces nothing it cancelled, so the totals have to be
     // asked for again. The record needs nothing: it was never repainted.
     onError: () => invalidateOrganizationStats(qc),
+  });
+
+  const setupRBACMutation = useMutation({
+    mutationFn: () => setupOrganizationRBAC({ id: org.id }),
   });
 
   // The confirmed path cannot restore focus itself: it disables the control it
@@ -126,6 +133,13 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
     // A control that has left the page is not somewhere to put the keyboard.
     if (openedFrom.current?.isConnected) openedFrom.current.focus();
   }, [mut.status, mut.isPending, mut.variables]);
+
+  const setupRestoreWanted = useRef(false);
+  useEffect(() => {
+    if (setupRBACMutation.isPending || !setupRestoreWanted.current) return;
+    setupRestoreWanted.current = false;
+    if (setupRBACControl.current?.isConnected) setupRBACControl.current.focus();
+  }, [setupRBACMutation.status, setupRBACMutation.isPending]);
 
   const commit = async (
     change: FactChange,
@@ -153,6 +167,30 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
       onSuccess: () => announce(`${org.name} updated. ${describe}.`),
       onError: (error) => {
         const text = `Could not update ${org.name}: ${errorMessage(error)}`;
+        announce(text);
+        showFailure(text);
+      },
+    });
+  };
+
+  const setupRBAC = async (): Promise<void> => {
+    const confirmed = await confirm({
+      title: `Setup RBAC for ${org.name}?`,
+      description:
+        "This seeds the core roles and grants. Use this only for legacy organizations; new organizations should have RBAC configured automatically.",
+      confirmLabel: "Setup RBAC",
+    });
+    if (!confirmed) {
+      setupRBACControl.current?.focus();
+      return;
+    }
+
+    showFailure(null);
+    setupRestoreWanted.current = true;
+    setupRBACMutation.mutate(undefined, {
+      onSuccess: () => announce(`RBAC set up for ${org.name}.`),
+      onError: (error) => {
+        const text = `Could not set up RBAC for ${org.name}: ${errorMessage(error)}`;
         announce(text);
         showFailure(text);
       },
@@ -260,6 +298,23 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
           >
             {fmtDateShort(org.disabled_at)}
           </span>
+        </Row>
+        <Row label="RBAC">
+          <div className="flex flex-col items-start gap-1.5">
+            <Button
+              ref={setupRBACControl}
+              variant="outline"
+              size="xs"
+              disabled={setupRBACMutation.isPending}
+              onClick={() => void setupRBAC()}
+            >
+              {setupRBACMutation.isPending ? "Setting up…" : "Setup RBAC"}
+            </Button>
+            <p className="text-muted-foreground max-w-xl text-xs">
+              Legacy organizations only. New organizations should have RBAC
+              configured automatically.
+            </p>
+          </div>
         </Row>
       </Group>
 

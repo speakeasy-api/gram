@@ -47,6 +47,11 @@ func EnableOrganizationAdminPath() string {
 	return "/admin/organization.enable"
 }
 
+// SetupRBACAdminPath returns the URL path to the admin service setupRBAC HTTP endpoint.
+func SetupRBACAdminPath() string {
+	return "/admin/organization.setupRBAC"
+}
+
 // GetOrganizationAdminPath returns the URL path to the admin service getOrganization HTTP endpoint.
 func GetOrganizationAdminPath() string {
 	return "/admin/organization.get"
