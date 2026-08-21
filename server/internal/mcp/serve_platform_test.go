@@ -54,8 +54,41 @@ func TestServePlatformToolset_ManagedAssistantReachesManagedToolset(t *testing.T
 	require.Contains(t, w.Body.String(), platformtools.ToolNameSearchLogs)
 }
 
-// The swap cuts both ways: an org on the platformmcp variant must lose the
-// legacy toolset, not merely gain the platform one.
+// A thread whose source kind cannot be read — deleted mid-turn, or a failed
+// read — falls back to the flag alone. Reporting it as not-dashboard would
+// 404 the toolset a dashboard thread is already connected to and strip the
+// assistant of every tool mid-turn; the legacy toolset stays hidden either
+// way, so an org that is not on the variant cannot be reached by the error.
+func TestServePlatformToolset_UnreadableThreadFallsBackToVariant(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	managedID := createAssistant(t, ti, authCtx, "Managed")
+	err := assistantsrepo.New(ti.conn).CreateProjectManagedAssistant(t.Context(), assistantsrepo.CreateProjectManagedAssistantParams{
+		ProjectID:   *authCtx.ProjectID,
+		AssistantID: managedID,
+	})
+	require.NoError(t, err)
+
+	ti.features.SetFlagVariant(feature.FlagAssistantPlatformMCP, authCtx.ActiveOrganizationID, feature.VariantAssistantToolsPlatformMCP)
+
+	// mintAssistantToken carries no thread, so the source-kind read finds
+	// nothing — the same position a deleted thread leaves this check in.
+	token := mintAssistantToken(t, ti, authCtx, managedID)
+
+	w, err := servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, toolsListBody(), token)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, "the variant's toolset must still serve: %s", w.Body.String())
+
+	_, err = servePlatformHTTP(t, ti, platformtools.ManagedAssistantPlatformToolsetSlug, toolsListBody(), token)
+	require.Error(t, err, "the legacy toolset stays hidden on the platformmcp variant")
+}
+
 // The rollout is dashboard-scoped. A Slack thread on the same managed
 // assistant keeps the legacy toolset even while the org is on the platformmcp
 // variant — attachment grants it, so the serve path must not 404 it.

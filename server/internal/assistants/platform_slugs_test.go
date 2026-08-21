@@ -79,7 +79,16 @@ func TestAssistantPlatformSlugsNonDashboardThreadStaysLegacy(t *testing.T) {
 	flags.SetFlagVariant(feature.FlagAssistantPlatformMCP, "org-test", feature.VariantAssistantToolsPlatformMCP)
 	svc.core.SetFeatureProvider(flags)
 
-	for _, sourceKind := range []string{sourceKindSlack, sourceKindCron, sourceKindWake, sourceKindWarmup} {
+	for _, sourceKind := range []string{
+		sourceKindSlack,
+		sourceKindMSTeams,
+		sourceKindLinear,
+		sourceKindGithub,
+		sourceKindCron,
+		sourceKindWake,
+		sourceKindWarmup,
+		sourceKindSetup,
+	} {
 		slugs, err := svc.core.assistantPlatformSlugs(t.Context(), managedRecord, sourceKind)
 		require.NoError(t, err)
 		require.Equal(t, []string{

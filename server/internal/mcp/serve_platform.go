@@ -182,8 +182,20 @@ func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, aut
 	// Slack, cron and wake turns on the legacy toolsets. The principal carries
 	// the thread it was minted for, which is what makes that resolvable here
 	// without trusting anything the runner sends.
+	//
+	// A source kind that cannot be read — a thread deleted mid-turn, a database
+	// blip — falls back to the flag alone, which is how this decision was made
+	// before the rollout was scoped to the dashboard. Reporting it as
+	// not-dashboard instead would 404 the Platform MCP toolset that bootstrap
+	// attached to a dashboard thread, stripping the assistant of every tool it
+	// has mid-turn; the reverse error only costs a non-dashboard thread its
+	// tools on an organization that is already on the variant, and neither
+	// error can reach an organization that is not.
+	sourceKind, resolvedSourceKind := s.threadSourceKind(ctx, principal.ThreadID)
+	dashboardScoped := !resolvedSourceKind || sourceKind == bgtriggers.DefinitionSlugDashboard
+
 	variant := feature.VariantAssistantToolsLegacy
-	if s.features != nil && s.threadIsDashboard(ctx, principal.ThreadID) {
+	if s.features != nil && dashboardScoped {
 		resolved, err := feature.FlagVariant(ctx, s.features, feature.FlagAssistantPlatformMCP,
 			authCtx.ActiveOrganizationID, feature.OrgProjectGroups(authCtx.OrganizationSlug, ""))
 		if err != nil {
@@ -200,18 +212,16 @@ func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, aut
 	return nil
 }
 
-// threadIsDashboard reports whether the calling thread was opened from the
-// dashboard. A thread that cannot be read — deleted mid-turn, or a database
-// blip — is reported as not-dashboard, which lands the caller on the legacy
-// toolsets: the same direction every other failure path here takes, and the
-// one that cannot strip a Slack thread of tools it already had.
-func (s *Service) threadIsDashboard(ctx context.Context, threadID uuid.UUID) bool {
+// threadSourceKind reads the surface the calling thread was opened from,
+// reporting false when it cannot be read — a thread deleted mid-turn, or a
+// database blip.
+func (s *Service) threadSourceKind(ctx context.Context, threadID uuid.UUID) (string, bool) {
 	sourceKind, err := assistantrepo.New(s.db).GetAssistantThreadSourceKind(ctx, threadID)
 	if err != nil {
 		s.logger.WarnContext(ctx, "resolve assistant thread source kind", attr.SlogError(err))
-		return false
+		return "", false
 	}
-	return sourceKind == bgtriggers.DefinitionSlugDashboard
+	return sourceKind, true
 }
 
 // wantedToolsetSlug maps a resolved rollout variant to the single managed-only
