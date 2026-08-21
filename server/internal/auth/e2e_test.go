@@ -211,6 +211,10 @@ func (e *e2eInstance) loginWithNonceBinding(ctx context.Context, t *testing.T, p
 	return ctx, result
 }
 
+// callbackFromLogin redeems the state Login put on the authorization URL.
+// It does not seed a nonce; that would skip the Login-written binding and
+// signup-intent keys this helper exists to exercise. Callback reports auth
+// failures as a redirect with signin_error=, not as a Go error.
 func (e *e2eInstance) callbackFromLogin(ctx context.Context, t *testing.T, login *gen.LoginResult) *gen.CallbackResult {
 	t.Helper()
 	state := nonceStateFromLocation(t, login.Location)
@@ -220,6 +224,7 @@ func (e *e2eInstance) callbackFromLogin(ctx context.Context, t *testing.T, login
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
+	require.NotContains(t, result.Location, "signin_error=")
 	return result
 }
 
@@ -1271,7 +1276,6 @@ func TestE2E_LoginCallback_OrdinaryLogin(t *testing.T) {
 	require.ErrorIs(t, err, redisCache.ErrCacheMiss, "ordinary login must not write a signup intent")
 
 	result := inst.callbackFromLogin(ctx, t, login)
-	require.NotContains(t, result.Location, "signin_error=")
 	require.NotEmpty(t, result.SessionToken)
 	require.Equal(t, 0, fetcher.getUserByEmailCalls, "callback must not perform the signup-only WorkOS email lookup")
 	require.Empty(t, fetcher.createdOrgs, "ordinary login must not provision a signup organization")
@@ -1327,7 +1331,6 @@ func TestE2E_LoginCallback_SignupNewWorkOSUser(t *testing.T) {
 	require.Equal(t, orgName, intent.OrgName)
 
 	result := inst.callbackFromLogin(ctx, t, login)
-	require.NotContains(t, result.Location, "signin_error=")
 	require.NotEmpty(t, result.SessionToken)
 
 	err = inst.nonceStore.Get(ctx, "auth:signup_intent:"+nonce, &intent)
@@ -1348,6 +1351,11 @@ func TestE2E_LoginCallback_SignupNewWorkOSUser(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, orgName, org.Name)
 	require.True(t, org.Whitelisted)
+	require.Equal(t, "enterprise", org.GramAccountType)
+
+	trial, err := trialsRepo.New(inst.conn).GetTrial(ctx, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	require.Equal(t, "enterprise", trial.Tier)
 }
 
 // TestE2E_LoginCallback_SignupExistingWorkOSUser exercises Login → Callback
@@ -1396,7 +1404,6 @@ func TestE2E_LoginCallback_SignupExistingWorkOSUser(t *testing.T) {
 	require.Equal(t, orgName, intent.OrgName)
 
 	result := inst.callbackFromLogin(ctx, t, login)
-	require.NotContains(t, result.Location, "signin_error=")
 	require.NotEmpty(t, result.SessionToken)
 
 	err = inst.nonceStore.Get(ctx, "auth:signup_intent:"+nonce, &intent)
@@ -1417,6 +1424,11 @@ func TestE2E_LoginCallback_SignupExistingWorkOSUser(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, orgName, org.Name)
 	require.True(t, org.Whitelisted)
+	require.Equal(t, "enterprise", org.GramAccountType)
+
+	trial, err := trialsRepo.New(inst.conn).GetTrial(ctx, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	require.Equal(t, "enterprise", trial.Tier)
 }
 
 // TestE2E_Logout verifies that after logging out the session is invalidated
