@@ -9,6 +9,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	otelattr "go.opentelemetry.io/otel/attribute"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -59,6 +60,40 @@ func TestLogTransformHandlerNormalizesEnrichesAndPublishes(t *testing.T) {
 	require.Positive(t, attributes[string(TokensCountKey)].GetIntValue())
 	require.NotEmpty(t, attributes[string(TokensCodecKey)].GetStringValue())
 	require.Contains(t, attributes, "gen_ai.input.messages")
+}
+
+func TestLogAnyValueConvertsHeterogeneousSlice(t *testing.T) {
+	t.Parallel()
+
+	value := otelattr.SliceValue(
+		otelattr.StringValue("text"),
+		otelattr.Int64Value(42),
+		otelattr.SliceValue(
+			otelattr.BoolValue(true),
+			otelattr.ByteSliceValue([]byte{0xde, 0xad}),
+		),
+	)
+
+	converted, err := logAnyValue(value)
+
+	require.NoError(t, err)
+	values := converted.GetArrayValue().GetValues()
+	require.Len(t, values, 3)
+	require.Equal(t, "text", values[0].GetStringValue())
+	require.Equal(t, int64(42), values[1].GetIntValue())
+	nested := values[2].GetArrayValue().GetValues()
+	require.Len(t, nested, 2)
+	require.True(t, nested[0].GetBoolValue())
+	require.Equal(t, []byte{0xde, 0xad}, nested[1].GetBytesValue())
+}
+
+func TestLogAnyValuePreservesEmptyValue(t *testing.T) {
+	t.Parallel()
+
+	converted, err := logAnyValue(otelattr.Value{})
+
+	require.NoError(t, err)
+	require.Equal(t, otelv1.LogRecord_AnyValue_Value_not_set_case, converted.WhichValue())
 }
 
 func TestMaxSizeLogRecordFitsRelayExportAfterFullEnrichment(t *testing.T) {

@@ -165,9 +165,23 @@ func logAnyValue(value otelattr.Value) (*otelv1.LogRecord_AnyValue, error) {
 		return (&otelv1.LogRecord_AnyValue_builder{
 			ArrayValue: (&otelv1.LogRecord_ArrayValue_builder{Values: values}).Build(),
 		}).Build(), nil
-	default:
-		return nil, fmt.Errorf("unsupported OpenTelemetry attribute type %v", value.Type())
+	case otelattr.SLICE:
+		input := value.AsSlice()
+		values := make([]*otelv1.LogRecord_AnyValue, len(input))
+		for i, item := range input {
+			converted, err := logAnyValue(item)
+			if err != nil {
+				return nil, fmt.Errorf("convert slice item %d: %w", i, err)
+			}
+			values[i] = converted
+		}
+		return (&otelv1.LogRecord_AnyValue_builder{
+			ArrayValue: (&otelv1.LogRecord_ArrayValue_builder{Values: values}).Build(),
+		}).Build(), nil
+	case otelattr.EMPTY:
+		return (&otelv1.LogRecord_AnyValue_builder{}).Build(), nil
 	}
+	return nil, fmt.Errorf("unsupported OpenTelemetry attribute type %v", value.Type())
 }
 
 func logRecordFromInbound(inbound *otelv1.InboundLogRecord) (*otelv1.LogRecord, error) {
