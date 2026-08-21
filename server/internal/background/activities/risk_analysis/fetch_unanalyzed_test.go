@@ -91,3 +91,83 @@ func TestFetchUnanalyzed_RespectsBatchLimit(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result.MessageIDs, 2)
 }
+
+func TestFetchUnanalyzed_ExcludesDashboardAssistantMessages(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	inScope := seedMessages(t, conn, td, 1)
+
+	dashboardChat := seedAssistantLinkedChat(t, conn, td, "dashboard")
+	dashboardMsgs := seedMessagesInChat(t, conn, td, dashboardChat, 2)
+
+	activity := risk_analysis.NewFetchUnanalyzed(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn)
+	result, err := activity.Do(t.Context(), risk_analysis.FetchUnanalyzedArgs{
+		ProjectID:    td.projectID,
+		IDLowerBound: zeroLowerBound,
+		BatchLimit:   100,
+	})
+	require.NoError(t, err)
+	require.Equal(t, inScope, result.MessageIDs)
+
+	queries := riskrepo.New(conn)
+	for _, id := range dashboardMsgs {
+		analyzedAt, err := queries.GetChatMessageRiskAnalyzedAtForTest(t.Context(), riskrepo.GetChatMessageRiskAnalyzedAtForTestParams{
+			ID:        id,
+			ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
+		})
+		require.NoError(t, err)
+		require.True(t, analyzedAt.Valid, "dashboard assistant message %s must be marked analyzed without scanning", id)
+	}
+}
+
+func TestFetchUnanalyzed_KeepsSlackAssistantMessages(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+
+	slackChat := seedAssistantLinkedChat(t, conn, td, "slack")
+	slackMsgs := seedMessagesInChat(t, conn, td, slackChat, 1)
+
+	activity := risk_analysis.NewFetchUnanalyzed(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn)
+	result, err := activity.Do(t.Context(), risk_analysis.FetchUnanalyzedArgs{
+		ProjectID:    td.projectID,
+		IDLowerBound: zeroLowerBound,
+		BatchLimit:   100,
+	})
+	require.NoError(t, err)
+	require.Equal(t, slackMsgs, result.MessageIDs)
+
+	analyzedAt, err := riskrepo.New(conn).GetChatMessageRiskAnalyzedAtForTest(t.Context(), riskrepo.GetChatMessageRiskAnalyzedAtForTestParams{
+		ID:        slackMsgs[0],
+		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
+	})
+	require.NoError(t, err)
+	require.False(t, analyzedAt.Valid, "slack assistant messages stay in the unanalyzed sweep")
+}
+
+func TestFetchUnanalyzed_ExcludesDashboardAssistantContentParts(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	inScopePart := seedContentPartInChat(t, conn, td, td.chatID)
+
+	dashboardChat := seedAssistantLinkedChat(t, conn, td, "dashboard")
+	dashboardPart := seedContentPartInChat(t, conn, td, dashboardChat)
+
+	activity := risk_analysis.NewFetchUnanalyzed(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn)
+	result, err := activity.Do(t.Context(), risk_analysis.FetchUnanalyzedArgs{
+		ProjectID:    td.projectID,
+		IDLowerBound: zeroLowerBound,
+		BatchLimit:   100,
+	})
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{inScopePart}, result.ContentPartIDs)
+
+	analyzedAt, err := riskrepo.New(conn).GetContentPartRiskAnalyzedAtForTest(t.Context(), riskrepo.GetContentPartRiskAnalyzedAtForTestParams{
+		ID:        dashboardPart,
+		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
+	})
+	require.NoError(t, err)
+	require.True(t, analyzedAt.Valid, "dashboard assistant content part must be marked analyzed without scanning")
+}
