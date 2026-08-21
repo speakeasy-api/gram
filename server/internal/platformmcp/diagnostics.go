@@ -63,16 +63,23 @@ type DiagnosticsTelemetryReader interface {
 // DiagnosticsService answers the two overview-first questions: what is this
 // project doing, and why is this one MCP not working.
 type DiagnosticsService struct {
-	db             *pgxpool.Pool
-	telemetry      DiagnosticsTelemetryReader
-	sessions       ProjectOverviewSessionReader
-	sessionCapture FeatureChecker
-	reader         Reader
-	readiness      *ReadinessService
-	budget         OperationBudget
-	now            func() time.Time
+	db              *pgxpool.Pool
+	telemetry       DiagnosticsTelemetryReader
+	drilldown       DrilldownTelemetryReader
+	references      *subjectReferenceCodec
+	sensitiveBudget OperationBudget
+	sessions        ProjectOverviewSessionReader
+	sessionCapture  FeatureChecker
+	reader          Reader
+	readiness       *ReadinessService
+	budget          OperationBudget
+	now             func() time.Time
 }
 
+// NewDiagnosticsService composes the overview-first entry points. The bounded
+// drill-down tools are attached separately by WithDrilldown, so a deployment
+// that cannot mint subject references serves the overview and withholds the
+// row-level reads rather than serving them unbound.
 func NewDiagnosticsService(db *pgxpool.Pool, telemetry DiagnosticsTelemetryReader, sessionCapture FeatureChecker, reader Reader, readiness *ReadinessService, budget OperationBudget) *DiagnosticsService {
 	var sessions ProjectOverviewSessionReader
 	if db != nil {
@@ -88,6 +95,29 @@ func NewDiagnosticsService(db *pgxpool.Pool, telemetry DiagnosticsTelemetryReade
 		budget:         budget,
 		now:            time.Now,
 	}
+}
+
+// WithDrilldown attaches the bounded drill-down reads. Reference key material
+// is required: without it a trace or subject handle could not be bound to the
+// caller's organization and session, and the tools stay unavailable rather than
+// returning unbound identifiers.
+func (s *DiagnosticsService) WithDrilldown(drilldown DrilldownTelemetryReader, referenceKeyMaterial string, sensitiveBudget OperationBudget) *DiagnosticsService {
+	if s == nil || drilldown == nil || !sensitiveBudget.valid() {
+		return s
+	}
+	codec, err := newSubjectReferenceCodec(referenceKeyMaterial)
+	if err != nil {
+		return s
+	}
+	s.drilldown = drilldown
+	s.references = codec
+	s.sensitiveBudget = sensitiveBudget
+	return s
+}
+
+// drilldownValid reports whether the bounded drill-down tools are servable.
+func (s *DiagnosticsService) drilldownValid() bool {
+	return s.valid() && s.drilldown != nil && s.references != nil && s.sensitiveBudget.valid()
 }
 
 func (s *DiagnosticsService) valid() bool {
@@ -439,24 +469,30 @@ func (s *DiagnosticsService) currentReadiness(ctx context.Context, principal Pri
 func totalsFromRows(rows []telemetryrepo.MCPOutcomeBreakdownRow) outcomeTotals {
 	var totals outcomeTotals
 	for _, row := range rows {
-		count := boundedCount(row.CallCount)
-		totals.Total += count
-		switch row.Outcome {
-		case telemetryrepo.MCPOutcomeSuccess:
-			totals.Success += count
-		case telemetryrepo.MCPOutcomeUnauthorized:
-			totals.Unauthorized += count
-		case telemetryrepo.MCPOutcomeClientError:
-			totals.ClientError += count
-		case telemetryrepo.MCPOutcomeServerError:
-			totals.ServerError += count
-		case telemetryrepo.MCPOutcomeFailed:
-			totals.Failed += count
-		default:
-			totals.Unknown += count
-		}
+		addOutcome(&totals, row.Outcome, boundedCount(row.CallCount))
 	}
 	return totals
+}
+
+// addOutcome accumulates one classified count. An outcome this build does not
+// know is counted as unknown rather than dropped, so the totals always add up
+// and a new class cannot silently shrink the denominator.
+func addOutcome(totals *outcomeTotals, outcome string, count int64) {
+	totals.Total += count
+	switch outcome {
+	case telemetryrepo.MCPOutcomeSuccess:
+		totals.Success += count
+	case telemetryrepo.MCPOutcomeUnauthorized:
+		totals.Unauthorized += count
+	case telemetryrepo.MCPOutcomeClientError:
+		totals.ClientError += count
+	case telemetryrepo.MCPOutcomeServerError:
+		totals.ServerError += count
+	case telemetryrepo.MCPOutcomeFailed:
+		totals.Failed += count
+	default:
+		totals.Unknown += count
+	}
 }
 
 // summaryFromTotals converts the internal tally into the serialized summary.

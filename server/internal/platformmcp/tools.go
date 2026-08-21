@@ -188,6 +188,11 @@ func newServer(reader Reader, catalog Catalog, registrations *RegistrationServic
 	} else {
 		registerDiagnosticsTools(reg, diagnostics)
 	}
+	if !diagnostics.drilldownValid() {
+		registerUnavailableDrilldownTools(reg)
+	} else {
+		registerDrilldownTools(reg, diagnostics)
+	}
 	if !skills.valid() {
 		registerUnavailableSkillsTools(reg)
 	} else {

@@ -72,7 +72,11 @@ type platformMCPConfig struct {
 	// what a project overview's active-user count measures. Shared with the
 	// telemetry service so both surfaces answer from the same source.
 	SessionCapture platformmcp.FeatureChecker
-	LocalFixture   *platformMCPLocalFixtureConfig
+	// TelemetryDrilldown is the row-level half of the same read model. Nil
+	// withholds the drill-down tools while leaving the overview-first entry
+	// points serving.
+	TelemetryDrilldown platformmcp.DrilldownTelemetryReader
+	LocalFixture       *platformMCPLocalFixtureConfig
 }
 
 var platformMCPLocalFixtureLoopbackCIDRBlocks = []string{"127.0.0.0/8", "::1/128"}
@@ -191,6 +195,13 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		},
 		Skills:      newBudget(platformmcp.SkillsConnectionLimitName, platformmcp.SkillsOrganizationLimitName),
 		Diagnostics: newBudget(platformmcp.DiagnosticsConnectionLimitName, platformmcp.DiagnosticsOrganizationLimitName),
+		// Half the ordinary allowance: this is the only read that reaches
+		// personal data, and a loop should exhaust it well before it has
+		// enumerated an organization.
+		SensitiveDiagnostics: platformmcp.OperationBudget{
+			Connection:   ratelimit.New(limitStore, platformmcp.SensitiveDiagnosticsConnectionLimitName, ratelimit.PerMinute(2), ratelimit.WithMetrics(config.MeterProvider)),
+			Organization: ratelimit.New(limitStore, platformmcp.SensitiveDiagnosticsOrganizationLimitName, ratelimit.PerMinute(25), ratelimit.WithMetrics(config.MeterProvider)),
+		},
 	}
 	if !budgets.Valid() {
 		return AssistantSurface{}, errors.New("local Platform MCP operation budgets are incomplete")
@@ -230,7 +241,8 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 
 	skillAuthoring := platformmcp.NewSkillsService(config.Skills, platformmcp.NewPostgresSkillTargets(config.DB), store, config.Authz, registrationGate, budgets.Skills)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB)
-	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics)
+	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics).
+		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics)
 	runtime := platformmcp.NewRuntimeWithLifecycle(
 		config.Logger,
 		authenticator,
@@ -386,6 +398,13 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		},
 		Skills:      newBudget(platformmcp.SkillsConnectionLimitName, platformmcp.SkillsOrganizationLimitName),
 		Diagnostics: newBudget(platformmcp.DiagnosticsConnectionLimitName, platformmcp.DiagnosticsOrganizationLimitName),
+		// Half the ordinary allowance: this is the only read that reaches
+		// personal data, and a loop should exhaust it well before it has
+		// enumerated an organization.
+		SensitiveDiagnostics: platformmcp.OperationBudget{
+			Connection:   ratelimit.New(limitStore, platformmcp.SensitiveDiagnosticsConnectionLimitName, ratelimit.PerMinute(2), ratelimit.WithMetrics(config.MeterProvider)),
+			Organization: ratelimit.New(limitStore, platformmcp.SensitiveDiagnosticsOrganizationLimitName, ratelimit.PerMinute(25), ratelimit.WithMetrics(config.MeterProvider)),
+		},
 	}
 	if !budgets.Valid() {
 		return AssistantSurface{}, errors.New("platform MCP operation budgets are incomplete")
@@ -434,7 +453,8 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	)
 	skillAuthoring := platformmcp.NewSkillsService(config.Skills, platformmcp.NewPostgresSkillTargets(config.DB), store, config.Authz, registrationGate, budgets.Skills)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB)
-	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics)
+	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics).
+		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics)
 	runtime := platformmcp.NewRuntimeWithLifecycle(
 		config.Logger,
 		authenticator,

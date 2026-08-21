@@ -80,10 +80,7 @@ func (q *Queries) GetMCPOutcomeBreakdown(ctx context.Context, arg GetMCPOutcomeB
 		return nil, err
 	}
 
-	source := "(" + directSQL + " UNION ALL " + hookSQL + ")"
-	sourceArgs := make([]any, 0, len(directArgs)+len(hookArgs))
-	sourceArgs = append(sourceArgs, directArgs...)
-	sourceArgs = append(sourceArgs, hookArgs...)
+	source, sourceArgs := unionSource(directSQL, directArgs, hookSQL, hookArgs)
 
 	sb := sq.Select(
 		"client",
@@ -124,14 +121,40 @@ func (q *Queries) GetMCPOutcomeBreakdown(ctx context.Context, arg GetMCPOutcomeB
 	return result, nil
 }
 
+// mcpTraceSource builds the per-trace row set both diagnostics and drill-down
+// read from: one row per trace, carrying its correlation id, when it happened,
+// the client that made it, the tool it called, and its classified outcome.
+// Aggregations sit on top of this; nothing below it reaches a raw log row.
+func (q *Queries) mcpTraceSource(arg GetMCPOutcomeBreakdownParams) (string, []any, error) {
+	directSQL, directArgs, err := q.mcpOutcomeDirectSource(arg)
+	if err != nil {
+		return "", nil, err
+	}
+	hookSQL, hookArgs, err := q.mcpOutcomeHookSource(arg)
+	if err != nil {
+		return "", nil, err
+	}
+	source, sourceArgs := unionSource(directSQL, directArgs, hookSQL, hookArgs)
+	return source, sourceArgs, nil
+}
+
+func unionSource(directSQL string, directArgs []any, hookSQL string, hookArgs []any) (string, []any) {
+	args := make([]any, 0, len(directArgs)+len(hookArgs))
+	args = append(args, directArgs...)
+	args = append(args, hookArgs...)
+	return "(" + directSQL + " UNION ALL " + hookSQL + ")", args
+}
+
 // mcpOutcomeDirectSource classifies calls that reached a hosted MCP server
 // directly. Aggregate aliases carry the "g_" prefix for the reason the tool
 // usage CTE documents: an alias that shadows a trace_summaries column is merged
 // into the enclosing aggregate and fails with ILLEGAL_AGGREGATION.
 func (q *Queries) mcpOutcomeDirectSource(arg GetMCPOutcomeBreakdownParams) (string, []any, error) {
 	grouped := sq.Select(
+		"trace_id",
 		"min(start_time_unix_nano) AS event_time_ns",
 		"max(toolset_slug) AS g_toolset_slug",
+		"any(tool_name) AS g_tool_name",
 		"ifNull(anyIfMerge(http_status_code), 0) AS g_http_status_code",
 	).
 		From("trace_summaries").
@@ -161,8 +184,10 @@ func (q *Queries) mcpOutcomeDirectSource(arg GetMCPOutcomeBreakdownParams) (stri
 
 	return fmt.Sprintf(`
 SELECT
+	trace_id,
 	event_time_ns,
 	'%s' AS client,
+	g_tool_name AS tool_name,
 	%s AS outcome
 FROM (%s)`, MCPClientUnattributed, outcome, groupedSQL), groupedArgs, nil
 }
@@ -173,8 +198,10 @@ FROM (%s)`, MCPClientUnattributed, outcome, groupedSQL), groupedArgs, nil
 // dimension a caller can filter on.
 func (q *Queries) mcpOutcomeHookSource(arg GetMCPOutcomeBreakdownParams) (string, []any, error) {
 	grouped := sq.Select(
+		"trace_id",
 		"min(start_time_unix_nano) AS event_time_ns",
 		"any(hook_source) AS g_hook_source",
+		"any(tool_name) AS g_tool_name",
 		"max(mcp_server_url) AS g_mcp_server_url",
 		"max(has_result) AS g_has_result",
 		"max(has_error) AS g_has_error",
@@ -204,8 +231,10 @@ func (q *Queries) mcpOutcomeHookSource(arg GetMCPOutcomeBreakdownParams) (string
 
 	return fmt.Sprintf(`
 SELECT
+	trace_id,
 	event_time_ns,
 	%s AS client,
+	g_tool_name AS tool_name,
 	%s AS outcome
 FROM (%s)`, chFirstNonEmpty("g_hook_source", "'"+MCPClientUnattributed+"'"), outcome, groupedSQL), groupedArgs, nil
 }
