@@ -21,7 +21,10 @@ import (
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
-const userEnrichmentTTL = 5 * time.Minute
+const (
+	userEnrichmentTimeout = time.Second
+	userEnrichmentTTL     = 5 * time.Minute
+)
 
 func fetchUserEnrichment(
 	ctx context.Context,
@@ -41,25 +44,27 @@ func fetchUserEnrichment(
 		var empty userEnrichment
 		return empty, nil
 	}
+	lookupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), userEnrichmentTimeout)
+	defer cancel()
 
 	emailDigest := sha256.Sum256([]byte(email))
 	emailHash := hex.EncodeToString(emailDigest[:])
 	cacheKey := userEnrichmentCacheKey(organizationID, emailHash)
-	if cached, err := enrichmentCache.Get(ctx, cacheKey); err == nil {
+	if cached, err := enrichmentCache.Get(lookupCtx, cacheKey); err == nil {
 		return cached.Enrichment, nil
 	}
 
 	value, err, _ := loads.Do(cacheKey, func() (any, error) {
-		if cached, err := enrichmentCache.Get(ctx, cacheKey); err == nil {
+		if cached, err := enrichmentCache.Get(lookupCtx, cacheKey); err == nil {
 			return cached.Enrichment, nil
 		}
 
-		resolved, err := loadUserEnrichment(ctx, replicaDB, organizationID, email)
+		resolved, err := loadUserEnrichment(lookupCtx, replicaDB, organizationID, email)
 		if err != nil {
 			return resolved, err
 		}
 
-		err = enrichmentCache.Store(ctx, cachedUserEnrichment{
+		err = enrichmentCache.Store(lookupCtx, cachedUserEnrichment{
 			OrganizationID: organizationID,
 			EmailHash:      emailHash,
 			Enrichment:     resolved,

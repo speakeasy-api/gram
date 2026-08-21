@@ -19,7 +19,7 @@ func TestEnrichLogDirectoryIncludesCachedUserEnrichment(t *testing.T) {
 	emailDigest := sha256.Sum256([]byte(email))
 	emailHash := hex.EncodeToString(emailDigest[:])
 
-	enricher := newEnrichLogDirectory(testenv.NewLogger(t), newTestDatabase(t), testenv.NewMemoryCache())
+	enricher := newEnrichLogDirectory(testenv.NewLogger(t), nil, testenv.NewMemoryCache())
 	require.NoError(t, enricher.cache.Store(t.Context(), cachedUserEnrichment{
 		OrganizationID: organizationID,
 		EmailHash:      emailHash,

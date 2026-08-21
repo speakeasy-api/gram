@@ -1,9 +1,13 @@
 package otel
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
@@ -130,6 +134,41 @@ func TestFetchUserEnrichmentDoesNotCacheLookupFailure(t *testing.T) {
 	got, err = fetchUserEnrichment(t.Context(), db, &enrichmentCache, &loads, organizationID, email)
 	require.Error(t, err)
 	require.Empty(t, got)
+}
+
+func TestFetchUserEnrichmentBoundsLookupDuration(t *testing.T) {
+	t.Parallel()
+
+	enrichmentCache := cache.NewTypedObjectCache[cachedUserEnrichment](testenv.NewLogger(t), cache.NoopCache, cache.SuffixNone)
+	loads := singleflight.Group{}
+
+	got, err := fetchUserEnrichment(t.Context(), blockingUserEnrichmentDB{}, &enrichmentCache, &loads, "organization-id", "user@example.invalid")
+
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.Empty(t, got)
+}
+
+type blockingUserEnrichmentDB struct{}
+
+func (blockingUserEnrichmentDB) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) {
+	return pgconn.CommandTag{}, errors.New("unexpected exec")
+}
+
+func (blockingUserEnrichmentDB) Query(context.Context, string, ...any) (pgx.Rows, error) {
+	return nil, errors.New("unexpected query")
+}
+
+func (blockingUserEnrichmentDB) QueryRow(ctx context.Context, _ string, _ ...any) pgx.Row {
+	<-ctx.Done()
+	return userEnrichmentErrorRow{err: ctx.Err()}
+}
+
+type userEnrichmentErrorRow struct {
+	err error
+}
+
+func (r userEnrichmentErrorRow) Scan(...any) error {
+	return r.err
 }
 
 type userEnrichmentSeed struct {
