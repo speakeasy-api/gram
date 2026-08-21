@@ -387,19 +387,26 @@ describe("useMcpGuideOperations", () => {
     expect(incomplete.result.current.deploymentReady).toBe(false);
   });
 
-  it("returns client snippets, links, and a list-plus-read-only-call prompt", () => {
+  it("returns client connection prompts and a list-plus-read-only-call prompt", () => {
     setExistingServer();
     const { result } = renderHook(() => useMcpGuideOperations());
 
-    expect(result.current.snippets?.claude.code).toContain(
-      '"url": "https://api.example/mcp/linear-endpoint"',
+    expect(result.current.connectionPrompts?.claude).toContain(
+      "Configure the remote Linear MCP server in my local Claude Code setup only.",
     );
-    expect(result.current.snippets?.cursor.language).toBe("json");
-    expect(result.current.snippets?.codex).toEqual({
-      code: '[mcp_servers.linear-governed]\nurl = "https://api.example/mcp/linear-endpoint"',
-      language: "toml",
-    });
+    expect(result.current.connectionPrompts?.cursor).toContain(
+      "in my local Cursor setup only.",
+    );
+    expect(result.current.connectionPrompts?.codex).toContain(
+      "in my local Codex setup only.",
+    );
     expect(result.current.prompt).toMatch(/first list the available tools/i);
+    expect(result.current.prompt).toContain(
+      "https://api.example/mcp/linear-endpoint",
+    );
+    expect(result.current.prompt).toMatch(
+      /same name.*use only the one at this URL/i,
+    );
     expect(result.current.prompt).toMatch(/marked read-only/i);
     expect(result.current.prompt).toMatch(/do not create, update, or delete/i);
     expect(result.current.mcpServerHref).toBe(
@@ -408,15 +415,15 @@ describe("useMcpGuideOperations", () => {
     expect(result.current.toolLogsHref).toBe("/projects/request-project/logs");
 
     expect(result.current.client).toBe("claude");
-    expect(result.current.configCopied).toBe(false);
+    expect(result.current.connectionPromptCopied).toBe(false);
     expect(result.current.promptCopied).toBe(false);
     act(() => {
       result.current.setClient("codex");
-      result.current.markConfigCopied();
+      result.current.markConnectionPromptCopied();
       result.current.markPromptCopied();
     });
     expect(result.current.client).toBe("codex");
-    expect(result.current.configCopied).toBe(true);
+    expect(result.current.connectionPromptCopied).toBe(true);
     expect(result.current.promptCopied).toBe(true);
   });
 

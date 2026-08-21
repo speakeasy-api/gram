@@ -38,11 +38,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export type McpGuideClient = "claude" | "cursor" | "codex";
 
-export type McpGuideSnippet = {
-  code: string;
-  language: "json" | "toml";
-};
-
 type ActiveOperation = {
   scope: ProjectGuideOperationScope;
   report: (report: ProjectGuideOperationReport) => void;
@@ -89,27 +84,37 @@ function curateCatalogServers(
     .sort(compareCatalogServers);
 }
 
-function snippetsFor(
-  serverSlug: string,
+function connectionPromptFor(
+  client: McpGuideClient,
+  serverName: string,
   endpointUrl: string,
-): Record<McpGuideClient, McpGuideSnippet> {
-  const json = JSON.stringify(
-    { mcpServers: { [serverSlug]: { url: endpointUrl } } },
-    null,
-    2,
-  );
+): string {
+  const clientName = {
+    claude: "Claude Code",
+    cursor: "Cursor",
+    codex: "Codex",
+  }[client];
+  return `Configure the remote ${serverName} MCP server in my local ${clientName} setup only.
+
+Server URL:
+${endpointUrl}
+
+Complete OAuth if prompted. Verify only that the configuration exists and is enabled.`;
+}
+
+function connectionPromptsFor(
+  serverName: string,
+  endpointUrl: string,
+): Record<McpGuideClient, string> {
   return {
-    claude: { code: json, language: "json" },
-    cursor: { code: json, language: "json" },
-    codex: {
-      code: `[mcp_servers.${serverSlug}]\nurl = "${endpointUrl}"`,
-      language: "toml",
-    },
+    claude: connectionPromptFor("claude", serverName, endpointUrl),
+    cursor: connectionPromptFor("cursor", serverName, endpointUrl),
+    codex: connectionPromptFor("codex", serverName, endpointUrl),
   };
 }
 
-function promptFor(name: string): string {
-  return `Using the ${name} MCP server, first list the available tools. Then choose one tool marked read-only and call it with a harmless request. Do not create, update, or delete anything. Summarize the result, and do not call any tool unless it is marked read-only.`;
+function promptFor(name: string, endpointUrl: string): string {
+  return `Using the ${name} MCP server at this exact URL, ${endpointUrl}, first list the available tools. If multiple servers have the same name, use only the one at this URL. Then choose one tool marked read-only and call it with a harmless request. Do not create, update, or delete anything. Summarize the result, and do not call any tool unless it is marked read-only.`;
 }
 
 function activityFor(
@@ -159,7 +164,7 @@ export function useMcpGuideOperations(): {
   catalogPending: boolean;
   catalogServers: PulseMCPServer[] | undefined;
   client: McpGuideClient;
-  configCopied: boolean;
+  connectionPromptCopied: boolean;
   deploymentReady: boolean;
   endpointUrl: string | undefined;
   handleSignal: (
@@ -167,7 +172,7 @@ export function useMcpGuideOperations(): {
     report: (report: ProjectGuideOperationReport) => void,
   ) => void;
   installStatuses: ServerInstallStatus[];
-  markConfigCopied: () => void;
+  markConnectionPromptCopied: () => void;
   markPromptCopied: () => void;
   mcpServer: McpServer | undefined;
   mcpServerHref: string | undefined;
@@ -181,7 +186,7 @@ export function useMcpGuideOperations(): {
   selectedServer: PulseMCPServer | undefined;
   serverName: string | undefined;
   setClient: (client: McpGuideClient) => void;
-  snippets: Record<McpGuideClient, McpGuideSnippet> | undefined;
+  connectionPrompts: Record<McpGuideClient, string> | undefined;
   toolLogsHref: string;
 } {
   const gramProject = useProjectSlugForRequests();
@@ -190,7 +195,7 @@ export function useMcpGuideOperations(): {
     PulseMCPServer | undefined
   >(undefined);
   const [client, setClient] = useState<McpGuideClient>("claude");
-  const [configCopied, setConfigCopied] = useState(false);
+  const [connectionPromptCopied, setConnectionPromptCopied] = useState(false);
   const [promptCopied, setPromptCopied] = useState(false);
   const [activeOperation, setActiveOperation] = useState<
     ActiveOperation | undefined
@@ -318,11 +323,14 @@ export function useMcpGuideOperations(): {
   const activityError = baselineCaptureError || queryActivityError;
   const serverActivity = activityFor(activityQuery.data?.activity, mcpServer);
 
-  const snippets =
-    endpointUrl && mcpServer?.slug
-      ? snippetsFor(mcpServer.slug, endpointUrl)
+  const connectionPrompts =
+    endpointUrl && resolvedName
+      ? connectionPromptsFor(resolvedName, endpointUrl)
       : undefined;
-  const prompt = resolvedName ? promptFor(resolvedName) : undefined;
+  const prompt =
+    resolvedName && endpointUrl
+      ? promptFor(resolvedName, endpointUrl)
+      : undefined;
   const installStatuses =
     workflow.phase === "installing" || workflow.phase === "complete"
       ? workflow.statuses
@@ -556,12 +564,12 @@ export function useMcpGuideOperations(): {
     catalogPending: catalog.isPending,
     catalogServers,
     client,
-    configCopied,
+    connectionPromptCopied,
     deploymentReady,
     endpointUrl,
     handleSignal,
     installStatuses,
-    markConfigCopied: () => setConfigCopied(true),
+    markConnectionPromptCopied: () => setConnectionPromptCopied(true),
     markPromptCopied: () => setPromptCopied(true),
     mcpServer,
     mcpServerHref: mcpServer
@@ -577,7 +585,7 @@ export function useMcpGuideOperations(): {
     },
     selectServer: (server) => {
       setSelectedServer(server);
-      setConfigCopied(false);
+      setConnectionPromptCopied(false);
       setPromptCopied(false);
       activityBaselineRef.current = undefined;
       setActivityBaseline(undefined);
@@ -587,9 +595,9 @@ export function useMcpGuideOperations(): {
     serverName: resolvedName,
     setClient: (nextClient) => {
       setClient(nextClient);
-      setConfigCopied(false);
+      setConnectionPromptCopied(false);
     },
-    snippets,
+    connectionPrompts,
     toolLogsHref: routes.logs.href(),
   };
 }

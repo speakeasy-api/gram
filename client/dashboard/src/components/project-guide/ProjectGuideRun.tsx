@@ -82,14 +82,21 @@ export function ProjectGuideRun({
         : "ready");
   const isComplete = displayState === "complete";
   const isRunning = displayState !== "ready";
-  const currentStep = Math.min(
-    suppliedCurrentStep ?? (status === "in-progress" ? 1 : 0),
-    journey.steps.length - 1,
-  );
+  const currentStep = isComplete
+    ? journey.steps.length
+    : Math.min(
+        suppliedCurrentStep ?? (status === "in-progress" ? 1 : 0),
+        journey.steps.length - 1,
+      );
+  const isEndStep = isComplete && currentStep === journey.steps.length;
   const completedSteps =
     suppliedCompletedSteps ??
     Array.from({ length: currentStep }, (_, index) => index);
-  let resolvedCurrentContent = currentContent;
+  let resolvedCurrentContent = isEndStep ? (
+    <CompletionStepBody journey={journey} body={completionBody} />
+  ) : (
+    currentContent
+  );
   let resolvedOutput = output;
   let resolvedEventCard = eventCard;
   let resolvedPrimaryAction = primaryAction;
@@ -139,26 +146,12 @@ export function ProjectGuideRun({
     if (activityLog) activityLog.scrollTop = activityLog.scrollHeight;
   }, [resolvedOutput]);
 
-  if (isComplete && resolvedPrimaryAction) {
-    return (
-      <section id={regionId} role="region" aria-label={journey.title}>
-        <CompletionSummary
-          journey={journey}
-          body={completionBody}
-          eventCard={resolvedEventCard}
-          primaryAction={resolvedPrimaryAction}
-          secondaryAction={resolvedSecondaryAction}
-        />
-      </section>
-    );
-  }
-
   return (
     <section
       id={regionId}
       role="region"
       aria-label={journey.title}
-      className="min-w-0"
+      className="h-full min-w-0"
     >
       <motion.div
         initial={reducedMotion ? false : { opacity: 0, y: 8 }}
@@ -168,6 +161,7 @@ export function ProjectGuideRun({
             ? { duration: 0 }
             : { duration: 0.3, ease: [0.2, 0.7, 0.3, 1] }
         }
+        className="flex h-full min-h-0 flex-col"
         data-testid="project-guide-run"
         data-display-state={displayState}
       >
@@ -190,10 +184,10 @@ export function ProjectGuideRun({
             {completedSteps.length} of {journey.steps.length} done
           </span>
         </div>
-        <div className="grid min-w-0 lg:grid-cols-[minmax(0,1fr)_352px]">
+        <div className="grid min-h-0 min-w-0 flex-1 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_352px] lg:overflow-hidden">
           <ol
             aria-label={`${journey.id === "third-party-mcp" ? "Journey A" : "Journey B"} steps`}
-            className="min-w-0 overflow-hidden px-[22px] pt-2 pb-5"
+            className="min-w-0 overflow-hidden px-[22px] pt-2 pb-5 lg:overflow-y-auto"
           >
             {journey.steps.map((step, index) => {
               const complete = completedSteps.includes(index);
@@ -247,20 +241,40 @@ export function ProjectGuideRun({
                 </li>
               );
             })}
+            {isEndStep && (
+              <li
+                aria-current="step"
+                className="min-w-0 border-l-2 border-b border-[#F0EFED] py-3 pl-4"
+                style={{ borderLeftColor: fixture.accent }}
+              >
+                <div className="flex items-baseline gap-3">
+                  <span className="font-mono text-[10px] text-[#121212]/35">
+                    END
+                  </span>
+                  <span className="text-[19px] leading-[1.25]">
+                    Journey complete
+                  </span>
+                  <span className="ml-auto font-mono text-[9.5px] tracking-[0.06em] text-[#121212]/40 uppercase">
+                    done
+                  </span>
+                </div>
+                {resolvedCurrentContent}
+              </li>
+            )}
           </ol>
           <aside
             aria-label={`${journey.id === "third-party-mcp" ? "Journey A" : "Journey B"} run panel`}
-            className="flex min-h-[390px] min-w-0 flex-col gap-[13px] border-l border-[#EBEBEB] bg-[#FCFCFC] px-5 pt-[18px] pb-5"
+            className="flex min-h-[390px] min-w-0 flex-col gap-[13px] border-l border-[#EBEBEB] bg-[#FCFCFC] px-5 pt-[18px] pb-5 lg:min-h-0 lg:overflow-y-auto"
           >
             <div className="flex items-baseline gap-2.5">
               <span
                 className="font-mono text-[10px]"
                 style={{ color: fixture.accent }}
               >
-                {String(currentStep + 1).padStart(2, "0")}
+                {isEndStep ? "END" : String(currentStep + 1).padStart(2, "0")}
               </span>
               <h3 className="text-[13px] leading-[1.3]">
-                {journey.steps[currentStep]}
+                {journey.steps[currentStep] ?? "Journey complete"}
               </h3>
             </div>
             <span className="h-px bg-[#EBEBEB]" />
@@ -276,6 +290,7 @@ export function ProjectGuideRun({
               </span>
               <div className="font-mono text-[11px] leading-[1.5] text-[#121212]/55">
                 {resolvedOutput}
+                {resolvedEventCard}
               </div>
             </div>
             {displayState === "waiting" && (
@@ -287,28 +302,49 @@ export function ProjectGuideRun({
                 </span>
               </div>
             )}
-            {resolvedEventCard}
-            {resolvedPrimaryAction && (
-              <button
-                type="button"
-                onClick={resolvedPrimaryAction.onClick}
-                disabled={resolvedPrimaryAction.disabled}
-                aria-label={resolvedPrimaryAction.label}
-                className={cn(
-                  "mt-auto flex w-full items-center justify-center gap-2 px-4 py-[11px] font-mono text-[11px] tracking-[0.06em] uppercase transition-colors",
-                  isEnabledPrimaryAction
-                    ? "bg-[#121212] text-[#FAFAFA]"
-                    : "cursor-default bg-[#EDECEA] text-[#121212]/40",
+            {(resolvedPrimaryAction || resolvedSecondaryAction) && (
+              <div className="mt-auto grid gap-2">
+                {resolvedPrimaryAction?.href ? (
+                  <Link
+                    to={resolvedPrimaryAction.href}
+                    className="flex w-full items-center justify-center gap-2 bg-[#121212] px-4 py-[11px] font-mono text-[11px] tracking-[0.06em] text-[#FAFAFA] uppercase"
+                  >
+                    {resolvedPrimaryAction.label}
+                  </Link>
+                ) : (
+                  resolvedPrimaryAction && (
+                    <button
+                      type="button"
+                      onClick={resolvedPrimaryAction.onClick}
+                      disabled={resolvedPrimaryAction.disabled}
+                      aria-label={resolvedPrimaryAction.label}
+                      className={cn(
+                        "flex w-full items-center justify-center gap-2 px-4 py-[11px] font-mono text-[11px] tracking-[0.06em] uppercase transition-colors",
+                        isEnabledPrimaryAction
+                          ? "bg-[#121212] text-[#FAFAFA]"
+                          : "cursor-default bg-[#EDECEA] text-[#121212]/40",
+                      )}
+                    >
+                      {isStartAction && !resolvedPrimaryAction.disabled && (
+                        <span
+                          aria-hidden="true"
+                          className="size-0 border-y-[5px] border-l-[8px] border-y-transparent border-l-current"
+                        />
+                      )}
+                      {resolvedPrimaryAction.label}
+                    </button>
+                  )
                 )}
-              >
-                {isStartAction && !resolvedPrimaryAction.disabled && (
-                  <span
-                    aria-hidden="true"
-                    className="size-0 border-y-[5px] border-l-[8px] border-y-transparent border-l-current"
-                  />
+                {resolvedSecondaryAction && (
+                  <button
+                    type="button"
+                    onClick={resolvedSecondaryAction.onClick}
+                    className="w-full border border-[#DBDBDB] px-[18px] py-[10px] font-mono text-[11px] tracking-[0.06em] text-[#121212]/60 uppercase"
+                  >
+                    {resolvedSecondaryAction.label}
+                  </button>
                 )}
-                {resolvedPrimaryAction.label}
-              </button>
+              </div>
             )}
           </aside>
         </div>
@@ -355,80 +391,28 @@ export function ProjectGuideObservedEvent({
   );
 }
 
-function CompletionSummary({
+function CompletionStepBody({
   journey,
   body,
-  eventCard,
-  primaryAction,
-  secondaryAction,
 }: {
   journey: JourneyMeta;
   body?: string;
-  eventCard: ReactNode;
-  primaryAction: ProjectGuideRunAction;
-  secondaryAction?: ProjectGuideRunAction;
 }): JSX.Element {
   const fixture = PROJECT_GUIDE_FIXTURES[journey.id];
   return (
-    <section className="grid gap-4 p-[22px]">
-      <div className="flex items-center gap-3">
-        <span
-          className="font-mono text-[10px] tracking-[0.08em] uppercase"
-          style={{ color: fixture.accent }}
-        >
-          {journey.completion.eyebrow}
-        </span>
-        <span
-          className="h-px flex-1"
-          style={{ backgroundColor: fixture.accent }}
-        />
-      </div>
-      <h2 className="max-w-[24ch] font-display text-[32px] leading-[1] font-thin tracking-[-0.03em]">
+    <div className="grid gap-3 pt-3">
+      <span
+        className="font-mono text-[10px] tracking-[0.08em] uppercase"
+        style={{ color: fixture.accent }}
+      >
+        {journey.completion.eyebrow}
+      </span>
+      <h4 className="max-w-[24ch] font-display text-[28px] leading-[1] font-thin tracking-[-0.03em]">
         {journey.completion.heading}
-      </h2>
+      </h4>
       <p className="max-w-[56ch] text-[13px] leading-[1.6] text-[#121212]/62">
         {body ?? journey.completion.body}
       </p>
-      {eventCard}
-      <div className="flex flex-wrap gap-3">
-        <CompletionPrimaryAction action={primaryAction} />
-        {secondaryAction && (
-          <button
-            type="button"
-            onClick={secondaryAction.onClick}
-            disabled={secondaryAction.disabled}
-            className="border border-[#DBDBDB] px-[18px] py-[10px] font-mono text-[11px] tracking-[0.06em] text-[#121212]/60 uppercase"
-          >
-            {secondaryAction.label}
-          </button>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function CompletionPrimaryAction({
-  action,
-}: {
-  action: ProjectGuideRunAction;
-}): JSX.Element {
-  const className =
-    "bg-[#121212] px-[18px] py-[11px] font-mono text-[11px] tracking-[0.06em] text-[#FAFAFA] uppercase";
-  if (action.href) {
-    return (
-      <Link to={action.href} className={className}>
-        {action.label}
-      </Link>
-    );
-  }
-  return (
-    <button
-      type="button"
-      onClick={action.onClick}
-      disabled={action.disabled}
-      className={className}
-    >
-      {action.label}
-    </button>
+    </div>
   );
 }

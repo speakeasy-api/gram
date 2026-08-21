@@ -48,7 +48,7 @@ import {
 } from "@/components/ui/Tabs";
 import { useMachine } from "@xstate/react";
 import { motion, useReducedMotion } from "motion/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router";
 
 type McpGuideOperations = ReturnType<typeof useMcpGuideOperations>;
@@ -90,8 +90,6 @@ export function ProjectGuide({
     [send],
   );
   reportRef.current = reportOperation;
-  const [reviewingCompletedJourneys, setReviewingCompletedJourneys] =
-    useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const reducedMotion = useReducedMotion();
   const selected = snapshot.context.activePath;
@@ -165,13 +163,12 @@ export function ProjectGuide({
         secretOperations,
       )
     : undefined;
-  if (isComplete && !reviewingCompletedJourneys) {
+  if (isComplete) {
     return (
       <GuideCanvas>
         <ProjectGuideComplete
           reducedMotion={reducedMotion}
           onReturnToProjectHome={returnToProjectHome}
-          onReview={() => setReviewingCompletedJourneys(true)}
         />
       </GuideCanvas>
     );
@@ -179,7 +176,7 @@ export function ProjectGuide({
 
   return (
     <GuideCanvas>
-      <section className="bg-card border-border mx-auto flex w-full max-w-[960px] flex-col overflow-hidden border shadow-[0_1px_2px_rgba(18,18,18,.04)]">
+      <section className="bg-card border-border mx-auto flex min-h-[400px] w-full max-w-[960px] flex-col overflow-hidden border shadow-[0_1px_2px_rgba(18,18,18,.04)]">
         <header className="flex items-baseline gap-3.5 border-b border-[#121212]/10 px-6 py-[18px] pb-[14px]">
           <h2 className="font-display text-[28px] leading-[.95] font-thin tracking-[-0.03em]">
             {selectedJourney?.title ?? "Put your agent traffic under control"}
@@ -204,14 +201,8 @@ export function ProjectGuide({
             const isSelected = selected === journey.id;
             const isSpine = selected !== null && !isSelected;
             return (
-              <motion.section
+              <section
                 key={journey.id}
-                layout={!reducedMotion}
-                transition={
-                  reducedMotion
-                    ? { duration: 0 }
-                    : { layout: { duration: 0.5, ease: [0.65, 0, 0.25, 1] } }
-                }
                 data-testid={`project-guide-${journey.id}-card`}
                 data-state={isSelected ? "open" : isSpine ? "spine" : "closed"}
                 className={cn(
@@ -319,7 +310,7 @@ export function ProjectGuide({
                     onSelect={() => openJourney(journey)}
                   />
                 )}
-              </motion.section>
+              </section>
             );
           })}
         </div>
@@ -359,7 +350,9 @@ function primaryActionFor(
       if (journey.id === "third-party-mcp" && currentStep === 1) {
         return {
           label: "I've connected it",
-          disabled: !mcpOperations.snippets || !mcpOperations.configCopied,
+          disabled:
+            !mcpOperations.connectionPrompts ||
+            !mcpOperations.connectionPromptCopied,
           onClick: () =>
             send({
               type: "USER_CHECKPOINT_COMPLETE",
@@ -845,7 +838,7 @@ function McpStepBody({
           onMcpPromptCopied={onMcpPromptCopied}
         />
       );
-    case 4:
+    case 3:
       return null;
     default:
       return null;
@@ -941,7 +934,7 @@ function McpClientConnection({
 }: {
   operations: McpGuideOperations;
 }): JSX.Element {
-  if (!operations.endpointUrl || !operations.snippets) {
+  if (!operations.endpointUrl || !operations.connectionPrompts) {
     return (
       <p role="alert" className="text-destructive text-[12px]">
         The governed endpoint is not ready yet.
@@ -970,13 +963,13 @@ function McpClientConnection({
             className="min-w-0 max-w-full overflow-hidden"
           >
             <CodeSnippet
-              code={operations.snippets![client].code}
-              language={operations.snippets![client].language}
+              code={operations.connectionPrompts![client]}
+              language="text"
               copyable
               wordWrap
               className="min-w-0 w-full max-w-full"
               snippetClassName="min-w-0 w-full max-w-full"
-              onSelectOrCopy={operations.markConfigCopied}
+              onSelectOrCopy={operations.markConnectionPromptCopied}
             />
           </TabsContent>
         ))}
@@ -1001,11 +994,14 @@ function McpSafePrompt({
   }
 
   return (
-    <div className="grid gap-2">
+    <div className="grid min-w-0 max-w-full gap-2 overflow-hidden">
       <CodeSnippet
         code={operations.prompt}
         language="text"
         copyable
+        wordWrap
+        className="min-w-0 w-full max-w-full"
+        snippetClassName="min-w-0 w-full max-w-full"
         onSelectOrCopy={onMcpPromptCopied}
       />
     </div>
@@ -1318,11 +1314,9 @@ function JourneySpine({
 function ProjectGuideComplete({
   reducedMotion,
   onReturnToProjectHome,
-  onReview,
 }: {
   reducedMotion: boolean | null;
   onReturnToProjectHome: () => void;
-  onReview: () => void;
 }): JSX.Element {
   return (
     <motion.section
@@ -1353,17 +1347,7 @@ function ProjectGuideComplete({
         >
           {PROJECT_GUIDE_COMPLETE.primaryAction}
         </button>
-        <button
-          type="button"
-          onClick={onReview}
-          className="border border-[#DBDBDB] px-4 py-2 font-mono text-[11px] tracking-[0.05em] text-[#121212]/60 uppercase"
-        >
-          {PROJECT_GUIDE_COMPLETE.secondaryAction}
-        </button>
       </div>
-      <span className="font-mono text-[10px] text-muted-foreground uppercase">
-        {PROJECT_GUIDE_COMPLETE.note}
-      </span>
     </motion.section>
   );
 }

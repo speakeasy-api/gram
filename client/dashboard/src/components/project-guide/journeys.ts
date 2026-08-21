@@ -86,8 +86,6 @@ export const PROJECT_GUIDE_COMPLETE = {
   heading: "Both journeys are on the record.",
   body: "Traffic is proxied and recorded, and prompts are inspected before transport. Project home now shows live calls, policies, and risk events instead of this card.",
   primaryAction: "Go to project home",
-  secondaryAction: "Review what you set up",
-  note: "This card is replaced on next visit",
 } as const;
 
 export const PROJECT_GUIDE_JOURNEYS: JourneyMeta[] = [

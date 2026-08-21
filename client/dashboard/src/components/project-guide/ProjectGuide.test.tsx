@@ -115,12 +115,12 @@ function resetMcpOperations(): void {
     catalogPending: false,
     catalogServers: [catalogServer],
     client: "claude",
-    configCopied: true,
+    connectionPromptCopied: true,
     deploymentReady: true,
     endpointUrl: "https://api.example/mcp/linear-endpoint",
     handleSignal: vi.fn(),
     installStatuses: [],
-    markConfigCopied: vi.fn(),
+    markConnectionPromptCopied: vi.fn(),
     markPromptCopied: vi.fn(),
     mcpServer: {
       id: "mcp-server-id",
@@ -133,26 +133,20 @@ function resetMcpOperations(): void {
     projectStateError: false,
     projectStatePending: false,
     prompt:
-      "Using the Linear MCP server, first list the available tools. Then choose one tool marked read-only and call it with a harmless request. Do not create, update, or delete anything.",
+      "Using the Linear MCP server at this exact URL, https://api.example/mcp/linear-endpoint, first list the available tools. If multiple servers have the same name, use only the one at this URL. Then choose one tool marked read-only and call it with a harmless request. Do not create, update, or delete anything.",
     promptCopied: true,
     retryActivity: vi.fn(),
     retryCatalog: vi.fn(),
     selectServer: vi.fn(),
     selectedServer: catalogServer,
     setClient: vi.fn(),
-    snippets: {
-      claude: {
-        code: '{"mcpServers":{"linear-governed":{"url":"https://api.example/mcp/linear-endpoint"}}}',
-        language: "json",
-      },
-      cursor: {
-        code: '{"mcpServers":{"linear-governed":{"url":"https://api.example/mcp/linear-endpoint"}}}',
-        language: "json",
-      },
-      codex: {
-        code: '[mcp_servers.linear-governed]\nurl = "https://api.example/mcp/linear-endpoint"',
-        language: "toml",
-      },
+    connectionPrompts: {
+      claude:
+        "Configure the remote Linear MCP server in my local Claude Code setup only.\n\nServer URL:\nhttps://api.example/mcp/linear-endpoint\n\nComplete OAuth if prompted. Verify only that the configuration exists and is enabled.",
+      cursor:
+        "Configure the remote Linear MCP server in my local Cursor setup only.\n\nServer URL:\nhttps://api.example/mcp/linear-endpoint\n\nComplete OAuth if prompted. Verify only that the configuration exists and is enabled.",
+      codex:
+        "Configure the remote Linear MCP server in my local Codex setup only.\n\nServer URL:\nhttps://api.example/mcp/linear-endpoint\n\nComplete OAuth if prompted. Verify only that the configuration exists and is enabled.",
     },
     toolLogsHref: "/projects/request-project/logs",
   };
@@ -389,6 +383,14 @@ describe("ProjectGuide", () => {
     expect(
       screen.getByRole("heading", { name: "The path is governed." }),
     ).toBeTruthy();
+    expect(screen.getByTestId("project-guide-run")).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Journey complete" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("log", { name: "Journey A activity" }).textContent,
+    ).toContain("linear.tools/list");
+    expect(document.querySelectorAll('[aria-current="step"]')).toHaveLength(1);
     expect(screen.getByText("linear.tools/list")).toBeTruthy();
   });
 
@@ -868,9 +870,8 @@ describe("ProjectGuide", () => {
       }),
     ).toBeTruthy();
     expect(
-      screen.getByRole("button", { name: "Review what you set up" }),
-    ).toBeTruthy();
-
+      screen.queryByText("This card is replaced on next visit"),
+    ).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Go to project home" }));
 
     expect(setSearchParams).toHaveBeenCalledWith(new URLSearchParams(), {
@@ -1079,9 +1080,7 @@ describe("ProjectGuide", () => {
     expect(screen.getByRole("tab", { name: "Cursor" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "Codex" })).toBeTruthy();
     expect(
-      screen.queryByRole("link", {
-        name: "https://api.example/mcp/linear-endpoint",
-      }),
+      screen.queryByText("https://api.example/mcp/linear-endpoint"),
     ).toBeNull();
     expect(
       screen.queryByRole("link", { name: "View Linear MCP server" }),
