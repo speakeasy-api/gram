@@ -48,7 +48,7 @@ func TestGetProjectOverviewOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
-	window, err := resolveWindow("24h", now)
+	window, err := resolveWindow("24h", now, overviewWindowSpec)
 	require.NoError(t, err)
 
 	output := GetProjectOverviewOutput{
@@ -64,7 +64,7 @@ func TestGetProjectOverviewOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 
 	require.ElementsMatch(t, []string{
 		"project_id",
-		"data", "queried_at", "data_through", "freshness", "resolved_window", "window", "from", "to",
+		"data", "queried_at", "data_through", "freshness", "no_observations", "resolved_window", "window", "from", "to",
 		"metrics_mode",
 		"tool_calls", "failed_tool_calls", "active_servers", "active_users",
 		"top_servers", "name", "tool_calls",
@@ -78,7 +78,7 @@ func TestGetMCPDiagnosticsOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
-	window, err := resolveWindow("7d", now)
+	window, err := resolveWindow("7d", now, overviewWindowSpec)
 	require.NoError(t, err)
 
 	output := GetMCPDiagnosticsOutput{
@@ -101,7 +101,7 @@ func TestGetMCPDiagnosticsOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 
 	require.ElementsMatch(t, []string{
 		"project_id", "mcp_id",
-		"data", "queried_at", "data_through", "freshness", "resolved_window", "window", "from", "to",
+		"data", "queried_at", "data_through", "freshness", "no_observations", "resolved_window", "window", "from", "to",
 		"readiness", "state", "freshness", "checked_at",
 		"outcomes", "total", "success", "unauthorized", "client_error", "server_error", "failed", "unknown",
 		"organization_outcomes", "total", "success", "unauthorized", "client_error", "server_error", "failed", "unknown",

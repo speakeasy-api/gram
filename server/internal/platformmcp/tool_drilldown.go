@@ -77,7 +77,7 @@ func registerDrilldownTools(reg *Registrar, diagnostics *DiagnosticsService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_user_mcp_status",
 		Title:       "Get User MCP Status",
-		Description: drilldownPreamble + "Report how many people are using one MCP and, on request, per-subject activity. Subjects are addressed only by expiring opaque references bound to this session — never by name, email, or account id. Per-subject rows are refused when fewer than five subjects are involved, because a row would then identify a person.",
+		Description: drilldownPreamble + "Report one subject's state against one MCP, given the opaque subject reference a summary tool returned for them. Returns a masked identity and a state category only — never a raw identifier, a count, or a history. References expire, are bound to this session, and cannot be searched, joined, or constructed; an unknown or expired one is not found.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetUserMCPStatusInput) (*mcp.CallToolResult, GetUserMCPStatusOutput, error) {
 		principal, err := principalFromToolContext(ctx)
@@ -104,7 +104,7 @@ func registerUnavailableDrilldownTools(reg *Registrar) {
 		{"query_mcp_events", "Query MCP Events", "Break one MCP's calls down by tool and outcome. Diagnostics are not enabled in the current rollout."},
 		{"query_mcp_traces", "Query MCP Traces", "List individual occurrences for one MCP. Diagnostics are not enabled in the current rollout."},
 		{"query_mcp_metrics", "Query MCP Metrics", "Return one MCP's aggregate levels. Diagnostics are not enabled in the current rollout."},
-		{"get_user_mcp_status", "Get User MCP Status", "Report how many people are using one MCP. Diagnostics are not enabled in the current rollout."},
+		{"get_user_mcp_status", "Get User MCP Status", "Report one subject's state against one MCP. Diagnostics are not enabled in the current rollout."},
 	} {
 		addTool(reg, &mcp.Tool{
 			Name:        tool.name,

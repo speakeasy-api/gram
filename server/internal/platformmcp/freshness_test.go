@@ -35,7 +35,7 @@ func TestResolveWindow_DefaultsAndClosedSet(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			window, err := resolveWindow(test.requested, now)
+			window, err := resolveWindow(test.requested, now, overviewWindowSpec)
 			if test.wantErr {
 				require.ErrorIs(t, err, ErrDiagnosticWindowInvalid)
 				return
@@ -54,7 +54,7 @@ func TestNewDataEnvelope_ClassifiesFreshness(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
-	window, err := resolveWindow("24h", now)
+	window, err := resolveWindow("24h", now, overviewWindowSpec)
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -67,14 +67,14 @@ func TestNewDataEnvelope_ClassifiesFreshness(t *testing.T) {
 		{
 			// Absence of observations is its own answer. Reporting it as fresh
 			// would let a caller read an empty result as a healthy one.
-			name:      "no watermark is no observations",
+			name:      "no watermark is unavailable",
 			watermark: time.Time{},
-			want:      FreshnessNoObservations,
+			want:      FreshnessUnavailable,
 		},
 		{
 			name:        "watermark inside the threshold is fresh",
 			watermark:   now.Add(-2 * time.Minute),
-			want:        FreshnessFresh,
+			want:        FreshnessCurrent,
 			wantThrough: true,
 		},
 		{
@@ -86,7 +86,7 @@ func TestNewDataEnvelope_ClassifiesFreshness(t *testing.T) {
 		{
 			name:        "watermark exactly at the threshold is still fresh",
 			watermark:   now.Add(-StaleWatermarkThreshold),
-			want:        FreshnessFresh,
+			want:        FreshnessCurrent,
 			wantThrough: true,
 		},
 		{
@@ -95,7 +95,7 @@ func TestNewDataEnvelope_ClassifiesFreshness(t *testing.T) {
 			// for being about the past.
 			name:        "watermark at the window end is fresh",
 			watermark:   window.end,
-			want:        FreshnessFresh,
+			want:        FreshnessCurrent,
 			wantThrough: true,
 		},
 	}
@@ -106,6 +106,10 @@ func TestNewDataEnvelope_ClassifiesFreshness(t *testing.T) {
 
 			envelope := newDataEnvelope(now, test.watermark, window)
 			require.Equal(t, test.want, envelope.Freshness)
+			// no_observations is stated positively beside freshness, because
+			// "unavailable" describes the pipeline while this describes the
+			// result, and neither may be read as evidence of health.
+			require.Equal(t, test.watermark.IsZero(), envelope.NoObservations)
 			require.Equal(t, now.Format(time.RFC3339), envelope.QueriedAt)
 			require.Equal(t, window, envelope.ResolvedWindow)
 			if test.wantThrough {
@@ -125,7 +129,7 @@ func TestResolveWindow_AdvertisedBoundsMatchTheQueriedBounds(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, 8, 21, 12, 0, 0, 987_654_321, time.UTC)
-	window, err := resolveWindow("1h", now)
+	window, err := resolveWindow("1h", now, overviewWindowSpec)
 	require.NoError(t, err)
 
 	require.Equal(t, window.start.Format(time.RFC3339), window.From)

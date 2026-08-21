@@ -17,7 +17,7 @@ func TestQueryMCPTracesOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
-	window, err := resolveWindow("24h", now)
+	window, err := resolveWindow("24h", now, drilldownWindowSpec)
 	require.NoError(t, err)
 
 	output := QueryMCPTracesOutput{
@@ -36,7 +36,7 @@ func TestQueryMCPTracesOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 
 	require.ElementsMatch(t, []string{
 		"project_id", "mcp_id",
-		"data", "queried_at", "data_through", "freshness", "resolved_window", "window", "from", "to",
+		"data", "queried_at", "data_through", "freshness", "no_observations", "resolved_window", "window", "from", "to",
 		"traces", "reference", "occurred_at", "tool_name", "outcome", "client",
 		"next_cursor",
 	}, decodeKeys(t, output))
@@ -46,33 +46,63 @@ func TestGetUserMCPStatusOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
-	window, err := resolveWindow("7d", now)
+	window, err := resolveWindow("24h", now, drilldownWindowSpec)
 	require.NoError(t, err)
 
 	output := GetUserMCPStatusOutput{
 		ProjectID:      "00000000-0000-0000-0000-000000000001",
 		MCPID:          "00000000-0000-0000-0000-000000000002",
 		Envelope:       newDataEnvelope(now, now.Add(-time.Minute), window),
-		ActiveUsers:    NewSubjectCount(9),
-		RowsSuppressed: false,
-		Users:          []MCPUserStatus{{SubjectReference: "opaque", ToolCalls: 12}},
+		MaskedIdentity: "a***@e***",
+		Activity:       SubjectStateActive,
 	}
 
-	// Note what is absent: no email, no user id, no name, no account id. A
-	// subject is only ever a reference.
+	// Note what is absent: no email, no user id, no name, no account id, and no
+	// activity count that repeated calls could assemble into a profile.
 	require.ElementsMatch(t, []string{
 		"project_id", "mcp_id",
-		"data", "queried_at", "data_through", "freshness", "resolved_window", "window", "from", "to",
-		"active_users", "rows_suppressed", "unavailable",
-		"users", "subject_reference", "tool_calls",
+		"data", "queried_at", "data_through", "freshness", "no_observations", "resolved_window", "window", "from", "to",
+		"masked_identity", "activity", "unavailable",
 	}, decodeKeys(t, output))
+}
+
+func TestMaskSubject_RecognizableNotLearnable(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		subject string
+		want    string
+	}{
+		{subject: "alice@example.com", want: "a***@e***"},
+		{subject: "bo@x.io", want: "b*@x***"},
+		{subject: "a@b", want: "*@*"},
+		{subject: "external-user-1234", want: "e***"},
+		{subject: "x", want: "*"},
+	}
+
+	// An empty subject masks to empty; it is covered separately because the
+	// "must not equal the original" rule is vacuous for it.
+	require.Empty(t, maskSubject(""))
+
+	for _, test := range tests {
+		t.Run(test.subject, func(t *testing.T) {
+			t.Parallel()
+
+			masked := maskSubject(test.subject)
+			require.Equal(t, test.want, masked)
+			// The mask must never carry the original back.
+			require.NotEqual(t, test.subject, masked)
+			require.NotContains(t, masked, "lice")
+			require.NotContains(t, masked, "xample")
+		})
+	}
 }
 
 func TestQueryMCPEventsOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
-	window, err := resolveWindow("1h", now)
+	window, err := resolveWindow("1h", now, drilldownWindowSpec)
 	require.NoError(t, err)
 
 	output := QueryMCPEventsOutput{
@@ -85,7 +115,7 @@ func TestQueryMCPEventsOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 
 	require.ElementsMatch(t, []string{
 		"project_id", "mcp_id",
-		"data", "queried_at", "data_through", "freshness", "resolved_window", "window", "from", "to",
+		"data", "queried_at", "data_through", "freshness", "no_observations", "resolved_window", "window", "from", "to",
 		"tools", "tool_name",
 		"outcomes", "total", "success", "unauthorized", "client_error", "server_error", "failed", "unknown",
 		"truncated",
@@ -96,7 +126,7 @@ func TestQueryMCPMetricsOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
-	window, err := resolveWindow("30d", now)
+	window, err := resolveWindow("7d", now, metricsWindowSpec)
 	require.NoError(t, err)
 
 	output := QueryMCPMetricsOutput{
@@ -112,7 +142,7 @@ func TestQueryMCPMetricsOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 
 	require.ElementsMatch(t, []string{
 		"project_id", "mcp_id",
-		"data", "queried_at", "data_through", "freshness", "resolved_window", "window", "from", "to",
+		"data", "queried_at", "data_through", "freshness", "no_observations", "resolved_window", "window", "from", "to",
 		"tool_calls", "failed_tool_calls", "failure_rate", "avg_latency_ms", "active_users",
 		"active_users_unavailable",
 	}, decodeKeys(t, output))

@@ -169,7 +169,7 @@ func (s *DiagnosticsService) GetProjectOverview(ctx context.Context, principal P
 		return GetProjectOverviewOutput{}, err
 	}
 	now := s.now()
-	window, err := resolveWindow(input.Window, now)
+	window, err := resolveWindow(input.Window, now, overviewWindowSpec)
 	if err != nil {
 		return GetProjectOverviewOutput{}, err
 	}
@@ -270,7 +270,7 @@ func (s *DiagnosticsService) GetProjectOverview(ctx context.Context, principal P
 type GetMCPDiagnosticsInput struct {
 	ProjectID string `json:"project_id" jsonschema:"AICP project ID that owns the MCP"`
 	MCPID     string `json:"mcp_id" jsonschema:"configured MCP ID as returned by find_mcp or get_mcp"`
-	Window    string `json:"window,omitempty" jsonschema:"observation window: 1h, 24h (default), 7d, or 30d"`
+	Window    string `json:"window,omitempty" jsonschema:"observation window: 1h (default) or 24h"`
 }
 
 // MCPOutcomeSummary is a server's calls in the window, already summed per
@@ -333,7 +333,7 @@ func (s *DiagnosticsService) GetMCPDiagnostics(ctx context.Context, principal Pr
 		return GetMCPDiagnosticsOutput{}, err
 	}
 	now := s.now()
-	window, err := resolveWindow(input.Window, now)
+	window, err := resolveWindow(input.Window, now, diagnosticsWindowSpec)
 	if err != nil {
 		return GetMCPDiagnosticsOutput{}, err
 	}

@@ -62,7 +62,7 @@ func (t drilldownTarget) hostedToolsetSlug() string {
 	return t.toolsetSlugs[0]
 }
 
-func (s *DiagnosticsService) resolveDrilldown(ctx context.Context, principal Principal, projectID, mcpID, window string, budget OperationBudget) (drilldownTarget, error) {
+func (s *DiagnosticsService) resolveDrilldown(ctx context.Context, principal Principal, projectID, mcpID, window string, budget OperationBudget, spec windowSpec) (drilldownTarget, error) {
 	if !s.valid() || s.drilldown == nil || !budget.valid() {
 		return drilldownTarget{}, ErrUnavailable
 	}
@@ -73,7 +73,7 @@ func (s *DiagnosticsService) resolveDrilldown(ctx context.Context, principal Pri
 		return drilldownTarget{}, err
 	}
 	now := s.now()
-	resolved, err := resolveWindow(window, now)
+	resolved, err := resolveWindow(window, now, spec)
 	if err != nil {
 		return drilldownTarget{}, err
 	}
@@ -123,7 +123,7 @@ func (s *DiagnosticsService) drilldownEnvelope(ctx context.Context, target drill
 type QueryMCPEventsInput struct {
 	ProjectID string `json:"project_id" jsonschema:"AICP project ID that owns the MCP"`
 	MCPID     string `json:"mcp_id" jsonschema:"configured MCP ID as returned by find_mcp or get_mcp"`
-	Window    string `json:"window,omitempty" jsonschema:"observation window: 1h, 24h (default), 7d, or 30d"`
+	Window    string `json:"window,omitempty" jsonschema:"observation window: 1h or 24h (default); this tool looks back at most 24h"`
 }
 
 // MCPToolEvents is one tool's calls in the window, already summed per outcome.
@@ -141,7 +141,7 @@ type QueryMCPEventsOutput struct {
 }
 
 func (s *DiagnosticsService) QueryMCPEvents(ctx context.Context, principal Principal, input QueryMCPEventsInput) (QueryMCPEventsOutput, error) {
-	target, err := s.resolveDrilldown(ctx, principal, input.ProjectID, input.MCPID, input.Window, s.budget)
+	target, err := s.resolveDrilldown(ctx, principal, input.ProjectID, input.MCPID, input.Window, s.budget, drilldownWindowSpec)
 	if err != nil {
 		return QueryMCPEventsOutput{}, err
 	}
@@ -195,7 +195,7 @@ func toolEvents(rows []telemetryrepo.MCPToolOutcomeBreakdownRow) ([]MCPToolEvent
 type QueryMCPTracesInput struct {
 	ProjectID string `json:"project_id" jsonschema:"AICP project ID that owns the MCP"`
 	MCPID     string `json:"mcp_id" jsonschema:"configured MCP ID as returned by find_mcp or get_mcp"`
-	Window    string `json:"window,omitempty" jsonschema:"observation window: 1h, 24h (default), 7d, or 30d"`
+	Window    string `json:"window,omitempty" jsonschema:"observation window: 1h or 24h (default); this tool looks back at most 24h"`
 	Outcome   string `json:"outcome,omitempty" jsonschema:"optional outcome class to narrow to: success, unauthorized, client_error, server_error, failed, or unknown"`
 	Cursor    string `json:"cursor,omitempty" jsonschema:"opaque cursor returned by a previous query_mcp_traces result"`
 }
@@ -226,7 +226,7 @@ func (s *DiagnosticsService) QueryMCPTraces(ctx context.Context, principal Princ
 	if input.Outcome != "" && !validOutcomeClass(input.Outcome) {
 		return QueryMCPTracesOutput{}, fmt.Errorf("outcome must be one of success, unauthorized, client_error, server_error, failed, unknown")
 	}
-	target, err := s.resolveDrilldown(ctx, principal, input.ProjectID, input.MCPID, input.Window, s.budget)
+	target, err := s.resolveDrilldown(ctx, principal, input.ProjectID, input.MCPID, input.Window, s.budget, drilldownWindowSpec)
 	if err != nil {
 		return QueryMCPTracesOutput{}, err
 	}
@@ -296,7 +296,7 @@ func (s *DiagnosticsService) QueryMCPTraces(ctx context.Context, principal Princ
 type QueryMCPMetricsInput struct {
 	ProjectID string `json:"project_id" jsonschema:"AICP project ID that owns the MCP"`
 	MCPID     string `json:"mcp_id" jsonschema:"configured MCP ID as returned by find_mcp or get_mcp"`
-	Window    string `json:"window,omitempty" jsonschema:"observation window: 1h, 24h (default), 7d, or 30d"`
+	Window    string `json:"window,omitempty" jsonschema:"observation window: 1h, 24h (default), or 7d"`
 }
 
 // QueryMCPMetricsOutput is aggregated to the window it names. There is
@@ -321,7 +321,7 @@ type QueryMCPMetricsOutput struct {
 }
 
 func (s *DiagnosticsService) QueryMCPMetrics(ctx context.Context, principal Principal, input QueryMCPMetricsInput) (QueryMCPMetricsOutput, error) {
-	target, err := s.resolveDrilldown(ctx, principal, input.ProjectID, input.MCPID, input.Window, s.budget)
+	target, err := s.resolveDrilldown(ctx, principal, input.ProjectID, input.MCPID, input.Window, s.budget, metricsWindowSpec)
 	if err != nil {
 		return QueryMCPMetricsOutput{}, err
 	}
@@ -389,110 +389,93 @@ func (s *DiagnosticsService) QueryMCPMetrics(ctx context.Context, principal Prin
 	return output, nil
 }
 
-// GetUserMCPStatusInput asks who is using one MCP and how it is going for them.
+// GetUserMCPStatusInput names one subject and one MCP. The subject is given as
+// an opaque reference minted by a summary tool, never as an email, account id,
+// or name: the caller asks about someone it was shown, not about someone it
+// can describe.
 type GetUserMCPStatusInput struct {
 	ProjectID string `json:"project_id" jsonschema:"AICP project ID that owns the MCP"`
 	MCPID     string `json:"mcp_id" jsonschema:"configured MCP ID as returned by find_mcp or get_mcp"`
-	Window    string `json:"window,omitempty" jsonschema:"observation window: 1h, 24h (default), 7d, or 30d"`
-	// IncludeRows asks for per-subject rows rather than the aggregate alone.
-	// It is refused when too few subjects are involved for a row to be
-	// anything other than a person.
-	IncludeRows bool `json:"include_rows,omitempty" jsonschema:"request per-subject rows; refused when fewer than five subjects are involved"`
+	// SubjectReference is an expiring, session-bound handle returned in the
+	// optional rows of a summary tool. It cannot be searched, joined,
+	// refreshed, or constructed.
+	SubjectReference string `json:"subject_reference" jsonschema:"opaque subject reference returned by a summary tool; expires and is bound to this session"`
+	Window           string `json:"window,omitempty" jsonschema:"observation window: 1h or 24h (default); this tool looks back at most 24h"`
 }
 
-// MCPUserStatus is one subject's activity against one MCP, addressed only by an
-// expiring opaque reference. It carries no email, no external user id, and no
-// name.
-type MCPUserStatus struct {
-	SubjectReference string `json:"subject_reference"`
-	ToolCalls        int64  `json:"tool_calls"`
-}
+// Subject state categories. Closed vocabulary, assigned server-side: a category
+// is the whole answer, so there is no count to reconstruct an individual's
+// activity pattern from.
+const (
+	SubjectStateActive         = "active"
+	SubjectStateInactive       = "inactive"
+	SubjectStateNoObservations = "no_observations"
+)
 
 type GetUserMCPStatusOutput struct {
 	ProjectID string       `json:"project_id"`
 	MCPID     string       `json:"mcp_id"`
 	Envelope  DataEnvelope `json:"data"`
 
-	ActiveUsers SubjectCount `json:"active_users"`
-	// RowsSuppressed reports that per-subject rows were withheld because too
-	// few subjects were involved. It is stated rather than left to be inferred
-	// from an empty list, which would read as "nobody used this".
-	RowsSuppressed bool `json:"rows_suppressed"`
+	// MaskedIdentity is enough to recognize a subject already known to the
+	// administrator and not enough to learn one. It is never a raw identifier.
+	MaskedIdentity string `json:"masked_identity"`
+	// Activity is a state category rather than a count, so a caller cannot
+	// assemble an activity profile from repeated calls.
+	Activity string `json:"activity"`
 	// Unavailable reports that this MCP's model cannot be scoped by the reads
-	// behind this tool, so no statement is made about its users at all.
-	Unavailable bool            `json:"unavailable"`
-	Users       []MCPUserStatus `json:"users"`
+	// behind this tool, so no statement is made about the subject at all.
+	Unavailable bool `json:"unavailable"`
 }
 
 func (s *DiagnosticsService) GetUserMCPStatus(ctx context.Context, principal Principal, input GetUserMCPStatusInput) (GetUserMCPStatusOutput, error) {
 	if s == nil || s.references == nil {
 		return GetUserMCPStatusOutput{}, ErrUnavailable
 	}
+	if input.SubjectReference == "" {
+		return GetUserMCPStatusOutput{}, fmt.Errorf("subject_reference is required")
+	}
 	// Metered on its own allowance: this is the one drill-down that reaches
 	// personal data, so exhausting it must not be possible by spending the
 	// ordinary diagnostic budget.
-	target, err := s.resolveDrilldown(ctx, principal, input.ProjectID, input.MCPID, input.Window, s.sensitiveBudget)
+	target, err := s.resolveDrilldown(ctx, principal, input.ProjectID, input.MCPID, input.Window, s.sensitiveBudget, drilldownWindowSpec)
 	if err != nil {
 		return GetUserMCPStatusOutput{}, err
 	}
-	toolsetSlug := target.hostedToolsetSlug()
-	start, end := target.window.start.UnixNano(), target.window.end.UnixNano()
+	// Resolved only within the bound organization and connection generation.
+	// An unknown, expired, cross-generation, or cross-organization reference is
+	// a single not-found: distinguishing them would confirm that a reference
+	// once existed, which is itself information about another organization.
+	subject, err := s.references.Decode(input.SubjectReference, principal, subjectKindUser, target.now)
+	if err != nil {
+		return GetUserMCPStatusOutput{}, ErrSubjectReferenceNotFound
+	}
 
-	envelopeOnly, err := s.drilldownEnvelope(ctx, target)
+	envelope, err := s.drilldownEnvelope(ctx, target)
 	if err != nil {
 		return GetUserMCPStatusOutput{}, err
-	}
-	// A remote, tunneled, or unproxied server carries no toolset slug, and the
-	// reads below narrow by nothing else. Answering anyway would report the
-	// project's users as this MCP's — and mint a subject reference for every
-	// one of them, which is a disclosure, not just a wrong number.
-	if toolsetSlug == "" {
-		return GetUserMCPStatusOutput{
-			ProjectID:   input.ProjectID,
-			MCPID:       input.MCPID,
-			Envelope:    envelopeOnly,
-			Unavailable: true,
-			Users:       []MCPUserStatus{},
-		}, nil
-	}
-
-	counts, err := s.telemetry.GetActiveCounts(ctx, telemetryrepo.GetActiveCountsParams{
-		GramProjectID: target.projectID,
-		TimeStart:     start,
-		TimeEnd:       end,
-		ToolsetSlug:   toolsetSlug,
-	})
-	if err != nil {
-		return GetUserMCPStatusOutput{}, fmt.Errorf("read mcp user active counts: %w", err)
-	}
-	envelope := envelopeOnly
-
-	var activeUsers int64
-	if counts != nil {
-		activeUsers = boundedCount(counts.ActiveUsersCount)
 	}
 	output := GetUserMCPStatusOutput{
-		ProjectID:   input.ProjectID,
-		MCPID:       input.MCPID,
-		Envelope:    envelope,
-		ActiveUsers: NewSubjectCount(activeUsers),
-		Users:       []MCPUserStatus{},
+		ProjectID:      input.ProjectID,
+		MCPID:          input.MCPID,
+		Envelope:       envelope,
+		MaskedIdentity: maskSubject(subject),
+		Activity:       SubjectStateNoObservations,
 	}
-	if !input.IncludeRows {
-		return output, nil
-	}
-	// Refused rather than trimmed: with fewer than five subjects, a row is a
-	// person however it is labelled, and the aggregate above already answers
-	// the question rows were asked for.
-	if activeUsers < SubjectSuppressionThreshold {
-		output.RowsSuppressed = true
+
+	toolsetSlug := target.hostedToolsetSlug()
+	// A remote, tunneled, or unproxied server carries no toolset slug, and the
+	// read below narrows by nothing else. Answering anyway would report the
+	// project's activity as this MCP's.
+	if toolsetSlug == "" {
+		output.Unavailable = true
 		return output, nil
 	}
 
 	users, err := s.drilldown.GetTopUsers(ctx, telemetryrepo.GetTopUsersParams{
 		GramProjectID: target.projectID,
-		TimeStart:     start,
-		TimeEnd:       end,
+		TimeStart:     target.window.start.UnixNano(),
+		TimeEnd:       target.window.end.UnixNano(),
 		ToolsetSlug:   toolsetSlug,
 		Limit:         maxUserStatusRows,
 	})
@@ -500,19 +483,41 @@ func (s *DiagnosticsService) GetUserMCPStatus(ctx context.Context, principal Pri
 		return GetUserMCPStatusOutput{}, fmt.Errorf("read mcp user activity: %w", err)
 	}
 	for _, user := range users {
-		// user.UserID is whichever identity the telemetry fold resolved — an
-		// email in many cases. It is minted into a reference here and never
-		// projected, which is the whole reason references exist.
-		reference, err := s.references.Encode(principal, subjectKindUser, user.UserID, target.now)
-		if err != nil {
-			return GetUserMCPStatusOutput{}, fmt.Errorf("mint subject reference: %w", err)
+		if user.UserID != subject {
+			continue
 		}
-		output.Users = append(output.Users, MCPUserStatus{
-			SubjectReference: reference,
-			ToolCalls:        boundedCount(user.ActivityCount),
-		})
+		if user.ActivityCount > 0 {
+			output.Activity = SubjectStateActive
+		} else {
+			output.Activity = SubjectStateInactive
+		}
+		return output, nil
 	}
 	return output, nil
+}
+
+// maskSubject reduces an identifier to something an administrator who already
+// knows the person can recognize, and someone who does not cannot learn.
+//
+// The local part and the domain are masked separately for an email so the shape
+// stays readable; anything else keeps only its first character.
+func maskSubject(subject string) string {
+	local, domain, isEmail := strings.Cut(subject, "@")
+	if !isEmail || local == "" || domain == "" {
+		return maskToken(subject)
+	}
+	return maskToken(local) + "@" + maskToken(domain)
+}
+
+func maskToken(value string) string {
+	runes := []rune(value)
+	if len(runes) == 0 {
+		return ""
+	}
+	if len(runes) == 1 {
+		return "*"
+	}
+	return string(runes[0]) + strings.Repeat("*", min(len(runes)-1, 3))
 }
 
 func (s *DiagnosticsService) decodeTraceCursor(cursor string, principal Principal, now time.Time) (int64, string, error) {
