@@ -11,7 +11,7 @@ type UpdateMCPMetadataToolInput struct {
 	ProjectSlug     string `json:"project_slug" jsonschema:"explicit AICP project slug that owns the Platform-managed MCP"`
 	RegistrationID  string `json:"registration_id" jsonschema:"Platform registration ID returned by find_mcp or get_mcp"`
 	MCPID           string `json:"mcp_id" jsonschema:"configured MCP ID returned by find_mcp or get_mcp"`
-	Name            string `json:"name" jsonschema:"new non-empty project-local MCP display name"`
+	Name            string `json:"name" jsonschema:"new project-local MCP display name; 1-256 bytes after trimming and no line breaks"`
 	ExpectedVersion string `json:"expected_version" jsonschema:"opaque version returned by find_mcp, get_mcp, or a previous update_mcp_metadata result"`
 	IdempotencyKey  string `json:"idempotency_key" jsonschema:"caller-generated idempotency key; reuse only to retry this exact metadata update"`
 }
