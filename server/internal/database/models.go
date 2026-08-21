@@ -137,6 +137,7 @@ type AssistantMcpOauthClient struct {
 	ClientID              pgtype.Text
 	ClientSecretEncrypted pgtype.Text
 	ClientSecretExpiresAt pgtype.Timestamptz
+	ClientIDMetadataUri   pgtype.Text
 	RegistrationOwner     uuid.NullUUID
 	RegistrationStartedAt pgtype.Timestamptz
 	CreatedAt             pgtype.Timestamptz

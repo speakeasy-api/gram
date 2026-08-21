@@ -222,6 +222,7 @@ DO UPDATE SET
   client_id = NULL,
   client_secret_encrypted = NULL,
   client_secret_expires_at = NULL,
+  client_id_metadata_uri = NULL,
   redirect_uri = EXCLUDED.redirect_uri,
   registration_owner = EXCLUDED.registration_owner,
   registration_started_at = EXCLUDED.registration_started_at,
@@ -385,6 +386,7 @@ SET
   client_id = $1,
   client_secret_encrypted = $2,
   client_secret_expires_at = $3,
+  client_id_metadata_uri = NULL,
   registration_owner = NULL,
   registration_started_at = NULL,
   updated_at = clock_timestamp()
@@ -948,6 +950,47 @@ func (q *Queries) GetAssistant(ctx context.Context, arg GetAssistantParams) (Get
 	return i, err
 }
 
+const getAssistantForClientMetadataDocument = `-- name: GetAssistantForClientMetadataDocument :one
+SELECT
+  a.id,
+  a.project_id,
+  a.name,
+  p.slug AS project_slug,
+  om.slug AS organization_slug
+FROM assistants a
+JOIN projects p ON p.id = a.project_id AND p.deleted IS FALSE
+JOIN organization_metadata om ON om.id = a.organization_id
+WHERE a.id = $1
+  AND a.deleted IS FALSE
+`
+
+type GetAssistantForClientMetadataDocumentRow struct {
+	ID               uuid.UUID
+	ProjectID        uuid.UUID
+	Name             string
+	ProjectSlug      string
+	OrganizationSlug string
+}
+
+// Public CIMD document endpoint lookup. Intentionally NOT project-scoped: the
+// endpoint is unauthenticated and addresses assistants by their globally
+// unique primary key. The served document exposes the assistant's display
+// name, dashboard URI, and redirect_uri — the same identity sent upstream as
+// client_id. A deleted assistant or missing org/project yields no row, so
+// the handler 404s.
+func (q *Queries) GetAssistantForClientMetadataDocument(ctx context.Context, assistantID uuid.UUID) (GetAssistantForClientMetadataDocumentRow, error) {
+	row := q.db.QueryRow(ctx, getAssistantForClientMetadataDocument, assistantID)
+	var i GetAssistantForClientMetadataDocumentRow
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.ProjectSlug,
+		&i.OrganizationSlug,
+	)
+	return i, err
+}
+
 const getAssistantForDispatch = `-- name: GetAssistantForDispatch :one
 SELECT id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at
 FROM assistants
@@ -1045,12 +1088,21 @@ const getAssistantMCPOAuthClient = `-- name: GetAssistantMCPOAuthClient :one
 SELECT
   client_id,
   client_secret_encrypted,
+  client_id_metadata_uri,
   (
     client_id IS NOT NULL
-    AND client_secret_encrypted IS NOT NULL
     AND redirect_uri = $1
     AND (client_secret_expires_at IS NULL OR client_secret_expires_at > $2)
+    AND (
+      client_secret_encrypted IS NOT NULL
+      OR client_id_metadata_uri IS NOT NULL
+    )
   ) AS usable,
+  (
+    client_id IS NOT NULL
+    AND client_secret_expires_at IS NOT NULL
+    AND client_secret_expires_at <= $2
+  ) AS invalidated,
   (
     (
       client_id IS NULL
@@ -1090,7 +1142,9 @@ type GetAssistantMCPOAuthClientParams struct {
 type GetAssistantMCPOAuthClientRow struct {
 	ClientID              pgtype.Text
 	ClientSecretEncrypted pgtype.Text
+	ClientIDMetadataUri   pgtype.Text
 	Usable                pgtype.Bool
+	Invalidated           pgtype.Bool
 	Claimable             pgtype.Bool
 }
 
@@ -1107,7 +1161,9 @@ func (q *Queries) GetAssistantMCPOAuthClient(ctx context.Context, arg GetAssista
 	err := row.Scan(
 		&i.ClientID,
 		&i.ClientSecretEncrypted,
+		&i.ClientIDMetadataUri,
 		&i.Usable,
+		&i.Invalidated,
 		&i.Claimable,
 	)
 	return i, err
@@ -3900,6 +3956,75 @@ func (q *Queries) UpsertAssistantChat(ctx context.Context, arg UpsertAssistantCh
 		arg.Title,
 	)
 	return err
+}
+
+const upsertAssistantMCPOAuthClientCIMD = `-- name: UpsertAssistantMCPOAuthClientCIMD :one
+INSERT INTO assistant_mcp_oauth_clients AS clients (
+  project_id,
+  assistant_id,
+  oauth_server_issuer,
+  redirect_uri,
+  client_id,
+  client_id_metadata_uri
+) SELECT
+  $1,
+  $2,
+  $3,
+  $4,
+  $5,
+  $6
+FROM assistants owner
+WHERE owner.id = $2
+  AND owner.project_id = $1
+  AND owner.deleted IS FALSE
+ON CONFLICT (project_id, assistant_id, oauth_server_issuer) WHERE deleted IS FALSE
+DO UPDATE SET
+  redirect_uri = EXCLUDED.redirect_uri,
+  client_id = EXCLUDED.client_id,
+  client_id_metadata_uri = EXCLUDED.client_id_metadata_uri,
+  client_secret_encrypted = NULL,
+  client_secret_expires_at = NULL,
+  registration_owner = NULL,
+  registration_started_at = NULL,
+  updated_at = clock_timestamp()
+WHERE
+  -- Only rewrite existing CIMD rows (redirect refresh). Never steal a live
+  -- confidential DCR client or an in-progress / abandoned DCR claim.
+  clients.client_id_metadata_uri IS NOT NULL
+RETURNING client_id, client_secret_encrypted, client_id_metadata_uri
+`
+
+type UpsertAssistantMCPOAuthClientCIMDParams struct {
+	ProjectID           uuid.UUID
+	AssistantID         uuid.UUID
+	OauthServerIssuer   string
+	RedirectUri         string
+	ClientID            pgtype.Text
+	ClientIDMetadataUri pgtype.Text
+}
+
+type UpsertAssistantMCPOAuthClientCIMDRow struct {
+	ClientID              pgtype.Text
+	ClientSecretEncrypted pgtype.Text
+	ClientIDMetadataUri   pgtype.Text
+}
+
+// Records a public CIMD client whose client_id is the document URL. Does not
+// replace a live confidential DCR registration: that reuse path stays on the
+// secret-bearing row until it expires, is invalidated, or the assistant is
+// deleted. Intentionally project-scoped.
+func (q *Queries) UpsertAssistantMCPOAuthClientCIMD(ctx context.Context, arg UpsertAssistantMCPOAuthClientCIMDParams) (UpsertAssistantMCPOAuthClientCIMDRow, error) {
+	row := q.db.QueryRow(ctx, upsertAssistantMCPOAuthClientCIMD,
+		arg.ProjectID,
+		arg.AssistantID,
+		arg.OauthServerIssuer,
+		arg.RedirectUri,
+		arg.ClientID,
+		arg.ClientIDMetadataUri,
+	)
+	var i UpsertAssistantMCPOAuthClientCIMDRow
+	err := row.Scan(&i.ClientID, &i.ClientSecretEncrypted, &i.ClientIDMetadataUri)
+	return i, err
 }
 
 const upsertAssistantThread = `-- name: UpsertAssistantThread :one

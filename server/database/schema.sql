@@ -4719,19 +4719,25 @@ CREATE TABLE IF NOT EXISTS assistant_mcp_servers (
 CREATE INDEX IF NOT EXISTS assistant_mcp_servers_mcp_server_id_idx ON assistant_mcp_servers (mcp_server_id);
 CREATE INDEX IF NOT EXISTS assistant_mcp_servers_project_id_idx ON assistant_mcp_servers (project_id);
 
--- Reusable dynamic client registrations for assistant-initiated MCP OAuth flows.
--- OAuth issuer identity lets one client serve MCP resources that share an
--- authorization server, even if its endpoint paths change.
+-- Reusable OAuth clients for assistant-initiated MCP auth flows. One live
+-- row per (project, assistant, issuer): confidential DCR clients (secret
+-- present) or public CIMD clients (client_id_metadata_uri present). Issuer
+-- identity lets one client serve MCP resources that share an authorization
+-- server, even if its endpoint paths change.
 CREATE TABLE IF NOT EXISTS assistant_mcp_oauth_clients (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
   assistant_id uuid NOT NULL,
   oauth_server_issuer TEXT NOT NULL,
   redirect_uri TEXT NOT NULL,
-  -- Assistant MCP auth only registers confidential client_secret_basic clients.
   client_id TEXT,
   client_secret_encrypted TEXT,
   client_secret_expires_at timestamptz,
+  -- CIMD: when non-null, Gram publishes a Client ID Metadata Document at
+  -- this URL and sends the URL as client_id. Public clients carry no secret.
+  -- draft-ietf-oauth-client-id-metadata-document requires client_id equal
+  -- this URL; the CHECK below enforces that.
+  client_id_metadata_uri TEXT,
   registration_owner uuid,
   registration_started_at timestamptz,
 
@@ -4744,18 +4750,40 @@ CREATE TABLE IF NOT EXISTS assistant_mcp_oauth_clients (
   CONSTRAINT assistant_mcp_oauth_clients_oauth_server_issuer_check CHECK (oauth_server_issuer <> '' AND CHAR_LENGTH(oauth_server_issuer) <= 500),
   CONSTRAINT assistant_mcp_oauth_clients_registration_state_check CHECK (
     (
+      -- Confidential DCR client (complete).
       client_id IS NOT NULL
       AND client_secret_encrypted IS NOT NULL
+      AND client_id_metadata_uri IS NULL
       AND registration_owner IS NULL
       AND registration_started_at IS NULL
     )
     OR
     (
+      -- Public CIMD client (complete). client_secret_expires_at may be set
+      -- to invalidate the row so the next flow can fall back to DCR.
+      client_id IS NOT NULL
+      AND client_secret_encrypted IS NULL
+      AND client_id_metadata_uri IS NOT NULL
+      AND registration_owner IS NULL
+      AND registration_started_at IS NULL
+    )
+    OR
+    (
+      -- In-progress registration claim.
       client_id IS NULL
       AND client_secret_encrypted IS NULL
       AND client_secret_expires_at IS NULL
+      AND client_id_metadata_uri IS NULL
       AND registration_owner IS NOT NULL
       AND registration_started_at IS NOT NULL
+    )
+  ),
+  CONSTRAINT assistant_mcp_oauth_clients_client_id_metadata_uri_check CHECK (
+    client_id_metadata_uri IS NULL
+    OR (
+      client_id_metadata_uri <> ''
+      AND client_secret_encrypted IS NULL
+      AND client_id = client_id_metadata_uri
     )
   ),
   -- Intentional exception to the usual SET NULL policy: tenant and owner IDs

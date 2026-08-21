@@ -84,11 +84,11 @@ func TestGetOrRegisterMCPAuthClientReusesRegistration(t *testing.T) {
 	service := newMCPAuthTestService(t, conn)
 	redirectURI := "https://gram.example.com/rpc/assistantMcpAuth/" + assistantID.String() + "/oauth/callback"
 	first, err := service.getOrRegisterMCPAuthClient(
-		t.Context(), projectID, assistantID, registrationServer.URL, registrationServer.URL, redirectURI,
+		t.Context(), projectID, assistantID, registrationServer.URL, registrationServer.URL, redirectURI, false,
 	)
 	require.NoError(t, err)
 	second, err := service.getOrRegisterMCPAuthClient(
-		t.Context(), projectID, assistantID, registrationServer.URL, registrationServer.URL, redirectURI,
+		t.Context(), projectID, assistantID, registrationServer.URL, registrationServer.URL, redirectURI, false,
 	)
 	require.NoError(t, err)
 
@@ -149,12 +149,12 @@ func TestInvalidateMCPAuthClientForcesRegistration(t *testing.T) {
 	service := newMCPAuthTestService(t, conn)
 	redirectURI := "https://gram.example.com/rpc/assistantMcpAuth/" + assistantID.String() + "/oauth/callback"
 	first, err := service.getOrRegisterMCPAuthClient(
-		t.Context(), projectID, assistantID, registrationServer.URL, registrationServer.URL, redirectURI,
+		t.Context(), projectID, assistantID, registrationServer.URL, registrationServer.URL, redirectURI, false,
 	)
 	require.NoError(t, err)
 	service.invalidateMCPAuthClient(t.Context(), projectID, assistantID, registrationServer.URL, first.ClientID)
 	second, err := service.getOrRegisterMCPAuthClient(
-		t.Context(), projectID, assistantID, registrationServer.URL, registrationServer.URL, redirectURI,
+		t.Context(), projectID, assistantID, registrationServer.URL, registrationServer.URL, redirectURI, false,
 	)
 	require.NoError(t, err)
 
@@ -184,7 +184,7 @@ func TestGetOrRegisterMCPAuthClientRejectsSoonExpiringRegistration(t *testing.T)
 	service := newMCPAuthTestService(t, conn)
 	redirectURI := "https://gram.example.com/rpc/assistantMcpAuth/" + assistantID.String() + "/oauth/callback"
 	_, err = service.getOrRegisterMCPAuthClient(
-		t.Context(), projectID, assistantID, registrationServer.URL, registrationServer.URL, redirectURI,
+		t.Context(), projectID, assistantID, registrationServer.URL, registrationServer.URL, redirectURI, false,
 	)
 	require.ErrorContains(t, err, "client secret expires before the authorization flow")
 	require.Equal(t, int32(1), registrations.Load())
@@ -223,7 +223,7 @@ func TestGetOrRegisterMCPAuthClientSerializesFirstRegistration(t *testing.T) {
 	var completed atomic.Int32
 	register := func() {
 		result, err := service.getOrRegisterMCPAuthClient(
-			t.Context(), projectID, assistantID, registrationServer.URL, registrationServer.URL, redirectURI,
+			t.Context(), projectID, assistantID, registrationServer.URL, registrationServer.URL, redirectURI, false,
 		)
 		results <- result
 		errs <- err
