@@ -156,18 +156,21 @@ type DataEnvelope struct {
 // covered, so a historical read stays fresh instead of being reported stale
 // merely for being about the past. Otherwise the lag is measured against the
 // moment of the read.
-func newDataEnvelope(now time.Time, watermark time.Time, window ResolvedWindow) DataEnvelope {
+//
+// observed is the scoped result, not the watermark: a project may be busy while
+// the one MCP being asked about produced nothing, and deriving "no observations"
+// from the watermark would report that silence as activity.
+func newDataEnvelope(now time.Time, watermark time.Time, window ResolvedWindow, observed bool) DataEnvelope {
 	envelope := DataEnvelope{
 		QueriedAt:      now.UTC().Format(time.RFC3339),
 		DataThrough:    "",
 		Freshness:      FreshnessUnavailable,
-		NoObservations: true,
+		NoObservations: !observed,
 		ResolvedWindow: window,
 	}
 	if watermark.IsZero() {
 		return envelope
 	}
-	envelope.NoObservations = false
 	envelope.DataThrough = watermark.UTC().Format(time.RFC3339)
 	switch {
 	case !watermark.Before(window.end):

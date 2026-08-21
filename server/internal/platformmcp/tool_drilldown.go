@@ -74,25 +74,23 @@ func registerDrilldownTools(reg *Registrar, diagnostics *DiagnosticsService) {
 		return nil, output, nil
 	})
 
+	// get_user_mcp_status is deliberately not registered live here. Its input
+	// is a subject reference, and the tools that mint one — the organization
+	// summaries — are the other half of this lane and are not built yet.
+	// Registering it anyway would advertise a capability that always fails,
+	// which is the same mistake the audience list exists to prevent. The
+	// handler and its tests are complete; the summaries lane swaps this stub
+	// for an addTool over DiagnosticsService.GetUserMCPStatus.
+	registerPendingUserMCPStatusTool(reg)
+}
+
+func registerPendingUserMCPStatusTool(reg *Registrar) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_user_mcp_status",
 		Title:       "Get User MCP Status",
-		Description: drilldownPreamble + "Report one subject's state against one MCP, given the opaque subject reference a summary tool returned for them. Returns a masked identity and a state category only — never a raw identifier, a count, or a history. References expire, are bound to this session, and cannot be searched, joined, or constructed; an unknown or expired one is not found.",
+		Description: "Report one subject's state against one MCP. Unavailable: this tool takes an opaque subject reference, and the organization summary tools that return one are not available yet.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetUserMCPStatusInput) (*mcp.CallToolResult, GetUserMCPStatusOutput, error) {
-		principal, err := principalFromToolContext(ctx)
-		if err != nil {
-			return nil, GetUserMCPStatusOutput{}, err
-		}
-		output, err := diagnostics.GetUserMCPStatus(ctx, principal, input)
-		if err != nil {
-			if budgetResult, ok := operationBudgetToolResult(err); ok {
-				return budgetResult, GetUserMCPStatusOutput{}, nil
-			}
-			return nil, GetUserMCPStatusOutput{}, err
-		}
-		return nil, output, nil
-	})
+	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("user_mcp_status"))
 }
 
 func registerUnavailableDrilldownTools(reg *Registrar) {
@@ -104,7 +102,6 @@ func registerUnavailableDrilldownTools(reg *Registrar) {
 		{"query_mcp_events", "Query MCP Events", "Break one MCP's calls down by tool and outcome. Diagnostics are not enabled in the current rollout."},
 		{"query_mcp_traces", "Query MCP Traces", "List individual occurrences for one MCP. Diagnostics are not enabled in the current rollout."},
 		{"query_mcp_metrics", "Query MCP Metrics", "Return one MCP's aggregate levels. Diagnostics are not enabled in the current rollout."},
-		{"get_user_mcp_status", "Get User MCP Status", "Report one subject's state against one MCP. Diagnostics are not enabled in the current rollout."},
 	} {
 		addTool(reg, &mcp.Tool{
 			Name:        tool.name,

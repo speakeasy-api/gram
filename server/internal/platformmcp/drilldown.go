@@ -22,8 +22,6 @@ const (
 	maxDrilldownTools = 25
 	// maxTraceReferences bounds one page of correlation references.
 	maxTraceReferences = 20
-	// maxUserStatusRows bounds one page of per-subject rows.
-	maxUserStatusRows = 25
 )
 
 // DrilldownTelemetryReader is the additional telemetry the bounded drill-down
@@ -32,7 +30,6 @@ const (
 type DrilldownTelemetryReader interface {
 	GetMCPToolOutcomeBreakdown(ctx context.Context, arg telemetryrepo.GetMCPToolOutcomeBreakdownParams) ([]telemetryrepo.MCPToolOutcomeBreakdownRow, error)
 	ListMCPTraceReferences(ctx context.Context, arg telemetryrepo.ListMCPTraceReferencesParams) ([]telemetryrepo.MCPTraceReferenceRow, error)
-	GetTopUsers(ctx context.Context, arg telemetryrepo.GetTopUsersParams) ([]telemetryrepo.TopUser, error)
 }
 
 // drilldownTarget is one resolved MCP plus the window to read it over. Every
@@ -107,14 +104,14 @@ func (t drilldownTarget) outcomeParams() telemetryrepo.GetMCPOutcomeBreakdownPar
 	}
 }
 
-func (s *DiagnosticsService) drilldownEnvelope(ctx context.Context, target drilldownTarget) (DataEnvelope, error) {
+func (s *DiagnosticsService) drilldownEnvelope(ctx context.Context, target drilldownTarget, observed bool) (DataEnvelope, error) {
 	watermark, err := s.telemetry.GetTelemetryWatermark(ctx, telemetryrepo.GetTelemetryWatermarkParams{
 		GramProjectIDs: []string{target.projectID},
 	})
 	if err != nil {
 		return DataEnvelope{}, fmt.Errorf("read drilldown watermark: %w", err)
 	}
-	return newDataEnvelope(target.now, watermarkTime(watermark), target.window), nil
+	return newDataEnvelope(target.now, watermarkTime(watermark), target.window, observed), nil
 }
 
 // QueryMCPEventsInput drills into one MCP's calls by tool. It has no free-text
@@ -151,11 +148,11 @@ func (s *DiagnosticsService) QueryMCPEvents(ctx context.Context, principal Princ
 	if err != nil {
 		return QueryMCPEventsOutput{}, fmt.Errorf("read mcp tool outcome breakdown: %w", err)
 	}
-	envelope, err := s.drilldownEnvelope(ctx, target)
+	tools, truncated := toolEvents(rows)
+	envelope, err := s.drilldownEnvelope(ctx, target, len(rows) > 0)
 	if err != nil {
 		return QueryMCPEventsOutput{}, err
 	}
-	tools, truncated := toolEvents(rows)
 	return QueryMCPEventsOutput{
 		ProjectID: input.ProjectID,
 		MCPID:     input.MCPID,
@@ -251,7 +248,7 @@ func (s *DiagnosticsService) QueryMCPTraces(ctx context.Context, principal Princ
 	if err != nil {
 		return QueryMCPTracesOutput{}, fmt.Errorf("read mcp trace references: %w", err)
 	}
-	envelope, err := s.drilldownEnvelope(ctx, target)
+	envelope, err := s.drilldownEnvelope(ctx, target, len(rows) > 0)
 	if err != nil {
 		return QueryMCPTracesOutput{}, err
 	}
@@ -361,12 +358,11 @@ func (s *DiagnosticsService) QueryMCPMetrics(ctx context.Context, principal Prin
 	if err != nil {
 		return QueryMCPMetricsOutput{}, fmt.Errorf("read mcp metrics summary: %w", err)
 	}
-	envelope, err := s.drilldownEnvelope(ctx, target)
+	totals := totalsFromRows(outcomeRows)
+	envelope, err := s.drilldownEnvelope(ctx, target, totals.Total > 0)
 	if err != nil {
 		return QueryMCPMetricsOutput{}, err
 	}
-
-	totals := totalsFromRows(outcomeRows)
 	output := QueryMCPMetricsOutput{
 		ProjectID:       input.ProjectID,
 		MCPID:           input.MCPID,
@@ -463,14 +459,9 @@ func (s *DiagnosticsService) GetUserMCPStatus(ctx context.Context, principal Pri
 		return GetUserMCPStatusOutput{}, ErrSubjectReferenceNotFound
 	}
 
-	envelope, err := s.drilldownEnvelope(ctx, target)
-	if err != nil {
-		return GetUserMCPStatusOutput{}, err
-	}
 	output := GetUserMCPStatusOutput{
 		ProjectID:      input.ProjectID,
 		MCPID:          input.MCPID,
-		Envelope:       envelope,
 		MaskedIdentity: maskSubject(subject),
 		Activity:       SubjectStateNoObservations,
 	}
@@ -480,30 +471,40 @@ func (s *DiagnosticsService) GetUserMCPStatus(ctx context.Context, principal Pri
 	// read below narrows by nothing else. Answering anyway would report the
 	// project's activity as this MCP's.
 	if toolsetSlug == "" {
+		envelope, err := s.drilldownEnvelope(ctx, target, false)
+		if err != nil {
+			return GetUserMCPStatusOutput{}, err
+		}
+		output.Envelope = envelope
 		output.Unavailable = true
 		return output, nil
 	}
 
-	users, err := s.drilldown.GetTopUsers(ctx, telemetryrepo.GetTopUsersParams{
+	// Scoped to this one subject rather than filtered out of a truncated
+	// top-user list: a subject outside that list would otherwise be reported as
+	// having no observations, which on a personal-data question is a false
+	// negative rather than a missing row. The value is whichever identity the
+	// telemetry fold resolved, so it is offered as both candidates.
+	summary, err := s.telemetry.GetOverviewSummary(ctx, telemetryrepo.GetOverviewSummaryParams{
 		GramProjectID: target.projectID,
 		TimeStart:     target.window.start.UnixNano(),
 		TimeEnd:       target.window.end.UnixNano(),
 		ToolsetSlug:   toolsetSlug,
-		Limit:         maxUserStatusRows,
+		User:          telemetryrepo.UserIdentity{UserIDs: []string{subject}, Emails: []string{subject}},
 	})
 	if err != nil {
 		return GetUserMCPStatusOutput{}, fmt.Errorf("read mcp user activity: %w", err)
 	}
-	for _, user := range users {
-		if user.UserID != subject {
-			continue
-		}
-		if user.ActivityCount > 0 {
-			output.Activity = SubjectStateActive
-		} else {
-			output.Activity = SubjectStateInactive
-		}
-		return output, nil
+	observed := summary != nil && summary.TotalToolCalls > 0
+	envelope, err := s.drilldownEnvelope(ctx, target, observed)
+	if err != nil {
+		return GetUserMCPStatusOutput{}, err
+	}
+	output.Envelope = envelope
+	if observed {
+		output.Activity = SubjectStateActive
+	} else {
+		output.Activity = SubjectStateInactive
 	}
 	return output, nil
 }

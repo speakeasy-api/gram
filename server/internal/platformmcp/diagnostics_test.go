@@ -53,7 +53,7 @@ func TestGetProjectOverviewOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 
 	output := GetProjectOverviewOutput{
 		ProjectID:       "00000000-0000-0000-0000-000000000001",
-		Envelope:        newDataEnvelope(now, now.Add(-time.Minute), window),
+		Envelope:        newDataEnvelope(now, now.Add(-time.Minute), window, true),
 		MetricsMode:     "tool_call",
 		ToolCalls:       120,
 		FailedToolCalls: 4,
@@ -84,7 +84,7 @@ func TestGetMCPDiagnosticsOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 	output := GetMCPDiagnosticsOutput{
 		ProjectID:                   "00000000-0000-0000-0000-000000000001",
 		MCPID:                       "00000000-0000-0000-0000-000000000002",
-		Envelope:                    newDataEnvelope(now, now.Add(-time.Minute), window),
+		Envelope:                    newDataEnvelope(now, now.Add(-time.Minute), window, true),
 		Readiness:                   MCPDiagnosticsReadiness{State: string(ReadinessReady), Freshness: "fresh", CheckedAt: now.Format(time.RFC3339)},
 		Outcomes:                    MCPOutcomeSummary{Total: 10, Success: 4, Unauthorized: 6},
 		OrganizationOutcomes:        MCPOutcomeSummary{Total: 100, Success: 98, ServerError: 2},
