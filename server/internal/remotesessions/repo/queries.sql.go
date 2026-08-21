@@ -5445,11 +5445,12 @@ SET
     authorization_expires_at = $4,
     refresh_expires_at = $5,
     scopes = $6,
+    resource = COALESCE(resource, $7),
     updated_at = clock_timestamp()
-WHERE subject_urn = $7
-  AND remote_session_client_id = $8
+WHERE subject_urn = $8
+  AND remote_session_client_id = $9
   AND deleted IS FALSE
-  AND updated_at = $9
+  AND updated_at = $10
 RETURNING id, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, created_at, updated_at, deleted_at, deleted
 `
 
@@ -5460,6 +5461,7 @@ type UpdateRemoteSessionTokensIfUnchangedParams struct {
 	AuthorizationExpiresAt pgtype.Timestamptz
 	RefreshExpiresAt       pgtype.Timestamptz
 	Scopes                 []string
+	BackfillResource       pgtype.Text
 	SubjectUrn             urn.SessionSubject
 	RemoteSessionClientID  uuid.UUID
 	ExpectedUpdatedAt      pgtype.Timestamptz
@@ -5470,6 +5472,7 @@ type UpdateRemoteSessionTokensIfUnchangedParams struct {
 // another writer won or the session was revoked; both end in a re-auth challenge.
 // Keyed by (subject, client) + CAS only: the session's user_session_issuer_id
 // is provenance, never part of the credential's identity.
+// backfill_resource stamps the refresh's RFC 8707 resource onto legacy NULL rows; COALESCE never overwrites a stored binding.
 func (q *Queries) UpdateRemoteSessionTokensIfUnchanged(ctx context.Context, arg UpdateRemoteSessionTokensIfUnchangedParams) (RemoteSession, error) {
 	row := q.db.QueryRow(ctx, updateRemoteSessionTokensIfUnchanged,
 		arg.AccessTokenEncrypted,
@@ -5478,6 +5481,7 @@ func (q *Queries) UpdateRemoteSessionTokensIfUnchanged(ctx context.Context, arg 
 		arg.AuthorizationExpiresAt,
 		arg.RefreshExpiresAt,
 		arg.Scopes,
+		arg.BackfillResource,
 		arg.SubjectUrn,
 		arg.RemoteSessionClientID,
 		arg.ExpectedUpdatedAt,
