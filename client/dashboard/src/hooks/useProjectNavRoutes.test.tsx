@@ -135,7 +135,8 @@ describe("useProjectNavRoutes", () => {
       expect(navRoutes).not.toContain(routes.assistants);
       expect(navRoutes).not.toContain(routes.watchdog);
       expect(navRoutes).toContain(routes.deployments);
-      // Without Watchdog, the legacy risk pages stay in the nav.
+      // Without Watchdog, Risk Overview stays in the nav; Risk Events is
+      // always there.
       expect(navRoutes).toContain(routes.riskOverview);
       expect(navRoutes).toContain(routes.riskEvents);
     },
@@ -154,8 +155,8 @@ describe("useProjectNavRoutes", () => {
     expect(navRoutes).toContain(routes.assistants);
     expect(navRoutes).toContain(routes.watchdog);
     expect(navRoutes).not.toContain(routes.deployments);
-    // Watchdog supersedes the legacy risk pages in the nav.
+    // Watchdog supersedes Risk Overview only; Risk Events stays in the nav.
     expect(navRoutes).not.toContain(routes.riskOverview);
-    expect(navRoutes).not.toContain(routes.riskEvents);
+    expect(navRoutes).toContain(routes.riskEvents);
   });
 });

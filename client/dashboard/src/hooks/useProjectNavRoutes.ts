@@ -89,16 +89,16 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
         ? [{ route: routes.orgMemory, scope: observe }]
         : []),
       { route: routes.logs, scope: observe },
-      // Watchdog supersedes the Risk Overview and Risk Events pages: with the
-      // flag on, it is the Secure section's landing surface and the two
-      // legacy nav items hide (their routes stay reachable by direct URL).
+      // Watchdog supersedes the Risk Overview page: with the flag on, it is
+      // the Secure section's landing surface and the legacy overview nav item
+      // hides (its route stays reachable by direct URL). Risk Events stays in
+      // the nav either way — Watchdog groups events, and the raw list is how
+      // a block or a policy under test is traced back to its event (AIS-595).
       ...(isRiskWatchdogEnabled
         ? [{ route: routes.watchdog, scope: read }]
         : [{ route: routes.riskOverview, scope: read }]),
       { route: routes.policyCenter, scope: readWrite },
-      ...(isRiskWatchdogEnabled
-        ? []
-        : [{ route: routes.riskEvents, scope: ["org:admin"] as Scope[] }]),
+      { route: routes.riskEvents, scope: ["org:admin"] },
       { route: routes.shadowMCP, scope: readWrite },
       { route: routes.settings, scope: ["project:write"] },
     ];

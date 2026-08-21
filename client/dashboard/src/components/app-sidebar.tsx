@@ -208,8 +208,9 @@ export function AppSidebar({
             label="Secure"
             Icon={(p) => <Icon {...p} name="shield" />}
             items={[
-              // Watchdog supersedes Risk Overview and Risk Events: exactly one
-              // of the two sets shows, mirroring useProjectNavRoutes.
+              // Watchdog supersedes Risk Overview: exactly one of the two
+              // shows, mirroring useProjectNavRoutes. Risk Events stays either
+              // way — it is the raw event list behind Watchdog's grouping.
               ...(isRiskWatchdogEnabled
                 ? [{ item: routes.watchdog, ...accessFor(routes.watchdog) }]
                 : [
@@ -219,14 +220,7 @@ export function AppSidebar({
                     },
                   ]),
               { item: routes.policyCenter, ...accessFor(routes.policyCenter) },
-              ...(isRiskWatchdogEnabled
-                ? []
-                : [
-                    {
-                      item: routes.riskEvents,
-                      ...accessFor(routes.riskEvents),
-                    },
-                  ]),
+              { item: routes.riskEvents, ...accessFor(routes.riskEvents) },
               { item: routes.shadowMCP, ...accessFor(routes.shadowMCP) },
             ]}
           />
