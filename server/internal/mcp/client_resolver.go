@@ -12,9 +12,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/url"
-	"slices"
-	"strings"
 
 	"github.com/jackc/pgx/v5"
 
@@ -243,7 +240,7 @@ func (s *Service) admitCIMDClient(ctx context.Context, logger *slog.Logger, endp
 	// dimension: this is the URL an operator needs when diagnosing a preset
 	// miss, and it is exactly the value too unbounded to be a metric label.
 	logAttrs := []any{
-		attr.SlogOAuthClientID(truncateClientIDForLog(clientID)),
+		attr.SlogOAuthClientID(admission.TruncateClientIDForLog(clientID)),
 		attr.SlogCIMDAdmissionMode(mode),
 		attr.SlogCIMDAdmissionOutcome(decision.Denial),
 	}
@@ -259,78 +256,13 @@ func (s *Service) admitCIMDClient(ctx context.Context, logger *slog.Logger, endp
 	return &admission.DenialError{Mode: mode, Reason: decision.Denial}
 }
 
-// truncateClientIDForLog bounds a presented client_id for logging. The value
-// is attacker-chosen on the unauthenticated OAuth surface and is logged at
-// points that run before any length validation — a rejected authorize
-// request, an admission denial in disabled mode — so an oversized client_id
-// could otherwise inflate every line it appears on.
-func truncateClientIDForLog(clientID string) string {
-	if len(clientID) <= admission.MaxClientIDLength {
-		return clientID
-	}
-	return clientID[:admission.MaxClientIDLength] + "…(truncated)"
-}
-
 // redirectURIMatches reports whether the request's redirect_uri matches an
-// entry registered on the client row. The rule is exact string matching (RFC
-// 9700 §4.1.3) with exactly one exception, applied to CIMD-resolved rows
-// only: when both the registered and requested URIs are RFC 8252 §7.3
-// loopback redirects, the port is ignored. RFC 8252 requires the AS to allow
-// variable loopback ports for native apps — Claude Code binds an OS-assigned
-// ephemeral port per invocation — and RFC 9700 preserves that carve-out. The
-// port is the ONLY component allowed to vary: every other component must
-// match in escaped form, and neither side may carry userinfo — otherwise an
-// attacker-crafted authorize URL could inject extra query parameters, an
-// encoding-variant path, or browser-sent Basic credentials into the
-// legitimate client's local callback. DCR rows keep byte-exact matching.
+// entry registered on the client row. The matching rules live in oauthwire so
+// the Platform MCP authorization server, which holds its clients in different
+// tables entirely, enforces the same ones. This function supplies the only
+// part that is specific to this surface: the RFC 8252 §7.3 variable-loopback-
+// port exception is granted to CIMD-resolved rows only, and DCR rows keep
+// byte-exact matching.
 func redirectURIMatches(client *usersessions_repo.UserSessionClient, requested string) bool {
-	if slices.Contains(client.RedirectUris, requested) {
-		return true
-	}
-	if !client.ClientIDMetadataUri.Valid {
-		return false
-	}
-
-	// Fragments disqualify the exception on either side: RFC 6749 §3.1.2
-	// forbids fragments in redirect URIs, and url.Parse cannot distinguish
-	// an absent fragment from an explicit empty one ("...#") — URL.String()
-	// drops the latter, which would let a malformed registered URI match a
-	// fragment-less request. A raw-string check is the only reliable guard.
-	if strings.Contains(requested, "#") {
-		return false
-	}
-	requestedURL, err := url.Parse(requested)
-	if err != nil || requestedURL.User != nil || !cimd.IsLoopbackRedirectURI(requestedURL) {
-		return false
-	}
-	for _, registered := range client.RedirectUris {
-		if strings.Contains(registered, "#") {
-			continue
-		}
-		registeredURL, err := url.Parse(registered)
-		if err != nil || registeredURL.User != nil || !cimd.IsLoopbackRedirectURI(registeredURL) {
-			continue
-		}
-		if loopbackRedirectEqualIgnoringPort(registeredURL, requestedURL) {
-			return true
-		}
-	}
-	return false
-}
-
-// loopbackRedirectEqualIgnoringPort reports whether two parsed loopback
-// redirect URIs are identical except for the port. Rebuilding each URI with
-// the port stripped and the host lowercased, then comparing the resulting
-// strings, covers every remaining component in escaped form — scheme, host,
-// path, and query — so a percent-encoding variant (e.g. /%63allback for a
-// registered /callback) cannot slip through the variable-port exception.
-// Callers must have rejected fragments on both sides already: URL.String()
-// cannot represent an explicit empty fragment.
-func loopbackRedirectEqualIgnoringPort(a, b *url.URL) bool {
-	stripPort := func(u *url.URL) string {
-		c := *u
-		c.Host = strings.ToLower(c.Hostname())
-		return c.String()
-	}
-	return stripPort(a) == stripPort(b)
+	return oauthwire.RedirectURIMatches(client.RedirectUris, requested, client.ClientIDMetadataUri.Valid)
 }

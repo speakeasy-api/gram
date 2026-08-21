@@ -50,3 +50,15 @@ func Evaluate(mode Mode, clientID string) Decision {
 		return denyDecision(DenialUnknownMode)
 	}
 }
+
+// TruncateClientIDForLog bounds a presented client_id for logging. The value
+// is attacker-chosen on the unauthenticated OAuth surface and is logged at
+// points that run before any length validation — a rejected authorize
+// request, an admission denial in disabled mode — so an oversized client_id
+// could otherwise inflate every line it appears on.
+func TruncateClientIDForLog(clientID string) string {
+	if len(clientID) <= MaxClientIDLength {
+		return clientID
+	}
+	return clientID[:MaxClientIDLength] + "…(truncated)"
+}

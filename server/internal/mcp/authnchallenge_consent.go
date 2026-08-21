@@ -36,7 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urls"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	users_repo "github.com/speakeasy-api/gram/server/internal/users/repo"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -355,7 +355,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 			if u, err := url.Parse(client.ClientIDMetadataUri.String); err == nil {
 				clientIDOrigin = u.Host
 			}
-			if u, err := url.Parse(challengeState.RedirectURI); err == nil && cimd.IsLoopbackRedirectURI(u) {
+			if u, err := url.Parse(challengeState.RedirectURI); err == nil && oauthwire.IsLoopbackRedirectURI(u) {
 				loopbackRedirectWarning = true
 			}
 		}

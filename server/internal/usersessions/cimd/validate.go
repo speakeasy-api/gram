@@ -178,30 +178,13 @@ func validateOriginBinding(clientIDURL *url.URL, redirectURI string) error {
 	if err != nil {
 		return oauthValidationError(reasonRedirectURIInvalid, "invalid_redirect_uri", "redirect_uri must be an absolute URL")
 	}
-	if IsLoopbackRedirectURI(parsed) {
+	if oauthwire.IsLoopbackRedirectURI(parsed) {
 		return nil
 	}
 	if parsed.Scheme != clientIDURL.Scheme || parsed.Host != clientIDURL.Host {
 		return oauthValidationError(reasonRedirectOriginMismatch, "invalid_redirect_uri", fmt.Sprintf("redirect_uri %q is not same-origin with the client_id URL", redirectURI))
 	}
 	return nil
-}
-
-// IsLoopbackRedirectURI reports whether a parsed redirect URI is an RFC 8252
-// §7.3 loopback redirect: http scheme with a host of 127.0.0.1, ::1, or
-// localhost, on any port. Shared with the mcp package's request-time
-// redirect matching, where RFC 8252 requires variable loopback ports to be
-// accepted for native apps.
-func IsLoopbackRedirectURI(u *url.URL) bool {
-	if u.Scheme != "http" {
-		return false
-	}
-	switch strings.ToLower(u.Hostname()) {
-	case "127.0.0.1", "::1", "localhost":
-		return true
-	default:
-		return false
-	}
 }
 
 // validateJWKSPublicOnly rejects a jwks member containing private or

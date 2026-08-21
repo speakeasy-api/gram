@@ -71,7 +71,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	// That URI is the single most useful field when diagnosing why a real
 	// client cannot connect, since the client itself surfaces only the
 	// error_description to its user.
-	logger = logger.With(attr.SlogOAuthClientID(truncateClientIDForLog(req.ClientID)))
+	logger = logger.With(attr.SlogOAuthClientID(admission.TruncateClientIDForLog(req.ClientID)))
 
 	// RFC 6749 §4.1.2.1 wants validation errors carried back to the client
 	// via redirect when we can trust the redirect_uri, and surfaced inline
