@@ -672,21 +672,16 @@ RETURNING *;
 
 -- name: GetTunneledMcpServerBinding :one
 -- Validates an issuer tunnel binding at create/update time: the tunnel must
--- exist, be active, and live in the same project as the issuer.
-SELECT id, project_id, name
-FROM tunneled_mcp_servers
-WHERE id = @id
-  AND project_id = @project_id
-  AND deleted IS FALSE;
-
--- name: GetTunneledMcpServerBindingUnscoped :one
--- Deliberately NOT project-scoped, unlike every other lookup here: the
--- dynamic client registration handler is platform-admin-only and carries no
--- project context, and the id comes from the admin, never from tenant input.
-SELECT id, project_id, name
-FROM tunneled_mcp_servers
-WHERE id = @id
-  AND deleted IS FALSE;
+-- exist, be active, and live in the same project and organization as the issuer.
+SELECT t.id, t.project_id, t.name
+FROM tunneled_mcp_servers AS t
+JOIN projects AS p ON p.id = t.project_id
+WHERE t.id = @id
+  AND t.project_id = @project_id
+  AND p.organization_id = @organization_id
+  AND t.status <> 'revoked'
+  AND t.deleted IS FALSE
+  AND p.deleted IS FALSE;
 
 -- name: CreateRemoteSessionClientCIMD :one
 -- Create a client directly in Client ID Metadata Document (CIMD) mode. The

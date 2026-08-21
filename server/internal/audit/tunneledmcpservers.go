@@ -20,9 +20,9 @@ const (
 	ActionTunneledMcpServerDelete    Action = "tunneled-mcp:delete"
 
 	// ActionTunneledMcpServerDynamicClientRegistration records a platform
-	// admin running OAuth dynamic client registration through this tunnel —
-	// a request Gram sends into customer infrastructure on their behalf.
-	ActionTunneledMcpServerDynamicClientRegistration Action = "tunneled-mcp:dynamic-client-registration"
+	// admin's attempt to run OAuth dynamic client registration through this
+	// tunnel before Gram sends the external request.
+	ActionTunneledMcpServerDynamicClientRegistration Action = "tunneled-mcp:dynamic-client-registration-attempt"
 )
 
 type LogTunneledMcpServerCreateEvent struct {
