@@ -820,7 +820,11 @@ var ShadowMCPInventoryServerModel = Type("ShadowMCPInventoryServer", func() {
 	Attribute("user_count", Int)
 	Attribute("top_users", ArrayOf(String))
 	Attribute("access", String, func() {
+		Description("Deprecated: read access_summary.state. Kept one release so older clients keep rendering, then removed together with making access_summary required. Note the values themselves are corrected in this release: URLs whose bypass grants cover only part of a policy's audience now read restricted where they previously read allowed.")
 		Enum("none", "allowed", "blocked", "restricted")
+	})
+	Attribute("access_summary", ShadowMCPAccessSummaryModel, func() {
+		Description("The server-computed enforcement verdict. Optional for one release only so a client deployed ahead of a rolled-back server degrades to the legacy access field instead of failing to parse; the server always sends it. Becomes required when access is removed.")
 	})
 	Attribute("request_count", Int)
 	Attribute("latest_request", ShadowMCPInventoryRequestSummaryModel)
@@ -860,11 +864,46 @@ var ListShadowMCPInventoryUsersResult = Type("ListShadowMCPInventoryUsersResult"
 	Attribute("next_cursor", String, "Cursor for the next page of results.")
 })
 
+var ShadowMCPAccessSummaryModel = Type("ShadowMCPAccessSummary", func() {
+	Description("The enforcement verdict for a shadow MCP server, computed server-side from policies, grants, and the recorded decision. state is the canonical compression of who may call the server; the remaining fields name the mechanisms so a client renders wording without re-deriving enforcement.")
+
+	Required("state", "allowed_for", "blocked_for", "blocking_default", "decision_coverage")
+
+	Attribute("state", String, func() {
+		Description("The shape of the user-to-access function: allowed and blocked are uniform, restricted varies by user, unenforced means no blocking policy applies.")
+		Enum("allowed", "restricted", "blocked", "unenforced")
+	})
+	Attribute("allowed_for", String, func() {
+		Description("Reach of explicit allow grants: everyone when every deny-by-default policy's audience is covered (an all-users grant, or grants naming the policy's whole audience), selected when grants free only part of an audience, none without grants. A role grant whose membership happens to span the organization still reads selected — reach compares principal sets, not expanded memberships.")
+		Enum("everyone", "selected", "none")
+	})
+	Attribute("blocked_for", String, func() {
+		Description("Reach of explicit block mechanisms: an everyone-audience block rule, a targeted rule or targeted deny-by-default policy, or none.")
+		Enum("everyone", "some", "none")
+	})
+	Attribute("blocking_default", String, func() {
+		Description("What happens to a user no rule names: deny under an everyone-audience deny-by-default policy, allow when blocking exists without one, none when no blocking policy is enabled.")
+		Enum("deny", "allow", "none")
+	})
+	Attribute("decision", String, func() {
+		Description("The recorded review decision, when one exists.")
+		Enum("approved", "denied")
+	})
+	Attribute("decision_coverage", String, func() {
+		Description("How much of the recorded decision enforcement delivers. full: the decision's own writes are intact — an approval's grants survive unoverridden (a scoped blast radius is the decision as recorded, not a shortfall), or a denial lands as a project-wide block. partial: something carries the decision but not all of it, such as a denial only a targeted policy enforces, or an approval whose grants were later removed or overridden. none: nothing carries it — no blocking policy exists, the target is a local command (stdio decisions are recorded without writing enforcement), or no decision is recorded at all.")
+		Enum("full", "partial", "none")
+	})
+})
+
 var ShadowMCPInventoryURLStateModel = Type("ShadowMCPInventoryURLState", func() {
 	Required("access", "request_count", "allowed_policy_ids", "blocked_policy_ids")
 
 	Attribute("access", String, func() {
+		Description("Deprecated: read access_summary.state. Kept one release so older clients keep rendering, then removed together with making access_summary required. Note the values themselves are corrected in this release: URLs whose bypass grants cover only part of a policy's audience now read restricted where they previously read allowed.")
 		Enum("none", "allowed", "blocked", "restricted")
+	})
+	Attribute("access_summary", ShadowMCPAccessSummaryModel, func() {
+		Description("The server-computed enforcement verdict. Optional for one release only so a client deployed ahead of a rolled-back server degrades to the legacy access field instead of failing to parse; the server always sends it. Becomes required when access is removed.")
 	})
 	Attribute("request_count", Int)
 	Attribute("latest_request", ShadowMCPInventoryRequestSummaryModel)

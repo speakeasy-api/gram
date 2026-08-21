@@ -11,6 +11,7 @@ import {
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ShadowMCPPolicyServerSelector } from "./ShadowMCPPolicyServerSelector";
+import { testAccessSummary } from "./shadowMCPInventoryTestFixtures";
 
 function inventoryServer(
   canonicalServerUrl: string,
@@ -32,6 +33,8 @@ function inventoryServer(
     urlHost: new URL(canonicalServerUrl).host,
     userCount: 0,
     ...overrides,
+    accessSummary:
+      overrides.accessSummary ?? testAccessSummary(overrides.access ?? "none"),
   };
 }
 

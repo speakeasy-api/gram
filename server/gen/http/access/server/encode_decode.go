@@ -4475,6 +4475,9 @@ func marshalAccessShadowMCPInventoryServerToShadowMCPInventoryServerResponseBody
 	} else {
 		res.TopUsers = []string{}
 	}
+	if v.AccessSummary != nil {
+		res.AccessSummary = marshalAccessShadowMCPAccessSummaryToShadowMCPAccessSummaryResponseBody(v.AccessSummary)
+	}
 	if v.LatestRequest != nil {
 		res.LatestRequest = marshalAccessShadowMCPInventoryRequestSummaryToShadowMCPInventoryRequestSummaryResponseBody(v.LatestRequest)
 	}
@@ -4496,6 +4499,25 @@ func marshalAccessShadowMCPInventoryServerToShadowMCPInventoryServerResponseBody
 		}
 	} else {
 		res.BlockedPolicyIds = []string{}
+	}
+
+	return res
+}
+
+// marshalAccessShadowMCPAccessSummaryToShadowMCPAccessSummaryResponseBody
+// builds a value of type *ShadowMCPAccessSummaryResponseBody from a value of
+// type *access.ShadowMCPAccessSummary.
+func marshalAccessShadowMCPAccessSummaryToShadowMCPAccessSummaryResponseBody(v *access.ShadowMCPAccessSummary) *ShadowMCPAccessSummaryResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ShadowMCPAccessSummaryResponseBody{
+		State:            v.State,
+		AllowedFor:       v.AllowedFor,
+		BlockedFor:       v.BlockedFor,
+		BlockingDefault:  v.BlockingDefault,
+		Decision:         v.Decision,
+		DecisionCoverage: v.DecisionCoverage,
 	}
 
 	return res
