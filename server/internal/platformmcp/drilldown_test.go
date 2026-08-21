@@ -63,7 +63,7 @@ func TestGetUserMCPStatusOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 	require.ElementsMatch(t, []string{
 		"project_id", "mcp_id",
 		"data", "queried_at", "data_through", "freshness", "resolved_window", "window", "from", "to",
-		"active_users", "rows_suppressed",
+		"active_users", "rows_suppressed", "unavailable",
 		"users", "subject_reference", "tool_calls",
 	}, decodeKeys(t, output))
 }
@@ -114,6 +114,7 @@ func TestQueryMCPMetricsOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 		"project_id", "mcp_id",
 		"data", "queried_at", "data_through", "freshness", "resolved_window", "window", "from", "to",
 		"tool_calls", "failed_tool_calls", "failure_rate", "avg_latency_ms", "active_users",
+		"active_users_unavailable",
 	}, decodeKeys(t, output))
 }
 
@@ -174,15 +175,20 @@ func TestFailureRate_RoundsServerSide(t *testing.T) {
 	require.InDelta(t, 1.0, failureRate(7, 7), 1e-9)
 }
 
-func TestCursorPosition_RoundTripsAndRejectsJunk(t *testing.T) {
+// TestCursorPosition_CarriesTheCompositeKey pins that a cursor keeps both
+// halves of the ordering key. A timestamp-only cursor skips every trace sharing
+// the boundary nanosecond, so on a busy server those occurrences appear on
+// neither page.
+func TestCursorPosition_CarriesTheCompositeKey(t *testing.T) {
 	t.Parallel()
 
-	position, err := parseCursorPosition(formatCursorPosition(1_700_000_000_000_000_000))
+	position, traceID, err := parseCursorPosition(formatCursorPosition(1_700_000_000_000_000_000, "abc123"))
 	require.NoError(t, err)
 	require.Equal(t, int64(1_700_000_000_000_000_000), position)
+	require.Equal(t, "abc123", traceID)
 
-	for _, value := range []string{"", "1700000000", "t:", "t:abc", "t:-1", "t:0"} {
-		_, err := parseCursorPosition(value)
-		require.ErrorIs(t, err, ErrSubjectReferenceInvalid, value)
+	for _, value := range []string{"", "1700000000", "t:", "t:abc", "t:-1:x", "t:0:x", "t:1700000000"} {
+		_, _, err := parseCursorPosition(value)
+		require.ErrorIs(t, err, ErrSubjectReferenceNotFound, value)
 	}
 }
