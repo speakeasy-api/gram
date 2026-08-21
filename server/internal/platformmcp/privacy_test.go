@@ -52,6 +52,31 @@ func TestSubjectCount_SuppressedValueNeverRoundTrips(t *testing.T) {
 	require.Equal(t, int64(SubjectSuppressionThreshold-1), decoded.value)
 }
 
+// TestSubjectCount_RejectsUnknownSuppressionLabel pins that a label this build
+// does not recognise is an error, not a zero. Decoding an unreadable value into
+// "nobody" would turn ignorance into a positive claim about people.
+func TestSubjectCount_RejectsUnknownSuppressionLabel(t *testing.T) {
+	t.Parallel()
+
+	var decoded SubjectCount
+	require.Error(t, json.Unmarshal([]byte(`"less_than_50"`), &decoded))
+	require.Error(t, json.Unmarshal([]byte(`"redacted"`), &decoded))
+}
+
+// TestSubjectCount_DecodedNegativeIsNormalized pins that decoding applies the
+// same clamp the constructor does, so a negative count cannot survive a
+// round-trip and re-serialize as a negative number.
+func TestSubjectCount_DecodedNegativeIsNormalized(t *testing.T) {
+	t.Parallel()
+
+	var decoded SubjectCount
+	require.NoError(t, json.Unmarshal([]byte("-1"), &decoded))
+
+	encoded, err := json.Marshal(decoded)
+	require.NoError(t, err)
+	require.Equal(t, "0", string(encoded))
+}
+
 func TestSubjectCount_ReportedValueRoundTrips(t *testing.T) {
 	t.Parallel()
 

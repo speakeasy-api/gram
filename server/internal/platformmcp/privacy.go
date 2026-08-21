@@ -55,16 +55,20 @@ func (c SubjectCount) MarshalJSON() ([]byte, error) {
 func (c *SubjectCount) UnmarshalJSON(data []byte) error {
 	var number int64
 	if err := json.Unmarshal(data, &number); err == nil {
-		c.value = number
+		// Normalized the same way the constructor does, so a decoded value can
+		// never re-serialize as something NewSubjectCount would have rejected.
+		*c = NewSubjectCount(number)
 		return nil
 	}
 	var label string
 	if err := json.Unmarshal(data, &label); err != nil {
 		return fmt.Errorf("decode subject count: %w", err)
 	}
+	// An unrecognized label is refused rather than read as zero: silently
+	// decoding a future or malformed suppression token into "nobody" would
+	// turn a value this build cannot read into a positive claim about people.
 	if label != subjectSuppressedLabel {
-		c.value = 0
-		return nil
+		return fmt.Errorf("decode subject count: unknown suppression label %q", label)
 	}
 	c.value = SubjectSuppressionThreshold - 1
 	return nil

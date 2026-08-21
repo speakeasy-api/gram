@@ -82,14 +82,15 @@ func TestGetMCPDiagnosticsOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 	require.NoError(t, err)
 
 	output := GetMCPDiagnosticsOutput{
-		ProjectID:            "00000000-0000-0000-0000-000000000001",
-		MCPID:                "00000000-0000-0000-0000-000000000002",
-		Envelope:             newDataEnvelope(now, now.Add(-time.Minute), window),
-		Readiness:            MCPDiagnosticsReadiness{State: string(ReadinessReady), Freshness: "fresh", CheckedAt: now.Format(time.RFC3339)},
-		Outcomes:             MCPOutcomeSummary{Total: 10, Success: 4, Unauthorized: 6},
-		OrganizationOutcomes: MCPOutcomeSummary{Total: 100, Success: 98, ServerError: 2},
-		Clients:              []MCPClientEvidence{{Client: "claude-code", Calls: 6, Failures: 6}},
-		ClientsTruncated:     false,
+		ProjectID:                   "00000000-0000-0000-0000-000000000001",
+		MCPID:                       "00000000-0000-0000-0000-000000000002",
+		Envelope:                    newDataEnvelope(now, now.Add(-time.Minute), window),
+		Readiness:                   MCPDiagnosticsReadiness{State: string(ReadinessReady), Freshness: "fresh", CheckedAt: now.Format(time.RFC3339)},
+		Outcomes:                    MCPOutcomeSummary{Total: 10, Success: 4, Unauthorized: 6},
+		OrganizationOutcomes:        MCPOutcomeSummary{Total: 100, Success: 98, ServerError: 2},
+		OrganizationOutcomesPartial: false,
+		Clients:                     []MCPClientEvidence{{Client: "claude-code", Calls: 6, Failures: 6}},
+		ClientsTruncated:            false,
 		Attribution: FaultAttribution{
 			Fault:               FaultGramConfiguration,
 			Reason:              reasonUnauthorizedDominant,
@@ -104,10 +105,18 @@ func TestGetMCPDiagnosticsOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 		"readiness", "state", "freshness", "checked_at",
 		"outcomes", "total", "success", "unauthorized", "client_error", "server_error", "failed", "unknown",
 		"organization_outcomes", "total", "success", "unauthorized", "client_error", "server_error", "failed", "unknown",
+		"organization_outcomes_partial",
 		"clients", "client", "calls", "failures",
 		"clients_truncated",
 		"attribution", "fault", "reason", "readiness_exonerates", "scope",
 	}, decodeKeys(t, output))
+}
+
+func TestMetricsMode_NamesWhatTheCountsMeasure(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "session", metricsMode(true))
+	require.Equal(t, "tool_call", metricsMode(false))
 }
 
 func TestTotalsFromRows_SumsPerOutcomeClass(t *testing.T) {

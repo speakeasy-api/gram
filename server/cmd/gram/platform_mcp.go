@@ -67,8 +67,12 @@ type platformMCPConfig struct {
 	// Telemetry is the Gram-owned ClickHouse read model the diagnostics tools
 	// answer from. Nil disables them rather than serving an empty answer, which
 	// a caller would read as "nothing is wrong".
-	Telemetry    platformmcp.DiagnosticsTelemetryReader
-	LocalFixture *platformMCPLocalFixtureConfig
+	Telemetry platformmcp.DiagnosticsTelemetryReader
+	// SessionCapture resolves the organization's metrics mode, which decides
+	// what a project overview's active-user count measures. Shared with the
+	// telemetry service so both surfaces answer from the same source.
+	SessionCapture platformmcp.FeatureChecker
+	LocalFixture   *platformMCPLocalFixtureConfig
 }
 
 var platformMCPLocalFixtureLoopbackCIDRBlocks = []string{"127.0.0.0/8", "::1/128"}
@@ -226,7 +230,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 
 	skillAuthoring := platformmcp.NewSkillsService(config.Skills, platformmcp.NewPostgresSkillTargets(config.DB), store, config.Authz, registrationGate, budgets.Skills)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB)
-	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, platformReader, readiness, budgets.Diagnostics)
+	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics)
 	runtime := platformmcp.NewRuntimeWithLifecycle(
 		config.Logger,
 		authenticator,
@@ -430,7 +434,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	)
 	skillAuthoring := platformmcp.NewSkillsService(config.Skills, platformmcp.NewPostgresSkillTargets(config.DB), store, config.Authz, registrationGate, budgets.Skills)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB)
-	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, platformReader, readiness, budgets.Diagnostics)
+	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics)
 	runtime := platformmcp.NewRuntimeWithLifecycle(
 		config.Logger,
 		authenticator,

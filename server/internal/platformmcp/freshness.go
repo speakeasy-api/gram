@@ -85,7 +85,11 @@ func resolveWindow(requested string, now time.Time) (ResolvedWindow, error) {
 	if !ok {
 		return ResolvedWindow{}, ErrDiagnosticWindowInvalid
 	}
-	end := now.UTC()
+	// Truncated to the second the window is advertised at, so the interval a
+	// caller is told about is exactly the interval that was queried. Formatting
+	// a sub-second `now` as RFC3339 would round the boundary away and quietly
+	// disagree with the nanosecond bounds the reads use.
+	end := now.UTC().Truncate(time.Second)
 	start := end.Add(-duration)
 	return ResolvedWindow{
 		Window: window,

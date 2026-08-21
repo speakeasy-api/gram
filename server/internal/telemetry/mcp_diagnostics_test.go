@@ -1,7 +1,6 @@
 package telemetry_test
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -10,18 +9,8 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	telemetryRepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
-
-// flushAsyncInserts commits ClickHouse's async insert buffer. InsertTelemetryLogs
-// acks once rows are queued, not once they are readable, so a test that inserts
-// and immediately queries would otherwise race the buffer's flush timer.
-func flushAsyncInserts(t *testing.T, ctx context.Context) {
-	t.Helper()
-
-	conn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-	require.NoError(t, conn.Exec(ctx, "SYSTEM FLUSH ASYNC INSERT QUEUE"))
-}
 
 // outcomeCounts folds a breakdown into outcome -> count so assertions do not
 // depend on the row order the query happens to return.
@@ -48,7 +37,7 @@ func TestGetMCPOutcomeBreakdown_Empty(t *testing.T) {
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	now := time.Now().UTC()
 
-	flushAsyncInserts(t, ctx)
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	rows, err := ti.chClient.GetMCPOutcomeBreakdown(ctx, telemetryRepo.GetMCPOutcomeBreakdownParams{
 		GramProjectIDs: []string{authCtx.ProjectID.String()},
@@ -67,7 +56,7 @@ func TestGetMCPOutcomeBreakdown_NoProjectsIsNotAnUnscopedRead(t *testing.T) {
 	ctx, ti := newTestLogsService(t)
 	now := time.Now().UTC()
 
-	flushAsyncInserts(t, ctx)
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	rows, err := ti.chClient.GetMCPOutcomeBreakdown(ctx, telemetryRepo.GetMCPOutcomeBreakdownParams{
 		GramProjectIDs: nil,
@@ -110,7 +99,7 @@ func TestGetMCPOutcomeBreakdown_ClassifiesDirectCallsByStatus(t *testing.T) {
 		statusCode:  500,
 	})
 
-	flushAsyncInserts(t, ctx)
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	rows, err := ti.chClient.GetMCPOutcomeBreakdown(ctx, telemetryRepo.GetMCPOutcomeBreakdownParams{
 		GramProjectIDs: []string{projectID},
@@ -186,7 +175,7 @@ func TestGetMCPOutcomeBreakdown_AttributesHookObservedCallsToTheirClient(t *test
 		mcpServerURL: "https://api.getgram.ai/mcp/shipping",
 	})
 
-	flushAsyncInserts(t, ctx)
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	rows, err := ti.chClient.GetMCPOutcomeBreakdown(ctx, telemetryRepo.GetMCPOutcomeBreakdownParams{
 		GramProjectIDs:       []string{projectID},
@@ -228,7 +217,7 @@ func TestGetMCPOutcomeBreakdown_ExcludesCallsOutsideTheWindow(t *testing.T) {
 		statusCode:  500,
 	})
 
-	flushAsyncInserts(t, ctx)
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	rows, err := ti.chClient.GetMCPOutcomeBreakdown(ctx, telemetryRepo.GetMCPOutcomeBreakdownParams{
 		GramProjectIDs: []string{projectID},
@@ -274,7 +263,7 @@ func TestGetTelemetryWatermark_ReportsNewestObservation(t *testing.T) {
 		statusCode:  200,
 	})
 
-	flushAsyncInserts(t, ctx)
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	watermark, err = ti.chClient.GetTelemetryWatermark(ctx, telemetryRepo.GetTelemetryWatermarkParams{
 		GramProjectIDs: []string{projectID},

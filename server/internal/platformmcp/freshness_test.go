@@ -117,6 +117,23 @@ func TestNewDataEnvelope_ClassifiesFreshness(t *testing.T) {
 	}
 }
 
+// TestResolveWindow_AdvertisedBoundsMatchTheQueriedBounds pins that the window
+// a caller is told about is exactly the interval that was read. Formatting a
+// sub-second now as RFC3339 would round the boundary away, so the advertised
+// window and the nanosecond bounds behind it would silently disagree.
+func TestResolveWindow_AdvertisedBoundsMatchTheQueriedBounds(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 8, 21, 12, 0, 0, 987_654_321, time.UTC)
+	window, err := resolveWindow("1h", now)
+	require.NoError(t, err)
+
+	require.Equal(t, window.start.Format(time.RFC3339), window.From)
+	require.Equal(t, window.end.Format(time.RFC3339), window.To)
+	require.Equal(t, time.Hour, window.end.Sub(window.start))
+	require.Zero(t, window.end.Nanosecond())
+}
+
 // TestWatermarkTime_ZeroIsNotTheEpoch pins that an absent watermark stays
 // absent. Treating 0 as a real time would report every empty scope as data
 // through 1970 and mark it stale rather than unobserved.

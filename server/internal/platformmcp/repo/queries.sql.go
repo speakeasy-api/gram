@@ -2146,6 +2146,8 @@ JOIN projects AS project
  AND project.deleted IS FALSE
 LEFT JOIN toolsets AS toolset
   ON toolset.id = m.toolset_id
+ AND toolset.project_id = m.project_id
+ AND toolset.organization_id = $1
  AND toolset.deleted IS FALSE
 WHERE m.id = $2
   AND m.project_id = $3

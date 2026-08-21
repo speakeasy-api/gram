@@ -12,6 +12,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
@@ -28,7 +30,24 @@ const maxDiagnosticClients = 10
 // maxOverviewServers bounds the top-server list on a project overview.
 const maxOverviewServers = 10
 
+// maxOverviewProjects bounds the organization-wide scope comparison. When an
+// organization has more projects than this, the comparison covers a subset and
+// the diagnosis says so rather than asserting a scope from partial coverage.
+const maxOverviewProjects = 100
+
 var ErrDiagnosticsTargetNotFound = errors.New("platform mcp diagnostics target not found")
+
+// FeatureChecker answers whether an organization has a product feature enabled.
+// It mirrors the telemetry service's checker so both surfaces resolve the
+// organization's metrics mode from the same source.
+type FeatureChecker func(ctx context.Context, organizationID string) (bool, error)
+
+// ProjectOverviewSessionReader is the PostgreSQL side of a session-mode
+// overview. In session mode the active-user count is a count of chat
+// participants, which ClickHouse's tool-call lane cannot answer.
+type ProjectOverviewSessionReader interface {
+	GetActiveUserCountByMessages(ctx context.Context, arg chatrepo.GetActiveUserCountByMessagesParams) (int64, error)
+}
 
 // DiagnosticsTelemetryReader is the Gram-owned telemetry this surface reads.
 // It is deliberately two bounded aggregate queries: there is no query grammar
@@ -44,27 +63,35 @@ type DiagnosticsTelemetryReader interface {
 // DiagnosticsService answers the two overview-first questions: what is this
 // project doing, and why is this one MCP not working.
 type DiagnosticsService struct {
-	db        *pgxpool.Pool
-	telemetry DiagnosticsTelemetryReader
-	reader    Reader
-	readiness *ReadinessService
-	budget    OperationBudget
-	now       func() time.Time
+	db             *pgxpool.Pool
+	telemetry      DiagnosticsTelemetryReader
+	sessions       ProjectOverviewSessionReader
+	sessionCapture FeatureChecker
+	reader         Reader
+	readiness      *ReadinessService
+	budget         OperationBudget
+	now            func() time.Time
 }
 
-func NewDiagnosticsService(db *pgxpool.Pool, telemetry DiagnosticsTelemetryReader, reader Reader, readiness *ReadinessService, budget OperationBudget) *DiagnosticsService {
+func NewDiagnosticsService(db *pgxpool.Pool, telemetry DiagnosticsTelemetryReader, sessionCapture FeatureChecker, reader Reader, readiness *ReadinessService, budget OperationBudget) *DiagnosticsService {
+	var sessions ProjectOverviewSessionReader
+	if db != nil {
+		sessions = chatrepo.New(db)
+	}
 	return &DiagnosticsService{
-		db:        db,
-		telemetry: telemetry,
-		reader:    reader,
-		readiness: readiness,
-		budget:    budget,
-		now:       time.Now,
+		db:             db,
+		telemetry:      telemetry,
+		sessions:       sessions,
+		sessionCapture: sessionCapture,
+		reader:         reader,
+		readiness:      readiness,
+		budget:         budget,
+		now:            time.Now,
 	}
 }
 
 func (s *DiagnosticsService) valid() bool {
-	return s != nil && s.db != nil && s.telemetry != nil && s.reader != nil && s.budget.valid()
+	return s != nil && s.db != nil && s.telemetry != nil && s.sessions != nil && s.sessionCapture != nil && s.reader != nil && s.budget.valid()
 }
 
 // GetProjectOverviewInput asks for one project's activity. It carries no
@@ -90,8 +117,9 @@ type ProjectOverviewServer struct {
 type GetProjectOverviewOutput struct {
 	ProjectID string       `json:"project_id"`
 	Envelope  DataEnvelope `json:"data"`
-	// MetricsMode is the organization's metrics mode. It is reported because it
-	// changes what the numbers count, not so a caller can switch on it.
+	// MetricsMode is the organization's metrics mode, resolved server-side. It
+	// is reported because it changes what ActiveUsers counts: chat participants
+	// under "session", tool-call actors under "tool_call".
 	MetricsMode     string                  `json:"metrics_mode"`
 	ToolCalls       int64                   `json:"tool_calls"`
 	FailedToolCalls int64                   `json:"failed_tool_calls"`
@@ -115,11 +143,20 @@ func (s *DiagnosticsService) GetProjectOverview(ctx context.Context, principal P
 	if err != nil {
 		return GetProjectOverviewOutput{}, err
 	}
+	projectUUID, err := uuid.Parse(input.ProjectID)
+	if err != nil {
+		return GetProjectOverviewOutput{}, fmt.Errorf("parse project id: %w", err)
+	}
 	// Reading the MCP inventory for the project is what establishes that this
 	// principal may see the project at all; the telemetry queries below are
 	// project-scoped and must not run before it.
 	if _, err := s.reader.FindMCP(ctx, principal, FindMCPInput{ProjectID: input.ProjectID, Limit: 1}); err != nil {
 		return GetProjectOverviewOutput{}, fmt.Errorf("resolve project overview project: %w", err)
+	}
+
+	sessionMode, err := s.sessionCapture(ctx, principal.OrganizationID)
+	if err != nil {
+		return GetProjectOverviewOutput{}, fmt.Errorf("resolve organization metrics mode: %w", err)
 	}
 
 	projectIDs := []string{input.ProjectID}
@@ -158,7 +195,7 @@ func (s *DiagnosticsService) GetProjectOverview(ctx context.Context, principal P
 	output := GetProjectOverviewOutput{
 		ProjectID:   input.ProjectID,
 		Envelope:    newDataEnvelope(now, watermarkTime(watermark), window),
-		MetricsMode: "tool_call",
+		MetricsMode: metricsMode(sessionMode),
 		TopServers:  make([]ProjectOverviewServer, 0, len(servers)),
 	}
 	if summary != nil {
@@ -168,6 +205,21 @@ func (s *DiagnosticsService) GetProjectOverview(ctx context.Context, principal P
 	if counts != nil {
 		output.ActiveServers = boundedCount(counts.ActiveServersCount)
 		output.ActiveUsers = NewSubjectCount(boundedCount(counts.ActiveUsersCount))
+	}
+	if sessionMode {
+		// Under session capture the active-user count is a count of chat
+		// participants held in PostgreSQL. Reporting ClickHouse's tool-call
+		// actors here would answer a different question than metrics_mode says
+		// this number answers.
+		activeUsers, err := s.sessions.GetActiveUserCountByMessages(ctx, chatrepo.GetActiveUserCountByMessagesParams{
+			ProjectID: projectUUID,
+			TimeStart: conv.ToPGTimestamptz(window.start),
+			TimeEnd:   conv.ToPGTimestamptz(window.end),
+		})
+		if err != nil {
+			return GetProjectOverviewOutput{}, fmt.Errorf("read project overview active users: %w", err)
+		}
+		output.ActiveUsers = NewSubjectCount(activeUsers)
 	}
 	for _, server := range servers {
 		output.TopServers = append(output.TopServers, ProjectOverviewServer{
@@ -223,12 +275,16 @@ type GetMCPDiagnosticsOutput struct {
 
 	Readiness MCPDiagnosticsReadiness `json:"readiness"`
 	Outcomes  MCPOutcomeSummary       `json:"outcomes"`
-	// OrganizationOutcomes is the same summary across every project in the
-	// organization. It is what makes the scope check answerable server-side.
-	OrganizationOutcomes MCPOutcomeSummary   `json:"organization_outcomes"`
-	Clients              []MCPClientEvidence `json:"clients"`
-	ClientsTruncated     bool                `json:"clients_truncated"`
-	Attribution          FaultAttribution    `json:"attribution"`
+	// OrganizationOutcomes is the same summary across the organization's
+	// projects. It is what makes the scope check answerable server-side.
+	OrganizationOutcomes MCPOutcomeSummary `json:"organization_outcomes"`
+	// OrganizationOutcomesPartial reports that the comparison covered only the
+	// first maxOverviewProjects projects. When it is true the attribution's
+	// scope is forced to unknown rather than asserted from partial coverage.
+	OrganizationOutcomesPartial bool                `json:"organization_outcomes_partial"`
+	Clients                     []MCPClientEvidence `json:"clients"`
+	ClientsTruncated            bool                `json:"clients_truncated"`
+	Attribution                 FaultAttribution    `json:"attribution"`
 }
 
 func (s *DiagnosticsService) GetMCPDiagnostics(ctx context.Context, principal Principal, input GetMCPDiagnosticsInput) (GetMCPDiagnosticsOutput, error) {
@@ -258,7 +314,7 @@ func (s *DiagnosticsService) GetMCPDiagnostics(ctx context.Context, principal Pr
 		return GetMCPDiagnosticsOutput{}, err
 	}
 
-	projectIDs, err := s.organizationProjectIDs(ctx, principal)
+	projectIDs, projectsTruncated, err := s.organizationProjectIDs(ctx, principal)
 	if err != nil {
 		return GetMCPDiagnosticsOutput{}, err
 	}
@@ -292,6 +348,13 @@ func (s *DiagnosticsService) GetMCPDiagnostics(ctx context.Context, principal Pr
 	readiness, readinessFound := s.currentReadiness(ctx, principal, mcp)
 	clients, truncated := clientEvidence(serverRows)
 
+	attribution := attributeFault(readiness, readinessFound, serverTotals, organizationTotals)
+	if projectsTruncated {
+		// The organization comparison covered a subset, so it cannot support a
+		// claim either way about where the pattern lives.
+		attribution.Scope = FaultScopeUnknown
+	}
+
 	return GetMCPDiagnosticsOutput{
 		ProjectID: input.ProjectID,
 		MCPID:     input.MCPID,
@@ -301,11 +364,12 @@ func (s *DiagnosticsService) GetMCPDiagnostics(ctx context.Context, principal Pr
 			Freshness: readinessFreshness(readiness, readinessFound),
 			CheckedAt: readinessTimestamp(readiness.CheckedAt),
 		},
-		Outcomes:             summaryFromTotals(serverTotals),
-		OrganizationOutcomes: summaryFromTotals(organizationTotals),
-		Clients:              clients,
-		ClientsTruncated:     truncated,
-		Attribution:          attributeFault(readiness, readinessFound, serverTotals, organizationTotals),
+		Outcomes:                    summaryFromTotals(serverTotals),
+		OrganizationOutcomes:        summaryFromTotals(organizationTotals),
+		OrganizationOutcomesPartial: projectsTruncated,
+		Clients:                     clients,
+		ClientsTruncated:            truncated,
+		Attribution:                 attribution,
 	}, nil
 }
 
@@ -332,19 +396,24 @@ func (s *DiagnosticsService) diagnosticsTarget(ctx context.Context, organization
 	return row, nil
 }
 
-// organizationProjectIDs collects the projects the scope comparison spans. It
-// reuses the same listing the caller can already read, so the comparison never
-// covers a project the principal cannot see.
-func (s *DiagnosticsService) organizationProjectIDs(ctx context.Context, principal Principal) ([]string, error) {
-	projects, err := s.reader.ListProjects(ctx, principal, ListProjectsInput{Limit: 100})
+// organizationProjectIDs collects the projects the scope comparison spans, and
+// reports whether that listing was cut short. It reuses the same listing the
+// caller can already read, so the comparison never covers a project the
+// principal cannot see.
+//
+// The truncation flag is returned rather than swallowed: a comparison over an
+// unstated subset of an organization reads as a comparison over all of it, and
+// would let a partial view assert a scope it cannot support.
+func (s *DiagnosticsService) organizationProjectIDs(ctx context.Context, principal Principal) ([]string, bool, error) {
+	projects, err := s.reader.ListProjects(ctx, principal, ListProjectsInput{Limit: maxOverviewProjects})
 	if err != nil {
-		return nil, fmt.Errorf("list organization projects: %w", err)
+		return nil, false, fmt.Errorf("list organization projects: %w", err)
 	}
 	ids := make([]string, 0, len(projects.Projects))
 	for _, project := range projects.Projects {
 		ids = append(ids, project.ID)
 	}
-	return ids, nil
+	return ids, projects.Truncated, nil
 }
 
 // currentReadiness loads the persisted readiness result without probing the
@@ -427,6 +496,14 @@ func clientEvidence(rows []telemetryrepo.MCPOutcomeBreakdownRow) ([]MCPClientEvi
 		return clients[:maxDiagnosticClients], true
 	}
 	return clients, false
+}
+
+// metricsMode names what the overview's counts measure.
+func metricsMode(sessionMode bool) string {
+	if sessionMode {
+		return "session"
+	}
+	return "tool_call"
 }
 
 func nonEmpty(value string) []string {

@@ -40,6 +40,23 @@ func TestAttributeFault(t *testing.T) {
 			wantScope:  FaultScopeUnknown,
 		},
 		{
+			// Calls nobody could classify are not successes. Counting the
+			// absence of classified failures as health is the same mistake as
+			// reading an empty result as a healthy one.
+			name:       "unclassified-only observations are indeterminate",
+			server:     outcomeTotals{Total: 12, Unknown: 12},
+			wantFault:  FaultIndeterminate,
+			wantReason: reasonUnclassifiedOnly,
+			wantScope:  FaultScopeUnknown,
+		},
+		{
+			name:       "successes alongside unclassified calls are still no fault",
+			server:     outcomeTotals{Total: 12, Success: 8, Unknown: 4},
+			wantFault:  FaultNone,
+			wantReason: reasonNoFailures,
+			wantScope:  FaultScopeUnknown,
+		},
+		{
 			// A fresh readiness result is a direct statement about this
 			// server's Gram-side setup and outranks inference from outcomes.
 			name:           "not-ready readiness attributes to gram configuration",

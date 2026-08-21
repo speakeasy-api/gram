@@ -51,6 +51,7 @@ const (
 const (
 	reasonNoObservations       = "no_observations"
 	reasonNoFailures           = "no_failures"
+	reasonUnclassifiedOnly     = "unclassified_observations_only"
 	reasonReadyAndFailing      = "ready_but_failing"
 	reasonUnauthorizedDominant = "unauthorized_dominant"
 	reasonServerErrorDominant  = "server_error_dominant"
@@ -131,6 +132,14 @@ func attributeFault(readiness Readiness, readinessFound bool, server, organizati
 		return attribution
 	}
 	if server.failures() == 0 {
+		// Calls whose trace carried neither a status nor a result are not
+		// evidence of success. A window that produced only those says nothing
+		// about the server, so it is indeterminate rather than healthy.
+		if server.Success == 0 {
+			attribution.Fault = FaultIndeterminate
+			attribution.Reason = reasonUnclassifiedOnly
+			return attribution
+		}
 		attribution.Fault = FaultNone
 		attribution.Reason = reasonNoFailures
 		return attribution
