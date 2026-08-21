@@ -114,7 +114,7 @@ func TestInterruptDashboardTurnCancelsQueuedTurn(t *testing.T) {
 	require.NoError(t, err)
 
 	projectID, assistantID, chatID, threadID := insertDashboardAssistantFixture(t, conn, "interrupt-queued")
-	core := newInterruptTestCore(t, conn, testRuntimeBackend{backend: runtimeBackendFlyIO})
+	core := newInterruptTestCore(t, conn, testRuntimeBackend{backend: runtimeBackendGKE})
 
 	result, err := core.InterruptDashboardTurn(t.Context(), projectID, assistantID, interruptTestUserID, chatID)
 	require.NoError(t, err)
@@ -150,7 +150,7 @@ func TestInterruptDashboardTurnInterruptsRunningTurn(t *testing.T) {
 
 	interruptedThread := &atomic.Pointer[uuid.UUID]{}
 	backend := testRuntimeBackend{
-		backend:           runtimeBackendFlyIO,
+		backend:           runtimeBackendGKE,
 		interruptResult:   true,
 		interruptThreadID: interruptedThread,
 	}
@@ -185,7 +185,7 @@ func TestInterruptDashboardTurnRejectsForeignChat(t *testing.T) {
 	require.NoError(t, err)
 
 	projectID, assistantID, chatID, threadID := insertDashboardAssistantFixture(t, conn, "interrupt-foreign")
-	core := newInterruptTestCore(t, conn, testRuntimeBackend{backend: runtimeBackendFlyIO})
+	core := newInterruptTestCore(t, conn, testRuntimeBackend{backend: runtimeBackendGKE})
 
 	_, err = core.InterruptDashboardTurn(t.Context(), projectID, assistantID, "someone-else", chatID)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
@@ -240,7 +240,7 @@ func TestInterruptDashboardTurnWithNothingRunning(t *testing.T) {
 		Title:          pgtype.Text{},
 	}))
 
-	core := newInterruptTestCore(t, conn, testRuntimeBackend{backend: runtimeBackendFlyIO})
+	core := newInterruptTestCore(t, conn, testRuntimeBackend{backend: runtimeBackendGKE})
 
 	result, err := core.InterruptDashboardTurn(ctx, proj.ID, assistant.ID, interruptTestUserID, chatID)
 	require.NoError(t, err)
