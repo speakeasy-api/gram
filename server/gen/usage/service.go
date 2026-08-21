@@ -46,6 +46,9 @@ type Service interface {
 	// Get exact billable usage and estimated cost for the organization's live paid
 	// Stripe service period
 	GetPaygBillingSummary(context.Context, *GetPaygBillingSummaryPayload) (res *PaygBillingSummary, err error)
+	// Get calendar-month inference spend recorded going forward from durable daily
+	// collection
+	GetInferenceSpendHistory(context.Context, *GetInferenceSpendHistoryPayload) (res *InferenceSpendHistory, err error)
 	// Create a Stripe customer portal session for the organization's PAYG
 	// subscription
 	CreateStripePortalSession(context.Context, *CreateStripePortalSessionPayload) (res string, err error)
@@ -79,7 +82,7 @@ const ServiceName = "usage"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [17]string{"getPeriodUsage", "getTokensUnderManagement", "setBillingMetadata", "getBillingEmail", "setBillingEmail", "setSpendCap", "getInferenceSpendCaps", "getUsageTiers", "createCustomerSession", "createCheckout", "createStripeCheckout", "getStripeSubscription", "getPaygBillingSummary", "createStripePortalSession", "cancelStripeSubscription", "resumeStripeSubscription", "createTopUpCheckout"}
+var MethodNames = [18]string{"getPeriodUsage", "getTokensUnderManagement", "setBillingMetadata", "getBillingEmail", "setBillingEmail", "setSpendCap", "getInferenceSpendCaps", "getUsageTiers", "createCustomerSession", "createCheckout", "createStripeCheckout", "getStripeSubscription", "getPaygBillingSummary", "getInferenceSpendHistory", "createStripePortalSession", "cancelStripeSubscription", "resumeStripeSubscription", "createTopUpCheckout"}
 
 // BillingEmail is the result type of the usage service getBillingEmail method.
 type BillingEmail struct {
@@ -136,6 +139,12 @@ type GetInferenceSpendCapsPayload struct {
 	SessionToken *string
 }
 
+// GetInferenceSpendHistoryPayload is the payload type of the usage service
+// getInferenceSpendHistory method.
+type GetInferenceSpendHistoryPayload struct {
+	SessionToken *string
+}
+
 // GetPaygBillingSummaryPayload is the payload type of the usage service
 // getPaygBillingSummary method.
 type GetPaygBillingSummaryPayload struct {
@@ -169,6 +178,37 @@ type InferenceSpendCap struct {
 	MonthlyCredits int
 	// Whether the platform-managed key is disabled
 	Disabled bool
+}
+
+// InferenceSpendHistory is the result type of the usage service
+// getInferenceSpendHistory method.
+type InferenceSpendHistory struct {
+	// UTC calendar months with recorded spend, newest first. The current month is
+	// always present.
+	Months []*InferenceSpendMonth
+}
+
+type InferenceSpendMonth struct {
+	// Start of the UTC calendar month
+	MonthStart string
+	// End of the UTC calendar month (exclusive)
+	MonthEnd string
+	// Exact durable inference spend in USD through recorded_through
+	SpendUsd string
+	// Most recent completed durable UTC spend day included in this month
+	RecordedThrough *string
+	// Whether this is the current UTC calendar month
+	Current bool
+	// Spend by platform-managed key type. Keys with no recorded days in the month
+	// are omitted.
+	KeySpend []*InferenceSpendMonthKey
+}
+
+type InferenceSpendMonthKey struct {
+	// The platform-managed inference function
+	KeyType string
+	// Exact durable spend in USD for this key through recorded_through
+	SpendUsd string
 }
 
 // PaygBillingSummary is the result type of the usage service

@@ -10,6 +10,7 @@ import { usageCreateStripePortalSession } from "../funcs/usageCreateStripePortal
 import { usageCreateTopUpCheckout } from "../funcs/usageCreateTopUpCheckout.js";
 import { usageGetBillingEmail } from "../funcs/usageGetBillingEmail.js";
 import { usageGetInferenceSpendCaps } from "../funcs/usageGetInferenceSpendCaps.js";
+import { usageGetInferenceSpendHistory } from "../funcs/usageGetInferenceSpendHistory.js";
 import { usageGetPaygBillingSummary } from "../funcs/usageGetPaygBillingSummary.js";
 import { usageGetPeriodUsage } from "../funcs/usageGetPeriodUsage.js";
 import { usageGetStripeSubscription } from "../funcs/usageGetStripeSubscription.js";
@@ -22,6 +23,7 @@ import { usageSetSpendCap } from "../funcs/usageSetSpendCap.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { BillingEmail } from "../models/components/billingemail.js";
 import { InferenceSpendCap } from "../models/components/inferencespendcap.js";
+import { InferenceSpendHistory } from "../models/components/inferencespendhistory.js";
 import { PaygBillingSummary } from "../models/components/paygbillingsummary.js";
 import { PeriodUsage } from "../models/components/periodusage.js";
 import { SpendCap } from "../models/components/spendcap.js";
@@ -60,6 +62,10 @@ import {
   GetInferenceSpendCapsRequest,
   GetInferenceSpendCapsSecurity,
 } from "../models/operations/getinferencespendcaps.js";
+import {
+  GetInferenceSpendHistoryRequest,
+  GetInferenceSpendHistorySecurity,
+} from "../models/operations/getinferencespendhistory.js";
 import {
   GetPaygBillingSummaryRequest,
   GetPaygBillingSummarySecurity,
@@ -240,6 +246,25 @@ export class Usage extends ClientSDK {
     options?: RequestOptions,
   ): Promise<Array<InferenceSpendCap>> {
     return unwrapAsync(usageGetInferenceSpendCaps(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getInferenceSpendHistory usage
+   *
+   * @remarks
+   * Get calendar-month inference spend recorded going forward from durable daily collection
+   */
+  async getInferenceSpendHistory(
+    request?: GetInferenceSpendHistoryRequest | undefined,
+    security?: GetInferenceSpendHistorySecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<InferenceSpendHistory> {
+    return unwrapAsync(usageGetInferenceSpendHistory(
       this,
       request,
       security,

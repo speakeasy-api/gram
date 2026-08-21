@@ -28,6 +28,7 @@ type Client struct {
 	CreateStripeCheckoutEndpoint      goa.Endpoint
 	GetStripeSubscriptionEndpoint     goa.Endpoint
 	GetPaygBillingSummaryEndpoint     goa.Endpoint
+	GetInferenceSpendHistoryEndpoint  goa.Endpoint
 	CreateStripePortalSessionEndpoint goa.Endpoint
 	CancelStripeSubscriptionEndpoint  goa.Endpoint
 	ResumeStripeSubscriptionEndpoint  goa.Endpoint
@@ -35,7 +36,7 @@ type Client struct {
 }
 
 // NewClient initializes a "usage" service client given the endpoints.
-func NewClient(getPeriodUsage, getTokensUnderManagement, setBillingMetadata, getBillingEmail, setBillingEmail, setSpendCap, getInferenceSpendCaps, getUsageTiers, createCustomerSession, createCheckout, createStripeCheckout, getStripeSubscription, getPaygBillingSummary, createStripePortalSession, cancelStripeSubscription, resumeStripeSubscription, createTopUpCheckout goa.Endpoint) *Client {
+func NewClient(getPeriodUsage, getTokensUnderManagement, setBillingMetadata, getBillingEmail, setBillingEmail, setSpendCap, getInferenceSpendCaps, getUsageTiers, createCustomerSession, createCheckout, createStripeCheckout, getStripeSubscription, getPaygBillingSummary, getInferenceSpendHistory, createStripePortalSession, cancelStripeSubscription, resumeStripeSubscription, createTopUpCheckout goa.Endpoint) *Client {
 	return &Client{
 		GetPeriodUsageEndpoint:            getPeriodUsage,
 		GetTokensUnderManagementEndpoint:  getTokensUnderManagement,
@@ -50,6 +51,7 @@ func NewClient(getPeriodUsage, getTokensUnderManagement, setBillingMetadata, get
 		CreateStripeCheckoutEndpoint:      createStripeCheckout,
 		GetStripeSubscriptionEndpoint:     getStripeSubscription,
 		GetPaygBillingSummaryEndpoint:     getPaygBillingSummary,
+		GetInferenceSpendHistoryEndpoint:  getInferenceSpendHistory,
 		CreateStripePortalSessionEndpoint: createStripePortalSession,
 		CancelStripeSubscriptionEndpoint:  cancelStripeSubscription,
 		ResumeStripeSubscriptionEndpoint:  resumeStripeSubscription,
@@ -348,6 +350,29 @@ func (c *Client) GetPaygBillingSummary(ctx context.Context, p *GetPaygBillingSum
 		return
 	}
 	return ires.(*PaygBillingSummary), nil
+}
+
+// GetInferenceSpendHistory calls the "getInferenceSpendHistory" endpoint of
+// the "usage" service.
+// GetInferenceSpendHistory may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetInferenceSpendHistory(ctx context.Context, p *GetInferenceSpendHistoryPayload) (res *InferenceSpendHistory, err error) {
+	var ires any
+	ires, err = c.GetInferenceSpendHistoryEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*InferenceSpendHistory), nil
 }
 
 // CreateStripePortalSession calls the "createStripePortalSession" endpoint of

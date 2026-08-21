@@ -9,6 +9,7 @@ import {
   inferenceCapLabel,
   inferenceCapPausedNote,
   inferenceCapRaiseLabel,
+  inferenceSpendLabel,
   isInferenceCapAnchor,
   isInferenceCapReached,
   sortInferenceCaps,
@@ -32,6 +33,15 @@ describe("inferenceCapLabel", () => {
     ["chat", "Other inference cap"],
   ])("labels the %s key as %s", (keyType, label) => {
     expect(inferenceCapLabel(keyType)).toBe(label);
+  });
+});
+
+describe("inferenceSpendLabel", () => {
+  it.each<[InferenceSpendCap["keyType"], string]>([
+    ["internal", "Security inference"],
+    ["chat", "Other inference"],
+  ])("labels the %s key as %s", (keyType, label) => {
+    expect(inferenceSpendLabel(keyType)).toBe(label);
   });
 });
 
