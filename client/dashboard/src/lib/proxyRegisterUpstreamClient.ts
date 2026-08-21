@@ -14,6 +14,7 @@ export type ProxyRegisterUpstreamClientInput = {
   scope?: string;
   tokenEndpointAuthMethod?: string;
   tunneledMcpServerId?: string;
+  projectSlug?: string;
 };
 
 export class ProxyRegistrationError extends Error {
@@ -45,7 +46,10 @@ export async function proxyRegisterUpstreamClient(
 
   const response = await authedFetch("/oauth/proxy-register", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(input.projectSlug ? { "gram-project": input.projectSlug } : {}),
+    },
     body: JSON.stringify(body),
     signal,
     ...(import.meta.env.DEV ? { credentials: "include" } : {}),

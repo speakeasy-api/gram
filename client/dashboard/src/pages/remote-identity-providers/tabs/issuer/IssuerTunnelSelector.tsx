@@ -48,6 +48,7 @@ export function IssuerTunnelSelector({
   }
 
   const tunnels = tunnelsQuery.data?.tunneledMcpServers ?? [];
+  const loadError = projectsQuery.error ?? tunnelsQuery.error;
   const selectedTunnelIsUnavailable =
     value !== "" && !tunnels.some((tunnel) => tunnel.id === value);
 
@@ -60,7 +61,12 @@ export function IssuerTunnelSelector({
           onValueChange={(next) => onChange(next === DIRECT_ROUTE ? "" : next)}
           disabled={!projectSlug || tunnelsQuery.isPending}
         >
-          <SelectTrigger id={selectId} className="w-full">
+          <SelectTrigger
+            id={selectId}
+            className="w-full"
+            aria-invalid={loadError ? true : undefined}
+            aria-describedby={loadError ? `${selectId}-error` : undefined}
+          >
             <SelectValue placeholder="Select a tunnel" />
           </SelectTrigger>
           <SelectContent>
@@ -85,8 +91,13 @@ export function IssuerTunnelSelector({
           Routes metadata discovery, token exchange, refresh, revocation, and
           dynamic client registration through the selected project tunnel.
         </Text>
-        {tunnelsQuery.error && (
-          <Text small className="text-destructive">
+        {loadError && (
+          <Text
+            id={`${selectId}-error`}
+            role="alert"
+            small
+            className="text-destructive"
+          >
             Failed to load this project's tunnels.
           </Text>
         )}
