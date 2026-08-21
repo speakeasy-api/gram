@@ -3,6 +3,7 @@ package dialect
 import (
 	"bytes"
 	"encoding/json"
+
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/speakeasy-api/gram/server/internal/genaiconv"
 )
@@ -62,6 +63,8 @@ func semconvContent[T any](span *otelv1.InboundSpan, desired string) (string, T,
 
 func semconvAnyValue(value *otelv1.InboundSpan_AnyValue) any {
 	switch value.WhichValue() {
+	case otelv1.InboundSpan_AnyValue_Value_not_set_case:
+		return nil
 	case otelv1.InboundSpan_AnyValue_StringValue_case:
 		return value.GetStringValue()
 	case otelv1.InboundSpan_AnyValue_BoolValue_case:
@@ -86,9 +89,8 @@ func semconvAnyValue(value *otelv1.InboundSpan_AnyValue) any {
 		return result
 	case otelv1.InboundSpan_AnyValue_BytesValue_case:
 		return value.GetBytesValue()
-	default:
-		return nil
 	}
+	return nil
 }
 
 func (e SemconvSpan) SessionID(span *otelv1.InboundSpan) (key string, val string, err error) {

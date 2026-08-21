@@ -81,6 +81,8 @@ func semconvLogContent[T any](record *otelv1.InboundLogRecord, desired string) (
 
 func semconvLogAnyValue(value *otelv1.InboundLogRecord_AnyValue) any {
 	switch value.WhichValue() {
+	case otelv1.InboundLogRecord_AnyValue_Value_not_set_case:
+		return nil
 	case otelv1.InboundLogRecord_AnyValue_StringValue_case:
 		return value.GetStringValue()
 	case otelv1.InboundLogRecord_AnyValue_BoolValue_case:
@@ -105,7 +107,7 @@ func semconvLogAnyValue(value *otelv1.InboundLogRecord_AnyValue) any {
 		return result
 	case otelv1.InboundLogRecord_AnyValue_BytesValue_case:
 		return value.GetBytesValue()
-	default:
-		return nil
 	}
+
+	return nil
 }
