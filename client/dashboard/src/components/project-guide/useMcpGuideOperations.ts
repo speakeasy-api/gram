@@ -14,12 +14,11 @@ import { mcpServerRouteParam } from "@/lib/sources";
 import { getServerURL } from "@/lib/utils";
 import { type PulseMCPServer, useListMCPCatalog } from "@/pages/catalog/hooks";
 import {
+  extractAuthType,
   isPulseMcpServer,
-  requiresManualSetup,
 } from "@/pages/catalog/hooks/serverMetadata";
 import {
   filterToHttpRemotes,
-  isFigmaCatalogServer,
   normalizeRemoteUrl,
 } from "@/pages/catalog/remotes";
 import {
@@ -82,11 +81,11 @@ function curateCatalogServers(
   if (!servers) return undefined;
   return servers
     .filter(isPulseMcpServer)
-    .filter((server) => !requiresManualSetup(server))
-    .filter((server) => server.isReadOnly === true)
-    .filter((server) => !isFigmaCatalogServer(server))
-    .map(filterToHttpRemotes)
-    .filter((server) => (server.remotes?.length ?? 0) > 0)
+    .filter((server) =>
+      AUTOMATIC_CATALOG_SERVER_NAMES.includes(
+        serverName(server) as (typeof AUTOMATIC_CATALOG_SERVER_NAMES)[number],
+      ),
+    )
     .sort(compareCatalogServers);
 }
 
@@ -305,7 +304,7 @@ export function useMcpGuideOperations(): {
     {
       enabled: Boolean(endpointUrl),
       refetchInterval:
-        activeOperation?.scope.step === 4 && !activeOperation.paused
+        activeOperation?.scope.step === 3 && !activeOperation.paused
           ? 5_000
           : false,
       throwOnError: false,
@@ -397,7 +396,7 @@ export function useMcpGuideOperations(): {
       }
 
       updateActiveOperation({ scope: signal.scope, report, paused: false });
-      if (signal.type === "start" && signal.scope.step === 4) {
+      if (signal.type === "start" && signal.scope.step === 3) {
         report({
           type: "progress",
           scope: signal.scope,
@@ -406,7 +405,7 @@ export function useMcpGuideOperations(): {
       }
       if (signal.type === "retry") {
         if (signal.scope.step === 0) workflow.reset();
-        if (signal.scope.step === 4) retryActivity();
+        if (signal.scope.step === 3) retryActivity();
       }
     },
     [captureActivityBaseline, retryActivity, updateActiveOperation, workflow],
@@ -449,12 +448,21 @@ export function useMcpGuideOperations(): {
     }
     if (!progressReportedFor.current.has(key)) {
       progressReportedFor.current.add(key);
+      const name = serverName(selectedServer);
       operation.report({
         type: "progress",
         scope: operation.scope,
-        message: `Installing ${serverName(selectedServer)} into this project`,
+        message: `Installing ${name} into this project`,
         progress: 0.2,
       });
+      if (extractAuthType(selectedServer) === "oauth") {
+        operation.report({
+          type: "progress",
+          scope: operation.scope,
+          message: `Configuring OAuth for ${name}`,
+          progress: 0.5,
+        });
+      }
     }
     if (
       workflow.phase === "configure" &&
@@ -500,44 +508,7 @@ export function useMcpGuideOperations(): {
 
   useEffect(() => {
     const operation = activeOperation;
-    if (!operation || operation.paused || operation.scope.step !== 1) return;
-    if (projectStatePending) return;
-    updateActiveOperation(undefined);
-    if (projectStateError) {
-      operation.report({
-        type: "error",
-        scope: operation.scope,
-        message:
-          "Could not read this project's MCP server, Default plugin, and endpoint. Retry the readiness check.",
-      });
-      return;
-    }
-    if (!deploymentReady || !resolvedName) {
-      operation.report({
-        type: "error",
-        scope: operation.scope,
-        message:
-          "The server is not ready in the Default plugin with a governed endpoint. Retry after the install finishes.",
-      });
-      return;
-    }
-    operation.report({
-      type: "success",
-      scope: operation.scope,
-      result: `${resolvedName} is ready on its governed endpoint`,
-    });
-  }, [
-    activeOperation,
-    deploymentReady,
-    projectStateError,
-    projectStatePending,
-    resolvedName,
-    updateActiveOperation,
-  ]);
-
-  useEffect(() => {
-    const operation = activeOperation;
-    if (!operation || operation.paused || operation.scope.step !== 4) return;
+    if (!operation || operation.paused || operation.scope.step !== 3) return;
     const baseline = activityBaselineRef.current;
     if (!baseline) return;
     if (suppressActivityError || activityQuery.isPending) return;

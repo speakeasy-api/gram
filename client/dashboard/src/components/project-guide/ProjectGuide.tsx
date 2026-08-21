@@ -49,7 +49,7 @@ import {
 import { useMachine } from "@xstate/react";
 import { motion, useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router";
+import { useSearchParams } from "react-router";
 
 type McpGuideOperations = ReturnType<typeof useMcpGuideOperations>;
 type SecretGuideOperations = ReturnType<typeof useSecretGuideOperations>;
@@ -256,7 +256,7 @@ export function ProjectGuide({
                           mcpOperations.markPromptCopied();
                           if (
                             journey.id === "third-party-mcp" &&
-                            currentStep === 3 &&
+                            currentStep === 2 &&
                             displayState === "checkpoint"
                           ) {
                             send({
@@ -356,7 +356,7 @@ function primaryActionFor(
     case "running":
       return { label: "Pause", onClick: () => send({ type: "PAUSE" }) };
     case "checkpoint":
-      if (journey.id === "third-party-mcp" && currentStep === 2) {
+      if (journey.id === "third-party-mcp" && currentStep === 1) {
         return {
           label: "I've connected it",
           disabled: !mcpOperations.snippets || !mcpOperations.configCopied,
@@ -367,7 +367,7 @@ function primaryActionFor(
             }),
         };
       }
-      if (journey.id === "third-party-mcp" && currentStep === 3) {
+      if (journey.id === "third-party-mcp" && currentStep === 2) {
         return null;
       }
       if (journey.id === "secret-block" && currentStep === 2) {
@@ -815,7 +815,7 @@ function ProjectGuideMcpStepContent({
         operations={operations}
         onMcpPromptCopied={onMcpPromptCopied}
       />
-      {error && step !== 4 && (
+      {error && step !== 3 && (
         <p role="alert" className="text-destructive text-[12px]">
           {error}
         </p>
@@ -837,10 +837,8 @@ function McpStepBody({
     case 0:
       return <McpCatalogSelection operations={operations} />;
     case 1:
-      return <McpDeploymentReadiness operations={operations} />;
-    case 2:
       return <McpClientConnection operations={operations} />;
-    case 3:
+    case 2:
       return (
         <McpSafePrompt
           operations={operations}
@@ -886,7 +884,7 @@ function McpCatalogSelection({
     return (
       <div className="grid gap-2">
         <p className="text-[12px] text-[#121212]/55">
-          No automatic read-only hosted servers are available right now.
+          No curated hosted servers are available right now.
         </p>
         <button
           type="button"
@@ -900,7 +898,7 @@ function McpCatalogSelection({
   }
 
   return (
-    <div className="grid gap-2 sm:grid-cols-2">
+    <div className="grid gap-2 sm:grid-cols-3">
       {operations.catalogServers.map((server) => {
         const name = server.title ?? server.registrySpecifier;
         const selected = operations.selectedServer === server;
@@ -923,43 +921,6 @@ function McpCatalogSelection({
           </button>
         );
       })}
-    </div>
-  );
-}
-
-function McpDeploymentReadiness({
-  operations,
-}: {
-  operations: McpGuideOperations;
-}): JSX.Element {
-  if (operations.projectStateError) {
-    return (
-      <p role="alert" className="text-destructive text-[12px]">
-        Could not read the server, Default plugin, or governed endpoint.
-      </p>
-    );
-  }
-  if (operations.projectStatePending) {
-    return (
-      <span className="font-mono text-[10px] text-[#121212]/50 uppercase">
-        Checking project readiness
-      </span>
-    );
-  }
-
-  return (
-    <div className="grid gap-2 font-mono text-[10px] text-[#121212]/55">
-      {operations.installStatuses.map((status) => (
-        <span key={status.key}>
-          {status.name} · {status.status}
-          {status.error ? ` · ${status.error}` : ""}
-        </span>
-      ))}
-      {operations.deploymentReady && (
-        <span className="text-success-default">
-          Default plugin and governed endpoint ready
-        </span>
-      )}
     </div>
   );
 }
@@ -989,28 +950,11 @@ function McpClientConnection({
   }
 
   return (
-    <div className="grid gap-3">
-      <div className="flex flex-wrap gap-3 font-mono text-[10px]">
-        <a
-          href={operations.endpointUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-information-default underline underline-offset-2"
-        >
-          {operations.endpointUrl}
-        </a>
-        {operations.mcpServerHref && (
-          <Link
-            to={operations.mcpServerHref}
-            className="text-information-default underline underline-offset-2"
-          >
-            View {operations.mcpServer?.name ?? "governed"} MCP server
-          </Link>
-        )}
-      </div>
+    <div className="grid min-w-0 max-w-full gap-3 overflow-hidden">
       <Tabs
         value={operations.client}
         onValueChange={(value) => operations.setClient(value as McpGuideClient)}
+        className="min-w-0 max-w-full"
       >
         <PageTabsList aria-label="MCP client">
           {MCP_GUIDE_CLIENTS.map((client) => (
@@ -1020,11 +964,18 @@ function McpClientConnection({
           ))}
         </PageTabsList>
         {MCP_GUIDE_CLIENTS.map((client) => (
-          <TabsContent key={client} value={client}>
+          <TabsContent
+            key={client}
+            value={client}
+            className="min-w-0 max-w-full overflow-hidden"
+          >
             <CodeSnippet
               code={operations.snippets![client].code}
               language={operations.snippets![client].language}
               copyable
+              wordWrap
+              className="min-w-0 w-full max-w-full"
+              snippetClassName="min-w-0 w-full max-w-full"
               onSelectOrCopy={operations.markConfigCopied}
             />
           </TabsContent>
@@ -1131,7 +1082,7 @@ function JourneyChoice({
     : isComplete
       ? "Complete"
       : isInProgress
-        ? "1 of 5 done"
+        ? `1 of ${journey.steps.length} done`
         : "Not started";
 
   return (
@@ -1180,7 +1131,7 @@ function JourneyChoice({
             style={{ backgroundColor: fixture.accent }}
           />
           <span className="font-mono text-[11px] text-[#121212]/40">
-            5 steps · ~4 min
+            {journey.steps.length} steps · ~4 min
           </span>
           <span
             className="font-mono text-[11.5px]"
@@ -1335,7 +1286,7 @@ function JourneySpine({
     status === "done"
       ? "complete"
       : status === "in-progress"
-        ? "1 / 5"
+        ? `1 / ${journey.steps.length}`
         : fixture.meta;
   return (
     <button

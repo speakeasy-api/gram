@@ -413,6 +413,13 @@ const STEP_MODES: readonly StepMode[] = [
   "listen",
 ];
 
+const MCP_STEP_MODES: readonly StepMode[] = [
+  "operation",
+  "checkpoint",
+  "checkpoint",
+  "listen",
+];
+
 const JOURNEY_BY_ID = Object.fromEntries(
   PROJECT_GUIDE_JOURNEYS.map((journey) => [journey.id, journey]),
 ) as Record<JourneyId, (typeof PROJECT_GUIDE_JOURNEYS)[number]>;
@@ -462,6 +469,9 @@ function stepModeForPath(
   step: number,
   selectedClient: string | null = null,
 ): StepMode {
+  if (path === "third-party-mcp") {
+    return MCP_STEP_MODES[step] ?? "listen";
+  }
   if (path === "secret-block" && step === 1 && selectedClient === null) {
     return "checkpoint";
   }

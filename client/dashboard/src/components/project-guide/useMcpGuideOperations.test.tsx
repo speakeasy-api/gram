@@ -121,6 +121,15 @@ beforeEach(() => {
       servers: [
         catalogServer({ title: "Other", registrySpecifier: "other/server" }),
         catalogServer({ title: "Linear" }),
+        catalogServer({
+          title: "Vercel",
+          isReadOnly: false,
+          supportsDcr: false,
+        }),
+        catalogServer({ title: "GitHub" }),
+        catalogServer({ title: "Notion" }),
+        catalogServer({ title: "Granola" }),
+        catalogServer({ title: "Ramp" }),
         catalogServer({ title: "Manual", supportsDcr: false }),
         catalogServer({ title: "Writable", isReadOnly: false }),
         catalogServer({
@@ -222,12 +231,10 @@ function setExistingServer({ calls = 0 }: { calls?: number } = {}): void {
 }
 
 describe("useMcpGuideOperations", () => {
-  it("curates automatic read-only HTTP servers without installing a selection", () => {
+  it("exposes six curated catalog choices without installing a selection", () => {
     const { result } = renderHook(() => useMcpGuideOperations());
 
-    expect(
-      result.current.catalogServers?.map((server) => server.title),
-    ).toEqual(["Linear", "Other"]);
+    expect(result.current.catalogServers).toHaveLength(6);
 
     act(() => result.current.selectServer(SERVER));
 
@@ -237,6 +244,38 @@ describe("useMcpGuideOperations", () => {
       projectSlug: "request-project",
       autoSelectRemotes: true,
     });
+  });
+
+  it("reports OAuth setup in the activity output", async () => {
+    const oauthServer = catalogServer({
+      title: "Notion",
+      meta: {
+        "com.pulsemcp/server-version": {
+          "remotes[0]": { authOptions: [{ type: "oauth" }] },
+        },
+      },
+    });
+    queryHooks.catalog.mockReturnValue(queryResult({ servers: [oauthServer] }));
+
+    const { result } = renderHook(() => useMcpGuideOperations());
+    const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
+
+    act(() => result.current.selectServer(oauthServer));
+    act(() =>
+      result.current.handleSignal(
+        { type: "start", scope: SERVER_SCOPE },
+        report,
+      ),
+    );
+
+    await waitFor(() =>
+      expect(report).toHaveBeenCalledWith({
+        type: "progress",
+        scope: SERVER_SCOPE,
+        message: "Configuring OAuth for Notion",
+        progress: 0.5,
+      }),
+    );
   });
 
   it("starts the existing project-scoped install workflow only after start", async () => {
@@ -328,9 +367,8 @@ describe("useMcpGuideOperations", () => {
     expect(startInstall).not.toHaveBeenCalled();
   });
 
-  it("resumes an existing catalog server and requires Default plugin plus endpoint readiness", async () => {
+  it("exposes the endpoint and Default plugin readiness for client setup", () => {
     setExistingServer();
-    const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
     const { result } = renderHook(() => useMcpGuideOperations());
 
     expect(result.current.mcpServer?.slug).toBe("linear-governed");
@@ -343,17 +381,6 @@ describe("useMcpGuideOperations", () => {
       projectSlug: "request-project",
       autoSelectRemotes: true,
     });
-
-    const scope = { ...SERVER_SCOPE, step: 1, runId: 2 };
-    act(() => result.current.handleSignal({ type: "start", scope }, report));
-
-    await waitFor(() =>
-      expect(report).toHaveBeenCalledWith({
-        type: "success",
-        scope,
-        result: "Linear is ready on its governed endpoint",
-      }),
-    );
 
     queryHooks.plugins.mockReturnValue(queryResult({ plugins: [] }));
     const incomplete = renderHook(() => useMcpGuideOperations());
@@ -398,7 +425,7 @@ describe("useMcpGuideOperations", () => {
     const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
     const { result, rerender } = renderHook(() => useMcpGuideOperations());
     const promptScope = { ...SERVER_SCOPE, step: 2, runId: 2 };
-    const listenScope = { ...SERVER_SCOPE, step: 4, runId: 3 };
+    const listenScope = { ...SERVER_SCOPE, step: 3, runId: 3 };
     let resolveFreshRead!: (value: {
       data: { activity: McpServerActivity[] };
       isError: boolean;
@@ -479,7 +506,7 @@ describe("useMcpGuideOperations", () => {
     const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
     const { result } = renderHook(() => useMcpGuideOperations());
     const promptScope = { ...SERVER_SCOPE, step: 2, runId: 2 };
-    const listenScope = { ...SERVER_SCOPE, step: 4, runId: 3 };
+    const listenScope = { ...SERVER_SCOPE, step: 3, runId: 3 };
     refetchActivity.mockReturnValueOnce(new Promise(() => undefined));
 
     act(() => {
@@ -509,7 +536,7 @@ describe("useMcpGuideOperations", () => {
     const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
     const { result, rerender } = renderHook(() => useMcpGuideOperations());
     const promptScope = { ...SERVER_SCOPE, step: 2, runId: 2 };
-    const listenScope = { ...SERVER_SCOPE, step: 4, runId: 3 };
+    const listenScope = { ...SERVER_SCOPE, step: 3, runId: 3 };
     refetchActivity.mockResolvedValueOnce({
       data: {
         activity: [

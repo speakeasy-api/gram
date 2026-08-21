@@ -193,7 +193,7 @@ export function ProjectGuideRun({
         <div className="grid min-w-0 lg:grid-cols-[minmax(0,1fr)_352px]">
           <ol
             aria-label={`${journey.id === "third-party-mcp" ? "Journey A" : "Journey B"} steps`}
-            className="min-w-0 px-[22px] pt-2 pb-5"
+            className="min-w-0 overflow-hidden px-[22px] pt-2 pb-5"
           >
             {journey.steps.map((step, index) => {
               const complete = completedSteps.includes(index);

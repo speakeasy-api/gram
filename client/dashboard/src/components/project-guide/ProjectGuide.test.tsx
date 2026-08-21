@@ -277,7 +277,7 @@ describe("ProjectGuide", () => {
     ).toBeTruthy();
     expect(
       screen.getByRole("log", { name: "Journey A activity" }).textContent,
-    ).toContain("Ready · Pick a server from the catalog");
+    ).toContain("Ready · Pick and set up a server");
 
     fireEvent.click(switchControl);
 
@@ -319,7 +319,7 @@ describe("ProjectGuide", () => {
     ]);
     expect(
       screen.getByRole("log", { name: "Journey A activity" }).textContent,
-    ).toContain("Started · Pick a server from the catalog");
+    ).toContain("Started · Pick and set up a server");
   });
 
   it("renders checkpoint, waiting, and observed-event completion from adapter reports", () => {
@@ -430,7 +430,7 @@ describe("ProjectGuide", () => {
     expect(screen.queryByRole("button", { name: "Sent it" })).toBeNull();
   });
 
-  it("shows MCP Step 5 waiting guidance only in Activity", async () => {
+  it("shows MCP listening guidance only in Activity", async () => {
     const waitingMessage =
       "Listening for a new call on the selected governed endpoint";
     const handleSignal = vi.fn(
@@ -445,7 +445,7 @@ describe("ProjectGuide", () => {
             result: "Step complete",
           });
         }
-        if (signal.type === "start" && signal.scope.step === 4) {
+        if (signal.type === "start" && signal.scope.step === 3) {
           report({
             type: "progress",
             scope: signal.scope,
@@ -475,7 +475,7 @@ describe("ProjectGuide", () => {
     expect(screen.queryByRole("link", { name: "Open Tool Logs" })).toBeNull();
   });
 
-  it("shows MCP Step 5 operation errors only in Activity", async () => {
+  it("shows MCP listening errors only in Activity", async () => {
     const listenerError =
       "Could not check for the new governed call. Retry after checking the client connection.";
     const handleSignal = vi.fn(
@@ -490,7 +490,7 @@ describe("ProjectGuide", () => {
             result: "Step complete",
           });
         }
-        if (signal.type === "start" && signal.scope.step === 4) {
+        if (signal.type === "start" && signal.scope.step === 3) {
           report({
             type: "error",
             scope: signal.scope,
@@ -833,9 +833,7 @@ describe("ProjectGuide", () => {
     expect(
       screen.getByRole("log", { name: "Journey A activity" }),
     ).toBeTruthy();
-    expect(
-      screen.getByText("Ready · Confirm the governed endpoint"),
-    ).toBeTruthy();
+    expect(screen.getByText("Ready · Connect your client")).toBeTruthy();
     expect(
       screen.queryByText(
         "Endpoint verified, client connected, no calls recorded.",
@@ -1026,7 +1024,7 @@ describe("ProjectGuide", () => {
     );
   });
 
-  it("renders the real MCP selection, connection, prompt, observed call, and links", async () => {
+  it("renders the real MCP selection, connection, prompt, and observed call", async () => {
     const handleSignal = vi.fn(
       (
         signal: ProjectGuideOperationSignal,
@@ -1046,7 +1044,7 @@ describe("ProjectGuide", () => {
             result: "Linear is ready on its governed endpoint",
           });
         }
-        if (signal.type === "start" && signal.scope.step === 4) {
+        if (signal.type === "start" && signal.scope.step === 3) {
           report({
             type: "event",
             scope: signal.scope,
@@ -1081,13 +1079,13 @@ describe("ProjectGuide", () => {
     expect(screen.getByRole("tab", { name: "Cursor" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "Codex" })).toBeTruthy();
     expect(
-      screen.getByRole("link", {
+      screen.queryByRole("link", {
         name: "https://api.example/mcp/linear-endpoint",
       }),
-    ).toBeTruthy();
+    ).toBeNull();
     expect(
-      screen.getByRole("link", { name: "View Linear MCP server" }),
-    ).toBeTruthy();
+      screen.queryByRole("link", { name: "View Linear MCP server" }),
+    ).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
     await waitFor(() =>
@@ -1327,7 +1325,7 @@ describe("ProjectGuide", () => {
     expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
   });
 
-  it("shows Step 5 waiting guidance only in activity before an event exists", async () => {
+  it("shows secret listening guidance only in activity before an event exists", async () => {
     const handleSignal = vi.fn(
       (
         signal: ProjectGuideOperationSignal,
@@ -1488,9 +1486,9 @@ describe("ProjectGuide", () => {
         type: "retry",
         scope: {
           path: "third-party-mcp",
-          step: 4,
+          step: 3,
           attempt: 1,
-          runId: 3,
+          runId: 2,
         },
       },
       expect.any(Function),

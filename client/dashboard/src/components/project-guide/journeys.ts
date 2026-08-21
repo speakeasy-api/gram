@@ -12,12 +12,12 @@ export function otherProjectGuideJourney(id: JourneyId): JourneyId {
 
 /** Catalog entries we surface first in the automatic project-guide chooser. */
 export const AUTOMATIC_CATALOG_SERVER_NAMES = [
-  "GitHub",
-  "Notion",
-  "Stripe",
-  "Figma",
   "Linear",
-  "Cloudflare",
+  "Notion",
+  "Vercel",
+  "Granola",
+  "Ramp",
+  "GitHub",
 ] as const;
 
 export const JOURNEY_STATUS_LABELS: Record<JourneyStatus, string> = {
@@ -74,6 +74,13 @@ export const THIRD_PARTY_MCP_STEPS = [
   "Watch the first governed call",
 ];
 
+export const PROJECT_GUIDE_MCP_STEPS = [
+  "Pick and set up a server",
+  "Connect your client",
+  "Ask the agent to list the tools",
+  "Watch the first governed call",
+];
+
 export const PROJECT_GUIDE_COMPLETE = {
   eyebrow: "Both journeys complete",
   heading: "Both journeys are on the record.",
@@ -115,10 +122,9 @@ export const PROJECT_GUIDE_JOURNEYS: JourneyMeta[] = [
       body: "Your client now reaches the selected server through an endpoint you own. Tool lists are filtered to what each caller may use, every call lands in tool logs, and the vendor's server never changed. Remove the server and the path closes.",
       primaryAction: "Open tool logs",
     },
-    steps: THIRD_PARTY_MCP_STEPS,
+    steps: PROJECT_GUIDE_MCP_STEPS,
     stepBlurbs: [
       "The catalog lists servers from the official MCP Registry. Installing one creates a governed endpoint in front of the vendor's server — the vendor's URL is already known, and nothing upstream changes.",
-      "Installing created your endpoint. Confirming it proves the upstream is reachable and speaking MCP, and shows what the endpoint already covers.",
       "Point the client at your endpoint instead of the vendor's URL. The proxy drops the client's own Authorization header and substitutes the credential resolved for that caller, so no vendor key sits on a developer's machine.",
       "Run this in the client you just configured. Listing tools reads nothing and writes nothing — it puts the first real request on the governed path.",
       "The endpoint checks the call against the caller's tool access and records it before forwarding. This is the first entry.",
