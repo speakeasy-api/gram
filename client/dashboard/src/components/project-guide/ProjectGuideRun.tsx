@@ -3,6 +3,7 @@ import {
   type JourneyMeta,
   type JourneyStatus,
 } from "@/components/project-guide/journeys";
+import { Button } from "@/components/ui/Button";
 import type {
   ProjectGuideDisplayState,
   ProjectGuideEventCard,
@@ -35,6 +36,20 @@ export type ProjectGuideRunProps = {
   onRewind?: (step: number) => void;
   onSwitchJourney: () => void;
 };
+
+function journeyActionIcon(label: string): "play" | "pause" | undefined {
+  if (label === "Start the journey") {
+    return "play";
+  }
+  if (
+    label === "Pause the journey" ||
+    label === "Pause listening" ||
+    label === "Pause"
+  ) {
+    return "pause";
+  }
+  return undefined;
+}
 
 function stepStateLabel(displayState: ProjectGuideDisplayState): string {
   switch (displayState) {
@@ -131,13 +146,6 @@ export function ProjectGuideRun({
     if (isComplete) label = journey.completion.primaryAction;
     resolvedPrimaryAction = { label, disabled: !isComplete };
   }
-  const isStartAction =
-    resolvedPrimaryAction !== null &&
-    (displayState === "ready" || displayState === "checkpoint") &&
-    resolvedPrimaryAction.label === "Start the journey";
-  const isEnabledPrimaryAction =
-    resolvedPrimaryAction !== null && !resolvedPrimaryAction.disabled;
-
   const activityLogRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const activityLog = activityLogRef.current;
@@ -303,34 +311,28 @@ export function ProjectGuideRun({
             {resolvedPrimaryAction && (
               <div className="mt-auto grid gap-2">
                 {resolvedPrimaryAction?.href ? (
-                  <Link
-                    to={resolvedPrimaryAction.href}
-                    className="flex w-full items-center justify-center gap-2 bg-[#121212] px-4 py-[11px] font-mono text-[11px] tracking-[0.06em] text-[#FAFAFA] uppercase"
-                  >
-                    {resolvedPrimaryAction.label}
-                  </Link>
+                  <Button asChild className="w-full">
+                    <Link to={resolvedPrimaryAction.href}>
+                      <Button.Text className="flex-none">
+                        {resolvedPrimaryAction.label}
+                      </Button.Text>
+                    </Link>
+                  </Button>
                 ) : (
                   resolvedPrimaryAction && (
-                    <button
+                    <Button
                       type="button"
                       onClick={resolvedPrimaryAction.onClick}
                       disabled={resolvedPrimaryAction.disabled}
                       aria-label={resolvedPrimaryAction.label}
-                      className={cn(
-                        "flex w-full items-center justify-center gap-2 px-4 py-[11px] font-mono text-[11px] tracking-[0.06em] uppercase transition-colors",
-                        isEnabledPrimaryAction
-                          ? "bg-[#121212] text-[#FAFAFA]"
-                          : "cursor-default bg-[#EDECEA] text-[#121212]/40",
-                      )}
+                      icon={journeyActionIcon(resolvedPrimaryAction.label)}
+                      iconAfter
+                      className="w-full"
                     >
-                      {isStartAction && !resolvedPrimaryAction.disabled && (
-                        <span
-                          aria-hidden="true"
-                          className="size-0 border-y-[5px] border-l-[8px] border-y-transparent border-l-current"
-                        />
-                      )}
-                      {resolvedPrimaryAction.label}
-                    </button>
+                      <Button.Text className="flex-none">
+                        {resolvedPrimaryAction.label}
+                      </Button.Text>
+                    </Button>
                   )
                 )}
               </div>

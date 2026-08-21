@@ -708,7 +708,7 @@ describe("ProjectGuide", () => {
     ).toHaveLength(1);
   });
 
-  it("renders the ready start action with the designed play affordance", () => {
+  it("renders the ready start action with the designed play affordance", async () => {
     render(
       <ProjectGuideRun
         journey={PROJECT_GUIDE_JOURNEYS[1]!}
@@ -722,10 +722,10 @@ describe("ProjectGuide", () => {
 
     const action = screen.getByRole("button", { name: "Start the journey" });
     expect((action as HTMLButtonElement).disabled).toBe(false);
-    expect(action.querySelector('[aria-hidden="true"]')).toBeTruthy();
+    await waitFor(() => expect(action.querySelector("svg")).toBeTruthy());
   });
 
-  it("keeps the ready start action disabled without the play affordance", () => {
+  it("keeps the ready start action disabled with the play affordance", async () => {
     render(
       <ProjectGuideRun
         journey={PROJECT_GUIDE_JOURNEYS[1]!}
@@ -739,10 +739,10 @@ describe("ProjectGuide", () => {
 
     const action = screen.getByRole("button", { name: "Start the journey" });
     expect((action as HTMLButtonElement).disabled).toBe(true);
-    expect(action.querySelector('[aria-hidden="true"]')).toBeNull();
+    await waitFor(() => expect(action.querySelector("svg")).toBeTruthy());
   });
 
-  it("styles an enabled checkpoint action as actionable without a play affordance", () => {
+  it("keeps an enabled checkpoint action actionable without a play affordance", () => {
     render(
       <ProjectGuideRun
         journey={PROJECT_GUIDE_JOURNEYS[1]!}
@@ -761,12 +761,10 @@ describe("ProjectGuide", () => {
       name: "I've installed and restarted it",
     });
     expect((action as HTMLButtonElement).disabled).toBe(false);
-    expect(action.className).toContain("bg-[#121212]");
-    expect(action.className).toContain("text-[#FAFAFA]");
     expect(action.querySelector('[aria-hidden="true"]')).toBeNull();
   });
 
-  it("styles a disabled checkpoint action as non-interactive", () => {
+  it("keeps a disabled checkpoint action non-interactive", () => {
     render(
       <ProjectGuideRun
         journey={PROJECT_GUIDE_JOURNEYS[1]!}
@@ -785,8 +783,6 @@ describe("ProjectGuide", () => {
       name: "I've installed and restarted it",
     });
     expect((action as HTMLButtonElement).disabled).toBe(true);
-    expect(action.className).toContain("bg-[#EDECEA]");
-    expect(action.className).toContain("text-[#121212]/40");
     expect(action.querySelector('[aria-hidden="true"]')).toBeNull();
   });
 
@@ -801,7 +797,7 @@ describe("ProjectGuide", () => {
         completedSteps={[]}
         currentStep={0}
         output={<span>First output</span>}
-        primaryAction={{ label: "Pause" }}
+        primaryAction={{ label: "Pause the journey" }}
         onSwitchJourney={() => undefined}
       />,
     );
@@ -821,7 +817,7 @@ describe("ProjectGuide", () => {
         completedSteps={[]}
         currentStep={0}
         output={<span>Latest output</span>}
-        primaryAction={{ label: "Pause" }}
+        primaryAction={{ label: "Pause the journey" }}
         onSwitchJourney={() => undefined}
       />,
     );
@@ -830,7 +826,7 @@ describe("ProjectGuide", () => {
     expect(activity.scrollTop).toBe(400);
   });
 
-  it("keeps elapsed listening ticks out of the polite live status", () => {
+  it("keeps elapsed listening ticks out of the polite live status", async () => {
     render(
       <ProjectGuideRun
         journey={PROJECT_GUIDE_JOURNEYS[1]!}
@@ -848,6 +844,16 @@ describe("ProjectGuide", () => {
 
     expect(screen.getByRole("status").textContent).toBe(
       "Listening for an event",
+    );
+    expect(
+      screen.getByRole("button", { name: "Pause listening" }),
+    ).toBeTruthy();
+    await waitFor(() =>
+      expect(
+        screen
+          .getByRole("button", { name: "Pause listening" })
+          .querySelector("svg"),
+      ).toBeTruthy(),
     );
     expect(screen.getByText("12s elapsed").getAttribute("aria-hidden")).toBe(
       "true",

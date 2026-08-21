@@ -386,7 +386,10 @@ function primaryActionFor(
         onClick: () => send({ type: "START" }),
       };
     case "running":
-      return { label: "Pause", onClick: () => send({ type: "PAUSE" }) };
+      return {
+        label: "Pause the journey",
+        onClick: () => send({ type: "PAUSE" }),
+      };
     case "checkpoint":
       if (journey.id === "third-party-mcp" && currentStep === 1) {
         return {
