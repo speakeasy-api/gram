@@ -100,6 +100,22 @@ func TestApplySpanEnrichments(t *testing.T) {
 				require.Equal(t, "b", values[1].GetStringValue())
 			},
 		},
+		{
+			name: "generic slice",
+			enrichment: otelattr.Slice("generic slice",
+				otelattr.StringValue("value"),
+				otelattr.Float64Value(2),
+				otelattr.BoolValue(true),
+			),
+			check: func(t *testing.T, got *otelv1.Span_AnyValue) {
+				t.Helper()
+				values := got.GetArrayValue().GetValues()
+				require.Len(t, values, 3)
+				require.Equal(t, "value", values[0].GetStringValue())
+				require.InDelta(t, 2, values[1].GetDoubleValue(), 0)
+				require.True(t, values[2].GetBoolValue())
+			},
+		},
 	}
 
 	out := (&otelv1.Span_builder{
