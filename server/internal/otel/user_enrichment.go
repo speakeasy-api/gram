@@ -25,7 +25,7 @@ const userEnrichmentTTL = 5 * time.Minute
 
 func fetchUserEnrichment(
 	ctx context.Context,
-	db database.DBTX,
+	replicaDB database.DBTX,
 	enrichmentCache *cache.TypedCacheObject[cachedUserEnrichment],
 	loads *singleflight.Group,
 	organizationID string,
@@ -54,7 +54,7 @@ func fetchUserEnrichment(
 			return cached.Enrichment, nil
 		}
 
-		resolved, loadErr := loadUserEnrichment(ctx, db, organizationID, email)
+		resolved, loadErr := loadUserEnrichment(ctx, replicaDB, organizationID, email)
 		cacheErr := enrichmentCache.Store(ctx, cachedUserEnrichment{
 			OrganizationID: organizationID,
 			EmailHash:      emailHash,
@@ -70,8 +70,8 @@ func fetchUserEnrichment(
 	return resolved, err
 }
 
-func loadUserEnrichment(ctx context.Context, db database.DBTX, organizationID string, email string) (userEnrichment, error) {
-	user, err := usersrepo.New(db).GetConnectedUserByEmail(ctx, usersrepo.GetConnectedUserByEmailParams{
+func loadUserEnrichment(ctx context.Context, replicaDB database.DBTX, organizationID string, email string) (userEnrichment, error) {
+	user, err := usersrepo.New(replicaDB).GetConnectedUserByEmail(ctx, usersrepo.GetConnectedUserByEmailParams{
 		Email:          email,
 		OrganizationID: organizationID,
 	})
@@ -86,7 +86,7 @@ func loadUserEnrichment(ctx context.Context, db database.DBTX, organizationID st
 
 	var result userEnrichment
 	var profileErr error
-	profile, err := directory.NewService(db).GetUserProfile(ctx, organizationID, user.ID)
+	profile, err := directory.NewService(replicaDB).GetUserProfile(ctx, organizationID, user.ID)
 	switch {
 	case errors.Is(err, directory.ErrUserNotFound):
 	case err != nil:
@@ -101,7 +101,7 @@ func loadUserEnrichment(ctx context.Context, db database.DBTX, organizationID st
 		}
 	}
 
-	roles, err := accessrepo.New(db).ListMemberRolePrincipalsByUser(ctx, accessrepo.ListMemberRolePrincipalsByUserParams{
+	roles, err := accessrepo.New(replicaDB).ListMemberRolePrincipalsByUser(ctx, accessrepo.ListMemberRolePrincipalsByUserParams{
 		OrganizationID: organizationID,
 		UserID:         user.ID,
 	})

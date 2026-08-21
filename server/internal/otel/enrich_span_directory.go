@@ -15,17 +15,17 @@ import (
 )
 
 type enrichDirectory struct {
-	logger *slog.Logger
-	db     database.DBTX
-	cache  cache.TypedCacheObject[cachedUserEnrichment]
-	loads  singleflight.Group
+	logger    *slog.Logger
+	replicaDB database.DBTX
+	cache     cache.TypedCacheObject[cachedUserEnrichment]
+	loads     singleflight.Group
 }
 
-func NewEnrichDirectory(logger *slog.Logger, db database.DBTX, cacheImpl cache.Cache) *enrichDirectory {
+func NewEnrichDirectory(logger *slog.Logger, replicaDB database.DBTX, cacheImpl cache.Cache) *enrichDirectory {
 	logger = logger.With(attr.SlogComponent("enrich-directory"))
 	return &enrichDirectory{
-		logger: logger,
-		db:     db,
+		logger:    logger,
+		replicaDB: replicaDB,
 		cache: cache.NewTypedObjectCache[cachedUserEnrichment](
 			logger.With(attr.SlogCacheNamespace("otel_user_enrichment")),
 			cacheImpl,
@@ -46,7 +46,7 @@ func (e *enrichDirectory) Enrich(ctx context.Context, span *otelv1.InboundSpan) 
 		e.logger.WarnContext(ctx, "failed to read user email for directory span enrichment", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
 		return nil, nil
 	}
-	resolved, err := fetchUserEnrichment(ctx, e.db, &e.cache, &e.loads, organizationID, email)
+	resolved, err := fetchUserEnrichment(ctx, e.replicaDB, &e.cache, &e.loads, organizationID, email)
 	if err != nil {
 		e.logger.WarnContext(ctx, "failed to resolve user enrichment", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
 	}

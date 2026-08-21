@@ -31,7 +31,7 @@ func NewSpanTransformHandler(
 	logger *slog.Logger,
 	meterProvider metric.MeterProvider,
 	spanPublisher gcp.Publisher[*otelv1.Span],
-	db database.DBTX,
+	replicaDB database.DBTX,
 	cacheImpl cache.Cache,
 ) *SpanTransformHandler {
 	logger = logger.With(attr.SlogComponent("span-transform-handler"))
@@ -43,7 +43,7 @@ func NewSpanTransformHandler(
 		enrichers: []SpanEnricher{
 			&enrichTenancy{},
 			NewEnrichSpeakeasyTokens(),
-			NewEnrichDirectory(logger, db, cacheImpl),
+			NewEnrichDirectory(logger, replicaDB, cacheImpl),
 		},
 	}
 }

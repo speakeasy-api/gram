@@ -31,7 +31,7 @@ func NewLogTransformHandler(
 	logger *slog.Logger,
 	meterProvider metric.MeterProvider,
 	logPublisher gcp.Publisher[*otelv1.LogRecord],
-	db database.DBTX,
+	replicaDB database.DBTX,
 	cacheImpl cache.Cache,
 ) *LogTransformHandler {
 	logger = logger.With(attr.SlogComponent("log-transform-handler"))
@@ -43,7 +43,7 @@ func NewLogTransformHandler(
 		enrichers: []LogEnricher{
 			&enrichLogTenancy{},
 			newEnrichLogSpeakeasyTokens(),
-			newEnrichLogDirectory(logger, db, cacheImpl),
+			newEnrichLogDirectory(logger, replicaDB, cacheImpl),
 		},
 	}
 }
