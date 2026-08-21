@@ -382,6 +382,11 @@ func newStartCommand() *cli.Command {
 			Usage:   "Maximum concurrently tracked anonymous MCP sessions per tunnel (0 uses the built-in default)",
 			EnvVars: []string{"GRAM_PUBLIC_TUNNELS_LIVE_SESSION_CAP"},
 		},
+		&cli.DurationFlag{
+			Name:    "hooks-gating-scan-timeout",
+			Usage:   "Deadline for the risk enforcement scan on the synchronous gating hook path (0 uses the built-in default)",
+			EnvVars: []string{"GRAM_HOOKS_GATING_SCAN_TIMEOUT"},
+		},
 		&cli.StringFlag{
 			Name:    "openrouter-provisioning-key",
 			Usage:   "Provisioning key for OpenRouter to create new API keys for orgs - https://openrouter.ai/settings/provisioning-keys",
@@ -1350,6 +1355,7 @@ func newStartCommand() *cli.Command {
 				serverURL,
 				siteURL,
 				c.String("jwt-signing-key"),
+				c.Duration("hooks-gating-scan-timeout"),
 			)
 			hooks.Attach(mux, hooksService)
 			litellmService = litellm.NewService(logger, tracerProvider, db, chDB, sessionManager, authzEngine, hooksService, litellmCalls, litellmTraceProcessor, litellmMetricProcessor, litellmHealthProcessor, litellmInstanceResolver, auditLogger, c.String("environment"))

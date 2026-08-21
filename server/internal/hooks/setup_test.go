@@ -235,6 +235,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 		serverURL,
 		siteURL,
 		"test-jwt-secret",
+		0,
 	)
 
 	return ctx, &testInstance{
