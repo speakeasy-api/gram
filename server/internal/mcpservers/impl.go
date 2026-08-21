@@ -566,7 +566,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	txRepo := repo.New(dbtx)
 
 	if payload.Visibility == VisibilityDisabled {
-		if err := LockMCPServerVisibilityDependencies(ctx, dbtx, *authCtx.ProjectID, serverID); err != nil {
+		if err := LockMCPServerVisibilityDependencies(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverID); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "lock mcp server visibility dependencies").LogError(ctx, logger)
 		}
 	}
@@ -851,8 +851,8 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "delete child mcp endpoints").LogError(ctx, logger)
 	}
-	if err := s.logMcpServerRootAutoClears(ctx, dbtx, authCtx, rootEndpoints); err != nil {
-		return err
+	if err := logMCPServerRootAutoClears(ctx, dbtx, s.audit, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), authCtx.Email, rootEndpoints); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "log automatic root endpoint cleanup").LogError(ctx, logger)
 	}
 
 	for _, endpoint := range deletedEndpoints {
@@ -1009,37 +1009,6 @@ func rootDomainIDs(endpoints []mcpendpointsrepo.McpEndpoint) []uuid.UUID {
 		return strings.Compare(a.String(), b.String())
 	})
 	return result
-}
-
-func (s *Service) logMcpServerRootAutoClears(
-	ctx context.Context,
-	dbtx pgx.Tx,
-	authCtx *contextvalues.AuthContext,
-	rootEndpoints []mcpendpointsrepo.McpEndpoint,
-) error {
-	repository := customdomainsrepo.New(dbtx)
-	for _, endpoint := range rootEndpoints {
-		if !endpoint.CustomDomainID.Valid {
-			continue
-		}
-		domain, err := repository.GetCustomDomainByID(ctx, endpoint.CustomDomainID.UUID)
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "load custom domain for root cleanup audit").LogError(ctx, s.logger)
-		}
-		if err := s.audit.LogCustomDomainUpdate(ctx, dbtx, audit.LogCustomDomainUpdateEvent{
-			OrganizationID:             authCtx.ActiveOrganizationID,
-			Actor:                      urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-			ActorDisplayName:           authCtx.Email,
-			ActorSlug:                  nil,
-			CustomDomainURN:            urn.NewCustomDomain(domain.ID),
-			DomainName:                 domain.Domain,
-			CustomDomainSnapshotBefore: mv.BuildCustomDomainView(domain, false, endpoint.ID),
-			CustomDomainSnapshotAfter:  mv.BuildCustomDomainView(domain, false, uuid.Nil),
-		}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "log automatic root endpoint cleanup").LogError(ctx, s.logger)
-		}
-	}
-	return nil
 }
 
 func (s *Service) reconcileMcpServerCustomDomains(ctx context.Context, customDomainIDs []uuid.UUID) error {

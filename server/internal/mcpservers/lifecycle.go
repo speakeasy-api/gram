@@ -2,6 +2,7 @@ package mcpservers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -52,9 +53,15 @@ type MCPServerVisibilityResult struct {
 // LockMCPServerVisibilityDependencies preserves the domain -> root endpoint ->
 // MCP-server lock order used by deletion and root-selection paths. Call it before
 // locking the MCP server for a disabling transition.
-func LockMCPServerVisibilityDependencies(ctx context.Context, tx pgx.Tx, projectID, serverID uuid.UUID) error {
-	if tx == nil || projectID == uuid.Nil || serverID == uuid.Nil {
+func LockMCPServerVisibilityDependencies(ctx context.Context, tx pgx.Tx, organizationID string, projectID, serverID uuid.UUID) error {
+	if tx == nil || organizationID == "" || projectID == uuid.Nil || serverID == uuid.Nil {
 		return fmt.Errorf("invalid MCP server visibility lock input")
+	}
+	// Root-selection mutations lock the organization's custom-domain row before
+	// endpoint/server rows. Take that same lock before discovering dependencies so
+	// an endpoint cannot gain a domain after the list but before endpoint locking.
+	if _, err := customdomainsrepo.New(tx).LockCustomDomainByOrganization(ctx, organizationID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("lock MCP server custom domain: %w", err)
 	}
 	domainIDs, err := mcpendpointsrepo.New(tx).ListCustomDomainIDsByMCPServerID(ctx, mcpendpointsrepo.ListCustomDomainIDsByMCPServerIDParams{McpServerID: serverID, ProjectID: projectID})
 	if err != nil {
@@ -88,14 +95,17 @@ func UpdateMCPServerVisibilityInTransaction(ctx context.Context, tx pgx.Tx, audi
 		if err != nil {
 			return MCPServerVisibilityResult{}, fmt.Errorf("clear MCP server root endpoints: %w", err)
 		}
-		if err := logMCPServerRootAutoClears(ctx, tx, auditLogger, input, cleared); err != nil {
+		if err := logMCPServerRootAutoClears(ctx, tx, auditLogger, input.OrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, input.ActorUserID), input.ActorEmail, cleared); err != nil {
 			return MCPServerVisibilityResult{}, err
 		}
 	}
 	return MCPServerVisibilityResult{Server: updated, ClearedRootDomainIDs: rootDomainIDs(cleared)}, nil
 }
 
-func logMCPServerRootAutoClears(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, input LifecycleUpdateInput, rootEndpoints []mcpendpointsrepo.McpEndpoint) error {
+func logMCPServerRootAutoClears(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, organizationID string, actor urn.Principal, actorDisplayName *string, rootEndpoints []mcpendpointsrepo.McpEndpoint) error {
+	if auditLogger == nil || organizationID == "" {
+		return fmt.Errorf("invalid MCP root cleanup audit input")
+	}
 	repository := customdomainsrepo.New(tx)
 	for _, endpoint := range rootEndpoints {
 		if !endpoint.CustomDomainID.Valid {
@@ -106,9 +116,9 @@ func logMCPServerRootAutoClears(ctx context.Context, tx pgx.Tx, auditLogger *aud
 			return fmt.Errorf("load custom domain for MCP root cleanup audit: %w", err)
 		}
 		if err := auditLogger.LogCustomDomainUpdate(ctx, tx, audit.LogCustomDomainUpdateEvent{
-			OrganizationID:             input.OrganizationID,
-			Actor:                      urn.NewPrincipal(urn.PrincipalTypeUser, input.ActorUserID),
-			ActorDisplayName:           input.ActorEmail,
+			OrganizationID:             organizationID,
+			Actor:                      actor,
+			ActorDisplayName:           actorDisplayName,
 			ActorSlug:                  nil,
 			CustomDomainURN:            urn.NewCustomDomain(domain.ID),
 			DomainName:                 domain.Domain,

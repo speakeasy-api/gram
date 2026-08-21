@@ -23,7 +23,10 @@ const (
 	operationEnableMCP  = "enable_mcp"
 )
 
-var ErrLifecycleVisibilityInvalid = errors.New("invalid platform mcp visibility update")
+var (
+	ErrLifecycleVisibilityInvalid     = errors.New("invalid platform mcp visibility update")
+	ErrLifecycleVisibilityUnavailable = errors.New("platform mcp visibility is unavailable for this target")
+)
 
 type UpdateMCPVisibilityInput struct {
 	ProjectSlug     string
@@ -47,7 +50,7 @@ type UpdateMCPVisibilityResult struct {
 // LifecycleVisibilityLocker is composed from mcpservers to preserve its domain
 // -> root endpoint -> MCP server lock order before the Platform service locks
 // the target server.
-type LifecycleVisibilityLocker func(context.Context, pgx.Tx, uuid.UUID, uuid.UUID) error
+type LifecycleVisibilityLocker func(context.Context, pgx.Tx, string, uuid.UUID, uuid.UUID) error
 
 // LifecycleVisibilityUpdater is composed from mcpservers so Platform MCP uses
 // the same transactional visibility/audit primitive as the dashboard while
@@ -152,17 +155,26 @@ func (s *LifecycleVisibilityService) update(ctx context.Context, principal Princ
 	}
 
 	registration, err := lifecycleRegistration(ctx, q, principal, project.ID, registrationID)
-	if err != nil || registration.Status != registrationStatusRegistered || !registrationComponentsComplete(registration) || !registration.McpServerID.Valid || registration.McpServerID.UUID != mcpID {
-		return UpdateMCPVisibilityResult{}, ErrLifecycleVisibilityInvalid
+	if errors.Is(err, pgx.ErrNoRows) {
+		return UpdateMCPVisibilityResult{}, ErrLifecycleVisibilityUnavailable
+	}
+	if err != nil {
+		return UpdateMCPVisibilityResult{}, err
+	}
+	if registration.Status != registrationStatusRegistered || !registrationComponentsComplete(registration) || !registration.McpServerID.Valid || registration.McpServerID.UUID != mcpID {
+		return UpdateMCPVisibilityResult{}, ErrLifecycleVisibilityUnavailable
 	}
 	if to == "disabled" {
-		if err := s.locker(ctx, tx, project.ID, mcpID); err != nil {
+		if err := s.locker(ctx, tx, principal.OrganizationID, project.ID, mcpID); err != nil {
 			return UpdateMCPVisibilityResult{}, fmt.Errorf("lock platform mcp visibility dependencies: %w", err)
 		}
 	}
 	server, err := mcpserversrepo.New(tx).LockMCPServerByIDAndProjectID(ctx, mcpserversrepo.LockMCPServerByIDAndProjectIDParams{ID: mcpID, ProjectID: project.ID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return UpdateMCPVisibilityResult{}, ErrLifecycleVisibilityUnavailable
+	}
 	if err != nil {
-		return UpdateMCPVisibilityResult{}, ErrLifecycleVisibilityInvalid
+		return UpdateMCPVisibilityResult{}, fmt.Errorf("lock platform mcp visibility target: %w", err)
 	}
 	if server.Visibility != from || !hmac.Equal([]byte(lifecycleMetadataVersion(s.key, server.ID.String(), server.ProjectID.String(), lifecycleMCPDisplayName(server), server.Slug.String, server.Visibility)), []byte(input.ExpectedVersion)) {
 		return UpdateMCPVisibilityResult{}, ErrRegistrationConflict
@@ -205,8 +217,14 @@ func (s *LifecycleVisibilityService) update(ctx context.Context, principal Princ
 
 func (s *LifecycleVisibilityService) current(ctx context.Context, principal Principal, project ResolvedProject, registrationID, mcpID uuid.UUID, receipt OperationReceipt) (UpdateMCPVisibilityResult, error) {
 	registration, err := lifecycleRegistration(ctx, platformrepo.New(s.db), principal, project.ID, registrationID)
-	if err != nil || !registration.McpServerID.Valid || registration.McpServerID.UUID != mcpID {
-		return UpdateMCPVisibilityResult{}, ErrLifecycleVisibilityInvalid
+	if errors.Is(err, pgx.ErrNoRows) {
+		return UpdateMCPVisibilityResult{}, ErrLifecycleVisibilityUnavailable
+	}
+	if err != nil {
+		return UpdateMCPVisibilityResult{}, err
+	}
+	if registration.Status != registrationStatusRegistered || !registrationComponentsComplete(registration) || !registration.McpServerID.Valid || registration.McpServerID.UUID != mcpID {
+		return UpdateMCPVisibilityResult{}, ErrLifecycleVisibilityUnavailable
 	}
 	server, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: mcpID, ProjectID: project.ID})
 	if err != nil {
