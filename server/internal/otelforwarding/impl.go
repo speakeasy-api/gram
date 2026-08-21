@@ -108,16 +108,16 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 		return nil, err
 	}
 
-	headers, err := normalizeHeaderInputs(payload.Headers)
+	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID), attr.SlogUserID(authCtx.UserID))
+
+	// Load the current values from the database before resolving omitted
+	// write-only header values and building the audit before-snapshot.
+	before, beforeRow, err := s.client.LoadForOrgRow(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return nil, err
 	}
 
-	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID), attr.SlogUserID(authCtx.UserID))
-
-	// Load the pre-state for the audit before-snapshot. Stale cache here is
-	// fine — the snapshot is for human review, not for write decisions.
-	before, beforeRow, err := s.client.LoadForOrgRow(ctx, authCtx.ActiveOrganizationID)
+	headers, err := normalizeHeaderInputs(payload.Headers, before.Headers)
 	if err != nil {
 		return nil, err
 	}
@@ -226,7 +226,7 @@ func validateForwardingURL(raw string) error {
 	return nil
 }
 
-func normalizeHeaderInputs(in []*gen.OtelForwardingHeaderInput) (map[string]string, error) {
+func normalizeHeaderInputs(in []*gen.OtelForwardingHeaderInput, existing map[string]string) (map[string]string, error) {
 	if len(in) == 0 {
 		return nil, nil
 	}
@@ -248,7 +248,15 @@ func normalizeHeaderInputs(in []*gen.OtelForwardingHeaderInput) (map[string]stri
 		if _, exists := out[name]; exists {
 			return nil, oops.E(oops.CodeInvalid, nil, "duplicate header name: %q", name)
 		}
-		out[name] = h.Value
+		if h.Value != nil {
+			out[name] = *h.Value
+			continue
+		}
+		value, exists := existing[name]
+		if !exists {
+			return nil, oops.E(oops.CodeInvalid, nil, "header value is required for new header: %q", name)
+		}
+		out[name] = value
 	}
 	return out, nil
 }

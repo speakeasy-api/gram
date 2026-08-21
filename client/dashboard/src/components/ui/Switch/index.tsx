@@ -21,6 +21,7 @@ export function Switch({
 }: SwitchProps): JSX.Element {
   return (
     <button
+      type="button"
       onClick={() => onCheckedChange(!checked)}
       disabled={disabled}
       aria-label={ariaLabel}

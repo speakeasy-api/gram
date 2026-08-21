@@ -11,11 +11,14 @@ import {
 } from "@gram/client/react-query/otelForwardingConfig";
 import { useUpsertOtelForwardingConfigMutation } from "@gram/client/react-query/upsertOtelForwardingConfig";
 import { useDeleteOtelForwardingConfigMutation } from "@gram/client/react-query/deleteOtelForwardingConfig";
+import type { OtelForwardingConfig } from "@gram/client/models/components/otelforwardingconfig.js";
+import type { OtelForwardingHeaderInput } from "@gram/client/models/components/otelforwardingheaderinput.js";
 import type { OtelForwardingHeader } from "@gram/client/models/components/otelforwardingheader.js";
 import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
+import { useForm } from "@tanstack/react-form";
 import { Plus, Send, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { toast } from "sonner";
 
 type EditableHeader = {
@@ -50,87 +53,91 @@ function blankRow(): EditableHeader {
   };
 }
 
+type OtelForwardingFormValues = {
+  enabled: boolean;
+  endpointUrl: string;
+  headers: EditableHeader[];
+};
+
+function formValuesFromConfig(
+  config: OtelForwardingConfig | undefined,
+): OtelForwardingFormValues {
+  return {
+    enabled: config?.enabled ?? false,
+    endpointUrl: config?.endpointUrl ?? "",
+    headers: config?.headers.map(rowFromServer) ?? [],
+  };
+}
+
+function hasValidHeaders(headers: EditableHeader[]): boolean {
+  return headers.every((header) => {
+    if (header.name.trim() === "") return false;
+    return header.value !== "" || header.hasStoredValue;
+  });
+}
+
+function headerInputFromForm(
+  header: EditableHeader,
+): OtelForwardingHeaderInput {
+  const name = header.name.trim();
+  if (header.hasStoredValue && header.value === "") return { name };
+  return { name, value: header.value };
+}
+
 export function OtelForwardingSection(): JSX.Element {
   const { data, isLoading } = useOtelForwardingConfig();
   const queryClient = useQueryClient();
-  const { mutate: upsert, status: upsertStatus } =
-    useUpsertOtelForwardingConfigMutation({
-      onSuccess: () => {
-        toast.success("Forwarding config saved");
-        void invalidateAllOtelForwardingConfig(queryClient);
-      },
-      onError: (err) => {
-        toast.error(`Failed to save forwarding config: ${err.message}`);
-      },
-    });
-  const { mutate: deleteConfig, status: deleteStatus } =
-    useDeleteOtelForwardingConfigMutation({
-      onSuccess: () => {
-        toast.success("Forwarding config deleted");
-        void invalidateAllOtelForwardingConfig(queryClient);
-      },
-      onError: (err) => {
-        toast.error(`Failed to delete forwarding config: ${err.message}`);
-      },
-    });
-
-  const [enabled, setEnabled] = useState(false);
-  const [url, setUrl] = useState("");
-  const [headers, setHeaders] = useState<EditableHeader[]>([]);
+  const defaultValues = useMemo(() => formValuesFromConfig(data), [data]);
+  const upsertMutation = useUpsertOtelForwardingConfigMutation({
+    onSuccess: async () => {
+      toast.success("Forwarding config saved");
+      await invalidateAllOtelForwardingConfig(queryClient);
+    },
+    onError: (err) => {
+      toast.error(`Failed to save forwarding config: ${err.message}`);
+    },
+  });
+  const deleteMutation = useDeleteOtelForwardingConfigMutation({
+    onSuccess: async () => {
+      toast.success("Forwarding config deleted");
+      await invalidateAllOtelForwardingConfig(queryClient);
+    },
+    onError: (err) => {
+      toast.error(`Failed to delete forwarding config: ${err.message}`);
+    },
+  });
+  const form = useForm({
+    defaultValues,
+    onSubmit: async ({ value }) => {
+      try {
+        const saved = await upsertMutation.mutateAsync({
+          request: {
+            upsertConfigRequestBody3: {
+              endpointUrl: value.endpointUrl.trim(),
+              enabled: value.enabled,
+              headers: value.headers.map(headerInputFromForm),
+            },
+          },
+        });
+        form.reset(formValuesFromConfig(saved));
+      } catch {
+        return;
+      }
+    },
+  });
 
   const isConfigured = Boolean(data?.id);
+  const isMutating = upsertMutation.isPending || deleteMutation.isPending;
 
-  // Pull server values into the form on first load and whenever the server
-  // copy changes (e.g. after another tab edits the config).
-  useEffect(() => {
-    if (!data) return;
-    setEnabled(data.enabled);
-    setUrl(data.endpointUrl);
-    setHeaders(data.headers.map(rowFromServer));
-  }, [data]);
-
-  const isMutating = upsertStatus === "pending" || deleteStatus === "pending";
-
-  const trimmedUrl = url.trim();
-  const hasValidHeaders = useMemo(
-    () =>
-      headers.every((h) => {
-        const name = h.name.trim();
-        if (name === "") return false;
-        // Allow keeping an existing value (hasStoredValue + empty input).
-        if (h.value === "" && !h.hasStoredValue) return false;
-        return true;
-      }),
-    [headers],
-  );
-  const canSave = trimmedUrl !== "" && hasValidHeaders && !isMutating;
-
-  const handleSave = () => {
-    upsert({
-      request: {
-        upsertConfigRequestBody3: {
-          endpointUrl: trimmedUrl,
-          enabled,
-          headers: headers
-            .filter((h) => h.name.trim() !== "")
-            .map((h) => ({
-              name: h.name.trim(),
-              // Server treats empty + previously-stored as a no-op: it will
-              // re-encrypt the existing value. Sending the new value when
-              // the user typed one in.
-              value: h.value,
-            })),
-        },
-      },
-    });
-  };
-
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!isConfigured) return;
-    deleteConfig({ request: {} });
-    setEnabled(false);
-    setUrl("");
-    setHeaders([]);
+
+    try {
+      await deleteMutation.mutateAsync({ request: {} });
+      form.reset(formValuesFromConfig(undefined));
+    } catch {
+      return;
+    }
   };
 
   return (
@@ -146,148 +153,239 @@ export function OtelForwardingSection(): JSX.Element {
         </Text>
       </div>
 
-      <div className="border-border bg-card flex flex-col gap-4 border p-4">
-        <Stack direction="horizontal" justify="space-between" align="center">
-          <Stack gap={1}>
-            <Stack direction="horizontal" align="center" gap={2}>
-              <Send className="text-muted-foreground h-4 w-4" />
-              <Text variant="body" className="font-medium">
-                Enable forwarding
-              </Text>
-            </Stack>
-            <Text variant="body" className="text-muted-foreground ml-6 text-sm">
-              Send each inbound OTEL payload to the endpoint below.
-            </Text>
-          </Stack>
-          <RequireScope scope="org:admin" level="component">
-            <Switch
-              checked={enabled}
-              onCheckedChange={setEnabled}
-              disabled={isLoading || isMutating}
-              aria-label="Enable OTEL forwarding"
-            />
-          </RequireScope>
-        </Stack>
+      <form
+        className="border-border bg-card flex flex-col gap-4 border p-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void form.handleSubmit();
+        }}
+      >
+        <form.Subscribe
+          selector={(state) => [state.values, state.isSubmitting] as const}
+        >
+          {([values, isSubmitting]) => {
+            const formDisabled = isLoading || isMutating || isSubmitting;
+            const canSave =
+              values.endpointUrl.trim() !== "" &&
+              hasValidHeaders(values.headers) &&
+              !formDisabled;
 
-        <div className="border-border border-t" />
+            return (
+              <fieldset disabled={formDisabled} className="contents">
+                <Stack
+                  direction="horizontal"
+                  justify="space-between"
+                  align="center"
+                >
+                  <Stack gap={1}>
+                    <Stack direction="horizontal" align="center" gap={2}>
+                      <Send className="text-muted-foreground h-4 w-4" />
+                      <Text variant="body" className="font-medium">
+                        Enable forwarding
+                      </Text>
+                    </Stack>
+                    <Text
+                      variant="body"
+                      className="text-muted-foreground ml-6 text-sm"
+                    >
+                      Send each inbound OTEL payload to the endpoint below.
+                    </Text>
+                  </Stack>
+                  <RequireScope scope="org:admin" level="component">
+                    <form.Field name="enabled">
+                      {(field) => (
+                        <Switch
+                          checked={field.state.value}
+                          onCheckedChange={field.handleChange}
+                          disabled={formDisabled}
+                          aria-label="Enable OTEL forwarding"
+                        />
+                      )}
+                    </form.Field>
+                  </RequireScope>
+                </Stack>
 
-        <Stack gap={2}>
-          <Label htmlFor="otel-forwarding-url">Endpoint URL</Label>
-          <Input
-            id="otel-forwarding-url"
-            placeholder="https://collector.example.com"
-            value={url}
-            onChange={setUrl}
-            disabled={isLoading || isMutating}
-          />
-        </Stack>
+                <div className="border-border border-t" />
 
-        <div className="border-border border-t" />
+                <form.Field name="endpointUrl">
+                  {(field) => (
+                    <Stack gap={2}>
+                      <Label htmlFor={field.name}>Endpoint URL</Label>
+                      <Input
+                        id={field.name}
+                        name={field.name}
+                        placeholder="https://collector.example.com"
+                        value={field.state.value}
+                        onChange={field.handleChange}
+                        onBlur={field.handleBlur}
+                        disabled={formDisabled}
+                      />
+                    </Stack>
+                  )}
+                </form.Field>
 
-        <Stack gap={2}>
-          <Stack direction="horizontal" justify="space-between" align="center">
-            <Label>Headers</Label>
-            <RequireScope scope="org:admin" level="component">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setHeaders((prev) => [...prev, blankRow()])}
-                disabled={isLoading || isMutating}
-              >
-                <Plus className="mr-1 h-3.5 w-3.5" />
-                Add header
-              </Button>
-            </RequireScope>
-          </Stack>
+                <div className="border-border border-t" />
 
-          {headers.length === 0 ? (
-            <Text variant="body" className="text-muted-foreground text-sm">
-              No headers. Add any required authorization headers (e.g.
-              <code className="bg-muted ml-1 px-1">Authorization</code>
-              ).
-            </Text>
-          ) : (
-            <Stack gap={2}>
-              {headers.map((header, idx) => (
-                <HeaderRow
-                  key={header.rowID}
-                  header={header}
-                  disabled={isLoading || isMutating}
-                  onChange={(next) =>
-                    setHeaders((prev) => {
-                      const copy = prev.slice();
-                      copy[idx] = next;
-                      return copy;
-                    })
-                  }
-                  onRemove={() =>
-                    setHeaders((prev) => prev.filter((_, i) => i !== idx))
-                  }
-                />
-              ))}
-            </Stack>
-          )}
-        </Stack>
+                <form.Field name="headers" mode="array">
+                  {(headersField) => (
+                    <Stack gap={2}>
+                      <Stack
+                        direction="horizontal"
+                        justify="space-between"
+                        align="center"
+                      >
+                        <Label>Headers</Label>
+                        <RequireScope scope="org:admin" level="component">
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => headersField.pushValue(blankRow())}
+                            disabled={formDisabled}
+                          >
+                            <Plus className="mr-1 h-3.5 w-3.5" />
+                            Add header
+                          </Button>
+                        </RequireScope>
+                      </Stack>
 
-        <div className="border-border border-t" />
+                      {headersField.state.value.length === 0 ? (
+                        <Text
+                          variant="body"
+                          className="text-muted-foreground text-sm"
+                        >
+                          No headers. Add any required authorization headers
+                          (e.g.
+                          <code className="bg-muted ml-1 px-1">
+                            Authorization
+                          </code>
+                          ).
+                        </Text>
+                      ) : (
+                        <Stack gap={2}>
+                          {headersField.state.value.map((header, idx) => (
+                            <form.Field
+                              key={header.rowID}
+                              name={`headers[${idx}].name` as const}
+                            >
+                              {(nameField) => (
+                                <form.Field
+                                  name={`headers[${idx}].value` as const}
+                                >
+                                  {(valueField) => (
+                                    <HeaderRow
+                                      name={nameField.state.value}
+                                      value={valueField.state.value}
+                                      hasStoredValue={header.hasStoredValue}
+                                      nameInputName={nameField.name}
+                                      valueInputName={valueField.name}
+                                      disabled={formDisabled}
+                                      onNameChange={nameField.handleChange}
+                                      onNameBlur={nameField.handleBlur}
+                                      onValueChange={valueField.handleChange}
+                                      onValueBlur={valueField.handleBlur}
+                                      onRemove={() =>
+                                        headersField.removeValue(idx)
+                                      }
+                                    />
+                                  )}
+                                </form.Field>
+                              )}
+                            </form.Field>
+                          ))}
+                        </Stack>
+                      )}
+                    </Stack>
+                  )}
+                </form.Field>
 
-        <Stack direction="horizontal" justify="space-between" align="center">
-          <RequireScope scope="org:admin" level="component">
-            <Button
-              variant="destructive-secondary"
-              size="sm"
-              onClick={handleDelete}
-              disabled={!isConfigured || isMutating}
-            >
-              <Trash2 className="mr-1 h-3.5 w-3.5" />
-              Delete
-            </Button>
-          </RequireScope>
-          <RequireScope scope="org:admin" level="component">
-            <Button onClick={handleSave} disabled={!canSave}>
-              Save
-            </Button>
-          </RequireScope>
-        </Stack>
-      </div>
+                <div className="border-border border-t" />
+
+                <Stack
+                  direction="horizontal"
+                  justify="space-between"
+                  align="center"
+                >
+                  <RequireScope scope="org:admin" level="component">
+                    <Button
+                      type="button"
+                      variant="destructive-secondary"
+                      size="sm"
+                      onClick={() => void handleDelete()}
+                      disabled={!isConfigured || formDisabled}
+                    >
+                      <Trash2 className="mr-1 h-3.5 w-3.5" />
+                      Delete
+                    </Button>
+                  </RequireScope>
+                  <RequireScope scope="org:admin" level="component">
+                    <Button type="submit" disabled={!canSave}>
+                      Save
+                    </Button>
+                  </RequireScope>
+                </Stack>
+              </fieldset>
+            );
+          }}
+        </form.Subscribe>
+      </form>
     </Stack>
   );
 }
 
 function HeaderRow({
-  header,
+  name,
+  value,
+  hasStoredValue,
+  nameInputName,
+  valueInputName,
   disabled,
-  onChange,
+  onNameChange,
+  onNameBlur,
+  onValueChange,
+  onValueBlur,
   onRemove,
 }: {
-  header: EditableHeader;
+  name: string;
+  value: string;
+  hasStoredValue: boolean;
+  nameInputName: string;
+  valueInputName: string;
   disabled: boolean;
-  onChange: (next: EditableHeader) => void;
+  onNameChange: (value: string) => void;
+  onNameBlur: () => void;
+  onValueChange: (value: string) => void;
+  onValueBlur: () => void;
   onRemove: () => void;
 }) {
   return (
     <Stack direction="horizontal" gap={2} align="center">
       <Input
+        name={nameInputName}
         placeholder="Header name"
-        value={header.name}
-        onChange={(value) => onChange({ ...header, name: value })}
+        value={name}
+        onChange={onNameChange}
+        onBlur={onNameBlur}
         disabled={disabled}
         className="flex-1"
       />
       <Input
-        placeholder={header.hasStoredValue ? "•••••• (saved)" : "Header value"}
-        value={header.value}
-        onChange={(value) => onChange({ ...header, value })}
+        name={valueInputName}
+        placeholder={hasStoredValue ? "••••" : "Header value"}
+        value={value}
+        onChange={onValueChange}
+        onBlur={onValueBlur}
         type="password"
         disabled={disabled}
         className="flex-1"
       />
       <Button
+        type="button"
         variant="tertiary"
         size="sm"
         onClick={onRemove}
         disabled={disabled}
-        aria-label={`Remove header ${header.name || "row"}`}
+        aria-label={`Remove header ${name || "row"}`}
       >
         <Trash2 className="h-3.5 w-3.5" />
       </Button>

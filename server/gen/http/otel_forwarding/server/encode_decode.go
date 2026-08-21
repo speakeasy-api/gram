@@ -672,7 +672,7 @@ func unmarshalOtelForwardingHeaderInputRequestBodyToOtelforwardingOtelForwarding
 	}
 	res := &otelforwarding.OtelForwardingHeaderInput{
 		Name:  *v.Name,
-		Value: *v.Value,
+		Value: v.Value,
 	}
 
 	return res
