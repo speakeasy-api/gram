@@ -1,6 +1,7 @@
 import { ArrowRight, ExternalLink, LifeBuoy } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { GramLogo } from "@/components/gram-logo";
+import { showPylonChat } from "@/lib/pylon";
 
 interface OnboardingHeaderProps {
   onLeave?: () => void;
@@ -10,7 +11,7 @@ export function OnboardingHeader({
   onLeave,
 }: OnboardingHeaderProps): JSX.Element {
   const handleGetSupport = () => {
-    window.Pylon?.("show");
+    showPylonChat();
   };
 
   return (

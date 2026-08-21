@@ -1,53 +1,16 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { usePylonChat } from "@/hooks/usePylonChat";
+
 import {
   bindPylonChatListeners,
   isPylonChatOpen,
+  showPylonChat,
   subscribePylonChatOpen,
   togglePylonChat,
 } from "./pylon";
-import { usePylonChat } from "@/hooks/usePylonChat";
-
-type MockPylon = typeof window.Pylon & {
-  emitShow: () => void;
-  emitHide: () => void;
-};
-
-function installMockPylon(): MockPylon {
-  let onShow: (() => void) | null = null;
-  let onHide: (() => void) | null = null;
-
-  const pylon = Object.assign(
-    (action: string, ...args: unknown[]) => {
-      if (action === "onShow" && typeof args[0] === "function") {
-        onShow = args[0] as () => void;
-      }
-      if (action === "onHide" && typeof args[0] === "function") {
-        onHide = args[0] as () => void;
-      }
-      if (action === "show") {
-        onShow?.();
-      }
-      if (action === "hide") {
-        onHide?.();
-      }
-    },
-    {
-      q: [] as unknown[],
-      e: () => undefined,
-      emitShow: () => {
-        onShow?.();
-      },
-      emitHide: () => {
-        onHide?.();
-      },
-    },
-  ) as MockPylon;
-
-  window.Pylon = pylon;
-  return pylon;
-}
+import { installMockPylon, type MockPylon } from "./pylon-test-mock";
 
 function closeChat(): void {
   if (typeof window.Pylon !== "function") {
@@ -80,6 +43,11 @@ describe("pylon chat visibility", () => {
 
     togglePylonChat();
     expect(isPylonChatOpen()).toBe(false);
+  });
+
+  it("opens via showPylonChat so non-menu buttons attach listeners", () => {
+    showPylonChat();
+    expect(isPylonChatOpen()).toBe(true);
   });
 
   it("updates when the widget is closed outside the menu", () => {
@@ -124,5 +92,8 @@ describe("pylon chat visibility", () => {
 
     expect(first.result.current.isOpen).toBe(false);
     expect(second.result.current.isOpen).toBe(false);
+
+    first.unmount();
+    second.unmount();
   });
 });

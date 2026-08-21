@@ -69,6 +69,8 @@ vi.mock("@/components/ui/ThemeSwitcher", () => ({
   ThemeSwitcher: () => <div data-testid="theme-switcher" />,
 }));
 
+import { installMockPylon } from "@/lib/pylon-test-mock";
+
 import { SidebarUserMenu } from "./sidebar-user-menu";
 
 afterEach(() => {
@@ -129,39 +131,3 @@ describe("SidebarUserMenu", () => {
     expect(screen.queryByText("Close Support")).toBeNull();
   });
 });
-
-type MockPylon = typeof window.Pylon & {
-  emitHide: () => void;
-};
-
-function installMockPylon(): MockPylon {
-  let onShow: (() => void) | null = null;
-  let onHide: (() => void) | null = null;
-
-  const pylon = Object.assign(
-    (action: string, ...args: unknown[]) => {
-      if (action === "onShow" && typeof args[0] === "function") {
-        onShow = args[0] as () => void;
-      }
-      if (action === "onHide" && typeof args[0] === "function") {
-        onHide = args[0] as () => void;
-      }
-      if (action === "show") {
-        onShow?.();
-      }
-      if (action === "hide") {
-        onHide?.();
-      }
-    },
-    {
-      q: [] as unknown[],
-      e: () => undefined,
-      emitHide: () => {
-        onHide?.();
-      },
-    },
-  ) as MockPylon;
-
-  window.Pylon = pylon;
-  return pylon;
-}

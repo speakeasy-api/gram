@@ -8,9 +8,9 @@
  * which is why we must set chat_settings *before* injecting the script.
  *
  * The default launcher bubble is hidden via CSS — chat is opened from
- * the account menu. Visibility is tracked globally via Pylon's
- * `onShow` / `onHide` callbacks so every surface (menu label, onboarding
- * header, the widget's own close control) stays in sync.
+ * the account menu (or `showPylonChat()` from other buttons). Visibility
+ * is tracked globally via Pylon's `onShow` / `onHide` so the menu label
+ * stays in sync with the widget's own close control.
  */
 
 export const PYLON_APP_ID = "f9cade16-8d3c-4826-9a2a-034fad495102";
@@ -61,7 +61,11 @@ export function subscribePylonChatOpen(listener: () => void): () => void {
   };
 }
 
-/** Register the single Pylon onShow/onHide pair that drives the shared store. */
+/**
+ * Attach onShow/onHide to the current `window.Pylon`. Safe to call
+ * repeatedly: the first bind often hits the pre-script queue stub, and
+ * Pylon keeps only one callback per event (last registration wins).
+ */
 export function bindPylonChatListeners(): void {
   if (typeof window.Pylon !== "function") {
     return;
@@ -74,12 +78,21 @@ export function bindPylonChatListeners(): void {
   });
 }
 
-export function togglePylonChat(): void {
+export function showPylonChat(): void {
   bindPylonChatListeners();
+  window.Pylon?.("show");
+}
+
+export function hidePylonChat(): void {
+  bindPylonChatListeners();
+  window.Pylon?.("hide");
+}
+
+export function togglePylonChat(): void {
   if (chatOpen) {
-    window.Pylon?.("hide");
+    hidePylonChat();
   } else {
-    window.Pylon?.("show");
+    showPylonChat();
   }
 }
 
