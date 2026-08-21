@@ -19,6 +19,7 @@ import {
   type JourneyStatus,
 } from "@/components/project-guide/journeys";
 import { useProjectGuideProgress } from "@/components/project-guide/useProjectGuideProgress";
+import { RainbowSpinner } from "@/components/ui/Spinner";
 import {
   MCP_GUIDE_CLIENTS,
   type McpGuideClient,
@@ -139,9 +140,7 @@ export function ProjectGuide({
     statusByJourney["secret-block"] === "done";
 
   const returnToProjectHome = useCallback(() => {
-    const nextSearchParams = new URLSearchParams(searchParams);
-    nextSearchParams.delete("showGuide");
-    setSearchParams(nextSearchParams, { replace: true });
+    setSearchParams(searchParams, { replace: true });
   }, [searchParams, setSearchParams]);
 
   useEffect(() => {
@@ -313,6 +312,7 @@ export function ProjectGuide({
                       <ProjectGuideOutput
                         entries={snapshot.context.output}
                         accent={PROJECT_GUIDE_FIXTURES[journey.id].accent}
+                        isProcessing={displayState === "running"}
                         error={guideStepError(
                           journey,
                           currentStep,
@@ -1015,10 +1015,12 @@ function mcpCompletionBody(name: string | undefined): string {
 function ProjectGuideOutput({
   entries,
   accent,
+  isProcessing,
   error,
 }: {
   entries: ProjectGuideOutputEntry[];
   accent: string;
+  isProcessing: boolean;
   error?: string | null;
 }): JSX.Element {
   if (entries.length === 0 && !error) {
@@ -1027,12 +1029,13 @@ function ProjectGuideOutput({
 
   return (
     <ol className="grid gap-1.5">
-      {entries.map((entry) => (
+      {entries.map((entry, index) => (
         <ProjectGuideOutputRow
           key={entry.id}
           accent={accent}
           kind={entry.kind}
           message={entry.message}
+          working={isProcessing && !error && index === entries.length - 1}
         />
       ))}
       {error && (
@@ -1086,11 +1089,13 @@ function ProjectGuideOutputRow({
   kind,
   message,
   role,
+  working = false,
 }: {
   accent: string;
   kind: ProjectGuideOutputKind;
   message: string;
   role?: "alert";
+  working?: boolean;
 }): JSX.Element {
   const styles = PROJECT_GUIDE_OUTPUT_ENTRY_STYLES[kind];
   const accentStyle = styles.useAccent ? { color: accent } : undefined;
@@ -1104,7 +1109,11 @@ function ProjectGuideOutputRow({
         )}
         style={accentStyle}
       >
-        <Icon name={styles.icon} className="size-3.5" aria-hidden="true" />
+        {working ? (
+          <RainbowSpinner className="size-3.5" />
+        ) : (
+          <Icon name={styles.icon} className="size-3.5" aria-hidden="true" />
+        )}
         <span className="sr-only">{kind}</span>
       </span>
       <span className={cn("min-w-0", styles.message)} style={accentStyle}>

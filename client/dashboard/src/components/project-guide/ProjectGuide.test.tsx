@@ -80,7 +80,7 @@ vi.mock("react-router", () => ({
       {children}
     </a>
   ),
-  useSearchParams: () => [new URLSearchParams("showGuide"), setSearchParams],
+  useSearchParams: () => [new URLSearchParams(), setSearchParams],
 }));
 
 import { ProjectGuide } from "./ProjectGuide";
