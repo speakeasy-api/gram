@@ -377,7 +377,6 @@ func (m *ChallengeManager) RefreshRemoteSession(
 	organizationID string,
 	userSessionIssuerID uuid.UUID,
 	clientID uuid.UUID,
-	fallbackResource string,
 ) (RefreshResult, error) {
 	var zero RefreshResult
 
@@ -408,7 +407,22 @@ func (m *ChallengeManager) RefreshRemoteSession(
 		return zero, ErrRemoteSessionNotRefreshable
 	}
 
+	// Only legacy rows without a persisted resource need the derived fallback.
+	fallbackResource := ""
+	if !session.Resource.Valid || session.Resource.String == "" {
+		fallbackResource, err = m.refresher.FallbackResourceForClient(ctx, clientID)
+		if err != nil {
+			return zero, fmt.Errorf("derive fallback resource: %w", err)
+		}
+	}
+
 	return m.refresher.RefreshNow(ctx, session, fallbackResource)
+}
+
+// FallbackResourceForClient derives one client's RFC 8707 resource from its
+// attached MCP servers; ambiguous or absent upstreams derive "".
+func (m *ChallengeManager) FallbackResourceForClient(ctx context.Context, clientID uuid.UUID) (string, error) {
+	return m.refresher.FallbackResourceForClient(ctx, clientID)
 }
 
 // DisconnectRemoteSession soft-deletes the subject's remote_session for one

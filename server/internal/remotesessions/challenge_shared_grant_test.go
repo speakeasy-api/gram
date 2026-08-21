@@ -601,6 +601,57 @@ func seedRefreshableSharedGrant(t *testing.T, slug string, handler http.HandlerF
 	}
 }
 
+// A session with no persisted resource must refresh with the client's own
+// derived RFC 8707 resource, never an endpoint-level one.
+func TestRefreshRemoteSession_DerivesPerClientFallbackResource(t *testing.T) {
+	t.Parallel()
+
+	var refreshCount atomic.Int64
+	var capturedResource atomic.Value
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && r.URL.Path == "/token" && r.ParseForm() == nil {
+			capturedResource.Store(r.PostForm.Get("resource"))
+		}
+		newSharedGrantRefreshHandler(&refreshCount, "rotated-with-resource")(w, r)
+	}
+	ctx, fx := seedRefreshableSharedGrant(t, "age-3328-refresh-res", handler)
+
+	// The client's sole attached MCP server pins its derived resource.
+	attachRemoteMcpServerToIssuer(t, ctx, fx.ti.conn, fx.projectID, fx.issuerA, "age-3328-refresh-res", "https://upstream-refresh.example.com/")
+
+	result, err := fx.mgr.RefreshRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID)
+	require.NoError(t, err)
+	require.Equal(t, remotesessions.RefreshOutcomeRefreshed, result.Outcome)
+	require.Equal(t, int64(1), refreshCount.Load())
+	require.Equal(t, "https://upstream-refresh.example.com", capturedResource.Load())
+}
+
+// The lazy request-time path must also derive per client, never an
+// endpoint-level fallback (AGE-3328): a NULL-resource row refreshed via
+// ResolveAccessTokens sends the client's own derived resource upstream.
+func TestResolveAccessTokens_DerivesPerClientFallbackResource(t *testing.T) {
+	t.Parallel()
+
+	var refreshCount atomic.Int64
+	var capturedResource atomic.Value
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && r.URL.Path == "/token" && r.ParseForm() == nil {
+			capturedResource.Store(r.PostForm.Get("resource"))
+		}
+		newSharedGrantRefreshHandler(&refreshCount, "rotated-lazy-resource")(w, r)
+	}
+	ctx, fx := seedRefreshableSharedGrant(t, "age-3328-lazy-res", handler)
+
+	attachRemoteMcpServerToIssuer(t, ctx, fx.ti.conn, fx.projectID, fx.issuerA, "age-3328-lazy-res", "https://upstream-lazy.example.com/")
+	require.NoError(t, testrepo.New(fx.ti.conn).ExpireRemoteSessionAccessTokenFixture(ctx, fx.session.ID))
+
+	tokens, err := fx.mgr.ResolveAccessTokens(ctx, fx.projectID, fx.organizationID, fx.issuerB, fx.subject)
+	require.NoError(t, err)
+	require.Len(t, tokens, 1)
+	require.Equal(t, int64(1), refreshCount.Load())
+	require.Equal(t, "https://upstream-lazy.example.com", capturedResource.Load())
+}
+
 func TestRefreshRemoteSession_FindsGrantMintedByDifferentIssuer(t *testing.T) {
 	t.Parallel()
 
@@ -610,7 +661,7 @@ func TestRefreshRemoteSession_FindsGrantMintedByDifferentIssuer(t *testing.T) {
 	bound := listBoundClientIDs(t, ctx, fx, fx.issuerB)
 	requireBoundClient(t, bound, fx.clientID)
 
-	result, err := fx.mgr.RefreshRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID, "")
+	result, err := fx.mgr.RefreshRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID)
 	require.NoError(t, err)
 	require.Equal(t, remotesessions.RefreshOutcomeRefreshed, result.Outcome)
 	require.Equal(t, "rotated-access", result.AccessToken)
@@ -632,7 +683,7 @@ func TestRefreshRemoteSession_FindsGrantAfterMintingIssuerSoftDeleted(t *testing
 	bound := listBoundClientIDs(t, ctx, fx, fx.issuerB)
 	requireBoundClient(t, bound, fx.clientID)
 
-	result, err := fx.mgr.RefreshRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID, "")
+	result, err := fx.mgr.RefreshRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID)
 	require.NoError(t, err)
 	require.Equal(t, remotesessions.RefreshOutcomeRefreshed, result.Outcome)
 	require.Equal(t, "rotated-after-delete", result.AccessToken)

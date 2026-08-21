@@ -425,6 +425,29 @@ func seedOrgLevelRemoteClient(t *testing.T, ctx context.Context, conn *pgxpool.P
 	return created.ID
 }
 
+// attachRemoteMcpServerToIssuer binds a remote-backed MCP server to issuerID
+// so clients on that issuer derive serverURL as their resource.
+func attachRemoteMcpServerToIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, issuerID uuid.UUID, slug, serverURL string) {
+	t.Helper()
+	remoteServer, err := remotemcprepo.New(conn).CreateServer(ctx, remotemcprepo.CreateServerParams{
+		ID:            uuid.New(),
+		ProjectID:     projectID,
+		TransportType: "sse",
+		Url:           serverURL,
+	})
+	require.NoError(t, err)
+	_, err = mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                  uuid.New(),
+		ProjectID:           projectID,
+		Name:                conv.ToPGText(slug),
+		Slug:                conv.ToPGText(slug),
+		RemoteMcpServerID:   conv.ToNullUUID(remoteServer.ID),
+		Visibility:          "private",
+		UserSessionIssuerID: conv.ToNullUUID(issuerID),
+	})
+	require.NoError(t, err)
+}
+
 // seedMCPServerInOrg creates a project in the supplied organization and an MCP
 // server within it, returning the MCP server id. Used to exercise cross-org
 // isolation on org-admin MCP server lookups.
