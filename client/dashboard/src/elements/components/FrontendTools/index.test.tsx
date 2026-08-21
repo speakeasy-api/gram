@@ -14,9 +14,6 @@ const makeTool = (): AssistantTool =>
 
 describe("FrontendTools", () => {
   it("survives a tool set that grows between renders", () => {
-    // Not hypothetical: the assistant onboarding tools are gated on RBAC
-    // grants, and `hasScope` returns false until the grants query resolves, so
-    // a hard page load renders a trimmed set before the full one.
     const { rerender } = render(<FrontendTools tools={{ a: makeTool() }} />);
 
     expect(() =>

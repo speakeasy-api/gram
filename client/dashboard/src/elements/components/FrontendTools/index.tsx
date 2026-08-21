@@ -9,8 +9,6 @@ export function FrontendTools({
   return (
     <>
       {Object.entries(frontendTools).map(([name, tool]) => {
-        // Each tool owns hooks, and the set is sized by RBAC grants that
-        // resolve after the first paint, so every tool needs its own fiber.
         const Tool = tool as AssistantTool;
         return <Tool key={name} />;
       })}
