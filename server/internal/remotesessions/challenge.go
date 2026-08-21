@@ -407,9 +407,10 @@ func (m *ChallengeManager) RefreshRemoteSession(
 		return zero, ErrRemoteSessionNotRefreshable
 	}
 
-	// Only legacy rows without a persisted resource need the derived fallback.
+	// Only legacy NULL-resource rows need the derived fallback, matching
+	// validateAndRefresh: a valid-but-empty binding keeps omitting resource.
 	fallbackResource := ""
-	if !session.Resource.Valid || session.Resource.String == "" {
+	if !session.Resource.Valid {
 		fallbackResource, err = m.refresher.FallbackResourceForClient(ctx, clientID)
 		if err != nil {
 			return zero, fmt.Errorf("derive fallback resource: %w", err)

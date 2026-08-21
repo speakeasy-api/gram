@@ -82,11 +82,12 @@ type UpstreamRevoker struct {
 
 	// client is built once and shared by every revocation. Guardian's pooled
 	// transport is meant for exactly this — a long-lived client making repeated
-	// requests to the same hosts — and a bulk revoke is the case it pays off on,
-	// since every session in a batch shares one issuer. Constructing one per
-	// call instead would open a connection per session and hold each idle until
-	// it timed out, which is the file-descriptor leak PooledClient's own
-	// documentation warns against.
+	// requests to the same hosts — and a bulk revoke is the case it pays off
+	// on: even a batch spanning several clients' issuers repeats each host, and
+	// the pool amortizes every repeat. Constructing one per call instead would
+	// open a connection per session and hold each idle until it timed out,
+	// which is the file-descriptor leak PooledClient's own documentation warns
+	// against.
 	client *guardian.HTTPClient
 
 	metrics *remotesessionmetrics.Revoke
