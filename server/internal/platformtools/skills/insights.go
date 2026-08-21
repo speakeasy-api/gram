@@ -208,6 +208,8 @@ func (t *Insights) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload i
 		From:            from,
 		To:              to,
 		IntervalSeconds: int64(insightInterval.Seconds()),
+		// This tool ranks and displays attributed session cost.
+		IncludeCosts: true,
 	})
 	if err != nil {
 		return fmt.Errorf("query skill insights: %w", err)

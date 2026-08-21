@@ -185,7 +185,15 @@ export default function SkillsList(): JSX.Element {
     ? metricSkills
     : (pageQuery.data?.result.skills ?? EMPTY_SKILLS);
   const insightsQuery = useSkillEfficacyInsights(
-    metricSort ? {} : { skillIds: insightSkills.map((skill) => skill.id) },
+    // The list only shows activations, efficacy, and estimated savings; it never
+    // displays attributed session cost. Skipping it avoids a full-project
+    // telemetry scan that made this table take ~1 minute to load.
+    metricSort
+      ? { includeCosts: false }
+      : {
+          skillIds: insightSkills.map((skill) => skill.id),
+          includeCosts: false,
+        },
     undefined,
     {
       throwOnError: false,

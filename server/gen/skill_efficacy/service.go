@@ -69,6 +69,10 @@ type QueryInsightsPayload struct {
 	To *string
 	// Include per-version daily trends.
 	IncludeVersions *bool
+	// Compute attributed session cost from raw telemetry. Defaults to true. Set
+	// false for the skills list, which never displays cost, to skip the expensive
+	// telemetry scan.
+	IncludeCosts *bool
 	// Include a newest-first page of scored sessions. Intended for one skill
 	// detail view.
 	IncludeScoredSessions *bool

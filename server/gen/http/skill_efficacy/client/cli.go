@@ -96,7 +96,7 @@ func BuildUpsertSettingsPayload(skillEfficacyUpsertSettingsBody string, skillEff
 
 // BuildQueryInsightsPayload builds the payload for the skillEfficacy
 // queryInsights endpoint from CLI flags.
-func BuildQueryInsightsPayload(skillEfficacyQueryInsightsSkillIds string, skillEfficacyQueryInsightsFrom string, skillEfficacyQueryInsightsTo string, skillEfficacyQueryInsightsIncludeVersions string, skillEfficacyQueryInsightsIncludeScoredSessions string, skillEfficacyQueryInsightsCursor string, skillEfficacyQueryInsightsLimit string, skillEfficacyQueryInsightsSessionToken string, skillEfficacyQueryInsightsProjectSlugInput string) (*skillefficacy.QueryInsightsPayload, error) {
+func BuildQueryInsightsPayload(skillEfficacyQueryInsightsSkillIds string, skillEfficacyQueryInsightsFrom string, skillEfficacyQueryInsightsTo string, skillEfficacyQueryInsightsIncludeVersions string, skillEfficacyQueryInsightsIncludeCosts string, skillEfficacyQueryInsightsIncludeScoredSessions string, skillEfficacyQueryInsightsCursor string, skillEfficacyQueryInsightsLimit string, skillEfficacyQueryInsightsSessionToken string, skillEfficacyQueryInsightsProjectSlugInput string) (*skillefficacy.QueryInsightsPayload, error) {
 	var err error
 	var skillIds []string
 	{
@@ -135,6 +135,17 @@ func BuildQueryInsightsPayload(skillEfficacyQueryInsightsSkillIds string, skillE
 			includeVersions = &val
 			if err != nil {
 				return nil, fmt.Errorf("invalid value for includeVersions, must be BOOL")
+			}
+		}
+	}
+	var includeCosts *bool
+	{
+		if skillEfficacyQueryInsightsIncludeCosts != "" {
+			var val bool
+			val, err = strconv.ParseBool(skillEfficacyQueryInsightsIncludeCosts)
+			includeCosts = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for includeCosts, must be BOOL")
 			}
 		}
 	}
@@ -192,6 +203,7 @@ func BuildQueryInsightsPayload(skillEfficacyQueryInsightsSkillIds string, skillE
 	v.From = from
 	v.To = to
 	v.IncludeVersions = includeVersions
+	v.IncludeCosts = includeCosts
 	v.IncludeScoredSessions = includeScoredSessions
 	v.Cursor = cursor
 	v.Limit = limit

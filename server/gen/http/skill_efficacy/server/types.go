@@ -1242,12 +1242,13 @@ func NewUpsertSettingsPayload(body *UpsertSettingsRequestBody, apikeyToken *stri
 
 // NewQueryInsightsPayload builds a skillEfficacy service queryInsights
 // endpoint payload.
-func NewQueryInsightsPayload(skillIds []string, from *string, to *string, includeVersions *bool, includeScoredSessions *bool, cursor *string, limit int, sessionToken *string, projectSlugInput *string) *skillefficacy.QueryInsightsPayload {
+func NewQueryInsightsPayload(skillIds []string, from *string, to *string, includeVersions *bool, includeCosts *bool, includeScoredSessions *bool, cursor *string, limit int, sessionToken *string, projectSlugInput *string) *skillefficacy.QueryInsightsPayload {
 	v := &skillefficacy.QueryInsightsPayload{}
 	v.SkillIds = skillIds
 	v.From = from
 	v.To = to
 	v.IncludeVersions = includeVersions
+	v.IncludeCosts = includeCosts
 	v.IncludeScoredSessions = includeScoredSessions
 	v.Cursor = cursor
 	v.Limit = limit

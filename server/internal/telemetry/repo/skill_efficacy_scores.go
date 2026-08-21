@@ -45,6 +45,12 @@ type QuerySkillInsightsParams struct {
 	From            time.Time
 	To              time.Time
 	IntervalSeconds int64
+	// IncludeCosts computes attributed session cost by scanning raw
+	// telemetry_logs for the whole project window (the expensive part of this
+	// query). Leave it false for callers that only need activations, efficacy,
+	// or savings (the skills list, regression signals, suggestion trends): the
+	// telemetry scan is skipped and TotalSessionCost is reported as 0.
+	IncludeCosts bool
 }
 
 type ListSkillEfficacyScoreSessionsParams struct {
@@ -228,23 +234,31 @@ func (q *Queries) QuerySkillInsights(ctx context.Context, arg QuerySkillInsights
 		return nil, fmt.Errorf("query skill insights: invalid scope, window, or interval")
 	}
 
-	sessions := sq.Select(
-		"toString(gram_project_id) AS project_id",
-		"chat_id AS session_id",
-		"if("+skillVersionAssistantUsagePredicate+", 'assistant', 'dev') AS surface",
-		"countIf("+skillVersionUsageMeasureFilter+") > 0 AS has_usage",
-		skillVersionCostExpr+" AS total_cost",
-	).
-		From("telemetry_logs").
-		Where(squirrel.Eq{"gram_project_id": []string{arg.ProjectID}}).
-		Where("time_unix_nano >= ?", arg.From.UnixNano()).
-		Where("time_unix_nano <= ?", arg.To.UnixNano()).
-		Where(skillVersionSourceRowPredicate).
-		Where("chat_id != ''").
-		GroupBy("gram_project_id", "chat_id", "surface")
-	sessionSQL, sessionArgs, err := sessions.ToSql()
-	if err != nil {
-		return nil, fmt.Errorf("building skill insight sessions query: %w", err)
+	// The sessions CTE scans raw telemetry_logs for the whole project window to
+	// attribute per-session cost. It is by far the most expensive part of this
+	// query, so it is only built when the caller asks for costs.
+	var sessionSQL string
+	var sessionArgs []any
+	var err error
+	if arg.IncludeCosts {
+		sessions := sq.Select(
+			"toString(gram_project_id) AS project_id",
+			"chat_id AS session_id",
+			"if("+skillVersionAssistantUsagePredicate+", 'assistant', 'dev') AS surface",
+			"countIf("+skillVersionUsageMeasureFilter+") > 0 AS has_usage",
+			skillVersionCostExpr+" AS total_cost",
+		).
+			From("telemetry_logs").
+			Where(squirrel.Eq{"gram_project_id": []string{arg.ProjectID}}).
+			Where("time_unix_nano >= ?", arg.From.UnixNano()).
+			Where("time_unix_nano <= ?", arg.To.UnixNano()).
+			Where(skillVersionSourceRowPredicate).
+			Where("chat_id != ''").
+			GroupBy("gram_project_id", "chat_id", "surface")
+		sessionSQL, sessionArgs, err = sessions.ToSql()
+		if err != nil {
+			return nil, fmt.Errorf("building skill insight sessions query: %w", err)
+		}
 	}
 
 	mappings := sq.Select(
@@ -307,6 +321,13 @@ func (q *Queries) QuerySkillInsights(ctx context.Context, arg QuerySkillInsights
 		return nil, fmt.Errorf("building skill insight scores query: %w", err)
 	}
 
+	// When costs are skipped there is no sessions CTE to join, so cost is a
+	// constant zero rather than a sum over the session usage rows.
+	totalSessionCostExpr := "sum(if(s.has_usage, s.total_cost, 0)) AS total_session_cost"
+	if !arg.IncludeCosts {
+		totalSessionCostExpr = "toFloat64(0) AS total_session_cost"
+	}
+
 	outer := sq.Select(
 		"m.skill_id AS skill_id",
 		"m.skill_version_id AS skill_version_id",
@@ -315,7 +336,7 @@ func (q *Queries) QuerySkillInsights(ctx context.Context, arg QuerySkillInsights
 		Columns(
 			"sum(m.activation_count) AS activation_count",
 			"count() AS activated_sessions",
-			"sum(if(s.has_usage, s.total_cost, 0)) AS total_session_cost",
+			totalSessionCostExpr,
 			"sum(ifNull(e.score_count, 0)) AS scored_sessions",
 			"sum(ifNull(e.score_sum, 0)) AS score_sum",
 			"sum(ifNull(e.turns_sum, 0)) AS estimated_turns_saved_sum",
@@ -330,12 +351,27 @@ func (q *Queries) QuerySkillInsights(ctx context.Context, arg QuerySkillInsights
 			"sum(ifNull(e.partially_followed_count, 0)) AS partially_followed_count",
 			"sum(ifNull(e.harmful_count, 0)) AS harmful_count",
 		).
-		From("mappings m").
-		LeftJoin("sessions s ON s.project_id = m.project_id AND s.session_id = m.session_id AND s.surface = m.surface").
+		From("mappings m")
+	if arg.IncludeCosts {
+		outer = outer.LeftJoin("sessions s ON s.project_id = m.project_id AND s.session_id = m.session_id AND s.surface = m.surface")
+	}
+	outer = outer.
 		LeftJoin("scores e ON e.project_id = m.project_id AND e.session_id = m.session_id AND e.surface = m.surface AND e.skill_id = m.skill_id AND e.skill_version_id = m.skill_version_id").
 		GroupBy("m.skill_id", "m.skill_version_id", "bucket_time_unix_nano").
-		OrderBy("bucket_time_unix_nano ASC", "m.skill_id ASC", "m.skill_version_id ASC").
-		Prefix("WITH sessions AS ("+sessionSQL+"), mappings AS ("+mappingSQL+"), score_events AS ("+scoreEventSQL+"), scores AS ("+scoreSQL+")", append(append(append(sessionArgs, mappingArgs...), scoreEventArgs...), scoreArgs...)...)
+		OrderBy("bucket_time_unix_nano ASC", "m.skill_id ASC", "m.skill_version_id ASC")
+
+	// CTE order in the WITH clause must match the argument order below.
+	cteParts := make([]string, 0, 4)
+	cteArgs := make([]any, 0, len(sessionArgs)+len(mappingArgs)+len(scoreEventArgs)+len(scoreArgs))
+	if arg.IncludeCosts {
+		cteParts = append(cteParts, "sessions AS ("+sessionSQL+")")
+		cteArgs = append(cteArgs, sessionArgs...)
+	}
+	cteParts = append(cteParts, "mappings AS ("+mappingSQL+")", "score_events AS ("+scoreEventSQL+")", "scores AS ("+scoreSQL+")")
+	cteArgs = append(cteArgs, mappingArgs...)
+	cteArgs = append(cteArgs, scoreEventArgs...)
+	cteArgs = append(cteArgs, scoreArgs...)
+	outer = outer.Prefix("WITH "+strings.Join(cteParts, ", "), cteArgs...)
 	query, args, err := outer.ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("building skill insights query: %w", err)

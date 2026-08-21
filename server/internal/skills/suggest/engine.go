@@ -177,6 +177,8 @@ func (e *Engine) run(ctx context.Context, in RunInput, force bool) (Result, erro
 		From:            now.Add(-e.config.TrendWindow),
 		To:              now,
 		IntervalSeconds: int64(e.config.TrendWindow.Seconds()),
+		// The suggestion engine only evaluates efficacy trends, never cost.
+		IncludeCosts: false,
 	})
 	if err != nil {
 		return Result{}, fmt.Errorf("query suggestion skill insights: %w", err)
