@@ -21,6 +21,19 @@ func TestEnrichDirectoryReturnsNoAttributesWithoutMatchingUser(t *testing.T) {
 	require.Empty(t, got)
 }
 
+func TestEnrichDirectoryIncludesDirectoryAndRoleAttributes(t *testing.T) {
+	t.Parallel()
+
+	db := newTestDatabase(t)
+	seed := seedUserEnrichment(t, db)
+	enricher := NewEnrichDirectory(testenv.NewLogger(t), db, cache.NoopCache)
+
+	got, err := enricher.Enrich(t.Context(), directoryEnrichmentTestSpan(seed.organizationID, seed.email))
+
+	require.NoError(t, err)
+	require.ElementsMatch(t, seed.want.attributes(), got)
+}
+
 func TestEnrichDirectoryLookupFailureDoesNotFailSpan(t *testing.T) {
 	t.Parallel()
 
