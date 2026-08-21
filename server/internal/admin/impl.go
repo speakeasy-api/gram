@@ -67,7 +67,7 @@ type Service struct {
 	workos orgprovision.WorkOSOrganizationCreator
 
 	openRouter           TrialKeyReviver
-	openRouterLimit      OpenRouterLimitUpdater
+	openRouterSpendCap   OpenRouterSpendCapScheduler
 	openRouterUsage      OpenRouterUsageReader
 	productFeatures      *productfeatures.Client
 	chatAnalysisSignaler analysis.Signaler
@@ -91,9 +91,8 @@ type TrialKeyReviver interface {
 	ReinstateAPIKeyLimitWithDB(ctx context.Context, db openrouter.DBTX, orgID string, keyType openrouter.KeyType, limit *int) (int, error)
 }
 
-// OpenRouterLimitUpdater changes a key while using a caller-held billing-lock session.
-type OpenRouterLimitUpdater interface {
-	RefreshAPIKeyLimitWithDB(ctx context.Context, db openrouter.DBTX, orgID string, keyType openrouter.KeyType, limit *int) (int, error)
+type OpenRouterSpendCapScheduler interface {
+	SetAdminOpenRouterSpendCap(context.Context, string, string, openrouter.KeyType, int, urn.Principal, *string) (int, error)
 }
 
 // OpenRouterUsageReader reads the current monthly usage for a materialized key.
@@ -104,7 +103,6 @@ type OpenRouterUsageReader interface {
 // AdminOpenRouter is the complete OpenRouter surface used by the admin service.
 type AdminOpenRouter interface {
 	TrialKeyReviver
-	OpenRouterLimitUpdater
 	OpenRouterUsageReader
 }
 
@@ -125,10 +123,6 @@ const keyBillingLockWaitTimeout = 5 * time.Second
 type TrialKeysUnavailable struct{}
 
 func (TrialKeysUnavailable) RefreshAPIKeyLimit(context.Context, string, openrouter.KeyType, *int) (int, error) {
-	return 0, ErrOpenRouterUnavailable
-}
-
-func (TrialKeysUnavailable) RefreshAPIKeyLimitWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, *int) (int, error) {
 	return 0, ErrOpenRouterUnavailable
 }
 
@@ -160,6 +154,7 @@ func NewService(
 	trialNotifier trialemails.Notifier,
 	productFeatures *productfeatures.Client,
 	chatAnalysisSignaler analysis.Signaler,
+	openRouterSpendCap OpenRouterSpendCapScheduler,
 	billing BillingOperations,
 	dashboardURL *url.URL,
 ) *Service {
@@ -193,7 +188,7 @@ func NewService(
 		),
 		workos:               workosClient,
 		openRouter:           openRouter,
-		openRouterLimit:      openRouter,
+		openRouterSpendCap:   openRouterSpendCap,
 		openRouterUsage:      openRouter,
 		productFeatures:      productFeatures,
 		chatAnalysisSignaler: chatAnalysisSignaler,

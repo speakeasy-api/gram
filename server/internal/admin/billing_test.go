@@ -2,48 +2,47 @@ package admin
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"testing"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	"github.com/speakeasy-api/gram/server/internal/audit"
-	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	orrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usage"
 )
 
-type fakeOpenRouterLimitUpdater struct {
-	called          bool
-	usedTransaction bool
-	err             error
+type fakeOpenRouterSpendCapScheduler struct {
+	operationID      string
+	organizationID   string
+	keyType          openrouter.KeyType
+	limit            int
+	actor            urn.Principal
+	actorDisplayName *string
+	effectiveLimit   int
+	err              error
 }
 
-func (f *fakeOpenRouterLimitUpdater) RefreshAPIKeyLimitWithDB(ctx context.Context, db openrouter.DBTX, orgID string, keyType openrouter.KeyType, limit *int) (int, error) {
-	f.called = true
-	_, f.usedTransaction = db.(pgx.Tx)
+func (f *fakeOpenRouterSpendCapScheduler) SetAdminOpenRouterSpendCap(_ context.Context, operationID, organizationID string, keyType openrouter.KeyType, limit int, actor urn.Principal, actorDisplayName *string) (int, error) {
+	f.operationID = operationID
+	f.organizationID = organizationID
+	f.keyType = keyType
+	f.limit = limit
+	f.actor = actor
+	f.actorDisplayName = actorDisplayName
 	if f.err != nil {
 		return 0, f.err
 	}
-	key, err := orrepo.New(db).GetOpenRouterAPIKey(ctx, orrepo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(keyType)})
-	if err != nil {
-		return 0, fmt.Errorf("get fake OpenRouter key: %w", err)
+	if f.effectiveLimit != 0 {
+		return f.effectiveLimit, nil
 	}
-	_, err = orrepo.New(db).UpdateOpenRouterKey(ctx, orrepo.UpdateOpenRouterKeyParams{
-		OrganizationID: orgID, KeyType: string(keyType), MonthlyCredits: int64(*limit), KeyHash: key.KeyHash, Reinstate: false,
-	})
-	if err != nil {
-		return 0, fmt.Errorf("update fake OpenRouter key: %w", err)
-	}
-	return *limit, nil
+	return limit, nil
 }
 
 type fakeOpenRouterUsage struct {
@@ -182,99 +181,49 @@ func TestGetInferenceKeysFailsWhenOpenRouterUsageCannotBeRead(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeUnexpected)
 }
 
-func TestSetInferenceKeyMonthlyLimitUpdatesSpecificMaterializedKey(t *testing.T) {
+func TestSetInferenceKeyMonthlyLimitSchedulesDurableAdminOperation(t *testing.T) {
 	t.Parallel()
 	ctx, svc, db := newTestAdminService(t)
 	seedOrg(t, ctx, db, orgFixture{id: "org_limit", name: "Inference Limit", slug: "inference-limit"})
-	keys := orrepo.New(db)
-	for _, keyType := range openrouter.AllKeyTypes {
-		_, err := keys.CreateOpenRouterAPIKey(ctx, orrepo.CreateOpenRouterAPIKeyParams{
-			OrganizationID: "org_limit", KeyType: string(keyType), KeyEncrypted: pgtype.Text{}, KeyHash: "hash-" + string(keyType), MonthlyCredits: 50,
-		})
-		require.NoError(t, err)
-	}
-	updater := &fakeOpenRouterLimitUpdater{}
-	svc.openRouterLimit = updater
+	_, err := orrepo.New(db).CreateOpenRouterAPIKey(ctx, orrepo.CreateOpenRouterAPIKeyParams{
+		OrganizationID: "org_limit", KeyType: "internal", KeyEncrypted: pgtype.Text{}, KeyHash: "hash-internal", MonthlyCredits: 50,
+	})
+	require.NoError(t, err)
+	scheduler := &fakeOpenRouterSpendCapScheduler{effectiveLimit: 274}
+	svc.openRouterSpendCap = scheduler
+	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{
+		SessionID: "session-limit", Email: "operator@example.test", OIDCSubject: "oidc-subject-limit", Name: "Test Operator", HD: "example.test",
+	})
 
 	result, err := svc.SetInferenceKeyMonthlyLimit(ctx, &gen.SetInferenceKeyMonthlyLimitPayload{
 		OrganizationID: "org_limit", KeyType: "internal", MonthlyCredits: 275,
 	})
 	require.NoError(t, err)
-	require.Equal(t, &gen.AdminInferenceKeyLimit{KeyType: "internal", MonthlyCredits: 275}, result)
-	require.True(t, updater.called)
-	require.True(t, updater.usedTransaction, "the refresh and audit must share a transaction on the billing-lock connection")
-
-	internal, err := keys.GetOpenRouterAPIKey(ctx, orrepo.GetOpenRouterAPIKeyParams{OrganizationID: "org_limit", KeyType: "internal"})
-	require.NoError(t, err)
-	require.EqualValues(t, 275, internal.MonthlyCredits)
-	chat, err := keys.GetOpenRouterAPIKey(ctx, orrepo.GetOpenRouterAPIKeyParams{OrganizationID: "org_limit", KeyType: "chat"})
-	require.NoError(t, err)
-	require.EqualValues(t, 50, chat.MonthlyCredits)
+	require.Equal(t, &gen.AdminInferenceKeyLimit{KeyType: "internal", MonthlyCredits: 274}, result)
+	require.NotEmpty(t, scheduler.operationID)
+	require.Equal(t, "org_limit", scheduler.organizationID)
+	require.Equal(t, openrouter.KeyTypeInternal, scheduler.keyType)
+	require.Equal(t, 275, scheduler.limit)
+	require.Equal(t, "oidc-subject-limit", scheduler.actor.ID)
+	require.Equal(t, urn.PrincipalTypeUser, scheduler.actor.Type)
+	require.NotNil(t, scheduler.actorDisplayName)
+	require.Equal(t, audit.SpeakeasyTeamActorLabel, *scheduler.actorDisplayName)
 }
 
-func TestSetInferenceKeyMonthlyLimitMapsRefreshFailureToGatewayError(t *testing.T) {
+func TestSetInferenceKeyMonthlyLimitReportsSchedulerFailure(t *testing.T) {
 	t.Parallel()
 	ctx, svc, db := newTestAdminService(t)
-	seedOrg(t, ctx, db, orgFixture{id: "org_limit_gateway", name: "Inference Limit Gateway", slug: "inference-limit-gateway"})
-	keys := orrepo.New(db)
-	_, err := keys.CreateOpenRouterAPIKey(ctx, orrepo.CreateOpenRouterAPIKeyParams{
-		OrganizationID: "org_limit_gateway", KeyType: "chat", KeyEncrypted: pgtype.Text{}, KeyHash: "hash-chat-gateway", MonthlyCredits: 50,
-	})
-	require.NoError(t, err)
-	svc.openRouterLimit = &fakeOpenRouterLimitUpdater{err: errors.New("upstream patch failed")}
-
-	_, err = svc.SetInferenceKeyMonthlyLimit(ctx, &gen.SetInferenceKeyMonthlyLimitPayload{
-		OrganizationID: "org_limit_gateway", KeyType: "chat", MonthlyCredits: 275,
-	})
-	requireOopsCode(t, err, oops.CodeGatewayError)
-
-	key, err := keys.GetOpenRouterAPIKey(ctx, orrepo.GetOpenRouterAPIKeyParams{OrganizationID: "org_limit_gateway", KeyType: "chat"})
-	require.NoError(t, err)
-	require.EqualValues(t, 50, key.MonthlyCredits)
-	count, err := audittest.AuditLogCountByAction(ctx, db, audit.ActionOpenRouterAPIKeySetSpendCap)
-	require.NoError(t, err)
-	require.Zero(t, count)
-}
-
-func TestSetInferenceKeyMonthlyLimitWritesAdminAuditEntry(t *testing.T) {
-	t.Parallel()
-	ctx, svc, db := newTestAdminService(t)
-	seedOrg(t, ctx, db, orgFixture{id: "org_limit_audit", name: "Inference Limit Audit", slug: "inference-limit-audit"})
+	seedOrg(t, ctx, db, orgFixture{id: "org_limit_failure", name: "Inference Limit Failure", slug: "inference-limit-failure"})
 	_, err := orrepo.New(db).CreateOpenRouterAPIKey(ctx, orrepo.CreateOpenRouterAPIKeyParams{
-		OrganizationID: "org_limit_audit", KeyType: "internal", KeyEncrypted: pgtype.Text{}, KeyHash: "hash-internal-audit", MonthlyCredits: 50,
+		OrganizationID: "org_limit_failure", KeyType: "chat", KeyEncrypted: pgtype.Text{}, KeyHash: "hash-chat-failure", MonthlyCredits: 50,
 	})
 	require.NoError(t, err)
-	svc.openRouterLimit = &fakeOpenRouterLimitUpdater{}
-	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{
-		SessionID: "session-limit-audit", Email: "operator@example.test", OIDCSubject: "oidc-subject-limit-audit", Name: "Test Operator", HD: "example.test",
-	})
+	svc.openRouterSpendCap = &fakeOpenRouterSpendCapScheduler{err: errors.New("workflow failed")}
 
 	_, err = svc.SetInferenceKeyMonthlyLimit(ctx, &gen.SetInferenceKeyMonthlyLimitPayload{
-		OrganizationID: "org_limit_audit", KeyType: "internal", MonthlyCredits: 275,
+		OrganizationID: "org_limit_failure", KeyType: "chat", MonthlyCredits: 275,
 	})
-	require.NoError(t, err)
-
-	entry, err := audittest.LatestAuditLogByAction(ctx, db, audit.ActionOpenRouterAPIKeySetSpendCap)
-	require.NoError(t, err)
-	require.Equal(t, "org_limit_audit", entry.OrganizationID)
-	require.Equal(t, "oidc-subject-limit-audit", entry.ActorID)
-	require.Equal(t, "user", entry.ActorType)
-	require.NotNil(t, entry.ActorDisplayName)
-	require.Equal(t, audit.SpeakeasyTeamActorLabel, *entry.ActorDisplayName)
-	require.Equal(t, "openrouter_api_key", entry.SubjectType)
-	require.Equal(t, "Security inference cap", entry.SubjectDisplay)
-
-	var metadata struct {
-		KeyType string `json:"key_type"`
-	}
-	require.NoError(t, json.Unmarshal(entry.Metadata, &metadata))
-	require.Equal(t, "internal", metadata.KeyType)
-	before, err := audittest.DecodeAuditData(entry.BeforeSnapshot)
-	require.NoError(t, err)
-	after, err := audittest.DecodeAuditData(entry.AfterSnapshot)
-	require.NoError(t, err)
-	require.InDelta(t, 50, before["monthly_credits"], 0)
-	require.InDelta(t, 275, after["monthly_credits"], 0)
+	requireOopsCode(t, err, oops.CodeUnexpected)
 }
 
 func TestSetInferenceKeyMonthlyLimitValidatesExplicitKeyAndBounds(t *testing.T) {
@@ -292,18 +241,29 @@ func TestSetInferenceKeyMonthlyLimitValidatesExplicitKeyAndBounds(t *testing.T) 
 	}
 }
 
+func TestSetInferenceKeyMonthlyLimitReportsUnavailableWithoutScheduler(t *testing.T) {
+	t.Parallel()
+	ctx, svc, db := newTestAdminService(t)
+	seedOrg(t, ctx, db, orgFixture{id: "org_limit_unavailable", name: "Inference Limit Unavailable", slug: "inference-limit-unavailable"})
+
+	_, err := svc.SetInferenceKeyMonthlyLimit(ctx, &gen.SetInferenceKeyMonthlyLimitPayload{
+		OrganizationID: "org_limit_unavailable", KeyType: "chat", MonthlyCredits: 100,
+	})
+	requireOopsCode(t, err, oops.CodeUnavailable)
+}
+
 func TestSetInferenceKeyMonthlyLimitRejectsAbsentAndDisabledKeys(t *testing.T) {
 	t.Parallel()
 	ctx, svc, db := newTestAdminService(t)
 	seedOrg(t, ctx, db, orgFixture{id: "org_limit_reject", name: "Inference Limit Reject", slug: "inference-limit-reject"})
-	updater := &fakeOpenRouterLimitUpdater{}
-	svc.openRouterLimit = updater
+	scheduler := &fakeOpenRouterSpendCapScheduler{}
+	svc.openRouterSpendCap = scheduler
 
 	_, err := svc.SetInferenceKeyMonthlyLimit(ctx, &gen.SetInferenceKeyMonthlyLimitPayload{
 		OrganizationID: "org_limit_reject", KeyType: "internal", MonthlyCredits: 100,
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
-	require.False(t, updater.called)
+	require.Empty(t, scheduler.operationID)
 
 	_, err = orrepo.New(db).CreateOpenRouterAPIKey(ctx, orrepo.CreateOpenRouterAPIKeyParams{
 		OrganizationID: "org_limit_reject", KeyType: "internal", KeyEncrypted: pgtype.Text{}, KeyHash: "hash-disabled", MonthlyCredits: 50,
@@ -315,7 +275,7 @@ func TestSetInferenceKeyMonthlyLimitRejectsAbsentAndDisabledKeys(t *testing.T) {
 		OrganizationID: "org_limit_reject", KeyType: "internal", MonthlyCredits: 100,
 	})
 	requireOopsCode(t, err, oops.CodeConflict)
-	require.False(t, updater.called)
+	require.Empty(t, scheduler.operationID)
 }
 
 func TestGetPaygBillingSummaryUsesCanonicalOrganizationID(t *testing.T) {
