@@ -2701,7 +2701,7 @@ JOIN projects AS project
   AND registration.organization_id = distribution.organization_id
   AND registration.deleted IS FALSE
  JOIN plugins AS plugin
-   ON plugin.id = distribution.default_plugin_id
+   ON plugin.id = COALESCE(distribution.plugin_id, distribution.default_plugin_id)
   AND plugin.organization_id = distribution.organization_id
   AND plugin.project_id = distribution.project_id
   AND plugin.is_default IS TRUE
@@ -3188,7 +3188,7 @@ SELECT EXISTS (
       AND project.organization_id = distribution.organization_id
       AND project.deleted IS FALSE
      JOIN plugins AS plugin
-       ON plugin.id = distribution.default_plugin_id
+       ON plugin.id = COALESCE(distribution.plugin_id, distribution.default_plugin_id)
       AND plugin.organization_id = distribution.organization_id
       AND plugin.project_id = distribution.project_id
       AND plugin.is_default IS TRUE
@@ -3430,7 +3430,7 @@ SELECT EXISTS (
       AND registration.project_id = distribution.project_id
       AND registration.deleted IS FALSE
      JOIN plugins AS plugin
-       ON plugin.id = distribution.default_plugin_id
+       ON plugin.id = COALESCE(distribution.plugin_id, distribution.default_plugin_id)
       AND plugin.organization_id = distribution.organization_id
       AND plugin.project_id = distribution.project_id
       AND plugin.is_default IS TRUE
@@ -3464,7 +3464,7 @@ SELECT EXISTS (
       AND project.organization_id = distribution.organization_id
       AND project.deleted IS FALSE
      JOIN plugins AS plugin
-       ON plugin.id = distribution.default_plugin_id
+       ON plugin.id = COALESCE(distribution.plugin_id, distribution.default_plugin_id)
       AND plugin.organization_id = distribution.organization_id
       AND plugin.project_id = distribution.project_id
       AND plugin.is_default IS TRUE
