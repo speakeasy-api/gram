@@ -1,47 +1,52 @@
 #!/usr/bin/env -S node
 
-//MISE description="Configure IDP mode: mock-workos (default) or real WorkOS"
+//MISE description="Configure the dev-idp identity backend: local (default) or real WorkOS"
 //MISE hide=true
 //USAGE flag "--restart" default="false" help="Force the onboarding even if configuration already exists."
 
 import { $, question } from "zx";
 
 async function run() {
-  const mode = process.env["GRAM_IDP_MODE"] || "mock-workos";
+  const backend = process.env["GRAM_DEVIDP_BACKEND"] || "local";
 
-  if (mode === "workos" && process.env["usage_restart"] !== "true") {
-    console.log("✅ IDP mode: workos (already configured).");
+  if (backend === "workos" && process.env["usage_restart"] !== "true") {
+    console.log("✅ Identity backend: workos (already configured).");
     process.exit(0);
   }
 
-  if (mode === "mock-workos" && process.env["usage_restart"] !== "true") {
+  if (backend === "local" && process.env["usage_restart"] !== "true") {
     // Check if the user previously made an explicit choice (not just the default).
     const secret = process.env["GRAM_IDP_CLIENT_SECRET"];
     const hasExplicitChoice =
       (typeof secret === "string" && secret !== "" && secret !== "unset") ||
       process.env["GRAM_IDP_SKIPPED"] === "true";
     if (hasExplicitChoice) {
-      console.log("✅ IDP mode: mock-workos (already configured).");
+      console.log("✅ Identity backend: local (already configured).");
       process.exit(0);
     }
   }
 
   console.log();
-  console.log("💬 Which IDP mode do you want to use?");
+  console.log("💬 Which identity backend do you want to use?");
   console.log();
-  console.log("  1) mock-workos  (default)");
+  console.log("  1) local  (default)");
   console.log(
-    "     \x1b[90mFully local, zero config. dev-idp emulates the WorkOS API.\x1b[0m",
+    "     \x1b[90mFully offline, zero config. dev-idp emulates the WorkOS API.\x1b[0m",
   );
   console.log(
-    "     \x1b[90mUses a hardcoded test user — no external account needed.\x1b[0m",
+    "     \x1b[90mSigns you in as your git committer identity — no external account.\x1b[0m",
   );
   console.log();
   console.log("  2) workos");
   console.log(
-    "     \x1b[90mReal WorkOS AuthKit login via dev-idp proxy.\x1b[0m",
+    "     \x1b[90mReads and writes your real WorkOS environment through dev-idp.\x1b[0m",
   );
-  console.log("     \x1b[90mRequires a WorkOS API key and client ID.\x1b[0m");
+  console.log(
+    "     \x1b[90mStill signs you in without credentials, as the WorkOS user\x1b[0m",
+  );
+  console.log(
+    "     \x1b[90mmatching your git committer email. Requires a WorkOS API key.\x1b[0m",
+  );
   console.log();
 
   const choice = await question("💬 Enter 1 or 2 (default: 1): ");
@@ -49,10 +54,10 @@ async function run() {
   if (choice.trim() === "2") {
     await setupRealWorkOS();
   } else {
-    await $`mise set --file mise.local.toml GRAM_IDP_MODE=mock-workos`;
+    await $`mise set --file mise.local.toml GRAM_DEVIDP_BACKEND=local`;
     await $`mise set --file mise.local.toml GRAM_IDP_SKIPPED=true`;
     console.log();
-    console.log("✅ IDP mode: mock-workos. No additional config needed.");
+    console.log("✅ Identity backend: local. No additional config needed.");
   }
 }
 
@@ -60,28 +65,29 @@ async function setupRealWorkOS() {
   console.log();
   const key = await question("💬 WorkOS API Key (sk_test_...): ");
   if (!key.trim()) {
-    console.log("❌ API key is required for real WorkOS mode.");
+    console.log("❌ API key is required for the workos backend.");
     process.exit(1);
   }
-
-  const clientId = await question("💬 WorkOS Client ID (client_...): ");
-  if (!clientId.trim()) {
-    console.log("❌ Client ID is required for real WorkOS mode.");
-    process.exit(1);
-  }
-
-  const devidpURL =
-    process.env["GRAM_DEVIDP_EXTERNAL_URL"] || "http://localhost:35291";
 
   await $`touch mise.local.toml`;
-  await $`mise set --file mise.local.toml GRAM_IDP_MODE=workos`;
+  await $`mise set --file mise.local.toml GRAM_DEVIDP_BACKEND=workos`;
   await $`mise set --file mise.local.toml GRAM_IDP_CLIENT_SECRET=${key.trim()}`;
-  await $`mise set --file mise.local.toml WORKOS_API_URL=${devidpURL}/workos`;
-  await $`mise set --file mise.local.toml GRAM_IDP_CLIENT_ID=${clientId.trim()}`;
+
+  // Deliberately NOT setting GRAM_IDP_CLIENT_ID. The server routes any
+  // client_-prefixed id straight to WorkOS's hosted AuthKit, which is an
+  // interactive login — the opposite of what dev-idp is for. Leaving the
+  // default keeps the authorize leg on dev-idp, which signs you in
+  // non-interactively as the WorkOS user matching your committer email.
+  //
+  // WORKOS_API_URL is likewise left alone: it points at dev-idp's /workos
+  // surface in both backends, and the flag above decides what serves it.
 
   console.log();
   console.log(
-    "✅ IDP mode: real WorkOS. Credentials saved to mise.local.toml.",
+    "✅ Identity backend: real WorkOS. Credentials saved to mise.local.toml.",
+  );
+  console.log(
+    "   You'll be signed in as the WorkOS user matching your git committer email.",
   );
   console.log("   Restart pitchfork to apply.");
 }

@@ -22,18 +22,18 @@ The data is the same data the public demo organization is built from, retargeted
 
 Local development uses **dev-idp** — a lightweight Go server (`dev-idp/`) that replaces the external identity services Gram uses in production. It runs as a pitchfork daemon, uses SQLite, and requires no external accounts.
 
-The mode is controlled by a single env var:
+Whichever backend you pick, **login is non-interactive**: you click "Login" and are signed straight in, with no credentials and no hosted login page. That is the point of dev-idp. What the backend changes is only where your identity comes from.
 
 ```
-GRAM_IDP_MODE = "mock-workos" | "workos"
+GRAM_DEVIDP_BACKEND = "local" | "workos"
 ```
 
-#### mock-workos (default — zero config)
+#### local (default — zero config)
 
 This is what you get out of the box after `./zero`. No configuration needed.
 
-- **Login** authenticates instantly with a test user — no credentials needed.
-- **WorkOS API calls** (Roles & Permissions, Team management, Invitations) hit dev-idp's built-in mock instead of the real API.
+- **Login** signs you in as your git committer identity (`git config user.email`), synthesized on first use.
+- **WorkOS API calls** (Roles & Permissions, Team management, Invitations) hit dev-idp's built-in emulator instead of the real API.
 - **Customization**: open `http://localhost:35293` to create/edit users, organizations, roles, and memberships.
 
 #### workos (opt-in — real WorkOS)
@@ -42,27 +42,32 @@ For Speakeasy employees testing against real WorkOS data. The `./zero` script pr
 
 ```toml
 [env]
-GRAM_IDP_MODE = "workos"
+GRAM_DEVIDP_BACKEND = "workos"
 GRAM_IDP_CLIENT_SECRET = "sk_test_..."
-WORKOS_API_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/workos"
-GRAM_IDP_CLIENT_ID = "client_..."
 ```
 
-This routes the server's WorkOS API calls through a dev-idp proxy to the real WorkOS API. OIDC login still goes through dev-idp's `/oauth2` handler locally.
+That is the whole configuration — no URLs to repoint. dev-idp passes REST calls through to the real WorkOS API, so roles, memberships and invitations act on live data.
 
-After changing modes, restart pitchfork with `mise run start`.
+Login stays non-interactive: dev-idp looks your git committer email up **through** the WorkOS API and signs you in as that WorkOS user, reporting its real user id. So you need a WorkOS user whose email matches `git config user.email`.
+
+> [!NOTE]
+> Don't set `GRAM_IDP_CLIENT_ID` to a real `client_...` value. The server sends any `client_`-prefixed id to WorkOS's hosted AuthKit, which is an interactive login — the opposite of what dev-idp is for.
+
+After changing backends, restart pitchfork with `mise run start`. Each backend keeps its own `current_users` row, so switching back and forth preserves whichever identity you had set on the other side.
+
+dev-idp brings its own SQLite database up to the current schema on start, so pulling a schema change does not require wiping it — existing users, organizations and memberships are kept. If a change ever needs more than SQLite can do in place, it says so on boot and names the column.
 
 <details>
 <summary>dev-idp protocol handlers (advanced)</summary>
 
-dev-idp mounts several protocol handlers on a single port, all sharing one SQLite database:
+dev-idp mounts two surfaces on a single port, sharing one SQLite database:
 
-| Prefix         | Purpose            | Details                                                                   |
-| -------------- | ------------------ | ------------------------------------------------------------------------- |
-| `/oauth2`      | User login         | Standard OIDC provider (authorize, token, userinfo, JWKS).                |
-| `/oauth2-1`    | MCP auth           | OAuth 2.1 with PKCE and Dynamic Client Registration.                      |
-| `/mock-workos` | Orgs, roles, teams | Mock WorkOS REST API — always mounted.                                    |
-| `/workos`      | Real WorkOS proxy  | Thin proxy to real WorkOS API — only mounted when `GRAM_IDP_MODE=workos`. |
+| Prefix      | Purpose            | Details                                                                                                               |
+| ----------- | ------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| `/oauth2-1` | Login + MCP auth   | OAuth 2.1 authorization server. PKCE and Dynamic Client Registration; both optional for the first-party login client. |
+| `/workos`   | Orgs, roles, teams | WorkOS REST surface. Emulated locally or proxied upstream, per `GRAM_DEVIDP_BACKEND`.                                 |
+
+Login spans both: the browser hits `/oauth2-1/authorize`, which redirects straight back with a code, and the server exchanges that code at `/workos/user_management/authenticate` rather than the OAuth token endpoint — it drives login through the WorkOS user-management SDK. `authenticate` is therefore always served locally, even under the `workos` backend, because real WorkOS would reject a code dev-idp minted.
 
 The Gram server uses the same code paths as production — only `GRAM_IDP_BASE_URL` and `WORKOS_API_URL` point to localhost instead of external services.
 

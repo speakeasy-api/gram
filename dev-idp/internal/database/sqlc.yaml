@@ -38,6 +38,9 @@ sql:
             go_type:
               import: "github.com/google/uuid"
               type: "UUID"
+          # oauth_clients
+          - column: "oauth_clients.rotate_refresh_tokens"
+            go_type: "bool"
           # auth_codes
           - column: "auth_codes.user_id"
             go_type:
@@ -68,6 +71,73 @@ sql:
               import: "github.com/google/uuid"
               type: "UUID"
           - column: "organization_roles.organization_id"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+          # ema_apps
+          - column: "ema_apps.id"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+          - column: "ema_apps.enabled"
+            go_type: "bool"
+          # ema_resources
+          - column: "ema_resources.id"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+          # ema_app_assignments
+          - column: "ema_app_assignments.id"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+          - column: "ema_app_assignments.app_id"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+          - column: "ema_app_assignments.user_id"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+          - column: "ema_app_assignments.resource_id"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+          # ema_trust_rules
+          - column: "ema_trust_rules.id"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+          - column: "ema_trust_rules.resource_id"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+          - column: "ema_trust_rules.enabled"
+            go_type: "bool"
+          # ema_issued_jags
+          - column: "ema_issued_jags.app_id"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+          - column: "ema_issued_jags.user_id"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+          - column: "ema_issued_jags.resource_id"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+          # ema_redeemed_jags
+          - column: "ema_redeemed_jags.resource_id"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+          # ema_resource_tokens
+          - column: "ema_resource_tokens.resource_id"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+          - column: "ema_resource_tokens.user_id"
             go_type:
               import: "github.com/google/uuid"
               type: "UUID"

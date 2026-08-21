@@ -1,12 +1,23 @@
-// Package oauth21 implements the dev-idp's oauth2-1 mode (idp-design.md
-// §7.3): an OAuth 2.1 authorization server with PKCE-required (S256),
-// stateless DCR, and OIDC compliance. Backs `remote_session_issuer` rows
-// used in remote-session tests.
+// Package oauth21 implements the dev-idp's OAuth 2.1 authorization server:
+// PKCE (S256), stateless DCR, and OIDC compliance. It backs both the
+// `remote_session_issuer` rows used in remote-session tests and the authorize
+// leg of dashboard login.
 //
-// Identity resolution is non-interactive (idp-design.md §3) — every
-// /authorize call resolves the per-mode currentUser and
-// immediately redirects with the issued code. Dynamic client registration
-// persists redirect_uris so tests can catch unregistered callback URLs.
+// It also doubles as the enterprise IdP for enterprise-managed
+// authorization: the token
+// endpoint mints ID-JAG grants under the RFC 8693 token-exchange grant (see
+// idjag.go). The server that redeems those grants is a different issuer,
+// internal/modes/resourceas.
+//
+// Identity resolution is non-interactive — every /authorize call resolves the
+// currentUser and immediately redirects with the issued code. Dynamic client
+// registration persists redirect_uris so tests can catch unregistered callback
+// URLs; Config.LoginClientID names the one statically provisioned client that
+// skips registration.
+//
+// PKCE is optional rather than mandatory. The dev-idp only ever serves
+// localhost, and the first-party login client sends no challenge. A challenge
+// that IS supplied is enforced through the token exchange.
 package oauth21
 
 import (
@@ -20,7 +31,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -32,13 +42,15 @@ import (
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/speakeasy-api/gram/dev-idp/internal/cimd"
 	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
 	"github.com/speakeasy-api/gram/dev-idp/internal/defaultuser"
+	"github.com/speakeasy-api/gram/dev-idp/internal/ema"
 	"github.com/speakeasy-api/gram/dev-idp/internal/keystore"
 )
 
-// Mode is the discriminator persisted on auth_codes / tokens /
-// current_users rows owned by this handler.
+// Mode is the current_users slot this handler resolves its subject from.
+// The local identity slot; the workos surface owns the other one.
 const Mode = "oauth2-1"
 
 // Prefix is the URL prefix the dev-idp listener mounts the handler under.
@@ -54,6 +66,11 @@ const (
 	// payloads are small; 64 KiB is comfortably above any legitimate
 	// request and below any DoS-relevant size.
 	maxFormBodyBytes = 64 << 10
+
+	// cimdCacheTTL bounds how long a client metadata document is reused. Long
+	// enough that a burst of requests is one fetch, short enough that
+	// republishing a rotated key takes effect without a restart.
+	cimdCacheTTL = 60 * time.Second
 )
 
 // Config carries the static configuration for the oauth2-1 mode.
@@ -62,6 +79,13 @@ type Config struct {
 	// trailing slash, no mode prefix). Used to build absolute URLs in
 	// discovery documents and as the `iss` claim on issued id_tokens.
 	ExternalURL string
+
+	// LoginClientID is the statically provisioned first-party client the
+	// Gram server logs in with (GRAM_IDP_CLIENT_ID). It never goes through
+	// dynamic client registration, so /authorize skips the registered-client
+	// and redirect_uri allowlist checks for it -- the server's callback URL
+	// varies with the local port and scheme. Empty disables the exemption.
+	LoginClientID string
 }
 
 // Handler serves the oauth2-1 mode's HTTP routes.
@@ -71,19 +95,20 @@ type Handler struct {
 	logger   *slog.Logger
 	db       *sql.DB
 	keystore *keystore.Keystore
-	// httpClient dereferences Client ID Metadata Document (CIMD) client_id URLs
-	// during the authorize leg. Short timeout; dev-only (no HTTPS enforcement).
-	httpClient *http.Client
+	// cimd dereferences Client ID Metadata Document client_id URLs: on the
+	// authorize leg to learn a client's redirect_uris, and on the mint leg to
+	// learn the keys a CIMD client authenticates with.
+	cimd *cimd.Resolver
 }
 
 func NewHandler(cfg Config, ks *keystore.Keystore, logger *slog.Logger, tracerProvider trace.TracerProvider, db *sql.DB) *Handler {
 	return &Handler{
-		cfg:        cfg,
-		tracer:     tracerProvider.Tracer("github.com/speakeasy-api/gram/dev-idp/internal/modes/oauth21"),
-		logger:     logger.With(slog.String("component", "devidp."+Mode)),
-		db:         db,
-		keystore:   ks,
-		httpClient: &http.Client{Timeout: 5 * time.Second},
+		cfg:      cfg,
+		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/dev-idp/internal/modes/oauth21"),
+		logger:   logger.With(slog.String("component", "devidp."+Mode)),
+		db:       db,
+		keystore: ks,
+		cimd:     cimd.NewResolver(&http.Client{Timeout: 5 * time.Second}, cimdCacheTTL),
 	}
 }
 
@@ -144,6 +169,12 @@ type asMetadata struct {
 	// metadata-document URL as the client_id. The dev-idp dereferences it in
 	// handleAuthorize instead of requiring DCR/pre-registration.
 	ClientIDMetadataDocumentSupported bool `json:"client_id_metadata_document_supported"`
+
+	// IdentityChainingRequestedTokenTypesSupported advertises which
+	// `requested_token_type` values the token-exchange grant honors. Listing
+	// the ID-JAG type is how a client learns this IdP can mint cross-app
+	// access grants (draft-ietf-oauth-identity-assertion-authz-grant).
+	IdentityChainingRequestedTokenTypesSupported []string `json:"identity_chaining_requested_token_types_supported"`
 }
 
 type oidcMetadata struct {
@@ -164,11 +195,13 @@ func (h *Handler) baseMetadata() asMetadata {
 		RevocationEndpoint:                iss + "/revoke",
 		JwksURI:                           iss + "/.well-known/jwks.json",
 		ResponseTypesSupported:            []string{"code"},
-		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
+		GrantTypesSupported:               []string{"authorization_code", "refresh_token", ema.GrantTypeTokenExchange},
 		CodeChallengeMethodsSupported:     []string{"S256"},
-		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic", "client_secret_post", "none"},
+		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic", "client_secret_post", "private_key_jwt", "none"},
 		ScopesSupported:                   []string{"openid", "email", "profile"},
 		ClientIDMetadataDocumentSupported: true,
+
+		IdentityChainingRequestedTokenTypesSupported: []string{ema.TokenTypeIDJAG},
 	}
 }
 
@@ -208,8 +241,15 @@ func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
 		GrantTypes              []string `json:"grant_types"`
 		ResponseTypes           []string `json:"response_types"`
 		TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method"`
+		// RotateRefreshTokens is a dev-idp extension to RFC 7591, not a real
+		// DCR field. Nil (the common case) means rotate, matching OAuth 2.1.
+		// Register with false to emulate an upstream that reuses refresh
+		// tokens across /token calls.
+		RotateRefreshTokens *bool `json:"rotate_refresh_tokens"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
+
+	rotateRefreshTokens := body.RotateRefreshTokens == nil || *body.RotateRefreshTokens
 
 	clientID := "client_" + randomHex(16)
 	clientSecret := "secret_" + randomHex(32)
@@ -224,10 +264,10 @@ func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := repo.New(h.db).CreateOAuthClient(r.Context(), repo.CreateOAuthClientParams{
-		ClientID:     clientID,
-		Mode:         Mode,
-		ClientSecret: clientSecret,
-		RedirectUris: string(rawRedirectURIs),
+		ClientID:            clientID,
+		ClientSecret:        clientSecret,
+		RedirectUris:        string(rawRedirectURIs),
+		RotateRefreshTokens: rotateRefreshTokens,
 	}); err != nil {
 		h.logger.ErrorContext(r.Context(), "create oauth client", slog.Any("error", err))
 		oauthError(w, http.StatusInternalServerError, "server_error", "failed to register client")
@@ -275,13 +315,18 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 		oauthError(w, http.StatusBadRequest, "invalid_request", "client_id and redirect_uri are required")
 		return
 	}
-	if codeChallenge == "" {
-		oauthError(w, http.StatusBadRequest, "invalid_request", "code_challenge is required (PKCE is mandatory in oauth2-1)")
+	// PKCE is optional: the dev-idp only ever serves localhost traffic, and
+	// the first-party login client (see Config.LoginClientID) does not send a
+	// challenge. When one IS supplied it is enforced end to end -- only S256
+	// is honored, because a `plain` verifier check is just string equality.
+	if codeChallenge != "" && codeChallengeMethod != "" && codeChallengeMethod != "S256" {
+		oauthError(w, http.StatusBadRequest, "invalid_request", "code_challenge_method must be S256 when supplied")
 		return
 	}
-	if codeChallengeMethod != "S256" {
-		oauthError(w, http.StatusBadRequest, "invalid_request", "code_challenge_method must be S256")
-		return
+	if codeChallenge != "" && codeChallengeMethod == "" {
+		// RFC 7636 §4.3 defaults the method to "plain" when omitted. The
+		// dev-idp doesn't honor "plain" (see above) so default to S256.
+		codeChallengeMethod = "S256"
 	}
 
 	target, err := url.Parse(redirectURI)
@@ -294,25 +339,31 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 	// dereference and validate it instead of requiring a pre-registered (DCR)
 	// client. Any other client_id resolves against the registered-clients table.
 	var allowedRedirectURIs []string
-	if isCIMDClientID(clientID) {
-		doc, derr := h.fetchClientMetadataDocument(ctx, clientID)
-		if derr != nil {
+	switch {
+	case h.cfg.LoginClientID != "" && clientID == h.cfg.LoginClientID:
+		// Statically provisioned first-party client: nothing to look up and
+		// no registered redirect_uri to match against. The Gram server's
+		// callback host and port vary per worktree, so there is no stable
+		// value to pin. This accepts any redirect_uri for this one client id,
+		// which in a production AS would be an open redirect -- acceptable
+		// only because dev-idp is dev-only, binds to localhost, and resolves
+		// identity non-interactively (there is no session to phish; a caller
+		// who can reach this endpoint already has local access).
+		allowedRedirectURIs = []string{redirectURI}
+	case cimd.IsClientID(clientID):
+		doc, derr := h.cimd.Document(ctx, clientID)
+		switch {
+		case errors.Is(derr, cimd.ErrClientIDMismatch):
+			oauthError(w, http.StatusBadRequest, "invalid_client", cimd.ErrClientIDMismatch.Error())
+			return
+		case derr != nil:
 			h.logger.WarnContext(ctx, "fetch client metadata document", slog.Any("error", derr))
 			oauthError(w, http.StatusBadRequest, "invalid_client", "could not fetch client metadata document")
 			return
 		}
-		// Per the CIMD draft the document's client_id MUST equal the URL it was
-		// fetched from.
-		if doc.ClientID != clientID {
-			oauthError(w, http.StatusBadRequest, "invalid_client", "client metadata document client_id does not match the client_id URL")
-			return
-		}
 		allowedRedirectURIs = doc.RedirectURIs
-	} else {
-		client, cerr := repo.New(h.db).GetOAuthClient(ctx, repo.GetOAuthClientParams{
-			ClientID: clientID,
-			Mode:     Mode,
-		})
+	default:
+		client, cerr := repo.New(h.db).GetOAuthClient(ctx, clientID)
 		if cerr != nil {
 			if errors.Is(cerr, sql.ErrNoRows) {
 				oauthError(w, http.StatusBadRequest, "invalid_client", "client_id is not registered")
@@ -345,12 +396,11 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 	code := randomHex(16)
 	if _, err := repo.New(h.db).CreateAuthCode(ctx, repo.CreateAuthCodeParams{
 		Code:                code,
-		Mode:                Mode,
 		UserID:              userID,
 		ClientID:            clientID,
 		RedirectUri:         redirectURI,
-		CodeChallenge:       sql.NullString{String: codeChallenge, Valid: true},
-		CodeChallengeMethod: sql.NullString{String: codeChallengeMethod, Valid: true},
+		CodeChallenge:       sql.NullString{String: codeChallenge, Valid: codeChallenge != ""},
+		CodeChallengeMethod: sql.NullString{String: codeChallengeMethod, Valid: codeChallenge != ""},
 		Scope:               sql.NullString{String: scope, Valid: scope != ""},
 		ExpiresAt:           time.Now().Add(authCodeLifetime),
 	}); err != nil {
@@ -366,47 +416,6 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 	}
 	target.RawQuery = rq.Encode()
 	http.Redirect(w, r, target.String(), http.StatusFound)
-}
-
-// clientMetadataDocument is the subset of an OAuth Client ID Metadata Document
-// (CIMD) the dev-idp validates when a client_id is a URL.
-type clientMetadataDocument struct {
-	ClientID     string   `json:"client_id"`
-	RedirectURIs []string `json:"redirect_uris"`
-}
-
-// isCIMDClientID reports whether a client_id is a Client ID Metadata Document
-// URL (an http or https URL) rather than an opaque registered client id.
-func isCIMDClientID(clientID string) bool {
-	u, err := url.Parse(clientID)
-	return err == nil && (u.Scheme == "https" || u.Scheme == "http") && u.Host != ""
-}
-
-// fetchClientMetadataDocument dereferences a CIMD client_id URL and parses the
-// hosted metadata document. Dev-only: plain HTTP is allowed (the draft requires
-// HTTPS) so localhost documents work during local development.
-func (h *Handler) fetchClientMetadataDocument(ctx context.Context, clientID string) (clientMetadataDocument, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, clientID, nil)
-	if err != nil {
-		return clientMetadataDocument{}, fmt.Errorf("build request: %w", err)
-	}
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := h.httpClient.Do(req)
-	if err != nil {
-		return clientMetadataDocument{}, fmt.Errorf("get %s: %w", clientID, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		return clientMetadataDocument{}, fmt.Errorf("get %s: status %d", clientID, resp.StatusCode)
-	}
-
-	var doc clientMetadataDocument
-	if err := json.NewDecoder(io.LimitReader(resp.Body, maxFormBodyBytes)).Decode(&doc); err != nil {
-		return clientMetadataDocument{}, fmt.Errorf("decode document: %w", err)
-	}
-	return doc, nil
 }
 
 // =============================================================================
@@ -435,10 +444,12 @@ func (h *Handler) handleToken(w http.ResponseWriter, r *http.Request) {
 		h.handleAuthorizationCodeGrant(ctx, w, r)
 	case "refresh_token":
 		h.handleRefreshTokenGrant(ctx, w, r)
+	case ema.GrantTypeTokenExchange:
+		h.handleTokenExchangeGrant(ctx, w, r)
 	case "":
 		oauthError(w, http.StatusBadRequest, "invalid_request", "grant_type is required")
 	default:
-		oauthError(w, http.StatusBadRequest, "unsupported_grant_type", "only authorization_code and refresh_token are supported")
+		oauthError(w, http.StatusBadRequest, "unsupported_grant_type", "only authorization_code, refresh_token, and token-exchange are supported")
 	}
 }
 
@@ -446,22 +457,31 @@ func (h *Handler) handleAuthorizationCodeGrant(ctx context.Context, w http.Respo
 	code := r.Form.Get("code")
 	verifier := r.Form.Get("code_verifier")
 	clientID := r.Form.Get("client_id")
-	if code == "" || verifier == "" {
-		oauthError(w, http.StatusBadRequest, "invalid_request", "code and code_verifier are required")
+	if code == "" {
+		oauthError(w, http.StatusBadRequest, "invalid_request", "code is required")
 		return
 	}
 
 	queries := repo.New(h.db)
-	stored, err := queries.ConsumeAuthCode(ctx, repo.ConsumeAuthCodeParams{Code: code, Mode: Mode})
+	stored, err := queries.ConsumeAuthCode(ctx, repo.ConsumeAuthCodeParams{Code: code, Ts: time.Now()})
 	if err != nil {
 		// Includes ErrNoRows (unknown / consumed / expired). Don't leak which.
 		oauthError(w, http.StatusBadRequest, "invalid_grant", "auth code is unknown, consumed, or expired")
 		return
 	}
 
-	if !stored.CodeChallenge.Valid || !validatePKCES256(verifier, stored.CodeChallenge.String) {
-		oauthError(w, http.StatusBadRequest, "invalid_grant", "PKCE verifier does not match challenge")
-		return
+	// PKCE is enforced exactly when /authorize accepted a challenge. A code
+	// minted with one cannot be redeemed without a matching verifier; a code
+	// minted without one never accepts a verifier it can't check.
+	if stored.CodeChallenge.Valid {
+		if verifier == "" {
+			oauthError(w, http.StatusBadRequest, "invalid_request", "code_verifier is required for a code issued with PKCE")
+			return
+		}
+		if !validatePKCES256(verifier, stored.CodeChallenge.String) {
+			oauthError(w, http.StatusBadRequest, "invalid_grant", "PKCE verifier does not match challenge")
+			return
+		}
 	}
 
 	// Per §5.2 client_id is recorded for inspection only. We cross-check
@@ -473,7 +493,7 @@ func (h *Handler) handleAuthorizationCodeGrant(ctx context.Context, w http.Respo
 	}
 
 	scope := pgTextOrEmpty(stored.Scope)
-	tokens, err := h.issueTokenSet(ctx, queries, stored.UserID, stored.ClientID, scope)
+	tokens, err := h.issueTokenSet(ctx, queries, stored.UserID, stored.ClientID, scope, "")
 	if err != nil {
 		h.logger.ErrorContext(ctx, "issue token set", slog.Any("error", err))
 		oauthError(w, http.StatusInternalServerError, "server_error", "failed to issue tokens")
@@ -490,7 +510,7 @@ func (h *Handler) handleRefreshTokenGrant(ctx context.Context, w http.ResponseWr
 	}
 
 	queries := repo.New(h.db)
-	stored, err := queries.GetActiveToken(ctx, repo.GetActiveTokenParams{Token: refreshToken, Mode: Mode})
+	stored, err := queries.GetActiveToken(ctx, repo.GetActiveTokenParams{Token: refreshToken, Ts: time.Now()})
 	if err != nil {
 		oauthError(w, http.StatusBadRequest, "invalid_grant", "refresh token is unknown, revoked, or expired")
 		return
@@ -500,19 +520,33 @@ func (h *Handler) handleRefreshTokenGrant(ctx context.Context, w http.ResponseWr
 		return
 	}
 
-	// OAuth 2.1 recommends rotating refresh tokens on use. Revoke the
-	// presented token; issueTokenSet mints a fresh pair.
-	if err := queries.RevokeToken(ctx, repo.RevokeTokenParams{
-		Ts:    sql.NullTime{Time: time.Now(), Valid: true},
-		Token: refreshToken,
-		Mode:  Mode,
-	}); err != nil {
-		h.logger.ErrorContext(ctx, "revoke rotated refresh token", slog.Any("error", err))
-		oauthError(w, http.StatusInternalServerError, "server_error", "failed to rotate refresh token")
+	// OAuth 2.1 recommends rotating refresh tokens on use, which is the
+	// default. A client that registered with rotate_refresh_tokens=false
+	// keeps its refresh token across calls, emulating upstreams that don't
+	// rotate. Unregistered clients (CIMD, the login client) rotate.
+	rotate := true
+	if client, cerr := queries.GetOAuthClient(ctx, stored.ClientID); cerr == nil {
+		rotate = client.RotateRefreshTokens
+	} else if !errors.Is(cerr, sql.ErrNoRows) {
+		h.logger.ErrorContext(ctx, "load oauth client for refresh", slog.Any("error", cerr))
+		oauthError(w, http.StatusInternalServerError, "server_error", "failed to load client")
 		return
 	}
 
-	tokens, err := h.issueTokenSet(ctx, queries, stored.UserID, stored.ClientID, pgTextOrEmpty(stored.Scope))
+	reuseRefresh := refreshToken
+	if rotate {
+		reuseRefresh = ""
+		if err := queries.RevokeToken(ctx, repo.RevokeTokenParams{
+			Ts:    sql.NullTime{Time: time.Now(), Valid: true},
+			Token: refreshToken,
+		}); err != nil {
+			h.logger.ErrorContext(ctx, "revoke rotated refresh token", slog.Any("error", err))
+			oauthError(w, http.StatusInternalServerError, "server_error", "failed to rotate refresh token")
+			return
+		}
+	}
+
+	tokens, err := h.issueTokenSet(ctx, queries, stored.UserID, stored.ClientID, pgTextOrEmpty(stored.Scope), reuseRefresh)
 	if err != nil {
 		h.logger.ErrorContext(ctx, "issue token set on refresh", slog.Any("error", err))
 		oauthError(w, http.StatusInternalServerError, "server_error", "failed to issue tokens")
@@ -524,13 +558,16 @@ func (h *Handler) handleRefreshTokenGrant(ctx context.Context, w http.ResponseWr
 // issueTokenSet writes opaque access + refresh rows to the tokens table
 // and, when the scope contains "openid", signs an id_token JWT and writes
 // a row for it too (so the dashboard can show "this id_token was issued").
-func (h *Handler) issueTokenSet(ctx context.Context, queries *repo.Queries, userID uuid.UUID, clientID, scope string) (tokenResponse, error) {
+//
+// reuseRefresh, when non-empty, is handed back verbatim instead of minting a
+// new refresh token -- the non-rotating path, where the caller's existing
+// token stays live.
+func (h *Handler) issueTokenSet(ctx context.Context, queries *repo.Queries, userID uuid.UUID, clientID, scope, reuseRefresh string) (tokenResponse, error) {
 	access := randomHex(32)
-	refresh := randomHex(32)
+	refresh := reuseRefresh
 
 	if _, err := queries.CreateToken(ctx, repo.CreateTokenParams{
 		Token:     access,
-		Mode:      Mode,
 		UserID:    userID,
 		ClientID:  clientID,
 		Kind:      "access_token",
@@ -539,16 +576,18 @@ func (h *Handler) issueTokenSet(ctx context.Context, queries *repo.Queries, user
 	}); err != nil {
 		return tokenResponse{}, fmt.Errorf("insert access_token: %w", err)
 	}
-	if _, err := queries.CreateToken(ctx, repo.CreateTokenParams{
-		Token:     refresh,
-		Mode:      Mode,
-		UserID:    userID,
-		ClientID:  clientID,
-		Kind:      "refresh_token",
-		Scope:     sql.NullString{String: scope, Valid: scope != ""},
-		ExpiresAt: time.Now().Add(refreshTokenLifetime),
-	}); err != nil {
-		return tokenResponse{}, fmt.Errorf("insert refresh_token: %w", err)
+	if refresh == "" {
+		refresh = randomHex(32)
+		if _, err := queries.CreateToken(ctx, repo.CreateTokenParams{
+			Token:     refresh,
+			UserID:    userID,
+			ClientID:  clientID,
+			Kind:      "refresh_token",
+			Scope:     sql.NullString{String: scope, Valid: scope != ""},
+			ExpiresAt: time.Now().Add(refreshTokenLifetime),
+		}); err != nil {
+			return tokenResponse{}, fmt.Errorf("insert refresh_token: %w", err)
+		}
 	}
 
 	resp := tokenResponse{
@@ -567,7 +606,6 @@ func (h *Handler) issueTokenSet(ctx context.Context, queries *repo.Queries, user
 		}
 		if _, err := queries.CreateToken(ctx, repo.CreateTokenParams{
 			Token:     idToken,
-			Mode:      Mode,
 			UserID:    userID,
 			ClientID:  clientID,
 			Kind:      "id_token",
@@ -645,7 +683,7 @@ func (h *Handler) handleUserinfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	queries := repo.New(h.db)
-	stored, err := queries.GetActiveToken(ctx, repo.GetActiveTokenParams{Token: bearer, Mode: Mode})
+	stored, err := queries.GetActiveToken(ctx, repo.GetActiveTokenParams{Token: bearer, Ts: time.Now()})
 	if err != nil || stored.Kind != "access_token" {
 		w.Header().Set("WWW-Authenticate", `Bearer realm="oauth2-1", error="invalid_token"`)
 		oauthError(w, http.StatusUnauthorized, "invalid_token", "bearer is unknown, revoked, expired, or not an access token")
@@ -686,7 +724,6 @@ func (h *Handler) handleRevoke(w http.ResponseWriter, r *http.Request) {
 		if err := repo.New(h.db).RevokeToken(ctx, repo.RevokeTokenParams{
 			Ts:    sql.NullTime{Time: time.Now(), Valid: true},
 			Token: token,
-			Mode:  Mode,
 		}); err != nil {
 			h.logger.WarnContext(ctx, "revoke token", slog.Any("error", err))
 		}

@@ -11,8 +11,8 @@ import (
 	"context"
 )
 
-// Dev-idp organizations CRUD. Backs both mock-workos and oauth2 modes' org
-// metadata. Permanently unauthenticated (idp-design.md §6).
+// Dev-idp organizations CRUD. Backs the local backend's org metadata.
+// Permanently unauthenticated.
 type Service interface {
 	// Create an organization.
 	Create(context.Context, *CreatePayload) (res *Organization, err error)
