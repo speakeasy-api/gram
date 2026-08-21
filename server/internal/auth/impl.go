@@ -706,14 +706,26 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 
 	state := encodeStateParam(destination, nonce)
 
-	// The company name is what marks a login as having begun on /sign-up, so it
-	// alone selects AuthKit's sign-up screen. Keeping one signal authoritative
-	// beats a second flag that can drift out of sync with it. The email only
-	// fills the field in, so a sign-up without one still lands on the right
-	// screen.
+	// The company name is what marks a login as having begun on /sign-up.
+	// AuthKit's hosted sign-up screen rejects emails that already have a
+	// WorkOS account ("This email is not available"), so look the address up
+	// first and send known users to sign-in with the field pre-filled. The
+	// lookup is signup-only: ordinary login must not pay the extra WorkOS
+	// round trip. Fail open on a lookup error so a temporary API problem
+	// cannot block new users. Signup intent is still stored either way —
+	// a WorkOS account with no Gram org still provisions on callback.
 	screenHint := ""
 	if orgName != "" {
 		screenHint = "sign-up"
+		if email != "" {
+			exists, lookupErr := s.identity.HasWorkOSUser(ctx, email)
+			switch {
+			case lookupErr != nil:
+				s.logger.WarnContext(ctx, "workos user lookup failed, continuing signup", attr.SlogError(lookupErr), attr.SlogAuthUserEmail(email))
+			case exists:
+				screenHint = ""
+			}
+		}
 	}
 
 	authURL, err := s.identity.BuildAuthorizationURL(ctx, identity.AuthorizationURLParams{
