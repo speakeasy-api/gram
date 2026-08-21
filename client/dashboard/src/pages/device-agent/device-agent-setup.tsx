@@ -1004,7 +1004,19 @@ function WinInstallStep() {
   const msiUrl = version
     ? `${RELEASES_BASE}/v${version}/speakeasy-agent_${version}.msi`
     : null;
-  const stableMsiUrl = `${getServerURL()}/v1/install/device-agent-windows.msi`;
+  // The snippet lands in an elevated shell, so never emit a plaintext
+  // download: if the server URL is somehow non-HTTPS, skip the stable link
+  // and build the snippet against the (always-HTTPS) release bucket instead.
+  const serverURL = getServerURL();
+  const stableMsiUrl = serverURL.startsWith("https:")
+    ? `${serverURL}/v1/install/device-agent-windows.msi`
+    : null;
+  const downloadScript = stableMsiUrl
+    ? `Invoke-WebRequest "${stableMsiUrl}" -OutFile speakeasy-agent.msi
+msiexec /i speakeasy-agent.msi`
+    : `${psVersionAssign(version)}
+Invoke-WebRequest "${RELEASES_BASE}/v$VERSION/speakeasy-agent_\${VERSION}.msi" -OutFile speakeasy-agent.msi
+msiexec /i speakeasy-agent.msi`;
 
   return (
     <div className="flex flex-col gap-6">
@@ -1015,11 +1027,10 @@ function WinInstallStep() {
       <div className="flex flex-col gap-2">
         <SubLabel>Run the download + install script</SubLabel>
         <StepNote>
-          Run from an elevated (Administrator) PowerShell. The stable URL always
-          redirects to the latest signed installer.
+          Run from an elevated (Administrator) PowerShell. The download URL
+          always resolves to the latest signed installer.
         </StepNote>
-        <CodeBlock language="powershell">{`Invoke-WebRequest "${stableMsiUrl}" -OutFile speakeasy-agent.msi
-msiexec /i speakeasy-agent.msi`}</CodeBlock>
+        <CodeBlock language="powershell">{downloadScript}</CodeBlock>
       </div>
       <OrDivider />
       <div className="flex flex-col gap-2">
@@ -1036,10 +1047,20 @@ msiexec /i speakeasy-agent.msi`}</CodeBlock>
             {isError
               ? "Couldn't load the latest release — use the "
               : "Loading the latest release… or use the "}
-            <ExternalLink href={stableMsiUrl} iconSuffixName="external-link">
-              stable installer link
-            </ExternalLink>
-            , which always serves the current version.
+            {stableMsiUrl ? (
+              <ExternalLink href={stableMsiUrl} iconSuffixName="external-link">
+                stable installer link
+              </ExternalLink>
+            ) : (
+              <ExternalLink
+                href={MANIFEST_URL}
+                target="_blank"
+                iconSuffixName="external-link"
+              >
+                release manifest
+              </ExternalLink>
+            )}
+            , which always points at the current version.
           </Text>
         )}
       </div>
@@ -1063,8 +1084,8 @@ Invoke-WebRequest "$BASE/speakeasy_\${VERSION}_windows_amd64.exe"  -OutFile spea
         <Text small muted>
           Upload the msi to Intune (or your MDM) as a{" "}
           <strong className="font-medium">Win32 / line-of-business app</strong>{" "}
-          and assign it per machine — no script needed. Get it from the stable
-          link above, and pair it with a <code>managed.json</code> pushed to{" "}
+          and assign it per machine — no script needed. Get it with the script
+          or link above, and pair it with a <code>managed.json</code> pushed to{" "}
           <code>%ProgramData%\Speakeasy\</code> (see the identity step) so
           enrollment is set centrally.
         </Text>
