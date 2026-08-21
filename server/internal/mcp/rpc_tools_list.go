@@ -99,7 +99,7 @@ func handleToolsList(
 		// the event: tools/list params are tiny, so the scan is negligible.
 		reqMeta := mcprequests.ParseMeta(req.Params)
 		identity, storedProtocolVersion := resolveClientIdentity(ctx, logger, clientInfoStore, payload, reqMeta.ClientInfo)
-		protocolVersion := reqMeta.DeclaredProtocolVersion(payload.protocolVersionHeader)
+		protocolVersion := payload.protocolVersion.Declared
 		if protocolVersion == "" {
 			protocolVersion = storedProtocolVersion
 		}

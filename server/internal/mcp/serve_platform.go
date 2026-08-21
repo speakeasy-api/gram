@@ -106,7 +106,11 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 		return oops.E(oops.CodeBadRequest, errInvalidJSONRPCVersion, "unsupported JSON-RPC version").LogError(ctx, s.logger)
 	}
 
-	body, err := s.handlePlatformToolsetRequest(ctx, authCtx, toolset, &req, r.Header.Get("Gram-Chat-ID"), mcpversions.Sanitize(r.Header.Get(mcpversions.HTTPHeader)))
+	// Resolved once per request; the initialize handler overwrites InEffect
+	// with the negotiated answer, which is the one sanctioned mutation.
+	protocolVersion := mcpversions.Resolve(mcprequests.DeclaredProtocolVersion(r.Header.Get(mcpversions.HTTPHeader), req.Params), mcpversions.SupportedPlatformToolset())
+
+	body, err := s.handlePlatformToolsetRequest(ctx, authCtx, toolset, &req, r.Header.Get("Gram-Chat-ID"), &protocolVersion)
 	switch {
 	case body == nil && err == nil:
 		return respondWithNoContent(true, w)
@@ -248,10 +252,13 @@ func (s *Service) handlePlatformToolsetRequest(
 	toolset platformtools.Toolset,
 	req *rawRequest,
 	chatIDHeader string,
-	protocolVersionHeader string,
+	protocolVersion *mcpversions.Resolution,
 ) (json.RawMessage, error) {
-	// Census parity with the hosted dispatch.
-	s.metrics.RecordMCPRequest(ctx, mcprequests.DeclaredProtocolVersion(protocolVersionHeader, req.Params), req.Method, mcpmetrics.SurfacePlatform)
+	// Count this request on the same census as the hosted dispatch. The
+	// version dimension must be Declared, not InEffect: the census exists to
+	// show what clients actually send, and RecordMCPRequest buckets an empty
+	// or unrecognized declaration into its "none"/"other" series.
+	s.metrics.RecordMCPRequest(ctx, protocolVersion.Declared, req.Method, mcpmetrics.SurfacePlatform)
 
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
 		start := time.Now()
@@ -264,7 +271,7 @@ func (s *Service) handlePlatformToolsetRequest(
 	case "ping":
 		return handlePing(ctx, s.logger, req.ID, serverInfoPlatformToolset)
 	case "initialize":
-		return handlePlatformInitialize(ctx, s.logger, s.metrics, req)
+		return handlePlatformInitialize(ctx, s.logger, s.metrics, req, protocolVersion)
 	case "notifications/initialized", "notifications/cancelled":
 		return nil, nil
 	case "tools/list":
@@ -276,26 +283,31 @@ func (s *Service) handlePlatformToolsetRequest(
 	}
 }
 
-func handlePlatformInitialize(ctx context.Context, logger *slog.Logger, telemetry *mcpmetrics.Metrics, req *rawRequest) (json.RawMessage, error) {
-	// This path answers ServedPlatformToolset unconditionally and does not
-	// otherwise read the request params. Parsing them purely for telemetry is
-	// the point: without it the platform surface is the one inbound path where
-	// the client's requested revision is invisible, which reads as a hole in
-	// the data rather than as "platform clients don't negotiate". Malformed
-	// params must not fail the handshake, so a parse error is logged and the
-	// requested version is simply left unrecorded.
+func handlePlatformInitialize(ctx context.Context, logger *slog.Logger, telemetry *mcpmetrics.Metrics, req *rawRequest, protocolVersion *mcpversions.Resolution) (json.RawMessage, error) {
+	// Malformed params must not fail the handshake, so a parse error is
+	// logged, the requested version is left unrecorded, and negotiation
+	// proceeds from an absent request — answering the unversioned default.
 	params, _, err := parseInitializeParams(req.Params)
 	if err != nil {
 		logger.WarnContext(ctx, "failed to parse platform mcp initialize params", attr.SlogError(err))
 	}
 
-	recordMCPProtocolVersionSpan(ctx, params.ProtocolVersion, mcpversions.ServedPlatformToolset)
-	telemetry.RecordMCPInitialize(ctx, params.ProtocolVersion, mcpversions.ServedPlatformToolset)
+	// Genuine version negotiation, mirroring the hosted surface: echo the
+	// requested revision when this surface supports it, otherwise answer the
+	// newest supported one. The answer is written back into the request's
+	// resolution because entry-time resolution saw a handshake with no
+	// declared version; anything downstream of dispatch must see the
+	// negotiated value.
+	negotiated := mcpversions.Negotiate(params.ProtocolVersion, mcpversions.SupportedPlatformToolset())
+	protocolVersion.InEffect = negotiated
+
+	recordMCPProtocolVersionSpan(ctx, params.ProtocolVersion, negotiated)
+	telemetry.RecordMCPInitialize(ctx, params.ProtocolVersion, negotiated)
 
 	result := &result[initializeResult]{
 		ID: req.ID,
 		Result: initializeResult{
-			ProtocolVersion: mcpversions.ServedPlatformToolset,
+			ProtocolVersion: negotiated,
 			Capabilities: map[string]json.RawMessage{
 				"tools": json.RawMessage("{}"),
 			},
