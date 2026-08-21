@@ -1585,6 +1585,76 @@ CREATE UNIQUE INDEX IF NOT EXISTS custom_domains_organization_id_key
 ON custom_domains (organization_id)
 WHERE deleted IS FALSE;
 
+-- Private network ingress: serves an org's MCP endpoints directly on the
+-- customer's overlay network (Tailscale first). Org-level, one row per org,
+-- mirroring custom_domains. See docs/network-ingress-design.md.
+CREATE TABLE IF NOT EXISTS network_ingresses (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  -- Overlay network technology serving this ingress. 'tailscale' only at
+  -- launch; allowed values are validated in application code.
+  provider TEXT NOT NULL DEFAULT 'tailscale',
+  -- Device hostname the node advertises on the customer's network.
+  hostname TEXT NOT NULL DEFAULT 'gram-mcp',
+  -- Credential material is provider-specific and exactly one mode is
+  -- populated ('auth_key' or 'oauth_client' for tailscale); both the kind and
+  -- the exactly-one rule are validated in application code. Secrets are
+  -- AES-256-GCM ciphertext (server/internal/encryption), never returned by RPCs.
+  credential_kind TEXT NOT NULL CONSTRAINT network_ingresses_credential_kind_check CHECK (credential_kind <> ''),
+  -- One-shot join key; nulled after the first successful join.
+  auth_key_enc TEXT,
+  oauth_client_id TEXT,
+  oauth_client_secret_enc TEXT,
+  -- ACL tags the node advertises on the customer's network. Provider-specific
+  -- defaults (e.g. tag:gram for tailscale) are applied in application code.
+  tags TEXT[] NOT NULL DEFAULT '{}',
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  -- Disable public access: MCP traffic 403s on both the platform host and the
+  -- org's custom domain; only private-network requests pass.
+  private_network_only BOOLEAN NOT NULL DEFAULT FALSE,
+  -- Reject requests the gateway cannot attribute to a network identity (e.g.
+  -- tailscale WhoIs) at the gateway.
+  identity_required BOOLEAN NOT NULL DEFAULT TRUE,
+  -- Health state below is written by the network gateway, not the management
+  -- API. status: pending|connecting|online|offline|error|disabled (validated
+  -- in application code).
+  status TEXT NOT NULL DEFAULT 'pending',
+  network_name TEXT,
+  dns_name TEXT,
+  node_id TEXT,
+  last_error TEXT,
+  last_seen_at timestamptz,
+  connected_since timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT network_ingresses_pkey PRIMARY KEY (id),
+  CONSTRAINT network_ingresses_hostname_check CHECK (hostname <> ''),
+  CONSTRAINT network_ingresses_provider_check CHECK (provider <> '')
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS network_ingresses_organization_id_key
+ON network_ingresses (organization_id)
+WHERE deleted IS FALSE;
+
+-- Provider-agnostic KV state for a network ingress node (for tailscale: the
+-- tsnet ipn.StateStore holding machine key, node key, and profile). This is
+-- what lets a gateway replica resume as the same overlay device after
+-- failover, with no persistent volumes. Rows are purged by the gateway as
+-- part of the ingress deletion lifecycle (the node must log out first), so
+-- there is deliberately no FK to network_ingresses.
+CREATE TABLE IF NOT EXISTS network_node_state (
+  ingress_id uuid NOT NULL,
+  key TEXT NOT NULL,
+  value bytea NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT network_node_state_pkey PRIMARY KEY (ingress_id, key)
+);
+
 -- External OAuth Server Metadata (RFC 8414 compliant)
 -- For direct external OAuth provider connections
 CREATE TABLE IF NOT EXISTS external_oauth_server_metadata (
