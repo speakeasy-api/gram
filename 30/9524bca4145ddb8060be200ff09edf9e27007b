@@ -1,0 +1,39 @@
+server/database/schema.sql
+  s_d8569503ddf9c1::t_4ddde612f20d1a 5047-5077
+  s_d8569503ddf9c1::t_f2949fb69fcd9e 67
+server/migrations/20260821090944_session-quarantines.sql
+  s_1b89b64f839d5a::t_e90b082b8f3946 1-25
+server/internal/organizations/repo/queries.sql.go
+  s_d8569503ddf9c1::t_afcc0f97d84c5a 200,240,412,435,444,467,476,499,1240,1267,1281,1307,1609,1648,1680,1715,1745,1786
+server/internal/database/models.go
+  s_d8569503ddf9c1::t_8e138f8948ed3a 2297-2311
+  s_d8569503ddf9c1::t_0ca4542435999d 1471-1488
+server/internal/projects/repo/queries.sql.go
+  s_d8569503ddf9c1::t_d38cded0a8bfdc 191,200-220,244
+server/internal/organizations/repo/models.go
+  s_d8569503ddf9c1::t_0ca4542435999d 28-45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "309524bca4145ddb8060be200ff09edf9e27007b",
+  "prompts": {},
+  "sessions": {
+    "s_1b89b64f839d5a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b212c1f3-f9cc-4384-9d8d-3b389aad3c4b",
+        "model": "claude-fable-5"
+      },
+      "human_author": null
+    },
+    "s_d8569503ddf9c1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a02009-cbbe-7523-85e3-7aa83e894e4c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
