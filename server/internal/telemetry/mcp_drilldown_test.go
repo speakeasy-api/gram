@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -168,6 +167,7 @@ func TestListMCPTraceReferences_PagesBackwardsInTime(t *testing.T) {
 	next, err := ti.chClient.ListMCPTraceReferences(ctx, telemetryRepo.ListMCPTraceReferencesParams{
 		GetMCPOutcomeBreakdownParams: base,
 		BeforeUnixNano:               first[len(first)-1].OccurredAt,
+		BeforeTraceID:                first[len(first)-1].TraceID,
 		Limit:                        2,
 	})
 	require.NoError(t, err)
@@ -218,23 +218,17 @@ func TestListMCPTraceReferences_CapsThePageSize(t *testing.T) {
 
 	// An unbounded or oversized request is clamped rather than honoured, so a
 	// caller cannot turn drill-down into a bulk export.
-	//
-	// Polled rather than read once: this package's tests share one ClickHouse
-	// and run in parallel, and a just-flushed row is not always visible to the
-	// very next statement.
-	require.EventuallyWithT(t, func(collect *assert.CollectT) {
-		rows, err := ti.chClient.ListMCPTraceReferences(ctx, telemetryRepo.ListMCPTraceReferencesParams{
-			GetMCPOutcomeBreakdownParams: telemetryRepo.GetMCPOutcomeBreakdownParams{
-				GramProjectIDs: []string{projectID},
-				ToolsetSlugs:   []string{"billing"},
-				TimeStart:      now.Add(-time.Hour).UnixNano(),
-				TimeEnd:        now.UnixNano(),
-			},
-			Limit: 100_000,
-		})
-		assert.NoError(collect, err)
-		assert.Len(collect, rows, 1)
-	}, 10*time.Second, 250*time.Millisecond)
+	rows, err := ti.chClient.ListMCPTraceReferences(ctx, telemetryRepo.ListMCPTraceReferencesParams{
+		GetMCPOutcomeBreakdownParams: telemetryRepo.GetMCPOutcomeBreakdownParams{
+			GramProjectIDs: []string{projectID},
+			ToolsetSlugs:   []string{"billing"},
+			TimeStart:      now.Add(-time.Hour).UnixNano(),
+			TimeEnd:        now.UnixNano(),
+		},
+		Limit: 100_000,
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
 }
 
 // TestMCPDrilldownTraceIDsAreStable pins that the same occurrence keeps its

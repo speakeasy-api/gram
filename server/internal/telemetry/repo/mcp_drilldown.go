@@ -79,8 +79,12 @@ type ListMCPTraceReferencesParams struct {
 	// rarely what a drill-down wants — the caller usually arrives here holding a
 	// failure class the overview named.
 	Outcomes []string
-	// BeforeUnixNano continues a previous page. Zero starts at the newest.
+	// BeforeUnixNano and BeforeTraceID continue a previous page. They are the
+	// composite key the ordering below uses; paging on the timestamp alone
+	// would skip every remaining trace sharing the boundary nanosecond, which
+	// on a busy server silently drops occurrences from both pages.
 	BeforeUnixNano int64
+	BeforeTraceID  string
 	Limit          int
 }
 
@@ -126,7 +130,11 @@ func (q *Queries) ListMCPTraceReferences(ctx context.Context, arg ListMCPTraceRe
 		sb = sb.Where(squirrel.Eq{"outcome": arg.Outcomes})
 	}
 	if arg.BeforeUnixNano > 0 {
-		sb = sb.Where("event_time_ns < ?", arg.BeforeUnixNano)
+		if arg.BeforeTraceID != "" {
+			sb = sb.Where("(event_time_ns, trace_id) < (?, ?)", arg.BeforeUnixNano, arg.BeforeTraceID)
+		} else {
+			sb = sb.Where("event_time_ns < ?", arg.BeforeUnixNano)
+		}
 	}
 	// Ordered by time then trace id so a page boundary is deterministic when
 	// several traces share a nanosecond.

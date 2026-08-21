@@ -1,6 +1,7 @@
 package platformmcp
 
 import (
+	"encoding/base64"
 	"testing"
 	"time"
 
@@ -27,9 +28,16 @@ func TestSubjectReference_RoundTripsWithinItsSession(t *testing.T) {
 
 	reference, err := codec.Encode(principal, subjectKindUser, "alice@example.com", now)
 	require.NoError(t, err)
-	// The identity must not be legible in what the caller holds.
-	require.NotContains(t, reference, "alice")
-	require.NotContains(t, reference, "example.com")
+
+	// Decoded before asserting, because base64 is an encoding and not
+	// confidentiality: a substring check against the token text would pass for
+	// a plaintext payload and prove nothing.
+	raw, err := base64.RawURLEncoding.DecodeString(reference)
+	require.NoError(t, err)
+	require.NotContains(t, string(raw), "alice")
+	require.NotContains(t, string(raw), "example.com")
+	require.NotContains(t, string(raw), "org-1")
+	require.NotContains(t, string(raw), subjectKindUser)
 
 	value, err := codec.Decode(reference, principal, subjectKindUser, now)
 	require.NoError(t, err)
@@ -93,6 +101,15 @@ func TestSubjectReference_Rejected(t *testing.T) {
 			at:        now.Add(SubjectReferenceTTL + time.Second),
 		},
 		{
+			// Rejected exactly at the boundary, so the advertised lifetime is a
+			// limit rather than a floor.
+			name:      "at the expiry instant",
+			token:     reference,
+			principal: principal,
+			kind:      subjectKindUser,
+			at:        now.Add(SubjectReferenceTTL),
+		},
+		{
 			name:      "not a reference",
 			token:     "definitely-not-a-reference",
 			principal: principal,
@@ -106,7 +123,7 @@ func TestSubjectReference_Rejected(t *testing.T) {
 			t.Parallel()
 
 			_, err := codec.Decode(test.token, test.principal, test.kind, test.at)
-			require.ErrorIs(t, err, ErrSubjectReferenceInvalid)
+			require.ErrorIs(t, err, ErrSubjectReferenceNotFound)
 		})
 	}
 }
@@ -129,7 +146,7 @@ func TestSubjectReference_ForgedSignatureRejected(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = codec.Decode(forged, principal, subjectKindUser, now)
-	require.ErrorIs(t, err, ErrSubjectReferenceInvalid)
+	require.ErrorIs(t, err, ErrSubjectReferenceNotFound)
 }
 
 // TestSubjectReference_UnavailableWithoutKeyMaterial pins that a deployment
@@ -139,5 +156,5 @@ func TestSubjectReference_UnavailableWithoutKeyMaterial(t *testing.T) {
 	t.Parallel()
 
 	_, err := newSubjectReferenceCodec("")
-	require.ErrorIs(t, err, ErrSubjectReferenceInvalid)
+	require.ErrorIs(t, err, ErrSubjectReferenceNotFound)
 }

@@ -43,8 +43,23 @@ type drilldownTarget struct {
 	toolsetSlugs []string
 	urlSuffixes  []string
 	projectID    string
+	mcpServerID  string
 	window       ResolvedWindow
 	now          time.Time
+}
+
+// hostedToolsetSlug is the toolset a hosted MCP's traffic is recorded under, or
+// empty for a remote, tunneled, or unproxied server.
+//
+// Emptiness matters: the summary reads treat an empty slug as "no filter", so a
+// caller that passes it through unchecked gets the whole project's numbers back
+// under one MCP's name. Every use of this value must handle the empty case
+// rather than forwarding it.
+func (t drilldownTarget) hostedToolsetSlug() string {
+	if len(t.toolsetSlugs) == 0 {
+		return ""
+	}
+	return t.toolsetSlugs[0]
 }
 
 func (s *DiagnosticsService) resolveDrilldown(ctx context.Context, principal Principal, projectID, mcpID, window string, budget OperationBudget) (drilldownTarget, error) {
@@ -76,6 +91,7 @@ func (s *DiagnosticsService) resolveDrilldown(ctx context.Context, principal Pri
 		toolsetSlugs: nonEmpty(target.ToolsetSlug),
 		urlSuffixes:  mcpURLSuffixes(target.McpSlug),
 		projectID:    projectID,
+		mcpServerID:  mcpID,
 		window:       resolved,
 		now:          now,
 	}, nil
@@ -215,7 +231,7 @@ func (s *DiagnosticsService) QueryMCPTraces(ctx context.Context, principal Princ
 		return QueryMCPTracesOutput{}, err
 	}
 
-	before, err := s.decodeTraceCursor(input.Cursor, principal, target.now)
+	before, beforeTraceID, err := s.decodeTraceCursor(input.Cursor, principal, target.now)
 	if err != nil {
 		return QueryMCPTracesOutput{}, err
 	}
@@ -223,6 +239,7 @@ func (s *DiagnosticsService) QueryMCPTraces(ctx context.Context, principal Princ
 	params := telemetryrepo.ListMCPTraceReferencesParams{
 		GetMCPOutcomeBreakdownParams: target.outcomeParams(),
 		BeforeUnixNano:               before,
+		BeforeTraceID:                beforeTraceID,
 		// One extra row decides whether another page exists without a second
 		// round trip, and is dropped before anything is projected.
 		Limit: maxTraceReferences + 1,
@@ -265,7 +282,8 @@ func (s *DiagnosticsService) QueryMCPTraces(ctx context.Context, principal Princ
 		Traces:    traces,
 	}
 	if more && len(rows) > 0 {
-		cursor, err := s.references.Encode(principal, subjectKindTrace, formatCursorPosition(rows[len(rows)-1].OccurredAt), target.now)
+		last := rows[len(rows)-1]
+		cursor, err := s.references.Encode(principal, subjectKindTrace, formatCursorPosition(last.OccurredAt, last.TraceID), target.now)
 		if err != nil {
 			return QueryMCPTracesOutput{}, fmt.Errorf("mint trace cursor: %w", err)
 		}
@@ -296,6 +314,10 @@ type QueryMCPMetricsOutput struct {
 	FailureRate  float64      `json:"failure_rate"`
 	AvgLatencyMs float64      `json:"avg_latency_ms"`
 	ActiveUsers  SubjectCount `json:"active_users"`
+	// ActiveUsersUnavailable reports that this MCP's model cannot be scoped by
+	// the active-count read, so ActiveUsers is not an answer about this server.
+	// Stated rather than left as a zero, which would read as "nobody".
+	ActiveUsersUnavailable bool `json:"active_users_unavailable"`
 }
 
 func (s *DiagnosticsService) QueryMCPMetrics(ctx context.Context, principal Principal, input QueryMCPMetricsInput) (QueryMCPMetricsOutput, error) {
@@ -303,20 +325,54 @@ func (s *DiagnosticsService) QueryMCPMetrics(ctx context.Context, principal Prin
 	if err != nil {
 		return QueryMCPMetricsOutput{}, err
 	}
-	toolsetSlug := ""
-	if len(target.toolsetSlugs) > 0 {
-		toolsetSlug = target.toolsetSlugs[0]
-	}
+	toolsetSlug := target.hostedToolsetSlug()
 	start, end := target.window.start.UnixNano(), target.window.end.UnixNano()
 
+	// Call volume comes from the same correctly-scoped trace source the rest of
+	// the drill-down reads, which matches on both the toolset slug and the
+	// server URL. The summary read below can only narrow by toolset slug or
+	// mcp_server_id, so it is used for latency alone.
+	outcomeRows, err := s.telemetry.GetMCPOutcomeBreakdown(ctx, target.outcomeParams())
+	if err != nil {
+		return QueryMCPMetricsOutput{}, fmt.Errorf("read mcp metrics outcomes: %w", err)
+	}
 	summary, err := s.telemetry.GetOverviewSummary(ctx, telemetryrepo.GetOverviewSummaryParams{
 		GramProjectID: target.projectID,
 		TimeStart:     start,
 		TimeEnd:       end,
 		ToolsetSlug:   toolsetSlug,
+		// Scopes the read for a remote, tunneled, or unproxied server, which
+		// carries no toolset slug. Without it an empty slug would read as "no
+		// filter" and return the whole project under this MCP's name.
+		MCPServerID: target.mcpServerID,
 	})
 	if err != nil {
 		return QueryMCPMetricsOutput{}, fmt.Errorf("read mcp metrics summary: %w", err)
+	}
+	envelope, err := s.drilldownEnvelope(ctx, target)
+	if err != nil {
+		return QueryMCPMetricsOutput{}, err
+	}
+
+	totals := totalsFromRows(outcomeRows)
+	output := QueryMCPMetricsOutput{
+		ProjectID:       input.ProjectID,
+		MCPID:           input.MCPID,
+		Envelope:        envelope,
+		ToolCalls:       totals.Total,
+		FailedToolCalls: totals.failures(),
+		FailureRate:     failureRate(totals.Total, totals.failures()),
+	}
+	if summary != nil {
+		output.AvgLatencyMs = summary.AvgLatencyMs
+	}
+	// Active users are only answerable for a hosted server: the active-count
+	// read narrows by toolset slug and by nothing else, so for any other model
+	// the honest answer is that this metric is unavailable for this MCP — not
+	// the project's user count wearing its name.
+	if toolsetSlug == "" {
+		output.ActiveUsersUnavailable = true
+		return output, nil
 	}
 	counts, err := s.telemetry.GetActiveCounts(ctx, telemetryrepo.GetActiveCountsParams{
 		GramProjectID: target.projectID,
@@ -326,22 +382,6 @@ func (s *DiagnosticsService) QueryMCPMetrics(ctx context.Context, principal Prin
 	})
 	if err != nil {
 		return QueryMCPMetricsOutput{}, fmt.Errorf("read mcp metrics active counts: %w", err)
-	}
-	envelope, err := s.drilldownEnvelope(ctx, target)
-	if err != nil {
-		return QueryMCPMetricsOutput{}, err
-	}
-
-	output := QueryMCPMetricsOutput{
-		ProjectID: input.ProjectID,
-		MCPID:     input.MCPID,
-		Envelope:  envelope,
-	}
-	if summary != nil {
-		output.ToolCalls = boundedCount(summary.TotalToolCalls)
-		output.FailedToolCalls = boundedCount(summary.FailedToolCalls)
-		output.FailureRate = failureRate(output.ToolCalls, output.FailedToolCalls)
-		output.AvgLatencyMs = summary.AvgLatencyMs
 	}
 	if counts != nil {
 		output.ActiveUsers = NewSubjectCount(boundedCount(counts.ActiveUsersCount))
@@ -377,8 +417,11 @@ type GetUserMCPStatusOutput struct {
 	// RowsSuppressed reports that per-subject rows were withheld because too
 	// few subjects were involved. It is stated rather than left to be inferred
 	// from an empty list, which would read as "nobody used this".
-	RowsSuppressed bool            `json:"rows_suppressed"`
-	Users          []MCPUserStatus `json:"users"`
+	RowsSuppressed bool `json:"rows_suppressed"`
+	// Unavailable reports that this MCP's model cannot be scoped by the reads
+	// behind this tool, so no statement is made about its users at all.
+	Unavailable bool            `json:"unavailable"`
+	Users       []MCPUserStatus `json:"users"`
 }
 
 func (s *DiagnosticsService) GetUserMCPStatus(ctx context.Context, principal Principal, input GetUserMCPStatusInput) (GetUserMCPStatusOutput, error) {
@@ -392,11 +435,26 @@ func (s *DiagnosticsService) GetUserMCPStatus(ctx context.Context, principal Pri
 	if err != nil {
 		return GetUserMCPStatusOutput{}, err
 	}
-	toolsetSlug := ""
-	if len(target.toolsetSlugs) > 0 {
-		toolsetSlug = target.toolsetSlugs[0]
-	}
+	toolsetSlug := target.hostedToolsetSlug()
 	start, end := target.window.start.UnixNano(), target.window.end.UnixNano()
+
+	envelopeOnly, err := s.drilldownEnvelope(ctx, target)
+	if err != nil {
+		return GetUserMCPStatusOutput{}, err
+	}
+	// A remote, tunneled, or unproxied server carries no toolset slug, and the
+	// reads below narrow by nothing else. Answering anyway would report the
+	// project's users as this MCP's — and mint a subject reference for every
+	// one of them, which is a disclosure, not just a wrong number.
+	if toolsetSlug == "" {
+		return GetUserMCPStatusOutput{
+			ProjectID:   input.ProjectID,
+			MCPID:       input.MCPID,
+			Envelope:    envelopeOnly,
+			Unavailable: true,
+			Users:       []MCPUserStatus{},
+		}, nil
+	}
 
 	counts, err := s.telemetry.GetActiveCounts(ctx, telemetryrepo.GetActiveCountsParams{
 		GramProjectID: target.projectID,
@@ -407,10 +465,7 @@ func (s *DiagnosticsService) GetUserMCPStatus(ctx context.Context, principal Pri
 	if err != nil {
 		return GetUserMCPStatusOutput{}, fmt.Errorf("read mcp user active counts: %w", err)
 	}
-	envelope, err := s.drilldownEnvelope(ctx, target)
-	if err != nil {
-		return GetUserMCPStatusOutput{}, err
-	}
+	envelope := envelopeOnly
 
 	var activeUsers int64
 	if counts != nil {
@@ -460,19 +515,19 @@ func (s *DiagnosticsService) GetUserMCPStatus(ctx context.Context, principal Pri
 	return output, nil
 }
 
-func (s *DiagnosticsService) decodeTraceCursor(cursor string, principal Principal, now time.Time) (int64, error) {
+func (s *DiagnosticsService) decodeTraceCursor(cursor string, principal Principal, now time.Time) (int64, string, error) {
 	if cursor == "" {
-		return 0, nil
+		return 0, "", nil
 	}
 	value, err := s.references.Decode(cursor, principal, subjectKindTrace, now)
 	if err != nil {
-		return 0, ErrSubjectReferenceInvalid
+		return 0, "", ErrSubjectReferenceNotFound
 	}
-	position, err := parseCursorPosition(value)
+	position, traceID, err := parseCursorPosition(value)
 	if err != nil {
-		return 0, ErrSubjectReferenceInvalid
+		return 0, "", ErrSubjectReferenceNotFound
 	}
-	return position, nil
+	return position, traceID, nil
 }
 
 // sortToolEvents puts the tool a caller should look at first at the top:
@@ -494,20 +549,27 @@ func sortToolEvents(events []MCPToolEvents) {
 
 // A trace cursor carries only a position, minted through the same bound,
 // expiring reference codec as everything else a caller holds between calls.
-func formatCursorPosition(unixNano int64) string {
-	return "t:" + strconv.FormatInt(unixNano, 10)
+func formatCursorPosition(unixNano int64, traceID string) string {
+	return "t:" + strconv.FormatInt(unixNano, 10) + ":" + traceID
 }
 
-func parseCursorPosition(value string) (int64, error) {
+// parseCursorPosition recovers the composite page key. Both halves are
+// required: the repo orders by (event_time_ns, trace_id), and a cursor carrying
+// only the timestamp would skip every trace sharing the boundary nanosecond.
+func parseCursorPosition(value string) (int64, string, error) {
 	rest, ok := strings.CutPrefix(value, "t:")
 	if !ok {
-		return 0, ErrSubjectReferenceInvalid
+		return 0, "", ErrSubjectReferenceNotFound
 	}
-	position, err := strconv.ParseInt(rest, 10, 64)
+	timestamp, traceID, ok := strings.Cut(rest, ":")
+	if !ok || traceID == "" {
+		return 0, "", ErrSubjectReferenceNotFound
+	}
+	position, err := strconv.ParseInt(timestamp, 10, 64)
 	if err != nil || position <= 0 {
-		return 0, ErrSubjectReferenceInvalid
+		return 0, "", ErrSubjectReferenceNotFound
 	}
-	return position, nil
+	return position, traceID, nil
 }
 
 func validOutcomeClass(outcome string) bool {
