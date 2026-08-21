@@ -560,7 +560,7 @@ export function SignalDrawer({
                           !evidenceQuery.isError &&
                           evidence.length === 0 && (
                             <Text small muted>
-                              No evidence rows in this window.
+                              No evidence rows for this rule.
                             </Text>
                           )}
                         <ExpandableList

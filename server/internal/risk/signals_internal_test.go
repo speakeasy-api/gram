@@ -79,6 +79,9 @@ func TestSignalTopUsersByRule_SkipsUnattributed(t *testing.T) {
 
 	rows := []chrepo.RiskSignalUserCount{
 		{RuleID: "r1", UserID: "", ExternalUserID: "", Email: "", Team: "", Findings: 3},
+		// A stray stamped email without any user id is skipped too: the Users
+		// stat's predicate is id-based, and this list mirrors it exactly.
+		{RuleID: "r1", UserID: "", ExternalUserID: "", Email: "ghost@example.com", Team: "", Findings: 2},
 		{RuleID: "r1", UserID: "u1", ExternalUserID: "", Email: "alice@example.com", Team: "", Findings: 1},
 	}
 
