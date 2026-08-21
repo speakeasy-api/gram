@@ -63,6 +63,18 @@ func TestMCPFromInventoryLabelsOwnershipAndNeverProbesLegacy(t *testing.T) {
 	require.False(t, legacy.EffectiveEnabled)
 }
 
+func TestLifecycleMetadataVersionChangesOnlyWithMutableInventoryState(t *testing.T) {
+	t.Parallel()
+
+	key := lifecycleMetadataVersionKey("test-key")
+	baseline := lifecycleMetadataVersion(key, "mcp", "project", "Example", "example", "private")
+	require.NotEmpty(t, baseline)
+	require.Equal(t, baseline, lifecycleMetadataVersion(key, "mcp", "project", "Example", "example", "private"))
+	require.NotEqual(t, baseline, lifecycleMetadataVersion(key, "mcp", "project", "Renamed", "example", "private"))
+	require.NotEqual(t, baseline, lifecycleMetadataVersion(key, "mcp", "project", "Example", "example", "disabled"))
+	require.NotEqual(t, baseline, lifecycleMetadataVersion(lifecycleMetadataVersionKey("other-key"), "mcp", "project", "Example", "example", "private"))
+}
+
 func TestInventoryModelRecognizesEveryDashboardBackend(t *testing.T) {
 	t.Parallel()
 
