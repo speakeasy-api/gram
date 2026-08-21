@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -76,6 +77,7 @@ func seedMetaMember(
 	metaID uuid.UUID,
 	name, slug string,
 	sortOrder int32,
+	visibility string,
 ) {
 	t.Helper()
 
@@ -99,7 +101,7 @@ func seedMetaMember(
 		UserSessionIssuerID: uuid.NullUUID{UUID: memberIssuerID, Valid: true},
 		RemoteMcpServerID:   uuid.NullUUID{UUID: remote.ID, Valid: true},
 		ToolsetID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Visibility:          "private",
+		Visibility:          visibility,
 	})
 	require.NoError(t, err)
 
@@ -145,7 +147,7 @@ func TestServePublic_MetaEndpoint_Initialize(t *testing.T) {
 
 	slug := "meta-" + uuid.NewString()
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
-	seedMetaMember(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "member alpha", "member-alpha-"+uuid.NewString()[:8], 0)
+	seedMetaMember(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "member alpha", "member-alpha-"+uuid.NewString()[:8], 0, mcpservers.VisibilityPrivate)
 
 	w, err := servePublicHTTP(t, ctx, ti, slug, makeInitializeBody(), "", nil)
 	require.NoError(t, err)
@@ -239,8 +241,8 @@ func TestServePublic_MetaEndpoint_ListServers_ReturnsOrderedMembers(t *testing.T
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
 	secondSlug := "member-second-" + uuid.NewString()[:8]
 	firstSlug := "member-first-" + uuid.NewString()[:8]
-	seedMetaMember(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "member second", secondSlug, 2)
-	seedMetaMember(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "member first", firstSlug, 1)
+	seedMetaMember(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "member second", secondSlug, 2, mcpservers.VisibilityPrivate)
+	seedMetaMember(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "member first", firstSlug, 1, mcpservers.VisibilityPrivate)
 
 	w, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, "tools/call", map[string]any{
 		"name":      "list_servers",
@@ -270,6 +272,44 @@ func TestServePublic_MetaEndpoint_ListServers_ReturnsOrderedMembers(t *testing.T
 	require.Len(t, result.Content, 1)
 	require.Contains(t, result.Content[0], "text")
 	require.NotContains(t, result.Content[0], "data", "text content chunks must not carry a data member")
+}
+
+// TestServePublic_MetaEndpoint_ListServers_HidesDisabledMembers pins that the
+// anonymous inventory follows the resolution path's rule that a disabled
+// server does not exist for unauthenticated callers.
+func TestServePublic_MetaEndpoint_ListServers_HidesDisabledMembers(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	slug := "meta-" + uuid.NewString()
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+	liveSlug := "member-live-" + uuid.NewString()[:8]
+	darkSlug := "member-dark-" + uuid.NewString()[:8]
+	seedMetaMember(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "member live", liveSlug, 1, mcpservers.VisibilityPrivate)
+	seedMetaMember(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "member dark", darkSlug, 2, mcpservers.VisibilityDisabled)
+
+	w, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, "tools/call", map[string]any{
+		"name":      "list_servers",
+		"arguments": map[string]any{},
+	}), "", nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
+
+	envelope := decodeRPCResponse(t, w)
+	var result struct {
+		StructuredContent struct {
+			Servers []struct {
+				Slug string `json:"slug"`
+			} `json:"servers"`
+		} `json:"structuredContent"`
+	}
+	require.NoError(t, json.Unmarshal(envelope["result"], &result))
+	require.Len(t, result.StructuredContent.Servers, 1)
+	require.Equal(t, liveSlug, result.StructuredContent.Servers[0].Slug)
 }
 
 func TestServePublic_MetaEndpoint_DrillDownToolsNotYetAvailable(t *testing.T) {
@@ -317,6 +357,41 @@ func TestServePublic_MetaEndpoint_UnsupportedDeclaredVersion(t *testing.T) {
 	envelope := decodeRPCResponse(t, w)
 	require.Contains(t, string(envelope["error"]), "unsupported protocol version")
 	require.Contains(t, string(envelope["error"]), mcpversions.ServedMetaServer)
+}
+
+// TestServePublic_MetaEndpoint_OlderKnownDeclaredVersionRejected pins the
+// accept set to exactly the served revision: an older revision this codebase
+// recognizes is still rejected, matching what server/discover advertises, and
+// the error names only the served set rather than every known revision.
+func TestServePublic_MetaEndpoint_OlderKnownDeclaredVersionRejected(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	slug := "meta-" + uuid.NewString()
+	createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+
+	w, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), "", map[string]string{
+		mcpversions.HTTPHeader: mcpversions.Version20250326,
+	})
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	envelope := decodeRPCResponse(t, w)
+	require.Contains(t, string(envelope["error"]), "unsupported protocol version")
+	require.Contains(t, string(envelope["error"]), mcpversions.ServedMetaServer)
+	require.NotContains(t, string(envelope["error"]), mcpversions.Version20241105, "the error must name the served set, not every known revision")
+
+	w, err = servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), "", map[string]string{
+		mcpversions.HTTPHeader: mcpversions.ServedMetaServer,
+	})
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
+	envelope = decodeRPCResponse(t, w)
+	require.NotContains(t, envelope, "error")
 }
 
 // TestServePublic_MetaEndpoint_UnsanitizableDeclaredVersion pins that a

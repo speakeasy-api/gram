@@ -178,8 +178,10 @@ const metaProtocolVersionMetaKey = "io.modelcontextprotocol/protocolVersion"
 // version declaration on the meta surface. A declaration may arrive in the
 // MCP-Protocol-Version header, the params-level
 // io.modelcontextprotocol/protocolVersion _meta key, or both; conflicting,
-// unrecognized, or unparseable declarations produce deterministic structured
-// errors naming the supported set. Only a genuinely absent declaration is
+// unparseable, or unserved declarations — anything but the served revision,
+// including older revisions this package recognizes, matching the set
+// server/discover advertises — produce deterministic structured errors
+// naming the served set. Only a genuinely absent declaration is
 // accepted, for backward compatibility with handshake-based clients per the
 // specification's versioning rules — a declaration that is present but
 // unsanitizable (or not a string at all) is a malformed value, not an
@@ -226,7 +228,7 @@ func validateMetaDeclaredProtocolVersion(req *rawRequest, headerValue string) er
 	}
 
 	declared := conv.Default(headerVersion, metaVersion)
-	if declared != "" && !mcpversions.Known(declared) {
+	if declared != "" && declared != mcpversions.ServedMetaServer {
 		return unsupportedMetaProtocolVersionError(req, declared)
 	}
 
@@ -234,13 +236,15 @@ func validateMetaDeclaredProtocolVersion(req *rawRequest, headerValue string) er
 }
 
 // unsupportedMetaProtocolVersionError is the structured error for a declared
-// protocol version this surface does not serve. declared must be sanitized
-// (or a placeholder) — it is echoed to the client.
+// protocol version this surface does not serve. The named set is the served
+// set — exactly [mcpversions.ServedMetaServer], matching what server/discover
+// advertises — not the wider set of recognized revisions. declared must be
+// sanitized (or a placeholder) — it is echoed to the client.
 func unsupportedMetaProtocolVersionError(req *rawRequest, declared string) *oops.MCPError {
 	return &oops.MCPError{
 		ID:      req.ID,
 		Code:    oops.MCPCodeInvalidRequest,
-		Message: fmt.Sprintf("unsupported protocol version %q; supported versions: %s", declared, strings.Join(mcpversions.All(), ", ")),
+		Message: fmt.Sprintf("unsupported protocol version %q; supported versions: %s", declared, mcpversions.ServedMetaServer),
 	}
 }
 
@@ -361,7 +365,7 @@ func (s *Service) handleMetaListServersCall(
 	metaServer *metamcprepo.MetaMcpServer,
 	req *rawRequest,
 ) (json.RawMessage, error) {
-	members, err := metamcprepo.New(s.db).ListMetaMCPMembers(ctx, metamcprepo.ListMetaMCPMembersParams{
+	members, err := metamcprepo.New(s.db).ListServableMetaMCPMembers(ctx, metamcprepo.ListServableMetaMCPMembersParams{
 		MetaMcpServerID: metaServer.ID,
 		ProjectID:       mcpEndpoint.ProjectID,
 	})

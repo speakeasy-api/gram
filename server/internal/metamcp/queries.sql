@@ -158,6 +158,28 @@ WHERE m.meta_mcp_server_id = @meta_mcp_server_id
   AND m.deleted IS FALSE
 ORDER BY m.sort_order, m.created_at, m.id;
 
+-- name: ListServableMetaMCPMembers :many
+-- Serving-path variant of ListMetaMCPMembers: additionally hides members
+-- whose server is disabled, matching the resolution path's rule that a
+-- disabled server does not exist for unauthenticated callers. The dashboard
+-- listing keeps the unfiltered query so admins still see disabled members.
+SELECT
+    m.id,
+    m.mcp_server_id,
+    m.sort_order,
+    s.name AS mcp_server_name,
+    s.slug AS mcp_server_slug
+FROM meta_mcp_server_members m
+JOIN mcp_servers s
+  ON s.id = m.mcp_server_id
+ AND s.project_id = m.project_id
+ AND s.deleted IS FALSE
+ AND s.visibility <> 'disabled'
+WHERE m.meta_mcp_server_id = @meta_mcp_server_id
+  AND m.project_id = @project_id
+  AND m.deleted IS FALSE
+ORDER BY m.sort_order, m.created_at, m.id;
+
 -- name: UpdateMetaMCPMemberSortOrder :one
 UPDATE meta_mcp_server_members
 SET sort_order = @sort_order,

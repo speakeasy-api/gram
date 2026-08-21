@@ -480,6 +480,68 @@ func (q *Queries) ListMetaMCPServers(ctx context.Context, arg ListMetaMCPServers
 	return items, nil
 }
 
+const listServableMetaMCPMembers = `-- name: ListServableMetaMCPMembers :many
+SELECT
+    m.id,
+    m.mcp_server_id,
+    m.sort_order,
+    s.name AS mcp_server_name,
+    s.slug AS mcp_server_slug
+FROM meta_mcp_server_members m
+JOIN mcp_servers s
+  ON s.id = m.mcp_server_id
+ AND s.project_id = m.project_id
+ AND s.deleted IS FALSE
+ AND s.visibility <> 'disabled'
+WHERE m.meta_mcp_server_id = $1
+  AND m.project_id = $2
+  AND m.deleted IS FALSE
+ORDER BY m.sort_order, m.created_at, m.id
+`
+
+type ListServableMetaMCPMembersParams struct {
+	MetaMcpServerID uuid.UUID
+	ProjectID       uuid.UUID
+}
+
+type ListServableMetaMCPMembersRow struct {
+	ID            uuid.UUID
+	McpServerID   uuid.UUID
+	SortOrder     int32
+	McpServerName pgtype.Text
+	McpServerSlug pgtype.Text
+}
+
+// Serving-path variant of ListMetaMCPMembers: additionally hides members
+// whose server is disabled, matching the resolution path's rule that a
+// disabled server does not exist for unauthenticated callers. The dashboard
+// listing keeps the unfiltered query so admins still see disabled members.
+func (q *Queries) ListServableMetaMCPMembers(ctx context.Context, arg ListServableMetaMCPMembersParams) ([]ListServableMetaMCPMembersRow, error) {
+	rows, err := q.db.Query(ctx, listServableMetaMCPMembers, arg.MetaMcpServerID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListServableMetaMCPMembersRow
+	for rows.Next() {
+		var i ListServableMetaMCPMembersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.McpServerID,
+			&i.SortOrder,
+			&i.McpServerName,
+			&i.McpServerSlug,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockMetaMCPMember = `-- name: LockMetaMCPMember :one
 SELECT id, project_id, meta_mcp_server_id, mcp_server_id, sort_order, created_at, updated_at, deleted_at, deleted
 FROM meta_mcp_server_members
