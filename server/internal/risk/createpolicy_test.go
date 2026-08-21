@@ -152,7 +152,7 @@ func TestCreateRiskPolicy_Unauthorized(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 
-	// Set up an RBAC-enabled context with zero grants — RBAC should deny.
+	// Set up an authenticated context with zero grants — RBAC should deny.
 	ctx = withExactAccessGrants(t, ctx, ti.conn)
 
 	_, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{

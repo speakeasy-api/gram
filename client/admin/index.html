@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- This host is an internal tool on a private network. -->
+    <meta name="robots" content="noindex, nofollow" />
+
+    <!-- The theme follows the operating system. src/index.css drives it off a
+         prefers-color-scheme media query, so no script runs before first paint.
+         favicon.svg carries the same media query, so the mark stays visible on
+         both tab strips without a swap script. The .ico is the fallback for
+         browsers that ignore SVG icons. -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="alternate icon" href="/favicon.ico" />
+
+    <title>Speakeasy AICP Admin</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

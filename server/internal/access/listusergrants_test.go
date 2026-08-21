@@ -7,7 +7,6 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -29,7 +28,30 @@ var expectedFullAccessScopes = []string{
 	string(authz.ScopeSkillWrite),
 	string(authz.ScopeRiskPolicyEvaluate),
 	string(authz.ScopeRiskPolicyBypass),
+	string(authz.ScopeRiskPolicyBlock),
 	string(authz.ScopeChatRead),
+	string(authz.ScopeChatWrite),
+}
+
+// TestDemoGrantsMatchEnforcedScopes holds the set ListGrants reports to the
+// dashboard against the set authz.Engine.PrepareContext enforces. Different
+// functions produce them on the same condition, and any drift lets the demo
+// org render pages whose handlers then return 403.
+func TestDemoGrantsMatchEnforcedScopes(t *testing.T) {
+	t.Parallel()
+
+	reported := make([]string, 0, len(userVisibleScopeGrants()))
+	for _, grant := range userVisibleScopeGrants() {
+		reported = append(reported, grant.Scope)
+	}
+
+	enforced := make([]string, 0, len(authz.DemoScopeGrants()))
+	for _, grant := range authz.DemoScopeGrants() {
+		enforced = append(enforced, string(grant.Scope))
+	}
+
+	require.ElementsMatch(t, reported, enforced)
+	require.ElementsMatch(t, expectedFullAccessScopes, enforced)
 }
 
 func TestService_ListGrants(t *testing.T) {
@@ -45,7 +67,7 @@ func TestService_ListGrants(t *testing.T) {
 	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, mockMember("", "membership_1", "workos_user_member", "custom-builder"))
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), authz.ScopeProjectRead, "project_123")
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), authz.ScopeRiskPolicyEvaluate, "policy_123")
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeMCPConnect, "tool_456")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, seededRolePrincipal(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "custom-builder"), authz.ScopeMCPConnect, "tool_456")
 
 	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
 	require.NoError(t, err)
@@ -73,8 +95,9 @@ func TestService_ListGrants_RoleGrants(t *testing.T) {
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, "member@example.com", "Member User", "workos_user_member", "membership_1")
 	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_custom", "Custom Builder", "custom-builder", ""))
 	seedRoleAssignment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, mockMember("", "membership_1", "workos_user_member", "custom-builder"))
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project_123")
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeMCPConnect, "tool_456")
+	rolePrincipal := seededRolePrincipal(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "custom-builder")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, rolePrincipal, authz.ScopeProjectRead, "project_123")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, rolePrincipal, authz.ScopeMCPConnect, "tool_456")
 
 	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
 	require.NoError(t, err)
@@ -130,6 +153,21 @@ func TestService_ListGrants_InvalidUserPrincipal(t *testing.T) {
 	require.ErrorIs(t, err, authz.ErrPrincipalInvalid)
 }
 
+func TestService_ListGrants_WithoutActiveOrganizationReturnsNoGrants(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+	authCtx.ActiveOrganizationID = ""
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+
+	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
+	require.NoError(t, err)
+	require.Empty(t, result.Grants)
+}
+
 func TestService_ListGrants_AdminImpersonatingReturnsFullAccess(t *testing.T) {
 	t.Parallel()
 
@@ -138,11 +176,10 @@ func TestService_ListGrants_AdminImpersonatingReturnsFullAccess(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	// RBAC-enforced org, admin user, admin override set, but NO
-	// organization_users row — mirrors real impersonation.
+	// Validated support context grants full access without a membership row.
 	authCtx.IsAdmin = true
-	ctx = contextvalues.SetAuthContext(ctx, authCtx)
-	ctx = contextvalues.SetAdminOverrideInContext(ctx, "customer-org")
+	authCtx.SupportOrganizationID = authCtx.ActiveOrganizationID
+	ctx = contextvalues.WithValidatedSupportSession(ctx, authCtx)
 
 	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
 	require.NoError(t, err)
@@ -178,31 +215,6 @@ func TestService_ListGrants_NonEnterpriseLoadsEffectiveGrants(t *testing.T) {
 	require.Equal(t, string(authz.ScopeProjectRead), result.Grants[0].Scope)
 	require.Len(t, result.Grants[0].Selectors, 1)
 	require.Equal(t, "project_non_enterprise", result.Grants[0].Selectors[0].ResourceID)
-}
-
-func TestService_ListGrants_RBACDisabledReturnsFullAccess(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestAccessService(t)
-
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-	ti.service.authz = authz.NewEngine(ti.service.logger, ti.conn, chConn, authztest.RBACAlwaysDisabled, authztest.ChallengeLoggingAlwaysDisabled, ti.roles)
-
-	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
-	require.NoError(t, err)
-	require.Len(t, result.Grants, len(expectedFullAccessScopes))
-
-	byScope := make(map[string]*gen.ListRoleGrant, len(result.Grants))
-	for _, grant := range result.Grants {
-		byScope[grant.Scope] = grant
-	}
-
-	for _, scope := range expectedFullAccessScopes {
-		grant, ok := byScope[scope]
-		require.True(t, ok)
-		require.Nil(t, grant.Selectors)
-	}
 }
 
 func TestService_ListGrants_WithoutSessionReturnsFullAccess(t *testing.T) {

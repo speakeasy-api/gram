@@ -2821,241 +2821,28 @@ func EncodeListShadowMCPInventoryUsersError(encoder func(context.Context, http.R
 	}
 }
 
-// EncodeUpsertShadowMCPInventoryPolicyBypassResponse returns an encoder for
-// responses returned by the access upsertShadowMCPInventoryPolicyBypass
+// EncodeListShadowMCPInventoryServersForUserResponse returns an encoder for
+// responses returned by the access listShadowMCPInventoryServersForUser
 // endpoint.
-func EncodeUpsertShadowMCPInventoryPolicyBypassResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+func EncodeListShadowMCPInventoryServersForUserResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*access.ShadowMCPInventoryURLState)
+		res, _ := v.(*access.ListShadowMCPInventoryResult)
 		enc := encoder(ctx, w)
-		body := NewUpsertShadowMCPInventoryPolicyBypassResponseBody(res)
+		body := NewListShadowMCPInventoryServersForUserResponseBody(res)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}
 }
 
-// DecodeUpsertShadowMCPInventoryPolicyBypassRequest returns a decoder for
-// requests sent to the access upsertShadowMCPInventoryPolicyBypass endpoint.
-func DecodeUpsertShadowMCPInventoryPolicyBypassRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.UpsertShadowMCPInventoryPolicyBypassPayload, error) {
-	return func(r *http.Request) (*access.UpsertShadowMCPInventoryPolicyBypassPayload, error) {
-		var payload *access.UpsertShadowMCPInventoryPolicyBypassPayload
-		var (
-			body UpsertShadowMCPInventoryPolicyBypassRequestBody
-			err  error
-		)
-		err = decoder(r).Decode(&body)
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				return payload, goa.MissingPayloadError()
-			}
-			var gerr *goa.ServiceError
-			if errors.As(err, &gerr) {
-				return payload, gerr
-			}
-			return payload, goa.DecodePayloadError(err.Error())
-		}
-		err = ValidateUpsertShadowMCPInventoryPolicyBypassRequestBody(&body)
-		if err != nil {
-			return payload, err
-		}
-
-		var (
-			sessionToken *string
-		)
-		sessionTokenRaw := r.Header.Get("Gram-Session")
-		if sessionTokenRaw != "" {
-			sessionToken = &sessionTokenRaw
-		}
-		payload = NewUpsertShadowMCPInventoryPolicyBypassPayload(&body, sessionToken)
-		if payload.SessionToken != nil {
-			if strings.Contains(*payload.SessionToken, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
-				payload.SessionToken = &cred
-			}
-		}
-
-		return payload, nil
-	}
-}
-
-// EncodeUpsertShadowMCPInventoryPolicyBypassError returns an encoder for
-// errors returned by the upsertShadowMCPInventoryPolicyBypass access endpoint.
-func EncodeUpsertShadowMCPInventoryPolicyBypassError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
-	encodeError := goahttp.ErrorEncoder(encoder, formatter)
-	return func(ctx context.Context, w http.ResponseWriter, v error) error {
-		var en goa.GoaErrorNamer
-		if !errors.As(v, &en) {
-			return encodeError(ctx, w, v)
-		}
-		switch en.GoaErrorName() {
-		case "unauthorized":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewUpsertShadowMCPInventoryPolicyBypassUnauthorizedResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusUnauthorized)
-			return enc.Encode(body)
-		case "forbidden":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewUpsertShadowMCPInventoryPolicyBypassForbiddenResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusForbidden)
-			return enc.Encode(body)
-		case "bad_request":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewUpsertShadowMCPInventoryPolicyBypassBadRequestResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusBadRequest)
-			return enc.Encode(body)
-		case "not_found":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewUpsertShadowMCPInventoryPolicyBypassNotFoundResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusNotFound)
-			return enc.Encode(body)
-		case "conflict":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewUpsertShadowMCPInventoryPolicyBypassConflictResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusConflict)
-			return enc.Encode(body)
-		case "unsupported_media":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewUpsertShadowMCPInventoryPolicyBypassUnsupportedMediaResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusUnsupportedMediaType)
-			return enc.Encode(body)
-		case "invalid":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewUpsertShadowMCPInventoryPolicyBypassInvalidResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusUnprocessableEntity)
-			return enc.Encode(body)
-		case "invariant_violation":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewUpsertShadowMCPInventoryPolicyBypassInvariantViolationResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusInternalServerError)
-			return enc.Encode(body)
-		case "unexpected":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewUpsertShadowMCPInventoryPolicyBypassUnexpectedResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusInternalServerError)
-			return enc.Encode(body)
-		case "gateway_error":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewUpsertShadowMCPInventoryPolicyBypassGatewayErrorResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusBadGateway)
-			return enc.Encode(body)
-		default:
-			return encodeError(ctx, w, v)
-		}
-	}
-}
-
-// EncodeDeleteShadowMCPInventoryPolicyBypassResponse returns an encoder for
-// responses returned by the access deleteShadowMCPInventoryPolicyBypass
-// endpoint.
-func EncodeDeleteShadowMCPInventoryPolicyBypassResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
-	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*access.ShadowMCPInventoryURLState)
-		enc := encoder(ctx, w)
-		body := NewDeleteShadowMCPInventoryPolicyBypassResponseBody(res)
-		w.WriteHeader(http.StatusOK)
-		return enc.Encode(body)
-	}
-}
-
-// DecodeDeleteShadowMCPInventoryPolicyBypassRequest returns a decoder for
-// requests sent to the access deleteShadowMCPInventoryPolicyBypass endpoint.
-func DecodeDeleteShadowMCPInventoryPolicyBypassRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.DeleteShadowMCPInventoryPolicyBypassPayload, error) {
-	return func(r *http.Request) (*access.DeleteShadowMCPInventoryPolicyBypassPayload, error) {
-		var payload *access.DeleteShadowMCPInventoryPolicyBypassPayload
+// DecodeListShadowMCPInventoryServersForUserRequest returns a decoder for
+// requests sent to the access listShadowMCPInventoryServersForUser endpoint.
+func DecodeListShadowMCPInventoryServersForUserRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.ListShadowMCPInventoryServersForUserPayload, error) {
+	return func(r *http.Request) (*access.ListShadowMCPInventoryServersForUserPayload, error) {
+		var payload *access.ListShadowMCPInventoryServersForUserPayload
 		var (
 			projectID    string
-			serverURL    string
+			userKeys     []string
+			limit        int
 			sessionToken *string
 			err          error
 		)
@@ -3065,11 +2852,34 @@ func DecodeDeleteShadowMCPInventoryPolicyBypassRequest(mux goahttp.Muxer, decode
 			err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "query string"))
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
-		serverURL = qp.Get("server_url")
-		if serverURL == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("server_url", "query string"))
+		userKeys = qp["user_keys"]
+		if userKeys == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("user_keys", "query string"))
 		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("server_url", serverURL, goa.FormatURI))
+		if len(userKeys) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("user_keys", userKeys, len(userKeys), 1, true))
+		}
+		if len(userKeys) > 200 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("user_keys", userKeys, len(userKeys), 200, false))
+		}
+		{
+			limitRaw := qp.Get("limit")
+			if limitRaw == "" {
+				limit = 50
+			} else {
+				v, err2 := strconv.ParseInt(limitRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("limit", limitRaw, "integer"))
+				}
+				limit = int(v)
+			}
+		}
+		if limit < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+		}
+		if limit > 200 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 200, false))
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -3077,7 +2887,7 @@ func DecodeDeleteShadowMCPInventoryPolicyBypassRequest(mux goahttp.Muxer, decode
 		if err != nil {
 			return payload, err
 		}
-		payload = NewDeleteShadowMCPInventoryPolicyBypassPayload(projectID, serverURL, sessionToken)
+		payload = NewListShadowMCPInventoryServersForUserPayload(projectID, userKeys, limit, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -3090,9 +2900,9 @@ func DecodeDeleteShadowMCPInventoryPolicyBypassRequest(mux goahttp.Muxer, decode
 	}
 }
 
-// EncodeDeleteShadowMCPInventoryPolicyBypassError returns an encoder for
-// errors returned by the deleteShadowMCPInventoryPolicyBypass access endpoint.
-func EncodeDeleteShadowMCPInventoryPolicyBypassError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeListShadowMCPInventoryServersForUserError returns an encoder for
+// errors returned by the listShadowMCPInventoryServersForUser access endpoint.
+func EncodeListShadowMCPInventoryServersForUserError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -3109,7 +2919,7 @@ func EncodeDeleteShadowMCPInventoryPolicyBypassError(encoder func(context.Contex
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteShadowMCPInventoryPolicyBypassUnauthorizedResponseBody(res)
+				body = NewListShadowMCPInventoryServersForUserUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -3123,7 +2933,7 @@ func EncodeDeleteShadowMCPInventoryPolicyBypassError(encoder func(context.Contex
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteShadowMCPInventoryPolicyBypassForbiddenResponseBody(res)
+				body = NewListShadowMCPInventoryServersForUserForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -3137,7 +2947,7 @@ func EncodeDeleteShadowMCPInventoryPolicyBypassError(encoder func(context.Contex
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteShadowMCPInventoryPolicyBypassBadRequestResponseBody(res)
+				body = NewListShadowMCPInventoryServersForUserBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -3151,7 +2961,7 @@ func EncodeDeleteShadowMCPInventoryPolicyBypassError(encoder func(context.Contex
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteShadowMCPInventoryPolicyBypassNotFoundResponseBody(res)
+				body = NewListShadowMCPInventoryServersForUserNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -3165,7 +2975,7 @@ func EncodeDeleteShadowMCPInventoryPolicyBypassError(encoder func(context.Contex
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteShadowMCPInventoryPolicyBypassConflictResponseBody(res)
+				body = NewListShadowMCPInventoryServersForUserConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -3179,7 +2989,7 @@ func EncodeDeleteShadowMCPInventoryPolicyBypassError(encoder func(context.Contex
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteShadowMCPInventoryPolicyBypassUnsupportedMediaResponseBody(res)
+				body = NewListShadowMCPInventoryServersForUserUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -3193,7 +3003,7 @@ func EncodeDeleteShadowMCPInventoryPolicyBypassError(encoder func(context.Contex
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteShadowMCPInventoryPolicyBypassInvalidResponseBody(res)
+				body = NewListShadowMCPInventoryServersForUserInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -3207,7 +3017,7 @@ func EncodeDeleteShadowMCPInventoryPolicyBypassError(encoder func(context.Contex
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteShadowMCPInventoryPolicyBypassInvariantViolationResponseBody(res)
+				body = NewListShadowMCPInventoryServersForUserInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -3221,7 +3031,7 @@ func EncodeDeleteShadowMCPInventoryPolicyBypassError(encoder func(context.Contex
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteShadowMCPInventoryPolicyBypassUnexpectedResponseBody(res)
+				body = NewListShadowMCPInventoryServersForUserUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -3235,7 +3045,7 @@ func EncodeDeleteShadowMCPInventoryPolicyBypassError(encoder func(context.Contex
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteShadowMCPInventoryPolicyBypassGatewayErrorResponseBody(res)
+				body = NewListShadowMCPInventoryServersForUserGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)
@@ -3459,31 +3269,63 @@ func EncodeResolveShadowMCPInventoryRequestError(encoder func(context.Context, h
 	}
 }
 
-// EncodeGetRBACStatusResponse returns an encoder for responses returned by the
-// access getRBACStatus endpoint.
-func EncodeGetRBACStatusResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeRequestAccessResponse returns an encoder for responses returned by the
+// access requestAccess endpoint.
+func EncodeRequestAccessResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*access.RBACStatus)
+		res, _ := v.(*access.RequestAccessResult)
 		enc := encoder(ctx, w)
-		body := NewGetRBACStatusResponseBody(res)
+		body := NewRequestAccessResponseBody(res)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}
 }
 
-// DecodeGetRBACStatusRequest returns a decoder for requests sent to the access
-// getRBACStatus endpoint.
-func DecodeGetRBACStatusRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.GetRBACStatusPayload, error) {
-	return func(r *http.Request) (*access.GetRBACStatusPayload, error) {
-		var payload *access.GetRBACStatusPayload
+// DecodeRequestAccessRequest returns a decoder for requests sent to the access
+// requestAccess endpoint.
+func DecodeRequestAccessRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.RequestAccessPayload, error) {
+	return func(r *http.Request) (*access.RequestAccessPayload, error) {
+		var payload *access.RequestAccessPayload
 		var (
+			body RequestAccessRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateRequestAccessRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			apikeyToken  *string
 			sessionToken *string
 		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload = NewGetRBACStatusPayload(sessionToken)
+		payload = NewRequestAccessPayload(&body, apikeyToken, sessionToken)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -3496,9 +3338,9 @@ func DecodeGetRBACStatusRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 	}
 }
 
-// EncodeGetRBACStatusError returns an encoder for errors returned by the
-// getRBACStatus access endpoint.
-func EncodeGetRBACStatusError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeRequestAccessError returns an encoder for errors returned by the
+// requestAccess access endpoint.
+func EncodeRequestAccessError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -3515,7 +3357,7 @@ func EncodeGetRBACStatusError(encoder func(context.Context, http.ResponseWriter)
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetRBACStatusUnauthorizedResponseBody(res)
+				body = NewRequestAccessUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -3529,7 +3371,7 @@ func EncodeGetRBACStatusError(encoder func(context.Context, http.ResponseWriter)
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetRBACStatusForbiddenResponseBody(res)
+				body = NewRequestAccessForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -3543,7 +3385,7 @@ func EncodeGetRBACStatusError(encoder func(context.Context, http.ResponseWriter)
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetRBACStatusBadRequestResponseBody(res)
+				body = NewRequestAccessBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -3557,7 +3399,7 @@ func EncodeGetRBACStatusError(encoder func(context.Context, http.ResponseWriter)
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetRBACStatusNotFoundResponseBody(res)
+				body = NewRequestAccessNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -3571,7 +3413,7 @@ func EncodeGetRBACStatusError(encoder func(context.Context, http.ResponseWriter)
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetRBACStatusConflictResponseBody(res)
+				body = NewRequestAccessConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -3585,7 +3427,7 @@ func EncodeGetRBACStatusError(encoder func(context.Context, http.ResponseWriter)
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetRBACStatusUnsupportedMediaResponseBody(res)
+				body = NewRequestAccessUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -3599,7 +3441,7 @@ func EncodeGetRBACStatusError(encoder func(context.Context, http.ResponseWriter)
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetRBACStatusInvalidResponseBody(res)
+				body = NewRequestAccessInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -3613,7 +3455,7 @@ func EncodeGetRBACStatusError(encoder func(context.Context, http.ResponseWriter)
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetRBACStatusInvariantViolationResponseBody(res)
+				body = NewRequestAccessInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -3627,7 +3469,7 @@ func EncodeGetRBACStatusError(encoder func(context.Context, http.ResponseWriter)
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetRBACStatusUnexpectedResponseBody(res)
+				body = NewRequestAccessUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -3641,387 +3483,7 @@ func EncodeGetRBACStatusError(encoder func(context.Context, http.ResponseWriter)
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetRBACStatusGatewayErrorResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusBadGateway)
-			return enc.Encode(body)
-		default:
-			return encodeError(ctx, w, v)
-		}
-	}
-}
-
-// EncodeEnableRBACResponse returns an encoder for responses returned by the
-// access enableRBAC endpoint.
-func EncodeEnableRBACResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
-	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		w.WriteHeader(http.StatusOK)
-		return nil
-	}
-}
-
-// DecodeEnableRBACRequest returns a decoder for requests sent to the access
-// enableRBAC endpoint.
-func DecodeEnableRBACRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.EnableRBACPayload, error) {
-	return func(r *http.Request) (*access.EnableRBACPayload, error) {
-		var payload *access.EnableRBACPayload
-		var (
-			sessionToken *string
-		)
-		sessionTokenRaw := r.Header.Get("Gram-Session")
-		if sessionTokenRaw != "" {
-			sessionToken = &sessionTokenRaw
-		}
-		payload = NewEnableRBACPayload(sessionToken)
-		if payload.SessionToken != nil {
-			if strings.Contains(*payload.SessionToken, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
-				payload.SessionToken = &cred
-			}
-		}
-
-		return payload, nil
-	}
-}
-
-// EncodeEnableRBACError returns an encoder for errors returned by the
-// enableRBAC access endpoint.
-func EncodeEnableRBACError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
-	encodeError := goahttp.ErrorEncoder(encoder, formatter)
-	return func(ctx context.Context, w http.ResponseWriter, v error) error {
-		var en goa.GoaErrorNamer
-		if !errors.As(v, &en) {
-			return encodeError(ctx, w, v)
-		}
-		switch en.GoaErrorName() {
-		case "unauthorized":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewEnableRBACUnauthorizedResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusUnauthorized)
-			return enc.Encode(body)
-		case "forbidden":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewEnableRBACForbiddenResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusForbidden)
-			return enc.Encode(body)
-		case "bad_request":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewEnableRBACBadRequestResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusBadRequest)
-			return enc.Encode(body)
-		case "not_found":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewEnableRBACNotFoundResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusNotFound)
-			return enc.Encode(body)
-		case "conflict":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewEnableRBACConflictResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusConflict)
-			return enc.Encode(body)
-		case "unsupported_media":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewEnableRBACUnsupportedMediaResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusUnsupportedMediaType)
-			return enc.Encode(body)
-		case "invalid":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewEnableRBACInvalidResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusUnprocessableEntity)
-			return enc.Encode(body)
-		case "invariant_violation":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewEnableRBACInvariantViolationResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusInternalServerError)
-			return enc.Encode(body)
-		case "unexpected":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewEnableRBACUnexpectedResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusInternalServerError)
-			return enc.Encode(body)
-		case "gateway_error":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewEnableRBACGatewayErrorResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusBadGateway)
-			return enc.Encode(body)
-		default:
-			return encodeError(ctx, w, v)
-		}
-	}
-}
-
-// EncodeDisableRBACResponse returns an encoder for responses returned by the
-// access disableRBAC endpoint.
-func EncodeDisableRBACResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
-	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		w.WriteHeader(http.StatusOK)
-		return nil
-	}
-}
-
-// DecodeDisableRBACRequest returns a decoder for requests sent to the access
-// disableRBAC endpoint.
-func DecodeDisableRBACRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*access.DisableRBACPayload, error) {
-	return func(r *http.Request) (*access.DisableRBACPayload, error) {
-		var payload *access.DisableRBACPayload
-		var (
-			sessionToken *string
-		)
-		sessionTokenRaw := r.Header.Get("Gram-Session")
-		if sessionTokenRaw != "" {
-			sessionToken = &sessionTokenRaw
-		}
-		payload = NewDisableRBACPayload(sessionToken)
-		if payload.SessionToken != nil {
-			if strings.Contains(*payload.SessionToken, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
-				payload.SessionToken = &cred
-			}
-		}
-
-		return payload, nil
-	}
-}
-
-// EncodeDisableRBACError returns an encoder for errors returned by the
-// disableRBAC access endpoint.
-func EncodeDisableRBACError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
-	encodeError := goahttp.ErrorEncoder(encoder, formatter)
-	return func(ctx context.Context, w http.ResponseWriter, v error) error {
-		var en goa.GoaErrorNamer
-		if !errors.As(v, &en) {
-			return encodeError(ctx, w, v)
-		}
-		switch en.GoaErrorName() {
-		case "unauthorized":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewDisableRBACUnauthorizedResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusUnauthorized)
-			return enc.Encode(body)
-		case "forbidden":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewDisableRBACForbiddenResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusForbidden)
-			return enc.Encode(body)
-		case "bad_request":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewDisableRBACBadRequestResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusBadRequest)
-			return enc.Encode(body)
-		case "not_found":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewDisableRBACNotFoundResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusNotFound)
-			return enc.Encode(body)
-		case "conflict":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewDisableRBACConflictResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusConflict)
-			return enc.Encode(body)
-		case "unsupported_media":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewDisableRBACUnsupportedMediaResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusUnsupportedMediaType)
-			return enc.Encode(body)
-		case "invalid":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewDisableRBACInvalidResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusUnprocessableEntity)
-			return enc.Encode(body)
-		case "invariant_violation":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewDisableRBACInvariantViolationResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusInternalServerError)
-			return enc.Encode(body)
-		case "unexpected":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewDisableRBACUnexpectedResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusInternalServerError)
-			return enc.Encode(body)
-		case "gateway_error":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewDisableRBACGatewayErrorResponseBody(res)
+				body = NewRequestAccessGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)
@@ -4995,6 +4457,7 @@ func marshalAccessShadowMCPInventoryServerToShadowMCPInventoryServerResponseBody
 		CanonicalServerURL: v.CanonicalServerURL,
 		ServerSlug:         v.ServerSlug,
 		URLHost:            v.URLHost,
+		TargetKind:         v.TargetKind,
 		ServerName:         v.ServerName,
 		FirstSeen:          v.FirstSeen,
 		LastSeen:           v.LastSeen,
@@ -5015,6 +4478,9 @@ func marshalAccessShadowMCPInventoryServerToShadowMCPInventoryServerResponseBody
 	if v.LatestRequest != nil {
 		res.LatestRequest = marshalAccessShadowMCPInventoryRequestSummaryToShadowMCPInventoryRequestSummaryResponseBody(v.LatestRequest)
 	}
+	if v.ApprovalRequest != nil {
+		res.ApprovalRequest = marshalAccessShadowMCPInventoryApprovalRequestToShadowMCPInventoryApprovalRequestResponseBody(v.ApprovalRequest)
+	}
 	if v.AllowedPolicyIds != nil {
 		res.AllowedPolicyIds = make([]string, len(v.AllowedPolicyIds))
 		for i, val := range v.AllowedPolicyIds {
@@ -5022,6 +4488,14 @@ func marshalAccessShadowMCPInventoryServerToShadowMCPInventoryServerResponseBody
 		}
 	} else {
 		res.AllowedPolicyIds = []string{}
+	}
+	if v.BlockedPolicyIds != nil {
+		res.BlockedPolicyIds = make([]string, len(v.BlockedPolicyIds))
+		for i, val := range v.BlockedPolicyIds {
+			res.BlockedPolicyIds[i] = val
+		}
+	} else {
+		res.BlockedPolicyIds = []string{}
 	}
 
 	return res
@@ -5045,6 +4519,23 @@ func marshalAccessShadowMCPInventoryRequestSummaryToShadowMCPInventoryRequestSum
 	return res
 }
 
+// marshalAccessShadowMCPInventoryApprovalRequestToShadowMCPInventoryApprovalRequestResponseBody
+// builds a value of type *ShadowMCPInventoryApprovalRequestResponseBody from a
+// value of type *access.ShadowMCPInventoryApprovalRequest.
+func marshalAccessShadowMCPInventoryApprovalRequestToShadowMCPInventoryApprovalRequestResponseBody(v *access.ShadowMCPInventoryApprovalRequest) *ShadowMCPInventoryApprovalRequestResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ShadowMCPInventoryApprovalRequestResponseBody{
+		ID:                v.ID,
+		Status:            v.Status,
+		RequesterCount:    v.RequesterCount,
+		EvidenceChangedAt: v.EvidenceChangedAt,
+	}
+
+	return res
+}
+
 // marshalAccessShadowMCPInventoryUserToShadowMCPInventoryUserResponseBody
 // builds a value of type *ShadowMCPInventoryUserResponseBody from a value of
 // type *access.ShadowMCPInventoryUser.
@@ -5054,6 +4545,31 @@ func marshalAccessShadowMCPInventoryUserToShadowMCPInventoryUserResponseBody(v *
 		Name:             v.Name,
 		Email:            v.Email,
 		LastCalled:       v.LastCalled,
+		ObservedUseCount: v.ObservedUseCount,
+	}
+	if v.Sources != nil {
+		res.Sources = make([]*ShadowMCPInventoryUserSourceResponseBody, len(v.Sources))
+		for i, val := range v.Sources {
+			if val == nil {
+				res.Sources[i] = nil
+				continue
+			}
+			res.Sources[i] = marshalAccessShadowMCPInventoryUserSourceToShadowMCPInventoryUserSourceResponseBody(val)
+		}
+	}
+
+	return res
+}
+
+// marshalAccessShadowMCPInventoryUserSourceToShadowMCPInventoryUserSourceResponseBody
+// builds a value of type *ShadowMCPInventoryUserSourceResponseBody from a
+// value of type *access.ShadowMCPInventoryUserSource.
+func marshalAccessShadowMCPInventoryUserSourceToShadowMCPInventoryUserSourceResponseBody(v *access.ShadowMCPInventoryUserSource) *ShadowMCPInventoryUserSourceResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ShadowMCPInventoryUserSourceResponseBody{
+		Source:           v.Source,
 		ObservedUseCount: v.ObservedUseCount,
 	}
 

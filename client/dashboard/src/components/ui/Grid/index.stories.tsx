@@ -12,7 +12,7 @@ export default meta;
 type Story = StoryObj<typeof Grid>;
 
 const Cell = ({ children }: { children: React.ReactNode }) => (
-  <div className="bg-card rounded-md border p-4 text-sm">{children}</div>
+  <div className="bg-card border p-4 text-sm">{children}</div>
 );
 
 export const Columns: Story = {

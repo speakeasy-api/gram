@@ -825,14 +825,68 @@ type UserSessionResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 	// Slug of the user_session_issuer that gated this session.
 	IssuerSlug string `form:"issuer_slug" json:"issuer_slug" xml:"issuer_slug"`
+	// The user_session_client this session was issued through. Null for sessions
+	// with no bound client. Unlike client_name, this identifies the registration
+	// unambiguously, so it is what a per-client drill-down should match on.
+	UserSessionClientID *string `form:"user_session_client_id,omitempty" json:"user_session_client_id,omitempty" xml:"user_session_client_id,omitempty"`
 	// Name of the MCP client that established the session, if known.
+	// Client-controlled and unverified; do not present it as an identity.
 	ClientName *string `form:"client_name,omitempty" json:"client_name,omitempty" xml:"client_name,omitempty"`
+	// Set when the client that established this session was resolved from a Client
+	// ID Metadata Document (CIMD) hosted at this URL, rather than registered via
+	// RFC 7591 DCR. Null for DCR clients and for sessions with no bound client.
+	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
 	// Subject kind: 'user', 'apikey', or 'anonymous'.
 	SubjectType string `form:"subject_type" json:"subject_type" xml:"subject_type"`
 	// Resolved human-readable name of the subject, if known.
 	SubjectDisplayName *string `form:"subject_display_name,omitempty" json:"subject_display_name,omitempty" xml:"subject_display_name,omitempty"`
+	// Avatar URL for the subject when it resolves to a Gram user with one. Null
+	// for API key and anonymous subjects, and for users who have no photo.
+	SubjectPhotoURL *string `form:"subject_photo_url,omitempty" json:"subject_photo_url,omitempty" xml:"subject_photo_url,omitempty"`
 	// When the session was revoked, if it has been.
 	RevokedAt *string `form:"revoked_at,omitempty" json:"revoked_at,omitempty" xml:"revoked_at,omitempty"`
+	// When this session last carried an MCP request. Recorded on the request path
+	// and coalesced to a five-minute resolution, so treat it as accurate to within
+	// that. Null means the session has not been used since the column was
+	// introduced — unknown, not never.
+	LastUsedAt *string `form:"last_used_at,omitempty" json:"last_used_at,omitempty" xml:"last_used_at,omitempty"`
+	// The upstream providers Gram holds tokens for on this session's subject,
+	// through the same issuer. Empty when the session reaches only Gram-native
+	// tools. A session can have several: an issuer may have more than one
+	// remote_session_client attached.
+	Upstreams []*UserSessionUpstreamResponseBody `form:"upstreams" json:"upstreams" xml:"upstreams"`
+}
+
+// UserSessionUpstreamResponseBody is used to define fields on response body
+// types.
+type UserSessionUpstreamResponseBody struct {
+	// The remote_session id. Target for revoke and force-refresh.
+	RemoteSessionID string `form:"remote_session_id" json:"remote_session_id" xml:"remote_session_id"`
+	// The remote_session_client the session was minted against.
+	RemoteSessionClientID string `form:"remote_session_client_id" json:"remote_session_client_id" xml:"remote_session_client_id"`
+	// The remote_session_issuer the client belongs to.
+	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
+	// Display slug of the upstream provider, e.g. 'mcp.linear.app'.
+	IssuerSlug string `form:"issuer_slug" json:"issuer_slug" xml:"issuer_slug"`
+	// Upstream access-token expiry. Null when the upstream issued a non-expiring
+	// token.
+	AccessExpiresAt *string `form:"access_expires_at,omitempty" json:"access_expires_at,omitempty" xml:"access_expires_at,omitempty"`
+	// Upstream refresh-token expiry. Null when the session holds no refresh token
+	// or the upstream issued a non-expiring one.
+	RefreshExpiresAt *string `form:"refresh_expires_at,omitempty" json:"refresh_expires_at,omitempty" xml:"refresh_expires_at,omitempty"`
+	// Absolute upstream authorization deadline. Unlike refresh_expires_at,
+	// exchanging a token does not extend this.
+	AuthorizationExpiresAt *string `form:"authorization_expires_at,omitempty" json:"authorization_expires_at,omitempty" xml:"authorization_expires_at,omitempty"`
+	// Whether a refresh grant is held. Gates 'refresh now'; refresh_expires_at is
+	// insufficient because an upstream may issue a non-expiring refresh token.
+	HasRefreshToken bool `form:"has_refresh_token" json:"has_refresh_token" xml:"has_refresh_token"`
+	// Whether the subject opted this connection into automated keepalive.
+	AutoRefresh bool `form:"auto_refresh" json:"auto_refresh" xml:"auto_refresh"`
+	// When this upstream token was last spent on a proxied call. Same five-minute
+	// resolution as the inbound leg, so the two are directly comparable.
+	LastUsedAt *string `form:"last_used_at,omitempty" json:"last_used_at,omitempty" xml:"last_used_at,omitempty"`
+	// Scopes held by this upstream session.
+	Scopes []string `form:"scopes" json:"scopes" xml:"scopes"`
 }
 
 // UserSessionFacetOptionResponseBody is used to define fields on response body

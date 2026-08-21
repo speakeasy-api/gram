@@ -5,8 +5,25 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+
+/**
+ * The EFFECTIVE CIMD admission policy in force for this issuer: disabled | presets | reporting | open. Always populated, so clients never have to reason about an unset state. Note 'reporting' can be READ but not written: it is the current default for an issuer whose mode has never been configured, and it admits every spec-valid client while recording what 'presets' would have refused. It exists so the platform can measure before switching the default to 'presets'. Set an explicit mode to opt out of it.
+ */
+export const ClientIdMetadataAdmissionMode = {
+  Disabled: "disabled",
+  Presets: "presets",
+  Reporting: "reporting",
+  Open: "open",
+} as const;
+/**
+ * The EFFECTIVE CIMD admission policy in force for this issuer: disabled | presets | reporting | open. Always populated, so clients never have to reason about an unset state. Note 'reporting' can be READ but not written: it is the current default for an issuer whose mode has never been configured, and it admits every spec-valid client while recording what 'presets' would have refused. It exists so the platform can measure before switching the default to 'presets'. Set an explicit mode to opt out of it.
+ */
+export type ClientIdMetadataAdmissionMode = ClosedEnum<
+  typeof ClientIdMetadataAdmissionMode
+>;
 
 /**
  * A user_session_issuer record.
@@ -16,6 +33,10 @@ export type UserSessionIssuer = {
    * chain | interactive.
    */
   authnChallengeMode: string;
+  /**
+   * The EFFECTIVE CIMD admission policy in force for this issuer: disabled | presets | reporting | open. Always populated, so clients never have to reason about an unset state. Note 'reporting' can be READ but not written: it is the current default for an issuer whose mode has never been configured, and it admits every spec-valid client while recording what 'presets' would have refused. It exists so the platform can measure before switching the default to 'presets'. Set an explicit mode to opt out of it.
+   */
+  clientIdMetadataAdmissionMode: ClientIdMetadataAdmissionMode;
   createdAt: Date;
   /**
    * The user_session_issuer id.
@@ -26,7 +47,7 @@ export type UserSessionIssuer = {
    */
   projectId: string;
   /**
-   * Issued user session lifetime, in hours.
+   * Maximum issued user session lifetime, in hours.
    */
   sessionDurationHours: number;
   /**
@@ -37,12 +58,19 @@ export type UserSessionIssuer = {
 };
 
 /** @internal */
+export const ClientIdMetadataAdmissionMode$inboundSchema: z.ZodMiniEnum<
+  typeof ClientIdMetadataAdmissionMode
+> = z.enum(ClientIdMetadataAdmissionMode);
+
+/** @internal */
 export const UserSessionIssuer$inboundSchema: z.ZodMiniType<
   UserSessionIssuer,
   unknown
 > = z.pipe(
   z.object({
     authn_challenge_mode: z.string(),
+    client_id_metadata_admission_mode:
+      ClientIdMetadataAdmissionMode$inboundSchema,
     created_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -59,6 +87,7 @@ export const UserSessionIssuer$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "authn_challenge_mode": "authnChallengeMode",
+      "client_id_metadata_admission_mode": "clientIdMetadataAdmissionMode",
       "created_at": "createdAt",
       "project_id": "projectId",
       "session_duration_hours": "sessionDurationHours",

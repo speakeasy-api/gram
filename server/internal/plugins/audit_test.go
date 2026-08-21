@@ -228,7 +228,10 @@ func TestPluginsService_SetPluginAssignments_RecordsAuditEvent(t *testing.T) {
 	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginAssignmentsSet)
 	require.NoError(t, err)
 
-	urns := []string{"role:engineering", "role:gtm"}
+	urns := []string{
+		createTestRolePrincipal(t, ctx, ti, "engineering"),
+		createTestRolePrincipal(t, ctx, ti, "gtm"),
+	}
 	_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
 		PluginID:      plugin.ID,
 		PrincipalUrns: urns,
@@ -249,8 +252,8 @@ func TestPluginsService_SetPluginAssignments_RecordsAuditEvent(t *testing.T) {
 	got, ok := meta["principal_urns"].([]any)
 	require.True(t, ok)
 	require.Len(t, got, 2)
-	require.Equal(t, "role:engineering", got[0])
-	require.Equal(t, "role:gtm", got[1])
+	require.Equal(t, urns[0], got[0])
+	require.Equal(t, urns[1], got[1])
 }
 
 func TestPluginsService_PublishPlugins_RecordsAuditEvent(t *testing.T) {

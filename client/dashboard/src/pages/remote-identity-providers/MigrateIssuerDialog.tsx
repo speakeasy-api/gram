@@ -12,12 +12,12 @@ import type { OrganizationRemoteSessionIssuer } from "@gram/client/models/compon
 import { useMigrateOrganizationRemoteSessionIssuerMutation } from "@gram/client/react-query/migrateOrganizationRemoteSessionIssuer.js";
 import { useOrganizationRemoteSessionIssuerMigratePreflight } from "@gram/client/react-query/organizationRemoteSessionIssuerMigratePreflight.js";
 import { invalidateAllOrganizationRemoteSessionIssuers } from "@gram/client/react-query/organizationRemoteSessionIssuers.js";
-import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
+import { MigrateImpact } from "./MigrateImpact";
 import { issuerDisplayName } from "./issuerDisplay";
 
 // MigrateIssuerDialog consolidates one identity provider onto another that
@@ -159,77 +159,5 @@ export function MigrateIssuerDialog({
         </Dialog.Footer>
       </Dialog.Content>
     </Dialog>
-  );
-}
-
-// MigrateImpact renders the server's authoritative preflight: what moves, what
-// blocks the migration, and what changes without blocking it. Blockers are
-// rendered as errors because the mutation rejects them; warnings are rendered as
-// warnings because the target's values simply become authoritative.
-function MigrateImpact({
-  isLoading,
-  hasFailed,
-  clientCount,
-  mcpServerNames,
-  endpointMismatches,
-  conflictingMcpServerNames,
-  warnings,
-}: {
-  isLoading: boolean;
-  hasFailed: boolean;
-  clientCount: number | undefined;
-  mcpServerNames: string[] | undefined;
-  endpointMismatches: string[] | undefined;
-  conflictingMcpServerNames: string[] | undefined;
-  warnings: string[] | undefined;
-}): JSX.Element {
-  if (isLoading) {
-    return (
-      <Text small muted>
-        Checking impact…
-      </Text>
-    );
-  }
-
-  // Without a preflight there is nothing trustworthy to show. Say so rather than
-  // rendering a zero impact summary that reads like a clean migration.
-  if (hasFailed) {
-    return (
-      <Alert variant="error" dismissible={false}>
-        Could not check the impact of this migration. Try again.
-      </Alert>
-    );
-  }
-
-  const count = clientCount ?? 0;
-
-  return (
-    <Stack gap={2}>
-      <Text small muted>
-        {count} {count === 1 ? "client moves" : "clients move"} to the target
-        provider.
-        {mcpServerNames && mcpServerNames.length > 0
-          ? ` Affected MCP servers: ${mcpServerNames.join(", ")}.`
-          : ""}
-      </Text>
-
-      {endpointMismatches && endpointMismatches.length > 0 && (
-        <Alert variant="error" dismissible={false}>
-          {`These providers describe different authorization servers (${endpointMismatches.join(", ")} differ). Consolidating them would break existing sessions.`}
-        </Alert>
-      )}
-
-      {conflictingMcpServerNames && conflictingMcpServerNames.length > 0 && (
-        <Alert variant="error" dismissible={false}>
-          {`Both providers already have a client on these MCP servers: ${conflictingMcpServerNames.join(", ")}. Remove one client per server, then try again.`}
-        </Alert>
-      )}
-
-      {warnings && warnings.length > 0 && (
-        <Alert variant="warning" dismissible={false}>
-          {warnings.join(" ")}
-        </Alert>
-      )}
-    </Stack>
   );
 }

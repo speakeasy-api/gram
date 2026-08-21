@@ -15,6 +15,15 @@ overrides:
           import: "github.com/google/uuid"
           type: "NullUUID"
         nullable: true
+      # Temporary pin while the schema ships ahead of the application layer:
+      # the column became nullable for the meta MCP endpoint backend, but no
+      # code writes meta-backed rows yet, so it is never NULL on this branch.
+      # The application PR removes this override together with the code that
+      # handles the nullable type.
+      - column: mcp_endpoints.mcp_server_id
+        go_type:
+          import: "github.com/google/uuid"
+          type: "UUID"
       - column: http_tool_definitions.response_filter
         go_type:
           import: github.com/speakeasy-api/gram/server/internal/tools/repo/models
@@ -251,6 +260,16 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
+    queries: ../internal/litellm/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/litellm/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
     queries: ../internal/environments/queries.sql
     engine: postgresql
     gen:
@@ -307,6 +326,16 @@ sql:
       go:
         package: "repo"
         out: "../internal/thirdparty/openrouter/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/openrouterkeys/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/openrouterkeys/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
 
@@ -567,6 +596,16 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
+    queries: ../internal/unproxiedmcp/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/unproxiedmcp/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
     queries: ../internal/remotemcp/queries.sql
     engine: postgresql
     gen:
@@ -593,6 +632,26 @@ sql:
       go:
         package: "repo"
         out: "../internal/thirdparty/workos/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/directory/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/directory/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/mcpapproval/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/mcpapproval/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
 
@@ -660,6 +719,16 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
+    queries: ../internal/webhooks/svixrelay/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/webhooks/svixrelay/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
     queries: ../internal/otelforwarding/queries.sql
     engine: postgresql
     gen:
@@ -706,5 +775,25 @@ sql:
       go:
         package: "repo"
         out: "../internal/admin/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/platformmcp/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/platformmcp/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/trials/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/trials/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true

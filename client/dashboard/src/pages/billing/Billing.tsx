@@ -10,6 +10,7 @@ import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { ProductTier, useProductTier } from "@/hooks/useProductTier";
+import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { getServerURL } from "@/lib/utils";
 import { TierLimits } from "@gram/client/models/components/tierlimits.js";
 import { useGetCreditUsage } from "@gram/client/react-query/getCreditUsage.js";
@@ -21,7 +22,18 @@ import { Stack } from "@/components/ui/Stack";
 import { cn } from "@/lib/utils";
 import { Info } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { PlatformAdminOnlyPanel } from "@/components/platform-admin-only-panel";
 import { RequireScope } from "@/components/require-scope";
+import { BillingEmailSection } from "@/components/billing/billing-email-section";
+import {
+  PaygCapReachedBanners,
+  PaygPaymentFailedBanner,
+} from "@/components/billing/billing-banners";
+import { InferenceCapsSection } from "@/components/billing/inference-caps-section";
+import { PaygPlanSection } from "@/components/billing/payg-plan-section";
+import { PaygUsageSection } from "@/components/billing/payg-usage-section";
+import { StartPaygCheckoutCTA } from "@/components/billing/start-payg-checkout-cta";
+import { PaygPriceList } from "@/components/billing/payg-price-list";
 import { TopUpCTA, UsageProgress } from "@/components/billing/usage-controls";
 import { TumAdminSection } from "@/components/billing/tum-admin-section";
 import { TumUsageSection } from "@/components/billing/tum-section";
@@ -32,6 +44,13 @@ export default function Billing(): JSX.Element {
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
+      {/* A failed payment is what stops the whole account, so it precedes the
+          cap notices when both states apply. The global header suppresses its
+          cap banners on this route to avoid a duplicate query and notice. */}
+      <Page.Banner>
+        <PaygPaymentFailedBanner />
+        <PaygCapReachedBanners />
+      </Page.Banner>
       <Page.Body>
         <RequireScope scope={["org:read", "org:admin"]} level="page">
           <BillingInner />
@@ -43,22 +62,39 @@ export default function Billing(): JSX.Element {
 
 function BillingInner() {
   const productTier = useProductTier();
-  const isAdmin = useIsPlatformAdmin();
+  const isPlatformAdmin = useIsPlatformAdmin();
 
   // Enterprise contracts bill on tokens under management, so enterprise orgs
-  // see the TUM view instead of the self-serve usage meters.
+  // see the TUM view instead of the self-serve usage meters. Trials run on the
+  // enterprise tier, so the pay-as-you-go CTA has to be repeated here — the
+  // early return is exactly the path an org in an active trial takes.
   if (productTier === "enterprise") {
     return (
       <>
+        <StartPaygCheckoutCTA label="Add payment method" />
         <TumUsageSection />
-        {isAdmin && <TumAdminSection />}
+        {/* Renders only during an active trial — the section owns that rule. */}
+        <InferenceCapsSection />
+        <PaygPriceList />
+        {isPlatformAdmin && <TumAdminSection />}
       </>
     );
   }
 
   return (
     <>
-      <UsageSection />
+      <StartPaygCheckoutCTA label="Add payment method" />
+      {/* Pay as you go bills through Stripe, so it gets the cycle usage and
+          invoice estimate. Every other self-serve tier still meters against
+          Polar period usage, which says nothing about a Stripe invoice. */}
+      {productTier === "payg" ? <PaygUsageSection /> : <UsageSection />}
+      {/* Renders only for pay as you go — the section owns that rule. */}
+      <PaygPlanSection />
+      {/* Renders only for pay as you go — the section owns that rule. */}
+      <InferenceCapsSection />
+      {/* Only pay-as-you-go organizations get product billing notifications;
+          enterprise contracts are billed through their contract terms. */}
+      {productTier === "payg" && <BillingEmailSection />}
       {/* The product tiers / self serve billing section is DEPRECATED, and thus only shown to users already on a paid, non-enterprise tier */}
       {(productTier === "base_PAID" || productTier === "__deprecated__pro") && (
         <UsageTiers />
@@ -69,8 +105,6 @@ function BillingInner() {
 
 const UsageSection = () => {
   const productTier = useProductTier();
-
-  const isAdmin = useIsPlatformAdmin();
 
   const { data: creditUsage } = useGetCreditUsage();
   const { data: periodUsage } = useGetPeriodUsage(undefined, undefined, {
@@ -142,16 +176,6 @@ const UsageSection = () => {
                 overageIncrement={1}
                 noMax={productTier === "enterprise"}
               />
-              {isAdmin && (
-                <UsageItem
-                  label="Chat Based Credits (Polar) (ADMIN VIEW ONLY)"
-                  tooltip="The number of credits used this month for chat based products and other AI-powered dashboard experiences."
-                  value={periodUsage.credits}
-                  included={periodUsage.includedCredits}
-                  overageIncrement={periodUsage.includedCredits}
-                  noMax={productTier === "enterprise"}
-                />
-              )}
             </>
           ) : (
             <>
@@ -175,6 +199,21 @@ const UsageSection = () => {
               <Skeleton className="h-4 w-full" />
             </>
           )}
+          {periodUsage?.credits != null &&
+            periodUsage.includedCredits != null && (
+              <div className="pt-4">
+                <PlatformAdminOnlyPanel>
+                  <UsageItem
+                    label="Chat Based Credits (Polar)"
+                    tooltip="The number of credits used this month for chat based products and other AI-powered dashboard experiences."
+                    value={periodUsage.credits}
+                    included={periodUsage.includedCredits}
+                    overageIncrement={periodUsage.includedCredits}
+                    noMax={productTier === "enterprise"}
+                  />
+                </PlatformAdminOnlyPanel>
+              </div>
+            )}
         </div>
       </Page.Section.Body>
     </Page.Section>
@@ -284,7 +323,7 @@ const UsageTiers = () => {
                 });
                 return;
               }
-              window.open(link, "_blank");
+              openSafeExternalUrl(link);
             } catch (error) {
               console.error("Error creating customer session:", error);
               telemetry.capture("customer_session_error", {
@@ -409,7 +448,8 @@ const UsageTiers = () => {
 
   return (
     <Page.Section>
-      <Page.Section.Title>Pricing</Page.Section.Title>
+      {/* Secondary section below Usage: suppress the area eyebrow. */}
+      <Page.Section.Title area="">Pricing</Page.Section.Title>
       <Page.Section.Description>
         A breakdown of our pricing tiers.
       </Page.Section.Description>

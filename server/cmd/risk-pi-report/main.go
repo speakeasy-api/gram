@@ -664,21 +664,22 @@ func judgeOne(ctx context.Context, client openrouter.CompletionClient, model str
 	defer cancel()
 
 	resp, err := client.GetObjectCompletion(callCtx, openrouter.ObjectCompletionRequest{
-		OrgID:          benchOrgID,
-		ProjectID:      benchProjectID,
-		Model:          model,
-		SystemPrompt:   piopenrouter.SystemPrompt,
-		Prompt:         string(payload),
-		Temperature:    &temp,
-		UsageSource:    billing.ModelUsageSourceGram,
-		KeyType:        openrouter.KeyTypeInternal,
-		KeySlot:        "",
-		UserID:         "",
-		ExternalUserID: "",
-		UserEmail:      "",
-		HTTPMetadata:   nil,
-		JSONSchema:     &schema,
-		Reasoning:      reasoning,
+		OrgID:                  benchOrgID,
+		ProjectID:              benchProjectID,
+		Model:                  model,
+		SystemPrompt:           piopenrouter.SystemPrompt,
+		Prompt:                 string(payload),
+		Temperature:            &temp,
+		UsageSource:            billing.ModelUsageSourceGram,
+		KeyType:                openrouter.KeyTypeInternal,
+		KeySlot:                "",
+		UserID:                 "",
+		ExternalUserID:         "",
+		UserEmail:              "",
+		HTTPMetadata:           nil,
+		JSONSchema:             &schema,
+		Reasoning:              reasoning,
+		DisableResponseHealing: false,
 	})
 	if err != nil {
 		return false, 0, fmt.Errorf("openrouter object completion: %w", err)
@@ -731,13 +732,16 @@ func (d *devProvisioner) ProvisionAPIKey(_ context.Context, _ string, _ openrout
 func (d *devProvisioner) RefreshAPIKeyLimit(_ context.Context, _ string, _ openrouter.KeyType, _ *int) (int, error) {
 	return 0, fmt.Errorf("not implemented in bench")
 }
+func (d *devProvisioner) DisableAPIKey(_ context.Context, _ string, _ openrouter.KeyType) error {
+	return fmt.Errorf("not implemented in bench")
+}
 func (d *devProvisioner) GetCreditsUsed(_ context.Context, _ string, _ openrouter.KeyType) (float64, int, error) {
 	return 0, 0, fmt.Errorf("not implemented in bench")
 }
 func (d *devProvisioner) GetKeyUsage(_ context.Context, _ string) (float64, *int64, error) {
 	return 0, nil, fmt.Errorf("not implemented in bench")
 }
-func (d *devProvisioner) ReconcileMonthlyCredits(_ context.Context, _ string, _ openrouter.KeyType, currentLimit int64, _ *int64) (int64, error) {
+func (d *devProvisioner) ReconcileMonthlyCredits(_ context.Context, _ string, _ openrouter.KeyType, currentLimit int64, _ int64, _ *int64) (int64, error) {
 	return currentLimit, nil
 }
 func (d *devProvisioner) GetModelUsage(_ context.Context, _ string, _ string, _ openrouter.KeyType) (*openrouter.ModelUsage, error) {

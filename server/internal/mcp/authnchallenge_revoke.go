@@ -54,10 +54,12 @@ func (s *Service) HandleRevoke(w http.ResponseWriter, r *http.Request) error {
 //     unified revocation cache so the still-live access token is invalidated
 //     too.
 //   - If `token_type_hint=access_token` (or the hint is missing and the
-//     token parses as a JWT): extract the jti without verifying the
-//     signature -- the client_secret check above establishes authenticity --
-//     and push it into the revocation cache. We do NOT have to find a
-//     matching user_sessions row to honour the request.
+//     token parses as a JWT): verify our HS256 signature (tolerating expiry),
+//     extract the jti, and — when the signed token's user_sessions row belongs
+//     to the authenticated client — push the jti into the revocation cache.
+//     Signature verification is required because public clients present no
+//     client_secret, so holding a validly-signed token is what proves the
+//     caller may revoke it.
 func (s *Service) ServeRevoke(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
 	ctx := r.Context()
 
@@ -136,17 +138,18 @@ func (s *Service) ServeRevoke(w http.ResponseWriter, r *http.Request, endpoint *
 	return nil
 }
 
-// tryRevokeAccessToken parses the token as a JWT, looks up the
-// user_sessions row by jti, and — when the row belongs to the
-// authenticated client — pushes the jti into the revocation cache.
-// Signature verification on the JWT is intentionally skipped; the
-// client_secret check in HandleRevoke establishes authenticity per RFC
-// 7009 §2.1. Returns true only when the row was found AND owned by the
-// caller; ownership mismatches return false so the dispatch falls through
-// to the refresh-token attempt (and ultimately surfaces as the success
-// silent-no-op per §2.2).
+// tryRevokeAccessToken parses the token as a JWT (verifying our HS256
+// signature, but tolerating expired claims so stale tokens can still be
+// revoked), looks up the user_sessions row by jti, and — when the row
+// belongs to the authenticated client — pushes the jti into the revocation
+// cache. Signature verification matters here: public clients present no
+// client_secret, so holding a validly-signed token is what proves the
+// caller may revoke it. Returns true only when the row was found AND owned
+// by the caller; ownership mismatches return false so the dispatch falls
+// through to the refresh-token attempt (and ultimately surfaces as the
+// success silent-no-op per RFC 7009 §2.2).
 func (s *Service) tryRevokeAccessToken(ctx context.Context, logger *slog.Logger, issuerID, clientID uuid.UUID, token string) bool {
-	jti, err := s.userSessionSigner.ParseUnverifiedJTI(token)
+	jti, err := s.userSessionSigner.VerifiedJTI(token)
 	if err != nil || jti == "" {
 		return false
 	}

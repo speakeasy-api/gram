@@ -6,7 +6,14 @@ import {
   screen,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { NAV_LOADING_DURATION_MS, NavButton } from "./nav-menu";
+import type { AppRoute } from "@/routes";
+import {
+  CollapsibleNavGroup,
+  CollapsibleNavItem,
+  NAV_LOADING_DURATION_MS,
+  NavButton,
+  NavGroupProvider,
+} from "./nav-menu";
 
 // Stub sidebar primitives to prevent real Radix/Tailwind sidebar from
 // loading. NavButton doesn't render these but nav-menu.tsx imports them.
@@ -130,5 +137,118 @@ describe("NavButton click loading state", () => {
 
     unmount();
     expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Group expansion state
+// ---------------------------------------------------------------------------
+
+function makeRoute(title: string): AppRoute {
+  return {
+    title,
+    url: title.toLowerCase(),
+    href: () => `/${title.toLowerCase()}`,
+    active: false,
+  } as unknown as AppRoute;
+}
+
+function Groups({
+  activeGroup,
+  defaultOpenGroups,
+}: {
+  activeGroup?: string;
+  defaultOpenGroups?: string[];
+}) {
+  return (
+    <NavGroupProvider
+      activeGroup={activeGroup}
+      defaultOpenGroups={defaultOpenGroups}
+    >
+      <CollapsibleNavGroup label="Observe" Icon={TestIcon}>
+        <CollapsibleNavItem item={makeRoute("Costs")} />
+      </CollapsibleNavGroup>
+      <CollapsibleNavGroup label="Connect" Icon={TestIcon}>
+        <CollapsibleNavItem item={makeRoute("Sources")} />
+      </CollapsibleNavGroup>
+    </NavGroupProvider>
+  );
+}
+
+describe("NavGroupProvider group expansion", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("renders all groups collapsed when nothing is active and no defaults", () => {
+    render(<Groups />);
+
+    expect(screen.queryByText("Costs")).toBeNull();
+    expect(screen.queryByText("Sources")).toBeNull();
+    screen.getByRole("button", { name: "Expand Observe" });
+    screen.getByRole("button", { name: "Expand Connect" });
+  });
+
+  it("expands only the active group", () => {
+    render(<Groups activeGroup="Observe" />);
+
+    screen.getByText("Costs");
+    expect(screen.queryByText("Sources")).toBeNull();
+  });
+
+  it("collapses the previously active group when navigating to another group", () => {
+    const { rerender } = render(<Groups activeGroup="Observe" />);
+    screen.getByText("Costs");
+
+    rerender(<Groups activeGroup="Connect" />);
+
+    expect(screen.queryByText("Costs")).toBeNull();
+    screen.getByText("Sources");
+  });
+
+  it("keeps explicitly expanded groups open across navigation", () => {
+    const { rerender } = render(<Groups activeGroup="Observe" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand Connect" }));
+    screen.getByText("Sources");
+
+    // Navigate to a top-level page: the active-only group collapses, the
+    // explicitly expanded one stays open.
+    rerender(<Groups />);
+
+    expect(screen.queryByText("Costs")).toBeNull();
+    screen.getByText("Sources");
+  });
+
+  it("collapses an open group via its chevron without navigating", () => {
+    render(<Groups activeGroup="Observe" />);
+    screen.getByText("Costs");
+
+    fireEvent.click(screen.getByRole("button", { name: "Collapse Observe" }));
+
+    expect(screen.queryByText("Costs")).toBeNull();
+  });
+
+  it("collapses a chevron-expanded group again on second chevron click", () => {
+    const { rerender } = render(<Groups />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand Connect" }));
+    screen.getByText("Sources");
+
+    fireEvent.click(screen.getByRole("button", { name: "Collapse Connect" }));
+    expect(screen.queryByText("Sources")).toBeNull();
+
+    // A group collapsed by hand is no longer "explicit": navigating into a
+    // different group on the same provider must not resurrect it.
+    rerender(<Groups activeGroup="Observe" />);
+    screen.getByText("Costs");
+    expect(screen.queryByText("Sources")).toBeNull();
+  });
+
+  it("opens defaultOpenGroups initially (org sidebar behavior)", () => {
+    render(<Groups defaultOpenGroups={["Observe", "Connect"]} />);
+
+    screen.getByText("Costs");
+    screen.getByText("Sources");
   });
 });

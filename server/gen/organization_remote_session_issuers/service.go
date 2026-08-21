@@ -35,6 +35,24 @@ type Service interface {
 	// Authoritative impact summary for deleting a remote_session_issuer:
 	// associated client count and affected MCP server names. Requires org:read.
 	GetIssuerDeletePreflight(context.Context, *GetIssuerDeletePreflightPayload) (res *OrganizationIssuerDeletePreflight, err error)
+	// Report the existing remote_session_issuers that already describe an upstream
+	// issuer URL, so a create or edit form can warn before it duplicates one.
+	// Requires org:read.
+
+	// Covers every issuer in the caller's organization — organization-level and
+	// project-specific alike — plus the platform catalog. The project-specific
+	// rows are the point: an organization administrator about to add an
+	// organization-level issuer most needs to know that several of their projects
+	// already configured the same URL separately, because those are exactly the
+	// records migrateIssuer can consolidate. The answer does not depend on whether
+	// the issuer being created is organization-level or project-scoped; an org
+	// administrator holds org:read either way.
+
+	// Advisory only. Duplicating an issuer URL is legitimate, so nothing here
+	// blocks a write and no lock is taken. Matching uses the same canonicalization
+	// as getRemoteSessionIssuer, and a URL that cannot be parsed as an issuer
+	// identifier returns no matches rather than an error.
+	GetIssuerDuplicatePreflight(context.Context, *GetIssuerDuplicatePreflightPayload) (res *types.RemoteSessionIssuerDuplicatePreflight, err error)
 	// Update any remote_session_issuer (organizational or project-specific) in the
 	// caller's organization. Requires org:admin.
 	UpdateIssuer(context.Context, *UpdateIssuerPayload) (res *types.RemoteSessionIssuer, err error)
@@ -57,11 +75,13 @@ type Service interface {
 	// target issuer, then soft-delete the source. Existing remote sessions are
 	// preserved, so no user re-authenticates. Both issuers must belong to the
 	// caller's organization and agree on issuer, token_endpoint, and
-	// authorization_endpoint. The target may not be narrower in scope than the
-	// source: a project-specific issuer may migrate onto an issuer in the same
-	// project or onto an organization-level issuer, and an organization-level
-	// issuer may migrate onto another organization-level issuer. Requires
-	// org:admin.
+	// authorization_endpoint. The issuer identifier is compared canonically, so
+	// two spellings differing only by a trailing slash or an explicit default port
+	// count as the same upstream; the two endpoints are compared literally. The
+	// target may not be narrower in scope than the source: a project-specific
+	// issuer may migrate onto an issuer in the same project or onto an
+	// organization-level issuer, and an organization-level issuer may migrate onto
+	// another organization-level issuer. Requires org:admin.
 	MigrateIssuer(context.Context, *MigrateIssuerPayload) (res *MigrateOrganizationRemoteSessionIssuerResult, err error)
 	// Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server
 	// document and return a draft suitable for
@@ -100,7 +120,7 @@ const ServiceName = "organizationRemoteSessionIssuers"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [11]string{"createIssuer", "listIssuers", "getIssuer", "getIssuerDeletePreflight", "updateIssuer", "deleteIssuer", "moveIssuer", "getIssuerMigratePreflight", "migrateIssuer", "fetchIssuerMetadata", "refreshIssuerMetadata"}
+var MethodNames = [12]string{"createIssuer", "listIssuers", "getIssuer", "getIssuerDeletePreflight", "getIssuerDuplicatePreflight", "updateIssuer", "deleteIssuer", "moveIssuer", "getIssuerMigratePreflight", "migrateIssuer", "fetchIssuerMetadata", "refreshIssuerMetadata"}
 
 // CreateIssuerPayload is the payload type of the
 // organizationRemoteSessionIssuers service createIssuer method.
@@ -126,6 +146,9 @@ type CreateIssuerPayload struct {
 	AuthorizationEndpoint *string
 	// Upstream token endpoint.
 	TokenEndpoint *string
+	// Upstream RFC 7009 revocation endpoint; absent for issuers that advertise
+	// none.
+	RevocationEndpoint *string
 	// Upstream RFC 7591 registration endpoint; absent for issuers without DCR.
 	RegistrationEndpoint *string
 	// Upstream JWKS URI.
@@ -148,6 +171,11 @@ type CreateIssuerPayload struct {
 	ResponseTypesSupported []string
 	// Token endpoint auth methods advertised by the issuer.
 	TokenEndpointAuthMethodsSupported []string
+	// PKCE code challenge methods advertised by the issuer (RFC 8414
+	// code_challenge_methods_supported). Omitting the field stores null ("not
+	// captured"), distinct from an empty array ("the issuer advertises no
+	// methods").
+	CodeChallengeMethodsSupported []string
 	// When true, may unlock OIDC-aware behaviour. Default false.
 	Oidc *bool
 	// When true, the MCP client registers and transacts directly with this issuer.
@@ -182,6 +210,16 @@ type FetchIssuerMetadataPayload struct {
 type GetIssuerDeletePreflightPayload struct {
 	// The remote_session_issuer id.
 	ID           string
+	SessionToken *string
+	ApikeyToken  *string
+}
+
+// GetIssuerDuplicatePreflightPayload is the payload type of the
+// organizationRemoteSessionIssuers service getIssuerDuplicatePreflight method.
+type GetIssuerDuplicatePreflightPayload struct {
+	// The upstream issuer URL being entered (e.g. https://login.linear.app). Empty
+	// or unparseable returns no matches.
+	Issuer       *string
 	SessionToken *string
 	ApikeyToken  *string
 }
@@ -329,7 +367,8 @@ type UpdateIssuerPayload struct {
 	Issuer *string
 	// Set or clear the display name. An empty string clears it to NULL.
 	Name *string
-	// Set the logo asset id.
+	// Set or clear the logo asset id. An empty string clears it to NULL; any other
+	// value must be a uuid.
 	LogoAssetID *string
 	// Set or clear the URL of OAuth client setup documentation shown when creating
 	// clients. An empty string clears it to NULL; any other value must be an
@@ -339,6 +378,8 @@ type UpdateIssuerPayload struct {
 	AuthorizationEndpoint *string
 	// Upstream token endpoint.
 	TokenEndpoint *string
+	// Upstream RFC 7009 revocation endpoint.
+	RevocationEndpoint *string
 	// Upstream RFC 7591 registration endpoint.
 	RegistrationEndpoint *string
 	// Upstream JWKS URI.
@@ -356,8 +397,13 @@ type UpdateIssuerPayload struct {
 	GrantTypesSupported               []string
 	ResponseTypesSupported            []string
 	TokenEndpointAuthMethodsSupported []string
-	Oidc                              *bool
-	Passthrough                       *bool
+	// PKCE code challenge methods advertised by the issuer (RFC 8414
+	// code_challenge_methods_supported). Omitting the field leaves the stored
+	// value unchanged; an empty array records that the issuer advertises no
+	// methods.
+	CodeChallengeMethodsSupported []string
+	Oidc                          *bool
+	Passthrough                   *bool
 	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
 	// (OAuth CIMD draft).
 	ClientIDMetadataDocumentSupported *bool

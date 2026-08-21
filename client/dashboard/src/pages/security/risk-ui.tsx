@@ -1,4 +1,5 @@
 import { Eye, EyeOff, Loader2, Lock } from "lucide-react";
+import { cn } from "@/lib/utils";
 import {
   useCallback,
   useEffect,
@@ -7,7 +8,6 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useRiskUnmaskResultMutation } from "@gram/client/react-query/riskUnmaskResult.js";
 import { CodeBlock } from "@/components/code";
 import { Dialog } from "@/components/ui/Dialog";
 import { RULE_CATEGORY_META } from "./policy-data";
@@ -27,15 +27,12 @@ import {
   type RevealAllContextValue,
 } from "./reveal-all-context";
 import { useRBAC } from "@/hooks/useRBAC";
-import type { Scope } from "@gram/client/models/components/rolegrant.js";
-
-// Revealing a flagged secret exposes the raw value captured from agent/chat
-// traffic, so it is gated behind the same `chat:read` scope that grants access
-// to other members' session transcripts. hasScope short-circuits to true when
-// RBAC is disabled, preserving existing behavior for non-RBAC orgs.
-const REVEAL_SCOPE: Scope = "chat:read";
-const REVEAL_DENIED_REASON =
-  "You need the chat:read scope to reveal flagged values.";
+import {
+  hasRevealableEvent,
+  REVEAL_DENIED_REASON,
+  REVEAL_SCOPE,
+  useUnmaskedMatch,
+} from "./unmask";
 
 export function CategoryLabel({
   source,
@@ -54,7 +51,14 @@ export function CategoryLabel({
       title={`${meta.label}: ${meta.description}`}
     >
       <Badge variant="neutral" className="max-w-full">
-        <Badge.Text className="min-w-0 truncate">{meta.label}</Badge.Text>
+        {/* The ellipsis needs overflow:hidden, but Badge.Text's default box
+            hugs the glyph ink (leading-none plus cap/alphabetic
+            text-box-trim), so clipping there shaves the letters themselves.
+            Disable the trim and open up the line box on this truncating
+            instance so the ink never crosses the clip edge. */}
+        <Badge.Text className="min-w-0 truncate leading-normal [text-box-trim:none]">
+          {meta.label}
+        </Badge.Text>
       </Badge>
     </span>
   );
@@ -120,35 +124,6 @@ export function SeverityBadge({
     </SimpleTooltip>
   );
 }
-
-// Numeric severity, rendered as a color-coded pill. Used in list/table columns
-// where the raw score is more useful than the qualitative label — the number
-// carries the exact value while the band color (shared with SeverityBadge) makes
-// severity scannable at a glance.
-export function SeverityScore({
-  score,
-  className,
-}: {
-  score: number | undefined;
-  className?: string;
-}): JSX.Element {
-  if (score == null) {
-    return <span className="text-muted-foreground text-sm">-</span>;
-  }
-  // Rate on the rounded value we actually display, so a score sitting just below
-  // a band boundary (e.g. 3.96 → shown as "4.0") never renders the number in a
-  // color that disagrees with the band its displayed value falls in.
-  const displayed = Math.round(score * 10) / 10;
-  const rating = scoreToRating(displayed);
-  return (
-    <SimpleTooltip tooltip={`${SEVERITY_RATING_LABEL[rating]} severity`}>
-      <Badge variant={SEVERITY_BADGE_VARIANT[rating]} className={className}>
-        <Badge.Text className="tabular-nums">{displayed.toFixed(1)}</Badge.Text>
-      </Badge>
-    </SimpleTooltip>
-  );
-}
-
 export function RevealAllProvider({
   children,
 }: {
@@ -193,7 +168,7 @@ export function RevealAllToggle({
         aria-label={revealAll ? "Hide all matches" : "Reveal all matches"}
         className={
           className ??
-          "border-border hover:bg-muted text-muted-foreground inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm transition-colors"
+          "border-border hover:bg-muted text-muted-foreground inline-flex h-9 items-center gap-2 border px-3 text-sm transition-colors"
         }
       >
         {revealAll ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
@@ -203,35 +178,28 @@ export function RevealAllToggle({
   );
 }
 
-// useUnmaskedMatch backs a single MaskedMatch row: it calls risk.unmaskResult
-// on reveal and caches the plaintext locally so re-toggling visibility (or a
-// second "reveal all" pass) never re-fetches or re-audits an already-seen
-// value. Each reveal is a real, audited server call — there is no client-side
-// stand-in for the plaintext until this resolves.
-function useUnmaskedMatch(resultId: string): {
-  value: string | null;
-  isLoading: boolean;
-  reveal: () => void;
-} {
-  const { mutate, isPending } = useRiskUnmaskResultMutation();
-  const [value, setValue] = useState<string | null>(null);
-  const reveal = useCallback(() => {
-    if (value !== null || isPending) return;
-    mutate(
-      { request: { riskIDRequestBody: { id: resultId } } },
-      { onSuccess: (res) => setValue(res.match) },
-    );
-  }, [mutate, resultId, value, isPending]);
-  return { value, isLoading: isPending, reveal };
-}
-
 export function MaskedMatch({
   resultId,
   matchRedacted,
+  tone = "default",
+  wrap = false,
 }: {
   resultId: string | undefined;
   matchRedacted: string | undefined;
+  /**
+   * "contrast" renders for a dark code-block backdrop (the Watchdog drawer's
+   * evidence card): the masked state becomes a red redaction chip and the
+   * revealed value flips to the backdrop's inverse text color.
+   */
+  tone?: "default" | "contrast";
+  /**
+   * Soft-wrap the revealed value instead of scrolling it horizontally. Use in
+   * detail surfaces (drawers) where the full value should stay visible; table
+   * cells keep the default single-line scroll so row heights stay stable.
+   */
+  wrap?: boolean;
 }): JSX.Element {
+  const contrast = tone === "contrast";
   const { hasScope } = useRBAC();
   const canReveal = hasScope(REVEAL_SCOPE);
   const ctx = useRevealAll();
@@ -262,7 +230,12 @@ export function MaskedMatch({
   if (!canReveal) {
     return (
       <SimpleTooltip tooltip={REVEAL_DENIED_REASON}>
-        <span className="text-muted-foreground inline-flex items-center gap-1 text-xs">
+        <span
+          className={cn(
+            "inline-flex items-center gap-1 text-xs",
+            contrast ? "text-background/70" : "text-muted-foreground",
+          )}
+        >
           <Lock className="h-3 w-3" />
           <span>Hidden</span>
         </span>
@@ -274,7 +247,12 @@ export function MaskedMatch({
     return (
       <button
         type="button"
-        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs disabled:opacity-60"
+        className={cn(
+          "inline-flex items-center gap-1 text-xs disabled:opacity-60",
+          contrast
+            ? "bg-destructive px-2 py-0.5 font-mono tracking-wide text-white uppercase hover:bg-destructive/80"
+            : "text-muted-foreground hover:text-foreground",
+        )}
         disabled={isLoading}
         onClick={(e) => {
           e.stopPropagation();
@@ -293,15 +271,33 @@ export function MaskedMatch({
   }
 
   return (
-    <span className="inline-flex max-w-full min-w-0 items-center gap-1">
+    <span
+      className={cn(
+        "inline-flex max-w-full min-w-0 gap-1",
+        wrap ? "items-start" : "items-center",
+      )}
+    >
       <SimpleTooltip tooltip={value}>
-        <span className="min-w-0 overflow-x-auto font-mono text-xs whitespace-nowrap">
+        <span
+          className={cn(
+            "min-w-0 font-mono text-xs",
+            wrap
+              ? "break-all whitespace-pre-wrap"
+              : "overflow-x-auto whitespace-nowrap",
+            contrast && "text-background",
+          )}
+        >
           {value}
         </span>
       </SimpleTooltip>
       <button
         type="button"
-        className="text-muted-foreground hover:text-foreground shrink-0"
+        className={cn(
+          "shrink-0",
+          contrast
+            ? "text-background/60 hover:text-background"
+            : "text-muted-foreground hover:text-foreground",
+        )}
         onClick={(e) => {
           e.stopPropagation();
           setRevealed(false);
@@ -330,16 +326,6 @@ function RationaleText({ text }: { text: string }): JSX.Element {
       {text}
     </span>
   );
-}
-
-// The server redacts an absent match to this exact sentinel (no sha segment,
-// unlike a real fingerprint). A prompt-based policy finding records the judge's
-// verdict rather than a span of the message, so it lands here: there is no
-// event behind the reveal, and offering one opens an empty dialog.
-const NO_MATCH_FINGERPRINT = "<redacted len=0>";
-
-function hasRevealableEvent(matchRedacted: string | undefined): boolean {
-  return Boolean(matchRedacted) && matchRedacted !== NO_MATCH_FINGERPRINT;
 }
 
 // EventMatchDialog is the evidence cell for llm_judge / prompt_injection
@@ -432,7 +418,7 @@ export function EventMatchDialog({
           </Dialog.Description>
         </Dialog.Header>
         {summary ? (
-          <div className="bg-muted/40 space-y-1 rounded-md border p-3">
+          <div className="bg-muted/40 space-y-1 border p-3">
             <div className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
               Why this was flagged
             </div>

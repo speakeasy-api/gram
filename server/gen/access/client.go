@@ -28,19 +28,16 @@ type Client struct {
 	GetShadowMCPInventoryServerEndpoint          goa.Endpoint
 	UpdateShadowMCPInventoryServerNameEndpoint   goa.Endpoint
 	ListShadowMCPInventoryUsersEndpoint          goa.Endpoint
-	UpsertShadowMCPInventoryPolicyBypassEndpoint goa.Endpoint
-	DeleteShadowMCPInventoryPolicyBypassEndpoint goa.Endpoint
+	ListShadowMCPInventoryServersForUserEndpoint goa.Endpoint
 	ResolveShadowMCPInventoryRequestEndpoint     goa.Endpoint
-	GetRBACStatusEndpoint                        goa.Endpoint
-	EnableRBACEndpoint                           goa.Endpoint
-	DisableRBACEndpoint                          goa.Endpoint
+	RequestAccessEndpoint                        goa.Endpoint
 	ListChallengesEndpoint                       goa.Endpoint
 	ListChallengeBucketsEndpoint                 goa.Endpoint
 	ResolveChallengeEndpoint                     goa.Endpoint
 }
 
 // NewClient initializes a "access" service client given the endpoints.
-func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listScopes, listMembers, listGrants, updateMemberRoles, listShadowMCPInventory, getShadowMCPInventoryServer, updateShadowMCPInventoryServerName, listShadowMCPInventoryUsers, upsertShadowMCPInventoryPolicyBypass, deleteShadowMCPInventoryPolicyBypass, resolveShadowMCPInventoryRequest, getRBACStatus, enableRBAC, disableRBAC, listChallenges, listChallengeBuckets, resolveChallenge goa.Endpoint) *Client {
+func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listScopes, listMembers, listGrants, updateMemberRoles, listShadowMCPInventory, getShadowMCPInventoryServer, updateShadowMCPInventoryServerName, listShadowMCPInventoryUsers, listShadowMCPInventoryServersForUser, resolveShadowMCPInventoryRequest, requestAccess, listChallenges, listChallengeBuckets, resolveChallenge goa.Endpoint) *Client {
 	return &Client{
 		ListRolesEndpoint:                            listRoles,
 		GetRoleEndpoint:                              getRole,
@@ -55,12 +52,9 @@ func NewClient(listRoles, getRole, createRole, updateRole, deleteRole, listScope
 		GetShadowMCPInventoryServerEndpoint:          getShadowMCPInventoryServer,
 		UpdateShadowMCPInventoryServerNameEndpoint:   updateShadowMCPInventoryServerName,
 		ListShadowMCPInventoryUsersEndpoint:          listShadowMCPInventoryUsers,
-		UpsertShadowMCPInventoryPolicyBypassEndpoint: upsertShadowMCPInventoryPolicyBypass,
-		DeleteShadowMCPInventoryPolicyBypassEndpoint: deleteShadowMCPInventoryPolicyBypass,
+		ListShadowMCPInventoryServersForUserEndpoint: listShadowMCPInventoryServersForUser,
 		ResolveShadowMCPInventoryRequestEndpoint:     resolveShadowMCPInventoryRequest,
-		GetRBACStatusEndpoint:                        getRBACStatus,
-		EnableRBACEndpoint:                           enableRBAC,
-		DisableRBACEndpoint:                          disableRBAC,
+		RequestAccessEndpoint:                        requestAccess,
 		ListChallengesEndpoint:                       listChallenges,
 		ListChallengeBucketsEndpoint:                 listChallengeBuckets,
 		ResolveChallengeEndpoint:                     resolveChallenge,
@@ -350,9 +344,9 @@ func (c *Client) ListShadowMCPInventoryUsers(ctx context.Context, p *ListShadowM
 	return ires.(*ListShadowMCPInventoryUsersResult), nil
 }
 
-// UpsertShadowMCPInventoryPolicyBypass calls the
-// "upsertShadowMCPInventoryPolicyBypass" endpoint of the "access" service.
-// UpsertShadowMCPInventoryPolicyBypass may return the following errors:
+// ListShadowMCPInventoryServersForUser calls the
+// "listShadowMCPInventoryServersForUser" endpoint of the "access" service.
+// ListShadowMCPInventoryServersForUser may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -364,36 +358,13 @@ func (c *Client) ListShadowMCPInventoryUsers(ctx context.Context, p *ListShadowM
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) UpsertShadowMCPInventoryPolicyBypass(ctx context.Context, p *UpsertShadowMCPInventoryPolicyBypassPayload) (res *ShadowMCPInventoryURLState, err error) {
+func (c *Client) ListShadowMCPInventoryServersForUser(ctx context.Context, p *ListShadowMCPInventoryServersForUserPayload) (res *ListShadowMCPInventoryResult, err error) {
 	var ires any
-	ires, err = c.UpsertShadowMCPInventoryPolicyBypassEndpoint(ctx, p)
+	ires, err = c.ListShadowMCPInventoryServersForUserEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*ShadowMCPInventoryURLState), nil
-}
-
-// DeleteShadowMCPInventoryPolicyBypass calls the
-// "deleteShadowMCPInventoryPolicyBypass" endpoint of the "access" service.
-// DeleteShadowMCPInventoryPolicyBypass may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) DeleteShadowMCPInventoryPolicyBypass(ctx context.Context, p *DeleteShadowMCPInventoryPolicyBypassPayload) (res *ShadowMCPInventoryURLState, err error) {
-	var ires any
-	ires, err = c.DeleteShadowMCPInventoryPolicyBypassEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(*ShadowMCPInventoryURLState), nil
+	return ires.(*ListShadowMCPInventoryResult), nil
 }
 
 // ResolveShadowMCPInventoryRequest calls the
@@ -419,8 +390,8 @@ func (c *Client) ResolveShadowMCPInventoryRequest(ctx context.Context, p *Resolv
 	return ires.(*ShadowMCPInventoryURLState), nil
 }
 
-// GetRBACStatus calls the "getRBACStatus" endpoint of the "access" service.
-// GetRBACStatus may return the following errors:
+// RequestAccess calls the "requestAccess" endpoint of the "access" service.
+// RequestAccess may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -432,49 +403,13 @@ func (c *Client) ResolveShadowMCPInventoryRequest(ctx context.Context, p *Resolv
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) GetRBACStatus(ctx context.Context, p *GetRBACStatusPayload) (res *RBACStatus, err error) {
+func (c *Client) RequestAccess(ctx context.Context, p *RequestAccessPayload) (res *RequestAccessResult, err error) {
 	var ires any
-	ires, err = c.GetRBACStatusEndpoint(ctx, p)
+	ires, err = c.RequestAccessEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*RBACStatus), nil
-}
-
-// EnableRBAC calls the "enableRBAC" endpoint of the "access" service.
-// EnableRBAC may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) EnableRBAC(ctx context.Context, p *EnableRBACPayload) (err error) {
-	_, err = c.EnableRBACEndpoint(ctx, p)
-	return
-}
-
-// DisableRBAC calls the "disableRBAC" endpoint of the "access" service.
-// DisableRBAC may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) DisableRBAC(ctx context.Context, p *DisableRBACPayload) (err error) {
-	_, err = c.DisableRBACEndpoint(ctx, p)
-	return
+	return ires.(*RequestAccessResult), nil
 }
 
 // ListChallenges calls the "listChallenges" endpoint of the "access" service.

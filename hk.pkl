@@ -2,6 +2,8 @@ amends "package://github.com/jdx/hk/releases/download/v1.38.0/hk@1.38.0#/Config.
 
 import "package://github.com/jdx/hk/releases/download/v1.38.0/hk@1.38.0#/Builtins.pkl"
 import "pkl:json"
+// Runtime data and local service configuration are outside source checks.
+exclude = List("local")
 
 // Source the oxfmt step's exclude list from `.oxfmtrc.json` so the two stay in sync.
 // Strip the leading `/` that .oxfmtrc.json uses for repo-root anchoring; hk globs are root-relative.
@@ -71,8 +73,8 @@ local linters = new Mapping<String, Step> {
     // pass an ignored file through `exclude`. Without the flag oxfmt would exit
     // non-zero on "all files excluded" and break the hook; with it, oxfmt simply
     // formats nothing and leaves the file untouched.
-    check = "pnpm oxfmt --check --no-error-on-unmatched-pattern {{files}}"
-    fix = "pnpm oxfmt --write --no-error-on-unmatched-pattern {{files}}"
+    check = "aube exec oxfmt -- --check --no-error-on-unmatched-pattern {{files}}"
+    fix = "aube exec oxfmt -- --write --no-error-on-unmatched-pattern {{files}}"
   }
   ["ruff-format"] = (Builtins.ruff_format) {
     batch = true

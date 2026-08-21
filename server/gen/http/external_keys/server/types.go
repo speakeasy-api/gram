@@ -36,19 +36,13 @@ type CreateAwsKmsKeyRequestBody struct {
 type UpdateAwsKmsKeyRequestBody struct {
 	// The ID of the key to update.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The ARN of the AWS KMS key.
-	KeyArn *string `form:"key_arn,omitempty" json:"key_arn,omitempty" xml:"key_arn,omitempty"`
-	// The external credential Gram uses to authenticate to the key. Must belong to
-	// the same organization and matching cloud family (an aws_kms key requires an
-	// aws_iam credential; a gcp_kms key requires a gcp_iam credential).
+	// The external credential Gram uses to authenticate to the key. Must be an
+	// aws_iam credential belonging to the same organization.
 	ExternalCredentialID *string `form:"external_credential_id,omitempty" json:"external_credential_id,omitempty" xml:"external_credential_id,omitempty"`
-	// The signing algorithm of the key.
-	Algorithm *string `form:"algorithm,omitempty" json:"algorithm,omitempty" xml:"algorithm,omitempty"`
 	// A human-readable name for the key.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// Optional. The Gram identity (GCP service-account email or AWS principal ARN)
-	// the customer granted on the key for the key-policy / IAM-grant model. Not a
-	// secret.
+	// Optional. The AWS principal ARN the customer granted on the key in its key
+	// policy. Not a secret.
 	CustomerGrantReference *string `form:"customer_grant_reference,omitempty" json:"customer_grant_reference,omitempty" xml:"customer_grant_reference,omitempty"`
 }
 
@@ -76,19 +70,13 @@ type CreateGcpKmsKeyRequestBody struct {
 type UpdateGcpKmsKeyRequestBody struct {
 	// The ID of the key to update.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The resource name of the GCP KMS key (projects/.../cryptoKeyVersions/...).
-	ResourceName *string `form:"resource_name,omitempty" json:"resource_name,omitempty" xml:"resource_name,omitempty"`
-	// The external credential Gram uses to authenticate to the key. Must belong to
-	// the same organization and matching cloud family (an aws_kms key requires an
-	// aws_iam credential; a gcp_kms key requires a gcp_iam credential).
+	// The external credential Gram uses to authenticate to the key. Must be a
+	// gcp_iam credential belonging to the same organization.
 	ExternalCredentialID *string `form:"external_credential_id,omitempty" json:"external_credential_id,omitempty" xml:"external_credential_id,omitempty"`
-	// The signing algorithm of the key.
-	Algorithm *string `form:"algorithm,omitempty" json:"algorithm,omitempty" xml:"algorithm,omitempty"`
 	// A human-readable name for the key.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// Optional. The Gram identity (GCP service-account email or AWS principal ARN)
-	// the customer granted on the key for the key-policy / IAM-grant model. Not a
-	// secret.
+	// Optional. The Gram service-account email the customer granted on the key in
+	// an IAM binding. Not a secret.
 	CustomerGrantReference *string `form:"customer_grant_reference,omitempty" json:"customer_grant_reference,omitempty" xml:"customer_grant_reference,omitempty"`
 }
 
@@ -273,6 +261,19 @@ type GetGcpKmsKeyResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the key was last updated.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// VerifyGcpKmsKeyResponseBody is the type of the "externalKeys" service
+// "verifyGcpKmsKey" endpoint HTTP response body.
+type VerifyGcpKmsKeyResponseBody struct {
+	// Whether the key produced a signature that validated against its own public
+	// half.
+	Verified bool `form:"verified" json:"verified" xml:"verified"`
+	// The machine-readable outcome of the probe.
+	ProbeOutcome string `form:"probe_outcome" json:"probe_outcome" xml:"probe_outcome"`
+	// Human-readable detail about the probe outcome, including the failure reason
+	// when it did not verify.
+	Detail *string `form:"detail,omitempty" json:"detail,omitempty" xml:"detail,omitempty"`
 }
 
 // CreateAwsKmsKeyUnauthorizedResponseBody is the type of the "externalKeys"
@@ -1963,6 +1964,214 @@ type GetGcpKmsKeyGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// VerifyGcpKmsKeyRateLimitExceededResponseBody is the type of the
+// "externalKeys" service "verifyGcpKmsKey" endpoint HTTP response body for the
+// "rate_limit_exceeded" error.
+type VerifyGcpKmsKeyRateLimitExceededResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyGcpKmsKeyUnauthorizedResponseBody is the type of the "externalKeys"
+// service "verifyGcpKmsKey" endpoint HTTP response body for the "unauthorized"
+// error.
+type VerifyGcpKmsKeyUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyGcpKmsKeyForbiddenResponseBody is the type of the "externalKeys"
+// service "verifyGcpKmsKey" endpoint HTTP response body for the "forbidden"
+// error.
+type VerifyGcpKmsKeyForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyGcpKmsKeyBadRequestResponseBody is the type of the "externalKeys"
+// service "verifyGcpKmsKey" endpoint HTTP response body for the "bad_request"
+// error.
+type VerifyGcpKmsKeyBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyGcpKmsKeyNotFoundResponseBody is the type of the "externalKeys"
+// service "verifyGcpKmsKey" endpoint HTTP response body for the "not_found"
+// error.
+type VerifyGcpKmsKeyNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyGcpKmsKeyConflictResponseBody is the type of the "externalKeys"
+// service "verifyGcpKmsKey" endpoint HTTP response body for the "conflict"
+// error.
+type VerifyGcpKmsKeyConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyGcpKmsKeyUnsupportedMediaResponseBody is the type of the
+// "externalKeys" service "verifyGcpKmsKey" endpoint HTTP response body for the
+// "unsupported_media" error.
+type VerifyGcpKmsKeyUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyGcpKmsKeyInvalidResponseBody is the type of the "externalKeys" service
+// "verifyGcpKmsKey" endpoint HTTP response body for the "invalid" error.
+type VerifyGcpKmsKeyInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyGcpKmsKeyInvariantViolationResponseBody is the type of the
+// "externalKeys" service "verifyGcpKmsKey" endpoint HTTP response body for the
+// "invariant_violation" error.
+type VerifyGcpKmsKeyInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyGcpKmsKeyUnexpectedResponseBody is the type of the "externalKeys"
+// service "verifyGcpKmsKey" endpoint HTTP response body for the "unexpected"
+// error.
+type VerifyGcpKmsKeyUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyGcpKmsKeyGatewayErrorResponseBody is the type of the "externalKeys"
+// service "verifyGcpKmsKey" endpoint HTTP response body for the
+// "gateway_error" error.
+type VerifyGcpKmsKeyGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // DeleteAwsKmsKeyUnauthorizedResponseBody is the type of the "externalKeys"
 // service "deleteAwsKmsKey" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -2527,6 +2736,17 @@ func NewGetGcpKmsKeyResponseBody(res *externalkeys.GcpKmsKey) *GetGcpKmsKeyRespo
 		CustomerGrantReference: res.CustomerGrantReference,
 		CreatedAt:              res.CreatedAt,
 		UpdatedAt:              res.UpdatedAt,
+	}
+	return body
+}
+
+// NewVerifyGcpKmsKeyResponseBody builds the HTTP response body from the result
+// of the "verifyGcpKmsKey" endpoint of the "externalKeys" service.
+func NewVerifyGcpKmsKeyResponseBody(res *externalkeys.VerifyKmsKeyResult) *VerifyGcpKmsKeyResponseBody {
+	body := &VerifyGcpKmsKeyResponseBody{
+		Verified:     res.Verified,
+		ProbeOutcome: res.ProbeOutcome,
+		Detail:       res.Detail,
 	}
 	return body
 }
@@ -3815,6 +4035,165 @@ func NewGetGcpKmsKeyGatewayErrorResponseBody(res *goa.ServiceError) *GetGcpKmsKe
 	return body
 }
 
+// NewVerifyGcpKmsKeyRateLimitExceededResponseBody builds the HTTP response
+// body from the result of the "verifyGcpKmsKey" endpoint of the "externalKeys"
+// service.
+func NewVerifyGcpKmsKeyRateLimitExceededResponseBody(res *goa.ServiceError) *VerifyGcpKmsKeyRateLimitExceededResponseBody {
+	body := &VerifyGcpKmsKeyRateLimitExceededResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyGcpKmsKeyUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "verifyGcpKmsKey" endpoint of the "externalKeys"
+// service.
+func NewVerifyGcpKmsKeyUnauthorizedResponseBody(res *goa.ServiceError) *VerifyGcpKmsKeyUnauthorizedResponseBody {
+	body := &VerifyGcpKmsKeyUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyGcpKmsKeyForbiddenResponseBody builds the HTTP response body from
+// the result of the "verifyGcpKmsKey" endpoint of the "externalKeys" service.
+func NewVerifyGcpKmsKeyForbiddenResponseBody(res *goa.ServiceError) *VerifyGcpKmsKeyForbiddenResponseBody {
+	body := &VerifyGcpKmsKeyForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyGcpKmsKeyBadRequestResponseBody builds the HTTP response body from
+// the result of the "verifyGcpKmsKey" endpoint of the "externalKeys" service.
+func NewVerifyGcpKmsKeyBadRequestResponseBody(res *goa.ServiceError) *VerifyGcpKmsKeyBadRequestResponseBody {
+	body := &VerifyGcpKmsKeyBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyGcpKmsKeyNotFoundResponseBody builds the HTTP response body from
+// the result of the "verifyGcpKmsKey" endpoint of the "externalKeys" service.
+func NewVerifyGcpKmsKeyNotFoundResponseBody(res *goa.ServiceError) *VerifyGcpKmsKeyNotFoundResponseBody {
+	body := &VerifyGcpKmsKeyNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyGcpKmsKeyConflictResponseBody builds the HTTP response body from
+// the result of the "verifyGcpKmsKey" endpoint of the "externalKeys" service.
+func NewVerifyGcpKmsKeyConflictResponseBody(res *goa.ServiceError) *VerifyGcpKmsKeyConflictResponseBody {
+	body := &VerifyGcpKmsKeyConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyGcpKmsKeyUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "verifyGcpKmsKey" endpoint of the "externalKeys"
+// service.
+func NewVerifyGcpKmsKeyUnsupportedMediaResponseBody(res *goa.ServiceError) *VerifyGcpKmsKeyUnsupportedMediaResponseBody {
+	body := &VerifyGcpKmsKeyUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyGcpKmsKeyInvalidResponseBody builds the HTTP response body from the
+// result of the "verifyGcpKmsKey" endpoint of the "externalKeys" service.
+func NewVerifyGcpKmsKeyInvalidResponseBody(res *goa.ServiceError) *VerifyGcpKmsKeyInvalidResponseBody {
+	body := &VerifyGcpKmsKeyInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyGcpKmsKeyInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "verifyGcpKmsKey" endpoint of the "externalKeys"
+// service.
+func NewVerifyGcpKmsKeyInvariantViolationResponseBody(res *goa.ServiceError) *VerifyGcpKmsKeyInvariantViolationResponseBody {
+	body := &VerifyGcpKmsKeyInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyGcpKmsKeyUnexpectedResponseBody builds the HTTP response body from
+// the result of the "verifyGcpKmsKey" endpoint of the "externalKeys" service.
+func NewVerifyGcpKmsKeyUnexpectedResponseBody(res *goa.ServiceError) *VerifyGcpKmsKeyUnexpectedResponseBody {
+	body := &VerifyGcpKmsKeyUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyGcpKmsKeyGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "verifyGcpKmsKey" endpoint of the "externalKeys"
+// service.
+func NewVerifyGcpKmsKeyGatewayErrorResponseBody(res *goa.ServiceError) *VerifyGcpKmsKeyGatewayErrorResponseBody {
+	body := &VerifyGcpKmsKeyGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewDeleteAwsKmsKeyUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "deleteAwsKmsKey" endpoint of the "externalKeys"
 // service.
@@ -4123,9 +4502,7 @@ func NewCreateAwsKmsKeyPayload(body *CreateAwsKmsKeyRequestBody, sessionToken *s
 func NewUpdateAwsKmsKeyPayload(body *UpdateAwsKmsKeyRequestBody, sessionToken *string) *externalkeys.UpdateAwsKmsKeyPayload {
 	v := &externalkeys.UpdateAwsKmsKeyPayload{
 		ID:                     *body.ID,
-		KeyArn:                 *body.KeyArn,
 		ExternalCredentialID:   *body.ExternalCredentialID,
-		Algorithm:              *body.Algorithm,
 		Name:                   *body.Name,
 		CustomerGrantReference: body.CustomerGrantReference,
 	}
@@ -4154,9 +4531,7 @@ func NewCreateGcpKmsKeyPayload(body *CreateGcpKmsKeyRequestBody, sessionToken *s
 func NewUpdateGcpKmsKeyPayload(body *UpdateGcpKmsKeyRequestBody, sessionToken *string) *externalkeys.UpdateGcpKmsKeyPayload {
 	v := &externalkeys.UpdateGcpKmsKeyPayload{
 		ID:                     *body.ID,
-		ResourceName:           *body.ResourceName,
 		ExternalCredentialID:   *body.ExternalCredentialID,
-		Algorithm:              *body.Algorithm,
 		Name:                   *body.Name,
 		CustomerGrantReference: body.CustomerGrantReference,
 	}
@@ -4207,6 +4582,16 @@ func NewGetAwsKmsKeyPayload(id string, sessionToken *string) *externalkeys.GetAw
 // payload.
 func NewGetGcpKmsKeyPayload(id string, sessionToken *string) *externalkeys.GetGcpKmsKeyPayload {
 	v := &externalkeys.GetGcpKmsKeyPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewVerifyGcpKmsKeyPayload builds a externalKeys service verifyGcpKmsKey
+// endpoint payload.
+func NewVerifyGcpKmsKeyPayload(id string, sessionToken *string) *externalkeys.VerifyGcpKmsKeyPayload {
+	v := &externalkeys.VerifyGcpKmsKeyPayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
 
@@ -4265,14 +4650,8 @@ func ValidateUpdateAwsKmsKeyRequestBody(body *UpdateAwsKmsKeyRequestBody) (err e
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
-	if body.KeyArn == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("key_arn", "body"))
-	}
 	if body.ExternalCredentialID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("external_credential_id", "body"))
-	}
-	if body.Algorithm == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("algorithm", "body"))
 	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
@@ -4282,11 +4661,6 @@ func ValidateUpdateAwsKmsKeyRequestBody(body *UpdateAwsKmsKeyRequestBody) (err e
 	}
 	if body.ExternalCredentialID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.external_credential_id", *body.ExternalCredentialID, goa.FormatUUID))
-	}
-	if body.Algorithm != nil {
-		if !(*body.Algorithm == "RS256" || *body.Algorithm == "ES256") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.algorithm", *body.Algorithm, []any{"RS256", "ES256"}))
-		}
 	}
 	return
 }
@@ -4323,14 +4697,8 @@ func ValidateUpdateGcpKmsKeyRequestBody(body *UpdateGcpKmsKeyRequestBody) (err e
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
-	if body.ResourceName == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("resource_name", "body"))
-	}
 	if body.ExternalCredentialID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("external_credential_id", "body"))
-	}
-	if body.Algorithm == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("algorithm", "body"))
 	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
@@ -4340,11 +4708,6 @@ func ValidateUpdateGcpKmsKeyRequestBody(body *UpdateGcpKmsKeyRequestBody) (err e
 	}
 	if body.ExternalCredentialID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.external_credential_id", *body.ExternalCredentialID, goa.FormatUUID))
-	}
-	if body.Algorithm != nil {
-		if !(*body.Algorithm == "RS256" || *body.Algorithm == "ES256") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.algorithm", *body.Algorithm, []any{"RS256", "ES256"}))
-		}
 	}
 	return
 }

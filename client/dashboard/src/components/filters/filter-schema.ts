@@ -28,6 +28,12 @@ export interface FilterOption {
   label: string;
   value: string;
   icon?: ComponentType<{ className?: string }>;
+  /**
+   * Optional secondary explanation under the option label in select /
+   * multiselect menus. Prefer this for non-obvious values users need to
+   * distinguish (e.g. Manual vs Captured).
+   */
+  description?: string;
 }
 
 /** Multiselect dimensions may supply grouped options (e.g. servers by type). */
@@ -86,6 +92,14 @@ interface BaseDimension<K extends FilterKind> {
    * "All"` for a Risk filter instead of "All risks").
    */
   allLabel?: string;
+  /**
+   * The dimension always holds a value — there is no "all" for it, so its chip
+   * hides the × rather than offering a clear that resolves straight back to a
+   * value. Use for a scope the query cannot run without (e.g. the project a
+   * list is read within), never merely for a filter that happens to be
+   * important.
+   */
+  required?: boolean;
 }
 
 type MultiselectDimension = BaseDimension<"multiselect">;

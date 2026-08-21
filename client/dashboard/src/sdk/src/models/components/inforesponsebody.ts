@@ -12,6 +12,11 @@ import {
   OrganizationEntry$inboundSchema,
 } from "./organizationentry.js";
 
+export type Trial = {
+  endsAt: Date;
+  startedAt: Date;
+};
+
 export type InfoResponseBody = {
   activeOrganizationId: string;
   gramAccountType: string;
@@ -19,8 +24,21 @@ export type InfoResponseBody = {
    * Whether the organization has an active billing subscription
    */
   hasActiveSubscription: boolean;
+  /**
+   * The WorkOS Dashboard operator who initiated this impersonation session. Empty for ordinary authentication.
+   */
+  impersonatorEmail?: string | undefined;
   isAdmin: boolean;
+  /**
+   * Whether this is a validated, time-bounded organization support session.
+   */
+  organizationOverride: boolean;
+  /**
+   * Fixed expiration of the organization support session.
+   */
+  organizationOverrideExpiresAt?: Date | undefined;
   organizations: Array<OrganizationEntry>;
+  trial: Trial | null;
   userDisplayName?: string | undefined;
   userEmail: string;
   userId: string;
@@ -33,6 +51,36 @@ export type InfoResponseBody = {
 };
 
 /** @internal */
+export const Trial$inboundSchema: z.ZodMiniType<Trial, unknown> = z.pipe(
+  z.object({
+    ends_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform(v => new Date(v)),
+    ),
+    started_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform(v => new Date(v)),
+    ),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      "ends_at": "endsAt",
+      "started_at": "startedAt",
+    });
+  }),
+);
+
+export function trialFromJSON(
+  jsonString: string,
+): SafeParseResult<Trial, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => Trial$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'Trial' from JSON`,
+  );
+}
+
+/** @internal */
 export const InfoResponseBody$inboundSchema: z.ZodMiniType<
   InfoResponseBody,
   unknown
@@ -41,8 +89,14 @@ export const InfoResponseBody$inboundSchema: z.ZodMiniType<
     active_organization_id: z.string(),
     gram_account_type: z.string(),
     has_active_subscription: z.boolean(),
+    impersonator_email: z.optional(z.string()),
     is_admin: z.boolean(),
+    organization_override: z.boolean(),
+    organization_override_expires_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
     organizations: z.array(OrganizationEntry$inboundSchema),
+    trial: z.nullable(z.lazy(() => Trial$inboundSchema)),
     user_display_name: z.optional(z.string()),
     user_email: z.string(),
     user_id: z.string(),
@@ -55,7 +109,10 @@ export const InfoResponseBody$inboundSchema: z.ZodMiniType<
       "active_organization_id": "activeOrganizationId",
       "gram_account_type": "gramAccountType",
       "has_active_subscription": "hasActiveSubscription",
+      "impersonator_email": "impersonatorEmail",
       "is_admin": "isAdmin",
+      "organization_override": "organizationOverride",
+      "organization_override_expires_at": "organizationOverrideExpiresAt",
       "user_display_name": "userDisplayName",
       "user_email": "userEmail",
       "user_id": "userId",

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -34,6 +35,7 @@ import (
 // manager as the UserResolver, matching the production wiring in start.go.
 func NewTestManager(t *testing.T, logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, redisClient *redis.Client, suffix cache.Suffix, billingRepo billing.Repository) *sessions.Manager {
 	t.Helper()
+	suffix = NewCacheSuffix(t, suffix)
 
 	cfg := mockidp.NewConfig()
 	srv := httptest.NewServer(mockidp.Handler(cfg))
@@ -57,12 +59,11 @@ func NewTestManager(t *testing.T, logger *slog.Logger, tracerProvider trace.Trac
 		srv.URL,
 		"test-client-id",
 		idpClient,
-		nil, // no WorkOS client in tests — fallback won't fire
+		nil, // no WorkOS client in tests
 		orgRepo.New(db),
 		userRepo.New(db),
 		fakePylon,
 		fakePosthog,
-		nil, // RBAC enabler — org seeding not exercised in this test env
 		suffix,
 	)
 
@@ -117,10 +118,13 @@ func InitAuthContext(t *testing.T, ctx context.Context, conn *pgxpool.Pool, sess
 	// Mint our own session ID and store
 	sessionID := uuid.New().String()
 	session := sessions.Session{
-		SessionID:            sessionID,
-		UserID:               userID,
-		ActiveOrganizationID: mockidp.MockOrgID,
-		WorkOSSessionID:      "",
+		SessionID:             sessionID,
+		UserID:                userID,
+		ActiveOrganizationID:  mockidp.MockOrgID,
+		WorkOSSessionID:       "",
+		ImpersonatorEmail:     "",
+		SupportOrganizationID: "",
+		SupportExpiresAt:      time.Time{},
 	}
 	err = sessionManager.StoreSession(ctx, session)
 	require.NoError(t, err)

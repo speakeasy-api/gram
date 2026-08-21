@@ -180,6 +180,36 @@ var _ = Service("remoteSessionIssuers", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RemoteSessionIssuer"}`)
 	})
 
+	Method("getRemoteSessionIssuerDuplicatePreflight", func() {
+		Description("Report the existing remote_session_issuers that already describe an upstream issuer URL, so a create or edit form can warn before it duplicates one. Covers this project's own issuers plus those inherited from the organization and the platform catalog.\n\nAdvisory only. Duplicating an issuer URL is legitimate — a project may want its own record so it can attach different documentation, branding or scopes — so nothing here blocks a write, and no lock is taken. A create that races another create still produces two records, which is a supported state.\n\nMatching uses the same canonicalization as getRemoteSessionIssuer. A URL that cannot be parsed as an issuer identifier returns no matches rather than an error, because a partially typed URL is the normal state of a form field.")
+
+		Payload(func() {
+			// Not Required: Goa cannot tell an absent query parameter from an
+			// empty one, so requiring it would turn a blank form field into a
+			// 400 at the transport decoder, contradicting the empty-match
+			// contract below before the handler ever runs.
+			Attribute("issuer", String, "The upstream issuer URL being entered (e.g. https://login.linear.app). Empty or unparseable returns no matches.")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(RemoteSessionIssuerDuplicatePreflight)
+
+		HTTP(func() {
+			GET("/rpc/remoteSessionIssuers.getDuplicatePreflight")
+			Param("issuer")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getRemoteSessionIssuerDuplicatePreflight")
+		Meta("openapi:extension:x-speakeasy-name-override", "getDuplicatePreflight")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RemoteSessionIssuerDuplicatePreflight"}`)
+	})
+
 	Method("deleteRemoteSessionIssuer", func() {
 		Description("Soft-delete a remote_session_issuer. Blocked if any remote_session_clients still reference it.")
 
@@ -334,6 +364,34 @@ var _ = Service("organizationRemoteSessionIssuers", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationRemoteSessionIssuerDeletePreflight"}`)
 	})
 
+	Method("getIssuerDuplicatePreflight", func() {
+		Description("Report the existing remote_session_issuers that already describe an upstream issuer URL, so a create or edit form can warn before it duplicates one. Requires org:read.\n\nCovers every issuer in the caller's organization — organization-level and project-specific alike — plus the platform catalog. The project-specific rows are the point: an organization administrator about to add an organization-level issuer most needs to know that several of their projects already configured the same URL separately, because those are exactly the records migrateIssuer can consolidate. The answer does not depend on whether the issuer being created is organization-level or project-scoped; an org administrator holds org:read either way.\n\nAdvisory only. Duplicating an issuer URL is legitimate, so nothing here blocks a write and no lock is taken. Matching uses the same canonicalization as getRemoteSessionIssuer, and a URL that cannot be parsed as an issuer identifier returns no matches rather than an error.")
+
+		Payload(func() {
+			// Not Required: Goa cannot tell an absent query parameter from an
+			// empty one, so requiring it would turn a blank form field into a
+			// 400 at the transport decoder, contradicting the empty-match
+			// contract below before the handler ever runs.
+			Attribute("issuer", String, "The upstream issuer URL being entered (e.g. https://login.linear.app). Empty or unparseable returns no matches.")
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(RemoteSessionIssuerDuplicatePreflight)
+
+		HTTP(func() {
+			GET("/rpc/organizationRemoteSessionIssuers.getDuplicatePreflight")
+			Param("issuer")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getOrganizationRemoteSessionIssuerDuplicatePreflight")
+		Meta("openapi:extension:x-speakeasy-name-override", "getDuplicatePreflight")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationRemoteSessionIssuerDuplicatePreflight"}`)
+	})
+
 	Method("updateIssuer", func() {
 		Description("Update any remote_session_issuer (organizational or project-specific) in the caller's organization. Requires org:admin.")
 
@@ -443,7 +501,7 @@ var _ = Service("organizationRemoteSessionIssuers", func() {
 	})
 
 	Method("migrateIssuer", func() {
-		Description("Consolidate two remote_session_issuers that point at the same upstream authorization server: re-point every client from the source issuer onto the target issuer, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. Both issuers must belong to the caller's organization and agree on issuer, token_endpoint, and authorization_endpoint. The target may not be narrower in scope than the source: a project-specific issuer may migrate onto an issuer in the same project or onto an organization-level issuer, and an organization-level issuer may migrate onto another organization-level issuer. Requires org:admin.")
+		Description("Consolidate two remote_session_issuers that point at the same upstream authorization server: re-point every client from the source issuer onto the target issuer, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. Both issuers must belong to the caller's organization and agree on issuer, token_endpoint, and authorization_endpoint. The issuer identifier is compared canonically, so two spellings differing only by a trailing slash or an explicit default port count as the same upstream; the two endpoints are compared literally. The target may not be narrower in scope than the source: a project-specific issuer may migrate onto an issuer in the same project or onto an organization-level issuer, and an organization-level issuer may migrate onto another organization-level issuer. Requires org:admin.")
 
 		Payload(func() {
 			Attribute("source_id", String, "The remote_session_issuer to migrate away from; soft-deleted on success.", func() {
@@ -534,6 +592,7 @@ var CreateRemoteSessionIssuerForm = Type("CreateRemoteSessionIssuerForm", func()
 	Attribute("client_setup_documentation_url", String, "URL of OAuth client setup documentation shown when creating clients. Manually set, not RFC 8414; rejected unless an absolute http(s) URL.")
 	Attribute("authorization_endpoint", String, "Upstream authorization endpoint.")
 	Attribute("token_endpoint", String, "Upstream token endpoint.")
+	Attribute("revocation_endpoint", String, "Upstream RFC 7009 revocation endpoint; absent for issuers that advertise none.")
 	Attribute("registration_endpoint", String, "Upstream RFC 7591 registration endpoint; absent for issuers without DCR.")
 	Attribute("jwks_uri", String, "Upstream JWKS URI.")
 	Attribute("service_documentation", String, "RFC 8414 service_documentation; developer documentation for the issuer. Discovered from the issuer metadata document; rejected unless an absolute http(s) URL.")
@@ -543,6 +602,7 @@ var CreateRemoteSessionIssuerForm = Type("CreateRemoteSessionIssuerForm", func()
 	Attribute("grant_types_supported", ArrayOf(String), "Grant types advertised by the issuer.")
 	Attribute("response_types_supported", ArrayOf(String), "Response types advertised by the issuer.")
 	Attribute("token_endpoint_auth_methods_supported", ArrayOf(String), "Token endpoint auth methods advertised by the issuer.")
+	Attribute("code_challenge_methods_supported", ArrayOf(String), "PKCE code challenge methods advertised by the issuer (RFC 8414 code_challenge_methods_supported). Omitting the field stores null (\"not captured\"), distinct from an empty array (\"the issuer advertises no methods\").")
 	Attribute("oidc", Boolean, "When true, may unlock OIDC-aware behaviour. Default false.")
 	Attribute("passthrough", Boolean, "When true, the MCP client registers and transacts directly with this issuer. Default false.")
 	Attribute("client_id_metadata_document_supported", Boolean, "When true, the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft). Discovered from the issuer metadata document and used to pre-flight outbound CIMD. Default false.")
@@ -559,12 +619,14 @@ var UpdateRemoteSessionIssuerForm = Type("UpdateRemoteSessionIssuerForm", func()
 	Attribute("slug", String, "Rename the slug.")
 	Attribute("issuer", String, "Issuer URL; matches the iss claim.")
 	Attribute("name", String, "Set or clear the display name. An empty string clears it to NULL.")
-	Attribute("logo_asset_id", String, "Set the logo asset id.", func() {
-		Format(FormatUUID)
-	})
+	// No FormatUUID: the empty string is the "clear to NULL" sentinel and a
+	// format check would reject it before the handler runs. The handler
+	// validates any non-empty value as a uuid.
+	Attribute("logo_asset_id", String, "Set or clear the logo asset id. An empty string clears it to NULL; any other value must be a uuid.")
 	Attribute("client_setup_documentation_url", String, "Set or clear the URL of OAuth client setup documentation shown when creating clients. An empty string clears it to NULL; any other value must be an absolute http(s) URL.")
 	Attribute("authorization_endpoint", String, "Upstream authorization endpoint.")
 	Attribute("token_endpoint", String, "Upstream token endpoint.")
+	Attribute("revocation_endpoint", String, "Upstream RFC 7009 revocation endpoint.")
 	Attribute("registration_endpoint", String, "Upstream RFC 7591 registration endpoint.")
 	Attribute("jwks_uri", String, "Upstream JWKS URI.")
 	Attribute("service_documentation", String, "Set or clear RFC 8414 service_documentation. An empty string clears it to NULL; any other value must be an absolute http(s) URL.")
@@ -574,6 +636,7 @@ var UpdateRemoteSessionIssuerForm = Type("UpdateRemoteSessionIssuerForm", func()
 	Attribute("grant_types_supported", ArrayOf(String))
 	Attribute("response_types_supported", ArrayOf(String))
 	Attribute("token_endpoint_auth_methods_supported", ArrayOf(String))
+	Attribute("code_challenge_methods_supported", ArrayOf(String), "PKCE code challenge methods advertised by the issuer (RFC 8414 code_challenge_methods_supported). Omitting the field leaves the stored value unchanged; an empty array records that the issuer advertises no methods.")
 	Attribute("oidc", Boolean)
 	Attribute("passthrough", Boolean)
 	Attribute("client_id_metadata_document_supported", Boolean, "Whether the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft).")
@@ -602,6 +665,7 @@ var RemoteSessionIssuer = Type("RemoteSessionIssuer", func() {
 	Attribute("client_setup_documentation_url", String, "URL of OAuth client setup documentation shown when creating clients. Manually set, not RFC 8414; null when unset.")
 	Attribute("authorization_endpoint", String, "Upstream authorization endpoint.")
 	Attribute("token_endpoint", String, "Upstream token endpoint.")
+	Attribute("revocation_endpoint", String, "Upstream RFC 7009 revocation endpoint; null when the issuer advertises none.")
 	Attribute("registration_endpoint", String, "Upstream RFC 7591 registration endpoint; null for issuers without DCR.")
 	Attribute("jwks_uri", String, "Upstream JWKS URI; null when not advertised.")
 	Attribute("service_documentation", String, "RFC 8414 service_documentation; developer documentation for the issuer. Null when not advertised.")
@@ -611,6 +675,12 @@ var RemoteSessionIssuer = Type("RemoteSessionIssuer", func() {
 	Attribute("grant_types_supported", ArrayOf(String))
 	Attribute("response_types_supported", ArrayOf(String))
 	Attribute("token_endpoint_auth_methods_supported", ArrayOf(String))
+	Attribute("code_challenge_methods_supported", ArrayOf(String), "PKCE code challenge methods advertised by the issuer (RFC 8414 code_challenge_methods_supported). Null when neither discovery nor an operator has captured the field for this issuer yet; an empty array means the field was captured and the issuer advertises no methods.", func() {
+		// Suppresses omitempty so the wire keeps null ("never captured")
+		// distinct from [] ("captured; advertises nothing"). Paired with a
+		// nullable:true patch in overlays/goa.yaml, like auth's trial field.
+		Meta("struct:tag:json", "code_challenge_methods_supported")
+	})
 	Attribute("oidc", Boolean, "When true, may unlock OIDC-aware behaviour.")
 	Attribute("passthrough", Boolean, "When true, the MCP client registers and transacts directly with this issuer.")
 	Attribute("client_id_metadata_document_supported", Boolean, "Whether the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft).")
@@ -632,6 +702,7 @@ var RemoteSessionIssuerDraft = Type("RemoteSessionIssuerDraft", func() {
 	Attribute("issuer", String, "Issuer URL; matches the iss claim.")
 	Attribute("authorization_endpoint", String, "Upstream authorization endpoint.")
 	Attribute("token_endpoint", String, "Upstream token endpoint.")
+	Attribute("revocation_endpoint", String, "Upstream RFC 7009 revocation endpoint; null when the issuer advertises none.")
 	Attribute("registration_endpoint", String, "Upstream RFC 7591 registration endpoint; null for issuers without DCR.")
 	Attribute("jwks_uri", String, "Upstream JWKS URI; null when not advertised.")
 	Attribute("service_documentation", String, "RFC 8414 service_documentation; developer documentation for the issuer. Null when not advertised or when the advertised value is not an absolute http(s) URL.")
@@ -641,6 +712,12 @@ var RemoteSessionIssuerDraft = Type("RemoteSessionIssuerDraft", func() {
 	Attribute("grant_types_supported", ArrayOf(String))
 	Attribute("response_types_supported", ArrayOf(String))
 	Attribute("token_endpoint_auth_methods_supported", ArrayOf(String))
+	Attribute("code_challenge_methods_supported", ArrayOf(String), "PKCE code challenge methods advertised in the discovery document (RFC 8414 code_challenge_methods_supported). Null when the document omits the field.", func() {
+		// Suppresses omitempty so a document advertising an empty list stays
+		// distinguishable from one omitting the field. Paired with a
+		// nullable:true patch in overlays/goa.yaml.
+		Meta("struct:tag:json", "code_challenge_methods_supported")
+	})
 	Attribute("oidc", Boolean, "When true, may unlock OIDC-aware behaviour.")
 	Attribute("passthrough", Boolean, "When true, the MCP client registers and transacts directly with this issuer.")
 	Attribute("client_id_metadata_document_supported", Boolean, "Whether the issuer advertises support for a Client ID Metadata Document URL as client_id (OAuth CIMD draft), parsed from the discovery document.")
@@ -658,6 +735,53 @@ var RemoteSessionIssuerRefresh = Type("RemoteSessionIssuerRefresh", func() {
 	Attribute("discovery_warnings", ArrayOf(String), "Warnings describing any RFC 8414 deviations encountered while re-reading the issuer's metadata document. A refresh that returns warnings still persisted its result; deviations severe enough to distrust the document abort the refresh with an error instead.")
 
 	Required("issuer", "discovery_warnings")
+})
+
+// RemoteSessionIssuerDuplicateMatch is deliberately a slim projection rather
+// than a full RemoteSessionIssuer. The preflight fires from a form while an
+// operator types, so the response is kept to what a warning needs to name a
+// match and link to it.
+//
+// It carries no client count and no organization name, and it must stay that
+// way: at the platform tier the matches are shared catalog rows, and any
+// per-row aggregate computed over them would be unscoped by tenant and would
+// report one organization's usage to another.
+var RemoteSessionIssuerDuplicateMatch = Type("RemoteSessionIssuerDuplicateMatch", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("An existing remote_session_issuer that already describes the upstream authorization server a caller is about to add.")
+
+	Attribute("id", String, "The matching remote_session_issuer id.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("slug", String, "The matching issuer's slug.")
+	Attribute("name", String, "The matching issuer's display name. Empty when it has none, in which case a caller should fall back to the slug.")
+	Attribute("issuer", String, "The matching issuer's stored upstream URL. May differ in spelling from the URL that was looked up, since canonicalization is applied to the supplied URL only.")
+	Attribute("tier", String, "Which tenancy tier owns the match: project-specific, organization-level, or platform-level.", func() {
+		Enum("project-specific", "organization-level", "platform-level")
+	})
+	Attribute("project_name", String, "The owning project's name, for a project-specific match an organization administrator may not otherwise be able to place. Empty for organization-level and platform-level matches, and for project-specific matches returned to a caller already scoped to that project.")
+
+	Required("id", "slug", "name", "issuer", "tier", "project_name")
+})
+
+// RemoteSessionIssuerDuplicatePreflight is the shared result of all three
+// duplicate preflights. The tiers differ only in which records they can see,
+// so they return one shape.
+//
+// Matches arrive in resolution order — the same precedence getRemoteSessionIssuer
+// applies — which makes matches[0] the record a project would actually resolve
+// this URL to. Ordering the response that way is what lets the preflight and the
+// resolver be checked against each other instead of reimplementing precedence in
+// a second place.
+var RemoteSessionIssuerDuplicatePreflight = Type("RemoteSessionIssuerDuplicatePreflight", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("Existing remote_session_issuers that already describe an upstream issuer URL. Advisory: a non-empty result never blocks a create or an update.")
+
+	Attribute("matches", ArrayOf(RemoteSessionIssuerDuplicateMatch), "The matching issuers in resolution order: project-specific first, then organization-level, then platform-level, and oldest first within a tier. The first entry is therefore the issuer this caller would resolve the URL to today. Empty when nothing describes the URL yet, and empty when the supplied URL is not a usable issuer identifier. Truncated to a fixed cap, since a warning only has to establish that duplicates exist and name a few.")
+
+	Required("matches")
 })
 
 var ListRemoteSessionIssuersResult = Type("ListRemoteSessionIssuersResult", func() {

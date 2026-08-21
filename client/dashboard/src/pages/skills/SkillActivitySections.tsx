@@ -1,8 +1,8 @@
 import { ChartCard } from "@/components/chart/ChartCard";
-import { CHART_COLORS } from "@/components/stacked-time-series";
+import { useSeriesColors } from "@/components/chart/useSeriesColors";
 import { Text } from "@/components/ui/Text";
 import { HumanizeDateTime } from "@/lib/dates";
-import { SettingsSection } from "@/pages/mcp/x/tabs/settings/SettingsSection";
+import { SettingsSection } from "@/components/detail/settings-section";
 import type { GetSkillResult } from "@gram/client/models/components/getskillresult.js";
 import {
   CategoryScale,
@@ -24,9 +24,6 @@ ChartJS.register(
   Tooltip,
   Legend,
 );
-
-export const SKILL_ADOPTION_SECTION_ID = "adoption";
-export const SKILL_TIMELINE_SECTION_ID = "timeline";
 
 const utcMonthDayFormatter = new Intl.DateTimeFormat(undefined, {
   month: "short",
@@ -52,6 +49,7 @@ export function SkillActivitySections({
   versionLabels: Map<string, string>;
   versionsLoading: boolean;
 }): JSX.Element {
+  const chartColors = useSeriesColors();
   const { skill, adoption, drift, sightingTimeline } = data;
   const firstBucket = Date.UTC(
     adoption.windowStart.getUTCFullYear(),
@@ -86,7 +84,7 @@ export function SkillActivitySections({
     ...(pointsByVersion.has("") ? [""] : []),
   ];
   const datasets = versionIDs.map((versionID, index) => {
-    const color = CHART_COLORS[index % CHART_COLORS.length];
+    const color = chartColors[index % chartColors.length];
     const label = versionID
       ? (versionLabels.get(versionID) ?? `Version ${versionID.slice(0, 8)}`)
       : "Unknown version";
@@ -122,113 +120,100 @@ export function SkillActivitySections({
 
   return (
     <>
-      <SettingsSection id={SKILL_ADOPTION_SECTION_ID}>
+      <SettingsSection>
         <SettingsSection.Header>
           <SettingsSection.Title>Adoption and drift</SettingsSection.Title>
           <SettingsSection.Description>
             Activation coverage and version convergence over the last 30 days.
           </SettingsSection.Description>
         </SettingsSection.Header>
-        <SettingsSection.Panel>
-          <SettingsSection.Body>
-            <dl className="grid gap-px overflow-hidden rounded-lg border sm:grid-cols-2 lg:grid-cols-4">
-              <Metric
-                label="Versions"
-                value={metricValue(skill.versionCount)}
-              />
-              <Metric
-                label="Active machines"
-                value={metricValue(adoption.distinctHostnames)}
-              />
-              <Metric
-                label="30-day activations"
-                value={metricValue(adoption.activationsInWindow)}
-              />
-              <Metric
-                label="Drifted"
-                value={metricValue(drift.driftedMachines)}
-              />
-            </dl>
+        <div className="space-y-3">
+          <dl className="grid gap-px overflow-hidden border sm:grid-cols-2 lg:grid-cols-4">
+            <Metric label="Versions" value={metricValue(skill.versionCount)} />
+            <Metric
+              label="Active machines"
+              value={metricValue(adoption.distinctHostnames)}
+            />
+            <Metric
+              label="30-day activations"
+              value={metricValue(adoption.activationsInWindow)}
+            />
+            <Metric
+              label="Drifted"
+              value={metricValue(drift.driftedMachines)}
+            />
+          </dl>
+          <Text small muted>
+            {drift.targetState === "single" && (
+              <>
+                {metricValue(drift.onTargetMachines)}{" "}
+                {machineLabel(drift.onTargetMachines)}{" "}
+                {drift.onTargetMachines === 1 ? "is" : "are"} on the distributed
+                version. {metricValue(drift.indeterminateMachines)}{" "}
+                {machineLabel(drift.indeterminateMachines)}{" "}
+                {drift.indeterminateMachines === 1 ? "has" : "have"} an unknown
+                version.
+              </>
+            )}
+            {drift.targetState === "not_distributed" &&
+              "No plugin distribution target is configured, so drift is indeterminate."}
+            {drift.targetState === "ambiguous" &&
+              "Multiple plugin distribution targets are configured, so drift is indeterminate."}
+          </Text>
+          {(skill.firstSeenAt || skill.lastSeenAt) && (
             <Text small muted>
-              {drift.targetState === "single" && (
+              {skill.firstSeenAt && (
                 <>
-                  {metricValue(drift.onTargetMachines)}{" "}
-                  {machineLabel(drift.onTargetMachines)}{" "}
-                  {drift.onTargetMachines === 1 ? "is" : "are"} on the
-                  distributed version.{" "}
-                  {metricValue(drift.indeterminateMachines)}{" "}
-                  {machineLabel(drift.indeterminateMachines)}{" "}
-                  {drift.indeterminateMachines === 1 ? "has" : "have"} an
-                  unknown version.
+                  First activated <HumanizeDateTime date={skill.firstSeenAt} />
                 </>
               )}
-              {drift.targetState === "not_distributed" &&
-                "No plugin distribution target is configured, so drift is indeterminate."}
-              {drift.targetState === "ambiguous" &&
-                "Multiple plugin distribution targets are configured, so drift is indeterminate."}
+              {skill.firstSeenAt && skill.lastSeenAt && " · "}
+              {skill.lastSeenAt && (
+                <>
+                  Last activated <HumanizeDateTime date={skill.lastSeenAt} />
+                </>
+              )}
             </Text>
-          </SettingsSection.Body>
-          {(skill.firstSeenAt || skill.lastSeenAt) && (
-            <SettingsSection.Footer>
-              <SettingsSection.FooterHint>
-                {skill.firstSeenAt && (
-                  <>
-                    First activated{" "}
-                    <HumanizeDateTime date={skill.firstSeenAt} />
-                  </>
-                )}
-                {skill.firstSeenAt && skill.lastSeenAt && " · "}
-                {skill.lastSeenAt && (
-                  <>
-                    Last activated <HumanizeDateTime date={skill.lastSeenAt} />
-                  </>
-                )}
-              </SettingsSection.FooterHint>
-            </SettingsSection.Footer>
           )}
-        </SettingsSection.Panel>
+        </div>
       </SettingsSection>
 
-      <SettingsSection id={SKILL_TIMELINE_SECTION_ID}>
+      <SettingsSection>
         <SettingsSection.Header>
           <SettingsSection.Title>Activation timeline</SettingsSection.Title>
           <SettingsSection.Description>
             Daily activation volume for the rolling 30-day window.
           </SettingsSection.Description>
         </SettingsSection.Header>
-        <SettingsSection.Panel>
-          <SettingsSection.Body>
-            <ChartCard
-              title="Activations by version"
-              chartId="skill-activation-timeline"
-              expandedChart={null}
-              onExpand={() => undefined}
-              expandable={false}
-              hasData={sightingTimeline.length > 0}
-              loading={versionsLoading}
-            >
-              {sightingTimeline.length === 0 ? (
-                <div className="flex h-56 items-center justify-center">
-                  <Text small muted>
-                    No activations captured in the last 30 days.
-                  </Text>
-                </div>
-              ) : (
-                <div className="h-64">
-                  <Line
-                    data={{
-                      labels: buckets.map((bucket) =>
-                        utcMonthDayFormatter.format(bucket),
-                      ),
-                      datasets,
-                    }}
-                    options={chartOptions}
-                  />
-                </div>
-              )}
-            </ChartCard>
-          </SettingsSection.Body>
-        </SettingsSection.Panel>
+        <ChartCard
+          title="Activations by version"
+          chartId="skill-activation-timeline"
+          expandedChart={null}
+          onExpand={() => undefined}
+          expandable={false}
+          hasData={sightingTimeline.length > 0}
+          loading={versionsLoading}
+        >
+          {sightingTimeline.length === 0 ? (
+            <div className="flex h-56 items-center justify-center">
+              <Text small muted>
+                No activations captured in the last 30 days.
+              </Text>
+            </div>
+          ) : (
+            <div className="h-64">
+              <Line
+                data={{
+                  labels: buckets.map((bucket) =>
+                    utcMonthDayFormatter.format(bucket),
+                  ),
+                  datasets,
+                }}
+                options={chartOptions}
+              />
+            </div>
+          )}
+        </ChartCard>
       </SettingsSection>
     </>
   );

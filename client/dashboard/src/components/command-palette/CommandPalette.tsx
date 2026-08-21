@@ -15,7 +15,11 @@ import { IconName } from "@/components/ui/Icon/names";
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { requestAskAi } from "./askAiBridge";
-import { useRecentlyVisited, useRecentsUserId } from "./recentlyVisited";
+import {
+  getRecentLabelOverride,
+  useRecentlyVisited,
+  useRecentsUserId,
+} from "./recentlyVisited";
 import { ResourceResults } from "./ResourceResults";
 
 // Speakeasy brand spectrum — the same brand-language gradient the Project
@@ -25,7 +29,7 @@ const BRAND_GRADIENT =
   "linear-gradient(90deg, #320F1E 0%, #C83228 12.5%, #FB873F 25%, #D2DC91 37.5%, #5A8250 50%, #002314 62%, #00143C 74%, #2873D7 86%, #9BC3FF 100%)";
 
 const KBD_CLASS =
-  "border-neutral-softest bg-muted text-muted-foreground pointer-events-none inline-flex h-5 min-w-5 items-center justify-center gap-1 rounded border px-1.5 font-mono text-[10px] font-medium select-none";
+  "border-neutral-softest bg-muted text-muted-foreground pointer-events-none inline-flex h-5 min-w-5 items-center justify-center gap-1 border px-1.5 font-mono text-[10px] font-medium select-none";
 
 export function CommandPalette(): JSX.Element {
   const { isOpen, close, actions, contextBadge } = useCommandPalette();
@@ -102,9 +106,6 @@ export function CommandPalette(): JSX.Element {
   // moves to the bottom once the user starts typing (see below), so both branch
   // on whether there's an active query.
   const hasQuery = trimmedQuery.length > 0;
-  const askAiLabel = trimmedQuery
-    ? `Ask AI: "${trimmedQuery}"`
-    : "Ask the Project Assistant…";
 
   const handleAskAi = () => {
     requestAskAi(trimmedQuery);
@@ -113,6 +114,10 @@ export function CommandPalette(): JSX.Element {
 
   // Free-form AI escape hatch — always offered regardless of the filter
   // (forceMount) so the typed query can always be sent to the assistant.
+  // forceMount is needed on the *group* too: cmdk hides a group whose id isn't
+  // in `filtered.groups` while a search is active, which would hide the
+  // forceMounted row inside it exactly when the query matches nothing — the
+  // case where it matters most.
   // Project Assistant is project-scoped, so only at the project level. Rendered
   // near the top when the palette is idle (discoverable) but pushed below the
   // results while searching: cmdk auto-selects the first item in DOM order after
@@ -120,7 +125,7 @@ export function CommandPalette(): JSX.Element {
   // the highlight from the closest result and force an extra ↓ keypress to reach
   // it (AGE-2807).
   const askAiGroup = inProject ? (
-    <CommandGroup heading="Assistant">
+    <CommandGroup forceMount heading="Assistant">
       <CommandItem
         forceMount
         value="__ask_ai__"
@@ -128,7 +133,16 @@ export function CommandPalette(): JSX.Element {
         className="flex items-center gap-2"
       >
         <Icon name="sparkles" className="text-primary size-4 shrink-0" />
-        <span className="truncate">{askAiLabel}</span>
+        <div className="flex min-w-0 flex-col">
+          <span className="shimmer truncate">
+            {hasQuery ? "Ask Project Assistant" : "Ask the Project Assistant…"}
+          </span>
+          {hasQuery && (
+            <span className="text-muted-foreground truncate text-xs">
+              &ldquo;{trimmedQuery}&rdquo;
+            </span>
+          )}
+        </div>
       </CommandItem>
     </CommandGroup>
   ) : null;
@@ -170,7 +184,9 @@ export function CommandPalette(): JSX.Element {
         }}
       />
       <CommandList>
-        <CommandEmpty>No results found.</CommandEmpty>
+        {/* The Ask row is always mounted inside a project, so an unmatched
+            query there is an offer to ask the assistant, not a dead end. */}
+        {!inProject && <CommandEmpty>No results found.</CommandEmpty>}
 
         {/* Recently visited pages (most-recent first), client-side localStorage.
             Only a zero-state affordance: once the user types, hide it so search
@@ -178,19 +194,24 @@ export function CommandPalette(): JSX.Element {
             a closer text match (AGE-2808). */}
         {!hasQuery && recents.length > 0 && (
           <CommandGroup heading="Recently Visited">
-            {recents.map((recent) => (
-              <CommandItem
-                key={recent.href}
-                value={`recent ${recent.label} ${recent.href}`}
-                onSelect={() => handleRecentSelect(recent.href)}
-                className="flex items-center gap-2"
-              >
-                {recent.icon && (
-                  <Icon name={recent.icon as IconName} className="size-4" />
-                )}
-                <span className="truncate">{recent.label}</span>
-              </CommandItem>
-            ))}
+            {recents.map((recent) => {
+              // Prefer a live name override over a stored URL-derived fallback
+              // so id-keyed pages show the resource name once it has loaded.
+              const label = getRecentLabelOverride(recent.href) ?? recent.label;
+              return (
+                <CommandItem
+                  key={recent.href}
+                  value={`recent ${label} ${recent.href}`}
+                  onSelect={() => handleRecentSelect(recent.href)}
+                  className="flex items-center gap-2"
+                >
+                  {recent.icon && (
+                    <Icon name={recent.icon as IconName} className="size-4" />
+                  )}
+                  <span className="truncate">{label}</span>
+                </CommandItem>
+              );
+            })}
           </CommandGroup>
         )}
 

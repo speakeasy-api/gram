@@ -244,6 +244,43 @@ func (q *Queries) GetDefaultPlugin(ctx context.Context, arg GetDefaultPluginPara
 	return i, err
 }
 
+const getDefaultPluginForUpdate = `-- name: GetDefaultPluginForUpdate :one
+SELECT id, organization_id, project_id, name, slug, description, is_default, created_at, updated_at, deleted_at, deleted
+FROM plugins
+WHERE organization_id = $1
+  AND project_id = $2
+  AND is_default IS TRUE
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+type GetDefaultPluginForUpdateParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+// Serializes mutation of the existing Default plugin with concurrent deletion.
+// Callers must use this inside the transaction that attaches or removes a
+// plugin server; a deleted plugin deliberately returns no row.
+func (q *Queries) GetDefaultPluginForUpdate(ctx context.Context, arg GetDefaultPluginForUpdateParams) (Plugin, error) {
+	row := q.db.QueryRow(ctx, getDefaultPluginForUpdate, arg.OrganizationID, arg.ProjectID)
+	var i Plugin
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.IsDefault,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getGitHubConnection = `-- name: GetGitHubConnection :one
 SELECT id, project_id, installation_id, repo_owner, repo_name, marketplace_token, published_fingerprint, published_mcp_fingerprints, published_hooks_version, published_hooks_config, created_at, updated_at
 FROM plugin_github_connections
@@ -358,7 +395,8 @@ SELECT
   EXISTS (
     SELECT 1 FROM mcp_endpoints e
     WHERE e.mcp_server_id = s.id AND e.deleted IS FALSE
-  ) AS has_endpoint
+  ) AS has_endpoint,
+  (s.unproxied_mcp_server_id IS NOT NULL)::boolean AS is_unproxied
 FROM mcp_servers s
 WHERE
   s.id = $1
@@ -377,11 +415,15 @@ type GetMcpServerForPluginServerRow struct {
 	Slug        pgtype.Text
 	Visibility  string
 	HasEndpoint bool
+	IsUnproxied bool
 }
 
 // Resolve an mcp_server for plugin-server validation, scoped to the project so
 // IDs alone are never trusted. has_endpoint reports whether the server has at
 // least one usable endpoint so the caller can reject unpublishable servers.
+// is_unproxied reports whether the server is backed by an unproxied MCP
+// server, which is never proxied and so never has an mcp_endpoints row; the
+// caller exempts those servers from the has_endpoint requirement.
 func (q *Queries) GetMcpServerForPluginServer(ctx context.Context, arg GetMcpServerForPluginServerParams) (GetMcpServerForPluginServerRow, error) {
 	row := q.db.QueryRow(ctx, getMcpServerForPluginServer, arg.McpServerID, arg.ProjectID)
 	var i GetMcpServerForPluginServerRow
@@ -391,6 +433,7 @@ func (q *Queries) GetMcpServerForPluginServer(ctx context.Context, arg GetMcpSer
 		&i.Slug,
 		&i.Visibility,
 		&i.HasEndpoint,
+		&i.IsUnproxied,
 	)
 	return i, err
 }
@@ -486,7 +529,7 @@ SELECT
     FROM projects p2
     WHERE p2.organization_id = pr.organization_id
       AND p2.deleted IS FALSE
-    ORDER BY p2.id ASC
+    ORDER BY p2.created_at ASC, p2.id ASC
     LIMIT 1
   )) AS is_default_project
 FROM projects pr
@@ -500,7 +543,7 @@ type GetProjectMarketplaceNameContextRow struct {
 }
 
 // Returns a project's slug and whether it's its org's default project (oldest by
-// id ASC), the two inputs needed to resolve its marketplace name — read from the
+// created_at, then id), the two inputs needed to resolve its marketplace name — read from the
 // project row rather than trusting auth-context fields that some auth flows
 // (e.g. project-scoped API keys) leave unset.
 func (q *Queries) GetProjectMarketplaceNameContext(ctx context.Context, projectID uuid.UUID) (GetProjectMarketplaceNameContextRow, error) {
@@ -516,7 +559,7 @@ SELECT (
   FROM projects p
   WHERE p.organization_id = $1
     AND p.deleted IS FALSE
-  ORDER BY p.id ASC
+  ORDER BY p.created_at ASC, p.id ASC
   LIMIT 1
 ) = $2 AS is_default
 `
@@ -526,8 +569,8 @@ type IsDefaultProjectParams struct {
 	ProjectID      uuid.UUID
 }
 
-// Whether @project_id is the org's default project — the oldest (first by id
-// ASC) non-deleted project, created at org setup. Mirrors the default-project
+// Whether @project_id is the org's default project — the oldest non-deleted
+// project by created_at, then id. Mirrors the default-project
 // definition the agent's getPlugins read path uses, so the audience the seeding
 // side grants matches the project the delivery side treats as default. Used to
 // decide whether a new plugin defaults to the org-wide audience: only plugins in
@@ -562,6 +605,198 @@ func (q *Queries) IsOrganizationFeatureEnabled(ctx context.Context, arg IsOrgani
 	var enabled bool
 	err := row.Scan(&enabled)
 	return enabled, err
+}
+
+const listActivePluginsForProject = `-- name: ListActivePluginsForProject :many
+SELECT id, organization_id, project_id, name, slug, description, is_default, created_at, updated_at, deleted_at, deleted
+FROM plugins
+WHERE project_id = $1
+  AND deleted IS FALSE
+  AND (COALESCE(cardinality($2::uuid[]), 0) = 0 OR id = ANY($2::uuid[]))
+ORDER BY slug ASC
+`
+
+type ListActivePluginsForProjectParams struct {
+	ProjectID uuid.UUID
+	PluginIds []uuid.UUID
+}
+
+// Seeds package resolution with every active plugin so empty plugins are not
+// omitted merely because they have no server or skill rows.
+func (q *Queries) ListActivePluginsForProject(ctx context.Context, arg ListActivePluginsForProjectParams) ([]Plugin, error) {
+	rows, err := q.db.Query(ctx, listActivePluginsForProject, arg.ProjectID, arg.PluginIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Plugin
+	for rows.Next() {
+		var i Plugin
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.IsDefault,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAgentPluginCompatibilityIssuesForProject = `-- name: ListAgentPluginCompatibilityIssuesForProject :many
+WITH intended AS (
+  SELECT
+    p.id AS plugin_id,
+    ps.id AS server_id,
+    CASE
+      WHEN ps.toolset_id IS NULL AND ps.mcp_server_id IS NULL THEN 'missing_backend'
+      WHEN ps.toolset_id IS NOT NULL AND t.id IS NULL THEN 'toolset_missing'
+      WHEN ps.toolset_id IS NOT NULL AND t.project_id <> p.project_id THEN 'toolset_wrong_project'
+      WHEN ps.toolset_id IS NOT NULL AND t.deleted IS TRUE THEN 'toolset_deleted'
+      WHEN ps.toolset_id IS NOT NULL AND (t.mcp_enabled IS FALSE OR t.mcp_slug IS NULL) THEN 'toolset_disabled_or_unresolved'
+	  WHEN ps.toolset_id IS NOT NULL AND EXISTS (
+		SELECT 1
+		FROM mcp_metadata md
+		JOIN mcp_environment_configs ec ON ec.mcp_metadata_id = md.id AND ec.project_id = p.project_id
+		WHERE md.toolset_id = t.id AND md.project_id = p.project_id AND ec.provided_by = 'user'
+	  ) THEN 'toolset_requires_user_header'
+      WHEN ps.mcp_server_id IS NOT NULL AND s.id IS NULL THEN 'mcp_server_missing'
+      WHEN ps.mcp_server_id IS NOT NULL AND s.project_id <> p.project_id THEN 'mcp_server_wrong_project'
+      WHEN ps.mcp_server_id IS NOT NULL AND s.deleted IS TRUE THEN 'mcp_server_deleted'
+      WHEN ps.mcp_server_id IS NOT NULL AND s.visibility = 'disabled' THEN 'mcp_server_disabled'
+      WHEN ps.mcp_server_id IS NOT NULL AND s.remote_mcp_server_id IS NOT NULL AND (rms.id IS NULL OR rms.project_id <> p.project_id OR rms.deleted IS TRUE) THEN 'remote_backing_unresolved'
+	  WHEN ps.mcp_server_id IS NOT NULL AND s.remote_mcp_server_id IS NOT NULL AND rms.transport_type NOT IN ('streamable-http', 'sse') THEN 'remote_transport_unsupported'
+	  WHEN ps.mcp_server_id IS NOT NULL AND s.remote_mcp_server_id IS NOT NULL AND EXISTS (
+		SELECT 1 FROM remote_mcp_server_headers rmh
+		WHERE rmh.remote_mcp_server_id = rms.id AND rmh.deleted IS FALSE AND rmh.value_from_request_header IS NOT NULL
+	  ) THEN 'remote_backing_requires_user_header'
+      WHEN ps.mcp_server_id IS NOT NULL AND s.tunneled_mcp_server_id IS NOT NULL AND (tms.id IS NULL OR tms.project_id <> p.project_id OR tms.deleted IS TRUE OR tms.status = 'revoked') THEN 'tunneled_backing_unresolved'
+	  WHEN ps.mcp_server_id IS NOT NULL AND s.tunneled_mcp_server_id IS NOT NULL AND s.visibility = 'public' AND tms.allow_public IS FALSE THEN 'tunneled_public_consent_missing'
+	  WHEN ps.mcp_server_id IS NOT NULL AND s.tunneled_mcp_server_id IS NOT NULL AND EXISTS (
+		SELECT 1 FROM tunneled_mcp_server_headers tmh
+		WHERE tmh.tunneled_mcp_server_id = tms.id AND tmh.deleted IS FALSE AND tmh.value_from_request_header IS NOT NULL
+	  ) THEN 'tunneled_backing_requires_user_header'
+      WHEN ps.mcp_server_id IS NOT NULL AND s.toolset_id IS NOT NULL AND (mts.id IS NULL OR mts.project_id <> p.project_id OR mts.deleted IS TRUE OR mts.mcp_enabled IS FALSE) THEN 'toolset_backing_unresolved'
+	  WHEN ps.mcp_server_id IS NOT NULL AND s.toolset_id IS NOT NULL AND s.visibility = 'public' AND mts.mcp_is_public IS FALSE THEN 'toolset_backing_auth_mismatch'
+	  WHEN ps.mcp_server_id IS NOT NULL AND EXISTS (
+		SELECT 1
+		FROM mcp_metadata md
+		JOIN mcp_environment_configs ec ON ec.mcp_metadata_id = md.id AND ec.project_id = p.project_id
+		WHERE md.mcp_server_id = s.id AND md.project_id = p.project_id AND ec.provided_by = 'user'
+	  ) THEN 'mcp_server_requires_user_header'
+	  WHEN ps.mcp_server_id IS NOT NULL AND s.toolset_id IS NOT NULL AND EXISTS (
+		SELECT 1
+		FROM mcp_metadata md
+		JOIN mcp_environment_configs ec ON ec.mcp_metadata_id = md.id AND ec.project_id = p.project_id
+		WHERE md.toolset_id = mts.id AND md.project_id = p.project_id AND ec.provided_by = 'user'
+	  ) THEN 'toolset_backing_requires_user_header'
+      WHEN ps.mcp_server_id IS NOT NULL AND s.unproxied_mcp_server_id IS NOT NULL AND NOT EXISTS (
+        SELECT 1
+        FROM unproxied_mcp_servers ump
+        WHERE ump.id = s.unproxied_mcp_server_id
+          AND ump.project_id = p.project_id
+          AND ump.deleted IS FALSE
+      ) THEN 'unproxied_backing_unresolved'
+      WHEN ps.mcp_server_id IS NOT NULL AND s.unproxied_mcp_server_id IS NULL AND NOT EXISTS (
+        SELECT 1
+        FROM mcp_endpoints e
+        LEFT JOIN custom_domains cd
+          ON cd.id = e.custom_domain_id
+		  AND cd.organization_id = p.organization_id
+          AND cd.activated IS TRUE
+          AND cd.verified IS TRUE
+          AND cd.deleted IS FALSE
+        WHERE e.mcp_server_id = s.id
+		  AND e.project_id = p.project_id
+          AND e.deleted IS FALSE
+          AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL)
+      ) THEN 'mcp_server_endpoint_unresolved'
+    END::text AS reason
+  FROM plugins p
+  JOIN plugin_servers ps ON ps.plugin_id = p.id AND ps.deleted IS FALSE
+  LEFT JOIN toolsets t ON t.id = ps.toolset_id
+  LEFT JOIN mcp_servers s ON s.id = ps.mcp_server_id
+  LEFT JOIN remote_mcp_servers rms ON rms.id = s.remote_mcp_server_id
+  LEFT JOIN tunneled_mcp_servers tms ON tms.id = s.tunneled_mcp_server_id
+  LEFT JOIN toolsets mts ON mts.id = s.toolset_id
+  WHERE p.project_id = $1
+    AND p.deleted IS FALSE
+	AND (COALESCE(cardinality($2::uuid[]), 0) = 0 OR p.id = ANY($2::uuid[]))
+), unresolved_skills AS (
+  SELECT p.id AS plugin_id, sd.id AS server_id, 'skill_distribution_unresolved'::text AS reason
+  FROM plugins p
+  JOIN skill_distributions sd ON sd.plugin_id = p.id AND sd.project_id = p.project_id
+  LEFT JOIN skills sk ON sk.id = sd.skill_id AND sk.project_id = p.project_id AND sk.archived_at IS NULL
+  WHERE p.project_id = $1
+    AND p.deleted IS FALSE
+    AND (COALESCE(cardinality($2::uuid[]), 0) = 0 OR p.id = ANY($2::uuid[]))
+    AND sd.channel = 'plugin'
+    AND sd.assistant_id IS NULL
+    AND sd.revoked_at IS NULL
+    AND (
+      sk.id IS NULL
+      OR NOT EXISTS (
+        SELECT 1 FROM skill_versions sv
+        WHERE sv.skill_id = sd.skill_id
+          AND sv.spec_valid IS TRUE
+          AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
+      )
+    )
+)
+SELECT plugin_id, server_id, reason
+FROM intended
+WHERE reason IS NOT NULL
+UNION ALL
+SELECT plugin_id, server_id, reason FROM unresolved_skills
+ORDER BY plugin_id, server_id
+`
+
+type ListAgentPluginCompatibilityIssuesForProjectParams struct {
+	ProjectID uuid.UUID
+	PluginIds []uuid.UUID
+}
+
+type ListAgentPluginCompatibilityIssuesForProjectRow struct {
+	PluginID uuid.UUID
+	ServerID uuid.UUID
+	Reason   string
+}
+
+// Classifies every active intended attachment, including broken references that
+// the package-resolution queries intentionally omit. A tombstoned attachment
+// is not intended and is excluded. Any returned row makes its plugin fail
+// closed for the shared Agent Plugins package while legacy packages continue to
+// render from the subset that resolves.
+func (q *Queries) ListAgentPluginCompatibilityIssuesForProject(ctx context.Context, arg ListAgentPluginCompatibilityIssuesForProjectParams) ([]ListAgentPluginCompatibilityIssuesForProjectRow, error) {
+	rows, err := q.db.Query(ctx, listAgentPluginCompatibilityIssuesForProject, arg.ProjectID, arg.PluginIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAgentPluginCompatibilityIssuesForProjectRow
+	for rows.Next() {
+		var i ListAgentPluginCompatibilityIssuesForProjectRow
+		if err := rows.Scan(&i.PluginID, &i.ServerID, &i.Reason); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listOrgPluginPublishTargets = `-- name: ListOrgPluginPublishTargets :many
@@ -637,6 +872,57 @@ func (q *Queries) ListPluginAssignments(ctx context.Context, pluginID uuid.UUID)
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPluginEnvironmentConfigsForProject = `-- name: ListPluginEnvironmentConfigsForProject :many
+SELECT DISTINCT
+  t.id AS toolset_id,
+  ec.variable_name,
+  ec.header_display_name
+FROM plugin_servers ps
+JOIN plugins p ON p.id = ps.plugin_id AND p.deleted IS FALSE
+JOIN toolsets t ON t.id = ps.toolset_id AND t.project_id = p.project_id AND t.deleted IS FALSE
+JOIN mcp_metadata md ON md.toolset_id = t.id AND md.project_id = p.project_id
+JOIN mcp_environment_configs ec ON ec.mcp_metadata_id = md.id AND ec.project_id = p.project_id
+WHERE p.project_id = $1
+  AND ps.deleted IS FALSE
+  AND (COALESCE(cardinality($2::uuid[]), 0) = 0 OR p.id = ANY($2::uuid[]))
+  AND ec.provided_by = 'user'
+ORDER BY t.id, ec.variable_name ASC
+`
+
+type ListPluginEnvironmentConfigsForProjectParams struct {
+	ProjectID uuid.UUID
+	PluginIds []uuid.UUID
+}
+
+type ListPluginEnvironmentConfigsForProjectRow struct {
+	ToolsetID         uuid.UUID
+	VariableName      string
+	HeaderDisplayName pgtype.Text
+}
+
+// Batch companion to ListPluginsWithServersForProject. Keeping environment
+// config resolution in one query avoids one metadata/config round trip per
+// public toolset while preserving the same user-provided-header semantics.
+func (q *Queries) ListPluginEnvironmentConfigsForProject(ctx context.Context, arg ListPluginEnvironmentConfigsForProjectParams) ([]ListPluginEnvironmentConfigsForProjectRow, error) {
+	rows, err := q.db.Query(ctx, listPluginEnvironmentConfigsForProject, arg.ProjectID, arg.PluginIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPluginEnvironmentConfigsForProjectRow
+	for rows.Next() {
+		var i ListPluginEnvironmentConfigsForProjectRow
+		if err := rows.Scan(&i.ToolsetID, &i.VariableName, &i.HeaderDisplayName); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -840,12 +1126,18 @@ JOIN LATERAL (
   LIMIT 1
 ) resolved ON TRUE
 WHERE sd.project_id = $1
+	AND (COALESCE(cardinality($2::uuid[]), 0) = 0 OR p.id = ANY($2::uuid[]))
   AND sd.channel = 'plugin'
   AND sd.plugin_id IS NOT NULL
   AND sd.assistant_id IS NULL
   AND sd.revoked_at IS NULL
 ORDER BY p.slug ASC, s.name ASC
 `
+
+type ListPluginSkillsForProjectParams struct {
+	ProjectID uuid.UUID
+	PluginIds []uuid.UUID
+}
 
 type ListPluginSkillsForProjectRow struct {
 	PluginID          uuid.UUID
@@ -862,8 +1154,8 @@ type ListPluginSkillsForProjectRow struct {
 // latest valid version). Distributions with no valid resolvable version are
 // dropped — packages only ever carry valid manifests. Plugin identity is
 // selected here so a skills-only plugin (no servers) still generates a package.
-func (q *Queries) ListPluginSkillsForProject(ctx context.Context, projectID uuid.UUID) ([]ListPluginSkillsForProjectRow, error) {
-	rows, err := q.db.Query(ctx, listPluginSkillsForProject, projectID)
+func (q *Queries) ListPluginSkillsForProject(ctx context.Context, arg ListPluginSkillsForProjectParams) ([]ListPluginSkillsForProjectRow, error) {
+	rows, err := q.db.Query(ctx, listPluginSkillsForProject, arg.ProjectID, arg.PluginIds)
 	if err != nil {
 		return nil, err
 	}
@@ -989,8 +1281,11 @@ SELECT
   ps.policy AS server_policy,
   ps.sort_order AS server_sort_order,
   ps.mcp_server_id,
-  ep.slug AS endpoint_slug,
-  ep.custom_domain AS endpoint_custom_domain
+	(s.visibility = 'public')::bool AS mcp_server_is_public,
+	(s.user_session_issuer_id IS NOT NULL)::bool AS mcp_server_is_oauth,
+  COALESCE(ep.slug, '') AS endpoint_slug,
+  ep.custom_domain AS endpoint_custom_domain,
+  ump.url AS unproxied_url
 FROM plugins p
 JOIN plugin_servers ps ON ps.plugin_id = p.id AND ps.deleted IS FALSE
 JOIN mcp_servers s ON s.id = ps.mcp_server_id AND s.deleted IS FALSE AND s.project_id = p.project_id AND s.visibility <> 'disabled'
@@ -999,20 +1294,38 @@ LEFT JOIN LATERAL (
   FROM mcp_endpoints e
   LEFT JOIN custom_domains cd
     ON cd.id = e.custom_domain_id
+	AND cd.organization_id = p.organization_id
     AND cd.activated IS TRUE
     AND cd.verified IS TRUE
     AND cd.deleted IS FALSE
   WHERE e.mcp_server_id = s.id
+	AND e.project_id = p.project_id
     AND e.deleted IS FALSE
     AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL)
   ORDER BY (e.custom_domain_id IS NULL) ASC, e.created_at ASC
   LIMIT 1
 ) ep ON TRUE
+LEFT JOIN unproxied_mcp_servers ump ON ump.id = s.unproxied_mcp_server_id AND ump.project_id = p.project_id AND ump.deleted IS FALSE
+LEFT JOIN remote_mcp_servers rms ON rms.id = s.remote_mcp_server_id AND rms.project_id = p.project_id AND rms.deleted IS FALSE AND rms.transport_type IN ('streamable-http', 'sse')
+LEFT JOIN tunneled_mcp_servers tms ON tms.id = s.tunneled_mcp_server_id AND tms.project_id = p.project_id AND tms.deleted IS FALSE AND tms.status <> 'revoked' AND (s.visibility <> 'public' OR tms.allow_public IS TRUE)
+LEFT JOIN toolsets mts ON mts.id = s.toolset_id AND mts.project_id = p.project_id AND mts.deleted IS FALSE AND mts.mcp_enabled IS TRUE
 WHERE p.project_id = $1
   AND p.deleted IS FALSE
-  AND ep.slug IS NOT NULL
+  AND (ep.slug IS NOT NULL OR ump.url IS NOT NULL)
+  AND (COALESCE(cardinality($2::uuid[]), 0) = 0 OR p.id = ANY($2::uuid[]))
+  AND (
+    (s.remote_mcp_server_id IS NOT NULL AND rms.id IS NOT NULL)
+    OR (s.tunneled_mcp_server_id IS NOT NULL AND tms.id IS NOT NULL)
+    OR (s.toolset_id IS NOT NULL AND mts.id IS NOT NULL)
+    OR (s.unproxied_mcp_server_id IS NOT NULL AND ump.id IS NOT NULL)
+  )
 ORDER BY p.slug, ps.sort_order ASC
 `
+
+type ListPluginsWithMcpServersForProjectParams struct {
+	ProjectID uuid.UUID
+	PluginIds []uuid.UUID
+}
 
 type ListPluginsWithMcpServersForProjectRow struct {
 	PluginID             uuid.UUID
@@ -1024,8 +1337,11 @@ type ListPluginsWithMcpServersForProjectRow struct {
 	ServerPolicy         string
 	ServerSortOrder      int32
 	McpServerID          uuid.NullUUID
+	McpServerIsPublic    bool
+	McpServerIsOauth     bool
 	EndpointSlug         string
 	EndpointCustomDomain pgtype.Text
+	UnproxiedUrl         pgtype.Text
 }
 
 // Plugin-generation companion to ListPluginsWithServersForProject covering
@@ -1035,11 +1351,14 @@ type ListPluginsWithMcpServersForProjectRow struct {
 // rule; per-plugin endpoint preference is a follow-up). Resolving the host
 // inside the selection keeps endpoint choice and URL-host construction in
 // lockstep, so a dangling custom-domain endpoint is never picked and emitted as
-// a (wrong) platform URL. Servers without a usable endpoint are dropped.
+// a (wrong) platform URL. A server backed by an unproxied MCP server never has
+// an mcp_endpoints row (Gram never proxies it), so it's resolved instead via
+// unproxied_mcp_servers, exposing the vendor's own URL. Servers with neither a
+// usable endpoint nor an unproxied backing are dropped.
 // Scoped to project_id; the mcp_server must live in the same project as the
 // plugin, and disabled servers are excluded.
-func (q *Queries) ListPluginsWithMcpServersForProject(ctx context.Context, projectID uuid.UUID) ([]ListPluginsWithMcpServersForProjectRow, error) {
-	rows, err := q.db.Query(ctx, listPluginsWithMcpServersForProject, projectID)
+func (q *Queries) ListPluginsWithMcpServersForProject(ctx context.Context, arg ListPluginsWithMcpServersForProjectParams) ([]ListPluginsWithMcpServersForProjectRow, error) {
+	rows, err := q.db.Query(ctx, listPluginsWithMcpServersForProject, arg.ProjectID, arg.PluginIds)
 	if err != nil {
 		return nil, err
 	}
@@ -1057,8 +1376,11 @@ func (q *Queries) ListPluginsWithMcpServersForProject(ctx context.Context, proje
 			&i.ServerPolicy,
 			&i.ServerSortOrder,
 			&i.McpServerID,
+			&i.McpServerIsPublic,
+			&i.McpServerIsOauth,
 			&i.EndpointSlug,
 			&i.EndpointCustomDomain,
+			&i.UnproxiedUrl,
 		); err != nil {
 			return nil, err
 		}
@@ -1087,12 +1409,18 @@ SELECT
   cd.domain AS toolset_custom_domain
 FROM plugins p
 JOIN plugin_servers ps ON ps.plugin_id = p.id AND ps.deleted IS FALSE
-JOIN toolsets t ON t.id = ps.toolset_id AND t.deleted IS FALSE AND t.mcp_enabled IS TRUE
-LEFT JOIN custom_domains cd ON cd.id = t.custom_domain_id AND cd.activated IS TRUE AND cd.verified IS TRUE AND cd.deleted IS FALSE
+JOIN toolsets t ON t.id = ps.toolset_id AND t.project_id = p.project_id AND t.deleted IS FALSE AND t.mcp_enabled IS TRUE
+LEFT JOIN custom_domains cd ON cd.id = t.custom_domain_id AND cd.organization_id = p.organization_id AND cd.activated IS TRUE AND cd.verified IS TRUE AND cd.deleted IS FALSE
 WHERE p.project_id = $1
   AND p.deleted IS FALSE
+  AND (COALESCE(cardinality($2::uuid[]), 0) = 0 OR p.id = ANY($2::uuid[]))
 ORDER BY p.slug, ps.sort_order ASC
 `
+
+type ListPluginsWithServersForProjectParams struct {
+	ProjectID uuid.UUID
+	PluginIds []uuid.UUID
+}
 
 type ListPluginsWithServersForProjectRow struct {
 	PluginID            uuid.UUID
@@ -1112,8 +1440,8 @@ type ListPluginsWithServersForProjectRow struct {
 
 // Used during plugin generation: returns all active plugin servers joined with
 // their parent plugin and toolset mcp_slug for URL construction.
-func (q *Queries) ListPluginsWithServersForProject(ctx context.Context, projectID uuid.UUID) ([]ListPluginsWithServersForProjectRow, error) {
-	rows, err := q.db.Query(ctx, listPluginsWithServersForProject, projectID)
+func (q *Queries) ListPluginsWithServersForProject(ctx context.Context, arg ListPluginsWithServersForProjectParams) ([]ListPluginsWithServersForProjectRow, error) {
+	rows, err := q.db.Query(ctx, listPluginsWithServersForProject, arg.ProjectID, arg.PluginIds)
 	if err != nil {
 		return nil, err
 	}

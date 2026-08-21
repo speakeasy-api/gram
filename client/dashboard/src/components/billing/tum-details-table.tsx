@@ -8,7 +8,10 @@ import { useMemo, useState } from "react";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/utils";
-import { CHART_COLORS, OTHER_COLOR } from "@/components/stacked-time-series";
+import {
+  useOtherSeriesColor,
+  useSeriesColors,
+} from "@/components/chart/useSeriesColors";
 import {
   type BilledDays,
   type BillingCycle,
@@ -39,7 +42,14 @@ type DetailRow = {
   color: string;
   series: number[];
   total: number;
+  // The label is an unresolved id (e.g. a deleted project's UUID): render it
+  // as a truncated mono chip instead of a raw UUID in running text.
+  mono?: boolean;
 };
+
+// A raw UUID label means the id could not be mapped to a display name.
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type DetailGroup = {
   heading: string;
@@ -71,30 +81,37 @@ type MeasureField = "inputTokens" | "outputTokens" | "cacheCreationTokens";
 
 type MeasureRowSpec = {
   label: string;
-  color: string;
+  // Slot in the theme-resolved series ramp, so the dot matches the chart's
+  // series color in both themes.
+  colorIndex: number;
   field: MeasureField;
 };
 
 // Input + output + cache writes sum to the TUM total; cache reads are
 // excluded from the population entirely.
 const TOKEN_TYPE_ROWS: MeasureRowSpec[] = [
-  { label: "Input", color: CHART_COLORS[0]!, field: "inputTokens" },
-  { label: "Output", color: CHART_COLORS[1]!, field: "outputTokens" },
+  { label: "Input", colorIndex: 0, field: "inputTokens" },
+  { label: "Output", colorIndex: 1, field: "outputTokens" },
   {
     label: "Cache write",
-    color: CHART_COLORS[2]!,
+    colorIndex: 2,
     field: "cacheCreationTokens",
   },
 ];
 
-// Row color for a dimension value — same palette walk as the chart's stacks,
-// so a value's dot matches its chart series color. The neutral remainder dot
-// uses the SAME rollup identity test as the chart (isServerRollupRow), never
-// a label match — a real value that happens to read "Other" keeps its
-// palette color in both places.
-function valueColor(rollup: boolean, index: number): string {
-  if (rollup) return OTHER_COLOR;
-  return CHART_COLORS[index % CHART_COLORS.length]!;
+// Row color for a dimension value — same palette walk as the chart's stacks
+// (the theme-resolved ramp), so a value's dot matches its chart series color.
+// The neutral remainder dot uses the SAME rollup identity test as the chart
+// (isServerRollupRow), never a label match — a real value that happens to
+// read "Other" keeps its palette color in both places.
+function valueColor(
+  rollup: boolean,
+  index: number,
+  chartColors: string[],
+  otherColor: string,
+): string {
+  if (rollup) return otherColor;
+  return chartColors[index % chartColors.length]!;
 }
 
 // The dimension sections of the details table, mirroring the chart's group
@@ -104,6 +121,8 @@ function dimensionGroups(
   data: TumDetailsResult | undefined,
   keys: string[],
   projectNames: Map<string, string>,
+  chartColors: string[],
+  otherColor: string,
 ): DetailGroup[] {
   const byKey = new Map(
     (data?.breakdowns ?? []).map((b) => [b.key, b.rows] as const),
@@ -129,12 +148,18 @@ function dimensionGroups(
         key === Dimension.Role
           ? "Users can hold multiple roles; rows overlap and can sum to more than the total token usage for the selected time period."
           : undefined,
-      rows: visible.map(({ row: r, rollup }, i) => ({
-        label: breakdownValueLabel(key, r.value, projectNames),
-        color: valueColor(rollup, i),
-        series: r.series,
-        total: r.totalTokens,
-      })),
+      rows: visible.map(({ row: r, rollup }, i) => {
+        const label = breakdownValueLabel(key, r.value, projectNames);
+        return {
+          label,
+          color: valueColor(rollup, i, chartColors, otherColor),
+          series: r.series,
+          total: r.totalTokens,
+          // A Project row still carrying its UUID is a project the name map
+          // doesn't know (e.g. deleted) — show a truncated mono id instead.
+          mono: key === Dimension.ProjectId && UUID_RE.test(label),
+        };
+      }),
     });
   }
   return groups;
@@ -206,7 +231,16 @@ function DetailRowItem({
         className="size-2 shrink-0 rounded-full"
         style={{ backgroundColor: row.color }}
       />
-      <span className="min-w-0 flex-1 truncate text-sm">{row.label}</span>
+      {row.mono ? (
+        <span
+          className="min-w-0 flex-1 truncate font-mono text-xs"
+          title={row.label}
+        >
+          {`${row.label.slice(0, 8)}…`}
+        </span>
+      ) : (
+        <span className="min-w-0 flex-1 truncate text-sm">{row.label}</span>
+      )}
       <span className="text-muted-foreground shrink-0">
         <Sparkline series={row.series} color={row.color} />
       </span>
@@ -251,7 +285,7 @@ function DetailGroupSection({
         type="button"
         onClick={onToggle}
         aria-expanded={!collapsed}
-        className="bg-muted text-muted-foreground hover:text-foreground border-border dark:border-white/20 flex w-full cursor-pointer items-center gap-1.5 border-t px-4 py-1.5 text-xs transition-colors"
+        className="text-eyebrow hover:text-foreground border-border dark:border-white/20 flex w-full cursor-pointer items-center gap-1.5 border-t px-4 py-1.5 transition-colors"
       >
         <ChevronDown
           className={cn(
@@ -259,7 +293,7 @@ function DetailGroupSection({
             collapsed && "-rotate-90",
           )}
         />
-        <span className="font-medium">{group.heading}</span>
+        <span>{group.heading}</span>
         {group.note && (
           <SimpleTooltip tooltip={group.note}>
             <Info className="size-3 cursor-help" />
@@ -362,6 +396,21 @@ export function TumDetailsTable({
   const organization = useOrganization();
   const scope = { client, orgId: organization.id, period };
   const { data, isFetching, isError } = useQuery(tumDetailsQuery(scope));
+  // Theme-resolved series ramp and rollup neutral, matching the chart the
+  // table sits under.
+  const chartColors = useSeriesColors();
+  const otherColor = useOtherSeriesColor();
+
+  // The passed-in map comes from the projects list fetch; the session's own
+  // project entries fill any gaps (e.g. before that fetch resolves) so
+  // Project rows show names instead of raw UUIDs whenever possible.
+  const projectLabels = useMemo(() => {
+    const merged = new Map(projectNames);
+    for (const p of organization.projects) {
+      if (!merged.has(p.id)) merged.set(p.id, p.name);
+    }
+    return merged;
+  }, [projectNames, organization.projects]);
 
   // Sections collapsed via their header band, keyed by heading so the state
   // survives period switches.
@@ -420,7 +469,7 @@ export function TumDetailsTable({
 
     const measureRow = (spec: MeasureRowSpec): DetailRow => ({
       label: spec.label,
-      color: spec.color,
+      color: chartColors[spec.colorIndex]!,
       series: points.map((p) => p[spec.field]),
       total: totals?.[spec.field] ?? 0,
     });
@@ -431,15 +480,27 @@ export function TumDetailsTable({
         rows: [
           {
             label: "Total tokens",
-            color: CHART_COLORS[0]!,
+            color: chartColors[0]!,
             series: points.map((p) => p.totalTokens),
             total: totals?.totalTokens ?? 0,
           },
         ],
       },
-      ...dimensionGroups(data, LEAD_DIMENSION_SECTIONS, projectNames),
+      ...dimensionGroups(
+        data,
+        LEAD_DIMENSION_SECTIONS,
+        projectLabels,
+        chartColors,
+        otherColor,
+      ),
       { heading: "Token type", rows: TOKEN_TYPE_ROWS.map(measureRow) },
-      ...dimensionGroups(data, TAIL_DIMENSION_SECTIONS, projectNames),
+      ...dimensionGroups(
+        data,
+        TAIL_DIMENSION_SECTIONS,
+        projectLabels,
+        chartColors,
+        otherColor,
+      ),
     ];
 
     // Convert every row into billed units (see billedScale).
@@ -451,7 +512,7 @@ export function TumDetailsTable({
         series: row.series.map((v) => v * billedScale),
       })),
     }));
-  }, [data, billedScale, projectNames]);
+  }, [data, billedScale, projectLabels, chartColors, otherColor]);
 
   // Time-based overage attribution: tokens count as overage from the moment
   // the organization's cumulative usage crossed the included allowance. Days
@@ -522,7 +583,7 @@ export function TumDetailsTable({
   );
 
   return (
-    <div className="border-border overflow-hidden rounded-lg border">
+    <div className="border-border overflow-hidden border">
       <div className="flex items-baseline gap-2 px-4 pt-3 pb-1">
         <span className="text-sm font-semibold">
           Token Usage Cumulative Breakdown
@@ -544,7 +605,7 @@ export function TumDetailsTable({
           </button>
         </div>
       </div>
-      <div className="text-muted-foreground flex items-center px-4 py-2 text-xs font-medium">
+      <div className="text-eyebrow flex items-center px-4 py-2">
         <span className="flex-1">Metric</span>
         <SimpleTooltip tooltip={totalTooltip}>
           <span className="w-24 cursor-help text-right">Total</span>

@@ -8,7 +8,8 @@ export function getActionCategory(action: string): ActionCategory {
     verb?.includes("disable") ||
     verb?.includes("detach") ||
     verb?.includes("revoke") ||
-    verb?.includes("remove")
+    verb?.includes("remove") ||
+    verb?.includes("demot")
   ) {
     return "destructive";
   }
@@ -28,26 +29,28 @@ export function getActionCategory(action: string): ActionCategory {
   return "update";
 }
 
+// Editorial treatment: semantic color lives in the dot and the mono action
+// text only — chips are neutral hairline boxes, no tinted washes.
 const colorConfigs = {
   create: {
-    dot: "bg-emerald-500",
-    text: "text-emerald-700",
-    bg: "bg-emerald-50",
+    dot: "bg-success-default",
+    text: "text-default-success",
+    bg: "border-border bg-card border",
   },
   update: {
-    dot: "bg-yellow-500",
-    text: "text-yellow-700",
-    bg: "bg-yellow-50",
+    dot: "bg-warning-default",
+    text: "text-default-warning",
+    bg: "border-border bg-card border",
   },
   deploy: {
-    dot: "bg-blue-500",
-    text: "text-blue-700",
-    bg: "bg-blue-50",
+    dot: "bg-information-default",
+    text: "text-default-information",
+    bg: "border-border bg-card border",
   },
   destructive: {
-    dot: "bg-red-500",
-    text: "text-red-700",
-    bg: "bg-red-50",
+    dot: "bg-destructive-default",
+    text: "text-default-destructive",
+    bg: "border-border bg-card border",
   },
 } as const;
 

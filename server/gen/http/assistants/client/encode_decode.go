@@ -2035,3 +2035,33 @@ func marshalAssistantMCPServerRefRequestBodyToTypesAssistantMCPServerRef(v *Assi
 
 	return res
 }
+
+// marshalAssistantsSendMessageAttachmentToSendMessageAttachmentRequestBody
+// builds a value of type *SendMessageAttachmentRequestBody from a value of
+// type *assistants.SendMessageAttachment.
+func marshalAssistantsSendMessageAttachmentToSendMessageAttachmentRequestBody(v *assistants.SendMessageAttachment) *SendMessageAttachmentRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &SendMessageAttachmentRequestBody{
+		AssetID: v.AssetID,
+		Name:    v.Name,
+	}
+
+	return res
+}
+
+// marshalSendMessageAttachmentRequestBodyToAssistantsSendMessageAttachment
+// builds a value of type *assistants.SendMessageAttachment from a value of
+// type *SendMessageAttachmentRequestBody.
+func marshalSendMessageAttachmentRequestBodyToAssistantsSendMessageAttachment(v *SendMessageAttachmentRequestBody) *assistants.SendMessageAttachment {
+	if v == nil {
+		return nil
+	}
+	res := &assistants.SendMessageAttachment{
+		AssetID: v.AssetID,
+		Name:    v.Name,
+	}
+
+	return res
+}

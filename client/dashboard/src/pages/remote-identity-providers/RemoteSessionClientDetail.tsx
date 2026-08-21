@@ -6,7 +6,7 @@ import {
   PageTabsTrigger,
   Tabs,
   TabsContent,
-  TabsList,
+  PageTabsList,
 } from "@/components/ui/Tabs";
 import { Text } from "@/components/ui/Text";
 import { useOrgRoutes } from "@/routes";
@@ -20,7 +20,8 @@ import { OverviewTab } from "./tabs/client/OverviewTab";
 import { McpServersTab } from "./tabs/client/McpServersTab";
 import { SessionsTab } from "./tabs/client/SessionsTab";
 import { SettingsTab } from "./tabs/client/SettingsTab";
-import { activeDetailTab, CLIENT_TABS, type ClientTab } from "./tabs";
+import { activeDetailTab } from "@/lib/detail-tabs";
+import { CLIENT_TABS, type ClientTab } from "./tabs";
 
 // Maps a client tab value to its route subpage key (the MCP Servers tab's URL
 // segment is "mcp-servers" but its route key is camelCase "mcpServers").
@@ -90,6 +91,7 @@ export default function RemoteSessionClientDetail(): JSX.Element {
       </Page.Header>
       <Page.Body fullWidth noPadding className="gap-0">
         <DetailHero>
+          <Page.Eyebrow />
           <div className="flex items-center gap-3">
             <Text small muted>
               Remote Session Client
@@ -110,7 +112,7 @@ export default function RemoteSessionClientDetail(): JSX.Element {
           <Tabs value={activeTab} className="flex w-full flex-1 flex-col">
             <div className="shrink-0 border-b">
               <div className="mx-auto max-w-[1270px] px-8">
-                <TabsList className="h-auto gap-6 rounded-none bg-transparent p-0">
+                <PageTabsList className="h-auto gap-6 bg-transparent p-0">
                   <PageTabsTrigger value="overview" asChild>
                     <Link to={tabHref("overview")}>Overview</Link>
                   </PageTabsTrigger>
@@ -123,7 +125,7 @@ export default function RemoteSessionClientDetail(): JSX.Element {
                   <PageTabsTrigger value="settings" asChild>
                     <Link to={tabHref("settings")}>Settings</Link>
                   </PageTabsTrigger>
-                </TabsList>
+                </PageTabsList>
               </div>
             </div>
 

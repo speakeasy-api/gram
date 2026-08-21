@@ -7,12 +7,13 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
 func TestIsClientIDURL(t *testing.T) {
@@ -62,16 +63,22 @@ func validDocumentJSON(clientID string) map[string]any {
 	}
 }
 
+// noCache is the cache state of a client_id nothing has been stored for. It
+// forces an unconditional fetch, which is what every test that is not about
+// the cache policy wants.
+var noCache = CacheState{ExpiresAt: time.Time{}, ETag: ""}
+
 func TestResolve_HappyPath(t *testing.T) {
 	t.Parallel()
 
 	_, resolver, clientID := serveDocumentJSON(t, validDocumentJSON)
 
-	doc, err := resolver.Resolve(t.Context(), clientID)
+	result, err := resolver.Resolve(t.Context(), clientID, noCache)
 	require.NoError(t, err)
-	require.Equal(t, clientID, doc.ClientID)
-	require.Equal(t, "CIMD Test Client", doc.ClientName)
-	require.Equal(t, []string{"http://127.0.0.1:3000/callback"}, doc.RedirectURIs)
+	require.Equal(t, CacheOutcomeRefreshed, result.Outcome)
+	require.Equal(t, clientID, result.Document.ClientID)
+	require.Equal(t, "CIMD Test Client", result.Document.ClientName)
+	require.Equal(t, []string{"http://127.0.0.1:3000/callback"}, result.Document.RedirectURIs)
 }
 
 func TestResolve_Non200Rejected(t *testing.T) {
@@ -81,7 +88,7 @@ func TestResolve_Non200Rejected(t *testing.T) {
 		http.NotFound(w, r)
 	})
 
-	_, err := resolver.Resolve(t.Context(), srv.URL+"/client.json")
+	_, err := resolver.Resolve(t.Context(), srv.URL+"/client.json", noCache)
 	require.ErrorContains(t, err, "status 404")
 }
 
@@ -103,7 +110,7 @@ func TestResolve_RedirectNotFollowed(t *testing.T) {
 	})
 	clientID = srv.URL + "/client.json"
 
-	_, err := resolver.Resolve(t.Context(), clientID)
+	_, err := resolver.Resolve(t.Context(), clientID, noCache)
 	require.ErrorContains(t, err, "status 302")
 }
 
@@ -117,7 +124,7 @@ func TestResolve_OversizedDocumentRejected(t *testing.T) {
 		}
 	})
 
-	_, err := resolver.Resolve(t.Context(), srv.URL+"/client.json")
+	_, err := resolver.Resolve(t.Context(), srv.URL+"/client.json", noCache)
 	require.ErrorContains(t, err, "byte limit")
 }
 
@@ -134,9 +141,9 @@ func TestResolve_InvalidJSONRejected(t *testing.T) {
 	// Deliberately NOT an OAuthError: a distinguishable "reachable but not
 	// JSON" outcome would let unauthenticated callers probe external hosts
 	// through Gram, so it reports like any other fetch failure.
-	_, err := resolver.Resolve(t.Context(), srv.URL+"/client.json")
+	_, err := resolver.Resolve(t.Context(), srv.URL+"/client.json", noCache)
 	require.ErrorContains(t, err, "parse client metadata document")
-	var oauthErr *usersessions.OAuthError
+	var oauthErr *oauthwire.Error
 	require.NotErrorAs(t, err, &oauthErr)
 }
 
@@ -149,7 +156,7 @@ func TestResolve_DocumentClientIDMismatchRejected(t *testing.T) {
 		return doc
 	})
 
-	_, err := resolver.Resolve(t.Context(), clientID)
+	_, err := resolver.Resolve(t.Context(), clientID, noCache)
 	requireOAuthError(t, err, "invalid_client_metadata")
 }
 
@@ -161,7 +168,7 @@ func TestResolve_InvalidClientIDURLNoFetch(t *testing.T) {
 		requests++
 	})
 
-	_, err := resolver.Resolve(t.Context(), srv.URL) // no path component
+	_, err := resolver.Resolve(t.Context(), srv.URL, noCache) // no path component
 	requireOAuthError(t, err, "invalid_request")
 	require.Zero(t, requests, "syntactically invalid client_id must never be fetched")
 }
@@ -177,6 +184,6 @@ func TestResolve_ProductionPolicyBlocksLoopback(t *testing.T) {
 	})
 
 	resolver := NewResolver(guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)), testenv.NewMeterProvider(t), testenv.NewLogger(t))
-	_, err := resolver.Resolve(t.Context(), srv.URL+"/client.json")
+	_, err := resolver.Resolve(t.Context(), srv.URL+"/client.json", noCache)
 	require.ErrorContains(t, err, "request document")
 }

@@ -2,15 +2,20 @@ package chat_test
 
 import (
 	"testing"
+	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 // A member holding no chat:read grant can still load their own session — via
@@ -126,11 +131,12 @@ func TestLoadChat_ImpersonatingAdminBlocked(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	authCtx.IsAdmin = true
+	authCtx.SupportOrganizationID = authCtx.ActiveOrganizationID
+	ctx = contextvalues.WithValidatedSupportSession(ctx, authCtx)
 
 	other := seedChat(t, ctx, ti, "someone-else", "", "their session")
 
 	adminCtx := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeChatRead, authz.WildcardResource))
-	adminCtx = contextvalues.SetAdminOverrideInContext(adminCtx, "customer-org")
 
 	before, err := audittest.AuditLogCountByAction(t.Context(), ti.conn, audit.ActionChatSessionAccess)
 	require.NoError(t, err)
@@ -146,9 +152,52 @@ func TestLoadChat_ImpersonatingAdminBlocked(t *testing.T) {
 	require.Equal(t, before, after, "blocked opens must not record an access audit event")
 }
 
-// A stray admin-override cookie on a non-admin session has no effect: auth
-// ignores the override for non-admins, so LoadChat must not block them.
-func TestLoadChat_OverrideWithoutAdminNotBlocked(t *testing.T) {
+// The shared demo org is exempt from the impersonation transcript block: its
+// sessions are fabricated by seed/demo/ and exist to be read. Non-demo orgs
+// stay blocked (covered above).
+func TestLoadChat_ImpersonatingAdminAllowedForDemoOrg(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	authCtx.IsAdmin = true
+	authCtx.ActiveOrganizationID = constants.DemoOrganizationID
+	authCtx.SupportOrganizationID = constants.DemoOrganizationID
+	ctx = contextvalues.WithValidatedSupportSession(ctx, authCtx)
+
+	// The audit log FK requires the demo org row to exist.
+	err := testrepo.New(ti.conn).CreateOrganizationMetadataFixture(t.Context(), testrepo.CreateOrganizationMetadataFixtureParams{
+		ID:                 constants.DemoOrganizationID,
+		Name:               "Acme Demo Workspace",
+		Slug:               "acme-demo",
+		GramAccountType:    "demo",
+		WorkosID:           pgtype.Text{String: "", Valid: false},
+		Whitelisted:        true,
+		FreeTrialStartedAt: conv.ToPGTimestamptz(time.Now().UTC()),
+		FreeTrialEndsAt:    conv.ToPGTimestamptz(time.Now().UTC().Add(14 * 24 * time.Hour)),
+		DisabledAt:         pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: 0, Valid: false},
+	})
+	require.NoError(t, err)
+
+	other := seedChat(t, ctx, ti, "someone-else", "", "demo session")
+
+	adminCtx := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeChatRead, authz.WildcardResource))
+
+	before, err := audittest.AuditLogCountByAction(t.Context(), ti.conn, audit.ActionChatSessionAccess)
+	require.NoError(t, err)
+
+	res, err := ti.service.LoadChat(adminCtx, loadPayload(other.String()))
+	require.NoError(t, err)
+	require.Equal(t, other.String(), res.ID)
+
+	after, err := audittest.AuditLogCountByAction(t.Context(), ti.conn, audit.ActionChatSessionAccess)
+	require.NoError(t, err)
+	require.Equal(t, before+1, after, "demo transcript opens must record an access audit event")
+}
+
+// A non-admin can load their own chat with the ordinary user grant.
+func TestLoadChat_NonAdminOwnChatNotBlocked(t *testing.T) {
 	t.Parallel()
 	ti := newTestChatService(t)
 	ctx := initSessionCtx(t, ti)
@@ -158,7 +207,6 @@ func TestLoadChat_OverrideWithoutAdminNotBlocked(t *testing.T) {
 	own := seedChat(t, ctx, ti, authCtx.UserID, "", "my session")
 
 	selfCtx := authztest.WithExactGrants(t, ctx)
-	selfCtx = contextvalues.SetAdminOverrideInContext(selfCtx, "customer-org")
 
 	res, err := ti.service.LoadChat(selfCtx, loadPayload(own.String()))
 	require.NoError(t, err)

@@ -9,13 +9,19 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/trialemails"
 )
 
 var infra *testenv.Environment
 
 func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true})
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true})
 	if err != nil {
 		log.Fatalf("Failed to launch test infrastructure: %v", err)
 	}
@@ -31,10 +37,11 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// newTestAdminService builds the minimum Service needed to exercise read-only
-// handlers like ListOrganizations. Auth, sessions, and OIDC fields are left nil
-// because the test invokes the handler directly without going through the HTTP
-// transport layer.
+// newTestAdminService builds the minimum Service needed to exercise admin
+// handlers in tests. It wires the session store, login state cache, OIDC
+// client, and verifier so handlers can run through auth-aware HTTP paths. The
+// WorkOS field is left nil: a handler that needs it gets a service from
+// newTestAdminServiceWithWorkOS instead.
 func newTestAdminService(t *testing.T) (context.Context, *Service, *pgxpool.Pool) {
 	t.Helper()
 
@@ -43,11 +50,59 @@ func newTestAdminService(t *testing.T) (context.Context, *Service, *pgxpool.Pool
 	logger := testenv.NewLogger(t)
 	conn, err := infra.CloneTestDatabase(t, "admintestdb")
 	require.NoError(t, err)
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
 
+	adminCache := cache.NewRedisCacheAdapter(redisClient)
+	enc, err := encryption.NewWithBytes(make([]byte, 32))
+	require.NoError(t, err)
+	sessions := NewSessionStore(
+		cache.NewTypedObjectCache[Session](logger, adminCache, cache.SuffixNone),
+		enc,
+	)
+	tracerProvider := testenv.NewTracerProvider(t)
 	svc := &Service{
-		logger: logger,
-		db:     conn,
+		logger:          logger,
+		db:              conn,
+		audit:           audit.NewLogger(),
+		trial:           trialemails.NoopNotifier{},
+		sessions:        sessions,
+		loginStates:     cache.NewTypedObjectCache[LoginState](logger, adminCache, cache.SuffixNone),
+		productFeatures: productfeatures.NewClient(logger, tracerProvider, conn, redisClient),
 	}
+	svc.oidc = newTestOIDCClient(t, userinfoOK("sub-admin", "operator@example.com"))
+	svc.verifier = NewVerifier(logger, sessions, svc.oidc, adminCache)
 
 	return ctx, svc, conn
+}
+
+// newTestAdminServiceWithWorkOS is newTestAdminService with an identity provider
+// attached, for the handlers that write to one.
+func newTestAdminServiceWithWorkOS(t *testing.T, workos orgprovision.WorkOSOrganizationCreator) (context.Context, *Service, *pgxpool.Pool) {
+	t.Helper()
+
+	ctx, svc, conn := newTestAdminService(t)
+	svc.workos = workos
+
+	return ctx, svc, conn
+}
+
+type fakeTrialNotifier struct {
+	started     []string
+	inactive    []string
+	inactiveErr error
+}
+
+func (f *fakeTrialNotifier) TrialStarted(_ context.Context, organizationID string) error {
+	f.started = append(f.started, organizationID)
+	return nil
+}
+
+func (f *fakeTrialNotifier) AdminAdded(context.Context, string, string) error {
+	return nil
+}
+
+func (f *fakeTrialNotifier) TrialInactive(_ context.Context, organizationID string) error {
+	f.inactive = append(f.inactive, organizationID)
+	return f.inactiveErr
 }

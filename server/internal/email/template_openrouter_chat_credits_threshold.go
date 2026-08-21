@@ -2,12 +2,10 @@ package email
 
 import "strconv"
 
-// OpenRouterChatCreditsThreshold is sent to an organization's billing alert
-// contact when usage of the platform-managed OpenRouter chat key crosses a
-// warning threshold (50%, 75%, 90%) or exhausts (100%) the monthly credit cap.
-// Exhausting the chat cap causes the org's chat surfaces (playground,
-// elements, assistants, /chat/completions proxy) to start returning 402/5XX,
-// so the warnings give admins a chance to react before that happens.
+// OpenRouterChatCreditsThreshold is the stable template contract for Other
+// inference alerts. The underlying provider key still uses the legacy `chat`
+// storage identifier, but customers see the function it serves. The alert is
+// sent at 50%, 75%, 90%, and 100% of that key's monthly cap.
 type OpenRouterChatCreditsThreshold struct {
 	// OrganizationName is the display name of the organization.
 	OrganizationName string
@@ -19,8 +17,8 @@ type OpenRouterChatCreditsThreshold struct {
 	Exhausted bool
 }
 
-func (t OpenRouterChatCreditsThreshold) TransactionalID() TransactionalID {
-	return transactionalIDOpenRouterChatCreditsThreshold
+func (t OpenRouterChatCreditsThreshold) Key() TemplateKey {
+	return TemplateKeyOpenRouterChatCredits
 }
 
 func (t OpenRouterChatCreditsThreshold) AddToAudience() bool { return false }

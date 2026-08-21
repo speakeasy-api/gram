@@ -96,7 +96,7 @@ function ProxiedStatusNotice({
 }): JSX.Element {
   return (
     <div className="flex h-full items-center justify-center">
-      <div className="border-neutral-softest flex max-w-md flex-col items-center gap-3 rounded-lg border px-6 py-12 text-center">
+      <div className="border-neutral-softest flex max-w-md flex-col items-center gap-3 border px-6 py-12 text-center">
         <PlugZap className="text-muted-foreground/70 size-8" />
         <Text muted className="text-sm">
           {message}
@@ -118,7 +118,7 @@ function ProxiedConnectPrompt({
 
   return (
     <div className="flex h-full items-center justify-center">
-      <div className="border-neutral-softest flex max-w-md flex-col items-center gap-3 rounded-lg border px-6 py-12 text-center">
+      <div className="border-neutral-softest flex max-w-md flex-col items-center gap-3 border px-6 py-12 text-center">
         <PlugZap className="text-muted-foreground/70 size-8" />
         <Text className="font-medium">Connection Required</Text>
         <Text muted className="text-sm">

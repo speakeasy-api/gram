@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/url"
 	"strings"
 
 	"github.com/google/uuid"
@@ -30,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -39,14 +39,15 @@ import (
 )
 
 type Service struct {
-	tracer  trace.Tracer
-	logger  *slog.Logger
-	db      *pgxpool.Pool
-	auth    *auth.Auth
-	authz   *authz.Engine
-	headers *Headers
-	policy  *guardian.Policy
-	audit   *audit.Logger
+	tracer       trace.Tracer
+	logger       *slog.Logger
+	db           *pgxpool.Pool
+	auth         *auth.Auth
+	authz        *authz.Engine
+	headers      *Headers
+	policy       *guardian.Policy
+	audit        *audit.Logger
+	provisioning *RemoteMCPProvisioningService
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -61,18 +62,20 @@ func NewService(
 	authzEngine *authz.Engine,
 	policy *guardian.Policy,
 	auditLogger *audit.Logger,
+	iconSetter mcpservers.DefaultServerIconSetter,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("remotemcp"))
 
 	return &Service{
-		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotemcp"),
-		logger:  logger,
-		db:      db,
-		auth:    auth.New(logger, db, sessions, authzEngine),
-		authz:   authzEngine,
-		headers: NewHeaders(logger, db, enc),
-		policy:  policy,
-		audit:   auditLogger,
+		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotemcp"),
+		logger:       logger,
+		db:           db,
+		auth:         auth.New(logger, db, sessions, authzEngine),
+		authz:        authzEngine,
+		headers:      NewHeaders(logger, db, enc),
+		policy:       policy,
+		audit:        auditLogger,
+		provisioning: NewRemoteMCPProvisioningService(db, policy, auditLogger, iconSetter),
 	}
 }
 
@@ -98,27 +101,8 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
-	if err := validateURL(ctx, s.policy, payload.URL); err != nil {
+	if _, err := s.policy.ValidateHTTPURL(ctx, payload.URL); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid url").LogError(ctx, logger)
-	}
-
-	// Generate the server ID up front so the slug can include its suffix and
-	// the row can be inserted in a single statement (no insert-then-update).
-	serverID, err := uuid.NewV7()
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "generate server id").LogError(ctx, logger)
-	}
-
-	slug, err := computeServerSlug(payload.URL, serverID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "compute server slug").LogError(ctx, logger)
-	}
-
-	name := pgtype.Text{String: "", Valid: false}
-	if payload.Name != nil {
-		if trimmed := strings.TrimSpace(*payload.Name); trimmed != "" {
-			name = pgtype.Text{String: trimmed, Valid: true}
-		}
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -127,34 +111,17 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	txRepo := repo.New(dbtx)
-
-	server, err := txRepo.CreateServer(ctx, repo.CreateServerParams{
-		ID:            serverID,
-		ProjectID:     *authCtx.ProjectID,
-		Name:          name,
-		Slug:          conv.ToPGText(slug),
+	server, err := createRemoteMCPSource(ctx, dbtx, s.audit, authCtx, remoteMCPSourceInput{
+		Name:          payload.Name,
+		URL:           payload.URL,
 		TransportType: payload.TransportType,
-		Url:           payload.URL,
 	})
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			return nil, oops.E(oops.CodeConflict, err, "remote mcp server slug already in use").LogError(ctx, logger)
+		var shareableErr *oops.ShareableError
+		if errors.As(err, &shareableErr) {
+			return nil, shareableErr.LogError(ctx, logger)
 		}
-		return nil, oops.E(oops.CodeUnexpected, err, "create remote mcp server").LogError(ctx, logger)
-	}
-
-	if err := s.audit.LogRemoteMcpServerCreate(ctx, dbtx, audit.LogRemoteMcpServerCreateEvent{
-		OrganizationID:     authCtx.ActiveOrganizationID,
-		ProjectID:          *authCtx.ProjectID,
-		Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName:   authCtx.Email,
-		ActorSlug:          nil,
-		RemoteMcpServerURN: urn.NewRemoteMcpServer(server.ID),
-		RemoteMcpServerURL: server.Url,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log remote mcp server creation").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "create remote MCP server").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
@@ -162,6 +129,34 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 	}
 
 	return mv.BuildRemoteMcpServerView(server), nil
+}
+
+func (s *Service) CreateServerAndMcpServer(ctx context.Context, payload *gen.CreateServerAndMcpServerPayload) (*gen.CreateServerAndMcpServerResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
+	result, err := s.provisioning.ProvisionDashboardRemoteMCP(ctx, authCtx, DashboardRemoteMCPProvisioningInput{
+		Name:          payload.Name,
+		URL:           payload.URL,
+		TransportType: payload.TransportType,
+	})
+	if err != nil {
+		var shareableErr *oops.ShareableError
+		if errors.As(err, &shareableErr) {
+			return nil, shareableErr.LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "provision remote MCP server").LogError(ctx, logger)
+	}
+	return &gen.CreateServerAndMcpServerResult{
+		RemoteMcpServer: mv.BuildRemoteMcpServerView(result.RemoteMCPServer),
+		McpServer:       mv.BuildMcpServerView(result.MCPServer),
+	}, nil
 }
 
 func (s *Service) ListServers(ctx context.Context, payload *gen.ListServersPayload) (*gen.ListServersResult, error) {
@@ -254,7 +249,7 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 	}
 
 	if payload.URL != nil {
-		if err := validateURL(ctx, s.policy, *payload.URL); err != nil {
+		if _, err := s.policy.ValidateHTTPURL(ctx, *payload.URL); err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid url").LogError(ctx, logger)
 		}
 	}
@@ -292,7 +287,7 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 	// Always recompute slug from the post-update URL so it tracks the URL
 	// even when the URL didn't change (idempotent).
 	finalURL := conv.PtrValOr(payload.URL, existingServer.Url)
-	slug, err := computeServerSlug(finalURL, existingServer.ID)
+	slug, err := conv.URLBackedSlug(finalURL, existingServer.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "compute server slug").LogError(ctx, logger)
 	}
@@ -348,7 +343,7 @@ func (s *Service) VerifyURL(ctx context.Context, payload *gen.VerifyURLPayload) 
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
-	if err := validateURL(ctx, s.policy, payload.URL); err != nil {
+	if _, err := s.policy.ValidateHTTPURL(ctx, payload.URL); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid url").LogError(ctx, logger)
 	}
 
@@ -754,29 +749,6 @@ func (s *Service) DeleteServerHeader(ctx context.Context, payload *gen.DeleteSer
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
-}
-
-// validateURL checks that the given URL string is a valid absolute HTTP(S) URL
-// whose host is permitted by the supplied [guardian.Policy].
-func validateURL(ctx context.Context, policy *guardian.Policy, rawURL string) error {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return fmt.Errorf("parse url: %w", err)
-	}
-
-	if u.Scheme != "http" && u.Scheme != "https" {
-		return fmt.Errorf("url scheme must be http or https")
-	}
-
-	if u.Host == "" {
-		return fmt.Errorf("url must include a host")
-	}
-
-	if err := policy.ValidateHost(ctx, u.Hostname()); err != nil {
-		return fmt.Errorf("validate host: %w", err)
-	}
-
-	return nil
 }
 
 // validateHeaderValueSource checks that exactly one of value or

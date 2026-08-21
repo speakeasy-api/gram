@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	"io"
 	"log/slog"
 	"net/http"
@@ -16,11 +17,16 @@ import (
 
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
@@ -100,7 +106,7 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 		return oops.E(oops.CodeBadRequest, errInvalidJSONRPCVersion, "unsupported JSON-RPC version").LogError(ctx, s.logger)
 	}
 
-	body, err := s.handlePlatformToolsetRequest(ctx, authCtx, toolset, &req, r.Header.Get("Gram-Chat-ID"))
+	body, err := s.handlePlatformToolsetRequest(ctx, authCtx, toolset, &req, r.Header.Get("Gram-Chat-ID"), mcpversions.Sanitize(r.Header.Get(mcpversions.HTTPHeader)))
 	switch {
 	case body == nil && err == nil:
 		return respondWithNoContent(true, w)
@@ -131,7 +137,18 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 // project is rejected as if the toolset did not exist, rather than relying on
 // downstream tools to refuse the call.
 func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, authCtx *contextvalues.AuthContext) error {
-	if slug != platformtools.ManagedAssistantPlatformToolsetSlug {
+	switch slug {
+	case platformtools.ResearchToolsetSlug:
+		// Nobody reaches the research tools over HTTP. The research runner
+		// constructs its executors privately — the slug is not even in the
+		// toolset registry — so this refusal is a tripwire: an assistant
+		// token arriving here was never meant to have billable web search
+		// and public page fetch, and re-registering the toolset must not
+		// quietly grant them. If the runner is ever moved onto the assistant
+		// runtime, this is where its principal is checked.
+		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+	case platformtools.ManagedAssistantPlatformToolsetSlug, platformtools.PlatformMCPReadToolsetSlug:
+	default:
 		return nil
 	}
 
@@ -152,7 +169,77 @@ func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, aut
 		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
 	}
 
+	// The two managed-only toolsets are rollout variants of each other: a
+	// thread reaches exactly one, never both. The attachment decision in the
+	// assistants service resolves the same variant, but the assistant token
+	// lives inside the runner VM, so the serve path re-resolves rather than
+	// trusting attachment. A variant that cannot be resolved falls back to
+	// legacy, matching attachment, so an outage never leaves the managed
+	// assistant with no toolset at all.
+	//
+	// The rollout is scoped to dashboard threads, so the calling thread's
+	// source kind is part of the decision — the same managed assistant serves
+	// Slack, cron and wake turns on the legacy toolsets. The principal carries
+	// the thread it was minted for, which is what makes that resolvable here
+	// without trusting anything the runner sends.
+	//
+	// A source kind that cannot be read — a thread deleted mid-turn, a database
+	// blip — falls back to the flag alone, which is how this decision was made
+	// before the rollout was scoped to the dashboard. Reporting it as
+	// not-dashboard instead would 404 the Platform MCP toolset that bootstrap
+	// attached to a dashboard thread, stripping the assistant of every tool it
+	// has mid-turn; the reverse error only costs a non-dashboard thread its
+	// tools on an organization that is already on the variant, and neither
+	// error can reach an organization that is not.
+	sourceKind, resolvedSourceKind := s.threadSourceKind(ctx, principal.ThreadID, *authCtx.ProjectID)
+	dashboardScoped := !resolvedSourceKind || sourceKind == bgtriggers.DefinitionSlugDashboard
+
+	variant := feature.VariantAssistantToolsLegacy
+	if s.features != nil && dashboardScoped {
+		resolved, err := feature.FlagVariant(ctx, s.features, feature.FlagAssistantPlatformMCP,
+			authCtx.ActiveOrganizationID, feature.OrgProjectGroups(authCtx.OrganizationSlug, ""))
+		if err != nil {
+			s.logger.WarnContext(ctx, "resolve assistant platform mcp variant", attr.SlogError(err))
+		} else {
+			variant = feature.AssistantToolsVariant(resolved)
+		}
+	}
+
+	if slug != wantedToolsetSlug(variant) {
+		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+	}
+
 	return nil
+}
+
+// threadSourceKind reads the surface the calling thread was opened from,
+// reporting false when it cannot be read — a thread deleted mid-turn, or a
+// database blip.
+//
+// Scoped to the request's project so a thread id belonging to another project
+// cannot decide which toolset this one is served, even though the id comes
+// from a signed principal rather than the request body.
+func (s *Service) threadSourceKind(ctx context.Context, threadID, projectID uuid.UUID) (string, bool) {
+	sourceKind, err := assistantrepo.New(s.db).GetAssistantThreadSourceKind(ctx, assistantrepo.GetAssistantThreadSourceKindParams{
+		ThreadID:  threadID,
+		ProjectID: projectID,
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "resolve assistant thread source kind", attr.SlogError(err))
+		return "", false
+	}
+	return sourceKind, true
+}
+
+// wantedToolsetSlug maps a resolved rollout variant to the single managed-only
+// platform toolset that variant serves. Keep in lockstep with
+// assistantPlatformSlugs in the assistants service — the two must agree or a
+// toolset is attached at bootstrap and then 404s on every request.
+func wantedToolsetSlug(variant feature.Variant) string {
+	if variant == feature.VariantAssistantToolsPlatformMCP {
+		return platformtools.PlatformMCPReadToolsetSlug
+	}
+	return platformtools.ManagedAssistantPlatformToolsetSlug
 }
 
 func (s *Service) handlePlatformToolsetRequest(
@@ -161,7 +248,11 @@ func (s *Service) handlePlatformToolsetRequest(
 	toolset platformtools.Toolset,
 	req *rawRequest,
 	chatIDHeader string,
+	protocolVersionHeader string,
 ) (json.RawMessage, error) {
+	// Census parity with the hosted dispatch.
+	s.metrics.RecordMCPRequest(ctx, mcprequests.DeclaredProtocolVersion(protocolVersionHeader, req.Params), req.Method, mcpmetrics.SurfacePlatform)
+
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
 		start := time.Now()
 		defer func() {
@@ -171,9 +262,9 @@ func (s *Service) handlePlatformToolsetRequest(
 
 	switch req.Method {
 	case "ping":
-		return handlePing(ctx, s.logger, req.ID)
+		return handlePing(ctx, s.logger, req.ID, serverInfoPlatformToolset)
 	case "initialize":
-		return handlePlatformInitialize(ctx, s.logger, req)
+		return handlePlatformInitialize(ctx, s.logger, s.metrics, req)
 	case "notifications/initialized", "notifications/cancelled":
 		return nil, nil
 	case "tools/list":
@@ -185,20 +276,33 @@ func (s *Service) handlePlatformToolsetRequest(
 	}
 }
 
-func handlePlatformInitialize(ctx context.Context, logger *slog.Logger, req *rawRequest) (json.RawMessage, error) {
+func handlePlatformInitialize(ctx context.Context, logger *slog.Logger, telemetry *mcpmetrics.Metrics, req *rawRequest) (json.RawMessage, error) {
+	// This path answers ServedPlatformToolset unconditionally and does not
+	// otherwise read the request params. Parsing them purely for telemetry is
+	// the point: without it the platform surface is the one inbound path where
+	// the client's requested revision is invisible, which reads as a hole in
+	// the data rather than as "platform clients don't negotiate". Malformed
+	// params must not fail the handshake, so a parse error is logged and the
+	// requested version is simply left unrecorded.
+	params, _, err := parseInitializeParams(req.Params)
+	if err != nil {
+		logger.WarnContext(ctx, "failed to parse platform mcp initialize params", attr.SlogError(err))
+	}
+
+	recordMCPProtocolVersionSpan(ctx, params.ProtocolVersion, mcpversions.ServedPlatformToolset)
+	telemetry.RecordMCPInitialize(ctx, params.ProtocolVersion, mcpversions.ServedPlatformToolset)
+
 	result := &result[initializeResult]{
 		ID: req.ID,
 		Result: initializeResult{
-			ProtocolVersion: "2025-03-26",
+			ProtocolVersion: mcpversions.ServedPlatformToolset,
 			Capabilities: map[string]json.RawMessage{
 				"tools": json.RawMessage("{}"),
 			},
-			ServerInfo: serverInfo{
-				Name:    "Gram Platform Toolset",
-				Version: "0.0.0",
-			},
+			ServerInfo:   serverInfoPlatformToolset,
 			Instructions: "",
 		},
+		serverIdentity: serverInfoPlatformToolset,
 	}
 	bs, err := json.Marshal(result)
 	if err != nil {
@@ -236,8 +340,9 @@ func (s *Service) listPlatformToolsetTools(
 	}
 
 	bs, err := json.Marshal(&result[toolsListResultTools]{
-		ID:     req.ID,
-		Result: toolsListResultTools{Tools: tools},
+		ID:             req.ID,
+		Result:         toolsListResultTools{Tools: tools},
+		serverIdentity: serverInfoPlatformToolset,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/list response").LogError(ctx, s.logger)
@@ -412,11 +517,9 @@ func (s *Service) callPlatformToolsetTool(
 	}()
 
 	if err := s.toolProxy.Do(ctx, rw, bytes.NewReader(requestBodyBytes), toolCallEnv, plan, logAttrs); err != nil {
-		var shareableErr *oops.ShareableError
-		if errors.As(err, &shareableErr) {
-			return nil, fmt.Errorf("execute platform tool: %w", err)
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to execute platform tool call").LogError(ctx, logger, attr.SlogToolName(params.Name))
+		failure := platformToolCallError(ctx, logger, err, attr.SlogToolName(params.Name))
+		recordToolCallErrorStatus(ctx, rw, failure)
+		return nil, failure
 	}
 	outputBytes = int64(rw.body.Len())
 
@@ -432,11 +535,25 @@ func (s *Service) callPlatformToolsetTool(
 			StructuredContent: structured,
 			IsError:           rw.statusCode < 200 || rw.statusCode >= 300,
 		},
+		serverIdentity: serverInfoPlatformToolset,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/call result").LogError(ctx, logger, attr.SlogToolName(params.Name))
 	}
 	return bs, nil
+}
+
+func platformToolCallError(ctx context.Context, logger *slog.Logger, err error, args ...slog.Attr) error {
+	if rejected, ok := toolCallRejection(ctx, logger, err, args...); ok {
+		return rejected
+	}
+
+	var shareableErr *oops.ShareableError
+	if errors.As(err, &shareableErr) {
+		return fmt.Errorf("execute platform tool: %w", err)
+	}
+
+	return oops.E(oops.CodeUnexpected, err, "failed to execute platform tool call").LogError(ctx, logger, args...)
 }
 
 // platformToolFeatureAvailable reports whether a platform tool gated on

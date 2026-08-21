@@ -64,6 +64,22 @@ func buildView(row repo.ListUserSessionsByProjectIDRow) *types.UserSession {
 		revokedAt = &s
 	}
 
+	// A session can be issued without a client (the API key and anonymous
+	// paths mint one directly), so the column is nullable.
+	var clientID *string
+	if row.UserSessionClientID.Valid {
+		s := row.UserSessionClientID.UUID.String()
+		clientID = &s
+	}
+
+	// Null means the session has not been used since the column was introduced,
+	// which is distinct from the zero time.
+	var lastUsedAt *string
+	if row.LastUsedAt.Valid {
+		s := row.LastUsedAt.Time.Format(time.RFC3339)
+		lastUsedAt = &s
+	}
+
 	return &types.UserSession{
 		ID:                  row.ID.String(),
 		UserSessionIssuerID: row.UserSessionIssuerID.String(),
@@ -74,10 +90,21 @@ func buildView(row repo.ListUserSessionsByProjectIDRow) *types.UserSession {
 		CreatedAt:           row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:           row.UpdatedAt.Time.Format(time.RFC3339),
 		IssuerSlug:          row.IssuerSlug,
+		UserSessionClientID: clientID,
 		ClientName:          conv.FromPGText[string](row.ClientName),
+		ClientIDMetadataURI: conv.FromPGText[string](row.ClientIDMetadataUri),
 		SubjectType:         subjectType,
 		SubjectDisplayName:  subjectName,
-		RevokedAt:           revokedAt,
+		// Only a user subject resolves to a users row, so the join leaves this
+		// NULL for API key and anonymous subjects.
+		SubjectPhotoURL: conv.FromPGText[string](row.UserPhotoUrl),
+		RevokedAt:       revokedAt,
+		LastUsedAt:      lastUsedAt,
+		// The platform tool answers "which sessions exist", not "what is this
+		// connection wired to", so it does not pay for the upstream join. Empty
+		// rather than nil: the field is required, and absent upstreams is a
+		// meaningful answer this caller simply is not computing.
+		Upstreams: []*types.UserSessionUpstream{},
 	}
 }
 

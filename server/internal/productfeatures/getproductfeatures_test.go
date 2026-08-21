@@ -24,7 +24,8 @@ func TestProductFeaturesService_GetProductFeatures_DeviceAgent(t *testing.T) {
 	require.True(t, ok)
 	orgID := authCtx.ActiveOrganizationID
 
-	res, err := ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{})
+	res, err := ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{
+		OrganizationID: requestedOrganizationID(ctx)})
 	require.NoError(t, err)
 	require.False(t, res.DeviceAgent, "no device has synced yet")
 
@@ -43,23 +44,47 @@ func TestProductFeaturesService_GetProductFeatures_DeviceAgent(t *testing.T) {
 		Email:          "dev@example.com",
 	}))
 
-	res, err = ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{})
+	res, err = ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{
+		OrganizationID: requestedOrganizationID(ctx)})
 	require.NoError(t, err)
 	require.True(t, res.DeviceAgent, "a device has synced")
+}
+
+func TestProductFeaturesService_PlatformMCP(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestProductFeaturesService(t)
+
+	res, err := ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{
+		OrganizationID: requestedOrganizationID(ctx)})
+	require.NoError(t, err)
+	require.False(t, res.PlatformMcpEnabled)
+
+	require.NoError(t, ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
+		OrganizationID: requestedOrganizationID(ctx),
+		FeatureName:    string(productfeatures.FeaturePlatformMCP),
+		Enabled:        true,
+	}))
+	res, err = ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{
+		OrganizationID: requestedOrganizationID(ctx)})
+	require.NoError(t, err)
+	require.True(t, res.PlatformMcpEnabled)
 }
 
 func TestProductFeaturesService_SkillCaptureMetadataOnly(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestProductFeaturesService(t)
 
-	res, err := ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{})
+	res, err := ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{
+		OrganizationID: requestedOrganizationID(ctx)})
 	require.NoError(t, err)
 	require.False(t, res.SkillCaptureMetadataOnly)
 	require.NoError(t, ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
-		FeatureName: string(productfeatures.FeatureSkillCaptureMetadataOnly),
-		Enabled:     true,
+		OrganizationID: requestedOrganizationID(ctx),
+		FeatureName:    string(productfeatures.FeatureSkillCaptureMetadataOnly),
+		Enabled:        true,
 	}))
-	res, err = ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{})
+	res, err = ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{
+		OrganizationID: requestedOrganizationID(ctx)})
 	require.NoError(t, err)
 	require.True(t, res.SkillCaptureMetadataOnly)
 }

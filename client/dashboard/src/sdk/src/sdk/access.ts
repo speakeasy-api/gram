@@ -4,10 +4,6 @@
 
 import { accessCreateRole } from "../funcs/accessCreateRole.js";
 import { accessDeleteRole } from "../funcs/accessDeleteRole.js";
-import { accessDeleteShadowMCPInventoryPolicyBypass } from "../funcs/accessDeleteShadowMCPInventoryPolicyBypass.js";
-import { accessDisableRBAC } from "../funcs/accessDisableRBAC.js";
-import { accessEnableRBAC } from "../funcs/accessEnableRBAC.js";
-import { accessGetRBACStatus } from "../funcs/accessGetRBACStatus.js";
 import { accessGetRole } from "../funcs/accessGetRole.js";
 import { accessGetShadowMCPInventoryServer } from "../funcs/accessGetShadowMCPInventoryServer.js";
 import { accessListChallengeBuckets } from "../funcs/accessListChallengeBuckets.js";
@@ -17,13 +13,14 @@ import { accessListMembers } from "../funcs/accessListMembers.js";
 import { accessListRoles } from "../funcs/accessListRoles.js";
 import { accessListScopes } from "../funcs/accessListScopes.js";
 import { accessListShadowMCPInventory } from "../funcs/accessListShadowMCPInventory.js";
+import { accessListShadowMCPInventoryServersForUser } from "../funcs/accessListShadowMCPInventoryServersForUser.js";
 import { accessListShadowMCPInventoryUsers } from "../funcs/accessListShadowMCPInventoryUsers.js";
+import { accessRequestAccess } from "../funcs/accessRequestAccess.js";
 import { accessResolveChallenge } from "../funcs/accessResolveChallenge.js";
 import { accessResolveShadowMCPInventoryRequest } from "../funcs/accessResolveShadowMCPInventoryRequest.js";
 import { accessUpdateMemberRoles } from "../funcs/accessUpdateMemberRoles.js";
 import { accessUpdateRole } from "../funcs/accessUpdateRole.js";
 import { accessUpdateShadowMCPInventoryServerName } from "../funcs/accessUpdateShadowMCPInventoryServerName.js";
-import { accessUpsertShadowMCPInventoryPolicyBypass } from "../funcs/accessUpsertShadowMCPInventoryPolicyBypass.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AccessMember } from "../models/components/accessmember.js";
 import { ListChallengeBucketsResult } from "../models/components/listchallengebucketsresult.js";
@@ -34,7 +31,7 @@ import { ListScopesResult } from "../models/components/listscopesresult.js";
 import { ListShadowMCPInventoryResult } from "../models/components/listshadowmcpinventoryresult.js";
 import { ListShadowMCPInventoryUsersResult } from "../models/components/listshadowmcpinventoryusersresult.js";
 import { ListUserGrantsResult } from "../models/components/listusergrantsresult.js";
-import { RBACStatus } from "../models/components/rbacstatus.js";
+import { RequestAccessResult } from "../models/components/requestaccessresult.js";
 import { ResolveChallengesResult } from "../models/components/resolvechallengesresult.js";
 import { Role } from "../models/components/role.js";
 import { ShadowMCPInventoryServer } from "../models/components/shadowmcpinventoryserver.js";
@@ -47,22 +44,6 @@ import {
   DeleteRoleRequest,
   DeleteRoleSecurity,
 } from "../models/operations/deleterole.js";
-import {
-  DeleteShadowMCPInventoryPolicyBypassRequest,
-  DeleteShadowMCPInventoryPolicyBypassSecurity,
-} from "../models/operations/deleteshadowmcpinventorypolicybypass.js";
-import {
-  DisableRBACRequest,
-  DisableRBACSecurity,
-} from "../models/operations/disablerbac.js";
-import {
-  EnableRBACRequest,
-  EnableRBACSecurity,
-} from "../models/operations/enablerbac.js";
-import {
-  GetRBACStatusRequest,
-  GetRBACStatusSecurity,
-} from "../models/operations/getrbacstatus.js";
 import {
   GetRoleRequest,
   GetRoleSecurity,
@@ -100,9 +81,17 @@ import {
   ListShadowMCPInventorySecurity,
 } from "../models/operations/listshadowmcpinventory.js";
 import {
+  ListShadowMCPInventoryServersForUserRequest,
+  ListShadowMCPInventoryServersForUserSecurity,
+} from "../models/operations/listshadowmcpinventoryserversforuser.js";
+import {
   ListShadowMCPInventoryUsersRequest,
   ListShadowMCPInventoryUsersSecurity,
 } from "../models/operations/listshadowmcpinventoryusers.js";
+import {
+  RequestAccessRequest,
+  RequestAccessSecurity,
+} from "../models/operations/requestaccess.js";
 import {
   ResolveChallengeRequest,
   ResolveChallengeSecurity,
@@ -123,10 +112,6 @@ import {
   UpdateShadowMCPInventoryServerNameRequest,
   UpdateShadowMCPInventoryServerNameSecurity,
 } from "../models/operations/updateshadowmcpinventoryservername.js";
-import {
-  UpsertShadowMCPInventoryPolicyBypassRequest,
-  UpsertShadowMCPInventoryPolicyBypassSecurity,
-} from "../models/operations/upsertshadowmcpinventorypolicybypass.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Access extends ClientSDK {
@@ -161,82 +146,6 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(accessDeleteRole(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * deleteShadowMCPInventoryPolicyBypass access
-   *
-   * @remarks
-   * Remove a Shadow MCP URL allow decision.
-   */
-  async deleteShadowMCPInventoryPolicyBypass(
-    request: DeleteShadowMCPInventoryPolicyBypassRequest,
-    security?: DeleteShadowMCPInventoryPolicyBypassSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<ShadowMCPInventoryURLState> {
-    return unwrapAsync(accessDeleteShadowMCPInventoryPolicyBypass(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * disableRBAC access
-   *
-   * @remarks
-   * Disable RBAC enforcement for the current organization.
-   */
-  async disableRBAC(
-    request?: DisableRBACRequest | undefined,
-    security?: DisableRBACSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<void> {
-    return unwrapAsync(accessDisableRBAC(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * enableRBAC access
-   *
-   * @remarks
-   * Enable RBAC for the current organization. Seeds default grants for system roles.
-   */
-  async enableRBAC(
-    request?: EnableRBACRequest | undefined,
-    security?: EnableRBACSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<void> {
-    return unwrapAsync(accessEnableRBAC(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * getRBACStatus access
-   *
-   * @remarks
-   * Returns whether RBAC is currently enabled for the current organization.
-   */
-  async getRBACStatus(
-    request?: GetRBACStatusRequest | undefined,
-    security?: GetRBACStatusSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<RBACStatus> {
-    return unwrapAsync(accessGetRBACStatus(
       this,
       request,
       security,
@@ -416,6 +325,25 @@ export class Access extends ClientSDK {
   }
 
   /**
+   * listShadowMCPInventoryServersForUser access
+   *
+   * @remarks
+   * List the Shadow MCP servers one person reached, with each server's access state. The inverse of listShadowMCPInventoryUsers, which expands a single server into its users.
+   */
+  async listShadowMCPInventoryServersForUser(
+    request: ListShadowMCPInventoryServersForUserRequest,
+    security?: ListShadowMCPInventoryServersForUserSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListShadowMCPInventoryResult> {
+    return unwrapAsync(accessListShadowMCPInventoryServersForUser(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * listShadowMCPInventoryUsers access
    *
    * @remarks
@@ -427,6 +355,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListShadowMCPInventoryUsersResult> {
     return unwrapAsync(accessListShadowMCPInventoryUsers(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * requestAccess access
+   *
+   * @remarks
+   * Request access to a scope by sending an email notification to organization administrators.
+   */
+  async requestAccess(
+    request: RequestAccessRequest,
+    security?: RequestAccessSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<RequestAccessResult> {
+    return unwrapAsync(accessRequestAccess(
       this,
       request,
       security,
@@ -522,25 +469,6 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(accessUpdateShadowMCPInventoryServerName(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * upsertShadowMCPInventoryPolicyBypass access
-   *
-   * @remarks
-   * Create or modify a Shadow MCP URL allow decision for selected blocking policies.
-   */
-  async upsertShadowMCPInventoryPolicyBypass(
-    request: UpsertShadowMCPInventoryPolicyBypassRequest,
-    security?: UpsertShadowMCPInventoryPolicyBypassSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<ShadowMCPInventoryURLState> {
-    return unwrapAsync(accessUpsertShadowMCPInventoryPolicyBypass(
       this,
       request,
       security,

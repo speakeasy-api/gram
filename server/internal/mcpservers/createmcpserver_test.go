@@ -285,3 +285,56 @@ func TestCreateMcpServer_TunneledMcpPublicAllowedWithConsent(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, types.McpServerVisibility("public"), result.Visibility)
 }
+
+func TestCreateMcpServer_UnproxiedBackendRejectsNonStaff(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	// newTestService seeds the default mock user (a non-Speakeasy domain), so
+	// attaching an unproxied backend must be rejected without staff override.
+	serverID := seedUnproxiedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+
+	_, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Name:                 "test unproxied mcp server",
+		EnvironmentID:        nil,
+		UnproxiedMcpServerID: &serverID,
+		ToolsetID:            nil,
+		Visibility:           types.McpServerVisibility("private"),
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestCreateMcpServer_UnproxiedBackendAllowsStaff(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	serverID := seedUnproxiedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+
+	ctx = withStaffEmail(t, ctx)
+
+	result, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Name:                 "test unproxied mcp server",
+		EnvironmentID:        nil,
+		UnproxiedMcpServerID: &serverID,
+		ToolsetID:            nil,
+		Visibility:           types.McpServerVisibility("private"),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result.UnproxiedMcpServerID)
+	require.Equal(t, serverID, *result.UnproxiedMcpServerID)
+	require.Nil(t, result.UserSessionIssuerID)
+}

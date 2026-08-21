@@ -285,13 +285,16 @@ func (d *devProvisioner) ProvisionAPIKey(_ context.Context, _ string, _ openrout
 func (d *devProvisioner) RefreshAPIKeyLimit(_ context.Context, _ string, _ openrouter.KeyType, _ *int) (int, error) {
 	return 0, fmt.Errorf("not implemented in bench")
 }
+func (d *devProvisioner) DisableAPIKey(_ context.Context, _ string, _ openrouter.KeyType) error {
+	return fmt.Errorf("not implemented in bench")
+}
 func (d *devProvisioner) GetCreditsUsed(_ context.Context, _ string, _ openrouter.KeyType) (float64, int, error) {
 	return 0, 0, fmt.Errorf("not implemented in bench")
 }
 func (d *devProvisioner) GetKeyUsage(_ context.Context, _ string) (float64, *int64, error) {
 	return 0, nil, fmt.Errorf("not implemented in bench")
 }
-func (d *devProvisioner) ReconcileMonthlyCredits(_ context.Context, _ string, _ openrouter.KeyType, currentLimit int64, _ *int64) (int64, error) {
+func (d *devProvisioner) ReconcileMonthlyCredits(_ context.Context, _ string, _ openrouter.KeyType, currentLimit int64, _ int64, _ *int64) (int64, error) {
 	return currentLimit, nil
 }
 func (d *devProvisioner) GetModelUsage(_ context.Context, _ string, _ string, _ openrouter.KeyType) (*openrouter.ModelUsage, error) {

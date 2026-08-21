@@ -38,7 +38,7 @@ export function ProxyMetadataForm(): JSX.Element {
           </Text>
 
           {discovered && !proxy.prefilled && (
-            <div className="border-border bg-muted/50 mb-4 flex items-start justify-between gap-4 rounded-md border p-4">
+            <div className="border-border bg-muted/50 mb-4 flex items-start justify-between gap-4 border p-4">
               <div>
                 <Text small className="font-medium">
                   OAuth detected from {discovered.name}
@@ -58,7 +58,7 @@ export function ProxyMetadataForm(): JSX.Element {
             </div>
           )}
           {proxy.prefilled && (
-            <div className="border-border bg-muted/50 mb-4 rounded-md border p-4">
+            <div className="border-border bg-muted/50 mb-4 border p-4">
               <Text small className="font-medium">
                 Pre-filled from detected OAuth metadata
               </Text>
@@ -132,7 +132,7 @@ export function ProxyMetadataForm(): JSX.Element {
                 Token Endpoint Auth Method
               </Text>
               <select
-                className="bg-background w-full rounded border px-3 py-2"
+                className="bg-background w-full border px-3 py-2"
                 value={proxy.tokenAuthMethod}
                 onChange={(e) => setField("tokenAuthMethod", e.target.value)}
               >

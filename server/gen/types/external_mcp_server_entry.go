@@ -43,4 +43,9 @@ type ExternalMCPServerEntry struct {
 	SupportsDcr bool
 	// Available remote endpoints for the server
 	Remotes []*ExternalMCPRemote
+	// The source repository the registry links for this server, when it declares
+	// one
+	Repository *ExternalMCPRepository
+	// Published packages that run this server, when the registry declares any
+	Packages []*ExternalMCPPackage
 }

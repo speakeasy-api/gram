@@ -12,7 +12,7 @@ import (
 
 func appendToOutbox(ctx context.Context, dbtx repo.DBTX, entry auditEntry, result repo.InsertAuditLogRow) error {
 	input := entry.Params
-	if _, err := outbox.Append(ctx, dbtx, result.OrganizationID, entry.OutboxEvent, events.AuditLogCreatedPayloadV1{
+	if _, err := outbox.PublishWebhookEvent(ctx, dbtx, result.OrganizationID, entry.OutboxEvent, events.AuditLogCreatedPayloadV1{
 		ID:                 result.ID,
 		OrganizationID:     result.OrganizationID,
 		ProjectID:          input.ProjectID,
@@ -28,6 +28,8 @@ func appendToOutbox(ctx context.Context, dbtx repo.DBTX, entry auditEntry, resul
 		BeforeSnapshot:     input.BeforeSnapshot,
 		AfterSnapshot:      input.AfterSnapshot,
 		Metadata:           input.Metadata,
+		ActingSurface:      conv.FromPGTextOrEmpty[string](input.ActingSurface),
+		ActingClientID:     conv.FromPGTextOrEmpty[string](input.ActingClientID),
 	}); err != nil {
 		return fmt.Errorf("append to outbox: %w", err)
 	}

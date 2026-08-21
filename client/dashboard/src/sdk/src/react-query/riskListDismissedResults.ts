@@ -24,6 +24,7 @@ import { ServiceError } from "../models/errors/serviceerror.js";
 import {
   ListDismissedRiskResultsRequest,
   ListDismissedRiskResultsSecurity,
+  Reasons,
 } from "../models/operations/listdismissedriskresults.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -59,7 +60,7 @@ export type RiskListDismissedResultsQueryError =
  * listDismissedRiskResults risk
  *
  * @remarks
- * List risk results manually marked as false positive for the current project (the Dismissed tab). Kept separate from listRiskResults, which never returns dismissed results.
+ * List suppressed risk results for the current project — findings hidden by an exclusion rule, a manual dismissal, or the automated false-positive sweep. Kept separate from listRiskResults, which never returns suppressed results.
  */
 export function useRiskListDismissedResults(
   request?: ListDismissedRiskResultsRequest | undefined,
@@ -88,7 +89,7 @@ export function useRiskListDismissedResults(
  * listDismissedRiskResults risk
  *
  * @remarks
- * List risk results manually marked as false positive for the current project (the Dismissed tab). Kept separate from listRiskResults, which never returns dismissed results.
+ * List suppressed risk results for the current project — findings hidden by an exclusion rule, a manual dismissal, or the automated false-positive sweep. Kept separate from listRiskResults, which never returns suppressed results.
  */
 export function useRiskListDismissedResultsSuspense(
   request?: ListDismissedRiskResultsRequest | undefined,
@@ -119,6 +120,7 @@ export function setRiskListDismissedResultsData(
     parameters: {
       cursor?: string | undefined;
       limit?: number | undefined;
+      reasons?: Array<Reasons> | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
@@ -137,6 +139,7 @@ export function invalidateRiskListDismissedResults(
     [parameters: {
       cursor?: string | undefined;
       limit?: number | undefined;
+      reasons?: Array<Reasons> | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;

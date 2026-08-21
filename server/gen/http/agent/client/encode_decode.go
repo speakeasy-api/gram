@@ -45,6 +45,10 @@ func EncodeGetPluginsRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 			head := *p.ApikeyToken
 			req.Header.Set("Gram-Key", head)
 		}
+		if p.Email != nil {
+			head := *p.Email
+			req.Header.Set("Gram-User-Email", head)
+		}
 		if p.SerialNumber != nil {
 			head := *p.SerialNumber
 			req.Header.Set("Gram-Device-Serial", head)
@@ -54,7 +58,9 @@ func EncodeGetPluginsRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 			req.Header.Set("Gram-Device-Hostname", head)
 		}
 		values := req.URL.Query()
-		values.Add("email", p.Email)
+		if p.LegacyEmail != nil {
+			values.Add("email", *p.LegacyEmail)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -489,6 +495,1178 @@ func DecodeListSyncedUsersResponse(decoder func(*http.Response) goahttp.Decoder,
 	}
 }
 
+// BuildGetConfigurationRequest instantiates a HTTP request object with method
+// and path set to call the "agent" service "getConfiguration" endpoint
+func (c *Client) BuildGetConfigurationRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetConfigurationAgentPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("agent", "getConfiguration", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetConfigurationRequest returns an encoder for requests sent to the
+// agent getConfiguration server.
+func EncodeGetConfigurationRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*agent.GetConfigurationPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("agent", "getConfiguration", "*agent.GetConfigurationPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeGetConfigurationResponse returns a decoder for responses returned by
+// the agent getConfiguration endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeGetConfigurationResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetConfigurationResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetConfigurationResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getConfiguration", err)
+			}
+			err = ValidateGetConfigurationResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getConfiguration", err)
+			}
+			res := NewGetConfigurationDeviceAgentConfigurationOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetConfigurationUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getConfiguration", err)
+			}
+			err = ValidateGetConfigurationUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getConfiguration", err)
+			}
+			return nil, NewGetConfigurationUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetConfigurationForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getConfiguration", err)
+			}
+			err = ValidateGetConfigurationForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getConfiguration", err)
+			}
+			return nil, NewGetConfigurationForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetConfigurationBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getConfiguration", err)
+			}
+			err = ValidateGetConfigurationBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getConfiguration", err)
+			}
+			return nil, NewGetConfigurationBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetConfigurationNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getConfiguration", err)
+			}
+			err = ValidateGetConfigurationNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getConfiguration", err)
+			}
+			return nil, NewGetConfigurationNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetConfigurationConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getConfiguration", err)
+			}
+			err = ValidateGetConfigurationConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getConfiguration", err)
+			}
+			return nil, NewGetConfigurationConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetConfigurationUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getConfiguration", err)
+			}
+			err = ValidateGetConfigurationUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getConfiguration", err)
+			}
+			return nil, NewGetConfigurationUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetConfigurationInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getConfiguration", err)
+			}
+			err = ValidateGetConfigurationInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getConfiguration", err)
+			}
+			return nil, NewGetConfigurationInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetConfigurationInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agent", "getConfiguration", err)
+				}
+				err = ValidateGetConfigurationInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agent", "getConfiguration", err)
+				}
+				return nil, NewGetConfigurationInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetConfigurationUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agent", "getConfiguration", err)
+				}
+				err = ValidateGetConfigurationUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agent", "getConfiguration", err)
+				}
+				return nil, NewGetConfigurationUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("agent", "getConfiguration", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetConfigurationGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getConfiguration", err)
+			}
+			err = ValidateGetConfigurationGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getConfiguration", err)
+			}
+			return nil, NewGetConfigurationGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("agent", "getConfiguration", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildUpdateConfigurationRequest instantiates a HTTP request object with
+// method and path set to call the "agent" service "updateConfiguration"
+// endpoint
+func (c *Client) BuildUpdateConfigurationRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateConfigurationAgentPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("agent", "updateConfiguration", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUpdateConfigurationRequest returns an encoder for requests sent to the
+// agent updateConfiguration server.
+func EncodeUpdateConfigurationRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*agent.UpdateConfigurationPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("agent", "updateConfiguration", "*agent.UpdateConfigurationPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewUpdateConfigurationRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("agent", "updateConfiguration", err)
+		}
+		return nil
+	}
+}
+
+// DecodeUpdateConfigurationResponse returns a decoder for responses returned
+// by the agent updateConfiguration endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeUpdateConfigurationResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUpdateConfigurationResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body UpdateConfigurationResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "updateConfiguration", err)
+			}
+			err = ValidateUpdateConfigurationResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "updateConfiguration", err)
+			}
+			res := NewUpdateConfigurationDeviceAgentConfigurationOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body UpdateConfigurationUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "updateConfiguration", err)
+			}
+			err = ValidateUpdateConfigurationUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "updateConfiguration", err)
+			}
+			return nil, NewUpdateConfigurationUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UpdateConfigurationForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "updateConfiguration", err)
+			}
+			err = ValidateUpdateConfigurationForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "updateConfiguration", err)
+			}
+			return nil, NewUpdateConfigurationForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UpdateConfigurationBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "updateConfiguration", err)
+			}
+			err = ValidateUpdateConfigurationBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "updateConfiguration", err)
+			}
+			return nil, NewUpdateConfigurationBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UpdateConfigurationNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "updateConfiguration", err)
+			}
+			err = ValidateUpdateConfigurationNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "updateConfiguration", err)
+			}
+			return nil, NewUpdateConfigurationNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UpdateConfigurationConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "updateConfiguration", err)
+			}
+			err = ValidateUpdateConfigurationConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "updateConfiguration", err)
+			}
+			return nil, NewUpdateConfigurationConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UpdateConfigurationUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "updateConfiguration", err)
+			}
+			err = ValidateUpdateConfigurationUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "updateConfiguration", err)
+			}
+			return nil, NewUpdateConfigurationUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UpdateConfigurationInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "updateConfiguration", err)
+			}
+			err = ValidateUpdateConfigurationInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "updateConfiguration", err)
+			}
+			return nil, NewUpdateConfigurationInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UpdateConfigurationInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agent", "updateConfiguration", err)
+				}
+				err = ValidateUpdateConfigurationInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agent", "updateConfiguration", err)
+				}
+				return nil, NewUpdateConfigurationInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UpdateConfigurationUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agent", "updateConfiguration", err)
+				}
+				err = ValidateUpdateConfigurationUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agent", "updateConfiguration", err)
+				}
+				return nil, NewUpdateConfigurationUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("agent", "updateConfiguration", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UpdateConfigurationGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "updateConfiguration", err)
+			}
+			err = ValidateUpdateConfigurationGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "updateConfiguration", err)
+			}
+			return nil, NewUpdateConfigurationGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("agent", "updateConfiguration", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetSessionMetaRequest instantiates a HTTP request object with method
+// and path set to call the "agent" service "getSessionMeta" endpoint
+func (c *Client) BuildGetSessionMetaRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetSessionMetaAgentPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("agent", "getSessionMeta", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetSessionMetaRequest returns an encoder for requests sent to the
+// agent getSessionMeta server.
+func EncodeGetSessionMetaRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*agent.GetSessionMetaPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("agent", "getSessionMeta", "*agent.GetSessionMetaPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		values := req.URL.Query()
+		for _, value := range p.SessionIds {
+			values.Add("session_ids", value)
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetSessionMetaResponse returns a decoder for responses returned by the
+// agent getSessionMeta endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeGetSessionMetaResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetSessionMetaResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetSessionMetaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getSessionMeta", err)
+			}
+			err = ValidateGetSessionMetaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getSessionMeta", err)
+			}
+			res := NewGetSessionMetaResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetSessionMetaUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getSessionMeta", err)
+			}
+			err = ValidateGetSessionMetaUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getSessionMeta", err)
+			}
+			return nil, NewGetSessionMetaUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetSessionMetaForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getSessionMeta", err)
+			}
+			err = ValidateGetSessionMetaForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getSessionMeta", err)
+			}
+			return nil, NewGetSessionMetaForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetSessionMetaBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getSessionMeta", err)
+			}
+			err = ValidateGetSessionMetaBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getSessionMeta", err)
+			}
+			return nil, NewGetSessionMetaBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetSessionMetaNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getSessionMeta", err)
+			}
+			err = ValidateGetSessionMetaNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getSessionMeta", err)
+			}
+			return nil, NewGetSessionMetaNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetSessionMetaConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getSessionMeta", err)
+			}
+			err = ValidateGetSessionMetaConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getSessionMeta", err)
+			}
+			return nil, NewGetSessionMetaConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetSessionMetaUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getSessionMeta", err)
+			}
+			err = ValidateGetSessionMetaUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getSessionMeta", err)
+			}
+			return nil, NewGetSessionMetaUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetSessionMetaInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getSessionMeta", err)
+			}
+			err = ValidateGetSessionMetaInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getSessionMeta", err)
+			}
+			return nil, NewGetSessionMetaInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetSessionMetaInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agent", "getSessionMeta", err)
+				}
+				err = ValidateGetSessionMetaInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agent", "getSessionMeta", err)
+				}
+				return nil, NewGetSessionMetaInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetSessionMetaUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agent", "getSessionMeta", err)
+				}
+				err = ValidateGetSessionMetaUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agent", "getSessionMeta", err)
+				}
+				return nil, NewGetSessionMetaUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("agent", "getSessionMeta", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetSessionMetaGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getSessionMeta", err)
+			}
+			err = ValidateGetSessionMetaGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getSessionMeta", err)
+			}
+			return nil, NewGetSessionMetaGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("agent", "getSessionMeta", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildReportSessionMovedRequest instantiates a HTTP request object with
+// method and path set to call the "agent" service "reportSessionMoved" endpoint
+func (c *Client) BuildReportSessionMovedRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ReportSessionMovedAgentPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("agent", "reportSessionMoved", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeReportSessionMovedRequest returns an encoder for requests sent to the
+// agent reportSessionMoved server.
+func EncodeReportSessionMovedRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*agent.ReportSessionMovedPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("agent", "reportSessionMoved", "*agent.ReportSessionMovedPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SerialNumber != nil {
+			head := *p.SerialNumber
+			req.Header.Set("Gram-Device-Serial", head)
+		}
+		if p.Hostname != nil {
+			head := *p.Hostname
+			req.Header.Set("Gram-Device-Hostname", head)
+		}
+		body := NewReportSessionMovedRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("agent", "reportSessionMoved", err)
+		}
+		return nil
+	}
+}
+
+// DecodeReportSessionMovedResponse returns a decoder for responses returned by
+// the agent reportSessionMoved endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeReportSessionMovedResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeReportSessionMovedResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body ReportSessionMovedUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "reportSessionMoved", err)
+			}
+			err = ValidateReportSessionMovedUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "reportSessionMoved", err)
+			}
+			return nil, NewReportSessionMovedUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ReportSessionMovedForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "reportSessionMoved", err)
+			}
+			err = ValidateReportSessionMovedForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "reportSessionMoved", err)
+			}
+			return nil, NewReportSessionMovedForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ReportSessionMovedBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "reportSessionMoved", err)
+			}
+			err = ValidateReportSessionMovedBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "reportSessionMoved", err)
+			}
+			return nil, NewReportSessionMovedBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ReportSessionMovedNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "reportSessionMoved", err)
+			}
+			err = ValidateReportSessionMovedNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "reportSessionMoved", err)
+			}
+			return nil, NewReportSessionMovedNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ReportSessionMovedConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "reportSessionMoved", err)
+			}
+			err = ValidateReportSessionMovedConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "reportSessionMoved", err)
+			}
+			return nil, NewReportSessionMovedConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ReportSessionMovedUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "reportSessionMoved", err)
+			}
+			err = ValidateReportSessionMovedUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "reportSessionMoved", err)
+			}
+			return nil, NewReportSessionMovedUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ReportSessionMovedInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "reportSessionMoved", err)
+			}
+			err = ValidateReportSessionMovedInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "reportSessionMoved", err)
+			}
+			return nil, NewReportSessionMovedInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ReportSessionMovedInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agent", "reportSessionMoved", err)
+				}
+				err = ValidateReportSessionMovedInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agent", "reportSessionMoved", err)
+				}
+				return nil, NewReportSessionMovedInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ReportSessionMovedUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agent", "reportSessionMoved", err)
+				}
+				err = ValidateReportSessionMovedUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agent", "reportSessionMoved", err)
+				}
+				return nil, NewReportSessionMovedUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("agent", "reportSessionMoved", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ReportSessionMovedGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "reportSessionMoved", err)
+			}
+			err = ValidateReportSessionMovedGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "reportSessionMoved", err)
+			}
+			return nil, NewReportSessionMovedGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("agent", "reportSessionMoved", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildCreateSessionHandoffRequest instantiates a HTTP request object with
+// method and path set to call the "agent" service "createSessionHandoff"
+// endpoint
+func (c *Client) BuildCreateSessionHandoffRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CreateSessionHandoffAgentPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("agent", "createSessionHandoff", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCreateSessionHandoffRequest returns an encoder for requests sent to
+// the agent createSessionHandoff server.
+func EncodeCreateSessionHandoffRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*agent.CreateSessionHandoffPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("agent", "createSessionHandoff", "*agent.CreateSessionHandoffPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SerialNumber != nil {
+			head := *p.SerialNumber
+			req.Header.Set("Gram-Device-Serial", head)
+		}
+		if p.Hostname != nil {
+			head := *p.Hostname
+			req.Header.Set("Gram-Device-Hostname", head)
+		}
+		body := NewCreateSessionHandoffRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("agent", "createSessionHandoff", err)
+		}
+		return nil
+	}
+}
+
+// DecodeCreateSessionHandoffResponse returns a decoder for responses returned
+// by the agent createSessionHandoff endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeCreateSessionHandoffResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCreateSessionHandoffResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CreateSessionHandoffResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "createSessionHandoff", err)
+			}
+			err = ValidateCreateSessionHandoffResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "createSessionHandoff", err)
+			}
+			res := NewCreateSessionHandoffResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CreateSessionHandoffUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "createSessionHandoff", err)
+			}
+			err = ValidateCreateSessionHandoffUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "createSessionHandoff", err)
+			}
+			return nil, NewCreateSessionHandoffUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CreateSessionHandoffForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "createSessionHandoff", err)
+			}
+			err = ValidateCreateSessionHandoffForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "createSessionHandoff", err)
+			}
+			return nil, NewCreateSessionHandoffForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CreateSessionHandoffBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "createSessionHandoff", err)
+			}
+			err = ValidateCreateSessionHandoffBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "createSessionHandoff", err)
+			}
+			return nil, NewCreateSessionHandoffBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CreateSessionHandoffNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "createSessionHandoff", err)
+			}
+			err = ValidateCreateSessionHandoffNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "createSessionHandoff", err)
+			}
+			return nil, NewCreateSessionHandoffNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CreateSessionHandoffConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "createSessionHandoff", err)
+			}
+			err = ValidateCreateSessionHandoffConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "createSessionHandoff", err)
+			}
+			return nil, NewCreateSessionHandoffConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CreateSessionHandoffUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "createSessionHandoff", err)
+			}
+			err = ValidateCreateSessionHandoffUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "createSessionHandoff", err)
+			}
+			return nil, NewCreateSessionHandoffUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CreateSessionHandoffInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "createSessionHandoff", err)
+			}
+			err = ValidateCreateSessionHandoffInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "createSessionHandoff", err)
+			}
+			return nil, NewCreateSessionHandoffInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CreateSessionHandoffInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agent", "createSessionHandoff", err)
+				}
+				err = ValidateCreateSessionHandoffInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agent", "createSessionHandoff", err)
+				}
+				return nil, NewCreateSessionHandoffInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CreateSessionHandoffUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agent", "createSessionHandoff", err)
+				}
+				err = ValidateCreateSessionHandoffUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agent", "createSessionHandoff", err)
+				}
+				return nil, NewCreateSessionHandoffUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("agent", "createSessionHandoff", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CreateSessionHandoffGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "createSessionHandoff", err)
+			}
+			err = ValidateCreateSessionHandoffGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "createSessionHandoff", err)
+			}
+			return nil, NewCreateSessionHandoffGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("agent", "createSessionHandoff", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalAgentMarketplaceResponseBodyToAgentAgentMarketplace builds a value
 // of type *agent.AgentMarketplace from a value of type
 // *AgentMarketplaceResponseBody.
@@ -512,6 +1690,29 @@ func unmarshalAgentPluginResponseBodyToAgentAgentPlugin(v *AgentPluginResponseBo
 	return res
 }
 
+// unmarshalDeviceAgentConfigurationResponseBodyToAgentDeviceAgentConfiguration
+// builds a value of type *agent.DeviceAgentConfiguration from a value of type
+// *DeviceAgentConfigurationResponseBody.
+func unmarshalDeviceAgentConfigurationResponseBodyToAgentDeviceAgentConfiguration(v *DeviceAgentConfigurationResponseBody) *agent.DeviceAgentConfiguration {
+	if v == nil {
+		return nil
+	}
+	res := &agent.DeviceAgentConfiguration{
+		SchemaVersion: *v.SchemaVersion,
+		IsConfigured:  *v.IsConfigured,
+		Etag:          *v.Etag,
+		UpdatedAt:     v.UpdatedAt,
+	}
+	res.Config = make(map[string]any, len(v.Config))
+	for key, val := range v.Config {
+		tk := key
+		tv := val
+		res.Config[tk] = tv
+	}
+
+	return res
+}
+
 // unmarshalSyncedAgentUserResponseBodyToAgentSyncedAgentUser builds a value of
 // type *agent.SyncedAgentUser from a value of type
 // *SyncedAgentUserResponseBody.
@@ -520,6 +1721,20 @@ func unmarshalSyncedAgentUserResponseBodyToAgentSyncedAgentUser(v *SyncedAgentUs
 		Email:       *v.Email,
 		FirstSeenAt: *v.FirstSeenAt,
 		LastSeenAt:  *v.LastSeenAt,
+	}
+
+	return res
+}
+
+// unmarshalAgentSessionMetaResponseBodyToAgentAgentSessionMeta builds a value
+// of type *agent.AgentSessionMeta from a value of type
+// *AgentSessionMetaResponseBody.
+func unmarshalAgentSessionMetaResponseBodyToAgentAgentSessionMeta(v *AgentSessionMetaResponseBody) *agent.AgentSessionMeta {
+	res := &agent.AgentSessionMeta{
+		SessionID: *v.SessionID,
+		ChatID:    *v.ChatID,
+		Title:     v.Title,
+		UpdatedAt: *v.UpdatedAt,
 	}
 
 	return res

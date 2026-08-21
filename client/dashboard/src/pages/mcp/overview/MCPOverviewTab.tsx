@@ -1,10 +1,9 @@
-import { MetricCard } from "@/components/chart/MetricCard";
+import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { RankedBarList } from "@/components/chart/RankedBarList";
 import { ToolCallsTimeSeriesChart } from "@/components/chart/ToolCallsTimeSeriesChart";
 import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
-import { Heading } from "@/components/ui/Heading";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
@@ -59,7 +58,7 @@ export function MCPOverviewTab({
   } = useDateRangeFilter();
   const timeRangeMs = useMemo(() => to.getTime() - from.getTime(), [from, to]);
 
-  const { data, isLoading, isLogsDisabled } = useLogsEnabledErrorCheck(
+  const { data, isLoading, isError, isLogsDisabled } = useLogsEnabledErrorCheck(
     useQuery<GetObservabilityOverviewResult>({
       queryKey: [
         "mcp-detail-overview",
@@ -82,6 +81,10 @@ export function MCPOverviewTab({
       throwOnError: false,
     }),
   );
+
+  // With keepPreviousData a failed refetch still has stale data to show, so
+  // only fall back to the error state when there is nothing to render at all.
+  const showQueryError = isError && !data;
 
   const summary = data?.summary;
   const comparison = data?.comparison;
@@ -127,8 +130,8 @@ export function MCPOverviewTab({
         />
       </div>
 
-      {isLogsDisabled ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border p-12 text-center">
+      {isLogsDisabled && (
+        <div className="flex flex-col items-center justify-center border p-12 text-center">
           <Text muted className="mb-1 block">
             Observability is not enabled
           </Text>
@@ -136,31 +139,49 @@ export function MCPOverviewTab({
             Enable logs for this organization to see usage for this MCP server.
           </Text>
         </div>
-      ) : (
+      )}
+      {!isLogsDisabled && showQueryError && (
+        <div className="flex flex-col items-center justify-center border p-12 text-center">
+          <Text muted className="mb-1 block">
+            Could not load usage data
+          </Text>
+          <Text muted small>
+            Something went wrong loading metrics for this MCP server. Try
+            refreshing the page or changing the time range.
+          </Text>
+        </div>
+      )}
+      {!isLogsDisabled && !showQueryError && (
         <>
-          <div className="grid grid-cols-2 gap-4 @4xl:grid-cols-4">
+          <StatTileGroup>
             {isLoading && !summary ? (
               Array.from({ length: 4 }).map((_, i) => (
-                <Skeleton key={i} className="h-[116px] w-full rounded-lg" />
+                <Skeleton key={i} className="h-[116px] flex-1" />
               ))
             ) : (
               <>
-                <MetricCard
+                <StatTile
                   title="Tool calls"
                   value={summary?.totalToolCalls ?? 0}
+                  tone="information"
                   previousValue={comparison?.totalToolCalls}
                   format="compact"
                   comparisonLabel="vs previous period"
                 />
-                <MetricCard
+                <StatTile
                   title="Failed calls"
                   value={summary?.failedToolCalls ?? 0}
+                  tone={
+                    (summary?.failedToolCalls ?? 0) > 0
+                      ? "destructive"
+                      : "neutral"
+                  }
                   previousValue={comparison?.failedToolCalls}
                   format="compact"
                   invertDelta
                   comparisonLabel="vs previous period"
                 />
-                <MetricCard
+                <StatTile
                   title="Error rate"
                   value={summary ? errorRate(summary) : 0}
                   previousValue={comparison ? errorRate(comparison) : undefined}
@@ -169,9 +190,10 @@ export function MCPOverviewTab({
                   thresholds={{ red: 10, amber: 5, inverted: true }}
                   comparisonLabel="vs previous period"
                 />
-                <MetricCard
+                <StatTile
                   title="Avg latency"
                   value={summary?.avgLatencyMs ?? 0}
+                  tone="information"
                   previousValue={comparison?.avgLatencyMs}
                   format="ms"
                   invertDelta
@@ -179,7 +201,7 @@ export function MCPOverviewTab({
                 />
               </>
             )}
-          </div>
+          </StatTileGroup>
 
           <ToolCallsTimeSeriesChart
             title="Tool calls over time"
@@ -191,20 +213,16 @@ export function MCPOverviewTab({
           />
 
           <div className="grid grid-cols-1 gap-6 @3xl:grid-cols-2">
-            <div className="rounded-lg border p-5">
-              <Heading variant="h5" className="mb-3">
-                Top tools by call count
-              </Heading>
+            <div className="border p-5">
+              <h3 className="text-eyebrow mb-3">Top tools by call count</h3>
               {topByCount.length > 0 ? (
                 <RankedBarList items={topByCount} />
               ) : (
                 <WidgetEmptyState message="No tool calls in the selected range." />
               )}
             </div>
-            <div className="rounded-lg border p-5">
-              <Heading variant="h5" className="mb-3">
-                Top tools by failure rate
-              </Heading>
+            <div className="border p-5">
+              <h3 className="text-eyebrow mb-3">Top tools by failure rate</h3>
               {topByFailureRate.length > 0 ? (
                 <RankedBarList items={topByFailureRate} />
               ) : (

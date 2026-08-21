@@ -21,6 +21,50 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
+// loadUpstreamsForSessions resolves the outbound leg for a page of sessions in
+// one query, keyed by the (subject_urn, user_session_issuer_id) pair both
+// tables carry. One round trip for the page rather than one per row: a page of
+// 50 sessions would otherwise be 51 queries.
+//
+// Distinct pairs are collected first because a subject commonly holds several
+// sessions against the same issuer — one per MCP client — and every one of them
+// shares the same upstream tokens.
+func (s *Service) loadUpstreamsForSessions(ctx context.Context, projectID uuid.UUID, rows []repo.ListUserSessionsByProjectIDRow) (map[mv.UpstreamKey][]*types.UserSessionUpstream, error) {
+	if len(rows) == 0 {
+		return map[mv.UpstreamKey][]*types.UserSessionUpstream{}, nil
+	}
+
+	seen := make(map[mv.UpstreamKey]struct{}, len(rows))
+	subjectURNs := make([]string, 0, len(rows))
+	issuerIDs := make([]uuid.UUID, 0, len(rows))
+	for _, row := range rows {
+		key := mv.UpstreamKey{
+			SubjectURN:          row.SubjectUrn.String(),
+			UserSessionIssuerID: row.UserSessionIssuerID,
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		subjectURNs = append(subjectURNs, key.SubjectURN)
+		issuerIDs = append(issuerIDs, key.UserSessionIssuerID)
+	}
+
+	upstreamRows, err := repo.New(s.db).ListRemoteSessionUpstreamsForSubjects(ctx, repo.ListRemoteSessionUpstreamsForSubjectsParams{
+		SubjectUrns: subjectURNs,
+		IssuerIds:   issuerIDs,
+		// Scopes on the user_session_issuer's project rather than the client's,
+		// so an upstream held through an organization-level or global client
+		// still surfaces here. See the query for why.
+		ProjectID: projectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list remote session upstreams").LogError(ctx, s.logger)
+	}
+
+	return mv.BuildUserSessionUpstreamIndex(upstreamRows), nil
+}
+
 // Lists issued sessions; keyset paginated by id (descending).
 // refresh_token_hash is excluded from the projection.
 func (s *Service) ListUserSessions(ctx context.Context, payload *gen.ListUserSessionsPayload) (*gen.ListUserSessionsResult, error) {
@@ -63,10 +107,12 @@ func (s *Service) ListUserSessions(ctx context.Context, payload *gen.ListUserSes
 		return nil, oops.E(oops.CodeUnexpected, err, "list user sessions").LogError(ctx, s.logger)
 	}
 
-	items := make([]*types.UserSession, len(rows))
-	for i, row := range rows {
-		items[i] = mv.BuildUserSessionView(row)
+	upstreams, err := s.loadUpstreamsForSessions(ctx, *authCtx.ProjectID, rows)
+	if err != nil {
+		return nil, err
 	}
+
+	items := mv.BuildUserSessionListView(rows, upstreams)
 
 	var nextCursor *string
 	if len(rows) >= int(limit) {
@@ -175,6 +221,13 @@ func (s *Service) RevokeUserSession(ctx context.Context, payload *gen.RevokeUser
 		return oops.E(oops.CodeUnexpected, err, "log user session revocation").LogError(ctx, logger)
 	}
 
+	// Tombstone the subject's upstream grants in the same transaction; the
+	// RFC 7009 pushes wait until it commits.
+	revokedUpstream, err := s.revoker.SoftDeleteSubjectSessions(ctx, dbtx, revoked.SubjectUrn, *authCtx.ProjectID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "revoke upstream remote sessions").LogError(ctx, logger)
+	}
+
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
@@ -183,8 +236,18 @@ func (s *Service) RevokeUserSession(ctx context.Context, payload *gen.RevokeUser
 	// jti always corresponds to a soft-deleted row. Cache-write failure is
 	// surfaced as Unexpected — the row is gone but the access token would keep
 	// validating until expiry, which is the case the cache exists to prevent.
-	if err := s.chatSessions.RevokeToken(ctx, revoked.Jti); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "push jti into revocation cache").LogError(ctx, logger)
+	pushErr := s.chatSessions.RevokeToken(ctx, revoked.Jti)
+
+	// Strictly after the jti push, and attempted even when it failed. The
+	// upstream call is a synchronous round trip to a third party, so running it
+	// first would hold Gram's own access token valid for the length of someone
+	// else's timeout — trading a prompt local revocation for a best-effort
+	// remote one. The two are independent controls, so a cache outage must not
+	// also cost the upstream revocation.
+	s.revoker.RevokeAllDetached(ctx, revokedUpstream)
+
+	if pushErr != nil {
+		return oops.E(oops.CodeUnexpected, pushErr, "push jti into revocation cache").LogError(ctx, logger)
 	}
 
 	return nil

@@ -520,6 +520,23 @@ func TestSkillsListSearchFiltersAndUpdatedPagination(t *testing.T) {
 	require.Equal(t, int64(1), captured.TotalCount)
 	require.Equal(t, "captured", captured.Skills[0].Name)
 
+	_, err = ti.service.Update(ctx, &gen.UpdatePayload{
+		ID: alpha.Skill.ID, Name: alpha.Skill.Name, DisplayName: "Alpha updated", Summary: alpha.Skill.Summary,
+		Tags: []string{"ops", "runbook", " ops "}, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	tagged, err := ti.service.List(ctx, &gen.ListPayload{
+		Cursor: nil, Limit: 10, Search: nil, SourceKinds: nil, Classifications: nil, Tags: []string{"ops"}, Sort: "name",
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), tagged.TotalCount)
+	require.Equal(t, "alpha", tagged.Skills[0].Name)
+	require.Equal(t, []string{"ops", "runbook"}, tagged.Skills[0].Tags)
+	tags, err := ti.service.ListTags(ctx, &gen.ListTagsPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Equal(t, []string{"ops", "runbook"}, tags.Tags)
+
 	err = ti.service.Archive(ctx, &gen.ArchivePayload{
 		ID: bravo.Skill.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})

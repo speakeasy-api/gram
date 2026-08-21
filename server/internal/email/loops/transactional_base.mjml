@@ -1,0 +1,154 @@
+<mjml>
+  <mj-head>
+    <mj-title>{DATA_VARIABLE:email_title}</mj-title>
+    <mj-preview>{DATA_VARIABLE:email_preview}</mj-preview>
+
+    <mj-attributes>
+      <mj-all font-family="ABCDiatype, Arial, Helvetica, sans-serif" />
+      <mj-body background-color="#fafafa" width="640px" />
+      <mj-section background-color="#ffffff" padding="0" />
+      <mj-text color="#121212" font-size="16px" line-height="1.65" padding="0" />
+      <mj-button
+        background-color="#121212"
+        border-radius="0"
+        color="#ffffff"
+        font-family="ABCDiatypeMono, 'Courier New', monospace"
+        font-size="13px"
+        font-weight="400"
+        inner-padding="14px 22px"
+        letter-spacing="0.08em"
+        padding="0"
+        text-transform="uppercase"
+      />
+    </mj-attributes>
+
+    <mj-style>
+      @font-face {
+        font-family: 'ABCDiatype';
+        font-style: normal;
+        font-weight: 400;
+        src: url('https://www.speakeasy.com/fonts/diatype/ABCDiatype-Regular.woff2') format('woff2');
+      }
+      @font-face {
+        font-family: 'ABCDiatypeMono';
+        font-style: normal;
+        font-weight: 400;
+        src: url('https://www.speakeasy.com/fonts/diatype-mono/ABCDiatypeMono-Regular.woff2') format('woff2');
+      }
+      @font-face {
+        font-family: 'Tobias';
+        font-style: normal;
+        font-weight: 100;
+        src: url('https://www.speakeasy.com/fonts/tobias/Tobias-Thin.woff2') format('woff2');
+      }
+
+      .display-copy {
+        font-family: Tobias, Georgia, 'Times New Roman', serif !important;
+        font-weight: 100 !important;
+        letter-spacing: -0.035em !important;
+      }
+
+      .eyebrow {
+        font-family: ABCDiatypeMono, 'Courier New', monospace !important;
+        letter-spacing: 0.1em !important;
+        text-transform: uppercase !important;
+      }
+
+      @media only screen and (max-width: 480px) {
+        .mobile-pad > table > tbody > tr > td {
+          padding-left: 24px !important;
+          padding-right: 24px !important;
+        }
+      }
+    </mj-style>
+  </mj-head>
+
+  <mj-body>
+    <mj-raw>
+      <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="border-collapse:collapse;background:#ffffff;">
+        <tr>
+          <td width="12.5%" height="5" bgcolor="#330f1f" style="font-size:0;line-height:0;">&nbsp;</td>
+          <td width="12.5%" height="5" bgcolor="#c83228" style="font-size:0;line-height:0;">&nbsp;</td>
+          <td width="12.5%" height="5" bgcolor="#fb8841" style="font-size:0;line-height:0;">&nbsp;</td>
+          <td width="12.5%" height="5" bgcolor="#d3dd92" style="font-size:0;line-height:0;">&nbsp;</td>
+          <td width="12.5%" height="5" bgcolor="#59824f" style="font-size:0;line-height:0;">&nbsp;</td>
+          <td width="12.5%" height="5" bgcolor="#002414" style="font-size:0;line-height:0;">&nbsp;</td>
+          <td width="12.5%" height="5" bgcolor="#00143d" style="font-size:0;line-height:0;">&nbsp;</td>
+          <td width="12.5%" height="5" bgcolor="#2874d7" style="font-size:0;line-height:0;">&nbsp;</td>
+        </tr>
+      </table>
+    </mj-raw>
+
+    <mj-section css-class="mobile-pad" padding="26px 40px 24px">
+      <mj-column>
+        <mj-raw>
+          <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="border-collapse:collapse;">
+            <tr>
+              <td width="36" valign="middle">
+                <img src="https://www.speakeasy.com/favicon-96x96-light.png" width="28" height="28" alt="" style="display:block;border:0;outline:none;text-decoration:none;" />
+              </td>
+              <td valign="middle" style="color:#121212;font-family:ABCDiatype,Arial,Helvetica,sans-serif;font-size:21px;line-height:1;font-weight:400;">
+                speakeasy
+              </td>
+              <td align="right" valign="middle" style="color:#757575;font-family:ABCDiatypeMono,'Courier New',monospace;font-size:10px;line-height:1.4;letter-spacing:0.1em;text-transform:uppercase;">
+                AI control plane
+              </td>
+            </tr>
+          </table>
+        </mj-raw>
+      </mj-column>
+    </mj-section>
+
+    <!-- MESSAGE SLOT: replace or extend only this slot for event-specific data. -->
+    <mj-section css-class="mobile-pad" padding="44px 40px 26px">
+      <mj-column>
+        <mj-text css-class="eyebrow" color="#757575" font-size="11px" line-height="1.4" padding="0 0 18px">
+          {DATA_VARIABLE:email_eyebrow}
+        </mj-text>
+        <mj-text css-class="display-copy" font-size="44px" line-height="1.12" padding="0">
+          {DATA_VARIABLE:email_headline}
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-section css-class="mobile-pad" padding="0 40px 28px">
+      <mj-column>
+        <mj-text color="#545454" font-size="16px" line-height="1.65" padding="0">
+          {DATA_VARIABLE:email_body}
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <!-- Optional detail block: delete when the message has no key detail. -->
+    <mj-section css-class="mobile-pad" padding="0 40px 32px">
+      <mj-column border="1px solid #dbdbdb" padding="22px 24px 20px">
+        <mj-text css-class="eyebrow" color="#757575" font-size="10px" line-height="1.4" padding="0 0 8px">
+          {DATA_VARIABLE:detail_label}
+        </mj-text>
+        <mj-text color="#121212" font-family="ABCDiatypeMono, 'Courier New', monospace" font-size="14px" line-height="1.55" padding="0">
+          {DATA_VARIABLE:detail_value}
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <!-- Optional CTA: delete when the recipient has no useful next action. -->
+    <mj-section css-class="mobile-pad" padding="0 40px 48px">
+      <mj-column>
+        <mj-button align="left" href="{DATA_VARIABLE:action_url}">
+          {DATA_VARIABLE:action_label}&nbsp;&nbsp;→
+        </mj-button>
+      </mj-column>
+    </mj-section>
+
+    <mj-section css-class="mobile-pad" background-color="#fafafa" border-top="1px dashed #bababa" padding="24px 40px 30px">
+      <mj-column>
+        <mj-text css-class="eyebrow" color="#757575" font-size="10px" line-height="1.6" padding="0 0 8px">
+          Speakeasy · AI control plane
+        </mj-text>
+        <mj-text color="#757575" font-size="12px" line-height="1.6" padding="0">
+          {DATA_VARIABLE:footer_reason}
+        </mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

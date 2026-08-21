@@ -201,6 +201,35 @@ func (q *Queries) DeleteTriggerInstance(ctx context.Context, arg DeleteTriggerIn
 	return i, err
 }
 
+const deleteTriggerInstancesByTargetExceptDefinition = `-- name: DeleteTriggerInstancesByTargetExceptDefinition :exec
+UPDATE trigger_instances
+SET
+    deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE project_id = $1
+  AND target_kind = $2
+  AND target_ref = $3
+  AND definition_slug <> $4
+  AND deleted IS FALSE
+`
+
+type DeleteTriggerInstancesByTargetExceptDefinitionParams struct {
+	ProjectID              uuid.UUID
+	TargetKind             string
+	TargetRef              string
+	ExcludedDefinitionSlug string
+}
+
+func (q *Queries) DeleteTriggerInstancesByTargetExceptDefinition(ctx context.Context, arg DeleteTriggerInstancesByTargetExceptDefinitionParams) error {
+	_, err := q.db.Exec(ctx, deleteTriggerInstancesByTargetExceptDefinition,
+		arg.ProjectID,
+		arg.TargetKind,
+		arg.TargetRef,
+		arg.ExcludedDefinitionSlug,
+	)
+	return err
+}
+
 const getTriggerInstanceByID = `-- name: GetTriggerInstanceByID :one
 SELECT id, organization_id, project_id, definition_slug, name, environment_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
 FROM trigger_instances ti
@@ -315,6 +344,74 @@ func (q *Queries) ListActiveTriggerInstancesByTarget(ctx context.Context, arg Li
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTriggerEvents = `-- name: ListTriggerEvents :many
+SELECT
+    e.id,
+    e.trigger_instance_id,
+    e.status,
+    e.attempts,
+    e.last_error,
+    e.created_at,
+    e.processed_at,
+    t.chat_id
+FROM assistant_thread_events e
+LEFT JOIN assistant_threads t
+    ON t.id = e.assistant_thread_id
+    AND t.project_id = $1
+    AND t.deleted IS FALSE
+WHERE e.project_id = $1
+  AND e.trigger_instance_id = $2
+  AND e.deleted IS FALSE
+ORDER BY e.created_at DESC
+LIMIT $3
+`
+
+type ListTriggerEventsParams struct {
+	ProjectID         uuid.UUID
+	TriggerInstanceID uuid.NullUUID
+	RowLimit          int32
+}
+
+type ListTriggerEventsRow struct {
+	ID                uuid.UUID
+	TriggerInstanceID uuid.NullUUID
+	Status            string
+	Attempts          int64
+	LastError         pgtype.Text
+	CreatedAt         pgtype.Timestamptz
+	ProcessedAt       pgtype.Timestamptz
+	ChatID            uuid.NullUUID
+}
+
+func (q *Queries) ListTriggerEvents(ctx context.Context, arg ListTriggerEventsParams) ([]ListTriggerEventsRow, error) {
+	rows, err := q.db.Query(ctx, listTriggerEvents, arg.ProjectID, arg.TriggerInstanceID, arg.RowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTriggerEventsRow
+	for rows.Next() {
+		var i ListTriggerEventsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TriggerInstanceID,
+			&i.Status,
+			&i.Attempts,
+			&i.LastError,
+			&i.CreatedAt,
+			&i.ProcessedAt,
+			&i.ChatID,
 		); err != nil {
 			return nil, err
 		}

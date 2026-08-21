@@ -19,9 +19,9 @@ func TestVerifyGcpIamPlatformCredential_Resolves(t *testing.T) {
 
 	cred := createPlatformGCPAmbientCredential(t, ctx, ti, "platform-verify")
 
-	ti.gcpResolver.fn = func(_ context.Context, _ gcpauth.Credential) (gcpauth.Principal, error) {
+	ti.gcpResolver.SetResolve(func(_ context.Context, _ gcpauth.Credential) (gcpauth.Principal, error) {
 		return gcpauth.Principal{Email: "gram@gram-platform.iam.gserviceaccount.com", Source: gcpauth.SourceMetadataServer}, nil
-	}
+	})
 
 	result, err := ti.service.VerifyGcpIamPlatformCredential(withAdmin(t, ctx), &adminecgen.VerifyGcpIamPlatformCredentialPayload{
 		ID:           cred.ID,
@@ -45,9 +45,9 @@ func TestVerifyGcpIamPlatformCredential_ResolvesWithoutEmail(t *testing.T) {
 
 	cred := createPlatformGCPAmbientCredential(t, ctx, ti, "platform-verify-noemail")
 
-	ti.gcpResolver.fn = func(_ context.Context, _ gcpauth.Credential) (gcpauth.Principal, error) {
+	ti.gcpResolver.SetResolve(func(_ context.Context, _ gcpauth.Credential) (gcpauth.Principal, error) {
 		return gcpauth.Principal{Email: "", Source: gcpauth.SourceADC}, nil
-	}
+	})
 
 	result, err := ti.service.VerifyGcpIamPlatformCredential(withAdmin(t, ctx), &adminecgen.VerifyGcpIamPlatformCredentialPayload{
 		ID:           cred.ID,
@@ -67,9 +67,9 @@ func TestVerifyGcpIamPlatformCredential_UnsupportedMode(t *testing.T) {
 
 	cred := createPlatformGCPAmbientCredential(t, ctx, ti, "platform-verify-unsupported")
 
-	ti.gcpResolver.fn = func(_ context.Context, _ gcpauth.Credential) (gcpauth.Principal, error) {
+	ti.gcpResolver.SetResolve(func(_ context.Context, _ gcpauth.Credential) (gcpauth.Principal, error) {
 		return gcpauth.Principal{}, gcpauth.ErrUnsupportedMode
-	}
+	})
 
 	result, err := ti.service.VerifyGcpIamPlatformCredential(withAdmin(t, ctx), &adminecgen.VerifyGcpIamPlatformCredentialPayload{
 		ID:           cred.ID,
@@ -89,9 +89,9 @@ func TestVerifyGcpIamPlatformCredential_ResolveFailure(t *testing.T) {
 
 	cred := createPlatformGCPAmbientCredential(t, ctx, ti, "platform-verify-fail")
 
-	ti.gcpResolver.fn = func(_ context.Context, _ gcpauth.Credential) (gcpauth.Principal, error) {
+	ti.gcpResolver.SetResolve(func(_ context.Context, _ gcpauth.Credential) (gcpauth.Principal, error) {
 		return gcpauth.Principal{}, errors.New("metadata server unreachable")
-	}
+	})
 
 	result, err := ti.service.VerifyGcpIamPlatformCredential(withAdmin(t, ctx), &adminecgen.VerifyGcpIamPlatformCredentialPayload{
 		ID:           cred.ID,

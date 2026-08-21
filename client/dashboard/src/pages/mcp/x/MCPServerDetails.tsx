@@ -36,13 +36,14 @@ import {
   isLegacyAuthenticationTabPath,
   isLegacyToolsTabPath,
   mcpServerTabHref,
+  MCP_SERVER_TAB_URLS,
 } from "./MCPServerDetailsRouting";
 import { MCPOverviewTab } from "@/pages/mcp/overview/MCPOverviewTab";
 import { InspectTab } from "./tabs/InspectTab";
 import { MCP_AUTHENTICATION_SECTION_ID } from "./tabs/settings/sections/authentication/AuthenticationSection";
+import { ClientsAndSessionsTab } from "@/components/sessions/ClientsAndSessionsTab";
 import { SettingsTab } from "./tabs/settings/SettingsTab";
-
-const MCP_X_TAB_URLS = ["overview", "inspect", "team-access", "settings"];
+import { UnproxiedMcpOverviewTab } from "./tabs/UnproxiedMcpOverviewTab";
 
 export default function MCPServerDetails(): JSX.Element {
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
@@ -91,6 +92,18 @@ export default function MCPServerDetails(): JSX.Element {
       <Navigate to={mcpServerTabHref(routes, idOrSlug, "inspect")} replace />
     );
   }
+  // Inspect and Clients and Sessions are hidden from the nav for unproxied
+  // servers (see McpServerXSidebarNav) but the routes still resolve, so bounce
+  // anyone who lands on them directly (old links, the legacy /tools redirect
+  // above) back to Overview instead of rendering a tab with nothing to show.
+  if (
+    (activeTab === "inspect" || activeTab === "sessions") &&
+    mcpServer?.unproxiedMcpServerId
+  ) {
+    return (
+      <Navigate to={mcpServerTabHref(routes, idOrSlug, "overview")} replace />
+    );
+  }
   if (!activeTab) {
     const initialTab = initialTabFromHash(location.hash);
     const hash =
@@ -110,16 +123,25 @@ export default function MCPServerDetails(): JSX.Element {
       case "overview":
         return (
           mcpServer &&
-          mcpServer.slug && (
-            <MCPOverviewTab
-              server={{
-                kind: "mcp-server",
-                id: mcpServer.id,
-                slug: mcpServer.slug,
-                name: mcpServer.name ?? "MCP Server",
-              }}
+          (mcpServer.unproxiedMcpServerId ? (
+            <UnproxiedMcpOverviewTab
+              unproxiedMcpServerId={mcpServer.unproxiedMcpServerId}
+              mcpServerId={mcpServer.id}
+              mcpServerSlug={mcpServer.slug ?? ""}
+              mcpServerName={mcpServer.name ?? "MCP Server"}
             />
-          )
+          ) : (
+            mcpServer.slug && (
+              <MCPOverviewTab
+                server={{
+                  kind: "mcp-server",
+                  id: mcpServer.id,
+                  slug: mcpServer.slug,
+                  name: mcpServer.name ?? "MCP Server",
+                }}
+              />
+            )
+          ))
         );
       case "inspect":
         return (
@@ -151,6 +173,14 @@ export default function MCPServerDetails(): JSX.Element {
             </RequireScope>
           )
         );
+      case "sessions":
+        return (
+          mcpServer && (
+            <RequireScope scope="project:read" level="page">
+              <ClientsAndSessionsTab issuerId={mcpServer.userSessionIssuerId} />
+            </RequireScope>
+          )
+        );
       case "settings":
         return (
           mcpServer && (
@@ -177,7 +207,7 @@ export default function MCPServerDetails(): JSX.Element {
             // server's own slug happens to collide with a tab name (e.g. a
             // server slugged "settings"), guard against also skipping the
             // server's own breadcrumb crumb.
-            ...MCP_X_TAB_URLS.filter((tab) => tab !== idOrSlug),
+            ...MCP_SERVER_TAB_URLS.filter((tab) => tab !== idOrSlug),
           ]}
         />
       </Page.Header>
@@ -274,6 +304,7 @@ export function MCPServerStatusDropdown({
           remoteMcpServerId: server.remoteMcpServerId ?? undefined,
           tunneledMcpServerId: server.tunneledMcpServerId ?? undefined,
           toolsetId: server.toolsetId ?? undefined,
+          unproxiedMcpServerId: server.unproxiedMcpServerId ?? undefined,
           environmentId: server.environmentId ?? undefined,
           // updateMcpServer is a full-record replace for the optional UUID
           // references. Forwarding them keeps stored values intact across a
@@ -308,13 +339,29 @@ export function MCPServerStatusDropdown({
     options.find((option) => option.value === server.visibility)?.dotClass ??
     "bg-green-400";
 
+  // Unproxied servers have no Gram-hosted endpoint for disabled/private to
+  // gate — the vendor's own server is reachable regardless of this setting —
+  // so there's nothing to toggle. Still show the record's actual stored
+  // value (not a hardcoded "Public") so this can't drift from what Settings
+  // and the readiness checklist report for the same server.
+  if (server.unproxiedMcpServerId) {
+    return (
+      <span className="text-foreground border-border flex w-fit items-center gap-2 border px-3 py-1.5 text-sm font-medium">
+        <span
+          className={cn("h-2 w-2 shrink-0 rounded-full", currentDotClass)}
+        />
+        {currentLabel}
+      </span>
+    );
+  }
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild disabled={!canWrite || update.isPending}>
         <button
           type="button"
           disabled={!canWrite || update.isPending}
-          className="text-foreground hover:bg-muted trans border-border flex w-fit items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
+          className="text-foreground hover:bg-muted trans border-border flex w-fit items-center gap-2 border px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
         >
           <span
             className={cn("h-2 w-2 shrink-0 rounded-full", currentDotClass)}
@@ -337,7 +384,7 @@ export function MCPServerStatusDropdown({
                 if (publicBlocked) return;
                 handleSelect(option.value);
               }}
-              className="group flex cursor-pointer items-start gap-2.5 rounded-md p-2 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60"
+              className="group flex cursor-pointer items-start gap-2.5 p-2 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60"
             >
               {option.value === server.visibility ? (
                 <span

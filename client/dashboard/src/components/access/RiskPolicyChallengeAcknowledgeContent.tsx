@@ -1,4 +1,4 @@
-import { GramLogo } from "@/components/gram-logo";
+import { FullScreenPage } from "@/components/full-screen-page";
 import { Text } from "@/components/ui/Text";
 import { useSessionData } from "@/contexts/Auth";
 import { buildLoginRedirectURL } from "@/lib/utils";
@@ -8,9 +8,7 @@ import { useRiskGetPolicyChallengeMutation } from "@gram/client/react-query/risk
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { Stack } from "@/components/ui/Stack";
-import { type ComponentProps, useEffect, useRef, useState } from "react";
-
-type IconName = ComponentProps<typeof Icon>["name"];
+import { useEffect, useRef, useState } from "react";
 
 const ACK_TOKEN_STORAGE_KEY = "riskPolicyChallengeAckToken";
 
@@ -146,12 +144,7 @@ export function RiskPolicyChallengeAcknowledgeContent(): JSX.Element {
   };
 
   return (
-    <div className="bg-background flex min-h-screen w-full flex-col items-center justify-center p-8">
-      <Stack gap={8} align="center" className="w-full max-w-md">
-        <GramLogo className="w-25" variant="vertical" />
-        {renderBody()}
-      </Stack>
-    </div>
+    <FullScreenPage contentClassName="max-w-md">{renderBody()}</FullScreenPage>
   );
 
   function renderBody(): JSX.Element {
@@ -211,9 +204,6 @@ function ChallengeReview({
   return (
     <Stack gap={5} align="center" className="w-full">
       <Stack gap={2} align="center">
-        <div className="bg-warning/10 flex h-11 w-11 items-center justify-center rounded-full">
-          <Icon name="shield-alert" className="text-warning h-5 w-5" />
-        </div>
         <Text variant="subheading" className="text-center">
           Approval required
         </Text>
@@ -225,7 +215,7 @@ function ChallengeReview({
         </Text>
       </Stack>
 
-      <div className="border-border bg-muted/40 w-full rounded-md border p-3">
+      <div className="border-border bg-muted/40 w-full border p-3">
         <Text
           small
           className="text-foreground/90 whitespace-pre-wrap break-words font-mono"
@@ -253,8 +243,6 @@ function ChallengeReview({
 function ApprovedView() {
   return (
     <StatusView
-      icon="check"
-      tone="primary"
       title="Approved"
       body="Return to your agent and retry the request. You can close this page."
     />
@@ -264,8 +252,6 @@ function ApprovedView() {
 function DeclinedView() {
   return (
     <StatusView
-      icon="x"
-      tone="muted"
       title="Denied"
       body="The request remains blocked. You can close this page."
     />
@@ -275,8 +261,6 @@ function DeclinedView() {
 function AlreadyApprovedView() {
   return (
     <StatusView
-      icon="check"
-      tone="primary"
       title="Already approved"
       body="This challenge was already approved. Return to your agent and retry the request."
     />
@@ -286,8 +270,6 @@ function AlreadyApprovedView() {
 function ExpiredView() {
   return (
     <StatusView
-      icon="circle-x"
-      tone="destructive"
       title="Link expired"
       body="This approval link is no longer valid. Try the action again in your agent to generate a new one."
     />
@@ -298,8 +280,6 @@ function RetryableError({ onRetry }: { onRetry: () => void }) {
   return (
     <Stack gap={3} align="center">
       <StatusView
-        icon="circle-x"
-        tone="destructive"
         title="Something went wrong"
         body="We could not record your decision. Check your connection and try again."
       />
@@ -327,36 +307,9 @@ function SpinnerView({ label }: { label: string }) {
   );
 }
 
-function StatusView({
-  icon,
-  tone,
-  title,
-  body,
-}: {
-  icon: IconName;
-  tone: "primary" | "muted" | "destructive";
-  title: string;
-  body: string;
-}) {
-  const ring =
-    tone === "primary"
-      ? "bg-primary/10"
-      : tone === "destructive"
-        ? "bg-destructive/10"
-        : "bg-muted";
-  const fg =
-    tone === "primary"
-      ? "text-primary"
-      : tone === "destructive"
-        ? "text-destructive"
-        : "text-muted-foreground";
+function StatusView({ title, body }: { title: string; body: string }) {
   return (
     <Stack gap={3} align="center">
-      <div
-        className={`flex h-11 w-11 items-center justify-center rounded-full ${ring}`}
-      >
-        <Icon name={icon} className={`h-5 w-5 ${fg}`} />
-      </div>
       <Stack gap={1} align="center">
         <Text variant="subheading" className="text-center">
           {title}

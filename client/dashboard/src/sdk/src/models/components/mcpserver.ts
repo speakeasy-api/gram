@@ -67,6 +67,10 @@ export type McpServer = {
    */
   tunneledMcpServerId?: string | undefined;
   /**
+   * The ID of the unproxied MCP server used as the backend, if any. A server backed by an unproxied MCP server is never proxied by Gram.
+   */
+  unproxiedMcpServerId?: string | undefined;
+  /**
    * When the MCP server was last updated
    */
   updatedAt: Date;
@@ -102,6 +106,7 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
       tool_variations_group_id: z.optional(z.string()),
       toolset_id: z.optional(z.string()),
       tunneled_mcp_server_id: z.optional(z.string()),
+      unproxied_mcp_server_id: z.optional(z.string()),
       updated_at: z.pipe(
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
@@ -118,6 +123,7 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
         "tool_variations_group_id": "toolVariationsGroupId",
         "toolset_id": "toolsetId",
         "tunneled_mcp_server_id": "tunneledMcpServerId",
+        "unproxied_mcp_server_id": "unproxiedMcpServerId",
         "updated_at": "updatedAt",
         "user_session_issuer_id": "userSessionIssuerId",
       });

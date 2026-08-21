@@ -9,6 +9,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures/productfeaturestest"
 )
 
 func TestListExternalKeys_All(t *testing.T) {
@@ -57,6 +59,19 @@ func TestListExternalKeys_ForbiddenWithoutGrants(t *testing.T) {
 	ctx, ti := newTestService(t)
 
 	_, err := ti.service.ListExternalKeys(authztest.WithExactGrants(t, ctx), &gen.ListExternalKeysPayload{
+		Provider:     nil,
+		SessionToken: nil,
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestListExternalKeys_ForbiddenWithoutEntitlement(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	productfeaturestest.Disable(t, ctx, ti.conn, ti.features, ti.orgID, productfeatures.FeatureCustomerManagedEncryptionKeys)
+
+	_, err := ti.service.ListExternalKeys(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgRead, authz.WildcardResource)), &gen.ListExternalKeysPayload{
 		Provider:     nil,
 		SessionToken: nil,
 	})

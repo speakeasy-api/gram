@@ -35,10 +35,18 @@ import {
   RevealAllProvider,
   RevealAllToggle,
   RuleLabel,
-  SeverityScore,
 } from "./risk-ui";
-import { isJudgeSource } from "./risk-utils";
+import {
+  isJudgeSource,
+  isShadowMcpSource,
+  scoreToRating,
+  SEVERITY_RATING_LABEL,
+  type SeverityRating,
+} from "./risk-utils";
 
+// Signal-list layout (Risk Watchdog idiom): the severity score leads each row
+// as a big serif numeral, so it sits directly after the checkbox.
+//
 // Category and rule share one column, badge over rule title, matching the
 // findings table on the risk overview category drill-down. Judge findings own a
 // single rule whose name only restates the category, so they render the badge
@@ -47,7 +55,67 @@ import { isJudgeSource } from "./risk-utils";
 // Evidence gets the widest track: for judge findings it holds a sentence or two
 // of rationale, where every other column holds a label.
 const RISK_EVENTS_GRID =
-  "grid grid-cols-[28px_172px_minmax(0,1.3fr)_88px_minmax(0,0.85fr)_minmax(0,0.85fr)_minmax(0,2.4fr)_minmax(0,0.9fr)_110px] gap-3";
+  "grid grid-cols-[28px_88px_172px_minmax(0,1.3fr)_minmax(0,0.85fr)_minmax(0,0.85fr)_minmax(0,2.4fr)_minmax(0,0.9fr)_110px] gap-3";
+
+// Signal severity palette: band → text / row-edge classes. Colors are
+// token-derived — brand red hsl(4,67%,47%) (--color-brand-red-500) is reserved
+// for critical, the feedback-orange ramp covers high/medium, low stays neutral
+// ink. Applied to the score numeral, the severity word, and the row's 2px
+// left edge.
+const SEVERITY_TEXT: Record<SeverityRating, string> = {
+  critical: "text-[var(--color-brand-red-500)]",
+  high: "text-[var(--color-feedback-orange-600)]",
+  medium: "text-[var(--color-feedback-orange-400)]",
+  low: "text-foreground",
+};
+
+const SEVERITY_EDGE: Record<SeverityRating, string> = {
+  critical: "border-l-[var(--color-brand-red-500)]",
+  high: "border-l-[var(--color-feedback-orange-600)]",
+  medium: "border-l-[var(--color-feedback-orange-400)]",
+  low: "border-l-border",
+};
+
+// Ratings key off the rounded value we display, so a score sitting just below
+// a band boundary (e.g. 3.96 → shown as "4.0") never renders in a color that
+// disagrees with the band its displayed value falls in.
+function displayedScoreRating(score: number): {
+  displayed: number;
+  rating: SeverityRating;
+} {
+  const displayed = Math.round(score * 10) / 10;
+  return { displayed, rating: scoreToRating(displayed) };
+}
+
+// The signal-list score block: thin display-serif numeral over a mono
+// uppercase severity word, both colored by band. The numeral carries the exact
+// policy score while the word makes the band scannable.
+function SignalScore({ score }: { score: number | undefined }): JSX.Element {
+  if (score == null) {
+    return <span className="text-muted-foreground text-sm">-</span>;
+  }
+  const { displayed, rating } = displayedScoreRating(score);
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      <span
+        className={cn(
+          "font-display text-3xl leading-none font-thin tabular-nums",
+          SEVERITY_TEXT[rating],
+        )}
+      >
+        {displayed.toFixed(1)}
+      </span>
+      <span
+        className={cn(
+          "font-mono text-2xs tracking-widest uppercase",
+          SEVERITY_TEXT[rating],
+        )}
+      >
+        {SEVERITY_RATING_LABEL[rating]}
+      </span>
+    </div>
+  );
+}
 
 // Strongly-typed filter schema for Risk Events. `policy_id` and the date range
 // are pinned (always visible in the bar); the rest live behind "More filters".
@@ -275,12 +343,8 @@ export default function RiskEvents(): JSX.Element {
   const handleSetupExclusionSelected = useCallback(() => {
     const selected = selection.selectedItems;
     if (selected.length === 0) return;
-    // Deliberately doesn't clear the selection (unlike handleDismissSelected):
-    // a batch AI suggestion takes a few seconds, and clearing here would
-    // collapse the bulk bar mid-request, hiding the spinner on "Setup
-    // exclusion rule" with no visible feedback until the sheet opens. Leaving
-    // the selection also means Clear/retry still works if the sheet is
-    // cancelled.
+    // Deliberately doesn't clear the selection (unlike handleDismissSelected)
+    // so retrying still works if the sheet is canceled.
     exclusionRule.open(selected);
   }, [selection, exclusionRule]);
 
@@ -303,10 +367,18 @@ export default function RiskEvents(): JSX.Element {
   return (
     <RevealAllProvider>
       <LogWorkbench
+        eyebrow="Secure"
         title="Risk Events"
         stage="beta"
         description="Review policy findings across recent analyzed chats."
-        actions={<RevealAllToggle />}
+        actions={
+          <RevealAllToggle
+            // Match the "More filters"/"Refresh" toolbar triggers (hairline
+            // secondary button, h-10, mono label) instead of the component's
+            // hand-rolled default.
+            className="border-neutral-default text-btn-secondary hover:bg-btn-secondary hover:text-btn-secondary-hover inline-flex h-10 items-center gap-2 border bg-transparent px-4 font-mono text-sm tracking-[-0.01em] transition-all"
+          />
+        }
         filters={
           <Page.Toolbar>
             <Page.Toolbar.Filters
@@ -350,7 +422,6 @@ export default function RiskEvents(): JSX.Element {
                   onClick: handleSetupExclusionSelected,
                 },
               ]}
-              loading={exclusionRule.isSuggesting}
               leftOffsetPx={28}
               heightPx={headerMeasure.height}
             />
@@ -413,7 +484,7 @@ function InactivePolicyNotice({
   policyName: string | undefined;
 }) {
   return (
-    <div className="flex shrink-0 items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-5 py-2 text-sm text-amber-700 dark:text-amber-400">
+    <div className="text-warning flex shrink-0 items-center gap-2 border-b px-5 py-2 text-sm">
       <History className="size-4 shrink-0" />
       <span>
         {policyName ? (
@@ -442,7 +513,9 @@ function RiskEventsHeader({
       ref={headerRef}
       className={cn(
         RISK_EVENTS_GRID,
-        "bg-muted/30 text-muted-foreground shrink-0 items-center border-b px-5 py-2.5 text-xs font-medium tracking-wide uppercase",
+        // whitespace-nowrap keeps two-word labels ("Session Name") on one
+        // line when their fr track compresses.
+        "text-eyebrow bg-muted/30 shrink-0 items-center border-b px-5 py-2.5 whitespace-nowrap",
       )}
     >
       <div className="min-w-0">
@@ -452,10 +525,10 @@ function RiskEventsHeader({
           aria-label="Select all loaded findings"
         />
       </div>
+      <div className="min-w-0">Severity</div>
       <div className="min-w-0">Timestamp</div>
       <div className="min-w-0">Category / Rule</div>
-      <div className="min-w-0">Severity</div>
-      <div className="min-w-0">Session Name</div>
+      <div className="min-w-0 whitespace-nowrap">Session Name</div>
       <div className="min-w-0">User</div>
       <div className="min-w-0">Evidence</div>
       <div className="min-w-0">Policy</div>
@@ -499,7 +572,7 @@ function RiskEventsRows({
   if (error) {
     return (
       <div className="flex flex-col items-center gap-3 py-12">
-        <div className="bg-destructive/10 flex size-12 items-center justify-center rounded-full">
+        <div className="bg-destructive/10 flex size-12 items-center justify-center">
           <Icon name="circle-alert" className="text-destructive size-6" />
         </div>
         <span className="text-foreground font-medium">
@@ -524,7 +597,7 @@ function RiskEventsRows({
   if (results.length === 0) {
     return (
       <div className="flex flex-col items-center gap-3 py-12 text-center">
-        <div className="bg-muted flex size-12 items-center justify-center rounded-full">
+        <div className="bg-muted flex size-12 items-center justify-center">
           <Icon name="inbox" className="text-muted-foreground size-6" />
         </div>
         <span className="text-foreground font-medium">
@@ -587,8 +660,12 @@ function RiskEventsRow({
   onDismiss: (result: RiskResult) => void;
   onSetupExclusion: (result: RiskResult) => void;
 }) {
-  const isShadowMCP = result.source === "shadow_mcp";
+  const isShadowMCP = isShadowMcpSource(result.source);
   const isEventSource = isJudgeSource(result.source);
+  // The 2px left edge carries the severity band color; rows whose policy
+  // hasn't loaded a score keep a transparent edge so the grid stays aligned.
+  const edgeRating =
+    policyScore != null ? displayedScoreRating(policyScore).rating : null;
 
   // A row click opens the chat only when the gesture both starts and ends inside
   // the row. This rejects the stray click Radix's outside-dismiss sends here:
@@ -623,7 +700,8 @@ function RiskEventsRow({
       tabIndex={result.chatId ? 0 : undefined}
       className={cn(
         RISK_EVENTS_GRID,
-        "hover:bg-muted/30 w-full items-center border-b px-5 py-3 text-left text-sm transition-colors",
+        "hover:bg-muted/30 w-full items-center border-b border-l-2 px-5 py-3 text-left text-sm transition-colors",
+        edgeRating ? SEVERITY_EDGE[edgeRating] : "border-l-transparent",
         !result.chatId && "cursor-default",
       )}
       onPointerDown={(e) => {
@@ -667,6 +745,9 @@ function RiskEventsRow({
           aria-label="Select finding"
         />
       </div>
+      <div className="min-w-0">
+        <SignalScore score={policyScore} />
+      </div>
       <div className="text-muted-foreground min-w-0 font-mono text-xs">
         {result.createdAt ? new Date(result.createdAt).toLocaleString() : "-"}
       </div>
@@ -674,16 +755,19 @@ function RiskEventsRow({
         <CategoryLabel source={result.source} ruleId={result.ruleId} />
         <RuleLabel source={result.source} ruleId={result.ruleId} />
       </div>
-      <div className="min-w-0">
-        <SeverityScore score={policyScore} />
+      <div className="text-muted-foreground min-w-0 truncate font-mono text-xs">
+        {result.chatTitle ?? "Untitled"}
       </div>
-      <div className="min-w-0 truncate">{result.chatTitle ?? "Untitled"}</div>
-      <div className="min-w-0 truncate">{result.userId ?? "-"}</div>
+      <div className="text-muted-foreground min-w-0 truncate font-mono text-xs">
+        {result.userId ?? "-"}
+      </div>
       {/* Judge rationale wraps to two lines, so this cell can't clip to one. */}
       <div className={cn("min-w-0", !isEventSource && "truncate")}>
         {isShadowMCP && result.matchRedacted ? (
+          // Square hairline mono tag — the fingerprint reads as a chip, not
+          // prose.
           <span
-            className="block truncate font-mono text-xs"
+            className="border-border inline-block max-w-full truncate border px-1.5 py-0.5 font-mono text-xs"
             title={result.matchRedacted}
           >
             {result.matchRedacted}
@@ -701,7 +785,10 @@ function RiskEventsRow({
           />
         )}
       </div>
-      <div className="min-w-0 truncate" title={policyName}>
+      <div
+        className="text-muted-foreground min-w-0 truncate font-mono text-xs"
+        title={policyName}
+      >
         {policyName ?? "-"}
       </div>
       <div

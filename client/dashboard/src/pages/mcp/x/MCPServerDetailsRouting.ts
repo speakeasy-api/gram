@@ -1,8 +1,18 @@
 import type { useRoutes } from "@/routes";
 
-const VALID_TABS = ["overview", "inspect", "team-access", "settings"] as const;
+const VALID_TABS = [
+  "overview",
+  "inspect",
+  "team-access",
+  "sessions",
+  "settings",
+] as const;
 const LEGACY_AUTHENTICATION_TAB = "authentication";
 const LEGACY_TOOLS_TAB = "tools";
+
+// Breadcrumb `skipSegments` source. Derived from VALID_TABS rather than
+// hand-maintained alongside it, so adding a tab can't leave a stray crumb.
+export const MCP_SERVER_TAB_URLS: string[] = [...VALID_TABS];
 
 export type TabValue = (typeof VALID_TABS)[number];
 
@@ -86,6 +96,8 @@ export function mcpServerTabHref(
       return routes.mcp.x.inspect.href(mcpServerSlug);
     case "team-access":
       return routes.mcp.x.teamAccess.href(mcpServerSlug);
+    case "sessions":
+      return routes.mcp.x.sessions.href(mcpServerSlug);
     case "settings":
       return routes.mcp.x.settings.href(mcpServerSlug);
   }

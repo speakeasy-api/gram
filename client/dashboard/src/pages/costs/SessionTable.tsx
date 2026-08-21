@@ -322,7 +322,7 @@ export function SessionTable({
 
   return (
     <div
-      className="border-border divide-border grid gap-x-3 gap-y-0 divide-y overflow-x-auto rounded-lg border"
+      className="border-border divide-border grid gap-x-3 gap-y-0 divide-y overflow-x-auto border"
       style={{ gridTemplateColumns: gridTemplate }}
     >
       <div
@@ -347,7 +347,8 @@ export function SessionTable({
                   onClick={() => onSort(c.sortKey!)}
                 />
               ) : (
-                label
+                // Match SortHeader's uppercase treatment on sortable columns.
+                <span className="uppercase">{label}</span>
               )}
               {c.id === "cost" && (
                 <EstimatedCostIndicator billingMode={billingMode} />
@@ -412,7 +413,7 @@ export function SessionTable({
               aria-label="Previous page"
               onClick={() => setPage((p) => p - 1)}
               disabled={safePage === 0}
-              className="hover:bg-muted inline-flex size-8 items-center justify-center rounded-md transition-colors disabled:pointer-events-none disabled:opacity-40"
+              className="hover:bg-muted inline-flex size-8 items-center justify-center transition-colors disabled:pointer-events-none disabled:opacity-40"
             >
               <ChevronLeft className="size-4" />
             </button>
@@ -421,7 +422,7 @@ export function SessionTable({
               aria-label="Next page"
               onClick={() => setPage((p) => p + 1)}
               disabled={safePage >= totalPages - 1}
-              className="hover:bg-muted inline-flex size-8 items-center justify-center rounded-md transition-colors disabled:pointer-events-none disabled:opacity-40"
+              className="hover:bg-muted inline-flex size-8 items-center justify-center transition-colors disabled:pointer-events-none disabled:opacity-40"
             >
               <ChevronRight className="size-4" />
             </button>

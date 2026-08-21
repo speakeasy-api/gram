@@ -60,32 +60,20 @@ type chatTestInstance struct {
 	assets    assets.BlobStore
 }
 
-// newTestChatService builds a chat service with RBAC enforcement enabled.
+// newTestChatService builds a chat service with RBAC enforcement.
 func newTestChatService(t *testing.T) *chatTestInstance {
 	t.Helper()
-	return newTestChatServiceWithRBAC(t, authztest.RBACAlwaysEnabled)
-}
-
-// newTestChatServiceRBACDisabled builds a chat service whose org has the RBAC
-// feature flag off, so ShouldEnforce returns false for session callers.
-func newTestChatServiceRBACDisabled(t *testing.T) *chatTestInstance {
-	t.Helper()
-	return newTestChatServiceWithRBAC(t, authztest.RBACAlwaysDisabled)
-}
-
-func newTestChatServiceWithRBAC(t *testing.T, isRBACEnabled authz.IsRBACEnabled) *chatTestInstance {
-	t.Helper()
-	return newTestChatServiceWithOptions(t, isRBACEnabled, nil)
+	return newTestChatServiceWithOptions(t, nil)
 }
 
 // newTestChatServiceWithCompletion builds a chat service with a custom
 // OpenRouter completion client (e.g. a mock for summarize tests).
 func newTestChatServiceWithCompletion(t *testing.T, completionClient openrouter.CompletionClient) *chatTestInstance {
 	t.Helper()
-	return newTestChatServiceWithOptions(t, authztest.RBACAlwaysEnabled, completionClient)
+	return newTestChatServiceWithOptions(t, completionClient)
 }
 
-func newTestChatServiceWithOptions(t *testing.T, isRBACEnabled authz.IsRBACEnabled, completionClient openrouter.CompletionClient) *chatTestInstance {
+func newTestChatServiceWithOptions(t *testing.T, completionClient openrouter.CompletionClient) *chatTestInstance {
 	t.Helper()
 
 	ctx := t.Context()
@@ -117,16 +105,10 @@ func newTestChatServiceWithOptions(t *testing.T, isRBACEnabled authz.IsRBACEnabl
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
 	billingClient := billing.NewStubClient(logger, tp)
-	// Use a unique suffix per test to isolate Redis cache entries when tests
-	// run in parallel and all use the same mockidp.MockUserID.
-	suffix := cache.Suffix("gram-local-" + uuid.NewString()[:8])
-	mgr := testenv.NewTestManager(t, logger, tp, conn, redisClient, suffix, billingClient)
+	mgr := testenv.NewTestManager(t, logger, tp, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
-	authzEngine := authz.NewEngine(logger, conn, chConn, isRBACEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	assetStorage := assetstest.NewTestBlobStore(t)
 	svc := chat.NewService(logger, tp, conn, mgr, nil, nil, completionClient, nil, nil, nil, assetStorage, authzEngine, nil, billingClient, audit.NewLogger())
 

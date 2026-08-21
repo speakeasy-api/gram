@@ -1,7 +1,7 @@
-import { Page } from "@/components/page-layout";
+import { SettingsPage } from "@/components/page-templates";
+import { useOrganization } from "@/contexts/Auth";
 import { LogDataRetentionBanner } from "@/components/observe/LoggingPageHeader";
 import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/Heading";
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
 import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
@@ -13,24 +13,28 @@ import { OtelForwardingSection } from "./OtelForwardingSection";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { handleAPIError } from "@/lib/errors";
 import { SkillContentUploadSetting } from "./SkillContentUploadSetting";
+import { useIsCurrentOrganization } from "@/hooks/useIsCurrentOrganization";
 
 export default function OrgLogs(): JSX.Element {
+  const organization = useOrganization();
+  const isCurrentOrganization = useIsCurrentOrganization(organization.id);
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <RequireScope scope={["org:read", "org:admin"]} level="page">
-          <OrgLogsInner />
-        </RequireScope>
-      </Page.Body>
-    </Page>
+    <OrgLogsInner
+      key={organization.id}
+      organizationId={organization.id}
+      isCurrentOrganization={isCurrentOrganization}
+    />
   );
 }
 
-function OrgLogsInner() {
-  const { data: featuresData } = useProductFeatures();
+function OrgLogsInner({
+  organizationId,
+  isCurrentOrganization,
+}: {
+  organizationId: string;
+  isCurrentOrganization: () => boolean;
+}) {
+  const { data: featuresData } = useProductFeatures({ organizationId });
   const [logsEnabled, setLogsEnabled] = useState<boolean | null>(null);
   const [toolIoLogsEnabled, setToolIoLogsEnabled] = useState<boolean | null>(
     null,
@@ -59,6 +63,7 @@ function OrgLogsInner() {
   const { mutate: setLogsFeature, status: logsMutationStatus } =
     useFeaturesSetMutation({
       onSuccess: (_, variables) => {
+        if (!isCurrentOrganization()) return;
         const { featureName, enabled } =
           variables.request.setProductFeatureRequestBody;
         if (featureName === FeatureName.Logs) {
@@ -74,6 +79,7 @@ function OrgLogsInner() {
         }
       },
       onError: (error) => {
+        if (!isCurrentOrganization()) return;
         // On error the optimistic state above never runs, so the switch
         // reverts to the server value.
         handleAPIError(error, "Failed to update setting");
@@ -86,6 +92,7 @@ function OrgLogsInner() {
     setLogsFeature({
       request: {
         setProductFeatureRequestBody: {
+          organizationId,
           featureName: FeatureName.Logs,
           enabled,
         },
@@ -96,6 +103,7 @@ function OrgLogsInner() {
       setLogsFeature({
         request: {
           setProductFeatureRequestBody: {
+            organizationId,
             featureName: FeatureName.ToolIoLogs,
             enabled: false,
           },
@@ -108,6 +116,7 @@ function OrgLogsInner() {
     setLogsFeature({
       request: {
         setProductFeatureRequestBody: {
+          organizationId,
           featureName: FeatureName.ToolIoLogs,
           enabled,
         },
@@ -119,6 +128,7 @@ function OrgLogsInner() {
     setLogsFeature({
       request: {
         setProductFeatureRequestBody: {
+          organizationId,
           featureName: FeatureName.SessionCapture,
           enabled,
         },
@@ -130,6 +140,7 @@ function OrgLogsInner() {
     setLogsFeature({
       request: {
         setProductFeatureRequestBody: {
+          organizationId,
           featureName: FeatureName.HooksBrowserLogin,
           enabled,
         },
@@ -141,6 +152,7 @@ function OrgLogsInner() {
     setLogsFeature({
       request: {
         setProductFeatureRequestBody: {
+          organizationId,
           featureName: FeatureName.HooksFailOpen,
           enabled,
         },
@@ -149,17 +161,13 @@ function OrgLogsInner() {
   };
 
   return (
-    <>
-      <Heading variant="h4" className="mb-2">
-        Logs
-      </Heading>
-      <Text muted small className="mb-6">
-        Configure logging and telemetry settings for all your tool capture. When
-        enabled, tool calls and traces are recorded for debugging and analytics.
-        These power the insights and logs page on the platform.
-      </Text>
+    <SettingsPage
+      scope={["org:read", "org:admin"]}
+      title="Logs"
+      description="Configure logging and telemetry settings for all your tool capture. When enabled, tool calls and traces are recorded for debugging and analytics. These power the insights and logs page on the platform."
+    >
       <LogDataRetentionBanner />
-      <div className="border-border bg-card rounded-lg border p-4">
+      <div className="border-border bg-card border p-4">
         <Stack gap={4}>
           <Stack direction="horizontal" justify="space-between" align="center">
             <Stack gap={1}>
@@ -190,12 +198,8 @@ function OrgLogsInner() {
 
           <div className="border-border border-t" />
 
-          {featuresData?.skillsEnabled && (
-            <>
-              <SkillContentUploadSetting />
-              <div className="border-border border-t" />
-            </>
-          )}
+          <SkillContentUploadSetting />
+          {featuresData && <div className="border-border border-t" />}
 
           <Stack direction="horizontal" justify="space-between" align="center">
             <Stack gap={1}>
@@ -320,9 +324,7 @@ function OrgLogsInner() {
         </Stack>
       </div>
 
-      <div className="mt-8">
-        <OtelForwardingSection />
-      </div>
-    </>
+      <OtelForwardingSection />
+    </SettingsPage>
   );
 }

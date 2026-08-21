@@ -5,13 +5,23 @@ import (
 
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 // The externalCredentials service exposes organization-scoped CRUD over
 // external_credentials (how Gram authenticates into a customer's AWS or GCP
 // account). Writes are per-provider and strongly typed; reads use a generic,
-// supertype-only list plus per-provider typed detail endpoints. Verification of
-// the credential against the cloud provider is intentionally out of scope here.
+// supertype-only list plus per-provider typed detail endpoints.
+//
+// GCP credentials are verifiable here. That was originally out of scope because
+// the ambient identity mode makes verification meaningless — resolving Gram's
+// own attached identity says nothing about a customer's configuration. Requiring
+// impersonation on this tier removes that objection: impersonating the
+// customer's service account is a real authorization check that only succeeds
+// when they have granted Gram roles/iam.serviceAccountTokenCreator on it.
+//
+// AWS credentials are not verifiable yet — Gram has no AWS identity to assume a
+// customer role from — so no verify method exists for that provider.
 var _ = Service("externalCredentials", func() {
 	Description("Manage organization-level external credentials — how Gram authenticates into a customer's AWS or GCP account.")
 	Security(security.Session)
@@ -223,8 +233,61 @@ var _ = Service("externalCredentials", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetGcpIamCredential"}`)
 	})
 
+	Method("verifyGcpIamCredential", func() {
+		Description("Probe that Gram can impersonate the service account a GCP IAM credential names, and report the principal it resolves to. Ephemeral: nothing is persisted. Rate limited per organization. Requires org:admin.")
+
+		// Declared here rather than in shared.DeclareErrorResponses because only the
+		// rate-limited endpoints can return it, and putting it in the shared set
+		// would type a 429 onto every method of every service.
+		Error(string(oops.CodeRateLimitExceeded), func() { Description(oops.CodeRateLimitExceeded.UserMessage()) })
+
+		Payload(func() {
+			Attribute("id", String, "The ID of the credential to verify.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+			security.SessionPayload()
+		})
+
+		Result(VerifyCredentialResult)
+
+		HTTP(func() {
+			POST("/rpc/externalCredentials.verifyGcpIam")
+			Param("id")
+			security.SessionHeader()
+			Response(StatusOK)
+			Response(string(oops.CodeRateLimitExceeded), StatusTooManyRequests, func() {
+				ContentType("application/json")
+			})
+		})
+
+		Meta("openapi:operationId", "verifyGcpIamCredential")
+		Meta("openapi:extension:x-speakeasy-name-override", "verifyGcpIam")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "VerifyGcpIamCredential"}`)
+	})
+
+	Method("getGcpSetupInfo", func() {
+		Description("Report what the customer must grant in their own GCP project before Gram can impersonate a service account there. Readable before any credential exists, since impersonation is a precondition of creating one. Requires org:read.")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(GcpSetupInfo)
+
+		HTTP(func() {
+			GET("/rpc/externalCredentials.getGcpSetupInfo")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getGcpSetupInfo")
+		Meta("openapi:extension:x-speakeasy-name-override", "getGcpSetupInfo")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GcpSetupInfo"}`)
+	})
+
 	Method("deleteAwsIamCredential", func() {
-		Description("Soft-delete an AWS IAM external credential by ID. Requires org:admin.")
+		Description("Soft-delete an AWS IAM external credential by ID. Requires org:admin. Refused with a conflict while any live external key still names the credential, since deleting it would leave those keys unable to reach the key material they sign with.")
 
 		Payload(func() {
 			Attribute("id", String, "The ID of the credential to delete.", func() {
@@ -247,7 +310,7 @@ var _ = Service("externalCredentials", func() {
 	})
 
 	Method("deleteGcpIamCredential", func() {
-		Description("Soft-delete a GCP IAM external credential by ID. Requires org:admin.")
+		Description("Soft-delete a GCP IAM external credential by ID. Requires org:admin. Refused with a conflict while any live external key still names the credential, since deleting it would leave those keys unable to reach the key material they sign with.")
 
 		Payload(func() {
 			Attribute("id", String, "The ID of the credential to delete.", func() {

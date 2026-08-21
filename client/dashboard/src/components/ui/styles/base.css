@@ -514,8 +514,8 @@
    * Higher-level semantic tokens for specific use cases
    * ============================================ */
 
-  /* Border Radius */
-  --radius: 0.625rem;
+  /* Border Radius — square corners everywhere */
+  --radius: 0rem;
   /* ============================================
    * 4. DEPRECATED TOKENS - SHADCN COMPATIBILITY
    * These will be removed in future versions

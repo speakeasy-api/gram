@@ -34,6 +34,8 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
+	"slices"
 	"syscall"
 	"time"
 
@@ -47,6 +49,15 @@ import (
 )
 
 type HTTPClient = http.Client
+
+type closeIdleRoundTripper struct {
+	http.RoundTripper
+	closeIdleConnections func()
+}
+
+func (t *closeIdleRoundTripper) CloseIdleConnections() {
+	t.closeIdleConnections()
+}
 
 var (
 	ErrBadHost   = fmt.Errorf("bad host")
@@ -113,12 +124,15 @@ type RetryConfig struct {
 // only a few fields need to be overridden.
 func DefaultRetryConfig() *RetryConfig {
 	return &RetryConfig{
-		WaitMin:      1 * time.Second,
-		WaitMax:      30 * time.Second,
-		MaxAttempts:  4,
-		CheckRetry:   retryablehttp.DefaultRetryPolicy,
-		Backoff:      retryablehttp.DefaultBackoff,
-		ErrorHandler: nil,
+		WaitMin:     1 * time.Second,
+		WaitMax:     30 * time.Second,
+		MaxAttempts: 4,
+		CheckRetry:  retryablehttp.DefaultRetryPolicy,
+		Backoff:     retryablehttp.DefaultBackoff,
+		// Exhausted retries surface as *RetriesExhaustedError so callers
+		// keep the final attempt's status and body instead of the opaque
+		// "giving up" message that discards the response.
+		ErrorHandler: retriesExhaustedErrorHandler,
 		PrepareRetry: nil,
 	}
 }
@@ -359,6 +373,10 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 			breaker: p.breaker,
 		}
 	}
+	roundTripper = &closeIdleRoundTripper{
+		RoundTripper:         roundTripper,
+		closeIdleConnections: transport.CloseIdleConnections,
+	}
 
 	if opts.retryConfig == nil {
 		return &http.Client{Transport: roundTripper}
@@ -390,7 +408,12 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 		retryClient.Backoff = opts.retryConfig.Backoff
 	}
 
-	return retryClient.StandardClient()
+	client := retryClient.StandardClient()
+	client.Transport = &closeIdleRoundTripper{
+		RoundTripper:         client.Transport,
+		closeIdleConnections: transport.CloseIdleConnections,
+	}
+	return client
 }
 
 type dialerOptions struct {
@@ -502,6 +525,47 @@ func (p *Policy) ValidateHost(ctx context.Context, host string) error {
 	}
 
 	return nil
+}
+
+// ValidateHTTPURL checks that rawURL is an absolute http or https URL whose
+// host is permitted by the policy's CIDR blocklist. It validates the URL
+// string and resolves the host; it does not connect. Runtime enforcement still
+// happens via [Policy.Dialer] on the subsequent request, including each
+// redirect. Callers that fetch user-supplied content (OpenAPI specs, images)
+// should use [Policy.ValidateHTTPSURL] instead so the body cannot travel in
+// the clear.
+func (p *Policy) ValidateHTTPURL(ctx context.Context, rawURL string) (*url.URL, error) {
+	return p.validateAbsoluteURL(ctx, rawURL, []string{"http", "https"})
+}
+
+// ValidateHTTPSURL is [Policy.ValidateHTTPURL] restricted to https. Use it for
+// user-supplied fetch URLs so the request cannot be MITM'd in transit.
+func (p *Policy) ValidateHTTPSURL(ctx context.Context, rawURL string) (*url.URL, error) {
+	return p.validateAbsoluteURL(ctx, rawURL, []string{"https"})
+}
+
+func (p *Policy) validateAbsoluteURL(ctx context.Context, rawURL string, schemes []string) (*url.URL, error) {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return nil, fmt.Errorf("parse url: %w", err)
+	}
+
+	if !slices.Contains(schemes, u.Scheme) {
+		if len(schemes) == 1 {
+			return nil, fmt.Errorf("url scheme must be %s", schemes[0])
+		}
+		return nil, fmt.Errorf("url scheme must be http or https")
+	}
+
+	if u.Host == "" {
+		return nil, fmt.Errorf("url must include a host")
+	}
+
+	if err := p.ValidateHost(ctx, u.Hostname()); err != nil {
+		return nil, fmt.Errorf("validate host: %w", err)
+	}
+
+	return u, nil
 }
 
 // checkIP returns [ErrBlockedIP] if ip falls within any of the policy's

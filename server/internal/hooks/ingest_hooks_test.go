@@ -20,9 +20,12 @@ import (
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
@@ -47,11 +50,13 @@ type sessionCacheDeadlineRecorder struct {
 }
 
 func (r *sessionCacheDeadlineRecorder) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
-	deadline, ok := ctx.Deadline()
-	if ok {
-		r.remaining <- time.Until(deadline)
-	} else {
-		r.remaining <- 0
+	if strings.HasPrefix(key, "session:metadata:") {
+		deadline, ok := ctx.Deadline()
+		if ok {
+			r.remaining <- time.Until(deadline)
+		} else {
+			r.remaining <- 0
+		}
 	}
 	if err := r.Cache.Set(ctx, key, value, ttl); err != nil {
 		return fmt.Errorf("set cache: %w", err)
@@ -211,6 +216,51 @@ func TestIngest_RejectedCredentialsUnauthorized(t *testing.T) {
 	require.Error(t, err)
 	require.Nil(t, result)
 	require.Contains(t, strings.ToLower(err.Error()), "unauthorized")
+}
+
+func TestIngestAuthenticated_UsesSuppliedIdentity(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := "authenticated-ingest-" + uuid.NewString()
+	idempotencyKey := "authenticated-ingest-" + uuid.NewString()
+	prompt := "authenticated ingestion prompt " + uuid.NewString()
+	untrustedAPIKey := "must-not-override-authenticated-context"
+	untrustedProjectSlug := "must-not-override-authenticated-project"
+	payload := canonicalIngestPayload("litellm", "prompt.submitted", sessionID)
+	payload.ApikeyToken = &untrustedAPIKey
+	payload.ProjectSlugInput = &untrustedProjectSlug
+	payload.IdempotencyKey = &idempotencyKey
+	payload.Data = &gen.HookIngestData{
+		Prompt: &gen.HookPromptData{Text: &prompt},
+	}
+	ti.service.riskScanner = &stubResultScanner{result: &risk.ScanResult{
+		Action:      "block",
+		PolicyID:    uuid.NewString(),
+		PolicyName:  "authenticated boundary policy",
+		Description: "blocked by deterministic test scanner",
+	}}
+
+	result, err := ti.service.IngestAuthenticated(t.Context(), authCtx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "deny", result.Decision)
+
+	messages, err := chatRepo.New(ti.conn).ListChatMessages(t.Context(), chatRepo.ListChatMessagesParams{
+		ChatID:    sessionIDToUUID(sessionID),
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, messages, 1)
+	require.True(t, messages[0].ProjectID.Valid)
+	require.Equal(t, *authCtx.ProjectID, messages[0].ProjectID.UUID)
+	require.Equal(t, "user", messages[0].Role)
+	require.Equal(t, prompt, messages[0].Content)
 }
 
 // A shared plugins-* key carries no usable identity of its own, but the
@@ -581,6 +631,38 @@ func TestCanonicalChatTitle_TruncatesByRunes(t *testing.T) {
 	title := canonicalChatTitle(payload, "")
 	require.True(t, utf8.ValidString(title))
 	require.Len(t, []rune(title), 80)
+}
+
+func TestCanonicalAgentTurnIDAcceptsLegacyCodexTurnID(t *testing.T) {
+	t.Parallel()
+
+	payload := canonicalIngestPayload("codex", "prompt.submitted", "codex-session")
+	payload.Session.TurnID = new("turn-1")
+	require.Equal(t, "codex:turn-1", canonicalAgentTurnID(payload))
+}
+
+func TestCanonicalAgentTurnIDExtractsLegacyOpenCodeMessageID(t *testing.T) {
+	t.Parallel()
+
+	payload := canonicalIngestPayload("opencode", "prompt.submitted", "opencode-session")
+	payload.Raw = json.RawMessage(`{"input":{"messageID":"msg-input"},"output":{"message":{"id":"msg-output"}}}`)
+	require.Equal(t, "opencode:msg-output", canonicalAgentTurnID(payload))
+}
+
+func TestCanonicalAgentTurnIDRejectsSpoofedProviderPrefix(t *testing.T) {
+	t.Parallel()
+
+	payload := canonicalIngestPayload("custom-adapter", "prompt.submitted", "custom-session")
+	payload.Session.TurnID = new("agent-turn:v1:opencode:msg-1")
+	require.Empty(t, canonicalAgentTurnID(payload))
+}
+
+func TestCanonicalAgentTurnIDRejectsProviderWithoutSharedIdentity(t *testing.T) {
+	t.Parallel()
+
+	payload := canonicalIngestPayload("claude", "prompt.submitted", "claude-session")
+	payload.Session.TurnID = new("turn-1")
+	require.Empty(t, canonicalAgentTurnID(payload))
 }
 
 func TestIngest_SkillActivationIsAcceptedAsFeatureEvent(t *testing.T) {
@@ -981,7 +1063,7 @@ func TestIngest_NonUUIDSessionIDStampsResolvedChatID(t *testing.T) {
 	require.Equal(t, "allow", res.Decision)
 
 	// The transcript lands under the mapped UUID.
-	persisted, err := chatRepo.New(ti.conn).GetChat(ctx, chatID)
+	persisted, err := chatRepo.New(ti.conn).GetChat(ctx, chatRepo.GetChatParams{ID: chatID, ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
 
 	var logs []telemetryrepo.TelemetryLog
@@ -1055,7 +1137,7 @@ func TestIngest_LinksChatToUserAccount(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "allow", res.Decision)
 
-	chat, err := chatRepo.New(ti.conn).GetChat(ctx, chatID)
+	chat, err := chatRepo.New(ti.conn).GetChat(ctx, chatRepo.GetChatParams{ID: chatID, ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
 	require.True(t, chat.UserAccountID.Valid)
 	require.Equal(t, userAccountID, chat.UserAccountID.UUID.String())
@@ -1569,6 +1651,17 @@ func canonicalIngestPayload(adapter, eventType, sessionID string) *gen.IngestPay
 	}
 }
 
+func TestMergeSourceAttributesDoesNotOverrideCanonicalFields(t *testing.T) {
+	t.Parallel()
+	base := map[attr.Key]any{attr.ProjectIDKey: "canonical-project"}
+	mergeSourceAttributes(base, map[attr.Key]any{
+		attr.ProjectIDKey:     "external-project",
+		attr.LiteLLMCallIDKey: "call-id",
+	})
+	require.Equal(t, "canonical-project", base[attr.ProjectIDKey])
+	require.Equal(t, "call-id", base[attr.LiteLLMCallIDKey])
+}
+
 // The gram.hook.event attribute vocabulary is the provider-style HookEvent
 // names — ClickHouse summary predicates match on PostToolUse and friends, so
 // canonical event types must translate back before they reach telemetry.
@@ -1764,4 +1857,579 @@ type recordingRiskFindingInserter struct {
 func (r *recordingRiskFindingInserter) InsertRiskFindings(_ context.Context, rows []chrepo.RiskFindingRow) error {
 	r.rows = rows
 	return nil
+}
+
+// TestCanonicalSessionMetadata_AttributesCodexAdapter: a Codex session
+// delivered only through the relay (Ingest is its sole path) is attributed at
+// ingest — provider openai, email-based classification, and the org-level
+// billing mode from the codex_compliance config for team sessions (DNO-734).
+func TestCanonicalSessionMetadata_AttributesCodexAdapter(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	seedCodexBillingConfig(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "flat_rate")
+
+	payload := canonicalIngestPayload("codex", "tool.requested", "codex-ingest-attribution")
+	metadata := ti.service.canonicalSessionMetadata(ctx, payload, authCtx, canonicalActor{UserID: "user-123", Email: "dev@example.com"})
+
+	require.Equal(t, providerOpenAI, metadata.Provider)
+	require.Equal(t, accountTypeTeam, metadata.AccountType)
+	require.Equal(t, "flat_rate", metadata.BillingMode)
+}
+
+// TestCanonicalSessionMetadata_CodexAdapterUnresolvedActorIsPersonal: an actor
+// whose email did not resolve to an org member classifies personal and does
+// not inherit the company's billing mode. Claude adapters remain untouched —
+// their attribution belongs to the OTEL path.
+func TestCanonicalSessionMetadata_CodexAdapterUnresolvedActorIsPersonal(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	seedCodexBillingConfig(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "flat_rate")
+
+	payload := canonicalIngestPayload("Codex", "prompt.submitted", "codex-ingest-personal")
+	metadata := ti.service.canonicalSessionMetadata(ctx, payload, authCtx, canonicalActor{UserID: "", Email: "someone@personal.example"})
+
+	require.Equal(t, providerOpenAI, metadata.Provider)
+	require.Equal(t, accountTypePersonal, metadata.AccountType)
+	require.Empty(t, metadata.BillingMode)
+
+	claudeMetadata := ti.service.canonicalSessionMetadata(ctx, canonicalIngestPayload("claude-code", "prompt.submitted", "claude-ingest-untouched"), authCtx, canonicalActor{UserID: "", Email: ""})
+	require.Empty(t, claudeMetadata.Provider)
+	require.Empty(t, claudeMetadata.AccountType)
+}
+
+// TestCanonicalSessionMetadata_CodexReattributesOnNewActorEmail: a cached
+// classification is only adopted when this event's actor email is the one it
+// was computed from — the same identity rule the legacy-hook and OTEL paths
+// apply — so a different resolved actor on the same session re-classifies
+// instead of inheriting the prior attribution. Re-attribution is observable
+// through the billing mode: the cache carries flat_rate, but no config exists
+// in this test, so a fresh resolution must come back empty.
+func TestCanonicalSessionMetadata_CodexReattributesOnNewActorEmail(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	newActorID := "codex-ingest-new-actor"
+	newActorEmail := "new-actor@example.com"
+	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, newActorID, newActorEmail)
+
+	sessionID := "codex-ingest-actor-change"
+	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+		SessionID:         sessionID,
+		ServiceName:       "codex",
+		UserEmail:         "teammate@example.com",
+		UserID:            "teammate-user-id",
+		Provider:          providerOpenAI,
+		AccountType:       accountTypeTeam,
+		BillingMode:       "flat_rate",
+		ObservedUserEmail: "teammate@example.com",
+		GramOrgID:         authCtx.ActiveOrganizationID,
+		ProjectID:         authCtx.ProjectID.String(),
+	}, 0))
+
+	payload := canonicalIngestPayload("codex", "tool.requested", sessionID)
+	metadata := ti.service.canonicalSessionMetadata(ctx, payload, authCtx, canonicalActor{UserID: newActorID, Email: newActorEmail})
+
+	require.Equal(t, providerOpenAI, metadata.Provider)
+	require.Equal(t, accountTypeTeam, metadata.AccountType)
+	// The cached flat_rate must NOT survive: a fresh resolution ran and found
+	// no config declaration.
+	require.Empty(t, metadata.BillingMode)
+	require.Equal(t, newActorEmail, metadata.ObservedUserEmail)
+}
+
+// TestCanonicalSessionMetadata_CodexReattributionDropsStaleCachedUserID: when
+// the actor email changes to one that resolves to no org member, the
+// re-classification must not run with the PRIOR actor's UserID (the session
+// identity fallback fills UserID from the cache independently of the email).
+// A stale id would classify the unresolved email team and unlock the
+// team-gated org billing mode; the fresh actor must come back personal with
+// no billing mode even though a flat_rate declaration exists.
+func TestCanonicalSessionMetadata_CodexReattributionDropsStaleCachedUserID(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	seedCodexBillingConfig(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "flat_rate")
+
+	sessionID := "codex-ingest-stale-user-id"
+	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+		SessionID:         sessionID,
+		ServiceName:       "codex",
+		UserEmail:         "teammate@example.com",
+		UserID:            "teammate-user-id",
+		Provider:          providerOpenAI,
+		AccountType:       accountTypeTeam,
+		BillingMode:       "flat_rate",
+		ObservedUserEmail: "teammate@example.com",
+		GramOrgID:         authCtx.ActiveOrganizationID,
+		ProjectID:         authCtx.ProjectID.String(),
+	}, 0))
+
+	payload := canonicalIngestPayload("codex", "tool.requested", sessionID)
+	metadata := ti.service.canonicalSessionMetadata(ctx, payload, authCtx, canonicalActor{UserID: "", Email: "stranger@personal.example"})
+
+	require.Equal(t, providerOpenAI, metadata.Provider)
+	require.Empty(t, metadata.UserID, "cached teammate id must not survive the identity change")
+	require.Equal(t, accountTypePersonal, metadata.AccountType)
+	require.Empty(t, metadata.BillingMode)
+	require.Equal(t, "stranger@personal.example", metadata.ObservedUserEmail)
+}
+
+// TestIngest_ShadowMCPGuardCoversCodexMetaTools: Codex's built-in MCP resource
+// tools carry no mcp__ prefix and their target lives in tool_input.server, so
+// neither arm of the gate (resolved MCP data, MCP-shaped tool name) recognizes
+// them. Before DNO-767 they were classified as ordinary tool calls and a
+// block_all shadow-MCP policy never ran, letting a Codex session read any MCP
+// server's resources. A meta-tool whose server cannot be read must still deny —
+// an unproven target is not an absent one.
+func TestIngest_ShadowMCPGuardCoversCodexMetaTools(t *testing.T) {
+	t.Parallel()
+
+	for _, toolName := range []string{"list_mcp_resources", "list_mcp_resource_templates", "read_mcp_resource"} {
+		for name, toolInput := range map[string]any{
+			"named server":      map[string]any{"server": "platform-logs"},
+			"missing server":    map[string]any{},
+			"blank server":      map[string]any{"server": "  "},
+			"non-string server": map[string]any{"server": 42},
+			"nil input":         nil,
+		} {
+			t.Run(toolName+"/"+name, func(t *testing.T) {
+				t.Parallel()
+				ctx, ti := newTestHooksService(t)
+				ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+				payload := canonicalIngestPayload("codex", "tool.requested", "codex-meta-"+toolName+"-"+name)
+				callID := "call-1"
+				payload.Data = &gen.HookIngestData{
+					ToolCall: &gen.HookToolCallData{
+						ID:    &callID,
+						Name:  &toolName,
+						Input: toolInput,
+					},
+					// The sender read the list and found no servers, so an
+					// empty inventory is proof of absence here.
+					McpInventoryCollected: new(true),
+				}
+
+				result, err := ti.service.Ingest(ctx, payload)
+				require.NoError(t, err)
+				require.NotNil(t, result)
+				require.Equal(t, "deny", result.Decision,
+					"a codex MCP meta-tool must be evaluated by the shadow-MCP policy")
+			})
+		}
+	}
+}
+
+// TestIngest_ShadowMCPGuardIgnoresMetaToolNamesFromOtherAdapters: the meta-tool
+// names are Codex's, so an unrelated tool of the same name on another agent
+// must not be reclassified as an MCP call.
+func TestIngest_ShadowMCPGuardIgnoresMetaToolNamesFromOtherAdapters(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+	toolName := "read_mcp_resource"
+	callID := "call-1"
+	payload := canonicalIngestPayload("custom-adapter", "tool.requested", "non-codex-meta-tool")
+	payload.Data = &gen.HookIngestData{
+		ToolCall: &gen.HookToolCallData{
+			ID:    &callID,
+			Name:  &toolName,
+			Input: map[string]any{"server": "platform-logs"},
+		},
+	}
+
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotEqual(t, "deny", result.Decision)
+}
+
+// TestIngest_ShadowMCPResolvesCodexMetaToolAgainstInventory: bringing the
+// meta-tools under the guard must not blanket-deny them. The guard can only
+// reach its generic "not Gram-hosted" deny without a URL, so a meta-tool
+// reading resources from a Gram-hosted server would be blocked — traffic the
+// legacy endpoint permits. Resolving the name against the session inventory is
+// what separates allowed from denied, and it must name the server when denying.
+func TestIngest_ShadowMCPResolvesCodexMetaToolAgainstInventory(t *testing.T) {
+	t.Parallel()
+
+	gramHosted := MCPServerEntry{
+		Source: "codex", Name: "speakeasy-team",
+		URL:    "https://app.getgram.ai/mcp/speakeasy-team-8g3az",
+		Status: "unknown",
+	}
+	external := MCPServerEntry{
+		Source: "codex", Name: "someone-else",
+		URL:    "https://mcp.example.test/mcp",
+		Status: "unknown",
+	}
+
+	tests := []struct {
+		name       string
+		entry      MCPServerEntry
+		target     string
+		wantDenied bool
+	}{
+		{"gram-hosted target is allowed", gramHosted, "speakeasy-team", false},
+		{"external target is denied", external, "someone-else", true},
+		{"target absent from inventory is denied", gramHosted, "unlisted", true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestHooksService(t)
+			ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+			sessionID := "codex-meta-inventory-" + tc.name
+			require.NoError(t, ti.service.cache.Set(ctx,
+				sessionMCPListCacheKey(sessionID), []MCPServerEntry{tc.entry}, sessionMCPListTTL))
+
+			toolName := "read_mcp_resource"
+			callID := "call-1"
+			payload := canonicalIngestPayload("codex", "tool.requested", sessionID)
+			payload.Data = &gen.HookIngestData{
+				ToolCall: &gen.HookToolCallData{
+					ID: &callID, Name: &toolName,
+					Input: map[string]any{"server": tc.target},
+				},
+				McpInventoryCollected: new(true),
+			}
+
+			result, err := ti.service.Ingest(ctx, payload)
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			if !tc.wantDenied {
+				require.NotEqual(t, "deny", result.Decision,
+					"a Gram-hosted meta-tool target must not be blocked")
+				return
+			}
+			require.Equal(t, "deny", result.Decision)
+		})
+	}
+}
+
+// TestCanonicalMCPInventoryEntriesCarryCodexToolPrefix: Codex addresses a
+// server by its sanitized tool prefix as well as its configured name, and the
+// cached-entry fallback matches only on ToolPrefix. Without it a hyphenated
+// server is unresolvable on the ingest path while the legacy endpoint resolves
+// it, so a Gram-hosted target would be denied.
+func TestCanonicalMCPInventoryEntriesCarryCodexToolPrefix(t *testing.T) {
+	t.Parallel()
+
+	name := "platform-logs"
+	url := "https://app.getgram.ai/mcp/platform-logs"
+	payload := canonicalIngestPayload("codex", "session.started", "codex-tool-prefix")
+	payload.Data = &gen.HookIngestData{
+		McpInventory: []*gen.HookMCPData{{ServerName: &name, URL: &url}},
+	}
+
+	entries := canonicalMCPInventoryEntries(payload)
+	require.Len(t, entries, 1)
+	require.Equal(t, "platform_logs", entries[0].ToolPrefix)
+
+	// The sanitized form must resolve to the configured server, as it does on
+	// the legacy endpoint.
+	matched := matchCodexCachedMCPServerEntry(entries, "platform_logs")
+	require.NotNil(t, matched)
+	require.Equal(t, url, matched.URL)
+
+	// Other adapters keep no codex-specific prefix.
+	payload.Source.Adapter = "claude"
+	require.Empty(t, canonicalMCPInventoryEntries(payload)[0].ToolPrefix)
+}
+
+func TestIngestStoresExplicitEmptyMCPInventory(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	sessionID := uuid.NewString()
+	stale := []MCPServerEntry{{Name: "stale-server", URL: "https://stale.example.test/mcp"}}
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID), stale, sessionMCPListTTL))
+
+	payload := canonicalIngestPayload("claude", "mcp.inventory", sessionID)
+	payload.Data = &gen.HookIngestData{
+		McpInventory:          []*gen.HookMCPData{},
+		McpInventoryCollected: new(true),
+	}
+
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	entries, err := ti.service.getCachedMCPList(ctx, sessionID)
+	require.NoError(t, err)
+	require.NotNil(t, entries)
+	require.Empty(t, entries)
+	require.True(t, ti.service.canonicalClientReportsMCPInventory(ctx, payload))
+}
+
+func TestIngestPartialMCPInventoryWithoutAuthoritativeSnapshot(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+	sessionID := uuid.NewString()
+	name := "partial-server"
+	url := "https://mcp.example.test/partial"
+	payload := canonicalIngestPayload("codex", "mcp.inventory", sessionID)
+	payload.Data = &gen.HookIngestData{
+		McpInventory:          []*gen.HookMCPData{{ServerName: &name, URL: &url}},
+		McpInventoryCollected: new(false),
+	}
+
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	_, err = ti.service.getCachedMCPList(ctx, sessionID)
+	require.Error(t, err)
+	require.False(t, ti.service.canonicalClientReportsMCPInventory(ctx, payload))
+
+	toolName := "read_mcp_resource"
+	callID := "call-1"
+	call := canonicalIngestPayload("codex", "tool.requested", sessionID)
+	call.Data = &gen.HookIngestData{ToolCall: &gen.HookToolCallData{
+		ID: &callID, Name: &toolName, Input: map[string]any{"server": name},
+	}}
+	result, err = ti.service.Ingest(ctx, call)
+	require.NoError(t, err)
+	require.NotEqual(t, "deny", result.Decision,
+		"a partial inventory must not enable enforcement without complete evidence")
+}
+
+func TestIngestPartialMCPInventoryPreservesAuthoritativeSnapshot(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+	sessionID := uuid.NewString()
+	name := "speakeasy-team"
+	hostedURL := "https://app.getgram.ai/mcp/speakeasy-team"
+	want := []MCPServerEntry{{Source: "codex", Name: name, URL: hostedURL, Status: "unknown", ToolPrefix: "speakeasy_team"}}
+	complete := canonicalIngestPayload("codex", "mcp.inventory", sessionID)
+	complete.Data = &gen.HookIngestData{
+		McpInventory:          []*gen.HookMCPData{{ServerName: &name, URL: &hostedURL}},
+		McpInventoryCollected: new(true),
+	}
+	_, err := ti.service.Ingest(ctx, complete)
+	require.NoError(t, err)
+
+	partialURL := "https://mcp.example.test/partial"
+	partial := canonicalIngestPayload("codex", "mcp.inventory", sessionID)
+	partial.Data = &gen.HookIngestData{
+		McpInventory:          []*gen.HookMCPData{{ServerName: &name, URL: &partialURL}},
+		McpInventoryCollected: new(false),
+	}
+	_, err = ti.service.Ingest(ctx, partial)
+	require.NoError(t, err)
+
+	entries, err := ti.service.getCachedMCPList(ctx, sessionID)
+	require.NoError(t, err)
+	require.Equal(t, want, entries)
+	require.True(t, ti.service.canonicalClientReportsMCPInventory(ctx, partial))
+
+	toolName := "read_mcp_resource"
+	callID := "call-1"
+	call := canonicalIngestPayload("codex", "tool.requested", sessionID)
+	call.Data = &gen.HookIngestData{ToolCall: &gen.HookToolCallData{
+		ID: &callID, Name: &toolName, Input: map[string]any{"server": name},
+	}}
+	result, err := ti.service.Ingest(ctx, call)
+	require.NoError(t, err)
+	require.NotEqual(t, "deny", result.Decision,
+		"a partial inventory must not replace the complete Gram-hosted target")
+}
+
+func TestIngestStoresCollectedEmptyMCPInventory(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	sessionID := uuid.NewString()
+	stale := []MCPServerEntry{{Name: "stale-server", URL: "https://stale.example.test/mcp"}}
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID), stale, sessionMCPListTTL))
+
+	payload := canonicalIngestPayload("claude", "session.updated", sessionID)
+	payload.Data = &gen.HookIngestData{McpInventoryCollected: new(true)}
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	entries, err := ti.service.getCachedMCPList(ctx, sessionID)
+	require.NoError(t, err)
+	require.Empty(t, entries)
+}
+
+func TestIngestPreservesMCPInventoryForUnrelatedExplicitEmptyEvent(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	sessionID := uuid.NewString()
+	name := "current-server"
+	url := "https://current.example.test/mcp"
+	want := []MCPServerEntry{{Source: "claude", Name: name, URL: url, Status: "unknown"}}
+	snapshot := canonicalIngestPayload("claude", "session.started", sessionID)
+	snapshot.Data = &gen.HookIngestData{
+		McpInventory:          []*gen.HookMCPData{{ServerName: &name, URL: &url}},
+		McpInventoryCollected: new(true),
+	}
+	result, err := ti.service.Ingest(ctx, snapshot)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	payload := canonicalIngestPayload("claude", "session.updated", sessionID)
+	payload.Data = &gen.HookIngestData{McpInventory: []*gen.HookMCPData{}}
+	result, err = ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	entries, err := ti.service.getCachedMCPList(ctx, sessionID)
+	require.NoError(t, err)
+	require.Equal(t, want, entries)
+	require.True(t, ti.service.canonicalClientReportsMCPInventory(ctx, payload))
+}
+
+// TestIngest_ShadowMCPMetaToolGateDegradesWithoutAReadInventory: the guard
+// denies a meta-tool call it cannot clear against an inventory, so an empty
+// inventory only justifies a deny when the sender actually read the list. A
+// sender that could not read it — no agent binary, a failed probe — reports
+// mcp_inventory_collected false, and every relay predating the flag omits it
+// entirely. Enforcing on either would deny reads of Gram-hosted servers that
+// work today (DNO-771).
+func TestIngest_ShadowMCPMetaToolGateDegradesWithoutAReadInventory(t *testing.T) {
+	t.Parallel()
+
+	for name, collected := range map[string]*bool{
+		"flag absent: a relay predating it":   nil,
+		"flag false: the list was unreadable": new(false),
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestHooksService(t)
+			ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+			toolName := "read_mcp_resource"
+			callID := "call-1"
+			payload := canonicalIngestPayload("codex", "tool.requested", "codex-unread-inventory-"+name)
+			payload.Data = &gen.HookIngestData{
+				ToolCall: &gen.HookToolCallData{
+					ID: &callID, Name: &toolName,
+					Input: map[string]any{"server": "platform-logs"},
+				},
+				McpInventoryCollected: collected,
+			}
+
+			result, err := ti.service.Ingest(ctx, payload)
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			require.NotEqual(t, "deny", result.Decision,
+				"an inventory that was never read is not evidence the server is absent")
+		})
+	}
+}
+
+// TestIngest_ShadowMCPMetaToolGateReadsSessionState drives the real event
+// sequence rather than a hand-built payload: the sender reports whether it read
+// the MCP list on session.started, and the meta-tool call it gates arrives
+// later as its own tool.requested event carrying no such field. Reading the
+// flag off the gating event instead of the session would skip every meta-tool
+// call in production while a test that injects the flag into a tool.requested
+// payload still passed.
+func TestIngest_ShadowMCPMetaToolGateReadsSessionState(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+
+	sessionID := "codex-session-state-gate"
+
+	// The ordered inventory event says the sender read the list and found no
+	// servers before the related tool request arrives.
+	inventory := canonicalIngestPayload("codex", "mcp.inventory", sessionID)
+	inventory.Data = &gen.HookIngestData{
+		McpInventory:          []*gen.HookMCPData{},
+		McpInventoryCollected: new(true),
+	}
+	_, err := ti.service.Ingest(ctx, inventory)
+	require.NoError(t, err)
+
+	// tool.requested: a meta-tool call, with no inventory fields of its own.
+	toolName := "read_mcp_resource"
+	callID := "call-1"
+	call := canonicalIngestPayload("codex", "tool.requested", sessionID)
+	call.Data = &gen.HookIngestData{
+		ToolCall: &gen.HookToolCallData{
+			ID: &callID, Name: &toolName,
+			Input: map[string]any{"server": "platform-logs"},
+		},
+	}
+
+	result, err := ti.service.Ingest(ctx, call)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "deny", result.Decision,
+		"the session reported a successful read, so the guard must enforce on its meta-tool calls")
+}
+
+// Canonical events carry the session working directory (hook.ingest.v1
+// session.cwd); the chat row must persist it so session portability can
+// materialize a moved session into the right project directory. Later events
+// without a cwd must never null out a previously recorded one.
+func TestIngest_PersistsSessionCwd(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	// Chat rows are only written when session capture is enabled for the org.
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := "canonical-session-cwd"
+	chatID := sessionIDToUUID(sessionID)
+	cwd := "/Users/test/code/api"
+
+	prompt := "add a --verbose flag"
+	payload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+	payload.Session.Cwd = &cwd
+	payload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &prompt}}
+	res, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	chat, err := chatRepo.New(ti.conn).GetChat(ctx, chatRepo.GetChatParams{ID: chatID, ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	require.True(t, chat.Cwd.Valid, "chat must persist the session cwd")
+	require.Equal(t, cwd, chat.Cwd.String)
+
+	// An ordinary follow-up event finds the chat already there and never
+	// reaches the upsert, so drive the conflict directly: a racing insert for
+	// the same chat carrying no cwd must not null out the recorded one.
+	_, err = repo.New(ti.conn).UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
+		ID:             chatID,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         conv.ToPGTextEmpty(""),
+		ExternalUserID: conv.ToPGTextEmpty("employee@example.com"),
+		UserAccountID:  conv.StringToNullUUID(""),
+		Title:          conv.ToPGText("racing insert"),
+		Cwd:            conv.ToPGTextEmpty(""),
+	})
+	require.NoError(t, err)
+
+	chat, err = chatRepo.New(ti.conn).GetChat(ctx, chatRepo.GetChatParams{ID: chatID, ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	require.True(t, chat.Cwd.Valid, "a later write without a cwd must not erase the recorded one")
+	require.Equal(t, cwd, chat.Cwd.String)
 }

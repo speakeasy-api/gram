@@ -87,6 +87,32 @@ WITH existing_alias AS (
 SELECT COUNT(*) = 1 AS known
 FROM resolved;
 
+-- name: SkillRawHashNeedsPromptInjectionScan :one
+SELECT EXISTS (
+  SELECT 1
+  FROM skill_raw_hashes srh
+  JOIN skills s
+    ON s.project_id = srh.project_id
+    AND s.archived_at IS NULL
+  JOIN skill_versions sv
+    ON sv.skill_id = s.id
+    AND sv.canonical_sha256 = srh.canonical_sha256
+  JOIN risk_policies p
+    ON p.project_id = s.project_id
+    AND p.enabled IS TRUE
+    AND p.deleted IS FALSE
+    AND 'prompt_injection' = ANY (p.sources)
+  WHERE srh.project_id = @project_id
+    AND srh.raw_sha256 = @raw_sha256
+    AND NOT EXISTS (
+      SELECT 1
+      FROM risk_results rr
+      WHERE rr.skill_version_id = sv.id
+        AND rr.risk_policy_id = p.id
+        AND rr.risk_policy_version = p.version
+    )
+)::boolean;
+
 -- name: HasSkillObservationRawHash :one
 SELECT EXISTS (
   SELECT 1
@@ -102,6 +128,11 @@ WHERE project_id = @project_id
 ORDER BY seen_at ASC, id ASC;
 
 -- name: UpsertClaudeCodeSession :one
+-- Creates the chat row a captured agent session hangs off, or refreshes the one
+-- already there. The chat id is derived from a client-supplied session id, so a
+-- caller could name another tenant's chat: the conflict update is scoped to the
+-- owning project, and a cross-project id surfaces as a no-rows error rather
+-- than mutating a row across the boundary.
 INSERT INTO chats (
     id
   , project_id
@@ -110,6 +141,7 @@ INSERT INTO chats (
   , external_user_id
   , user_account_id
   , title
+  , cwd
   , created_at
   , updated_at
 )
@@ -121,12 +153,15 @@ VALUES (
     @external_user_id,
     sqlc.narg(user_account_id),
     @title,
+    sqlc.narg(cwd),
     NOW(),
     NOW()
 )
 ON CONFLICT (id) DO UPDATE SET
     updated_at = NOW()
   , user_account_id = COALESCE(EXCLUDED.user_account_id, chats.user_account_id)
+  , cwd = COALESCE(EXCLUDED.cwd, chats.cwd)
+WHERE chats.project_id = EXCLUDED.project_id
 RETURNING id;
 
 -- name: UpdateClaudeCodeSessionTimestamp :exec
@@ -244,6 +279,16 @@ WHERE organization_id = @organization_id
   AND deleted_at IS NULL
 ORDER BY user_id, account_type DESC, provider, last_seen_at DESC;
 
+-- name: ListUserAccountsByEmails :many
+-- Resolves account emails back to their directory owner. This supports telemetry
+-- rows whose only identity is a linked personal/provider account email.
+SELECT id, user_id, provider, email, account_type, external_org_id, last_seen_at
+FROM user_accounts
+WHERE organization_id = @organization_id
+  AND lower(email) = ANY(ARRAY(SELECT lower(e) FROM unnest(@emails::text[]) AS e))
+  AND deleted_at IS NULL
+ORDER BY user_id, account_type DESC, provider, last_seen_at DESC;
+
 -- name: GetProviderOrgBillingMode :one
 -- Resolves the org-level admin-declared billing mode for a provider org from the
 -- org's AI integration config (the org-level tier of the billing-mode cascade).
@@ -251,9 +296,13 @@ ORDER BY user_id, account_type DESC, provider, last_seen_at DESC;
 -- provider org; a config with none applies provider-wide. Exact-org matches are
 -- preferred over provider-wide (NULLS LAST because the comparison is NULL for a
 -- NULL-scoped row, and DESC would otherwise sort NULL ahead of an exact match).
--- Only one live config per (org, provider) can exist today, so the ordering is
--- defensive. Only configs with a non-null billing_mode are considered, so an
--- undeclared org returns no rows (treated as unknown upstream).
+-- @match_any_org disables the org scoping entirely: Codex sessions carry no org
+-- identity on any layer while codex_compliance configs always pin one, so for
+-- them the provider-wide declaration applies regardless of config scope. Only
+-- one live config per (org, provider) can exist today, so the ordering (with
+-- updated_at as the tiebreak against historical duplicates) is defensive. Only
+-- configs with a non-null billing_mode are considered, so an undeclared org
+-- returns no rows (treated as unknown upstream).
 SELECT billing_mode
 FROM ai_integration_configs
 WHERE organization_id = @organization_id
@@ -262,11 +311,12 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE
   AND billing_mode IS NOT NULL
   AND (
-    external_organization_id IS NULL
+    @match_any_org::bool
+    OR external_organization_id IS NULL
     OR external_organization_id = ''
     OR external_organization_id = @external_org_id
   )
-ORDER BY (external_organization_id = @external_org_id) DESC NULLS LAST
+ORDER BY (external_organization_id = @external_org_id) DESC NULLS LAST, updated_at DESC
 LIMIT 1;
 
 -- name: GetDeviceOwner :one

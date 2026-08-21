@@ -35,11 +35,6 @@ func (r RevokedToken) CacheKey() string {
 	return fmt.Sprintf("chat_session_revoked:%s", r.JTI)
 }
 
-// AdditionalCacheKeys returns additional cache keys for the revoked token (none needed)
-func (r RevokedToken) AdditionalCacheKeys() []string {
-	return nil
-}
-
 // TTL returns the TTL for the cache entry (24 hours for revoked tokens)
 func (r RevokedToken) TTL() time.Duration {
 	return 24 * time.Hour
@@ -128,6 +123,7 @@ func (m *Manager) Authorize(ctx context.Context, token string) (context.Context,
 		Whitelisted:           false,
 		APIKeyScopes:          nil,
 		IsAdmin:               false,
+		SupportOrganizationID: "",
 	}
 
 	return contextvalues.SetAuthContext(ctx, authCtx), nil

@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { Eye, EyeOff } from "lucide-react";
 import * as React from "react";
 import { useLayoutEffect, useRef, useState } from "react";
 import { Icon } from "../Icon";
@@ -28,6 +29,11 @@ export interface InputProps extends Omit<
   error?: boolean;
   /** A prefix the value must carry; shown as static text inside the field. */
   requiredPrefix?: string;
+  /**
+   * Renders a password field with a built-in show/hide eye toggle. Replaces the
+   * former standalone PrivateInput wrapper.
+   */
+  reveal?: boolean;
   className?: string;
 }
 
@@ -43,12 +49,16 @@ export function Input({
   lines,
   error,
   requiredPrefix,
+  reveal,
   className,
   children,
   disabled,
   placeholder,
+  type,
   ...props
 }: InputProps): React.JSX.Element {
+  const [isRevealed, setIsRevealed] = useState(false);
+  const effectiveType = reveal ? (isRevealed ? "text" : "password") : type;
   const runValidation = (val: string) => {
     if (val === "") return null;
 
@@ -101,7 +111,7 @@ export function Input({
   // billing limit) while scrolling the page. Blur on wheel so the scroll
   // passes through without editing the number.
   const handleWheel = (event: React.WheelEvent<HTMLInputElement>) => {
-    if (props.type === "number") event.currentTarget.blur();
+    if (type === "number") event.currentTarget.blur();
     props.onWheel?.(event);
   };
 
@@ -140,6 +150,7 @@ export function Input({
   ) : (
     <input
       {...props}
+      type={effectiveType}
       value={displayValue}
       placeholder={placeholder}
       disabled={disabled}
@@ -162,7 +173,7 @@ export function Input({
     <div className="relative">
       <div
         className={cn(
-          "flex items-center gap-3 rounded-md border border-input bg-surface-primary-default px-4 py-2 text-muted-foreground",
+          "flex items-center gap-3 border border-input bg-surface-primary-default px-4 py-2 text-muted-foreground",
           icon && "px-3",
           isFocused && "border-focus text-default",
           hasError && "border-destructive-default",
@@ -180,6 +191,21 @@ export function Input({
           </span>
         )}
         {field}
+        {reveal && !asTextarea && (
+          <button
+            type="button"
+            onClick={() => setIsRevealed((v) => !v)}
+            disabled={disabled || props.readOnly}
+            aria-label={isRevealed ? "Hide value" : "Show value"}
+            className="text-muted-foreground hover:text-foreground flex shrink-0 items-center justify-center transition-colors"
+          >
+            {isRevealed ? (
+              <EyeOff className="h-4 w-4" />
+            ) : (
+              <Eye className="h-4 w-4" />
+            )}
+          </button>
+        )}
       </div>
       {validationError && validationError !== DEFAULT_ERROR && (
         <span className="text-xs text-default-destructive">

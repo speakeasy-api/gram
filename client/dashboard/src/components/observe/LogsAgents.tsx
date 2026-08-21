@@ -544,6 +544,20 @@ export function LogsAgentsContent(): JSX.Element {
     [setSearchParams],
   );
 
+  // Open a chat by bare id — used by the detail panel's Linked-sessions rows,
+  // whose far end may not be on the current list page, so there is no
+  // ChatOverview to hand to setSelectedChat. The panel loads by id.
+  const openChatByID = useCallback(
+    (chatID: string) => {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("chatId", chatID);
+        return next;
+      });
+    },
+    [setSearchParams],
+  );
+
   const dateRangeContext = useMemo(() => {
     const formatDate = (d: Date) =>
       d.toLocaleDateString("en-US", {
@@ -603,6 +617,7 @@ export function LogsAgentsContent(): JSX.Element {
         selectedChat={selectedChat}
         selectedChatId={urlChatId}
         setSelectedChat={setSelectedChat}
+        onOpenChat={openChatByID}
         isLoading={isLoading}
         error={error}
         isLogsDisabled={isLogsDisabled}
@@ -651,6 +666,7 @@ function AgentSessionsPageContent({
   selectedChat,
   selectedChatId,
   setSelectedChat,
+  onOpenChat,
   isLoading,
   error,
   isLogsDisabled,
@@ -694,6 +710,7 @@ function AgentSessionsPageContent({
   selectedChat: ChatOverview | null;
   selectedChatId: string | null;
   setSelectedChat: (chat: ChatOverview | null) => void;
+  onOpenChat: (chatID: string) => void;
   isLoading: boolean;
   error: Error | null;
   isLogsDisabled: boolean;
@@ -751,7 +768,7 @@ function AgentSessionsPageContent({
                 type="button"
                 onClick={clearAssistantFilter}
                 aria-label="Clear assistant filter"
-                className="hover:bg-muted-foreground/20 -mr-1 ml-0.5 flex size-4 items-center justify-center rounded"
+                className="hover:bg-muted-foreground/20 -mr-1 ml-0.5 flex size-4 items-center justify-center"
               >
                 <Icon name="x" className="size-3" />
               </button>
@@ -866,14 +883,14 @@ function AgentSessionsPageContent({
               />
             </div>
             {(hasMore || offset > 0) && (
-              <div className="bg-background flex shrink-0 items-center justify-center gap-4 border-t p-4">
+              <div className="bg-card flex shrink-0 items-center justify-center gap-4 border-t p-4 pb-20">
                 <Button
                   onClick={() => setOffset(Math.max(0, offset - limit))}
                   disabled={offset === 0}
                 >
                   Previous
                 </Button>
-                <span className="text-muted-foreground text-sm tabular-nums">
+                <span className="text-muted-foreground font-mono text-xs tabular-nums">
                   Page {Math.floor(offset / limit) + 1}
                   {total > 0 && ` of ${Math.ceil(total / limit)}`}
                 </span>
@@ -893,6 +910,7 @@ function AgentSessionsPageContent({
         chatId={selectedChatId ?? selectedChat?.id ?? null}
         onClose={() => setSelectedChat(null)}
         onDelete={onDeleteChat}
+        onOpenChat={onOpenChat}
         dimNonRisk={hasRisk === "true" || minRiskScore !== undefined}
       />
     </>

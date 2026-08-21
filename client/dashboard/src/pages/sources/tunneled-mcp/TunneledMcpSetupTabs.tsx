@@ -1,5 +1,5 @@
 import { CodeBlock, type CodeBlockSlot } from "@/components/code";
-import { McpSidebarInfoLabel } from "@/components/mcp-sidebar-nav-shell";
+import { DetailSidebarInfoLabel } from "@/components/detail/detail-sidebar-nav";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/Tabs";
@@ -76,7 +76,7 @@ export function TunneledMcpSetupTabs({
   };
 
   return (
-    <div className="rounded-lg border p-6">
+    <div className="border p-6">
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div>
           <Text variant="subheading">Connect your MCP server</Text>
@@ -92,7 +92,7 @@ export function TunneledMcpSetupTabs({
       </div>
 
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
-        <div className="bg-card border-border flex flex-col gap-3 rounded-lg border px-4 py-3 shadow-md lg:sticky lg:top-6 dark:bg-neutral-950">
+        <div className="bg-card border-border flex flex-col gap-3 border px-4 py-3 shadow-md lg:sticky lg:top-6 dark:bg-neutral-950">
           <Text className="font-semibold">Tunnel config</Text>
           <ConfigGroup label="Tunnel endpoint">
             <Tabs value={mode} onValueChange={handleModeChange}>
@@ -457,7 +457,7 @@ function FlashOnChange({ text }: { text: string }) {
   return (
     <span
       className={cn(
-        "rounded-xs transition-colors",
+        "transition-colors",
         flashing ? "bg-primary/20 duration-150" : "bg-transparent duration-700",
       )}
     >
@@ -477,7 +477,7 @@ function ConfigGroup({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <McpSidebarInfoLabel>{label}</McpSidebarInfoLabel>
+      <DetailSidebarInfoLabel>{label}</DetailSidebarInfoLabel>
       {children}
     </div>
   );

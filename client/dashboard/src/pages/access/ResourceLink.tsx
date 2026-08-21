@@ -1,7 +1,28 @@
 import { Text } from "@/components/ui/Text";
 import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
-import { Building2, ChevronRight, FolderOpen, Plug } from "lucide-react";
+import {
+  Blocks,
+  Building2,
+  ChevronRight,
+  FolderOpen,
+  Plug,
+  Terminal,
+} from "lucide-react";
 import { Link } from "react-router";
+
+// Fallback for resource ids we cannot resolve to a display name (deleted
+// rows, kinds with no org-level lookup): a truncated mono chip with the full
+// id on hover, instead of a raw UUID in running text.
+function IdChip({ id }: { id: string }): JSX.Element {
+  return (
+    <code
+      className="bg-muted text-muted-foreground shrink-0 px-1.5 py-0.5 font-mono text-xs"
+      title={id}
+    >
+      {id.length > 12 ? `${id.slice(0, 8)}…` : id}
+    </code>
+  );
+}
 
 export function ResourceLink({
   challenge,
@@ -19,7 +40,7 @@ export function ResourceLink({
     { slug?: string; name?: string; projectId: string }
   >;
 }): JSX.Element {
-  const { resourceKind, resourceId } = challenge;
+  const { resourceKind, resourceId, projectId } = challenge;
 
   if (!resourceKind || !resourceId) {
     return (
@@ -44,8 +65,9 @@ export function ResourceLink({
     to = proj ? `/${orgSlug}/projects/${proj.slug}` : null;
   } else if (resourceKind === "mcp") {
     IconEl = Plug;
-    // Grants store the toolset id for toolset-backed servers and the
-    // mcp_servers row id for remote/tunneled ones, so try both maps.
+    // Grants use resource_kind "mcp" for both server flavors: the resource id
+    // is the toolset id for toolset-backed servers and the mcp_servers row id
+    // for remote/tunneled ones, so try both maps.
     const toolset = toolsetMap.get(resourceId);
     const mcpServer = toolset ? undefined : mcpServerMap.get(resourceId);
     if (toolset) {
@@ -63,6 +85,28 @@ export function ResourceLink({
           : null;
     } else {
       label = resourceId;
+    }
+  } else if (resourceKind === "skill") {
+    IconEl = Terminal;
+    // Skill scopes are project-scoped: the resource id is the project id, so a
+    // direct project lookup is enough (same as the "project" branch above).
+    const proj = projectMap.get(resourceId);
+    if (proj) {
+      label = proj.name;
+      to = `/${orgSlug}/projects/${proj.slug}/skills`;
+    }
+  } else if (resourceKind === "environment") {
+    IconEl = Blocks;
+    // Environment checks carry either the project id or a specific environment
+    // id as the resource id, always with the project id on the bucket. There is
+    // no org-wide environment lookup to resolve an environment id to a slug, so
+    // link to the project's environments list.
+    const proj =
+      projectMap.get(resourceId) ??
+      (projectId ? projectMap.get(projectId) : undefined);
+    if (proj) {
+      label = proj.name;
+      to = `/${orgSlug}/projects/${proj.slug}/environments`;
     }
   }
 
@@ -82,7 +126,11 @@ export function ResourceLink({
   return (
     <span className="text-muted-foreground inline-flex items-center gap-1.5 truncate text-sm">
       {IconEl && <IconEl className="h-3.5 w-3.5 shrink-0" />}
-      <span className="truncate">{label}</span>
+      {label === resourceId ? (
+        <IdChip id={resourceId} />
+      ) : (
+        <span className="truncate">{label}</span>
+      )}
     </span>
   );
 }

@@ -7,13 +7,13 @@ SELECT pg_advisory_xact_lock(hashtext('openrouter_key:' || @organization_id::tex
 INSERT INTO openrouter_api_keys (
     organization_id
   , key_type
-  , key
+  , key_encrypted
   , key_hash
   , monthly_credits
 ) VALUES (
     @organization_id
   , @key_type
-  , @key
+  , @key_encrypted
   , @key_hash
   , @monthly_credits
 )
@@ -28,20 +28,46 @@ WHERE organization_id = @organization_id
 
 -- name: UpdateOpenRouterKey :one
 UPDATE openrouter_api_keys
-SET monthly_credits = @monthly_credits, key_hash = @key_hash, key = @key
+SET monthly_credits = @monthly_credits, key_hash = @key_hash,
+    disabled = disabled AND NOT @reinstate::boolean,
+    updated_at = GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
 WHERE organization_id = @organization_id
   AND key_type = @key_type
   AND deleted IS FALSE
 RETURNING *;
+
+-- name: DisableOpenRouterAPIKey :exec
+-- Locks the key down without deleting it, so a reinstated organization keeps
+-- the same upstream key and its ceiling. ProvisionAPIKey reads this flag and
+-- refuses to hand the key to a completion.
+UPDATE openrouter_api_keys
+SET disabled = TRUE,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND key_type = @key_type
+  AND deleted IS FALSE;
 
 -- name: UpdateOpenRouterKeyMonthlyCredits :exec
 -- Updates only monthly_credits for the given organization. Used by the
 -- metrics-collection reconciliation path when the upstream OpenRouter limit
 -- diverges from the locally cached value (e.g. after a manual change on the
 -- OpenRouter dashboard). Distinct from UpdateOpenRouterKey, which is the
--- key-provisioning write path and also mutates key/key_hash.
+-- key-provisioning write path and also mutates key_hash.
 UPDATE openrouter_api_keys
-SET monthly_credits = @monthly_credits
+SET monthly_credits = @monthly_credits,
+    updated_at = GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
 WHERE organization_id = @organization_id
   AND key_type = @key_type
+  AND deleted IS FALSE;
+
+-- name: CompareAndSetOpenRouterKeyMonthlyCredits :execrows
+-- Reconciles an upstream observation only while the local mirror still equals
+-- what the caller observed. A concurrent explicit cap change wins this CAS.
+UPDATE openrouter_api_keys
+SET monthly_credits = @monthly_credits,
+    updated_at = GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
+WHERE organization_id = @organization_id
+  AND key_type = @key_type
+  AND monthly_credits = @current_monthly_credits
+  AND (extract(epoch FROM updated_at) * 1000000)::bigint = @current_generation::bigint
   AND deleted IS FALSE;

@@ -37,6 +37,12 @@ SELECT project_id
 FROM assistant_threads
 WHERE id = @thread_id;
 
+-- name: GetAssistantThreadSourceKind :one
+SELECT source_kind
+FROM assistant_threads
+WHERE id = @thread_id
+  AND project_id = @project_id;
+
 -- name: LoadAssistantThreadForBootstrap :one
 SELECT
   t.id,
@@ -497,6 +503,13 @@ RETURNING id, project_id, organization_id, created_by_user_id, name, model, inst
 UPDATE assistants
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE id = @assistant_id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
+
+-- name: RetireAssistantMCPOAuthClients :exec
+UPDATE assistant_mcp_oauth_clients
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE assistant_id = @assistant_id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
@@ -1354,3 +1367,149 @@ WHERE assistant_thread_id = @assistant_thread_id
   AND project_id = @project_id
 ORDER BY created_at DESC
 LIMIT 1;
+
+-- name: GetAssistantMCPOAuthClient :one
+SELECT
+  client_id,
+  client_secret_encrypted,
+  (
+    client_id IS NOT NULL
+    AND client_secret_encrypted IS NOT NULL
+    AND redirect_uri = @redirect_uri
+    AND (client_secret_expires_at IS NULL OR client_secret_expires_at > @usable_after)
+  ) AS usable,
+  (
+    (
+      client_id IS NULL
+      AND registration_started_at < clock_timestamp() - @claim_lease::interval
+    )
+    OR
+    (
+      client_id IS NOT NULL
+      AND client_secret_expires_at IS NOT NULL
+      AND client_secret_expires_at <= @usable_after
+    )
+    OR (client_id IS NOT NULL AND redirect_uri <> @redirect_uri)
+  ) AS claimable
+FROM assistant_mcp_oauth_clients clients
+WHERE clients.project_id = @project_id
+  AND clients.assistant_id = @assistant_id
+  AND clients.oauth_server_issuer = @oauth_server_issuer
+  AND EXISTS (
+    SELECT 1
+    FROM assistants owner
+    WHERE owner.id = @assistant_id
+      AND owner.project_id = @project_id
+      AND owner.deleted IS FALSE
+  )
+  AND clients.deleted IS FALSE;
+
+-- name: ClaimAssistantMCPOAuthClientRegistration :execrows
+INSERT INTO assistant_mcp_oauth_clients AS clients (
+  project_id,
+  assistant_id,
+  oauth_server_issuer,
+  redirect_uri,
+  registration_owner,
+  registration_started_at
+) SELECT
+  @project_id,
+  @assistant_id,
+  @oauth_server_issuer,
+  @redirect_uri,
+  @registration_owner,
+  clock_timestamp()
+FROM assistants owner
+WHERE owner.id = @assistant_id
+  AND owner.project_id = @project_id
+  AND owner.deleted IS FALSE
+FOR UPDATE
+ON CONFLICT (project_id, assistant_id, oauth_server_issuer) WHERE deleted IS FALSE
+DO UPDATE SET
+  client_id = NULL,
+  client_secret_encrypted = NULL,
+  client_secret_expires_at = NULL,
+  redirect_uri = EXCLUDED.redirect_uri,
+  registration_owner = EXCLUDED.registration_owner,
+  registration_started_at = EXCLUDED.registration_started_at,
+  updated_at = clock_timestamp()
+WHERE
+  (
+    clients.client_id IS NULL
+    AND clients.registration_started_at < clock_timestamp() - @claim_lease::interval
+  )
+  OR
+  (
+    clients.client_id IS NOT NULL
+    AND clients.client_secret_expires_at IS NOT NULL
+    AND clients.client_secret_expires_at <= @usable_after
+  )
+  OR (
+    clients.client_id IS NOT NULL
+    AND clients.redirect_uri <> EXCLUDED.redirect_uri
+  );
+
+-- name: CompleteAssistantMCPOAuthClientRegistration :execrows
+UPDATE assistant_mcp_oauth_clients AS clients
+SET
+  client_id = @client_id,
+  client_secret_encrypted = @client_secret_encrypted,
+  client_secret_expires_at = @client_secret_expires_at,
+  registration_owner = NULL,
+  registration_started_at = NULL,
+  updated_at = clock_timestamp()
+WHERE clients.project_id = @project_id
+  AND clients.assistant_id = @assistant_id
+  AND clients.oauth_server_issuer = @oauth_server_issuer
+  AND clients.registration_owner = @registration_owner
+  AND clients.client_id IS NULL
+  AND EXISTS (
+    SELECT 1
+    FROM assistants owner
+    WHERE owner.id = @assistant_id
+      AND owner.project_id = @project_id
+      AND owner.deleted IS FALSE
+  )
+  AND clients.deleted IS FALSE;
+
+-- name: AbandonAssistantMCPOAuthClientRegistration :exec
+UPDATE assistant_mcp_oauth_clients
+SET
+  registration_started_at = to_timestamp(0),
+  updated_at = clock_timestamp()
+WHERE project_id = @project_id
+  AND assistant_id = @assistant_id
+  AND oauth_server_issuer = @oauth_server_issuer
+  AND registration_owner = @registration_owner
+  AND client_id IS NULL
+  AND deleted IS FALSE;
+
+-- name: InvalidateAssistantMCPOAuthClient :exec
+UPDATE assistant_mcp_oauth_clients
+SET
+  client_secret_expires_at = to_timestamp(0),
+  updated_at = clock_timestamp()
+WHERE project_id = @project_id
+  AND assistant_id = @assistant_id
+  AND oauth_server_issuer = @oauth_server_issuer
+  AND client_id = @client_id
+  AND client_id IS NOT NULL
+  AND deleted IS FALSE;
+
+-- name: GetAssistantMCPOAuthClientDeleted :one
+-- Test-only helper for verifying credential retirement on assistant deletion.
+SELECT deleted
+FROM assistant_mcp_oauth_clients
+WHERE project_id = @project_id
+  AND assistant_id = @assistant_id
+  AND oauth_server_issuer = @oauth_server_issuer;
+
+-- name: ListChatAttachmentAssets :many
+-- Resolves the chat attachments a dashboard turn carries, scoped to the
+-- project so a leaked asset id from another project cannot be attached.
+SELECT id, name, url, content_type, content_length
+FROM assets
+WHERE project_id = @project_id::uuid
+  AND id = ANY(@ids::uuid[])
+  AND kind = 'chat_attachment'
+  AND deleted IS FALSE;

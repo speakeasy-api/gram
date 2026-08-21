@@ -12,4 +12,7 @@ if pitchfork supervisor status &> /dev/null; then
     pitchfork stop --all-local || true
 fi
 
+# Only this worktree's project. The shared stack (compose.shared.yml) is left
+# running on purpose — other worktrees depend on it, and it is cheap to keep up.
+# Use `mise run nuke` to tear the shared services down as well.
 docker compose --profile "*" down --remove-orphans

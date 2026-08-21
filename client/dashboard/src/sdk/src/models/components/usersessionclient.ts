@@ -9,16 +9,36 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * A user_session_client (DCR'd MCP client). client_secret_hash is never returned.
+ * An MCP client registered against a user-session issuer. client_secret_hash is never returned.
  */
 export type UserSessionClient = {
   /**
-   * DCR-issued client_id.
+   * How many live user_sessions this client currently holds. Counted the same way the sessions listing's active filter counts: not revoked, and the refresh token has not expired.
+   */
+  activeSessionCount: number;
+  /**
+   * The client_id. Minted by Gram for a DCR registration; for a CIMD client it is the metadata document URL and equals client_id_metadata_uri.
    */
   clientId: string;
   clientIdIssuedAt: Date;
   /**
-   * Display name from the registration request.
+   * When the cached metadata document lapses and the next /authorize revalidates it against the host. Null for DCR clients, and null after a refresh purge until the re-read lands.
+   */
+  clientIdMetadataCacheExpiresAt?: Date | undefined;
+  /**
+   * ETag the document host returned on the last full read; sent as If-None-Match when revalidating. Null when the host offers no validator, and null for DCR clients.
+   */
+  clientIdMetadataEtag?: string | undefined;
+  /**
+   * When the metadata document was last successfully read. A 304 revalidation counts as a read, so this is not necessarily when the body was last fetched. Null for DCR clients.
+   */
+  clientIdMetadataFetchedAt?: Date | undefined;
+  /**
+   * When set, the client was resolved from a Client ID Metadata Document (CIMD) hosted at this URL rather than registered via RFC 7591 DCR. Null for DCR clients. The URL is the client's identity, so its origin -- not client_name, which the client chooses -- is the trustworthy label.
+   */
+  clientIdMetadataUri?: string | undefined;
+  /**
+   * Display name the client supplied at registration, or the client_name extracted from its metadata document. Client-controlled and unverified; do not present it as an identity.
    */
   clientName: string;
   /**
@@ -47,11 +67,20 @@ export const UserSessionClient$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    active_session_count: z.int(),
     client_id: z.string(),
     client_id_issued_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    client_id_metadata_cache_expires_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
+    client_id_metadata_etag: z.optional(z.string()),
+    client_id_metadata_fetched_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
+    client_id_metadata_uri: z.optional(z.string()),
     client_name: z.string(),
     client_secret_expires_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
@@ -70,8 +99,13 @@ export const UserSessionClient$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "active_session_count": "activeSessionCount",
       "client_id": "clientId",
       "client_id_issued_at": "clientIdIssuedAt",
+      "client_id_metadata_cache_expires_at": "clientIdMetadataCacheExpiresAt",
+      "client_id_metadata_etag": "clientIdMetadataEtag",
+      "client_id_metadata_fetched_at": "clientIdMetadataFetchedAt",
+      "client_id_metadata_uri": "clientIdMetadataUri",
       "client_name": "clientName",
       "client_secret_expires_at": "clientSecretExpiresAt",
       "created_at": "createdAt",

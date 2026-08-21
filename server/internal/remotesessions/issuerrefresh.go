@@ -39,8 +39,12 @@ func buildIssuerDraft(doc rfc8414Document, issuerURL string, warnings []string) 
 		Issuer:                conv.Default(doc.Issuer, issuerURL),
 		AuthorizationEndpoint: conv.PtrEmpty(doc.AuthorizationEndpoint),
 		TokenEndpoint:         conv.PtrEmpty(doc.TokenEndpoint),
-		RegistrationEndpoint:  conv.PtrEmpty(doc.RegistrationEndpoint),
-		JwksURI:               conv.PtrEmpty(doc.JwksURI),
+		// Revocation endpoints that are not HTTPS are filtered out: tokens are
+		// sensitive credentials that must not be transmitted in plaintext. Only
+		// https:// revocation endpoints are accepted.
+		RevocationEndpoint:   conv.PtrEmpty(conv.Ternary(urls.IsAbsoluteHTTPSOrLoopback(doc.RevocationEndpoint), doc.RevocationEndpoint, "")),
+		RegistrationEndpoint: conv.PtrEmpty(doc.RegistrationEndpoint),
+		JwksURI:              conv.PtrEmpty(doc.JwksURI),
 		// The issuer controls these and downstream surfaces render them as
 		// links, so a value that is not an absolute http(s) URL is discarded
 		// rather than carried into the draft the create form submits back.
@@ -51,7 +55,17 @@ func buildIssuerDraft(doc rfc8414Document, issuerURL string, warnings []string) 
 		GrantTypesSupported:               doc.GrantTypesSupported,
 		ResponseTypesSupported:            doc.ResponseTypesSupported,
 		TokenEndpointAuthMethodsSupported: doc.TokenEndpointAuthMethodsSupported,
+
+		// Copied as-is, nil included, so absent stays distinguishable from
+		// advertised-empty for as long as the draft lives. The dashboard's
+		// discovery flow still captures omission as an empty array when it
+		// submits the create form — discovery ran, so "advertises nothing" is
+		// a captured fact — while hand-typed setups omit the field and store
+		// NULL ("never captured").
+		CodeChallengeMethodsSupported: doc.CodeChallengeMethodsSupported,
+
 		ClientIDMetadataDocumentSupported: doc.ClientIDMetadataDocumentSupported,
+
 		// Gram behavior flags, not discovered metadata. A draft never proposes
 		// them; the operator opts in on the create form.
 		Oidc:              false,
@@ -179,8 +193,17 @@ func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer 
 		// history rather than on what the issuer advertises right now.
 		AuthorizationEndpoint: doc.AuthorizationEndpoint,
 		TokenEndpoint:         doc.TokenEndpoint,
-		RegistrationEndpoint:  doc.RegistrationEndpoint,
-		JwksUri:               doc.JwksURI,
+		// Deliberately absent from the distrust gate above: an issuer that
+		// advertises no revocation endpoint is the common case, not a signal
+		// that the document is untrustworthy. It clears to NULL like any other
+		// endpoint the issuer has stopped advertising, and revoking a session
+		// against such an issuer stays a local soft-delete.
+		//
+		// Revocation endpoints that are not HTTPS are filtered out: tokens are
+		// sensitive credentials that must not be transmitted in plaintext.
+		RevocationEndpoint:   conv.Ternary(urls.IsAbsoluteHTTPSOrLoopback(doc.RevocationEndpoint), doc.RevocationEndpoint, ""),
+		RegistrationEndpoint: doc.RegistrationEndpoint,
+		JwksUri:              doc.JwksURI,
 		// Downstream surfaces render these as links, so a value that is not an
 		// absolute http(s) URL is dropped rather than stored — matching how the
 		// create-time draft filters them.
@@ -191,7 +214,16 @@ func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer 
 		GrantTypesSupported:               orEmptySlice(doc.GrantTypesSupported),
 		ResponseTypesSupported:            orEmptySlice(doc.ResponseTypesSupported),
 		TokenEndpointAuthMethodsSupported: orEmptySlice(doc.TokenEndpointAuthMethodsSupported),
+
+		// orEmptySlice is load-bearing here beyond its NOT NULL siblings: this
+		// column is nullable, and a refresh is the capture event, so a document
+		// omitting the field must persist the empty array ("captured; the
+		// upstream advertises nothing") — never NULL, which would revert the
+		// row to "never captured".
+		CodeChallengeMethodsSupported: orEmptySlice(doc.CodeChallengeMethodsSupported),
+
 		ClientIDMetadataDocumentSupported: doc.ClientIDMetadataDocumentSupported,
+
 		// The identity the update re-asserts, so a concurrent move or issuer
 		// rename aborts the write instead of applying it to a row Gram no
 		// longer holds the same authorization over.

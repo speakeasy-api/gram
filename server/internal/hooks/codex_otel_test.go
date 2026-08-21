@@ -12,6 +12,10 @@ import (
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
+// codexTestServiceName is the interactive CLI's reported service.name — one
+// member of the codex_ family the ingest matches (see codexServiceNamePrefix).
+const codexTestServiceName = "codex_cli_rs"
+
 // strAttr builds an OTLP string-valued log attribute, the shape Codex emits.
 func strAttr(key, val string) *gen.OTELAttribute {
 	return &gen.OTELAttribute{Key: key, Value: &gen.OTELAttributeValue{StringValue: new(val)}}
@@ -24,7 +28,7 @@ func codexLogsPayload(records ...*gen.OTELLogRecord) *gen.LogsPayload {
 			Resource: &gen.OTELResource{
 				Attributes: []*gen.OTELResourceAttribute{{
 					Key:   "service.name",
-					Value: &gen.OTELAttributeValue{StringValue: new(codexServiceName)},
+					Value: &gen.OTELAttributeValue{StringValue: new(codexTestServiceName)},
 				}},
 			},
 			ScopeLogs: []*gen.OTELScopeLog{{LogRecords: records}},
@@ -57,7 +61,7 @@ func codexMetricsPayload(metrics ...*gen.OTELMetric) *gen.MetricsPayload {
 		ResourceMetrics: []*gen.OTELResourceMetrics{{
 			Resource: &gen.OTELResource{
 				Attributes: []*gen.OTELResourceAttribute{
-					resourceStrAttr("service.name", codexServiceName),
+					resourceStrAttr("service.name", codexTestServiceName),
 				},
 			},
 			ScopeMetrics: []*gen.OTELScopeMetrics{{Metrics: metrics}},
@@ -125,7 +129,7 @@ func TestLogs_PersistsCodexOTELRecords(t *testing.T) {
 	require.Contains(t, first.Attributes, providerOpenAI)
 
 	require.Contains(t, first.ResourceAttributes, "service")
-	require.Contains(t, first.ResourceAttributes, codexServiceName)
+	require.Contains(t, first.ResourceAttributes, codexTestServiceName)
 
 	second := logs[0]
 	require.Equal(t, "codex.tool_decision", second.Body)
@@ -261,25 +265,6 @@ func TestLogs_CodexUsageRollsUpToAttributeMetrics(t *testing.T) {
 	}, 15*time.Second, 200*time.Millisecond)
 }
 
-func TestIsCodexLogsPayload(t *testing.T) {
-	t.Parallel()
-
-	assert.True(t, isCodexLogsPayload(codexLogsPayload(tokenBearingRecord())))
-	assert.False(t, isCodexLogsPayload(nil))
-
-	claude := &gen.LogsPayload{
-		ResourceLogs: []*gen.OTELResourceLog{{
-			Resource: &gen.OTELResource{
-				Attributes: []*gen.OTELResourceAttribute{{
-					Key:   "service.name",
-					Value: &gen.OTELAttributeValue{StringValue: new("claude-code")},
-				}},
-			},
-		}},
-	}
-	assert.False(t, isCodexLogsPayload(claude))
-}
-
 func TestLogs_AttributesCodexOTELRecordsToResolvedUser(t *testing.T) {
 	t.Parallel()
 
@@ -308,24 +293,6 @@ func TestLogs_AttributesCodexOTELRecordsToResolvedUser(t *testing.T) {
 	logs := waitForHookLogs(t, ctx, chClient, authCtx.ProjectID.String(), codexOTELLogsURN, timestamp, 1)
 	require.Contains(t, logs[0].Attributes, userID)
 	require.Contains(t, logs[0].Attributes, "codex-otel@example.com")
-}
-
-func TestIsCodexMetricsPayload(t *testing.T) {
-	t.Parallel()
-
-	assert.True(t, isCodexMetricsPayload(codexMetricsPayload()))
-	assert.False(t, isCodexMetricsPayload(nil))
-
-	claude := &gen.MetricsPayload{
-		ResourceMetrics: []*gen.OTELResourceMetrics{{
-			Resource: &gen.OTELResource{
-				Attributes: []*gen.OTELResourceAttribute{
-					resourceStrAttr("service.name", "claude-code"),
-				},
-			},
-		}},
-	}
-	assert.False(t, isCodexMetricsPayload(claude))
 }
 
 func TestMetrics_PersistsCodexOTELMetricDataPoints(t *testing.T) {
@@ -371,7 +338,83 @@ func TestMetrics_PersistsCodexOTELMetricDataPoints(t *testing.T) {
 	require.Contains(t, row.Attributes, "tool_name")
 	require.Contains(t, row.Attributes, "shell")
 	require.Contains(t, row.Attributes, providerOpenAI)
-	require.Contains(t, row.ResourceAttributes, codexServiceName)
+	// Metrics rows carry the same account attribution as the logs stream
+	// (dev@example.com resolves to the test org member → team).
+	require.Contains(t, row.Attributes, `"account_type":"team"`)
+	require.Contains(t, row.ResourceAttributes, codexTestServiceName)
+}
+
+// TestMetrics_MixedCollectorBatchRoutesEachResourceToItsOwnStream is the
+// metrics twin of the logs mixed-batch test. It is the case that caught a
+// real asymmetry: the logs handler narrowed its payload to the Claude half
+// but the metrics handler did not, so Codex resources still reached the
+// Claude usage extractor — which rejects Codex's cumulative temporality and
+// would have dropped the batch's Claude rows along with it.
+func TestMetrics_MixedCollectorBatchRoutesEachResourceToItsOwnStream(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	chClient := enableHookTelemetryLogger(t, ctx, ti)
+	authCtx := hookAuthContext(t, ctx)
+	timestamp := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+
+	codexMetric := "codex.tool.call"
+	unit := "1"
+	claudeMetric := "claude_code.token.usage"
+	mixed := &gen.MetricsPayload{ResourceMetrics: []*gen.OTELResourceMetrics{
+		{
+			Resource: &gen.OTELResource{Attributes: []*gen.OTELResourceAttribute{resourceStrAttr("service.name", "codex_exec")}},
+			ScopeMetrics: []*gen.OTELScopeMetrics{{Metrics: []*gen.OTELMetric{{
+				Name: &codexMetric,
+				Unit: &unit,
+				Sum: &gen.OTELSum{
+					// Codex exports cumulative counters — the temporality the
+					// Claude extractor rejects outright.
+					AggregationTemporality: "AGGREGATION_TEMPORALITY_CUMULATIVE",
+					DataPoints: []*gen.OTELNumberDataPoint{{
+						TimeUnixNano: new(nanoString(timestamp)),
+						AsInt:        "3",
+						Attributes: []*gen.OTELAttribute{
+							strAttr("conversation.id", "conv-mixed-metrics"),
+							strAttr("user.email", "mixed-codex@example.com"),
+						},
+					}},
+				},
+			}}}},
+		},
+		{
+			Resource: &gen.OTELResource{Attributes: []*gen.OTELResourceAttribute{resourceStrAttr("service.name", "claude-code")}},
+			ScopeMetrics: []*gen.OTELScopeMetrics{{Metrics: []*gen.OTELMetric{{
+				Name: &claudeMetric,
+				Unit: &unit,
+				Sum: &gen.OTELSum{
+					AggregationTemporality: "AGGREGATION_TEMPORALITY_DELTA",
+					DataPoints: []*gen.OTELNumberDataPoint{{
+						TimeUnixNano: new(nanoString(timestamp)),
+						AsInt:        "7",
+						Attributes: []*gen.OTELAttribute{
+							strAttr("session.id", "session-mixed-metrics"),
+							strAttr("type", "input"),
+						},
+					}},
+				},
+			}}}},
+		},
+	}}
+
+	require.NoError(t, ti.service.Metrics(ctx, mixed))
+
+	// The Codex half lands verbatim on its own stream...
+	codexRows := waitForHookLogs(t, ctx, chClient, authCtx.ProjectID.String(), codexOTELMetricsURN, timestamp, 1)
+	require.Contains(t, codexRows[0].Attributes, "codex.tool.call")
+	require.Contains(t, codexRows[0].ResourceAttributes, "codex_exec")
+
+	// ...and the Claude half still produces its usage rows. This is the
+	// assertion that fails when the Claude path is handed the unsplit
+	// payload: the extractor rejects Codex's cumulative temporality and
+	// returns, taking the batch's Claude rows down with it.
+	claudeRows := waitForHookLogs(t, ctx, chClient, authCtx.ProjectID.String(), "claude-code:usage:metrics", timestamp, 1)
+	require.Contains(t, claudeRows[0].Attributes, "session-mixed-metrics")
 }
 
 func TestMetrics_CodexPayloadDoesNotWriteClaudeUsageRows(t *testing.T) {
@@ -415,4 +458,177 @@ func TestMetrics_CodexPayloadDoesNotWriteClaudeUsageRows(t *testing.T) {
 		})
 		return err == nil && len(logs) > 0
 	}, 300*time.Millisecond, 50*time.Millisecond)
+}
+
+// TestLogs_StampsCodexAccountAttribution: a Codex OTEL record whose user.email
+// resolves to an org member is classified team and stamped with the org-level
+// billing mode from the codex_compliance config (DNO-734) — the columns the
+// cost surfaces classify Codex spend by.
+func TestLogs_StampsCodexAccountAttribution(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	chClient := enableHookTelemetryLogger(t, ctx, ti)
+	authCtx := hookAuthContext(t, ctx)
+
+	userID := uuid.NewString()
+	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, userID, "codex-account-attr@example.com")
+	seedCodexBillingConfig(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "flat_rate")
+
+	timestamp := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+	rec := &gen.OTELLogRecord{
+		TimeUnixNano: new(nanoString(timestamp)),
+		Body:         &gen.OTELLogBody{StringValue: new("codex.user_prompt")},
+		Attributes: []*gen.OTELAttribute{
+			strAttr("event.name", "codex.user_prompt"),
+			strAttr("conversation.id", "conv-account-attribution"),
+			strAttr("user.email", "codex-account-attr@example.com"),
+		},
+	}
+
+	require.NoError(t, ti.service.Logs(ctx, codexLogsPayload(rec)))
+
+	// Attributes are stored as nested JSON (dotted keys expand to objects), so
+	// assert on the serialized "gram" object's fields.
+	logs := waitForHookLogs(t, ctx, chClient, authCtx.ProjectID.String(), codexOTELLogsURN, timestamp, 1)
+	require.Contains(t, logs[0].Attributes, `"account_type":"team"`)
+	require.Contains(t, logs[0].Attributes, `"billing_mode":"flat_rate"`)
+	require.Contains(t, logs[0].Attributes, `"provider":"openai"`)
+}
+
+// TestLogs_ClassifiesUnresolvedCodexEmailPersonal: an email no org member owns
+// classifies personal, and the company's declared billing mode must not ride
+// on the row.
+func TestLogs_ClassifiesUnresolvedCodexEmailPersonal(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	chClient := enableHookTelemetryLogger(t, ctx, ti)
+	authCtx := hookAuthContext(t, ctx)
+	seedCodexBillingConfig(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "flat_rate")
+
+	timestamp := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+	rec := &gen.OTELLogRecord{
+		TimeUnixNano: new(nanoString(timestamp)),
+		Body:         &gen.OTELLogBody{StringValue: new("codex.user_prompt")},
+		Attributes: []*gen.OTELAttribute{
+			strAttr("event.name", "codex.user_prompt"),
+			strAttr("conversation.id", "conv-personal-attribution"),
+			strAttr("user.email", "someone@personal.example"),
+		},
+	}
+
+	require.NoError(t, ti.service.Logs(ctx, codexLogsPayload(rec)))
+
+	logs := waitForHookLogs(t, ctx, chClient, authCtx.ProjectID.String(), codexOTELLogsURN, timestamp, 1)
+	require.Contains(t, logs[0].Attributes, `"account_type":"personal"`)
+	require.NotContains(t, logs[0].Attributes, "billing_mode")
+}
+
+// TestIsCodexPayloadMatchesServiceNameFamily: Codex reports a different
+// service.name per mode — codex_exec is what headless `codex exec` (CI and
+// scripted runs) emits, verified against the shipped 0.146 binary, alongside
+// codex_tui and codex_mcp. Matching only the interactive codex_cli_rs
+// silently dropped every other mode's telemetry: no rows, no tokens, no
+// error. Claude's service names must still route to the session path.
+func TestIsCodexPayloadMatchesServiceNameFamily(t *testing.T) {
+	t.Parallel()
+
+	nilCodexLogs, nilClaudeLogs := splitCodexLogsPayload(nil)
+	require.Nil(t, nilCodexLogs)
+	require.Nil(t, nilClaudeLogs)
+	nilCodexMetrics, nilClaudeMetrics := splitCodexMetricsPayload(nil)
+	require.Nil(t, nilCodexMetrics)
+	require.Nil(t, nilClaudeMetrics)
+
+	// Every name below was observed against the shipped 0.146 build.
+	// codex-app-server is Codex mode in the unified ChatGPT desktop app and
+	// is hyphenated, so an underscore-only match would still have misrouted
+	// the desktop surface.
+	for _, serviceName := range []string{"codex", "codex_cli_rs", "codex_exec", "codex_tui", "codex_mcp", "codex-app-server"} {
+		logs := &gen.LogsPayload{ResourceLogs: []*gen.OTELResourceLog{{
+			Resource:  &gen.OTELResource{Attributes: []*gen.OTELResourceAttribute{resourceStrAttr("service.name", serviceName)}},
+			ScopeLogs: nil,
+		}}}
+		codexLogs, claudeLogs := splitCodexLogsPayload(logs)
+		require.NotNil(t, codexLogs, serviceName)
+		require.Nil(t, claudeLogs, serviceName)
+
+		metrics := &gen.MetricsPayload{ResourceMetrics: []*gen.OTELResourceMetrics{{
+			Resource:     &gen.OTELResource{Attributes: []*gen.OTELResourceAttribute{resourceStrAttr("service.name", serviceName)}},
+			ScopeMetrics: nil,
+		}}}
+		codexMetrics, claudeMetrics := splitCodexMetricsPayload(metrics)
+		require.NotNil(t, codexMetrics, serviceName)
+		require.Nil(t, claudeMetrics, serviceName)
+	}
+
+	for _, serviceName := range []string{"claude-code", "claude-code-desktop", "cowork", "codexish-other", ""} {
+		logs := &gen.LogsPayload{ResourceLogs: []*gen.OTELResourceLog{{
+			Resource:  &gen.OTELResource{Attributes: []*gen.OTELResourceAttribute{resourceStrAttr("service.name", serviceName)}},
+			ScopeLogs: nil,
+		}}}
+		codexLogs, claudeLogs := splitCodexLogsPayload(logs)
+		require.Nil(t, codexLogs, serviceName)
+		require.NotNil(t, claudeLogs, serviceName)
+
+		metrics := &gen.MetricsPayload{ResourceMetrics: []*gen.OTELResourceMetrics{{
+			Resource:     &gen.OTELResource{Attributes: []*gen.OTELResourceAttribute{resourceStrAttr("service.name", serviceName)}},
+			ScopeMetrics: nil,
+		}}}
+		codexMetrics, claudeMetrics := splitCodexMetricsPayload(metrics)
+		require.Nil(t, codexMetrics, serviceName)
+		require.NotNil(t, claudeMetrics, serviceName)
+	}
+}
+
+// TestLogs_MixedCollectorBatchRoutesEachResourceToItsOwnStream: an
+// OpenTelemetry Collector fanning in several clients can re-batch Claude and
+// Codex resources into one export. Routing the whole payload on an
+// any-resource match would stamp one client's records with the other's URN,
+// hook source, and attribution — so the split must be per resource.
+func TestLogs_MixedCollectorBatchRoutesEachResourceToItsOwnStream(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	chClient := enableHookTelemetryLogger(t, ctx, ti)
+	authCtx := hookAuthContext(t, ctx)
+
+	timestamp := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+	mixed := &gen.LogsPayload{ResourceLogs: []*gen.OTELResourceLog{
+		{
+			Resource: &gen.OTELResource{Attributes: []*gen.OTELResourceAttribute{resourceStrAttr("service.name", "codex_exec")}},
+			ScopeLogs: []*gen.OTELScopeLog{{LogRecords: []*gen.OTELLogRecord{{
+				TimeUnixNano: new(nanoString(timestamp)),
+				Body:         &gen.OTELLogBody{StringValue: new("codex.user_prompt")},
+				Attributes: []*gen.OTELAttribute{
+					strAttr("event.name", "codex.user_prompt"),
+					strAttr("conversation.id", "conv-mixed-batch"),
+					strAttr("user.email", "mixed-codex@example.com"),
+				},
+			}}}},
+		},
+		{
+			Resource: &gen.OTELResource{Attributes: []*gen.OTELResourceAttribute{resourceStrAttr("service.name", "claude-code")}},
+			ScopeLogs: []*gen.OTELScopeLog{{LogRecords: []*gen.OTELLogRecord{{
+				TimeUnixNano: new(nanoString(timestamp)),
+				Body:         &gen.OTELLogBody{StringValue: new("claude api request")},
+				Attributes: []*gen.OTELAttribute{
+					strAttr("session.id", "session-mixed-batch"),
+					strAttr("user.email", "mixed-claude@example.com"),
+				},
+			}}}},
+		},
+	}}
+
+	require.NoError(t, ti.service.Logs(ctx, mixed))
+
+	codexRows := waitForHookLogs(t, ctx, chClient, authCtx.ProjectID.String(), codexOTELLogsURN, timestamp, 1)
+	require.Contains(t, codexRows[0].Attributes, "codex.user_prompt")
+	require.Contains(t, codexRows[0].ResourceAttributes, "codex_exec")
+
+	claudeRows := waitForHookLogs(t, ctx, chClient, authCtx.ProjectID.String(), claudeOTELLogsURN, timestamp, 1)
+	require.Contains(t, claudeRows[0].ResourceAttributes, "claude-code")
+	// The Claude record must NOT have been stamped as Codex traffic.
+	require.NotContains(t, claudeRows[0].Attributes, providerOpenAI)
 }

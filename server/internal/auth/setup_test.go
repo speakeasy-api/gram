@@ -17,6 +17,7 @@ import (
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
 
 	gen "github.com/speakeasy-api/gram/server/gen/auth"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -26,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -41,6 +43,27 @@ var (
 type noopCancelScheduler struct{}
 
 func (noopCancelScheduler) ScheduleCancelAssistantsSubscription(ctx context.Context, subscriptionID string) error {
+	return nil
+}
+
+type fakeTrialNotifier struct {
+	trialStartedErr error
+	trialStarted    []string
+}
+
+func (f *fakeTrialNotifier) TrialStarted(_ context.Context, organizationID string) error {
+	f.trialStarted = append(f.trialStarted, organizationID)
+	if f.trialStartedErr != nil {
+		return f.trialStartedErr
+	}
+	return nil
+}
+
+func (f *fakeTrialNotifier) AdminAdded(context.Context, string, string) error {
+	return nil
+}
+
+func (f *fakeTrialNotifier) TrialInactive(context.Context, string) error {
 	return nil
 }
 
@@ -72,6 +95,7 @@ type testInstance struct {
 	mockAuthServer   *httptest.Server
 	authConfigs      auth.AuthConfigurations
 	nonceStore       cache.Cache
+	trialNotifier    *fakeTrialNotifier
 }
 
 // MockUserInfo represents the user info used by the mock OIDC server
@@ -99,6 +123,14 @@ func createMockWorkOSServer(userInfo *MockUserInfo) *httptest.Server {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("POST /user_management/authenticate", func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			Code string `json:"code"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		resp := map[string]any{
 			"access_token":    fmt.Sprintf("mock_access_token_%p", userInfo),
@@ -113,6 +145,13 @@ func createMockWorkOSServer(userInfo *MockUserInfo) *httptest.Server {
 				"external_id":         userInfo.ExternalID,
 			},
 		}
+		if request.Code == "impersonation_code" {
+			resp["authentication_method"] = "Impersonation"
+			resp["impersonator"] = map[string]string{
+				"email":  "support@example.com",
+				"reason": "Investigating a reported issue",
+			}
+		}
 		_ = json.NewEncoder(w).Encode(resp)
 	})
 
@@ -120,6 +159,12 @@ func createMockWorkOSServer(userInfo *MockUserInfo) *httptest.Server {
 }
 
 func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, *testInstance) {
+	t.Helper()
+
+	return newTestAuthServiceWithWorkOSClient(t, userInfo, nil)
+}
+
+func newTestAuthServiceWithWorkOSClient(t *testing.T, userInfo *MockUserInfo, workosClient identity.WorkOSClient) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx := authztest.WithAdminGrants(t.Context())
@@ -147,8 +192,10 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, nil, orgRepo.New(conn), userRepo.New(conn), pylon, posthog, nil, cache.SuffixNone)
-	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), conn, redisClient, cache.Suffix("gram-test"), idpClient, billingClient, resolver)
+	authzProvisioner := authz.NewProvisioner(conn)
+	cacheSuffix := testenv.NewCacheSuffix(t, cache.Suffix("auth"))
+	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, workosClient, orgRepo.New(conn), userRepo.New(conn), pylon, posthog, cacheSuffix)
+	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), conn, redisClient, cacheSuffix, idpClient, billingClient, resolver)
 
 	authConfigs := auth.AuthConfigurations{
 		IDPBaseURL:        mockServer.URL,
@@ -157,14 +204,29 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 		Environment:       "test",
 	}
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
 	nonceStore := cache.NewRedisCacheAdapter(redisClient)
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog, nonceStore, nil)
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	trialNotifier := &fakeTrialNotifier{}
+	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog, nonceStore, authzProvisioner, productfeatures.SeedOrganizationDefaultsTx, productfeatures.SeedEnterpriseTrialBundleTx, audit.NewLogger(), trialNotifier)
 	result := newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs, nonceStore)
 	result.authorizer = auth.New(logger, conn, sessionManager, authzEngine)
+	result.trialNotifier = trialNotifier
+
+	return ctx, result
+}
+
+func newTestAuthServiceForOrganizationProvisioning(t *testing.T, userInfo *MockUserInfo) (context.Context, *testInstance) {
+	t.Helper()
+
+	ctx, result := newTestAuthServiceWithWorkOSClient(t, userInfo, &mockWorkOSFetcher{
+		members: map[string][]workos.Member{},
+		orgs:    map[string]*workos.Organization{},
+	})
+	require.NoError(t, result.createTestUser(ctx, userInfo))
+	require.NoError(t, userRepo.New(result.conn).OverwriteUserWorkosID(ctx, userRepo.OverwriteUserWorkosIDParams{
+		ID:       userInfo.UserID,
+		WorkosID: conv.ToPGText(userInfo.UserID),
+	}))
 
 	return ctx, result
 }
@@ -197,8 +259,10 @@ func newTestAuthServiceWithAuthz(t *testing.T, userInfo *MockUserInfo) (context.
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, nil, orgRepo.New(conn), userRepo.New(conn), pylon, posthog, nil, cache.SuffixNone)
-	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), conn, redisClient, cache.Suffix("gram-test"), idpClient, billingClient, resolver)
+	authzProvisioner := authz.NewProvisioner(conn)
+	cacheSuffix := testenv.NewCacheSuffix(t, cache.Suffix("auth"))
+	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, nil, orgRepo.New(conn), userRepo.New(conn), pylon, posthog, cacheSuffix)
+	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), conn, redisClient, cacheSuffix, idpClient, billingClient, resolver)
 
 	authConfigs := auth.AuthConfigurations{
 		IDPBaseURL:        mockServer.URL,
@@ -207,14 +271,13 @@ func newTestAuthServiceWithAuthz(t *testing.T, userInfo *MockUserInfo) (context.
 		Environment:       "test",
 	}
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
 	nonceStore := cache.NewRedisCacheAdapter(redisClient)
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog, nonceStore, nil)
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	trialNotifier := &fakeTrialNotifier{}
+	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog, nonceStore, authzProvisioner, productfeatures.SeedOrganizationDefaultsTx, productfeatures.SeedEnterpriseTrialBundleTx, audit.NewLogger(), trialNotifier)
 	result := newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs, nonceStore)
 	result.authorizer = auth.New(logger, conn, sessionManager, authzEngine)
+	result.trialNotifier = trialNotifier
 
 	return ctx, result
 }
@@ -229,6 +292,7 @@ func newTestAuthServiceResult(_ *testing.T, svc *auth.Service, conn *pgxpool.Poo
 		mockAuthServer:   mockServer,
 		authConfigs:      authConfigs,
 		nonceStore:       nonceStore,
+		trialNotifier:    nil,
 	}
 }
 
@@ -257,6 +321,27 @@ func (ti *testInstance) stateWithNonce(ctx context.Context, t *testing.T, redire
 	stateJSON, err := json.Marshal(state)
 	require.NoError(t, err)
 	return auth.TestNonceBindingContext(ctx, testNonceBinding), base64.RawURLEncoding.EncodeToString(stateJSON)
+}
+
+// stateWithSignupIntent behaves like stateWithNonce and additionally seeds a
+// signup intent under the same nonce, simulating a login that came from the
+// sign-up page with a company name.
+//
+// The map key is "OrgName" — the Go field name, not the "org_name" JSON tag.
+// The nonce store round-trips values through msgpack (go-redis/cache v9),
+// which keys struct fields by their literal Go name unless a `msgpack` tag
+// says otherwise; it does not consult `json` tags. Since signupIntent (in
+// impl.go) carries no `msgpack` tag, that's the key production's own
+// Login->Callback round trip actually uses under the hood.
+func (ti *testInstance) stateWithSignupIntent(ctx context.Context, t *testing.T, redirectURL, orgName string) (context.Context, string) {
+	t.Helper()
+
+	ctx, stateParam := ti.stateWithNonce(ctx, t, redirectURL)
+	nonce := extractNonceFromState(t, stateParam)
+	require.NoError(t, ti.nonceStore.Set(ctx, "auth:signup_intent:"+nonce, map[string]string{
+		"OrgName": orgName,
+	}, 10*time.Minute))
+	return ctx, stateParam
 }
 
 // callbackWithNonce creates a CallbackPayload with a valid nonce and calls Callback.

@@ -526,80 +526,64 @@ func BuildListShadowMCPInventoryUsersPayload(accessListShadowMCPInventoryUsersPr
 	return v, nil
 }
 
-// BuildUpsertShadowMCPInventoryPolicyBypassPayload builds the payload for the
-// access upsertShadowMCPInventoryPolicyBypass endpoint from CLI flags.
-func BuildUpsertShadowMCPInventoryPolicyBypassPayload(accessUpsertShadowMCPInventoryPolicyBypassBody string, accessUpsertShadowMCPInventoryPolicyBypassSessionToken string) (*access.UpsertShadowMCPInventoryPolicyBypassPayload, error) {
-	var err error
-	var body UpsertShadowMCPInventoryPolicyBypassRequestBody
-	{
-		err = json.Unmarshal([]byte(accessUpsertShadowMCPInventoryPolicyBypassBody), &body)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"policy_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_url\": \"https://example.com/foo\"\n   }'")
-		}
-		if body.PolicyIds == nil {
-			err = goa.MergeErrors(err, goa.MissingFieldError("policy_ids", "body"))
-		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", body.ProjectID, goa.FormatUUID))
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.server_url", body.ServerURL, goa.FormatURI))
-		for _, e := range body.PolicyIds {
-			err = goa.MergeErrors(err, goa.ValidateFormat("body.policy_ids[*]", e, goa.FormatUUID))
-		}
-		if err != nil {
-			return nil, err
-		}
-	}
-	var sessionToken *string
-	{
-		if accessUpsertShadowMCPInventoryPolicyBypassSessionToken != "" {
-			sessionToken = &accessUpsertShadowMCPInventoryPolicyBypassSessionToken
-		}
-	}
-	v := &access.UpsertShadowMCPInventoryPolicyBypassPayload{
-		ProjectID: body.ProjectID,
-		ServerURL: body.ServerURL,
-	}
-	if body.PolicyIds != nil {
-		v.PolicyIds = make([]string, len(body.PolicyIds))
-		for i, val := range body.PolicyIds {
-			v.PolicyIds[i] = val
-		}
-	} else {
-		v.PolicyIds = []string{}
-	}
-	v.SessionToken = sessionToken
-
-	return v, nil
-}
-
-// BuildDeleteShadowMCPInventoryPolicyBypassPayload builds the payload for the
-// access deleteShadowMCPInventoryPolicyBypass endpoint from CLI flags.
-func BuildDeleteShadowMCPInventoryPolicyBypassPayload(accessDeleteShadowMCPInventoryPolicyBypassProjectID string, accessDeleteShadowMCPInventoryPolicyBypassServerURL string, accessDeleteShadowMCPInventoryPolicyBypassSessionToken string) (*access.DeleteShadowMCPInventoryPolicyBypassPayload, error) {
+// BuildListShadowMCPInventoryServersForUserPayload builds the payload for the
+// access listShadowMCPInventoryServersForUser endpoint from CLI flags.
+func BuildListShadowMCPInventoryServersForUserPayload(accessListShadowMCPInventoryServersForUserProjectID string, accessListShadowMCPInventoryServersForUserUserKeys string, accessListShadowMCPInventoryServersForUserLimit string, accessListShadowMCPInventoryServersForUserSessionToken string) (*access.ListShadowMCPInventoryServersForUserPayload, error) {
 	var err error
 	var projectID string
 	{
-		projectID = accessDeleteShadowMCPInventoryPolicyBypassProjectID
+		projectID = accessListShadowMCPInventoryServersForUserProjectID
 		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
 		if err != nil {
 			return nil, err
 		}
 	}
-	var serverURL string
+	var userKeys []string
 	{
-		serverURL = accessDeleteShadowMCPInventoryPolicyBypassServerURL
-		err = goa.MergeErrors(err, goa.ValidateFormat("server_url", serverURL, goa.FormatURI))
+		err = json.Unmarshal([]byte(accessListShadowMCPInventoryServersForUserUserKeys), &userKeys)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for userKeys, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\",\n      \"abc123\"\n   ]'")
+		}
+		if len(userKeys) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("user_keys", userKeys, len(userKeys), 1, true))
+		}
+		if len(userKeys) > 200 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("user_keys", userKeys, len(userKeys), 200, false))
+		}
 		if err != nil {
 			return nil, err
 		}
 	}
-	var sessionToken *string
+	var limit int
 	{
-		if accessDeleteShadowMCPInventoryPolicyBypassSessionToken != "" {
-			sessionToken = &accessDeleteShadowMCPInventoryPolicyBypassSessionToken
+		if accessListShadowMCPInventoryServersForUserLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(accessListShadowMCPInventoryServersForUserLimit, 10, strconv.IntSize)
+			limit = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+			}
+			if limit > 200 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 200, false))
+			}
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
-	v := &access.DeleteShadowMCPInventoryPolicyBypassPayload{}
+	var sessionToken *string
+	{
+		if accessListShadowMCPInventoryServersForUserSessionToken != "" {
+			sessionToken = &accessListShadowMCPInventoryServersForUserSessionToken
+		}
+	}
+	v := &access.ListShadowMCPInventoryServersForUserPayload{}
 	v.ProjectID = projectID
-	v.ServerURL = serverURL
+	v.UserKeys = userKeys
+	v.Limit = limit
 	v.SessionToken = sessionToken
 
 	return v, nil
@@ -649,46 +633,47 @@ func BuildResolveShadowMCPInventoryRequestPayload(accessResolveShadowMCPInventor
 	return v, nil
 }
 
-// BuildGetRBACStatusPayload builds the payload for the access getRBACStatus
+// BuildRequestAccessPayload builds the payload for the access requestAccess
 // endpoint from CLI flags.
-func BuildGetRBACStatusPayload(accessGetRBACStatusSessionToken string) (*access.GetRBACStatusPayload, error) {
-	var sessionToken *string
+func BuildRequestAccessPayload(accessRequestAccessBody string, accessRequestAccessApikeyToken string, accessRequestAccessSessionToken string) (*access.RequestAccessPayload, error) {
+	var err error
+	var body RequestAccessRequestBody
 	{
-		if accessGetRBACStatusSessionToken != "" {
-			sessionToken = &accessGetRBACStatusSessionToken
+		err = json.Unmarshal([]byte(accessRequestAccessBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"message\": \"aaa\",\n      \"resource_id\": \"abc123\",\n      \"resource_name\": \"abc123\",\n      \"scope\": \"org:admin\"\n   }'")
+		}
+		if !(body.Scope == "org:read" || body.Scope == "org:admin" || body.Scope == "project:read" || body.Scope == "project:write" || body.Scope == "mcp:read" || body.Scope == "mcp:write" || body.Scope == "mcp:connect" || body.Scope == "environment:read" || body.Scope == "environment:write" || body.Scope == "skill:read" || body.Scope == "skill:write" || body.Scope == "risk_policy:evaluate" || body.Scope == "risk_policy:bypass" || body.Scope == "chat:read" || body.Scope == "chat:write") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "skill:read", "skill:write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read", "chat:write"}))
+		}
+		if body.Message != nil {
+			if utf8.RuneCountInString(*body.Message) > 1000 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.message", *body.Message, utf8.RuneCountInString(*body.Message), 1000, false))
+			}
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
-	v := &access.GetRBACStatusPayload{}
-	v.SessionToken = sessionToken
-
-	return v, nil
-}
-
-// BuildEnableRBACPayload builds the payload for the access enableRBAC endpoint
-// from CLI flags.
-func BuildEnableRBACPayload(accessEnableRBACSessionToken string) (*access.EnableRBACPayload, error) {
-	var sessionToken *string
+	var apikeyToken *string
 	{
-		if accessEnableRBACSessionToken != "" {
-			sessionToken = &accessEnableRBACSessionToken
+		if accessRequestAccessApikeyToken != "" {
+			apikeyToken = &accessRequestAccessApikeyToken
 		}
 	}
-	v := &access.EnableRBACPayload{}
-	v.SessionToken = sessionToken
-
-	return v, nil
-}
-
-// BuildDisableRBACPayload builds the payload for the access disableRBAC
-// endpoint from CLI flags.
-func BuildDisableRBACPayload(accessDisableRBACSessionToken string) (*access.DisableRBACPayload, error) {
 	var sessionToken *string
 	{
-		if accessDisableRBACSessionToken != "" {
-			sessionToken = &accessDisableRBACSessionToken
+		if accessRequestAccessSessionToken != "" {
+			sessionToken = &accessRequestAccessSessionToken
 		}
 	}
-	v := &access.DisableRBACPayload{}
+	v := &access.RequestAccessPayload{
+		Scope:        body.Scope,
+		ResourceID:   body.ResourceID,
+		ResourceName: body.ResourceName,
+		Message:      body.Message,
+	}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v, nil

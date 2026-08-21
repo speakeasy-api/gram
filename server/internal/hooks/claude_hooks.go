@@ -742,6 +742,7 @@ func (s *Service) claudeAuthContextMetadata(ctx context.Context, sessionID, user
 			ExternalAccountID:   "",
 			DeviceID:            "",
 			Hostname:            "",
+			Cwd:                 "",
 			AccountType:         "",
 			BillingMode:         "",
 			UserAccountID:       "",
@@ -762,6 +763,7 @@ func (s *Service) claudeAuthContextMetadata(ctx context.Context, sessionID, user
 		ExternalAccountID:   "",
 		DeviceID:            "",
 		Hostname:            "",
+		Cwd:                 "",
 		AccountType:         "",
 		BillingMode:         "",
 		UserAccountID:       "",
@@ -813,6 +815,12 @@ func (s *Service) persistHook(ctx context.Context, payload *gen.ClaudePayload, m
 	// it by re-resolving from the (non-resolving) personal email.
 	if metadata.UserID == "" {
 		metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)
+	}
+
+	// The chat upsert persists the working directory for session portability;
+	// legacy Claude events carry it on every hook payload.
+	if cwd := strings.TrimSpace(conv.PtrValOr(payload.Cwd, "")); cwd != "" {
+		metadata.Cwd = cwd
 	}
 
 	if isConversationEvent(payload.HookEventName) {
@@ -1052,21 +1060,33 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 
 	matched := matchCachedMCPEntry(entries, serverPrefix)
 	var detail string
-	switch {
-	case matched == nil:
-		detail = fmt.Sprintf("MCP server %q is not in the active configuration", serverPrefix)
-	case matched.URL != "" && !s.shadowMCPClient.IsGramHostedMCPURLForOrg(ctx, matched.URL, metadata.GramOrgID):
-		detail = fmt.Sprintf("MCP server %q is not Gram-hosted (URL: %s)", serverPrefix, matched.URL)
-	case matched.URL == "" && matched.Command != "":
-		// Local stdio servers have no URL, so the Gram-hosted check above
-		// can't apply. Treat them as shadow MCPs until explicitly approved
-		// by command.
-		detail = fmt.Sprintf("MCP server %q is a local stdio server (command: %s)", serverPrefix, matched.Command)
-	case matched.URL == "" && matched.Command == "":
-		// Defensive: the parser populates either URL or Command for every
-		// real entry, but if a future format slips past it we'd rather
-		// fail closed with a clear reason than silently allow.
-		detail = fmt.Sprintf("MCP server %q has no recognizable target", serverPrefix)
+	if policy.IsAllowAll() {
+		// Permit-by-default: only a blocked-list URL match denies. Servers
+		// missing from the inventory, local stdio servers, and unrecognizable
+		// entries are all allowed — the fail-closed reasons below are
+		// block_all concepts. Gram-hosted URLs stay allowed even if listed.
+		if matched != nil && matched.URL != "" && !s.shadowMCPClient.IsGramHostedMCPURLForOrg(ctx, matched.URL, metadata.GramOrgID) {
+			if blockedURL, blocked := shadowmcp.BlockedURLMatch(policy.BlockedURLs, matched.URL); blocked {
+				detail = fmt.Sprintf("MCP server %q is blocked by policy (URL: %s)", serverPrefix, blockedURL)
+			}
+		}
+	} else {
+		switch {
+		case matched == nil:
+			detail = fmt.Sprintf("MCP server %q is not in the active configuration", serverPrefix)
+		case matched.URL != "" && !s.shadowMCPClient.IsGramHostedMCPURLForOrg(ctx, matched.URL, metadata.GramOrgID):
+			detail = fmt.Sprintf("MCP server %q is not Gram-hosted (URL: %s)", serverPrefix, matched.URL)
+		case matched.URL == "" && matched.Command != "":
+			// Local stdio servers have no URL, so the Gram-hosted check above
+			// can't apply. Treat them as shadow MCPs until explicitly approved
+			// by command.
+			detail = fmt.Sprintf("MCP server %q is a local stdio server (command: %s)", serverPrefix, matched.Command)
+		case matched.URL == "" && matched.Command == "":
+			// Defensive: the parser populates either URL or Command for every
+			// real entry, but if a future format slips past it we'd rather
+			// fail closed with a clear reason than silently allow.
+			detail = fmt.Sprintf("MCP server %q has no recognizable target", serverPrefix)
+		}
 	}
 	evidence := shadowmcp.AccessEvidence{
 		FullURL:        "",
@@ -1089,26 +1109,30 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 		return result, nil
 	}
 
-	if _, allowed := s.canBypassPolicy(ctx, metadata.GramOrgID, metadata.UserID, policy.ID, evidence, mcpToolName); allowed {
-		matchedURL, matchedCommand := "", ""
-		if matched != nil {
-			matchedURL = matched.URL
-			matchedCommand = matched.Command
+	// Bypass grants are a block_all concept: under allow-all the blocked-list
+	// membership above is the whole check.
+	if !policy.IsAllowAll() {
+		if _, allowed := s.canBypassPolicy(ctx, metadata.GramOrgID, metadata.UserID, policy.ID, evidence, mcpToolName); allowed {
+			matchedURL, matchedCommand := "", ""
+			if matched != nil {
+				matchedURL = matched.URL
+				matchedCommand = matched.Command
+			}
+			s.logger.InfoContext(ctx, "shadow-mcp call allowed via risk policy bypass grant",
+				attr.SlogEvent("claude_hook_policy_bypass_allow"),
+				attr.SlogToolName(rawToolName),
+				attr.SlogRiskPolicyID(policy.ID),
+				attr.SlogValueAny(map[string]any{
+					"serverPrefix":   serverPrefix,
+					"matchedURL":     matchedURL,
+					"matchedCommand": matchedCommand,
+				}),
+			)
+			if output != nil {
+				output.PermissionDecision = &allow
+			}
+			return result, nil
 		}
-		s.logger.InfoContext(ctx, "shadow-mcp call allowed via risk policy bypass grant",
-			attr.SlogEvent("claude_hook_policy_bypass_allow"),
-			attr.SlogToolName(rawToolName),
-			attr.SlogRiskPolicyID(policy.ID),
-			attr.SlogValueAny(map[string]any{
-				"serverPrefix":   serverPrefix,
-				"matchedURL":     matchedURL,
-				"matchedCommand": matchedCommand,
-			}),
-		)
-		if output != nil {
-			output.PermissionDecision = &allow
-		}
-		return result, nil
 	}
 
 	auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
@@ -1122,6 +1146,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 		ToolName:        mcpToolName,
 		ToolInput:       payload.ToolInput,
 		RiskPolicyID:    policy.ID,
+		PolicyName:      policy.Name,
 	})
 	matchedURL := ""
 	if matched != nil {
@@ -1373,16 +1398,8 @@ func (s *Service) writeClaudeBlockToClickHouse(ctx context.Context, payload *gen
 	}
 
 	s.telemetryLogger.Log(ctx, telemetry.LogParams{
-		Timestamp: time.Now(),
-		ToolInfo: telemetry.ToolInfo{
-			Name:           toolName,
-			OrganizationID: metadata.GramOrgID,
-			ProjectID:      projectID.String(),
-			ID:             "",
-			URN:            "",
-			DeploymentID:   "",
-			FunctionID:     nil,
-		},
+		Timestamp:  time.Now(),
+		ToolInfo:   telemetryToolInfo(metadata, projectID, toolName),
 		UserInfo:   telemetry.UserInfoByIDAndEmail(metadata.UserID, metadata.UserEmail),
 		Attributes: attrs,
 	})

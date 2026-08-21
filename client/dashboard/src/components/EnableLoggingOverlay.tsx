@@ -1,9 +1,11 @@
 import { RequireScope } from "@/components/require-scope";
+import { useOrganization } from "@/contexts/Auth";
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet.js";
+import { useIsCurrentOrganization } from "@/hooks/useIsCurrentOrganization";
 
 interface EnableLoggingOverlayProps {
   onEnabled: () => void;
@@ -16,14 +18,36 @@ interface EnableLoggingOverlayProps {
 export function EnableLoggingOverlay({
   onEnabled,
 }: EnableLoggingOverlayProps): JSX.Element {
+  const organization = useOrganization();
+  const isCurrentOrganization = useIsCurrentOrganization(organization.id);
+  return (
+    <EnableLoggingOverlayInner
+      key={organization.id}
+      organizationId={organization.id}
+      isCurrentOrganization={isCurrentOrganization}
+      onEnabled={onEnabled}
+    />
+  );
+}
+
+function EnableLoggingOverlayInner({
+  organizationId,
+  isCurrentOrganization,
+  onEnabled,
+}: EnableLoggingOverlayProps & {
+  organizationId: string;
+  isCurrentOrganization: () => boolean;
+}): JSX.Element {
   const [mutationError, setMutationError] = useState<string | null>(null);
   const { mutate: setLogsFeature, status: mutationStatus } =
     useFeaturesSetMutation({
       onSuccess: () => {
+        if (!isCurrentOrganization()) return;
         setMutationError(null);
         onEnabled();
       },
       onError: (err) => {
+        if (!isCurrentOrganization()) return;
         const message =
           err instanceof Error ? err.message : "Failed to enable logging";
         setMutationError(message);
@@ -37,6 +61,7 @@ export function EnableLoggingOverlay({
     setLogsFeature({
       request: {
         setProductFeatureRequestBody: {
+          organizationId,
           featureName: FeatureName.Logs,
           enabled: true,
         },
@@ -45,7 +70,7 @@ export function EnableLoggingOverlay({
   };
 
   return (
-    <div className="bg-background/70 absolute inset-0 z-10 flex items-center justify-center rounded-lg backdrop-blur-[2px]">
+    <div className="bg-background/70 absolute inset-0 z-10 flex items-center justify-center backdrop-blur-[2px]">
       <div className="flex max-w-md flex-col items-center gap-4 p-8 text-center">
         <div className="bg-muted flex size-14 items-center justify-center rounded-full">
           <Icon name="activity" className="text-muted-foreground size-7" />
@@ -58,7 +83,7 @@ export function EnableLoggingOverlay({
             system metrics to power the observability dashboard.
           </p>
         </div>
-        <div className="border-border bg-muted/30 w-full rounded-lg border p-4 text-left">
+        <div className="border-border bg-muted/30 w-full border p-4 text-left">
           <div className="flex items-start gap-2">
             <Icon
               name="info"

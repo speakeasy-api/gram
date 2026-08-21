@@ -9,6 +9,7 @@ INSERT INTO mcp_servers (
     remote_mcp_server_id,
     tunneled_mcp_server_id,
     toolset_id,
+    unproxied_mcp_server_id,
     tool_variations_group_id,
     visibility
 )
@@ -22,6 +23,7 @@ VALUES (
     @remote_mcp_server_id,
     @tunneled_mcp_server_id,
     @toolset_id,
+    @unproxied_mcp_server_id,
     @tool_variations_group_id,
     @visibility
 )
@@ -71,6 +73,7 @@ WHERE project_id = @project_id
   AND (sqlc.narg('remote_mcp_server_id')::uuid IS NULL OR remote_mcp_server_id = sqlc.narg('remote_mcp_server_id')::uuid)
   AND (sqlc.narg('tunneled_mcp_server_id')::uuid IS NULL OR tunneled_mcp_server_id = sqlc.narg('tunneled_mcp_server_id')::uuid)
   AND (sqlc.narg('toolset_id')::uuid IS NULL OR toolset_id = sqlc.narg('toolset_id')::uuid)
+  AND (sqlc.narg('unproxied_mcp_server_id')::uuid IS NULL OR unproxied_mcp_server_id = sqlc.narg('unproxied_mcp_server_id')::uuid)
 ORDER BY created_at DESC;
 
 -- name: ListMCPServersByOrganizationID :many
@@ -84,6 +87,37 @@ WHERE p.organization_id = @organization_id
   AND m.deleted IS FALSE
   AND p.deleted IS FALSE
 ORDER BY m.created_at DESC;
+
+-- name: ListMCPServersByProjectIDLimited :many
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, created_at, updated_at, deleted_at, deleted
+FROM mcp_servers
+WHERE project_id = @project_id
+  AND deleted IS FALSE
+ORDER BY id ASC
+LIMIT @limit_value;
+
+-- name: ListMCPServersByLiveProjectForOrganizationLimited :many
+SELECT m.*
+FROM mcp_servers AS m
+JOIN projects AS p
+  ON p.id = m.project_id
+ AND p.organization_id = @organization_id
+ AND p.deleted IS FALSE
+WHERE m.project_id = @project_id
+  AND m.deleted IS FALSE
+ORDER BY m.id ASC
+LIMIT @limit_value;
+
+-- name: GetMCPServerByLiveProjectForOrganization :one
+SELECT m.*
+FROM mcp_servers AS m
+JOIN projects AS p
+  ON p.id = m.project_id
+ AND p.organization_id = @organization_id
+ AND p.deleted IS FALSE
+WHERE m.id = @id
+  AND m.project_id = @project_id
+  AND m.deleted IS FALSE;
 
 -- name: ListMCPServersForTelemetryByProjectID :many
 -- Includes soft-deleted servers so tool-usage telemetry can classify historical
@@ -108,6 +142,7 @@ SET
     remote_mcp_server_id = @remote_mcp_server_id,
     tunneled_mcp_server_id = @tunneled_mcp_server_id,
     toolset_id = @toolset_id,
+    unproxied_mcp_server_id = @unproxied_mcp_server_id,
     tool_variations_group_id = @tool_variations_group_id,
     visibility = @visibility,
     updated_at = clock_timestamp()

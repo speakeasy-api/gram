@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -14,10 +15,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 // sessionTokenBytes is the number of random bytes drawn for a session token.
@@ -61,6 +64,7 @@ type Manager struct {
 	sessionCache cache.TypedCacheObject[Session]
 	idpClient    SessionRevoker
 	orgRepo      *orgRepo.Queries
+	userRepo     *userRepo.Queries
 	billingRepo  billing.Repository
 	identity     UserResolver
 }
@@ -80,12 +84,18 @@ func NewManager(
 	return &Manager{
 		logger:       logger,
 		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth/sessions"),
-		sessionCache: cache.NewTypedObjectCache[Session](logger.With(attr.SlogCacheNamespace("session")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
+		sessionCache: cache.NewTypedObjectCache[Session](logger.With(attr.SlogCacheNamespace("session")), cache.NewRedisCacheAdapter(redisClient), suffix),
 		idpClient:    idpClient,
 		orgRepo:      orgRepo.New(db),
+		userRepo:     userRepo.New(db),
 		billingRepo:  billingRepo,
 		identity:     identity,
 	}
+}
+
+func validSupportSession(session Session, isAdmin bool, now time.Time) bool {
+	return isAdmin && !session.SupportExpiresAt.IsZero() && now.Before(session.SupportExpiresAt) &&
+		session.SupportOrganizationID == session.ActiveOrganizationID
 }
 
 func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context, error) {
@@ -97,6 +107,15 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 	session, err := s.sessionCache.Get(ctx, SessionCacheKey(key))
 	if err != nil {
 		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+
+	validatedSupportAdmin := false
+	if session.SupportOrganizationID != "" {
+		user, userErr := s.userRepo.GetUser(ctx, session.UserID)
+		if userErr != nil || !validSupportSession(session, user.Admin, time.Now()) {
+			return ctx, oops.C(oops.CodeUnauthorized)
+		}
+		validatedSupportAdmin = true
 	}
 
 	authCtx := &contextvalues.AuthContext{
@@ -116,12 +135,18 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 		APIKeyName:            "",
 		OrgWidePluginHooksKey: false,
 		IsAdmin:               false,
+		SupportOrganizationID: session.SupportOrganizationID,
 	}
 
 	if session.ActiveOrganizationID == "" {
-		// Populate IsAdmin from cached user info. A cache miss leaves it false
-		// (safe default). No org membership check needed for org-less sessions.
-		authCtx.IsAdmin = s.identity.IsAdmin(ctx, session.UserID)
+		// Organization-less sessions still need identity attributes for
+		// request handling and audit attribution.
+		userInfo, _, err := s.identity.GetUserInfo(ctx, session.UserID)
+		if err == nil {
+			email := userInfo.Email
+			authCtx.Email = &email
+			authCtx.IsAdmin = userInfo.Admin
+		}
 		ctx = contextvalues.SetAuthContext(ctx, authCtx)
 		return ctx, nil
 	}
@@ -130,14 +155,19 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 	// the user info cache on a miss. We check IsAdmin AFTER this call so the
 	// cache is guaranteed to be warm — avoids a false-negative on cold cache.
 	_, email, ok := s.identity.HasAccessToOrganization(ctx, session.ActiveOrganizationID, session.UserID)
-	authCtx.IsAdmin = s.identity.IsAdmin(ctx, session.UserID)
+	authCtx.IsAdmin = validatedSupportAdmin || s.identity.IsAdmin(ctx, session.UserID)
 
 	if !ok {
-		if !authCtx.IsAdmin {
+		// The shared demo org has no membership rows by design — any
+		// authenticated user may hold a session pointed at it. A platform admin
+		// may access a foreign org only through a validated support session.
+		isDemo := session.ActiveOrganizationID == constants.DemoOrganizationID
+		if !isDemo && !validatedSupportAdmin {
 			return ctx, oops.C(oops.CodeForbidden)
 		}
-		// Admin visiting a customer org they don't belong to — fall back to
-		// cached user info for the email the auth context needs.
+		// Admin visiting a customer org they don't belong to (or any user in
+		// the demo org) — fall back to cached user info for the email the
+		// auth context needs.
 		if userInfo, _, err := s.identity.GetUserInfo(ctx, session.UserID); err == nil {
 			email = userInfo.Email
 		}
@@ -157,13 +187,28 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 	authCtx.OrganizationSlug = orgMetadata.Slug
 	authCtx.Email = &email
 
-	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+	if validatedSupportAdmin {
+		ctx = contextvalues.WithValidatedSupportSession(ctx, authCtx)
+	} else {
+		ctx = contextvalues.SetAuthContext(ctx, authCtx)
+	}
 
 	return ctx, nil
 }
 
 func (s *Manager) AuthenticateWithCookie(ctx context.Context) (context.Context, error) {
 	return s.Authenticate(ctx, "")
+}
+
+// IsPlatformAdmin reads the authoritative users.admin value directly from the
+// database. Support authorization must not rely on the identity cache because
+// an administrator may have been revoked after that cache was populated.
+func (s *Manager) IsPlatformAdmin(ctx context.Context, userID string) (bool, error) {
+	user, err := s.userRepo.GetUser(ctx, userID)
+	if err != nil {
+		return false, fmt.Errorf("get user for platform admin check: %w", err)
+	}
+	return user.Admin, nil
 }
 
 func (s *Manager) Billing() billing.Repository {

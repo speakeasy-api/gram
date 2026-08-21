@@ -8,6 +8,10 @@ const mockDiscoverProtectedResourceMetadata = vi.fn();
 const mockMcpServersCreate = vi.fn();
 const mockMcpEndpointsCreate = vi.fn();
 const mockAuthedFetch = vi.fn();
+const mockUnproxiedCreateServer = vi.fn();
+const mockUnproxiedDeleteServer = vi.fn();
+const mockFetchImageFromURL = vi.fn();
+const mockMcpMetadataSet = vi.fn();
 
 // Return a stable client reference to avoid re-render loops from useCallback deps
 const mockClient = {
@@ -22,6 +26,16 @@ const mockClient = {
   },
   mcpEndpoints: {
     create: mockMcpEndpointsCreate,
+  },
+  unproxiedMcp: {
+    createServer: mockUnproxiedCreateServer,
+    deleteServer: mockUnproxiedDeleteServer,
+  },
+  assets: {
+    fetchImageFromURL: mockFetchImageFromURL,
+  },
+  mcpMetadata: {
+    set: mockMcpMetadataSet,
   },
 };
 
@@ -42,6 +56,10 @@ vi.mock("@gram/client/react-query/remoteMcpServers.js", () => ({
   useRemoteMcpServers: vi.fn(() => ({ data: undefined })),
   invalidateAllRemoteMcpServers: vi.fn(() => Promise.resolve()),
 }));
+vi.mock("@gram/client/react-query/unproxiedMcpServers.js", () => ({
+  useUnproxiedMcpServers: vi.fn(() => ({ data: undefined })),
+  invalidateAllUnproxiedMcpServers: vi.fn(() => Promise.resolve()),
+}));
 vi.mock("@gram/client/react-query/remoteMcpServerHeaders.js", () => ({
   invalidateAllRemoteMcpServerHeaders: vi.fn(() => Promise.resolve()),
 }));
@@ -50,6 +68,9 @@ vi.mock("@gram/client/react-query/mcpServers.js", () => ({
 }));
 vi.mock("@gram/client/react-query/mcpEndpoints.js", () => ({
   invalidateAllMcpEndpoints: vi.fn(() => Promise.resolve()),
+}));
+vi.mock("@gram/client/react-query/getMcpMetadata.js", () => ({
+  invalidateAllGetMcpMetadata: vi.fn(() => Promise.resolve()),
 }));
 vi.mock("@gram/client/react-query/userSessionIssuers.js", () => ({
   invalidateAllUserSessionIssuers: vi.fn(() => Promise.resolve()),
@@ -133,6 +154,15 @@ describe("useRemoteMcpInstallWorkflow", () => {
       slug: "test-org-abc123",
     });
     mockDeleteServer.mockResolvedValue(undefined);
+    mockUnproxiedCreateServer.mockResolvedValue({
+      id: "unproxied-1",
+      slug: "unproxied-slug",
+      url: "https://mcp.figma.com/mcp",
+      name: "Figma",
+    });
+    mockUnproxiedDeleteServer.mockResolvedValue(undefined);
+    mockFetchImageFromURL.mockResolvedValue({ asset: { id: "asset-1" } });
+    mockMcpMetadataSet.mockResolvedValue({ mcpServerId: "mcp-server-1" });
   });
 
   // -------------------------------------------------------------------------
@@ -334,6 +364,165 @@ describe("useRemoteMcpInstallWorkflow", () => {
       mcpServerParam: "mcp-server-slug",
     });
     expect(state.statuses[0]!.mcpEndpointUrl).toContain("/mcp/test-org-abc123");
+  });
+
+  it("creates an unproxied MCP server for Figma instead of a remote one", async () => {
+    const servers = [
+      makeServer({
+        title: "Figma",
+        registrySpecifier: "com.figma.mcp/mcp",
+        remotes: [remote("https://mcp.figma.com/mcp")],
+      }),
+    ];
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({ servers }),
+    );
+
+    await startInstall(result);
+
+    await waitFor(() => expect(result.current.phase).toBe("complete"));
+    expect(mockUnproxiedCreateServer).toHaveBeenCalledWith(
+      {
+        createUnproxiedMcpServerForm: {
+          name: "Figma",
+          url: "https://mcp.figma.com/mcp",
+          description: "A test server",
+        },
+      },
+      undefined,
+      undefined,
+    );
+    expect(mockCreateServer).not.toHaveBeenCalled();
+    expect(mockMcpServersCreate).toHaveBeenCalledWith(
+      {
+        createMcpServerForm: expect.objectContaining({
+          name: "Figma",
+          unproxiedMcpServerId: "unproxied-1",
+          visibility: "public",
+        }),
+      },
+      undefined,
+      undefined,
+    );
+    expect(mockMcpEndpointsCreate).not.toHaveBeenCalled();
+  });
+
+  // -------------------------------------------------------------------------
+  // catalog icon persistence
+  // -------------------------------------------------------------------------
+
+  it("uploads the catalog icon and attaches it to the new mcp server", async () => {
+    const servers = [
+      makeServer({
+        title: "My Server",
+        iconUrl: "https://cdn.example/logo.png",
+      }),
+    ];
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({ servers }),
+    );
+
+    await startInstall(result);
+
+    await waitFor(() => expect(result.current.phase).toBe("complete"));
+    expect(mockFetchImageFromURL).toHaveBeenCalledWith(
+      { fetchImageFromURLForm2: { url: "https://cdn.example/logo.png" } },
+      undefined,
+      undefined,
+    );
+    expect(mockMcpMetadataSet).toHaveBeenCalledWith(
+      {
+        setMcpMetadataRequestBody: {
+          mcpServerId: "mcp-server-1",
+          logoAssetId: "asset-1",
+        },
+      },
+      undefined,
+      undefined,
+    );
+  });
+
+  it("persists the catalog icon for unproxied installs too", async () => {
+    const servers = [
+      makeServer({
+        title: "Figma",
+        registrySpecifier: "com.figma.mcp/mcp",
+        remotes: [remote("https://mcp.figma.com/mcp")],
+        iconUrl: "https://cdn.example/figma.png",
+      }),
+    ];
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({ servers }),
+    );
+
+    await startInstall(result);
+
+    await waitFor(() => expect(result.current.phase).toBe("complete"));
+    expect(mockUnproxiedCreateServer).toHaveBeenCalled();
+    expect(mockMcpMetadataSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        setMcpMetadataRequestBody: {
+          mcpServerId: "mcp-server-1",
+          logoAssetId: "asset-1",
+        },
+      }),
+      undefined,
+      undefined,
+    );
+  });
+
+  it("skips the icon calls entirely when the server has no iconUrl", async () => {
+    const servers = [makeServer({ title: "My Server", iconUrl: undefined })];
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({ servers }),
+    );
+
+    await startInstall(result);
+
+    await waitFor(() => expect(result.current.phase).toBe("complete"));
+    expect(mockFetchImageFromURL).not.toHaveBeenCalled();
+    expect(mockMcpMetadataSet).not.toHaveBeenCalled();
+  });
+
+  it("completes the install even when the icon upload fails", async () => {
+    mockFetchImageFromURL.mockRejectedValue(new Error("upload boom"));
+    const servers = [
+      makeServer({
+        title: "My Server",
+        iconUrl: "https://cdn.example/logo.png",
+      }),
+    ];
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({ servers }),
+    );
+
+    await startInstall(result);
+
+    await waitFor(() => expect(result.current.phase).toBe("complete"));
+    const complete = result.current;
+    if (complete.phase !== "complete") throw new Error("unexpected phase");
+    expect(complete.statuses[0]).toMatchObject({ status: "completed" });
+    expect(mockMcpMetadataSet).not.toHaveBeenCalled();
+  });
+
+  it("completes the install even when attaching the icon metadata fails", async () => {
+    mockMcpMetadataSet.mockRejectedValue(new Error("metadata boom"));
+    const servers = [
+      makeServer({
+        title: "My Server",
+        iconUrl: "https://cdn.example/logo.png",
+      }),
+    ];
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({ servers }),
+    );
+
+    await startInstall(result);
+
+    await waitFor(() => expect(result.current.phase).toBe("complete"));
+    const complete = result.current;
+    if (complete.phase !== "complete") throw new Error("unexpected phase");
+    expect(complete.statuses[0]).toMatchObject({ status: "completed" });
   });
 
   it("sends gram-project request options for cross-project installs", async () => {

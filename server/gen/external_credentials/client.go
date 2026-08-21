@@ -24,13 +24,15 @@ type Client struct {
 	ListGcpIamCredentialsEndpoint   goa.Endpoint
 	GetAwsIamCredentialEndpoint     goa.Endpoint
 	GetGcpIamCredentialEndpoint     goa.Endpoint
+	VerifyGcpIamCredentialEndpoint  goa.Endpoint
+	GetGcpSetupInfoEndpoint         goa.Endpoint
 	DeleteAwsIamCredentialEndpoint  goa.Endpoint
 	DeleteGcpIamCredentialEndpoint  goa.Endpoint
 }
 
 // NewClient initializes a "externalCredentials" service client given the
 // endpoints.
-func NewClient(createAwsIamCredential, updateAwsIamCredential, createGcpIamCredential, updateGcpIamCredential, listExternalCredentials, listAwsIamCredentials, listGcpIamCredentials, getAwsIamCredential, getGcpIamCredential, deleteAwsIamCredential, deleteGcpIamCredential goa.Endpoint) *Client {
+func NewClient(createAwsIamCredential, updateAwsIamCredential, createGcpIamCredential, updateGcpIamCredential, listExternalCredentials, listAwsIamCredentials, listGcpIamCredentials, getAwsIamCredential, getGcpIamCredential, verifyGcpIamCredential, getGcpSetupInfo, deleteAwsIamCredential, deleteGcpIamCredential goa.Endpoint) *Client {
 	return &Client{
 		CreateAwsIamCredentialEndpoint:  createAwsIamCredential,
 		UpdateAwsIamCredentialEndpoint:  updateAwsIamCredential,
@@ -41,6 +43,8 @@ func NewClient(createAwsIamCredential, updateAwsIamCredential, createGcpIamCrede
 		ListGcpIamCredentialsEndpoint:   listGcpIamCredentials,
 		GetAwsIamCredentialEndpoint:     getAwsIamCredential,
 		GetGcpIamCredentialEndpoint:     getGcpIamCredential,
+		VerifyGcpIamCredentialEndpoint:  verifyGcpIamCredential,
+		GetGcpSetupInfoEndpoint:         getGcpSetupInfo,
 		DeleteAwsIamCredentialEndpoint:  deleteAwsIamCredential,
 		DeleteGcpIamCredentialEndpoint:  deleteGcpIamCredential,
 	}
@@ -251,6 +255,53 @@ func (c *Client) GetGcpIamCredential(ctx context.Context, p *GetGcpIamCredential
 		return
 	}
 	return ires.(*GcpIamCredential), nil
+}
+
+// VerifyGcpIamCredential calls the "verifyGcpIamCredential" endpoint of the
+// "externalCredentials" service.
+// VerifyGcpIamCredential may return the following errors:
+//   - "rate_limit_exceeded" (type *goa.ServiceError): rate limit exceeded
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) VerifyGcpIamCredential(ctx context.Context, p *VerifyGcpIamCredentialPayload) (res *VerifyCredentialResult, err error) {
+	var ires any
+	ires, err = c.VerifyGcpIamCredentialEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*VerifyCredentialResult), nil
+}
+
+// GetGcpSetupInfo calls the "getGcpSetupInfo" endpoint of the
+// "externalCredentials" service.
+// GetGcpSetupInfo may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetGcpSetupInfo(ctx context.Context, p *GetGcpSetupInfoPayload) (res *GcpSetupInfo, err error) {
+	var ires any
+	ires, err = c.GetGcpSetupInfoEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*GcpSetupInfo), nil
 }
 
 // DeleteAwsIamCredential calls the "deleteAwsIamCredential" endpoint of the

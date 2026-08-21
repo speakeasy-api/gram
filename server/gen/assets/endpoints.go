@@ -21,6 +21,7 @@ type Endpoints struct {
 	UploadImage                   goa.Endpoint
 	UploadFunctions               goa.Endpoint
 	UploadOpenAPIv3               goa.Endpoint
+	FetchImageFromURL             goa.Endpoint
 	FetchOpenAPIv3FromURL         goa.Endpoint
 	ServeOpenAPIv3                goa.Endpoint
 	ServeFunction                 goa.Endpoint
@@ -121,6 +122,7 @@ func NewEndpoints(s Service) *Endpoints {
 		UploadImage:                   NewUploadImageEndpoint(s, a.APIKeyAuth),
 		UploadFunctions:               NewUploadFunctionsEndpoint(s, a.APIKeyAuth),
 		UploadOpenAPIv3:               NewUploadOpenAPIv3Endpoint(s, a.APIKeyAuth),
+		FetchImageFromURL:             NewFetchImageFromURLEndpoint(s, a.APIKeyAuth),
 		FetchOpenAPIv3FromURL:         NewFetchOpenAPIv3FromURLEndpoint(s, a.APIKeyAuth),
 		ServeOpenAPIv3:                NewServeOpenAPIv3Endpoint(s, a.APIKeyAuth),
 		ServeFunction:                 NewServeFunctionEndpoint(s, a.APIKeyAuth),
@@ -138,6 +140,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.UploadImage = m(e.UploadImage)
 	e.UploadFunctions = m(e.UploadFunctions)
 	e.UploadOpenAPIv3 = m(e.UploadOpenAPIv3)
+	e.FetchImageFromURL = m(e.FetchImageFromURL)
 	e.FetchOpenAPIv3FromURL = m(e.FetchOpenAPIv3FromURL)
 	e.ServeOpenAPIv3 = m(e.ServeOpenAPIv3)
 	e.ServeFunction = m(e.ServeFunction)
@@ -335,6 +338,65 @@ func NewUploadOpenAPIv3Endpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 			return nil, err
 		}
 		return s.UploadOpenAPIv3(ctx, ep.Payload, ep.Body)
+	}
+}
+
+// NewFetchImageFromURLEndpoint returns an endpoint function that calls the
+// method "fetchImageFromURL" of service "assets".
+func NewFetchImageFromURLEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*FetchImageFromURLForm)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.FetchImageFromURL(ctx, p)
 	}
 }
 

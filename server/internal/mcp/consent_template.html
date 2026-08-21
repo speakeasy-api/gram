@@ -36,12 +36,16 @@
         --color-feedback-green-300: hsl(99, 30%, 73%);
         --color-feedback-green-700: hsl(105, 24%, 27%);
         --color-feedback-amber-700: hsl(32, 80%, 36%);
+        --color-feedback-red-100: hsl(0, 71%, 97%);
+        --color-feedback-red-300: hsl(0, 51%, 80%);
+        --color-feedback-red-700: hsl(0, 61%, 43%);
         --color-brand-blue-600: hsl(215, 71%, 40%);
 
         --text-default: var(--color-neutral-700);
         --text-default-inverse: var(--color-neutral-100);
         --text-default-success: var(--color-feedback-green-700);
         --text-default-warning: var(--color-feedback-amber-700);
+        --text-default-destructive: var(--color-feedback-red-700);
 
         --fill-neutral-highlight: var(--color-base-black);
         --fill-neutral-default: var(--color-neutral-800);
@@ -53,6 +57,7 @@
         --border-neutral-softest: var(--color-neutral-200);
 
         --ease-in-out-quad: cubic-bezier(0.455, 0.03, 0.515, 0.955);
+        --z-tooltip: 10;
 
         font-family: var(--font-diatype);
         color: var(--text-default);
@@ -89,7 +94,7 @@
         border: solid 1px var(--border-neutral-softest);
         border-radius: 0.5rem;
         padding: 2rem;
-        max-width: 30rem;
+        max-width: 52rem;
         width: 100%;
         display: flex;
         flex-direction: column;
@@ -144,6 +149,52 @@
 
       .info dt:first-child {
         margin-top: 0;
+      }
+
+      /* Wrap any consent-screen trigger and tooltip content with this pattern. */
+      .tooltip {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+      }
+
+      .tooltip[tabindex] {
+        cursor: help;
+      }
+
+      .tooltip[tabindex]:focus-visible {
+        outline: 2px solid var(--color-brand-blue-600);
+        outline-offset: 2px;
+        border-radius: 2px;
+      }
+
+      .tooltip-content {
+        position: absolute;
+        z-index: var(--z-tooltip);
+        top: calc(100% + 0.5rem);
+        left: 0;
+        display: none;
+        width: max-content;
+        max-width: min(18rem, calc(100vw - 2rem));
+        padding: 0.625rem 0.75rem;
+        border-radius: 6px;
+        background: var(--fill-neutral-default);
+        color: var(--text-default-inverse);
+        box-shadow: 0 0.375rem 1rem hsl(0 0% 0% / 18%);
+        font: 400 0.75rem/1.5 var(--font-diatype);
+        letter-spacing: normal;
+        text-align: left;
+        text-transform: none;
+      }
+
+      .tooltip--align-end .tooltip-content {
+        right: 0;
+        left: auto;
+      }
+
+      .tooltip:hover > .tooltip-content,
+      .tooltip:focus-within > .tooltip-content {
+        display: block;
       }
 
       .info dd {
@@ -202,9 +253,21 @@
       }
 
       .remote-card .meta .issuer {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
         font-weight: 500;
         color: var(--fill-neutral-default);
         font-family: var(--font-diatype-mono);
+      }
+
+      .remote-card .meta .issuer-logo {
+        width: 1.5rem;
+        height: 1.5rem;
+        border-radius: 4px;
+        object-fit: contain;
+        flex-shrink: 0;
+        display: block;
       }
 
       .remote-card .meta .state {
@@ -214,7 +277,16 @@
         letter-spacing: 0.03em;
       }
 
+      .remote-card .meta .detail {
+        font-size: 0.75rem;
+        color: var(--text-default);
+      }
+
       .remote-card .state.connected {
+        color: var(--text-default-success);
+      }
+
+      .remote-card .detail.auto-refresh-on {
         color: var(--text-default-success);
       }
 
@@ -223,36 +295,124 @@
         color: var(--text-default-warning);
       }
 
-      .remote-card a.btn-link {
+      .remote-card button.btn-link {
         padding: 0.5rem 1rem;
         font-size: calc(1rem - 2px);
         font-weight: 400;
+        border: none;
         border-radius: 6px;
         text-decoration: none;
         text-transform: uppercase;
+        font-family: inherit;
+        cursor: pointer;
         background: var(--fill-neutral-default);
         color: var(--text-default-inverse);
         transition: background-color 300ms var(--ease-in-out-quad);
         white-space: nowrap;
       }
 
-      .remote-card a.btn-link:hover {
+      .remote-card button.btn-link:hover {
         background: var(--fill-neutral-highlight);
       }
 
-      .remote-card a.btn-link.connected {
+      .remote-card button.btn-link:disabled,
+      .remote-card button.btn-link:disabled:hover {
         background: var(--color-neutral-200);
-        color: var(--fill-neutral-default);
+        color: var(--text-default);
+        cursor: default;
       }
 
-      .remote-card a.btn-link.connected:hover {
-        background: var(--color-neutral-200);
-        color: var(--fill-neutral-highlight);
+      .remote-card .remote-actions {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
       }
 
-      .remote-card a.btn-link[aria-disabled="true"] {
+      .remote-card button.icon-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 2.125rem;
+        height: 2.125rem;
+        padding: 0;
+        border: solid 1px var(--border-neutral-softest);
+        border-radius: 6px;
+        background: transparent;
+        color: var(--text-default-destructive);
+        cursor: pointer;
+        transition:
+          background-color 300ms var(--ease-in-out-quad),
+          border-color 300ms var(--ease-in-out-quad);
+      }
+
+      .remote-card button.icon-btn:hover {
+        background: var(--color-feedback-red-100);
+        border-color: var(--color-feedback-red-300);
+      }
+
+      .remote-card button.icon-btn svg {
+        width: 0.875rem;
+        height: 0.875rem;
+        display: block;
+      }
+
+      .visually-hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+      }
+
+      .info select {
+        font-family: var(--font-diatype-mono);
+        font-size: 0.8125rem;
+        padding: 0.25rem 0.5rem;
+        border: solid 1px var(--border-neutral-softest);
+        border-radius: 6px;
+        background: var(--bg-surface-primary-default);
+        color: var(--text-default);
+        max-width: 100%;
+      }
+
+      .info .auto-refresh-managed {
+        font-family: var(--font-diatype-mono);
+        font-size: 0.8125rem;
+      }
+
+      .info .auto-refresh-managed.on {
+        color: var(--text-default-success);
+      }
+
+      /* Refresh being off is the organization's choice, not a failure, so the
+         off state stays neutral rather than borrowing a feedback color. */
+      .info .auto-refresh-managed.off {
+        color: var(--text-default);
+      }
+
+      .remote-card button.btn-link[aria-disabled="true"] {
         pointer-events: none;
         opacity: 0.65;
+      }
+
+      .tools {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+
+      .tools h3 {
+        margin: 0;
+        color: var(--fill-neutral-default);
+        font-size: 0.875rem;
+        font-weight: 400;
+      }
+
+      .tools-note {
+        margin: 0;
+        font-size: 0.75rem;
+        color: var(--text-default);
       }
 
       .actions {
@@ -364,7 +524,81 @@
           <dt>Will redirect to</dt>
           <dd>{{.RedirectURI}}</dd>
           {{end}}
+          {{if .SessionDurationOptions}}
+          <dt>Session length</dt>
+          <dd>
+            <select
+              name="session_duration_hours"
+              form="consent-approve-form"
+              aria-label="Session length"
+            >
+              {{range .SessionDurationOptions}}
+              <option value="{{.Hours}}" {{if .Selected}}selected{{end}}>
+                {{.Label}}
+              </option>
+              {{end}}
+            </select>
+          </dd>
+          {{end}}
+          {{if .RemoteSessionCards}}
+          <dt>
+            <span
+              class="tooltip"
+              tabindex="0"
+              aria-describedby="auto-refresh-tooltip"
+            >
+              Auto refresh
+              <span
+                id="auto-refresh-tooltip"
+                class="tooltip-content"
+                role="tooltip"
+              >
+                Renews connections in the background so they don't expire
+                from inactivity. When off, idle connections lapse and need
+                reconnecting.
+              </span>
+            </span>
+          </dt>
+          <dd>
+            {{if .AutoRefreshPolicy.IsUserControlled}}
+            <select
+              name="auto_refresh"
+              form="auto-refresh-form"
+              aria-label="Auto refresh"
+              data-auto-refresh-select
+            >
+              <option value="on" {{if .AutoRefreshOn}}selected{{end}}>On</option>
+              <option value="off" {{if not .AutoRefreshOn}}selected{{end}}>
+                Off
+              </option>
+            </select>
+            {{else if .AutoRefreshPolicy.IsEnforced}}
+            <span class="auto-refresh-managed on" data-auto-refresh-managed>
+              On · Managed by your organization
+            </span>
+            {{else}}
+            <span class="auto-refresh-managed off" data-auto-refresh-managed>
+              Off · Managed by your organization
+            </span>
+            {{end}}
+          </dd>
+          {{end}}
         </dl>
+
+        {{if .AutoRefreshPolicy.IsUserControlled}}
+        <form
+          method="POST"
+          action="/{{.MCPRouteBase}}/{{.MCPSlug}}/connect/remote-session"
+          id="auto-refresh-form"
+          class="visually-hidden"
+          {{if .AutoRefreshHasSessions}}data-auto-refresh-persist{{end}}
+        >
+          <input type="hidden" name="state" value="{{.State}}" />
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
+          <input type="hidden" name="action" value="set_auto_refresh" />
+          <button type="submit" tabindex="-1" aria-hidden="true"></button>
+        </form>
+        {{end}}
 
         {{if .LoopbackRedirectWarning}}
         <p class="loopback-warning">
@@ -378,27 +612,132 @@
         <div class="remotes">
           <h3>Connect required services</h3>
           {{range .RemoteSessionCards}}
-          <div class="remote-card">
+          <form
+            method="POST"
+            action="/{{$.MCPRouteBase}}/{{$.MCPSlug}}/connect/remote-session"
+            class="remote-card"
+            data-remote-card
+          >
+            <input type="hidden" name="state" value="{{$.State}}" />
+            <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}" />
+            <input type="hidden" name="client_id" value="{{.ClientID}}" />
+            <input
+              type="hidden"
+              name="auto_refresh"
+              value="{{if $.AutoRefreshOn}}on{{else}}off{{end}}"
+              data-auto-refresh-input
+            />
             <div class="meta">
-              <div class="issuer">{{.IssuerSlug}}</div>
+              <div class="issuer">
+                {{if .IssuerLogoURL}}<img
+                  class="issuer-logo"
+                  src="{{.IssuerLogoURL}}"
+                  alt=""
+                />{{end}}<span>{{.IssuerDisplay}}</span>
+              </div>
               {{if .Connected}}
               <div class="state connected">✓ Connected</div>
+              {{if .AutoRefreshChecked}}
+              <div class="detail auto-refresh-on">✓ Auto refresh on</div>
+              {{else}}
+              <div class="detail">Auto refresh off</div>
+              {{end}}
               {{else if .Expired}}
               <div class="state expired">⚠ Expired — reconnect</div>
               {{else}}
               <div class="state disconnected">Not connected</div>
               {{end}}
             </div>
-            <a
-              class="btn-link {{if .Connected}}connected{{end}}"
-              href="{{.ChallengeURL}}"
-              data-connect-link
-              >{{if or .Connected .Expired}}Reconnect{{else}}Connect{{end}}</a
-            >
-          </div>
+            <div class="remote-actions">
+              {{if .Connected}} {{if .CanRefresh}}
+              <span
+                {{if .RefreshExpiresIn}}class="tooltip
+                tooltip--align-end"{{end}}
+              >
+                <button
+                  type="submit"
+                  name="action"
+                  value="refresh"
+                  class="btn-link"
+                  {{if .RefreshExpiresIn}}
+                  aria-describedby="refresh-expiry-{{.ClientID}}"
+                  {{end}}
+                  data-refresh-link
+                >
+                  Refresh now
+                </button>
+                {{if .RefreshExpiresIn}}
+                <span
+                  id="refresh-expiry-{{.ClientID}}"
+                  class="tooltip-content"
+                  role="tooltip"
+                >
+                  Renews on use. If unused, this connection expires in
+                  <time datetime="{{.RefreshExpiresAt}}"
+                    >{{.RefreshExpiresIn}}</time
+                  >.
+                </span>
+                {{end}}
+              </span>
+              {{end}} {{else}}
+              <button
+                type="submit"
+                name="action"
+                value="connect"
+                class="btn-link"
+                data-connect-link
+              >
+                Connect
+              </button>
+              {{end}}
+              {{if or .Connected .Expired}}
+              <button
+                type="submit"
+                name="action"
+                value="disconnect"
+                class="icon-btn"
+                aria-label="Disconnect {{.IssuerDisplay}}"
+                title="Disconnect"
+              >
+                <svg
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  aria-hidden="true"
+                >
+                  <path d="M3 3l10 10M13 3L3 13" />
+                </svg>
+              </button>
+              {{end}}
+            </div>
+          </form>
           {{end}}
         </div>
-        {{end}} {{if .AutoClose}}
+        {{end}}
+
+        {{if .ShowToolsIsland}}
+        <div class="tools">
+          <h3>Tool access</h3>
+          <div
+            id="consent-tools-root"
+            data-tools-url="{{.ConsentToolsURL}}"
+            data-state="{{.State}}"
+            data-csrf-token="{{.CSRFToken}}"
+            data-form-id="consent-approve-form"
+            data-approve-button-id="consent-approve-button"
+            data-consent-enabled="{{if .ConsentEnabled}}true{{else}}false{{end}}"
+            data-server-name="{{.MCPSlug}}"
+            {{if .ConsentToolsPrefill}}data-prefill="{{.ConsentToolsPrefill}}"{{end}}
+            aria-live="polite"
+          >
+            <p class="tools-note">Loading available tools…</p>
+          </div>
+        </div>
+        {{end}}
+
+        {{if .AutoClose}}
         <p class="info">
           Connection complete. This tab will close automatically.
         </p>
@@ -411,6 +750,7 @@
           <form
             method="POST"
             action="/{{.MCPRouteBase}}/{{.MCPSlug}}/connect"
+            id="consent-approve-form"
             data-approve-form
           >
             <input type="hidden" name="state" value="{{.State}}" />
@@ -419,10 +759,9 @@
               type="submit"
               name="action"
               value="approve"
+              id="consent-approve-button"
               class="btn btn-primary"
-              {{if
-              not
-              .ConsentEnabled}}disabled{{end}}
+              {{if or .ShowToolsIsland (not .ConsentEnabled)}}disabled{{end}}
             >
               Give Access
             </button>
@@ -444,5 +783,8 @@
       </div>
     </main>
     <script src="{{.ScriptURL}}"></script>
+    {{if .ShowToolsIsland}}
+    <script defer src="{{.ConsentToolsScriptURL}}"></script>
+    {{end}}
   </body>
 </html>

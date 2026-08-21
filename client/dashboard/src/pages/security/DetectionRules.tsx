@@ -1,5 +1,6 @@
-import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { useRoutes } from "@/routes";
+import { Navigate, useSearchParams } from "react-router";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -13,7 +14,6 @@ import {
   SheetTitle,
 } from "@/components/ui/Sheet";
 import { TextArea } from "@/components/ui/Textarea";
-import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/ui/Icon";
 import { type IconName } from "@/components/ui/Icon/names";
@@ -22,7 +22,6 @@ import {
   Check,
   ChevronRight,
   Loader2,
-  Plus,
   Sparkles,
   Trash2,
 } from "lucide-react";
@@ -83,22 +82,53 @@ type SelectedRule =
   | { kind: "builtin"; rule: BuiltinRule }
   | { kind: "custom"; rule: CustomDetectionRule };
 
+/**
+ * Legacy route target: Detection Rules now lives as a Guardrails tab, so
+ * the old standalone page redirects there, carrying the `?rule=` deep link
+ * along so existing bookmarks and palette links keep resolving.
+ */
 export default function DetectionRules(): JSX.Element {
+  const routes = useRoutes();
+  const [searchParams] = useSearchParams();
+  const rule = searchParams.get("rule");
+  const ruleSuffix = rule ? `&rule=${encodeURIComponent(rule)}` : "";
   return (
-    <RequireScope scope="org:admin" level="page">
-      <Page>
-        <Page.Header>
-          <Page.Header.Breadcrumbs />
-        </Page.Header>
-        <Page.Body>
-          <DetectionRulesContent />
-        </Page.Body>
-      </Page>
+    <Navigate
+      to={`${routes.policyCenter.href()}?tab=detection-rules${ruleSuffix}`}
+      replace
+    />
+  );
+}
+
+/**
+ * The Detection Rules tab body, rendered inside the Guardrails page's
+ * TabbedPage — no page frame of its own. The create sheet is controlled by
+ * the parent so the page-level primary action can open it.
+ */
+export function DetectionRulesTab({
+  createOpen,
+  onCreateOpenChange,
+}: {
+  createOpen: boolean;
+  onCreateOpenChange: (open: boolean) => void;
+}): JSX.Element {
+  return (
+    <RequireScope scope="org:admin" level="component">
+      <DetectionRulesContent
+        createOpen={createOpen}
+        onCreateOpenChange={onCreateOpenChange}
+      />
     </RequireScope>
   );
 }
 
-function DetectionRulesContent() {
+function DetectionRulesContent({
+  createOpen,
+  onCreateOpenChange,
+}: {
+  createOpen: boolean;
+  onCreateOpenChange: (open: boolean) => void;
+}) {
   const {
     customRules,
     isLoading: customRulesLoading,
@@ -108,7 +138,6 @@ function DetectionRulesContent() {
     removeCustomRule,
   } = useDetectionRulesStore();
 
-  const [createOpen, setCreateOpen] = useState(false);
   const [selected, setSelected] = useState<SelectedRule | null>(null);
   const [expanded, setExpanded] = useState<RuleCategory | "custom" | null>(
     null,
@@ -151,49 +180,34 @@ function DetectionRulesContent() {
 
   return (
     <>
-      <Page.Section>
-        <Page.Section.Title stage="beta">Detection Rules</Page.Section.Title>
-        <Page.Section.Description>
-          Reusable built-in and custom rules your policies use to flag — or
-          exempt — messages.
-        </Page.Section.Description>
-        <Page.Section.CTA>
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Custom Detection Rule
-          </Button>
-        </Page.Section.CTA>
-        <Page.Section.Body>
-          <div className="space-y-8">
-            {customRulesLoading && (
-              <div className="text-muted-foreground text-sm">
-                Loading custom rules...
-              </div>
-            )}
-            {customRulesError && (
-              <div className="text-destructive text-sm">
-                Failed to load custom rules.
-              </div>
-            )}
-            {customRules.length > 0 && (
-              <CustomRulesSection
-                rules={customRules}
-                expanded={expanded === "custom"}
-                onToggle={() =>
-                  setExpanded(expanded === "custom" ? null : "custom")
-                }
-                onSelect={(rule) => setSelected({ kind: "custom", rule })}
-              />
-            )}
-
-            <BuiltinRulesSection
-              expanded={expanded}
-              onToggle={(cat) => setExpanded(expanded === cat ? null : cat)}
-              onSelect={(rule) => setSelected({ kind: "builtin", rule })}
-            />
+      <div className="space-y-8">
+        {customRulesLoading && (
+          <div className="text-muted-foreground text-sm">
+            Loading custom rules...
           </div>
-        </Page.Section.Body>
-      </Page.Section>
+        )}
+        {customRulesError && (
+          <div className="text-destructive text-sm">
+            Failed to load custom rules.
+          </div>
+        )}
+        {customRules.length > 0 && (
+          <CustomRulesSection
+            rules={customRules}
+            expanded={expanded === "custom"}
+            onToggle={() =>
+              setExpanded(expanded === "custom" ? null : "custom")
+            }
+            onSelect={(rule) => setSelected({ kind: "custom", rule })}
+          />
+        )}
+
+        <BuiltinRulesSection
+          expanded={expanded}
+          onToggle={(cat) => setExpanded(expanded === cat ? null : cat)}
+          onSelect={(rule) => setSelected({ kind: "builtin", rule })}
+        />
+      </div>
 
       <RuleDetailSheet
         selection={selected}
@@ -212,11 +226,11 @@ function DetectionRulesContent() {
 
       <CreateCustomRuleSheet
         open={createOpen}
-        onOpenChange={setCreateOpen}
+        onOpenChange={onCreateOpenChange}
         existingCustomIds={customRules.map((r) => r.id)}
         onCreate={(rule) => {
           addCustomRule(rule);
-          setCreateOpen(false);
+          onCreateOpenChange(false);
           toast.success(`Created custom rule ${rule.id}`);
         }}
       />
@@ -242,10 +256,8 @@ function CustomRulesSection({
   const meta = RULE_CATEGORY_META.custom;
   return (
     <div>
-      <Text variant="subheading" className="mb-3">
-        Custom
-      </Text>
-      <div className="border-border divide-border divide-y rounded-lg border">
+      <div className="text-eyebrow mb-3">Custom</div>
+      <div className="border-border divide-border divide-y border">
         <CategoryHeader
           icon={meta.icon as IconName}
           label={meta.label}
@@ -286,10 +298,8 @@ function BuiltinRulesSection({
 }) {
   return (
     <div>
-      <Text variant="subheading" className="mb-3">
-        Built-in
-      </Text>
-      <div className="border-border divide-border divide-y rounded-lg border">
+      <div className="text-eyebrow mb-3">Built-in</div>
+      <div className="border-border divide-border divide-y border">
         {BUILTIN_CATEGORY_ORDER.map((cat) => {
           const meta = RULE_CATEGORY_META[cat];
           const rules = BUILTIN_RULES_BY_CATEGORY[cat];
@@ -661,14 +671,14 @@ function RulePlayground({
       >
         <label
           htmlFor={`pg-mode-sample-${ruleId}`}
-          className="hover:bg-muted/40 flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-xs"
+          className="hover:bg-muted/40 flex cursor-pointer items-center gap-2 border px-3 py-1.5 text-xs"
         >
           <RadioGroupItem value="sample" id={`pg-mode-sample-${ruleId}`} />
           Paste sample
         </label>
         <label
           htmlFor={`pg-mode-chat-${ruleId}`}
-          className="hover:bg-muted/40 flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-xs"
+          className="hover:bg-muted/40 flex cursor-pointer items-center gap-2 border px-3 py-1.5 text-xs"
         >
           <RadioGroupItem value="chat" id={`pg-mode-chat-${ruleId}`} />
           Run on a chat
@@ -753,7 +763,7 @@ function MatchList({
   reason: string | null;
 }) {
   return (
-    <div className="border-border mt-3 rounded-lg border">
+    <div className="border-border mt-3 border">
       <div className="border-border bg-muted/40 flex items-center justify-between border-b px-3 py-2 text-xs font-medium">
         <span>
           {matches.length} match{matches.length === 1 ? "" : "es"}
@@ -775,7 +785,7 @@ function MatchList({
                   {getCategoryCodeForFinding(m.source, m.ruleId)}
                 </span>
               </div>
-              <pre className="bg-muted/50 overflow-x-auto rounded px-2 py-1 font-mono text-[11px]">
+              <pre className="bg-muted/50 overflow-x-auto px-2 py-1 font-mono text-[11px]">
                 {m.match}
               </pre>
               {m.description && (
@@ -1005,7 +1015,7 @@ function ChatPlayground({
       </div>
 
       {results.length > 0 && (
-        <div className="border-border divide-border max-h-[420px] divide-y overflow-y-auto rounded-lg border">
+        <div className="border-border divide-border max-h-[420px] divide-y overflow-y-auto border">
           {results.map((r) => (
             <ChatMessageRow key={r.messageId} item={r} />
           ))}
@@ -1039,7 +1049,7 @@ function ChatPickerColumn({
         <RadioGroup
           value={value ?? ""}
           onValueChange={onChange}
-          className="border-border divide-border max-h-48 divide-y overflow-y-auto rounded-md border"
+          className="border-border divide-border max-h-48 divide-y overflow-y-auto border"
         >
           {items.map((item) => (
             <label
@@ -1106,7 +1116,7 @@ function ChatMessageRow({ item }: { item: ChatMessageResult }) {
               Full message ({item.fullText.length} chars):
             </p>
           )}
-          <pre className="bg-muted/40 max-h-40 overflow-auto rounded px-2 py-1 font-mono text-[11px] whitespace-pre-wrap">
+          <pre className="bg-muted/40 max-h-40 overflow-auto px-2 py-1 font-mono text-[11px] whitespace-pre-wrap">
             {item.fullText || "(empty)"}
           </pre>
           {item.status === "error" && (
@@ -1383,14 +1393,14 @@ function CreateCustomRuleSheet({
               <div className="space-y-2">
                 <Label className="text-sm font-medium">Rule ID</Label>
                 <div className="flex">
-                  <span className="border-input bg-muted text-muted-foreground inline-flex items-center rounded-l-md border border-r-0 px-3 font-mono text-xs">
+                  <span className="border-input bg-muted text-muted-foreground inline-flex items-center border border-r-0 px-3 font-mono text-xs">
                     {CUSTOM_RULE_ID_PREFIX}
                   </span>
                   <Input
                     value={idSuffix}
                     onChange={setIdSuffix}
                     placeholder="internal_token"
-                    className="rounded-l-none font-mono text-xs"
+                    className="font-mono text-xs"
                   />
                 </div>
                 {idError ? (

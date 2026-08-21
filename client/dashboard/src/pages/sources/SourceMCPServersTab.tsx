@@ -1,4 +1,4 @@
-import { DotCard } from "@/components/ui/DotCard";
+import { Card } from "@/components/ui/Card";
 import { Text } from "@/components/ui/Text";
 import { useRoutes } from "@/routes";
 import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
@@ -14,7 +14,9 @@ function MCPServerPortalCard({ toolset }: { toolset: ToolsetEntry }) {
       params={[toolset.slug]}
       className="hover:no-underline"
     >
-      <DotCard icon={<Network className="text-muted-foreground h-10 w-10" />}>
+      <Card.Entity
+        icon={<Network className="text-muted-foreground h-10 w-10" />}
+      >
         <div className="mb-1 flex items-start justify-between gap-2">
           <Text
             variant="subheading"
@@ -58,7 +60,7 @@ function MCPServerPortalCard({ toolset }: { toolset: ToolsetEntry }) {
             <ArrowRight className="h-3.5 w-3.5" />
           </div>
         </div>
-      </DotCard>
+      </Card.Entity>
     </routes.mcp.details.Link>
   );
 }
@@ -79,7 +81,7 @@ export function SourceMCPServersTab({
           ))}
         </div>
       ) : (
-        <div className="rounded-lg border p-12 text-center">
+        <div className="border p-12 text-center">
           <Server className="text-muted-foreground mx-auto mb-3 h-10 w-10 opacity-40" />
           <Text className="mb-1 block font-medium">No MCP servers yet</Text>
           <Text muted small className="mx-auto mb-4 block max-w-sm">

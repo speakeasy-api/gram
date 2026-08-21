@@ -29,7 +29,6 @@ import {
   type SectionMatch,
   ToolUI,
   ToolUIGroup,
-  type ToolUIMetaRow,
 } from "@/elements";
 import type { ClaudeToolUsage } from "@gram/client/models/components/claudetoolusage.js";
 import type { ClaudeTurnUsage } from "@gram/client/models/components/claudeturnusage.js";
@@ -43,10 +42,14 @@ import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/Avatar";
 import {
   type ClaudeUsageMatch,
-  formatByteCount,
   formatDurationFromNanos,
   formatUsageCost,
 } from "./claudeUsage";
+import {
+  toolMetaRows,
+  userDisplayName,
+  userInitials,
+} from "./chatTranscriptUtils";
 import {
   argsToString,
   displayItemContainsMessage,
@@ -212,45 +215,6 @@ function CostBadge({ usage }: { usage: ClaudeUsageMatch }) {
   );
 }
 
-// The API reports payload size per tool call but cost only per turn (a turn
-// covers every tool it called), so the cost row is labelled accordingly.
-function toolMetaRows({
-  usage,
-  turn,
-}: {
-  usage: ClaudeToolUsage | undefined;
-  turn: ClaudeTurnUsage | undefined;
-}): ToolUIMetaRow[] {
-  if (!usage) return [];
-  const total = usage.inputSizeBytes + usage.resultSizeBytes;
-  const rows: ToolUIMetaRow[] = [];
-  if (total > 0) {
-    rows.push(
-      { label: "Arguments size", value: formatByteCount(usage.inputSizeBytes) },
-      { label: "Output size", value: formatByteCount(usage.resultSizeBytes) },
-      { label: "Total size", value: formatByteCount(total) },
-    );
-  }
-  if (turn) {
-    rows.push({ label: "Turn cost", value: formatUsageCost(turn.costUsd) });
-  }
-  return rows;
-}
-
-// Two letters for the avatar fallback: the first two name parts of an email
-// local-part (jane.doe → JD), else the first two characters.
-function userInitials(id: string | undefined): string {
-  if (!id) return "?";
-  const handle = id.includes("@") ? id.slice(0, id.indexOf("@")) : id;
-  const parts = handle.split(/[._\-\s]+/).filter(Boolean);
-  if (parts.length >= 2) return (parts[0]![0]! + parts[1]![0]!).toUpperCase();
-  return handle.slice(0, 2).toUpperCase();
-}
-
-function userDisplayName(id: string | undefined): string {
-  return id && id.trim().length > 0 ? id : "User";
-}
-
 // A repeating zig-zag (triangle-wave) rule. Drawn as a themeable `bg-border`
 // bar revealed through an SVG mask, so it follows the border colour in light and
 // dark without baking a colour into the data URI.
@@ -360,7 +324,7 @@ function TurnHeader({
         />
       </div>
       <div className="flex items-center justify-between pt-1 pb-3">
-        <div className="bg-background flex h-9 min-w-0 items-center gap-2 rounded-full border pr-3 pl-1">
+        <div className="bg-background flex h-9 min-w-0 items-center gap-2 border pr-3 pl-1">
           <Avatar className="size-7 shrink-0">
             <AvatarFallback className="bg-muted text-muted-foreground text-xs font-medium">
               {isUser ? userInitials(userName) : <Bot className="size-3.5" />}
@@ -422,7 +386,7 @@ function UserMessageRow({
     >
       <div
         className={cn(
-          "bg-muted text-foreground mx-2 max-w-[80%] rounded-xl px-4 py-2 wrap-break-word",
+          "bg-muted text-foreground mx-2 max-w-[80%] px-4 py-2 wrap-break-word",
         )}
       >
         {messageResults && messageResults.length > 0 ? (
@@ -528,7 +492,7 @@ function PromptAttachmentChip({
     <details
       open={expanded}
       onToggle={(event) => setExpanded(event.currentTarget.open)}
-      className="border-border bg-background overflow-hidden rounded-md border text-xs"
+      className="border-border bg-background overflow-hidden border text-xs"
     >
       <summary className="hover:bg-muted/40 flex cursor-pointer list-none items-center gap-2 px-2.5 py-1.5 select-none">
         <Paperclip className="text-muted-foreground size-3.5 shrink-0" />
@@ -542,7 +506,7 @@ function PromptAttachmentChip({
           {hasDetailedResults ? (
             <RiskBadge results={results} />
           ) : flagged ? (
-            <span className="bg-destructive text-destructive-foreground rounded px-1.5 py-0.5 text-[10px] font-medium">
+            <span className="bg-destructive text-destructive-foreground px-1.5 py-0.5 text-[10px] font-medium">
               Risk
             </span>
           ) : null}
@@ -666,7 +630,7 @@ function SystemMessageRow({
   const text = messageText(row.message.content);
   return (
     <div className={cn("px-4 py-2", dimClass(ctx.dimNonRisk))}>
-      <details className="border-muted bg-muted/20 group overflow-hidden rounded-md border">
+      <details className="border-muted bg-muted/20 group overflow-hidden border">
         <summary className="text-muted-foreground hover:bg-muted/40 flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-xs select-none">
           <Icon
             name="chevron-right"
@@ -892,7 +856,7 @@ function ToolRowView({
         meta={meta}
         nameQuery={ctx.searchQuery}
         nameActiveOccurrence={activeNameOccurrence}
-        className={bare ? "rounded-none border-0" : undefined}
+        className={bare ? "border-0" : undefined}
       />
       <RowDecorationFooter
         decoration={decoration}
@@ -1053,7 +1017,7 @@ function LoadDivider({
         type="button"
         disabled={loading}
         onClick={onClick}
-        className="bg-background text-foreground hover:bg-muted inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium shadow-xs transition-colors disabled:cursor-default disabled:opacity-60"
+        className="bg-background text-foreground hover:bg-muted inline-flex cursor-pointer items-center gap-1.5 border px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-default disabled:opacity-60"
       >
         {loading ? (
           <Loader2 className="size-3.5 animate-spin" />
@@ -1363,7 +1327,7 @@ export function ChatTranscript({
         <button
           type="button"
           onClick={scrollToStart}
-          className="bg-background text-muted-foreground hover:text-foreground hover:bg-muted absolute top-2 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1 rounded-full border px-2.5 py-1 text-xs shadow-sm transition-colors"
+          className="bg-background text-muted-foreground hover:text-foreground hover:bg-muted absolute top-2 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1 border px-2.5 py-1 text-xs transition-colors"
         >
           <ArrowUp className="size-3" />
           Start of thread
@@ -1391,7 +1355,7 @@ export function ChatTranscript({
                 aria-current={focused ? "location" : undefined}
                 ref={virtualizer.measureElement}
                 className={cn(
-                  "absolute top-0 left-0 w-full rounded-lg transition-colors",
+                  "absolute top-0 left-0 w-full transition-colors",
                   focused && "bg-warning/10 ring-warning/40 ring-1 ring-inset",
                 )}
                 style={{ transform: `translateY(${virtualRow.start}px)` }}

@@ -124,18 +124,16 @@ function MdmIntegrationDetailInner({
 
   const scheduleRows = useMemo(
     () =>
-      provider.schedules.map(
-        (schedule): DeviceIntegrationScheduleRow => ({
-          key: `${provider.id}:${schedule.schedule}`,
-          schedule,
-          runtime: runtimeOrDefault(runtimes, schedule.schedule),
-          configured: form.isConfigured,
-          connectionEnabled: form.enabled,
-          role,
-          toggle,
-          retry,
-        }),
-      ),
+      provider.schedules.map((schedule): DeviceIntegrationScheduleRow => ({
+        key: `${provider.id}:${schedule.schedule}`,
+        schedule,
+        runtime: runtimeOrDefault(runtimes, schedule.schedule),
+        configured: form.isConfigured,
+        connectionEnabled: form.enabled,
+        role,
+        toggle,
+        retry,
+      })),
     [provider, runtimes, form.isConfigured, form.enabled, role, toggle, retry],
   );
 
@@ -224,7 +222,8 @@ function MdmIntegrationDetailInner({
       </Page.Section>
 
       <Page.Section>
-        <Page.Section.Title>
+        {/* Secondary section: suppress the area eyebrow (primary title above). */}
+        <Page.Section.Title area="">
           {sink ? "Push schedules" : "Sync schedules"}
         </Page.Section.Title>
         <Page.Section.Description>
@@ -240,7 +239,7 @@ function MdmIntegrationDetailInner({
           org-wide coverage above, sourced from the inventory note. */}
       {sink ? null : (
         <Page.Section>
-          <Page.Section.Title>Managed devices</Page.Section.Title>
+          <Page.Section.Title area="">Managed devices</Page.Section.Title>
           <Page.Section.Description>
             The device inventory synced from {provider.displayName}, with each
             device's agent coverage.
@@ -451,7 +450,7 @@ function FleetSourceBreakdown() {
             key={provider.id}
             to={`../${provider.id}`}
             relative="path"
-            className="border-border bg-muted/40 hover:bg-muted flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm transition-colors"
+            className="border-border bg-muted/40 hover:bg-muted flex items-center gap-2 border px-3 py-1.5 text-sm transition-colors"
           >
             <span className="font-medium">{provider.displayName}</span>
             <span className="text-muted-foreground tabular-nums">

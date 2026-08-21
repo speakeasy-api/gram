@@ -118,9 +118,18 @@ async function pokeDockerService(
   serviceName: string,
   displayName: string,
   url: string,
+  /**
+   * Services in compose.shared.yml run once for the whole machine under a fixed
+   * project, so they are invisible to a plain `docker compose ps` scoped to this
+   * worktree's COMPOSE_PROJECT_NAME — which would report them as down.
+   */
+  shared = false,
 ) {
+  const composeArgs = shared
+    ? ["-f", "compose.shared.yml", "-p", "gram-shared"]
+    : [];
   let result =
-    await $`docker compose ps ${serviceName} --format json`.nothrow();
+    await $`docker compose ${composeArgs} ps ${serviceName} --format json`.nothrow();
   if (!result.ok) {
     return row(displayName, false, url);
   }
@@ -161,11 +170,12 @@ await pokeDockerService(
   `http://localhost:${temporalWebPort}`,
 );
 
-const jaegerWebPort = process.env["JAEGER_WEB_PORT"] ?? "16686";
+const grafanaPort = process.env["GRAFANA_PORT"] ?? "13000";
 await pokeDockerService(
-  "jaeger",
-  "Jaeger",
-  `http://localhost:${jaegerWebPort}`,
+  "lgtm",
+  "Grafana",
+  `http://localhost:${grafanaPort}`,
+  true,
 );
 
 const clickhouseHTTPPort = process.env["CLICKHOUSE_HTTP_PORT"] ?? "8123";
@@ -203,6 +213,28 @@ const gramSitePort = process.env["GRAM_SITE_PORT"] ?? "5173";
 const gramDashboardURL =
   process.env["GRAM_SITE_URL"] ?? `https://${gramHost}:${gramSitePort}`;
 await pokeHTTPService("Gram dashboard", gramDashboardURL, gramDashboardURL);
+
+const adminHost = process.env["GRAM_ADMIN_HOST"] ?? "localhost";
+const adminControlPort = process.env["GRAM_ADMIN_CONTROL_PORT"] ?? "8084";
+const adminAPIURL =
+  process.env["GRAM_ADMIN_BACKEND_URL"] ??
+  `https://${adminHost}:${process.env["GRAM_ADMIN_PORT"] ?? "8083"}`;
+await pokeHTTPService(
+  "Gram admin API",
+  `http://localhost:${adminControlPort}/healthz`,
+  adminAPIURL,
+);
+
+// GRAM_ADMIN_SERVER_URL names the browser-facing origin, which is this dev
+// server, not the admin API above.
+const adminDashboardURL =
+  process.env["GRAM_ADMIN_SERVER_URL"] ??
+  `https://${adminHost}:${process.env["GRAM_ADMIN_DASHBOARD_PORT"] ?? "5174"}`;
+await pokeHTTPService(
+  "Gram admin dashboard",
+  adminDashboardURL,
+  adminDashboardURL,
+);
 
 tableRows.sort(([nameA, runningA], [nameB, runningB]) => {
   if (runningA !== runningB) return runningA ? -1 : 1;

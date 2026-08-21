@@ -265,3 +265,25 @@ export const ConflictingInteractions: Story = {
     href: "/will-be-ignored", // This will be ignored due to button presence
   },
 };
+
+export const Entity: Story = {
+  render: () => (
+    <div className="max-w-xl">
+      <Card.Entity
+        icon={<Badge variant="neutral">MCP</Badge>}
+        overlay={
+          <Badge variant="success" className="absolute top-2 right-2">
+            Added
+          </Badge>
+        }
+      >
+        <div className="mb-2 flex items-start justify-between gap-2">
+          <span className="font-medium">Petstore MCP Server</span>
+        </div>
+        <span className="text-muted-foreground text-sm">
+          12 tools · production environment
+        </span>
+      </Card.Entity>
+    </div>
+  ),
+};

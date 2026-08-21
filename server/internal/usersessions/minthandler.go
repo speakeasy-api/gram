@@ -121,13 +121,15 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 
 	subject := urn.NewUserSubject(authCtx.UserID)
 	access, jti, err := s.signer.Mint(MintParams{
-		Subject:  subject,
-		Audience: target.audience,
-		Issuer:   target.issuerURL,
-		Lifetime: mintAccessTokenLifetime,
+		Subject:   subject,
+		Audience:  target.audience,
+		Issuer:    target.issuerURL,
+		Lifetime:  mintAccessTokenLifetime,
+		ExpiresAt: nil,
 		// No DCR-registered client — this mint bypasses the OAuth dance, so the
 		// session is attributed to our own surface rather than left unlabelled.
 		ClientID: FirstPartyClientID,
+		JTI:      "",
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "mint session jwt").LogError(ctx, s.logger)
@@ -147,6 +149,7 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		RefreshTokenHash: fmt.Sprintf("%s:%s", dashboardMintRefreshTokenHashPrefix, jti),
 		ExpiresAt:        pgtype.Timestamptz{Time: now.Add(mintAccessTokenLifetime), InfinityModifier: 0, Valid: true},
 		RefreshExpiresAt: pgtype.Timestamptz{Time: now.Add(refreshLifetime), InfinityModifier: 0, Valid: true},
+		ToolSelection:    nil,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "persist user session").LogError(ctx, s.logger)
 	}

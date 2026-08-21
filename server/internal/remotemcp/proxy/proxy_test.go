@@ -766,13 +766,12 @@ func TestProxy_Get_LongStreamStaysAliveOnActivity(t *testing.T) {
 	require.Len(t, observed, eventCount, "every event must reach the interceptor — none lost to a premature timeout")
 }
 
-func TestProxy_Get_StreamTerminatesOnIdleTimeout(t *testing.T) {
-	t.Parallel()
-
-	// Upstream sends headers + one event, then goes silent. The
-	// StreamingTimeout idle bound must fire and tear down the stream
-	// even though NonStreamingTimeout is much larger.
-	const idleTimeout = 100 * time.Millisecond
+// newStallingSSEUpstream returns an httptest server that answers with SSE
+// headers plus one progress event, then holds the stream silent until the
+// proxy disconnects or test cleanup releases the handler — the proxy's idle
+// timer should beat the cleanup channel.
+func newStallingSSEUpstream(t *testing.T) *httptest.Server {
+	t.Helper()
 
 	handlerDone := make(chan struct{})
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -786,9 +785,6 @@ func TestProxy_Get_StreamTerminatesOnIdleTimeout(t *testing.T) {
 		if flusher != nil {
 			flusher.Flush()
 		}
-		// Hold the connection silent until either the proxy disconnects or
-		// test cleanup releases the handler — the proxy's idle timer should
-		// beat the cleanup channel.
 		select {
 		case <-r.Context().Done():
 		case <-handlerDone:
@@ -799,6 +795,19 @@ func TestProxy_Get_StreamTerminatesOnIdleTimeout(t *testing.T) {
 	// handler before upstream.Close waits for it to drain.
 	t.Cleanup(func() { close(handlerDone) })
 
+	return upstream
+}
+
+func TestProxy_Get_StreamTerminatesOnIdleTimeout(t *testing.T) {
+	t.Parallel()
+
+	// Upstream sends headers + one event, then goes silent. The
+	// StreamingTimeout idle bound must fire and tear down the stream
+	// even though NonStreamingTimeout is much larger.
+	const idleTimeout = 100 * time.Millisecond
+
+	upstream := newStallingSSEUpstream(t)
+
 	p := newProxyForTest(t, upstream.URL)
 	p.NonStreamingTimeout = 5 * time.Second // deliberately too long to be load-bearing
 	p.StreamingTimeout = idleTimeout
@@ -808,11 +817,39 @@ func TestProxy_Get_StreamTerminatesOnIdleTimeout(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 	start := time.Now()
-	_ = p.Get(rr, req) // an error here is acceptable; the stream was torn down mid-flight
+	err := p.Get(rr, req)
 	elapsed := time.Since(start)
 
+	require.NoError(t, err, "idle termination of the standalone listen stream is its expected end, not a fault")
 	require.Less(t, elapsed, 1*time.Second, "idle stream must terminate within ~StreamingTimeout, not wait for NonStreamingTimeout")
 	require.Contains(t, rr.Body.String(), `"step":0`, "first event must have reached the client before idle terminated the stream")
+}
+
+func TestProxy_Post_StreamIdleTimeoutReturnsGatewayError(t *testing.T) {
+	t.Parallel()
+
+	// Upstream answers the POST with an SSE stream, sends one progress
+	// event, then stalls without ever delivering the terminal response
+	// event. Unlike the standalone GET stream, the client is still owed a
+	// reply here, so the idle bound firing is an upstream fault.
+	const idleTimeout = 100 * time.Millisecond
+
+	upstream := newStallingSSEUpstream(t)
+
+	p := newProxyForTest(t, upstream.URL)
+	p.NonStreamingTimeout = 5 * time.Second
+	p.StreamingTimeout = idleTimeout
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+
+	rr := httptest.NewRecorder()
+	err := p.Post(rr, req)
+
+	var serr *oops.ShareableError
+	require.ErrorAs(t, err, &serr, "idle timeout mid-POST-response must surface as a shareable error")
+	require.Equal(t, oops.CodeGatewayError, serr.Code, "idle timeout mid-POST-response is an upstream fault")
 }
 
 func TestProxy_Post_UpstreamUnreachableReturnsGatewayError(t *testing.T) {
@@ -1427,7 +1464,11 @@ func TestProxy_Post_InitializeRequestInterceptor_RunsAfterGeneric(t *testing.T) 
 	require.Equal(t, []string{"generic-req", "typed-req"}, order, "generic interceptors must run before typed interceptors")
 }
 
-const toolsCallRequest = `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_weather","arguments":{"location":"sf"}}}`
+// toolsCallRequest carries, alongside name and arguments, params members the
+// SDK's CallToolParamsRaw does not model — an invented future member and an
+// _meta value whose integer exceeds float64 precision. Mutation tests assert
+// both forward intact through SetArguments.
+const toolsCallRequest = `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_weather","arguments":{"location":"sf"},"_meta":{"trace":9007199254740993},"futureUnknownField":{"mode":"strict"}}}`
 
 func TestProxy_Post_ToolsCallRequestInterceptor_RunsForToolsCall(t *testing.T) {
 	t.Parallel()
@@ -1560,15 +1601,58 @@ func TestProxy_Post_ToolsCallRequest_SetArguments_RewritesForwardedBody(t *testi
 	require.NotContains(t, gotBody, `"sf"`, "original arguments must not leak upstream")
 	require.Contains(t, gotBody, `"tools/call"`, "method must survive re-encoding")
 	require.Contains(t, gotBody, `"id":1`, "request id must survive re-encoding")
+
+	// Params members the SDK types don't model must survive the mutation:
+	// SetArguments splices only the arguments member into the original
+	// payload instead of round-tripping through CallToolParamsRaw.
+	require.Contains(t, gotBody, `"futureUnknownField":{"mode":"strict"}`, "unmodeled params member must survive SetArguments")
+	require.Contains(t, gotBody, `"_meta":{"trace":9007199254740993}`,
+		"_meta must forward with its original bytes — no float64 precision loss")
+}
+
+func TestProxy_Post_ToolsCallRequest_SetArguments_EmptyRemovesArgumentsMember(t *testing.T) {
+	t.Parallel()
+
+	// A nil replacement removes the arguments member from the forwarded
+	// params, mirroring the omitempty encoding the typed field had. No
+	// production interceptor commits an empty replacement today, so this
+	// path is only exercised here.
+	var gotBody string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		gotBody = string(body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"ok"}]}}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newProxyForTest(t, upstream.URL)
+	p.ToolsCallRequestInterceptors = []proxy.ToolsCallRequestInterceptor{
+		&mutatingToolsCallRequestInterceptor{
+			name: "drop-arguments",
+			argsFn: func(_ json.RawMessage) json.RawMessage {
+				return nil
+			},
+		},
+	}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(toolsCallRequest))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+
+	require.NotContains(t, gotBody, `"arguments"`, "empty replacement must delete the arguments member, not send null")
+	require.Contains(t, gotBody, `"name":"get_weather"`, "modeled params members must survive the delete")
+	require.Contains(t, gotBody, `"futureUnknownField":{"mode":"strict"}`, "unmodeled params members must survive the delete")
 }
 
 func TestProxy_Post_ToolsCallRequest_SetArguments_MarshalFailureSurfacesAs5xx(t *testing.T) {
 	t.Parallel()
 
-	// Force a marshal failure inside SetArguments by handing it a
-	// json.RawMessage holding invalid JSON bytes. json.Marshal of the
-	// enclosing CallToolParamsRaw delegates to RawMessage.MarshalJSON
-	// and then validates the returned bytes; an invalid byte (0xff)
+	// Force a mutation failure inside SetArguments by handing it a
+	// json.RawMessage holding invalid JSON bytes. Re-encoding the spliced
+	// params members validates each raw value; an invalid byte (0xff)
 	// trips the validator. SetArguments must reject with a
 	// *MutationError before mutating any state, and the proxy must
 	// surface that as a 5xx rather than a JSON-RPC rejection.
@@ -2232,13 +2316,23 @@ func TestProxy_Post_ToolsListResponseInterceptor_RejectionWritesJSONRPCError(t *
 	require.Contains(t, rr.Body.String(), "listing blocked", "RejectError message must propagate")
 }
 
+// toolsListResponseThreeTools carries, alongside the tools array, result
+// members the SDK's ListToolsResult does not model — the MCP 2026-07-28
+// required resultType/ttlMs/cacheScope trio and an invented future member —
+// plus an _meta value whose integer exceeds float64 precision. Mutation
+// tests assert all of them relay intact through SetTools.
 const toolsListResponseThreeTools = `{
   "jsonrpc": "2.0",
   "id": 2,
   "result": {
+    "_meta": {"upstream/trace": 9007199254740993},
+    "resultType": "tools/list",
+    "ttlMs": 60000,
+    "cacheScope": "server",
+    "futureUnknownField": {"nested": ["ok"]},
     "tools": [
       {"name": "tool_a", "description": "first", "inputSchema": {"type": "object"}},
-      {"name": "tool_b", "description": "second", "inputSchema": {"type": "object"}},
+      {"name": "tool_b", "description": "second <b&c>", "inputSchema": {"type": "object"}},
       {"name": "tool_c", "description": "third", "inputSchema": {"type": "object"}}
     ]
   }
@@ -2474,6 +2568,18 @@ func TestProxy_Post_ToolsListResponse_SetTools_RewritesRelayedBody_JSONPath(t *t
 	require.NotContains(t, rr.Body.String(), `"tool_a"`, "filtered tool must not reach client")
 	require.NotContains(t, rr.Body.String(), `"tool_c"`, "filtered tool must not reach client")
 	require.Contains(t, rr.Body.String(), `"id":2`, "response id must survive re-encoding")
+
+	// Result members the SDK types don't model must survive the mutation:
+	// SetTools splices only the tools member into the original payload
+	// instead of round-tripping through ListToolsResult.
+	require.Contains(t, rr.Body.String(), `"resultType":"tools/list"`, "unmodeled required member must survive SetTools")
+	require.Contains(t, rr.Body.String(), `"ttlMs":60000`, "unmodeled required member must survive SetTools")
+	require.Contains(t, rr.Body.String(), `"cacheScope":"server"`, "unmodeled required member must survive SetTools")
+	require.Contains(t, rr.Body.String(), `"futureUnknownField":{"nested":["ok"]}`, "unknown future member must survive SetTools")
+	require.Contains(t, rr.Body.String(), `"_meta":{"upstream/trace":9007199254740993}`,
+		"_meta must relay with its original bytes — no float64 precision loss")
+	require.Contains(t, rr.Body.String(), `"description":"second <b&c>"`,
+		"kept tool bytes must not be HTML-escaped, matching the non-escaping relay of preserved members")
 }
 
 func TestProxy_Post_SSEResponse_TerminalEventDispatchesTypedToolsListInterceptor(t *testing.T) {
@@ -2590,6 +2696,12 @@ func TestProxy_Post_ToolsListResponse_SetTools_RewritesRelayedEvent_SSEPath(t *t
 	require.Contains(t, out, `"tool_a"`, "client must see kept tool on terminal SSE event")
 	require.NotContains(t, out, `"tool_b"`, "filtered tool must not reach client")
 	require.NotContains(t, out, `"tool_c"`, "filtered tool must not reach client")
+
+	// Unmodeled result members must survive the SSE-path mutation the same
+	// way they do on the buffered JSON path.
+	require.Contains(t, out, `"resultType":"tools/list"`, "unmodeled required member must survive SetTools on SSE path")
+	require.Contains(t, out, `"_meta":{"upstream/trace":9007199254740993}`,
+		"_meta must relay with its original bytes on SSE path")
 
 	// Non-data SSE fields must survive the rebuild so the client's MCP
 	// runtime sees the same event type and id as the upstream sent.

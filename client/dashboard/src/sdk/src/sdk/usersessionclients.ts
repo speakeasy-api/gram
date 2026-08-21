@@ -4,6 +4,7 @@
 
 import { userSessionClientsGet } from "../funcs/userSessionClientsGet.js";
 import { userSessionClientsList } from "../funcs/userSessionClientsList.js";
+import { userSessionClientsRefreshCIMD } from "../funcs/userSessionClientsRefreshCIMD.js";
 import { userSessionClientsRevoke } from "../funcs/userSessionClientsRevoke.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { UserSessionClient } from "../models/components/usersessionclient.js";
@@ -16,6 +17,10 @@ import {
   ListUserSessionClientsResponse,
   ListUserSessionClientsSecurity,
 } from "../models/operations/listusersessionclients.js";
+import {
+  RefreshUserSessionClientCIMDRequest,
+  RefreshUserSessionClientCIMDSecurity,
+} from "../models/operations/refreshusersessionclientcimd.js";
 import {
   RevokeUserSessionClientRequest,
   RevokeUserSessionClientSecurity,
@@ -63,10 +68,29 @@ export class UserSessionClients extends ClientSDK {
   }
 
   /**
+   * refreshUserSessionClientCIMD userSessionClients
+   *
+   * @remarks
+   * Force a CIMD client's metadata document to be re-read. Purges the stored cache state (expiry + ETag) before re-fetching, so the read is unconditional: a host answering 304 Not Modified cannot re-confirm the copy the operator is discarding. Rejected for DCR clients. Deliberately bypasses the document cache, so it carries a per-client cooldown: a refresh shortly after the last successful read returns rate_limit_exceeded.
+   */
+  async refreshCIMD(
+    request: RefreshUserSessionClientCIMDRequest,
+    security?: RefreshUserSessionClientCIMDSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<UserSessionClient> {
+    return unwrapAsync(userSessionClientsRefreshCIMD(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * revokeUserSessionClient userSessionClients
    *
    * @remarks
-   * Soft-delete a user_session_client. Future tokens minted for this client_id are rejected; existing live user_sessions keep working until they hit expires_at.
+   * Soft-delete a user_session_client and cascade to the user_sessions it issued. A DCR client stays revoked. A CIMD client does not: its identity is the metadata document URL, so the next /authorize re-resolves that document and registers a fresh row. Durably blocking a CIMD client is admission control's job, not revocation's.
    */
   async revoke(
     request: RevokeUserSessionClientRequest,

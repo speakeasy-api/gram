@@ -46,6 +46,7 @@ func TestRefreshRemoteSessionIssuerMetadata_OverwritesStaleEndpoints(t *testing.
 	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-happy", upstream.URL))
 	require.NoError(t, err)
 	require.Equal(t, "https://stale.example.com/authorize", *created.AuthorizationEndpoint)
+	require.Nil(t, created.CodeChallengeMethodsSupported, "a create that omits the field stores NULL (never captured)")
 
 	result, err := ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{
 		ID:               created.ID,
@@ -61,6 +62,7 @@ func TestRefreshRemoteSessionIssuerMetadata_OverwritesStaleEndpoints(t *testing.
 	require.Equal(t, upstream.URL+"/register", *result.Issuer.RegistrationEndpoint)
 	require.Equal(t, upstream.URL+"/jwks", *result.Issuer.JwksURI)
 	require.Equal(t, []string{"openid"}, result.Issuer.ScopesSupported)
+	require.Equal(t, []string{"S256"}, result.Issuer.CodeChallengeMethodsSupported, "a refresh captures the advertised PKCE methods over the create-time NULL")
 }
 
 // A refresh restates the issuer's whole discovered surface, so an endpoint the
@@ -135,6 +137,7 @@ func TestRefreshRemoteSessionIssuerMetadata_HandlesAbsentSupportedArrays(t *test
 		delete(doc, "grant_types_supported")
 		delete(doc, "response_types_supported")
 		delete(doc, "token_endpoint_auth_methods_supported")
+		delete(doc, "code_challenge_methods_supported")
 	})
 
 	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-no-arrays", upstream.URL))
@@ -152,6 +155,11 @@ func TestRefreshRemoteSessionIssuerMetadata_HandlesAbsentSupportedArrays(t *test
 	require.Empty(t, result.Issuer.GrantTypesSupported)
 	require.Empty(t, result.Issuer.ResponseTypesSupported)
 	require.Empty(t, result.Issuer.TokenEndpointAuthMethodsSupported)
+	// The nullable PKCE column must land on captured-empty, not revert to
+	// NULL: a refresh is the capture event, and an omitted field means "the
+	// upstream advertises nothing", which enforcement treats as a refusal.
+	require.NotNil(t, result.Issuer.CodeChallengeMethodsSupported, "refresh never reverts the PKCE capture to NULL")
+	require.Empty(t, result.Issuer.CodeChallengeMethodsSupported)
 }
 
 // An upstream that is unreachable or erroring is not caller error on refresh:
@@ -940,4 +948,58 @@ func TestRefreshGlobalIssuerMetadata_RejectsOrgScopedIssuer(t *testing.T) {
 	})
 	require.Error(t, err)
 	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+// Acceptance criterion for RFC 7009 support: an upstream that advertises a
+// revocation endpoint has it persisted, so the revoke path has somewhere to
+// POST to.
+func TestRefreshRemoteSessionIssuerMetadata_PersistsRevocationEndpoint(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	// The document's own issuer claim is the server URL, so deriving the
+	// revocation endpoint from it keeps the two consistent without needing the
+	// server's address before it starts.
+	upstream := fakeIssuerServer(t, func(doc map[string]any) {
+		issuer, ok := doc["issuer"].(string)
+		require.True(t, ok)
+		doc["revocation_endpoint"] = issuer + "/revoke"
+	})
+
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-revocation", upstream.URL))
+	require.NoError(t, err)
+	require.Nil(t, created.RevocationEndpoint, "create seeded no revocation endpoint")
+
+	result, err := ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{
+		ID:               created.ID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result.Issuer.RevocationEndpoint)
+	require.Equal(t, upstream.URL+"/revoke", *result.Issuer.RevocationEndpoint)
+}
+
+// The other half of the criterion. An issuer advertising no revocation endpoint
+// is the common case, so it must leave the column NULL *and* leave the refresh
+// itself succeeding — the field is deliberately not part of the distrust gate
+// that aborts on a missing authorization or token endpoint.
+func TestRefreshRemoteSessionIssuerMetadata_RevocationEndpointStaysNullWhenUnadvertised(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	upstream := fakeIssuerServer(t, nil)
+
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-no-revocation", upstream.URL))
+	require.NoError(t, err)
+
+	result, err := ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{
+		ID:               created.ID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err, "a missing revocation endpoint must not abort the refresh")
+	require.Nil(t, result.Issuer.RevocationEndpoint)
 }

@@ -3,35 +3,40 @@ import { cn } from "@/lib/utils";
 import React, { Children, isValidElement, useMemo, useState } from "react";
 import { ComponentProps, ReactNode } from "react";
 import {
-  ImperativePanelHandle,
+  Group,
   Panel,
-  PanelGroup,
-  PanelResizeHandle,
+  PanelImperativeHandle,
+  Separator,
 } from "react-resizable-panels";
 
-export interface ResizeHandleProps extends ComponentProps<
-  typeof PanelResizeHandle
-> {
+export interface ResizeHandleProps extends ComponentProps<typeof Separator> {
   children?: ReactNode;
 }
 
 const ResizeHandle = ({ children, ...props }: ResizeHandleProps) => {
-  return <PanelResizeHandle {...props}>{children}</PanelResizeHandle>;
+  return <Separator {...props}>{children}</Separator>;
 };
 
 ResizeHandle.displayName = "ResizablePanel.ResizeHandle";
 
-export interface ResizablePanelProps extends ComponentProps<typeof PanelGroup> {
+export interface ResizablePanelProps extends Omit<
+  ComponentProps<typeof Group>,
+  "children" | "className" | "onLayoutChange" | "orientation"
+> {
   children: ReactNode;
   className?: string;
+  direction?: "horizontal" | "vertical";
+  onLayout?: ComponentProps<typeof Group>["onLayoutChange"];
   useDefaultHandle?: boolean;
 }
 
 const ResizablePanel = ({
   children,
   className,
+  direction = "horizontal",
   useDefaultHandle = true,
   onLayout,
+  resizeTargetMinimumSize = { coarse: 20, fine: 20 },
   ...props
 }: ResizablePanelProps) => {
   const validChildren = useMemo(
@@ -48,7 +53,13 @@ const ResizablePanel = ({
   );
 
   return (
-    <PanelGroup onLayout={onLayout} {...props} className={className}>
+    <Group
+      onLayoutChange={onLayout}
+      orientation={direction}
+      resizeTargetMinimumSize={resizeTargetMinimumSize}
+      {...props}
+      className={className}
+    >
       {React.Children.map(validChildren, (child, index) => {
         if (!isValidElement(child)) return child;
         return (
@@ -56,24 +67,27 @@ const ResizablePanel = ({
             {child}
 
             {index < validChildren.length - 1 && useDefaultHandle && (
-              <DefaultResizeHandle direction={props.direction} />
+              <DefaultResizeHandle direction={direction} />
             )}
           </>
         );
       })}
-    </PanelGroup>
+    </Group>
   );
 };
 
-export interface PaneProps extends ComponentProps<typeof Panel> {
+export interface PaneProps extends Omit<
+  ComponentProps<typeof Panel>,
+  "children" | "className" | "panelRef"
+> {
   children: ReactNode;
   className?: string;
-  panelRef?: React.LegacyRef<ImperativePanelHandle>;
+  panelRef?: React.Ref<PanelImperativeHandle | null>;
 }
 
 const Pane = ({ children, className, panelRef, ...props }: PaneProps) => {
   return (
-    <Panel className={className} {...props} ref={panelRef}>
+    <Panel className={className} {...props} panelRef={panelRef}>
       {children}
     </Panel>
   );
@@ -88,12 +102,11 @@ const DefaultResizeHandle = ({
 }) => {
   const [isResizing, setIsResizing] = useState(false);
   return (
-    <PanelResizeHandle
-      onDragging={(dragging) => setIsResizing(dragging)}
-      hitAreaMargins={{
-        coarse: 10,
-        fine: 10,
-      }}
+    <Separator
+      onPointerDown={() => setIsResizing(true)}
+      onPointerUp={() => setIsResizing(false)}
+      onPointerCancel={() => setIsResizing(false)}
+      onLostPointerCapture={() => setIsResizing(false)}
       className={cn(
         "relative border-[1.25px] border-zinc-900/50",
         isResizing && "border-foreground/10",
@@ -103,14 +116,14 @@ const DefaultResizeHandle = ({
         className={cn(
           // Centred on both axes; translating only X left the grip hanging
           // half a grip below the separator.
-          "absolute top-[50%] flex translate-x-[-50%] translate-y-[-50%] items-center justify-center rounded-md border bg-card text-body-muted shadow-sm shadow-zinc-400/5",
+          "absolute top-[50%] flex translate-x-[-50%] translate-y-[-50%] items-center justify-center border bg-card text-body-muted shadow-sm shadow-zinc-400/5",
           direction === "vertical" ? "cursor-ns-resize" : "cursor-ew-resize",
           isResizing && "text-foreground",
         )}
       >
         <Icon name="grip-vertical" className="h-8 w-5" />
       </div>
-    </PanelResizeHandle>
+    </Separator>
   );
 };
 

@@ -1,14 +1,16 @@
 name: Pull Request
 on:
   pull_request:
-    branches:
-      - main
     types: [opened, synchronize, reopened]
   push:
     branches:
       - main
   merge_group:
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   id-token: write
@@ -52,19 +54,50 @@ jobs:
         id: filter
         with:
           filters: .github/filters.yaml
+      - id: stacked
+        name: Compare preview image components against main
+        if: github.event_name == 'pull_request' && github.base_ref != 'main' && !github.event.pull_request.head.repo.fork
+        run: |
+          set -euo pipefail
+          git fetch --quiet --depth=1 origin main
+          check() {
+            local name=$1
+            local pathspecs=()
+            local path
+            while IFS= read -r path; do
+              pathspecs+=(":(glob)${path}")
+            done < <(python3 -c 'import sys, yaml; print("\n".join(yaml.safe_load(open(".github/filters.yaml"))[sys.argv[1]]))' "$name")
+            if [ "${#pathspecs[@]}" -eq 0 ]; then
+              echo "::error::No watched paths resolved from .github/filters.yaml for ${name}"
+              exit 1
+            fi
+            if git diff --quiet origin/main HEAD -- "${pathspecs[@]}"; then
+              echo "${name}=false" >> "$GITHUB_OUTPUT"
+              echo "${name} matches main; the preview retag fallback can cover it."
+            else
+              echo "${name}=true" >> "$GITHUB_OUTPUT"
+              echo "${name} differs from main; its jobs will run."
+            fi
+          }
+          check server
+          check client
+          check pystreams
       - id: gates
         name: Set outputs
         env:
           HAS_FULL_CI_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'ci:full') }}
+          STACKED_SERVER: ${{ steps.stacked.outputs.server }}
+          STACKED_CLIENT: ${{ steps.stacked.outputs.client }}
+          STACKED_PYSTREAMS: ${{ steps.stacked.outputs.pystreams }}
         run: |
-          if [[ "${{ steps.filter.outputs.server }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${{ steps.filter.outputs.server }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" || "$STACKED_SERVER" == "true" ]]; then
             echo "server=true" >> $GITHUB_OUTPUT
             echo "Server jobs will run."
           else
             echo "Server jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.client }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${{ steps.filter.outputs.client }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" || "$STACKED_CLIENT" == "true" ]]; then
             echo "client=true" >> $GITHUB_OUTPUT
             echo "Client jobs will run."
           else
@@ -120,7 +153,7 @@ jobs:
             echo "Infra jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.pystreams }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${{ steps.filter.outputs.pystreams }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" || "$STACKED_PYSTREAMS" == "true" ]]; then
             echo "pystreams=true" >> $GITHUB_OUTPUT
             echo "Pystreams jobs will run."
           else
@@ -182,14 +215,15 @@ jobs:
           # Components whose docker build jobs are skipped this run still need
           # a preview image tag; each entry names the image and the
           # .github/filters.yaml keys whose paths gate its builds. The
-          # dashboard image is built by docker-build-client whenever client OR
-          # server changes.
+          # dashboard and admin dashboard images are both built by
+          # docker-build-client whenever client OR server changes.
           components='[]'
           add() {
             components=$(jq -c --arg component "$1" --arg filters "$2" '. + [{component: $component, filters: $filters}]' <<< "$components")
           }
           [[ "$SERVER" == "true" ]] || add gram server
           [[ "$SERVER" == "true" || "$CLIENT" == "true" ]] || add gram-dashboard "server client"
+          [[ "$SERVER" == "true" || "$CLIENT" == "true" ]] || add gram-admin-dashboard "server client"
           [[ "$PYSTREAMS" == "true" ]] || add gram-pystreams pystreams
           echo "components=$components" >> "$GITHUB_OUTPUT"
 
@@ -218,14 +252,14 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           # The retag action only needs yq; skip the rest of the toolset and
           # keep this job's cache separate from the full-install caches.
           install_args: yq
           cache: true
-          cache_key_prefix: mise-yq-v1
+          cache_key_prefix: mise-yq-blacksmith-v1
           env: false
 
       - id: "auth"
@@ -258,37 +292,45 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
         run: mise run github
 
-      - name: Cache PNPM
+      - name: Cache aube store
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          key: ${{ env.GH_CACHE_PNPM_KEY }}
+          key: ${{ env.GH_CACHE_AUBE_KEY }}
           restore-keys: |
-            ${{ env.GH_CACHE_PNPM_KEY }}
-            ${{ env.GH_CACHE_PNPM_KEY_PARTIAL }}
+            ${{ env.GH_CACHE_AUBE_KEY }}
+            ${{ env.GH_CACHE_AUBE_KEY_PARTIAL }}
           path: |
-            ${{ env.PNPM_STORE_PATH }}
+            ${{ env.AUBE_STORE_PATH }}
 
-      # hk's oxfmt step shells out to `pnpm oxfmt`, so node_modules must exist.
+      # hk's oxfmt step shells out to `aube exec oxfmt`, so node_modules must exist.
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: aube install --frozen-lockfile
+
+      # hk.pkl amends a pkl package hosted on github.com, so evaluating the
+      # config is a network call on every run. Cache it against a blip there.
+      # Namespaced by runner provider, as the other cache families are.
+      - name: Cache pkl packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: pkl-blacksmith-v1-${{ runner.os }}-${{ hashFiles('hk.pkl') }}
+          path: ~/.pkl/cache
 
       - name: Check formatting
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: hk check --all
 
-      - name: Prune PNPM store
+      - name: Prune aube store
         if: success()
-        run: pnpm store prune
+        run: aube store prune
 
   docker-build-server:
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -344,6 +386,7 @@ jobs:
           context: ./server
           file: server/Dockerfile
           git-auth-token: ${{ secrets.BOT_REPO_TOKEN }}
+          cache-key: gram/server-image
           build-args: |
             GIT_USERNAME=speakeasybot
       - name: Pull and Run Image
@@ -355,7 +398,7 @@ jobs:
 
   docker-build-pystreams:
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    needs: [changes, pystreams-build-lint]
+    needs: [changes]
     if: needs.changes.outputs.pystreams == 'true'
     steps:
       - name: Checkout
@@ -402,6 +445,7 @@ jobs:
           context: .
           file: pystreams/Dockerfile.pystreams
           git-auth-token: ${{ secrets.BOT_REPO_TOKEN }}
+          cache-key: gram/pystreams-image
       - name: Pull and Run Image
         run: |
           echo "Pulling image: ${{ steps.build.outputs.image-tag }}"
@@ -413,19 +457,50 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes]
     if: needs.changes.outputs.server == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.user.login != 'dependabot[bot]')
+    env:
+      RUNNER_TARGET: x86_64-unknown-linux-musl
+      RUNNER_BINARY_DIR: /tmp/runner-binary
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
         run: mise run github
+
+      - name: Install musl toolchain
+        run: |
+          sudo apt-get update -qq -o Acquire::Languages=none
+          sudo apt-get install -y -qq --no-install-recommends musl-tools
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+        with:
+          target: ${{ env.RUNNER_TARGET }}
+          rust-src-dir: agents/runner
+          # Release-artifact build; the action's -D warnings default would
+          # diverge from the in-image fallback build.
+          rustflags: ""
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build assistant runner
+        run: |
+          mise run build:assistant-runner --release --bin gram-assistant-runner --target ${{ env.RUNNER_TARGET }}
+          mkdir -p ${{ env.RUNNER_BINARY_DIR }}
+          cp agents/runner/target/${{ env.RUNNER_TARGET }}/release/gram-assistant-runner ${{ env.RUNNER_BINARY_DIR }}/gram-assistant-runner
+
+      - name: Smoke test assistant runner binary
+        run: |
+          file -b ${{ env.RUNNER_BINARY_DIR }}/gram-assistant-runner | grep -Eq "statically linked|static-pie linked" \
+            || { echo "runner binary is not statically linked; it would fail inside the runtime image" >&2; exit 1; }
+          ${{ env.RUNNER_BINARY_DIR }}/gram-assistant-runner --help
 
       - name: Generate preview tag
         id: assistant-preview-tag
@@ -452,35 +527,17 @@ jobs:
           fi
           echo "hash=$hash" >> "$GITHUB_OUTPUT"
 
-      - name: "[DEV] Create fly app"
-        id: assistantFlyCreateDev
-        shell: bash
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
-          FLY_IMAGE: ${{ vars.FLY_ASSISTANT_IMAGE_DEV }}
-        run: |
-          mise run fly:init-runner \
-            --org ${{ secrets.FLY_ORG_DEV }} \
-            --image $FLY_IMAGE \
-            --force
-
-      - name: "[PROD] Create fly app"
-        id: assistantFlyCreateProd
-        shell: bash
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_PROD }}
-          FLY_IMAGE: ${{ vars.FLY_ASSISTANT_IMAGE_PROD }}
-        run: |
-          mise run fly:init-runner \
-            --org ${{ secrets.FLY_ORG_PROD }} \
-            --image $FLY_IMAGE \
-            --force
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+      - name: Setup Docker builder
+        # Skip on fork PRs: untrusted code must not commit to the shared sticky
+        # disk. The build step below then falls back to the default builder and
+        # simply runs uncached.
+        if: github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork
+        uses: useblacksmith/setup-docker-builder@a5256a73e30f09e37e3eceb8ca36043d17621d24 # v2.1.0
+        with:
+          cache-key: gram/assistant-runtime-image
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -528,74 +585,22 @@ jobs:
             type=sha,format=long
 
       - name: Build and push assistant runtime image to GCR
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        # Blacksmith fork of docker/build-push-action, paired with the
+        # setup-docker-builder step above: buildkit runs on a sticky-disk
+        # cache so the bun/lightpanda/apt layers persist across runs.
+        uses: useblacksmith/build-push-action@9b0579bbec7a6cad2f171596c57e7ac1e7658850 # v2.3.0
         with:
           context: .
+          # build-contexts and build-args travel together: the arg switches the
+          # Dockerfile to the prebuilt path, the context provides the
+          # host-built binary.
+          build-contexts: runner-binary=${{ env.RUNNER_BINARY_DIR }}
+          build-args: RUNNER_SOURCE=runner-binary
           file: ./agents/runtime-image/Dockerfile
           platforms: linux/amd64
           push: true
           tags: ${{ steps.assistantMetaGcr.outputs.tags }}
           labels: ${{ steps.assistantMetaGcr.outputs.labels }}
-
-      - name: "[DEV] Login to Fly registry"
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
-        run: fly auth docker
-
-      - name: "[DEV] Extract assistant runtime metadata"
-        id: assistantMetaDev
-        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
-        with:
-          images: ${{ steps.assistantFlyCreateDev.outputs.flyAppRegistry }}
-          tags: |
-            type=ref,event=branch,enable=${{ github.event_name != 'merge_group' }}
-            type=ref,event=tag
-            type=ref,event=pr
-            type=raw,value=${{ steps.assistant-preview-tag.outputs.tag }},enable=${{ steps.assistant-preview-tag.outputs.enabled }}
-            type=raw,value=${{ steps.assistant-runtime-hash.outputs.hash }}
-            type=schedule,pattern=nightly
-            type=sha
-            type=sha,format=long
-
-      - name: "[DEV] Build and push assistant runtime image"
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
-        with:
-          context: .
-          file: ./agents/runtime-image/Dockerfile
-          platforms: linux/amd64
-          push: true
-          tags: ${{ steps.assistantMetaDev.outputs.tags }}
-          labels: ${{ steps.assistantMetaDev.outputs.labels }}
-
-      - name: "[PROD] Login to Fly registry"
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_PROD }}
-        run: fly auth docker
-
-      - name: "[PROD] Extract assistant runtime metadata"
-        id: assistantMetaProd
-        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
-        with:
-          images: ${{ steps.assistantFlyCreateProd.outputs.flyAppRegistry }}
-          tags: |
-            type=ref,event=branch,enable=${{ github.event_name != 'merge_group' }}
-            type=ref,event=tag
-            type=ref,event=pr
-            type=raw,value=${{ steps.assistant-preview-tag.outputs.tag }},enable=${{ steps.assistant-preview-tag.outputs.enabled }}
-            type=raw,value=${{ steps.assistant-runtime-hash.outputs.hash }}
-            type=schedule,pattern=nightly
-            type=sha
-            type=sha,format=long
-
-      - name: "[PROD] Build and push assistant runtime image"
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
-        with:
-          context: .
-          file: ./agents/runtime-image/Dockerfile
-          platforms: linux/amd64
-          push: true
-          tags: ${{ steps.assistantMetaProd.outputs.tags }}
-          labels: ${{ steps.assistantMetaProd.outputs.labels }}
 
   otel-collector:
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -606,14 +611,29 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
         run: mise run github
+
+      - name: Cache aube store
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: ${{ env.GH_CACHE_AUBE_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_AUBE_KEY }}
+            ${{ env.GH_CACHE_AUBE_KEY_PARTIAL }}
+          path: |
+            ${{ env.AUBE_STORE_PATH }}
+
+      # fly:init-runner is a .mts task that imports zx from the workspace.
+      - name: Install dependencies
+        run: aube install --frozen-lockfile
 
       - name: "[DEV] Create fly app"
         id: collectorFlyCreateDev
@@ -640,10 +660,10 @@ jobs:
             --force
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -665,7 +685,7 @@ jobs:
             type=sha,format=long
 
       - name: "[DEV] Build and push collector image"
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: ./otel-collector
           platforms: linux/amd64
@@ -702,7 +722,7 @@ jobs:
             type=sha,format=long
 
       - name: "[PROD] Build and push collector image"
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: ./otel-collector
           platforms: linux/amd64
@@ -747,10 +767,11 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Run ClickHouse migrations with golang-migrate
@@ -779,10 +800,11 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       # The ordering check needs both the checked-out head and the base commit
@@ -846,14 +868,15 @@ jobs:
           cloud-token: ${{ secrets.ATLAS_TOKEN }}
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Lint PostgreSQL migrations
-        uses: ariga/atlas-action/migrate/lint@v1.15.6
+        uses: ariga/atlas-action/migrate/lint@ba65b510ea74c2886c9c52ce7aa54fd7f5fc6293 # v1.15.6
         with:
           dir: file://server/migrations
           dir-name: gram
@@ -864,7 +887,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
 
       - name: Lint ClickHouse migrations
-        uses: ariga/atlas-action/migrate/lint@v1.15.6
+        uses: ariga/atlas-action/migrate/lint@ba65b510ea74c2886c9c52ce7aa54fd7f5fc6293 # v1.15.6
         with:
           dir: file://server/clickhouse/migrations
           dir-name: gram-clickhouse
@@ -965,7 +988,7 @@ jobs:
           fi
 
       - name: Push PostgreSQL migrations
-        uses: ariga/atlas-action/migrate/push@v1.15.6
+        uses: ariga/atlas-action/migrate/push@a6a4733a3fcccd0690570184deb2f7f50b13e656 # v1.16.1
         with:
           dir: file://server/migrations
           dir-name: gram
@@ -973,7 +996,7 @@ jobs:
           tag: ${{ steps.tag.outputs.tag }}
 
       - name: Push ClickHouse migrations
-        uses: ariga/atlas-action/migrate/push@v1.15.6
+        uses: ariga/atlas-action/migrate/push@a6a4733a3fcccd0690570184deb2f7f50b13e656 # v1.16.1
         with:
           dir: file://server/clickhouse/migrations
           dir-name: gram-clickhouse
@@ -993,10 +1016,11 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Fetch main branch
@@ -1055,10 +1079,11 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1095,10 +1120,15 @@ jobs:
       - name: Build tunnel gateway
         run: mise run build:tunnel-gateway --readonly
 
+      - name: Test CI tooling
+        run: mise run test:ci
+
       - name: Lint with golangci-lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           install-mode: none
+          # Skips a JSONSchema fetch from golangci-lint.run on every run.
+          verify: false
           working-directory: server
 
       - name: Upload server build
@@ -1148,10 +1178,11 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1177,18 +1208,20 @@ jobs:
             ${{ env.GH_CACHE_UV_KEY_PARTIAL }}
           path: ${{ env.UV_CACHE_DIR }}
 
-      # TODO: re-enable once buf.yaml + infra/proto exist on main. The breaking
-      # check compares against origin/main, which has no protos until this
-      # scaffolding lands, so `buf breaking` fails with "no .proto files" on the
-      # bootstrap PR. Uncomment both steps in a follow-up after the initial merge.
-      # - name: Fetch main branch
-      #   run: git fetch --depth=1 origin main
-      #
-      # - name: Lint proto files
-      #   run: mise run lint:infra --against ".git#ref=origin/main"
+      - name: Fetch base branch
+        run: git fetch --depth=1 origin "${{ github.base_ref || 'main' }}"
 
+      # buf breaking against the PR base is what catches a wire-incompatible
+      # proto change (field renumbering, type change) that would corrupt
+      # already published messages. Stacked PRs compare against their feature
+      # base; that base's own PR re-checks the full stack against main.
+      - name: Lint proto files
+        run: mise run lint:infra --against ".git#ref=origin/${{ github.base_ref || 'main' }}"
+
+      # gram-infra only. --all-packages would pull in pystreams, whose spaCy
+      # model is a 400MB wheel fetched from a github.com release on every run.
       - name: Install uv dependencies
-        run: mise run install:uv --all-packages --locked
+        run: mise run install:uv --package gram-infra --locked
 
       - name: Type-check and test the infra Python package
         run: mise run test:infra
@@ -1214,10 +1247,11 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1269,10 +1303,11 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1296,6 +1331,8 @@ jobs:
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           install-mode: none
+          # Skips a JSONSchema fetch from golangci-lint.run on every run.
+          verify: false
           working-directory: cli
 
       - name: Install Go tools
@@ -1323,10 +1360,11 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1366,10 +1404,11 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1397,6 +1436,8 @@ jobs:
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           install-mode: none
+          # Skips a JSONSchema fetch from golangci-lint.run on every run.
+          verify: false
           working-directory: plog
 
       - name: Test
@@ -1409,9 +1450,16 @@ jobs:
         run: mise run git:porcelain
 
   server-test:
+    name: server-test (shard ${{ matrix.shard }}/${{ strategy.job-total }})
     runs-on: blacksmith-8vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.server == 'true'
+    strategy:
+      # Every shard should report, otherwise a single failure hides the state of
+      # the rest of the suite.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     env:
       GOMAXPROCS: 8
       # The runner VM is destroyed after the job, and the reaper is the one
@@ -1423,10 +1471,11 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1447,15 +1496,76 @@ jobs:
         run: mise run install:go
 
       - name: Test
-        run: mise run test:server
+        # --rerun-fails=1 gives a failing test one more attempt before the
+        # shard is marked failed, so a flaky test does not block the PR.
+        run: mise run test:server --shard=${{ matrix.shard }}/${{ strategy.job-total }} --rerun-fails=1
+
+      # A retried test leaves the check green, so without this a flake is
+      # invisible unless someone reads the raw log.
+      - name: Report retried tests
+        if: always()
+        working-directory: server
+        run: |
+          [ -s rerun-report.txt ] || exit 0
+          {
+            echo "### Retried tests (shard ${{ matrix.shard }})"
+            echo
+            echo '```'
+            cat rerun-report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Standalone gate for the demo seed: TestDemoSeedSafety proves the seed
+  # cannot touch other tenants' data, cleans up stray demo-org rows, and stays
+  # idempotent across runs. The test is build-tagged (demoseed_safety) so the
+  # sharded server-test job skips it; this job is its only runner and reports
+  # as its own required check so a failure is immediately attributable.
+  demo-seed-safety:
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    needs: changes
+    if: needs.changes.outputs.server == 'true'
+    env:
+      GOMAXPROCS: 8
+      TESTCONTAINERS_RYUK_DISABLED: true
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+
+      - name: Setup Mise
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        with:
+          install: true
+          cache: true
+          cache_key_prefix: mise-blacksmith-v1
+          env: false
+
+      - name: Prepare GitHub Actions environment
+        run: mise run github
+
+      - name: Cache Go
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: ${{ env.GH_CACHE_GO_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_GO_KEY }}
+            ${{ env.GH_CACHE_GO_KEY_PARTIAL }}
+          path: |
+            ${{ env.GOCACHE }}
+            ${{ env.GOMODCACHE }}
+
+      - name: Install Go deps
+        run: mise run install:go
+
+      - name: Test
+        run: mise run test:server -count=1 -tags=demoseed_safety ./internal/demoseed/...
 
   docker-build-client:
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    needs: [changes, sdk-gen-check]
-    # Build dashboard docker image when server OR client changes exist (needed for preview environments)
+    needs: [changes]
+    # Build the dashboard and admin docker images when server OR client changes
+    # exist (the dashboard image is needed for preview environments)
     if: |
       !cancelled() &&
-      needs.sdk-gen-check.result != 'failure' &&
       (needs.changes.outputs.client == 'true' || needs.changes.outputs.server == 'true')
     env:
       GRAM_GIT_SHA: "${{ github.sha }}"
@@ -1464,32 +1574,33 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
         run: mise run github
 
-      - name: Cache PNPM
+      - name: Cache aube store
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          key: ${{ env.GH_CACHE_PNPM_KEY }}
+          key: ${{ env.GH_CACHE_AUBE_KEY }}
           restore-keys: |
-            ${{ env.GH_CACHE_PNPM_KEY }}
-            ${{ env.GH_CACHE_PNPM_KEY_PARTIAL }}
+            ${{ env.GH_CACHE_AUBE_KEY }}
+            ${{ env.GH_CACHE_AUBE_KEY_PARTIAL }}
           path: |
-            ${{ env.PNPM_STORE_PATH }}
+            ${{ env.AUBE_STORE_PATH }}
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: aube install --frozen-lockfile
 
       - name: Build
         env:
           NODE_ENV: production
-        run: mise exec --env viteprod -- pnpm build
+        run: mise exec --env viteprod -- aube run build
 
       # Published for upload-dashboard-assets so the CDN bucket receives the
       # exact assets this image ships with (a rebuild there could hash
@@ -1531,6 +1642,32 @@ jobs:
           done
           echo "All login attempts failed"
           exit 1
+      # The Gram admin dashboard. It ships as its own image because it is
+      # served from the admin origin (same host as the admin API) rather than
+      # the app origin. The `pnpm build` step above already produced its dist,
+      # so this only packages it; it needs no CDN asset upload.
+      # The image name must stay in step with adminDashboard.repository in the
+      # deployment Helm chart. "gram-admin" would be ambiguous: the admin API
+      # itself runs from the main "gram" image, not from an image of its own.
+      # Keep this ahead of the dashboard image push. A failure here fails the
+      # job, which skips upload-dashboard-assets; if the dashboard image were
+      # already pushed it would reference hashed assets that never reached the
+      # CDN bucket.
+      - name: Build and Push Admin Dashboard image to GCR
+        id: build-admin-dashboard
+        uses: ./.github/workflows/composite/build-push
+        with:
+          hub-username: ${{ secrets.DOCKERHUB_USERNAME }}
+          hub-token: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ${{ env.REGISTRY }}
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+          image: ${{ env.DOCKER_REPOSITORY_OWNER }}/gram-admin-dashboard
+          context: ./client/admin
+          file: client/admin/Dockerfile
+          git-auth-token: ${{ secrets.BOT_REPO_TOKEN }}
+          cache-key: gram/admin-dashboard-image
+
       - name: Build and Push Registry image to GCR
         id: build
         uses: ./.github/workflows/composite/build-push
@@ -1544,10 +1681,11 @@ jobs:
           context: ./client/dashboard
           file: client/dashboard/Dockerfile
           git-auth-token: ${{ secrets.BOT_REPO_TOKEN }}
+          cache-key: gram/dashboard-image
 
-      - name: Prune PNPM store
+      - name: Prune aube store
         if: success()
-        run: pnpm store prune
+        run: aube store prune
 
   upload-dashboard-assets:
     name: Upload dashboard assets to CDN bucket (${{ matrix.environment }})
@@ -1611,99 +1749,111 @@ jobs:
 
   client-build-lint:
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    needs: [changes, sdk-gen-check]
+    needs: [changes]
     if: |
       !cancelled() &&
-      needs.sdk-gen-check.result != 'failure' &&
       needs.changes.outputs.client == 'true'
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
         run: mise run github
 
-      - name: Cache PNPM
+      - name: Cache aube store
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          key: ${{ env.GH_CACHE_PNPM_KEY }}
+          key: ${{ env.GH_CACHE_AUBE_KEY }}
           restore-keys: |
-            ${{ env.GH_CACHE_PNPM_KEY }}
-            ${{ env.GH_CACHE_PNPM_KEY_PARTIAL }}
+            ${{ env.GH_CACHE_AUBE_KEY }}
+            ${{ env.GH_CACHE_AUBE_KEY_PARTIAL }}
           path: |
-            ${{ env.PNPM_STORE_PATH }}
+            ${{ env.AUBE_STORE_PATH }}
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: aube install --frozen-lockfile
 
       - name: Build
         env:
           NODE_ENV: production
-        run: mise exec --env viteprod -- pnpm build
+        run: mise exec --env viteprod -- aube run build
 
       - name: Lint
-        run: pnpm lint
+        run: aube run lint
         working-directory: client/dashboard
 
+      - name: Lint admin
+        run: aube run lint
+        working-directory: client/admin
+
       - name: Knip (dead code / unused deps)
-        run: pnpm knip
+        run: aube run knip
+        working-directory: client/dashboard
+
+      - name: Rebuild committed consent island bundle
+        run: aube run build:consent
         working-directory: client/dashboard
 
       - name: Check for dirty files
         run: mise run git:porcelain
 
-      - name: Prune PNPM store
+      - name: Prune aube store
         if: success()
-        run: pnpm store prune
+        run: aube store prune
 
   client-test:
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    needs: [changes, sdk-gen-check]
+    needs: [changes]
     if: |
       !cancelled() &&
-      needs.sdk-gen-check.result != 'failure' &&
       needs.changes.outputs.client == 'true'
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
         run: mise run github
 
-      - name: Cache PNPM
+      - name: Cache aube store
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          key: ${{ env.GH_CACHE_PNPM_KEY }}
+          key: ${{ env.GH_CACHE_AUBE_KEY }}
           restore-keys: |
-            ${{ env.GH_CACHE_PNPM_KEY }}
-            ${{ env.GH_CACHE_PNPM_KEY_PARTIAL }}
+            ${{ env.GH_CACHE_AUBE_KEY }}
+            ${{ env.GH_CACHE_AUBE_KEY_PARTIAL }}
           path: |
-            ${{ env.PNPM_STORE_PATH }}
+            ${{ env.AUBE_STORE_PATH }}
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: aube install --frozen-lockfile
 
       - name: Test
-        run: pnpm test
+        run: aube run test
         working-directory: client/dashboard
 
-      - name: Prune PNPM store
+      - name: Test admin
+        run: aube run test
+        working-directory: client/admin
+
+      - name: Prune aube store
         if: success()
-        run: pnpm store prune
+        run: aube store prune
 
   sdk-gen-check:
     name: Check SDK is up-to-date
@@ -1717,27 +1867,28 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
         run: mise run github
 
-      - name: Cache PNPM
+      - name: Cache aube store
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          key: ${{ env.GH_CACHE_PNPM_KEY }}
+          key: ${{ env.GH_CACHE_AUBE_KEY }}
           restore-keys: |
-            ${{ env.GH_CACHE_PNPM_KEY }}
-            ${{ env.GH_CACHE_PNPM_KEY_PARTIAL }}
+            ${{ env.GH_CACHE_AUBE_KEY }}
+            ${{ env.GH_CACHE_AUBE_KEY_PARTIAL }}
           path: |
-            ${{ env.PNPM_STORE_PATH }}
+            ${{ env.AUBE_STORE_PATH }}
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: aube install --frozen-lockfile
 
       - name: Regenerate SDK
         run: mise run gen:sdk
@@ -1749,9 +1900,9 @@ jobs:
       - name: Check for dirty files
         run: mise run git:porcelain
 
-      - name: Prune PNPM store
+      - name: Prune aube store
         if: success()
-        run: pnpm store prune
+        run: aube store prune
 
   functions-build-host:
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -1762,10 +1913,11 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1782,21 +1934,21 @@ jobs:
             ${{ env.GOCACHE }}
             ${{ env.GOMODCACHE }}
 
-      - name: Cache PNPM
+      - name: Cache aube store
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          key: ${{ env.GH_CACHE_PNPM_KEY }}
+          key: ${{ env.GH_CACHE_AUBE_KEY }}
           restore-keys: |
-            ${{ env.GH_CACHE_PNPM_KEY }}
-            ${{ env.GH_CACHE_PNPM_KEY_PARTIAL }}
+            ${{ env.GH_CACHE_AUBE_KEY }}
+            ${{ env.GH_CACHE_AUBE_KEY_PARTIAL }}
           path: |
-            ${{ env.PNPM_STORE_PATH }}
+            ${{ env.AUBE_STORE_PATH }}
 
       - name: Install Go tools
         run: go install tool
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: aube install --frozen-lockfile
 
       - name: Test functions runner
         working-directory: functions
@@ -1804,16 +1956,18 @@ jobs:
 
       - name: Test functions entrypoint
         working-directory: functions
-        run: pnpm test
+        run: aube run test
 
       - name: Type check functions entrypoint
         working-directory: functions
-        run: pnpm type-check
+        run: aube run type-check
 
       - name: Lint Go server
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           install-mode: none
+          # Skips a JSONSchema fetch from golangci-lint.run on every run.
+          verify: false
           working-directory: functions
 
       - name: Test Go server
@@ -1842,9 +1996,9 @@ jobs:
       - name: Check for dirty files
         run: mise run git:porcelain
 
-      - name: Prune PNPM store
+      - name: Prune aube store
         if: success()
-        run: pnpm store prune
+        run: aube store prune
 
   functions-image:
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -1862,27 +2016,28 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
         run: mise run github
 
-      - name: Cache PNPM
+      - name: Cache aube store
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          key: ${{ env.GH_CACHE_PNPM_KEY }}
+          key: ${{ env.GH_CACHE_AUBE_KEY }}
           restore-keys: |
-            ${{ env.GH_CACHE_PNPM_KEY }}
-            ${{ env.GH_CACHE_PNPM_KEY_PARTIAL }}
+            ${{ env.GH_CACHE_AUBE_KEY }}
+            ${{ env.GH_CACHE_AUBE_KEY_PARTIAL }}
           path: |
-            ${{ env.PNPM_STORE_PATH }}
+            ${{ env.AUBE_STORE_PATH }}
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: aube install --frozen-lockfile
 
       - name: Download melange packages artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -1940,10 +2095,10 @@ jobs:
 
       - name: Set up Docker Buildx
         if: github.event.pull_request.user.login != 'dependabot[bot]'
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -1995,9 +2150,9 @@ jobs:
           fly auth docker
           docker push --all-tags "${{ steps.flyCreateProd.outputs.flyAppRegistry }}"
 
-      - name: Prune PNPM store
+      - name: Prune aube store
         if: success()
-        run: pnpm store prune
+        run: aube store prune
 
   ts-framework-test:
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -2008,37 +2163,38 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
         run: mise run github
 
-      - name: Cache PNPM
+      - name: Cache aube store
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          key: ${{ env.GH_CACHE_PNPM_KEY }}
+          key: ${{ env.GH_CACHE_AUBE_KEY }}
           restore-keys: |
-            ${{ env.GH_CACHE_PNPM_KEY }}
-            ${{ env.GH_CACHE_PNPM_KEY_PARTIAL }}
+            ${{ env.GH_CACHE_AUBE_KEY }}
+            ${{ env.GH_CACHE_AUBE_KEY_PARTIAL }}
           path: |
-            ${{ env.PNPM_STORE_PATH }}
+            ${{ env.AUBE_STORE_PATH }}
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: aube install --frozen-lockfile
 
       - name: Test TypeScript framework
-        run: pnpm --filter "./ts-framework/**" test
+        run: aube run --filter "./ts-framework/**" --if-present test
 
       - name: Build TypeScript framework
-        run: pnpm --filter "./ts-framework/**" build
+        run: aube run --filter "./ts-framework/**" --if-present build
 
-      - name: Prune PNPM store
+      - name: Prune aube store
         if: success()
-        run: pnpm store prune
+        run: aube store prune
 
   # Scans the frontend for UI anti-patterns and "AI slop" tells (side-tab accent
   # borders, gradient headings, bounce easing, AI-favourite color palettes, ...)
@@ -2055,7 +2211,8 @@ jobs:
     name: Detect UI anti-patterns
     runs-on: blacksmith-2vcpu-ubuntu-2404
     # The scan itself takes ~3s; this only guards against a hung npx install.
-    timeout-minutes: 5
+    # A cold mise cache alone can take >5 minutes on the 2vcpu runner.
+    timeout-minutes: 12
     env:
       # Pin the CLI so a new release cannot turn a green PR red without a commit.
       IMPECCABLE_VERSION: "3.4.0"
@@ -2067,10 +2224,14 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           install: true
           cache: true
+          # This job only needs npx; avoid restoring the full ~606 MiB toolchain
+          # into a job with a five-minute timeout.
+          install_args: node
+          cache_key_prefix: mise-node-blacksmith-v1
           env: false
 
       - name: Run impeccable
@@ -2106,6 +2267,7 @@ jobs:
       - format-check
       - server-build-lint
       - server-test
+      - demo-seed-safety
       - docker-build-server
       - docker-build-client
       - upload-dashboard-assets
@@ -2223,10 +2385,19 @@ jobs:
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+      - name: Setup Docker builder
+        # Skip on fork PRs: untrusted code must not commit to the shared sticky
+        # disk. The build step below then falls back to the default builder and
+        # simply runs uncached.
+        if: github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork
+        uses: useblacksmith/setup-docker-builder@a5256a73e30f09e37e3eceb8ca36043d17621d24 # v2.1.0
+        with:
+          cache-key: gram/tunnel-agent-image
       - name: Build image (no push)
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        # Blacksmith fork of docker/build-push-action, paired with the
+        # setup-docker-builder step above: the go build/mod cache mounts in
+        # tunnel/Dockerfile persist on the sticky disk across runs.
+        uses: useblacksmith/build-push-action@9b0579bbec7a6cad2f171596c57e7ac1e7658850 # v2.3.0
         with:
           context: .
           file: tunnel/Dockerfile

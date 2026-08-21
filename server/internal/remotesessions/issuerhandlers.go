@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -42,6 +44,7 @@ type rfc8414Document struct {
 	Issuer                            string   `json:"issuer"`
 	AuthorizationEndpoint             string   `json:"authorization_endpoint"`
 	TokenEndpoint                     string   `json:"token_endpoint"`
+	RevocationEndpoint                string   `json:"revocation_endpoint"`
 	RegistrationEndpoint              string   `json:"registration_endpoint"`
 	JwksURI                           string   `json:"jwks_uri"`
 	ServiceDocumentation              string   `json:"service_documentation"`
@@ -51,6 +54,15 @@ type rfc8414Document struct {
 	GrantTypesSupported               []string `json:"grant_types_supported"`
 	ResponseTypesSupported            []string `json:"response_types_supported"`
 	TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported"`
+
+	// CodeChallengeMethodsSupported stays nil when the document omits the
+	// field, and only here: persistence collapses it to an empty array
+	// ("captured; the upstream advertises nothing", RFC 8414's stated meaning
+	// for absence) while the column's NULL is reserved for rows discovery has
+	// not captured at all. The nil/empty split survives just long enough for
+	// collectDiscoveryWarnings to word the two cases differently.
+	CodeChallengeMethodsSupported []string `json:"code_challenge_methods_supported"`
+
 	// ClientIDMetadataDocumentSupported comes from the OAuth CIMD draft
 	// (draft-ietf-oauth-client-id-metadata-document), not base RFC 8414: whether
 	// the issuer accepts a Client ID Metadata Document URL as client_id. Used to
@@ -230,6 +242,13 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid logo asset id").LogError(ctx, logger)
 	}
 
+	// Revocation endpoint must be HTTPS, or HTTP on loopback where a token
+	// never crosses a network: tokens are sensitive credentials that must not
+	// be transmitted in plaintext. An empty value stays legal.
+	if v := conv.PtrValOr(payload.RevocationEndpoint, ""); v != "" && !urls.IsAbsoluteHTTPSOrLoopback(v) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "revocation_endpoint must be an absolute https URL, or http on loopback").LogError(ctx, logger)
+	}
+
 	// Discovery drops malformed documentation URLs, but a caller holding the write
 	// scope can POST them without ever calling discover, and they are persisted
 	// and later rendered as links. An empty value stays legal: the update queries
@@ -262,6 +281,7 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 		ClientSetupDocumentationUrl:       conv.PtrToPGTextEmpty(payload.ClientSetupDocumentationURL),
 		AuthorizationEndpoint:             conv.PtrToPGText(payload.AuthorizationEndpoint),
 		TokenEndpoint:                     conv.PtrToPGText(payload.TokenEndpoint),
+		RevocationEndpoint:                conv.PtrToPGText(payload.RevocationEndpoint),
 		RegistrationEndpoint:              conv.PtrToPGText(payload.RegistrationEndpoint),
 		JwksUri:                           conv.PtrToPGText(payload.JwksURI),
 		ServiceDocumentation:              conv.PtrToPGTextEmpty(payload.ServiceDocumentation),
@@ -271,6 +291,7 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 		GrantTypesSupported:               payload.GrantTypesSupported,
 		ResponseTypesSupported:            payload.ResponseTypesSupported,
 		TokenEndpointAuthMethodsSupported: payload.TokenEndpointAuthMethodsSupported,
+		CodeChallengeMethodsSupported:     payload.CodeChallengeMethodsSupported,
 		ClientIDMetadataDocumentSupported: conv.PtrValOr(payload.ClientIDMetadataDocumentSupported, false),
 		Oidc:                              conv.PtrValOr(payload.Oidc, false),
 		Passthrough:                       conv.PtrValOr(payload.Passthrough, false),
@@ -369,9 +390,21 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 		return nil, oops.E(oops.CodeBadRequest, nil, "client_setup_documentation_url must be an absolute http(s) URL").LogError(ctx, logger)
 	}
 
-	logoAssetID, err := conv.PtrToNullUUID(payload.LogoAssetID)
-	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid logo asset id").LogError(ctx, logger)
+	// An empty logo asset id stays legal: the update query reads it as the
+	// explicit "clear to NULL" sentinel. Any other value must be a uuid —
+	// the query casts the text parameter, so a malformed value has to be
+	// rejected here rather than surfacing as a Postgres cast error.
+	if v := conv.PtrValOr(payload.LogoAssetID, ""); v != "" {
+		if _, err := uuid.Parse(v); err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid logo asset id").LogError(ctx, logger)
+		}
+	}
+
+	// Revocation endpoint must be HTTPS, or HTTP on loopback where a token
+	// never crosses a network: tokens are sensitive credentials that must not
+	// be transmitted in plaintext. An empty value stays legal.
+	if v := conv.PtrValOr(payload.RevocationEndpoint, ""); v != "" && !urls.IsAbsoluteHTTPSOrLoopback(v) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "revocation_endpoint must be an absolute https URL, or http on loopback").LogError(ctx, logger)
 	}
 
 	// Discovery drops malformed documentation URLs, but a caller holding the write
@@ -421,10 +454,11 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 		Slug:                              conv.PtrToPGText(payload.Slug),
 		Issuer:                            conv.PtrToPGText(payload.Issuer),
 		Name:                              conv.PtrToPGText(payload.Name),
-		LogoAssetID:                       logoAssetID,
+		LogoAssetID:                       conv.PtrToPGText(payload.LogoAssetID),
 		ClientSetupDocumentationUrl:       conv.PtrToPGText(payload.ClientSetupDocumentationURL),
 		AuthorizationEndpoint:             conv.PtrToPGText(payload.AuthorizationEndpoint),
 		TokenEndpoint:                     conv.PtrToPGText(payload.TokenEndpoint),
+		RevocationEndpoint:                conv.PtrToPGText(payload.RevocationEndpoint),
 		RegistrationEndpoint:              conv.PtrToPGText(payload.RegistrationEndpoint),
 		JwksUri:                           conv.PtrToPGText(payload.JwksURI),
 		ServiceDocumentation:              conv.PtrToPGText(payload.ServiceDocumentation),
@@ -434,6 +468,7 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 		GrantTypesSupported:               payload.GrantTypesSupported,
 		ResponseTypesSupported:            payload.ResponseTypesSupported,
 		TokenEndpointAuthMethodsSupported: payload.TokenEndpointAuthMethodsSupported,
+		CodeChallengeMethodsSupported:     payload.CodeChallengeMethodsSupported,
 		ClientIDMetadataDocumentSupported: conv.PtrToPGBool(payload.ClientIDMetadataDocumentSupported),
 		Oidc:                              conv.PtrToPGBool(payload.Oidc),
 		Passthrough:                       conv.PtrToPGBool(payload.Passthrough),
@@ -616,6 +651,56 @@ func (s *Service) GetRemoteSessionIssuer(ctx context.Context, payload *gen.GetRe
 	return mv.BuildRemoteSessionIssuerView(issuer), nil
 }
 
+// GetRemoteSessionIssuerDuplicatePreflight reports the issuers this project can
+// already see that describe a given upstream authorization server, so a create
+// or edit form can warn before adding a second record for one issuer.
+//
+// Both inherited tiers are in scope, matching GetRemoteSessionIssuer's issuer
+// arm: an organization-level or platform record describing this URL is one the
+// project may attach its own client to instead. The project arm stays
+// project_id = this project, so a sibling project's records never surface.
+func (s *Service) GetRemoteSessionIssuerDuplicatePreflight(ctx context.Context, payload *gen.GetRemoteSessionIssuerDuplicatePreflightPayload) (*types.RemoteSessionIssuerDuplicatePreflight, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
+
+	canonical, err := parseCanonicalIssuerURL(conv.PtrValOrEmpty(payload.Issuer, ""))
+	if err != nil {
+		return emptyIssuerDuplicatePreflight(), nil
+	}
+
+	// Reuses the resolver's own query rather than a preflight-specific one, so
+	// the two can never disagree about which records describe a URL. It carries
+	// no LIMIT, because precedence resolution needs the whole candidate set;
+	// buildIssuerDuplicatePreflight truncates the response instead.
+	candidates, err := repo.New(s.db).ListRemoteSessionIssuersByIssuerURL(ctx, repo.ListRemoteSessionIssuersByIssuerURLParams{
+		Issuers:               canonical.matchCandidates(),
+		ProjectID:             uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		IncludeOrganizational: true,
+		OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
+		IncludeGlobal:         true,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list remote session issuers by issuer url").LogError(ctx, logger)
+	}
+
+	// projectName stays empty at this tier: every project-specific match belongs
+	// to the caller's own project, which the caller is already looking at.
+	rows := make([]issuerDuplicateCandidate, 0, len(candidates))
+	for _, candidate := range candidates {
+		rows = append(rows, issuerDuplicateCandidateFromRecord(candidate))
+	}
+
+	return buildIssuerDuplicatePreflight(rows), nil
+}
+
 // DeleteRemoteSessionIssuer soft-deletes an issuer. Blocked when any
 // non-deleted remote_session_clients still reference it.
 func (s *Service) DeleteRemoteSessionIssuer(ctx context.Context, payload *gen.DeleteRemoteSessionIssuerPayload) error {
@@ -772,6 +857,59 @@ func (e *discoveryError) UserMessage() string {
 // fails the first (canonical RFC 8414) candidate's error is surfaced, wrapped
 // in a *discoveryError so the handler can attach the upstream URL and status to
 // the user-facing error.
+// DiscoveredIssuerMetadata is the server-owned subset of RFC 8414 metadata
+// required to register Gram as an OAuth client. It is deliberately an internal
+// application return type rather than an API payload: callers must not reflect
+// upstream endpoints or registration material to untrusted clients.
+type DiscoveredIssuerMetadata struct {
+	Issuer                            string
+	AuthorizationEndpoint             string
+	TokenEndpoint                     string
+	RegistrationEndpoint              string
+	ScopesSupported                   []string
+	GrantTypesSupported               []string
+	ResponseTypesSupported            []string
+	TokenEndpointAuthMethodsSupported []string
+
+	// CodeChallengeMethodsSupported is never nil: discovery ran, so a document
+	// that omits the field yields an empty slice — the persisted
+	// "captured; the upstream advertises nothing" state — rather than the nil
+	// that the nullable column would store as "never captured".
+	CodeChallengeMethodsSupported []string
+
+	ClientIDMetadataDocumentSupported bool
+}
+
+// DiscoverIssuerMetadata performs issuer metadata discovery through Guardian's
+// outbound policy. It is available to trusted server-side composition such as
+// Platform MCP provider attachment; browser and MCP callers must never supply
+// an issuer URL to it.
+func DiscoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuerURL string) (DiscoveredIssuerMetadata, error) {
+	doc, _, err := discoverIssuerMetadata(ctx, policy, issuerURL)
+	if err != nil {
+		return DiscoveredIssuerMetadata{}, err
+	}
+	return DiscoveredIssuerMetadata{
+		Issuer:                            doc.Issuer,
+		AuthorizationEndpoint:             doc.AuthorizationEndpoint,
+		TokenEndpoint:                     doc.TokenEndpoint,
+		RegistrationEndpoint:              doc.RegistrationEndpoint,
+		ScopesSupported:                   append([]string(nil), doc.ScopesSupported...),
+		GrantTypesSupported:               append([]string(nil), doc.GrantTypesSupported...),
+		ResponseTypesSupported:            append([]string(nil), doc.ResponseTypesSupported...),
+		TokenEndpointAuthMethodsSupported: append([]string(nil), doc.TokenEndpointAuthMethodsSupported...),
+
+		// An empty advertised list must survive as empty here, because nil and
+		// empty persist differently for this field (NULL "never captured" vs
+		// {} "captured, advertises nothing"). The plain append copy used by
+		// the sibling fields collapses an empty slice to nil, so it gets an
+		// orEmptySlice on top.
+		CodeChallengeMethodsSupported: orEmptySlice(append([]string(nil), doc.CodeChallengeMethodsSupported...)),
+
+		ClientIDMetadataDocumentSupported: doc.ClientIDMetadataDocumentSupported,
+	}, nil
+}
+
 func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuerURL string) (rfc8414Document, []string, error) {
 	candidates, err := issuerProbeCandidates(issuerURL)
 	if err != nil {
@@ -786,6 +924,14 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 	defer cancel()
 
 	client := policy.Client()
+	// Guardian owns the transport and its SSRF protections. Keep redirect policy
+	// narrow here without changing TLS verification or the transport itself.
+	client.CheckRedirect = func(req *http.Request, _ []*http.Request) error {
+		if !validIssuerDiscoveryURL(req.URL) {
+			return errors.New("issuer discovery redirect target must use HTTPS outside local loopback")
+		}
+		return nil
+	}
 
 	var firstErr *discoveryError
 	var fallbackDoc rfc8414Document
@@ -825,6 +971,14 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 // returns either the parsed RFC 8414 / OIDC document or a typed error annotated
 // with the probed URL and upstream status.
 func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKnown string) (rfc8414Document, *discoveryError) {
+	requestURL, err := url.Parse(wellKnown)
+	if err != nil || !validIssuerDiscoveryURL(requestURL) {
+		return rfc8414Document{}, &discoveryError{
+			WellKnownURL: wellKnown,
+			Status:       0,
+			cause:        errors.New("issuer discovery URL must use HTTPS outside local loopback"),
+		}
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, wellKnown, nil)
 	if err != nil {
 		return rfc8414Document{}, &discoveryError{
@@ -870,6 +1024,13 @@ func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKn
 			cause:        fmt.Errorf("decode discovery document: %w", err),
 		}
 	}
+	if err := validateIssuerMetadataEndpoints(doc, requestURL); err != nil {
+		return rfc8414Document{}, &discoveryError{
+			WellKnownURL: wellKnown,
+			Status:       resp.StatusCode,
+			cause:        err,
+		}
+	}
 
 	return doc, nil
 }
@@ -891,8 +1052,8 @@ func issuerProbeCandidates(issuerURL string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse issuer url: %w", err)
 	}
-	if u.Scheme == "" || u.Host == "" {
-		return nil, fmt.Errorf("issuer url must include scheme and host")
+	if !validIssuerDiscoveryURL(u) {
+		return nil, fmt.Errorf("issuer url must use HTTPS outside local loopback")
 	}
 
 	origin := (&url.URL{Scheme: u.Scheme, Host: u.Host}).String()
@@ -924,6 +1085,71 @@ func issuerProbeCandidates(issuerURL string) ([]string, error) {
 	return candidates, nil
 }
 
+// validIssuerDiscoveryURL permits HTTPS issuers and the explicit HTTP loopback
+// exception used by local development and deterministic tests. It is applied to
+// every initial probe and redirect before a request leaves the process.
+func validIssuerDiscoveryURL(u *url.URL) bool {
+	if u == nil || u.Host == "" || u.User != nil {
+		return false
+	}
+	if u.Scheme == "https" {
+		return true
+	}
+	if u.Scheme != "http" {
+		return false
+	}
+	host := strings.TrimSuffix(strings.ToLower(u.Hostname()), ".")
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+// validateIssuerMetadataEndpoints rejects endpoints that would weaken the
+// transport guarantee after a valid metadata document has been discovered.
+// Authorization and token endpoints retain the explicit local-loopback
+// exception used by discovery. JWKs and DCR endpoints are fetched server-side,
+// so they require HTTPS except for an endpoint on the exact same explicit
+// loopback origin as a local HTTP issuer.
+func validateIssuerMetadataEndpoints(doc rfc8414Document, requestedIssuer *url.URL) error {
+	for _, endpoint := range []struct {
+		name         string
+		raw          string
+		requireHTTPS bool
+	}{
+		{name: "authorization_endpoint", raw: doc.AuthorizationEndpoint, requireHTTPS: false},
+		{name: "token_endpoint", raw: doc.TokenEndpoint, requireHTTPS: true},
+		{name: "jwks_uri", raw: doc.JwksURI, requireHTTPS: true},
+		{name: "registration_endpoint", raw: doc.RegistrationEndpoint, requireHTTPS: true},
+	} {
+		if endpoint.raw == "" {
+			continue
+		}
+		parsed, err := url.Parse(endpoint.raw)
+		if err != nil || !validIssuerMetadataEndpointURL(parsed, requestedIssuer, endpoint.requireHTTPS) {
+			if endpoint.requireHTTPS {
+				return fmt.Errorf("issuer metadata %s must use HTTPS or the same local loopback origin", endpoint.name)
+			}
+			return fmt.Errorf("issuer metadata %s must use HTTPS outside local loopback", endpoint.name)
+		}
+	}
+	return nil
+}
+
+func validIssuerMetadataEndpointURL(parsed, requestedIssuer *url.URL, requireHTTPS bool) bool {
+	if parsed == nil || !parsed.IsAbs() || parsed.User != nil || parsed.Host == "" {
+		return false
+	}
+	if !requireHTTPS {
+		return validIssuerDiscoveryURL(parsed)
+	}
+	if parsed.Scheme == "https" {
+		return true
+	}
+	return parsed.Scheme == "http" && validIssuerDiscoveryURL(parsed) && validIssuerDiscoveryURL(requestedIssuer) && parsed.Host == requestedIssuer.Host
+}
+
 // collectDiscoveryWarnings reports RFC 8414 deviations on the parsed metadata
 // document. The list is informational; discover never fails on these.
 func collectDiscoveryWarnings(requestedIssuer string, doc rfc8414Document) []string {
@@ -941,6 +1167,17 @@ func collectDiscoveryWarnings(requestedIssuer string, doc rfc8414Document) []str
 	}
 	if doc.JwksURI == "" {
 		warnings = append(warnings, "jwks_uri missing from discovery document")
+	}
+	// Advisory rather than a defect report: RFC 8414 makes the field OPTIONAL,
+	// but MCP requires clients to refuse authorization servers that do not
+	// advertise PKCE support, so a future change may enforce it. The
+	// absent and empty cases read differently because only the wording here
+	// can distinguish them — persistence collapses both to an empty array.
+	switch {
+	case doc.CodeChallengeMethodsSupported == nil:
+		warnings = append(warnings, "code_challenge_methods_supported missing from discovery document; the MCP specification requires verifying that the identity provider advertises PKCE S256 support, and a future change may enforce this")
+	case !slices.Contains(doc.CodeChallengeMethodsSupported, "S256"):
+		warnings = append(warnings, "discovery document does not list S256 in code_challenge_methods_supported; the MCP specification requires verifying that the identity provider advertises PKCE S256 support, and a future change may enforce this")
 	}
 	return warnings
 }

@@ -15,67 +15,75 @@ import (
 
 // Client is the "telemetry" service client.
 type Client struct {
-	SearchLogsEndpoint                      goa.Endpoint
-	SearchToolCallsEndpoint                 goa.Endpoint
-	SearchChatsEndpoint                     goa.Endpoint
-	SearchUsersEndpoint                     goa.Endpoint
-	CaptureEventEndpoint                    goa.Endpoint
-	GetProjectMetricsSummaryEndpoint        goa.Endpoint
-	GetUserMetricsSummaryEndpoint           goa.Endpoint
-	GetEmployeeDataFlowGraphEndpoint        goa.Endpoint
-	GetObservabilityOverviewEndpoint        goa.Endpoint
-	GetProjectOverviewEndpoint              goa.Endpoint
-	QueryEndpoint                           goa.Endpoint
-	QueryTumDetailsEndpoint                 goa.Endpoint
-	ListSessionsEndpoint                    goa.Endpoint
-	ListFilterOptionsEndpoint               goa.Endpoint
-	ListAttributeKeysEndpoint               goa.Endpoint
-	GetHooksSummaryEndpoint                 goa.Endpoint
-	GetToolUsageSummaryEndpoint             goa.Endpoint
-	GetToolUsageTotalsEndpoint              goa.Endpoint
-	GetToolUsageTargetsEndpoint             goa.Endpoint
-	GetToolUsageUsersEndpoint               goa.Endpoint
-	GetToolUsageTargetTimeSeriesEndpoint    goa.Endpoint
-	GetToolUsageUserTimeSeriesEndpoint      goa.Endpoint
-	GetToolUsageUsersByTargetEndpoint       goa.Endpoint
-	GetToolUsageTargetToolBreakdownEndpoint goa.Endpoint
-	ListToolUsageTracesEndpoint             goa.Endpoint
-	GetToolUsageFilterOptionsEndpoint       goa.Endpoint
-	GetMcpServerActivityEndpoint            goa.Endpoint
-	ListHooksTracesEndpoint                 goa.Endpoint
+	SearchLogsEndpoint                       goa.Endpoint
+	SearchToolCallsEndpoint                  goa.Endpoint
+	SearchChatsEndpoint                      goa.Endpoint
+	SearchUsersEndpoint                      goa.Endpoint
+	CaptureEventEndpoint                     goa.Endpoint
+	GetProjectMetricsSummaryEndpoint         goa.Endpoint
+	GetUserMetricsSummaryEndpoint            goa.Endpoint
+	GetEmployeeDataFlowGraphEndpoint         goa.Endpoint
+	GetObservabilityOverviewEndpoint         goa.Endpoint
+	GetProjectOverviewEndpoint               goa.Endpoint
+	GetUnproxiedMcpServerUsageEndpoint       goa.Endpoint
+	GetUnproxiedMcpServerToolUsageEndpoint   goa.Endpoint
+	GetUnproxiedMcpServerUserUsageEndpoint   goa.Endpoint
+	GetUnproxiedMcpServerClientUsageEndpoint goa.Endpoint
+	QueryEndpoint                            goa.Endpoint
+	QueryTumDetailsEndpoint                  goa.Endpoint
+	ListSessionsEndpoint                     goa.Endpoint
+	ListFilterOptionsEndpoint                goa.Endpoint
+	ListAttributeKeysEndpoint                goa.Endpoint
+	GetHooksSummaryEndpoint                  goa.Endpoint
+	GetToolUsageSummaryEndpoint              goa.Endpoint
+	GetToolUsageTotalsEndpoint               goa.Endpoint
+	GetToolUsageTargetsEndpoint              goa.Endpoint
+	GetToolUsageUsersEndpoint                goa.Endpoint
+	GetToolUsageTargetTimeSeriesEndpoint     goa.Endpoint
+	GetToolUsageUserTimeSeriesEndpoint       goa.Endpoint
+	GetToolUsageUsersByTargetEndpoint        goa.Endpoint
+	GetToolUsageTargetToolBreakdownEndpoint  goa.Endpoint
+	ListToolUsageTracesEndpoint              goa.Endpoint
+	GetToolUsageFilterOptionsEndpoint        goa.Endpoint
+	GetMcpServerActivityEndpoint             goa.Endpoint
+	ListHooksTracesEndpoint                  goa.Endpoint
 }
 
 // NewClient initializes a "telemetry" service client given the endpoints.
-func NewClient(searchLogs, searchToolCalls, searchChats, searchUsers, captureEvent, getProjectMetricsSummary, getUserMetricsSummary, getEmployeeDataFlowGraph, getObservabilityOverview, getProjectOverview, query, queryTumDetails, listSessions, listFilterOptions, listAttributeKeys, getHooksSummary, getToolUsageSummary, getToolUsageTotals, getToolUsageTargets, getToolUsageUsers, getToolUsageTargetTimeSeries, getToolUsageUserTimeSeries, getToolUsageUsersByTarget, getToolUsageTargetToolBreakdown, listToolUsageTraces, getToolUsageFilterOptions, getMcpServerActivity, listHooksTraces goa.Endpoint) *Client {
+func NewClient(searchLogs, searchToolCalls, searchChats, searchUsers, captureEvent, getProjectMetricsSummary, getUserMetricsSummary, getEmployeeDataFlowGraph, getObservabilityOverview, getProjectOverview, getUnproxiedMcpServerUsage, getUnproxiedMcpServerToolUsage, getUnproxiedMcpServerUserUsage, getUnproxiedMcpServerClientUsage, query, queryTumDetails, listSessions, listFilterOptions, listAttributeKeys, getHooksSummary, getToolUsageSummary, getToolUsageTotals, getToolUsageTargets, getToolUsageUsers, getToolUsageTargetTimeSeries, getToolUsageUserTimeSeries, getToolUsageUsersByTarget, getToolUsageTargetToolBreakdown, listToolUsageTraces, getToolUsageFilterOptions, getMcpServerActivity, listHooksTraces goa.Endpoint) *Client {
 	return &Client{
-		SearchLogsEndpoint:                      searchLogs,
-		SearchToolCallsEndpoint:                 searchToolCalls,
-		SearchChatsEndpoint:                     searchChats,
-		SearchUsersEndpoint:                     searchUsers,
-		CaptureEventEndpoint:                    captureEvent,
-		GetProjectMetricsSummaryEndpoint:        getProjectMetricsSummary,
-		GetUserMetricsSummaryEndpoint:           getUserMetricsSummary,
-		GetEmployeeDataFlowGraphEndpoint:        getEmployeeDataFlowGraph,
-		GetObservabilityOverviewEndpoint:        getObservabilityOverview,
-		GetProjectOverviewEndpoint:              getProjectOverview,
-		QueryEndpoint:                           query,
-		QueryTumDetailsEndpoint:                 queryTumDetails,
-		ListSessionsEndpoint:                    listSessions,
-		ListFilterOptionsEndpoint:               listFilterOptions,
-		ListAttributeKeysEndpoint:               listAttributeKeys,
-		GetHooksSummaryEndpoint:                 getHooksSummary,
-		GetToolUsageSummaryEndpoint:             getToolUsageSummary,
-		GetToolUsageTotalsEndpoint:              getToolUsageTotals,
-		GetToolUsageTargetsEndpoint:             getToolUsageTargets,
-		GetToolUsageUsersEndpoint:               getToolUsageUsers,
-		GetToolUsageTargetTimeSeriesEndpoint:    getToolUsageTargetTimeSeries,
-		GetToolUsageUserTimeSeriesEndpoint:      getToolUsageUserTimeSeries,
-		GetToolUsageUsersByTargetEndpoint:       getToolUsageUsersByTarget,
-		GetToolUsageTargetToolBreakdownEndpoint: getToolUsageTargetToolBreakdown,
-		ListToolUsageTracesEndpoint:             listToolUsageTraces,
-		GetToolUsageFilterOptionsEndpoint:       getToolUsageFilterOptions,
-		GetMcpServerActivityEndpoint:            getMcpServerActivity,
-		ListHooksTracesEndpoint:                 listHooksTraces,
+		SearchLogsEndpoint:                       searchLogs,
+		SearchToolCallsEndpoint:                  searchToolCalls,
+		SearchChatsEndpoint:                      searchChats,
+		SearchUsersEndpoint:                      searchUsers,
+		CaptureEventEndpoint:                     captureEvent,
+		GetProjectMetricsSummaryEndpoint:         getProjectMetricsSummary,
+		GetUserMetricsSummaryEndpoint:            getUserMetricsSummary,
+		GetEmployeeDataFlowGraphEndpoint:         getEmployeeDataFlowGraph,
+		GetObservabilityOverviewEndpoint:         getObservabilityOverview,
+		GetProjectOverviewEndpoint:               getProjectOverview,
+		GetUnproxiedMcpServerUsageEndpoint:       getUnproxiedMcpServerUsage,
+		GetUnproxiedMcpServerToolUsageEndpoint:   getUnproxiedMcpServerToolUsage,
+		GetUnproxiedMcpServerUserUsageEndpoint:   getUnproxiedMcpServerUserUsage,
+		GetUnproxiedMcpServerClientUsageEndpoint: getUnproxiedMcpServerClientUsage,
+		QueryEndpoint:                            query,
+		QueryTumDetailsEndpoint:                  queryTumDetails,
+		ListSessionsEndpoint:                     listSessions,
+		ListFilterOptionsEndpoint:                listFilterOptions,
+		ListAttributeKeysEndpoint:                listAttributeKeys,
+		GetHooksSummaryEndpoint:                  getHooksSummary,
+		GetToolUsageSummaryEndpoint:              getToolUsageSummary,
+		GetToolUsageTotalsEndpoint:               getToolUsageTotals,
+		GetToolUsageTargetsEndpoint:              getToolUsageTargets,
+		GetToolUsageUsersEndpoint:                getToolUsageUsers,
+		GetToolUsageTargetTimeSeriesEndpoint:     getToolUsageTargetTimeSeries,
+		GetToolUsageUserTimeSeriesEndpoint:       getToolUsageUserTimeSeries,
+		GetToolUsageUsersByTargetEndpoint:        getToolUsageUsersByTarget,
+		GetToolUsageTargetToolBreakdownEndpoint:  getToolUsageTargetToolBreakdown,
+		ListToolUsageTracesEndpoint:              listToolUsageTraces,
+		GetToolUsageFilterOptionsEndpoint:        getToolUsageFilterOptions,
+		GetMcpServerActivityEndpoint:             getMcpServerActivity,
+		ListHooksTracesEndpoint:                  listHooksTraces,
 	}
 }
 
@@ -303,6 +311,98 @@ func (c *Client) GetProjectOverview(ctx context.Context, p *GetProjectOverviewPa
 		return
 	}
 	return ires.(*GetProjectOverviewResult), nil
+}
+
+// GetUnproxiedMcpServerUsage calls the "getUnproxiedMcpServerUsage" endpoint
+// of the "telemetry" service.
+// GetUnproxiedMcpServerUsage may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetUnproxiedMcpServerUsage(ctx context.Context, p *GetUnproxiedMcpServerUsagePayload) (res *GetUnproxiedMcpServerUsageResult, err error) {
+	var ires any
+	ires, err = c.GetUnproxiedMcpServerUsageEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*GetUnproxiedMcpServerUsageResult), nil
+}
+
+// GetUnproxiedMcpServerToolUsage calls the "getUnproxiedMcpServerToolUsage"
+// endpoint of the "telemetry" service.
+// GetUnproxiedMcpServerToolUsage may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetUnproxiedMcpServerToolUsage(ctx context.Context, p *GetUnproxiedMcpServerToolUsagePayload) (res *GetUnproxiedMcpServerToolUsageResult, err error) {
+	var ires any
+	ires, err = c.GetUnproxiedMcpServerToolUsageEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*GetUnproxiedMcpServerToolUsageResult), nil
+}
+
+// GetUnproxiedMcpServerUserUsage calls the "getUnproxiedMcpServerUserUsage"
+// endpoint of the "telemetry" service.
+// GetUnproxiedMcpServerUserUsage may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetUnproxiedMcpServerUserUsage(ctx context.Context, p *GetUnproxiedMcpServerUserUsagePayload) (res *GetUnproxiedMcpServerUserUsageResult, err error) {
+	var ires any
+	ires, err = c.GetUnproxiedMcpServerUserUsageEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*GetUnproxiedMcpServerUserUsageResult), nil
+}
+
+// GetUnproxiedMcpServerClientUsage calls the
+// "getUnproxiedMcpServerClientUsage" endpoint of the "telemetry" service.
+// GetUnproxiedMcpServerClientUsage may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetUnproxiedMcpServerClientUsage(ctx context.Context, p *GetUnproxiedMcpServerClientUsagePayload) (res *GetUnproxiedMcpServerClientUsageResult, err error) {
+	var ires any
+	ires, err = c.GetUnproxiedMcpServerClientUsageEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*GetUnproxiedMcpServerClientUsageResult), nil
 }
 
 // Query calls the "query" endpoint of the "telemetry" service.

@@ -19,7 +19,7 @@ import {
 /**
  * Policy action: flag, warn (challenge), or block.
  */
-export const Action = {
+export const CreateRiskPolicyRequestBodyAction = {
   Flag: "flag",
   Warn: "warn",
   Block: "block",
@@ -27,7 +27,9 @@ export const Action = {
 /**
  * Policy action: flag, warn (challenge), or block.
  */
-export type Action = ClosedEnum<typeof Action>;
+export type CreateRiskPolicyRequestBodyAction = ClosedEnum<
+  typeof CreateRiskPolicyRequestBodyAction
+>;
 
 /**
  * Policy audience type: everyone or targeted.
@@ -69,7 +71,7 @@ export type CreateRiskPolicyRequestBody = {
   /**
    * Policy action: flag, warn (challenge), or block.
    */
-  action?: Action | undefined;
+  action?: CreateRiskPolicyRequestBodyAction | undefined;
   /**
    * For the account_identity source: corporate email domains considered approved. Sessions whose AI-account email domain is not listed are flagged. Empty/omitted leaves the domain rule inert.
    */
@@ -148,6 +150,10 @@ export type CreateRiskPolicyRequestBody = {
    */
   shadowMcpAllowedUrls?: Array<string> | undefined;
   /**
+   * For allow_all policies: complete desired canonical URL block set. Omit or send empty to block nothing. Only valid when shadow_mcp_disposition is allow_all.
+   */
+  shadowMcpBlockedUrls?: Array<string> | undefined;
+  /**
    * Default disposition for shadow MCP blocking policies: block_all (default) blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Only valid with the shadow_mcp source and block action. Immutable after create — switching requires delete + recreate.
    */
   shadowMcpDisposition?: ShadowMcpDisposition | undefined;
@@ -162,9 +168,9 @@ export type CreateRiskPolicyRequestBody = {
 };
 
 /** @internal */
-export const Action$outboundSchema: z.ZodMiniEnum<typeof Action> = z.enum(
-  Action,
-);
+export const CreateRiskPolicyRequestBodyAction$outboundSchema: z.ZodMiniEnum<
+  typeof CreateRiskPolicyRequestBodyAction
+> = z.enum(CreateRiskPolicyRequestBodyAction);
 
 /** @internal */
 export const AudienceType$outboundSchema: z.ZodMiniEnum<typeof AudienceType> = z
@@ -202,6 +208,7 @@ export type CreateRiskPolicyRequestBody$Outbound = {
   scope_include?: string | undefined;
   score: number;
   shadow_mcp_allowed_urls?: Array<string> | undefined;
+  shadow_mcp_blocked_urls?: Array<string> | undefined;
   shadow_mcp_disposition?: string | undefined;
   sources?: Array<string> | undefined;
   user_message?: string | undefined;
@@ -213,7 +220,10 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
   CreateRiskPolicyRequestBody
 > = z.pipe(
   z.object({
-    action: z._default(Action$outboundSchema, "flag"),
+    action: z._default(
+      CreateRiskPolicyRequestBodyAction$outboundSchema,
+      "flag",
+    ),
     approvedEmailDomains: z.optional(z.array(z.string())),
     audiencePrincipalUrns: z.optional(z.array(z.string())),
     audienceType: z._default(AudienceType$outboundSchema, "everyone"),
@@ -234,6 +244,7 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
     scopeInclude: z.optional(z.string()),
     score: z._default(z.number(), 5),
     shadowMcpAllowedUrls: z.optional(z.array(z.string())),
+    shadowMcpBlockedUrls: z.optional(z.array(z.string())),
     shadowMcpDisposition: z.optional(ShadowMcpDisposition$outboundSchema),
     sources: z.optional(z.array(z.string())),
     userMessage: z.optional(z.string()),
@@ -256,6 +267,7 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
       scopeExempt: "scope_exempt",
       scopeInclude: "scope_include",
       shadowMcpAllowedUrls: "shadow_mcp_allowed_urls",
+      shadowMcpBlockedUrls: "shadow_mcp_blocked_urls",
       shadowMcpDisposition: "shadow_mcp_disposition",
       userMessage: "user_message",
     });

@@ -1,5 +1,8 @@
+import * as React from "react";
+
+import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
+import { MinusIcon, TestTube2Icon } from "lucide-react";
 import { NavButton, NavGroupProvider } from "@/components/nav-menu";
-import { ScopeGatedNavGroup } from "@/components/scope-gated-nav-group";
 import {
   Sidebar,
   SidebarContent,
@@ -7,39 +10,41 @@ import {
   SidebarHeader,
   SidebarMenu,
   SidebarMenuItem,
+  SidebarTrigger,
 } from "@/components/ui/Sidebar";
-import { GramLogo } from "./gram-logo";
-import { CommandPaletteTrigger } from "./command-palette/CommandPaletteTrigger";
-import { WorkspaceSwitcher } from "./workspace-switcher";
-import { InsightsDockResumeButton } from "./insights-dock-resume-button";
+import { useMemo, useState } from "react";
+
 import { BuiltInMcpSidebarNav } from "./built-in-mcp-sidebar-nav";
+import { Button } from "./ui/Button";
+import { HatchRule } from "./hatch-rule";
+import { FeatureRequestModal } from "./FeatureRequestModal";
+import { GramLogo } from "./gram-logo";
+import { Icon } from "@/components/ui/Icon";
+import { InsightsDockResumeButton } from "./insights-dock-resume-button";
+import { Link } from "react-router";
 import { McpDetailSidebarNav } from "./mcp-detail-sidebar-nav";
 import { McpServerXSidebarNav } from "./mcp-server-x-sidebar-nav";
-import { SkillDetailSidebarNav } from "./skill-detail-sidebar-nav";
 import { OnboardingResumeButton } from "./onboarding-resume-button";
-import { SidebarFooterAction } from "./sidebar-footer-action";
-import { SidebarUserMenu } from "./sidebar-user-menu";
-import { useSidebar } from "@/components/ui/Sidebar/sidebar-context";
-import { useSlugs } from "@/contexts/Sdk";
-import { useRBAC } from "@/hooks/useRBAC";
+import { PlatformMcpSidebarCta } from "./platform-mcp-sidebar-cta";
+import { PluginDetailSidebarNav } from "./plugin-detail-sidebar-nav";
+import type { ProjectNavRoute } from "@/hooks/useProjectNavRoutes";
+import { RequireScope } from "./require-scope";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
+import { ScopeGatedNavGroup } from "@/components/scope-gated-nav-group";
 import { SidebarNavSkeleton } from "./sidebar-nav-skeleton";
+import { SidebarUserMenu } from "./sidebar-user-menu";
+import { SkillDetailSidebarNav } from "./skill-detail-sidebar-nav";
+import { Stack } from "@/components/ui/Stack";
+import { Text } from "@/components/ui/Text";
+import { TrialStatusCard } from "./trial-status-card";
+import { cn } from "@/lib/utils";
+import { useGetPeriodUsage } from "@gram/client/react-query/getPeriodUsage.js";
+import { useNavArea } from "@/hooks/useNavArea";
 import { useProductTier } from "@/hooks/useProductTier";
 import { useProjectNavRoutes } from "@/hooks/useProjectNavRoutes";
-import type { ProjectNavRoute } from "@/hooks/useProjectNavRoutes";
-import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
-import { useGetPeriodUsage } from "@gram/client/react-query/getPeriodUsage.js";
-import { Icon } from "@/components/ui/Icon";
-import { Stack } from "@/components/ui/Stack";
-import { cn } from "@/lib/utils";
-import { MinusIcon, Settings, TestTube2Icon } from "lucide-react";
-import * as React from "react";
-import { useMemo, useState } from "react";
-import { Link } from "react-router";
-import { RequireScope } from "./require-scope";
-import { FeatureRequestModal } from "./FeatureRequestModal";
-import { Button } from "./ui/Button";
-import { Text } from "@/components/ui/Text";
+import { useRBAC } from "@/hooks/useRBAC";
+import { useSidebar } from "@/components/ui/Sidebar/sidebar-context";
+import { useSlugs } from "@/contexts/Sdk";
 
 function ScopeGatedTopLevelItem({
   item,
@@ -87,50 +92,13 @@ export function AppSidebar({
   const isAssistantsEnabled = navAccess.has(routes.assistants.url);
   const isOrgMemoryEnabled = navAccess.has(routes.orgMemory.url);
   const isDeploymentsPageEnabled = navAccess.has(routes.deployments.url);
+  const isRiskWatchdogEnabled = navAccess.has(routes.watchdog.url);
 
-  const connectActive = [
-    routes.sources,
-    routes.catalog,
-    routes.playground,
-    ...(isDeploymentsPageEnabled ? [routes.deployments] : []),
-  ].some((r) => r.active);
-
-  const distributeActive = [
-    routes.mcp,
-    routes.skills,
-    routes.plugins,
-    routes.environments,
-    ...(isAssistantsEnabled ? [routes.assistants] : []),
-  ].some((r) => r.active);
-
-  const observeActive = [
-    routes.employees,
-    routes.costs,
-    routes.insights,
-    routes.agentSessions,
-    ...(isOrgMemoryEnabled ? [routes.orgMemory] : []),
-    routes.logs,
-  ].some((r) => r.active);
-
-  const securityActive = [
-    routes.riskOverview,
-    routes.policyCenter,
-    routes.riskEvents,
-    routes.shadowMCP,
-    routes.approvalRequests,
-    routes.detectionRules,
-  ].some((r) => r.active);
-
-  let activeGroup: string | undefined;
-  if (observeActive) {
-    activeGroup = "Observe";
-  } else if (securityActive) {
-    activeGroup = "Secure";
-  } else if (connectActive) {
-    activeGroup = "Connect";
-  } else if (distributeActive) {
-    activeGroup = "Distribute";
-  }
+  // Shared with the page-title eyebrow (Page.Eyebrow) so the sidebar group
+  // highlight and the page header always agree on the area. "Organization"
+  // labels org-level pages in the header but is not a sidebar group.
+  const navArea = useNavArea();
+  const activeGroup = navArea === "Organization" ? undefined : navArea;
 
   // Find the specific active route title for the sliding highlight. Shared with
   // the command palette via useProjectNavRoutes so the two stay in sync.
@@ -152,11 +120,21 @@ export function AppSidebar({
     routes.mcp.details.active ||
     routes.mcp.x.active ||
     routes.mcp.builtIn.active ||
-    routes.skills.detail.active;
+    routes.skills.detail.active ||
+    routes.plugins.detail.active;
 
   let sidebarContent: React.ReactNode;
   if (rbacLoading) {
-    sidebarContent = <SidebarNavSkeleton />;
+    // Shaped like the real list below — 3 top-level items, the divider, the
+    // 4 collapsed groups, then Settings — at the same spacing, so resolving
+    // the grants swaps the rows out without shifting the nav.
+    sidebarContent = (
+      <SidebarNavSkeleton
+        rows={8}
+        divideAfter={3}
+        className="gap-0.5 px-2 group-data-[collapsible=icon]:px-0"
+      />
+    );
   } else if (routes.mcp.details.active) {
     sidebarContent = <McpDetailSidebarNav />;
   } else if (routes.mcp.x.active) {
@@ -165,19 +143,30 @@ export function AppSidebar({
     sidebarContent = <BuiltInMcpSidebarNav />;
   } else if (routes.skills.detail.active) {
     sidebarContent = <SkillDetailSidebarNav />;
+  } else if (routes.plugins.detail.active) {
+    sidebarContent = <PluginDetailSidebarNav />;
   } else {
     sidebarContent = (
-      <NavGroupProvider
-        activeGroup={activeGroup}
-        defaultOpenGroups={
-          !activeGroup
-            ? ["Observe", "Secure", "Connect", "Distribute"]
-            : undefined
-        }
-        activeItem={activeItem}
-      >
-        <SidebarMenu className="gap-1 px-2 group-data-[collapsible=icon]:px-0">
-          {/* Home — top-level, no group */}
+      <NavGroupProvider activeGroup={activeGroup} activeItem={activeItem}>
+        <SidebarMenu className="gap-0.5 px-2 group-data-[collapsible=icon]:px-0">
+          {/* Home — the org-scoped app (was the "Organization settings"
+              footer action); the project's own landing page sits below it as
+              "Project Overview". Scoped to match OrgSidebar's own Home item,
+              so it only shows to users who can open the page it links to. */}
+          <RequireScope
+            scope={["org:read", "project:read", "org:admin"]}
+            level="section"
+          >
+            <SidebarMenuItem>
+              <NavButton
+                title="Home"
+                href={`/${orgSlug}`}
+                Icon={(p) => <Icon {...p} name="building" />}
+              />
+            </SidebarMenuItem>
+          </RequireScope>
+
+          {/* Project overview — top-level, no group */}
           <ScopeGatedTopLevelItem
             item={routes.home}
             {...accessFor(routes.home)}
@@ -191,7 +180,7 @@ export function AppSidebar({
           />
 
           {/* Divider: sets Home + Chat apart from the grouped nav below */}
-          <li aria-hidden="true" className="my-3 px-1">
+          <li aria-hidden="true" className="my-2 px-1">
             <div className="border-border border-t" />
           </li>
 
@@ -218,16 +207,27 @@ export function AppSidebar({
           <ScopeGatedNavGroup
             label="Secure"
             Icon={(p) => <Icon {...p} name="shield" />}
-            stage="beta"
             items={[
-              { item: routes.riskOverview, ...accessFor(routes.riskOverview) },
+              // Watchdog supersedes Risk Overview and Risk Events: exactly one
+              // of the two sets shows, mirroring useProjectNavRoutes.
+              ...(isRiskWatchdogEnabled
+                ? [{ item: routes.watchdog, ...accessFor(routes.watchdog) }]
+                : [
+                    {
+                      item: routes.riskOverview,
+                      ...accessFor(routes.riskOverview),
+                    },
+                  ]),
               { item: routes.policyCenter, ...accessFor(routes.policyCenter) },
-              { item: routes.riskEvents, ...accessFor(routes.riskEvents) },
+              ...(isRiskWatchdogEnabled
+                ? []
+                : [
+                    {
+                      item: routes.riskEvents,
+                      ...accessFor(routes.riskEvents),
+                    },
+                  ]),
               { item: routes.shadowMCP, ...accessFor(routes.shadowMCP) },
-              {
-                item: routes.detectionRules,
-                ...accessFor(routes.detectionRules),
-              },
             ]}
           />
 
@@ -285,29 +285,32 @@ export function AppSidebar({
       }
       {...props}
     >
-      <SidebarHeader className="gap-3 pb-3">
-        <div className="flex items-center justify-between gap-2 group-data-[collapsible=icon]:justify-center">
+      {/* Logo row only — the project switcher now lives in the page header.
+          The row is exactly --header-height and closes with the same crosshatch
+          rule the page header uses, so the divider reads as one line running
+          across both panes. */}
+      <SidebarHeader className="gap-0 p-0">
+        <div className="flex h-(--header-height) items-center justify-between gap-2 px-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
           <Link
             to={`/${orgSlug}`}
-            className="flex h-(--header-height) items-center px-1 hover:no-underline group-data-[collapsible=icon]:hidden"
+            className="flex h-full items-center px-1 hover:no-underline group-data-[collapsible=icon]:hidden"
           >
             <GramLogo className="w-28" />
           </Link>
-          <CommandPaletteTrigger />
+          {/* Collapse control sits beside the logo (WorkOS placement); search
+              moved out to the page header. */}
+          <SidebarTrigger />
         </div>
-        <WorkspaceSwitcher />
+        <HatchRule />
       </SidebarHeader>
       <SidebarContent className="pt-2">{sidebarContent}</SidebarContent>
       <SidebarFooter className="border-t">
         <FreeTierExceededNotification />
         <div className="mb-2 flex flex-col gap-1.5">
+          <TrialStatusCard />
           <OnboardingResumeButton />
+          <PlatformMcpSidebarCta />
           <InsightsDockResumeButton />
-          <SidebarFooterAction
-            to={`/${orgSlug}`}
-            icon={Settings}
-            label="Organization settings"
-          />
         </div>
         <SidebarUserMenu />
       </SidebarFooter>
@@ -392,7 +395,7 @@ const PersistentNotification = ({
   );
 
   let classes =
-    "absolute bottom-2 left-1/2 h-[180px] w-[180px] -translate-x-1/2 rounded-lg p-4 border trans overflow-clip ";
+    "absolute bottom-2 left-1/2 h-[180px] w-[180px] -translate-x-1/2 p-4 border trans overflow-clip ";
   if (isMinimized) {
     classes +=
       "h-[12px] w-[12px] left-2 translate-x-0 cursor-pointer hover:scale-110";

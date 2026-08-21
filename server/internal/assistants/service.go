@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -20,8 +21,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/assets/blobio"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -31,13 +35,17 @@ import (
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	slackclient "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
+	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -49,6 +57,7 @@ const (
 	StatusPaused = "paused"
 
 	sourceKindSlack     = bgtriggers.DefinitionSlugSlack
+	sourceKindMSTeams   = bgtriggers.DefinitionSlugMSTeams
 	sourceKindLinear    = bgtriggers.DefinitionSlugLinear
 	sourceKindGithub    = bgtriggers.DefinitionSlugGithub
 	sourceKindCron      = bgtriggers.DefinitionSlugCron
@@ -392,7 +401,12 @@ type ServiceCore struct {
 	contextWindow     *openrouter.ContextWindowResolver
 	wakeCanceller     WakeCanceller
 	chatWriter        *chat.ChatMessageWriter
+	assetStorage      assets.BlobStore
+	assetSigningKey   string
+	envLoader         toolconfig.EnvironmentLoader
+	slackImages       slackImageFetcher
 	dashboardIngestor DashboardIngestor
+	featureFlags      feature.Provider
 	turnClassified    metric.Int64Counter
 }
 
@@ -436,7 +450,12 @@ func NewServiceCore(
 		contextWindow:     contextWindow,
 		wakeCanceller:     nil,
 		chatWriter:        nil,
+		assetStorage:      nil,
+		assetSigningKey:   "",
+		envLoader:         nil,
+		slackImages:       nil,
 		dashboardIngestor: nil,
+		featureFlags:      nil,
 		turnClassified:    turnClassified,
 	}
 }
@@ -460,6 +479,22 @@ func (s *ServiceCore) SetDashboardIngestor(i DashboardIngestor) {
 // site. Self-heal is skipped if the writer was never set.
 func (s *ServiceCore) SetChatMessageWriter(w *chat.ChatMessageWriter) {
 	s.chatWriter = w
+}
+
+// SetAssetStorage wires the blob store history replay uses to fetch
+// structured message content that overflowed content_raw. Set after
+// construction to match the existing post-construction injection pattern;
+// without it, oversized messages replay their plain-text projection.
+func (s *ServiceCore) SetAssetStorage(storage assets.BlobStore) {
+	s.assetStorage = storage
+}
+
+// SetFeatureProvider wires PostHog flag evaluation. Set after construction
+// to match the existing post-construction injection pattern and avoid
+// churning every test call site. A nil provider leaves every flag-gated
+// grant off (fail closed).
+func (s *ServiceCore) SetFeatureProvider(p feature.Provider) {
+	s.featureFlags = p
 }
 
 // resolveAssistantContextWindow returns the smallest context_length the gram
@@ -1418,8 +1453,23 @@ func (s *ServiceCore) DeleteAssistant(ctx context.Context, projectID uuid.UUID, 
 	if err != nil {
 		return fmt.Errorf("delete assistant: %w", err)
 	}
+	if err := queries.RetireAssistantMCPOAuthClients(ctx, assistantrepo.RetireAssistantMCPOAuthClientsParams{
+		AssistantID: assistantID,
+		ProjectID:   projectID,
+	}); err != nil {
+		return fmt.Errorf("retire assistant mcp oauth clients: %w", err)
+	}
 	if err := s.revokeAssistantSkillDistributions(ctx, tx, projectID, assistantID, actor, actorDisplayName); err != nil {
 		return err
+	}
+	err = triggerrepo.New(tx).DeleteTriggerInstancesByTargetExceptDefinition(ctx, triggerrepo.DeleteTriggerInstancesByTargetExceptDefinitionParams{
+		ProjectID:              projectID,
+		TargetKind:             bgtriggers.TargetKindAssistant,
+		TargetRef:              assistantID.String(),
+		ExcludedDefinitionSlug: bgtriggers.DefinitionSlugWake,
+	})
+	if err != nil {
+		return fmt.Errorf("delete assistant trigger instances: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit delete assistant tx: %w", err)
@@ -1637,18 +1687,12 @@ type RecycleAssistantRuntimeImagesParams struct {
 // the currently configured runtime image, so deploys absorb the image-pull +
 // reboot cost while runtimes are idle instead of the next turn paying it.
 // Busy or failed rows are not chased — the per-admission path catches them
-// lazily.
-//
-// This is the in-place roll for backends that reuse idle runtimes (Fly). A
-// non-reuse backend (GKE) has no in-place swap and rolls onto a new image by
-// terminating idle runtimes instead (the warm-TTL expiry stops them, which
-// deletes the claim, and the next /turn re-admits onto a fresh warm-pool pod
-// already running the new image), so this sweep is a no-op for it.
+// lazily. The roll mechanism is the backend's RecycleImage: Fly updates the
+// machine in place; GKE deletes the claim and re-claims a warm-pool pod. An
+// active-but-regularly-used runtime never goes idle long enough for the
+// inactivity janitor to reap it, so without this sweep it would stay on its
+// admission-time image across deploys indefinitely.
 func (s *ServiceCore) RecycleActiveRuntimeImages(ctx context.Context, params RecycleAssistantRuntimeImagesParams) (RecycleAssistantRuntimeImagesResult, error) {
-	if !s.runtime.ReusesIdleRuntimes() {
-		return RecycleAssistantRuntimeImagesResult{Recycled: 0, Skipped: 0, Errors: 0}, nil
-	}
-
 	queries := assistantrepo.New(s.db)
 	rows, err := queries.ListActiveAssistantRuntimes(ctx, runtimeStateActive)
 	if err != nil {
@@ -1882,7 +1926,7 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 		ChatID:         chatID,
 		ProjectID:      assistant.ProjectID,
 		OrganizationID: assistant.OrganizationID,
-		UserID:         conv.ToPGTextEmpty(dashboardChatUserID(sourceKind, normalizedPayloadJSON)),
+		UserID:         conv.ToPGTextEmpty(assistantChatOwnerID(sourceKind, normalizedPayloadJSON, assistant.CreatedByUserID)),
 		Title:          conv.ToPGText(chat.DefaultChatTitle),
 	}); err != nil {
 		return EnqueueResult{}, fmt.Errorf("upsert assistant chat: %w", err)
@@ -1931,7 +1975,7 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 
 // dashboardChatUserID extracts the Gram user id from a dashboard turn payload
 // so UpsertAssistantChat can stamp it on the chats row. External-source turns
-// return empty — their chat rows are owner-less.
+// return empty — see assistantChatOwnerID for who owns those.
 func dashboardChatUserID(sourceKind string, normalizedPayloadJSON []byte) string {
 	if sourceKind != sourceKindDashboard {
 		return ""
@@ -1941,6 +1985,26 @@ func dashboardChatUserID(sourceKind string, normalizedPayloadJSON []byte) string
 		return ""
 	}
 	return dash.UserID
+}
+
+// assistantChatOwnerID picks the owner to stamp on an assistant's chat row: the
+// dashboard user who sent the turn, falling back to whoever created the
+// assistant.
+//
+// The fallback exists because externally-triggered turns (cron, Slack, warmup)
+// carry no user, which left those chats owner-less. Owner-less is not a neutral
+// state — chat access is decided by owner-matching first and an explicit
+// chat:read/chat:write grant otherwise, so a chat nobody owns is one nobody can
+// read, continue, rename or delete without a custom role. Attributing it to the
+// assistant's creator makes the session behave like one they started.
+//
+// Returns empty when the assistant has no creator either (older or
+// platform-managed assistants); the chat is then owner-less exactly as before.
+func assistantChatOwnerID(sourceKind string, normalizedPayloadJSON []byte, createdByUserID string) string {
+	if userID := dashboardChatUserID(sourceKind, normalizedPayloadJSON); userID != "" {
+		return userID
+	}
+	return createdByUserID
 }
 
 // CheckDashboardChatOwnership returns nil when callerUserID owns the chats row
@@ -1960,8 +2024,16 @@ func (s *ServiceCore) CheckDashboardChatOwnership(ctx context.Context, projectID
 }
 
 func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, []byte, error) {
+	sourcePayloadJSON := task.RawPayload
+	if !json.Valid(sourcePayloadJSON) {
+		wrapped, err := json.Marshal(map[string]string{"raw": string(task.RawPayload)})
+		if err != nil {
+			return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
+		}
+		sourcePayloadJSON = wrapped
+	}
 	switch task.DefinitionSlug {
-	case "slack":
+	case sourceKindSlack:
 		var event slackEventPayload
 		if err := json.Unmarshal(task.EventJSON, &event); err != nil {
 			return "", nil, nil, nil, fmt.Errorf("decode slack trigger event: %w", err)
@@ -1978,14 +2050,22 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 		if err != nil {
 			return "", nil, nil, nil, fmt.Errorf("marshal slack source ref: %w", err)
 		}
-		sourcePayloadJSON := task.RawPayload
-		if !json.Valid(sourcePayloadJSON) {
-			sourcePayloadJSON, err = json.Marshal(map[string]string{"raw": string(task.RawPayload)})
-			if err != nil {
-				return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
-			}
-		}
 		return sourceKindSlack, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
+	case sourceKindMSTeams:
+		var event msteamsEventPayload
+		if err := json.Unmarshal(task.EventJSON, &event); err != nil {
+			return "", nil, nil, nil, fmt.Errorf("decode msteams trigger event: %w", err)
+		}
+		sourceRefJSON, err := json.Marshal(msteamsSourceRef{
+			TenantID:       event.TenantID,
+			ConversationID: event.ConversationID,
+			ServiceURL:     event.ServiceURL,
+			UserID:         event.UserID,
+		})
+		if err != nil {
+			return "", nil, nil, nil, fmt.Errorf("marshal msteams source ref: %w", err)
+		}
+		return sourceKindMSTeams, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
 	case sourceKindLinear:
 		var event linearEventPayload
 		if err := json.Unmarshal(task.EventJSON, &event); err != nil {
@@ -1997,13 +2077,6 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 		})
 		if err != nil {
 			return "", nil, nil, nil, fmt.Errorf("marshal linear source ref: %w", err)
-		}
-		sourcePayloadJSON := task.RawPayload
-		if !json.Valid(sourcePayloadJSON) {
-			sourcePayloadJSON, err = json.Marshal(map[string]string{"raw": string(task.RawPayload)})
-			if err != nil {
-				return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
-			}
 		}
 		return sourceKindLinear, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
 	case sourceKindGithub:
@@ -2019,13 +2092,6 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 		if err != nil {
 			return "", nil, nil, nil, fmt.Errorf("marshal github source ref: %w", err)
 		}
-		sourcePayloadJSON := task.RawPayload
-		if !json.Valid(sourcePayloadJSON) {
-			sourcePayloadJSON, err = json.Marshal(map[string]string{"raw": string(task.RawPayload)})
-			if err != nil {
-				return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
-			}
-		}
 		return sourceKindGithub, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
 	case sourceKindCron:
 		var event cronEventPayload
@@ -2038,13 +2104,6 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 		})
 		if err != nil {
 			return "", nil, nil, nil, fmt.Errorf("marshal cron source ref: %w", err)
-		}
-		sourcePayloadJSON := task.RawPayload
-		if !json.Valid(sourcePayloadJSON) {
-			sourcePayloadJSON, err = json.Marshal(map[string]string{"raw": string(task.RawPayload)})
-			if err != nil {
-				return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
-			}
 		}
 		return sourceKindCron, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
 	case sourceKindWake:
@@ -2059,13 +2118,6 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 		if err != nil {
 			return "", nil, nil, nil, fmt.Errorf("marshal wake source ref: %w", err)
 		}
-		sourcePayloadJSON := task.RawPayload
-		if !json.Valid(sourcePayloadJSON) {
-			sourcePayloadJSON, err = json.Marshal(map[string]string{"raw": string(task.RawPayload)})
-			if err != nil {
-				return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
-			}
-		}
 		return sourceKindWake, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
 	case sourceKindDashboard:
 		var event dashboardEventPayload
@@ -2075,13 +2127,6 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 		sourceRefJSON, err := json.Marshal(dashboardSourceRef{UserID: event.UserID})
 		if err != nil {
 			return "", nil, nil, nil, fmt.Errorf("marshal dashboard source ref: %w", err)
-		}
-		sourcePayloadJSON := task.RawPayload
-		if !json.Valid(sourcePayloadJSON) {
-			sourcePayloadJSON, err = json.Marshal(map[string]string{"raw": string(task.RawPayload)})
-			if err != nil {
-				return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
-			}
 		}
 		return sourceKindDashboard, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
 	default:
@@ -2265,8 +2310,10 @@ func (s *ServiceCore) EnsureWarmupThread(ctx context.Context, assistantID uuid.U
 		ChatID:         chatID,
 		ProjectID:      assistant.ProjectID,
 		OrganizationID: assistant.OrganizationID,
-		UserID:         pgtype.Text{String: "", Valid: false},
-		Title:          conv.ToPGText(chat.DefaultChatTitle),
+		// Warmup turns have no user either, so the creator owns them for the
+		// same reason external-source turns do.
+		UserID: conv.ToPGTextEmpty(assistant.CreatedByUserID),
+		Title:  conv.ToPGText(chat.DefaultChatTitle),
 	}); err != nil {
 		return noop, fmt.Errorf("upsert warmup chat: %w", err)
 	}
@@ -2695,9 +2742,10 @@ func (s *ServiceCore) processEventTurn(
 		notice = renderAssistantSkillSetChange(claimedSnapshot, currentSnapshot)
 	}
 
-	mcpServers := s.currentRuntimeMCPServers(ctx, assistant)
+	mcpServers := s.currentRuntimeMCPServers(ctx, assistant, thread.SourceKind)
 
 	prompt, actorUserID := "", assistant.CreatedByUserID
+	var inputParts []runtimeContentPart
 	if mcpAuthPrompt, ok := decodeMCPAuthTurn(ctx, s.logger, event); ok {
 		// MCP auth resumption is a system event with no human sender — act as
 		// the assistant's creator.
@@ -2712,6 +2760,14 @@ func (s *ServiceCore) processEventTurn(
 			return nil, fmt.Errorf("decode assistant turn: %w", err)
 		}
 		actorUserID = turnUserID(assistant, thread, event)
+		// Best-effort: files attached to the triggering message ride along as
+		// vision/text content. Failures degrade to the metadata-only turn.
+		switch thread.SourceKind {
+		case sourceKindSlack:
+			inputParts = s.slackTurnImageParts(ctx, thread, event)
+		case sourceKindDashboard:
+			inputParts = s.dashboardTurnAttachmentParts(ctx, assistant.ProjectID, event)
+		}
 	}
 	prompt, err = insertAssistantEnvironmentChange(prompt, notice)
 	if err != nil {
@@ -2721,7 +2777,14 @@ func (s *ServiceCore) processEventTurn(
 	if err != nil {
 		return nil, err
 	}
-	if err := s.runtime.RunTurn(ctx, runtime, thread.ID, event.ID.String(), turnToken, prompt, mcpServers); err != nil {
+	if err := s.runtime.RunTurn(ctx, runtime, runTurnRequest{
+		ThreadID:       thread.ID,
+		IdempotencyKey: event.ID.String(),
+		AuthToken:      turnToken,
+		Prompt:         prompt,
+		InputParts:     inputParts,
+		MCPServers:     mcpServers,
+	}); err != nil {
 		return nil, fmt.Errorf("run assistant turn: %w", err)
 	}
 	return currentSnapshotBytes, nil
@@ -2736,12 +2799,12 @@ func (s *ServiceCore) processEventTurn(
 // dispatch a turn with bogus URLs. Platform toolsets must be included so
 // the reconcile target matches what bootstrap granted — otherwise the
 // runner would treat them as removed and disconnect them mid-thread.
-func (s *ServiceCore) currentRuntimeMCPServers(ctx context.Context, assistant assistantRecord) []runtimeMCPServer {
+func (s *ServiceCore) currentRuntimeMCPServers(ctx context.Context, assistant assistantRecord, sourceKind string) []runtimeMCPServer {
 	serverURL := s.runtime.ServerURL()
 	if serverURL == nil {
 		return nil
 	}
-	platformSlugs, err := s.assistantPlatformSlugs(ctx, assistant)
+	platformSlugs, err := s.assistantPlatformSlugs(ctx, assistant, sourceKind)
 	if err != nil {
 		s.logger.WarnContext(ctx, "resolve platform toolsets for mcp reconcile failed; skipping reconcile",
 			attr.SlogError(err),
@@ -2753,21 +2816,67 @@ func (s *ServiceCore) currentRuntimeMCPServers(ctx context.Context, assistant as
 
 // assistantPlatformSlugs returns the platform toolset slugs granted to this
 // assistant's runtime. Every assistant gets the base assistants toolset; the
-// project's managed assistant additionally gets the managed-only toolset,
-// which must never be reachable by any other assistant.
-func (s *ServiceCore) assistantPlatformSlugs(ctx context.Context, assistant assistantRecord) ([]string, error) {
-	platformSlugs := []string{platformtools.AssistantsPlatformToolsetSlug}
+// project's managed assistant additionally gets exactly one managed-only
+// toolset — legacy or Platform MCP, per the rollout variant — which must never
+// be reachable by any other assistant.
+//
+// The Platform MCP variant is exclusive rather than additive: a managed
+// assistant on it is served the Platform MCP catalogue and nothing else, so
+// the legacy platformtools surface — the base assistants toolset included —
+// stays out of its reach. Rolling an organization onto the variant is a
+// statement about which catalogue that assistant speaks, and a half-migrated
+// assistant carrying both would answer "what can you do" with two generations
+// of the same product.
+//
+// The variant is scoped to the dashboard, though, not to the assistant: the
+// same managed assistant also answers Slack, cron and wake turns, and those
+// surfaces are not part of this rollout. They keep the legacy toolsets, so a
+// Slack thread does not silently lose memory, triggers and the insights tools
+// the moment an organization is flipped. Source kind therefore decides the
+// grant, and every thread resolves it independently.
+func (s *ServiceCore) assistantPlatformSlugs(ctx context.Context, assistant assistantRecord, sourceKind string) ([]string, error) {
+	legacySlugs := []string{
+		platformtools.AssistantsPlatformToolsetSlug,
+		platformtools.ManagedAssistantPlatformToolsetSlug,
+	}
 	switch managed, mErr := assistantrepo.New(s.db).GetManagedAssistantByProject(ctx, assistant.ProjectID); {
 	case mErr == nil:
 		if managed.ID == assistant.ID {
-			platformSlugs = append(platformSlugs, platformtools.ManagedAssistantPlatformToolsetSlug)
+			if sourceKind == sourceKindDashboard &&
+				s.assistantToolsVariant(ctx, assistant.ProjectID) == feature.VariantAssistantToolsPlatformMCP {
+				return []string{platformtools.PlatformMCPReadToolsetSlug}, nil
+			}
+			return legacySlugs, nil
 		}
 	case errors.Is(mErr, pgx.ErrNoRows):
 		// Project has no managed assistant; managed-only tools stay ungranted.
 	default:
 		return nil, fmt.Errorf("resolve managed assistant: %w", mErr)
 	}
-	return platformSlugs, nil
+	return []string{platformtools.AssistantsPlatformToolsetSlug}, nil
+}
+
+// assistantToolsVariant reports which managed-assistant platform toolset the
+// organization owning projectID is on. Evaluation mirrors the Platform MCP
+// organization gate: distinct ID is the org ID with the org-slug PostHog
+// group. Every failure path returns the legacy variant but never aborts the
+// turn — a flag-provider outage must not take down bootstrap or reconcile, nor
+// silently strip the managed assistant's tools.
+func (s *ServiceCore) assistantToolsVariant(ctx context.Context, projectID uuid.UUID) feature.Variant {
+	if s.featureFlags == nil {
+		return feature.VariantAssistantToolsLegacy
+	}
+	project, err := projectsrepo.New(s.db).GetProjectWithOrganizationMetadata(ctx, projectID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "resolve organization for assistant tools variant", attr.SlogError(err))
+		return feature.VariantAssistantToolsLegacy
+	}
+	variant, err := feature.FlagVariant(ctx, s.featureFlags, feature.FlagAssistantPlatformMCP, project.ID, feature.OrgProjectGroups(project.Slug, ""))
+	if err != nil {
+		s.logger.WarnContext(ctx, "resolve assistant platform mcp variant", attr.SlogError(err))
+		return feature.VariantAssistantToolsLegacy
+	}
+	return feature.AssistantToolsVariant(variant)
 }
 
 // turnUserID returns the Gram user whose identity a turn should act under.
@@ -2936,7 +3045,7 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 	// The managed-assistant platform toolset is granted only to the project's
 	// managed assistant; tools in it must not be reachable by any other
 	// assistant.
-	platformSlugs, err := s.assistantPlatformSlugs(ctx, assistant)
+	platformSlugs, err := s.assistantPlatformSlugs(ctx, assistant, thread.SourceKind)
 	if err != nil {
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "resolve managed assistant").LogError(ctx, s.logger, logAttrs...)
 	}
@@ -2999,7 +3108,7 @@ Two MCP auth events may appear in thread, each as <message-context> block with E
 
 - EventType "assistant_mcp_auth_required" carries AuthURL. Surface AuthURL to owner verbatim (don't shorten/summarize/rewrite). Reference MCP server by MCPSlug, not MCPServerID. Never expose AuthURL to non-owners or in any channel readable by non-owners. If no owner identity is recorded on this surface, deliver the URL privately to the requester but say explicitly that it should be completed by the assistant's owner, so an unexpected prompt isn't mistaken for a failure. If owner identity is recorded and the requester is not the owner, don't surface the URL to them — tell them (without URL) that only the owner can complete auth, naming the owner, and still deliver the AuthURL to the owner privately when this surface can reach them (per the output preferences below). If owner identity is recorded but no private route to the owner exists, stop without posting the URL. The per-surface output preferences below describe how to deliver the URL on this surface.
 
-- EventType "assistant_mcp_auth" reports result. Status "success" + still need server → call mcp_force_reconnect with server_id = MCPServerID, then continue task. Status "failed" → inform the user the auth attempt failed, include ErrorDescription if present.`
+- EventType "assistant_mcp_auth" reports result. Status "success" + still need server → call tool_search (it reconnects newly authorized servers and returns their tools), then continue task. Status "failed" → inform the user the auth attempt failed, include ErrorDescription if present.`
 
 func composeInstructions(base string, thread assistantThreadRecord, skills []assistantSkillSnapshot) (string, error) {
 	adapter, err := getSourceAdapter(thread.SourceKind)
@@ -3395,13 +3504,15 @@ func (s *ServiceCore) loadChatHistory(ctx context.Context, chatID uuid.UUID, pro
 		return nil, fmt.Errorf("list assistant chat messages: %w", err)
 	}
 
+	spilled := s.prefetchHistoryContentAssets(ctx, messages)
+
 	history := make([]runtimeMessage, 0, len(messages))
-	for _, message := range messages {
+	for i, message := range messages {
 		switch message.Role {
 		case "user":
 			history = append(history, runtimeMessage{
 				Role:       "user",
-				Content:    message.Content,
+				Content:    s.loadHistoryMessageContent(ctx, message, spilled[i]),
 				ToolCalls:  nil,
 				ToolCallID: "",
 			})
@@ -3412,7 +3523,7 @@ func (s *ServiceCore) loadChatHistory(ctx context.Context, chatID uuid.UUID, pro
 			}
 			history = append(history, runtimeMessage{
 				Role:       "assistant",
-				Content:    message.Content,
+				Content:    s.loadHistoryMessageContent(ctx, message, spilled[i]),
 				ToolCalls:  toolCalls,
 				ToolCallID: "",
 			})
@@ -3422,7 +3533,7 @@ func (s *ServiceCore) loadChatHistory(ctx context.Context, chatID uuid.UUID, pro
 			}
 			history = append(history, runtimeMessage{
 				Role:       "tool",
-				Content:    message.Content,
+				Content:    s.loadHistoryMessageContent(ctx, message, spilled[i]),
 				ToolCalls:  nil,
 				ToolCallID: message.ToolCallID.String,
 			})
@@ -3440,6 +3551,71 @@ func (s *ServiceCore) loadChatHistory(ctx context.Context, chatID uuid.UUID, pro
 		}
 	}
 	return history, nil
+}
+
+// historyAssetReadConcurrency bounds the parallel blob reads issued while
+// prefetching spilled history content on a cold bootstrap.
+const historyAssetReadConcurrency = 8
+
+// prefetchHistoryContentAssets concurrently reads the content assets for rows
+// whose structured content overflowed content_raw, keyed by row index, so a
+// long thread's cold bootstrap does not pay one serial blob round trip per
+// spilled row. Failed reads are logged and left absent; those rows degrade to
+// the text projection.
+func (s *ServiceCore) prefetchHistoryContentAssets(ctx context.Context, messages []chatrepo.ChatMessage) map[int][]byte {
+	if s.assetStorage == nil {
+		return nil
+	}
+	var mu sync.Mutex
+	spilled := make(map[int][]byte)
+	eg, egCtx := errgroup.WithContext(ctx)
+	eg.SetLimit(historyAssetReadConcurrency)
+	for i, message := range messages {
+		if len(message.ContentRaw) != 0 || !message.ContentAssetUrl.Valid || message.ContentAssetUrl.String == "" {
+			continue
+		}
+		eg.Go(func() error {
+			data, err := blobio.ReadAllString(egCtx, s.assetStorage, message.ContentAssetUrl.String, chat.MaxAssetReadSize)
+			if err != nil {
+				s.logger.WarnContext(egCtx, "read chat message content asset; using text projection",
+					attr.SlogError(err), attr.SlogChatID(message.ChatID.String()))
+				return nil
+			}
+			mu.Lock()
+			spilled[i] = []byte(data)
+			mu.Unlock()
+			return nil
+		})
+	}
+	// Workers never return errors; failures degrade to the text projection.
+	_ = eg.Wait()
+	return spilled
+}
+
+// loadHistoryMessageContent resolves the replayed content for one chat row,
+// preferring the structured JSON captured at store time (content_raw inline,
+// then the prefetched content asset) over the plain-text projection column.
+// The text column remains the fallback whenever structured content is absent,
+// unreadable, or not replayable (see replayableParts), so text-only history
+// replays exactly as before.
+func (s *ServiceCore) loadHistoryMessageContent(ctx context.Context, row chatrepo.ChatMessage, assetRaw []byte) runtimeContent {
+	raw := row.ContentRaw
+	if len(raw) == 0 {
+		raw = assetRaw
+	}
+	if len(raw) == 0 {
+		return runtimeTextContent(row.Content)
+	}
+	var content runtimeContent
+	if err := json.Unmarshal(raw, &content); err != nil {
+		s.logger.WarnContext(ctx, "decode structured chat message content; using text projection",
+			attr.SlogError(err), attr.SlogChatID(row.ChatID.String()))
+		return runtimeTextContent(row.Content)
+	}
+	if !content.replayableParts() {
+		return runtimeTextContent(row.Content)
+	}
+	return content
 }
 
 // decodePersistedToolCalls unmarshals the JSONB stored by the chat capture

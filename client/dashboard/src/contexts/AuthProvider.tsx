@@ -1,6 +1,6 @@
 import { FullPageError } from "@/components/full-page-error";
 import { GramLogo } from "@/components/gram-logo";
-import { PageHeader } from "@/components/page-header";
+import { HatchRule } from "@/components/hatch-rule";
 import { SidebarNavSkeleton } from "@/components/sidebar-nav-skeleton";
 import {
   Sidebar,
@@ -13,6 +13,7 @@ import {
 import { Skeleton } from "@/components/ui/Skeleton";
 import BookDemo from "@/pages/demo/BookDemo";
 import SwitchOrg from "@/pages/demo/SwitchOrg";
+import { getTrialLifecycleFromDates } from "@/lib/trial-status";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useIsPlatformAdminRef } from "@/contexts/Sdk";
@@ -30,6 +31,7 @@ import { useSlugs } from "./Sdk";
 import {
   useCaptureUserAuthorizationEvent,
   useIdentifyUserForTelemetry,
+  useRegisterOrganizationForTelemetry,
   useRegisterProjectForTelemetry,
 } from "./Telemetry";
 import {
@@ -49,12 +51,20 @@ const PREFERRED_PROJECT_KEY = "preferredProject";
 
 const SLUG_EXEMPT_PATHS = [
   "/switch-org",
+  "/explore-demo",
+  "/talk-to-us",
   "/shadow-mcp/request",
   "/risk-policy-bypass/request",
   "/risk-policy-challenge/acknowledge",
   "/blocks",
   "/shared",
 ];
+
+// Exact match, with or without the trailing slash. A prefix match would let
+// deeper paths (e.g. /explore-demo/projects/x) through the gate.
+function isPath(pathname: string, path: string): boolean {
+  return pathname === path || pathname === `${path}/`;
+}
 
 export const AuthProvider = ({
   children,
@@ -78,6 +88,10 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   const isLoading = status === "pending";
 
   useIdentifyUserForTelemetry(session?.user);
+  // Runs above every gate below, including the ones that return before
+  // ProjectProvider (and its own group registration) can mount, so
+  // organization-targeted feature flags resolve on the lockout pages too.
+  useRegisterOrganizationForTelemetry(session?.organization?.slug ?? "");
   usePylonInAppChat(session?.user);
   useFermatPixel(session?.user, session?.activeOrganizationId ?? "");
 
@@ -91,12 +105,14 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     // Don't show the authenticated app skeleton on routes that always redirect
     // (root "/" and unauthenticated pages like /login). This avoids a jarring
     // skeleton flash for logged-out users before the redirect to /login fires.
+    // A minimal centered pending state (not a blank viewport) covers the
+    // seconds the session check can take before login paints.
     if (
       location.pathname === "/" ||
       UNAUTHENTICATED_PATHS.some((p) => location.pathname.startsWith(p)) ||
       location.pathname.endsWith("/setup")
     ) {
-      return null;
+      return <AuthPendingScreen />;
     }
     return <AppLoadingShell />;
   }
@@ -111,11 +127,29 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
 
   // Show book demo page if organization is not whitelisted
   // Check this before the no-org fallback so non-whitelisted orgs are blocked before reaching the normal app flow
-  if (session.activeOrganizationId && !session.whitelisted) {
+  // /explore-demo stays reachable: it's the gate page's own escape hatch into
+  // the shared demo org (which is whitelisted).
+  if (
+    session.activeOrganizationId &&
+    !session.whitelisted &&
+    !isPath(location.pathname, "/explore-demo")
+  ) {
+    // The switcher wins even on the upgrade gate's own route. Someone with a
+    // second organization has somewhere to go, and that page offers no way to
+    // reach it — landing there would strand them.
     if (session.organizations.length > 1) {
       return <SwitchOrg gate />;
     }
-    return <BookDemo />;
+    // Past this point the upgrade gate has to render, or the redirect below
+    // sends the user to a route that bounces them straight back to it.
+    if (!isPath(location.pathname, "/talk-to-us")) {
+      // An org that never trialed (or is still mid-trial) falls through to the
+      // cold-signup gate.
+      if (getTrialLifecycleFromDates(session.trial, new Date()) === "expired") {
+        return <Navigate to="/talk-to-us" replace />;
+      }
+      return <BookDemo />;
+    }
   }
 
   if (!session.activeOrganizationId) {
@@ -279,6 +313,18 @@ export const ProjectProvider = ({
 };
 
 /**
+ * Minimal centered pending state shown while the session check resolves on
+ * routes that always redirect (root "/", /login, setup). Mirrors the
+ * thin-serif treatment CliCallback uses; the copy stays a neutral "Loading…"
+ * because on /login itself no redirect is coming.
+ */
+const AuthPendingScreen = () => (
+  <div className="flex h-screen items-center justify-center">
+    <h1 className="text-display-sm font-thin">Loading…</h1>
+  </div>
+);
+
+/**
  * Lightweight shell that mirrors the real AppLayout structure,
  * shown while the auth session is still loading so the user
  * sees the app chrome immediately instead of a blank screen.
@@ -293,16 +339,24 @@ const AppLoadingShell = () => (
   >
     <div className="flex h-screen w-full flex-col">
       <div className="flex w-full flex-1 overflow-hidden">
-        <Sidebar collapsible="icon" variant="inset">
-          <SidebarHeader className="gap-3 pb-3">
-            <div className="flex h-(--header-height) items-center px-1">
-              <GramLogo className="w-28" />
+        <Sidebar collapsible="icon">
+          {/* Logo row + crosshatch rule, exactly as AppSidebar renders it —
+              the switcher lives in the page header now, so no placeholder
+              for it here. */}
+          <SidebarHeader className="gap-0 p-0">
+            <div className="flex h-(--header-height) items-center px-2">
+              <div className="flex h-full items-center px-1">
+                <GramLogo className="w-28" />
+              </div>
             </div>
-            {/* Workspace switcher */}
-            <Skeleton className="h-8 w-full" />
+            <HatchRule />
           </SidebarHeader>
           <SidebarContent className="pt-2">
-            <SidebarNavSkeleton />
+            <SidebarNavSkeleton
+              rows={8}
+              divideAfter={3}
+              className="gap-0.5 px-2 group-data-[collapsible=icon]:px-0"
+            />
           </SidebarContent>
           <SidebarFooter className="border-t">
             <div className="flex items-center gap-2 py-2">
@@ -312,10 +366,14 @@ const AppLoadingShell = () => (
           </SidebarFooter>
         </Sidebar>
         <SidebarInset>
-          <PageHeader>
-            <PageHeader.Breadcrumbs />
+          {/* Mirrors PageHeader's own geometry (h-(--header-height), px-8,
+              hatch rule) without mounting it: the switcher inside needs the
+              auth context this shell is still waiting on. */}
+          <header className="flex h-(--header-height) shrink-0 items-center gap-3 px-8">
+            <Skeleton className="h-6 w-40" />
             <Loader2 className="text-muted-foreground h-4 w-4 animate-spin" />
-          </PageHeader>
+          </header>
+          <HatchRule />
         </SidebarInset>
       </div>
     </div>

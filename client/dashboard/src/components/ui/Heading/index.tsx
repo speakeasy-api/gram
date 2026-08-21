@@ -32,11 +32,17 @@ export function Heading({
 
   let base = null;
 
-  const baseClasses = cn("font-normal capitalize", className);
+  const baseClasses = cn("font-normal", className);
 
   switch (variant) {
     case "h1":
-      base = <h1 className={cn("text-3xl", baseClasses)}>{children}</h1>;
+      // Page titles get the thin display serif automatically (editorial
+      // idiom); text-display-sm carries family, size, and tracking.
+      base = (
+        <h1 className={cn("text-display-sm font-display font-thin", className)}>
+          {children}
+        </h1>
+      );
       break;
     case "h2":
       base = <h2 className={cn("text-2xl", baseClasses)}>{children}</h2>;

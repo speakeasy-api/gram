@@ -130,42 +130,13 @@ function searchNoun(label: string): string {
     .join(" ");
 }
 
-// A unique, deterministic colour identity for an entity, derived from its name
-// (FNV-1a → related hues), rendered as a faint blurred mesh wash behind the hero.
-function entityPalette(name: string): { mesh: string } {
-  let hash = 2166136261;
-  for (let i = 0; i < name.length; i++) {
-    hash ^= name.charCodeAt(i);
-    hash +=
-      (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
-  }
-  hash >>>= 0;
-  // Pick from an on-brand hue set only (sky, blue, indigo, violet, purple,
-  // fuchsia, rose, teal) — no lime/yellow-green or other off-brand hues. The
-  // companion hues stay within the same family via small offsets.
-  const ON_BRAND_HUES = [192, 210, 226, 244, 262, 284, 322, 340];
-  const h1 = ON_BRAND_HUES[hash % ON_BRAND_HUES.length]!;
-  const h2 = h1 + 16;
-  const h3 = h1 - 12;
-  return {
-    // Faint, low-saturation wash spread across the full width; masked + blurred
-    // in the markup so it fades downward.
-    mesh: [
-      `radial-gradient(52% 72% at 38% 10%, hsl(${h1} 70% 80% / 0.36) 0%, transparent 72%)`,
-      `radial-gradient(56% 76% at 62% 6%, hsl(${h2} 66% 78% / 0.34) 0%, transparent 72%)`,
-      `radial-gradient(56% 76% at 86% 16%, hsl(${h3} 68% 80% / 0.34) 0%, transparent 72%)`,
-      `radial-gradient(50% 70% at 100% 24%, hsl(${h1} 68% 82% / 0.30) 0%, transparent 72%)`,
-    ].join(", "),
-  };
-}
-
 // ── Small presentational pieces ─────────────────────────────────────────────
 
 // The page's bordered ghost buttons share one core look; the control-bar
-// actions (Export CSV, Reset) and the nav buttons (Home, Back) compose their
+// Reset, the table Export CSV, and the nav buttons (Home, Back) compose their
 // size/spacing on top of it.
 const GHOST_BUTTON_CLASS =
-  "text-muted-foreground hover:text-foreground border-border hover:bg-muted inline-flex items-center rounded-md border bg-transparent text-sm transition-colors";
+  "text-muted-foreground hover:text-foreground border-border hover:bg-muted inline-flex items-center border bg-transparent text-sm transition-colors";
 const BAR_BUTTON_CLASS = cn(
   GHOST_BUTTON_CLASS,
   "h-10 shrink-0 gap-1.5 px-3 font-medium disabled:pointer-events-none disabled:opacity-40",
@@ -187,8 +158,10 @@ function HeaderStat({
 }): JSX.Element {
   const inner = (
     <>
-      <span className="text-2xl font-semibold tabular-nums">{value}</span>
-      <span className="text-muted-foreground text-xs">{label}</span>
+      <span className="text-eyebrow">{label}</span>
+      <span className="font-display text-3xl font-thin tabular-nums">
+        {value}
+      </span>
     </>
   );
   if (onClick) {
@@ -196,13 +169,13 @@ function HeaderStat({
       <button
         type="button"
         onClick={onClick}
-        className="hover:bg-muted -mx-2 -my-1 flex flex-col rounded-md px-2 py-1 text-left transition-colors"
+        className="hover:bg-muted -mx-2 -my-1 flex flex-col gap-1 px-2 py-1 text-left transition-colors"
       >
         {inner}
       </button>
     );
   }
-  return <div className="flex flex-col">{inner}</div>;
+  return <div className="flex flex-col gap-1">{inner}</div>;
 }
 
 // Walk up from `el` to the nearest ancestor that actually scrolls vertically.
@@ -272,8 +245,8 @@ export type EntityProfileProps = {
   // mode). The override owns its own loading/empty/error states.
   tableOverride?: ReactNode;
   // CSV export for a `tableOverride`'s rows. Supplied alongside the override so
-  // the export control keeps working — and keeps its place in the header row —
-  // on the sessions breakdown instead of unmounting and reflowing the row.
+  // the export control above the table keeps working on the sessions breakdown
+  // instead of unmounting and leaving a gap.
   overrideCsv?: { rowCount: number; build: () => string };
   // Switch the breakdown to the per-session list — wired to the clickable
   // "Agent sessions" header stat. Omitted when already in sessions mode.
@@ -369,7 +342,6 @@ export function EntityProfile({
   const badgeVariant = entityBadgeVariant(
     entity?.dim ?? collection?.dim ?? null,
   );
-  const palette = entityPalette(title);
 
   // The control bar pins to the top of the scrollport once scrolled past. A
   // 1px sentinel above the sticky wrapper drives the pinned styling (full-
@@ -465,8 +437,8 @@ export function EntityProfile({
 
   // Whichever table is on screen owns the export: the dimension rows by default,
   // the override's rows (sessions) when it has supplied a builder. The control
-  // renders either way and only disables on an empty table, so switching the
-  // breakdown never reflows the header row.
+  // sits above the table itself (not in the page-scope toolbar) so it reads as
+  // exporting those rows, and only disables when the table is empty.
   const csvExport = overrideCsv
     ? {
         rowCount: overrideCsv.rowCount,
@@ -486,6 +458,18 @@ export function EntityProfile({
               : buildCostCsv(rows, groupLabel, groupBy),
           ),
       };
+
+  const exportCsvButton = (
+    <button
+      type="button"
+      onClick={csvExport.run}
+      disabled={csvExport.rowCount === 0}
+      className={BAR_BUTTON_CLASS}
+    >
+      <Download className="size-3.5 shrink-0" />
+      Export CSV
+    </button>
+  );
 
   // Placeholder names what the search box narrows: the sessions list when the
   // override table is on screen, otherwise the current axis's plural.
@@ -519,12 +503,12 @@ export function EntityProfile({
   // The dataset selector: a grey "Dataset" label box wrapping the select,
   // rendered in the top control bar's leading (page-scope) group.
   const datasetControl = (
-    <div className="border-border bg-muted flex h-10 items-stretch overflow-hidden rounded-md border text-sm">
+    <div className="border-border bg-muted flex h-10 items-stretch overflow-hidden border text-sm">
       <span className="text-muted-foreground flex items-center pr-2 pl-3 font-medium">
         Dataset
       </span>
       <Select value={datasetValue} onValueChange={onDatasetChange}>
-        <SelectTrigger className="border-border bg-background hover:bg-muted data-[state=open]:bg-muted !h-full w-auto cursor-pointer gap-1.5 rounded-none border-0 border-l py-1 pr-2.5 pl-3 font-medium shadow-none transition-colors">
+        <SelectTrigger className="border-border bg-background hover:bg-muted data-[state=open]:bg-muted !h-full w-auto cursor-pointer gap-1.5 border-0 border-l py-1 pr-2.5 pl-3 font-medium shadow-none transition-colors">
           <SelectValue />
         </SelectTrigger>
         <SelectContent align="end">
@@ -539,20 +523,9 @@ export function EntityProfile({
   );
 
   return (
-    <div className="relative flex w-full flex-col">
-      {/* Full-bleed hero wash: a soft, name-deterministic mesh fading downward
-          from the very top of the page, behind the control bar and the hero. */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 top-0 h-60 overflow-hidden [mask-image:linear-gradient(to_bottom,black_18%,transparent_92%)]"
-      >
-        <div
-          className="absolute inset-0 opacity-80 blur-2xl dark:opacity-45"
-          style={{ background: palette.mesh }}
-        />
-      </div>
+    <div className="flex w-full flex-col">
       {/* Top strip: the back controls, shown when drilled into an entity. */}
-      <div className="relative z-10 mx-auto w-full max-w-7xl px-8 pt-5">
+      <div className="mx-auto w-full max-w-7xl px-8 pt-5">
         {/* Cost Home (jump to root) + Back (one level up). Always mounted so
             they animate in/out across drills — conditional rendering would
             pop. The EntityProfile instance persists across drills, so the
@@ -593,8 +566,10 @@ export function EntityProfile({
           </button>
         </div>
       </div>
-      <div className="relative w-full">
-        <div className="relative mx-auto w-full max-w-7xl px-8 pt-8 pb-6">
+      {/* Flat hero: name + headline stats on the page surface, closed by a
+          hairline rule. */}
+      <div className="border-border w-full border-b">
+        <div className="mx-auto w-full max-w-7xl px-8 pt-8 pb-6">
           <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex min-w-0 items-start gap-4">
               <div className="min-w-0">
@@ -602,8 +577,9 @@ export function EntityProfile({
                     entity family (see entityBadgeVariant). `min-w-0` on the
                     heading keeps the truncation on the name, so the chip stays
                     legible however long the value is. */}
+                <Page.Eyebrow className="mb-2" />
                 <div className="flex items-center gap-3">
-                  <h1 className="min-w-0 truncate text-2xl font-semibold tracking-tight">
+                  <h1 className="text-display-sm min-w-0 truncate font-thin">
                     {title}
                     {emailSuffix && (
                       <span className="text-muted-foreground ml-2 text-xl font-normal">
@@ -639,18 +615,17 @@ export function EntityProfile({
       </div>
 
       {/* Page-scope controls sit under the headline numbers: dataset + range
-          shape every number on the page, and export/reset act on the current
-          view. Once scrolled past, the bar pins to the top of the scrollport
-          (the sentinel above drives the pinned styling: a full-width blur
-          band with a hairline). The breakdown axis track and row search live
-          with the chart/table below — not here — so they stay next to the
-          content they reshape. */}
+          shape every number on the page, and Reset acts on the current view.
+          Once scrolled past, the bar pins to the top of the scrollport (the
+          sentinel above drives the pinned styling: a full-width blur band
+          with a hairline). The breakdown axis track, row search, and CSV
+          export live with the chart/table below — not here — so they stay
+          next to the content they reshape and the rows they export. */}
       <div ref={pinSentinelRef} aria-hidden="true" className="h-px w-full" />
       <div
         className={cn(
-          "sticky top-0 z-20 w-full transition-shadow duration-200",
-          pinned &&
-            "border-border bg-background/85 border-b shadow-sm backdrop-blur-md",
+          "sticky top-0 z-20 w-full",
+          pinned && "border-border bg-background/85 border-b backdrop-blur-md",
         )}
       >
         <div className="mx-auto w-full max-w-7xl px-8 py-2">
@@ -660,25 +635,14 @@ export function EntityProfile({
               {rangePicker}
             </Page.Toolbar.Leading>
             <Page.Toolbar.Actions>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={csvExport.run}
-                  disabled={csvExport.rowCount === 0}
-                  className={BAR_BUTTON_CLASS}
-                >
-                  <Download className="size-3.5 shrink-0" />
-                  Export CSV
-                </button>
-                <button
-                  type="button"
-                  onClick={onReset}
-                  className={BAR_BUTTON_CLASS}
-                >
-                  <RotateCcw className="size-3.5 shrink-0" />
-                  Reset
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={onReset}
+                className={BAR_BUTTON_CLASS}
+              >
+                <RotateCcw className="size-3.5 shrink-0" />
+                Reset
+              </button>
             </Page.Toolbar.Actions>
           </Page.Toolbar>
         </div>
@@ -726,6 +690,9 @@ export function EntityProfile({
             searchPlaceholder={searchPlaceholder}
           />
           {chart}
+          {/* Export sits immediately above the table so it reads as exporting
+              these rows — not the whole page's spend. */}
+          <div className="flex items-center justify-end">{exportCsvButton}</div>
           {tableOverride ?? dimensionTable}
         </div>
       </div>

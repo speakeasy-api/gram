@@ -196,8 +196,6 @@ export function BusinessMemoryCorpus(): JSX.Element {
     normalizedSearch.length > 0 ? searchQuery.isLoading : listQuery.isLoading;
   const error =
     normalizedSearch.length > 0 ? searchQuery.error : listQuery.error;
-  const memoryCountSuffix =
-    normalizedSearch.length === 0 && listQuery.hasNextPage ? "+" : "";
 
   return (
     <div className="flex flex-col gap-4">
@@ -228,13 +226,6 @@ export function BusinessMemoryCorpus(): JSX.Element {
               placeholder="Semantic search memories…"
               debounceMs={400}
             />
-            {!loading && (
-              <Page.Toolbar.Count>
-                {memories.length}
-                {memoryCountSuffix}{" "}
-                {memories.length === 1 ? "memory" : "memories"}
-              </Page.Toolbar.Count>
-            )}
             <Page.Toolbar.Refresh
               onRefresh={() => {
                 if (normalizedSearch.length > 0) {
@@ -255,7 +246,7 @@ export function BusinessMemoryCorpus(): JSX.Element {
           {loading ? (
             <SkeletonTable />
           ) : error ? (
-            <div className="border-border rounded-md border p-6">
+            <div className="border-border border p-6">
               <Text className="text-destructive">
                 {error.message || "Failed to load business memories."}
               </Text>

@@ -57,6 +57,20 @@ type Service interface {
 	// unusual spelling may not be found and a duplicate is created instead, which
 	// is the safe direction to fail.
 	GetRemoteSessionIssuer(context.Context, *GetRemoteSessionIssuerPayload) (res *types.RemoteSessionIssuer, err error)
+	// Report the existing remote_session_issuers that already describe an upstream
+	// issuer URL, so a create or edit form can warn before it duplicates one.
+	// Covers this project's own issuers plus those inherited from the organization
+	// and the platform catalog.
+
+	// Advisory only. Duplicating an issuer URL is legitimate — a project may want
+	// its own record so it can attach different documentation, branding or scopes
+	// — so nothing here blocks a write, and no lock is taken. A create that races
+	// another create still produces two records, which is a supported state.
+
+	// Matching uses the same canonicalization as getRemoteSessionIssuer. A URL
+	// that cannot be parsed as an issuer identifier returns no matches rather than
+	// an error, because a partially typed URL is the normal state of a form field.
+	GetRemoteSessionIssuerDuplicatePreflight(context.Context, *GetRemoteSessionIssuerDuplicatePreflightPayload) (res *types.RemoteSessionIssuerDuplicatePreflight, err error)
 	// Soft-delete a remote_session_issuer. Blocked if any remote_session_clients
 	// still reference it.
 	DeleteRemoteSessionIssuer(context.Context, *DeleteRemoteSessionIssuerPayload) (err error)
@@ -82,7 +96,7 @@ const ServiceName = "remoteSessionIssuers"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"fetchRemoteSessionIssuerMetadata", "refreshRemoteSessionIssuerMetadata", "createRemoteSessionIssuer", "updateRemoteSessionIssuer", "listRemoteSessionIssuers", "getRemoteSessionIssuer", "deleteRemoteSessionIssuer"}
+var MethodNames = [8]string{"fetchRemoteSessionIssuerMetadata", "refreshRemoteSessionIssuerMetadata", "createRemoteSessionIssuer", "updateRemoteSessionIssuer", "listRemoteSessionIssuers", "getRemoteSessionIssuer", "getRemoteSessionIssuerDuplicatePreflight", "deleteRemoteSessionIssuer"}
 
 // CreateRemoteSessionIssuerPayload is the payload type of the
 // remoteSessionIssuers service createRemoteSessionIssuer method.
@@ -106,6 +120,9 @@ type CreateRemoteSessionIssuerPayload struct {
 	AuthorizationEndpoint *string
 	// Upstream token endpoint.
 	TokenEndpoint *string
+	// Upstream RFC 7009 revocation endpoint; absent for issuers that advertise
+	// none.
+	RevocationEndpoint *string
 	// Upstream RFC 7591 registration endpoint; absent for issuers without DCR.
 	RegistrationEndpoint *string
 	// Upstream JWKS URI.
@@ -128,6 +145,11 @@ type CreateRemoteSessionIssuerPayload struct {
 	ResponseTypesSupported []string
 	// Token endpoint auth methods advertised by the issuer.
 	TokenEndpointAuthMethodsSupported []string
+	// PKCE code challenge methods advertised by the issuer (RFC 8414
+	// code_challenge_methods_supported). Omitting the field stores null ("not
+	// captured"), distinct from an empty array ("the issuer advertises no
+	// methods").
+	CodeChallengeMethodsSupported []string
 	// When true, may unlock OIDC-aware behaviour. Default false.
 	Oidc *bool
 	// When true, the MCP client registers and transacts directly with this issuer.
@@ -154,6 +176,17 @@ type DeleteRemoteSessionIssuerPayload struct {
 type FetchRemoteSessionIssuerMetadataPayload struct {
 	// Issuer URL to fetch metadata for (e.g. https://login.linear.com).
 	Issuer           string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// GetRemoteSessionIssuerDuplicatePreflightPayload is the payload type of the
+// remoteSessionIssuers service getRemoteSessionIssuerDuplicatePreflight method.
+type GetRemoteSessionIssuerDuplicatePreflightPayload struct {
+	// The upstream issuer URL being entered (e.g. https://login.linear.app). Empty
+	// or unparseable returns no matches.
+	Issuer           *string
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
@@ -218,7 +251,8 @@ type UpdateRemoteSessionIssuerPayload struct {
 	Issuer *string
 	// Set or clear the display name. An empty string clears it to NULL.
 	Name *string
-	// Set the logo asset id.
+	// Set or clear the logo asset id. An empty string clears it to NULL; any other
+	// value must be a uuid.
 	LogoAssetID *string
 	// Set or clear the URL of OAuth client setup documentation shown when creating
 	// clients. An empty string clears it to NULL; any other value must be an
@@ -228,6 +262,8 @@ type UpdateRemoteSessionIssuerPayload struct {
 	AuthorizationEndpoint *string
 	// Upstream token endpoint.
 	TokenEndpoint *string
+	// Upstream RFC 7009 revocation endpoint.
+	RevocationEndpoint *string
 	// Upstream RFC 7591 registration endpoint.
 	RegistrationEndpoint *string
 	// Upstream JWKS URI.
@@ -245,8 +281,13 @@ type UpdateRemoteSessionIssuerPayload struct {
 	GrantTypesSupported               []string
 	ResponseTypesSupported            []string
 	TokenEndpointAuthMethodsSupported []string
-	Oidc                              *bool
-	Passthrough                       *bool
+	// PKCE code challenge methods advertised by the issuer (RFC 8414
+	// code_challenge_methods_supported). Omitting the field leaves the stored
+	// value unchanged; an empty array records that the issuer advertises no
+	// methods.
+	CodeChallengeMethodsSupported []string
+	Oidc                          *bool
+	Passthrough                   *bool
 	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
 	// (OAuth CIMD draft).
 	ClientIDMetadataDocumentSupported *bool

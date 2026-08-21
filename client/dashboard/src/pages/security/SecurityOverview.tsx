@@ -1,5 +1,11 @@
-import { MetricCard } from "@/components/chart/MetricCard";
+import {
+  StatTile,
+  StatTileGroup,
+  StatTileSkeleton,
+} from "@/components/chart/stat-tile";
 import { ChartCard } from "@/components/chart/ChartCard";
+import { AXIS, TOOLTIP } from "@/components/chart/palette";
+import { useSeriesColors } from "@/components/chart/useSeriesColors";
 import {
   formatChartLabel,
   formatChartZoomRangeLabel,
@@ -9,7 +15,7 @@ import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { DashboardCard } from "@/components/ui/DashboardCard";
+import { Card } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
@@ -68,15 +74,6 @@ const RISK_OVERVIEW_PRESETS: DateRangePreset[] = [
   "30d",
 ];
 
-const CHART_COLORS = {
-  gridLine: "rgba(128, 128, 128, 0.2)",
-  gridLineFaint: "rgba(128, 128, 128, 0.1)",
-  tooltipBg: "#171717",
-  tooltipTitle: "#fafafa",
-  tooltipBody: "#d4d4d4",
-  tooltipBorder: "#262626",
-} as const;
-
 type BarDatum = {
   key: string;
   label: string;
@@ -131,7 +128,7 @@ function NoPoliciesEmptyState() {
   const routes = useRoutes();
   return (
     <RiskOverviewShell>
-      <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
+      <div className="bg-muted/20 flex flex-col items-center justify-center border border-dashed px-8 py-16">
         <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
           <Shield className="text-muted-foreground size-6" />
         </div>
@@ -289,7 +286,7 @@ function SecurityOverviewContent() {
   if (overviewQuery.error) {
     return (
       <RiskOverviewShell rangeLabel={rangeLabel} controls={controls}>
-        <div className="bg-muted/20 flex flex-col items-center justify-center rounded-lg border border-dashed px-8 py-16 text-center">
+        <div className="bg-muted/20 flex flex-col items-center justify-center border border-dashed px-8 py-16 text-center">
           <div className="bg-muted/50 mb-4 flex size-12 items-center justify-center rounded-full">
             <Icon
               name="circle-alert"
@@ -354,7 +351,7 @@ function SecurityOverviewContent() {
       )}
       <RiskOverviewShell rangeLabel={rangeLabel} controls={controls}>
         {policiesDisabledWithHistory && (
-          <div className="bg-muted/30 flex items-start gap-3 rounded-lg border border-dashed px-4 py-3">
+          <div className="bg-muted/30 flex items-start gap-3 border border-dashed px-4 py-3">
             <Icon
               name="circle-alert"
               className="text-muted-foreground mt-0.5 size-4 shrink-0"
@@ -378,48 +375,54 @@ function SecurityOverviewContent() {
             </Button>
           </div>
         )}
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        <StatTileGroup>
           {isOverviewLoading ? (
-            <Skeleton className="h-[100px] rounded-lg" />
+            <StatTileSkeleton />
           ) : (
-            <MetricCard
+            <StatTile
               title="Events Scanned"
               value={overview?.messagesScanned ?? 0}
+              tone="information"
               format="compact"
               icon="scan-search"
             />
           )}
           {isOverviewLoading ? (
-            <Skeleton className="h-[100px] rounded-lg" />
+            <StatTileSkeleton />
           ) : (
-            <MetricCard
+            <StatTile
               title="Findings"
               value={overview?.findings ?? 0}
+              tone={(overview?.findings ?? 0) > 0 ? "destructive" : "neutral"}
               format="compact"
               icon="flag"
             />
           )}
           {isOverviewLoading ? (
-            <Skeleton className="h-[100px] rounded-lg" />
+            <StatTileSkeleton />
           ) : (
-            <MetricCard
+            <StatTile
               title="Flagged Sessions"
               value={overview?.flaggedSessions ?? 0}
+              tone={
+                (overview?.flaggedSessions ?? 0) > 0 ? "warning" : "neutral"
+              }
               format="compact"
               icon="message-square"
             />
           )}
           {isOverviewLoading ? (
-            <Skeleton className="h-[100px] rounded-lg" />
+            <StatTileSkeleton />
           ) : (
-            <MetricCard
+            <StatTile
               title="Active Policies"
               value={overview?.activePolicies ?? 0}
+              tone="success"
               format="compact"
               icon="shield-check"
             />
           )}
-        </div>
+        </StatTileGroup>
       </RiskOverviewShell>
 
       <RiskActivitySection>
@@ -460,7 +463,7 @@ function SecurityOverviewContent() {
         </div>
 
         {isOverviewLoading || !overview ? (
-          <Skeleton className="h-[250px] w-full rounded-lg" />
+          <Skeleton className="h-[250px] w-full" />
         ) : (
           <ChartCard
             title="Risk Events over Time"
@@ -510,7 +513,8 @@ function RiskActivitySection({ children }: { children: ReactNode }) {
 
   return (
     <Page.Section>
-      <Page.Section.Title>Policy Activity</Page.Section.Title>
+      {/* Secondary section on the overview page: suppress the area eyebrow. */}
+      <Page.Section.Title area="">Policy Activity</Page.Section.Title>
       <Page.Section.Description>
         Review where policy findings are concentrated and how risk activity
         changes over time.
@@ -546,9 +550,9 @@ function DashboardChartCard({
   action?: ReactNode;
 }) {
   return (
-    <DashboardCard title={title} action={action}>
+    <Card.Dashboard title={title} action={action}>
       {loading ? <SkeletonList /> : empty ? <ChartEmptyState /> : children}
-    </DashboardCard>
+    </Card.Dashboard>
   );
 }
 
@@ -594,9 +598,10 @@ function RankedBarList({ items }: { items: BarDatum[] }) {
                 {item.value.toLocaleString()}
               </span>
             </div>
-            <div className="bg-muted h-1 w-full rounded-full">
+            <div className="bg-muted h-1 w-full">
+              {/* Risk surface: bars carry the single red accent. */}
               <div
-                className="h-1 rounded-full bg-blue-700 dark:bg-blue-500"
+                className="bg-destructive h-1"
                 style={{ width: `${(item.value / max) * 100}%` }}
               />
             </div>
@@ -610,7 +615,7 @@ function RankedBarList({ items }: { items: BarDatum[] }) {
             {item.href ? (
               <Link
                 to={item.href}
-                className="hover:bg-muted/40 -mx-2 flex min-w-0 flex-1 items-center rounded px-2 py-1 transition-colors"
+                className="hover:bg-muted/40 -mx-2 flex min-w-0 flex-1 items-center px-2 py-1 transition-colors"
               >
                 {body}
               </Link>
@@ -637,9 +642,10 @@ function RiskTrendChart({
   height: number;
   onRangeSelect?: (from: Date, to: Date) => void;
 }) {
+  const seriesColors = useSeriesColors();
   const chartData = useMemo(
-    () => buildRiskTrendChartData(points, from, to),
-    [points, from, to],
+    () => buildRiskTrendChartData(points, from, to, seriesColors),
+    [points, from, to, seriesColors],
   );
   const timeRangeMs = to.getTime() - from.getTime();
   const { chartRef, zoomPluginOptions, resetZoom } = useChartZoom({
@@ -661,13 +667,15 @@ function RiskTrendChart({
     plugins: {
       legend: { display: false },
       tooltip: {
-        backgroundColor: CHART_COLORS.tooltipBg,
-        titleColor: CHART_COLORS.tooltipTitle,
-        bodyColor: CHART_COLORS.tooltipBody,
-        borderColor: CHART_COLORS.tooltipBorder,
-        borderWidth: 1,
+        ...TOOLTIP,
         padding: 12,
         boxPadding: 4,
+        // Index-mode hover activates every series at that x. Drop zeros so a
+        // sparse multi-series chart doesn't list every inactive category
+        // (which balloons the tooltip until it covers the chart). Returning
+        // `undefined` from `label` is not enough — Chart.js treats that as
+        // "use the default callback" and still renders the line.
+        filter: (item) => (item.parsed.y ?? 0) !== 0,
         callbacks: {
           title: (items) => {
             const x = items[0]?.parsed.x;
@@ -680,12 +688,10 @@ function RiskTrendChart({
               minute: "2-digit",
             });
           },
-          label: (item) => {
-            if ((item.parsed.y ?? 0) === 0) return undefined;
-            return item.formattedValue
+          label: (item) =>
+            item.formattedValue
               ? `${item.dataset.label}: ${item.formattedValue}`
-              : "";
-          },
+              : "",
         },
       },
       zoom: zoomPluginOptions,
@@ -695,7 +701,7 @@ function RiskTrendChart({
         type: "linear",
         grid: {
           display: true,
-          color: CHART_COLORS.gridLineFaint,
+          color: AXIS.grid,
           lineWidth: 1,
         },
         ticks: {
@@ -706,7 +712,7 @@ function RiskTrendChart({
       },
       y: {
         beginAtZero: true,
-        grid: { color: CHART_COLORS.gridLine },
+        grid: { color: AXIS.grid },
         ticks: { precision: 0 },
       },
     },

@@ -12,7 +12,7 @@ export type ListAIIntegrationSchedulesSecurity = {
 
 export type ListAIIntegrationSchedulesRequest = {
   /**
-   * AI provider identifier. Supported values include cursor, anthropic_compliance, and codex_compliance.
+   * AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, and chatgpt_compliance.
    */
   provider: string;
   /**

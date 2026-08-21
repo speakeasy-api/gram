@@ -12,7 +12,9 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	pgvector_go "github.com/pgvector/pgvector-go"
@@ -192,7 +194,15 @@ func (j *Judge) Judge(ctx context.Context, in analysis.JudgeInput) (analysis.Jud
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		return analysis.JudgeResult{}, fmt.Errorf("persist business memories: %w: %w", analysis.ErrRetryable, err)
+		sentinel := analysis.ErrRetryable
+		// A data exception means the model produced content the schema can
+		// never accept: a retry re-buys the same inference and the same
+		// rejection, so charge the model's attempt budget instead of looping
+		// forever as an infrastructure failure.
+		if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok && pgerrcode.IsDataException(pgErr.Code) {
+			sentinel = analysis.ErrModelFailure
+		}
+		return analysis.JudgeResult{}, fmt.Errorf("persist business memories: %w: %w", sentinel, err)
 	}
 
 	summary := extractionSummary{
@@ -232,6 +242,13 @@ func normalizeExtraction(raw string, transcriptTurns map[int]struct{}) ([]extrac
 
 	normalized := make([]extractionCandidate, 0, len(verdict.Memories))
 	for _, candidate := range verdict.Memories {
+		// A NUL codepoint here is almost always the model echoing a \u0000
+		// escape it saw in the marshaled transcript without re-escaping it
+		// for its own JSON output. No Postgres string type can store the
+		// codepoint, and at temperature zero a retry reproduces it — so
+		// restore the literal text the model meant instead of failing the
+		// extraction.
+		candidate.Body = strings.ReplaceAll(candidate.Body, "\x00", `\u0000`)
 		candidate.Body = strings.TrimSpace(candidate.Body)
 		if candidate.Body == "" || len(candidate.Body) > maxMemoryBodyBytes || !utf8.ValidString(candidate.Body) {
 			return nil, fmt.Errorf("invalid memory body")

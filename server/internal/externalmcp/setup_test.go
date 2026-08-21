@@ -3,6 +3,7 @@ package externalmcp_test
 import (
 	"context"
 	"log"
+	"net/url"
 	"os"
 	"testing"
 
@@ -23,6 +24,10 @@ import (
 var (
 	infra *testenv.Environment
 )
+
+// Base URL the test service renders into setup guides, and the callback it yields.
+const testServerURL = "https://app.getgram.ai"
+const testCallbackURL = testServerURL + "/mcp/remote_login_callback"
 
 func TestMain(m *testing.M) {
 	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true})
@@ -69,11 +74,13 @@ func newTestExternalMCPService(t *testing.T) (context.Context, *testInstance) {
 
 	mcpRegistryClient := externalmcptest.NewRegistryClient(t, logger, tracerProvider)
 
-	chConn, err := infra.NewClickhouseClient(t)
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+
+	serverURL, err := url.Parse(testServerURL)
 	require.NoError(t, err)
 
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := externalmcp.NewService(logger, tracerProvider, conn, sessionManager, mcpRegistryClient, authzEngine)
+	catalog := externalmcp.NewCatalogService(conn, mcpRegistryClient, nil)
+	svc := externalmcp.NewService(logger, tracerProvider, conn, sessionManager, mcpRegistryClient, catalog, authzEngine, serverURL)
 
 	return ctx, &testInstance{
 		service:        svc,

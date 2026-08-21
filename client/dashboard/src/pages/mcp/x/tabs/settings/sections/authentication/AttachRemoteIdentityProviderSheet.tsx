@@ -1,3 +1,5 @@
+import { AssetImageUploadField } from "@/components/asset-image-upload-field";
+import { Combobox } from "@/components/ui/Combobox";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import {
@@ -52,8 +54,14 @@ import {
   pickPreferredAuthMethod,
 } from "./issuerFormUtils";
 import { IdentityProviderAttachmentErrorAlert } from "./IdentityProviderAttachmentErrorAlert";
+import { selectExistingClient } from "./selectExistingClient";
 import { useAllRemoteSessionClients } from "./useAllRemoteSessionClients";
 import { useIssuerDiscovery } from "./useIssuerDiscovery";
+import { IssuerDuplicateWarning } from "./IssuerDuplicateWarning";
+import {
+  useIssuerDuplicatePreflight,
+  type RemoteSessionIssuerDuplicateMatch,
+} from "./useIssuerDuplicatePreflight";
 
 type Mode = "select" | "new";
 
@@ -102,6 +110,25 @@ export function AttachRemoteIdentityProviderSheet({
   // fall back to the issuer URL.
   const [name, setName] = useState("");
   const [nameDirty, setNameDirty] = useState(false);
+
+  // Optional logo, uploaded ahead of submit; empty submits as undefined so the
+  // backend stores NULL. Submit is held while an upload is in flight so a
+  // mid-upload submit cannot silently drop the picked logo.
+  const [logoAssetId, setLogoAssetId] = useState("");
+  const [logoUploading, setLogoUploading] = useState(false);
+
+  // The Issuer URL as it stood when the operator last left the field. Held
+  // separately from the live input so the duplicate preflight runs on a settled
+  // value rather than once per keystroke.
+  const [settledIssuerUrl, setSettledIssuerUrl] = useState("");
+  // Project scope: this project's own issuers plus the ones it inherits from
+  // the organization and the platform catalog. Only the "new" arm can create a
+  // duplicate — "select" mode is already reuse — so the lookup is off there.
+  const { matches: duplicateMatches } = useIssuerDuplicatePreflight({
+    issuerUrl: settledIssuerUrl,
+    scope: "project",
+    enabled: open && mode === "new",
+  });
 
   const [slug, setSlug] = useState("");
   // When the operator hasn't manually edited Slug, we keep it in lockstep
@@ -210,9 +237,12 @@ export function AttachRemoteIdentityProviderSheet({
   // directly (a brand-new issuer never has clients).
   const clientToggleVisible = attachableClients.length > 0;
   const effectiveClientMode: Mode = clientToggleVisible ? clientMode : "new";
-  const selectedClient = attachableClients.find(
-    (candidate) => candidate.id === selectedClientId,
+  const selectedClient = selectExistingClient(
+    attachableClients,
+    selectedClientId,
+    !isLoadingIssuerClients,
   );
+  const effectiveSelectedClientId = selectedClient?.id ?? "";
 
   // The Session Client section stays hidden until an identity provider is
   // determined — an existing one is picked, or a new one's Issuer URL has been
@@ -226,7 +256,7 @@ export function AttachRemoteIdentityProviderSheet({
     }> => {
       // Step 1: ensure a user_session_issuer exists. First-add auto-creates
       // one with the conservative interactive challenge mode and a 2-week
-      // session lifetime — these match the wire-user-session-issuer defaults.
+      // session lifetime.
       let issuerId = userSessionIssuer?.id;
       if (!issuerId) {
         const created = await client.userSessionIssuers.create({
@@ -255,6 +285,7 @@ export function AttachRemoteIdentityProviderSheet({
             slug: slug.trim(),
             issuer: issuerUrl.trim(),
             name: name.trim() || undefined,
+            logoAssetId: logoAssetId || undefined,
             authorizationEndpoint: authorizationEndpoint.trim() || undefined,
             tokenEndpoint: tokenEndpoint.trim() || undefined,
             registrationEndpoint: registrationEndpoint.trim() || undefined,
@@ -269,6 +300,12 @@ export function AttachRemoteIdentityProviderSheet({
               discoveredSnapshot?.responseTypesSupported ?? [],
             tokenEndpointAuthMethodsSupported:
               discoveredSnapshot?.tokenEndpointAuthMethodsSupported ?? [],
+            // Nullable server-side, so no `?? []` fallback: hand-typed setups
+            // omit the field to store NULL ("not captured") rather than claim
+            // the issuer advertises no PKCE methods. A discovery snapshot is
+            // never null and records what the document said.
+            codeChallengeMethodsSupported:
+              discoveredSnapshot?.codeChallengeMethodsSupported ?? undefined,
             // CIMD support parsed during discovery; persisted so the issuer can
             // offer the CIMD client type. False when discovery did not run.
             clientIdMetadataDocumentSupported:
@@ -276,6 +313,8 @@ export function AttachRemoteIdentityProviderSheet({
             // RFC 8414 documentation URLs are discovery-only — there are no form
             // inputs for them. Undefined when discovery did not run or the issuer
             // advertised nothing usable.
+            revocationEndpoint:
+              discoveredSnapshot?.revocationEndpoint || undefined,
             serviceDocumentation:
               discoveredSnapshot?.serviceDocumentation || undefined,
             opPolicyUri: discoveredSnapshot?.opPolicyUri || undefined,
@@ -303,7 +342,7 @@ export function AttachRemoteIdentityProviderSheet({
         // Attach the picked existing client to this user_session_issuer.
         await client.remoteSessionClients.attachUserSessionIssuer({
           attachUserSessionIssuerForm: {
-            id: selectedClientId,
+            id: effectiveSelectedClientId,
             userSessionIssuerId: issuerId,
           },
         });
@@ -434,9 +473,16 @@ export function AttachRemoteIdentityProviderSheet({
     setSlugDirty(false);
     setName(deriveRemoteSessionIssuerNameFromUrl(initialIssuerUrl ?? "") ?? "");
     setNameDirty(false);
+    setLogoAssetId("");
     setIssuerUrl(initialIssuerUrl ?? "");
     resetEndpointState();
     clearDiscoverError();
+    // Seeded, not cleared: "Start With Discovered Configuration" opens this
+    // sheet in "new" mode with the URL already filled in and runs discovery
+    // automatically. That is the path most likely to duplicate a platform or
+    // organization record, so it has to preflight without waiting for a blur on
+    // a field the operator has no reason to touch.
+    setSettledIssuerUrl(initialIssuerUrl ?? "");
     setClientId("");
     setClientSecret("");
     setTokenEndpointAuthMethod("");
@@ -497,6 +543,30 @@ export function AttachRemoteIdentityProviderSheet({
     setSelectedClientId("");
   }, [selectedIssuerId, mode]);
 
+  // One-click reuse switches this sheet from creating an issuer to selecting
+  // the one that already describes the URL. It is offered only when the match
+  // is in selectableIssuers, which is narrower than "the preflight found it"
+  // in two ways worth being explicit about: that list excludes issuers already
+  // attached to this target, and it is itself bounded. Offering the action for
+  // a match outside it would flip the sheet into select mode with an id the
+  // dropdown cannot resolve, leaving the client section incoherent. When the
+  // match is already attached here, the warning text alone is the right
+  // outcome — there is nothing left to reuse.
+  const selectableIssuerIds = useMemo(
+    () => new Set(selectableIssuers.map((issuer) => issuer.id)),
+    [selectableIssuers],
+  );
+  const primaryDuplicate = duplicateMatches[0];
+  const canReuseDuplicate =
+    primaryDuplicate !== undefined &&
+    selectableIssuerIds.has(primaryDuplicate.id);
+  const handleUseExistingIssuer = (
+    match: RemoteSessionIssuerDuplicateMatch,
+  ) => {
+    setSelectedIssuerId(match.id);
+    setMode("select");
+  };
+
   const submittable = useMemo(() => {
     // Issuer must be resolvable: an existing pick, or a complete new-issuer
     // form.
@@ -506,7 +576,7 @@ export function AttachRemoteIdentityProviderSheet({
       return false;
     }
     // Session client: attach an existing one, or complete the new-client form.
-    if (effectiveClientMode === "select") return !!selectedClientId;
+    if (effectiveClientMode === "select") return !!effectiveSelectedClientId;
     // Manual requires a client_id; DCR mints one; CIMD needs none.
     if (clientType === "manual" && !clientId.trim()) return false;
     return true;
@@ -516,13 +586,13 @@ export function AttachRemoteIdentityProviderSheet({
     slug,
     issuerUrl,
     effectiveClientMode,
-    selectedClientId,
+    effectiveSelectedClientId,
     clientType,
     clientId,
   ]);
 
   const handleSubmit = () => {
-    if (!submittable || submitting) return;
+    if (!submittable || submitting || logoUploading) return;
     attachMutation.mutate();
   };
 
@@ -544,7 +614,7 @@ export function AttachRemoteIdentityProviderSheet({
         {clientToggle}
         <SelectExistingClientFields
           clients={attachableClients}
-          selectedClientId={selectedClientId}
+          selectedClientId={effectiveSelectedClientId}
           onChange={setSelectedClientId}
           selectedClient={selectedClient}
         />
@@ -605,8 +675,22 @@ export function AttachRemoteIdentityProviderSheet({
               <Stack gap={4}>
                 <IssuerUrlField
                   issuerUrl={issuerUrl}
+                  onIssuerUrlSettled={setSettledIssuerUrl}
+                  duplicateWarning={
+                    <IssuerDuplicateWarning
+                      viewerScope="project"
+                      matches={duplicateMatches}
+                      onUseExisting={
+                        canReuseDuplicate ? handleUseExistingIssuer : undefined
+                      }
+                    />
+                  }
                   onIssuerUrlChange={(value) => {
                     setIssuerUrl(value);
+                    // Any edit invalidates the last blur, so the warning cannot
+                    // outlive the URL it describes and "Use existing" cannot
+                    // adopt a record for a URL no longer in the field.
+                    setSettledIssuerUrl("");
                     // A stale error from a previous URL would be misleading once
                     // the operator starts typing a new target; clear it so the
                     // next Discover click starts fresh.
@@ -679,6 +763,14 @@ export function AttachRemoteIdentityProviderSheet({
                   </Text>
                 </Stack>
 
+                <AssetImageUploadField
+                  tier="project"
+                  value={logoAssetId}
+                  onChange={setLogoAssetId}
+                  onUploadingChange={setLogoUploading}
+                  description="Shown beside this provider in the dashboard and on the connect consent page."
+                />
+
                 <EndpointsFields
                   issuerUrl={issuerUrl}
                   authorizationEndpoint={authorizationEndpoint}
@@ -726,7 +818,7 @@ export function AttachRemoteIdentityProviderSheet({
           </Button>
           <Button
             variant="primary"
-            disabled={!submittable || submitting}
+            disabled={!submittable || submitting || logoUploading}
             onClick={handleSubmit}
           >
             <Button.Text>
@@ -792,21 +884,35 @@ function SelectExistingFields({
   selectedIssuerId: string;
   onChange: (id: string) => void;
 }) {
+  const issuerOptions = useMemo(
+    () =>
+      selectableIssuers
+        .map((issuer) => ({
+          value: issuer.id,
+          label: `${issuer.name?.trim() || issuer.slug} — ${issuer.issuer}`,
+          keywords: [issuer.name ?? "", issuer.slug, issuer.issuer],
+        }))
+        .toSorted((a, b) => a.label.localeCompare(b.label)),
+    [selectableIssuers],
+  );
+  const selectedIssuer = issuerOptions.find(
+    (issuer) => issuer.value === selectedIssuerId,
+  );
+
   return (
     <Stack gap={2}>
       <Label className="text-muted-foreground text-xs">Identity Provider</Label>
-      <Select value={selectedIssuerId} onValueChange={onChange}>
-        <SelectTrigger>
-          <SelectValue placeholder="Choose an identity provider…" />
-        </SelectTrigger>
-        <SelectContent>
-          {selectableIssuers.map((issuer) => (
-            <SelectItem key={issuer.id} value={issuer.id}>
-              {issuer.name?.trim() || issuer.slug} — {issuer.issuer}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <Combobox
+        items={issuerOptions}
+        selected={selectedIssuer}
+        onSelectionChange={(issuer) => onChange(issuer.value)}
+        searchable
+        searchPlaceholder="Search identity providers…"
+        className="w-full justify-between"
+        contentClassName="w-[min(500px,calc(100vw-2rem))]"
+      >
+        {selectedIssuer?.label ?? "Choose an identity provider…"}
+      </Combobox>
       <Text muted small>
         Pick an organization-level or project identity provider already
         configured on this project.

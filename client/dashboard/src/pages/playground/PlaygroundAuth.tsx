@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/Button";
 import { Label } from "@/components/ui/Label";
-import { PrivateInput } from "@/components/ui/PrivateInput";
+import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { Toolset } from "@/lib/toolTypes";
@@ -53,7 +53,7 @@ function IssuerLoginConnection({
   }, [needsAuth, refetch]);
 
   return (
-    <div className="bg-muted/30 rounded-md border p-3">
+    <div className="bg-muted/30 border p-3">
       <Stack gap={2}>
         <Stack
           direction="horizontal"
@@ -271,7 +271,10 @@ export function PlaygroundAuth({
             >
               {displayName}
             </Label>
-            <PrivateInput
+            <Input
+              type="password"
+              reveal
+              autoComplete="off"
               id={`auth-${envVar.id}`}
               value={displayValue}
               onChange={(newValue) => {

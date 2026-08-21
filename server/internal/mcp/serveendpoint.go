@@ -17,6 +17,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -55,38 +57,50 @@ func (s *Service) ServeMCPEndpoint(w http.ResponseWriter, r *http.Request, slug,
 // the allowlist for that hostname. The lockdown engages as soon as an allowlist
 // is configured, regardless of whether the domain is verified/activated yet.
 //
-// This guard is wired ONLY into the runtime MCP dispatch (ServePublic,
-// ServeMCPEndpoint). The install page (ServeInstallPage / HandleGetServer's
-// inline browser path) and OAuth metadata routes are intentionally left
-// ungated: private-MCP install pages must keep working on the platform host
-// (app.getgram.ai), where the dashboard session cookie lives, even when the
-// org's custom domain has an allowlist. Do not call this from those handlers.
+// This guard is wired into runtime MCP dispatch (ServePublic,
+// ServeMCPEndpoint) and the consent-scoped MCP transport, which can enumerate
+// live inventories. The install page (ServeInstallPage / HandleGetServer's
+// inline browser path), consent HTML, and OAuth metadata routes are
+// intentionally left ungated: private-MCP install and consent pages must keep
+// working on the platform host (app.getgram.ai), where the dashboard session
+// cookie lives, even when the org's custom domain has an allowlist.
 func (s *Service) enforceCustomDomainLockdown(ctx context.Context, logger *slog.Logger, projectID uuid.UUID) error {
+	lockedDown, err := s.customDomainLockdownApplies(ctx, logger, projectID)
+	if err != nil {
+		return err
+	}
+	if lockedDown {
+		return oops.E(oops.CodeForbidden, nil, "this MCP server is only accessible via its custom domain")
+	}
+	return nil
+}
+
+// customDomainLockdownApplies reports whether a platform-origin request must
+// be kept away from runtime-like MCP surfaces. Requests already carrying a
+// custom-domain context passed through the ingress allowlist and are never
+// locked down here.
+func (s *Service) customDomainLockdownApplies(ctx context.Context, logger *slog.Logger, projectID uuid.UUID) (bool, error) {
 	if customdomains.FromContext(ctx) != nil {
-		return nil
+		return false, nil
 	}
 
 	project, err := projectsrepo.New(s.db).GetProjectByID(ctx, projectID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return oops.E(oops.CodeNotFound, err, "project not found")
+		return false, oops.E(oops.CodeNotFound, err, "project not found")
 	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "load project for custom domain lockdown").LogError(ctx, logger)
+		return false, oops.E(oops.CodeUnexpected, err, "load project for custom domain lockdown").LogError(ctx, logger)
 	}
 
 	domain, err := customdomainsrepo.New(s.db).GetCustomDomainByOrganization(ctx, project.OrganizationID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil
+		return false, nil
 	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "load custom domain for lockdown").LogError(ctx, logger)
+		return false, oops.E(oops.CodeUnexpected, err, "load custom domain for lockdown").LogError(ctx, logger)
 	}
 
-	if len(domain.IpAllowlist) > 0 {
-		return oops.E(oops.CodeForbidden, nil, "this MCP server is only accessible via its custom domain")
-	}
-
-	return nil
+	return len(domain.IpAllowlist) > 0, nil
 }
 
 // serveResolvedMCPEndpoint dispatches an already-resolved (mcp_endpoint,
@@ -128,19 +142,21 @@ func (s *Service) serveResolvedMCPEndpoint(
 	// remote-backed proxying forwards the upstream remote-session token
 	// via AuthorizationOverride.
 	var upstreamTokens map[uuid.UUID]string
+	var sessionToolSelection *toolfilter.SessionSelection
 	var wwwAuthenticate string
 	if issuerGated {
 		resolvedEndpoint, err := s.BuildResolvedMcpEndpointForServer(ctx, logger, mcpEndpoint, mcpServer, mcpRouteBase)
 		if err != nil {
 			return err
 		}
-		newCtx, tokens, err := s.ApplyIssuerGate(ctx, w, httpheaders.AuthorizationBearerToken(r), s.BaseURLForRequest(r), resolvedEndpoint)
+		newCtx, tokens, toolSelection, err := s.ApplyIssuerGate(ctx, w, httpheaders.AuthorizationBearerToken(r), s.BaseURLForRequest(r), resolvedEndpoint)
 		if err != nil {
 			return fmt.Errorf("apply issuer gate: %w", err)
 		}
 		ctx = newCtx
 		r = r.WithContext(ctx)
 		upstreamTokens = tokens
+		sessionToolSelection = toolSelection
 
 		// Issuer-gated clients authenticate with this server's AS, so an
 		// upstream 401/403 relayed by the proxy must challenge them with
@@ -154,18 +170,15 @@ func (s *Service) serveResolvedMCPEndpoint(
 	}
 
 	switch {
-	case mcpServer.RemoteMcpServerID.Valid:
+	case mcpServer.RemoteMcpServerID.Valid, mcpServer.TunneledMcpServerID.Valid:
 		upstreamToken, err := singleUpstreamToken(upstreamTokens)
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "resolve upstream token for remote MCP backend").LogError(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "resolve upstream token for proxied MCP backend").LogError(ctx, logger)
 		}
-		return s.serveRemoteBackend(w, r, logger, mcpEndpoint, mcpServer, upstreamToken, wwwAuthenticate)
-	case mcpServer.TunneledMcpServerID.Valid:
-		upstreamToken, err := singleUpstreamToken(upstreamTokens)
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "resolve upstream token for tunneled MCP backend").LogError(ctx, logger)
+		if mcpServer.RemoteMcpServerID.Valid {
+			return s.serveRemoteBackend(w, r, logger, mcpEndpoint, mcpServer, upstreamToken, wwwAuthenticate, sessionToolSelection)
 		}
-		return s.serveTunneledBackend(w, r, logger, mcpEndpoint, mcpServer, upstreamToken, wwwAuthenticate)
+		return s.serveTunneledBackend(w, r, logger, mcpEndpoint, mcpServer, upstreamToken, wwwAuthenticate, sessionToolSelection)
 	case mcpServer.ToolsetID.Valid:
 		// AGE-1902: toolset-backed branch still reads runtime config from the
 		// toolsets row (visibility, OAuth, default environment). Once
@@ -193,7 +206,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 			mcpServerVariationsGroupID = &id
 		}
 
-		if err := s.ServeToolsetResolved(w, r, &toolset, slug, mcpRouteBase, issuerGated, upstreamTokens, mcpServerVariationsGroupID, &mcpServer.ID); err != nil {
+		if err := s.ServeToolsetResolved(w, r, &toolset, slug, mcpRouteBase, issuerGated, upstreamTokens, sessionToolSelection, mcpServerVariationsGroupID, &mcpServer.ID); err != nil {
 			return fmt.Errorf("serve toolset-backed mcp: %w", err)
 		}
 		return nil
@@ -356,6 +369,9 @@ func (s *Service) resolveUpstreamResource(
 // remote server. It's only populated when the caller ran the issuer
 // gate; otherwise it's empty and the proxy does not forward an
 // Authorization header upstream.
+//
+// selection is the session's consent-screen tool selection; non-nil attaches
+// the proxy's exact-name enforcement interceptors.
 func (s *Service) serveRemoteBackend(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -364,6 +380,7 @@ func (s *Service) serveRemoteBackend(
 	mcpServer *mcpserversrepo.McpServer,
 	upstreamAuth string,
 	wwwAuthenticate string,
+	selection *toolfilter.SessionSelection,
 ) error {
 	ctx := r.Context()
 	logger = logger.With(attr.SlogRemoteMCPServerID(mcpServer.RemoteMcpServerID.UUID.String()))
@@ -394,7 +411,7 @@ func (s *Service) serveRemoteBackend(
 		return oops.E(oops.CodeUnexpected, nil, "remote MCP proxy manager is unavailable").LogError(ctx, logger)
 	}
 
-	p := s.remoteProxyManager.Build(logger, &server, mcpServer.ID.String(), headers, mcpServer.Visibility, endpoint.ProjectID.String(), upstreamAuth, wwwAuthenticate)
+	p := s.remoteProxyManager.Build(logger, &server, mcpServer.ID.String(), headers, mcpServer.Visibility, endpoint.ProjectID.String(), upstreamAuth, wwwAuthenticate, selection)
 
 	return serveProxyBackend(w, r.WithContext(ctx), p)
 }
@@ -430,6 +447,7 @@ func (s *Service) serveTunneledBackend(
 	mcpServer *mcpserversrepo.McpServer,
 	upstreamAuth string,
 	wwwAuthenticate string,
+	selection *toolfilter.SessionSelection,
 ) error {
 	ctx := r.Context()
 	logger = logger.With(attr.SlogTunneledMCPServerID(mcpServer.TunneledMcpServerID.UUID.String()))
@@ -444,7 +462,7 @@ func (s *Service) serveTunneledBackend(
 		return err
 	}
 
-	p, err := s.tunnelManager.buildProxy(ctx, r, logger, endpoint, mcpServer, upstreamAuth, wwwAuthenticate)
+	p, err := s.tunnelManager.buildProxy(ctx, tunnelrouting.ClientAffinityKeyFromRequest(r), logger, endpoint.ProjectID, mcpServer, upstreamAuth, wwwAuthenticate, selection)
 	if err != nil {
 		return err
 	}
@@ -473,6 +491,31 @@ func (s *Service) prepareProxyBackendContext(
 	// sessions, and would reject a perfectly valid user-session JWT. Skip
 	// it and trust the gate.
 	issuerGated := mcpServer.UserSessionIssuerID.Valid && !isTunneledPublic(mcpServer)
+	if issuerGated {
+		project, err := projectsrepo.New(s.db).GetProjectByID(ctx, endpoint.ProjectID)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return nil, oops.E(oops.CodeNotFound, err, "issuer-gated mcp server project not found")
+		case err != nil:
+			return nil, oops.E(oops.CodeUnexpected, err, "load issuer-gated mcp server project").LogError(ctx, logger)
+		}
+
+		// Public issuer-gated endpoints may carry an anonymous subject, which
+		// intentionally has no dashboard AuthContext. Private endpoints still
+		// require one; when present, always bind it to the owning organization
+		// before exposing a project context to the proxy.
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		if !ok || authCtx == nil {
+			if mcpServer.Visibility == mcpservers.VisibilityPrivate {
+				return nil, oops.C(oops.CodeUnauthorized)
+			}
+		} else {
+			if project.OrganizationID != authCtx.ActiveOrganizationID {
+				return nil, oops.C(oops.CodeUnauthorized)
+			}
+			ctx = setProxyBackendProjectContext(ctx, authCtx, project.ID, project.Slug)
+		}
+	}
 	switch mcpServer.Visibility {
 	case mcpservers.VisibilityPrivate:
 		// Private mcp_servers require identity auth, that the caller's
@@ -498,27 +541,6 @@ func (s *Service) prepareProxyBackendContext(
 			}
 			ctx = setProxyBackendProjectContext(ctx, authCtx, project.ID, project.Slug)
 		}
-
-		// Prepare RBAC grants for both the issuer-gated and non-issuer-gated
-		// paths. The proxy attaches the private-visibility mcp:connect
-		// interceptors (tools/list filter, tools/call authz) regardless of how
-		// the caller authenticated, and for RBAC-enforced callers those run
-		// FindMatched / Require, which fail with ErrMissingGrants unless grants
-		// are in context. Issuer-gated callers were authenticated by
-		// ApplyIssuerGate, which stamps the principal but does not load grants,
-		// so without this they hit that failure (AGE-2672). PrepareContext runs
-		// after the non-issuer-gated identity auth above has stamped the auth
-		// context, and is a no-op for callers RBAC never enforces.
-		var prepErr error
-		ctx, prepErr = s.authz.PrepareContext(ctx)
-		if prepErr != nil {
-			return nil, oops.E(oops.CodeUnexpected, prepErr, "load access grants").LogError(ctx, logger)
-		}
-
-		// mcp:connect covers non-tool proxy methods; tool interceptors still enforce per-tool scopes.
-		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, mcpServer.ID.String(), endpoint.ProjectID.String())); err != nil {
-			return nil, fmt.Errorf("authorize MCP server access: %w", mcpaccess.ServerPermissionDenied(err, s.authorizationChallengesURL(ctx)))
-		}
 	case mcpservers.VisibilityPublic:
 		// Public, no OAuth: optionally probe Gram identity if the
 		// caller supplied an Authorization or Gram-Chat-Session
@@ -539,7 +561,53 @@ func (s *Service) prepareProxyBackendContext(
 		return nil, oops.E(oops.CodeUnexpected, nil, "unrecognized mcp server visibility %q", mcpServer.Visibility).LogError(ctx, logger)
 	}
 
-	return ctx, nil
+	return s.authorizeProxyBackendAccess(ctx, logger, endpoint.ProjectID, mcpServer)
+}
+
+// authorizeProxyBackendAccess runs the visibility-scoped RBAC gate for a
+// proxied MCP backend after identity/AuthContext setup, shared by the
+// runtime dispatch path and consent-time tool enumeration.
+//
+// For private servers it prepares RBAC grants for both the issuer-gated and
+// non-issuer-gated paths: the proxy attaches the private-visibility
+// mcp:connect interceptors (tools/list filter, tools/call authz) regardless
+// of how the caller authenticated, and for RBAC-enforced callers those run
+// FindMatched / Require, which fail with ErrMissingGrants unless grants are
+// in context. Issuer-gated callers were authenticated by ApplyIssuerGate,
+// which stamps the principal but does not load grants, so without this they
+// hit that failure (AGE-2672). PrepareContext runs after identity auth has
+// stamped the auth context, and is a no-op for callers RBAC never enforces.
+//
+// Public servers bypass server-level RBAC by design; unknown visibility
+// fails closed.
+func (s *Service) authorizeProxyBackendAccess(
+	ctx context.Context,
+	logger *slog.Logger,
+	projectID uuid.UUID,
+	mcpServer *mcpserversrepo.McpServer,
+) (context.Context, error) {
+	switch mcpServer.Visibility {
+	case mcpservers.VisibilityPrivate:
+		var prepErr error
+		ctx, prepErr = s.authz.PrepareContext(ctx)
+		if prepErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, prepErr, "load access grants").LogError(ctx, logger)
+		}
+
+		// mcp:connect covers non-tool proxy methods; tool interceptors still enforce per-tool scopes.
+		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, mcpServer.ID.String(), projectID.String())); err != nil {
+			serverName := ""
+			if mcpServer.Name.Valid {
+				serverName = mcpServer.Name.String
+			}
+			return nil, fmt.Errorf("authorize MCP server access: %w", mcpaccess.ServerPermissionDenied(err, s.requestAccessURL(ctx, mcpServer.ID.String(), serverName)))
+		}
+		return ctx, nil
+	case mcpservers.VisibilityPublic:
+		return ctx, nil
+	default:
+		return nil, oops.E(oops.CodeUnexpected, nil, "unrecognized mcp server visibility %q", mcpServer.Visibility).LogError(ctx, logger)
+	}
 }
 
 func setProxyBackendProjectContext(ctx context.Context, authCtx *contextvalues.AuthContext, projectID uuid.UUID, projectSlug string) context.Context {

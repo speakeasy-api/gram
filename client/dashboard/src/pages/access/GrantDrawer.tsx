@@ -140,7 +140,7 @@ export function GrantDrawer({
             {step === "choose" && (
               <>
                 Grant{" "}
-                <code className="bg-muted rounded px-1 font-mono text-xs">
+                <code className="bg-muted px-1 font-mono text-xs">
                   {challenge.scope}
                 </code>{" "}
                 access to <strong>{principalDisplay}</strong>
@@ -169,9 +169,9 @@ export function GrantDrawer({
                 <button
                   type="button"
                   onClick={() => setStep("select-role")}
-                  className="border-border hover:bg-muted/50 flex w-full items-center gap-3 rounded-lg border p-4 text-left transition-colors"
+                  className="border-border hover:bg-muted/50 flex w-full items-center gap-3 border p-4 text-left transition-colors"
                 >
-                  <div className="bg-muted flex h-10 w-10 items-center justify-center rounded-lg">
+                  <div className="bg-muted flex h-10 w-10 items-center justify-center">
                     <Users className="h-5 w-5" />
                   </div>
                   <div className="flex-1">
@@ -192,8 +192,8 @@ export function GrantDrawer({
                 <SimpleTooltip
                   tooltip={`No roles have the ${challenge.scope} scope`}
                 >
-                  <div className="border-border flex w-full cursor-not-allowed items-center gap-3 rounded-lg border p-4 text-left opacity-50">
-                    <div className="bg-muted flex h-10 w-10 items-center justify-center rounded-lg">
+                  <div className="border-border flex w-full cursor-not-allowed items-center gap-3 border p-4 text-left opacity-50">
+                    <div className="bg-muted flex h-10 w-10 items-center justify-center">
                       <Users className="h-5 w-5" />
                     </div>
                     <div className="flex-1">
@@ -214,9 +214,9 @@ export function GrantDrawer({
               <button
                 type="button"
                 onClick={handleCreateNew}
-                className="border-border hover:bg-muted/50 flex w-full items-center gap-3 rounded-lg border p-4 text-left transition-colors"
+                className="border-border hover:bg-muted/50 flex w-full items-center gap-3 border p-4 text-left transition-colors"
               >
-                <div className="bg-muted flex h-10 w-10 items-center justify-center rounded-lg">
+                <div className="bg-muted flex h-10 w-10 items-center justify-center">
                   <Plus className="h-5 w-5" />
                 </div>
                 <div className="flex-1">
@@ -245,7 +245,7 @@ export function GrantDrawer({
                 Back
               </button>
 
-              <div className="border-border divide-border divide-y rounded-md border">
+              <div className="border-border divide-border divide-y border">
                 {roles.map((role) => (
                   <button
                     key={role.id}
@@ -291,7 +291,7 @@ export function GrantDrawer({
 
               {selectedRole && (
                 <div className="space-y-4">
-                  <div className="border-border rounded-md border p-4">
+                  <div className="border-border border p-4">
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <Text
@@ -329,7 +329,7 @@ export function GrantDrawer({
                         >
                           Scope
                         </Text>
-                        <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs">
+                        <code className="bg-muted px-1.5 py-0.5 font-mono text-xs">
                           {challenge.scope}
                         </code>
                       </div>

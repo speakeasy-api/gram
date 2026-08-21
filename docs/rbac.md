@@ -26,17 +26,19 @@ Examples:
 
 ```text
 user:user_01abc
-role:admin
-role:member
-role:custom-builder
+role:global:00000000-0000-0000-0000-000000000001
+role:global:00000000-0000-0000-0000-000000000002
+role:organization:00000000-0000-0000-0000-000000000003
 ```
+
+Role principals use `role:<kind>:<role-uuid>`, where `kind` is `global` or `organization`. Role slugs such as `admin` remain display and lookup metadata; they are not principal identifiers.
 
 The current RBAC implementation supports `user` and `role` principals, but there is no hard limitation to those two. We can add other principal types as the model grows. For example, we expect to migrate the current API key system into RBAC eventually, which would introduce an `api_key` principal.
 
 A request's effective grants are normally loaded from both:
 
 - the authenticated user principal, such as `user:user_01abc`
-- the user's organization role principal, such as `role:admin` or `role:custom-builder`
+- the user's canonical role principal, such as `role:global:<role-uuid>` or `role:organization:<role-uuid>`
 
 This lets us give most access through roles while still allowing direct user grants when needed.
 
@@ -82,13 +84,19 @@ const (
 	ScopeSkillWrite         Scope = "skill:write"
 	ScopeRiskPolicyEvaluate Scope = "risk_policy:evaluate"
 	ScopeRiskPolicyBypass   Scope = "risk_policy:bypass"
+	ScopeRiskPolicyBlock    Scope = "risk_policy:block"
 	ScopeChatRead           Scope = "chat:read"
+	ScopeChatWrite          Scope = "chat:write"
 )
 ```
 
 The Observe dashboard surface (Costs, MCP & Tools Insights, Employee Enrollment, Agent Sessions, and Tool Logs) is gated on **`org:admin`** at the page level (no dedicated scope). The Observe nav group stays visible to any project member (like the Secure section); opening a page as a non-admin renders the page-level "Access restricted" notice. This keeps telemetry out of basic members' view by default (e.g. members synced via directory/SCIM) without introducing a new scope.
 
-`chat:read` protects reading _other members'_ agent session transcripts (`chat.load`). It is **not** a default for any system role — not even `admin` — because session transcripts are sensitive; it must be granted explicitly via a custom role grant. Everyone (members and admins alike) can always read sessions they own: the `chat.load` handler bypasses the scope check when the caller owns the session (`chat.user_id == caller`), and the session list filters to the caller's own sessions when they lack `chat:read`. Reading another user's session — or an ownerless/external session — requires an unrestricted `chat:read` grant.
+`chat:read` protects reading _other members'_ agent session transcripts (`chat.load`, `chat.summarize`) and pinning them (`chat.setPinned`). `chat:write` protects destructive mutations — `chat.delete`, `chat.submitFeedback`, and the rename path of `chat.generateTitle`. Neither is a default for any system role — not even `admin` — because session transcripts are sensitive and deleting one is destructive; both must be granted explicitly via a custom role grant.
+
+The two are separate so a session reviewer can be given `chat:read` alone: they can open every transcript in the project and pin one as a shared bookmark, but cannot delete or otherwise alter one. `chat:write` satisfies `chat:read` through the normal expansion rules, so a role that needs both only has to carry `chat:write`.
+
+Everyone (members and admins alike) can always read _and_ mutate sessions they own: the chat handlers bypass the scope check when the caller owns the session (`chat.user_id == caller`), and the session list filters to the caller's own sessions when they lack `chat:read`. Reaching another user's session — or an ownerless/external session — requires the corresponding unrestricted grant.
 
 That is deliberate. Adding a scope changes the product contract: it affects role management, the access API, generated SDK types, the dashboard, and tests. Prefer the small action vocabulary we already use: `read` for viewing or listing, `write` for mutation, and `connect` for runtime connection surfaces. New verbs should be rare. If an action needs multiple words, or describes a very specific operation, that is usually a sign that the behavior should be modeled with an existing scope plus selector dimensions instead of a new scope.
 
@@ -112,11 +120,12 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeSkillWrite:         nil,
 	ScopeRiskPolicyEvaluate: nil,
 	ScopeRiskPolicyBypass:   nil,
-	ScopeChatRead:           nil,
+	ScopeChatRead:           {ScopeChatWrite},
+	ScopeChatWrite:          nil,
 }
 ```
 
-Read this map as "if a handler requires the key scope, any scope in the value list also satisfies the check." A `project:write` grant satisfies a `project:read` check. An `mcp:write` grant satisfies `mcp:read`, and both `mcp:read` and `mcp:write` satisfy `mcp:connect`. `environment:write` satisfies `environment:read`, and `skill:write` satisfies `skill:read`. `org:admin` satisfies `org:read`, and `root` satisfies every check.
+Read this map as "if a handler requires the key scope, any scope in the value list also satisfies the check." A `project:write` grant satisfies a `project:read` check. An `mcp:write` grant satisfies `mcp:read`, and both `mcp:read` and `mcp:write` satisfy `mcp:connect`. `environment:write` satisfies `environment:read`, `skill:write` satisfies `skill:read`, and `chat:write` satisfies `chat:read`. `org:admin` satisfies `org:read`, and `root` satisfies every check.
 
 Expansion happens when the engine evaluates a check. If code asks for `project:read`, the engine checks for `root`, `project:read`, and `project:write` against the same resource selector. The API also exposes the inverse relationship as `sub_scopes` so role UIs can show what a broader grant implies; those sub-scopes are derived from code and are not additional database rows.
 
@@ -133,14 +142,14 @@ principal + scope + selector = grant
 Example:
 
 ```text
-role:member has project:read on project 018f...
+role:global:00000000-0000-0000-0000-000000000002 has project:read on project 018f...
 ```
 
 In database shape:
 
 ```json
 {
-  "principal_urn": "role:member",
+  "principal_urn": "role:global:00000000-0000-0000-0000-000000000002",
   "scope": "project:read",
   "selectors": {
     "resource_kind": "project",
@@ -262,6 +271,13 @@ Read that as:
 The most important rule: **exclusion grants do not create access by themselves**.
 They only subtract from something that the base side already proved.
 
+`risk_policy:block` is the inverse rule store for allow-by-default (allow_all)
+shadow MCP blocking policies: each grant names a policy and a `server_url`
+selector and is always held by the all-users principal (`user:all`), meaning
+"this server is blocked for everyone in the project". The shadow MCP hook path
+reads these grants directly; they are never evaluated through `Require` and do
+not participate in grant expressions.
+
 ### Risk Policy Example
 
 Assume the user has these grants:
@@ -371,9 +387,9 @@ org:admin
 Grants assign that vocabulary to principals:
 
 ```text
-role:admin has project:write on every project
-role:member has mcp:connect on every MCP server
-role:custom-support has mcp:connect on toolset_123, tool=search_docs
+role:global:00000000-0000-0000-0000-000000000001 has project:write on every project
+role:global:00000000-0000-0000-0000-000000000002 has mcp:connect on every MCP server
+role:organization:00000000-0000-0000-0000-000000000003 has mcp:connect on toolset_123, tool=search_docs
 ```
 
 The practical distinction is simple: add a grant when the permission already exists but another principal needs it. Add a scope only when the product needs a new kind of permission that should be independently assignable. Most changes should add or modify grants, not scopes.
@@ -461,7 +477,7 @@ The principal list usually contains the user and their role:
 
 ```text
 user:user_01abc
-role:member
+role:global:00000000-0000-0000-0000-000000000002
 ```
 
 The engine then evaluates checks in memory against the loaded grants.
@@ -496,9 +512,9 @@ mcp:connect
 skill:read
 ```
 
-`member` intentionally does not receive `environment:read` (environment values include secrets, so viewing them must be granted explicitly through a custom role; admins keep `environment:read`/`environment:write`). Skills use an independent project-selectable scope family: members receive `skill:read`, while admins receive both `skill:read` and `skill:write`; `project:*` does not imply either skill scope. These Skills defaults are provisioned when the org-level `skills` product feature is enabled for an RBAC-enabled organization. If Skills is enabled before RBAC, an RBAC off-to-on transition seeds the complete system-role defaults and explicitly patches missing Skills defaults when retained role grants cause the general seed to skip a role. Repeated RBAC enable calls, including recurring WorkOS events, intentionally do not restore customized or removed Skills grants. The legacy base seeder continues to preserve any existing customized system-role grant set. Disabling Skills does not remove grants. The Observe dashboard surface is not member-visible either: it is gated on `org:admin` at the page level, so only org admins can open Observe pages.
+`member` intentionally does not receive `environment:read` (environment values include secrets, so viewing them must be granted explicitly through a custom role; admins keep `environment:read`/`environment:write`). Skills use an independent project-selectable scope family: members receive `skill:read`, while admins receive both `skill:read` and `skill:write`; `project:*` does not imply either skill scope. These Skills defaults are provisioned when the org-level `skills` product feature is enabled. Repeated provisioning intentionally does not restore customized or removed system-role grants. Disabling Skills does not remove grants. The Observe dashboard surface is not member-visible either: it is gated on `org:admin` at the page level, so only org admins can open Observe pages.
 
-System roles are seeded when RBAC is enabled for an organization. They are not meant to be edited like custom roles. Changing the default grants of a system role is a product behavior change and should be treated carefully, especially for existing organizations.
+System roles are seeded when an organization is provisioned, and the first user is assigned the Admin role. WorkOS organization reconciliation also seeds the defaults as an idempotent backstop. System roles are not meant to be edited like custom roles. Changing their default grants is a product behavior change and should be treated carefully, especially for existing organizations.
 
 ## Dashboard Grant Reference
 
@@ -514,8 +530,11 @@ Selectors matter. A project-scoped feature needs the grant selector to match the
 | Open Access / RBAC page                                                                               | `org:read` OR `org:admin`                                                                                    | Organization ID                                                       | Viewing access state can be read-only; role, grant, member-role, and challenge-resolution actions are `org:admin`.                                                                                                                                                                                                                                                                                                                                                                                                          |
 | Open Team page and manage members                                                                     | `org:admin`                                                                                                  | Organization ID                                                       | The current Team page is page-gated on `org:admin`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | Open Billing                                                                                          | `org:read` OR `org:admin`                                                                                    | Organization ID                                                       | Billing management sections and portal actions are `org:admin`.                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| See billing status banners (failed payment, inference cap reached)                                    | `org:read` OR `org:admin`                                                                                    | Organization ID                                                       | Per-key inference-cap banners ride the page header, so they appear on every organization and project page except Billing, where the failed-payment banner and cap banners are composed together. Stripe subscription state and per-key inference caps are read only after a pay-as-you-go tier check and an `org:read` gate. Their actions require `org:admin`; other readers see an ask-an-admin note instead.                                                                                                             |
+| Read per-key inference usage and monthly caps (`usage.getInferenceSpendCaps`)                         | `org:read` OR `org:admin`                                                                                    | Organization ID                                                       | Enforced server-side against the active organization. The endpoint enumerates only the materialized Gram-managed Security and Other inference keys; BYOK provider keys are excluded. The billing page's inference cap controls read it. Setting one selected key's cap (`usage.setSpendCap`) is `org:admin`.                                                                                                                                                                                                                |
 | Manage organization API keys or generate agent tokens                                                 | `org:admin`                                                                                                  | Organization ID                                                       | API key listing and creation are admin-only in the dashboard.                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| View organization domains, org logs, webhooks, identity, audit logs, device agent                     | `org:read` OR `org:admin`                                                                                    | Organization ID                                                       | Mutating settings on these pages, including domains, forwarding, webhooks, identity providers, and device-agent token generation, requires `org:admin`.                                                                                                                                                                                                                                                                                                                                                                     |
+| View organization domains, org logs, webhooks, identity, audit logs, device agent                     | `org:read` OR `org:admin`                                                                                    | Organization ID                                                       | Mutating settings on these pages, including domains, forwarding, webhooks, identity providers, and device-agent token generation, requires `org:admin`. The Device Agent Setup tab stays readable for org readers, but the fleet Configuration tab is admin-only to both view and change: its Configuration tab is hidden from non-admins and `agent.getConfiguration`/`agent.updateConfiguration` both require `org:admin`.                                                                                                |
+| View MCP Connections and automatic session refresh policy                                             | `org:read` OR `org:admin`                                                                                    | Organization ID                                                       | Changing the organization-wide automatic session refresh policy requires `org:admin`. Revoking connections requires `project:write` for the selected project.                                                                                                                                                                                                                                                                                                                                                               |
 | View organization collections                                                                         | `org:read` OR `org:admin`                                                                                    | Organization ID                                                       | Collection create/update/delete and MCP server attach/detach actions require `org:admin`. Adding collection content to a project can additionally require `project:write` for that project.                                                                                                                                                                                                                                                                                                                                 |
 | Open project home                                                                                     | `project:read`                                                                                               | Project ID                                                            | `project:write` also opens it through scope expansion.                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | Open Sources and source detail pages                                                                  | `project:read` OR `project:write`                                                                            | Project ID                                                            | Creating, importing, reconnecting, deleting, or editing sources requires `project:write`. Creating custom remote MCP servers is gated by `mcp:write`.                                                                                                                                                                                                                                                                                                                                                                       |
@@ -532,7 +551,9 @@ Selectors matter. A project-scoped feature needs the grant selector to match the
 | Open Environments list                                                                                | `project:read` OR `project:write`                                                                            | Project ID                                                            | Creating an environment requires `environment:write` (project-scoped); environment card clone actions are `environment:write`.                                                                                                                                                                                                                                                                                                                                                                                              |
 | Open an Environment detail page                                                                       | `project:read`                                                                                               | Project ID                                                            | Adding, editing, or deleting variables requires `environment:write` (the environment scope family is independent from `project:*` because env values include secrets). The "Fill for MCP Server" action also requires `environment:write`: it prefills placeholder variables through the environment update path. Environment-specific clone checks use `environment:read` for the source and `environment:write` for the destination.                                                                                      |
 | Open the Observe section: Costs, MCP & Tools Insights, Employee Enrollment, Agent Sessions, Tool Logs | `org:admin`                                                                                                  | Organization ID                                                       | Every Observe page is gated on `org:admin` at the page level. The Observe nav group and command-palette entries stay visible to project members; opening a page as a non-admin renders the page-level "Access restricted" notice (the Secure-section pattern).                                                                                                                                                                                                                                                              |
-| Open an individual agent session transcript (`chat.load`)                                             | `chat:read` (or owner)                                                                                       | Chat session                                                          | Reaching the Agent Sessions list first requires `org:admin` (row above). Anyone can always open sessions they own (owner-bypass: `chat.user_id == caller`), with no `chat:read` grant. Opening another user's session requires an explicit unrestricted `chat:read` — not a default of any system role, so even admins must be granted it. Every open is recorded in the audit log (`chat_session:access`).                                                                                                                 |
+| Open or summarize an individual agent session transcript (`chat.load`, `chat.summarize`)              | `chat:read` (or owner)                                                                                       | Chat session                                                          | Reaching the Agent Sessions list first requires `org:admin` (row above). Anyone can always open sessions they own (owner-bypass: `chat.user_id == caller`), with no `chat:read` grant. Opening another user's session requires an explicit unrestricted `chat:read` — not a default of any system role, so even admins must be granted it. Both are recorded in the audit log (`chat_session:access`), including a cached summary.                                                                                          |
+| Pin or unpin an agent session (`chat.setPinned`)                                                      | `chat:read` (or owner)                                                                                       | Chat session                                                          | Pinning is a shared project bookmark, not a destructive mutation of the transcript. Anyone who can open a session can pin it. Members without `chat:read` can still pin sessions they own.                                                                                                                                                                                                                                                                                                                                  |
+| Rename, delete, or submit feedback on an agent session                                                | `chat:write` (or owner)                                                                                      | Chat session                                                          | Deliberately separate from `chat:read` so a session reviewer can read and pin transcripts without being able to destroy one. `chat:write` satisfies `chat:read` by expansion. Anyone can always mutate sessions they own; doing it to another user's session needs an explicit unrestricted `chat:write`, which no system role holds. Deleting a chat that backs a live assistant thread is refused regardless.                                                                                                             |
 | Open Project Settings                                                                                 | `project:write`                                                                                              | Project ID                                                            | Settings are treated as project mutation/admin surface.                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | Open Secure pages: Risk Overview, Risk Policies, Approval Requests, Detection Rules                   | `org:admin`                                                                                                  | Organization ID                                                       | The dashboard pages are admin-only today. `risk_policy:evaluate` and `risk_policy:bypass` are policy runtime/request-flow scopes, not general dashboard page grants.                                                                                                                                                                                                                                                                                                                                                        |
 
@@ -546,11 +567,11 @@ Handlers do not query grants directly. Their job is to describe the access they 
 
 ### When RBAC is enforced
 
-`authz.Engine.ShouldEnforce` decides whether checks should actually be applied. RBAC is enforced for authenticated requests when the RBAC feature flag is enabled for the active organization, regardless of account tier, as long as the request is not using an API key. The request also needs a session, except for assistant-token requests, which are allowed through this path.
+`authz.Engine.ShouldEnforce` decides whether checks should actually be applied. RBAC is always enforced for authenticated requests, regardless of account tier, as long as the request is not using an API key. The request also needs a session, except for assistant-token requests, which are allowed through this path.
 
 Scope overrides are a special case. In local development, authenticated users can use override headers. In production, only platform admins can. When valid overrides are present, RBAC is enforced so the overridden grant set is what the request experiences.
 
-That means RBAC is not currently enforced for API key requests or organizations where the RBAC feature flag is disabled. Unauthenticated contexts are handled as authorization errors by the normal auth path. This may change as the RBAC model expands, especially when API keys move into RBAC.
+RBAC is not currently enforced for API key requests. Unauthenticated contexts are handled as authorization errors by the normal auth path. This may change as the RBAC model expands, especially when API keys move into RBAC.
 
 ### Add checks at the handler boundary
 
@@ -736,7 +757,7 @@ Grant row:
 ```json
 {
   "organization_id": "org_123",
-  "principal_urn": "role:analyst",
+  "principal_urn": "role:organization:00000000-0000-0000-0000-000000000010",
   "scope": "project:read",
   "selectors": {
     "resource_kind": "project",
@@ -766,7 +787,7 @@ Grant row:
 
 ```json
 {
-  "principal_urn": "role:analyst",
+  "principal_urn": "role:organization:00000000-0000-0000-0000-000000000010",
   "scope": "project:read",
   "selectors": {
     "resource_kind": "project",
@@ -796,7 +817,7 @@ Grant row:
 
 ```json
 {
-  "principal_urn": "role:builder",
+  "principal_urn": "role:organization:00000000-0000-0000-0000-000000000011",
   "scope": "project:write",
   "selectors": {
     "resource_kind": "project",
@@ -826,7 +847,7 @@ Grant row:
 
 ```json
 {
-  "principal_urn": "role:agent-user",
+  "principal_urn": "role:organization:00000000-0000-0000-0000-000000000012",
   "scope": "mcp:connect",
   "selectors": {
     "resource_kind": "mcp",
@@ -854,7 +875,7 @@ Grant row:
 
 ```json
 {
-  "principal_urn": "role:agent-user",
+  "principal_urn": "role:organization:00000000-0000-0000-0000-000000000012",
   "scope": "mcp:connect",
   "selectors": {
     "resource_kind": "mcp",
@@ -891,7 +912,7 @@ Grant rows:
 ```json
 [
   {
-    "principal_urn": "role:analyst",
+    "principal_urn": "role:organization:00000000-0000-0000-0000-000000000010",
     "scope": "project:read",
     "selectors": {
       "resource_kind": "project",
@@ -899,7 +920,7 @@ Grant rows:
     }
   },
   {
-    "principal_urn": "role:analyst",
+    "principal_urn": "role:organization:00000000-0000-0000-0000-000000000010",
     "scope": "project:read",
     "selectors": {
       "resource_kind": "project",

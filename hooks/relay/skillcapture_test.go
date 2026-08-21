@@ -1,6 +1,8 @@
 package relay
 
 import (
+	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -57,17 +59,19 @@ func TestRelayEnrichesSkillAndCreatesRequestedUploadTask(t *testing.T) {
 	require.True(t, delivery.result.accepted())
 	require.NotNil(t, delivery.payload.Data)
 	require.NotNil(t, delivery.payload.Data.Skill)
-	require.Equal(t, "project", *delivery.payload.Data.Skill.SourceLevel)
-	require.Equal(t, delivery.path, *delivery.payload.Data.Skill.SourcePath)
+	require.Nil(t, delivery.payload.Data.Skill.SourceLevel)
+	require.Nil(t, delivery.payload.Data.Skill.SourcePath)
 	require.Equal(t, delivery.rawSHA256, *delivery.payload.Data.Skill.RawSha256)
 	require.Nil(t, delivery.payload.Data.Skill.Source)
+	output, ok := delivery.payload.Data.ToolCall.Output.(string)
+	require.True(t, ok)
+	require.Equal(t, "# Captured skill\n", output)
 	require.Equal(t, []skillUploadTask{{
-		ServerURL:  delivery.serverURL,
-		Project:    "default",
-		APIKey:     "test-hooks-key",
-		RawSHA256:  delivery.rawSHA256,
-		SourcePath: delivery.path,
-		SourceRoot: filepath.Dir(filepath.Dir(delivery.path)),
+		ServerURL: delivery.serverURL,
+		Project:   "default",
+		APIKey:    "test-hooks-key",
+		RawSHA256: delivery.rawSHA256,
+		Content:   "# Captured skill\n",
 	}}, delivery.tasks)
 }
 
@@ -110,7 +114,7 @@ func TestRelayDeniedAcceptedSkillCreatesRequestedUploadTask(t *testing.T) {
 
 func TestRelayCacheRejectionUsesFinalOrgCredentialsForUploadTask(t *testing.T) {
 	capturedTasks := captureSkillUploadTasks(t)
-	event, _, _ := relaySkillEvent(t, []byte("fallback"))
+	event, _ := relaySkillEvent(t, []byte("fallback"))
 	var requests atomic.Int32
 	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
 		if requests.Add(1) == 1 {
@@ -142,7 +146,7 @@ func TestRelayCacheRejectionUsesFinalOrgCredentialsForUploadTask(t *testing.T) {
 
 func TestRelaySpoolsEnrichedUnsentSkillPayload(t *testing.T) {
 	setSpoolStateHome(t)
-	event, path, rawSHA256 := relaySkillEvent(t, []byte("offline content"))
+	event, rawSHA256 := relaySkillEvent(t, []byte("offline content"))
 	cfg := authedConfig(t, closedPortURL(t))
 
 	result, _ := NewRelay(cfg).deliver(t.Context(), event)
@@ -153,10 +157,10 @@ func TestRelaySpoolsEnrichedUnsentSkillPayload(t *testing.T) {
 	entry := readSpoolEntry(t, names[0])
 	skill := entry.Envelope.Data.Skill
 	require.NotNil(t, skill)
-	require.Equal(t, "project", *skill.SourceLevel)
-	require.Equal(t, path, *skill.SourcePath)
+	require.Nil(t, skill.SourceLevel)
+	require.Nil(t, skill.SourcePath)
 	require.Equal(t, rawSHA256, *skill.RawSha256)
-	require.Equal(t, filepath.Dir(filepath.Dir(path)), entry.SkillSourceRoot)
+	require.Equal(t, "offline content", entry.Envelope.Data.ToolCall.Output)
 }
 
 func TestIngestRedirectDoesNotForwardKeyAndFailsClosedWithoutSpool(t *testing.T) {
@@ -213,7 +217,6 @@ func ingestSkillCaptureEffect(t *testing.T, effect any) *skillCapture {
 
 type skillDelivery struct {
 	serverURL string
-	path      string
 	rawSHA256 string
 	payload   components.IngestRequestBody
 	result    ingestResult
@@ -234,11 +237,10 @@ func deliverSkillForTest(
 	})
 	fs.effects = effects
 	cfg := authedConfig(t, fs.URL)
-	event, path, rawSHA256 := relaySkillEvent(t, content)
+	event, rawSHA256 := relaySkillEvent(t, content)
 	result, _ := NewRelay(cfg).deliver(t.Context(), event)
 	return skillDelivery{
 		serverURL: fs.URL,
-		path:      path,
 		rawSHA256: rawSHA256,
 		payload:   fs.last(),
 		result:    result,
@@ -257,21 +259,27 @@ func requestedSkillCaptureEffects(contentRequired bool) func(components.IngestRe
 
 func captureSkillUploadTasks(t *testing.T) func() []skillUploadTask {
 	t.Helper()
-	original := startSkillUploadProcess
-	t.Cleanup(func() { startSkillUploadProcess = original })
+	original := executeSkillUpload
+	t.Cleanup(func() { executeSkillUpload = original })
 	var tasks []skillUploadTask
-	startSkillUploadProcess = func(task skillUploadTask) error {
+	executeSkillUpload = func(_ context.Context, task skillUploadTask) error {
 		tasks = append(tasks, task)
 		return nil
 	}
 	return func() []skillUploadTask { return tasks }
 }
 
-func relaySkillEvent(t *testing.T, content []byte) (*agenthooks.ToolPreEvent, string, string) {
+func relaySkillEvent(t *testing.T, content []byte) (*agenthooks.ToolPostEvent, string) {
 	t.Helper()
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("CLAUDE_CONFIG_DIR", "")
 	cwd := t.TempDir()
-	path := writeSkillManifest(t, filepath.Join(cwd, ".claude", "skills", "dno-441-relay-capture"), content)
-	return claudeSkillEvent(cwd, "dno-441-relay-capture"), path, sha256Hex(content)
+	output, err := json.Marshal(string(content))
+	require.NoError(t, err)
+	input, err := json.Marshal(map[string]string{"skill": "dno-441-relay-capture"})
+	require.NoError(t, err)
+	return &agenthooks.ToolPostEvent{
+		Event:  agenthooks.Event{Provider: agenthooks.ProviderClaudeCode, Kind: agenthooks.KindToolPost, Session: agenthooks.SessionInfo{CWD: cwd}},
+		Tool:   agenthooks.ToolCall{Name: "Skill", Input: input},
+		Output: output,
+		Failed: false,
+	}, sha256Hex(content)
 }

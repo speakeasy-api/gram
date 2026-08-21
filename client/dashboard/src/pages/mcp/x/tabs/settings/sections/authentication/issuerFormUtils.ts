@@ -13,10 +13,24 @@ export type DiscoveredEndpoints = {
   grantTypesSupported: string[];
   responseTypesSupported: string[];
   tokenEndpointAuthMethodsSupported: string[];
+  // PKCE methods (RFC 8414 code_challenge_methods_supported). Unlike the
+  // arrays above this is tri-state, mirroring the nullable column: null means
+  // the saved record was never captured, and it must round-trip as null so a
+  // settings save does not turn "never captured" into "advertises no methods"
+  // (an empty array — a refusal state under future PKCE enforcement). A
+  // fresh-discovery snapshot is never null: an omitted field captures as [].
+  codeChallengeMethodsSupported: string[] | null;
   // OAuth CIMD draft capability parsed from the discovery document: whether the
   // issuer accepts a Client ID Metadata Document URL as client_id. Persisted on
   // create/update so the CIMD client type can be offered for this issuer.
   clientIdMetadataDocumentSupported: boolean;
+  // RFC 7009 revocation endpoint parsed from the discovery document. Carried
+  // through create/update but not rendered as an input, like the capability
+  // arrays above and the documentation URLs below: an operator never needs to
+  // hand-write it, and re-running discovery is the way to correct a stale one.
+  // An empty string means the issuer advertised none, which is common — the
+  // sessions minted against such an issuer simply revoke locally.
+  revocationEndpoint: string;
   // RFC 8414 documentation URLs parsed from the discovery document. An empty
   // string means the issuer advertised nothing usable — the update payload sends
   // it through verbatim, which the server reads as "clear to NULL", so a URL the

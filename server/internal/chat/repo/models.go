@@ -38,22 +38,12 @@ type ChatMessage struct {
 	ToolUrn           urn.Tool
 	ToolOutcome       pgtype.Text
 	ToolOutcomeNotes  pgtype.Text
+	ToolCallSummaries []byte
 	ContentHash       []byte
 	Generation        int32
 	Replayed          bool
 	CreatedAt         pgtype.Timestamptz
 	RiskAnalyzedAt    pgtype.Timestamptz
-}
-
-type ChatResolution struct {
-	ID              uuid.UUID
-	ProjectID       uuid.UUID
-	ChatID          uuid.UUID
-	UserGoal        string
-	Resolution      string
-	ResolutionNotes string
-	Score           int32
-	CreatedAt       pgtype.Timestamptz
 }
 
 type ChatUserFeedback struct {

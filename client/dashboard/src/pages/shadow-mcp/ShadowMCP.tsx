@@ -1,10 +1,11 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import type { ShadowMCPPolicy } from "@/components/shadow-mcp/ShadowMCPInventoryActions";
 import { ShadowMCPInventoryTable } from "@/components/shadow-mcp/ShadowMCPInventoryTable";
 import { ShadowMCPPolicyStatus } from "@/components/shadow-mcp/ShadowMCPPolicyStatus";
 import {
   eligibleShadowMCPAllowRulePolicies,
+  shadowMCPBlockingPolicyDisposition,
+  type ShadowMCPPolicy,
   shadowMCPPolicyState,
 } from "@/components/shadow-mcp/shadowMCPInventoryStatus";
 import { SkeletonTable } from "@/components/ui/Skeleton";
@@ -33,6 +34,24 @@ function ShadowMCPLoadingState(): JSX.Element {
 
 export default function ShadowMCP(): JSX.Element {
   const pageTitle = "Shadow MCP";
+
+  return (
+    <Page>
+      <Page.Header>
+        <Page.Header.Breadcrumbs
+          substitutions={{ ["shadow-mcp"]: pageTitle }}
+        />
+      </Page.Header>
+      <Page.Body fullHeight className="pb-8">
+        <RequireScope scope="org:admin" level="page">
+          <ShadowMCPInventory pageTitle={pageTitle} />
+        </RequireScope>
+      </Page.Body>
+    </Page>
+  );
+}
+
+function ShadowMCPInventory({ pageTitle }: { pageTitle: string }): JSX.Element {
   const project = useProject();
   const routes = useRoutes();
   const policiesQuery = useRiskListPolicies();
@@ -47,48 +66,44 @@ export default function ShadowMCP(): JSX.Element {
     : shadowMCPPolicyState(policiesQuery.data?.policies);
   const shadowMCPPolicies: ShadowMCPPolicy[] =
     eligibleShadowMCPAllowRulePolicies(policiesQuery.data?.policies);
+  const disposition = shadowMCPBlockingPolicyDisposition(shadowMCPPolicies);
 
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs
-          substitutions={{ ["shadow-mcp"]: pageTitle }}
-        />
-      </Page.Header>
-      <Page.Body fullHeight className="pb-8">
-        <RequireScope scope="org:admin" level="page">
-          <Page.Section>
-            <Page.Section.Title stage="beta">{pageTitle}</Page.Section.Title>
-            <Page.Section.Description>
-              Manage the Shadow MCP server inventory, allow decisions, and
-              requests.
-            </Page.Section.Description>
-            {policyDataReady ? (
-              <Page.Section.CTA>
-                <ShadowMCPPolicyStatus policyState={policyState} />
-              </Page.Section.CTA>
-            ) : null}
-            <Page.Section.Body>
-              {policyDataReady ? (
-                <div className="flex flex-col pb-8">
-                  <ShadowMCPInventoryTable
-                    members={membersQuery.data?.members ?? []}
-                    onOpenServer={(server) =>
-                      routes.shadowMCP.detail.goTo(server.serverSlug)
-                    }
-                    policyState={policyState}
-                    projectID={project.id}
-                    roles={rolesQuery.data?.roles ?? []}
-                    shadowMCPPolicies={shadowMCPPolicies}
-                  />
-                </div>
-              ) : (
-                <ShadowMCPLoadingState />
-              )}
-            </Page.Section.Body>
-          </Page.Section>
-        </RequireScope>
-      </Page.Body>
-    </Page>
+    <Page.Section>
+      <Page.Section.Title stage="beta" area="">
+        {pageTitle}
+      </Page.Section.Title>
+      <Page.Section.Description>
+        Every MCP server this project knows about — observed in agent traffic or
+        raised in an access request — with its review state. Click a server for
+        its evidence, requesters, and decision history.
+      </Page.Section.Description>
+      {policyDataReady ? (
+        <Page.Section.CTA>
+          <ShadowMCPPolicyStatus
+            disposition={disposition}
+            policyState={policyState}
+          />
+        </Page.Section.CTA>
+      ) : null}
+      <Page.Section.Body>
+        {policyDataReady ? (
+          <div className="flex flex-col pb-8">
+            <ShadowMCPInventoryTable
+              members={membersQuery.data?.members ?? []}
+              onOpenServer={(server) =>
+                routes.shadowMCP.detail.goTo(server.serverSlug)
+              }
+              policyState={policyState}
+              projectID={project.id}
+              roles={rolesQuery.data?.roles ?? []}
+              shadowMCPPolicies={shadowMCPPolicies}
+            />
+          </div>
+        ) : (
+          <ShadowMCPLoadingState />
+        )}
+      </Page.Section.Body>
+    </Page.Section>
   );
 }

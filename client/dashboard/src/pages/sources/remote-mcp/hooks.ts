@@ -47,44 +47,14 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
 
   return useMutation({
     mutationFn: async ({ name, url }) => {
-      const remoteMcpServer = await client.remoteMcp.createServer({
-        createServerForm: {
-          name,
-          url,
-          transportType: "streamable-http",
-        },
-      });
-
-      let mcpServer: McpServer;
-      try {
-        mcpServer = await client.mcpServers.create({
-          createMcpServerForm: {
-            // mcp_servers.name is required; reuse the canonical
-            // formatRemoteMcpDisplay fallback so the auto-linked row matches
-            // what the dashboard shows for the source.
-            name: formatRemoteMcpDisplay(remoteMcpServer),
-            remoteMcpServerId: remoteMcpServer.id,
-            visibility: "disabled",
+      const { remoteMcpServer, mcpServer } =
+        await client.remoteMcp.createServerAndMcpServer({
+          createServerForm: {
+            name,
+            url,
+            transportType: "streamable-http",
           },
         });
-      } catch (linkError) {
-        try {
-          await client.remoteMcp.deleteServer({ id: remoteMcpServer.id });
-        } catch (rollbackError) {
-          const linkMsg =
-            linkError instanceof Error ? linkError.message : String(linkError);
-          const rollbackMsg =
-            rollbackError instanceof Error
-              ? rollbackError.message
-              : String(rollbackError);
-          throw new Error(
-            `Created remote MCP server ${remoteMcpServer.id} but failed to link an MCP server, and the rollback also failed. Delete it manually before retrying. Cause: ${linkMsg}. Rollback: ${rollbackMsg}.`,
-          );
-        }
-        throw linkError instanceof Error
-          ? linkError
-          : new Error(String(linkError));
-      }
 
       const authAutoConfig = await autoConfigureRemoteMcpAuth({
         client,

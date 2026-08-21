@@ -116,7 +116,7 @@ export function SidePanelSurface(): React.JSX.Element | null {
       inert={closing}
       style={{ width }}
       className={cn(
-        "bg-surface-primary relative my-2 mr-2 flex shrink-0 flex-col rounded-xl shadow-sm",
+        "bg-surface-primary relative my-2 mr-2 flex shrink-0 flex-col shadow-sm",
         closing ? "side-panel-exit" : "side-panel-enter",
       )}
       onKeyDown={(event) => {
@@ -132,7 +132,7 @@ export function SidePanelSurface(): React.JSX.Element | null {
         }}
       />
       {/* Clips inside the handle so the grip can sit out in the gutter. */}
-      <div className="flex min-h-0 flex-1 overflow-hidden rounded-xl">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Held at the panel's finished width: only the aside's width animates,
             and contents that resized along with it would re-wrap every frame.
             Instead they slide in from behind the right edge. */}
@@ -141,12 +141,12 @@ export function SidePanelSurface(): React.JSX.Element | null {
             {/* Whatever the panel is about, wearing its own face. Servers that
                 publish no icon fall back to the mark for what the panel holds,
                 which is a guide. */}
-            <div className="bg-primary/5 flex size-8 shrink-0 items-center justify-center rounded-md dark:bg-neutral-800">
+            <div className="bg-primary/5 flex size-8 shrink-0 items-center justify-center dark:bg-neutral-800">
               {shown.iconUrl ? (
                 <img
                   src={shown.iconUrl}
                   alt=""
-                  className="size-5 rounded object-contain"
+                  className="size-5 object-contain"
                 />
               ) : (
                 <BookOpen className="text-muted-foreground size-4" />
@@ -169,7 +169,7 @@ export function SidePanelSurface(): React.JSX.Element | null {
                   href={shown.docsUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-muted-foreground hover:text-foreground bg-muted/40 hover:bg-muted flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium transition-colors"
+                  className="text-muted-foreground hover:text-foreground bg-muted/40 hover:bg-muted flex items-center gap-1.5 border px-2 py-1 text-xs font-medium transition-colors"
                 >
                   Docs
                   <ExternalLink className="size-3" />
@@ -179,7 +179,7 @@ export function SidePanelSurface(): React.JSX.Element | null {
                 type="button"
                 onClick={closePanel}
                 aria-label="Close panel"
-                className="text-muted-foreground hover:text-foreground rounded-sm p-1 opacity-70 transition-opacity hover:opacity-100"
+                className="text-muted-foreground hover:text-foreground p-1 opacity-70 transition-opacity hover:opacity-100"
               >
                 <X className="size-4" />
               </button>
@@ -271,7 +271,7 @@ function SidePanelResizeHandle({
     >
       <div
         className={cn(
-          "bg-card text-muted-foreground group-hover:text-foreground group-focus-visible:border-primary flex h-8 w-4 items-center justify-center rounded-md border shadow-sm",
+          "bg-card text-muted-foreground group-hover:text-foreground group-focus-visible:border-primary flex h-8 w-4 items-center justify-center border shadow-sm",
           dragging && "text-foreground",
         )}
       >

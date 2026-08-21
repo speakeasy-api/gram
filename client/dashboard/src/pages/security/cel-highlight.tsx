@@ -22,10 +22,7 @@ export function highlight(text: string, spans: CelSpan[]): ReactNode[] {
     const start = Math.max(r.start, cursor);
     if (start > cursor) nodes.push(dec.decode(bytes.slice(cursor, start)));
     nodes.push(
-      <mark
-        key={key++}
-        className="bg-warning/30 text-foreground rounded-sm px-0.5"
-      >
+      <mark key={key++} className="bg-warning/30 text-foreground px-0.5">
         {dec.decode(bytes.slice(start, r.end))}
       </mark>,
     );

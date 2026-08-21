@@ -89,6 +89,9 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 
 	result, err := a.analyzeWithLLM(ctx, args.OrgID, args.ProjectID, segmentText, applicableUserFeedback)
 	if err != nil {
+		if openrouter.IsPlatformKeyDisabled(err) {
+			return newInferenceDisabledError(fmt.Errorf("failed to analyze segment with LLM: %w", err))
+		}
 		if openrouter.IsInsufficientCredits(err) {
 			return newInsufficientCreditsError(fmt.Errorf("failed to analyze segment with LLM: %w", err))
 		}
@@ -116,6 +119,7 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 			msgID := allMessages[absoluteIndex].ID
 			if err := txRepo.UpdateToolCallOutcome(ctx, repo.UpdateToolCallOutcomeParams{
 				ID:               msgID,
+				ProjectID:        args.ProjectID,
 				ToolOutcome:      conv.ToPGText(tc.Outcome),
 				ToolOutcomeNotes: conv.ToPGText(tc.Notes),
 			}); err != nil {
@@ -147,6 +151,7 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 	for i := args.StartIndex; i <= args.EndIndex && i < len(allMessages); i++ {
 		if err := txRepo.InsertChatResolutionMessage(ctx, repo.InsertChatResolutionMessageParams{
 			ChatResolutionID: resolutionID,
+			ProjectID:        args.ProjectID,
 			MessageID:        allMessages[i].ID,
 		}); err != nil {
 			return fmt.Errorf("failed to insert resolution message association: %w", err)
@@ -157,6 +162,7 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 	for _, fb := range applicableUserFeedback {
 		err := txRepo.AddUserFeedbackChatResolution(ctx, repo.AddUserFeedbackChatResolutionParams{
 			ID:               fb.ID,
+			ProjectID:        args.ProjectID,
 			ChatResolutionID: uuid.NullUUID{UUID: resolutionID, Valid: true},
 		})
 		if err != nil {
@@ -188,7 +194,7 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 		attr.OrganizationIDKey:             args.OrgID,
 		attr.APIKeyIDKey:                   args.APIKeyID,
 	}
-	chatInfo, err := a.repo.GetChat(ctx, args.ChatID)
+	chatInfo, err := a.repo.GetChat(ctx, repo.GetChatParams{ID: args.ChatID, ProjectID: args.ProjectID})
 	if err == nil && chatInfo.CreatedAt.Valid {
 		resolutionTimeSecs := time.Since(chatInfo.CreatedAt.Time).Seconds()
 
@@ -317,21 +323,22 @@ If there are no tool calls, return an empty array.`, userPromptText)
 	response, err := a.chatClient.GetObjectCompletion(
 		analysisCtx,
 		openrouter.ObjectCompletionRequest{
-			OrgID:          orgID,
-			ProjectID:      projectID.String(),
-			Model:          "", // Use default model
-			SystemPrompt:   systemPrompt,
-			Prompt:         userPrompt,
-			Temperature:    nil,
-			JSONSchema:     &jsonSchemaConfig,
-			UsageSource:    billing.ModelUsageSourceGram,
-			KeyType:        openrouter.KeyTypeInternal,
-			KeySlot:        "",
-			UserID:         "",
-			ExternalUserID: "",
-			UserEmail:      "",
-			HTTPMetadata:   nil,
-			Reasoning:      nil,
+			OrgID:                  orgID,
+			ProjectID:              projectID.String(),
+			Model:                  "", // Use default model
+			SystemPrompt:           systemPrompt,
+			Prompt:                 userPrompt,
+			Temperature:            nil,
+			JSONSchema:             &jsonSchemaConfig,
+			UsageSource:            billing.ModelUsageSourceGram,
+			KeyType:                openrouter.KeyTypeInternal,
+			KeySlot:                "",
+			UserID:                 "",
+			ExternalUserID:         "",
+			UserEmail:              "",
+			HTTPMetadata:           nil,
+			Reasoning:              nil,
+			DisableResponseHealing: false,
 		},
 	)
 	if err != nil {

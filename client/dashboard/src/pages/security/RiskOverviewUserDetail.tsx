@@ -1,4 +1,4 @@
-import { MetricCard } from "@/components/chart/MetricCard";
+import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import {
   formatDateRangeLabel,
   useDateRangeFilter,
@@ -139,20 +139,24 @@ function RiskOverviewUserDetailContent() {
         <Page.Section.CTA>{controls}</Page.Section.CTA>
         <Page.Section.Body>
           <div className="space-y-6">
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-              <MetricCard
+            <StatTileGroup>
+              <StatTile
                 title="Findings"
                 value={userEntry?.findings ?? 0}
+                tone={
+                  (userEntry?.findings ?? 0) > 0 ? "destructive" : "neutral"
+                }
                 format="compact"
                 icon="flag"
               />
-              <MetricCard
+              <StatTile
                 title="Chat Sessions"
                 value={totalChats}
+                tone="information"
                 format="compact"
                 icon="message-square"
               />
-            </div>
+            </StatTileGroup>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <CategoryBreakdown
                 categories={breakdownQuery.data?.categories ?? []}
@@ -222,7 +226,7 @@ function ChatList({
   }
 
   return (
-    <ul className="divide-border divide-y rounded-lg border">
+    <ul className="divide-border divide-y border">
       {chats.map((chat) => (
         <li key={chat.id}>
           <button
@@ -268,7 +272,7 @@ function CategoryBreakdown({
 }) {
   if (isLoading && categories.length === 0) {
     return (
-      <div className="text-muted-foreground rounded-lg border p-4 text-sm">
+      <div className="text-muted-foreground border p-4 text-sm">
         Loading category breakdown...
       </div>
     );
@@ -277,7 +281,7 @@ function CategoryBreakdown({
   const max = categories[0]?.findings || 1;
 
   return (
-    <div className="space-y-3 rounded-lg border p-4">
+    <div className="space-y-3 border p-4">
       <h4 className="text-sm font-medium">Findings by category</h4>
       <ul className="space-y-2">
         {categories.map((c, i) => {
@@ -321,7 +325,7 @@ function RuleBreakdown({
 }) {
   if (isLoading && rules.length === 0) {
     return (
-      <div className="text-muted-foreground rounded-lg border p-4 text-sm">
+      <div className="text-muted-foreground border p-4 text-sm">
         Loading rule breakdown...
       </div>
     );
@@ -330,7 +334,7 @@ function RuleBreakdown({
   const max = rules[0]?.findings || 1;
 
   return (
-    <div className="space-y-3 rounded-lg border p-4">
+    <div className="space-y-3 border p-4">
       <h4 className="text-sm font-medium">Findings by rule</h4>
       <ul className="space-y-2">
         {rules.map((r, i) => {

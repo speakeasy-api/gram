@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	"github.com/speakeasy-api/gram/server/internal/skills/suggest"
@@ -55,13 +56,20 @@ type Service struct {
 	productFeatures    ProductFeaturesClient
 	chatTitleGenerator ChatTitleGenerator
 	riskScanner        risk.RiskScanner
-	policyBypass       *risk.PolicyBypassEvaluator
-	spendGate          *spendrules.Gate
-	shadowMCPClient    *shadowmcp.Client
-	writer             *chat.ChatMessageWriter
+	// piScanner flags captured skill manifests that read as prompt injections.
+	// Optional: when nil, skill capture stores content and scans nothing.
+	piScanner       *promptinjection.Scanner
+	policyBypass    *risk.PolicyBypassEvaluator
+	spendGate       *spendrules.Gate
+	shadowMCPClient *shadowmcp.Client
+	writer          *chat.ChatMessageWriter
 	// efficacySignaler is optional: when nil, hook paths record exactly as
 	// before and emit no wakes.
 	efficacySignaler efficacy.Signaler
+	// identityMapRefresh is optional: when nil, newly attributed account
+	// links converge into the ClickHouse identity map at the sync schedule's
+	// next tick instead of immediately.
+	identityMapRefresh IdentityMapRefreshSignaler
 	// suggestionSignaler is optional: when nil, recorded feedback skips the
 	// suggestion-analysis wake.
 	suggestionSignaler suggest.Signaler
@@ -121,6 +129,11 @@ type SessionMetadata struct {
 	// letting the user breakdown fall back to the device when the session has
 	// no email (company-credential sessions emit no user identity).
 	Hostname string
+	// Cwd is the session's working directory as reported by the hook adapter
+	// (hook.ingest.v1 session.cwd, or the legacy Claude payload's cwd).
+	// Persisted onto chats so session portability can materialize a moved
+	// session into the right project directory.
+	Cwd string
 	// AccountType is "team" or "personal" once classified, else empty.
 	AccountType string
 	// BillingMode is the admin-declared billing mode for the provider org this
@@ -165,6 +178,34 @@ type ChatTitleGenerator interface {
 // slow coordinator.
 const skillEfficacySignalTimeout = time.Second
 
+// IdentityMapRefreshSignaler requests an immediate ClickHouse identity map
+// sync after an account link gains attribution. Implemented by the background
+// package's throttled schedule trigger.
+type IdentityMapRefreshSignaler interface {
+	SignalIdentityMapRefresh(ctx context.Context) error
+}
+
+// identityMapRefreshSignalTimeout bounds one refresh request. A request is
+// best-effort and always follows a durable link write, so it must never hold
+// a hook response open on a slow Temporal call.
+const identityMapRefreshSignalTimeout = time.Second
+
+// signalIdentityMapRefresh delivers one best-effort refresh request after an
+// attributed account link write. Detached from the request context — the link
+// is already durable — and bounded so a slow Temporal call can never hold a
+// hook response open. Failures are logged and swallowed: the sync schedule
+// delivers the same refresh at its next tick.
+func (s *Service) signalIdentityMapRefresh(ctx context.Context) {
+	if s.identityMapRefresh == nil {
+		return
+	}
+	signalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), identityMapRefreshSignalTimeout)
+	defer cancel()
+	if err := s.identityMapRefresh.SignalIdentityMapRefresh(signalCtx); err != nil {
+		s.logger.ErrorContext(ctx, "signal identity map refresh from hook", attr.SlogError(err))
+	}
+}
+
 // signalSkillEfficacy delivers one best-effort wake for a project. Detached
 // from the request context: the write the wake reports is already durable, so a
 // client disconnect must not drop it. Failures are logged and swallowed —
@@ -200,12 +241,14 @@ func NewService(
 	pfClient ProductFeaturesClient,
 	chatTitleGenerator ChatTitleGenerator,
 	riskScanner risk.RiskScanner,
+	piScanner *promptinjection.Scanner,
 	policyBypass *risk.PolicyBypassEvaluator,
 	spendGate *spendrules.Gate,
 	shadowMCPClient *shadowmcp.Client,
 	writer *chat.ChatMessageWriter,
 	efficacySignaler efficacy.Signaler,
 	suggestionSignaler suggest.Signaler,
+	identityMapRefresh IdentityMapRefreshSignaler,
 	serverURL *url.URL,
 	siteURL *url.URL,
 	jwtSecret string,
@@ -224,12 +267,14 @@ func NewService(
 		productFeatures:    pfClient,
 		chatTitleGenerator: chatTitleGenerator,
 		riskScanner:        riskScanner,
+		piScanner:          piScanner,
 		policyBypass:       policyBypass,
 		spendGate:          spendGate,
 		shadowMCPClient:    shadowMCPClient,
 		writer:             writer,
 		efficacySignaler:   efficacySignaler,
 		suggestionSignaler: suggestionSignaler,
+		identityMapRefresh: identityMapRefresh,
 		serverURL:          serverURL,
 		siteURL:            siteURL,
 		jwtSecret:          jwtSecret,

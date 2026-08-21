@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
 // testDocument returns a document that passes every validateDocument check
@@ -33,7 +33,7 @@ const testClientID = "https://client.example.com/oauth/client.json"
 
 func requireOAuthError(t *testing.T, err error, code string) {
 	t.Helper()
-	var oauthErr *usersessions.OAuthError
+	var oauthErr *oauthwire.Error
 	require.ErrorAs(t, err, &oauthErr)
 	require.Equal(t, code, oauthErr.Code)
 }
@@ -50,7 +50,7 @@ func requireValidationError(t *testing.T, err error, code string, reason validat
 func TestValidateClientIDURL_Valid(t *testing.T) {
 	t.Parallel()
 
-	parsed, err := validateClientIDURL(testClientID)
+	parsed, err := ValidateClientIDURL(testClientID)
 	require.NoError(t, err)
 	require.Equal(t, "client.example.com", parsed.Host)
 	require.Equal(t, "/oauth/client.json", parsed.Path)
@@ -59,49 +59,49 @@ func TestValidateClientIDURL_Valid(t *testing.T) {
 func TestValidateClientIDURL_QueryTolerated(t *testing.T) {
 	t.Parallel()
 
-	_, err := validateClientIDURL("https://client.example.com/oauth/client.json?v=2")
+	_, err := ValidateClientIDURL("https://client.example.com/oauth/client.json?v=2")
 	require.NoError(t, err)
 }
 
 func TestValidateClientIDURL_MissingPathRejected(t *testing.T) {
 	t.Parallel()
 
-	_, err := validateClientIDURL("https://client.example.com")
+	_, err := ValidateClientIDURL("https://client.example.com")
 	requireValidationError(t, err, "invalid_request", reasonClientIDMissingPath)
 }
 
 func TestValidateClientIDURL_UserinfoRejected(t *testing.T) {
 	t.Parallel()
 
-	_, err := validateClientIDURL("https://user@client.example.com/client.json")
+	_, err := ValidateClientIDURL("https://user@client.example.com/client.json")
 	requireValidationError(t, err, "invalid_request", reasonClientIDUserinfo)
 }
 
 func TestValidateClientIDURL_FragmentRejected(t *testing.T) {
 	t.Parallel()
 
-	_, err := validateClientIDURL("https://client.example.com/client.json#frag")
+	_, err := ValidateClientIDURL("https://client.example.com/client.json#frag")
 	requireValidationError(t, err, "invalid_request", reasonClientIDFragment)
 }
 
 func TestValidateClientIDURL_DotDotSegmentRejected(t *testing.T) {
 	t.Parallel()
 
-	_, err := validateClientIDURL("https://client.example.com/oauth/../client.json")
+	_, err := ValidateClientIDURL("https://client.example.com/oauth/../client.json")
 	requireValidationError(t, err, "invalid_request", reasonClientIDDotSegments)
 }
 
 func TestValidateClientIDURL_DotSegmentRejected(t *testing.T) {
 	t.Parallel()
 
-	_, err := validateClientIDURL("https://client.example.com/./client.json")
+	_, err := ValidateClientIDURL("https://client.example.com/./client.json")
 	requireValidationError(t, err, "invalid_request", reasonClientIDDotSegments)
 }
 
 func TestValidateClientIDURL_NonHTTPSRejected(t *testing.T) {
 	t.Parallel()
 
-	_, err := validateClientIDURL("http://client.example.com/client.json")
+	_, err := ValidateClientIDURL("http://client.example.com/client.json")
 	requireValidationError(t, err, "invalid_request", reasonClientIDScheme)
 }
 
@@ -109,14 +109,14 @@ func TestValidateClientIDURL_OversizedRejected(t *testing.T) {
 	t.Parallel()
 
 	long := "https://client.example.com/" + strings.Repeat("a", maxClientIDLength)
-	_, err := validateClientIDURL(long)
+	_, err := ValidateClientIDURL(long)
 	requireValidationError(t, err, "invalid_request", reasonClientIDTooLong)
 }
 
 func TestValidateDocument_Valid(t *testing.T) {
 	t.Parallel()
 
-	parsed, err := validateClientIDURL(testClientID)
+	parsed, err := ValidateClientIDURL(testClientID)
 	require.NoError(t, err)
 	require.NoError(t, validateDocument(testDocument(testClientID), testClientID, parsed))
 }
@@ -124,7 +124,7 @@ func TestValidateDocument_Valid(t *testing.T) {
 func TestValidateDocument_ClientIDMismatchRejected(t *testing.T) {
 	t.Parallel()
 
-	parsed, err := validateClientIDURL(testClientID)
+	parsed, err := ValidateClientIDURL(testClientID)
 	require.NoError(t, err)
 
 	doc := testDocument(testClientID)
@@ -135,7 +135,7 @@ func TestValidateDocument_ClientIDMismatchRejected(t *testing.T) {
 func TestValidateDocument_MissingClientNameRejected(t *testing.T) {
 	t.Parallel()
 
-	parsed, err := validateClientIDURL(testClientID)
+	parsed, err := ValidateClientIDURL(testClientID)
 	require.NoError(t, err)
 
 	doc := testDocument(testClientID)
@@ -143,23 +143,47 @@ func TestValidateDocument_MissingClientNameRejected(t *testing.T) {
 	requireValidationError(t, validateDocument(doc, testClientID, parsed), "invalid_client_metadata", reasonMissingClientName)
 }
 
-func TestValidateDocument_MissingAuthMethodRejected(t *testing.T) {
+// TestValidateDocument_MissingAuthMethodAccepted: an absent
+// token_endpoint_auth_method means "none", not client_secret_basic.
+//
+// RFC 7591's default does not carry over, because -02 §4.1 forbids a CIMD
+// document from using any shared-symmetric-secret method — so absence
+// cannot denote one. The field is not in -02's required set either.
+//
+// This is not academic. OpenAI's documents (ChatGPT and Codex CLI) omit the
+// field while being ordinary public clients, so rejecting here would make
+// the ChatGPT presets admit and then fail validation one step later — the
+// worst outcome available, since the client cannot fall back.
+func TestValidateDocument_MissingAuthMethodAccepted(t *testing.T) {
 	t.Parallel()
 
-	parsed, err := validateClientIDURL(testClientID)
+	parsed, err := ValidateClientIDURL(testClientID)
 	require.NoError(t, err)
 
-	// Absent token_endpoint_auth_method defaults to client_secret_basic per
-	// RFC 7591 — a symmetric method CIMD forbids, so it must be rejected.
 	doc := testDocument(testClientID)
 	doc.TokenEndpointAuthMethod = ""
+	require.NoError(t, validateDocument(doc, testClientID, parsed))
+}
+
+// TestValidateDocument_AsymmetricAuthMethodRejected pins that dropping the
+// absent-value rejection did NOT open the door to confidential clients. An
+// explicit private_key_jwt is still refused until §8.2's RFC 7523 §2.2
+// enforcement lands with it.
+func TestValidateDocument_AsymmetricAuthMethodRejected(t *testing.T) {
+	t.Parallel()
+
+	parsed, err := ValidateClientIDURL(testClientID)
+	require.NoError(t, err)
+
+	doc := testDocument(testClientID)
+	doc.TokenEndpointAuthMethod = "private_key_jwt"
 	requireValidationError(t, validateDocument(doc, testClientID, parsed), "invalid_client_metadata", reasonInvalidAuthMethod)
 }
 
 func TestValidateDocument_SymmetricAuthMethodRejected(t *testing.T) {
 	t.Parallel()
 
-	parsed, err := validateClientIDURL(testClientID)
+	parsed, err := ValidateClientIDURL(testClientID)
 	require.NoError(t, err)
 
 	doc := testDocument(testClientID)
@@ -170,7 +194,7 @@ func TestValidateDocument_SymmetricAuthMethodRejected(t *testing.T) {
 func TestValidateDocument_ClientSecretRejected(t *testing.T) {
 	t.Parallel()
 
-	parsed, err := validateClientIDURL(testClientID)
+	parsed, err := ValidateClientIDURL(testClientID)
 	require.NoError(t, err)
 
 	doc := testDocument(testClientID)
@@ -181,7 +205,7 @@ func TestValidateDocument_ClientSecretRejected(t *testing.T) {
 func TestValidateDocument_ClientSecretExpiresAtRejected(t *testing.T) {
 	t.Parallel()
 
-	parsed, err := validateClientIDURL(testClientID)
+	parsed, err := ValidateClientIDURL(testClientID)
 	require.NoError(t, err)
 
 	doc := testDocument(testClientID)
@@ -192,7 +216,7 @@ func TestValidateDocument_ClientSecretExpiresAtRejected(t *testing.T) {
 func TestValidateDocument_JWKSNotAJWKSetRejected(t *testing.T) {
 	t.Parallel()
 
-	parsed, err := validateClientIDURL(testClientID)
+	parsed, err := ValidateClientIDURL(testClientID)
 	require.NoError(t, err)
 
 	doc := testDocument(testClientID)
@@ -203,7 +227,7 @@ func TestValidateDocument_JWKSNotAJWKSetRejected(t *testing.T) {
 func TestValidateDocument_JWKSPrivateKeyRejected(t *testing.T) {
 	t.Parallel()
 
-	parsed, err := validateClientIDURL(testClientID)
+	parsed, err := ValidateClientIDURL(testClientID)
 	require.NoError(t, err)
 
 	doc := testDocument(testClientID)
@@ -214,7 +238,7 @@ func TestValidateDocument_JWKSPrivateKeyRejected(t *testing.T) {
 func TestValidateDocument_JWKSSymmetricKeyRejected(t *testing.T) {
 	t.Parallel()
 
-	parsed, err := validateClientIDURL(testClientID)
+	parsed, err := ValidateClientIDURL(testClientID)
 	require.NoError(t, err)
 
 	doc := testDocument(testClientID)
@@ -225,7 +249,7 @@ func TestValidateDocument_JWKSSymmetricKeyRejected(t *testing.T) {
 func TestValidateDocument_JWKSPublicKeyAccepted(t *testing.T) {
 	t.Parallel()
 
-	parsed, err := validateClientIDURL(testClientID)
+	parsed, err := ValidateClientIDURL(testClientID)
 	require.NoError(t, err)
 
 	doc := testDocument(testClientID)
@@ -236,7 +260,7 @@ func TestValidateDocument_JWKSPublicKeyAccepted(t *testing.T) {
 func TestValidateDocument_OversizedClientNameRejected(t *testing.T) {
 	t.Parallel()
 
-	parsed, err := validateClientIDURL(testClientID)
+	parsed, err := ValidateClientIDURL(testClientID)
 	require.NoError(t, err)
 
 	doc := testDocument(testClientID)
@@ -247,7 +271,7 @@ func TestValidateDocument_OversizedClientNameRejected(t *testing.T) {
 func TestValidateDocument_TooManyRedirectURIsRejected(t *testing.T) {
 	t.Parallel()
 
-	parsed, err := validateClientIDURL(testClientID)
+	parsed, err := ValidateClientIDURL(testClientID)
 	require.NoError(t, err)
 
 	doc := testDocument(testClientID)
@@ -261,7 +285,7 @@ func TestValidateDocument_TooManyRedirectURIsRejected(t *testing.T) {
 func TestValidateDocument_OversizedRedirectURIRejected(t *testing.T) {
 	t.Parallel()
 
-	parsed, err := validateClientIDURL(testClientID)
+	parsed, err := ValidateClientIDURL(testClientID)
 	require.NoError(t, err)
 
 	doc := testDocument(testClientID)
@@ -272,7 +296,7 @@ func TestValidateDocument_OversizedRedirectURIRejected(t *testing.T) {
 func TestValidateDocument_MissingRedirectURIsRejected(t *testing.T) {
 	t.Parallel()
 
-	parsed, err := validateClientIDURL(testClientID)
+	parsed, err := ValidateClientIDURL(testClientID)
 	require.NoError(t, err)
 
 	doc := testDocument(testClientID)
@@ -281,14 +305,14 @@ func TestValidateDocument_MissingRedirectURIsRejected(t *testing.T) {
 }
 
 // TestValidateDocument_NonLoopbackHTTPRedirectURIRejected exercises the
-// usersessions.ValidateRedirectURI rejection path — the one site whose
+// oauthwire.ValidateRedirectURI rejection path — the one site whose
 // wrapping shape differs (a fmt.Errorf layer between the validationError and
 // the OAuthError), so both the reason extraction and the errors.As traversal
 // through the extra layer are pinned here.
 func TestValidateDocument_NonLoopbackHTTPRedirectURIRejected(t *testing.T) {
 	t.Parallel()
 
-	parsed, err := validateClientIDURL(testClientID)
+	parsed, err := ValidateClientIDURL(testClientID)
 	require.NoError(t, err)
 
 	// An http redirect on a non-loopback host fails ValidateRedirectURI's
@@ -301,7 +325,7 @@ func TestValidateDocument_NonLoopbackHTTPRedirectURIRejected(t *testing.T) {
 func TestValidateDocument_CrossOriginHostRejected(t *testing.T) {
 	t.Parallel()
 
-	parsed, err := validateClientIDURL(testClientID)
+	parsed, err := ValidateClientIDURL(testClientID)
 	require.NoError(t, err)
 
 	doc := testDocument(testClientID)
@@ -312,7 +336,7 @@ func TestValidateDocument_CrossOriginHostRejected(t *testing.T) {
 func TestValidateDocument_CrossOriginPortRejected(t *testing.T) {
 	t.Parallel()
 
-	parsed, err := validateClientIDURL(testClientID)
+	parsed, err := ValidateClientIDURL(testClientID)
 	require.NoError(t, err)
 
 	// No normalization: an explicit :443 is a different origin string than
@@ -325,7 +349,7 @@ func TestValidateDocument_CrossOriginPortRejected(t *testing.T) {
 func TestValidateDocument_CustomSchemeRejectedByOriginBinding(t *testing.T) {
 	t.Parallel()
 
-	parsed, err := validateClientIDURL(testClientID)
+	parsed, err := ValidateClientIDURL(testClientID)
 	require.NoError(t, err)
 
 	// Passes the RFC 8252 scheme rules but cannot be same-origin with an
@@ -338,7 +362,7 @@ func TestValidateDocument_CustomSchemeRejectedByOriginBinding(t *testing.T) {
 func TestValidateDocument_LoopbackAnyPortAccepted(t *testing.T) {
 	t.Parallel()
 
-	parsed, err := validateClientIDURL(testClientID)
+	parsed, err := ValidateClientIDURL(testClientID)
 	require.NoError(t, err)
 
 	doc := testDocument(testClientID)
@@ -365,7 +389,7 @@ func TestValidateDocument_UnknownExtensionFieldsAccepted(t *testing.T) {
 	var doc Document
 	require.NoError(t, json.Unmarshal([]byte(raw), &doc))
 
-	parsed, err := validateClientIDURL(testClientID)
+	parsed, err := ValidateClientIDURL(testClientID)
 	require.NoError(t, err)
 	require.NoError(t, validateDocument(&doc, testClientID, parsed))
 }

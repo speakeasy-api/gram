@@ -11,6 +11,9 @@ type InspectTabProps = {
   isLoadingEndpoints: boolean;
 };
 
+// Unproxied servers never reach this tab: MCPServerDetails redirects their
+// /inspect route back to /overview before this component renders, since
+// there's no reliable way to discover a vendor's tools without live auth.
 export function InspectTab({
   mcpServer,
   endpoints,

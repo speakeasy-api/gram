@@ -1,3 +1,5 @@
+import { clearStorageForLogout } from "@/lib/logout-storage";
+
 /**
  * Paths that render without a session. A 401 on these is expected (auth.info
  * always 401s when logged out), so it must not trigger a login redirect.
@@ -5,6 +7,8 @@
 export const UNAUTHENTICATED_PATHS = [
   "/login",
   "/register",
+  "/explore-demo",
+  "/sign-up",
   "/invite",
   "/book-demo",
   "/shadow-mcp/request",
@@ -58,6 +62,7 @@ export function redirectToLoginOnUnauthorized(): void {
   if (UNAUTHENTICATED_PATHS.some((p) => pathname.startsWith(p))) return;
 
   redirecting = true;
+  clearStorageForLogout();
   const target = safeRedirectPath(pathname + search);
   if (!target) {
     window.location.assign("/login");

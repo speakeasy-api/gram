@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
@@ -46,13 +47,22 @@ type AuthorizationURLParams struct {
 	Scope           string
 	State           string
 	ScopesSupported []string
+
+	// LoginHint pre-fills the email field on the identity provider's screen.
+	// Optional; omitted from the URL when empty.
+	LoginHint string
+
+	// ScreenHint selects which AuthKit screen to land on. Only "sign-up" is
+	// used, and only while provider is "authkit". Omitted when empty.
+	ScreenHint string
 }
 
 // AuthenticateResult holds the fields Gram uses from the IDP code exchange.
 type AuthenticateResult struct {
-	AccessToken    string
-	OrganizationID string // WorkOS org ID the user selected during auth (may be empty)
-	User           AuthenticatedUser
+	AccessToken       string
+	OrganizationID    string // WorkOS org ID the user selected during auth (may be empty)
+	User              AuthenticatedUser
+	impersonatorEmail string
 }
 
 type MagicAuthChallenge struct {
@@ -72,7 +82,9 @@ type AuthenticatedUser struct {
 }
 
 // WorkOSClient is the subset of workos.Client needed for identity resolution:
-// org membership sync, cross-system ID synchronization, and org provisioning.
+// org membership sync, cross-system ID synchronization, org provisioning, and
+// the signup-time email lookup that keeps existing AuthKit users off the
+// hosted sign-up screen.
 type WorkOSClient interface {
 	ListUserMemberships(ctx context.Context, userID string) ([]workos.Member, error)
 	GetOrganization(ctx context.Context, orgID string) (*workos.Organization, error)
@@ -83,25 +95,28 @@ type WorkOSClient interface {
 	CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (string, error)
 	GetOrgMembership(ctx context.Context, workosUserID, workosOrgID string) (*workos.Member, error)
 	UpdateMemberRoles(ctx context.Context, membershipID string, roleSlugs []string) (*workos.Member, error)
+	GetUserByEmail(ctx context.Context, email string) (*workos.User, error)
 }
 
 // IDPUserInfo represents the user identity returned by the IDP after code exchange.
 type IDPUserInfo struct {
-	Sub             string  `json:"sub"`
-	Email           string  `json:"email"`
-	Name            string  `json:"name"`
-	Picture         *string `json:"picture,omitempty"`
-	ExternalID      string  `json:"-"`
-	WorkOSSessionID string  `json:"-"`
-	OrganizationID  string  `json:"-"` // WorkOS org ID selected during auth
+	Sub               string  `json:"sub"`
+	Email             string  `json:"email"`
+	Name              string  `json:"name"`
+	Picture           *string `json:"picture,omitempty"`
+	ExternalID        string  `json:"-"`
+	WorkOSSessionID   string  `json:"-"`
+	OrganizationID    string  `json:"-"` // WorkOS org ID selected during auth
+	impersonatorEmail string
 }
 
-// RBACEnabler enables RBAC for an organization (seed system-role grants + turn
-// on the feature flag). Implemented by *productfeatures.Client; declared here so
-// identity does not import productfeatures (which would form an import cycle via
-// productfeatures -> auth -> identity).
-type RBACEnabler interface {
-	EnableRBAC(ctx context.Context, organizationID string) error
+// ImpersonatorEmail returns the WorkOS Dashboard operator who initiated an
+// impersonation session. It is empty for ordinary authentication.
+func (u *IDPUserInfo) ImpersonatorEmail() string {
+	if u == nil {
+		return ""
+	}
+	return u.impersonatorEmail
 }
 
 // Resolver handles identity concerns: IDP code exchange, user upsert, org
@@ -118,7 +133,6 @@ type Resolver struct {
 	userRepo      *userRepo.Queries
 	pylon         *pylon.Pylon
 	posthog       *posthog.Posthog
-	rbac          RBACEnabler
 }
 
 func NewResolver(
@@ -133,7 +147,6 @@ func NewResolver(
 	userRepo *userRepo.Queries,
 	pylon *pylon.Pylon,
 	posthog *posthog.Posthog,
-	rbac RBACEnabler,
 	suffix cache.Suffix,
 ) *Resolver {
 	logger = logger.With(attr.SlogComponent("identity"))
@@ -149,7 +162,6 @@ func NewResolver(
 		userRepo:      userRepo,
 		pylon:         pylon,
 		posthog:       posthog,
-		rbac:          rbac,
 	}
 }
 
@@ -216,13 +228,14 @@ func idpUserInfoFromAuthenticateResult(resp *AuthenticateResult) *IDPUserInfo {
 	}
 
 	return &IDPUserInfo{
-		Sub:             resp.User.ID,
-		Email:           resp.User.Email,
-		Name:            name,
-		Picture:         picture,
-		ExternalID:      resp.User.ExternalID,
-		WorkOSSessionID: extractSessionIDFromJWT(resp.AccessToken),
-		OrganizationID:  resp.OrganizationID,
+		Sub:               resp.User.ID,
+		Email:             resp.User.Email,
+		Name:              name,
+		Picture:           picture,
+		ExternalID:        resp.User.ExternalID,
+		WorkOSSessionID:   extractSessionIDFromJWT(resp.AccessToken),
+		OrganizationID:    resp.OrganizationID,
+		impersonatorEmail: resp.impersonatorEmail,
 	}
 }
 
@@ -313,8 +326,7 @@ func (r *Resolver) resolveGramUserID(ctx context.Context, idpUser *IDPUserInfo) 
 }
 
 // BuildUserInfoFromDB constructs a CachedUserInfo by querying user data and
-// org memberships from the database. Falls back to WorkOS API when the local
-// DB has no memberships for the user.
+// organization memberships from the database.
 func (r *Resolver) BuildUserInfoFromDB(ctx context.Context, userID string) (*sessions.CachedUserInfo, error) {
 	ctx, span := r.tracer.Start(ctx, "identity.buildUserInfoFromDB")
 	defer span.End()
@@ -329,14 +341,6 @@ func (r *Resolver) BuildUserInfoFromDB(ctx context.Context, userID string) (*ses
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("list organizations for user: %w", err)
-	}
-
-	if len(orgRows) == 0 && user.WorkosID.Valid && r.workosClient != nil {
-		if synced, err := r.syncMembershipsFromWorkOS(ctx, userID, user.WorkosID.String); err != nil {
-			r.logger.ErrorContext(ctx, "workos membership fallback failed", attr.SlogError(err))
-		} else {
-			orgRows = synced
-		}
 	}
 
 	organizations := make([]sessions.Organization, len(orgRows))
@@ -387,8 +391,29 @@ func (r *Resolver) SyncMembershipsFromWorkOS(ctx context.Context, gramUserID, wo
 		return nil
 	}
 
-	if _, err := r.syncMembershipsFromWorkOS(ctx, gramUserID, workosUserID); err != nil {
-		return err
+	members, err := r.workosClient.ListUserMemberships(ctx, workosUserID)
+	if err != nil {
+		return fmt.Errorf("list workos memberships: %w", err)
+	}
+
+	for _, m := range members {
+		if err := r.upsertOrgFromMembership(ctx, m); err != nil {
+			return err
+		}
+	}
+
+	workosOrgIDs := make([]string, len(members))
+	membershipIDs := make([]string, len(members))
+	for i, m := range members {
+		workosOrgIDs[i] = m.OrganizationID
+		membershipIDs[i] = m.ID
+	}
+	if err := r.orgRepo.SetUserWorkOSMemberships(ctx, orgRepo.SetUserWorkOSMembershipsParams{
+		UserID:              pgtype.Text{String: gramUserID, Valid: gramUserID != ""},
+		WorkosOrgIds:        workosOrgIDs,
+		WorkosMembershipIds: membershipIDs,
+	}); err != nil {
+		return fmt.Errorf("set user workos memberships: %w", err)
 	}
 
 	if err := r.InvalidateUserInfoCache(ctx, gramUserID); err != nil {
@@ -428,42 +453,6 @@ func (r *Resolver) UpdateOrganizationMembershipRole(ctx context.Context, workosU
 	return membership.ID, nil
 }
 
-func (r *Resolver) syncMembershipsFromWorkOS(ctx context.Context, gramUserID, workosUserID string) ([]orgRepo.ListOrganizationsForUserRow, error) {
-	members, err := r.workosClient.ListUserMemberships(ctx, workosUserID)
-	if err != nil {
-		return nil, fmt.Errorf("list workos memberships: %w", err)
-	}
-	if len(members) == 0 {
-		return nil, nil
-	}
-
-	for _, m := range members {
-		if err := r.upsertOrgFromMembership(ctx, m); err != nil {
-			return nil, err
-		}
-	}
-
-	workosOrgIDs := make([]string, len(members))
-	membershipIDs := make([]string, len(members))
-	for i, m := range members {
-		workosOrgIDs[i] = m.OrganizationID
-		membershipIDs[i] = m.ID
-	}
-	if err := r.orgRepo.SetUserWorkOSMemberships(ctx, orgRepo.SetUserWorkOSMembershipsParams{
-		UserID:              pgtype.Text{String: gramUserID, Valid: gramUserID != ""},
-		WorkosOrgIds:        workosOrgIDs,
-		WorkosMembershipIds: membershipIDs,
-	}); err != nil {
-		return nil, fmt.Errorf("set user workos memberships: %w", err)
-	}
-
-	rows, err := r.orgRepo.ListOrganizationsForUser(ctx, conv.ToPGText(gramUserID))
-	if err != nil {
-		return nil, fmt.Errorf("re-read organizations after workos sync: %w", err)
-	}
-	return rows, nil
-}
-
 // upsertOrgFromMembership reconciles the local org row for one WorkOS
 // membership. Steady-state callers (local org already linked to this WorkOS
 // org) make zero WorkOS API calls. WorkOS reads happen only when the local
@@ -493,9 +482,9 @@ func (r *Resolver) upsertOrgFromMembership(ctx context.Context, m workos.Member)
 		gramOrgID = orgid.FromWorkOSID(m.OrganizationID)
 	}
 
-	slug := orgslug.Slugify(org.Name)
-	if slug == "" {
-		slug = m.OrganizationID
+	slug, err := orgslug.StableBase(org.Name, m.OrganizationID)
+	if err != nil {
+		return fmt.Errorf("derive slug for WorkOS organization %q: %w", m.OrganizationID, err)
 	}
 
 	existingOrg, err := r.orgRepo.GetOrganizationMetadata(ctx, gramOrgID)
@@ -526,19 +515,6 @@ func (r *Resolver) upsertOrgFromMembership(ctx context.Context, m workos.Member)
 			Whitelisted: pgtype.Bool{Bool: false, Valid: false},
 		}); err != nil {
 			return fmt.Errorf("upsert org metadata from workos %q: %w", m.OrganizationID, err)
-		}
-		// Newly provisioned org: enable RBAC so access control is on from the
-		// start. Best-effort — a failure here must not block login; the WorkOS
-		// webhook reconcile path is a backstop and the super-admin tool a manual
-		// fallback. Idempotent if it later runs again.
-		if r.rbac != nil {
-			if err := r.rbac.EnableRBAC(ctx, gramOrgID); err != nil {
-				r.logger.ErrorContext(ctx, "failed to enable RBAC for org provisioned from workos",
-					attr.SlogError(err),
-					attr.SlogWorkOSOrganizationID(m.OrganizationID),
-					attr.SlogOrganizationID(gramOrgID),
-				)
-			}
 		}
 	default:
 		return fmt.Errorf("get org metadata for workos organization %q: %w", m.OrganizationID, err)
@@ -616,6 +592,22 @@ func (r *Resolver) InvalidateUserInfoCache(ctx context.Context, userID string) e
 
 const workosAuthorizeEndpoint = "https://api.workos.com/user_management/authorize"
 
+// HasWorkOSUser reports whether WorkOS already has an account for email.
+// An unset client is treated as "no such user" so local and test environments
+// keep the current signup flow. Callers must fail open on error: a temporary
+// WorkOS problem must not block new signups.
+func (r *Resolver) HasWorkOSUser(ctx context.Context, email string) (bool, error) {
+	if r.workosClient == nil || email == "" {
+		return false, nil
+	}
+
+	user, err := r.workosClient.GetUserByEmail(ctx, email)
+	if err != nil {
+		return false, fmt.Errorf("lookup workos user by email: %w", err)
+	}
+	return user != nil, nil
+}
+
 // BuildAuthorizationURL constructs the OIDC authorization URL that the
 // browser should be redirected to.
 func (r *Resolver) BuildAuthorizationURL(ctx context.Context, params AuthorizationURLParams) (*url.URL, error) {
@@ -626,6 +618,15 @@ func (r *Resolver) BuildAuthorizationURL(ctx context.Context, params Authorizati
 	q.Set("state", params.State)
 	q.Set("scope", "openid email profile")
 	q.Set("provider", "authkit")
+	// Both hints are AuthKit features. Ordinary login leaves them empty so
+	// the authorization URL stays unchanged. Signup may set login_hint for
+	// either screen, and screen_hint only when the address is new.
+	if params.LoginHint != "" {
+		q.Set("login_hint", params.LoginHint)
+	}
+	if params.ScreenHint != "" {
+		q.Set("screen_hint", params.ScreenHint)
+	}
 
 	authorizeBase := workosAuthorizeEndpoint
 	if !strings.HasPrefix(r.idpClientID, "client_") {
@@ -641,41 +642,51 @@ func (r *Resolver) BuildAuthorizationURL(ctx context.Context, params Authorizati
 	return authURL, nil
 }
 
+type ProvisionedOrganization struct {
+	WorkOSOrganizationID string
+	GramOrganizationID   string
+	WorkOSUserID         string
+	WorkOSMembershipID   string
+}
+
 // ProvisionOrgInWorkOS creates a WorkOS organization, derives a deterministic
 // Gram org ID (UUIDv5) from the returned WorkOS org ID, sets the external_id
-// on the WorkOS org to the derived Gram ID, and creates a membership linking
-// the user. Returns (workosOrgID, gramOrgID, err).
+// on the WorkOS org to the derived Gram ID, and creates an admin membership
+// linking the first user.
 // When no WorkOS client is configured (tests, OSS), returns a random UUID as gramOrgID.
-func (r *Resolver) ProvisionOrgInWorkOS(ctx context.Context, orgName, gramUserID string) (string, string, error) {
+func (r *Resolver) ProvisionOrgInWorkOS(ctx context.Context, orgName, gramUserID string) (ProvisionedOrganization, error) {
 	if r.workosClient == nil {
-		return "", uuid.New().String(), nil
+		return ProvisionedOrganization{
+			WorkOSOrganizationID: "",
+			GramOrganizationID:   uuid.New().String(),
+			WorkOSUserID:         "",
+			WorkOSMembershipID:   "",
+		}, nil
 	}
 
 	// Look up user's WorkOS ID from the database.
 	user, err := r.userRepo.GetUser(ctx, gramUserID)
 	if err != nil {
-		return "", "", fmt.Errorf("look up user for WorkOS provisioning: %w", err)
+		return ProvisionedOrganization{}, fmt.Errorf("look up user for WorkOS provisioning: %w", err)
 	}
 	if !user.WorkosID.Valid {
-		return "", "", fmt.Errorf("user %s has no workos_id", gramUserID)
+		return ProvisionedOrganization{}, fmt.Errorf("user %s has no workos_id", gramUserID)
 	}
 
-	// Create the WorkOS org first, then derive the Gram org ID from it.
-	workosOrgID, err := r.workosClient.CreateOrganization(ctx, orgName, "")
+	created, err := orgprovision.CreateInWorkOS(ctx, r.workosClient, orgName)
 	if err != nil {
-		return "", "", fmt.Errorf("create WorkOS organization: %w", err)
+		return ProvisionedOrganization{}, fmt.Errorf("provision organization in WorkOS: %w", err)
 	}
 
-	gramOrgID := orgid.FromWorkOSID(workosOrgID)
-
-	// Back-fill the external_id so WorkOS knows the Gram org ID.
-	if err := r.workosClient.UpdateOrganizationExternalID(ctx, workosOrgID, gramOrgID); err != nil {
-		return "", "", fmt.Errorf("set external_id on WorkOS organization: %w", err)
+	membershipID, err := r.workosClient.CreateOrganizationMembership(ctx, user.WorkosID.String, created.WorkOSOrganizationID, "admin")
+	if err != nil {
+		return ProvisionedOrganization{}, fmt.Errorf("create WorkOS organization membership: %w", err)
 	}
 
-	if _, err := r.workosClient.CreateOrganizationMembership(ctx, user.WorkosID.String, workosOrgID, "admin"); err != nil {
-		return "", "", fmt.Errorf("create WorkOS organization membership: %w", err)
-	}
-
-	return workosOrgID, gramOrgID, nil
+	return ProvisionedOrganization{
+		WorkOSOrganizationID: created.WorkOSOrganizationID,
+		GramOrganizationID:   created.GramOrganizationID,
+		WorkOSUserID:         user.WorkosID.String,
+		WorkOSMembershipID:   membershipID,
+	}, nil
 }

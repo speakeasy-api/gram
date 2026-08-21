@@ -19,6 +19,10 @@ export type CreateIssuerRequestBody = {
    */
   clientSetupDocumentationUrl?: string | undefined;
   /**
+   * PKCE code challenge methods advertised by the issuer (RFC 8414 code_challenge_methods_supported). Omitting the field stores null ("not captured"), distinct from an empty array ("the issuer advertises no methods").
+   */
+  codeChallengeMethodsSupported?: Array<string> | undefined;
+  /**
    * Grant types advertised by the issuer.
    */
   grantTypesSupported?: Array<string> | undefined;
@@ -67,6 +71,10 @@ export type CreateIssuerRequestBody = {
    */
   responseTypesSupported?: Array<string> | undefined;
   /**
+   * Upstream RFC 7009 revocation endpoint; absent for issuers that advertise none.
+   */
+  revocationEndpoint?: string | undefined;
+  /**
    * Scopes advertised by the issuer.
    */
   scopesSupported?: Array<string> | undefined;
@@ -93,6 +101,7 @@ export type CreateIssuerRequestBody$Outbound = {
   authorization_endpoint?: string | undefined;
   client_id_metadata_document_supported?: boolean | undefined;
   client_setup_documentation_url?: string | undefined;
+  code_challenge_methods_supported?: Array<string> | undefined;
   grant_types_supported?: Array<string> | undefined;
   issuer: string;
   jwks_uri?: string | undefined;
@@ -105,6 +114,7 @@ export type CreateIssuerRequestBody$Outbound = {
   project_id?: string | undefined;
   registration_endpoint?: string | undefined;
   response_types_supported?: Array<string> | undefined;
+  revocation_endpoint?: string | undefined;
   scopes_supported?: Array<string> | undefined;
   service_documentation?: string | undefined;
   slug: string;
@@ -121,6 +131,7 @@ export const CreateIssuerRequestBody$outboundSchema: z.ZodMiniType<
     authorizationEndpoint: z.optional(z.string()),
     clientIdMetadataDocumentSupported: z.optional(z.boolean()),
     clientSetupDocumentationUrl: z.optional(z.string()),
+    codeChallengeMethodsSupported: z.optional(z.array(z.string())),
     grantTypesSupported: z.optional(z.array(z.string())),
     issuer: z.string(),
     jwksUri: z.optional(z.string()),
@@ -133,6 +144,7 @@ export const CreateIssuerRequestBody$outboundSchema: z.ZodMiniType<
     projectId: z.optional(z.string()),
     registrationEndpoint: z.optional(z.string()),
     responseTypesSupported: z.optional(z.array(z.string())),
+    revocationEndpoint: z.optional(z.string()),
     scopesSupported: z.optional(z.array(z.string())),
     serviceDocumentation: z.optional(z.string()),
     slug: z.string(),
@@ -145,6 +157,7 @@ export const CreateIssuerRequestBody$outboundSchema: z.ZodMiniType<
       clientIdMetadataDocumentSupported:
         "client_id_metadata_document_supported",
       clientSetupDocumentationUrl: "client_setup_documentation_url",
+      codeChallengeMethodsSupported: "code_challenge_methods_supported",
       grantTypesSupported: "grant_types_supported",
       jwksUri: "jwks_uri",
       logoAssetId: "logo_asset_id",
@@ -153,6 +166,7 @@ export const CreateIssuerRequestBody$outboundSchema: z.ZodMiniType<
       projectId: "project_id",
       registrationEndpoint: "registration_endpoint",
       responseTypesSupported: "response_types_supported",
+      revocationEndpoint: "revocation_endpoint",
       scopesSupported: "scopes_supported",
       serviceDocumentation: "service_documentation",
       tokenEndpoint: "token_endpoint",

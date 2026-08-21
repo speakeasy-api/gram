@@ -57,6 +57,9 @@ var _ = Service("risk", func() {
 			Attribute("shadow_mcp_disposition", String, "Default disposition for shadow MCP blocking policies: block_all (default) blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Only valid with the shadow_mcp source and block action. Immutable after create — switching requires delete + recreate.", func() {
 				shared.RiskPolicyShadowMCPDispositionEnum()
 			})
+			Attribute("shadow_mcp_blocked_urls", ArrayOf(String), "For allow_all policies: complete desired canonical URL block set. Omit or send empty to block nothing. Only valid when shadow_mcp_disposition is allow_all.", func() {
+				Meta("struct:tag:json", "shadow_mcp_blocked_urls")
+			})
 			Attribute("auto_name", Boolean, "Whether the policy name should be auto-generated.")
 			Attribute("user_message", String, "Optional message shown to end users when this policy blocks an action or surfaces a flagged finding.")
 			Attribute("prompt", String, "For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Required when policy_type is prompt_based.")
@@ -204,6 +207,9 @@ var _ = Service("risk", func() {
 			Attribute("shadow_mcp_disposition", String, "The policy's shadow MCP disposition. Immutable: omit, or send the current value unchanged; any other value is rejected. Switching posture requires delete + recreate.", func() {
 				shared.RiskPolicyShadowMCPDispositionEnum()
 			})
+			Attribute("shadow_mcp_blocked_urls", ArrayOf(String), "For allow_all policies: complete desired canonical URL block set. Omit to preserve; send empty to clear.", func() {
+				Meta("struct:tag:json", "shadow_mcp_blocked_urls")
+			})
 			Attribute("auto_name", Boolean, "Whether the policy name should be auto-generated.")
 			Attribute("user_message", String, "Optional message shown to end users when this policy blocks an action or surfaces a flagged finding. Send an empty string to clear.")
 			Attribute("prompt", String, "For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Omit to preserve the current value.")
@@ -274,6 +280,7 @@ var _ = Service("risk", func() {
 			Attribute("category", String, "Optional rule category key to filter by (e.g. secrets, pii, financial).")
 			Attribute("rule_id", String, "Optional rule identifier substring to filter by (case-insensitive, e.g. 'secret' matches all 'secret.*' rules).")
 			Attribute("user_id", String, "Optional user identifier substring to filter by (case-insensitive, matched against the chat's external user id).")
+			Attribute("external_user_ids", ArrayOf(String), "Optional external user identifiers to filter by, matched whole rather than as a substring. Pass every identifier a subject is known by; unlike user_id this cannot pull in another person whose identifier merely contains theirs.")
 			Attribute("unique_match", Boolean, "If true, collapse results to one row per (policy_id, rule_id, match), keeping the most recent occurrence. Useful when the same secret is detected many times within a single message body.")
 			Attribute("non_assistant", Boolean, "If true, only return findings from chats that are not linked to an assistant. Useful for surfacing events that are missing user attribution.")
 			Attribute("assistant_id", String, "Optional assistant ID; only return findings from chats linked to this assistant.", func() {
@@ -304,6 +311,7 @@ var _ = Service("risk", func() {
 			Param("category")
 			Param("rule_id")
 			Param("user_id")
+			Param("external_user_ids")
 			Param("unique_match")
 			Param("non_assistant")
 			Param("assistant_id")
@@ -505,7 +513,7 @@ var _ = Service("risk", func() {
 	})
 
 	Method("listDismissedRiskResults", func() {
-		Description("List risk results manually marked as false positive for the current project (the Dismissed tab). Kept separate from listRiskResults, which never returns dismissed results.")
+		Description("List suppressed risk results for the current project — findings hidden by an exclusion rule, a manual dismissal, or the automated false-positive sweep. Kept separate from listRiskResults, which never returns suppressed results.")
 
 		Payload(func() {
 			security.ByKeyPayload()
@@ -516,6 +524,9 @@ var _ = Service("risk", func() {
 				Minimum(1)
 				Maximum(200)
 			})
+			Attribute("reasons", ArrayOf(String, func() {
+				Enum("rule", "manual", "automated")
+			}), "Only return results suppressed for these reasons. Omitted or empty means all reasons.")
 		})
 
 		Result(ListRiskResultsResult)
@@ -527,6 +538,7 @@ var _ = Service("risk", func() {
 			security.ProjectHeader()
 			Param("cursor")
 			Param("limit")
+			Param("reasons")
 			Response(StatusOK)
 		})
 
@@ -695,6 +707,39 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskRuleBreakdown"}`)
 	})
 
+	Method("getRiskSignals", func() {
+		Description("Get clustered risk signals — findings grouped by rule and ranked by severity score — plus window-level KPI stats and the exposure breakdown by category. Powers the Watchdog page. Served from the ClickHouse findings store.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("from", String, "Inclusive start of the signals window. Defaults to the start of the 7-day calendar window ending at to.", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("to", String, "Exclusive end of the signals window. Defaults to now.", func() {
+				Format(FormatDateTime)
+			})
+		})
+
+		Result(RiskSignalsResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.getSignals")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("from")
+			Param("to")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getRiskSignals")
+		Meta("openapi:extension:x-speakeasy-group", "risk.signals")
+		Meta("openapi:extension:x-speakeasy-name-override", "get")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskSignals"}`)
+	})
+
 	Method("getRiskPolicyStatus", func() {
 		Description("Get the analysis status of a risk policy including progress and workflow state.")
 
@@ -727,18 +772,31 @@ var _ = Service("risk", func() {
 	Method("createRiskPolicyBypassRequest", func() {
 		Description("Create or refresh a risk policy bypass request from a signed request URL token.")
 		Security(security.Session)
+		// The device agent files the request on the user's behalf with the
+		// per-user `agent_user` key minted by token-exchange. The key owner is
+		// the enrolled user, so the handler's requester binding applies
+		// unchanged. Deliberately no ProjectSlug scheme: the project resolves
+		// from the request token's claims.
+		Security(security.ByKey, func() {
+			Scope("agent_user")
+		})
 
 		Payload(func() {
 			security.SessionPayload()
+			security.ByKeyPayload()
 			Attribute("request_token", String, "Signed request token generated when a risk policy blocks an action.")
+			Attribute("note", String, "The requester's own justification for needing this, shown to whoever decides. Optional: an older client that sends none falls back to the policy's block reason.", func() {
+				MaxLength(4000)
+			})
 			Required("request_token")
 		})
 
-		Result(RiskPolicyBypassRequest)
+		Result(PolicyBypassRedemption)
 
 		HTTP(func() {
 			POST("/rpc/risk.createPolicyBypassRequest")
 			security.SessionHeader()
+			security.ByKeyHeader()
 			Response(StatusCreated)
 		})
 
@@ -1842,6 +1900,17 @@ var RiskOverviewTimeSeriesFinding = Type("RiskOverviewTimeSeriesFinding", func()
 	Required("bucket_start", "category", "findings")
 })
 
+var PolicyBypassRedemption = Type("PolicyBypassRedemption", func() {
+	Description("What a redeemed block-link token turned into: an MCP access request when the approval workflow handles the server, or a legacy policy bypass request otherwise.")
+	Required("kind", "id", "status")
+
+	Attribute("kind", String, "The kind of request the token redeemed into.", func() {
+		Enum("approval_request", "bypass_request")
+	})
+	Attribute("id", String, "The id of the created or refreshed request.")
+	Attribute("status", String, "The request's current status.")
+})
+
 var RiskPolicyBypassRequest = Type("RiskPolicyBypassRequest", func() {
 	Attribute("id", String, "The bypass request ID.", func() {
 		Format(FormatUUID)
@@ -1914,4 +1983,71 @@ var RiskPolicyBypassApprovalRequestBody = Type("RiskPolicyBypassApprovalRequestB
 var ListRiskPolicyBypassRequestsResult = Type("ListRiskPolicyBypassRequestsResult", func() {
 	Attribute("requests", ArrayOf(RiskPolicyBypassRequest), "Current risk policy bypass request records.")
 	Required("requests")
+})
+
+var RiskSignalTopUser = Type("RiskSignalTopUser", func() {
+	Attribute("email", String, "User email, or Unknown user when unavailable.")
+	Attribute("external_user_id", String, "External user identifier as recorded on chats, when known. Empty when the finding cannot be attributed to an external user.")
+	Attribute("team", String, "WorkOS directory department of the user when known; empty otherwise.")
+	Attribute("findings", Int64, "Finding count for this user within the signal and window.")
+
+	Required("email", "external_user_id", "team", "findings")
+})
+
+var RiskSignal = Type("RiskSignal", func() {
+	Description("One clustered risk signal: all live findings for a single rule in the window, with a heuristic severity score and trend/spread stats.")
+
+	Attribute("key", String, "Stable client identity for the signal. Currently 'rule:<rule_id>'.")
+	Attribute("rule_id", String, "Rule identifier the signal clusters on (e.g. 'secret.aws_access_token', 'pii.email_address').")
+	Attribute("category", String, "Canonical risk category of the rule (secrets, pii, ...).")
+	Attribute("description", String, "Representative finding description for this rule. Empty when findings carry no description.")
+	Attribute("detection_sources", ArrayOf(String), "Detector sources that produced findings in this signal (gitleaks, presidio, prompt_injection, ...).")
+	Attribute("apps", ArrayOf(String), "Source apps (chat surfaces) the findings were observed in. Empty until app attribution is recorded on findings.")
+	Attribute("severity", String, "Severity rating derived from the risk score.", func() {
+		Enum("low", "medium", "high", "critical")
+	})
+	Attribute("risk_score", Float64, "Heuristic severity score on the 0.1-10 scale used across risk surfaces.")
+	Attribute("findings", Int64, "Deduplicated finding count in the window.")
+	Attribute("previous_findings", Int64, "Finding count in the equal-length window immediately before from.")
+	Attribute("users", Int64, "Distinct users with at least one finding in the window.")
+	Attribute("teams", Int64, "Distinct teams with at least one finding in the window. Zero until team attribution is recorded on findings.")
+	Attribute("first_seen", String, "Event time of the earliest finding in the window.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("last_seen", String, "Event time of the latest finding in the window.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("top_users", ArrayOf(RiskSignalTopUser), "Top users by finding count within the signal.")
+	Attribute("sparkline", ArrayOf(Int64), "Deduplicated finding counts per equal-width time bucket across the window, oldest bucket first. Powers the per-signal trend sparkline.")
+
+	Required("key", "rule_id", "category", "description", "detection_sources", "apps", "severity", "risk_score", "findings", "previous_findings", "users", "teams", "first_seen", "last_seen", "top_users", "sparkline")
+})
+
+var RiskExposureSlice = Type("RiskExposureSlice", func() {
+	Attribute("category", String, "Canonical risk category key.")
+	Attribute("findings", Int64, "Deduplicated finding count for this category in the window.")
+	Attribute("share", Float64, "Fraction of the window's findings in this category (0-1).")
+
+	Required("category", "findings", "share")
+})
+
+var RiskSignalsResult = Type("RiskSignalsResult", func() {
+	Attribute("from", String, "Inclusive start of the signals window.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("to", String, "Exclusive end of the signals window.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("org_risk_score", Float64, "Heuristic organization risk score on the 0.1-10 scale, blended from the top signal scores and finding volume. Zero when the window has no findings.")
+	Attribute("previous_org_risk_score", Float64, "Organization risk score computed the same way over the equal-length window immediately before from.")
+	Attribute("findings", Int64, "Deduplicated live findings in the window.")
+	Attribute("previous_findings", Int64, "Deduplicated live findings in the equal-length window immediately before from.")
+	Attribute("open_signals", Int64, "Signals with at least one live finding in the window.")
+	Attribute("critical_signals", Int64, "Signals rated critical in the window.")
+	Attribute("users_exposed", Int64, "Distinct users with at least one finding in the window.")
+	Attribute("previous_users_exposed", Int64, "Distinct users with at least one finding in the equal-length window immediately before from.")
+	Attribute("exposure", ArrayOf(RiskExposureSlice), "Finding counts by category, largest first.")
+	Attribute("signals", ArrayOf(RiskSignal), "Signals ranked by risk score, highest first.")
+
+	Required("from", "to", "org_risk_score", "previous_org_risk_score", "findings", "previous_findings", "open_signals", "critical_signals", "users_exposed", "previous_users_exposed", "exposure", "signals")
 })

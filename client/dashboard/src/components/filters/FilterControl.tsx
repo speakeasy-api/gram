@@ -56,6 +56,7 @@ export function FilterControl({
                   label: o.label,
                   value: o.value,
                   icon: o.icon,
+                  description: o.description,
                 }))
           }
           defaultValue={value as string[]}
@@ -91,7 +92,11 @@ export function FilterControl({
           <SelectContent>
             <SelectItem value={SELECT_ALL_VALUE}>{allLabelFor(dim)}</SelectItem>
             {flattenOptions(options).map((o) => (
-              <SelectItem key={o.value} value={o.value}>
+              <SelectItem
+                key={o.value}
+                value={o.value}
+                description={o.description}
+              >
                 {o.label}
               </SelectItem>
             ))}
@@ -124,7 +129,7 @@ export function FilterControl({
       );
     case "boolean":
       return (
-        <label className="border-border hover:bg-muted/50 inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm">
+        <label className="border-border hover:bg-muted/50 inline-flex h-9 cursor-pointer items-center gap-2 border px-3 text-sm">
           <Checkbox
             checked={value as boolean}
             onCheckedChange={(next) => onChange(next === true)}
@@ -226,7 +231,7 @@ function DebouncedTextInput({
   );
 
   return (
-    <div className="border-border focus-within:border-ring inline-flex h-9 items-center gap-2 rounded-md border px-2">
+    <div className="border-border focus-within:border-ring inline-flex h-9 items-center gap-2 border px-2">
       <Icon name="search" className="text-muted-foreground size-4 shrink-0" />
       <input
         id={inputId}
@@ -306,7 +311,7 @@ function DebouncedNumberInput({
   }, [local, value, onChange]);
 
   return (
-    <div className="border-border focus-within:border-ring inline-flex h-9 items-center gap-2 rounded-md border px-2">
+    <div className="border-border focus-within:border-ring inline-flex h-9 items-center gap-2 border px-2">
       <input
         type="number"
         inputMode="numeric"

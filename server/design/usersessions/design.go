@@ -168,14 +168,61 @@ var UserSession = Type("UserSession", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("issuer_slug", String, "Slug of the user_session_issuer that gated this session.")
-	Attribute("client_name", String, "Name of the MCP client that established the session, if known.")
+	Attribute("user_session_client_id", String, "The user_session_client this session was issued through. Null for sessions with no bound client. Unlike client_name, this identifies the registration unambiguously, so it is what a per-client drill-down should match on.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("client_name", String, "Name of the MCP client that established the session, if known. Client-controlled and unverified; do not present it as an identity.")
+	Attribute("client_id_metadata_uri", String, "Set when the client that established this session was resolved from a Client ID Metadata Document (CIMD) hosted at this URL, rather than registered via RFC 7591 DCR. Null for DCR clients and for sessions with no bound client.")
 	Attribute("subject_type", String, "Subject kind: 'user', 'apikey', or 'anonymous'.")
 	Attribute("subject_display_name", String, "Resolved human-readable name of the subject, if known.")
+	Attribute("subject_photo_url", String, "Avatar URL for the subject when it resolves to a Gram user with one. Null for API key and anonymous subjects, and for users who have no photo.")
 	Attribute("revoked_at", String, "When the session was revoked, if it has been.", func() {
 		Format(FormatDateTime)
 	})
+	Attribute("last_used_at", String, "When this session last carried an MCP request. Recorded on the request path and coalesced to a five-minute resolution, so treat it as accurate to within that. Null means the session has not been used since the column was introduced — unknown, not never.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("upstreams", ArrayOf(UserSessionUpstream), "The upstream providers Gram holds tokens for on this session's subject, through the same issuer. Empty when the session reaches only Gram-native tools. A session can have several: an issuer may have more than one remote_session_client attached.")
 
-	Required("id", "user_session_issuer_id", "subject_urn", "jti", "refresh_expires_at", "expires_at", "created_at", "updated_at", "issuer_slug", "subject_type")
+	Required("id", "user_session_issuer_id", "subject_urn", "jti", "refresh_expires_at", "expires_at", "created_at", "updated_at", "issuer_slug", "subject_type", "upstreams")
+})
+
+// UserSessionUpstream is the outbound leg of a brokered connection. A
+// user_session says an agent can reach Gram; this says what Gram can reach on
+// that subject's behalf. The two are joined on (subject_urn,
+// user_session_issuer_id), which both tables carry.
+var UserSessionUpstream = Type("UserSessionUpstream", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("An upstream remote_session held for the same subject and issuer as the user_session that carries it. Token material is never returned.")
+
+	Attribute("remote_session_id", String, "The remote_session id. Target for revoke and force-refresh.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("remote_session_client_id", String, "The remote_session_client the session was minted against.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("remote_session_issuer_id", String, "The remote_session_issuer the client belongs to.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("issuer_slug", String, "Display slug of the upstream provider, e.g. 'mcp.linear.app'.")
+	Attribute("access_expires_at", String, "Upstream access-token expiry. Null when the upstream issued a non-expiring token.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("refresh_expires_at", String, "Upstream refresh-token expiry. Null when the session holds no refresh token or the upstream issued a non-expiring one.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("authorization_expires_at", String, "Absolute upstream authorization deadline. Unlike refresh_expires_at, exchanging a token does not extend this.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("has_refresh_token", Boolean, "Whether a refresh grant is held. Gates 'refresh now'; refresh_expires_at is insufficient because an upstream may issue a non-expiring refresh token.")
+	Attribute("auto_refresh", Boolean, "Whether the subject opted this connection into automated keepalive.")
+	Attribute("last_used_at", String, "When this upstream token was last spent on a proxied call. Same five-minute resolution as the inbound leg, so the two are directly comparable.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("scopes", ArrayOf(String), "Scopes held by this upstream session.")
+
+	Required("remote_session_id", "remote_session_client_id", "remote_session_issuer_id", "issuer_slug", "has_refresh_token", "auto_refresh", "scopes")
 })
 
 var ListUserSessionsResult = Type("ListUserSessionsResult", func() {

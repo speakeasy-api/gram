@@ -14,31 +14,38 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/Sheet";
-import { Text } from "@/components/ui/Text";
 import { useOrgRoutes } from "@/routes";
-import { useCreateGcpIamPlatformCredentialMutation } from "@gram/client/react-query/createGcpIamPlatformCredential";
-import { invalidateAllListPlatformExternalCredentials } from "@gram/client/react-query/listPlatformExternalCredentials";
+import type { GcpIamCredential } from "@gram/client/models/components/gcpiamcredential.js";
+import { useCreateGcpIamCredentialMutation } from "@gram/client/react-query/createGcpIamCredential";
+import { invalidateAllListExternalCredentials } from "@gram/client/react-query/listExternalCredentials";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { GcpGrantInstructions } from "./GcpGrantInstructions";
 import {
   EXTERNAL_SERVICE_PROVIDERS,
   type ExternalServiceProvider,
+  providerSlug,
 } from "./providers";
 
-// CreateExternalCredentialSheet creates a platform external credential. The
-// External Service selector chooses the provider and swaps which optional fields
-// render. GCP is the only provider with a platform-admin create endpoint today;
-// leaving its optional fields blank registers the ambient attached identity.
+// CreateExternalCredentialSheet creates an organization external credential. The
+// External Service selector chooses the provider and swaps which fields render.
+//
+// onCreated lets a caller keep the user where they are instead of sending them
+// to the new credential's detail page. The encryption key form opens this sheet
+// to fill its own credential picker, and navigating away there would discard the
+// half-written key the user opened it from.
 export function CreateExternalCredentialSheet({
   open,
   onOpenChange,
+  onCreated,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onCreated?: (credential: GcpIamCredential) => void;
 }): JSX.Element {
   const orgRoutes = useOrgRoutes();
   const queryClient = useQueryClient();
@@ -48,12 +55,21 @@ export function CreateExternalCredentialSheet({
   const [impersonateServiceAccount, setImpersonateServiceAccount] =
     useState("");
 
-  const createMutation = useCreateGcpIamPlatformCredentialMutation({
+  const createMutation = useCreateGcpIamCredentialMutation({
     onSuccess: async (created) => {
-      await invalidateAllListPlatformExternalCredentials(queryClient);
+      await invalidateAllListExternalCredentials(queryClient);
       toast.success("External credential created");
       onOpenChange(false);
-      orgRoutes.externalServices.credentialDetail.goTo(created.id);
+
+      if (onCreated) {
+        onCreated(created);
+        return;
+      }
+
+      orgRoutes.externalServices.credentialDetail.goTo(
+        providerSlug(created.provider),
+        created.id,
+      );
     },
     onError: (error) => {
       console.error("Create external credential failed", error);
@@ -78,7 +94,10 @@ export function CreateExternalCredentialSheet({
     resetCreateMutation();
   }, [open, resetCreateMutation]);
 
-  const submittable = name.trim().length > 0;
+  // Impersonation is required: without a target there is nothing Gram could
+  // assume and nothing verification could prove.
+  const submittable =
+    name.trim().length > 0 && impersonateServiceAccount.trim().length > 0;
 
   const handleSubmit = () => {
     if (!submittable || submitting) return;
@@ -87,8 +106,7 @@ export function CreateExternalCredentialSheet({
       request: {
         createGcpIamCredentialForm: {
           name: name.trim(),
-          impersonateServiceAccount:
-            impersonateServiceAccount.trim() || undefined,
+          impersonateServiceAccount: impersonateServiceAccount.trim(),
         },
       },
     });
@@ -136,7 +154,7 @@ export function CreateExternalCredentialSheet({
               <Input
                 value={name}
                 onChange={setName}
-                placeholder="Speakeasy platform identity"
+                placeholder="Production encryption key access"
               />
             </Stack>
 
@@ -185,13 +203,10 @@ function GcpCredentialFields({
 }): JSX.Element {
   return (
     <Stack gap={4}>
-      <Text muted small>
-        Leave blank to use the platform's ambient attached identity, or set a
-        service account for the platform to impersonate.
-      </Text>
+      <GcpGrantInstructions />
       <Stack gap={2}>
         <Label className="text-muted-foreground text-xs">
-          Impersonate service account (optional)
+          Impersonate service account
         </Label>
         <Input
           value={impersonateServiceAccount}

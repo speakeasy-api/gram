@@ -171,17 +171,19 @@ WHERE organization_id = $1
   AND deleted IS FALSE
   AND billing_mode IS NOT NULL
   AND (
-    external_organization_id IS NULL
+    $3::bool
+    OR external_organization_id IS NULL
     OR external_organization_id = ''
-    OR external_organization_id = $3
+    OR external_organization_id = $4
   )
-ORDER BY (external_organization_id = $3) DESC NULLS LAST
+ORDER BY (external_organization_id = $4) DESC NULLS LAST, updated_at DESC
 LIMIT 1
 `
 
 type GetProviderOrgBillingModeParams struct {
 	OrganizationID string
 	Provider       string
+	MatchAnyOrg    bool
 	ExternalOrgID  pgtype.Text
 }
 
@@ -191,11 +193,20 @@ type GetProviderOrgBillingModeParams struct {
 // provider org; a config with none applies provider-wide. Exact-org matches are
 // preferred over provider-wide (NULLS LAST because the comparison is NULL for a
 // NULL-scoped row, and DESC would otherwise sort NULL ahead of an exact match).
-// Only one live config per (org, provider) can exist today, so the ordering is
-// defensive. Only configs with a non-null billing_mode are considered, so an
-// undeclared org returns no rows (treated as unknown upstream).
+// @match_any_org disables the org scoping entirely: Codex sessions carry no org
+// identity on any layer while codex_compliance configs always pin one, so for
+// them the provider-wide declaration applies regardless of config scope. Only
+// one live config per (org, provider) can exist today, so the ordering (with
+// updated_at as the tiebreak against historical duplicates) is defensive. Only
+// configs with a non-null billing_mode are considered, so an undeclared org
+// returns no rows (treated as unknown upstream).
 func (q *Queries) GetProviderOrgBillingMode(ctx context.Context, arg GetProviderOrgBillingModeParams) (pgtype.Text, error) {
-	row := q.db.QueryRow(ctx, getProviderOrgBillingMode, arg.OrganizationID, arg.Provider, arg.ExternalOrgID)
+	row := q.db.QueryRow(ctx, getProviderOrgBillingMode,
+		arg.OrganizationID,
+		arg.Provider,
+		arg.MatchAnyOrg,
+		arg.ExternalOrgID,
+	)
 	var billing_mode pgtype.Text
 	err := row.Scan(&billing_mode)
 	return billing_mode, err
@@ -575,6 +586,60 @@ func (q *Queries) ListSkillObservations(ctx context.Context, projectID uuid.UUID
 	return items, nil
 }
 
+const listUserAccountsByEmails = `-- name: ListUserAccountsByEmails :many
+SELECT id, user_id, provider, email, account_type, external_org_id, last_seen_at
+FROM user_accounts
+WHERE organization_id = $1
+  AND lower(email) = ANY(ARRAY(SELECT lower(e) FROM unnest($2::text[]) AS e))
+  AND deleted_at IS NULL
+ORDER BY user_id, account_type DESC, provider, last_seen_at DESC
+`
+
+type ListUserAccountsByEmailsParams struct {
+	OrganizationID string
+	Emails         []string
+}
+
+type ListUserAccountsByEmailsRow struct {
+	ID            uuid.UUID
+	UserID        pgtype.Text
+	Provider      string
+	Email         pgtype.Text
+	AccountType   pgtype.Text
+	ExternalOrgID pgtype.Text
+	LastSeenAt    pgtype.Timestamptz
+}
+
+// Resolves account emails back to their directory owner. This supports telemetry
+// rows whose only identity is a linked personal/provider account email.
+func (q *Queries) ListUserAccountsByEmails(ctx context.Context, arg ListUserAccountsByEmailsParams) ([]ListUserAccountsByEmailsRow, error) {
+	rows, err := q.db.Query(ctx, listUserAccountsByEmails, arg.OrganizationID, arg.Emails)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserAccountsByEmailsRow
+	for rows.Next() {
+		var i ListUserAccountsByEmailsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Provider,
+			&i.Email,
+			&i.AccountType,
+			&i.ExternalOrgID,
+			&i.LastSeenAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserAccountsByUsers = `-- name: ListUserAccountsByUsers :many
 SELECT id, user_id, provider, email, account_type, external_org_id, last_seen_at
 FROM user_accounts
@@ -683,6 +748,45 @@ func (q *Queries) RememberKnownSkillRawHash(ctx context.Context, arg RememberKno
 	return known, err
 }
 
+const skillRawHashNeedsPromptInjectionScan = `-- name: SkillRawHashNeedsPromptInjectionScan :one
+SELECT EXISTS (
+  SELECT 1
+  FROM skill_raw_hashes srh
+  JOIN skills s
+    ON s.project_id = srh.project_id
+    AND s.archived_at IS NULL
+  JOIN skill_versions sv
+    ON sv.skill_id = s.id
+    AND sv.canonical_sha256 = srh.canonical_sha256
+  JOIN risk_policies p
+    ON p.project_id = s.project_id
+    AND p.enabled IS TRUE
+    AND p.deleted IS FALSE
+    AND 'prompt_injection' = ANY (p.sources)
+  WHERE srh.project_id = $1
+    AND srh.raw_sha256 = $2
+    AND NOT EXISTS (
+      SELECT 1
+      FROM risk_results rr
+      WHERE rr.skill_version_id = sv.id
+        AND rr.risk_policy_id = p.id
+        AND rr.risk_policy_version = p.version
+    )
+)::boolean
+`
+
+type SkillRawHashNeedsPromptInjectionScanParams struct {
+	ProjectID uuid.UUID
+	RawSha256 string
+}
+
+func (q *Queries) SkillRawHashNeedsPromptInjectionScan(ctx context.Context, arg SkillRawHashNeedsPromptInjectionScanParams) (bool, error) {
+	row := q.db.QueryRow(ctx, skillRawHashNeedsPromptInjectionScan, arg.ProjectID, arg.RawSha256)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const updateClaudeCodeSessionTimestamp = `-- name: UpdateClaudeCodeSessionTimestamp :exec
 UPDATE chats SET updated_at = NOW() WHERE id = $1 AND project_id = $2
 `
@@ -706,6 +810,7 @@ INSERT INTO chats (
   , external_user_id
   , user_account_id
   , title
+  , cwd
   , created_at
   , updated_at
 )
@@ -717,12 +822,15 @@ VALUES (
     $5,
     $6,
     $7,
+    $8,
     NOW(),
     NOW()
 )
 ON CONFLICT (id) DO UPDATE SET
     updated_at = NOW()
   , user_account_id = COALESCE(EXCLUDED.user_account_id, chats.user_account_id)
+  , cwd = COALESCE(EXCLUDED.cwd, chats.cwd)
+WHERE chats.project_id = EXCLUDED.project_id
 RETURNING id
 `
 
@@ -734,8 +842,14 @@ type UpsertClaudeCodeSessionParams struct {
 	ExternalUserID pgtype.Text
 	UserAccountID  uuid.NullUUID
 	Title          pgtype.Text
+	Cwd            pgtype.Text
 }
 
+// Creates the chat row a captured agent session hangs off, or refreshes the one
+// already there. The chat id is derived from a client-supplied session id, so a
+// caller could name another tenant's chat: the conflict update is scoped to the
+// owning project, and a cross-project id surfaces as a no-rows error rather
+// than mutating a row across the boundary.
 func (q *Queries) UpsertClaudeCodeSession(ctx context.Context, arg UpsertClaudeCodeSessionParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, upsertClaudeCodeSession,
 		arg.ID,
@@ -745,6 +859,7 @@ func (q *Queries) UpsertClaudeCodeSession(ctx context.Context, arg UpsertClaudeC
 		arg.ExternalUserID,
 		arg.UserAccountID,
 		arg.Title,
+		arg.Cwd,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)

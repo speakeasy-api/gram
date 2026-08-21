@@ -46,21 +46,16 @@ type Service interface {
 	// List users with observed telemetry usage for one project-scoped Shadow MCP
 	// server URL.
 	ListShadowMCPInventoryUsers(context.Context, *ListShadowMCPInventoryUsersPayload) (res *ListShadowMCPInventoryUsersResult, err error)
-	// Create or modify a Shadow MCP URL allow decision for selected blocking
-	// policies.
-	UpsertShadowMCPInventoryPolicyBypass(context.Context, *UpsertShadowMCPInventoryPolicyBypassPayload) (res *ShadowMCPInventoryURLState, err error)
-	// Remove a Shadow MCP URL allow decision.
-	DeleteShadowMCPInventoryPolicyBypass(context.Context, *DeleteShadowMCPInventoryPolicyBypassPayload) (res *ShadowMCPInventoryURLState, err error)
+	// List the Shadow MCP servers one person reached, with each server's access
+	// state. The inverse of listShadowMCPInventoryUsers, which expands a single
+	// server into its users.
+	ListShadowMCPInventoryServersForUser(context.Context, *ListShadowMCPInventoryServersForUserPayload) (res *ListShadowMCPInventoryResult, err error)
 	// Review the latest pending Shadow MCP URL request and resolve all pending
 	// requests for that URL.
 	ResolveShadowMCPInventoryRequest(context.Context, *ResolveShadowMCPInventoryRequestPayload) (res *ShadowMCPInventoryURLState, err error)
-	// Returns whether RBAC is currently enabled for the current organization.
-	GetRBACStatus(context.Context, *GetRBACStatusPayload) (res *RBACStatus, err error)
-	// Enable RBAC for the current organization. Seeds default grants for system
-	// roles.
-	EnableRBAC(context.Context, *EnableRBACPayload) (err error)
-	// Disable RBAC enforcement for the current organization.
-	DisableRBAC(context.Context, *DisableRBACPayload) (err error)
+	// Request access to a scope by sending an email notification to organization
+	// administrators.
+	RequestAccess(context.Context, *RequestAccessPayload) (res *RequestAccessResult, err error)
 	// List authz challenge events from ClickHouse, enriched with resolution state
 	// from PostgreSQL.
 	ListChallenges(context.Context, *ListChallengesPayload) (res *ListChallengesResult, err error)
@@ -93,7 +88,7 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [22]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "upsertShadowMCPInventoryPolicyBypass", "deleteShadowMCPInventoryPolicyBypass", "resolveShadowMCPInventoryRequest", "getRBACStatus", "enableRBAC", "disableRBAC", "listChallenges", "listChallengeBuckets", "resolveChallenge"}
+var MethodNames = [19]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge"}
 
 // AccessMember is the result type of the access service updateMemberRoles
 // method.
@@ -236,8 +231,8 @@ type CreateRolePayload struct {
 	SessionToken *string
 	// Display name for the role.
 	Name string
-	// Description of what this role can do.
-	Description string
+	// Optional description of what this role can do.
+	Description *string
 	// Scope grants to assign.
 	Grants []*RoleGrant
 	// Optional member IDs to additionally assign to this role on creation.
@@ -250,32 +245,6 @@ type DeleteRolePayload struct {
 	// The ID of the role to delete.
 	ID           string
 	ApikeyToken  *string
-	SessionToken *string
-}
-
-// DeleteShadowMCPInventoryPolicyBypassPayload is the payload type of the
-// access service deleteShadowMCPInventoryPolicyBypass method.
-type DeleteShadowMCPInventoryPolicyBypassPayload struct {
-	ProjectID    string
-	ServerURL    string
-	SessionToken *string
-}
-
-// DisableRBACPayload is the payload type of the access service disableRBAC
-// method.
-type DisableRBACPayload struct {
-	SessionToken *string
-}
-
-// EnableRBACPayload is the payload type of the access service enableRBAC
-// method.
-type EnableRBACPayload struct {
-	SessionToken *string
-}
-
-// GetRBACStatusPayload is the payload type of the access service getRBACStatus
-// method.
-type GetRBACStatusPayload struct {
 	SessionToken *string
 }
 
@@ -432,6 +401,17 @@ type ListShadowMCPInventoryResult struct {
 	NextCursor *string
 }
 
+// ListShadowMCPInventoryServersForUserPayload is the payload type of the
+// access service listShadowMCPInventoryServersForUser method.
+type ListShadowMCPInventoryServersForUserPayload struct {
+	ProjectID string
+	// The identifiers to attribute usage to, matched against the reported email or
+	// user id. Pass every identifier the subject is known by.
+	UserKeys     []string
+	Limit        int
+	SessionToken *string
+}
+
 // ListShadowMCPInventoryUsersPayload is the payload type of the access service
 // listShadowMCPInventoryUsers method.
 type ListShadowMCPInventoryUsersPayload struct {
@@ -459,10 +439,27 @@ type ListUserGrantsResult struct {
 	Grants []*ListRoleGrant
 }
 
-// RBACStatus is the result type of the access service getRBACStatus method.
-type RBACStatus struct {
-	// Whether RBAC enforcement is currently enabled for this organization.
-	RbacEnabled bool
+// RequestAccessPayload is the payload type of the access service requestAccess
+// method.
+type RequestAccessPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+	// The scope being requested.
+	Scope string
+	// Optional resource ID the scope applies to.
+	ResourceID *string
+	// Optional human-readable name for the resource (e.g. project name, MCP server
+	// name).
+	ResourceName *string
+	// Optional message from the requester explaining why they need access.
+	Message *string
+}
+
+// RequestAccessResult is the result type of the access service requestAccess
+// method.
+type RequestAccessResult struct {
+	// Number of administrators who were notified.
+	SentToCount int
 }
 
 // ResolveChallengePayload is the payload type of the access service
@@ -564,6 +561,20 @@ type Selector struct {
 	ServerURL *string
 }
 
+// The MCP approval request tracking review status for a server. Status records
+// the review outcome, which may cover only selected principals; the server's
+// access field reports enforcement state.
+type ShadowMCPInventoryApprovalRequest struct {
+	ID     string
+	Status string
+	// How many distinct people have asked for this server.
+	RequesterCount int
+	// When the daily recheck first found the permission-relevant evidence
+	// differing from what the latest approval rested on. Absent when nothing has
+	// drifted; cleared only by a new decision.
+	EvidenceChangedAt *string
+}
+
 // Decision used when resolving a Shadow MCP inventory request.
 type ShadowMCPInventoryRequestDecision string
 
@@ -581,26 +592,37 @@ type ShadowMCPInventoryServer struct {
 	CanonicalServerURL string
 	ServerSlug         string
 	URLHost            string
-	ServerName         *string
-	FirstSeen          string
-	LastSeen           string
-	LastCalled         *string
-	ObservedUseCount   int
-	UserCount          int
-	TopUsers           []string
-	Access             string
-	RequestCount       int
-	LatestRequest      *ShadowMCPInventoryRequestSummary
-	AllowedPolicyIds   []string
+	// What the row identifies: a server URL observed or requested, or a local
+	// stdio command known only through its review. Absent means server_url.
+	TargetKind       *string
+	ServerName       *string
+	FirstSeen        string
+	LastSeen         string
+	LastCalled       *string
+	ObservedUseCount int
+	UserCount        int
+	TopUsers         []string
+	Access           string
+	RequestCount     int
+	LatestRequest    *ShadowMCPInventoryRequestSummary
+	ApprovalRequest  *ShadowMCPInventoryApprovalRequest
+	AllowedPolicyIds []string
+	// Enabled blocking policies that block this server via a risk_policy:block
+	// grant (allow_all policies only).
+	BlockedPolicyIds []string
 }
 
 // ShadowMCPInventoryURLState is the result type of the access service
-// upsertShadowMCPInventoryPolicyBypass method.
+// resolveShadowMCPInventoryRequest method.
 type ShadowMCPInventoryURLState struct {
 	Access           string
 	RequestCount     int
 	LatestRequest    *ShadowMCPInventoryRequestSummary
+	ApprovalRequest  *ShadowMCPInventoryApprovalRequest
 	AllowedPolicyIds []string
+	// Enabled blocking policies that block this server via a risk_policy:block
+	// grant (allow_all policies only).
+	BlockedPolicyIds []string
 }
 
 type ShadowMCPInventoryUser struct {
@@ -608,6 +630,12 @@ type ShadowMCPInventoryUser struct {
 	Name             *string
 	Email            *string
 	LastCalled       string
+	ObservedUseCount int
+	Sources          []*ShadowMCPInventoryUserSource
+}
+
+type ShadowMCPInventoryUserSource struct {
+	Source           string
 	ObservedUseCount int
 }
 
@@ -649,15 +677,6 @@ type UpdateShadowMCPInventoryServerNamePayload struct {
 	ProjectID    string
 	ServerURL    string
 	Name         string
-}
-
-// UpsertShadowMCPInventoryPolicyBypassPayload is the payload type of the
-// access service upsertShadowMCPInventoryPolicyBypass method.
-type UpsertShadowMCPInventoryPolicyBypassPayload struct {
-	SessionToken *string
-	ProjectID    string
-	ServerURL    string
-	PolicyIds    []string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

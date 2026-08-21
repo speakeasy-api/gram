@@ -43,6 +43,67 @@ func TestListClients(t *testing.T) {
 	require.Equal(t, 0, result.Items[0].ActiveSessionCount)
 }
 
+// TestListClients_PlatformIssuerHidesOtherOrganizationsClients proves the
+// tenant isolation the Clients tab depends on. A platform issuer is shared:
+// every organization sees the same issuer row and can register its own clients
+// against it. The listing must still show each organization only its own.
+//
+// This is the one tier where isolation cannot come from the issuer. For an
+// org-owned issuer, `i.organization_id = @organization_id` already fences the
+// result. A platform issuer's organization_id is NULL, so that comparison is
+// NULL rather than true for every caller, and the whole guarantee rests on the
+// second arm, `c.organization_id = @organization_id`. If a writer ever left a
+// client's organization_id unset on a platform issuer, that row would match
+// neither arm and become invisible to its owner — never visible to the wrong
+// one — so this asserts both directions: each org sees its own client and not
+// the other's.
+func TestListClients_PlatformIssuerHidesOtherOrganizationsClients(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	platformID := seedGlobalRemoteIssuer(t, ctx, ti.conn, "shared-platform-isolation")
+
+	// The caller's organization registers a client on the shared issuer.
+	ownClient, err := ti.service.CreateClient(ctx, newCreateClientPayload(platformID.String(), nil, nil))
+	require.NoError(t, err)
+
+	// A second organization registers its own client on the same issuer.
+	otherOrgID := createOrganization(t, ctx, ti.conn, "other-org-isolation")
+	otherClientID := seedOrgLevelRemoteClient(
+		t, ctx, ti.conn, otherOrgID, platformID, "other-org-client",
+	)
+	require.NotEqual(t, authCtx.ActiveOrganizationID, otherOrgID)
+
+	list, err := ti.service.ListClients(ctx, &orgclientsgen.ListClientsPayload{
+		IssuerID:     platformID.String(),
+		Cursor:       nil,
+		Limit:        nil,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.NoError(t, err)
+
+	ids := make([]string, 0, len(list.Items))
+	for _, item := range list.Items {
+		ids = append(ids, item.Client.ID)
+	}
+	require.Contains(t, ids, ownClient.ID, "the caller's own client on the shared issuer must be listed")
+	require.NotContains(t, ids, otherClientID.String(), "another organization's client on the shared issuer must not leak")
+	require.Len(t, list.Items, 1, "only the caller's own client is visible on a shared platform issuer")
+
+	// The same fence applies to the by-id read behind the client detail page,
+	// which would otherwise be a way around the listing.
+	_, err = ti.service.GetClient(ctx, &orgclientsgen.GetClientPayload{
+		ID:           otherClientID.String(),
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
 // TestGetClient_NotFound proves an unknown remote_session_client id in the
 // caller's organization returns NotFound.
 func TestGetClient_NotFound(t *testing.T) {

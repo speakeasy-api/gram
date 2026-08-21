@@ -20,6 +20,8 @@ import {
   type ShadowMCPInventoryStatus,
 } from "./shadowMCPInventoryStatus";
 
+type ShadowMCPPolicyServerSelectorMode = "allow" | "block";
+
 export type ShadowMCPPolicyServerSelectorProps = {
   servers: ShadowMCPInventoryServer[];
   originalURLs: ReadonlySet<string>;
@@ -28,6 +30,44 @@ export type ShadowMCPPolicyServerSelectorProps = {
   isLoading: boolean;
   error: Error | null;
   onRetry: () => void;
+  /** "allow" (block_all policies — pick servers that stay available) or
+   * "block" (allow_all policies — pick servers that get denied). */
+  mode?: ShadowMCPPolicyServerSelectorMode;
+};
+
+const SELECTOR_COPY: Record<
+  ShadowMCPPolicyServerSelectorMode,
+  {
+    title: string;
+    subtitle: string;
+    emptyTitle: string;
+    emptySubtitle: string;
+    dialogTitle: string;
+    dialogDescription: string;
+  }
+> = {
+  allow: {
+    title: "Servers allowed by this policy",
+    subtitle:
+      "These Shadow MCP servers remain available when the policy blocks access.",
+    emptyTitle: "No servers allowed yet",
+    emptySubtitle:
+      "Select any Shadow MCP servers that should remain available when this policy blocks access.",
+    dialogTitle: "Select allowed servers",
+    dialogDescription:
+      "Choose which Shadow MCP servers remain available when this policy blocks access.",
+  },
+  block: {
+    title: "Servers blocked by this policy",
+    subtitle:
+      "These Shadow MCP servers are denied while every other server stays available.",
+    emptyTitle: "No servers blocked yet",
+    emptySubtitle:
+      "Select any Shadow MCP servers that should be denied while this policy allows everything else.",
+    dialogTitle: "Select blocked servers",
+    dialogDescription:
+      "Choose which Shadow MCP servers are denied while this policy allows everything else.",
+  },
 };
 
 type PolicyServerAction = "add" | "remove" | "no-change";
@@ -64,6 +104,8 @@ function inventoryAccessStatus(
       return "allowed";
     case "blocked":
       return "blocked";
+    case "restricted":
+      return "restricted";
     case "none":
       return "observed";
   }
@@ -104,9 +146,17 @@ function StatusCell({ server }: { server: ShadowMCPInventoryServer }) {
   );
 }
 
-function EmptyServerSelection({ onSelect }: { onSelect: () => void }) {
+function EmptyServerSelection({
+  onSelect,
+  title,
+  subtitle,
+}: {
+  onSelect: () => void;
+  title: string;
+  subtitle: string;
+}) {
   return (
-    <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-10 text-center">
+    <div className="bg-muted/20 flex flex-col items-center justify-center border border-dashed px-6 py-8 text-center">
       <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
         <Icon
           aria-hidden="true"
@@ -115,11 +165,10 @@ function EmptyServerSelection({ onSelect }: { onSelect: () => void }) {
         />
       </div>
       <Text variant="subheading" className="mb-1">
-        No servers allowed yet
+        {title}
       </Text>
       <Text small muted className="mb-4 max-w-md">
-        Select any Shadow MCP servers that should remain available when this
-        policy blocks access.
+        {subtitle}
       </Text>
       <Button type="button" variant="primary" onClick={onSelect}>
         Select servers
@@ -234,7 +283,9 @@ export function ShadowMCPPolicyServerSelector({
   isLoading,
   error,
   onRetry,
+  mode = "allow",
 }: ShadowMCPPolicyServerSelectorProps): JSX.Element {
+  const copy = SELECTOR_COPY[mode];
   const [open, setOpen] = useState(false);
   const [draftURLs, setDraftURLs] = useState<Set<string>>(
     () => new Set(selectedURLs),
@@ -387,7 +438,7 @@ export function ShadowMCPPolicyServerSelector({
     );
   } else if (error) {
     selectionContent = (
-      <div className="border-border bg-muted/20 flex items-center justify-between gap-4 rounded-md border px-4 py-3">
+      <div className="border-border bg-muted/20 flex items-center justify-between gap-4 border px-4 py-3">
         <Text muted small>
           Shadow MCP inventory could not be loaded.
         </Text>
@@ -398,7 +449,11 @@ export function ShadowMCPPolicyServerSelector({
     );
   } else if (!hasAppliedRows) {
     selectionContent = (
-      <EmptyServerSelection onSelect={() => handleOpenChange(true)} />
+      <EmptyServerSelection
+        onSelect={() => handleOpenChange(true)}
+        title={copy.emptyTitle}
+        subtitle={copy.emptySubtitle}
+      />
     );
   } else {
     selectionContent = <AppliedServerTable rows={appliedRows} />;
@@ -416,11 +471,10 @@ export function ShadowMCPPolicyServerSelector({
             variant="body"
             className="font-medium"
           >
-            Servers allowed by this policy
+            {copy.title}
           </Text>
           <Text muted small className="mt-1">
-            These Shadow MCP servers remain available when the policy blocks
-            access.
+            {copy.subtitle}
           </Text>
         </div>
         {showHeaderAction && (
@@ -456,11 +510,8 @@ export function ShadowMCPPolicyServerSelector({
           }}
         >
           <Dialog.Header>
-            <Dialog.Title>Select allowed servers</Dialog.Title>
-            <Dialog.Description>
-              Choose which Shadow MCP servers remain available when this policy
-              blocks access.
-            </Dialog.Description>
+            <Dialog.Title>{copy.dialogTitle}</Dialog.Title>
+            <Dialog.Description>{copy.dialogDescription}</Dialog.Description>
           </Dialog.Header>
 
           <Input

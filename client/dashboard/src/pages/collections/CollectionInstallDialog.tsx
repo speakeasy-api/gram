@@ -226,7 +226,7 @@ export function CollectionInstallDialog({
                 </Dialog.Description>
               </Dialog.Header>
               <div className="space-y-4 py-2">
-                <div className="rounded-lg border p-3">
+                <div className="border p-3">
                   <div className="flex items-center gap-2 text-sm font-medium">
                     <Server className="h-4 w-4" />
                     {servers.length}{" "}
@@ -273,7 +273,7 @@ export function CollectionInstallDialog({
                         />
                       </div>
                     )}
-                    <div className="max-h-64 overflow-y-auto rounded-lg border">
+                    <div className="max-h-64 overflow-y-auto border">
                       {filteredProjects.length === 0 ? (
                         <div className="flex flex-col items-center py-6 text-center">
                           <Search className="text-muted-foreground mb-2 h-6 w-6" />
@@ -359,7 +359,7 @@ function ProjectProgressList({
           <div
             key={project.slug}
             className={cn(
-              "bg-card flex items-start gap-3 rounded-lg border p-3 transition-colors",
+              "bg-card flex items-start gap-3 border p-3 transition-colors",
               status === "installing" && "border-primary/30 bg-primary/5",
               status === "failed" && "border-destructive/30 bg-destructive/5",
             )}
@@ -410,7 +410,7 @@ function ResultStat({
   }[tone];
 
   return (
-    <div className={cn("rounded-lg border p-3 text-center", toneClass)}>
+    <div className={cn("border p-3 text-center", toneClass)}>
       <div className="flex items-center justify-center gap-1.5">
         <StatusCircleIcon tone={tone} />
         <span className="text-lg font-semibold">{value}</span>

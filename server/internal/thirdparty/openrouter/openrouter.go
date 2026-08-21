@@ -3,6 +3,7 @@ package openrouter
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,6 +21,8 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -27,17 +30,19 @@ import (
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
+	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
 
 const OpenRouterBaseURL = "https://openrouter.ai/api"
 
 // KeyType selects which of an org's provisioned OpenRouter keys pays for a
 // request. Each org can hold one key per type (openrouter_api_keys is keyed
-// by (organization_id, key_type)): the chat key funds customer-facing
-// completion surfaces, while the internal key funds platform-initiated LLM
+// by (organization_id, key_type)): the "chat" type funds Other inference
+// surfaces, while the "internal" type funds Security inference and other
+// platform-initiated LLM
 // usage (risk judges, title generation, chat resolutions, memory) so a burst
-// of scanning inference can never exhaust the chat cap and 402 the
-// customer's chat surface. Selection is an explicit request field — never
+// of scanning inference can never exhaust the Other inference cap and 402
+// customer-facing inference. Selection is an explicit request field — never
 // derived from the usage source, which the completions proxy accepts from
 // clients and could be spoofed onto the internal key.
 type KeyType string
@@ -47,15 +52,69 @@ const (
 	KeyTypeInternal KeyType = "internal"
 )
 
+// KeyDesiredState is the state a durable billing transition expects for an
+// existing platform key. It travels with the event-specific workflow so an
+// older opposite transition can be recognized after out-of-order delivery.
+type KeyDesiredState string
+
+const (
+	KeyDesiredStateEnabled  KeyDesiredState = "enabled"
+	KeyDesiredStateDisabled KeyDesiredState = "disabled"
+)
+
+func (s KeyDesiredState) Validate() error {
+	switch s {
+	case KeyDesiredStateEnabled, KeyDesiredStateDisabled:
+		return nil
+	default:
+		return fmt.Errorf("invalid OpenRouter key desired state %q", s)
+	}
+}
+
 // AllKeyTypes is the single definition of the valid key-type set. Validate
 // and any caller that fans out across an org's keys (e.g. account-type
 // limit refreshes) consume it, so adding a key type here propagates without
 // hunting call sites.
 var AllKeyTypes = []KeyType{KeyTypeChat, KeyTypeInternal}
 
-// upstreamKeyCreateTimeout bounds the POST /v1/keys call made while holding
-// the per-(org, key type) provisioning advisory lock.
-const upstreamKeyCreateTimeout = 15 * time.Second
+var billableKeyTypes = []KeyType{KeyTypeChat, KeyTypeInternal}
+
+// BillableKeyTypes returns the platform-managed OpenRouter keys whose spend a
+// PAYG organization owns. Estimate and invoice paths must consume this set.
+func BillableKeyTypes() []KeyType {
+	return slices.Clone(billableKeyTypes)
+}
+
+// BillableKeyTypeStrings returns BillableKeyTypes in the shape SQL queries use.
+func BillableKeyTypeStrings() []string {
+	keyTypes := make([]string, len(billableKeyTypes))
+	for i, keyType := range billableKeyTypes {
+		keyTypes[i] = string(keyType)
+	}
+	return keyTypes
+}
+
+// BillableKeyPolicyFingerprint mechanically identifies the ordered canonical
+// billable key set so collection and settlement can reject rolling-deployment
+// handoffs that used different policies.
+func BillableKeyPolicyFingerprint() string {
+	sum := sha256.Sum256([]byte(strings.Join(BillableKeyTypeStrings(), "\x00")))
+	return fmt.Sprintf("%x", sum)
+}
+
+// IsBillable reports whether PAYG invoices include this key type.
+func (k KeyType) IsBillable() bool {
+	return slices.Contains(billableKeyTypes, k.OrDefault())
+}
+
+const (
+	// upstreamKeyCreateTimeout bounds the POST /v1/keys call made while
+	// holding the per-(org, key type) provisioning advisory lock.
+	upstreamKeyCreateTimeout = 15 * time.Second
+	// upstreamKeyPatchTimeout leaves the spend-cap activity enough time to
+	// persist its mirror and audit before its 30-second attempt deadline.
+	upstreamKeyPatchTimeout = 20 * time.Second
+)
 
 // OrDefault resolves the zero value to the chat key, so existing callers
 // that never set a key type keep their behavior.
@@ -183,11 +242,70 @@ func ResolveModel(model string) string {
 // this can always be customized per org in the DB
 // or via running OpenrouterKeyRefreshWorkflow {OrgID: "abc123", Limit: new_monthly_limit} in temporal directly
 var creditsAccountTypeMap = map[string]int{
-	"free":       5,
-	"pro":        100,
-	"enterprise": 100,
-	"":           5, // safety default
+	string(billing.TierBase):       5,
+	string(billing.TierPro):        100,
+	string(billing.TierPayg):       100,
+	string(billing.TierEnterprise): 100,
+	"":                             5, // safety default
 }
+
+// AccountTypeCreditLimit returns the explicit platform-key policy for a billing
+// tier. Callers that require a particular tier must handle ok=false instead of
+// falling back to the free-tier limit.
+func AccountTypeCreditLimit(tier billing.Tier) (limit int, ok bool) {
+	limit, ok = creditsAccountTypeMap[string(tier)]
+	return limit, ok
+}
+
+// DefaultCreditLimit applies the complete mint-time policy after the caller
+// has resolved whether the organization is still trial-tier.
+func DefaultCreditLimit(orgID string, tier billing.Tier, activeTrial bool) (limit int, ok bool) {
+	if IsSpecialLimitOrg(orgID) {
+		return 500, true
+	}
+	if activeTrial {
+		return trialCreditLimit, true
+	}
+	return AccountTypeCreditLimit(tier)
+}
+
+// ResolveDefaultCreditLimit reads whether the organization is still trial-tier
+// and applies the full mint-time policy shared by provisioning and
+// legacy-key repair. The clock is not the source of truth: an un-demoted,
+// unconverted trial row is still trial-tier until the demotion sweeper
+// stamps demoted_at. A read failure falls through to the account type rather
+// than capping a paying customer on a transient database error.
+func ResolveDefaultCreditLimit(
+	ctx context.Context,
+	logger *slog.Logger,
+	dbtx trialsRepo.DBTX,
+	orgID string,
+	tier billing.Tier,
+) (limit int, ok bool) {
+	if IsSpecialLimitOrg(orgID) {
+		return DefaultCreditLimit(orgID, tier, false)
+	}
+
+	trial, err := trialsRepo.New(dbtx).GetTrial(ctx, orgID)
+	activeTrial := err == nil && !trial.ConvertedAt.Valid && !trial.DemotedAt.Valid
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		logger.WarnContext(ctx, "error reading trial; using the account type credit limit",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(orgID),
+		)
+	}
+
+	return DefaultCreditLimit(orgID, tier, activeTrial)
+}
+
+// trialCreditLimit caps each key an organization inside a trial holds, so its
+// total trial exposure is this amount multiplied by len(AllKeyTypes). A trial
+// is armed without verified intent and the credit-balance gate hard-stops the
+// free tier only, so these key limits are its only spend ceiling.
+//
+// The limit binds at mint time and nothing re-mints a key. AGE-3138 and
+// AGE-3141 cover the two lifecycle edges that leaves wrong.
+const trialCreditLimit = 50
 
 var specialLimitOrgs = []string{
 	"5a25158b-24dc-4d49-b03d-e85acfbea59c", // speakeasy-team
@@ -202,8 +320,16 @@ type Provisioner interface {
 	ProvisionAPIKey(ctx context.Context, orgID string, keyType KeyType) (string, error)
 
 	// RefreshAPIKeyLimit mutates the upstream OpenRouter key limit (PATCH
-	// /v1/keys/:hash) and mirrors the new value into the local DB.
+	// /v1/keys/:hash) and mirrors the new value into the local DB. It is also
+	// the reinstatement path: a key that DisableAPIKey turned off comes back
+	// enabled, upstream and locally.
 	RefreshAPIKeyLimit(ctx context.Context, orgID string, keyType KeyType, limit *int) (int, error)
+
+	// DisableAPIKey turns the org's key off upstream and records that locally,
+	// after which ProvisionAPIKey refuses it with ErrPlatformKeyDisabled. The
+	// key survives, so RefreshAPIKeyLimit can reinstate it. An org with no key
+	// of that type is a no-op.
+	DisableAPIKey(ctx context.Context, orgID string, keyType KeyType) error
 
 	GetCreditsUsed(ctx context.Context, orgID string, keyType KeyType) (float64, int, error)
 
@@ -214,13 +340,15 @@ type Provisioner interface {
 	GetKeyUsage(ctx context.Context, apiKey string) (used float64, limit *int64, err error)
 
 	// ReconcileMonthlyCredits compares upstreamLimit against the caller-supplied
-	// currentLimit (the DB-cached value) and writes the upstream value to the
+	// currentLimit and currentGeneration from the DB snapshot and writes the upstream value to the
 	// openrouter_api_keys row when they diverge. It is a DB-only reconciliation
 	// — it does NOT call OpenRouter — and is intended to self-heal drift
 	// introduced by out-of-band edits on the OpenRouter dashboard. A nil
-	// upstreamLimit (unlimited key) is treated as a no-op. Returns the
-	// effective limit the caller should use for the current tick.
-	ReconcileMonthlyCredits(ctx context.Context, orgID string, keyType KeyType, currentLimit int64, upstreamLimit *int64) (int64, error)
+	// upstreamLimit means unlimited and is mirrored as zero. The conditional
+	// write never overwrites a cap operation committed after that snapshot,
+	// including one that deliberately writes the same numeric limit.
+	// Returns the effective limit the caller should use for the current tick.
+	ReconcileMonthlyCredits(ctx context.Context, orgID string, keyType KeyType, currentLimit int64, currentGeneration int64, upstreamLimit *int64) (int64, error)
 
 	// GetModelUsage fetches generation usage by ID. Normal completion paths use
 	// inline usage; this is only a fallback for streams closed before the final
@@ -229,8 +357,13 @@ type Provisioner interface {
 	GetModelUsage(ctx context.Context, generationID string, orgID string, keyType KeyType) (*ModelUsage, error)
 }
 
+// DBTX is the database executor accepted by generated OpenRouter and
+// organization queries. It lets a caller that already owns a session-level
+// billing lock perform the associated reads and write on that same session.
+type DBTX = repo.DBTX
+
 type KeyRefresher interface {
-	ScheduleOpenRouterKeyRefresh(ctx context.Context, orgID string, keyType KeyType) error
+	ScheduleOpenRouterKeyRefresh(ctx context.Context, orgID string, keyType KeyType, limit *int) error
 }
 
 type OpenRouter struct {
@@ -243,13 +376,14 @@ type OpenRouter struct {
 	orClient        *guardian.HTTPClient
 	refresher       KeyRefresher
 	featureClient   *productfeatures.Client
+	enc             *encryption.Client
 	// baseURL is OpenRouterBaseURL outside of tests.
 	baseURL string
 }
 
 var _ Provisioner = (*OpenRouter)(nil)
 
-func New(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, db *pgxpool.Pool, env string, provisioningKey string, refresher KeyRefresher, featureClient *productfeatures.Client, tracking billing.Tracker) *OpenRouter {
+func New(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, db *pgxpool.Pool, env string, provisioningKey string, refresher KeyRefresher, featureClient *productfeatures.Client, tracking billing.Tracker, enc *encryption.Client) *OpenRouter {
 	orClient := guardianPolicy.PooledClient(guardian.WithDefaultRetryConfig())
 
 	return &OpenRouter{
@@ -262,8 +396,26 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolic
 		orClient:        orClient,
 		refresher:       refresher,
 		featureClient:   featureClient,
+		enc:             enc,
 		baseURL:         OpenRouterBaseURL,
 	}
+}
+
+// keyMaterial resolves the usable API key for a row by decrypting the
+// encrypted column, the only place key material lives. A row without a
+// ciphertext is a hard error, as is a decrypt failure, which means this
+// process runs with the wrong encryption key.
+func (o *OpenRouter) keyMaterial(key repo.OpenrouterApiKey) (string, error) {
+	if !key.KeyEncrypted.Valid {
+		return "", fmt.Errorf("openrouter key row for organization %s (%s) holds no encrypted key material", key.OrganizationID, key.KeyType)
+	}
+
+	plaintext, err := o.enc.Decrypt(key.KeyEncrypted.String)
+	if err != nil {
+		return "", fmt.Errorf("decrypt openrouter key for organization %s (%s): %w", key.OrganizationID, key.KeyType, err)
+	}
+
+	return plaintext, nil
 }
 
 func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string, keyType KeyType) (string, error) {
@@ -278,20 +430,29 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string, keyType 
 		KeyType:        string(keyType),
 	})
 	switch {
-	// A real read failure must be checked before the missing-key case: a
-	// failed lookup returns a zero-valued row, so key.Key == "" would
-	// otherwise swallow the error and mint an upstream key.
 	case err != nil && !errors.Is(err, pgx.ErrNoRows):
 		return "", oops.E(oops.CodeUnexpected, err, "error reading open router key data").LogError(ctx, o.logger)
 
-	case errors.Is(err, pgx.ErrNoRows), key.Key == "":
+	// Only a missing row triggers provisioning. An existing row without a
+	// ciphertext hard-errors in keyMaterial below instead: minting a
+	// replacement would orphan the upstream key the row already names.
+	case errors.Is(err, pgx.ErrNoRows):
 		openrouterKey, err = o.createAndStoreAPIKey(ctx, orgID, keyType)
 		if err != nil {
 			return "", err
 		}
 
 	default:
-		openrouterKey = key.Key
+		// Every platform-key completion resolves through here, so this is where
+		// the lockdown binds. Refusing locally beats an upstream rejection
+		// whose status also means "our provisioning key is broken".
+		if key.Disabled {
+			return "", fmt.Errorf("resolve %s key: %w", keyType, ErrPlatformKeyDisabled)
+		}
+		openrouterKey, err = o.keyMaterial(key)
+		if err != nil {
+			return "", oops.E(oops.CodeUnexpected, err, "error reading open router key data").LogError(ctx, o.logger)
+		}
 	}
 
 	if err := inv.Check("openrouter provisioning", "key is set", openrouterKey != ""); err != nil {
@@ -332,13 +493,22 @@ func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, key
 		KeyType:        string(keyType),
 	})
 	switch {
-	// Read-failure check must precede the missing-key case — see
-	// ProvisionAPIKey.
 	case err != nil && !errors.Is(err, pgx.ErrNoRows):
 		return "", oops.E(oops.CodeUnexpected, err, "error reading open router key data").LogError(ctx, o.logger)
-	case errors.Is(err, pgx.ErrNoRows), key.Key == "":
+	case errors.Is(err, pgx.ErrNoRows):
 	default:
-		return key.Key, nil
+		// The lockdown binds here too: the key may have been disabled between
+		// the caller's read and this re-read under the lock. A row without a
+		// ciphertext hard-errors in keyMaterial rather than falling through to
+		// mint a replacement upstream key.
+		if key.Disabled {
+			return "", fmt.Errorf("resolve %s key: %w", keyType, ErrPlatformKeyDisabled)
+		}
+		plaintext, keyErr := o.keyMaterial(key)
+		if keyErr != nil {
+			return "", oops.E(oops.CodeUnexpected, keyErr, "error reading open router key data").LogError(ctx, o.logger)
+		}
+		return plaintext, nil
 	}
 
 	// Read through the transaction: this goroutine already holds a pool
@@ -350,7 +520,7 @@ func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, key
 		return "", oops.E(oops.CodeUnexpected, err, "failed to get organization").LogError(ctx, o.logger)
 	}
 
-	creditAmount := o.getLimitForOrg(org)
+	creditAmount := o.defaultLimitForOrg(ctx, dbtx, org)
 
 	// Cap the upstream call so guardian's retry backoff cannot stretch the
 	// advisory-lock hold to minutes during an OpenRouter outage; a burst of
@@ -362,10 +532,15 @@ func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, key
 		return "", err
 	}
 
+	keyCiphertext, err := o.enc.Encrypt([]byte(*keyResponse.Key))
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "failed to encrypt openrouter key").LogError(ctx, o.logger)
+	}
+
 	_, err = txRepo.CreateOpenRouterAPIKey(ctx, repo.CreateOpenRouterAPIKeyParams{
 		OrganizationID: orgID,
 		KeyType:        string(keyType),
-		Key:            *keyResponse.Key,
+		KeyEncrypted:   conv.ToPGText(keyCiphertext),
 		KeyHash:        keyResponse.Data.Hash,
 		MonthlyCredits: int64(creditAmount),
 	})
@@ -378,7 +553,7 @@ func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, key
 	}
 
 	if o.refresher != nil {
-		if err := o.refresher.ScheduleOpenRouterKeyRefresh(ctx, orgID, keyType); err != nil {
+		if err := o.refresher.ScheduleOpenRouterKeyRefresh(ctx, orgID, keyType, nil); err != nil {
 			return "", oops.E(oops.CodeUnexpected, err, "error scheduling open router key refresh").LogError(ctx, o.logger)
 		}
 	}
@@ -387,11 +562,39 @@ func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, key
 }
 
 func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyType KeyType, limit *int) (int, error) {
+	return o.refreshAPIKeyLimit(ctx, o.db, orgID, keyType, limit, false)
+}
+
+// RefreshAPIKeyLimitWithDB is RefreshAPIKeyLimit using db for every local read
+// and write. Callers holding a session advisory lock must use the same
+// connection rather than acquiring a second pool connection while locked.
+func (o *OpenRouter) RefreshAPIKeyLimitWithDB(ctx context.Context, db DBTX, orgID string, keyType KeyType, limit *int) (int, error) {
+	return o.refreshAPIKeyLimit(ctx, db, orgID, keyType, limit, false)
+}
+
+// ReinstateAPIKeyLimit refreshes a key while explicitly allowing a disabled
+// key to come back when its caller needs the policy default resolved from nil.
+func (o *OpenRouter) ReinstateAPIKeyLimit(ctx context.Context, orgID string, keyType KeyType, limit *int) (int, error) {
+	return o.refreshAPIKeyLimit(ctx, o.db, orgID, keyType, limit, true)
+}
+
+// ReinstateAPIKeyLimitWithDB is ReinstateAPIKeyLimit using db for every local
+// read and write. Callers holding a session advisory lock must pass that same
+// connection instead of making the pool acquire a second connection.
+func (o *OpenRouter) ReinstateAPIKeyLimitWithDB(ctx context.Context, db DBTX, orgID string, keyType KeyType, limit *int) (int, error) {
+	return o.refreshAPIKeyLimit(ctx, db, orgID, keyType, limit, true)
+}
+
+func (o *OpenRouter) refreshAPIKeyLimit(ctx context.Context, db DBTX, orgID string, keyType KeyType, limit *int, reinstate bool) (int, error) {
 	keyType = keyType.OrDefault()
 	if err := keyType.Validate(); err != nil {
 		return 0, fmt.Errorf("refresh openrouter key limit: %w", err)
 	}
-	key, err := o.repo.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+	if limit != nil && *limit <= 0 {
+		return 0, errors.New("refresh openrouter key limit: monthly credits must be positive")
+	}
+	keyRepo := repo.New(db)
+	key, err := keyRepo.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
 		OrganizationID: orgID,
 		KeyType:        string(keyType),
 	})
@@ -399,39 +602,130 @@ func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyTy
 		return 0, fmt.Errorf("failed to get OpenRouter API key: %w", err)
 	}
 
-	if key.MonthlyCredits == 0 && !key.Disabled {
-		return 0, errors.New("cannot make an update to monthly credits of 0")
+	if limit == nil && key.Disabled && !reinstate {
+		// Generic refreshes must never undo a billing lockdown. An explicit
+		// activation, re-subscription, or platform-admin enable is the only path
+		// allowed to reinstate either platform key.
+		return int(key.MonthlyCredits), nil
 	}
 
-	org, err := o.orgRepo.GetOrganizationMetadata(ctx, orgID)
+	org, err := orgRepo.New(db).GetOrganizationMetadata(ctx, orgID)
 	if err != nil {
 		return 0, oops.E(oops.CodeUnexpected, err, "failed to get organization").LogError(ctx, o.logger)
+	}
+	if limit == nil && org.GramAccountType == string(billing.TierPayg) && !reinstate {
+		// OpenRouter is the authority for a PAYG customer's chosen inference cap
+		// on each materialized platform key. Generic tier refreshes preserve both
+		// the mirrored value and the key's
+		// disabled state without touching upstream or rewriting the row. Only an
+		// explicit activation/re-subscription or setSpendCap operation passes a
+		// non-nil limit.
+		return int(key.MonthlyCredits), nil
 	}
 
 	var keyLimit int
 	if limit != nil {
 		keyLimit = *limit
 	} else {
-		keyLimit = o.getLimitForOrg(org)
+		keyLimit = o.defaultLimitForOrg(ctx, db, org)
 	}
 
-	keyResponse, err := o.updateOpenRouterAPIKeyLimit(ctx, key.KeyHash, keyLimit)
+	creditLimit := float64(keyLimit)
+	patch := updateKeyRequest{Limit: &creditLimit, LimitReset: "monthly", Disabled: nil}
+	if key.Disabled {
+		// Setting a limit on a disabled key does not bring it back upstream.
+		patch.Disabled = new(false)
+	}
+
+	patchCtx, cancel := context.WithTimeout(ctx, upstreamKeyPatchTimeout)
+	defer cancel()
+	keyResponse, err := o.patchOpenRouterAPIKey(patchCtx, key.KeyHash, patch)
 	if err != nil {
 		return 0, err
 	}
+	if keyResponse.Data.Hash != key.KeyHash {
+		err := errors.New("refresh openrouter key limit: upstream key identity changed")
+		// This means the upstream key addressed by our immutable hash no longer
+		// resolves to the same identity. Every caller must fail closed, and the
+		// detection site must remain observable even for background refreshes
+		// that do not have an RPC boundary to log the failure.
+		o.logger.ErrorContext(ctx, "OpenRouter key identity changed while setting inference cap",
+			attr.SlogOrganizationID(orgID),
+			attr.SlogOpenRouterKeyType(string(keyType)),
+			attr.SlogError(err),
+		)
+		return 0, err
+	}
 
-	_, err = o.repo.UpdateOpenRouterKey(ctx, repo.UpdateOpenRouterKeyParams{
+	_, err = keyRepo.UpdateOpenRouterKey(ctx, repo.UpdateOpenRouterKeyParams{
 		OrganizationID: orgID,
 		KeyType:        string(keyType),
 		MonthlyCredits: int64(keyLimit),
 		KeyHash:        keyResponse.Data.Hash,
-		Key:            key.Key,
+		// This matches the upstream PATCH above. A lockdown committed after the
+		// read is preserved because key.Disabled was false at the read and this
+		// value therefore remains false.
+		Reinstate: key.Disabled,
 	})
 	if err != nil {
 		return 0, oops.E(oops.CodeUnexpected, err, "failed to update openrouter key").LogError(ctx, o.logger)
 	}
 
 	return keyLimit, nil
+}
+
+// DisableAPIKey stops an organization from spending on its platform key. Gram
+// enforces the lockdown itself: ProvisionAPIKey refuses a disabled key and
+// returns ErrPlatformKeyDisabled. The upstream flag covers any spend that never
+// passes through key resolution, such as a key that leaked.
+//
+// The upstream PATCH runs before the local write. The reverse order would
+// record a lockdown that a permanently failing PATCH never made.
+func (o *OpenRouter) DisableAPIKey(ctx context.Context, orgID string, keyType KeyType) error {
+	return o.disableAPIKey(ctx, o.db, orgID, keyType)
+}
+
+// DisableAPIKeyWithDB is DisableAPIKey using db for every local read and
+// write. It is used while a caller owns the key's session advisory lock.
+func (o *OpenRouter) DisableAPIKeyWithDB(ctx context.Context, db DBTX, orgID string, keyType KeyType) error {
+	return o.disableAPIKey(ctx, db, orgID, keyType)
+}
+
+func (o *OpenRouter) disableAPIKey(ctx context.Context, db DBTX, orgID string, keyType KeyType) error {
+	keyType = keyType.OrDefault()
+	if err := keyType.Validate(); err != nil {
+		return fmt.Errorf("disable openrouter key: %w", err)
+	}
+
+	keyRepo := repo.New(db)
+	key, err := keyRepo.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(keyType),
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		// An organization that never ran a completion has no key of this type.
+		return nil
+	case err != nil:
+		return fmt.Errorf("get openrouter key to disable: %w", err)
+	}
+
+	if _, err := o.patchOpenRouterAPIKey(ctx, key.KeyHash, updateKeyRequest{
+		Limit:      nil,
+		LimitReset: "",
+		Disabled:   new(true),
+	}); err != nil {
+		return fmt.Errorf("disable upstream openrouter key: %w", err)
+	}
+
+	if err := keyRepo.DisableOpenRouterAPIKey(ctx, repo.DisableOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(keyType),
+	}); err != nil {
+		return fmt.Errorf("mark openrouter key disabled: %w", err)
+	}
+
+	return nil
 }
 
 type keyUsageResponse struct {
@@ -442,21 +736,33 @@ type keyUsageResponse struct {
 }
 
 func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string, keyType KeyType) (float64, int, error) {
-	org, err := o.orgRepo.GetOrganizationMetadata(ctx, orgID)
-	if err != nil {
-		return 0, 0, oops.E(oops.CodeUnexpected, err, "failed to get organization").LogError(ctx, o.logger)
-	}
-	limit := o.getLimitForOrg(org)
-
-	key, err := o.repo.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+	// The key carries the ceiling the customer actually spends against, which a
+	// raise or a tier change can move away from the policy amount. Read it
+	// first: resolving the policy amount costs two more queries, and only a key
+	// minted before the column existed needs them.
+	key, keyErr := o.repo.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
 		OrganizationID: orgID,
 		KeyType:        string(keyType.OrDefault()),
 	})
-	if err != nil {
-		return 0, limit, nil // the key doesn't exist yet
+
+	limit := 0
+	if keyErr == nil {
+		limit = int(key.MonthlyCredits)
 	}
 
-	used, _, err := o.GetKeyUsage(ctx, key.Key)
+	if errors.Is(keyErr, pgx.ErrNoRows) {
+		return 0, 0, nil // the key doesn't exist yet
+	}
+	if keyErr != nil {
+		return 0, 0, fmt.Errorf("read openrouter key for usage: %w", keyErr)
+	}
+
+	apiKey, err := o.keyMaterial(key)
+	if err != nil {
+		return 0, limit, fmt.Errorf("resolve openrouter key material: %w", err)
+	}
+
+	used, _, err := o.GetKeyUsage(ctx, apiKey)
 	if err != nil {
 		return 0, limit, err
 	}
@@ -518,22 +824,52 @@ func (o *OpenRouter) GetKeyUsage(ctx context.Context, apiKey string) (float64, *
 // ReconcileMonthlyCredits self-heals drift in the locally cached monthly limit
 // after an out-of-band change on the OpenRouter dashboard. See the
 // Provisioner interface doc for the full contract.
-func (o *OpenRouter) ReconcileMonthlyCredits(ctx context.Context, orgID string, keyType KeyType, currentLimit int64, upstreamLimit *int64) (int64, error) {
-	if upstreamLimit == nil {
-		return currentLimit, nil
-	}
+func (o *OpenRouter) ReconcileMonthlyCredits(ctx context.Context, orgID string, keyType KeyType, currentLimit int64, currentGeneration int64, upstreamLimit *int64) (int64, error) {
+	return o.reconcileMonthlyCredits(ctx, o.db, orgID, keyType, currentLimit, currentGeneration, upstreamLimit)
+}
 
-	newLimit := *upstreamLimit
+// ReconcileMonthlyCreditsWithDB is ReconcileMonthlyCredits using db for the
+// mirror write. Credits polling holds the same per-key advisory lock across
+// its upstream read and this write, so a stale observation cannot race a cap
+// operation and erase its applied generation.
+func (o *OpenRouter) ReconcileMonthlyCreditsWithDB(ctx context.Context, db DBTX, orgID string, keyType KeyType, currentLimit int64, currentGeneration int64, upstreamLimit *int64) (int64, error) {
+	return o.reconcileMonthlyCredits(ctx, db, orgID, keyType, currentLimit, currentGeneration, upstreamLimit)
+}
+
+func (o *OpenRouter) reconcileMonthlyCredits(ctx context.Context, db DBTX, orgID string, keyType KeyType, currentLimit int64, currentGeneration int64, upstreamLimit *int64) (int64, error) {
+	// A nil upstream limit means the provider key is uncapped, not that the
+	// last local mirror is still authoritative. Mirror that as zero so cap
+	// meters and threshold alerts cannot claim an unenforced limit.
+	newLimit := int64(0)
+	if upstreamLimit != nil {
+		newLimit = *upstreamLimit
+	}
 	if newLimit == currentLimit {
 		return currentLimit, nil
 	}
 
-	if err := o.repo.UpdateOpenRouterKeyMonthlyCredits(ctx, repo.UpdateOpenRouterKeyMonthlyCreditsParams{
-		OrganizationID: orgID,
-		KeyType:        string(keyType.OrDefault()),
-		MonthlyCredits: newLimit,
-	}); err != nil {
+	keyRepo := repo.New(db)
+	updated, err := keyRepo.CompareAndSetOpenRouterKeyMonthlyCredits(ctx, repo.CompareAndSetOpenRouterKeyMonthlyCreditsParams{
+		OrganizationID:        orgID,
+		KeyType:               string(keyType.OrDefault()),
+		MonthlyCredits:        newLimit,
+		CurrentMonthlyCredits: currentLimit,
+		CurrentGeneration:     currentGeneration,
+	})
+	if err != nil {
 		return currentLimit, fmt.Errorf("reconcile openrouter monthly credits: %w", err)
+	}
+	if updated == 0 {
+		// A concurrent cap change won the compare-and-set. Read its value instead
+		// of overwriting it with the stale provider observation.
+		key, readErr := keyRepo.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+			OrganizationID: orgID,
+			KeyType:        string(keyType.OrDefault()),
+		})
+		if readErr != nil {
+			return currentLimit, fmt.Errorf("read concurrently updated openrouter monthly credits: %w", readErr)
+		}
+		return key.MonthlyCredits, nil
 	}
 
 	o.logger.InfoContext(ctx, "reconciled openrouter monthly credits from upstream",
@@ -546,12 +882,22 @@ func (o *OpenRouter) ReconcileMonthlyCredits(ctx context.Context, orgID string, 
 	return newLimit, nil
 }
 
-func (o *OpenRouter) getLimitForOrg(org orgRepo.OrganizationMetadatum) int {
-	if slices.Contains(specialLimitOrgs, org.ID) {
-		return 500
-	}
-
-	return creditsAccountTypeMap[org.GramAccountType]
+// defaultLimitForOrg resolves the monthly credit ceiling an organization is
+// entitled to by policy. It answers what a key would be minted at today, not
+// what an existing key carries: an operator raise leaves the key above this
+// amount, and only the key row records that. The account type is the last
+// resort, after the special-org list and the trial row.
+//
+// dbtx arrives from the caller because the provisioning path runs inside a
+// transaction that already holds an advisory lock and a pool connection, so it
+// must read through that same transaction.
+func (o *OpenRouter) defaultLimitForOrg(ctx context.Context, dbtx trialsRepo.DBTX, org orgRepo.OrganizationMetadatum) int {
+	// A trial runs on the real enterprise tier, so the account type on its own
+	// cannot tell a trial apart from a paying enterprise customer. A read
+	// failure falls through to the account type rather than capping a paying
+	// customer on a transient database error.
+	limit, _ := ResolveDefaultCreditLimit(ctx, o.logger, dbtx, org.ID, billing.Tier(org.GramAccountType))
+	return limit
 }
 
 // upstreamKeyIdentity names an org's OpenRouter key. Chat key naming must
@@ -577,6 +923,10 @@ type createKeyRequest struct {
 type updateKeyRequest struct {
 	Limit      *float64 `json:"limit,omitempty"`
 	LimitReset string   `json:"limit_reset,omitempty"`
+	// Disabled toggles the upstream key off and on. It is a pointer because
+	// omitting the field leaves the current state alone, which is what every
+	// limit-only patch wants.
+	Disabled *bool `json:"disabled,omitempty"`
 }
 
 type keyResponse struct {
@@ -640,10 +990,7 @@ func (o *OpenRouter) createOpenRouterAPIKey(ctx context.Context, orgID string, o
 	return &response, nil
 }
 
-func (o *OpenRouter) updateOpenRouterAPIKeyLimit(ctx context.Context, keyHash string, keyLimit int) (*keyResponse, error) {
-	creditLimit := float64(keyLimit)
-	requestBody := updateKeyRequest{Limit: &creditLimit, LimitReset: "monthly"}
-
+func (o *OpenRouter) patchOpenRouterAPIKey(ctx context.Context, keyHash string, requestBody updateKeyRequest) (*keyResponse, error) {
 	bodyBytes, err := json.Marshal(requestBody)
 	if err != nil {
 		o.logger.ErrorContext(ctx, "failed to marshal update openrouter key request body", attr.SlogError(err))
@@ -718,6 +1065,11 @@ func (o *OpenRouter) getGenerationDetails(ctx context.Context, generationID stri
 		return nil, 0, oops.E(oops.CodeUnexpected, err, "failed to get openrouter API key").LogError(ctx, o.logger)
 	}
 
+	apiKey, err := o.keyMaterial(key)
+	if err != nil {
+		return nil, 0, oops.E(oops.CodeUnexpected, err, "failed to resolve openrouter API key material").LogError(ctx, o.logger)
+	}
+
 	req, err := http.NewRequestWithContext(ctx, "GET", o.baseURL+"/v1/generation", nil)
 	if err != nil {
 		return nil, 0, fmt.Errorf("create generation request: %w", err)
@@ -727,7 +1079,7 @@ func (o *OpenRouter) getGenerationDetails(ctx context.Context, generationID stri
 	q.Set("id", generationID)
 	req.URL.RawQuery = q.Encode()
 
-	req.Header.Set("Authorization", "Bearer "+key.Key)
+	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := o.orClient.Do(req)

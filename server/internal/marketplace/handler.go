@@ -184,6 +184,9 @@ func (s *Server) proxyToGitHub(
 	if ct := r.Header.Get("Content-Type"); ct != "" {
 		upstreamReq.Header.Set("Content-Type", ct)
 	}
+	if ce := r.Header.Get("Content-Encoding"); ce != "" {
+		upstreamReq.Header.Set("Content-Encoding", ce)
+	}
 	// Forward git-protocol negotiation hints. Git advertises protocol v2 via
 	// this header; without it GitHub falls back to v0/v1 and clients may see
 	// degraded behavior.

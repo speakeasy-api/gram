@@ -15,6 +15,10 @@ import { PluginServer, PluginServer$inboundSchema } from "./pluginserver.js";
 
 export type Plugin = {
   /**
+   * Whether the plugin's complete current intended state can be published as an Agent Plugins 1.0 package.
+   */
+  agentPluginsV1Compatible: boolean;
+  /**
    * Number of role/user assignments.
    */
   assignmentCount?: number | undefined;
@@ -61,6 +65,7 @@ export type Plugin = {
 /** @internal */
 export const Plugin$inboundSchema: z.ZodMiniType<Plugin, unknown> = z.pipe(
   z.object({
+    agent_plugins_v1_compatible: z.boolean(),
     assignment_count: z.optional(z.int()),
     assignments: z.optional(z.array(PluginAssignment$inboundSchema)),
     created_at: z.pipe(
@@ -82,6 +87,7 @@ export const Plugin$inboundSchema: z.ZodMiniType<Plugin, unknown> = z.pipe(
   }),
   z.transform((v) => {
     return remap$(v, {
+      "agent_plugins_v1_compatible": "agentPluginsV1Compatible",
       "assignment_count": "assignmentCount",
       "created_at": "createdAt",
       "is_default": "isDefault",

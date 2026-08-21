@@ -119,14 +119,15 @@ func (j *Judge) Evaluate(ctx context.Context, in promptpolicy.Input) (*promptpol
 	))
 	defer span.End()
 
-	// A throttled call is treated like a judge error: the policy's fail-mode
-	// decides. A Store outage is not a throttle - proceed rather than let limiter
-	// infra disable the guardrail.
 	model := in.Config.Model
 	if model == "" {
 		model = defaultJudgeModel
 	}
-	switch res, err := j.limiter.Allow(ctx, openrouter.JudgeRateLimitKey(in.OrgID, model)); {
+	bucket := openrouter.ResolveJudgeRateLimitKey(ctx, j.logger, j.client, in.OrgID, in.ProjectID, billing.ModelUsageSourceRiskPolicy, model)
+	// A throttled call is treated like a judge error: the policy's fail-mode
+	// decides. A Store outage is not a throttle - proceed rather than let limiter
+	// infra disable the guardrail.
+	switch res, err := j.limiter.Allow(ctx, bucket); {
 	case err != nil:
 		j.logger.WarnContext(ctx, "judge rate limiter unavailable, allowing call",
 			attr.SlogError(err),
@@ -208,21 +209,22 @@ func (j *Judge) call(ctx context.Context, in promptpolicy.Input) (judgeCallResul
 	defer cancel()
 
 	response, err := j.client.GetObjectCompletion(callCtx, openrouter.ObjectCompletionRequest{
-		OrgID:          in.OrgID,
-		ProjectID:      in.ProjectID,
-		Model:          model,
-		SystemPrompt:   SystemPrompt,
-		Prompt:         judgePrompt,
-		Temperature:    &temperature,
-		UsageSource:    billing.ModelUsageSourceRiskAnalysis,
-		KeyType:        openrouter.KeyTypeInternal,
-		KeySlot:        billing.ModelUsageSourceRiskPolicy,
-		UserID:         in.UserID,
-		ExternalUserID: "",
-		UserEmail:      "",
-		HTTPMetadata:   nil,
-		JSONSchema:     &jsonSchema,
-		Reasoning:      nil,
+		OrgID:                  in.OrgID,
+		ProjectID:              in.ProjectID,
+		Model:                  model,
+		SystemPrompt:           SystemPrompt,
+		Prompt:                 judgePrompt,
+		Temperature:            &temperature,
+		UsageSource:            billing.ModelUsageSourceRiskAnalysis,
+		KeyType:                openrouter.KeyTypeInternal,
+		KeySlot:                billing.ModelUsageSourceRiskPolicy,
+		UserID:                 in.UserID,
+		ExternalUserID:         "",
+		UserEmail:              "",
+		HTTPMetadata:           nil,
+		JSONSchema:             &jsonSchema,
+		Reasoning:              nil,
+		DisableResponseHealing: false,
 	})
 	if err != nil {
 		return judgeCallResult{}, fmt.Errorf("openrouter object completion: %w", err)

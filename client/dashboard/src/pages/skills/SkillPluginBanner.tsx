@@ -269,7 +269,7 @@ export function SkillPluginBanner({
                   <PopoverTrigger asChild>
                     <button
                       type="button"
-                      className="border-input bg-background hover:bg-muted flex h-8 w-56 items-center justify-between gap-2 rounded-md border px-3 text-sm shadow-xs outline-none"
+                      className="border-input bg-background hover:bg-muted flex h-8 w-56 items-center justify-between gap-2 border px-3 text-sm shadow-xs outline-none"
                     >
                       <span
                         className={cn(
@@ -288,7 +288,7 @@ export function SkillPluginBanner({
                       {plugins.map((plugin) => (
                         <label
                           key={plugin.id}
-                          className="hover:bg-accent flex cursor-pointer items-start gap-2 rounded-sm px-2 py-1.5 text-sm"
+                          className="hover:bg-accent flex cursor-pointer items-start gap-2 px-2 py-1.5 text-sm"
                         >
                           {/* Disabled while saving: the post-save reseed
                               would silently discard mid-flight toggles. */}

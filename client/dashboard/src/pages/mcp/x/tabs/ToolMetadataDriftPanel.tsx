@@ -86,7 +86,7 @@ export function ToolMetadataDriftPanel({
   const removing = drift.filter((d) => d.kind === "removed").length;
 
   return (
-    <div className="border-border mb-5 rounded-lg border">
+    <div className="border-border mb-5 border">
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b px-4 py-2">
         <Text small as="p" className="text-muted-foreground">
           <span className="text-foreground font-medium">

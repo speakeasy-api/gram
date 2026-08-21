@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -187,4 +188,110 @@ func TestCodexAuthFileEmailPrefersAccessToken(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "auth.json"), []byte(auth), 0o600))
 
 	require.Equal(t, "access@example.com", codexAuthFileEmail())
+}
+
+// TestProbeCodexBinarySkipsUnrunnableCandidates: the probe's result is exec'd,
+// so it must return the first candidate that is actually runnable and skip a
+// path that merely exists. Driven through explicit candidates rather than the
+// process environment — pointing PATH or CODEX_HOME at a fixture would let a
+// miss fall through to the real /Applications copy and execute it.
+func TestProbeCodexBinarySkipsUnrunnableCandidates(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("executable-bit fixture is POSIX-only")
+	}
+
+	dir := t.TempDir()
+	notExecutable := filepath.Join(dir, "present-but-not-runnable")
+	runnable := filepath.Join(dir, "codex")
+	require.NoError(t, os.WriteFile(notExecutable, []byte("#!/bin/sh\nexit 0\n"), 0o600))
+	require.NoError(t, os.WriteFile(runnable, []byte("#!/bin/sh\nexit 0\n"), 0o700))
+
+	candidates := []string{filepath.Join(dir, "missing"), notExecutable, runnable}
+	require.Equal(t, runnable, probeCodexBinary(candidates))
+
+	require.Empty(t, probeCodexBinary([]string{filepath.Join(dir, "missing")}))
+	require.Empty(t, probeCodexBinary(nil))
+}
+
+// TestCodexBinaryCandidatesProbeTheUnifiedAppFirst pins the ordering the
+// /Applications entries cannot exercise on a test machine: the frozen
+// Codex.app must never win over the ChatGPT app that supersedes it.
+func TestCodexBinaryCandidatesProbeTheUnifiedAppFirst(t *testing.T) {
+	candidates := codexBinaryCandidates("/home/dev", "/home/dev/.codex")
+
+	unified := slices.Index(candidates, "/Applications/ChatGPT.app/Contents/Resources/codex")
+	frozen := slices.Index(candidates, "/Applications/Codex.app/Contents/Resources/codex")
+
+	require.NotEqual(t, -1, unified, "the unified ChatGPT app bundles the codex binary and must be probed")
+	require.NotEqual(t, -1, frozen)
+	require.Less(t, unified, frozen)
+
+	// Both app bundles rank below a managed or user-owned install.
+	require.Less(t, slices.Index(candidates, "/home/dev/.codex/packages/standalone/current/bin/codex"), unified)
+	require.Less(t, slices.Index(candidates, "/home/dev/.local/bin/codex"), unified)
+}
+
+// TestCodexBinaryCandidatesIncludeEditorExtensions: the ChatGPT editor
+// extensions bundle their own codex, and on a machine that runs Codex only
+// from an editor it is the only copy present — no CLI on PATH, no app bundle.
+// Missing it there means no MCP inventory, which the shadow-MCP guard reads as
+// an unprovable target and denies (DNO-771).
+func TestCodexBinaryCandidatesIncludeEditorExtensions(t *testing.T) {
+	home := t.TempDir()
+	// Versions installed side by side, as an editor leaves them across an
+	// upgrade. 26.10.0 over 26.9.0 is the case a lexical sort inverts, and the
+	// .cursor copy must beat the older .vscode ones even though it is globbed
+	// from a later directory.
+	oldest := writeCodexExtension(t, home, ".vscode", "26.7.1")
+	older := writeCodexExtension(t, home, ".vscode", "26.9.0")
+	newer := writeCodexExtension(t, home, ".cursor", "26.10.0")
+
+	candidates := codexBinaryCandidates(home, filepath.Join(home, ".codex"))
+
+	require.Contains(t, candidates, newer)
+	require.Contains(t, candidates, older)
+	require.Less(t, slices.Index(candidates, older), slices.Index(candidates, oldest),
+		"a newer extension build must be probed before an older one left behind")
+	require.Less(t, slices.Index(candidates, newer), slices.Index(candidates, older),
+		"26.10.0 is newer than 26.9.0; comparing the version components as text gets that backwards")
+	require.Less(t, slices.Index(candidates, newer), slices.Index(candidates, oldest),
+		"the newest build wins wherever it is installed, not just within its own editor directory")
+	require.Less(t, slices.Index(candidates, newer),
+		slices.Index(candidates, "/Applications/Codex.app/Contents/Resources/codex"),
+		"a maintained extension copy outranks the frozen Codex.app")
+
+	// A home with no editor extensions contributes nothing.
+	require.Empty(t, codexEditorExtensionBinaries(t.TempDir()))
+	require.Empty(t, codexEditorExtensionBinaries(""))
+}
+
+// TestCodexEditorExtensionBinariesKeepUnreadableVersions: an extension
+// directory naming scheme we cannot parse must not cost us the binary. It
+// ranks below everything we can read a version for, but on a machine where it
+// is the only copy installed it is still the difference between an MCP
+// inventory and none.
+func TestCodexEditorExtensionBinariesKeepUnreadableVersions(t *testing.T) {
+	home := t.TempDir()
+	unreadable := writeCodexExtension(t, home, ".vscode", "nightly")
+	known := writeCodexExtension(t, home, ".windsurf", "26.9.0")
+
+	found := codexEditorExtensionBinaries(home)
+
+	require.Equal(t, []string{known, unreadable}, found,
+		"an unparseable version sorts last but is never dropped")
+
+	onlyUnreadable := t.TempDir()
+	require.Equal(t, []string{writeCodexExtension(t, onlyUnreadable, ".cursor", "nightly")},
+		codexEditorExtensionBinaries(onlyUnreadable))
+}
+
+// writeCodexExtension lays down the codex binary an openai.chatgpt editor
+// extension bundles and returns its path.
+func writeCodexExtension(t *testing.T, home, editorDir, version string) string {
+	t.Helper()
+
+	path := filepath.Join(home, editorDir, "extensions", "openai.chatgpt-"+version+"-darwin-arm64", "bin", "macos-aarch64", "codex")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+	require.NoError(t, os.WriteFile(path, []byte("#!/bin/sh\nexit 0\n"), 0o700))
+	return path
 }

@@ -32,10 +32,10 @@ export class AdminChatAnalysis extends ClientSDK {
    * getSettings adminChatAnalysis
    *
    * @remarks
-   * Get the active organization's chat analysis settings. Requires platform admin.
+   * Get the named organization's chat analysis settings. Requires platform admin.
    */
   async getSettings(
-    request?: GetChatAnalysisSettingsRequest | undefined,
+    request: GetChatAnalysisSettingsRequest,
     security?: GetChatAnalysisSettingsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ChatAnalysisSettings> {
@@ -51,10 +51,10 @@ export class AdminChatAnalysis extends ClientSDK {
    * triggerAnalysis adminChatAnalysis
    *
    * @remarks
-   * Wake the chat analysis coordinator for every project in the active organization, instead of waiting for the periodic sweep. Requires platform admin.
+   * Wake the chat analysis coordinator for every project in the named organization, instead of waiting for the periodic sweep. Requires platform admin.
    */
   async triggerAnalysis(
-    request?: TriggerChatAnalysisRequest | undefined,
+    request: TriggerChatAnalysisRequest,
     security?: TriggerChatAnalysisSecurity | undefined,
     options?: RequestOptions,
   ): Promise<TriggerAnalysisResponseBody> {
@@ -70,7 +70,7 @@ export class AdminChatAnalysis extends ClientSDK {
    * upsertBusinessMemorySettings adminChatAnalysis
    *
    * @remarks
-   * Create or replace the active organization's business-memory extraction settings. Requires platform admin.
+   * Create or replace the named organization's business-memory extraction settings. Requires platform admin.
    */
   async upsertBusinessMemorySettings(
     request: UpsertBusinessMemoryAnalysisSettingsRequest,
@@ -89,7 +89,7 @@ export class AdminChatAnalysis extends ClientSDK {
    * upsertWorkUnitsSettings adminChatAnalysis
    *
    * @remarks
-   * Create or replace the active organization's chat analysis settings. Requires platform admin.
+   * Create or replace the named organization's chat analysis settings. Requires platform admin.
    */
   async upsertWorkUnitsSettings(
     request: UpsertChatAnalysisSettingsRequest,

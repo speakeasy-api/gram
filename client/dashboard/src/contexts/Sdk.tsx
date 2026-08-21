@@ -1,5 +1,8 @@
 import { handleError } from "@/lib/errors";
-import { isUnauthorizedError } from "@/lib/route-errors";
+import {
+  isGramSessionUnauthorizedError,
+  isUnauthorizedError,
+} from "@/lib/route-errors";
 import { redirectToLoginOnUnauthorized } from "@/lib/session-expired";
 import { Gram } from "@gram/client";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
@@ -29,13 +32,17 @@ export const useSdkClient = (): Gram => {
 // Preserve QueryClient across HMR to prevent cache loss
 const createQueryClient = () =>
   new QueryClient({
-    // A 401 means the session is dead (expired, revoked, or — in local dev —
-    // overwritten by another worktree's stack, since the cookie is scoped to
-    // `localhost` and cookies ignore ports). Send the user to /login instead
-    // of letting it throw to the error boundary.
+    // A Gram API 401 means the session is dead (expired, revoked, or — in
+    // local dev — overwritten by another worktree's stack, since the cookie is
+    // scoped to `localhost` and cookies ignore ports). Send the user to /login
+    // instead of letting it throw to the error boundary. Only Gram errors
+    // qualify: queries that talk to non-Gram endpoints (e.g. useProxiedMcpTools
+    // listing a proxied MCP server's tools) 401 when the *upstream* wants
+    // credentials, which their hooks handle inline — redirecting on those loops
+    // the page through /login forever since the Gram session is still valid.
     queryCache: new QueryCache({
       onError: (error) => {
-        if (isUnauthorizedError(error)) {
+        if (isGramSessionUnauthorizedError(error)) {
           redirectToLoginOnUnauthorized();
         }
       },
@@ -43,9 +50,11 @@ const createQueryClient = () =>
     defaultOptions: {
       queries: {
         // Suppress 403s so RBAC-restricted queries degrade gracefully
-        // instead of crashing the page, and 401s because the cache handler
-        // above is already navigating away. All other errors still throw to
-        // the nearest error boundary.
+        // instead of crashing the page, and 401s because they are auth
+        // states, not crashes: Gram 401s are already navigating away via the
+        // cache handler above, and non-Gram 401s (e.g. a proxied MCP upstream
+        // wanting credentials) are surfaced inline by their hooks. All other
+        // errors still throw to the nearest error boundary.
         throwOnError: (error) =>
           !isUnauthorizedError(error) &&
           !(error instanceof GramError && error.statusCode === 403),
@@ -77,7 +86,8 @@ const createQueryClient = () =>
 export const queryClient: QueryClient =
   (import.meta.hot?.data?.queryClient as QueryClient) ?? createQueryClient();
 
-if (import.meta.hot) {
+// Vite always provides `hot.data`, but vitest's shim defines `hot` without it.
+if (import.meta.hot?.data) {
   import.meta.hot.data.queryClient = queryClient;
 }
 

@@ -13,9 +13,9 @@ type Story = StoryObj<typeof ResizablePanel>;
 
 export const Horizontal: Story = {
   render: () => (
-    <div className="h-64 w-[40rem] rounded-md border">
+    <div className="h-64 w-[40rem] border">
       <ResizablePanel direction="horizontal">
-        <ResizablePanel.Pane defaultSize={35}>
+        <ResizablePanel.Pane defaultSize="35%">
           <div className="h-full p-4 text-sm">Tool list</div>
         </ResizablePanel.Pane>
         <ResizablePanel.Pane>

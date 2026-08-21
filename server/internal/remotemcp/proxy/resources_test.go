@@ -14,13 +14,18 @@ import (
 )
 
 const (
-	resourcesReadRequest    = `{"jsonrpc":"2.0","id":3,"method":"resources/read","params":{"uri":"file:///etc/hosts"}}`
-	resourcesReadResponse   = `{"jsonrpc":"2.0","id":3,"result":{"contents":[{"uri":"file:///etc/hosts","text":"127.0.0.1 localhost"}]}}`
-	resourcesListRequest    = `{"jsonrpc":"2.0","id":4,"method":"resources/list","params":{}}`
+	resourcesReadRequest  = `{"jsonrpc":"2.0","id":3,"method":"resources/read","params":{"uri":"file:///etc/hosts"}}`
+	resourcesReadResponse = `{"jsonrpc":"2.0","id":3,"result":{"contents":[{"uri":"file:///etc/hosts","text":"127.0.0.1 localhost"}]}}`
+	resourcesListRequest  = `{"jsonrpc":"2.0","id":4,"method":"resources/list","params":{}}`
+	// resourcesListThreeItems carries, alongside the resources array, result
+	// members the SDK's ListResourcesResult does not model. Mutation tests
+	// assert they relay intact through SetResources.
 	resourcesListThreeItems = `{
         "jsonrpc":"2.0",
         "id":4,
         "result":{
+            "resultType":"resources/list",
+            "futureUnknownField":{"nested":["ok"]},
             "resources":[
                 {"name":"a","uri":"file:///a"},
                 {"name":"b","uri":"file:///b"},
@@ -212,6 +217,12 @@ func TestProxy_Post_ResourcesListResponse_SetResources_RewritesRelayedBody(t *te
 	require.NotContains(t, out, `"file:///b"`, "filtered resource must not reach the client")
 	require.NotContains(t, out, `"file:///c"`, "filtered resource must not reach the client")
 	require.Contains(t, out, `"id":4`, "response id must survive re-encoding")
+
+	// Result members the SDK types don't model must survive the mutation:
+	// SetResources splices only the resources member into the original
+	// payload instead of round-tripping through ListResourcesResult.
+	require.Contains(t, out, `"resultType":"resources/list"`, "unmodeled member must survive SetResources")
+	require.Contains(t, out, `"futureUnknownField":{"nested":["ok"]}`, "unknown future member must survive SetResources")
 }
 
 func TestProxy_Post_ResourcesListResponse_SetResources_EmptyArrayWhenAllFiltered(t *testing.T) {

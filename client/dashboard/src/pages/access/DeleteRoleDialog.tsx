@@ -68,7 +68,7 @@ export const DeleteRoleDialog = ({
             </Text>
           ) : (
             <Text variant="body">
-              <code className="bg-muted rounded px-1 py-0.5 font-mono font-bold">
+              <code className="bg-muted px-1 py-0.5 font-mono font-bold">
                 {role?.name}
               </code>{" "}
               will be permanently deleted. This action cannot be undone.
@@ -76,7 +76,7 @@ export const DeleteRoleDialog = ({
           )}
 
           {hasMembers && (
-            <div className="border-border divide-border max-h-72 divide-y overflow-y-auto rounded-md border">
+            <div className="border-border divide-border max-h-72 divide-y overflow-y-auto border">
               {members.map((member) => {
                 const isOnlyRole = member.roleIds.length === 1;
                 return (

@@ -59,7 +59,7 @@ export function RegistryCacheSection(): JSX.Element {
                 key={registry.id}
                 direction="horizontal"
                 align="center"
-                className="justify-between rounded-md border p-3"
+                className="justify-between border p-3"
               >
                 <div>
                   <Text className="font-medium">{registry.name}</Text>

@@ -36,15 +36,36 @@ func BuildCallbackPayload(authCallbackCode string, authCallbackState string) (*a
 
 // BuildLoginPayload builds the payload for the auth login endpoint from CLI
 // flags.
-func BuildLoginPayload(authLoginRedirect string) (*auth.LoginPayload, error) {
+func BuildLoginPayload(authLoginRedirect string, authLoginOrgName string, authLoginEmail string, authLoginSupportHandoff string) (*auth.LoginPayload, error) {
 	var redirect *string
 	{
 		if authLoginRedirect != "" {
 			redirect = &authLoginRedirect
 		}
 	}
+	var orgName *string
+	{
+		if authLoginOrgName != "" {
+			orgName = &authLoginOrgName
+		}
+	}
+	var email *string
+	{
+		if authLoginEmail != "" {
+			email = &authLoginEmail
+		}
+	}
+	var supportHandoff *string
+	{
+		if authLoginSupportHandoff != "" {
+			supportHandoff = &authLoginSupportHandoff
+		}
+	}
 	v := &auth.LoginPayload{}
 	v.Redirect = redirect
+	v.OrgName = orgName
+	v.Email = email
+	v.SupportHandoff = supportHandoff
 
 	return v, nil
 }
@@ -73,6 +94,21 @@ func BuildSwitchScopesPayload(authSwitchScopesOrganizationID string, authSwitchS
 	v := &auth.SwitchScopesPayload{}
 	v.OrganizationID = organizationID
 	v.ProjectID = projectID
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildEnterDemoPayload builds the payload for the auth enterDemo endpoint
+// from CLI flags.
+func BuildEnterDemoPayload(authEnterDemoSessionToken string) (*auth.EnterDemoPayload, error) {
+	var sessionToken *string
+	{
+		if authEnterDemoSessionToken != "" {
+			sessionToken = &authEnterDemoSessionToken
+		}
+	}
+	v := &auth.EnterDemoPayload{}
 	v.SessionToken = sessionToken
 
 	return v, nil

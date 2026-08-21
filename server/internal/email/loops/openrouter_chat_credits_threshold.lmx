@@ -1,0 +1,35 @@
+<Style backgroundColor="#FAFAFA" backgroundXPadding="0" backgroundYPadding="32" bodyColor="#FFFFFF" bodyXPadding="0" bodyYPadding="0" bodyFontFamily="Inter" bodyFontCategory="ui-sans-serif" borderColor="" borderWidth="0" borderRadius="0" buttonBodyColor="" buttonBodyXPadding="16" buttonBodyYPadding="12" buttonBorderColor="" buttonBorderWidth="0" buttonBorderRadius="4" buttonTextColor="" buttonTextFormat="0" buttonTextFontSize="16" dividerColor="#BABABA" dividerBorderWidth="1" textBaseColor="#545454" textBaseFontSize="16" textBaseLineHeight="165" textBaseLetterSpacing="0" textLinkColor="" heading1Color="#121212" heading1FontSize="44" heading1LineHeight="112" heading1LetterSpacing="-1.5" heading2Color="#121212" heading2FontSize="24" heading2LineHeight="125" heading2LetterSpacing="0" heading3Color="" heading3FontSize="20" heading3LineHeight="125" heading3LetterSpacing="0" />
+<Image src="https://images.vialoops.com/clydgspni01t0bsa10jmd46rt/cmsrzwke702cu0j3bz2gats4u.png" width="600" />
+<Columns gap="12" widths="10,45,45" stackOnMobile="false" paddingTop="26" paddingRight="40" paddingBottom="24" paddingLeft="40">
+  <ColumnItem verticalAlignment="middle">
+    <Image src="https://images.vialoops.com/clydgspni01t0bsa10jmd46rt/cmsrzv81y00z60i1dmtf9twha.png" width="28" />
+  </ColumnItem>
+  <ColumnItem verticalAlignment="middle">
+    <Paragraph fontSize="21" lineHeight="100">speakeasy</Paragraph>
+  </ColumnItem>
+  <ColumnItem verticalAlignment="middle">
+    <Paragraph fontSize="12" lineHeight="140" align="right"><Text textColor="#757575">AI CONTROL PLANE</Text></Paragraph>
+  </ColumnItem>
+</Columns>
+<Paragraph fontSize="12" lineHeight="140" paddingTop="44" paddingRight="40" paddingBottom="18" paddingLeft="40"><Strong textColor="#757575">OTHER INFERENCE CAP ALERT</Strong></Paragraph>
+<Section if="{data.exhausted}" ifOperation="equal" ifValue="false">
+  <H1 paddingRight="40" paddingBottom="26" paddingLeft="40">{data.threshold_percent}% of other inference cap used</H1>
+  <Paragraph paddingRight="40" paddingBottom="28" paddingLeft="40">{data.organization_name} is approaching its cap for other inference.</Paragraph>
+</Section>
+<Section if="{data.exhausted}" ifOperation="equal" ifValue="true">
+  <H1 paddingRight="40" paddingBottom="26" paddingLeft="40">Other inference is paused</H1>
+  <Paragraph paddingRight="40" paddingBottom="28" paddingLeft="40">{data.organization_name} has reached its other inference cap.</Paragraph>
+</Section>
+<Section blockColor="#FFF1ED" blockBorderWidth="1" blockBorderColor="#E8A18D" if="{data.exhausted}" ifOperation="equal" ifValue="true" paddingTop="22" paddingRight="24" paddingBottom="20" paddingLeft="24">
+  <Paragraph fontSize="12" lineHeight="140"><Strong textColor="#C83228">CAP REACHED</Strong></Paragraph>
+  <Paragraph fontSize="14" lineHeight="155" paddingTop="8">Other inference is paused until usage resets or the cap changes.</Paragraph>
+</Section>
+<Section blockColor="#FFFFFF" blockBorderWidth="1" blockBorderColor="#DBDBDB" if="{data.exhausted}" ifOperation="equal" ifValue="false" paddingTop="22" paddingRight="24" paddingBottom="20" paddingLeft="24">
+  <Paragraph fontSize="12" lineHeight="140"><Strong textColor="#757575">ACTION</Strong></Paragraph>
+  <Paragraph fontSize="14" lineHeight="155" paddingTop="8">Review usage before the cap is exhausted.</Paragraph>
+</Section>
+<Divider />
+<Section blockColor="#FAFAFA" paddingTop="24" paddingRight="40" paddingBottom="30" paddingLeft="40">
+  <Paragraph fontSize="12" lineHeight="160"><Strong textColor="#757575">SPEAKEASY · AI CONTROL PLANE</Strong></Paragraph>
+  <Paragraph fontSize="12" lineHeight="160" paddingTop="8">This is an automated inference cap alert.</Paragraph>
+</Section>

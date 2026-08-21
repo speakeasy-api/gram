@@ -48,10 +48,12 @@ from TanStack Query.
 [use-query]: https://tanstack.com/query/v5/docs/framework/react/reference/useQuery
 
 ```tsx
-import { useRbacStatus } from "@gram/client/react-query/accessGetRBACStatus.js";
+import { useRole } from "@gram/client/react-query/accessGetRole.js";
 
 export function Example() {
-  const { data, error, status } = useRbacStatus();
+  const { data, error, status } = useRole({
+    id: "<id>",
+  });
 
   // Render the UI here...
 }
@@ -64,11 +66,14 @@ more options provided by the query hooks to control these behaviors.
 
 ```tsx
 import { useState } from "react";
-import { useRbacStatus } from "@gram/client/react-query/accessGetRBACStatus.js";
+import { useRole } from "@gram/client/react-query/accessGetRole.js";
 
 export function ExampleWithOptions() {
   const [enabled, setEnabled] = useState(true);
-  const { data, error, status } = useRbacStatus(
+  const { data, error, status } = useRole(
+    {
+      id: "<id>",
+    },
     {
       // TanStack Query options:
       enabled,
@@ -105,10 +110,10 @@ Query.
 [use-mutation]: https://tanstack.com/query/v5/docs/framework/react/reference/useMutation
 
 ```tsx
-import { useCreateRoleMutation } from "@gram/client/react-query/accessCreateRole.js";
+import { useUploadOpenTelemetryLogsMutation } from "@gram/client/react-query/otelUploadLogs.js";
 
 export function Example() {
-  const { mutate, status } = useCreateRoleMutation();
+  const { mutate, status } = useUploadOpenTelemetryLogsMutation();
 
   return (
     <form
@@ -117,17 +122,7 @@ export function Example() {
 
         // Read form data here...
 
-        mutate({
-          createRoleForm: {
-            description: "swerve hm receptor how",
-            grants: [
-              {
-                scope: "environment:write",
-              },
-            ],
-            name: "<value>",
-          },
-        });
+        mutate();
       }}
     >
       {/* Form fields go here... */} 
@@ -143,10 +138,10 @@ Since the underlying SDK handles request timeouts and retries, there are a few
 more options provided by the mutation hooks to control these behaviors.
 
 ```tsx
-import { useCreateRoleMutation } from "@gram/client/react-query/accessCreateRole.js";
+import { useUploadOpenTelemetryLogsMutation } from "@gram/client/react-query/otelUploadLogs.js";
 
 export function ExampleWithOptions() {
-  const { mutate, status } = useCreateRoleMutation({
+  const { mutate, status } = useUploadOpenTelemetryLogsMutation({
     // TanStack Query options:
     networkMode: "online",
     gcTime: 5 * 60 * 1000, // 5 minutes
@@ -178,7 +173,7 @@ query hook there are two functions that help invalidate cached data:
 
 ```tsx
 import { useQueryClient } from "@tanstack/react-query";
-import { invalidateRbacStatus, invalidateAllRbacStatus } from "@gram/client/react-query/accessGetRBACStatus.js";
+import { invalidateRole, invalidateAllRole } from "@gram/client/react-query/accessGetRole.js";
 // Replace this with a real mutation
 import { useExampleMutation } from "@gram/client/react-query/example.js";
 
@@ -196,9 +191,9 @@ export function Example() {
         mutate(formData, {
           onSuccess: () => {
             // Invalidate a single cache entry:
-            invalidateRbacStatus(queryClient, /* ... arguments ... */);
+            invalidateRole(queryClient, /* ... arguments ... */);
             // OR, invalidate all cache entries for the query targets:
-            invalidateAllRbacStatus(queryClient);
+            invalidateAllRole(queryClient);
           },
         });
       }}
@@ -261,7 +256,7 @@ import { ErrorBoundary } from "react-error-boundary";
 
 import { GramCore } from "@gram/client";
 import { GramProvider } from "@gram/client/react-query";
-import { useRbacStatusSuspense } from "@gram/client/react-query/accessGetRBACStatus.js";
+import { useRoleSuspense } from "@gram/client/react-query/accessGetRole.js";
 
 const queryClient = new QueryClient();
 const gram = new GramCore();
@@ -294,7 +289,9 @@ export function App() {
 }
 
 function Example() {
-  const { data } = useRbacStatusSuspense();
+  const { data } = useRoleSuspense({
+    id: "<id>",
+  });
 
   // Render the UI here...
 }
@@ -314,13 +311,15 @@ import {
   QueryClient,
 } from "@tanstack/react-query";
 import { GramCore } from "@gram/client";
-import { prefetchRbacStatus } from "@gram/client/react-query/accessGetRBACStatus.js";
+import { prefetchRole } from "@gram/client/react-query/accessGetRole.js";
 
 export default async function Page() {
   const queryClient = new QueryClient();
   const gram = new GramCore();
 
-  await prefetchRbacStatus(gram);
+  await prefetchRole(queryClient, gram, {
+    id: "<id>",
+  });
 
   return (
     // HydrationBoundary is a Client Component, so hydration will happen there.

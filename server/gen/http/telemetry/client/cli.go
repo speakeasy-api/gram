@@ -628,6 +628,236 @@ func BuildGetProjectOverviewPayload(telemetryGetProjectOverviewBody string, tele
 	return v, nil
 }
 
+// BuildGetUnproxiedMcpServerUsagePayload builds the payload for the telemetry
+// getUnproxiedMcpServerUsage endpoint from CLI flags.
+func BuildGetUnproxiedMcpServerUsagePayload(telemetryGetUnproxiedMcpServerUsageBody string, telemetryGetUnproxiedMcpServerUsageApikeyToken string, telemetryGetUnproxiedMcpServerUsageSessionToken string, telemetryGetUnproxiedMcpServerUsageProjectSlugInput string) (*telemetry.GetUnproxiedMcpServerUsagePayload, error) {
+	var err error
+	var body GetUnproxiedMcpServerUsageRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryGetUnproxiedMcpServerUsageBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"from\": \"1970-01-01T00:00:01Z\",\n      \"to\": \"1970-01-01T00:00:01Z\",\n      \"url\": \"https://example.com/foo\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.url", body.URL, goa.FormatURI))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if telemetryGetUnproxiedMcpServerUsageApikeyToken != "" {
+			apikeyToken = &telemetryGetUnproxiedMcpServerUsageApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryGetUnproxiedMcpServerUsageSessionToken != "" {
+			sessionToken = &telemetryGetUnproxiedMcpServerUsageSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if telemetryGetUnproxiedMcpServerUsageProjectSlugInput != "" {
+			projectSlugInput = &telemetryGetUnproxiedMcpServerUsageProjectSlugInput
+		}
+	}
+	v := &telemetry.GetUnproxiedMcpServerUsagePayload{
+		URL:  body.URL,
+		From: body.From,
+		To:   body.To,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetUnproxiedMcpServerToolUsagePayload builds the payload for the
+// telemetry getUnproxiedMcpServerToolUsage endpoint from CLI flags.
+func BuildGetUnproxiedMcpServerToolUsagePayload(telemetryGetUnproxiedMcpServerToolUsageBody string, telemetryGetUnproxiedMcpServerToolUsageApikeyToken string, telemetryGetUnproxiedMcpServerToolUsageSessionToken string, telemetryGetUnproxiedMcpServerToolUsageProjectSlugInput string) (*telemetry.GetUnproxiedMcpServerToolUsagePayload, error) {
+	var err error
+	var body GetUnproxiedMcpServerToolUsageRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryGetUnproxiedMcpServerToolUsageBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"abc123\",\n      \"from\": \"1970-01-01T00:00:01Z\",\n      \"limit\": 2,\n      \"to\": \"1970-01-01T00:00:01Z\",\n      \"url\": \"https://example.com/foo\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.url", body.URL, goa.FormatURI))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
+		if body.Limit < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", body.Limit, 1, true))
+		}
+		if body.Limit > 500 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", body.Limit, 500, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if telemetryGetUnproxiedMcpServerToolUsageApikeyToken != "" {
+			apikeyToken = &telemetryGetUnproxiedMcpServerToolUsageApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryGetUnproxiedMcpServerToolUsageSessionToken != "" {
+			sessionToken = &telemetryGetUnproxiedMcpServerToolUsageSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if telemetryGetUnproxiedMcpServerToolUsageProjectSlugInput != "" {
+			projectSlugInput = &telemetryGetUnproxiedMcpServerToolUsageProjectSlugInput
+		}
+	}
+	v := &telemetry.GetUnproxiedMcpServerToolUsagePayload{
+		URL:    body.URL,
+		From:   body.From,
+		To:     body.To,
+		Cursor: body.Cursor,
+		Limit:  body.Limit,
+	}
+	{
+		var zero int
+		if v.Limit == zero {
+			v.Limit = 50
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetUnproxiedMcpServerUserUsagePayload builds the payload for the
+// telemetry getUnproxiedMcpServerUserUsage endpoint from CLI flags.
+func BuildGetUnproxiedMcpServerUserUsagePayload(telemetryGetUnproxiedMcpServerUserUsageBody string, telemetryGetUnproxiedMcpServerUserUsageApikeyToken string, telemetryGetUnproxiedMcpServerUserUsageSessionToken string, telemetryGetUnproxiedMcpServerUserUsageProjectSlugInput string) (*telemetry.GetUnproxiedMcpServerUserUsagePayload, error) {
+	var err error
+	var body GetUnproxiedMcpServerUserUsageRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryGetUnproxiedMcpServerUserUsageBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"abc123\",\n      \"from\": \"1970-01-01T00:00:01Z\",\n      \"limit\": 2,\n      \"to\": \"1970-01-01T00:00:01Z\",\n      \"url\": \"https://example.com/foo\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.url", body.URL, goa.FormatURI))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
+		if body.Limit < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", body.Limit, 1, true))
+		}
+		if body.Limit > 500 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", body.Limit, 500, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if telemetryGetUnproxiedMcpServerUserUsageApikeyToken != "" {
+			apikeyToken = &telemetryGetUnproxiedMcpServerUserUsageApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryGetUnproxiedMcpServerUserUsageSessionToken != "" {
+			sessionToken = &telemetryGetUnproxiedMcpServerUserUsageSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if telemetryGetUnproxiedMcpServerUserUsageProjectSlugInput != "" {
+			projectSlugInput = &telemetryGetUnproxiedMcpServerUserUsageProjectSlugInput
+		}
+	}
+	v := &telemetry.GetUnproxiedMcpServerUserUsagePayload{
+		URL:    body.URL,
+		From:   body.From,
+		To:     body.To,
+		Cursor: body.Cursor,
+		Limit:  body.Limit,
+	}
+	{
+		var zero int
+		if v.Limit == zero {
+			v.Limit = 50
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetUnproxiedMcpServerClientUsagePayload builds the payload for the
+// telemetry getUnproxiedMcpServerClientUsage endpoint from CLI flags.
+func BuildGetUnproxiedMcpServerClientUsagePayload(telemetryGetUnproxiedMcpServerClientUsageBody string, telemetryGetUnproxiedMcpServerClientUsageApikeyToken string, telemetryGetUnproxiedMcpServerClientUsageSessionToken string, telemetryGetUnproxiedMcpServerClientUsageProjectSlugInput string) (*telemetry.GetUnproxiedMcpServerClientUsagePayload, error) {
+	var err error
+	var body GetUnproxiedMcpServerClientUsageRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryGetUnproxiedMcpServerClientUsageBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"abc123\",\n      \"from\": \"1970-01-01T00:00:01Z\",\n      \"limit\": 2,\n      \"to\": \"1970-01-01T00:00:01Z\",\n      \"url\": \"https://example.com/foo\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.url", body.URL, goa.FormatURI))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
+		if body.Limit < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", body.Limit, 1, true))
+		}
+		if body.Limit > 500 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", body.Limit, 500, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if telemetryGetUnproxiedMcpServerClientUsageApikeyToken != "" {
+			apikeyToken = &telemetryGetUnproxiedMcpServerClientUsageApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryGetUnproxiedMcpServerClientUsageSessionToken != "" {
+			sessionToken = &telemetryGetUnproxiedMcpServerClientUsageSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if telemetryGetUnproxiedMcpServerClientUsageProjectSlugInput != "" {
+			projectSlugInput = &telemetryGetUnproxiedMcpServerClientUsageProjectSlugInput
+		}
+	}
+	v := &telemetry.GetUnproxiedMcpServerClientUsagePayload{
+		URL:    body.URL,
+		From:   body.From,
+		To:     body.To,
+		Cursor: body.Cursor,
+		Limit:  body.Limit,
+	}
+	{
+		var zero int
+		if v.Limit == zero {
+			v.Limit = 50
+		}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildQueryPayload builds the payload for the telemetry query endpoint from
 // CLI flags.
 func BuildQueryPayload(telemetryQueryBody string, telemetryQuerySessionToken string) (*telemetry.QueryPayload, error) {

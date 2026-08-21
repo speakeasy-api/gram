@@ -7,12 +7,14 @@ import { useSkillsInfinite } from "@gram/client/react-query/skills.js";
 import { SortBy, SortOrder } from "@gram/client/models/operations/listchats";
 import { cn, isMacPlatform } from "@/lib/utils";
 import speakeasyIcon from "@/assets/speakeasy-icon.svg";
-import { useAssistantRuntime } from "@assistant-ui/react";
+import { useAui, useAuiState } from "@assistant-ui/react";
 import type { ElementsConfig, ElementsTransportFactory } from "@/elements";
 import {
   ActiveChatTitle,
   Chat,
+  ChatComposer,
   ChatHistory,
+  focusChatComposer,
   GramElementsProvider,
   useThreadId,
 } from "@/elements";
@@ -32,6 +34,7 @@ import { motion } from "motion/react";
 import {
   getRouteSuggestions,
   INSIGHTS_SUGGESTION_ICONS,
+  SLASH_COMMANDS,
   type InsightsSuggestion,
 } from "@/lib/insights-suggestions";
 import { useConfig as useMoonshineConfig } from "@/components/ui/hooks/useConfig";
@@ -110,11 +113,11 @@ const DOCK_REOPEN_WINDOW_MS = 2500;
 
 /** Icon-only buttons in the chat panel's Granola-style header. */
 const PANEL_ICON_BUTTON_CLASS =
-  "hover:bg-muted text-muted-foreground hover:text-foreground rounded-md p-1.5 transition-colors";
+  "hover:bg-muted text-muted-foreground hover:text-foreground p-1.5 transition-colors";
 
 /**
  * Restyles Elements' default chat composer (tall multi-row box with an
- * attachment/mention toolbar) into the same slim rounded-xl single-line row
+ * attachment/mention toolbar) into the same slim single-line row
  * as the docked pill that opens the panel, so the two read as one control.
  * Injected into the Elements shadow root via `theme.customCss` — host-page
  * CSS can't reach it. Targets Elements' stable `aui-*` class hooks; the
@@ -122,7 +125,7 @@ const PANEL_ICON_BUTTON_CLASS =
  */
 const DOCK_PANEL_COMPOSER_CSS = `
   .aui-composer-wrapper { padding-block: 0.5rem; }
-  .aui-composer-root { min-height: 0; border-radius: 0.75rem; padding: 0; }
+  .aui-composer-root { min-height: 0; border-radius: 0; padding: 0; }
   .aui-composer-input {
     min-height: 0;
     margin-bottom: 0;
@@ -140,27 +143,78 @@ const DOCK_PANEL_COMPOSER_CSS = `
   .aui-composer-action-wrapper-inner {
     display: flex;
   }
-  .aui-composer-action-wrapper-inner > :not(.aui-composer-skill-context-picker) {
+  /* The pill shows no composition tools at all — attachments, tool mentions
+     and skill context all belong to the surfaces with room for them. */
+  .aui-composer-action-wrapper-inner > * {
     display: none;
   }
-  .aui-composer-skill-context-picker-label { display: none; }
   .aui-composer-skill-context-badges { padding: 0.5rem 3rem 0 0.75rem; }
-  .aui-composer-send, .aui-composer-cancel {
-    width: 1.5rem;
-    height: 1.5rem;
-    min-width: 1.5rem;
+  /* Mic sits in the same cluster as send, so it has to shrink with it —
+     Elements sizes both at 34px, which is right for the full page only. */
+  .aui-composer-send, .aui-composer-cancel, .aui-composer-dictate {
+    width: 1.75rem;
+    height: 1.75rem;
+    min-width: 1.75rem;
     cursor: pointer;
   }
-  .aui-composer-send-icon {
-    width: 0.875rem;
-    height: 0.875rem;
-    stroke-width: 2.5;
+  .aui-composer-send-icon, .aui-composer-dictate-icon {
+    width: 1rem;
+    height: 1rem;
+    stroke-width: 1.75;
   }
+  .aui-composer-action-send-group { gap: 0.375rem; }
+  .aui-composer-dictation-wave { height: 1.75rem; margin-right: 0.375rem; }
   /* Filled square reads heavier than the stroked arrow — smaller icon keeps
      visible padding inside the same-size circle. */
   .aui-composer-cancel-icon {
     width: 0.625rem;
     height: 0.625rem;
+  }
+`;
+
+// The docked pill already IS the input surface: it draws the border, the card
+// background and the shadow. The shared composer rendered inside it must
+// therefore contribute no chrome of its own, or the two nest into a
+// box-in-a-box. Scoped to the dock host so the panel and page composers keep
+// their own frame.
+const DOCK_INLINE_COMPOSER_CSS = `
+  :host-context(.gram-chat-dock) .aui-composer-wrapper {
+    position: static;
+    padding: 0;
+    background: transparent;
+  }
+  :host-context(.gram-chat-dock) .aui-composer-root {
+    min-height: 0;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+  :host-context(.gram-chat-dock) .aui-composer-input {
+    padding: 0.375rem 5.5rem 0.375rem 0;
+    min-height: 0;
+    margin-bottom: 0;
+  }
+  :host-context(.gram-chat-dock) .aui-composer-action-wrapper {
+    position: absolute;
+    right: 0;
+    bottom: 50%;
+    transform: translateY(50%);
+    margin: 0;
+  }
+  /* The pill has one line: the composer's own "Listening…" label sits where
+     the draft text would be. */
+  /* The pill is one line wide: keep only the newest half of the level trail
+     (the bars nearest the mic) so it can't crowd out the draft row. */
+  :host-context(.gram-chat-dock) .aui-composer-dictation-bar:nth-child(-n + 16) {
+    display: none;
+  }
+  :host-context(.gram-chat-dock) .aui-composer-listening {
+    padding: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.875rem;
   }
 `;
 
@@ -179,28 +233,99 @@ const CHAT_MARKDOWN_CSS = `
   .aui-md-ul, .aui-md-ol { margin-top: 0.75rem; margin-bottom: 0.75rem; }
 `;
 
-// The docked composer above is intentionally compact. On the full-page chat
-// (ChatSurface wraps it in `.gram-chat-fullpage`) the composer should breathe,
-// so give it a roomier min-height + padding. Scoped via :host-context so the
-// docked panel keeps its tight pill.
-const CHAT_FULLPAGE_COMPOSER_CSS = `
-  :host-context(.gram-chat-fullpage) .aui-composer-root { min-height: 3.25rem; }
-  :host-context(.gram-chat-fullpage) .aui-composer-input {
-    min-height: 3.25rem;
-    padding-top: 0.875rem;
-    padding-bottom: 0.875rem;
-    font-size: 0.9375rem;
+// The docked composer above is intentionally compact. The surfaces that own
+// the page — the full-page chat (`.gram-chat-fullpage`) and the /chat landing
+// (`.gram-chat-landing`) — give the same composer room to breathe: taller
+// input, real padding, and the toolbar the dock hides. Scoped via
+// :host-context so the docked pill keeps its tight single-line form.
+const roomyComposerCss = (scope: string) => `
+  :host-context(.${scope}) .aui-composer-root {
+    min-height: 6.5rem;
+    padding: 0.75rem 0.375rem 0;
   }
-  :host-context(.gram-chat-fullpage) .aui-composer-action-wrapper {
+  :host-context(.${scope}) .aui-composer-input {
+    min-height: 2.75rem;
+    padding: 0 1.125rem 0.5rem;
+    font-size: 1rem;
+    line-height: 1.5rem;
+  }
+  :host-context(.${scope}) .aui-composer-action-wrapper {
     position: static;
-    margin: 0.5rem 0.25rem;
+    margin: 0 0.5rem 0.625rem;
     transform: none;
   }
-  :host-context(.gram-chat-fullpage) .aui-composer-skill-context-picker-label {
+  :host-context(.${scope}) .aui-composer-action-wrapper-inner > * {
+    display: inline-flex;
+  }
+  :host-context(.${scope}) .aui-composer-skill-context-picker-label {
     display: inline;
   }
+  :host-context(.${scope}) .aui-composer-send,
+  :host-context(.${scope}) .aui-composer-cancel,
+  :host-context(.${scope}) .aui-composer-dictate {
+    width: 2.125rem;
+    height: 2.125rem;
+    min-width: 2.125rem;
+  }
+  :host-context(.${scope}) .aui-composer-send-icon,
+  :host-context(.${scope}) .aui-composer-dictate-icon {
+    width: 1.125rem;
+    height: 1.125rem;
+  }
+  :host-context(.${scope}) .aui-composer-dictation-wave { height: 2.125rem; }
+`;
+
+const CHAT_FULLPAGE_COMPOSER_CSS = `
+  ${roomyComposerCss("gram-chat-fullpage")}
   :host-context(.gram-chat-fullpage) .aui-composer-wrapper {
-    padding-bottom: 1.25rem;
+    padding-bottom: 1.5rem;
+  }
+`;
+
+// The /chat landing renders the same composer standalone (no thread), so it
+// also has to undo the wrapper's sticky-bottom band, which has nothing to
+// stick to here.
+const CHAT_LANDING_COMPOSER_CSS = `
+  ${roomyComposerCss("gram-chat-landing")}
+  :host-context(.gram-chat-landing) .aui-composer-wrapper {
+    position: static;
+    padding: 0;
+  }
+  /* Cycling example prompts. The text arrives as a custom property set on the
+     host element — custom properties inherit through the shadow boundary, so
+     the landing can crossfade through examples without re-rendering the chat
+     tree (a changing \`composer.placeholder\` in the Elements config would).
+     The composer's own placeholder is hidden because it cannot be
+     transitioned — it is a ::before on the contenteditable input, since a div
+     has no ::placeholder. */
+  :host-context(.gram-chat-landing) .aui-composer-input[data-empty="true"]::before {
+    content: none;
+  }
+  :host-context(.gram-chat-landing) .aui-composer-root[data-empty="true"]::before {
+    content: var(--gram-composer-placeholder, "Ask anything");
+    position: absolute;
+    /* Must land exactly where the caret does: absolute offsets are measured
+       from the root's padding box, so this is the root's own padding plus the
+       input's — 0.375rem + 1.125rem across, 0.75rem down — with the input's
+       line-height so the first line sits on the same baseline. */
+    left: 1.5rem;
+    top: 0.75rem;
+    font-size: 1rem;
+    line-height: 1.5rem;
+    color: var(--muted-foreground);
+    opacity: var(--gram-composer-placeholder-opacity, 1);
+    transition: opacity 300ms ease;
+    pointer-events: none;
+  }
+  /* Focus means the user is about to type — the rotating example would sit
+     under their caret, so it clears out of the way. */
+  :host-context(.gram-chat-landing) .aui-composer-root:focus-within::before {
+    content: none;
+  }
+  /* The composer paints its own "Listening…" while dictating — don't stack the
+     cycling example prompt behind it. */
+  :host-context(.gram-chat-landing) .aui-composer-root[data-dictating="true"]::before {
+    content: none;
   }
 `;
 
@@ -221,7 +346,7 @@ function DockSubmitButton() {
     <button
       type="submit"
       aria-label="Send to Project Assistant"
-      className="bg-primary text-primary-foreground hover:bg-primary/90 flex size-6 shrink-0 items-center justify-center rounded-full transition-colors"
+      className="bg-primary text-primary-foreground hover:bg-primary/90 flex size-6 shrink-0 items-center justify-center transition-colors"
     >
       <ArrowUp className="size-3.5" />
     </button>
@@ -251,15 +376,20 @@ interface InsightsDockProps {
   onOpenHistory: () => void;
   /** Chat panel content, rendered inside the card when `open`. */
   panel: React.ReactNode;
+  /** True once the shared Elements runtime is mounted. The pill then renders
+   *  the same AUI composer every other surface uses (dictation, attachments,
+   *  tool mentions); until then it falls back to a plain input so the dock is
+   *  never a dead control. */
+  runtimeReady: boolean;
 }
 
-/** Width/shape/elevation of the dock card across its states: chat panel
- *  full-screen, chat panel open, composer focused (or holding draft text),
- *  and collapsed pill. Activity is signalled by deepening shadow. */
+/** Width of the dock card across its states: chat panel open, composer
+ *  focused (or holding draft text), and collapsed bar. The card itself
+ *  carries the single floating-overlay shadow. */
 function dockCardShapeClass(open: boolean, composerExpanded: boolean): string {
-  if (open) return "max-w-3xl rounded-2xl shadow-2xl";
-  if (composerExpanded) return "max-w-2xl rounded-2xl shadow-xl";
-  return "max-w-md rounded-full shadow-md hover:shadow-lg";
+  if (open) return "max-w-3xl";
+  if (composerExpanded) return "max-w-2xl";
+  return "max-w-md";
 }
 
 /**
@@ -287,6 +417,7 @@ function InsightsDock({
   onDismiss,
   onOpenHistory,
   panel,
+  runtimeReady,
 }: InsightsDockProps): ReactElement {
   const [value, setValue] = useState("");
   // Expansion is sticky state, not a focus mirror: it must survive the input
@@ -295,6 +426,10 @@ function InsightsDock({
   // a route change can cancel (or, for slow clicks, undo).
   const [expanded, setExpanded] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  /** Wraps the shared composer; also the focus target for Cmd+/. */
+  const composerHostRef = useRef<HTMLDivElement>(null);
+  /** Whether the shared composer holds a draft (see ComposerDraftReporter). */
+  const [sharedDraft, setSharedDraft] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const collapseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Stamped only by grace-timer collapses (blur/outside click), never by
@@ -328,10 +463,16 @@ function InsightsDock({
   useEffect(() => cancelCollapse, [cancelCollapse]);
 
   // Keyboard shortcut path: the provider bumps focusKey when Cmd+/ fires.
+  // The AUI composer's input lives in a shadow root, so it can't be reached
+  // with a plain ref.
   useEffect(() => {
     if (focusKey === 0) return;
+    if (runtimeReady) {
+      focusChatComposer(composerHostRef.current);
+      return;
+    }
     inputRef.current?.focus();
-  }, [focusKey]);
+  }, [focusKey, runtimeReady]);
 
   // Navigation keeps the dock expanded: cancel any pending collapse, and undo
   // one that just fired (slow click — the grace timer can win the race
@@ -364,7 +505,11 @@ function InsightsDock({
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [expanded, scheduleCollapse]);
 
-  const composerExpanded = !open && (expanded || value.trim().length > 0);
+  // `value` only backs the fallback input; the shared composer keeps its draft
+  // on the runtime, so it reports emptiness up through `sharedDraft`. Both feed
+  // the same rule: a non-empty draft holds the dock open even without focus.
+  const hasDraft = value.trim().length > 0 || sharedDraft;
+  const composerExpanded = !open && (expanded || hasDraft);
 
   const shortcutAria = isMacPlatform() ? "Meta+/" : "Control+/";
 
@@ -390,6 +535,17 @@ function InsightsDock({
     >
       Continue chat
     </button>
+  ) : runtimeReady ? (
+    // The shared composer, sending straight through the runtime — no prompt
+    // hand-off, so the dock gets dictation and every other composer feature.
+    <div
+      ref={composerHostRef}
+      className="gram-chat-dock min-w-0 flex-1"
+      tabIndex={open ? -1 : undefined}
+    >
+      <ComposerDraftReporter onChange={setSharedDraft} />
+      <ChatComposer />
+    </div>
   ) : (
     <input
       ref={inputRef}
@@ -412,7 +568,7 @@ function InsightsDock({
   return (
     <div
       className={cn(
-        "pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center px-4 pt-14 pb-8",
+        "pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center px-4 pt-14 pb-12",
       )}
     >
       {/* Frosted veil under the dock: blurs the page content directly behind
@@ -425,7 +581,7 @@ function InsightsDock({
       />
       <div
         className={cn(
-          "border-border bg-card text-card-foreground pointer-events-auto w-full border",
+          "border-border bg-card text-card-foreground pointer-events-auto w-full border shadow-md",
           "transition-all duration-300 ease-out",
           dockCardShapeClass(open, composerExpanded),
           // Pairs with the sidebar resume button for the dismiss/resume genie
@@ -442,7 +598,12 @@ function InsightsDock({
         // and even then through the grace timer, so a navigation click keeps
         // the dock expanded for the next page's suggestions.
         onFocus={(e) => {
-          if (e.target === inputRef.current) {
+          // Focus inside the shadow-rooted composer retargets to its host, so
+          // match on containment rather than identity for that path.
+          const fromComposer =
+            e.target === inputRef.current ||
+            (composerHostRef.current?.contains(e.target as Node) ?? false);
+          if (fromComposer) {
             cancelCollapse();
             setExpanded(true);
           }
@@ -471,8 +632,8 @@ function InsightsDock({
                   expanded composer, so opening the chat reads as the input
                   surface growing into the conversation rather than an
                   unrelated white panel appearing. */}
-              <div className="bg-muted/40 rounded-2xl p-2">
-                <div className="border-border bg-card h-[min(640px,70vh)] overflow-hidden rounded-xl border">
+              <div className="bg-muted/40 p-2">
+                <div className="border-border bg-card h-[min(640px,70vh)] overflow-hidden border">
                   {panel}
                 </div>
               </div>
@@ -489,7 +650,12 @@ function InsightsDock({
               open && "grid-rows-[0fr]",
             )}
           >
-            <div className="overflow-hidden">
+            {/* The clip is what makes the grid-rows collapse animate, but it
+                also crops the composer's own menus (slash commands, tool
+                mentions), which open upwards out of the composer box. Elements
+                marks its shadow host while one is open, so the clip lifts for
+                exactly as long as there is a menu to show. */}
+            <div className="overflow-hidden has-[[data-composer-menu-open]]:overflow-visible">
               {/* Granola-style expanded composer: the outer card gains inset
                 padding, the chip row sits at the top, and the input row gets
                 its own bordered rounded container. Collapsed, the padding and
@@ -500,7 +666,7 @@ function InsightsDock({
                   // Tint sits over the card's solid bg-card (rather than
                   // replacing it) so the tray reads as a subtle grey without
                   // page content bleeding through the translucency.
-                  "rounded-2xl transition-[padding,background-color] duration-300 ease-out",
+                  "transition-[padding,background-color] duration-300 ease-out",
                   composerExpanded ? "bg-muted/40 p-2" : "p-0",
                 )}
               >
@@ -545,7 +711,7 @@ function InsightsDock({
                                 type="button"
                                 tabIndex={composerExpanded ? 0 : -1}
                                 onClick={() => submit(suggestion.prompt)}
-                                className="border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors"
+                                className="border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground flex items-center gap-1.5 border px-2 py-1 text-xs transition-colors"
                               >
                                 <SuggestionIcon className="size-3 shrink-0" />
                                 {suggestion.title}
@@ -562,7 +728,7 @@ function InsightsDock({
                     submit(value);
                   }}
                   className={cn(
-                    "flex items-center gap-2.5 rounded-xl border px-4 py-2.5 transition-colors duration-300 ease-out",
+                    "flex items-center gap-2.5 border px-4 py-2.5 transition-colors duration-300 ease-out",
                     composerExpanded
                       ? "border-border bg-card"
                       : "border-transparent bg-transparent",
@@ -582,9 +748,11 @@ function InsightsDock({
                     </button>
                   )}
                   {/* Greyed shortcut hint on the resting pill; hidden once the
-                      composer is engaged (focused or typing) and in continue
-                      mode (a button, not a focusable input). */}
-                  {!composerExpanded && !continueMode && (
+                      composer is engaged (focused or typing), in continue mode
+                      (a button, not a focusable input), and alongside the
+                      shared composer — whose own action cluster (mic, send,
+                      mentions) already crowds that corner. */}
+                  {!composerExpanded && !continueMode && !runtimeReady && (
                     <InsightsShortcutKeys className="opacity-60" />
                   )}
                   <button
@@ -788,13 +956,19 @@ export function InsightsProvider({
     [skillsQuery.data?.pages],
   );
 
-  // Derive "Continue chat" from the server: if the assistant's most recent
-  // conversation was active within CONTINUE_WINDOW_MS, the resting pill offers
-  // to reopen it. Reading the backend (rather than client state) means it
-  // survives reloads for free. limit:1 — we only need the newest.
+  // Derive "Continue chat" from the server: if the viewer's most recent
+  // dashboard-initiated session with the assistant was active within
+  // CONTINUE_WINDOW_MS, the resting pill offers to reopen it. Reading the
+  // backend (rather than client state) means it survives reloads for free.
+  // sourceKind and userId keep out other members' sessions and other sources
+  // (Slack, cron, …), which an admin's chat:read visibility would otherwise
+  // surface here. limit:1 — we only need the newest.
+  const { user } = useSession();
   const { data: recentChatsData } = useListChats(
     {
       assistantId: managedAssistantId || undefined,
+      sourceKind: "dashboard",
+      userId: user.id,
       sortBy: SortBy.LastMessageTimestamp,
       sortOrder: SortOrder.Desc,
       limit: 1,
@@ -846,7 +1020,6 @@ export function InsightsProvider({
   // their chat:read grant, so hide the composer for those rather than let a
   // send 404. Chats started from the dashboard stash the caller's email in
   // externalUserId instead of userId (see resolveCreator above).
-  const { user } = useSession();
   const isOwnChat = useCallback(
     ({
       userId,
@@ -861,17 +1034,17 @@ export function InsightsProvider({
     [user.id, user.email],
   );
 
-  // Mount the shared runtime only where it's actually used: a chat route (the
-  // page owns the chat) or the open dock — and only where the dock is shown.
-  // Pages with their own chat runtime (Playground, Elements, assistant
-  // onboarding) hide the dock, so `!hideTrigger` keeps the shared provider out
-  // of their tree and the two RemoteThreadListRuntimes never nest. Maximize
-  // stays seamless because the expand handler navigates WITHOUT collapsing, so
-  // `onChatRoute` takes over before `isExpanded` flips (no unmount gap).
-  // Everything runtime-dependent — the dock panel's chat view, the provider
-  // mount, and (via context) the chat pages — gates on this single flag.
-  const runtimeMounted =
-    assistantReady && (onChatRoute || (isExpanded && !hideTrigger));
+  // The shared composer needs its runtime as soon as the assistant resolves,
+  // including on Home where the floating dock is hidden in favor of the
+  // landing widget. Routes that mount their own GramElementsProvider are the
+  // exception: wrapping them would nest RemoteThreadListRuntimes before their
+  // useHideInsightsDock layout effect can register with this parent.
+  const pageOwnsRuntime =
+    routes.playground.active ||
+    routes.elements.active ||
+    routes.assistants.newAssistant.active ||
+    routes.assistants.detail.active;
+  const runtimeMounted = assistantReady && !pageOwnsRuntime;
 
   // Read inside the transport wrapper via ref so override churn doesn't
   // re-create the transport identity on every parent re-render.
@@ -990,11 +1163,16 @@ export function InsightsProvider({
         suggestions,
       },
       // Mirror the docked pill's wording so the chat composer reads as the
-      // same control the user just typed into. Attachments are hidden — the
-      // dock has no attach affordance and the feature is not implemented.
+      // same control the user just typed into.
       composer: {
         placeholder: "Ask anything",
-        attachments: false,
+        // Typing `/` offers the same canned prompts the landing widget used to
+        // own, now that every surface shares one composer.
+        slashCommands: SLASH_COMMANDS.map((command) => ({
+          title: command.title,
+          label: command.label,
+          prompt: command.prompt,
+        })),
         skillContext: {
           skills: composerSkills,
           selectedSkillIds,
@@ -1006,10 +1184,15 @@ export function InsightsProvider({
       },
       theme: {
         colorScheme: theme === "dark" ? "dark" : "light",
+        // Square corners throughout the embedded chat, matching the
+        // dashboard's flat design language.
+        radius: "sharp",
         customCss:
           DOCK_PANEL_COMPOSER_CSS +
+          DOCK_INLINE_COMPOSER_CSS +
           CHAT_MARKDOWN_CSS +
           CHAT_FULLPAGE_COMPOSER_CSS +
+          CHAT_LANDING_COMPOSER_CSS +
           CHAT_LINK_CSS,
       },
     }),
@@ -1164,7 +1347,7 @@ export function InsightsProvider({
       setOverride: handleSetOverride,
       sendPrompt: handleSendPrompt,
       // Expose the gated "runtime is mounted" signal, not the raw eager
-      // `assistantReady`: chat pages render runtime hooks (useAssistantRuntime)
+      // `assistantReady`: chat pages render AUI hooks
       // only once the provider actually exists.
       assistantReady: runtimeMounted,
       assistantNeedsAdmin,
@@ -1212,14 +1395,14 @@ export function InsightsProvider({
     <>
       {/* Notice when the Project Assistant failed to connect */}
       {assistantError && (
-        <div className="border-destructive/40 bg-destructive/10 text-destructive mx-4 mt-1 flex items-start gap-2 rounded-md border px-3 py-2 text-xs">
+        <div className="border-destructive/40 bg-destructive/10 text-destructive mx-4 mt-1 flex items-start gap-2 border px-3 py-2 text-xs">
           <Terminal className="mt-0.5 size-3.5 shrink-0" />
           <span>{assistantError}</span>
         </div>
       )}
 
       {assistantNeedsAdmin && (
-        <div className="border-border bg-muted/50 text-muted-foreground mx-4 mt-1 flex items-start gap-2 rounded-md border px-3 py-2 text-xs">
+        <div className="border-border bg-muted/50 text-muted-foreground mx-4 mt-1 flex items-start gap-2 border px-3 py-2 text-xs">
           <Terminal className="mt-0.5 size-3.5 shrink-0" />
           <span>
             Ask an admin to enable the Project Assistant for this project.
@@ -1229,7 +1412,7 @@ export function InsightsProvider({
 
       {/* Notice when no toolsets are configured */}
       {noToolsetsConfigured && (
-        <div className="border-border bg-muted/50 text-muted-foreground mx-4 mt-1 flex items-start gap-2 rounded-md border px-3 py-2 text-xs">
+        <div className="border-border bg-muted/50 text-muted-foreground mx-4 mt-1 flex items-start gap-2 border px-3 py-2 text-xs">
           <Terminal className="mt-0.5 size-3.5 shrink-0" />
           <span>
             AI tools are unavailable. Create an MCP server to enable the Project
@@ -1371,6 +1554,7 @@ export function InsightsProvider({
           onDismiss={handleDockDismiss}
           onOpenHistory={handleOpenHistory}
           panel={panelContent}
+          runtimeReady={runtimeMounted}
         />
       )}
     </div>
@@ -1394,6 +1578,11 @@ export function InsightsProvider({
           <PendingPromptBridge
             pending={pendingPrompt}
             onConsume={consumePendingPrompt}
+          />
+          <StopDictationOnNavigate />
+          <OpenPanelOnSend
+            enabled={!isExpanded && !onChatRoute && !hideTrigger}
+            onSend={() => setIsExpanded(true)}
           />
           {dockSurface}
         </GramElementsProvider>
@@ -1429,6 +1618,80 @@ function ExpandToPageButton({
 }
 
 /**
+ * Opens the chat panel when the docked composer sends. The dock's composer
+ * submits through the runtime itself, so there is no submit handler to hook.
+ * Disabled on chat routes and while the panel is already open, where the panel
+ * must not steal the view.
+ */
+function OpenPanelOnSend({
+  enabled,
+  onSend,
+}: {
+  enabled: boolean;
+  onSend: () => void;
+}): null {
+  // A run starting, not the message count growing: loading an existing
+  // conversation into the shared runtime also grows that count, which would
+  // pop the panel open on its own.
+  const isRunning = useAuiState(({ thread }) => thread.isRunning);
+  const wasRunningRef = useRef(isRunning);
+  useEffect(() => {
+    const justStarted = isRunning && !wasRunningRef.current;
+    wasRunningRef.current = isRunning;
+    if (justStarted && enabled) onSend();
+  }, [isRunning, enabled, onSend]);
+  return null;
+}
+
+/**
+ * Reports whether the shared composer holds a draft. The docked pill stays
+ * expanded while the user has text in it — with the legacy input that was
+ * local state, but the shared composer keeps its draft on the runtime, so the
+ * dock has to be told. Without this a typed draft is hidden the moment focus
+ * leaves the composer.
+ */
+function ComposerDraftReporter({
+  onChange,
+}: {
+  onChange: (hasDraft: boolean) => void;
+}): null {
+  const hasDraft = useAuiState(({ composer }) => composer.text.trim() !== "");
+  useEffect(() => {
+    onChange(hasDraft);
+  }, [hasDraft, onChange]);
+  // Retract the report when the composer goes away — the dock swaps it out for
+  // the "Continue chat" button whenever a recent conversation appears, and a
+  // last report of `true` would otherwise pin the dock open with nothing in it.
+  useEffect(
+    () => () => {
+      onChange(false);
+    },
+    [onChange],
+  );
+  return null;
+}
+
+/**
+ * Ends any live dictation when the route changes. The composer is shared and
+ * outlives navigation, so without this the mic keeps listening (and recording)
+ * on a page the user has already left.
+ */
+function StopDictationOnNavigate(): null {
+  const { pathname } = useLocation();
+  const aui = useAui();
+  const isDictating = useAuiState(({ composer }) => composer.dictation != null);
+  const dictatingRef = useRef(isDictating);
+  dictatingRef.current = isDictating;
+  useEffect(() => {
+    return () => {
+      if (dictatingRef.current) aui.composer().stopDictation();
+    };
+    // Cleanup runs on every pathname change, which is exactly the signal.
+  }, [pathname, aui]);
+  return null;
+}
+
+/**
  * assistant-ui's EMPTY_THREAD_CORE placeholder throws a single shared sentinel
  * Error on append (and other actions) until the real thread core binds. It's
  * not exported, so we match its message to tell "thread not ready yet, retry"
@@ -1452,11 +1715,14 @@ function PendingPromptBridge({
   pending: { text: string; nonce: number } | null;
   onConsume: () => void;
 }): null {
-  const assistantRuntime = useAssistantRuntime();
+  const thread = useAui().thread();
+  const isThreadReady = useAuiState(
+    ({ thread }) => !thread.isLoading && !thread.isDisabled,
+  );
   const firedNonceRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!pending || !assistantRuntime) return;
+    if (!pending || !isThreadReady) return;
     if (firedNonceRef.current === pending.nonce) return;
     firedNonceRef.current = pending.nonce;
 
@@ -1471,21 +1737,16 @@ function PendingPromptBridge({
     // asynchronously, so a post-append "did it land?" check races and
     // re-appending duplicates the send.
     let done = false;
-    let unsubscribe: (() => void) | null = null;
 
     const finish = () => {
       done = true;
-      unsubscribe?.();
-      unsubscribe = null;
       onConsume();
     };
 
     const attempt = () => {
       if (done) return;
-      const state = assistantRuntime.thread.getState();
-      if (state.isLoading || state.isDisabled) return;
       try {
-        assistantRuntime.thread.append(text);
+        thread.append(text);
       } catch (err) {
         if (!isEmptyThreadError(err)) {
           console.error("Failed to send queued assistant prompt:", err);
@@ -1497,16 +1758,11 @@ function PendingPromptBridge({
     };
 
     attempt();
-    if (!done) {
-      unsubscribe = assistantRuntime.thread.subscribe(attempt);
-    }
 
     return () => {
       done = true;
-      unsubscribe?.();
-      unsubscribe = null;
     };
-  }, [pending, assistantRuntime, onConsume]);
+  }, [pending, isThreadReady, thread, onConsume]);
 
   return null;
 }

@@ -59,13 +59,10 @@ func BuildUpdateAwsKmsKeyPayload(externalKeysUpdateAwsKmsKeyBody string, externa
 	{
 		err = json.Unmarshal([]byte(externalKeysUpdateAwsKmsKeyBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"algorithm\": \"ES256\",\n      \"customer_grant_reference\": \"abc123\",\n      \"external_credential_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"key_arn\": \"abc123\",\n      \"name\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"customer_grant_reference\": \"abc123\",\n      \"external_credential_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.external_credential_id", body.ExternalCredentialID, goa.FormatUUID))
-		if !(body.Algorithm == "RS256" || body.Algorithm == "ES256") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.algorithm", body.Algorithm, []any{"RS256", "ES256"}))
-		}
 		if err != nil {
 			return nil, err
 		}
@@ -78,9 +75,7 @@ func BuildUpdateAwsKmsKeyPayload(externalKeysUpdateAwsKmsKeyBody string, externa
 	}
 	v := &externalkeys.UpdateAwsKmsKeyPayload{
 		ID:                     body.ID,
-		KeyArn:                 body.KeyArn,
 		ExternalCredentialID:   body.ExternalCredentialID,
-		Algorithm:              body.Algorithm,
 		Name:                   body.Name,
 		CustomerGrantReference: body.CustomerGrantReference,
 	}
@@ -133,13 +128,10 @@ func BuildUpdateGcpKmsKeyPayload(externalKeysUpdateGcpKmsKeyBody string, externa
 	{
 		err = json.Unmarshal([]byte(externalKeysUpdateGcpKmsKeyBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"algorithm\": \"ES256\",\n      \"customer_grant_reference\": \"abc123\",\n      \"external_credential_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"resource_name\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"customer_grant_reference\": \"abc123\",\n      \"external_credential_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.external_credential_id", body.ExternalCredentialID, goa.FormatUUID))
-		if !(body.Algorithm == "RS256" || body.Algorithm == "ES256") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.algorithm", body.Algorithm, []any{"RS256", "ES256"}))
-		}
 		if err != nil {
 			return nil, err
 		}
@@ -152,9 +144,7 @@ func BuildUpdateGcpKmsKeyPayload(externalKeysUpdateGcpKmsKeyBody string, externa
 	}
 	v := &externalkeys.UpdateGcpKmsKeyPayload{
 		ID:                     body.ID,
-		ResourceName:           body.ResourceName,
 		ExternalCredentialID:   body.ExternalCredentialID,
-		Algorithm:              body.Algorithm,
 		Name:                   body.Name,
 		CustomerGrantReference: body.CustomerGrantReference,
 	}
@@ -266,6 +256,31 @@ func BuildGetGcpKmsKeyPayload(externalKeysGetGcpKmsKeyID string, externalKeysGet
 		}
 	}
 	v := &externalkeys.GetGcpKmsKeyPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildVerifyGcpKmsKeyPayload builds the payload for the externalKeys
+// verifyGcpKmsKey endpoint from CLI flags.
+func BuildVerifyGcpKmsKeyPayload(externalKeysVerifyGcpKmsKeyID string, externalKeysVerifyGcpKmsKeySessionToken string) (*externalkeys.VerifyGcpKmsKeyPayload, error) {
+	var err error
+	var id string
+	{
+		id = externalKeysVerifyGcpKmsKeyID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if externalKeysVerifyGcpKmsKeySessionToken != "" {
+			sessionToken = &externalKeysVerifyGcpKmsKeySessionToken
+		}
+	}
+	v := &externalkeys.VerifyGcpKmsKeyPayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
 

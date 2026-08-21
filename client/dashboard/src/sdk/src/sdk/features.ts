@@ -4,6 +4,7 @@
 
 import { featuresGet } from "../funcs/featuresGet.js";
 import { featuresSet } from "../funcs/featuresSet.js";
+import { featuresSetRemoteSessionAutoRefreshPolicy } from "../funcs/featuresSetRemoteSessionAutoRefreshPolicy.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { GetProductFeaturesResponseBody } from "../models/components/getproductfeaturesresponsebody.js";
 import {
@@ -14,6 +15,10 @@ import {
   SetProductFeatureRequest,
   SetProductFeatureSecurity,
 } from "../models/operations/setproductfeature.js";
+import {
+  SetRemoteSessionAutoRefreshPolicyRequest,
+  SetRemoteSessionAutoRefreshPolicySecurity,
+} from "../models/operations/setremotesessionautorefreshpolicy.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Features extends ClientSDK {
@@ -24,7 +29,7 @@ export class Features extends ClientSDK {
    * Get the current state of all product feature flags.
    */
   async get(
-    request?: GetProductFeaturesRequest | undefined,
+    request: GetProductFeaturesRequest,
     security?: GetProductFeaturesSecurity | undefined,
     options?: RequestOptions,
   ): Promise<GetProductFeaturesResponseBody> {
@@ -48,6 +53,25 @@ export class Features extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(featuresSet(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * setRemoteSessionAutoRefreshPolicy features
+   *
+   * @remarks
+   * Set the organization policy for automatic remote-session refresh.
+   */
+  async setRemoteSessionAutoRefreshPolicy(
+    request: SetRemoteSessionAutoRefreshPolicyRequest,
+    security?: SetRemoteSessionAutoRefreshPolicySecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(featuresSetRemoteSessionAutoRefreshPolicy(
       this,
       request,
       security,

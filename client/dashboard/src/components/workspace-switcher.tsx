@@ -22,7 +22,11 @@ import {
   PopoverTrigger,
 } from "@/components/ui/Popover";
 
-export function WorkspaceSwitcher(): JSX.Element {
+export function WorkspaceSwitcher({
+  className,
+}: {
+  className?: string;
+} = {}): JSX.Element {
   const organization = useOrganization();
   const project = useProject();
   const session = useSession();
@@ -59,21 +63,23 @@ export function WorkspaceSwitcher(): JSX.Element {
     const orgLabel = organization.name || organization.slug;
     const orgColors = getGradientColors(organization.id);
     const orgInitial = orgLabel.charAt(0).toUpperCase();
-    const rowClass =
-      "flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-sm font-medium group-data-[collapsible=icon]:w-auto group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:border-0 group-data-[collapsible=icon]:p-0";
+    const rowClass = cn(
+      "flex w-full items-center gap-2 border px-2 py-1.5 text-sm font-medium group-data-[collapsible=icon]:w-auto group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:border-0 group-data-[collapsible=icon]:p-0",
+      className,
+    );
     const content = (
       <>
         <div
           className={cn(
             "flex shrink-0 items-center justify-center transition-shadow",
-            "group-data-[collapsible=icon]:ring-border/50 group-data-[collapsible=icon]:bg-card group-data-[collapsible=icon]:rounded-lg group-data-[collapsible=icon]:p-1 group-data-[collapsible=icon]:ring-1",
+            "group-data-[collapsible=icon]:ring-border/50 group-data-[collapsible=icon]:bg-card group-data-[collapsible=icon]:p-1 group-data-[collapsible=icon]:ring-1",
             isMultiOrg &&
               "group-data-[collapsible=icon]:hover:ring-foreground/15 group-data-[collapsible=icon]:hover:ring-2",
           )}
         >
           <div
             aria-label={orgLabel}
-            className="flex size-6 shrink-0 items-center justify-center rounded-md bg-gradient-to-br text-xs font-semibold text-white group-data-[collapsible=icon]:size-7 group-data-[collapsible=icon]:text-[14px]"
+            className="flex size-6 shrink-0 items-center justify-center bg-gradient-to-br text-xs font-semibold text-white group-data-[collapsible=icon]:size-7 group-data-[collapsible=icon]:text-[14px]"
             style={{
               backgroundImage: `linear-gradient(${orgColors.angle}deg, ${orgColors.from}, ${orgColors.to})`,
             }}
@@ -114,20 +120,28 @@ export function WorkspaceSwitcher(): JSX.Element {
         <PopoverTrigger asChild>
           <Button
             variant="tertiary"
-            className="h-auto w-full justify-start gap-2 rounded-md border px-2 py-1.5 font-sans group-data-[collapsible=icon]:w-auto group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-1"
+            className={cn(
+              "hover:bg-accent h-auto w-full justify-start gap-2 border px-2 py-1.5 font-sans group-data-[collapsible=icon]:w-auto group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-1",
+              className,
+            )}
           >
+            {/* rounded-none: keep the square tile idiom over ProjectAvatar's
+                rounded-full default. */}
             <ProjectAvatar
               project={project}
-              className="h-5 w-5 shrink-0 rounded"
+              className="h-5 w-5 shrink-0 rounded-none"
             />
+            {/* "Project" suffix names what the switcher switches. */}
             <span className="truncate text-sm font-medium group-data-[collapsible=icon]:hidden">
-              {project?.name || project?.slug || projectSlug}
+              {project?.name || project?.slug || projectSlug} Project
             </span>
             <ChevronsUpDown className="text-muted-foreground ml-auto h-4 w-4 shrink-0 group-data-[collapsible=icon]:hidden" />
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-[240px] p-0" align="start">
-          <Command className="border-none">
+          {/* CommandInput's wrapper is a fixed h-14 (command-palette sizing);
+              override it here so the popover's search row stays compact. */}
+          <Command className="border-none [&_[data-slot=command-input-wrapper]]:h-10">
             <CommandInput placeholder="Find Project..." className="h-10" />
             <CommandList className="max-h-[250px] !p-1">
               <CommandEmpty>No projects found.</CommandEmpty>
@@ -138,14 +152,26 @@ export function WorkspaceSwitcher(): JSX.Element {
                     <CommandItem
                       key={p.id}
                       value={p.slug}
+                      // Let search match the display name as well as the slug.
+                      keywords={p.name ? [p.name] : undefined}
                       onSelect={() => handleProjectSelect(p.slug)}
                       className="flex cursor-pointer items-center gap-2"
                     >
                       <ProjectAvatar
                         project={p}
-                        className="h-5 w-5 shrink-0 rounded"
+                        className="h-5 w-5 shrink-0 rounded-none"
                       />
-                      <span className="flex-1 truncate">{p.slug}</span>
+                      <span className="flex-1 truncate">
+                        {p.name || p.slug}
+                      </span>
+                      {/* Case-insensitive: "Default" / "default" is the same
+                          name, so the slug adds nothing. */}
+                      {p.name &&
+                        p.name.toLowerCase() !== p.slug.toLowerCase() && (
+                          <span className="text-muted-foreground max-w-[80px] truncate font-mono text-xs">
+                            {p.slug}
+                          </span>
+                        )}
                       {p.id === project.id && (
                         <CheckIcon className="h-4 w-4 shrink-0" />
                       )}

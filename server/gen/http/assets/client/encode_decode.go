@@ -1078,6 +1078,248 @@ func BuildUploadOpenAPIv3StreamPayload(payload any, fpath string) (*assets.Uploa
 	}, nil
 }
 
+// BuildFetchImageFromURLRequest instantiates a HTTP request object with method
+// and path set to call the "assets" service "fetchImageFromURL" endpoint
+func (c *Client) BuildFetchImageFromURLRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: FetchImageFromURLAssetsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("assets", "fetchImageFromURL", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeFetchImageFromURLRequest returns an encoder for requests sent to the
+// assets fetchImageFromURL server.
+func EncodeFetchImageFromURLRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*assets.FetchImageFromURLForm)
+		if !ok {
+			return goahttp.ErrInvalidType("assets", "fetchImageFromURL", "*assets.FetchImageFromURLForm", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewFetchImageFromURLRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("assets", "fetchImageFromURL", err)
+		}
+		return nil
+	}
+}
+
+// DecodeFetchImageFromURLResponse returns a decoder for responses returned by
+// the assets fetchImageFromURL endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeFetchImageFromURLResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeFetchImageFromURLResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body FetchImageFromURLResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "fetchImageFromURL", err)
+			}
+			err = ValidateFetchImageFromURLResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "fetchImageFromURL", err)
+			}
+			res := NewFetchImageFromURLUploadImageResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body FetchImageFromURLUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "fetchImageFromURL", err)
+			}
+			err = ValidateFetchImageFromURLUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "fetchImageFromURL", err)
+			}
+			return nil, NewFetchImageFromURLUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body FetchImageFromURLForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "fetchImageFromURL", err)
+			}
+			err = ValidateFetchImageFromURLForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "fetchImageFromURL", err)
+			}
+			return nil, NewFetchImageFromURLForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body FetchImageFromURLBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "fetchImageFromURL", err)
+			}
+			err = ValidateFetchImageFromURLBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "fetchImageFromURL", err)
+			}
+			return nil, NewFetchImageFromURLBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body FetchImageFromURLNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "fetchImageFromURL", err)
+			}
+			err = ValidateFetchImageFromURLNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "fetchImageFromURL", err)
+			}
+			return nil, NewFetchImageFromURLNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body FetchImageFromURLConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "fetchImageFromURL", err)
+			}
+			err = ValidateFetchImageFromURLConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "fetchImageFromURL", err)
+			}
+			return nil, NewFetchImageFromURLConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body FetchImageFromURLUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "fetchImageFromURL", err)
+			}
+			err = ValidateFetchImageFromURLUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "fetchImageFromURL", err)
+			}
+			return nil, NewFetchImageFromURLUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body FetchImageFromURLInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "fetchImageFromURL", err)
+			}
+			err = ValidateFetchImageFromURLInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "fetchImageFromURL", err)
+			}
+			return nil, NewFetchImageFromURLInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body FetchImageFromURLInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "fetchImageFromURL", err)
+				}
+				err = ValidateFetchImageFromURLInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "fetchImageFromURL", err)
+				}
+				return nil, NewFetchImageFromURLInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body FetchImageFromURLUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "fetchImageFromURL", err)
+				}
+				err = ValidateFetchImageFromURLUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "fetchImageFromURL", err)
+				}
+				return nil, NewFetchImageFromURLUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("assets", "fetchImageFromURL", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body FetchImageFromURLGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "fetchImageFromURL", err)
+			}
+			err = ValidateFetchImageFromURLGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "fetchImageFromURL", err)
+			}
+			return nil, NewFetchImageFromURLGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("assets", "fetchImageFromURL", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildFetchOpenAPIv3FromURLRequest instantiates a HTTP request object with
 // method and path set to call the "assets" service "fetchOpenAPIv3FromURL"
 // endpoint

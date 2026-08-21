@@ -52,6 +52,7 @@ export function CodeBlock({
   onCopy,
   preClassName,
   slots,
+  copyLabel = "code",
 }: {
   children: string;
   language?: string;
@@ -61,6 +62,7 @@ export function CodeBlock({
   onCopy?: () => void;
   preClassName?: string;
   slots?: Record<string, CodeBlockSlot>;
+  copyLabel?: string;
 }): React.JSX.Element {
   const { theme } = useMoonshineConfig();
   const hasSlots = !!slots && Object.keys(slots).length > 0;
@@ -134,7 +136,7 @@ export function CodeBlock({
   // inherited value from an ancestor, so whitespace-pre-wrap on this wrapper
   // alone never reaches it. Target the injected <pre> directly.
   const baseClasses =
-    "rounded-md font-mono text-sm text-wrap overflow-x-auto border break-all whitespace-pre-wrap [&>pre]:whitespace-pre-wrap [&>pre]:break-all";
+    "font-mono text-sm text-wrap overflow-x-auto border break-all whitespace-pre-wrap [&>pre]:whitespace-pre-wrap [&>pre]:break-all";
   const innerClasses = cn(baseClasses, "p-4 pr-12", innerClassName);
   // Shown until the async highlight resolves (and as the slot-path placeholder).
   const fallback = <div className={innerClasses}>{code}</div>;
@@ -221,7 +223,7 @@ export function CodeBlock({
             )}
           </Button.LeftIcon>
           <Button.Text className="sr-only">
-            {copied ? "Copied" : "Copy code"}
+            {copied ? `Copied ${copyLabel}` : `Copy ${copyLabel}`}
           </Button.Text>
         </Button>
       )}

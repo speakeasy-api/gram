@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { riskPolicyBypassRequestsCreate } from "../funcs/riskPolicyBypassRequestsCreate.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { RiskPolicyBypassRequest } from "../models/components/riskpolicybypassrequest.js";
+import { PolicyBypassRedemption } from "../models/components/policybypassredemption.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -37,7 +37,7 @@ export type RiskCreatePolicyBypassRequestMutationVariables = {
   options?: RequestOptions;
 };
 
-export type RiskCreatePolicyBypassRequestMutationData = RiskPolicyBypassRequest;
+export type RiskCreatePolicyBypassRequestMutationData = PolicyBypassRedemption;
 
 export type RiskCreatePolicyBypassRequestMutationError =
   | ServiceError

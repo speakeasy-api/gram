@@ -16,6 +16,7 @@ import { skillsListDistributions } from "../funcs/skillsListDistributions.js";
 import { skillsListFeedback } from "../funcs/skillsListFeedback.js";
 import { skillsListSuggestionFeedback } from "../funcs/skillsListSuggestionFeedback.js";
 import { skillsListSuggestions } from "../funcs/skillsListSuggestions.js";
+import { skillsListTags } from "../funcs/skillsListTags.js";
 import { skillsListUnknownActivations } from "../funcs/skillsListUnknownActivations.js";
 import { skillsListVersions } from "../funcs/skillsListVersions.js";
 import { skillsRestoreVersion } from "../funcs/skillsRestoreVersion.js";
@@ -29,6 +30,7 @@ import { ApproveAllSkillSuggestionsResult } from "../models/components/approveal
 import { ApproveSkillSuggestionResult } from "../models/components/approveskillsuggestionresult.js";
 import { GetSkillResult } from "../models/components/getskillresult.js";
 import { ListSkillSuggestionFeedbackResult } from "../models/components/listskillsuggestionfeedbackresult.js";
+import { ListSkillTagsResult } from "../models/components/listskilltagsresult.js";
 import { RecordSkillResult } from "../models/components/recordskillresult.js";
 import { Skill } from "../models/components/skill.js";
 import { SkillDistribution } from "../models/components/skilldistribution.js";
@@ -94,6 +96,10 @@ import {
   ListSkillSuggestionsResponse,
   ListSkillSuggestionsSecurity,
 } from "../models/operations/listskillsuggestions.js";
+import {
+  ListSkillTagsRequest,
+  ListSkillTagsSecurity,
+} from "../models/operations/listskilltags.js";
 import {
   ListSkillVersionsRequest,
   ListSkillVersionsResponse,
@@ -397,6 +403,25 @@ export class Skills extends ClientSDK {
   }
 
   /**
+   * listTags skills
+   *
+   * @remarks
+   * List distinct tags used by active skills in the project. The implementation requires the skills product feature and skill read scope.
+   */
+  async listTags(
+    request?: ListSkillTagsRequest | undefined,
+    security?: ListSkillTagsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListSkillTagsResult> {
+    return unwrapAsync(skillsListTags(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * listUnknownActivations skills
    *
    * @remarks
@@ -535,7 +560,7 @@ export class Skills extends ClientSDK {
    * update skills
    *
    * @remarks
-   * Rename an active skill or update its display name and summary. The implementation requires the skills product feature and skill write scope.
+   * Rename an active skill or update its display name, summary, and tags. The implementation requires the skills product feature and skill write scope.
    */
   async update(
     request: UpdateSkillRequest,

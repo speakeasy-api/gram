@@ -8,6 +8,7 @@ import {
 } from "react";
 import type { ReactNode } from "react";
 import type { User } from "./Auth";
+import type { TrialLifecycle } from "@/lib/trial-status";
 
 export type Telemetry = Pick<
   PostHog,
@@ -223,6 +224,46 @@ export function useCaptureEnterpriseGateViewed({
   }, [email, organizationId, organizationName, organizationSlug, telemetry]);
 }
 
+// Kept separate from `enterprise_gate_viewed` so that event keeps meaning "cold
+// org that never trialed" and the two funnels stay separable. The upgrade page
+// serves both ended and running trials, so the lifecycle rides along as a
+// property rather than splitting the event again — a walled org and one
+// upgrading early are the same funnel at different stages.
+export function useCaptureUpgradeGateViewed({
+  email,
+  organizationId,
+  organizationName,
+  organizationSlug,
+  trialLifecycle,
+}: {
+  email: string;
+  organizationId: string;
+  organizationName: string;
+  organizationSlug: string;
+  trialLifecycle: TrialLifecycle;
+}): void {
+  const telemetry = useTelemetry();
+
+  useEffect(() => {
+    if (!email) return;
+    if (!organizationId) return;
+    telemetry.capture("upgrade_gate_viewed", {
+      email,
+      organization_id: organizationId,
+      organization_name: organizationName,
+      organization_slug: organizationSlug,
+      trial_lifecycle: trialLifecycle,
+    });
+  }, [
+    email,
+    organizationId,
+    organizationName,
+    organizationSlug,
+    trialLifecycle,
+    telemetry,
+  ]);
+}
+
 export function useRegisterChatTelemetry({
   chatId,
   chatUrl,
@@ -271,6 +312,27 @@ export function useRegisterToolsetTelemetry({
       toolset_slug: toolsetSlug,
     });
   }, [toolsetSlug, telemetry]);
+}
+
+/**
+ * Registers the active organization as PostHog's "organization" group.
+ *
+ * `useRegisterProjectForTelemetry` already does this, but only from
+ * `ProjectProvider`, which a walled-off organization never reaches —
+ * `AuthProvider` returns the lockout page first. Registering from the auth
+ * layer as well means organization-targeted flags resolve on exactly the
+ * surfaces that have no project. Both callers pass the same group type and key,
+ * so whichever runs first wins and the other is a no-op.
+ */
+export function useRegisterOrganizationForTelemetry(
+  organizationSlug: string,
+): void {
+  const telemetry = useTelemetry();
+
+  useEffect(() => {
+    if (!organizationSlug) return;
+    telemetry.group("organization", organizationSlug, {});
+  }, [organizationSlug, telemetry]);
 }
 
 export function useRegisterProjectForTelemetry({

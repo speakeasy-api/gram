@@ -81,7 +81,7 @@ export function BreakdownBar({
         className={cn(
           SEGMENT_BASE,
           SEGMENT_INACTIVE,
-          "data-[state=open]:text-foreground w-auto cursor-pointer gap-1 bg-transparent shadow-none focus-visible:ring-0",
+          "data-[state=open]:text-foreground w-auto cursor-pointer gap-1 border-0 bg-transparent shadow-none focus-visible:ring-0",
         )}
       >
         <SelectValue placeholder="More" />

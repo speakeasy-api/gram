@@ -4,22 +4,25 @@ import { personalAccountEmail } from "@/components/observe/account-display-utils
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import { Dialog } from "@/components/ui/Dialog";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
-import { formatPlatform } from "@/lib/formatPlatform";
+import { formatChatSource } from "@/lib/formatPlatform";
 import { cn } from "@/lib/utils";
-import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
+import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { WorkUnitsRowMetrics } from "@/pages/chatLogs/WorkUnitsMetrics";
 import { useSession } from "@/contexts/Auth";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
 import { useChatSetPinnedMutation } from "@gram/client/react-query/chatSetPinned.js";
 import { invalidateAllListChats } from "@gram/client/react-query/listChats.js";
+import { useListChatSessionLinks } from "@gram/client/react-query/listChatSessionLinks.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { Pin } from "lucide-react";
-import { useCallback, useState, type MouseEvent } from "react";
+import { ArrowUpRight, CircleDashed, GitBranch, Pin } from "lucide-react";
+import { useCallback, useMemo, useState, type MouseEvent } from "react";
 import { toast } from "sonner";
+import { formatPlatform } from "@/lib/formatPlatform";
+import { summarizeLineage, type LineageSummary } from "./sessionLinks";
 
 interface ChatLogsTableProps {
   chats: ChatOverview[];
@@ -38,7 +41,7 @@ function getTraceId(chatId: string): string {
   return chatId.slice(0, 8);
 }
 
-function RiskIndicator({ count, size = 44 }: { count: number; size?: number }) {
+function RiskIndicator({ count }: { count: number }) {
   const hasRisk = count > 0;
   return (
     <SimpleTooltip
@@ -48,23 +51,80 @@ function RiskIndicator({ count, size = 44 }: { count: number; size?: number }) {
           : "No risk findings on this session"
       }
     >
-      <div className="flex flex-col items-center gap-1">
-        <div
+      <div className="flex w-11 flex-col items-center gap-0.5">
+        <span className="text-eyebrow">Risk</span>
+        <span
           className={cn(
-            "flex items-center justify-center rounded-full border-[3px]",
-            hasRisk
-              ? "border-destructive/40 text-destructive bg-destructive/5"
-              : "border-muted-foreground/30 text-muted-foreground/70",
+            "font-display text-2xl leading-none font-thin tabular-nums",
+            hasRisk ? "text-destructive" : "text-muted-foreground/70",
           )}
-          style={{ width: size, height: size }}
         >
-          <span className="text-sm font-semibold tabular-nums">{count}</span>
-        </div>
-        <span className="text-muted-foreground text-[9px] font-medium tracking-wider uppercase">
-          Risk
+          {count}
         </span>
       </div>
     </SimpleTooltip>
+  );
+}
+
+// listHarnesses renders a harness list for a lineage tooltip ("Claude Code",
+// "Claude Code and Cursor").
+function listHarnesses(harnesses: string[]): string {
+  const labels = [...new Set(harnesses.map(formatPlatform))];
+  if (labels.length <= 1) return labels[0] ?? "";
+  return `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
+}
+
+// SessionLineageIcons is the at-a-glance lineage cluster on a session row:
+// one icon per state — continued elsewhere (navigable continuation exists),
+// derived from an earlier session, and moved with no captured continuation.
+// The cluster sits above the row's stretched select button (tooltips need
+// pointer events), so clicking it forwards to the same row selection; the
+// stretched button remains the tab stop, hence tabIndex={-1}.
+function SessionLineageIcons({
+  summary,
+  onActivate,
+}: {
+  summary?: LineageSummary;
+  onActivate: () => void;
+}) {
+  if (!summary) return null;
+  return (
+    <button
+      type="button"
+      tabIndex={-1}
+      onClick={onActivate}
+      aria-label="Open session details"
+      className="text-muted-foreground pointer-events-auto mt-0.5 inline-flex shrink-0 cursor-pointer items-center gap-1"
+    >
+      {summary.continuedIn.length > 0 && (
+        <SimpleTooltip
+          tooltip={`Continued in ${listHarnesses(summary.continuedIn)}`}
+        >
+          <ArrowUpRight
+            className="size-3.5"
+            aria-label="Continued in another harness"
+          />
+        </SimpleTooltip>
+      )}
+      {summary.derived && (
+        <SimpleTooltip tooltip="Derived from an earlier session">
+          <GitBranch
+            className="size-3.5"
+            aria-label="Derived from an earlier session"
+          />
+        </SimpleTooltip>
+      )}
+      {summary.danglingIn.length > 0 && (
+        <SimpleTooltip
+          tooltip={`Moved to ${listHarnesses(summary.danglingIn)} — continuation not yet captured`}
+        >
+          <CircleDashed
+            className="size-3.5"
+            aria-label="Moved, continuation not yet captured"
+          />
+        </SimpleTooltip>
+      )}
+    </button>
   );
 }
 
@@ -116,7 +176,7 @@ function SessionPinButton({
       disabled={setPinned.isPending}
       onClick={toggle}
       className={cn(
-        "hover:bg-muted text-muted-foreground hover:text-foreground rounded-md p-1 transition-all",
+        "hover:bg-muted text-muted-foreground hover:text-foreground p-1 transition-all",
         pinned
           ? "text-foreground opacity-100"
           : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
@@ -155,7 +215,7 @@ function CopyButton({
       type="button"
       onClick={handleCopy}
       className={cn(
-        "cursor-pointer rounded p-0.5 transition-colors",
+        "cursor-pointer p-0.5 transition-colors",
         "opacity-50 hover:opacity-100",
         "hover:bg-muted/80",
         copied && "opacity-100",
@@ -168,7 +228,7 @@ function CopyButton({
         name={copied ? "check" : "copy"}
         className={cn(
           "size-3.5",
-          copied ? "text-emerald-500" : "text-muted-foreground",
+          copied ? "text-foreground" : "text-muted-foreground",
         )}
       />
     </button>
@@ -186,6 +246,28 @@ export function ChatLogsTable({
 }: ChatLogsTableProps): JSX.Element {
   const { user } = useSession();
   const { data: membersData } = useMembers();
+
+  // One batched lineage lookup for the visible rows. Optional decoration:
+  // errors are swallowed (never blank the list) and the endpoint caps at 100
+  // ids, matching the list's maximum page size.
+  const chatIds = useMemo(
+    () => chats.slice(0, 100).map((chat) => chat.id),
+    [chats],
+  );
+  const { data: linksData } = useListChatSessionLinks({ chatIds }, undefined, {
+    enabled: chatIds.length > 0,
+    throwOnError: false,
+    retry: false,
+  });
+  const lineageByChat = useMemo(() => {
+    const map = new Map<string, LineageSummary>();
+    const links = linksData?.links ?? [];
+    for (const id of chatIds) {
+      const summary = summarizeLineage(links, id);
+      if (summary) map.set(id, summary);
+    }
+    return map;
+  }, [chatIds, linksData]);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   if (isLoading && chats.length === 0) {
     return (
@@ -204,9 +286,7 @@ export function ChatLogsTable({
     return (
       <div className="flex h-64 items-center justify-center">
         <div className="flex flex-col items-center gap-3 px-4 text-center">
-          <div className="flex size-10 items-center justify-center rounded-full bg-rose-500/10">
-            <Icon name="triangle-alert" className="size-5 text-rose-500" />
-          </div>
+          <Icon name="triangle-alert" className="text-destructive size-5" />
           <div>
             <p className="text-foreground text-sm font-medium">
               Failed to load traces
@@ -224,9 +304,7 @@ export function ChatLogsTable({
     return (
       <div className="flex h-64 items-center justify-center">
         <div className="flex flex-col items-center gap-3 px-4 text-center">
-          <div className="bg-muted flex size-10 items-center justify-center rounded-full">
-            <Icon name="inbox" className="text-muted-foreground size-5" />
-          </div>
+          <Icon name="inbox" className="text-muted-foreground size-5" />
           <div>
             <p className="text-foreground text-sm font-medium">
               {emptyState?.title ?? "No traces found"}
@@ -243,7 +321,7 @@ export function ChatLogsTable({
 
   return (
     <>
-      <div className="divide-border/50 divide-y">
+      <div className="divide-border bg-card divide-y">
         {chats.map((chat) => {
           const isSelected = selectedChatId === chat.id;
           const source = chat.source;
@@ -266,9 +344,9 @@ export function ChatLogsTable({
                   it (z-20) so interactive controls are never nested in a button. */}
               <div
                 className={cn(
-                  "group relative w-full px-5 py-4 transition-all duration-150",
+                  "group relative w-full px-5 py-4 transition-colors duration-150",
                   "hover:bg-muted/50",
-                  isSelected && "bg-primary/3 hover:bg-primary/5",
+                  isSelected && "bg-primary/5",
                 )}
               >
                 <button
@@ -280,41 +358,35 @@ export function ChatLogsTable({
                 <div className="pointer-events-none relative z-20 flex items-center gap-5">
                   {/* Left: Risk findings indicator */}
                   <div className="shrink-0">
-                    <RiskIndicator count={riskCount} size={44} />
+                    <RiskIndicator count={riskCount} />
                   </div>
 
                   {/* Center: Main content */}
                   <div className="min-w-0 flex-1">
-                    {/* Header row */}
-                    <div className="mb-1.5 flex items-center gap-2">
-                      <span className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-                        {getTraceId(chat.id)}
-                      </span>
-                      <span className="pointer-events-auto">
-                        <CopyButton value={chat.id} label="Chat ID" />
-                      </span>
-                      <span className="text-muted-foreground/40">·</span>
-                      <span className="text-muted-foreground text-sm">
-                        Created {format(chat.createdAt, "MMM d, HH:mm")}
-                      </span>
-                      <span className="text-muted-foreground/40">·</span>
-                      <span className="text-muted-foreground text-sm">
-                        Last activity{" "}
-                        {format(lastActivityTimestamp, "MMM d, HH:mm")}
-                      </span>
+                    {/* Title — the scan target — with the lineage cluster */}
+                    <div className="flex items-start gap-1.5">
+                      <h3 className="text-foreground line-clamp-2 text-sm leading-snug font-medium">
+                        {chat.title}
+                      </h3>
+                      <SessionLineageIcons
+                        summary={lineageByChat.get(chat.id)}
+                        onActivate={() => onSelectChat(chat)}
+                      />
                     </div>
 
-                    {/* Title */}
-                    <h3 className="text-foreground mb-2 line-clamp-2 text-sm leading-snug font-medium">
-                      {chat.title}
-                    </h3>
-
-                    {/* Metadata row */}
-                    <div className="text-muted-foreground flex items-center gap-4 text-sm">
-                      <span className="flex items-center gap-1.5">
+                    {/* Meta row — muted mono */}
+                    <div className="text-muted-foreground mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-xs">
+                      <span className="inline-flex items-center gap-1">
+                        {getTraceId(chat.id)}
+                        <span className="pointer-events-auto">
+                          <CopyButton value={chat.id} label="Chat ID" />
+                        </span>
+                      </span>
+                      <span className="text-muted-foreground/40">·</span>
+                      <span className="inline-flex items-center gap-1.5">
                         {chat.assistantName ? (
                           <>
-                            <Icon name="bot" className="size-4 opacity-60" />
+                            <Icon name="bot" className="size-3.5 opacity-60" />
                             <span className="max-w-[120px] truncate">
                               {chat.assistantName}
                             </span>
@@ -334,37 +406,48 @@ export function ChatLogsTable({
                         )}
                       </span>
                       {source && (
-                        <span className="flex items-center gap-1.5">
-                          <HookSourceIcon source={source} className="size-4" />
-                          {formatPlatform(source)}
-                        </span>
+                        <>
+                          <span className="text-muted-foreground/40">·</span>
+                          <span className="inline-flex items-center gap-1.5">
+                            <AgentProviderIcon
+                              source={source}
+                              className="size-3.5"
+                            />
+                            {formatChatSource(source, chat)}
+                          </span>
+                        </>
                       )}
-                      <span className="flex items-center gap-1.5">
-                        <Icon name="timer" className="size-4 opacity-60" />
+                      <span className="text-muted-foreground/40">·</span>
+                      <span>
+                        Created {format(chat.createdAt, "MMM d, HH:mm")}
+                      </span>
+                      <span className="text-muted-foreground/40">·</span>
+                      <span>
+                        Last activity{" "}
+                        {format(lastActivityTimestamp, "MMM d, HH:mm")}
+                      </span>
+                      <span className="text-muted-foreground/40">·</span>
+                      <span className="tabular-nums">
                         {formatDuration(chat)}
                       </span>
-                      <span className="flex items-center gap-1.5">
-                        <Icon
-                          name="message-square"
-                          className="size-4 opacity-60"
-                        />
+                      <span className="text-muted-foreground/40">·</span>
+                      <span className="tabular-nums">
                         {chat.numMessages} messages
                       </span>
                       {chat.totalCost !== undefined && chat.totalCost > 0 && (
-                        <span className="flex items-center gap-0">
-                          <Icon
-                            name="dollar-sign"
-                            className="size-4 opacity-60"
-                          />
-                          {chat.totalCost.toFixed(4)}
-                        </span>
+                        <>
+                          <span className="text-muted-foreground/40">·</span>
+                          <span className="tabular-nums">
+                            ${chat.totalCost.toFixed(4)}
+                          </span>
+                        </>
                       )}
                       <WorkUnitsRowMetrics chat={chat} />
                     </div>
                   </div>
 
                   {/* Right: Pin + Delete + Chevron */}
-                  <div className="pointer-events-auto flex shrink-0 items-center gap-1 pt-2">
+                  <div className="pointer-events-auto flex shrink-0 items-center gap-1">
                     <SessionPinButton
                       chatId={chat.id}
                       pinned={Boolean(chat.pinned)}
@@ -372,7 +455,7 @@ export function ChatLogsTable({
                     <button
                       type="button"
                       onClick={() => setDeleteConfirmId(chat.id)}
-                      className="hover:bg-destructive/10 text-muted-foreground hover:text-destructive rounded-md p-1 opacity-0 transition-all group-hover:opacity-100 focus-visible:opacity-100"
+                      className="hover:bg-destructive/10 text-muted-foreground hover:text-destructive p-1 opacity-0 transition-all group-hover:opacity-100 focus-visible:opacity-100"
                       aria-label="Delete chat"
                     >
                       <Icon name="trash-2" className="size-4" />

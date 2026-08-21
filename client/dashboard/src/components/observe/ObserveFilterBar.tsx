@@ -12,7 +12,7 @@ import { ACCOUNT_TYPE_OPTIONS } from "@/components/observe/observeFilterConstant
 import { Page } from "@/components/page-layout";
 import type { useServerNameMappings } from "@/hooks/useServerNameMappings";
 import { formatPlatform } from "@/lib/formatPlatform";
-import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
+import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import type {
   MultiSelectGroup,
   MultiSelectOption,
@@ -223,7 +223,7 @@ export function ObserveFilterBar({
         label: formatPlatform(source),
         value: source,
         icon: ({ className: iconClassName }: { className?: string }) => (
-          <HookSourceIcon source={source} className={iconClassName} />
+          <AgentProviderIcon source={source} className={iconClassName} />
         ),
       })),
     [sourceOptions],
@@ -458,7 +458,7 @@ export function ObserveFilterBar({
         customBuilder={attributeSearchControl}
         extraChips={
           localToolsExcluded && (
-            <span className="border-border text-muted-foreground inline-flex h-10 shrink-0 items-center gap-2 rounded-md border border-dashed px-3 text-sm font-medium">
+            <span className="border-border text-muted-foreground inline-flex h-10 shrink-0 items-center gap-2 border border-dashed px-3 font-mono text-[11px] tracking-wide uppercase">
               Local tools excluded
               <button
                 type="button"

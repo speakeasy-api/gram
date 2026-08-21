@@ -75,6 +75,16 @@ func NewUnifiedClient(
 	}
 }
 
+// ResolveKey exposes key resolution so callers can scope rate-limit buckets to
+// the key a completion would spend.
+func (c *ChatClient) ResolveKey(ctx context.Context, orgID string, projectID string, slot billing.ModelUsageSource, keyType KeyType) (ResolvedKey, error) {
+	resolved, err := c.keyResolver.ResolveKey(ctx, orgID, projectID, slot, keyType.OrDefault())
+	if err != nil {
+		return ResolvedKey{}, fmt.Errorf("resolve OpenRouter key: %w", err)
+	}
+	return resolved, nil
+}
+
 type initializeRequestResult struct {
 	apiKey         string
 	customerKey    bool
@@ -86,8 +96,8 @@ type initializeRequestResult struct {
 func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionRequest) (*initializeRequestResult, error) {
 	// risk-analysis inference is always platform-initiated (the completions
 	// proxy clamps client-supplied claims to a customer surface), so a
-	// chat-key pairing can only be a miswired caller — fail fast instead of
-	// silently draining the customer's chat cap. The gram source cannot get
+	// Other-inference-key pairing can only be a miswired caller — fail fast
+	// instead of silently draining the customer's Other inference cap. The gram source cannot get
 	// the same mechanical check: the proxy legitimately accepts it from
 	// Elements on the chat key.
 	if req.UsageSource == billing.ModelUsageSourceRiskAnalysis && req.KeyType.OrDefault() != KeyTypeInternal {
@@ -151,6 +161,7 @@ func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionReques
 		Messages:       outboundMessages,
 		Stream:         req.Stream,
 		Tools:          req.Tools,
+		ToolChoice:     req.ToolChoice,
 		Temperature:    temp,
 		ResponseFormat: nil,
 		Reasoning:      req.Reasoning,
@@ -159,6 +170,16 @@ func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionReques
 		User:           req.OrgID,
 		Metadata:       nil,
 		Trace:          nil,
+		Plugins:        nil,
+	}
+
+	if req.WebSearch != nil {
+		reqBody.Plugins = append(reqBody.Plugins, RequestPlugin{ID: "web", Enabled: nil, MaxResults: req.WebSearch.MaxResults})
+	}
+
+	if req.DisableResponseHealing {
+		healingOff := false
+		reqBody.Plugins = append(reqBody.Plugins, RequestPlugin{ID: "response-healing", Enabled: &healingOff, MaxResults: 0})
 	}
 
 	if req.ChatID != uuid.Nil {
@@ -330,7 +351,7 @@ func (c *ChatClient) requestCompletion(ctx context.Context, apiKey string, reqBo
 	}
 
 	if httpResp.StatusCode != http.StatusOK {
-		return OpenAIChatResponse{}, body, classifyHTTPError(ctx, httpResp.StatusCode, body)
+		return OpenAIChatResponse{}, body, classifyHTTPError(ctx, httpResp.StatusCode, httpResp.Header, body)
 	}
 
 	var chatResp OpenAIChatResponse
@@ -438,6 +459,7 @@ func (c *ChatClient) GetCompletion(ctx context.Context, req CompletionRequest) (
 		FinishReason: &finishReason,
 		ToolCalls:    toolCalls,
 		Content:      content,
+		Annotations:  chatResp.Choices[0].Annotations,
 	}
 
 	// Apply message capture and usage tracking strategies
@@ -452,6 +474,16 @@ func (c *ChatClient) GetCompletion(ctx context.Context, req CompletionRequest) (
 // - Parses SSE chunks internally to extract message metadata
 // - Automatically triggers capture/tracking strategies when the stream closes
 func (c *ChatClient) GetCompletionStream(ctx context.Context, req CompletionRequest) (StreamReader, error) {
+	// The streaming reader accumulates content and tool calls but never
+	// parses url_citation annotations, so a streamed web search would return
+	// its prose with every citation silently missing — and a search whose
+	// citations are gone is not a search result, it is unsourced text. Refuse
+	// rather than answer with less than the caller asked for; the
+	// non-streaming path carries annotations and is what search uses.
+	if req.WebSearch != nil {
+		return nil, fmt.Errorf("web search is not available on the streaming path: its citations would be dropped")
+	}
+
 	// Build request body (streaming)
 	initResult, err := c.initializeRequest(ctx, req)
 	if err != nil {
@@ -470,7 +502,7 @@ func (c *ChatClient) GetCompletionStream(ctx context.Context, req CompletionRequ
 	if httpResp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(httpResp.Body)
 		o11y.NoLogDefer(func() error { return httpResp.Body.Close() })
-		return nil, classifyHTTPError(ctx, httpResp.StatusCode, body)
+		return nil, classifyHTTPError(ctx, httpResp.StatusCode, httpResp.Header, body)
 	}
 
 	// Wrap the response body with SSE parser that accumulates metadata
@@ -535,6 +567,7 @@ func (c *ChatClient) GetObjectCompletion(ctx context.Context, req ObjectCompleti
 		ProjectID:                 req.ProjectID,
 		Messages:                  messages,
 		Tools:                     nil,
+		ToolChoice:                nil,
 		Temperature:               req.Temperature,
 		Model:                     req.Model,
 		Stream:                    false,
@@ -551,6 +584,8 @@ func (c *ChatClient) GetObjectCompletion(ctx context.Context, req ObjectCompleti
 		APIKeyID:                  "",
 		Reasoning:                 reasoning,
 		NormalizeOutboundMessages: false,
+		WebSearch:                 nil,
+		DisableResponseHealing:    req.DisableResponseHealing,
 	}
 
 	return c.GetCompletion(ctx, completionReq)
@@ -610,11 +645,15 @@ func (r *streamingResponseReader) Close() error {
 	// If we have accumulated message data, trigger strategies
 	if r.messageID != "" {
 		response := CompletionResponse{
-			StartTime:    r.startTime,
-			Message:      nil, // Not available in streaming mode
-			MessageID:    r.messageID,
-			Model:        r.model,
-			Content:      r.messageContent.String(),
+			StartTime: r.startTime,
+			Message:   nil, // Not available in streaming mode
+			MessageID: r.messageID,
+			Model:     r.model,
+			Content:   r.messageContent.String(),
+			// Never populated here: the reader does not parse annotations,
+			// and GetCompletionStream refuses the web plugin for that
+			// reason, so a stream has none to carry.
+			Annotations:  nil,
 			FinishReason: r.finishReason,
 			Usage:        r.usage,
 			ToolCalls:    make([]ToolCall, 0, len(r.accumulatedToolCalls)),

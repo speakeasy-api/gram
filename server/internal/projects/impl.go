@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	envrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/management/readmodel"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -245,10 +246,11 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 	if s.pluginsGitHubEnabled {
 		enqueueCtx := context.WithoutCancel(ctx)
 		if _, err := background.ExecutePluginInitialPublishWorkflow(enqueueCtx, s.temporalEnv, plugins.PublishProjectInput{
-			ProjectID:       prj.ID,
-			CreatedByUserID: authCtx.UserID,
-			CommitMessage:   "Initial marketplace publish",
-			SkipIfUnchanged: false,
+			ProjectID:              prj.ID,
+			CreatedByUserID:        authCtx.UserID,
+			CommitMessage:          "Initial marketplace publish",
+			ForcePlatformMCPRepair: false,
+			SkipIfUnchanged:        false,
 		}); err != nil {
 			s.logger.WarnContext(ctx, "failed to enqueue initial plugin publish", attr.SlogError(err))
 		}
@@ -294,7 +296,7 @@ func (s *Service) ListProjects(ctx context.Context, payload *gen.ListProjectsPay
 		return nil, oops.E(oops.CodeInvalid, nil, "organization id is required")
 	}
 
-	projects, err := s.repo.ListProjectsByOrganization(ctx, payload.OrganizationID)
+	projects, err := readmodel.New(s.db).ListProjects(ctx, payload.OrganizationID)
 	if err != nil {
 		return nil, fmt.Errorf("list projects by organization %s: %w", payload.OrganizationID, err)
 	}
@@ -560,7 +562,6 @@ func (s *Service) SetOrganizationWhitelist(ctx context.Context, payload *gen.Set
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error setting organization whitelist status").LogError(ctx, s.logger, attr.SlogOrganizationID(payload.OrganizationID))
 	}
-
 	return nil
 }
 

@@ -484,7 +484,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
       direction="horizontal"
       className="[&>[role='separator']]:border-border h-full [&>[role='separator']]:mx-8 [&>[role='separator']]:border-1"
     >
-      <ResizablePanel.Pane minSize={35}>
+      <ResizablePanel.Pane minSize="35%">
         <Stack gap={1} className="h-full overflow-y-scroll">
           <Stack direction="horizontal" align="center" className="w-full">
             <Block label="Tool name" className="w-2/3">
@@ -625,7 +625,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
           </Stack>
         </Stack>
       </ResizablePanel.Pane>
-      <ResizablePanel.Pane minSize={35}>
+      <ResizablePanel.Pane minSize="35%">
         <ChatProvider>
           <ChatPanel
             toolsetSlug={toolsetFilter?.slug}
@@ -642,7 +642,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
 }
 
 const inputStyles =
-  "bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100 px-1 rounded";
+  "bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100 px-1";
 const blockBackground = "bg-stone-100 dark:bg-stone-900";
 
 export const MustacheHighlight = ({
@@ -728,7 +728,7 @@ const StepCard = ({
   }
 
   return (
-    <BlockInner className="overflow-clip rounded-md p-0">
+    <BlockInner className="overflow-clip p-0">
       <Stack>
         <Stack
           direction="horizontal"

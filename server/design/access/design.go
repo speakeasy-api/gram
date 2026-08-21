@@ -373,56 +373,41 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ShadowMCPInventoryUsers"}`)
 	})
 
-	Method("upsertShadowMCPInventoryPolicyBypass", func() {
-		Description("Create or modify a Shadow MCP URL allow decision for selected blocking policies.")
-		Security(security.Session)
-
-		Payload(func() {
-			Extend(ShadowMCPInventoryPolicyBypassForm)
-			security.SessionPayload()
-		})
-
-		Result(ShadowMCPInventoryURLStateModel)
-
-		HTTP(func() {
-			POST("/rpc/access.upsertShadowMCPInventoryPolicyBypass")
-			security.SessionHeader()
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "upsertShadowMCPInventoryPolicyBypass")
-		Meta("openapi:extension:x-speakeasy-name-override", "upsertShadowMCPInventoryPolicyBypass")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpsertShadowMCPInventoryPolicyBypass", "type": "mutation"}`)
-	})
-
-	Method("deleteShadowMCPInventoryPolicyBypass", func() {
-		Description("Remove a Shadow MCP URL allow decision.")
+	Method("listShadowMCPInventoryServersForUser", func() {
+		Description("List the Shadow MCP servers one person reached, with each server's access state. The inverse of listShadowMCPInventoryUsers, which expands a single server into its users.")
 		Security(security.Session)
 
 		Payload(func() {
 			Attribute("project_id", String, func() {
 				Format(FormatUUID)
 			})
-			Attribute("server_url", String, func() {
-				Format(FormatURI)
+			Attribute("user_keys", ArrayOf(String), "The identifiers to attribute usage to, matched against the reported email or user id. Pass every identifier the subject is known by.", func() {
+				MinLength(1)
+				MaxLength(200)
 			})
-			Required("project_id", "server_url")
+			Attribute("limit", Int, func() {
+				Default(50)
+				Minimum(1)
+				Maximum(200)
+			})
+			Required("project_id", "user_keys")
 			security.SessionPayload()
 		})
 
-		Result(ShadowMCPInventoryURLStateModel)
+		Result(ListShadowMCPInventoryResult)
 
 		HTTP(func() {
-			DELETE("/rpc/access.deleteShadowMCPInventoryPolicyBypass")
+			GET("/rpc/access.listShadowMCPInventoryServersForUser")
 			Param("project_id")
-			Param("server_url")
+			Param("user_keys")
+			Param("limit")
 			security.SessionHeader()
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "deleteShadowMCPInventoryPolicyBypass")
-		Meta("openapi:extension:x-speakeasy-name-override", "deleteShadowMCPInventoryPolicyBypass")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteShadowMCPInventoryPolicyBypass", "type": "mutation"}`)
+		Meta("openapi:operationId", "listShadowMCPInventoryServersForUser")
+		Meta("openapi:extension:x-speakeasy-name-override", "listShadowMCPInventoryServersForUser")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ShadowMCPInventoryServersForUser"}`)
 	})
 
 	Method("resolveShadowMCPInventoryRequest", func() {
@@ -447,63 +432,31 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ResolveShadowMCPInventoryRequest", "type": "mutation"}`)
 	})
 
-	Method("getRBACStatus", func() {
-		Description("Returns whether RBAC is currently enabled for the current organization.")
+	Method("requestAccess", func() {
+		Description("Request access to a scope by sending an email notification to organization administrators.")
+		Security(security.ByKey, func() {
+			Scope("consumer")
+		})
 		Security(security.Session)
 
 		Payload(func() {
+			Extend(RequestAccessForm)
+			security.ByKeyPayload()
 			security.SessionPayload()
 		})
 
-		Result(RBACStatus)
+		Result(RequestAccessResult)
 
 		HTTP(func() {
-			GET("/rpc/access.getRBACStatus")
+			POST("/rpc/access.requestAccess")
+			security.ByKeyHeader()
 			security.SessionHeader()
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "getRBACStatus")
-		Meta("openapi:extension:x-speakeasy-name-override", "getRBACStatus")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RBACStatus"}`)
-	})
-
-	Method("enableRBAC", func() {
-		Description("Enable RBAC for the current organization. Seeds default grants for system roles.")
-		Security(security.Session)
-
-		Payload(func() {
-			security.SessionPayload()
-		})
-
-		HTTP(func() {
-			POST("/rpc/access.enableRBAC")
-			security.SessionHeader()
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "enableRBAC")
-		Meta("openapi:extension:x-speakeasy-name-override", "enableRBAC")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "EnableRBAC"}`)
-	})
-
-	Method("disableRBAC", func() {
-		Description("Disable RBAC enforcement for the current organization.")
-		Security(security.Session)
-
-		Payload(func() {
-			security.SessionPayload()
-		})
-
-		HTTP(func() {
-			POST("/rpc/access.disableRBAC")
-			security.SessionHeader()
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "disableRBAC")
-		Meta("openapi:extension:x-speakeasy-name-override", "disableRBAC")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DisableRBAC"}`)
+		Meta("openapi:operationId", "requestAccess")
+		Meta("openapi:extension:x-speakeasy-name-override", "requestAccess")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RequestAccess", "type": "mutation"}`)
 	})
 
 	Method("listChallenges", func() {
@@ -673,7 +626,7 @@ var RoleGrantModel = Type("RoleGrant", func() {
 
 	Attribute("scope", String, func() {
 		Description("The scope slug this grant applies to.")
-		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read")
+		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write")
 	})
 
 	Attribute("selectors", ArrayOf(SelectorModel), func() {
@@ -687,13 +640,13 @@ var ListRoleGrantModel = Type("ListRoleGrant", func() {
 
 	Attribute("scope", String, func() {
 		Description("The scope slug this grant applies to.")
-		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read")
+		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write")
 	})
 
 	Attribute("sub_scopes", ArrayOf(String), func() {
 		Description("The inherited scopes the primary scope grants.")
 		Elem(func() {
-			Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read")
+			Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write")
 		})
 	})
 
@@ -731,7 +684,7 @@ var ScopeModel = Type("ScopeDefinition", func() {
 
 	Attribute("slug", String, func() {
 		Description("Unique scope identifier.")
-		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read")
+		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write")
 	})
 	Attribute("description", String, "What this scope protects.")
 	Attribute("resource_type", String, func() {
@@ -754,10 +707,10 @@ var ListScopesResult = Type("ListScopesResult", func() {
 })
 
 var CreateRoleForm = Type("CreateRoleForm", func() {
-	Required("name", "description", "grants")
+	Required("name", "grants")
 
 	Attribute("name", String, "Display name for the role.")
-	Attribute("description", String, "Description of what this role can do.")
+	Attribute("description", String, "Optional description of what this role can do.")
 	Attribute("grants", ArrayOf(RoleGrantModel), "Scope grants to assign.")
 	Attribute("member_ids", ArrayOf(String), "Optional member IDs to additionally assign to this role on creation.")
 })
@@ -829,12 +782,30 @@ var UpdateShadowMCPInventoryServerNameForm = Type("UpdateShadowMCPInventoryServe
 	Attribute("name", String, func() { MaxLength(255) })
 })
 
+var ShadowMCPInventoryApprovalRequestModel = Type("ShadowMCPInventoryApprovalRequest", func() {
+	Description("The MCP approval request tracking review status for a server. Status records the review outcome, which may cover only selected principals; the server's access field reports enforcement state.")
+	Required("id", "status", "requester_count")
+
+	Attribute("id", String, func() {
+		Format(FormatUUID)
+	})
+	Attribute("status", String, func() {
+		Enum("unreviewed", "requested", "approved", "denied")
+	})
+	Attribute("requester_count", Int, "How many distinct people have asked for this server.")
+	Attribute("evidence_changed_at", String, "When the daily recheck first found the permission-relevant evidence differing from what the latest approval rested on. Absent when nothing has drifted; cleared only by a new decision.", func() { Format(FormatDateTime) })
+})
+
 var ShadowMCPInventoryServerModel = Type("ShadowMCPInventoryServer", func() {
-	Required("canonical_server_url", "server_slug", "url_host", "first_seen", "last_seen", "observed_use_count", "user_count", "top_users", "access", "request_count", "allowed_policy_ids")
+	Required("canonical_server_url", "server_slug", "url_host", "first_seen", "last_seen", "observed_use_count", "user_count", "top_users", "access", "request_count", "allowed_policy_ids", "blocked_policy_ids")
 
 	Attribute("canonical_server_url", String)
 	Attribute("server_slug", String)
 	Attribute("url_host", String)
+	Attribute("target_kind", String, func() {
+		Description("What the row identifies: a server URL observed or requested, or a local stdio command known only through its review. Absent means server_url.")
+		Enum("server_url", "stdio_command")
+	})
 	Attribute("server_name", String)
 	Attribute("first_seen", String, func() {
 		Format(FormatDateTime)
@@ -849,17 +820,25 @@ var ShadowMCPInventoryServerModel = Type("ShadowMCPInventoryServer", func() {
 	Attribute("user_count", Int)
 	Attribute("top_users", ArrayOf(String))
 	Attribute("access", String, func() {
-		Enum("none", "allowed", "blocked")
+		Enum("none", "allowed", "blocked", "restricted")
 	})
 	Attribute("request_count", Int)
 	Attribute("latest_request", ShadowMCPInventoryRequestSummaryModel)
+	Attribute("approval_request", ShadowMCPInventoryApprovalRequestModel)
 	Attribute("allowed_policy_ids", ArrayOf(String))
+	Attribute("blocked_policy_ids", ArrayOf(String), "Enabled blocking policies that block this server via a risk_policy:block grant (allow_all policies only).")
 })
 
 var ListShadowMCPInventoryResult = Type("ListShadowMCPInventoryResult", func() {
 	Required("servers")
 	Attribute("servers", ArrayOf(ShadowMCPInventoryServerModel))
 	Attribute("next_cursor", String, "Cursor for the next page of results.")
+})
+
+var ShadowMCPInventoryUserSourceModel = Type("ShadowMCPInventoryUserSource", func() {
+	Required("source", "observed_use_count")
+	Attribute("source", String)
+	Attribute("observed_use_count", Int)
 })
 
 var ShadowMCPInventoryUserModel = Type("ShadowMCPInventoryUser", func() {
@@ -872,6 +851,7 @@ var ShadowMCPInventoryUserModel = Type("ShadowMCPInventoryUser", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("observed_use_count", Int)
+	Attribute("sources", ArrayOf(ShadowMCPInventoryUserSourceModel))
 })
 
 var ListShadowMCPInventoryUsersResult = Type("ListShadowMCPInventoryUsersResult", func() {
@@ -881,12 +861,16 @@ var ListShadowMCPInventoryUsersResult = Type("ListShadowMCPInventoryUsersResult"
 })
 
 var ShadowMCPInventoryURLStateModel = Type("ShadowMCPInventoryURLState", func() {
-	Required("access", "request_count", "allowed_policy_ids")
+	Required("access", "request_count", "allowed_policy_ids", "blocked_policy_ids")
 
-	Attribute("access", String)
+	Attribute("access", String, func() {
+		Enum("none", "allowed", "blocked", "restricted")
+	})
 	Attribute("request_count", Int)
 	Attribute("latest_request", ShadowMCPInventoryRequestSummaryModel)
+	Attribute("approval_request", ShadowMCPInventoryApprovalRequestModel)
 	Attribute("allowed_policy_ids", ArrayOf(String))
+	Attribute("blocked_policy_ids", ArrayOf(String), "Enabled blocking policies that block this server via a risk_policy:block grant (allow_all policies only).")
 })
 
 var ShadowMCPInventoryPolicyBypassForm = Type("ShadowMCPInventoryPolicyBypassForm", func() {
@@ -925,11 +909,6 @@ var ResolveShadowMCPInventoryRequestForm = Type("ResolveShadowMCPInventoryReques
 			Format(FormatUUID)
 		})
 	})
-})
-
-var RBACStatus = Type("RBACStatus", func() {
-	Required("rbac_enabled")
-	Attribute("rbac_enabled", Boolean, "Whether RBAC enforcement is currently enabled for this organization.")
 })
 
 var AuthzChallengeModel = Type("AuthzChallenge", func() {
@@ -1087,4 +1066,25 @@ var ChallengeResolutionModel = Type("ChallengeResolution", func() {
 var ResolveChallengesResult = Type("ResolveChallengesResult", func() {
 	Required("resolutions")
 	Attribute("resolutions", ArrayOf(ChallengeResolutionModel), "The created resolution records.")
+})
+
+var RequestAccessForm = Type("RequestAccessForm", func() {
+	Description("Form for requesting access to a scope.")
+	Required("scope")
+
+	Attribute("scope", String, func() {
+		Description("The scope being requested.")
+		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "skill:read", "skill:write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read", "chat:write")
+	})
+	Attribute("resource_id", String, "Optional resource ID the scope applies to.")
+	Attribute("resource_name", String, "Optional human-readable name for the resource (e.g. project name, MCP server name).")
+	Attribute("message", String, func() {
+		Description("Optional message from the requester explaining why they need access.")
+		MaxLength(1000)
+	})
+})
+
+var RequestAccessResult = Type("RequestAccessResult", func() {
+	Required("sent_to_count")
+	Attribute("sent_to_count", Int, "Number of administrators who were notified.")
 })

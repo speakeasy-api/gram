@@ -17,10 +17,21 @@ import (
 // SetProductFeatureRequestBody is the type of the "features" service
 // "setProductFeature" endpoint HTTP request body.
 type SetProductFeatureRequestBody struct {
+	// Organization whose product feature to update.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	// Name of the feature to update
 	FeatureName *string `form:"feature_name,omitempty" json:"feature_name,omitempty" xml:"feature_name,omitempty"`
 	// Whether the feature should be enabled
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+}
+
+// SetRemoteSessionAutoRefreshPolicyRequestBody is the type of the "features"
+// service "setRemoteSessionAutoRefreshPolicy" endpoint HTTP request body.
+type SetRemoteSessionAutoRefreshPolicyRequestBody struct {
+	// Organization whose automatic remote-session refresh policy to update.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// Organization policy for automatic remote-session refresh
+	Policy *string `form:"policy,omitempty" json:"policy,omitempty" xml:"policy,omitempty"`
 }
 
 // GetProductFeaturesResponseBody is the type of the "features" service
@@ -34,8 +45,6 @@ type GetProductFeaturesResponseBody struct {
 	SessionCaptureEnabled bool `form:"session_capture_enabled" json:"session_capture_enabled" xml:"session_capture_enabled"`
 	// Whether authz challenge logging to ClickHouse is enabled
 	AuthzChallengeLoggingEnabled bool `form:"authz_challenge_logging_enabled" json:"authz_challenge_logging_enabled" xml:"authz_challenge_logging_enabled"`
-	// Whether webhooks are enabled
-	Webhooks bool `form:"webhooks" json:"webhooks" xml:"webhooks"`
 	// Whether SSO setup is enabled for the organization
 	SsoEnabled bool `form:"sso_enabled" json:"sso_enabled" xml:"sso_enabled"`
 	// Whether SCIM/directory sync setup is enabled for the organization
@@ -53,6 +62,27 @@ type GetProductFeaturesResponseBody struct {
 	// Whether skill capture stores activation metadata without requesting manifest
 	// content
 	SkillCaptureMetadataOnly bool `form:"skill_capture_metadata_only" json:"skill_capture_metadata_only" xml:"skill_capture_metadata_only"`
+	// Whether the organization can provision push integrations for AI platforms
+	AiPlatformPushIntegrationsEnabled bool `form:"ai_platform_push_integrations_enabled" json:"ai_platform_push_integrations_enabled" xml:"ai_platform_push_integrations_enabled"`
+	// Whether the organization can use the Gram Platform MCP capability
+	PlatformMcpEnabled bool `form:"platform_mcp_enabled" json:"platform_mcp_enabled" xml:"platform_mcp_enabled"`
+	// Whether the organization can manage the external credentials and cloud KMS
+	// keys backing customer-managed encryption
+	CustomerManagedEncryptionKeysEnabled bool `form:"customer_managed_encryption_keys_enabled" json:"customer_managed_encryption_keys_enabled" xml:"customer_managed_encryption_keys_enabled"`
+	// Whether consent screens expose automatic remote-session refresh for the
+	// organization
+	RemoteSessionAutoRefreshEnabled bool `form:"remote_session_auto_refresh_enabled" json:"remote_session_auto_refresh_enabled" xml:"remote_session_auto_refresh_enabled"`
+	// Whether automatic remote-session refresh is enforced as the organization
+	// default: forced on for every user, shown locked on consent screens, and
+	// applied by the keepalive regardless of per-session preference
+	RemoteSessionAutoRefreshEnforcedEnabled bool `form:"remote_session_auto_refresh_enforced_enabled" json:"remote_session_auto_refresh_enforced_enabled" xml:"remote_session_auto_refresh_enforced_enabled"`
+	// Whether MCP consent screens offer the tool filtering picker for the
+	// organization
+	ConsentToolFilteringEnabled bool `form:"consent_tool_filtering_enabled" json:"consent_tool_filtering_enabled" xml:"consent_tool_filtering_enabled"`
+	// Whether agent session portability is enabled for the organization: session
+	// sharing links, move reporting with lineage, and picker title enrichment via
+	// the device agent
+	SessionPortabilityEnabled bool `form:"session_portability_enabled" json:"session_portability_enabled" xml:"session_portability_enabled"`
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -432,23 +462,219 @@ type SetProductFeatureGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// SetRemoteSessionAutoRefreshPolicyUnauthorizedResponseBody is the type of the
+// "features" service "setRemoteSessionAutoRefreshPolicy" endpoint HTTP
+// response body for the "unauthorized" error.
+type SetRemoteSessionAutoRefreshPolicyUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetRemoteSessionAutoRefreshPolicyForbiddenResponseBody is the type of the
+// "features" service "setRemoteSessionAutoRefreshPolicy" endpoint HTTP
+// response body for the "forbidden" error.
+type SetRemoteSessionAutoRefreshPolicyForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetRemoteSessionAutoRefreshPolicyBadRequestResponseBody is the type of the
+// "features" service "setRemoteSessionAutoRefreshPolicy" endpoint HTTP
+// response body for the "bad_request" error.
+type SetRemoteSessionAutoRefreshPolicyBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetRemoteSessionAutoRefreshPolicyNotFoundResponseBody is the type of the
+// "features" service "setRemoteSessionAutoRefreshPolicy" endpoint HTTP
+// response body for the "not_found" error.
+type SetRemoteSessionAutoRefreshPolicyNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetRemoteSessionAutoRefreshPolicyConflictResponseBody is the type of the
+// "features" service "setRemoteSessionAutoRefreshPolicy" endpoint HTTP
+// response body for the "conflict" error.
+type SetRemoteSessionAutoRefreshPolicyConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetRemoteSessionAutoRefreshPolicyUnsupportedMediaResponseBody is the type of
+// the "features" service "setRemoteSessionAutoRefreshPolicy" endpoint HTTP
+// response body for the "unsupported_media" error.
+type SetRemoteSessionAutoRefreshPolicyUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetRemoteSessionAutoRefreshPolicyInvalidResponseBody is the type of the
+// "features" service "setRemoteSessionAutoRefreshPolicy" endpoint HTTP
+// response body for the "invalid" error.
+type SetRemoteSessionAutoRefreshPolicyInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetRemoteSessionAutoRefreshPolicyInvariantViolationResponseBody is the type
+// of the "features" service "setRemoteSessionAutoRefreshPolicy" endpoint HTTP
+// response body for the "invariant_violation" error.
+type SetRemoteSessionAutoRefreshPolicyInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetRemoteSessionAutoRefreshPolicyUnexpectedResponseBody is the type of the
+// "features" service "setRemoteSessionAutoRefreshPolicy" endpoint HTTP
+// response body for the "unexpected" error.
+type SetRemoteSessionAutoRefreshPolicyUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetRemoteSessionAutoRefreshPolicyGatewayErrorResponseBody is the type of the
+// "features" service "setRemoteSessionAutoRefreshPolicy" endpoint HTTP
+// response body for the "gateway_error" error.
+type SetRemoteSessionAutoRefreshPolicyGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // NewGetProductFeaturesResponseBody builds the HTTP response body from the
 // result of the "getProductFeatures" endpoint of the "features" service.
 func NewGetProductFeaturesResponseBody(res *features.GetProductFeaturesResult) *GetProductFeaturesResponseBody {
 	body := &GetProductFeaturesResponseBody{
-		LogsEnabled:                  res.LogsEnabled,
-		ToolIoLogsEnabled:            res.ToolIoLogsEnabled,
-		SessionCaptureEnabled:        res.SessionCaptureEnabled,
-		AuthzChallengeLoggingEnabled: res.AuthzChallengeLoggingEnabled,
-		Webhooks:                     res.Webhooks,
-		SsoEnabled:                   res.SsoEnabled,
-		ScimEnabled:                  res.ScimEnabled,
-		HooksBrowserLoginEnabled:     res.HooksBrowserLoginEnabled,
-		HooksFailOpenEnabled:         res.HooksFailOpenEnabled,
-		CustomModelKeysEnabled:       res.CustomModelKeysEnabled,
-		SkillsEnabled:                res.SkillsEnabled,
-		SkillCaptureMetadataOnly:     res.SkillCaptureMetadataOnly,
-		DeviceAgent:                  res.DeviceAgent,
+		LogsEnabled:                             res.LogsEnabled,
+		ToolIoLogsEnabled:                       res.ToolIoLogsEnabled,
+		SessionCaptureEnabled:                   res.SessionCaptureEnabled,
+		AuthzChallengeLoggingEnabled:            res.AuthzChallengeLoggingEnabled,
+		SsoEnabled:                              res.SsoEnabled,
+		ScimEnabled:                             res.ScimEnabled,
+		HooksBrowserLoginEnabled:                res.HooksBrowserLoginEnabled,
+		HooksFailOpenEnabled:                    res.HooksFailOpenEnabled,
+		CustomModelKeysEnabled:                  res.CustomModelKeysEnabled,
+		SkillsEnabled:                           res.SkillsEnabled,
+		SkillCaptureMetadataOnly:                res.SkillCaptureMetadataOnly,
+		AiPlatformPushIntegrationsEnabled:       res.AiPlatformPushIntegrationsEnabled,
+		PlatformMcpEnabled:                      res.PlatformMcpEnabled,
+		CustomerManagedEncryptionKeysEnabled:    res.CustomerManagedEncryptionKeysEnabled,
+		RemoteSessionAutoRefreshEnabled:         res.RemoteSessionAutoRefreshEnabled,
+		RemoteSessionAutoRefreshEnforcedEnabled: res.RemoteSessionAutoRefreshEnforcedEnabled,
+		ConsentToolFilteringEnabled:             res.ConsentToolFilteringEnabled,
+		SessionPortabilityEnabled:               res.SessionPortabilityEnabled,
+		DeviceAgent:                             res.DeviceAgent,
 	}
 	return body
 }
@@ -746,10 +972,161 @@ func NewSetProductFeatureGatewayErrorResponseBody(res *goa.ServiceError) *SetPro
 	return body
 }
 
+// NewSetRemoteSessionAutoRefreshPolicyUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "setRemoteSessionAutoRefreshPolicy"
+// endpoint of the "features" service.
+func NewSetRemoteSessionAutoRefreshPolicyUnauthorizedResponseBody(res *goa.ServiceError) *SetRemoteSessionAutoRefreshPolicyUnauthorizedResponseBody {
+	body := &SetRemoteSessionAutoRefreshPolicyUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetRemoteSessionAutoRefreshPolicyForbiddenResponseBody builds the HTTP
+// response body from the result of the "setRemoteSessionAutoRefreshPolicy"
+// endpoint of the "features" service.
+func NewSetRemoteSessionAutoRefreshPolicyForbiddenResponseBody(res *goa.ServiceError) *SetRemoteSessionAutoRefreshPolicyForbiddenResponseBody {
+	body := &SetRemoteSessionAutoRefreshPolicyForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetRemoteSessionAutoRefreshPolicyBadRequestResponseBody builds the HTTP
+// response body from the result of the "setRemoteSessionAutoRefreshPolicy"
+// endpoint of the "features" service.
+func NewSetRemoteSessionAutoRefreshPolicyBadRequestResponseBody(res *goa.ServiceError) *SetRemoteSessionAutoRefreshPolicyBadRequestResponseBody {
+	body := &SetRemoteSessionAutoRefreshPolicyBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetRemoteSessionAutoRefreshPolicyNotFoundResponseBody builds the HTTP
+// response body from the result of the "setRemoteSessionAutoRefreshPolicy"
+// endpoint of the "features" service.
+func NewSetRemoteSessionAutoRefreshPolicyNotFoundResponseBody(res *goa.ServiceError) *SetRemoteSessionAutoRefreshPolicyNotFoundResponseBody {
+	body := &SetRemoteSessionAutoRefreshPolicyNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetRemoteSessionAutoRefreshPolicyConflictResponseBody builds the HTTP
+// response body from the result of the "setRemoteSessionAutoRefreshPolicy"
+// endpoint of the "features" service.
+func NewSetRemoteSessionAutoRefreshPolicyConflictResponseBody(res *goa.ServiceError) *SetRemoteSessionAutoRefreshPolicyConflictResponseBody {
+	body := &SetRemoteSessionAutoRefreshPolicyConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetRemoteSessionAutoRefreshPolicyUnsupportedMediaResponseBody builds the
+// HTTP response body from the result of the
+// "setRemoteSessionAutoRefreshPolicy" endpoint of the "features" service.
+func NewSetRemoteSessionAutoRefreshPolicyUnsupportedMediaResponseBody(res *goa.ServiceError) *SetRemoteSessionAutoRefreshPolicyUnsupportedMediaResponseBody {
+	body := &SetRemoteSessionAutoRefreshPolicyUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetRemoteSessionAutoRefreshPolicyInvalidResponseBody builds the HTTP
+// response body from the result of the "setRemoteSessionAutoRefreshPolicy"
+// endpoint of the "features" service.
+func NewSetRemoteSessionAutoRefreshPolicyInvalidResponseBody(res *goa.ServiceError) *SetRemoteSessionAutoRefreshPolicyInvalidResponseBody {
+	body := &SetRemoteSessionAutoRefreshPolicyInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetRemoteSessionAutoRefreshPolicyInvariantViolationResponseBody builds
+// the HTTP response body from the result of the
+// "setRemoteSessionAutoRefreshPolicy" endpoint of the "features" service.
+func NewSetRemoteSessionAutoRefreshPolicyInvariantViolationResponseBody(res *goa.ServiceError) *SetRemoteSessionAutoRefreshPolicyInvariantViolationResponseBody {
+	body := &SetRemoteSessionAutoRefreshPolicyInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetRemoteSessionAutoRefreshPolicyUnexpectedResponseBody builds the HTTP
+// response body from the result of the "setRemoteSessionAutoRefreshPolicy"
+// endpoint of the "features" service.
+func NewSetRemoteSessionAutoRefreshPolicyUnexpectedResponseBody(res *goa.ServiceError) *SetRemoteSessionAutoRefreshPolicyUnexpectedResponseBody {
+	body := &SetRemoteSessionAutoRefreshPolicyUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetRemoteSessionAutoRefreshPolicyGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "setRemoteSessionAutoRefreshPolicy"
+// endpoint of the "features" service.
+func NewSetRemoteSessionAutoRefreshPolicyGatewayErrorResponseBody(res *goa.ServiceError) *SetRemoteSessionAutoRefreshPolicyGatewayErrorResponseBody {
+	body := &SetRemoteSessionAutoRefreshPolicyGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetProductFeaturesPayload builds a features service getProductFeatures
 // endpoint payload.
-func NewGetProductFeaturesPayload(sessionToken *string) *features.GetProductFeaturesPayload {
+func NewGetProductFeaturesPayload(organizationID string, sessionToken *string) *features.GetProductFeaturesPayload {
 	v := &features.GetProductFeaturesPayload{}
+	v.OrganizationID = organizationID
 	v.SessionToken = sessionToken
 
 	return v
@@ -759,8 +1136,21 @@ func NewGetProductFeaturesPayload(sessionToken *string) *features.GetProductFeat
 // endpoint payload.
 func NewSetProductFeaturePayload(body *SetProductFeatureRequestBody, sessionToken *string) *features.SetProductFeaturePayload {
 	v := &features.SetProductFeaturePayload{
-		FeatureName: *body.FeatureName,
-		Enabled:     *body.Enabled,
+		OrganizationID: *body.OrganizationID,
+		FeatureName:    *body.FeatureName,
+		Enabled:        *body.Enabled,
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewSetRemoteSessionAutoRefreshPolicyPayload builds a features service
+// setRemoteSessionAutoRefreshPolicy endpoint payload.
+func NewSetRemoteSessionAutoRefreshPolicyPayload(body *SetRemoteSessionAutoRefreshPolicyRequestBody, sessionToken *string) *features.SetRemoteSessionAutoRefreshPolicyPayload {
+	v := &features.SetRemoteSessionAutoRefreshPolicyPayload{
+		OrganizationID: *body.OrganizationID,
+		Policy:         *body.Policy,
 	}
 	v.SessionToken = sessionToken
 
@@ -770,6 +1160,9 @@ func NewSetProductFeaturePayload(body *SetProductFeatureRequestBody, sessionToke
 // ValidateSetProductFeatureRequestBody runs the validations defined on
 // SetProductFeatureRequestBody
 func ValidateSetProductFeatureRequestBody(body *SetProductFeatureRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
 	if body.FeatureName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("feature_name", "body"))
 	}
@@ -777,13 +1170,30 @@ func ValidateSetProductFeatureRequestBody(body *SetProductFeatureRequestBody) (e
 		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
 	}
 	if body.FeatureName != nil {
-		if !(*body.FeatureName == "logs" || *body.FeatureName == "tool_io_logs" || *body.FeatureName == "session_capture" || *body.FeatureName == "authz_challenge_logging" || *body.FeatureName == "webhooks" || *body.FeatureName == "sso" || *body.FeatureName == "scim" || *body.FeatureName == "hooks_browser_login" || *body.FeatureName == "hooks_fail_open" || *body.FeatureName == "custom_model_keys" || *body.FeatureName == "skills" || *body.FeatureName == "skill_capture_metadata_only") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feature_name", *body.FeatureName, []any{"logs", "tool_io_logs", "session_capture", "authz_challenge_logging", "webhooks", "sso", "scim", "hooks_browser_login", "hooks_fail_open", "custom_model_keys", "skills", "skill_capture_metadata_only"}))
+		if !(*body.FeatureName == "logs" || *body.FeatureName == "tool_io_logs" || *body.FeatureName == "session_capture" || *body.FeatureName == "authz_challenge_logging" || *body.FeatureName == "sso" || *body.FeatureName == "scim" || *body.FeatureName == "hooks_browser_login" || *body.FeatureName == "hooks_fail_open" || *body.FeatureName == "custom_model_keys" || *body.FeatureName == "skills" || *body.FeatureName == "skill_capture_metadata_only" || *body.FeatureName == "ai_platform_push_integrations" || *body.FeatureName == "platform_mcp" || *body.FeatureName == "customer_managed_encryption_keys" || *body.FeatureName == "remote_session_auto_refresh" || *body.FeatureName == "remote_session_auto_refresh_enforced" || *body.FeatureName == "consent_tool_filtering" || *body.FeatureName == "session_portability") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feature_name", *body.FeatureName, []any{"logs", "tool_io_logs", "session_capture", "authz_challenge_logging", "sso", "scim", "hooks_browser_login", "hooks_fail_open", "custom_model_keys", "skills", "skill_capture_metadata_only", "ai_platform_push_integrations", "platform_mcp", "customer_managed_encryption_keys", "remote_session_auto_refresh", "remote_session_auto_refresh_enforced", "consent_tool_filtering", "session_portability"}))
 		}
 	}
 	if body.FeatureName != nil {
 		if utf8.RuneCountInString(*body.FeatureName) > 60 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.feature_name", *body.FeatureName, utf8.RuneCountInString(*body.FeatureName), 60, false))
+		}
+	}
+	return
+}
+
+// ValidateSetRemoteSessionAutoRefreshPolicyRequestBody runs the validations
+// defined on SetRemoteSessionAutoRefreshPolicyRequestBody
+func ValidateSetRemoteSessionAutoRefreshPolicyRequestBody(body *SetRemoteSessionAutoRefreshPolicyRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Policy == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("policy", "body"))
+	}
+	if body.Policy != nil {
+		if !(*body.Policy == "disabled" || *body.Policy == "user_controlled" || *body.Policy == "enforced") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.policy", *body.Policy, []any{"disabled", "user_controlled", "enforced"}))
 		}
 	}
 	return

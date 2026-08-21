@@ -3,7 +3,7 @@ import { Info } from "lucide-react";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
-import { ToggleButton } from "@/components/ui/ToggleButton";
+import { ToggleButton } from "@/components/ui/SegmentedControl";
 import { useOrganization } from "@/contexts/Auth";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useQuery } from "@tanstack/react-query";
@@ -93,26 +93,26 @@ function AverageStat({
   let value: JSX.Element;
   if (average != null) {
     value = (
-      <span className="text-xl font-semibold tabular-nums">
+      <span className="font-display text-3xl font-thin">
         {average.toLocaleString()}
       </span>
     );
   } else if (failed) {
-    value = <span className="text-xl font-semibold tabular-nums">—</span>;
+    value = <span className="font-display text-3xl font-thin">—</span>;
   } else {
-    value = <Skeleton className="h-7 w-24" />;
+    value = <Skeleton className="h-9 w-24" />;
   }
 
   return (
     <div className="flex flex-col gap-0.5">
-      {/* Pinned to the text-xs line height so the pill's chrome overflows
+      {/* Pinned to the label line height so the switcher's chrome overflows
           the label row instead of inflating it — this stat's label and value
           stay aligned with the neighboring Stats. */}
-      <span className="text-muted-foreground flex h-4 items-center gap-1 text-xs">
+      <span className="text-eyebrow flex h-4 items-center gap-1">
         Avg per
         {/* Bordered so the units read as a clickable segmented control
             rather than as part of the label text. */}
-        <span className="border-border flex items-center rounded-md border p-0.5">
+        <span className="border-border flex items-center border p-0.5">
           {AVERAGE_UNITS.map((u) => (
             <ToggleButton
               key={u.unit}
@@ -154,26 +154,22 @@ function Stat({
 }): JSX.Element {
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="text-muted-foreground flex h-4 items-center gap-1 text-xs">
+      <span className="text-eyebrow flex h-4 items-center gap-1">
         {label}
         {hint && <InfoHint label={`About ${label}`} tooltip={hint} />}
       </span>
       {value != null ? (
         <span
           className={cn(
-            "text-xl font-semibold tabular-nums",
-            // The success text tokens wash out here: near-white in dark mode,
-            // muted olive in light. Pin the palette steps that read as green in
-            // each mode.
-            tone === "success" &&
-              "text-[var(--color-feedback-green-600)] dark:text-[var(--color-feedback-green-400)]",
-            tone === "warning" && "text-warning",
+            "font-display text-3xl font-thin",
+            tone === "success" && "text-default-success",
+            tone === "warning" && "text-default-warning",
           )}
         >
           {value}
         </span>
       ) : (
-        <Skeleton className="h-7 w-28" />
+        <Skeleton className="h-9 w-28" />
       )}
     </div>
   );
@@ -333,7 +329,7 @@ function TumUsageCard({
       : null;
 
   return (
-    <div className="border-border rounded-lg border p-4">
+    <div className="border-border border p-4">
       <div className="text-muted-foreground mb-3 text-sm font-medium">
         {fullCycle ? formatCycleName(fullCycle) : rangeTitle}
       </div>
@@ -368,14 +364,14 @@ function TumUsageCard({
       </div>
 
       {meter != null && (
-        <div className="bg-muted mt-4 flex h-2 w-full gap-0.5 overflow-hidden rounded-full">
+        <div className="bg-muted mt-4 flex h-2 w-full gap-0.5 overflow-hidden">
           <div
-            className="bg-success-default h-full rounded-full transition-all duration-300"
+            className="bg-success-default h-full transition-all duration-300"
             style={{ width: `${meter.included}%` }}
           />
           {meter.overage > 0 && (
             <div
-              className="bg-warning-default h-full rounded-full transition-all duration-300"
+              className="bg-warning-default h-full transition-all duration-300"
               style={{ width: `${meter.overage}%` }}
             />
           )}

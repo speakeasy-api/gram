@@ -1,5 +1,14 @@
 import { Checkbox } from "@/components/ui/Checkbox";
 import { RequireScope } from "@/components/require-scope";
+import {
+  ToolSelectionPanel,
+  type ToolAnnotation,
+  type ToolSelectionChange,
+  type ToolSelectionMode,
+  type ToolSelectionServer,
+  type ToolSelectionTool,
+  type ToolSelectionToolRef,
+} from "@/components/tool-selection/ToolSelectionPanel";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { cn, getServerURL } from "@/lib/utils";
@@ -9,38 +18,28 @@ import { useOrgRoutes, useRoutes } from "@/routes";
 import { useListCollections } from "@gram/client/react-query/listCollections.js";
 import { useListMcpServersForOrg } from "@gram/client/react-query/listMcpServersForOrg.js";
 import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg.js";
-import {
-  AlertTriangle,
-  ArrowUpRight,
-  Check,
-  ChevronRight,
-  Info,
-  Globe,
-  Plus,
-  Repeat,
-  Shield,
-  Wrench,
-  X,
-} from "lucide-react";
+import { ArrowUpRight, Check, Info, Plus, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { useQueries } from "@tanstack/react-query";
 import type { Selector } from "@gram/client/models/components/selector.js";
+
+import {
+  selectorsAfterToolBatch,
+  selectorsAfterToolToggle,
+} from "./toolSelectionTransition";
 import type { ActivePanel, AnnotationHint, ResourceType } from "./types";
 import {
   ANNOTATION_TO_DISPOSITION,
+  DISPOSITION_TO_ANNOTATION,
   isProjectSelectableResourceType,
 } from "./types";
 import { computePanelState, type CollectionGroup } from "./computePanelState";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/Tooltip";
-import {
   mergeMcpServersIntoGroups,
   type Server,
   type ServerGroup,
+  type ServerTool,
 } from "./serverMerge";
 import { toolMetadataToServerTools } from "./remoteToolMetadata";
 
@@ -334,7 +333,7 @@ export function GrantRuleDrawerContent({
     resourceType === "chat"
   ) {
     return (
-      <span className="border-input text-muted-foreground inline-flex h-7 items-center rounded-md border bg-transparent px-2 py-1 text-xs">
+      <span className="border-input text-muted-foreground inline-flex h-7 items-center border bg-transparent px-2 py-1 text-xs">
         {resourceType === "environment"
           ? "All in project"
           : resourceType === "chat"
@@ -579,7 +578,7 @@ export function GrantRuleDrawerContent({
   );
 
   const customTabs = (toolScrollClass?: string) => (
-    <ToolSelectionPanel
+    <RoleToolSelectionPanel
       mcpServers={toolPanelMcpServers}
       projectSlugById={projectSlugById}
       selectors={selectors ?? []}
@@ -664,7 +663,79 @@ export function GrantRuleDrawerContent({
   );
 }
 
-function ToolSelectionPanel({
+interface RemoteToolsState {
+  tools: ServerTool[];
+  isLoading: boolean;
+  isError: boolean;
+  refetch: () => void;
+}
+
+/**
+ * Fetches stored remote-MCP tool metadata for one server and reports it
+ * upward. Mounted per remote-backed server so the picker issues at most one
+ * metadata request per expanded server; `enabled` gates the fetch to rows the
+ * admin actually opens.
+ */
+function RemoteToolMetadataLoader({
+  serverId,
+  projectSlug,
+  enabled,
+  onState,
+}: {
+  serverId: string;
+  projectSlug: string | undefined;
+  enabled: boolean;
+  onState: (serverId: string, state: RemoteToolsState) => void;
+}): null {
+  const { metadataByTool, isLoading, isError, refetch } = useToolMetadata(
+    serverId,
+    { enabled, projectSlug },
+  );
+  const refetchRef = useRef(refetch);
+  useEffect(() => {
+    refetchRef.current = refetch;
+  });
+  const stableRefetch = useCallback(() => refetchRef.current(), []);
+  const tools = useMemo(
+    () => toolMetadataToServerTools(serverId, Object.values(metadataByTool)),
+    [serverId, metadataByTool],
+  );
+  useEffect(() => {
+    if (!enabled) return;
+    onState(serverId, { tools, isLoading, isError, refetch: stableRefetch });
+  }, [enabled, serverId, tools, isLoading, isError, stableRefetch, onState]);
+  return null;
+}
+
+function serverToolAnnotations(tool: ServerTool): ToolAnnotation[] {
+  const annotations: ToolAnnotation[] = [];
+  const hints = tool.annotations;
+  if (hints?.readOnlyHint) annotations.push("read_only");
+  if (hints?.destructiveHint) annotations.push("destructive");
+  if (hints?.idempotentHint) annotations.push("idempotent");
+  if (hints?.openWorldHint) annotations.push("open_world");
+  return annotations;
+}
+
+function toSelectionTool(tool: ServerTool): ToolSelectionTool {
+  return { name: tool.name, annotations: serverToolAnnotations(tool) };
+}
+
+function remoteServerStatus(
+  state: RemoteToolsState | undefined,
+): ToolSelectionServer["status"] {
+  if (!state || state.isLoading) return "loading";
+  if (state.isError) return "error";
+  return "ready";
+}
+
+/**
+ * Dashboard adapter around the shared ToolSelectionPanel: converts server
+ * groups and selectors into the panel's normalized types, lazily loads remote
+ * tool metadata, and replays panel toggles as the legacy selector/annotation
+ * updates so emitted grants are unchanged.
+ */
+function RoleToolSelectionPanel({
   mcpServers,
   projectSlugById,
   selectors,
@@ -690,7 +761,9 @@ function ToolSelectionPanel({
   onChangeSelectors?: (selectors: Selector[]) => void;
   isDeny?: boolean;
   className?: string;
-}) {
+}): JSX.Element {
+  const routes = useRoutes();
+
   const allServers = useMemo(
     () =>
       mcpServers
@@ -709,531 +782,213 @@ function ToolSelectionPanel({
     [mcpServers, projectSlugById],
   );
 
-  const [search, setSearch] = useState("");
-  // Auto-expand if only one server; otherwise all collapsed
-  const [expandedServers, setExpandedServers] = useState<Set<string>>(
-    () => new Set(allServers.length === 1 ? [allServers[0]!.id!] : []),
+  const [expandedIds, setExpandedIds] = useState<ReadonlySet<string>>(
+    new Set(),
   );
+  const [remoteTools, setRemoteTools] = useState<
+    Record<string, RemoteToolsState>
+  >({});
 
-  const toggleExpanded = (serverId: string) => {
-    setExpandedServers((prev) =>
-      prev.has(serverId) ? new Set() : new Set([serverId]),
-    );
-  };
-
-  const q = search.toLowerCase();
-
-  // Check if any annotation filters are active
-  const hasAnnotationFilter = (annotations ?? []).length > 0;
-
-  // Compute matching tools per annotation
-  const allTools = useMemo(
-    () =>
-      allServers.flatMap((s) => s.tools.map((t) => ({ ...t, serverId: s.id }))),
-    [allServers],
-  );
-
-  const toolCountByAnnotation = useMemo(() => {
-    const counts = new Map<AnnotationHint, number>();
-    for (const hint of [
-      "readOnlyHint",
-      "destructiveHint",
-      "idempotentHint",
-      "openWorldHint",
-    ] as AnnotationHint[]) {
-      counts.set(hint, allTools.filter((t) => t.annotations?.[hint]).length);
-    }
-    return counts;
-  }, [allTools]);
-
-  const toggleAnnotation = (key: AnnotationHint) => {
-    if (!onChangeAnnotations || !onChangeSelectors) return;
-    const current = annotations ?? [];
-    const has = current.includes(key);
-    const next = has ? current.filter((a) => a !== key) : [...current, key];
-    onChangeAnnotations(next);
-    // Sync selectors to annotation-based selectors
-    const newSelectors = next.map((hint) => ({
-      resourceKind: "mcp" as const,
-      resourceId: "*",
-      disposition: ANNOTATION_TO_DISPOSITION[hint],
-    }));
-    onChangeSelectors(newSelectors);
-    // Collapse all server accordions when switching to annotation mode
-    if (next.length > 0) {
-      setExpandedServers(new Set());
-      setSearch("");
-    }
-  };
-
-  // Filter servers and tools by search query
-  const filteredServers = useMemo(() => {
-    if (!q) return allServers;
-    return allServers
-      .map((server) => ({
-        ...server,
-        tools: server.tools.filter((t) => t.name.toLowerCase().includes(q)),
-      }))
-      .filter(
-        (s) =>
-          s.tools.length > 0 ||
-          s.name.toLowerCase().includes(q) ||
-          s.projectName.toLowerCase().includes(q),
-      );
-  }, [allServers, q]);
-
-  // Auto-expand servers when searching
-  useEffect(() => {
-    if (q) {
-      setExpandedServers(new Set(filteredServers.map((s) => s.id)));
-    }
-  }, [q, filteredServers]);
-
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop += e.deltaY;
-    }
+  const handleExpandedServersChange = useCallback((serverIds: string[]) => {
+    setExpandedIds(new Set(serverIds));
   }, []);
 
-  // Determine active mode: annotation-based or manual tool selection
+  const handleRemoteToolsState = useCallback(
+    (serverId: string, state: RemoteToolsState) => {
+      setRemoteTools((prev) => ({ ...prev, [serverId]: state }));
+    },
+    [],
+  );
+
+  const panelServers = useMemo(
+    (): ToolSelectionServer[] =>
+      allServers.map((server) => {
+        const namePrefix = `${server.projectName.toLowerCase()}/`;
+        const isRemoteBacked = server.dynamicTools && server.remoteBacked;
+        const isTunneled = server.dynamicTools && !server.remoteBacked;
+        if (isTunneled) {
+          return {
+            id: server.id,
+            name: server.name,
+            namePrefix,
+            tools: [],
+            status: "unavailable",
+            unavailableLabel: "dynamic tools",
+            unavailableTooltip:
+              "Tools are dynamically resolved for this server and cannot be individually permissioned.",
+          };
+        }
+        if (isRemoteBacked) {
+          const state = remoteTools[server.id];
+          const status = remoteServerStatus(state);
+          return {
+            id: server.id,
+            name: server.name,
+            namePrefix,
+            tools:
+              status === "ready" && state
+                ? state.tools.map(toSelectionTool)
+                : [],
+            status,
+            collapsedLabel: "Expand to load tools",
+            emptyLabel: "Not synced",
+            emptyContent: (
+              <div className="text-muted-foreground space-y-1 px-8 py-3 text-sm">
+                <p>This server&apos;s tools haven&apos;t been synced yet.</p>
+                <p>
+                  <Link
+                    to={routes.mcp.x.inspect.href(
+                      mcpServerRouteParam({ id: server.id, slug: server.slug }),
+                    )}
+                    className="text-primary inline-flex items-center gap-1 hover:underline"
+                  >
+                    Connect it on the Inspect tab
+                    <ArrowUpRight className="h-3 w-3" />
+                  </Link>{" "}
+                  to permission its tools individually.
+                </p>
+              </div>
+            ),
+            onRetry: state?.refetch,
+          };
+        }
+        return {
+          id: server.id,
+          name: server.name,
+          namePrefix,
+          tools: server.tools.map(toSelectionTool),
+          status: "ready",
+        };
+      }),
+    [allServers, remoteTools, routes],
+  );
+
+  // Annotation counts stay pinned to deploy-time tools: lazily loaded remote
+  // metadata must not change the chip counts when a row is expanded.
+  const toolCountByAnnotation = useMemo(() => {
+    const counts = new Map<ToolAnnotation, number>();
+    for (const server of allServers) {
+      for (const tool of server.tools) {
+        for (const annotation of serverToolAnnotations(tool)) {
+          counts.set(annotation, (counts.get(annotation) ?? 0) + 1);
+        }
+      }
+    }
+    return counts;
+  }, [allServers]);
+
+  const selectedAnnotations = useMemo(
+    () => (annotations ?? []).map((hint) => ANNOTATION_TO_DISPOSITION[hint]),
+    [annotations],
+  );
+
+  const selectedTools = useMemo(
+    () =>
+      selectors.flatMap((s): ToolSelectionToolRef[] =>
+        s.tool ? [{ serverId: s.resourceId, toolName: s.tool }] : [],
+      ),
+    [selectors],
+  );
+
   const hasManualTools = selectors.some(
     (s) => s.tool && s.resourceId && s.resourceId !== "*",
   );
+  const mode: ToolSelectionMode = hasManualTools ? "tools" : "annotations";
+
+  const handleSelectionChange = (change: ToolSelectionChange) => {
+    switch (change.kind) {
+      case "annotation-toggle": {
+        if (!onChangeAnnotations || !onChangeSelectors) return;
+        const hints = change.annotations.map(
+          (a) => DISPOSITION_TO_ANNOTATION[a]!,
+        );
+        onChangeAnnotations(hints);
+        onChangeSelectors(
+          hints.map((hint) => ({
+            resourceKind: "mcp" as const,
+            resourceId: "*",
+            disposition: ANNOTATION_TO_DISPOSITION[hint],
+          })),
+        );
+        return;
+      }
+      case "tool-toggle": {
+        if ((annotations ?? []).length > 0) {
+          // Entering manual mode replaces the authoritative selectors
+          // atomically: keeping the category-wide disposition selectors
+          // alongside the first tool pick would silently widen the
+          // persisted grant past the panel's exclusive-mode promise.
+          onChangeAnnotations?.([]);
+          onChangeSelectors?.(
+            selectorsAfterToolToggle(
+              selectors,
+              change.serverId,
+              change.toolName,
+            ),
+          );
+          return;
+        }
+        onToggleTool(change.serverId, change.toolName);
+        return;
+      }
+      case "tool-batch": {
+        if ((annotations ?? []).length > 0) {
+          onChangeAnnotations?.([]);
+          onChangeSelectors?.(
+            selectorsAfterToolBatch(
+              selectors,
+              change.serverId,
+              change.toolNames,
+              change.selected,
+            ),
+          );
+          return;
+        }
+        onBatchToggleTools?.(
+          change.serverId,
+          change.toolNames,
+          change.selected,
+        );
+        return;
+      }
+    }
+  };
+
+  const remoteBackedServers = allServers.filter(
+    (s) => s.dynamicTools && s.remoteBacked,
+  );
 
   return (
-    <div className={cn("flex min-h-0 flex-1 flex-col", className)}>
-      <div
-        ref={scrollRef}
-        onWheel={handleWheel}
-        className="min-h-0 flex-1 overflow-y-auto"
-      >
-        {/* ── Section 1: By annotation ── */}
-        {onChangeAnnotations && (
-          <div className={cn(hasManualTools && "opacity-60")}>
-            <div className="px-3 pt-5 pb-3">
-              <div className="text-muted-foreground text-[11px] font-medium tracking-wider uppercase">
-                By annotation
-              </div>
-              <div className="text-muted-foreground/70 mt-1.5 text-xs leading-snug">
-                Tools can be annotated with labels that provide more context
-                about the properties of the tool, such as if it's a destructive
-                operation. OpenAPI sources are tagged automatically based on
-                HTTP method. You can edit annotations on the MCP tools tab.
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-2 px-3 pb-4">
-              {ANNOTATION_OPTIONS.map((opt) => {
-                const isActive = (annotations ?? []).includes(opt.key);
-                const count = toolCountByAnnotation.get(opt.key) ?? 0;
-                if (count === 0) return null;
-                const Icon = opt.icon;
-                return (
-                  <button
-                    key={opt.key}
-                    type="button"
-                    onClick={() => toggleAnnotation(opt.key)}
-                    className={cn(
-                      "border-input hover:bg-accent inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition-colors",
-                      isActive &&
-                        "border-primary bg-primary/5 text-primary font-medium",
-                    )}
-                  >
-                    <Icon className="h-3 w-3" />
-                    {opt.label}
-                    <span className="text-muted-foreground ml-0.5">
-                      {count}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* ── OR divider ── */}
-        {onChangeAnnotations && (
-          <div className="flex items-center gap-3 px-3 py-3">
-            <div className="bg-border h-px flex-1" />
-            <span className="text-muted-foreground text-[11px] font-medium uppercase">
-              or
-            </span>
-            <div className="bg-border h-px flex-1" />
-          </div>
-        )}
-
-        {/* ── Section 2: By server (manual) ── */}
-        <div className={cn(hasAnnotationFilter && "opacity-60")}>
-          <div className="px-3 pt-1 pb-3">
-            <div className="text-muted-foreground text-[11px] font-medium tracking-wider uppercase">
-              By server
-            </div>
-            <div className="text-muted-foreground/70 mt-1.5 text-xs leading-snug">
-              {isDeny
-                ? "Select specific tools to exclude. Expand a server to choose which tools this role should not access."
-                : "Select specific tools to allow. Expand a server to choose which tools this role can access."}
-            </div>
-          </div>
-
-          {/* Search */}
-          <div className="flex items-center gap-2 px-3 pb-3">
-            <div className="border-input flex h-8 flex-1 items-center gap-2 rounded-md border px-2">
-              <Wrench className="text-muted-foreground h-3 w-3 shrink-0" />
-              <input
-                type="text"
-                placeholder="Search tools and servers…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="placeholder:text-muted-foreground flex-1 bg-transparent text-xs outline-none"
-              />
-              {search && (
-                <button
-                  type="button"
-                  onClick={() => setSearch("")}
-                  className="text-muted-foreground hover:text-foreground shrink-0"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Server accordion */}
-          <div className="border-border border-t">
-            {filteredServers.length === 0 ? (
-              <div className="text-muted-foreground px-3 py-3 text-sm">
-                {allServers.length === 0
-                  ? "No servers found"
-                  : "No matching tools or servers"}
-              </div>
-            ) : (
-              filteredServers.map((server) => (
-                <ServerToolRow
-                  key={server.id}
-                  server={server}
-                  selectors={selectors}
-                  query={q}
-                  isExpanded={expandedServers.has(server.id)}
-                  onToggleExpanded={toggleExpanded}
-                  onToggleTool={onToggleTool}
-                  onBatchToggleTools={onBatchToggleTools}
-                  hasAnnotationFilter={hasAnnotationFilter}
-                  onClearAnnotations={
-                    onChangeAnnotations
-                      ? () => onChangeAnnotations([])
-                      : undefined
-                  }
-                />
-              ))
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
+    <>
+      {remoteBackedServers.map((server) => (
+        <RemoteToolMetadataLoader
+          key={server.id}
+          serverId={server.id}
+          projectSlug={server.projectSlug}
+          enabled={expandedIds.has(server.id)}
+          onState={handleRemoteToolsState}
+        />
+      ))}
+      <ToolSelectionPanel
+        servers={panelServers}
+        mode={mode}
+        selectedAnnotations={selectedAnnotations}
+        selectedTools={selectedTools}
+        onSelectionChange={handleSelectionChange}
+        annotationSelectionSupported={!!onChangeAnnotations}
+        annotationsDescription="Tools can be annotated with labels that provide more context about the properties of the tool, such as if it's a destructive operation. OpenAPI sources are tagged automatically based on HTTP method. You can edit annotations on the MCP tools tab."
+        toolsDescription={
+          isDeny
+            ? "Select specific tools to exclude. Expand a server to choose which tools this role should not access."
+            : "Select specific tools to allow. Expand a server to choose which tools this role can access."
+        }
+        toolCountByAnnotation={toolCountByAnnotation}
+        onExpandedServersChange={handleExpandedServersChange}
+        className={className}
+      />
+    </>
   );
 }
-
-/** A server row in the tool picker, enriched with its project's display name
- *  and slug (the slug is what the remote metadata request scopes against). */
-type PanelServer = Server & { projectName: string; projectSlug?: string };
-
-/**
- * One MCP server row in the "Specific tools" picker.
- *
- * Toolset-backed servers render their enumerable deploy-time tools directly.
- * Remote-backed servers (`dynamicTools` + `remoteBacked`) have no such list, so
- * on expand this fetches their stored tool metadata and renders it as
- * selectable rows — with distinct loading, load-error (retry), and never-synced
- * states; the never-synced state points the admin at the Inspect tab (which
- * materializes the table from the live session). Tunneled dynamic servers carry
- * no metadata table, so they render as a disabled, non-selectable row.
- */
-function ServerToolRow({
-  server,
-  selectors,
-  query,
-  isExpanded,
-  onToggleExpanded,
-  onToggleTool,
-  onBatchToggleTools,
-  hasAnnotationFilter,
-  onClearAnnotations,
-}: {
-  server: PanelServer;
-  selectors: Selector[];
-  query: string;
-  isExpanded: boolean;
-  onToggleExpanded: (serverId: string) => void;
-  onToggleTool: (serverId: string, toolName: string) => void;
-  onBatchToggleTools?: (
-    serverId: string,
-    toolNames: string[],
-    select: boolean,
-  ) => void;
-  hasAnnotationFilter: boolean;
-  onClearAnnotations?: () => void;
-}) {
-  const routes = useRoutes();
-  // Only remote-MCP-backed servers carry stored tool metadata — the endpoint
-  // rejects everything else. Tunneled dynamic servers resolve their tools at
-  // call time with no metadata table, so they stay non-selectable.
-  const isRemoteBacked = server.dynamicTools && server.remoteBacked;
-  const isTunneled = server.dynamicTools && !server.remoteBacked;
-
-  // Fetch lazily, only for the remote-backed rows the admin actually opens, so
-  // the picker issues at most one metadata request per expanded server. The
-  // project slug scopes the (project-scoped) request to this server's project.
-  const { metadataByTool, isLoading, isError, refetch } = useToolMetadata(
-    server.id,
-    {
-      enabled: isRemoteBacked && isExpanded,
-      projectSlug: server.projectSlug,
-    },
-  );
-
-  const serverTools = useMemo(() => {
-    const base = isRemoteBacked
-      ? toolMetadataToServerTools(server.id, Object.values(metadataByTool))
-      : server.tools;
-    return base.slice().sort((a, b) => a.name.localeCompare(b.name));
-  }, [isRemoteBacked, server.id, server.tools, metadataByTool]);
-
-  const q = query.toLowerCase();
-
-  // Persisted tool selections exist whether or not the remote list has loaded,
-  // so count them from the selectors rather than the (possibly empty) tools.
-  const selectedCount = selectors.filter(
-    (s) => s.resourceId === server.id && !!s.tool,
-  ).length;
-  const total = serverTools.length;
-  const allSelected =
-    total > 0 &&
-    serverTools.every((t) =>
-      selectors.some((s) => s.resourceId === server.id && s.tool === t.name),
-    );
-  const someSelected = selectedCount > 0 && !allSelected;
-
-  const toolsLoaded = !isRemoteBacked || (isExpanded && !isLoading);
-  // A failed request is distinct from a genuinely empty (never-synced) table:
-  // only the latter should point the admin at the Inspect tab.
-  const showConnectPrompt =
-    isRemoteBacked && toolsLoaded && !isError && total === 0;
-
-  const countLabel =
-    isRemoteBacked && !isExpanded
-      ? selectedCount > 0
-        ? `${selectedCount} selected`
-        : "Expand to load tools"
-      : isLoading
-        ? "Loading…"
-        : isError
-          ? "Couldn't load"
-          : showConnectPrompt
-            ? "Not synced"
-            : selectedCount > 0
-              ? `${selectedCount} of ${total} selected`
-              : `${total} ${total === 1 ? "tool" : "tools"} available`;
-
-  // Tunneled dynamic servers can't be individually permissioned — keep them as
-  // a disabled, non-expandable row that explains why.
-  if (isTunneled) {
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div
-            tabIndex={0}
-            aria-disabled="true"
-            className="border-border focus-visible:ring-ring flex cursor-not-allowed items-center border-b px-3 py-2.5 text-sm opacity-50 focus-visible:ring-1 focus-visible:outline-none last:border-b-0"
-          >
-            <span className="min-w-0 flex-1 truncate">
-              <HighlightMatch
-                text={`${server.projectName.toLowerCase()}/`}
-                query={q}
-                className="text-muted-foreground/60"
-              />
-              <HighlightMatch
-                text={server.name}
-                query={q}
-                className="font-medium"
-              />
-            </span>
-            <span className="text-muted-foreground shrink-0 text-xs">
-              dynamic tools
-            </span>
-          </div>
-        </TooltipTrigger>
-        <TooltipContent side="bottom" className="max-w-xs">
-          Tools are dynamically resolved for this server and cannot be
-          individually permissioned.
-        </TooltipContent>
-      </Tooltip>
-    );
-  }
-
-  return (
-    <div className="border-border border-b last:border-b-0">
-      {/* Server header */}
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={() => onToggleExpanded(server.id)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            onToggleExpanded(server.id);
-          }
-        }}
-        className="hover:bg-muted/50 flex cursor-pointer items-center"
-      >
-        <div className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2.5 text-sm">
-          <ChevronRight
-            className={cn(
-              "text-muted-foreground h-3 w-3 shrink-0 transition-transform",
-              isExpanded && "rotate-90",
-            )}
-          />
-          <span className="min-w-0 truncate">
-            <HighlightMatch
-              text={`${server.projectName.toLowerCase()}/`}
-              query={q}
-              className="text-muted-foreground/60"
-            />
-            <HighlightMatch
-              text={server.name}
-              query={q}
-              className="font-medium"
-            />
-          </span>
-        </div>
-        <div className="flex shrink-0 items-center gap-2 pr-3">
-          <span className="text-muted-foreground text-xs">{countLabel}</span>
-          {total > 0 && (
-            <Checkbox
-              checked={
-                allSelected ? true : someSelected ? "indeterminate" : false
-              }
-              onClick={(e) => {
-                e.stopPropagation();
-                if (hasAnnotationFilter) onClearAnnotations?.();
-                onBatchToggleTools?.(
-                  server.id,
-                  serverTools.map((t) => t.name),
-                  !allSelected,
-                );
-              }}
-              className="focus-visible:border-input pointer-events-auto cursor-pointer focus-visible:ring-0"
-            />
-          )}
-        </div>
-      </div>
-
-      {/* Expanded tool list */}
-      {isExpanded && (
-        <div className="bg-muted/30 border-border max-h-[300px] overflow-y-auto border-t">
-          {isRemoteBacked && isLoading ? (
-            <div className="text-muted-foreground px-8 py-3 text-sm">
-              Loading tools…
-            </div>
-          ) : isError ? (
-            <div className="text-muted-foreground space-y-1 px-8 py-3 text-sm">
-              <p className="flex items-center gap-1.5">
-                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                Couldn&apos;t load this server&apos;s tools.
-              </p>
-              <button
-                type="button"
-                onClick={() => refetch()}
-                className="text-primary hover:underline"
-              >
-                Retry
-              </button>
-            </div>
-          ) : showConnectPrompt ? (
-            <div className="text-muted-foreground space-y-1 px-8 py-3 text-sm">
-              <p>This server&apos;s tools haven&apos;t been synced yet.</p>
-              <p>
-                <Link
-                  to={routes.mcp.x.inspect.href(
-                    mcpServerRouteParam({ id: server.id, slug: server.slug }),
-                  )}
-                  className="text-primary inline-flex items-center gap-1 hover:underline"
-                >
-                  Connect it on the Inspect tab
-                  <ArrowUpRight className="h-3 w-3" />
-                </Link>{" "}
-                to permission its tools individually.
-              </p>
-            </div>
-          ) : total === 0 ? (
-            <div className="text-muted-foreground px-8 py-3 text-sm">
-              No tools available
-            </div>
-          ) : (
-            serverTools.map((tool) => {
-              const isSelected = selectors.some(
-                (s) => s.resourceId === server.id && s.tool === tool.name,
-              );
-              return (
-                <button
-                  key={tool.id}
-                  type="button"
-                  onClick={() => {
-                    if (hasAnnotationFilter) onClearAnnotations?.();
-                    onToggleTool(server.id, tool.name);
-                  }}
-                  className="hover:bg-accent flex w-full cursor-pointer items-center gap-2 py-1.5 pr-3 pl-8 text-sm"
-                >
-                  <Checkbox
-                    checked={isSelected}
-                    className="focus-visible:border-input pointer-events-none focus-visible:ring-0"
-                    tabIndex={-1}
-                  />
-                  <HighlightMatch
-                    text={tool.name}
-                    query={q}
-                    className="truncate"
-                  />
-                </button>
-              );
-            })
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-const ANNOTATION_OPTIONS: {
-  key: AnnotationHint;
-  label: string;
-  description: string;
-  icon: React.ComponentType<{ className?: string }>;
-}[] = [
-  {
-    key: "readOnlyHint",
-    label: "Read-only",
-    description: "Tools that don't modify their environment",
-    icon: Shield,
-  },
-  {
-    key: "destructiveHint",
-    label: "Destructive",
-    description: "Tools that perform destructive updates",
-    icon: AlertTriangle,
-  },
-  {
-    key: "idempotentHint",
-    label: "Idempotent",
-    description: "Repeated calls have no additional effect",
-    icon: Repeat,
-  },
-  {
-    key: "openWorldHint",
-    label: "Open-world",
-    description: "Tools that interact with external entities",
-    icon: Globe,
-  },
-];
 
 /** Fetches collection groups with resolved server/tool data. */
 function useCollectionGroups(
@@ -1328,7 +1083,7 @@ function CollectionGroupPanel({
             <button
               type="button"
               onClick={disabled ? undefined : goToCreateCollection}
-              className="border-input text-foreground hover:bg-accent inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs shadow-xs transition-colors"
+              className="border-input text-foreground hover:bg-accent inline-flex cursor-pointer items-center gap-1.5 border px-3 py-1.5 text-xs shadow-xs transition-colors"
             >
               <Plus className="h-3 w-3" />
               Create new collection
@@ -1387,7 +1142,7 @@ function CollectionGroupPanel({
             key={group.id}
             type="button"
             onClick={toggleAll}
-            className="hover:bg-accent flex w-full cursor-pointer items-center gap-3 rounded-sm px-3 py-2.5 text-sm"
+            className="hover:bg-accent flex w-full cursor-pointer items-center gap-3 px-3 py-2.5 text-sm"
           >
             <Checkbox
               checked={allSelected}
@@ -1415,7 +1170,7 @@ function CollectionGroupPanel({
             <button
               type="button"
               onClick={disabled ? undefined : goToCreateCollection}
-              className="text-muted-foreground hover:text-foreground flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-sm px-3 py-1.5 text-xs transition-colors"
+              className="text-muted-foreground hover:text-foreground flex w-full cursor-pointer items-center justify-center gap-1.5 px-3 py-1.5 text-xs transition-colors"
             >
               <Plus className="h-3 w-3" />
               Create new collection
@@ -1446,7 +1201,7 @@ function ResourceCheckbox({
       onClick={() => onToggle(id)}
       className={cn(
         "hover:bg-accent flex w-full cursor-pointer items-center gap-2 px-3",
-        compact ? "h-10 rounded-none text-sm" : "rounded-sm py-2 text-sm",
+        compact ? "h-10 text-sm" : "py-2 text-sm",
         checked && "font-medium",
       )}
     >
@@ -1476,7 +1231,7 @@ function ScopeOption({
       type="button"
       onClick={onClick}
       className={cn(
-        "hover:bg-accent flex w-full cursor-pointer items-start gap-2 rounded-sm px-3 py-2 text-sm",
+        "hover:bg-accent flex w-full cursor-pointer items-start gap-2 px-3 py-2 text-sm",
         selected && "font-medium",
       )}
     >
@@ -1492,29 +1247,5 @@ function ScopeOption({
         )}
       </span>
     </button>
-  );
-}
-
-/** Highlights substring matches with a yellow background. */
-function HighlightMatch({
-  text,
-  query,
-  className,
-}: {
-  text: string;
-  query: string;
-  className?: string;
-}) {
-  if (!query) return <span className={className}>{text}</span>;
-  const idx = text.toLowerCase().indexOf(query.toLowerCase());
-  if (idx === -1) return <span className={className}>{text}</span>;
-  return (
-    <span className={className}>
-      {text.slice(0, idx)}
-      <mark className="rounded-sm bg-yellow-200 dark:bg-yellow-800/60">
-        {text.slice(idx, idx + query.length)}
-      </mark>
-      {text.slice(idx + query.length)}
-    </span>
   );
 }

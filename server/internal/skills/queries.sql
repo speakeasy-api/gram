@@ -1242,6 +1242,7 @@ UPDATE skills
 SET name = @name,
     display_name = @display_name,
     summary = sqlc.narg(summary)::text,
+    tags = @tags,
     updated_at = clock_timestamp()
 WHERE project_id = @project_id
   AND id = @id
@@ -1307,6 +1308,31 @@ WHERE s.project_id = @project_id
   AND s.id = @skill_id
   AND s.archived_at IS NULL;
 
+-- name: ListSkillVersionPromptInjectionFindings :many
+SELECT DISTINCT
+  COALESCE(rr.rule_id, 'prompt_injection')::text AS rule_id,
+  COALESCE(rr.description, 'Detected a prompt injection attempt.')::text AS description,
+  COALESCE(rr.confidence, 0)::double precision AS confidence
+FROM risk_results rr
+JOIN skill_versions sv ON sv.id = rr.skill_version_id
+JOIN skills s ON s.id = sv.skill_id
+JOIN risk_policies rp
+  ON rp.id = rr.risk_policy_id
+  AND rp.project_id = s.project_id
+  AND rp.enabled IS TRUE
+  AND rp.deleted IS FALSE
+  AND rr.risk_policy_version = rp.version
+WHERE s.project_id = @project_id
+  AND s.id = @skill_id
+  AND s.archived_at IS NULL
+  AND sv.id = @skill_version_id
+  AND rr.project_id = s.project_id
+  AND rr.source = 'prompt_injection'
+  AND rr.found IS TRUE
+  AND rr.excluded_at IS NULL
+  AND rr.false_positive_at IS NULL
+ORDER BY 1, 2, 3 DESC;
+
 -- name: GetSkillState :one
 SELECT
   COALESCE(state.latest_version_id, '00000000-0000-0000-0000-000000000000'::uuid) AS latest_version_id,
@@ -1349,7 +1375,19 @@ WHERE project_id = @project_id
   AND (
     COALESCE(cardinality(@classifications::text[]), 0) = 0
     OR classification = ANY(@classifications::text[])
+  )
+  AND (
+    COALESCE(cardinality(@tags::text[]), 0) = 0
+    OR tags && @tags::text[]
   );
+
+-- name: ListDistinctSkillTags :many
+SELECT DISTINCT tag::text AS tag
+FROM skills s
+CROSS JOIN LATERAL unnest(s.tags) AS tag
+WHERE s.project_id = @project_id
+  AND s.archived_at IS NULL
+ORDER BY tag;
 
 -- name: ListSkills :many
 SELECT
@@ -1380,6 +1418,10 @@ SELECT
         COALESCE(cardinality(@classifications::text[]), 0) = 0
         OR counted.classification = ANY(@classifications::text[])
       )
+      AND (
+        COALESCE(cardinality(@tags::text[]), 0) = 0
+        OR counted.tags && @tags::text[]
+      )
   )::bigint AS total_count
 FROM skills s
 LEFT JOIN LATERAL (
@@ -1409,6 +1451,10 @@ WHERE s.project_id = @project_id
   AND (
     COALESCE(cardinality(@classifications::text[]), 0) = 0
     OR s.classification = ANY(@classifications::text[])
+  )
+  AND (
+    COALESCE(cardinality(@tags::text[]), 0) = 0
+    OR s.tags && @tags::text[]
   )
   AND (
     (
@@ -2252,6 +2298,15 @@ WHERE project_id = @project_id
   AND state = 'reserved'
   AND claim_token IS NULL;
 
+-- name: BackdateReservedSkillEfficacyEvaluationsFixture :execrows
+-- Test-only fixture: age a project's reserved rows past a recovery lease so a
+-- test can make staleness deterministic instead of retrying a sweep that
+-- recovers rows cumulatively.
+UPDATE skill_efficacy_evaluations
+SET updated_at = updated_at - @backdate_by::interval
+WHERE project_id = @project_id
+  AND state = 'reserved';
+
 -- name: ClearSkillEfficacyClaimTokenFixture :execrows
 -- Test-only fixture for a reservation written before claim_token existed.
 UPDATE skill_efficacy_evaluations
@@ -2630,6 +2685,35 @@ SELECT
   latest.content,
   latest.created_at AS version_created_at
 FROM skill_share_links l
+JOIN skills s
+  ON s.project_id = l.project_id
+  AND s.id = l.skill_id
+  AND s.archived_at IS NULL
+JOIN LATERAL (
+  SELECT sv.content, COALESCE(sv.promoted_at, sv.created_at) AS created_at
+  FROM skill_versions sv
+  WHERE sv.skill_id = l.skill_id
+  ORDER BY COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
+  LIMIT 1
+) latest ON TRUE
+WHERE l.token = @token
+  AND l.revoked_at IS NULL;
+
+-- name: GetSharedSkillByTokenForOrganization :one
+-- Custom-domain variant of GetSharedSkillByToken: the extra projects join pins
+-- the share link to the organization that owns the serving domain, so one
+-- tenant's skill can never be rendered under another tenant's custom domain.
+SELECT
+  s.name,
+  s.display_name,
+  s.summary,
+  latest.content,
+  latest.created_at AS version_created_at
+FROM skill_share_links l
+JOIN projects p
+  ON p.id = l.project_id
+  AND p.organization_id = @organization_id
+  AND NOT p.deleted
 JOIN skills s
   ON s.project_id = l.project_id
   AND s.id = l.skill_id

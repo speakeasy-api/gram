@@ -12,6 +12,11 @@ func CreateGlobalIssuerAdminRemoteSessionsPath() string {
 	return "/rpc/adminRemoteSessions.createGlobalIssuer"
 }
 
+// GetGlobalIssuerDuplicatePreflightAdminRemoteSessionsPath returns the URL path to the adminRemoteSessions service getGlobalIssuerDuplicatePreflight HTTP endpoint.
+func GetGlobalIssuerDuplicatePreflightAdminRemoteSessionsPath() string {
+	return "/rpc/adminRemoteSessions.getGlobalIssuerDuplicatePreflight"
+}
+
 // ListGlobalIssuersAdminRemoteSessionsPath returns the URL path to the adminRemoteSessions service listGlobalIssuers HTTP endpoint.
 func ListGlobalIssuersAdminRemoteSessionsPath() string {
 	return "/rpc/adminRemoteSessions.listGlobalIssuers"
@@ -65,4 +70,19 @@ func UpdateGlobalClientAdminRemoteSessionsPath() string {
 // DeleteGlobalClientAdminRemoteSessionsPath returns the URL path to the adminRemoteSessions service deleteGlobalClient HTTP endpoint.
 func DeleteGlobalClientAdminRemoteSessionsPath() string {
 	return "/rpc/adminRemoteSessions.deleteGlobalClient"
+}
+
+// ListGlobalIssuerConvergenceCandidatesAdminRemoteSessionsPath returns the URL path to the adminRemoteSessions service listGlobalIssuerConvergenceCandidates HTTP endpoint.
+func ListGlobalIssuerConvergenceCandidatesAdminRemoteSessionsPath() string {
+	return "/rpc/adminRemoteSessions.listGlobalIssuerConvergenceCandidates"
+}
+
+// GetGlobalIssuerMigratePreflightAdminRemoteSessionsPath returns the URL path to the adminRemoteSessions service getGlobalIssuerMigratePreflight HTTP endpoint.
+func GetGlobalIssuerMigratePreflightAdminRemoteSessionsPath() string {
+	return "/rpc/adminRemoteSessions.getGlobalIssuerMigratePreflight"
+}
+
+// MigrateToGlobalIssuerAdminRemoteSessionsPath returns the URL path to the adminRemoteSessions service migrateToGlobalIssuer HTTP endpoint.
+func MigrateToGlobalIssuerAdminRemoteSessionsPath() string {
+	return "/rpc/adminRemoteSessions.migrateToGlobalIssuer"
 }

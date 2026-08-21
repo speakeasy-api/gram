@@ -12,6 +12,18 @@ const AssistantsPlatformToolsetSlug = "assistants"
 // other assistant.
 const ManagedAssistantPlatformToolsetSlug = "managed-assistant"
 
+// PlatformMCPReadToolsetSlug is the reserved slug for the platform toolset
+// re-serving the Platform MCP read tools to a project's managed assistant.
+// Granted only when the assistant-platform-mcp rollout flag is on for the
+// organization.
+const PlatformMCPReadToolsetSlug = "platform"
+
+// ResearchToolsetSlug is the reserved slug for the MCP research agent's web
+// tools (search and page fetch). No assistant is granted it by default; the
+// research-agent runner attaches it explicitly, and its tools are gated on
+// the mcp_approval feature.
+const ResearchToolsetSlug = "research"
+
 // Toolset is a virtual collection of platform tools exposed at runtime via a
 // dedicated MCP endpoint. Platform toolsets are not persisted; the slug is
 // hardcoded per consumer and wired in code at process startup.
@@ -28,6 +40,7 @@ type ToolsetDependencies struct {
 	AssistantSkillTools           []ExternalTool
 	AssistantTriggerTools         []ExternalTool
 	ManagedAssistantInsightsTools []ExternalTool
+	PlatformMCPReadTools          []ExternalTool
 }
 
 type toolsetBuilder func(deps ToolsetDependencies) Toolset
@@ -44,6 +57,11 @@ var toolsetRegistry = []toolsetBuilder{
 		tools := make([]ExternalTool, 0, len(deps.ManagedAssistantInsightsTools))
 		tools = append(tools, deps.ManagedAssistantInsightsTools...)
 		return NewManagedAssistantToolset(tools...)
+	},
+	func(deps ToolsetDependencies) Toolset {
+		tools := make([]ExternalTool, 0, len(deps.PlatformMCPReadTools))
+		tools = append(tools, deps.PlatformMCPReadTools...)
+		return NewPlatformMCPReadToolset(tools...)
 	},
 }
 
@@ -78,6 +96,13 @@ func NewAssistantsToolset(tools ...ExternalTool) Toolset {
 // production wiring goes through BuildToolsets.
 func NewManagedAssistantToolset(tools ...ExternalTool) Toolset {
 	return Toolset{Slug: ManagedAssistantPlatformToolsetSlug, Tools: tools}
+}
+
+// NewPlatformMCPReadToolset returns the platform toolset re-serving the
+// Platform MCP read tools to a project's managed assistant. Exposed for tests
+// and direct callers; production wiring goes through BuildToolsets.
+func NewPlatformMCPReadToolset(tools ...ExternalTool) Toolset {
+	return Toolset{Slug: PlatformMCPReadToolsetSlug, Tools: tools}
 }
 
 // PlatformToolsetURL builds the URL where a runtime reaches the named

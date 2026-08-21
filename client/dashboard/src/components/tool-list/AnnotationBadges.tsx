@@ -41,7 +41,8 @@ export function AnnotationBadges({ tool }: { tool: Tool }): JSX.Element | null {
  *
  * Renders the same text labels and variants as the Connect → Catalog → MCP tool
  * cards (`CatalogDetail`), so the permission labels read identically wherever a
- * tool is surfaced — including Distribute → MCP → Tools.
+ * tool is surfaced — including Distribute → MCP → Tools and the role grant
+ * picker's tool rows.
  */
 function AnnotationBadgeIcons({
   readOnly,
@@ -66,7 +67,7 @@ function AnnotationBadgeIcons({
         </Badge>
       )}
       {idempotent && !readOnly && (
-        <Badge variant="information" className="text-xs">
+        <Badge variant="neutral" className="text-xs">
           Idempotent
         </Badge>
       )}

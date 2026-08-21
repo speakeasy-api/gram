@@ -1,16 +1,12 @@
-import {
-  useIsPlatformAdmin,
-  useOrganization,
-  useSession,
-} from "@/contexts/Auth.tsx";
+import { useOrganization, useSession } from "@/contexts/Auth.tsx";
 import { useSdkClient } from "@/contexts/Sdk.tsx";
+import { cn } from "@/lib/utils";
+import { DEMO_ORG_SLUG, PRE_DEMO_ORG_KEY } from "@/lib/demo";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
-import { ModalProvider } from "@/components/ui/context/ModalContext";
 import { Icon } from "@/components/ui/Icon";
-import { Modal } from "@/components/ui/Modal";
 import { ShieldAlert } from "lucide-react";
-import { useCallback, useMemo } from "react";
+import { useCallback } from "react";
 import { Navigate, Outlet, useLocation } from "react-router";
 import { AppSidebar } from "./app-sidebar.tsx";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
@@ -22,6 +18,7 @@ import {
   SidePanelSurface,
 } from "./side-panel/SidePanel.tsx";
 import { SidebarInset, SidebarProvider } from "@/components/ui/Sidebar";
+import { useShowsImpersonationBanner } from "./impersonation-banner-state";
 
 // Layout to handle unauthenticated landing pages and the authenticated webapp experience
 export const LoginCheck = (): JSX.Element => {
@@ -42,9 +39,7 @@ export const LoginCheck = (): JSX.Element => {
 };
 
 export const AppLayout = (): JSX.Element => {
-  const isAdmin = useIsPlatformAdmin();
-  const overrideSlug = useMemo(() => getAdminOverrideCookie(), []);
-  const isImpersonating = isAdmin && !!overrideSlug;
+  const isImpersonating = useShowsImpersonationBanner();
 
   return (
     <SidebarProvider
@@ -56,46 +51,88 @@ export const AppLayout = (): JSX.Element => {
         } as React.CSSProperties
       }
     >
-      <ModalProvider>
-        <SidePanelProvider>
-          <AppLayoutContent isImpersonating={isImpersonating} />
-        </SidePanelProvider>
-      </ModalProvider>
+      <SidePanelProvider>
+        <AppLayoutContent isImpersonating={isImpersonating} />
+      </SidePanelProvider>
     </SidebarProvider>
   );
 };
 
-function getAdminOverrideCookie(): string | null {
-  const match = document.cookie
-    .split("; ")
-    .find((row) => row.startsWith("gram_admin_override="));
-  if (!match) return null;
-  const value = match.split("=")[1];
-  return value || null;
-}
+// The shared demo org isn't a customer org being impersonated — brand it as
+// a demo instead of an impersonation warning. Detection keys off the active
+// organization so it also works for sessions entered through auth.enterDemo.
 
-const ImpersonationBanner = () => {
+export const ImpersonationBanner = (): JSX.Element => {
   const organization = useOrganization();
+  const session = useSession();
   const client = useSdkClient();
+  const isDemo = organization.slug === DEMO_ORG_SLUG;
+  const isWorkOSImpersonation = !!session.impersonatorEmail;
+  const organizationLabel = organization.name || organization.slug;
+
+  let label = `Impersonating ${organization.slug}`;
+  let actionLabel = "Stop impersonating";
+  if (isDemo) {
+    label = "Demo org — sample data";
+    actionLabel = "Exit demo";
+  } else if (isWorkOSImpersonation) {
+    label = `WorkOS impersonation active — signed in as ${session.user.email} in ${organizationLabel}`;
+  } else if (session.organizationOverride) {
+    label = `Support access active for ${organizationLabel}`;
+    actionLabel = "Exit support access";
+  }
+
+  const exit = () => {
+    void (async () => {
+      document.cookie = "gram_admin_override=; path=/; max-age=0;";
+      // Exiting the demo switches back to the org the user came from (stashed
+      // by /explore-demo), or their first real org — no logout round-trip.
+      // Falls through to logout for support/WorkOS sessions and for a demo
+      // user with no other organization.
+      const preDemoOrgId = localStorage.getItem(PRE_DEMO_ORG_KEY);
+      const ownOrg =
+        session.organizations.find(
+          (org) => org.id === preDemoOrgId && org.slug !== DEMO_ORG_SLUG,
+        ) ?? session.organizations.find((org) => org.slug !== DEMO_ORG_SLUG);
+      if (isDemo && ownOrg) {
+        localStorage.removeItem(PRE_DEMO_ORG_KEY);
+        await client.auth.switchScopes({ organizationId: ownOrg.id });
+        window.location.replace("/");
+        return;
+      }
+      await client.auth.logout();
+      window.location.href = "/login";
+    })();
+  };
+
+  // Height must stay 2.25rem (h-9) to match --header-offset / --banner-offset.
+  // Solid ink-family bars (editorial): demo = ink, impersonation = deep brand
+  // red. White mono label; the exit action is a hairline-outlined light chip.
+  const toneClasses = isDemo
+    ? "bg-surface-primary-fixed-dark border-transparent"
+    : "bg-destructive-highlight border-transparent";
+  const labelTone = "text-default-fixed-light";
 
   return (
-    <div className="flex items-center justify-center gap-3 bg-red-600 px-4 py-2 text-sm text-white">
-      <ShieldAlert className="h-4 w-4 shrink-0" />
-      <span className="font-mono font-bold">
-        Impersonating {organization.slug}
+    <div
+      className={cn(
+        "flex h-9 items-center justify-center gap-3 border-b px-4",
+        toneClasses,
+      )}
+      role="alert"
+    >
+      <ShieldAlert className={cn("h-3.5 w-3.5 shrink-0", labelTone)} />
+      {/* Plain concatenation: tailwind-merge would treat text-eyebrow and the
+          text-default-* tone as conflicting text-* utilities and drop one. */}
+      <span className={`text-eyebrow min-w-0 truncate ${labelTone}`}>
+        {label}
       </span>
       <button
         type="button"
-        className="ml-2 rounded bg-white/20 px-2 py-0.5 text-xs font-medium transition-colors hover:bg-white/30"
-        onClick={() => {
-          void (async () => {
-            document.cookie = "gram_admin_override=; path=/; max-age=0;";
-            await client.auth.logout();
-            window.location.href = "/login";
-          })();
-        }}
+        onClick={exit}
+        className="border-neutral-softest text-default-fixed-light ml-2 shrink-0 border px-2 py-0.5 font-mono text-[11px] tracking-[0.08em] uppercase hover:bg-white/10"
       >
-        Stop impersonating
+        {actionLabel}
       </button>
     </div>
   );
@@ -110,17 +147,14 @@ const AppLayoutContent = ({
     <div className="flex h-screen w-full flex-col">
       {isImpersonating && <ImpersonationBanner />}
       <div className="flex w-full flex-1 overflow-hidden">
-        <AppSidebar variant="inset" />
+        {/* Default (non-inset) variant: flat panes divided by a hairline
+            instead of a floating bordered card. */}
+        <AppSidebar />
         <SidebarInset>
           <GlobalInsightsWrapper>
             <MembershipSyncGuard>
               <Outlet />
             </MembershipSyncGuard>
-            <Modal
-              closable
-              className="h-full max-h-[450px] min-h-auto w-9/12 max-w-[1100px] min-w-auto rounded-sm p-0 2xl:w-2/3 2xl:max-w-[1000px]"
-              layout="custom"
-            />
           </GlobalInsightsWrapper>
         </SidebarInset>
         {/* Sibling of the content, not an overlay: the page reflows into the
@@ -182,7 +216,7 @@ const MembershipSyncGuard = ({ children }: { children: React.ReactNode }) => {
         </p>
         <button
           type="button"
-          className="bg-primary text-primary-foreground hover:bg-primary/90 mt-2 rounded-md px-4 py-2 text-sm font-medium"
+          className="bg-primary text-primary-foreground hover:bg-primary/90 mt-2 px-4 py-2 text-sm font-medium"
           onClick={() => {
             void (async () => {
               await client.auth.logout();
@@ -198,9 +232,7 @@ const MembershipSyncGuard = ({ children }: { children: React.ReactNode }) => {
 };
 
 export const OrgLayout = (): JSX.Element => {
-  const isAdmin = useIsPlatformAdmin();
-  const overrideSlug = useMemo(() => getAdminOverrideCookie(), []);
-  const isImpersonating = isAdmin && !!overrideSlug;
+  const isImpersonating = useShowsImpersonationBanner();
 
   return (
     <SidebarProvider
@@ -212,19 +244,17 @@ export const OrgLayout = (): JSX.Element => {
         } as React.CSSProperties
       }
     >
-      <ModalProvider>
-        <div className="flex h-screen w-full flex-col">
-          {isImpersonating && <ImpersonationBanner />}
-          <div className="flex w-full flex-1 overflow-hidden">
-            <OrgSidebar variant="inset" />
-            <SidebarInset>
-              <MembershipSyncGuard>
-                <Outlet />
-              </MembershipSyncGuard>
-            </SidebarInset>
-          </div>
+      <div className="flex h-screen w-full flex-col">
+        {isImpersonating && <ImpersonationBanner />}
+        <div className="flex w-full flex-1 overflow-hidden">
+          <OrgSidebar />
+          <SidebarInset>
+            <MembershipSyncGuard>
+              <Outlet />
+            </MembershipSyncGuard>
+          </SidebarInset>
         </div>
-      </ModalProvider>
+      </div>
     </SidebarProvider>
   );
 };

@@ -211,7 +211,7 @@ function CoverageStatTile({
 }) {
   return (
     <SimpleTooltip tooltip={display.detail}>
-      <div className="border-border bg-card flex flex-col gap-1 rounded-lg border p-3">
+      <div className="border-border bg-card flex flex-col gap-1 border p-3">
         <Text variant="body" className="text-2xl font-semibold tabular-nums">
           {count}
         </Text>
@@ -305,11 +305,6 @@ export const ManagedDeviceTable = memo(function ManagedDeviceTable({
           onClear={clearValue as (id: string) => void}
           onClearAll={clearAll}
         />
-        <Page.Toolbar.Count>
-          {/* The "+" keeps the count honest while unloaded pages remain. */}
-          {filteredDevices.length}
-          {hasMore ? "+" : ""} devices
-        </Page.Toolbar.Count>
       </Page.Toolbar>
       <Table
         columns={columns}

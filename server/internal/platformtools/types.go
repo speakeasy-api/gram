@@ -3,10 +3,12 @@ package platformtools
 import (
 	"context"
 	"log/slog"
+	"net/url"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/core"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/logs"
@@ -15,6 +17,7 @@ import (
 const (
 	SourceLogs                     = "logs"
 	SourceMemory                   = "memory"
+	SourcePlatform                 = "platform"
 	SourceSlack                    = "slack"
 	SourceTriggers                 = "triggers"
 	ToolNameSearchLogs             = "platform_search_logs"
@@ -38,6 +41,10 @@ const (
 	ToolNameListEmoji              = "platform_slack_list_emoji"
 	ToolNameListUserSessions       = "platform_list_user_sessions"
 	ToolNameGetUserSession         = "platform_get_user_session"
+	ToolNameGetPlatformContext     = "platform_get_platform_context"
+	ToolNameListProjects           = "platform_list_projects"
+	ToolNameFindMCP                = "platform_find_mcp"
+	ToolNameGetMCP                 = "platform_get_mcp"
 )
 
 // Skill tool names are externally specified by the skills RFC.
@@ -53,6 +60,12 @@ type Dependencies struct {
 	TriggerApp       *bgtriggers.App
 	SlackHTTPClient  *guardian.HTTPClient
 	Audit            *audit.Logger
+
+	// Encryption seals the payload behind minted asset download URLs.
+	Encryption *encryption.Client
+
+	// ServerURL is the public base URL minted download URLs point at.
+	ServerURL *url.URL
 }
 
 // FeatureChecker reports whether a product feature is enabled for an

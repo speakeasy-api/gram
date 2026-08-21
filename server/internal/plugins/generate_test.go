@@ -4,6 +4,8 @@ import (
 	"archive/zip"
 	"bytes"
 	"crypto/sha256"
+	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -14,10 +16,13 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
+	"unicode/utf16"
 
 	"github.com/BurntSushi/toml"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -55,6 +60,220 @@ func TestGeneratePluginWithCustomDomainURL(t *testing.T) {
 
 	server := mcpConfig.MCPServers["custom-server"]
 	require.Equal(t, "https://mcp.acme.com/mcp/my-slug", server.URL, "custom domain URL must be preserved verbatim in generated config")
+}
+
+func TestGeneratePluginPackagesIncludesPlatformMCPOnlyWhenEnabled(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:            "Acme Corp",
+		OrgEmail:           "admin@example.com",
+		ServerURL:          "https://app.getgram.ai///",
+		APIKey:             "gram_consumer_secret",
+		HooksAPIKey:        "gram_hooks_secret",
+		ProjectSlug:        "tenant-project-sentinel",
+		PlatformMCPEnabled: true,
+	}
+
+	files, err := GeneratePluginPackages(fingerprintTestPlugins(), cfg)
+	require.NoError(t, err)
+
+	var meta claudePluginMeta
+	require.NoError(t, json.Unmarshal(files["platform-mcp/.claude-plugin/plugin.json"], &meta))
+	require.Equal(t, platformMCPPluginName, meta.Name)
+	require.Equal(t, "Speakeasy AICP Platform MCP", meta.DisplayName)
+	require.Equal(t, platformMCPDescription, meta.Description)
+	require.Equal(t, "Speakeasy", meta.Author.Name)
+	require.Nil(t, meta.UserConfig, "Platform MCP must not request tenant credentials")
+
+	var mcpConfig claudeMCPConfig
+	require.NoError(t, json.Unmarshal(files["platform-mcp/.mcp.json"], &mcpConfig))
+	require.Equal(t, map[string]claudeMCPServer{
+		platformMCPServerName: {
+			Type: "http",
+			URL:  "https://app.getgram.ai/platform-mcp",
+		},
+	}, mcpConfig.MCPServers)
+
+	platformSkills, err := loadPlatformMCPSkills()
+	require.NoError(t, err)
+	require.NotEmpty(t, platformSkills)
+	for name, skill := range platformSkills {
+		paths := []string{
+			"platform-mcp/skills/" + name + "/SKILL.md",
+			"cursor-plugins/platform-mcp-cursor/skills/" + name + "/SKILL.md",
+			"platform-mcp-codex/skills/" + name + "/SKILL.md",
+			"opencode-plugins/platform-mcp/speakeasy-aicp-platform-mcp/skills/" + name + "/SKILL.md",
+			"agent-plugins/speakeasy-aicp-platform-mcp/skills/" + name + "/SKILL.md",
+		}
+		for _, packagePath := range paths {
+			require.Equal(t, skill, files[packagePath], "missing or changed Platform MCP skill %q at %s", name, packagePath)
+		}
+		require.NotContains(t, string(skill), "Gram", "distributed skill %q exposes the internal codename", name)
+	}
+
+	claudeSkill := files["platform-mcp/skills/add-mcp-from-catalog/SKILL.md"]
+	require.Contains(t, string(claudeSkill), "register_platform_mcp_for_project")
+	require.Contains(t, string(claudeSkill), "attach_platform_mcp_identity_provider")
+	require.Contains(t, string(claudeSkill), "add_platform_mcp_to_default_plugin")
+	require.Contains(t, string(claudeSkill), "send_platform_mcp_feedback")
+
+	var agentManifest agentPluginManifest
+	require.NoError(t, json.Unmarshal(files["agent-plugins/speakeasy-aicp-platform-mcp/plugin.json"], &agentManifest))
+	require.Equal(t, platformMCPPluginName, agentManifest.Name)
+	require.Equal(t, "Speakeasy", agentManifest.Author.Name)
+	var agentMCP agentMCPConfig
+	require.NoError(t, json.Unmarshal(files["agent-plugins/speakeasy-aicp-platform-mcp/mcp.json"], &agentMCP))
+	require.Equal(t, "https://app.getgram.ai/platform-mcp", agentMCP.MCPServers[platformMCPServerName].URL)
+	require.Equal(t, claudeSkill, files["agent-plugins/speakeasy-aicp-platform-mcp/skills/add-mcp-from-catalog/SKILL.md"])
+
+	platformPrefixes := []string{
+		"platform-mcp/",
+		"cursor-plugins/platform-mcp-cursor/",
+		"platform-mcp-codex/",
+		"opencode-plugins/platform-mcp/",
+		"agent-plugins/speakeasy-aicp-platform-mcp/",
+	}
+	for path, content := range files {
+		if slices.ContainsFunc(platformPrefixes, func(prefix string) bool { return strings.HasPrefix(path, prefix) }) {
+			require.NotContains(t, string(content), cfg.APIKey)
+			require.NotContains(t, string(content), cfg.HooksAPIKey)
+			require.NotContains(t, string(content), cfg.ProjectSlug)
+			require.NotContains(t, string(content), cfg.OrgName)
+			require.NotContains(t, string(content), cfg.OrgEmail)
+			require.NotContains(t, path, "hooks/")
+			require.NotContains(t, string(content), skillFeedbackMCPServerName)
+		}
+	}
+
+	var claude marketplaceManifest
+	require.NoError(t, json.Unmarshal(files[".claude-plugin/marketplace.json"], &claude))
+	require.Len(t, claude.Plugins, len(fingerprintTestPlugins())+2)
+	require.Equal(t, "acme-corp-observability", claude.Plugins[0].Name)
+	require.Equal(t, marketplaceEntry{
+		Name:        platformMCPPluginName,
+		DisplayName: "Speakeasy AICP Platform MCP",
+		Source:      "./platform-mcp",
+		Description: platformMCPDescription,
+	}, claude.Plugins[1])
+
+	var cursor marketplaceManifest
+	require.NoError(t, json.Unmarshal(files[".cursor-plugin/marketplace.json"], &cursor))
+	require.Contains(t, cursor.Plugins, marketplaceEntry{
+		Name:        "platform-mcp-cursor",
+		Source:      "platform-mcp-cursor",
+		Description: platformMCPDescription,
+	})
+
+	var codex codexMarketplaceManifest
+	require.NoError(t, json.Unmarshal(files[".agents/plugins/marketplace.json"], &codex))
+	require.Contains(t, codex.Plugins, codexMarketplaceEntry{
+		Name: "platform-mcp-codex",
+		Source: codexMarketplaceSource{
+			Source: "local",
+			Path:   "./platform-mcp-codex",
+		},
+		Policy: codexMarketplacePolicy{Installation: "AVAILABLE", Authentication: "ON_USE"},
+	})
+
+	cfg.PlatformMCPEnabled = false
+	withoutPlatform, err := GeneratePluginPackages(fingerprintTestPlugins(), cfg)
+	require.NoError(t, err)
+	for path := range withoutPlatform {
+		require.NotContains(t, path, platformMCPPluginRoot)
+		require.NotContains(t, path, platformMCPPluginName)
+	}
+}
+
+func TestCarryPlatformMCPSubtreeAcceptsB1AndFullNativeLayouts(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{ServerURL: "https://app.getgram.ai", Version: "42"}
+	allFiles, err := generatePlatformMCPFiles(cfg)
+	require.NoError(t, err)
+
+	b1Files := make(map[string][]byte)
+	for filePath, content := range allFiles {
+		if strings.HasPrefix(filePath, platformMCPPluginRoot+"/") || strings.HasPrefix(filePath, platformMCPAgentPluginRoot+"/") {
+			b1Files[filePath] = content
+		}
+	}
+	carried := make(map[string][]byte)
+	intact, nativeClientsAvailable := carryPlatformMCPSubtree(carried, b1Files)
+	require.True(t, intact)
+	require.False(t, nativeClientsAvailable)
+	require.Equal(t, b1Files, carried)
+
+	carried = make(map[string][]byte)
+	intact, nativeClientsAvailable = carryPlatformMCPSubtree(carried, allFiles)
+	require.True(t, intact)
+	require.True(t, nativeClientsAvailable)
+	require.Equal(t, allFiles, carried)
+
+	partialNative := maps.Clone(allFiles)
+	delete(partialNative, platformMCPCodexPluginRoot+"/.mcp.json")
+	carried = make(map[string][]byte)
+	intact, nativeClientsAvailable = carryPlatformMCPSubtree(carried, partialNative)
+	require.True(t, intact)
+	require.False(t, nativeClientsAvailable)
+	require.NotContains(t, carried, platformMCPCursorPluginRoot+"/.cursor-plugin/plugin.json")
+	require.NotContains(t, carried, platformMCPOpenCodePluginRoot+"/plugin/"+platformMCPPluginName+".ts")
+}
+
+func TestGeneratePlatformMCPPluginPackageDirectDownloadsShareDefinition(t *testing.T) {
+	t.Parallel()
+
+	packages := make(map[string]map[string][]byte)
+	for _, platform := range []string{"claude", "cursor", "codex", "opencode", "agent-plugin"} {
+		files, err := GeneratePlatformMCPPluginPackage("https://app.getgram.ai/", "42", platform)
+		require.NoError(t, err, platform)
+		packages[platform] = files
+	}
+
+	platformSkills, err := loadPlatformMCPSkills()
+	require.NoError(t, err)
+	for name, skill := range platformSkills {
+		paths := map[string]string{
+			"claude":       "skills/" + name + "/SKILL.md",
+			"cursor":       "skills/" + name + "/SKILL.md",
+			"codex":        "skills/" + name + "/SKILL.md",
+			"opencode":     platformMCPPluginName + "/skills/" + name + "/SKILL.md",
+			"agent-plugin": "skills/" + name + "/SKILL.md",
+		}
+		for platform, packagePath := range paths {
+			require.Equal(t, skill, packages[platform][packagePath], "missing or changed %s direct-download skill %q", platform, name)
+		}
+	}
+	for platform, files := range packages {
+		for path, content := range files {
+			require.NotContains(t, path, "hooks/", platform)
+			require.NotContains(t, string(content), "GRAM_API_KEY", platform)
+			require.NotContains(t, string(content), skillFeedbackMCPServerName, platform)
+		}
+	}
+
+	_, err = GeneratePlatformMCPPluginPackage("https://app.getgram.ai", "42", "unsupported")
+	require.ErrorContains(t, err, "unsupported Platform MCP platform")
+}
+
+func TestGeneratePluginPackagesRejectsInvalidPlatformMCPServerURL(t *testing.T) {
+	t.Parallel()
+
+	for _, serverURL := range []string{
+		"",
+		"localhost:8080",
+		"https:///missing-host",
+		"ftp://example.com",
+		"https://user:password@example.com",
+		"https://example.com?query=value",
+		"https://example.com#fragment",
+	} {
+		_, err := GeneratePluginPackages(fingerprintTestPlugins(), GenerateConfig{
+			OrgName:            "Acme Corp",
+			ServerURL:          serverURL,
+			PlatformMCPEnabled: true,
+		})
+		require.ErrorContains(t, err, "invalid Platform MCP server URL", serverURL)
+	}
 }
 
 func TestGeneratePluginPackagesProducesExpectedFiles(t *testing.T) {
@@ -340,6 +559,92 @@ func TestGenerateClaudeMixedOAuthAndHTTPServers(t *testing.T) {
 	err = json.Unmarshal(files["test/.claude-plugin/plugin.json"], &pluginMeta)
 	require.NoError(t, err)
 	require.Contains(t, pluginMeta.UserConfig, "GRAM_API_KEY")
+}
+
+// TestGenerateUnproxiedServerNeverGetsGramCredential guards against
+// reintroducing the leak fixed alongside this test: an unproxied server's
+// MCPURL points straight at the vendor, so no format may attach a Gram
+// credential (static header, env-header, or bearer-token-env-var) to it —
+// checked across all four generated formats, and with cfg.APIKey both set
+// and unset, since the leak only reproduced with a baked key present.
+func TestGenerateUnproxiedServerNeverGetsGramCredential(t *testing.T) {
+	t.Parallel()
+
+	for _, cfg := range []GenerateConfig{
+		{OrgName: "Test Org", ServerURL: "https://app.getgram.ai", APIKey: "gram_live_leaked_key"},
+		{OrgName: "Test Org", ServerURL: "https://app.getgram.ai"},
+	} {
+		plugins := []PluginInfo{
+			{
+				Name: "Test",
+				Slug: "test",
+				Servers: []PluginServerInfo{
+					{DisplayName: "vendor-widget", MCPURL: "https://vendor.example.com/mcp", IsUnproxied: true},
+				},
+			},
+		}
+
+		files, err := GeneratePluginPackages(plugins, cfg)
+		require.NoError(t, err)
+
+		var claudeConfig claudeMCPConfig
+		require.NoError(t, json.Unmarshal(files["test/.mcp.json"], &claudeConfig))
+		claudeServer := claudeConfig.MCPServers["vendor-widget"]
+		require.Equal(t, "https://vendor.example.com/mcp", claudeServer.URL)
+		require.Empty(t, claudeServer.Headers, "Claude must not attach a Gram credential to an unproxied server")
+
+		var cursorConfig cursorMCPConfig
+		require.NoError(t, json.Unmarshal(files["cursor-plugins/test-cursor/mcp.json"], &cursorConfig))
+		cursorServer := cursorConfig.MCPServers["vendor-widget"]
+		require.Equal(t, "https://vendor.example.com/mcp", cursorServer.URL)
+		require.Empty(t, cursorServer.Headers, "Cursor must not attach a Gram credential to an unproxied server")
+
+		var codexConfig codexMCPConfig
+		require.NoError(t, json.Unmarshal(files["test-codex/.mcp.json"], &codexConfig))
+		codexServer := codexConfig.MCPServers["vendor-widget"]
+		require.Equal(t, "https://vendor.example.com/mcp", codexServer.URL)
+		require.Empty(t, codexServer.HTTPHeaders, "Codex must not attach a Gram credential to an unproxied server")
+		require.Empty(t, codexServer.BearerTokenEnvVar, "Codex must not set a bearer_token_env_var for an unproxied server")
+
+		var opencodeConfig opencodeMCPConfig
+		require.NoError(t, json.Unmarshal(files["opencode-plugins/test/test/mcp.json"], &opencodeConfig))
+		opencodeServer := opencodeConfig.MCP["vendor-widget"]
+		require.Equal(t, "https://vendor.example.com/mcp", opencodeServer.URL)
+		require.Empty(t, opencodeServer.Headers, "OpenCode must not attach a Gram credential to an unproxied server")
+
+		require.Equal(t, "ON_USE", codexAuthPolicy(plugins[0], cfg),
+			"an all-unproxied plugin needs no install-time secret prompt")
+	}
+}
+
+// TestGenerateClaudeUnproxiedDoesNotForcePrompt mirrors
+// TestGenerateClaudeMixedOAuthAndHTTPServers: a private HTTP server still
+// forces the GRAM_API_KEY prompt, but an unproxied server standing alone
+// must not — needsGramKeyPrompt has the same IsOAuth/IsPublic-only gap the
+// header-attachment branches had.
+func TestGenerateClaudeUnproxiedDoesNotForcePrompt(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{
+		{
+			Name: "Test",
+			Slug: "test",
+			Servers: []PluginServerInfo{
+				{DisplayName: "vendor-widget", MCPURL: "https://vendor.example.com/mcp", IsUnproxied: true},
+			},
+		},
+	}
+
+	files, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:   "Test Org",
+		ServerURL: "https://app.getgram.ai",
+	})
+	require.NoError(t, err)
+
+	var pluginMeta claudePluginMeta
+	err = json.Unmarshal(files["test/.claude-plugin/plugin.json"], &pluginMeta)
+	require.NoError(t, err)
+	require.NotContains(t, pluginMeta.UserConfig, "GRAM_API_KEY",
+		"a plugin with only an unproxied server needs no Gram API key prompt")
 }
 
 func TestGenerateCodexMCPConfigUsesBearerTokenEnvVar(t *testing.T) {
@@ -771,8 +1076,7 @@ func TestGenerateMarketplaceManifest(t *testing.T) {
 
 	require.Equal(t, "acme-speakeasy", cursorManifest.Name)
 	require.Len(t, cursorManifest.Plugins, 2)
-	require.NotNil(t, cursorManifest.Metadata)
-	require.Equal(t, "cursor-plugins", cursorManifest.Metadata.PluginRoot)
+	require.Equal(t, &marketplaceMetadata{PluginRoot: cursorPluginRoot}, cursorManifest.Metadata)
 	require.Equal(t, "a-cursor", cursorManifest.Plugins[0].Source)
 	require.Equal(t, "b-cursor", cursorManifest.Plugins[1].Source)
 }
@@ -996,22 +1300,34 @@ func TestGenerateCodexObservabilityPluginHooksJSONIncludesBootstrapCommands(t *t
 		case "SessionEnd":
 			timeoutSeconds = 3
 		}
-		expectedSuffix := fmt.Sprintf(` --config="${PLUGIN_ROOT}/speakeasy.json" agenthooks run --provider=codex --timeout=%ds`, timeoutSeconds)
-		expectedWindowsSuffix := fmt.Sprintf(` --config="${PLUGIN_ROOT}\speakeasy.json" agenthooks run --provider=codex --timeout=%ds`, timeoutSeconds)
-		if async {
-			expectedSuffix += " --async"
-			expectedWindowsSuffix += " --async"
-		}
-		require.Equal(t, `bash "${PLUGIN_ROOT}/hooks/bootstrap.sh"`+expectedSuffix, groups[0].Hooks[0].Command)
-		require.Equal(t, `powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "${PLUGIN_ROOT}\hooks\bootstrap.ps1"`+expectedWindowsSuffix, groups[0].Hooks[0].CommandWindows)
+		require.Equal(t, codexHooksBootstrapCommand(timeoutSeconds, async, cfg.InstallFailOpen), groups[0].Hooks[0].Command)
+		require.Contains(t, groups[0].Hooks[0].Command, fmt.Sprintf(`agenthooks run --provider=codex --timeout=%ds`, timeoutSeconds))
+		require.Contains(t, groups[0].Hooks[0].Command, `r="$PLUGIN_ROOT"`, "the shell must expand Codex's runtime environment safely")
+		require.Equal(t, codexHooksPowerShellCommand(timeoutSeconds, async, cfg.InstallFailOpen), groups[0].Hooks[0].CommandWindows)
 		if event == "SessionEnd" {
 			require.Equal(t, 3, groups[0].Hooks[0].Timeout)
 		} else {
 			require.Zero(t, groups[0].Hooks[0].Timeout)
 		}
-		require.Equal(t, async, strings.HasSuffix(groups[0].Hooks[0].Command, " --async"))
-		require.Equal(t, async, strings.HasSuffix(groups[0].Hooks[0].CommandWindows, " --async"))
+		// The Unix command wraps the script in `bash -c '...'`, so --async is
+		// the last thing inside the quotes rather than the last thing on the line.
+		require.Equal(t, async, strings.HasSuffix(groups[0].Hooks[0].Command, " --async'"))
+		require.Equal(t, async, strings.Contains(decodePowerShellCommand(t, groups[0].Hooks[0].CommandWindows), " --async"))
 	}
+}
+
+func decodePowerShellCommand(t *testing.T, command string) string {
+	t.Helper()
+	const prefix = `powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -EncodedCommand `
+	require.True(t, strings.HasPrefix(command, prefix))
+	encoded, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(command, prefix))
+	require.NoError(t, err)
+	require.Zero(t, len(encoded)%2)
+	units := make([]uint16, len(encoded)/2)
+	for i := range units {
+		units[i] = binary.LittleEndian.Uint16(encoded[2*i:])
+	}
+	return string(utf16.Decode(units))
 }
 
 func TestComputeCodexHookApprovalsIncludesSingleSessionStartCommand(t *testing.T) {
@@ -1020,7 +1336,7 @@ func TestComputeCodexHookApprovalsIncludesSingleSessionStartCommand(t *testing.T
 	marketplace := conv.ToSlug(cfg.OrgName) + "-speakeasy"
 	plugin := CodexObservabilitySlug(cfg)
 
-	approvals, err := computeCodexHookApprovals(marketplace, plugin)
+	approvals, err := computeCodexHookApprovals(marketplace, plugin, false)
 	require.NoError(t, err)
 
 	sessionStartPrefix := plugin + "@" + marketplace + ":hooks/hooks.json:session_start:0:"
@@ -1041,7 +1357,7 @@ func TestComputeCodexHookApprovalsIncludesSessionEndTrustState(t *testing.T) {
 	marketplace := conv.ToSlug(cfg.OrgName) + "-speakeasy"
 	plugin := CodexObservabilitySlug(cfg)
 
-	approvals, err := computeCodexHookApprovals(marketplace, plugin)
+	approvals, err := computeCodexHookApprovals(marketplace, plugin, false)
 	require.NoError(t, err)
 
 	prefix := plugin + "@" + marketplace + ":hooks/hooks.json:session_end:0:"
@@ -1054,6 +1370,65 @@ func TestComputeCodexHookApprovalsIncludesSessionEndTrustState(t *testing.T) {
 	require.Len(t, sessionEndApprovals, 1)
 	require.Equal(t, prefix+"0", sessionEndApprovals[0].StateKey)
 	require.NotEmpty(t, sessionEndApprovals[0].TrustedHash)
+}
+
+// Codex hashes the bytes of its own serde_json serialization, which leaves <, >
+// and & unescaped. Go's json.Marshal escapes them, so a command containing any
+// of the three would hash to a value no Codex install computes and every hook
+// would be discarded as modified — silently, with no output at all.
+func TestComputeCodexHookHashDoesNotEscapeShellRedirections(t *testing.T) {
+	t.Parallel()
+	const command = `bash -c 'a 2>/dev/null && b >&2'`
+
+	hash, err := computeCodexHookHash("SessionStart", command)
+	require.NoError(t, err)
+
+	canonical := fmt.Sprintf(
+		`{"event_name":"session_start","hooks":[{"async":false,"command":%s,"timeout":600,"type":"command"}],"matcher":""}`,
+		mustJSONStringUnescaped(t, command),
+	)
+	require.Equal(t, fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(canonical))), hash)
+	require.NotContains(t, canonical, `\u003e`)
+}
+
+// The trust identity is an external contract: Codex only runs a hook whose
+// trusted_hash in config.toml equals the hash it recomputes from hooks.json, and
+// nothing re-approves an install whose hash drifted. These digests were verified
+// against codex-cli 0.147.0 by installing the generated plugin and confirming
+// SessionStart and UserPromptSubmit were invoked without bypassing hook trust.
+// Any change to the hook commands or hashed identity must be re-verified before
+// these expectations are updated.
+func TestComputeCodexHookApprovalsMatchHashesCodexAccepts(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{OrgName: "Acme Inc", ServerURL: "https://app.example.com"}
+	marketplace := conv.ToSlug(cfg.OrgName) + "-speakeasy"
+	plugin := CodexObservabilitySlug(cfg)
+
+	approvals, err := computeCodexHookApprovals(marketplace, plugin, false)
+	require.NoError(t, err)
+
+	want := map[string]string{
+		"session_start":      "sha256:01aa9026f9191e84ba6d993afb74f7d0415e84714b6abe9663e732bfdf341677",
+		"session_end":        "sha256:a9a6220fdd0aebc83248da0b91f500784fb48e19437d97f92c493cd264c96d05",
+		"pre_tool_use":       "sha256:f1d673b42ef2ce2d16a93d2509fe08cbce64942de1ba4fab0eabe94e0bc39cbd",
+		"permission_request": "sha256:ea2d44b06d6c36971d5fb9121aaedc64b1e49a65e854e284f0c6f164f60fa897",
+		"post_tool_use":      "sha256:d0e7d5c001f156a748ad7471930012a6c9d3d726ceffe9d17e893a5fa743ef97",
+		"user_prompt_submit": "sha256:4e18decc3bc5d57114130d3b2bb80b7c8999cc654e92a5590b489762a98878c9",
+		"stop":               "sha256:a2ff79157b9cdf19f1342772f4d25ab0cc58e141d9426681c5708f00feeb3a4b",
+	}
+	got := make(map[string]string, len(approvals))
+	for _, approval := range approvals {
+		event := strings.TrimSuffix(strings.TrimPrefix(approval.StateKey, plugin+"@"+marketplace+":hooks/hooks.json:"), ":0:0")
+		got[event] = approval.TrustedHash
+	}
+	require.Equal(t, want, got)
+}
+
+func mustJSONStringUnescaped(t *testing.T, s string) string {
+	t.Helper()
+	encoded, err := marshalUnescapedJSON(s)
+	require.NoError(t, err)
+	return string(encoded)
 }
 
 // runCodexInstallScript executes the generated install script under an
@@ -1237,6 +1612,90 @@ func TestHooksBootstrapColdAndWarmPathsPreserveInput(t *testing.T) {
 	}
 }
 
+func TestCodexBootstrapPersistsCompletePayloadBeforeRelayExecution(t *testing.T) {
+	t.Parallel()
+	target := currentHooksBootstrapTarget(t)
+	archive := hooksBootstrapArchive(t, []byte("#!/bin/sh\nprintf 'args:%s\\n' \"$*\"\n"))
+	sum := sha256.Sum256(archive)
+	var downloads atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		downloads.Add(1)
+		_, _ = w.Write(archive)
+	}))
+
+	script := renderHooksBootstrapForRelease("test-version", map[string]hooksBinaryTarget{
+		target: {URL: server.URL + "/hooks.zip", SHA256: fmt.Sprintf("%x", sum)},
+	}, false, "releases.test")
+	base := t.TempDir()
+	root := filepath.Join(base, "plugins", "cache", "acme-speakeasy", "acme-observability-codex", "0.29.100")
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "hooks"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "hooks", "bootstrap.sh"), script, 0o755))
+	config := []byte("{\"deployment\":\"test\"}\n")
+	require.NoError(t, os.WriteFile(filepath.Join(root, "speakeasy.json"), config, 0o600))
+	data := filepath.Join(base, "plugins", "data", "acme-observability-codex-acme-speakeasy")
+	cache := filepath.Join(base, "hooks-binary-cache")
+	command := codexHookCommandString(60, false, false)
+
+	stdout, stderr, code := codexHookCommandProbe(t, command, root, data, "GRAM_HOOKS_HOME="+cache)
+	require.Equal(t, 0, code, "stderr: %s", stderr)
+	stable := filepath.Join(data, filepath.FromSlash(codexHooksStablePayloadSubdir))
+	currentGeneration := strings.TrimSpace(string(requireFileBytes(t, filepath.Join(stable, ".unix-current"))))
+	stableGeneration := filepath.Join(stable, "generations", currentGeneration)
+	stableConfig := filepath.Join(stableGeneration, "speakeasy.json")
+	require.Contains(t, stdout, "--config="+stableConfig,
+		"the first relay execution must no longer depend on the disposable config")
+	require.Equal(t, script, requireFileBytes(t, filepath.Join(stableGeneration, "hooks", "bootstrap.sh")))
+	require.Equal(t, config, requireFileBytes(t, stableConfig))
+	configInfo, err := os.Stat(stableConfig)
+	require.NoError(t, err)
+	require.Equal(t, os.FileMode(0o600), configInfo.Mode().Perm())
+
+	refreshedScript := bytes.Replace(script, []byte("set -eu\n"), []byte("set -eu\nprintf 'refreshed-bootstrap\\n' >&2\n"), 1)
+	refreshedConfig := []byte("{\"deployment\":\"refreshed\"}\n")
+	require.NoError(t, os.WriteFile(filepath.Join(root, "hooks", "bootstrap.sh"), refreshedScript, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "speakeasy.json"), refreshedConfig, 0o600))
+	persistLock := filepath.Join(stable, ".persist-unix.lock")
+	require.NoError(t, os.Mkdir(persistLock, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(persistLock, "pid"), fmt.Appendf(nil, "%d\n", os.Getpid()), 0o600))
+	old := time.Now().Add(-10 * time.Minute)
+	require.NoError(t, os.Chtimes(persistLock, old, old))
+	stdout, stderr, code = codexHookCommandProbe(t, command, root, data, "GRAM_HOOKS_HOME="+cache)
+	require.Equal(t, 0, code, "stderr: %s", stderr)
+	require.Contains(t, stderr, "refreshed-bootstrap",
+		"the hook that refreshes the bundle must immediately execute the new bootstrap")
+	currentGeneration = strings.TrimSpace(string(requireFileBytes(t, filepath.Join(stable, ".unix-current"))))
+	stableGeneration = filepath.Join(stable, "generations", currentGeneration)
+	stableConfig = filepath.Join(stableGeneration, "speakeasy.json")
+	require.Contains(t, stdout, "--config="+stableConfig,
+		"the refreshed bootstrap must execute with the config from its immutable generation")
+	require.Equal(t, refreshedScript, requireFileBytes(t, filepath.Join(stableGeneration, "hooks", "bootstrap.sh")))
+	require.Equal(t, refreshedConfig, requireFileBytes(t, stableConfig))
+	require.NoDirExists(t, persistLock, "an expired lock must be reclaimed even if its PID was reused")
+
+	newestScript := bytes.Replace(script, []byte("set -eu\n"), []byte("set -eu\nprintf 'newest-bootstrap\\n' >&2\n"), 1)
+	newestConfig := []byte("{\"deployment\":\"newest\"}\n")
+	require.NoError(t, os.WriteFile(filepath.Join(root, "hooks", "bootstrap.sh"), newestScript, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "speakeasy.json"), newestConfig, 0o600))
+	require.NoError(t, os.Mkdir(persistLock, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(persistLock, "pid"), []byte("99999999\n"), 0o600))
+	stdout, stderr, code = codexHookCommandProbe(t, command, root, data, "GRAM_HOOKS_HOME="+cache)
+	require.Equal(t, 0, code, "stderr: %s", stderr)
+	currentGeneration = strings.TrimSpace(string(requireFileBytes(t, filepath.Join(stable, ".unix-current"))))
+	stableGeneration = filepath.Join(stable, "generations", currentGeneration)
+	stableConfig = filepath.Join(stableGeneration, "speakeasy.json")
+	require.Contains(t, stdout, "--config="+stableConfig)
+	require.Equal(t, newestScript, requireFileBytes(t, filepath.Join(stableGeneration, "hooks", "bootstrap.sh")))
+	require.Equal(t, newestConfig, requireFileBytes(t, stableConfig))
+	require.NoDirExists(t, persistLock, "an old ownerless persistence lock must be reclaimed")
+
+	require.NoError(t, os.RemoveAll(filepath.Dir(filepath.Dir(root))))
+	server.Close()
+	stdout, stderr, code = codexHookCommandProbe(t, command, root, data, "GRAM_HOOKS_HOME="+cache)
+	require.Equal(t, 0, code, "stderr: %s", stderr)
+	require.Contains(t, stdout, "--config="+stableConfig)
+	require.Equal(t, int64(1), downloads.Load(), "stable fallback must reuse the verified binary cache")
+}
+
 func TestHooksBootstrapChecksumMismatchNeverExecutes(t *testing.T) {
 	t.Parallel()
 	target := currentHooksBootstrapTarget(t)
@@ -1284,6 +1743,14 @@ func TestHooksBootstrapBakesInstallFailurePolicy(t *testing.T) {
 	require.Contains(t, string(renderHooksPowerShellBootstrap(GenerateConfig{InstallFailOpen: true})), "$InstallFailureExit = 0")
 	require.Contains(t, string(renderHooksBootstrap(GenerateConfig{})), "install_failure_exit=1")
 	require.Contains(t, string(renderHooksPowerShellBootstrap(GenerateConfig{})), "$InstallFailureExit = 1")
+}
+
+func TestHooksPowerShellBootstrapRecoversStalePersistenceLock(t *testing.T) {
+	t.Parallel()
+	script := string(renderHooksPowerShellBootstrap(GenerateConfig{}))
+	require.Contains(t, script, `function Enter-PersistenceLock`)
+	require.Contains(t, script, `Get-Process -Id $OwnerPID`)
+	require.Contains(t, script, `Move-Item -LiteralPath $LockPath -Destination $Reap`)
 }
 
 func TestCarryHooksSubtreeIsLayoutIndependent(t *testing.T) {
@@ -1502,6 +1969,8 @@ func TestGenerateOpenCodeObservabilityPluginPackage(t *testing.T) {
 	require.Contains(t, string(shim), "--provider=opencode")
 	require.Contains(t, string(shim), "speakeasy.json")
 	require.Contains(t, string(shim), "bootstrap.sh")
+	require.Contains(t, string(shim), `"x-gram-agent-provider": "opencode"`)
+	require.Contains(t, string(shim), `"x-gram-agent-turn-id": messageID`)
 
 	_, ok = files["speakeasy.json"]
 	require.True(t, ok, "opencode package must ship speakeasy.json alongside the shim")
@@ -1521,7 +1990,7 @@ func TestGenerateCodexInstallScriptRefreshesStaleTrustedHashes(t *testing.T) {
 	marketplace := conv.ToSlug(cfg.OrgName) + "-speakeasy"
 	plugin := CodexObservabilitySlug(cfg)
 
-	approvals, err := computeCodexHookApprovals(marketplace, plugin)
+	approvals, err := computeCodexHookApprovals(marketplace, plugin, false)
 	require.NoError(t, err)
 	require.NotEmpty(t, approvals)
 	target := approvals[0]
@@ -1560,6 +2029,92 @@ func TestGenerateCodexInstallScriptProbesForCodexBinary(t *testing.T) {
 	calls := string(requireFileBytes(t, callLog))
 	require.Contains(t, calls, "plugin marketplace add https://example.com/gram-marketplace")
 	require.Contains(t, calls, "plugin marketplace upgrade "+conv.ToSlug(cfg.OrgName)+"-speakeasy")
+}
+
+// The unified ChatGPT desktop app (Chat + Work + Codex modes) that OpenAI
+// merged the standalone Codex app into on 2026-07-09 ships the codex CLI at a
+// different bundle path. Without this probe the script silently degrades to
+// "codex executable not found" manual instructions on every machine that only
+// has the post-merge app — the common case now that the legacy app is frozen.
+// find_codex walks a candidate list in order when no codex is on PATH. Run
+// the script against two seeded candidates and observe which binary it
+// actually invokes, so this covers the lookup and its precedence rather than
+// the generated text.
+func TestGenerateCodexInstallScriptResolvesCodexByProbeOrder(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai"}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	home := t.TempDir()
+	callLog := filepath.Join(home, "codex-calls.log")
+	for marker, dir := range map[string]string{
+		// Candidate 1: the standalone package install.
+		"standalone-wins": filepath.Join(home, ".codex", "packages", "standalone", "current", "bin"),
+		// Candidate 2: ~/.local/bin, which must lose to the earlier match.
+		"local-bin-ran": filepath.Join(home, ".local", "bin"),
+	} {
+		require.NoError(t, os.MkdirAll(dir, 0o755))
+		stub := "#!/bin/sh\nprintf '" + marker + "\\n' >> \"" + callLog + "\"\n"
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "codex"), []byte(stub), 0o755))
+	}
+
+	execCodexInstallScript(t, script, home)
+
+	calls := string(requireFileBytes(t, callLog))
+	require.Contains(t, calls, "standalone-wins", "the first matching candidate must be the one invoked")
+	require.NotContains(t, calls, "local-bin-ran", "a later candidate must not run once an earlier one matches")
+}
+
+// The /Applications candidates cannot be executed here — a test cannot place
+// a bundle under the system Applications directory — so the candidate list is
+// read out of the generated script and asserted whole. That pins both which
+// paths are probed and the order they are tried in, and a failure prints the
+// actual list rather than an index comparison.
+//
+// ChatGPT.app leads the bundle pair because OpenAI merged the standalone
+// Codex app into the unified ChatGPT app, which is where the maintained codex
+// CLI now ships (verified by hand against 0.146, DNO-737); the frozen legacy
+// bundle stays as a fallback for machines that never migrated. Dropping the
+// unified entry silently returns install to "codex executable not found" on
+// any post-merge machine.
+func TestGenerateCodexInstallScriptProbesCandidatesInOrder(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai"}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	require.Equal(t, []string{
+		"${codex_home}/packages/standalone/current/bin/codex",
+		"${HOME}/.local/bin/codex",
+		"/usr/local/bin/codex",
+		"/Applications/ChatGPT.app/Contents/Resources/codex",
+		"/Applications/Codex.app/Contents/Resources/codex",
+	}, codexProbeCandidates(t, script))
+}
+
+// codexProbeCandidates reads find_codex's ordered candidate list out of the
+// generated script.
+func codexProbeCandidates(t *testing.T, script []byte) []string {
+	t.Helper()
+
+	const marker = "for candidate in"
+	start := strings.Index(string(script), marker)
+	require.Positive(t, start, "generated script must declare a candidate list")
+	body := string(script)[start+len(marker):]
+	end := strings.Index(body, "; do")
+	require.Positive(t, end, "candidate list must terminate with '; do'")
+
+	candidates := make([]string, 0, 8)
+	for field := range strings.FieldsSeq(body[:end]) {
+		field = strings.Trim(field, "\\\"")
+		if field != "" {
+			candidates = append(candidates, field)
+		}
+	}
+	return candidates
 }
 
 // Root-level dotted keys (features.hooks = true) implicitly define the
@@ -1616,7 +2171,7 @@ func TestGenerateCodexInstallScriptIsIdempotent(t *testing.T) {
 	marketplace := conv.ToSlug(cfg.OrgName) + "-speakeasy"
 	plugin := CodexObservabilitySlug(cfg)
 
-	approvals, err := computeCodexHookApprovals(marketplace, plugin)
+	approvals, err := computeCodexHookApprovals(marketplace, plugin, false)
 	require.NoError(t, err)
 	require.NotEmpty(t, approvals)
 
@@ -1860,6 +2415,23 @@ func TestMCPFingerprintsIsStableAcrossCalls(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, first, second, "same plugins + config must produce the same fingerprints")
+}
+
+func TestMCPFingerprintsIsolatesPlatformMCP(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{OrgName: "Acme Corp", ServerURL: "https://app.getgram.ai", ProjectSlug: "default"}
+
+	withoutPlatform, err := MCPFingerprints(fingerprintTestPlugins(), cfg)
+	require.NoError(t, err)
+
+	cfg.PlatformMCPEnabled = true
+	withPlatform, err := MCPFingerprints(fingerprintTestPlugins(), cfg)
+	require.NoError(t, err)
+
+	require.Equal(t, withoutPlatform["engineering-tools"], withPlatform["engineering-tools"], "Platform MCP must not churn customer plugin fingerprints")
+	require.NotEqual(t, withoutPlatform[mcpSharedFingerprintKey], withPlatform[mcpSharedFingerprintKey], "shared marketplace files list the Platform package and must change with it")
+	require.Contains(t, withPlatform, mcpPlatformFingerprintKey)
+	require.True(t, strings.HasPrefix(withPlatform[mcpPlatformFingerprintKey], "sha256:"))
 }
 
 func TestMCPFingerprintsIgnoresPerPublishFields(t *testing.T) {

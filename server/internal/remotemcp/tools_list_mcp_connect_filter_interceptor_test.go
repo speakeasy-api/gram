@@ -1,6 +1,7 @@
 package remotemcp_test
 
 import (
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -19,7 +20,9 @@ import (
 // newToolsListResponse constructs a typed view with the given tools and
 // a fresh RemoteMessage backing the SetTools setter. The RemoteMessage
 // carries a *jsonrpc.Response whose Result is set to a marshaled
-// ListToolsResult so SetTools can re-marshal cleanly.
+// ListToolsResult so SetTools can splice its mutation into a real wire
+// payload, matching the production invariant that the typed view only
+// exists when those bytes decoded successfully.
 func newToolsListResponse(t *testing.T, tools []*mcp.Tool) *proxy.ToolsListResponse {
 	t.Helper()
 
@@ -28,9 +31,11 @@ func newToolsListResponse(t *testing.T, tools []*mcp.Tool) *proxy.ToolsListRespo
 		NextCursor: "",
 		Tools:      tools,
 	}
+	payload, err := json.Marshal(result)
+	require.NoError(t, err)
 	rpcResp := &jsonrpc.Response{
 		ID:     jsonrpc.ID{},
-		Result: nil,
+		Result: payload,
 		Error:  nil,
 	}
 	return &proxy.ToolsListResponse{
@@ -91,6 +96,44 @@ func TestToolsListMCPConnectFilterInterceptor_KeepsOnlyGrantedTools(t *testing.T
 
 	require.Len(t, resp.Result.Tools, 1)
 	require.Equal(t, "search_tickets", resp.Result.Tools[0].Name)
+}
+
+func TestToolsListMCPConnectFilterInterceptor_AllGrantedRelaysUnchangedBytes(t *testing.T) {
+	t.Parallel()
+
+	// When every tool is authorized there is nothing to filter, and the
+	// interceptor must not commit: SetTools would re-marshal each kept
+	// tool through mcp.Tool, dropping per-tool members the SDK does not
+	// model. The wire payload must relay byte-for-byte.
+	engine := newAuthzEngineForTest(t)
+	ctx := contextvalues.SetAuthContext(t.Context(), authzAuthContext(t))
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.NewGrantWithSelector(authz.ScopeMCPConnect, authz.Selector{
+			"resource_kind": "mcp",
+			"resource_id":   testServerID,
+			"tool":          "tool_a",
+		}),
+		authz.NewGrantWithSelector(authz.ScopeMCPConnect, authz.Selector{
+			"resource_kind": "mcp",
+			"resource_id":   testServerID,
+			"tool":          "tool_b",
+		}),
+	)
+
+	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(engine, emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
+
+	resp := newToolsListResponse(t, []*mcp.Tool{
+		{Name: "tool_a", InputSchema: map[string]any{}},
+		{Name: "tool_b", InputSchema: map[string]any{}},
+	})
+	rpcResp, ok := resp.RemoteMessage.Message.(*jsonrpc.Response)
+	require.True(t, ok)
+	original := string(rpcResp.Result)
+
+	require.NoError(t, interceptor.InterceptToolsListResponse(ctx, resp))
+
+	require.Len(t, resp.Result.Tools, 2, "no tool may be filtered when all are granted")
+	require.Equal(t, original, string(rpcResp.Result), "a fully authorized catalog must relay byte-for-byte, not be re-marshaled")
 }
 
 func TestToolsListMCPConnectFilterInterceptor_EmptyArrayWhenNoGrantsMatch(t *testing.T) {

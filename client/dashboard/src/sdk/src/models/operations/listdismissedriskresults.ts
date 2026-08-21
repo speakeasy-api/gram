@@ -4,6 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { ClosedEnum } from "../../types/enums.js";
 
 export type ListDismissedRiskResultsSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -20,6 +21,13 @@ export type ListDismissedRiskResultsSecurity = {
   option2?: ListDismissedRiskResultsSecurityOption2 | undefined;
 };
 
+export const Reasons = {
+  Rule: "rule",
+  Manual: "manual",
+  Automated: "automated",
+} as const;
+export type Reasons = ClosedEnum<typeof Reasons>;
+
 export type ListDismissedRiskResultsRequest = {
   /**
    * Cursor to fetch the next page of results.
@@ -29,6 +37,10 @@ export type ListDismissedRiskResultsRequest = {
    * Maximum number of results to return per page.
    */
   limit?: number | undefined;
+  /**
+   * Only return results suppressed for these reasons. Omitted or empty means all reasons.
+   */
+  reasons?: Array<Reasons> | undefined;
   /**
    * API Key header
    */
@@ -151,9 +163,15 @@ export function listDismissedRiskResultsSecurityToJSON(
 }
 
 /** @internal */
+export const Reasons$outboundSchema: z.ZodMiniEnum<typeof Reasons> = z.enum(
+  Reasons,
+);
+
+/** @internal */
 export type ListDismissedRiskResultsRequest$Outbound = {
   cursor?: string | undefined;
   limit?: number | undefined;
+  reasons?: Array<string> | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
@@ -167,6 +185,7 @@ export const ListDismissedRiskResultsRequest$outboundSchema: z.ZodMiniType<
   z.object({
     cursor: z.optional(z.string()),
     limit: z.optional(z.int()),
+    reasons: z.optional(z.array(Reasons$outboundSchema)),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),

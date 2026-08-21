@@ -10,6 +10,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
 
+// A page of findings costs roughly 200 tokens per row and stays in the
+// transcript for the rest of the turn, so the agent gets a much tighter budget
+// than the dashboard's 200. Anything wider than this is a question for
+// platform_get_risk_rule_breakdown, not a bigger page.
+const (
+	agentResultsDefaultLimit = 25
+	agentResultsMaxLimit     = 50
+)
+
 type ListRiskResultsForAgent struct {
 	risk RiskService
 }
@@ -26,7 +35,7 @@ type listRiskResultsForAgentInput struct {
 	From         *string `json:"from,omitempty" jsonschema:"Filter to messages created at or after this ISO 8601 timestamp."`
 	To           *string `json:"to,omitempty" jsonschema:"Filter to messages created strictly before this ISO 8601 timestamp."`
 	Cursor       *string `json:"cursor,omitempty" jsonschema:"Cursor for pagination."`
-	Limit        *int    `json:"limit,omitempty" jsonschema:"Maximum results per page."`
+	Limit        *int    `json:"limit,omitempty" jsonschema:"Maximum results per page. Defaults to 25. Keep this small: a full page of findings is tens of thousands of tokens and stays in context for the rest of the turn. To characterize a large finding set, use platform_get_risk_rule_breakdown instead of paginating."`
 }
 
 func NewListRiskResultsForAgentTool(riskSvc RiskService) *ListRiskResultsForAgent {
@@ -45,7 +54,7 @@ func (s *ListRiskResultsForAgent) Descriptor() core.ToolDescriptor {
 			core.WithPropertyFormat("assistant_id", "uuid"),
 			core.WithPropertyFormat("from", "date-time"),
 			core.WithPropertyFormat("to", "date-time"),
-			core.WithPropertyNumberRange("limit", 1, 200),
+			core.WithPropertyNumberRange("limit", 1, agentResultsMaxLimit),
 		),
 		Variables:   nil,
 		Annotations: core.ReadOnlyAnnotations(),
@@ -78,6 +87,16 @@ func (s *ListRiskResultsForAgent) Call(ctx context.Context, _ toolconfig.ToolCal
 		return err
 	}
 
+	// The service defaults an omitted limit to its own (larger) page size, so
+	// the agent's default is applied here rather than left unset. The schema
+	// range is advisory — DecodeInput is a plain unmarshal — so the bound is
+	// enforced here too.
+	limitValue := agentResultsDefaultLimit
+	if input.Limit != nil {
+		limitValue = min(max(*input.Limit, 1), agentResultsMaxLimit)
+	}
+	limit := &limitValue
+
 	result, err := s.risk.ListRiskResultsForAgent(ctx, &risk.ListRiskResultsForAgentPayload{
 		ApikeyToken:      nil,
 		SessionToken:     nil,
@@ -93,7 +112,7 @@ func (s *ListRiskResultsForAgent) Call(ctx context.Context, _ toolconfig.ToolCal
 		From:             input.From,
 		To:               input.To,
 		Cursor:           input.Cursor,
-		Limit:            input.Limit,
+		Limit:            limit,
 	})
 	if err != nil {
 		return fmt.Errorf("list risk results for agent: %w", err)

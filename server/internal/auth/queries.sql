@@ -1,3 +1,8 @@
+-- name: SetUserAdminFixture :exec
+UPDATE users
+SET admin = @admin
+WHERE id = @user_id;
+
 -- name: ListProjectsByOrganization :many
 SELECT *
 FROM projects

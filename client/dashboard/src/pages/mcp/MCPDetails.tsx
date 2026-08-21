@@ -1,5 +1,6 @@
 import { Block, BlockInner } from "@/components/block";
 import { CodeBlock } from "@/components/code";
+import { ClientsAndSessionsTab } from "@/components/sessions/ClientsAndSessionsTab";
 import { MCPPublishingSection as SharedMCPPublishingSection } from "./MCPPublishingSection";
 import { MCPToolFilteringSection } from "@/components/mcp-tool-filtering-section";
 import {
@@ -7,6 +8,7 @@ import {
   type UseMcpMetadataMetadataFormResult,
 } from "@/components/mcp_install_page/useMcpMetadataForm";
 import { Textarea } from "@/components/moon/textarea";
+import { PageEyebrow } from "@/components/page-eyebrow";
 import { Page } from "@/components/page-layout";
 import { PublicMcpWarningDialog } from "@/components/public-mcp-warning-dialog";
 import { ServerEnableDialog } from "@/components/server-enable-dialog";
@@ -54,7 +56,6 @@ import {
 } from "./toolsetAuthSurface";
 import { useRoutes } from "@/routes";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
-import { useAddOAuthProxyServerMutation } from "@gram/client/react-query/addOAuthProxyServer.js";
 import { useExportMcpMetadataMutation } from "@gram/client/react-query/exportMcpMetadata.js";
 import { useGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
 import { invalidateAllGetPeriodUsage } from "@gram/client/react-query/getPeriodUsage.js";
@@ -123,25 +124,25 @@ function MCPLoading() {
       <Page.Body fullWidth className="gap-0">
         <div className="mx-auto w-full max-w-[1270px] flex-1">
           <Stack gap={6} className="mb-4">
-            <div className="bg-muted/30 h-40 w-full animate-pulse rounded-xl" />
+            <div className="bg-muted/30 h-40 w-full animate-pulse" />
 
             <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
               {Array.from({ length: 4 }).map((_, i) => (
                 <div
                   key={i}
-                  className="bg-muted/30 h-[116px] w-full animate-pulse rounded-lg"
+                  className="bg-muted/30 h-[116px] w-full animate-pulse"
                 />
               ))}
             </div>
 
-            <div className="bg-muted/30 h-64 w-full animate-pulse rounded-lg" />
+            <div className="bg-muted/30 h-64 w-full animate-pulse" />
 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              <div className="bg-muted/30 h-40 w-full animate-pulse rounded-lg" />
-              <div className="bg-muted/30 h-40 w-full animate-pulse rounded-lg" />
+              <div className="bg-muted/30 h-40 w-full animate-pulse" />
+              <div className="bg-muted/30 h-40 w-full animate-pulse" />
             </div>
 
-            <div className="bg-muted/30 h-48 w-full animate-pulse rounded-lg" />
+            <div className="bg-muted/30 h-48 w-full animate-pulse" />
           </Stack>
         </div>
       </Page.Body>
@@ -238,6 +239,15 @@ function renderMcpDetailTabContent(
       return (
         <RequireScope scope="mcp:write" level="page">
           <MCPPerformanceTab toolset={toolset} />
+        </RequireScope>
+      );
+    case "sessions":
+      return (
+        <RequireScope scope="project:read" level="page">
+          <ClientsAndSessionsTab
+            issuerId={toolset.userSessionIssuerId}
+            authTabPath="authentication"
+          />
         </RequireScope>
       );
     case "team-access":
@@ -653,7 +663,7 @@ export function MCPStatusDropdown({
           <button
             type="button"
             disabled={!canWrite}
-            className="text-foreground hover:bg-muted trans border-border flex w-fit items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
+            className="text-foreground hover:bg-muted trans border-border flex w-fit items-center gap-2 border px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
           >
             <span
               className={cn(
@@ -672,7 +682,7 @@ export function MCPStatusDropdown({
               key={option.value}
               onSelect={() => handleSelect(option.value)}
               disabled={option.value === "public" && publicOptionUnavailable}
-              className="group flex cursor-pointer items-start gap-2.5 rounded-md p-2"
+              className="group flex cursor-pointer items-start gap-2.5 p-2"
             >
               {option.value === currentStatus ? (
                 <span
@@ -1053,7 +1063,10 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
           align="center"
           className="mb-4"
         >
-          <Heading variant="h3">Tools</Heading>
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <PageEyebrow />
+            <h1 className="text-display-sm font-thin">Tools</h1>
+          </div>
           <Stack direction="horizontal" gap={2}>
             {canWrite && (
               <routes.customTools.Link>
@@ -1486,6 +1499,10 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
 
   return (
     <Stack gap={0} className="mb-4">
+      <div className="mb-8 flex min-w-0 flex-col gap-1.5">
+        <PageEyebrow />
+        <h1 className="text-display-sm font-thin">Settings</h1>
+      </div>
       <PageSection
         heading="Server Instructions"
         description="Instructions returned to LLMs when they connect to your MCP server. Describe how your tools work together, required workflows, and any constraints."
@@ -1516,8 +1533,8 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
               </Text>
               {!toolset.customDomainId ? (
                 <Input
-                  className="w-full rounded border px-2 py-1"
-                  placeholder="Enter MCP Slug"
+                  className="w-full border px-2 py-1"
+                  placeholder="my-server"
                   value={mcpSlug}
                   onChange={handleMcpSlugChange}
                   maxLength={40}
@@ -1526,8 +1543,8 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
                 />
               ) : (
                 <Input
-                  className="w-full rounded border px-2 py-1"
-                  placeholder="Enter MCP Slug"
+                  className="w-full border px-2 py-1"
+                  placeholder="my-server"
                   value={mcpSlug}
                   onChange={handleMcpSlugChange}
                   maxLength={40}
@@ -1611,7 +1628,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
       </PageSection>
 
       {/* Danger Zone */}
-      <div className="border-destructive/30 mt-8 rounded-lg border p-6">
+      <div className="border-destructive/30 mt-8 border p-6">
         <Text variant="subheading" className="text-destructive mb-1">
           Danger Zone
         </Text>
@@ -1645,7 +1662,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
           </Dialog.Header>
           <div className="space-y-4 py-4">
             <Text variant="body">
-              <code className="bg-muted rounded px-1 py-0.5 font-mono font-bold">
+              <code className="bg-muted px-1 py-0.5 font-mono font-bold">
                 {toolset.name}
               </code>{" "}
               and all its configuration will be permanently deleted. Connected
@@ -1747,12 +1764,10 @@ export function OAuthDetailsModal({
   isOpen,
   onClose,
   toolset,
-  onEditRequest,
 }: {
   isOpen: boolean;
   onClose: () => void;
   toolset: Toolset;
-  onEditRequest: () => void;
 }): React.JSX.Element {
   const { url: mcpUrl } = useMcpUrl(toolset);
   const queryClient = useQueryClient();
@@ -1764,184 +1779,14 @@ export function OAuthDetailsModal({
     },
   });
 
-  const isGramOAuth =
-    toolset.oauthProxyServer?.oauthProxyProviders?.[0]?.providerType === "gram";
-
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <Dialog.Content className="flex max-h-[80vh] max-w-2xl flex-col">
         <Dialog.Header className="shrink-0">
-          <Dialog.Title>
-            {toolset.externalOauthServer
-              ? "External OAuth Configuration"
-              : isGramOAuth
-                ? "Platform OAuth Configuration"
-                : "OAuth Proxy Configuration"}
-          </Dialog.Title>
+          <Dialog.Title>External OAuth Configuration</Dialog.Title>
         </Dialog.Header>
         <div className="flex-1 overflow-y-auto">
           <Stack gap={4}>
-            {toolset.oauthProxyServer && isGramOAuth && (
-              <>
-                <div>
-                  <Text className="font-medium">Platform OAuth is Active</Text>
-                </div>
-                <Stack gap={2} className="">
-                  <Text className="mb-2">
-                    Platform users with access to your organization can use this
-                    MCP server.
-                  </Text>
-                  {toolset.oauthProxyServer.oauthProxyProviders?.[0]
-                    ?.environmentSlug && (
-                    <div>
-                      <Text small className="text-muted-foreground font-medium">
-                        Environment:
-                      </Text>
-                      <CodeBlock className="mt-1">
-                        {
-                          toolset.oauthProxyServer.oauthProxyProviders[0]
-                            .environmentSlug
-                        }
-                      </CodeBlock>
-                    </div>
-                  )}
-                </Stack>
-              </>
-            )}
-            {toolset.oauthProxyServer && !isGramOAuth && (
-              <>
-                <div className="flex items-center justify-between">
-                  <Text className="font-medium">OAuth Proxy Server</Text>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="tertiary"
-                      size="sm"
-                      onClick={() => {
-                        onClose();
-                        onEditRequest();
-                      }}
-                    >
-                      <Button.LeftIcon>
-                        <Pencil aria-hidden="true" className="h-4 w-4" />
-                      </Button.LeftIcon>
-                      <Button.Text>Edit</Button.Text>
-                    </Button>
-                    <Button
-                      variant="tertiary"
-                      size="sm"
-                      className="hover:bg-destructive border-none hover:text-white"
-                      onClick={() =>
-                        removeOAuthMutation.mutate({
-                          request: {
-                            slug: toolset.slug,
-                          },
-                        })
-                      }
-                    >
-                      <Button.LeftIcon>
-                        <Trash2 aria-hidden="true" className="h-4 w-4" />
-                      </Button.LeftIcon>
-                      <Button.Text>Unlink</Button.Text>
-                    </Button>
-                  </div>
-                </div>
-                <Stack gap={2} className="pl-4">
-                  <div>
-                    <Text small className="text-muted-foreground font-medium">
-                      Server Slug:
-                    </Text>
-                    <CodeBlock className="mt-1">
-                      {toolset.oauthProxyServer.slug}
-                    </CodeBlock>
-                  </div>
-                  {toolset.oauthProxyServer.audience && (
-                    <div>
-                      <Text small className="text-muted-foreground font-medium">
-                        Audience:
-                      </Text>
-                      <CodeBlock className="mt-1">
-                        {toolset.oauthProxyServer.audience}
-                      </CodeBlock>
-                    </div>
-                  )}
-                </Stack>
-              </>
-            )}
-            {toolset.oauthProxyServer?.oauthProxyProviders?.map(
-              (provider) =>
-                provider.providerType !== "gram" && (
-                  <Stack key={provider.id} gap={2}>
-                    <Stack gap={2} className="pl-4">
-                      <div>
-                        <Text
-                          small
-                          className="text-muted-foreground font-medium"
-                        >
-                          Authorization Endpoint:
-                        </Text>
-                        <CodeBlock className="mt-1">
-                          {provider.authorizationEndpoint}
-                        </CodeBlock>
-                      </div>
-                      <div>
-                        <Text
-                          small
-                          className="text-muted-foreground font-medium"
-                        >
-                          Token Endpoint:
-                        </Text>
-                        <CodeBlock className="mt-1">
-                          {provider.tokenEndpoint}
-                        </CodeBlock>
-                      </div>
-                      {provider.tokenEndpointAuthMethodsSupported &&
-                        provider.tokenEndpointAuthMethodsSupported.length >
-                          0 && (
-                          <div>
-                            <Text
-                              small
-                              className="text-muted-foreground font-medium"
-                            >
-                              Token Auth Method:
-                            </Text>
-                            <CodeBlock className="mt-1">
-                              {provider.tokenEndpointAuthMethodsSupported.join(
-                                ", ",
-                              )}
-                            </CodeBlock>
-                          </div>
-                        )}
-                      {provider.scopesSupported &&
-                        provider.scopesSupported.length > 0 && (
-                          <div>
-                            <Text
-                              small
-                              className="text-muted-foreground font-medium"
-                            >
-                              Supported Scopes:
-                            </Text>
-                            <CodeBlock className="mt-1">
-                              {provider.scopesSupported.join(", ")}
-                            </CodeBlock>
-                          </div>
-                        )}
-                      {provider.environmentSlug && (
-                        <div>
-                          <Text
-                            small
-                            className="text-muted-foreground font-medium"
-                          >
-                            Environment:
-                          </Text>
-                          <CodeBlock className="mt-1">
-                            {provider.environmentSlug}
-                          </CodeBlock>
-                        </div>
-                      )}
-                    </Stack>
-                  </Stack>
-                ),
-            )}
             {toolset.externalOauthServer && (
               <Stack gap={2}>
                 <div className="flex items-center justify-between">
@@ -2000,110 +1845,9 @@ export function OAuthDetailsModal({
             )}
           </Stack>
         </div>
-        {isGramOAuth && (
-          <Dialog.Footer>
-            <Button variant="tertiary" onClick={onClose}>
-              Close
-            </Button>
-            <Button
-              variant="destructive-primary"
-              onClick={() =>
-                removeOAuthMutation.mutate({
-                  request: { slug: toolset.slug },
-                })
-              }
-            >
-              <Button.LeftIcon>
-                <Trash2 aria-hidden="true" className="h-4 w-4" />
-              </Button.LeftIcon>
-              <Button.Text>Unlink</Button.Text>
-            </Button>
-          </Dialog.Footer>
-        )}
       </Dialog.Content>
     </Dialog>
   );
 }
 
-export function GramOAuthProxyModal({
-  isOpen,
-  onClose,
-  toolset,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  toolset: Toolset;
-}): React.JSX.Element {
-  const telemetry = useTelemetry();
-  const queryClient = useQueryClient();
-
-  const addOAuthProxyMutation = useAddOAuthProxyServerMutation({
-    onSuccess: () => {
-      void invalidateAllToolset(queryClient);
-      toast.success("Platform OAuth configured successfully");
-      telemetry.capture("mcp_event", {
-        action: "gram_oauth_proxy_configured",
-        slug: toolset.slug,
-      });
-      onClose();
-    },
-    onError: (error) => {
-      console.error("Failed to configure Platform OAuth:", error);
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to configure Platform OAuth",
-      );
-    },
-  });
-
-  const handleSubmit = () => {
-    addOAuthProxyMutation.mutate({
-      request: {
-        slug: toolset.slug,
-        addOAuthProxyServerRequestBody: {
-          oauthProxyServer: {
-            providerType: "gram",
-            slug: "gram-oauth-proxy",
-          },
-        },
-      },
-    });
-  };
-
-  return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <Dialog.Content className="max-h-[90vh] max-w-2xl overflow-hidden">
-        <Dialog.Header>
-          <Dialog.Title>Platform OAuth</Dialog.Title>
-        </Dialog.Header>
-
-        <div className="max-h-[60vh] space-y-4 overflow-auto">
-          <div>
-            <Text className="mb-2 font-medium">
-              Platform OAuth Configuration
-            </Text>
-            <Text small className="mb-4">
-              Configure Platform OAuth to let users with access to your
-              organization use this MCP server. Users will authenticate using
-              their platform credentials.
-            </Text>
-          </div>
-        </div>
-
-        <Dialog.Footer className="flex justify-end">
-          <Button
-            onClick={handleSubmit}
-            disabled={addOAuthProxyMutation.isPending}
-          >
-            {addOAuthProxyMutation.isPending
-              ? "Enabling..."
-              : "Enable Platform OAuth"}
-          </Button>
-        </Dialog.Footer>
-      </Dialog.Content>
-    </Dialog>
-  );
-}
-
-export { ConnectOAuthModal, EditOAuthProxyModal } from "./oauth-wizard";
+export { ConnectOAuthModal } from "./oauth-wizard";

@@ -55,7 +55,7 @@ export function SkillSuggestionComment({
 
   return (
     // The card sits inside the diff's <pre>, so the prose font is reset here.
-    <div className="border-border bg-card my-2 overflow-hidden rounded-lg border font-sans shadow-sm">
+    <div className="border-border bg-card my-2 overflow-hidden border font-sans shadow-sm">
       <div className="space-y-3 px-4 py-3">
         <Text small>
           {change.feedbackSessionCount > 0 && (
@@ -141,7 +141,7 @@ function SuggestionSources({
       </button>
       {open && (
         <div className="space-y-2">
-          {query.isPending && <Skeleton className="h-16 w-full rounded-md" />}
+          {query.isPending && <Skeleton className="h-16 w-full" />}
           {query.error && (
             <ErrorAlert
               title="Unable to load agent reports"
@@ -154,7 +154,7 @@ function SuggestionSources({
             </Text>
           )}
           {query.data && query.data.feedback.length > 0 && (
-            <ul className="divide-y rounded-md border">
+            <ul className="divide-y border">
               {query.data.feedback.map((feedback) => (
                 <li key={feedback.id} className="space-y-1 p-3">
                   <div className="flex flex-wrap items-center gap-2">

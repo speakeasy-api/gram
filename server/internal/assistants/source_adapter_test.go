@@ -50,6 +50,36 @@ func TestComposeInstructions_SlackIncludesRespondDecisionGuidance(t *testing.T) 
 	require.NotContains(t, instructions, "## Elements visualizations")
 }
 
+func TestSlackAdapterDecodeTurnRendersAttachments(t *testing.T) {
+	t.Parallel()
+
+	// A file_share message carries attachment metadata in the normalized
+	// payload. The turn must list each file's id/name/type/size and tell the
+	// assistant that contents are only reachable via the Slack platform tools.
+	got, err := slackAdapter{}.DecodeTurn(assistantThreadEventRecord{
+		EventID:               "evt-1",
+		NormalizedPayloadJSON: []byte(`{"event_type":"message","subtype":"file_share","team_id":"T1","channel_id":"C1","thread_id":"","user_id":"U1","text":"see attached","files":[{"id":"F123","name":"report.pdf","title":"Q2 report","mimetype":"application/pdf","size":204800},{"id":"F456","title":"screenshot","mimetype":"image/png","size":512}]}`),
+	})
+	require.NoError(t, err)
+	require.Contains(t, got, "Attachments:")
+	require.Contains(t, got, "- id: F123, name: report.pdf, type: application/pdf, size: 200.0 KB")
+	// A file without a name falls back to its title.
+	require.Contains(t, got, "- id: F456, name: screenshot, type: image/png, size: 512 B")
+	require.Contains(t, got, "Attachment contents are not directly visible")
+	require.Contains(t, got, "Slack platform tools")
+}
+
+func TestSlackAdapterDecodeTurnOmitsEmptyAttachments(t *testing.T) {
+	t.Parallel()
+
+	got, err := slackAdapter{}.DecodeTurn(assistantThreadEventRecord{
+		EventID:               "evt-1",
+		NormalizedPayloadJSON: []byte(`{"event_type":"message","team_id":"T1","channel_id":"C1","thread_id":"","text":"no files here"}`),
+	})
+	require.NoError(t, err)
+	require.NotContains(t, got, "Attachments:")
+}
+
 func TestComposeInstructions_IncludesSkillsBeforeMCPAuthInOrder(t *testing.T) {
 	t.Parallel()
 
@@ -104,6 +134,9 @@ func TestComposeInstructions_DashboardIncludesElementsPrompts(t *testing.T) {
 	require.Contains(t, instructions, "Only render ONE generative UI widget")
 	require.Contains(t, instructions, "BarChart")
 	require.Contains(t, instructions, "```ui code blocks")
+	require.Contains(t, instructions, "## Linking entities")
+	require.Contains(t, instructions, "gram:skill/<ID>")
+	require.Contains(t, instructions, "Skill.ID from the skill tools")
 }
 
 func TestDashboardAdapterDecodeTurnIncludesSelectedSkills(t *testing.T) {
@@ -230,4 +263,31 @@ func TestGitHubAdapterDecodeTurnOmitsEmptyPayload(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotContains(t, got, "<event-payload>")
+}
+
+func TestMSTeamsAdapterDecodeTurnRendersContextAndText(t *testing.T) {
+	t.Parallel()
+
+	got, err := msteamsAdapter{}.DecodeTurn(assistantThreadEventRecord{
+		EventID:               "evt-1",
+		NormalizedPayloadJSON: []byte(`{"event_type":"message","conversation_type":"personal","user_id":"29:user","user_name":"Jo Doe","reply_to_id":"123","text":"hello bot"}`),
+	})
+	require.NoError(t, err)
+	require.Contains(t, got, "<message-context>")
+	require.Contains(t, got, "EventType: message")
+	require.Contains(t, got, "ConversationType: personal")
+	require.Contains(t, got, "UserName: Jo Doe")
+	require.Contains(t, got, "ReplyToID: 123")
+	require.True(t, strings.HasSuffix(got, "hello bot"))
+}
+
+func TestMSTeamsAdapterThreadContextRendersRef(t *testing.T) {
+	t.Parallel()
+
+	got, err := msteamsAdapter{}.ThreadContext([]byte(`{"tenant_id":"tenant-1","conversation_id":"19:chan@thread.tacv2;messageid=1","service_url":"https://smba.trafficmanager.net/teams/","user_id":"29:user"}`))
+	require.NoError(t, err)
+	require.Contains(t, got, "Microsoft Teams")
+	require.Contains(t, got, "TenantID: tenant-1")
+	require.Contains(t, got, "ConversationID: 19:chan@thread.tacv2;messageid=1")
+	require.Contains(t, got, "ServiceURL: https://smba.trafficmanager.net/teams/")
 }

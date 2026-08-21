@@ -8,7 +8,7 @@ import (
 )
 
 var _ = Service("userSessionClients", func() {
-	Description("Operator visibility into DCR'd MCP clients (user_session_clients). Read + revoke; registrations are written by /mcp/{slug}/register.")
+	Description("Operator visibility into MCP clients registered against a user-session issuer (user_session_clients). Read + revoke. Registrations are written by /mcp/{slug}/register (RFC 7591 DCR) or resolved from a Client ID Metadata Document on /mcp/{slug}/authorize (CIMD); client_id_metadata_uri distinguishes the two.")
 	Security(security.Session, security.ProjectSlug)
 	Security(security.ByKey, security.ProjectSlug, func() {
 		Scope("producer")
@@ -79,8 +79,37 @@ var _ = Service("userSessionClients", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UserSessionClient"}`)
 	})
 
+	Method("refreshUserSessionClientCIMD", func() {
+		Description("Force a CIMD client's metadata document to be re-read. Purges the stored cache state (expiry + ETag) before re-fetching, so the read is unconditional: a host answering 304 Not Modified cannot re-confirm the copy the operator is discarding. Rejected for DCR clients. Deliberately bypasses the document cache, so it carries a per-client cooldown: a refresh shortly after the last successful read returns rate_limit_exceeded.")
+
+		Payload(func() {
+			Attribute("id", String, "The user_session_client id.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(UserSessionClient)
+
+		HTTP(func() {
+			POST("/rpc/userSessionClients.refreshCIMD")
+			Param("id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "refreshUserSessionClientCIMD")
+		Meta("openapi:extension:x-speakeasy-name-override", "refreshCIMD")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RefreshUserSessionClientCIMD"}`)
+	})
+
 	Method("revokeUserSessionClient", func() {
-		Description("Soft-delete a user_session_client. Future tokens minted for this client_id are rejected; existing live user_sessions keep working until they hit expires_at.")
+		Description("Soft-delete a user_session_client and cascade to the user_sessions it issued. A DCR client stays revoked. A CIMD client does not: its identity is the metadata document URL, so the next /authorize re-resolves that document and registers a fresh row. Durably blocking a CIMD client is admission control's job, not revocation's.")
 
 		Payload(func() {
 			Attribute("id", String, "The user_session_client id.", func() {
@@ -110,7 +139,7 @@ var _ = Service("userSessionClients", func() {
 var UserSessionClient = Type("UserSessionClient", func() {
 	Meta("struct:pkg:path", "types")
 
-	Description("A user_session_client (DCR'd MCP client). client_secret_hash is never returned.")
+	Description("An MCP client registered against a user-session issuer. client_secret_hash is never returned.")
 
 	Attribute("id", String, "The user_session_client id.", func() {
 		Format(FormatUUID)
@@ -118,8 +147,16 @@ var UserSessionClient = Type("UserSessionClient", func() {
 	Attribute("user_session_issuer_id", String, "The owning user_session_issuer id.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("client_id", String, "DCR-issued client_id.")
-	Attribute("client_name", String, "Display name from the registration request.")
+	Attribute("client_id", String, "The client_id. Minted by Gram for a DCR registration; for a CIMD client it is the metadata document URL and equals client_id_metadata_uri.")
+	Attribute("client_id_metadata_uri", String, "When set, the client was resolved from a Client ID Metadata Document (CIMD) hosted at this URL rather than registered via RFC 7591 DCR. Null for DCR clients. The URL is the client's identity, so its origin -- not client_name, which the client chooses -- is the trustworthy label.")
+	Attribute("client_id_metadata_fetched_at", String, "When the metadata document was last successfully read. A 304 revalidation counts as a read, so this is not necessarily when the body was last fetched. Null for DCR clients.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("client_id_metadata_cache_expires_at", String, "When the cached metadata document lapses and the next /authorize revalidates it against the host. Null for DCR clients, and null after a refresh purge until the re-read lands.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("client_id_metadata_etag", String, "ETag the document host returned on the last full read; sent as If-None-Match when revalidating. Null when the host offers no validator, and null for DCR clients.")
+	Attribute("client_name", String, "Display name the client supplied at registration, or the client_name extracted from its metadata document. Client-controlled and unverified; do not present it as an identity.")
 	Attribute("redirect_uris", ArrayOf(String), "Validated on every /authorize.")
 	Attribute("client_id_issued_at", String, func() {
 		Format(FormatDateTime)
@@ -133,8 +170,9 @@ var UserSessionClient = Type("UserSessionClient", func() {
 	Attribute("updated_at", String, func() {
 		Format(FormatDateTime)
 	})
+	Attribute("active_session_count", Int, "How many live user_sessions this client currently holds. Counted the same way the sessions listing's active filter counts: not revoked, and the refresh token has not expired.")
 
-	Required("id", "user_session_issuer_id", "client_id", "client_name", "redirect_uris", "client_id_issued_at", "created_at", "updated_at")
+	Required("id", "user_session_issuer_id", "client_id", "client_name", "redirect_uris", "client_id_issued_at", "created_at", "updated_at", "active_session_count")
 })
 
 var ListUserSessionClientsResult = Type("ListUserSessionClientsResult", func() {

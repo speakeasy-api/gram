@@ -77,7 +77,8 @@ func AnalyzeChatResolutionsWorkflow(ctx workflow.Context, params AnalyzeChatReso
 		ctx,
 		a.DeleteChatResolutions,
 		activities.DeleteChatResolutionsArgs{
-			ChatID: params.ChatID,
+			ChatID:    params.ChatID,
+			ProjectID: params.ProjectID,
 		},
 	).Get(ctx, nil)
 	if err != nil {
@@ -108,6 +109,15 @@ func AnalyzeChatResolutionsWorkflow(ctx workflow.Context, params AnalyzeChatReso
 					"end_index", segment.EndIndex,
 				)
 				return workflow.NewContinueAsNewError(ctx, AnalyzeChatResolutionsWorkflow, params)
+			}
+			if activities.IsInferenceDisabled(err) {
+				workflow.GetLogger(ctx).Warn("skipping segment analysis: organization inference is disabled",
+					"chat_id", params.ChatID.String(),
+					"org_id", params.OrgID,
+					"start_index", segment.StartIndex,
+					"end_index", segment.EndIndex,
+				)
+				continue
 			}
 			if activities.IsInsufficientCredits(err) {
 				workflow.GetLogger(ctx).Warn("skipping segment analysis: organization has insufficient OpenRouter credits",

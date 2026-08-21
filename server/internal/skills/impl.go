@@ -10,6 +10,8 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -47,6 +49,8 @@ const (
 	maxSkillsRequestBodyBytes = 512 * 1024
 	maxSkillDisplayNameRunes  = 256
 	maxSkillSummaryRunes      = 1024
+	maxSkillTags              = 40
+	maxSkillTagRunes          = 64
 )
 
 type Service struct {
@@ -58,6 +62,7 @@ type Service struct {
 	features *productfeatures.Client
 	audit    *audit.Logger
 	signaler ManualSuggestionSignaler
+	siteURL  *url.URL
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -72,6 +77,7 @@ func NewService(
 	features *productfeatures.Client,
 	auditLogger *audit.Logger,
 	signaler ManualSuggestionSignaler,
+	siteURL *url.URL,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("skills"))
 
@@ -84,6 +90,7 @@ func NewService(
 		features: features,
 		audit:    auditLogger,
 		signaler: signaler,
+		siteURL:  siteURL,
 	}
 }
 
@@ -95,6 +102,11 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		mux,
 		srv.New(endpoints, mux, skillsRequestDecoder, goahttp.ResponseEncoder, nil, nil),
 	)
+	// Public share pages, served outside Goa like the MCP install pages so
+	// they resolve on custom domains (which point at this server, not at the
+	// dashboard host).
+	o11y.AttachHandler(mux, http.MethodGet, "/shared/skills/{token}", oops.ErrHandle(service.logger, service.ServeSharedSkillPage).ServeHTTP)
+	o11y.AttachHandler(mux, http.MethodGet, "/shared/skills/{token}/SKILL.md", oops.ErrHandle(service.logger, service.ServeSharedSkillMarkdown).ServeHTTP)
 }
 
 func skillsRequestDecoder(r *http.Request) goahttp.Decoder {
@@ -194,12 +206,46 @@ func buildSkillAuditSnapshot(skill repo.Skill, latestVersionID uuid.UUID, versio
 		DisplayName:     skill.DisplayName,
 		SourceKind:      skill.SourceKind,
 		Classification:  skill.Classification,
+		Tags:            skillTagsOrEmpty(skill.Tags),
 		LatestVersionID: latestVersionID.String(),
 		VersionCount:    versionCount,
 		CreatedAt:       conv.FromPGTimestamptz(skill.CreatedAt),
 		UpdatedAt:       conv.FromPGTimestamptz(skill.UpdatedAt),
 		ArchivedAt:      archivedAt,
 	}
+}
+
+func skillTagsOrEmpty(tags []string) []string {
+	if tags == nil {
+		return []string{}
+	}
+	return tags
+}
+
+func normalizeSkillTags(tags []string) ([]string, error) {
+	if len(tags) == 0 {
+		return []string{}, nil
+	}
+	normalized := make([]string, 0, len(tags))
+	seen := make(map[string]struct{}, len(tags))
+	for _, raw := range tags {
+		tag := strings.TrimSpace(raw)
+		if tag == "" {
+			return nil, oops.E(oops.CodeBadRequest, nil, "skill tags must not be empty")
+		}
+		if utf8.RuneCountInString(tag) > maxSkillTagRunes {
+			return nil, oops.E(oops.CodeBadRequest, nil, "skill tags must be at most 64 Unicode code points")
+		}
+		if _, ok := seen[tag]; ok {
+			continue
+		}
+		seen[tag] = struct{}{}
+		normalized = append(normalized, tag)
+	}
+	if len(normalized) > maxSkillTags {
+		return nil, oops.E(oops.CodeBadRequest, nil, "skills may have at most 40 tags")
+	}
+	return normalized, nil
 }
 
 func buildSkillDistributionAuditSnapshot(distribution repo.SkillDistribution, resolvedVersionID uuid.UUID) *audit.SkillDistributionSnapshot {
@@ -238,6 +284,39 @@ func resolveDerivedFromVersion(ctx context.Context, queries *repo.Queries, proje
 		return uuid.NullUUID{}, uuid.NullUUID{}, oops.E(oops.CodeUnexpected, err, "resolve derived-from version")
 	}
 	return uuid.NullUUID{UUID: versionID, Valid: true}, uuid.NullUUID{UUID: version.SkillID, Valid: true}, nil
+}
+
+// parseExpectedLatestVersion validates a caller's optimistic concurrency token.
+//
+// Parsing is deliberately separate from comparing. Both write paths recover
+// from a stale token when the write turns out to be a replay, and a combined
+// check would let those recovery paths swallow a malformed token as though it
+// were merely stale — accepting a write whose concurrency claim was never
+// valid in the first place.
+//
+// The token names the version the caller believed was current, not a counter:
+// version IDs are what every skill read already returns, so a caller has one
+// without a second lookup.
+func parseExpectedLatestVersion(expected *string) (uuid.NullUUID, error) {
+	if expected == nil {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, nil
+	}
+	expectedID, err := uuid.Parse(*expected)
+	if err != nil {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, oops.E(oops.CodeBadRequest, err, "invalid expected latest version id")
+	}
+	return uuid.NullUUID{UUID: expectedID, Valid: true}, nil
+}
+
+// expectedLatestVersionStale reports whether the skill has moved on since the
+// caller read it. It runs inside the transaction that performs the write, so a
+// concurrent version is a conflict rather than a silent overwrite.
+func expectedLatestVersionStale(expected uuid.NullUUID, latestVersionID uuid.UUID) bool {
+	return expected.Valid && expected.UUID != latestVersionID
+}
+
+func errSkillVersionConflict() error {
+	return oops.E(oops.CodeConflict, nil, "the skill has a newer version than the expected one; re-read the skill and retry")
 }
 
 type distributionTarget struct {
@@ -568,6 +647,37 @@ func (s *Service) AddVersion(ctx context.Context, payload *gen.AddVersionPayload
 	if skill.Name != parsed.Name && !parentSkillID.Valid {
 		return nil, oops.E(oops.CodeInvalid, nil, "manifest name does not match the skill")
 	}
+	expectedLatest, err := parseExpectedLatestVersion(payload.ExpectedLatestVersionID)
+	if err != nil {
+		return nil, err
+	}
+	if expectedLatest.Valid {
+		state, err := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "load skill state before adding version").LogError(ctx, logger)
+		}
+		if expectedLatestVersionStale(expectedLatest, state.LatestVersionID) {
+			// A retried write that already landed is stale by its own token,
+			// but it is not a lost update: the version it created is current
+			// and carries exactly this content, so it stays the same no-op an
+			// unconditional retry would get.
+			matched, hashErr := queries.GetSkillVersionByHash(ctx, repo.GetSkillVersionByHashParams{
+				ProjectID:       *authCtx.ProjectID,
+				SkillID:         skill.ID,
+				CanonicalSha256: parsed.CanonicalSHA256,
+			})
+			switch {
+			case errors.Is(hashErr, pgx.ErrNoRows):
+				// The content is genuinely new, so the stale token is a real
+				// conflict rather than a replay.
+				return nil, errSkillVersionConflict()
+			case hashErr != nil:
+				return nil, oops.E(oops.CodeUnexpected, hashErr, "resolve skill version by hash for stale token recovery").LogError(ctx, logger)
+			case matched.ID != state.LatestVersionID:
+				return nil, errSkillVersionConflict()
+			}
+		}
+	}
 
 	result, err := s.recordVersion(ctx, dbtx, queries, authCtx, logger, skill, parsed, false, false, derivedFromVersionID)
 	if err != nil {
@@ -704,6 +814,14 @@ func (s *Service) Update(ctx context.Context, payload *gen.UpdatePayload) (*type
 			return nil, oops.E(oops.CodeBadRequest, nil, "skill summary must be at most 1024 Unicode code points")
 		}
 	}
+	tags, err := normalizeSkillTags(payload.Tags)
+	if err != nil {
+		return nil, err
+	}
+	expectedLatest, err := parseExpectedLatestVersion(payload.ExpectedLatestVersionID)
+	if err != nil {
+		return nil, err
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -722,11 +840,25 @@ func (s *Service) Update(ctx context.Context, payload *gen.UpdatePayload) (*type
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load skill state before update").LogError(ctx, logger)
 	}
+	if expectedLatestVersionStale(expectedLatest, state.LatestVersionID) {
+		// Metadata edits never create a version, so this token only goes stale
+		// when someone else records one. A retry of an edit that already landed
+		// is then indistinguishable from a lost update by token alone — except
+		// that the values it asks for are already the values in place, which
+		// makes it the same no-op the equivalent version write gets.
+		if !skillMetadataMatches(skill, name, displayName, summary, tags) {
+			return nil, errSkillVersionConflict()
+		}
+		// Returned before the write so a replay neither advances updated_at nor
+		// records a second update event for an edit that already happened.
+		return mv.BuildSkillView(skill, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false}), nil
+	}
 
 	updated, err := queries.UpdateSkillDetails(ctx, repo.UpdateSkillDetailsParams{
 		Name:        name,
 		DisplayName: displayName,
 		Summary:     conv.PtrToPGText(summary),
+		Tags:        tags,
 		ProjectID:   *authCtx.ProjectID,
 		ID:          skill.ID,
 	})
@@ -757,6 +889,27 @@ func (s *Service) Update(ctx context.Context, payload *gen.UpdatePayload) (*type
 	}
 
 	return mv.BuildSkillView(updated, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false}), nil
+}
+
+// skillMetadataMatches reports whether a skill already carries exactly the
+// metadata a write is asking for, which is what separates a replayed edit from
+// one that would overwrite someone else's.
+func skillMetadataMatches(skill repo.Skill, name, displayName string, summary *string, tags []string) bool {
+	if skill.Name != name || skill.DisplayName != displayName {
+		return false
+	}
+	currentSummary := ""
+	if skill.Summary.Valid {
+		currentSummary = skill.Summary.String
+	}
+	requestedSummary := ""
+	if summary != nil {
+		requestedSummary = *summary
+	}
+	if currentSummary != requestedSummary {
+		return false
+	}
+	return slices.Equal(skillTagsOrEmpty(skill.Tags), skillTagsOrEmpty(tags))
 }
 
 func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.ListSkillsResult, error) {
@@ -795,6 +948,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 		Search:          conv.PtrToPGTextEmpty(payload.Search),
 		SourceKinds:     payload.SourceKinds,
 		Classifications: payload.Classifications,
+		Tags:            payload.Tags,
 		SortOrder:       sortOrder,
 		CursorName:      cursorName,
 		CursorUpdatedAt: cursorUpdatedAt,
@@ -827,6 +981,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 			Search:          conv.PtrToPGTextEmpty(payload.Search),
 			SourceKinds:     payload.SourceKinds,
 			Classifications: payload.Classifications,
+			Tags:            payload.Tags,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "count skills").LogError(ctx, logger)
@@ -838,6 +993,23 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 		TotalCount: totalCount,
 		NextCursor: nextCursor,
 	}, nil
+}
+
+func (s *Service) ListTags(ctx context.Context, _ *gen.ListTagsPayload) (*gen.ListSkillTagsResult, error) {
+	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillRead)
+	if err != nil {
+		return nil, err
+	}
+
+	tags, err := repo.New(s.db).ListDistinctSkillTags(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list skill tags").LogError(ctx, logger)
+	}
+	if tags == nil {
+		tags = []string{}
+	}
+
+	return &gen.ListSkillTagsResult{Tags: tags}, nil
 }
 
 func (s *Service) ListFeedback(ctx context.Context, payload *gen.ListFeedbackPayload) (*gen.ListSkillFeedbackResult, error) {
@@ -973,6 +1145,7 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.GetSki
 	}
 
 	var latestView *types.SkillVersion
+	promptInjectionFindings := make([]*gen.SkillPromptInjectionFinding, 0)
 	if details.LatestVersionID != uuid.Nil {
 		latest, latestErr := queries.GetSkillVersionDetails(ctx, repo.GetSkillVersionDetailsParams{
 			ProjectID: *authCtx.ProjectID, SkillID: skillID, SkillVersionID: details.LatestVersionID,
@@ -985,6 +1158,18 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.GetSki
 		})
 		if latestErr != nil {
 			return nil, oops.E(oops.CodeUnexpected, latestErr, "build latest skill version").LogError(ctx, logger)
+		}
+		findingRows, findingErr := queries.ListSkillVersionPromptInjectionFindings(ctx, repo.ListSkillVersionPromptInjectionFindingsParams{
+			ProjectID: *authCtx.ProjectID, SkillID: skillID, SkillVersionID: details.LatestVersionID,
+		})
+		if findingErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, findingErr, "list skill prompt injection findings").LogError(ctx, logger)
+		}
+		promptInjectionFindings = make([]*gen.SkillPromptInjectionFinding, len(findingRows))
+		for i, row := range findingRows {
+			promptInjectionFindings[i] = &gen.SkillPromptInjectionFinding{
+				RuleID: row.RuleID, Description: row.Description, Confidence: row.Confidence,
+			}
 		}
 	}
 
@@ -1049,9 +1234,10 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.GetSki
 	}
 
 	return &gen.GetSkillResult{
-		Skill:          mv.BuildSkillView(details.Skill, details.LatestVersionID, details.VersionCount, details.HasValidVersion, details.ShareToken),
-		LatestVersion:  latestView,
-		AssistantCount: details.AssistantCount,
+		Skill:                   mv.BuildSkillView(details.Skill, details.LatestVersionID, details.VersionCount, details.HasValidVersion, details.ShareToken),
+		LatestVersion:           latestView,
+		AssistantCount:          details.AssistantCount,
+		PromptInjectionFindings: promptInjectionFindings,
 		Adoption: &gen.SkillAdoption{
 			WindowStart: windowStart.Format(time.RFC3339), WindowEnd: windowEnd.Format(time.RFC3339),
 			DistinctHostnames: adoption.DistinctHostnames, ActivationsInWindow: adoption.ActivationsInWindow,

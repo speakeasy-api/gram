@@ -366,7 +366,7 @@ export function AddServerDialog({
             </Dialog.Description>
           </Dialog.Header>
           <div className="py-4">
-            <div className="border-destructive/30 bg-destructive/5 flex items-start gap-3 rounded-lg border p-3">
+            <div className="border-destructive/30 bg-destructive/5 flex items-start gap-3 border p-3">
               <AlertCircle className="text-destructive mt-0.5 h-5 w-5 shrink-0" />
               <Text small className="text-destructive/80">
                 {detailsError}
@@ -544,12 +544,12 @@ function SelectRemotesPhaseContent({
 
         {/* Server icon and info */}
         <div className="flex items-center gap-3">
-          <div className="bg-primary/10 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg">
+          <div className="bg-primary/10 flex h-10 w-10 shrink-0 items-center justify-center">
             {currentConfig.server.iconUrl ? (
               <img
                 src={currentConfig.server.iconUrl}
                 alt=""
-                className="h-6 w-6 rounded"
+                className="h-6 w-6"
               />
             ) : (
               <ServerIcon className="text-muted-foreground h-5 w-5" />
@@ -613,7 +613,7 @@ function SelectRemotesPhaseContent({
                 : "Select all"}
             </button>
           </div>
-          <div className="bg-muted/50 max-h-64 space-y-2 overflow-y-auto rounded-lg border p-4">
+          <div className="bg-muted/50 max-h-64 space-y-2 overflow-y-auto border p-4">
             {currentConfig.remotes.map((remote) => {
               const isSelected = currentConfig.selectedRemoteUrls.has(
                 remote.url,
@@ -623,7 +623,7 @@ function SelectRemotesPhaseContent({
                 <label
                   key={remote.url}
                   className={cn(
-                    "bg-background flex cursor-pointer items-start gap-3 rounded-md border p-3 transition-colors",
+                    "bg-background flex cursor-pointer items-start gap-3 border p-3 transition-colors",
                     isSelected
                       ? "border-primary/40"
                       : "border-border hover:border-muted-foreground/30",
@@ -846,16 +846,12 @@ function BatchServerConfig({
         return (
           <div
             key={config.server.registrySpecifier}
-            className="flex flex-col gap-2 rounded-lg border p-3"
+            className="flex flex-col gap-2 border p-3"
           >
             <div className="flex items-center gap-3">
-              <div className="bg-primary/10 flex h-6 w-6 shrink-0 items-center justify-center rounded">
+              <div className="bg-primary/10 flex h-6 w-6 shrink-0 items-center justify-center">
                 {config.server.iconUrl ? (
-                  <img
-                    src={config.server.iconUrl}
-                    alt=""
-                    className="h-4 w-4 rounded"
-                  />
+                  <img src={config.server.iconUrl} alt="" className="h-4 w-4" />
                 ) : (
                   <ServerIcon className="text-muted-foreground h-3 w-3" />
                 )}
@@ -886,7 +882,7 @@ function BatchServerConfig({
 
 function NoRemoteWarning() {
   return (
-    <div className="border-destructive/30 bg-destructive/5 flex items-start gap-2 rounded-md border p-2">
+    <div className="border-destructive/30 bg-destructive/5 flex items-start gap-2 border p-2">
       <AlertCircle className="text-destructive mt-0.5 h-4 w-4 shrink-0" />
       <Text small className="text-destructive/80">
         This server does not expose a compatible remote endpoint and cannot be
@@ -908,8 +904,8 @@ function BulkInstallSummary({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-3 rounded-lg border p-4">
-        <div className="bg-primary/10 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg">
+      <div className="flex items-center gap-3 border p-4">
+        <div className="bg-primary/10 flex h-10 w-10 shrink-0 items-center justify-center">
           <ServerIcon className="text-muted-foreground h-5 w-5" />
         </div>
         <div>
@@ -1102,10 +1098,7 @@ function InstallStatusList({ statuses }: { statuses: ServerInstallStatus[] }) {
   return (
     <div className="space-y-1.5 py-2">
       {statuses.map((status) => (
-        <div
-          key={status.key}
-          className="flex items-center gap-3 rounded-lg border p-2"
-        >
+        <div key={status.key} className="flex items-center gap-3 border p-2">
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <Text small className="truncate">
               {status.name}
@@ -1140,7 +1133,7 @@ function CompletePhaseContent({
     <div className="space-y-4 pb-2">
       {/* Success header when all done */}
       {allSucceeded && (
-        <div className="flex items-center gap-3 rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3">
+        <div className="flex items-center gap-3 border border-emerald-500/20 bg-emerald-500/10 p-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/20">
             <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
           </div>
@@ -1196,7 +1189,7 @@ function InstallStatusRow({
   const isCompleted = status.status === "completed" && status.mcpServerParam;
 
   const content = (
-    <div className="flex items-center gap-3 rounded-lg border p-2">
+    <div className="flex items-center gap-3 border p-2">
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <Text small className="truncate">
           {status.name}
@@ -1263,8 +1256,8 @@ function NextSteps({
       <Text className="mb-2 font-medium">Next steps</Text>
       <div className="grid grid-cols-2 gap-2">
         <routes.sources.Link className="no-underline hover:no-underline">
-          <div className="group hover:border-foreground/20 hover:bg-muted/30 flex h-full items-center gap-3 rounded-lg border p-3 transition-all [&_*]:no-underline">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-blue-500/10 dark:bg-blue-500/20">
+          <div className="group hover:border-foreground/20 hover:bg-muted/30 flex h-full items-center gap-3 border p-3 transition-all [&_*]:no-underline">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center bg-blue-500/10 dark:bg-blue-500/20">
               <Plus className="h-4 w-4 text-blue-600 dark:text-blue-400" />
             </div>
             <div className="flex-1">
@@ -1282,8 +1275,8 @@ function NextSteps({
             rel="noopener noreferrer"
             className="no-underline hover:no-underline"
           >
-            <div className="group hover:border-foreground/20 hover:bg-muted/30 flex h-full items-center gap-3 rounded-lg border p-3 transition-all [&_*]:no-underline">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-emerald-500/10 dark:bg-emerald-500/20">
+            <div className="group hover:border-foreground/20 hover:bg-muted/30 flex h-full items-center gap-3 border p-3 transition-all [&_*]:no-underline">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center bg-emerald-500/10 dark:bg-emerald-500/20">
                 <Plug className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
               </div>
               <div className="flex-1">
@@ -1299,8 +1292,8 @@ function NextSteps({
           params={[status.mcpServerParam!]}
           className="no-underline hover:no-underline"
         >
-          <div className="group hover:border-foreground/20 hover:bg-muted/30 flex h-full items-center gap-3 rounded-lg border p-3 transition-all [&_*]:no-underline">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-orange-500/10 dark:bg-orange-500/20">
+          <div className="group hover:border-foreground/20 hover:bg-muted/30 flex h-full items-center gap-3 border p-3 transition-all [&_*]:no-underline">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center bg-orange-500/10 dark:bg-orange-500/20">
               <Settings className="h-4 w-4 text-orange-600 dark:text-orange-400" />
             </div>
             <div className="flex-1">

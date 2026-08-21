@@ -3,9 +3,7 @@ package risk_test
 import (
 	"context"
 	"encoding/base64"
-	"encoding/hex"
 	"errors"
-	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -72,6 +70,10 @@ func finding() *riskv1.Finding {
 		Tags:              []string{"pii", "secret"},
 		Source:            new("input"),
 		Confidence:        new(0.95),
+		Surface:           new("json_path"),
+		Field:             new("tool.args"),
+		Path:              new("command.0"),
+		ToolCallId:        new("call_abc123"),
 	}.Build()
 }
 
@@ -125,15 +127,6 @@ func chFinding() *riskv1.Finding {
 	return f
 }
 
-// wantRedacted mirrors the CH writer's redacted display string: a prefix of the
-// keyed HMAC fingerprint (tenant-qualified for an org-scoped finding), not an
-// unkeyed hash, so a low-entropy match can't be recovered from the stored value.
-func wantRedacted(t *testing.T, tenantID, match string) string {
-	t.Helper()
-	sum := wantTenantedHMAC(t, testPepperKey, tenantID, []byte(match))
-	return fmt.Sprintf("<redacted len=%d sha=%s>", len(match), hex.EncodeToString(sum[:4]))
-}
-
 func TestFindingCHWriter_HandleBatch_MapsAllFields(t *testing.T) {
 	t.Parallel()
 
@@ -179,36 +172,60 @@ func TestFindingCHWriter_HandleBatch_MapsAllFields(t *testing.T) {
 	require.Empty(t, row.ExternalUserID)
 	require.Equal(t, "custom", row.Category)
 
-	// Hashes-only: the raw match is never stored, only its length + redaction.
+	// The raw match is never stored: only its length, the shared partial-mask
+	// display (maskdisplay: 7 runes = first 2 + stars + last 1), and one-way
+	// fingerprints.
 	require.Equal(t, uint32(len("hunter2")), row.MatchLen)
-	require.Equal(t, wantRedacted(t, "org-1", "hunter2"), row.MatchRedacted)
+	require.Equal(t, "hu****2", row.MatchRedacted)
 	require.NotContains(t, row.MatchRedacted, "hunter2")
 	require.Equal(t, wantGlobalFingerprint("hunter2"), row.FingerprintGlobalHS256)
 	require.Equal(t, wantTenantFingerprint(t, "org-1", "hunter2"), row.FingerprintTenantHS256)
 	require.Equal(t, testPepperVersion, row.FingerprintPepperVersion)
+
+	// Reveal metadata passes through verbatim from the message.
+	require.Equal(t, "json_path", row.Surface)
+	require.Equal(t, "tool.args", row.Field)
+	require.Equal(t, "command.0", row.Path)
+	require.Equal(t, "call_abc123", row.ToolCallID)
 }
 
-// The security-critical case: shadow_mcp and account_identity findings pass
-// their match through verbatim on the dashboard, but must be REDACTED in
-// ClickHouse so no server URL or account email (PII) is stored at rest.
-func TestFindingCHWriter_HandleBatch_RedactsEverySourceNoPassthrough(t *testing.T) {
+// match_redacted is the shared maskdisplay partial mask, per source: an
+// account_identity email keeps only the domain (the local part — the PII —
+// is never stored), a judge match displays as nothing, and shadow_mcp passes
+// its non-secret server identifier through verbatim as maskdisplay's
+// documented carve-out. Storing boundary characters of real matches is the
+// signed-off relaxation from the reveal-from-ClickHouse design.
+func TestFindingCHWriter_HandleBatch_MaskDisplayPerSource(t *testing.T) {
 	t.Parallel()
 
-	for _, source := range []string{shadowmcp.SourceShadowMCP, ra.SourceAccountIdentity} {
-		w, ins := newCHWriter(t)
+	accountIdentity := chFinding()
+	accountIdentity.SetSource(ra.SourceAccountIdentity)
+	accountIdentity.SetMatch("user@example.com")
 
-		f := chFinding()
-		f.SetSource(source)
-		f.SetMatch("user@example.com")
+	judge := chFinding()
+	judge.SetSource("prompt_injection")
+	judge.SetMatch("the whole scanned content")
 
-		require.NoError(t, w.HandleBatch(context.Background(), []*riskv1.Finding{f}, nil))
+	shadowMCP := chFinding()
+	shadowMCP.SetSource(shadowmcp.SourceShadowMCP)
+	shadowMCP.SetMatch("mcp.internal.example")
 
-		row := chRows(t, ins)[0]
-		require.Equal(t, wantRedacted(t, "org-1", "user@example.com"), row.MatchRedacted,
-			"source %q must be redacted in ClickHouse, not passed through verbatim", source)
-		require.NotContains(t, row.MatchRedacted, "user@example.com",
-			"source %q leaked plaintext into ClickHouse", source)
+	w, ins := newCHWriter(t)
+	require.NoError(t, w.HandleBatch(context.Background(), []*riskv1.Finding{accountIdentity, judge, shadowMCP}, nil))
+
+	rows := chRows(t, ins)
+	require.Len(t, rows, 3)
+	byID := map[uuid.UUID]chrepo.RiskFindingRow{}
+	for _, r := range rows {
+		byID[r.ID] = r
 	}
+
+	require.Equal(t, "***@example.com", byID[uuid.MustParse(accountIdentity.GetId())].MatchRedacted,
+		"account_identity stores only the email domain")
+	require.Empty(t, byID[uuid.MustParse(judge.GetId())].MatchRedacted,
+		"judge matches are rendered artifacts; nothing worth displaying")
+	require.Equal(t, "mcp.internal.example", byID[uuid.MustParse(shadowMCP.GetId())].MatchRedacted,
+		"shadow_mcp server identifiers are the documented verbatim carve-out")
 }
 
 func TestFindingCHWriter_HandleBatch_NoMatchYieldsNoFingerprintsOrRedaction(t *testing.T) {
@@ -423,11 +440,22 @@ func TestFindingCHWriter_HandleBatch_AnnotatesExcludedFindings(t *testing.T) {
 	kept.SetRiskPolicyId(policyID)
 	kept.SetMatch("different-secret")
 
-	require.NoError(t, w.HandleBatch(ctx, []*riskv1.Finding{excluded, kept}, nil))
+	// Republished manual suppression: matches the exclusion value, but the
+	// message-carried state must win over the ingest-time rule check.
+	manualAt := time.Now().UTC().Truncate(time.Second)
+	manual := chFinding()
+	manual.SetProjectId(authCtx.ProjectID.String())
+	manual.SetRiskPolicyId(policyID)
+	manual.SetMatch("hunter2")
+	manual.SetExcludedAt(manualAt.Format(time.RFC3339))
+	manual.SetExcludedReason(chrepo.ExcludedReasonManual)
+	manual.SetExcludedDetail("dismissed from the dashboard")
 
-	// Both rows are inserted: excluded findings are annotated, not dropped.
+	require.NoError(t, w.HandleBatch(ctx, []*riskv1.Finding{excluded, kept, manual}, nil))
+
+	// All rows are inserted: excluded findings are annotated, not dropped.
 	rows := chRows(t, ins)
-	require.Len(t, rows, 2, "excluded findings are annotated, not dropped")
+	require.Len(t, rows, 3, "excluded findings are annotated, not dropped")
 
 	byID := map[uuid.UUID]chrepo.RiskFindingRow{}
 	for _, r := range rows {
@@ -438,10 +466,43 @@ func TestFindingCHWriter_HandleBatch_AnnotatesExcludedFindings(t *testing.T) {
 	require.NotNil(t, excludedRow.ExclusionID, "excluded finding must carry the exclusion id")
 	require.Equal(t, exclusion.ID, *excludedRow.ExclusionID)
 	require.NotNil(t, excludedRow.ExcludedAt, "excluded finding must carry excluded_at")
+	require.Equal(t, chrepo.ExcludedReasonRule, excludedRow.ExcludedReason, "rule exclusion must stamp excluded_reason=rule")
+	require.Empty(t, excludedRow.ExcludedDetail, "rule exclusion carries no detail")
 
 	keptRow := byID[uuid.MustParse(kept.GetId())]
 	require.Nil(t, keptRow.ExclusionID, "non-excluded finding must not carry an exclusion id")
 	require.Nil(t, keptRow.ExcludedAt, "non-excluded finding must not carry excluded_at")
+	require.Empty(t, keptRow.ExcludedReason, "non-excluded finding must not carry a reason")
+
+	manualRow := byID[uuid.MustParse(manual.GetId())]
+	require.Nil(t, manualRow.ExclusionID, "message-carried suppression carries no exclusion id")
+	require.NotNil(t, manualRow.ExcludedAt, "message-carried excluded_at must be preserved")
+	require.True(t, manualAt.Equal(*manualRow.ExcludedAt), "message-carried excluded_at wins over the ingest-time rule check")
+	require.Equal(t, chrepo.ExcludedReasonManual, manualRow.ExcludedReason)
+	require.Equal(t, "dismissed from the dashboard", manualRow.ExcludedDetail)
+}
+
+// TestFindingCHWriter_HandleBatch_InvalidExcludedAtSkipsFinding mirrors the
+// false_positive_at guard: an excluded_at that fails to parse must skip the
+// message rather than append the row unsuppressed, which would silently
+// resurface a suppressed finding in ClickHouse's dedup.
+func TestFindingCHWriter_HandleBatch_InvalidExcludedAtSkipsFinding(t *testing.T) {
+	t.Parallel()
+
+	w, ins := newCHWriter(t)
+
+	bad := chFinding()
+	bad.SetExcludedAt("not-a-timestamp")
+
+	good := finding()
+	goodID := uuid.Must(uuid.NewV7())
+	good.SetId(goodID.String())
+
+	require.NoError(t, w.HandleBatch(context.Background(), []*riskv1.Finding{bad, good}, nil))
+
+	rows := chRows(t, ins)
+	require.Len(t, rows, 1, "only the finding with a valid (or absent) excluded_at is inserted")
+	require.Equal(t, goodID, rows[0].ID, "the surviving row must be the valid finding, not the skipped one")
 }
 
 // Integration test against a real Postgres: the writer batch-resolves the
@@ -508,14 +569,17 @@ func TestFindingCHWriter_HandleBatch_ResolvesAttribution(t *testing.T) {
 
 	own := chFinding()
 	own.SetChatMessageId(msgOwn.String())
+	own.SetProjectId(authCtx.ProjectID.String())
 
 	fallback := chFinding()
 	fallback.SetChatMessageId(msgFallback.String())
+	fallback.SetProjectId(authCtx.ProjectID.String())
 
 	// Well-formed UUID that matches no chat message: enrichment resolves
 	// nothing, the finding still inserts with empty attribution.
 	unknown := chFinding()
 	unknown.SetChatMessageId(uuid.Must(uuid.NewV7()).String())
+	unknown.SetProjectId(authCtx.ProjectID.String())
 
 	require.NoError(t, w.HandleBatch(ctx, []*riskv1.Finding{own, fallback, unknown}, nil))
 
@@ -549,6 +613,40 @@ func TestFindingCHWriter_HandleBatch_ResolvesAttribution(t *testing.T) {
 	// Unresolved attribution: message_created_at falls back to the finding's
 	// own scan time.
 	require.True(t, unknownRow.CreatedAt.Equal(unknownRow.MessageCreatedAt))
+
+	// A finding claiming a message that belongs to another project must not
+	// inherit its chat or user ids. The batch also carries the message's own
+	// project's finding so the batch-scoped query does return the message row
+	// and only the per-finding project re-check stands between that row and
+	// the foreign finding.
+	legit := chFinding()
+	legit.SetChatMessageId(msgOwn.String())
+	legit.SetProjectId(authCtx.ProjectID.String())
+
+	otherProject := chFinding()
+	otherProject.SetChatMessageId(msgOwn.String())
+	otherProject.SetProjectId(uuid.NewString())
+
+	ins2 := &fakeCHInserter{}
+	w2 := risk.NewFindingCHWriter(testenv.NewLogger(t), ti.conn, testenv.NewMeterProvider(t), ins2, fp)
+	require.NoError(t, w2.HandleBatch(ctx, []*riskv1.Finding{legit, otherProject}, nil))
+
+	crossRows := chRows(t, ins2)
+	require.Len(t, crossRows, 2)
+	byID2 := map[uuid.UUID]chrepo.RiskFindingRow{}
+	for _, r := range crossRows {
+		byID2[r.ID] = r
+	}
+
+	legitRow := byID2[uuid.MustParse(legit.GetId())]
+	require.Equal(t, chatID.String(), legitRow.ChatID)
+	require.Equal(t, "msg-user", legitRow.UserID)
+
+	crossRow := byID2[uuid.MustParse(otherProject.GetId())]
+	require.Equal(t, msgOwn.String(), crossRow.ChatMessageID)
+	require.Empty(t, crossRow.ChatID)
+	require.Empty(t, crossRow.UserID)
+	require.Empty(t, crossRow.ExternalUserID)
 }
 
 func TestFindingCHWriter_HandleBatch_ResolvesContentPartAttribution(t *testing.T) {
@@ -750,6 +848,67 @@ func TestFindingCHWriter_HandleBatch_RejectsPartWhoseChatIsInAnotherProject(t *t
 	})
 	require.NoError(t, err)
 	require.Empty(t, rows)
+}
+
+// A message whose chat lives in another project must not resolve attribution
+// even when the message's own project_id matches the finding's: the chat-level
+// user ids, the assistant link, and the directory lookup's organization all
+// come from that chat, so the attribution query rejects the mismatched anchor
+// outright rather than attributing it.
+func TestFindingCHWriter_HandleBatch_RejectsMessageWhoseChatIsInAnotherProject(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	slug := "other-msg-attr-" + uuid.New().String()[:8]
+	otherProject, err := projectsRepo.New(ti.conn).CreateProject(ctx, projectsRepo.CreateProjectParams{
+		Name:           slug,
+		Slug:           slug,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+
+	queries := riskrepo.New(ti.conn)
+	// The chat lives in the other project while the message claims the
+	// caller's project.
+	foreignChatID, err := queries.CreateChatForTest(t.Context(), riskrepo.CreateChatForTestParams{
+		ProjectID:      otherProject.ID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         conv.ToPGText("foreign-project-user"),
+		ExternalUserID: conv.ToPGText("foreign-project-user@example.com"),
+	})
+	require.NoError(t, err)
+
+	msgID, err := queries.CreateChatMessageForTest(t.Context(), riskrepo.CreateChatMessageForTestParams{
+		ChatID:         foreignChatID,
+		ProjectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		Content:        "hello",
+		UserID:         conv.ToPGTextEmpty(""),
+		ExternalUserID: conv.ToPGTextEmpty(""),
+	})
+	require.NoError(t, err)
+
+	ins := &fakeCHInserter{}
+	fp, err := risk.ParsePepperKeyRing(keyRingJSON(t, testPepperVersion, map[string][]byte{testPepperVersion: testPepperKey}))
+	require.NoError(t, err)
+	w := risk.NewFindingCHWriter(testenv.NewLogger(t), ti.conn, testenv.NewMeterProvider(t), ins, fp)
+
+	f := chFinding()
+	f.SetChatMessageId(msgID.String())
+	f.SetProjectId(authCtx.ProjectID.String())
+
+	require.NoError(t, w.HandleBatch(ctx, []*riskv1.Finding{f}, nil))
+
+	rows := chRows(t, ins)
+	require.Len(t, rows, 1)
+	require.Equal(t, msgID.String(), rows[0].ChatMessageID)
+	require.Empty(t, rows[0].ChatID)
+	require.Empty(t, rows[0].UserID)
+	require.Empty(t, rows[0].ExternalUserID)
+	require.Empty(t, rows[0].AssistantID)
 }
 
 // chMessagesInsertedPoint returns the single data point for the CH

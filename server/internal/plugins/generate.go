@@ -1,11 +1,15 @@
 package plugins
 
 import (
+	"bytes"
 	"crypto/sha256"
+	"embed"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
+	"net/url"
 	"path"
 	"slices"
 	"sort"
@@ -34,6 +38,12 @@ type PluginServerInfo struct {
 	// IsOAuth indicates the toolset uses OAuth (proxy or external). OAuth servers are emitted
 	// as stdio mcp-remote entries instead of HTTP-with-headers entries.
 	IsOAuth bool
+	// IsUnproxied indicates the server is an unproxied MCP server: MCPURL
+	// points directly at the vendor, never through Gram's gateway. No
+	// Authorization header may be attached — the Gram API key would leak to
+	// the vendor's own server, which was never meant to receive it, and
+	// Gram has no way to inject vendor-specific credentials on its behalf.
+	IsUnproxied bool
 	// EnvConfigs are user-facing environment variables for public servers.
 	EnvConfigs []ServerEnvConfig
 }
@@ -55,7 +65,8 @@ type PluginInfo struct {
 	Description string
 	Servers     []PluginServerInfo
 	// Skills are emitted into each platform plugin's skills/ directory.
-	Skills []PluginSkillInfo
+	Skills               []PluginSkillInfo
+	AgentPluginsV1Issues []string
 }
 
 // GenerateConfig holds org-level configuration for package generation.
@@ -80,7 +91,7 @@ type GenerateConfig struct {
 	// it scopes the default marketplace name for non-default projects.
 	ProjectSlug string
 	// IsDefaultProject reports whether this is the org's default project (its
-	// oldest, by id ASC). The default project keeps the bare org-derived
+	// oldest by created_at, then id). The default project keeps the bare org-derived
 	// marketplace name; non-default projects get a project-scoped one. Must be
 	// resolved identically to the device-agent endpoint (see naming.MarketplaceName).
 	IsDefaultProject bool
@@ -90,6 +101,9 @@ type GenerateConfig struct {
 	// manifests as new and refresh installed copies. Empty pins deterministic
 	// defaults for tests, fingerprints, and the CI render diff.
 	Version string
+	// PlatformMCPEnabled adds the first-party organization-level Platform MCP
+	// package to the literal-default project's supported client marketplaces.
+	PlatformMCPEnabled bool
 	// MarketplaceName is the identifier users type into Claude Code or Codex
 	// (e.g. `<plugin>@<marketplace>`) and the `name` field in the generated
 	// marketplace.json. Empty falls back to DefaultMarketplaceName.
@@ -128,19 +142,20 @@ type GenerateConfig struct {
 // fields are fixed sentinels so only generator changes register, never data.
 func PublishedHooksFiles() (map[string][]byte, error) {
 	cfg := GenerateConfig{
-		OrgName:          "Hooks Check",
-		OrgEmail:         "hooks-check@example.com",
-		OrgID:            "org-hooks-check",
-		ServerURL:        "https://app.getgram.ai",
-		APIKey:           fingerprintAPIKeySentinel,
-		HooksAPIKey:      fingerprintHooksKeySentinel,
-		ProjectSlug:      "hooks-check",
-		IsDefaultProject: true,
-		Version:          "",
-		MarketplaceName:  "",
-		HooksOrgName:     "",
-		BrowserLogin:     false,
-		InstallFailOpen:  false,
+		OrgName:            "Hooks Check",
+		OrgEmail:           "hooks-check@example.com",
+		OrgID:              "org-hooks-check",
+		ServerURL:          "https://app.getgram.ai",
+		APIKey:             fingerprintAPIKeySentinel,
+		HooksAPIKey:        fingerprintHooksKeySentinel,
+		ProjectSlug:        "hooks-check",
+		IsDefaultProject:   true,
+		Version:            "",
+		MarketplaceName:    "",
+		HooksOrgName:       "",
+		BrowserLogin:       false,
+		InstallFailOpen:    false,
+		PlatformMCPEnabled: false,
 	}
 	out := make(map[string][]byte)
 	for _, mode := range []struct {
@@ -191,8 +206,9 @@ func DogfoodPluginFiles() (map[string][]byte, error) {
 		HooksOrgName:     "",
 		// The dogfood harness is how the browser flow itself gets exercised
 		// locally, so it stays on here regardless of the publish default.
-		BrowserLogin:    true,
-		InstallFailOpen: false,
+		BrowserLogin:       true,
+		InstallFailOpen:    false,
+		PlatformMCPEnabled: false,
 	}
 	files := make(map[string][]byte)
 	if err := generateClaudeObservabilityPluginInDir(files, "plugin-claude", cfg); err != nil {
@@ -349,7 +365,12 @@ func storedHooksConfigHash(stored []byte) string {
 // MCP plugins on the next run, even when a project's generated MCP output is
 // byte-identical — for generator changes that alter MCP behaviour in ways the
 // placeholder fingerprint pass can't observe.
-const mcpGeneratorVersion = "10"
+const mcpGeneratorVersion = "11"
+
+// platformMCPGeneratorVersion is independent from mcpGeneratorVersion so adding
+// or changing the first-party Platform MCP never triggers a fleet-wide customer
+// plugin republish.
+const platformMCPGeneratorVersion = "2"
 
 // hooksGeneratorVersion is the sole rollout signal for the observability (hooks)
 // plugin. It is stamped into the hooks plugin.json version (see
@@ -362,7 +383,7 @@ const mcpGeneratorVersion = "10"
 // line when it pins a new binary, because new checksums always change the
 // rendered bootstrap script. Any other change to hooks generation needs a
 // manual bump, which the Plugin Generate Check CI workflow enforces.
-const hooksGeneratorVersion = "26"
+const hooksGeneratorVersion = "31"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -379,6 +400,28 @@ const (
 // and never collide with it. When per-plugin publishing lands, shared files will
 // be assembled per plugin and this reserved entry can be reworked away.
 const mcpSharedFingerprintKey = "__shared__"
+
+// mcpPlatformFingerprintKey is deliberately not a valid customer plugin slug.
+const mcpPlatformFingerprintKey = "__platform_mcp__"
+
+const (
+	platformMCPPluginName         = "speakeasy-aicp-platform-mcp"
+	platformMCPServerName         = "platform-mcp"
+	platformMCPPluginRoot         = "platform-mcp"
+	platformMCPDescription        = "Manage MCPs, Risk Policies and explore logs in your favorite agent."
+	platformMCPCursorPluginRoot   = cursorPluginRoot + "/platform-mcp-cursor"
+	platformMCPCodexPluginRoot    = "platform-mcp-codex"
+	platformMCPOpenCodePluginRoot = opencodePluginRoot + "/platform-mcp"
+	platformMCPAgentPluginRoot    = agentPluginRoot + "/" + platformMCPPluginName
+)
+
+// platformMCPSkillsFS is the single source for reviewed skills distributed with
+// every Platform MCP package. Add skills as
+// platform_mcp_skills/<canonical-name>/SKILL.md; loadPlatformMCPSkills validates
+// directory/frontmatter names before any package is generated.
+//
+//go:embed platform_mcp_skills/*/SKILL.md
+var platformMCPSkillsFS embed.FS
 
 // MCPFingerprints returns per-plugin content fingerprints of the MCP (feature)
 // plugins that would be generated for the given plugins — a map of plugin slug ->
@@ -400,13 +443,20 @@ func MCPFingerprints(plugins []PluginInfo, cfg GenerateConfig) (map[string]strin
 	// entries are fingerprinted without rotating the hash on every publish.
 	cfg.HooksAPIKey = fingerprintHooksKeySentinel
 
-	out := make(map[string]string, len(plugins)+1)
+	out := make(map[string]string, len(plugins)+2)
 	for _, p := range plugins {
 		files, err := generateMCPFiles([]PluginInfo{p}, cfg)
 		if err != nil {
 			return nil, fmt.Errorf("generate mcp files for plugin %s fingerprint: %w", p.Slug, err)
 		}
 		out[p.Slug] = hashFiles(mcpGeneratorVersion, files)
+	}
+	if cfg.PlatformMCPEnabled {
+		files, err := generatePlatformMCPFiles(cfg)
+		if err != nil {
+			return nil, fmt.Errorf("generate Platform MCP files for fingerprint: %w", err)
+		}
+		out[mcpPlatformFingerprintKey] = hashFiles(platformMCPGeneratorVersion, files)
 	}
 
 	shared, err := generateSharedFiles(plugins, cfg)
@@ -529,6 +579,11 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 	if err != nil {
 		return nil, err
 	}
+	if cfg.PlatformMCPEnabled {
+		if err := generatePlatformMCPFilesInto(mcp, cfg); err != nil {
+			return nil, fmt.Errorf("generate Platform MCP package: %w", err)
+		}
+	}
 	shared, err := generateSharedFiles(plugins, cfg)
 	if err != nil {
 		return nil, err
@@ -591,6 +646,22 @@ func mcpFilePaths(plugins []PluginInfo, cfg GenerateConfig) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("enumerate mcp file paths: %w", err)
 	}
+	if cfg.PlatformMCPEnabled {
+		if err := generatePlatformMCPFilesInto(files, cfg); err != nil {
+			return nil, fmt.Errorf("enumerate Platform MCP file paths: %w", err)
+		}
+	}
+	return slices.Sorted(maps.Keys(files)), nil
+}
+
+// sharedFilePaths returns the deterministic marketplace manifests and README
+// paths that are regenerated on every publish. An indeterminate Platform MCP
+// admission must verify them before skipping so a partial repo is repaired.
+func sharedFilePaths(plugins []PluginInfo, cfg GenerateConfig) ([]string, error) {
+	files, err := generateSharedFiles(plugins, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("enumerate shared file paths: %w", err)
+	}
 	return slices.Sorted(maps.Keys(files)), nil
 }
 
@@ -611,6 +682,16 @@ func generateMCPFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][]by
 		if err := generateOpenCodePlugin(files, p, cfg); err != nil {
 			return nil, fmt.Errorf("generate opencode plugin %s: %w", p.Slug, err)
 		}
+		agentFiles, err := compileAgentPlugin(p, cfg, agentPluginCredentialsPackage)
+		if err != nil {
+			if errors.Is(err, ErrAgentPluginsV1Incompatible) {
+				continue
+			}
+			return nil, fmt.Errorf("generate Agent Plugins package %s: %w", p.Slug, err)
+		}
+		for filePath, content := range agentFiles {
+			files[path.Join(agentPluginRoot, p.Slug, filePath)] = content
+		}
 	}
 	return files, nil
 }
@@ -622,6 +703,13 @@ func generateMCPFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][]by
 // observability entry is listed first (so it's the first thing team admins see)
 // and only when a hooks key is configured, matching generateHooksFiles.
 func generateSharedFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][]byte, error) {
+	return generateSharedFilesWithPlatformClients(plugins, cfg, true)
+}
+
+// generateSharedFilesWithPlatformClients allows an indeterminate-admission
+// publish to preserve a complete B1 Claude/portable package without advertising
+// B2/B3 marketplace entries whose native package directories are not present.
+func generateSharedFilesWithPlatformClients(plugins []PluginInfo, cfg GenerateConfig, includePlatformNativeClients bool) (map[string][]byte, error) {
 	files := make(map[string][]byte)
 
 	claudePlugins := make([]marketplaceEntry, 0)
@@ -655,6 +743,34 @@ func generateSharedFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][
 				Authentication: "ON_USE",
 			},
 		})
+	}
+
+	if cfg.PlatformMCPEnabled {
+		claudePlugins = append(claudePlugins, marketplaceEntry{
+			Name:        platformMCPPluginName,
+			DisplayName: "Speakeasy AICP Platform MCP",
+			Source:      "./" + platformMCPPluginRoot,
+			Description: platformMCPDescription,
+		})
+		if includePlatformNativeClients {
+			cursorPlugins = append(cursorPlugins, marketplaceEntry{
+				Name:        "platform-mcp-cursor",
+				DisplayName: "",
+				Source:      "platform-mcp-cursor",
+				Description: platformMCPDescription,
+			})
+			codexPlugins = append(codexPlugins, codexMarketplaceEntry{
+				Name: "platform-mcp-codex",
+				Source: codexMarketplaceSource{
+					Source: "local",
+					Path:   "./" + platformMCPCodexPluginRoot,
+				},
+				Policy: codexMarketplacePolicy{
+					Installation:   "AVAILABLE",
+					Authentication: "ON_USE",
+				},
+			})
+		}
 	}
 
 	for _, p := range plugins {
@@ -754,6 +870,11 @@ func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
 		fmt.Fprintf(&b, "> **Required:** install the `%s` plugin alongside any feature plugins to enable Speakeasy observability. Without it, your team will install MCP servers but tool events will not be reported to your Speakeasy dashboard.\n\n", ClaudeObservabilitySlug(cfg))
 	}
 
+	if cfg.PlatformMCPEnabled {
+		b.WriteString("## Speakeasy AICP Platform MCP\n\n")
+		b.WriteString("The `speakeasy-aicp-platform-mcp` plugin connects supported agents to Speakeasy through OAuth and includes a reviewed workflow for adding an MCP Catalogue server to an explicit project. Installing the package grants no organization access until OAuth and live authorization succeed.\n\n")
+	}
+
 	if len(plugins) > 0 {
 		b.WriteString("## Plugins\n\n")
 		b.WriteString("| Plugin | Description | Servers |\n")
@@ -826,6 +947,8 @@ func GenerateSinglePluginPackage(plugin PluginInfo, cfg GenerateConfig, platform
 		if err := generateCodexPluginFlat(files, plugin, cfg); err != nil {
 			return nil, fmt.Errorf("generate codex plugin: %w", err)
 		}
+	case "agent-plugin":
+		return compileAgentPlugin(plugin, cfg, agentPluginCredentialsKeyless)
 	// ponytail: no "opencode" case — the downloadPluginPackage enum is
 	// claude|cursor|codex, so a flat per-plugin opencode package is unreachable.
 	// OpenCode ships via downloadObservabilityPlugin only; add here if per-plugin
@@ -873,6 +996,10 @@ func generateOpenCodePlugin(files map[string][]byte, p PluginInfo, cfg GenerateC
 // APIKey plus all-public-no-env servers means the plugin is install-silent.
 func codexAuthPolicy(p PluginInfo, cfg GenerateConfig) string {
 	for _, s := range p.Servers {
+		if s.IsUnproxied {
+			// No credential of any kind is ever collected for these.
+			continue
+		}
 		if s.IsPublic {
 			if len(s.EnvConfigs) > 0 {
 				return "ON_INSTALL"
@@ -948,18 +1075,22 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 			EnvHTTPHeaders:    nil,
 		}
 
-		if s.IsOAuth {
+		switch {
+		case s.IsUnproxied:
+			// Never attach the Gram API key: MCPURL points straight at the
+			// vendor's own server, which was never meant to receive it.
+		case s.IsOAuth:
 			// OAuth servers handle identity at the HTTP layer — no auth credential needed.
-		} else if s.IsPublic {
+		case s.IsPublic:
 			if len(s.EnvConfigs) > 0 {
 				entry.EnvHTTPHeaders = make(map[string]string, len(s.EnvConfigs))
 				for _, ec := range s.EnvConfigs {
 					entry.EnvHTTPHeaders[ec.DisplayName] = ec.VariableName
 				}
 			}
-		} else if cfg.APIKey != "" {
+		case cfg.APIKey != "":
 			entry.HTTPHeaders = map[string]string{"Authorization": "Bearer " + cfg.APIKey}
-		} else {
+		default:
 			entry.BearerTokenEnvVar = "GRAM_API_KEY"
 		}
 
@@ -1281,8 +1412,8 @@ func generateCodexObservabilityPluginInDir(files map[string][]byte, subdir strin
 		}
 		hooks := []codexHookCommand{{
 			Type:           "command",
-			Command:        codexHookCommandString(timeoutSeconds, async),
-			CommandWindows: codexHookCommandStringWindows(timeoutSeconds, async),
+			Command:        codexHookCommandString(timeoutSeconds, async, cfg.InstallFailOpen),
+			CommandWindows: codexHookCommandStringWindows(timeoutSeconds, async, cfg.InstallFailOpen),
 			Timeout:        hookTimeout,
 		}}
 		hookEvents[event] = []codexMatcherGroup{{
@@ -1442,6 +1573,15 @@ export const SpeakeasyObservability = async (ctx: any) => {
   return {
     "chat.message": forward("chat.message"),
     "chat.params": forward("chat.params"),
+    "chat.headers": async (input: any, output: any) => {
+      const messageID = input?.message?.id
+      if (messageID) output.headers = {
+        ...output.headers,
+        "x-gram-agent-provider": "opencode",
+        "x-gram-agent-session-id": input.sessionID,
+        "x-gram-agent-turn-id": messageID,
+      }
+    },
     "tool.execute.before": forward("tool.execute.before"),
     "tool.execute.after": forward("tool.execute.after"),
     event: async ({ event }: any) => {
@@ -1581,8 +1721,8 @@ func computeCodexHookHash(event, command string) (string, error) {
 		"timeout": timeoutSeconds,
 		"type":    "command",
 	}
-	// json.Marshal on map[string]any sorts keys alphabetically, matching
-	// Codex's canonical JSON implementation in fingerprint.rs.
+	// Go sorts map[string]any keys alphabetically, matching Codex's canonical
+	// JSON implementation in fingerprint.rs.
 	canonical := map[string]any{
 		"event_name": eventSnake,
 		"hooks":      []map[string]any{hook},
@@ -1595,12 +1735,28 @@ func computeCodexHookHash(event, command string) (string, error) {
 	default:
 		canonical["matcher"] = ""
 	}
-	data, err := json.Marshal(canonical)
+	data, err := marshalUnescapedJSON(canonical)
 	if err != nil {
 		return "", fmt.Errorf("marshal canonical JSON: %w", err)
 	}
 	sum := sha256.Sum256(data)
 	return fmt.Sprintf("sha256:%x", sum), nil
+}
+
+// marshalUnescapedJSON serializes v the way serde_json does, leaving <, > and &
+// as themselves. json.Marshal escapes them to \u003c, \u003e and \u0026, which
+// is valid JSON but different bytes — and Codex hashes the bytes of its own
+// serialization, so a command containing any of those characters would hash to
+// something no Codex install ever computes and leave every hook untrusted.
+func marshalUnescapedJSON(v any) ([]byte, error) {
+	var buf bytes.Buffer
+	encoder := json.NewEncoder(&buf)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(v); err != nil {
+		return nil, fmt.Errorf("encode JSON: %w", err)
+	}
+	// Encode terminates each value with a newline; Codex hashes the value alone.
+	return bytes.TrimSuffix(buf.Bytes(), []byte("\n")), nil
 }
 
 // codexHookParams returns the timeout and relay --async flag for a Codex hook
@@ -1621,16 +1777,19 @@ func codexHookParams(event string) (timeoutSeconds int, async bool) {
 
 // computeCodexHookApprovals returns pre-computed [hooks.state] entries for all
 // Codex observability hook events for a given marketplace and plugin name.
-func computeCodexHookApprovals(marketplace, plugin string) ([]codexHookApproval, error) {
+// failOpen must match the org's install-failure policy: it is baked into the
+// hook command, which Codex hashes, so an approval computed under the wrong
+// policy leaves every hook untrusted.
+func computeCodexHookApprovals(marketplace, plugin string, failOpen bool) ([]codexHookApproval, error) {
 	approvals := make([]codexHookApproval, 0, len(CodexObservabilityHookEvents))
 	for _, event := range CodexObservabilityHookEvents {
 		snake := codexEventSnakeCase(event)
 		timeoutSeconds, async := codexHookParams(event)
-		hash, err := computeCodexHookHash(event, codexHookCommandString(timeoutSeconds, async))
+		hash, err := computeCodexHookHash(event, codexHookCommandString(timeoutSeconds, async, failOpen))
 		if err != nil {
 			return nil, fmt.Errorf("compute hash for %s hook: %w", event, err)
 		}
-		windowsHash, err := computeCodexHookHash(event, codexHookCommandStringWindows(timeoutSeconds, async))
+		windowsHash, err := computeCodexHookHash(event, codexHookCommandStringWindows(timeoutSeconds, async, failOpen))
 		if err != nil {
 			return nil, fmt.Errorf("compute windows hash for %s hook: %w", event, err)
 		}
@@ -1648,12 +1807,15 @@ func computeCodexHookApprovals(marketplace, plugin string) ([]codexHookApproval,
 // commandWindows) AND hashed into the precomputed approvals — Codex hashes the
 // command string verbatim, so any drift between the two call sites silently
 // untrusts every hook.
-func codexHookCommandString(timeoutSeconds int, async bool) string {
-	return hooksBootstrapCommand(`${PLUGIN_ROOT}`, "codex", timeoutSeconds, async)
+func codexHookCommandString(timeoutSeconds int, async, failOpen bool) string {
+	return codexHooksBootstrapCommand(timeoutSeconds, async, failOpen)
 }
 
-func codexHookCommandStringWindows(timeoutSeconds int, async bool) string {
-	return hooksPowerShellCommand(`${PLUGIN_ROOT}`, "codex", timeoutSeconds, async)
+// codexHookCommandStringWindows carries the same cache-swap and stable-data
+// resolution policy as the Unix command, encoded as UTF-16LE so paths and
+// PowerShell syntax do not depend on the parent process's quoting rules.
+func codexHookCommandStringWindows(timeoutSeconds int, async, failOpen bool) string {
+	return codexHooksPowerShellCommand(timeoutSeconds, async, failOpen)
 }
 
 // GenerateCodexInstallScript produces a bash install script that:
@@ -1668,7 +1830,7 @@ func GenerateCodexInstallScript(marketplaceURL string, cfg GenerateConfig) ([]by
 	marketplace := resolveMarketplaceName(cfg)
 	plugin := CodexObservabilitySlug(cfg)
 
-	approvals, err := computeCodexHookApprovals(marketplace, plugin)
+	approvals, err := computeCodexHookApprovals(marketplace, plugin, cfg.InstallFailOpen)
 	if err != nil {
 		return nil, fmt.Errorf("compute hook approvals: %w", err)
 	}
@@ -1695,10 +1857,15 @@ func renderCodexInstallScript(marketplaceURL, marketplace, plugin string, approv
   fi
   local codex_home="${CODEX_HOME:-$HOME/.codex}"
   local candidate
+  # ChatGPT.app is the unified desktop app (Chat + Work + Codex modes) OpenAI
+  # merged the standalone Codex app into on 2026-07-09; it embeds the same
+  # codex CLI and still reads ~/.codex/config.toml. It is probed before the
+  # legacy Codex.app bundle, which is frozen post-merge.
   for candidate in \
     "${codex_home}/packages/standalone/current/bin/codex" \
     "${HOME}/.local/bin/codex" \
     /usr/local/bin/codex \
+    "/Applications/ChatGPT.app/Contents/Resources/codex" \
     "/Applications/Codex.app/Contents/Resources/codex"; do
     if [ -f "${candidate}" ] && [ -x "${candidate}" ]; then
       printf '%s\n' "${candidate}"
@@ -1862,6 +2029,299 @@ echo "✓ Speakeasy observability plugin installed. Restart Codex to activate."
 	return []byte(b.String())
 }
 
+func generatePlatformMCPFiles(cfg GenerateConfig) (map[string][]byte, error) {
+	files := make(map[string][]byte)
+	if err := generatePlatformMCPFilesInto(files, cfg); err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
+func generatePlatformMCPFilesInto(files map[string][]byte, cfg GenerateConfig) error {
+	platformURL, err := platformMCPURL(cfg.ServerURL)
+	if err != nil {
+		return err
+	}
+
+	packages := []struct {
+		root     string
+		platform string
+	}{
+		{root: platformMCPPluginRoot, platform: "claude"},
+		{root: platformMCPCursorPluginRoot, platform: "cursor"},
+		{root: platformMCPCodexPluginRoot, platform: "codex"},
+		{root: platformMCPOpenCodePluginRoot, platform: "opencode"},
+		{root: platformMCPAgentPluginRoot, platform: "agent-plugin"},
+	}
+	for _, packageSpec := range packages {
+		packageFiles, err := generatePlatformMCPPackageForClient(cfg, platformURL.String(), packageSpec.platform)
+		if err != nil {
+			return err
+		}
+		for filePath, content := range packageFiles {
+			files[path.Join(packageSpec.root, filePath)] = content
+		}
+	}
+	return nil
+}
+
+func platformMCPURL(serverURL string) (*url.URL, error) {
+	platformURL, err := url.Parse(strings.TrimRight(serverURL, "/") + "/platform-mcp")
+	if err != nil || platformURL.Host == "" || platformURL.User != nil || platformURL.RawQuery != "" || platformURL.Fragment != "" || (platformURL.Scheme != "http" && platformURL.Scheme != "https") {
+		return nil, fmt.Errorf("invalid Platform MCP server URL %q", serverURL)
+	}
+	return platformURL, nil
+}
+
+func platformMCPManifestVersion(cfg GenerateConfig) string {
+	return "0." + platformMCPGeneratorVersion + "." + conv.Default(cfg.Version, "0")
+}
+
+func loadPlatformMCPSkills() (map[string][]byte, error) {
+	entries, err := platformMCPSkillsFS.ReadDir("platform_mcp_skills")
+	if err != nil {
+		return nil, fmt.Errorf("read embedded Platform MCP skills: %w", err)
+	}
+	skills := make(map[string][]byte, len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() || !domainskills.ValidSpecName(entry.Name()) {
+			return nil, fmt.Errorf("invalid Platform MCP skill directory %q", entry.Name())
+		}
+		content, err := platformMCPSkillsFS.ReadFile(path.Join("platform_mcp_skills", entry.Name(), "SKILL.md"))
+		if err != nil {
+			return nil, fmt.Errorf("read Platform MCP skill %q: %w", entry.Name(), err)
+		}
+		if err := domainskills.ValidateSkillManifest(string(content), entry.Name()); err != nil {
+			return nil, fmt.Errorf("validate Platform MCP skill %q: %w", entry.Name(), err)
+		}
+		skills[entry.Name()] = content
+	}
+	if len(skills) == 0 {
+		return nil, errors.New("platform MCP package must contain at least one reviewed skill")
+	}
+	return skills, nil
+}
+
+func emitPlatformMCPSkills(files map[string][]byte) error {
+	skills, err := loadPlatformMCPSkills()
+	if err != nil {
+		return err
+	}
+	for name, content := range skills {
+		files[path.Join("skills", name, "SKILL.md")] = bytes.Clone(content)
+	}
+	return nil
+}
+
+func generatePlatformMCPPackage(cfg GenerateConfig, platformURL string) (map[string][]byte, error) {
+	files := make(map[string][]byte)
+	meta, err := marshalJSON(claudePluginMeta{
+		Name:        platformMCPPluginName,
+		DisplayName: "Speakeasy AICP Platform MCP",
+		Description: platformMCPDescription,
+		Version:     platformMCPManifestVersion(cfg),
+		Author:      pluginAuthor{Name: "Speakeasy", URL: "https://www.speakeasy.com/"},
+		Homepage:    "https://www.speakeasy.com/product/gram",
+		UserConfig:  nil,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal Platform MCP plugin.json: %w", err)
+	}
+	files[".claude-plugin/plugin.json"] = meta
+
+	mcpConfig, err := marshalJSON(claudeMCPConfig{MCPServers: map[string]claudeMCPServer{
+		platformMCPServerName: {
+			Type:    "http",
+			Command: "",
+			Args:    nil,
+			URL:     platformURL,
+			Headers: nil,
+		},
+	}})
+	if err != nil {
+		return nil, fmt.Errorf("marshal Platform MCP .mcp.json: %w", err)
+	}
+	files[".mcp.json"] = mcpConfig
+	if err := emitPlatformMCPSkills(files); err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
+func platformMCPPluginInfo(platformURL string) PluginInfo {
+	return PluginInfo{
+		Name:        "Speakeasy AICP Platform MCP",
+		Slug:        platformMCPPluginName,
+		Description: platformMCPDescription,
+		Servers: []PluginServerInfo{{
+			DisplayName: platformMCPServerName,
+			Policy:      "optional",
+			MCPURL:      platformURL,
+			IsPublic:    true,
+			IsOAuth:     true,
+			IsUnproxied: false,
+			EnvConfigs:  nil,
+		}},
+		// Platform skills are emitted through emitPlatformMCPSkills after the
+		// native adapter runs. Keeping them out of this ordinary plugin model avoids
+		// coupling the first-party package to the hooks-backed skill-feedback sidecar.
+		Skills:               nil,
+		AgentPluginsV1Issues: nil,
+	}
+}
+
+func generatePlatformMCPCursorPackage(cfg GenerateConfig, platformURL string) (map[string][]byte, error) {
+	plugin := platformMCPPluginInfo(platformURL)
+	files := make(map[string][]byte)
+	if err := generateCursorPluginInDir(files, "", "platform-mcp-cursor", plugin, cfg); err != nil {
+		return nil, fmt.Errorf("generate Platform MCP Cursor package: %w", err)
+	}
+	var manifest cursorPluginMeta
+	if err := json.Unmarshal(files[".cursor-plugin/plugin.json"], &manifest); err != nil {
+		return nil, fmt.Errorf("decode Platform MCP Cursor manifest: %w", err)
+	}
+	manifest.Version = platformMCPManifestVersion(cfg)
+	manifest.Author = cursorAuthor{Name: "Speakeasy", Email: ""}
+	manifest.Homepage = "https://www.speakeasy.com/product/gram"
+	manifestJSON, err := marshalJSON(manifest)
+	if err != nil {
+		return nil, fmt.Errorf("marshal Platform MCP Cursor manifest: %w", err)
+	}
+	files[".cursor-plugin/plugin.json"] = manifestJSON
+	if err := emitPlatformMCPSkills(files); err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
+func generatePlatformMCPCodexPackage(cfg GenerateConfig, platformURL string) (map[string][]byte, error) {
+	plugin := platformMCPPluginInfo(platformURL)
+	files := make(map[string][]byte)
+	if err := generateCodexPluginInDir(files, "", "platform-mcp-codex", plugin, cfg); err != nil {
+		return nil, fmt.Errorf("generate Platform MCP Codex package: %w", err)
+	}
+	var manifest codexPluginMeta
+	if err := json.Unmarshal(files[".codex-plugin/plugin.json"], &manifest); err != nil {
+		return nil, fmt.Errorf("decode Platform MCP Codex manifest: %w", err)
+	}
+	manifest.Version = platformMCPManifestVersion(cfg)
+	manifestJSON, err := marshalJSON(manifest)
+	if err != nil {
+		return nil, fmt.Errorf("marshal Platform MCP Codex manifest: %w", err)
+	}
+	files[".codex-plugin/plugin.json"] = manifestJSON
+	if err := emitPlatformMCPSkills(files); err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
+func generatePlatformMCPOpenCodePackage(cfg GenerateConfig, platformURL string) (map[string][]byte, error) {
+	plugin := platformMCPPluginInfo(platformURL)
+	files := make(map[string][]byte)
+	if err := generateOpenCodePluginInDir(files, "", plugin, cfg); err != nil {
+		return nil, fmt.Errorf("generate Platform MCP OpenCode package: %w", err)
+	}
+	skills, err := loadPlatformMCPSkills()
+	if err != nil {
+		return nil, err
+	}
+	for name, content := range skills {
+		files[path.Join(platformMCPPluginName, "skills", name, "SKILL.md")] = bytes.Clone(content)
+	}
+	return files, nil
+}
+
+func generatePlatformMCPAgentPackage(cfg GenerateConfig, platformURL string) (map[string][]byte, error) {
+	manifest := agentPluginManifest{
+		Schema:      agentPluginSchemaID,
+		Name:        platformMCPPluginName,
+		Version:     platformMCPManifestVersion(cfg),
+		Description: platformMCPDescription,
+		Author:      agentPluginAuthor{Name: "Speakeasy", URL: "https://www.speakeasy.com/"},
+		Homepage:    "https://www.speakeasy.com/product/gram",
+	}
+	mcpConfig := agentMCPConfig{
+		Schema: agentMCPSchemaID,
+		MCPServers: map[string]agentMCPServer{
+			platformMCPServerName: {
+				Type:    "streamable-http",
+				Command: "",
+				Args:    nil,
+				Env:     nil,
+				CWD:     "",
+				URL:     platformURL,
+				Headers: nil,
+			},
+		},
+	}
+	if err := validateAgentPluginDocument(agentPluginSchemaID, manifest); err != nil {
+		return nil, fmt.Errorf("validate Platform Agent Plugin manifest: %w", err)
+	}
+	if err := validateAgentPluginDocument(agentMCPSchemaID, mcpConfig); err != nil {
+		return nil, fmt.Errorf("validate Platform Agent Plugin MCP config: %w", err)
+	}
+	manifestJSON, err := marshalJSON(manifest)
+	if err != nil {
+		return nil, fmt.Errorf("marshal Platform Agent Plugin manifest: %w", err)
+	}
+	mcpJSON, err := marshalJSON(mcpConfig)
+	if err != nil {
+		return nil, fmt.Errorf("marshal Platform Agent Plugin MCP config: %w", err)
+	}
+	files := map[string][]byte{
+		"plugin.json": manifestJSON,
+		"mcp.json":    mcpJSON,
+	}
+	if err := emitPlatformMCPSkills(files); err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
+func generatePlatformMCPPackageForClient(cfg GenerateConfig, platformURL, platform string) (map[string][]byte, error) {
+	switch platform {
+	case "claude":
+		return generatePlatformMCPPackage(cfg, platformURL)
+	case "cursor":
+		return generatePlatformMCPCursorPackage(cfg, platformURL)
+	case "codex":
+		return generatePlatformMCPCodexPackage(cfg, platformURL)
+	case "opencode":
+		return generatePlatformMCPOpenCodePackage(cfg, platformURL)
+	case "agent-plugin":
+		return generatePlatformMCPAgentPackage(cfg, platformURL)
+	default:
+		return nil, fmt.Errorf("unsupported Platform MCP platform: %s", platform)
+	}
+}
+
+// GeneratePlatformMCPPluginPackage produces a credential-free direct-install
+// package from the same server-owned definition used by marketplace publishing.
+func GeneratePlatformMCPPluginPackage(serverURL, version, platform string) (map[string][]byte, error) {
+	cfg := GenerateConfig{
+		OrgName:            "",
+		OrgEmail:           "",
+		OrgID:              "",
+		ServerURL:          serverURL,
+		APIKey:             "",
+		HooksAPIKey:        "",
+		ProjectSlug:        "",
+		IsDefaultProject:   false,
+		Version:            version,
+		PlatformMCPEnabled: false,
+		MarketplaceName:    "",
+		BrowserLogin:       false,
+		HooksOrgName:       "",
+		InstallFailOpen:    false,
+	}
+	platformURL, err := platformMCPURL(serverURL)
+	if err != nil {
+		return nil, err
+	}
+	return generatePlatformMCPPackageForClient(cfg, platformURL.String(), platform)
+}
+
 func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginInfo, cfg GenerateConfig) error {
 	// Collect userConfig entries across all servers that need user-provided values.
 	userConfig := make(map[string]userConfigEntry)
@@ -1869,7 +2329,7 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 	// Determine if any private server needs a Gram API key prompt.
 	needsGramKeyPrompt := false
 	for _, s := range p.Servers {
-		if !s.IsPublic && !s.IsOAuth && cfg.APIKey == "" {
+		if !s.IsUnproxied && !s.IsPublic && !s.IsOAuth && cfg.APIKey == "" {
 			needsGramKeyPrompt = true
 		}
 		// Public non-OAuth servers may need user-provided env vars.
@@ -1911,7 +2371,10 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 	for _, s := range p.Servers {
 		var headers map[string]string
 
-		if s.IsOAuth {
+		if s.IsUnproxied {
+			// Never attach the Gram API key: MCPURL points straight at the
+			// vendor's own server, which was never meant to receive it.
+		} else if s.IsOAuth {
 			// OAuth servers handle identity at the HTTP layer — no Authorization header needed.
 		} else if s.IsPublic {
 			headers = make(map[string]string)
@@ -2050,7 +2513,10 @@ func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p P
 	for _, s := range p.Servers {
 		var headers map[string]string
 
-		if s.IsOAuth {
+		if s.IsUnproxied {
+			// Never attach the Gram API key: MCPURL points straight at the
+			// vendor's own server, which was never meant to receive it.
+		} else if s.IsOAuth {
 			// OAuth servers handle identity at the HTTP layer — no Authorization header needed.
 		} else if s.IsPublic {
 			headers = make(map[string]string)
@@ -2111,7 +2577,10 @@ func generateOpenCodePluginInDir(files map[string][]byte, subdir string, p Plugi
 	for _, s := range p.Servers {
 		var headers map[string]string
 
-		if s.IsOAuth {
+		if s.IsUnproxied {
+			// Never attach the Gram API key: MCPURL points straight at the
+			// vendor's own server, which was never meant to receive it.
+		} else if s.IsOAuth {
 			// OpenCode auto-detects OAuth on remote servers and runs the
 			// authorization flow itself — no headers needed.
 		} else if s.IsPublic {
@@ -2345,13 +2814,11 @@ type codexMatcherGroup struct {
 
 // commandWindows is supported by Codex hook_config.rs at
 // 5bed6447998c754d154dbd796517310b8f04d4ce. On Windows it replaces command
-// before execution. Codex substitutes plugin variables only in the ${KEY}
-// textual form (discovery.rs), so commandWindows must use ${PLUGIN_ROOT},
-// never PowerShell-only $env: expansion. Trust hashing happens after that
-// replacement (discovery.rs normalizes command_windows into command before
-// hashing), so Windows machines verify against a hash of the commandWindows
-// string — precomputed approvals carry both hashes and the install script
-// selects by platform.
+// before execution. The command runs after Codex exports PLUGIN_ROOT and
+// PLUGIN_DATA, so it may read them through PowerShell's $env: syntax. Trust
+// hashing normalizes command_windows into command before hashing, so Windows
+// machines verify against a hash of this exact string; precomputed approvals
+// carry both hashes and the install script selects by platform.
 type codexHookCommand struct {
 	Type           string `json:"type"`
 	Command        string `json:"command"`

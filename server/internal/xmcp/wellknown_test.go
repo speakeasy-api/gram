@@ -28,10 +28,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 )
 
 // runWellKnown invokes the supplied xmcp well-known handler with the chi
@@ -133,87 +133,6 @@ func TestHandleWellKnownOAuthServerMetadata_ToolsetBackendWithoutOAuth(t *testin
 	require.Empty(t, w.Body.String())
 }
 
-func TestHandleWellKnownOAuthServerMetadata_ToolsetBackendWithProxy(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	proxy := oauthtest.CreateProxyToolset(t, ctx, ti.conn, authCtx, oauthtest.ProxyToolsetOpts{
-		Slug:         "xmcp-srv-proxy",
-		IsPublic:     true,
-		ProviderType: "",
-	})
-	slug, _ := seedToolsetMCPEndpoint(t, ctx, ti, *authCtx.ProjectID, proxy.Toolset, "public")
-
-	w, err := runWellKnown(t, ctx, ti.service.HandleWellKnownOAuthServerMetadata, "/.well-known/oauth-authorization-server/x/mcp/"+slug, slug)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, w.Code)
-	require.Contains(t, w.Header().Get("Content-Type"), "application/json")
-
-	var metadata map[string]any
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
-
-	expectedIssuer := "http://0.0.0.0/oauth/" + slug
-	require.Equal(t, expectedIssuer, metadata["issuer"])
-	require.Equal(t, expectedIssuer+"/authorize", metadata["authorization_endpoint"])
-	require.Equal(t, expectedIssuer+"/token", metadata["token_endpoint"])
-	require.Equal(t, expectedIssuer+"/register", metadata["registration_endpoint"])
-
-	// The Gram-issued offline_access scope is always advertised so RFC 8414
-	// scopes_supported never disappears.
-	scopes, ok := metadata["scopes_supported"].([]any)
-	require.True(t, ok)
-	require.Contains(t, scopes, "offline_access")
-
-	grants, ok := metadata["grant_types_supported"].([]any)
-	require.True(t, ok)
-	require.Contains(t, grants, "authorization_code")
-	require.Contains(t, grants, "refresh_token")
-}
-
-func TestHandleWellKnownOAuthServerMetadata_ToolsetBackendOnCustomDomain(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	domain := seedCustomDomain(t, ctx, ti, authCtx.ActiveOrganizationID, "xmcp-srv-cd-"+uuid.NewString()[:8]+".example.com")
-	proxy := oauthtest.CreateProxyToolset(t, ctx, ti.conn, authCtx, oauthtest.ProxyToolsetOpts{
-		Slug:         "xmcp-srv-cd",
-		IsPublic:     true,
-		ProviderType: "",
-	})
-	slug, _ := seedToolsetMCPEndpointOnDomain(t, ctx, ti, *authCtx.ProjectID, proxy.Toolset, "public", uuid.NullUUID{UUID: domain.ID, Valid: true})
-
-	domainCtx := customdomains.WithContext(ctx, &customdomains.Context{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		Domain:         domain.Domain,
-		DomainID:       domain.ID,
-	})
-
-	w, err := runWellKnown(t, domainCtx, ti.service.HandleWellKnownOAuthServerMetadata, "/.well-known/oauth-authorization-server/x/mcp/"+slug, slug)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, w.Code)
-
-	var metadata map[string]any
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
-
-	// Custom-domain requests must produce metadata URLs rooted at the
-	// custom domain (https), not the platform serverURL — clients will
-	// reject discovery responses whose host doesn't match the resource
-	// they were directed to.
-	expectedIssuer := "https://" + domain.Domain + "/oauth/" + slug
-	require.Equal(t, expectedIssuer, metadata["issuer"])
-	require.Equal(t, expectedIssuer+"/authorize", metadata["authorization_endpoint"])
-	require.Equal(t, expectedIssuer+"/token", metadata["token_endpoint"])
-	require.Equal(t, expectedIssuer+"/register", metadata["registration_endpoint"])
-}
-
 func TestHandleWellKnownOAuthServerMetadata_ToolsetBackendWithExternalOAuth(t *testing.T) {
 	t.Parallel()
 
@@ -277,6 +196,11 @@ func TestHandleWellKnownOAuthServerMetadata_IssuerGatedRemoteBackend(t *testing.
 	require.Equal(t, expectedIssuer+"/token", metadata["token_endpoint"])
 	require.Equal(t, expectedIssuer+"/register", metadata["registration_endpoint"])
 	require.Equal(t, expectedIssuer+"/revoke", metadata["revocation_endpoint"])
+
+	// RFC 9207 §3. Asserted per surface because the route base is baked into
+	// the issuer that `iss` has to match, so a regression can land on one
+	// surface while the other stays correct.
+	require.Equal(t, true, metadata["authorization_response_iss_parameter_supported"])
 }
 
 // TestHandleWellKnownOAuthServerMetadata_IssuerGatedToolsetBackend mirrors
@@ -395,39 +319,6 @@ func TestHandleWellKnownOAuthProtectedResourceMetadata_ToolsetBackendWithoutOAut
 	require.Empty(t, w.Body.String())
 }
 
-func TestHandleWellKnownOAuthProtectedResourceMetadata_ToolsetBackendWithProxy(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	proxy := oauthtest.CreateProxyToolset(t, ctx, ti.conn, authCtx, oauthtest.ProxyToolsetOpts{
-		Slug:         "xmcp-pr-proxy",
-		IsPublic:     true,
-		ProviderType: "",
-	})
-	slug, _ := seedToolsetMCPEndpoint(t, ctx, ti, *authCtx.ProjectID, proxy.Toolset, "public")
-
-	w, err := runWellKnown(t, ctx, ti.service.HandleWellKnownOAuthProtectedResourceMetadata, "/.well-known/oauth-protected-resource/x/mcp/"+slug, slug)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, w.Code)
-	require.Contains(t, w.Header().Get("Content-Type"), "application/json")
-
-	var metadata map[string]any
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
-
-	expectedResource := "http://0.0.0.0/x/mcp/" + slug
-	require.Equal(t, expectedResource, metadata["resource"])
-
-	// authorization_servers points at the same resource so .well-known
-	// discovery loops back to /.well-known/oauth-authorization-server/x/mcp/{slug}.
-	authServers, ok := metadata["authorization_servers"].([]any)
-	require.True(t, ok)
-	require.Equal(t, []any{expectedResource}, authServers)
-}
-
 func TestHandleWellKnownOAuthProtectedResourceMetadata_ToolsetBackendOnCustomDomain(t *testing.T) {
 	t.Parallel()
 
@@ -437,12 +328,12 @@ func TestHandleWellKnownOAuthProtectedResourceMetadata_ToolsetBackendOnCustomDom
 	require.NotNil(t, authCtx.ProjectID)
 
 	domain := seedCustomDomain(t, ctx, ti, authCtx.ActiveOrganizationID, "xmcp-pr-cd-"+uuid.NewString()[:8]+".example.com")
-	proxy := oauthtest.CreateProxyToolset(t, ctx, ti.conn, authCtx, oauthtest.ProxyToolsetOpts{
-		Slug:         "xmcp-pr-cd",
-		IsPublic:     true,
-		ProviderType: "",
+	external := oauthtest.CreateExternalOAuthToolset(t, ctx, ti.conn, authCtx, oauthtest.ExternalOAuthToolsetOpts{
+		Slug:     "xmcp-pr-cd",
+		IsPublic: true,
+		Metadata: nil,
 	})
-	slug, _ := seedToolsetMCPEndpointOnDomain(t, ctx, ti, *authCtx.ProjectID, proxy.Toolset, "public", uuid.NullUUID{UUID: domain.ID, Valid: true})
+	slug, _ := seedToolsetMCPEndpointOnDomain(t, ctx, ti, *authCtx.ProjectID, external.Toolset, "public", uuid.NullUUID{UUID: domain.ID, Valid: true})
 
 	domainCtx := customdomains.WithContext(ctx, &customdomains.Context{
 		OrganizationID: authCtx.ActiveOrganizationID,
@@ -581,11 +472,11 @@ func TestHandleWellKnownOAuthProtectedResourceMetadata_IssuerGatedRemoteBackend_
 	require.Equal(t, []any{expectedResource}, authServers)
 }
 
-// TestHandleWellKnownOAuthServerMetadata_IssuerGated_CIMDFlagOn verifies the
-// /x/mcp well-known variant advertises client_id_metadata_document_supported
-// when the issuer organization's gram-user-session-cimd flag is on — the
-// shared mcp.ServeGetAuthorizationServer emits it for both route families.
-func TestHandleWellKnownOAuthServerMetadata_IssuerGated_CIMDFlagOn(t *testing.T) {
+// TestHandleWellKnownOAuthServerMetadata_IssuerGated_CIMDAdvertised verifies
+// the /x/mcp well-known variant advertises
+// client_id_metadata_document_supported — the shared
+// mcp.ServeGetAuthorizationServer emits it for both route families.
+func TestHandleWellKnownOAuthServerMetadata_IssuerGated_CIMDAdvertised(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -593,7 +484,6 @@ func TestHandleWellKnownOAuthServerMetadata_IssuerGated_CIMDFlagOn(t *testing.T)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	ti.features.SetFlag(feature.FlagUserSessionCIMD, authCtx.ActiveOrganizationID, true)
 	slug, _, _ := seedIssuerGatedRemoteMCPEndpoint(t, ctx, ti, *authCtx.ProjectID, "https://upstream.invalid/mcp", "public")
 
 	w, err := runWellKnown(t, ctx, ti.service.HandleWellKnownOAuthServerMetadata, "/.well-known/oauth-authorization-server/x/mcp/"+slug, slug)
@@ -605,9 +495,10 @@ func TestHandleWellKnownOAuthServerMetadata_IssuerGated_CIMDFlagOn(t *testing.T)
 	require.Equal(t, true, metadata["client_id_metadata_document_supported"])
 }
 
-// TestHandleWellKnownOAuthServerMetadata_IssuerGated_CIMDFlagOff pins the
-// omit-when-disabled behavior on the /x/mcp variant.
-func TestHandleWellKnownOAuthServerMetadata_IssuerGated_CIMDFlagOff(t *testing.T) {
+// TestHandleWellKnownOAuthServerMetadata_IssuerGated_CIMDDisabledOmitted pins
+// the omit-when-disabled behavior on the /x/mcp variant: an issuer whose
+// admission mode is `disabled` must not advertise CIMD support.
+func TestHandleWellKnownOAuthServerMetadata_IssuerGated_CIMDDisabledOmitted(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -615,7 +506,14 @@ func TestHandleWellKnownOAuthServerMetadata_IssuerGated_CIMDFlagOff(t *testing.T
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	slug, _, _ := seedIssuerGatedRemoteMCPEndpoint(t, ctx, ti, *authCtx.ProjectID, "https://upstream.invalid/mcp", "public")
+	slug, _, issuerID := seedIssuerGatedRemoteMCPEndpoint(t, ctx, ti, *authCtx.ProjectID, "https://upstream.invalid/mcp", "public")
+
+	err := testrepo.New(ti.conn).SetUserSessionIssuerCIMDAdmissionMode(ctx, testrepo.SetUserSessionIssuerCIMDAdmissionModeParams{
+		ClientIDMetadataAdmissionMode: conv.ToPGText(string(admission.ModeDisabled)),
+		ID:                            issuerID,
+		ProjectID:                     *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
 
 	w, err := runWellKnown(t, ctx, ti.service.HandleWellKnownOAuthServerMetadata, "/.well-known/oauth-authorization-server/x/mcp/"+slug, slug)
 	require.NoError(t, err)

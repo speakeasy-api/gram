@@ -13,6 +13,18 @@ export type AuthLoginRequest = {
    * Optional URL to redirect to after successful authentication
    */
   redirect?: string | undefined;
+  /**
+   * Optional organization name. When set, the organization is created for a new user during the auth callback.
+   */
+  orgName?: string | undefined;
+  /**
+   * Optional email address. Pre-fills the email field on the identity provider's sign-up screen. Never stored.
+   */
+  email?: string | undefined;
+  /**
+   * Opaque, one-time organization support handoff. Never included in OAuth state.
+   */
+  supportHandoff?: string | undefined;
 };
 
 export type AuthLoginResponse = {
@@ -22,15 +34,29 @@ export type AuthLoginResponse = {
 /** @internal */
 export type AuthLoginRequest$Outbound = {
   redirect?: string | undefined;
+  org_name?: string | undefined;
+  email?: string | undefined;
+  support_handoff?: string | undefined;
 };
 
 /** @internal */
 export const AuthLoginRequest$outboundSchema: z.ZodMiniType<
   AuthLoginRequest$Outbound,
   AuthLoginRequest
-> = z.object({
-  redirect: z.optional(z.string()),
-});
+> = z.pipe(
+  z.object({
+    redirect: z.optional(z.string()),
+    orgName: z.optional(z.string()),
+    email: z.optional(z.string()),
+    supportHandoff: z.optional(z.string()),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      orgName: "org_name",
+      supportHandoff: "support_handoff",
+    });
+  }),
+);
 
 export function authLoginRequestToJSON(
   authLoginRequest: AuthLoginRequest,

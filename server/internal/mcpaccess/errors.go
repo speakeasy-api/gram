@@ -42,6 +42,39 @@ func AuthorizationChallengesURL(siteURL *url.URL, organizationSlug string) strin
 	return siteURL.JoinPath(organizationSlug, "access", "challenges").String()
 }
 
+// RequestAccessURLParams holds optional parameters for building a request access URL.
+type RequestAccessURLParams struct {
+	// Scope is the RBAC scope being requested (e.g. "mcp:connect").
+	Scope string
+	// ResourceID is an optional identifier for the specific resource.
+	ResourceID string
+	// ResourceName is a human-readable name for the resource.
+	ResourceName string
+}
+
+// RequestAccessURL returns a URL that allows end users to request access to a
+// scope by sending an email notification to organization administrators.
+func RequestAccessURL(siteURL *url.URL, organizationSlug string, params RequestAccessURLParams) string {
+	if siteURL == nil || strings.TrimSpace(organizationSlug) == "" {
+		return ""
+	}
+
+	u := siteURL.JoinPath(organizationSlug, "request-access")
+	q := u.Query()
+	if params.Scope != "" {
+		q.Set("scope", params.Scope)
+	}
+	if params.ResourceID != "" {
+		q.Set("resource_id", params.ResourceID)
+	}
+	if params.ResourceName != "" {
+		q.Set("resource_name", params.ResourceName)
+	}
+	u.RawQuery = q.Encode()
+
+	return u.String()
+}
+
 func permissionDenied(err error, message string) error {
 	var shareableErr *oops.ShareableError
 	if !errors.As(err, &shareableErr) || shareableErr.Code != oops.CodeForbidden {

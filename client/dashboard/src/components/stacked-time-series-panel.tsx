@@ -19,14 +19,15 @@ import {
 } from "react";
 import { Bar } from "react-chartjs-2";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { ToggleButton } from "@/components/ui/ToggleButton";
+import { ToggleButton } from "@/components/ui/SegmentedControl";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
-import { cn } from "@/lib/utils";
+import { AXIS, TOOLTIP, withAlpha } from "@/components/chart/palette";
 import {
-  CHART_COLORS,
-  OTHER_COLOR,
-  type TimeSeriesStack,
-} from "./stacked-time-series";
+  useOtherSeriesColor,
+  useSeriesColors,
+} from "@/components/chart/useSeriesColors";
+import { cn } from "@/lib/utils";
+import { type TimeSeriesStack } from "./stacked-time-series";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ChartTooltip, Legend);
 
@@ -122,20 +123,22 @@ function rolledUpStacks(
 }
 
 // The bar color for a stack: an explicitly-flagged top-N roll-up stays
-// neutral, everything else walks the palette — a real group that merely
-// DISPLAYS as "Other" keeps its own color, so callers must mark their rollup
-// series (see TimeSeriesStack.rollup).
+// neutral (the theme-resolved rollup color), everything else walks the
+// palette — a real group that merely DISPLAYS as "Other" keeps its own color,
+// so callers must mark their rollup series (see TimeSeriesStack.rollup).
 function stackColor(
   stack: { label: string; rollup?: boolean },
   index: number,
+  colors: string[],
+  otherColor: string,
 ): string {
-  if (stack.rollup) return OTHER_COLOR;
-  return CHART_COLORS[index % CHART_COLORS.length]!;
+  if (stack.rollup) return otherColor;
+  return colors[index % colors.length]!;
 }
 
-// A 6-digit hex color with ~13% alpha, for de-emphasizing non-hovered series.
-function dimmed(hex: string): string {
-  return `${hex}22`;
+// A palette color at ~13% alpha, for de-emphasizing non-hovered series.
+function dimmed(color: string): string {
+  return withAlpha(color, 0.13);
 }
 
 export function StackedTimeSeriesPanel({
@@ -196,6 +199,11 @@ export function StackedTimeSeriesPanel({
   const dragTeardownRef = useRef<(() => void) | null>(null);
   useEffect(() => () => dragTeardownRef.current?.(), []);
 
+  // Theme-resolved series ramp and rollup neutral; stable per-theme values,
+  // so the memo below only rebuilds when the theme actually flips.
+  const seriesColors = useSeriesColors();
+  const otherColor = useOtherSeriesColor();
+
   // The expensive pass — granularity roll-up, axis derivation, cumulative
   // sums, base colors — keyed on the data inputs only. Hover/toggle state
   // stays out so sweeping the legend doesn't rebuild the bucketing.
@@ -214,7 +222,11 @@ export function StackedTimeSeriesPanel({
           values[j] = values[j]! + values[j - 1]!;
         }
       }
-      return { label: s.label, data: values, base: stackColor(s, i) };
+      return {
+        label: s.label,
+        data: values,
+        base: stackColor(s, i, seriesColors, otherColor),
+      };
     });
 
     return {
@@ -223,7 +235,7 @@ export function StackedTimeSeriesPanel({
       // Bucket start times parallel to the axis, for bar-click drill-down.
       buckets,
     };
-  }, [bucketsMs, stacks, granularity, cumulative]);
+  }, [bucketsMs, stacks, granularity, cumulative, seriesColors, otherColor]);
 
   // The resolved hover spotlight, computed outside the chart memo so legend
   // TOGGLES (hiddenLabels churn) don't rebuild the data object while nothing
@@ -354,8 +366,8 @@ export function StackedTimeSeriesPanel({
   const isDark = theme === "dark";
 
   const chartOptions = useMemo<ChartOptions<"bar">>(() => {
-    const textColor = isDark ? "rgba(255, 255, 255, 0.85)" : "#666";
-    const gridColor = isDark ? "#666" : "rgba(0, 0, 0, 0.08)";
+    const textColor = isDark ? AXIS.faded : AXIS.label;
+    const gridColor = isDark ? AXIS.gridDark : AXIS.grid;
     return {
       responsive: true,
       maintainAspectRatio: false,
@@ -379,6 +391,7 @@ export function StackedTimeSeriesPanel({
         // legend below the chart replaces it (see the buttons in the JSX).
         legend: { display: false },
         tooltip: {
+          ...TOOLTIP,
           callbacks: {
             label: (item) =>
               `${item.dataset.label}: ${formatValue(Number(item.raw))}`,
@@ -405,7 +418,7 @@ export function StackedTimeSeriesPanel({
   }, [isDark, drillToBuckets, onSelectRange, formatValue, formatAxisValue]);
 
   return (
-    <div className="border-border rounded-lg border p-4">
+    <div className="border-border border p-4">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <div className="flex items-center gap-1.5 text-sm font-semibold">
           {title}
@@ -473,17 +486,14 @@ export function StackedTimeSeriesPanel({
                     onMouseEnter={() => setFocusLabel(d.label)}
                     onMouseLeave={() => setFocusLabel(null)}
                     className={cn(
-                      "hover:bg-muted hover:text-foreground flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-0.5 text-xs transition-colors",
+                      "hover:bg-muted hover:text-foreground flex cursor-pointer items-center gap-1.5 px-2 py-0.5 text-xs transition-colors",
                       hidden
                         ? "text-muted-foreground/60 line-through"
                         : "text-muted-foreground",
                     )}
                   >
                     <span
-                      className={cn(
-                        "size-2.5 rounded-[3px]",
-                        hidden && "opacity-40",
-                      )}
+                      className={cn("size-2.5", hidden && "opacity-40")}
                       style={{
                         backgroundColor: d.base,
                       }}

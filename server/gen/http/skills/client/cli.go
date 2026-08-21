@@ -64,11 +64,14 @@ func BuildAddVersionPayload(skillsAddVersionBody string, skillsAddVersionSession
 	{
 		err = json.Unmarshal([]byte(skillsAddVersionBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"content\": \"abc123\",\n      \"derived_from_version_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"content\": \"abc123\",\n      \"derived_from_version_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"expected_latest_version_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.DerivedFromVersionID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.derived_from_version_id", *body.DerivedFromVersionID, goa.FormatUUID))
+		}
+		if body.ExpectedLatestVersionID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.expected_latest_version_id", *body.ExpectedLatestVersionID, goa.FormatUUID))
 		}
 		if err != nil {
 			return nil, err
@@ -93,9 +96,10 @@ func BuildAddVersionPayload(skillsAddVersionBody string, skillsAddVersionSession
 		}
 	}
 	v := &skills.AddVersionPayload{
-		ID:                   body.ID,
-		Content:              body.Content,
-		DerivedFromVersionID: body.DerivedFromVersionID,
+		ID:                      body.ID,
+		Content:                 body.Content,
+		DerivedFromVersionID:    body.DerivedFromVersionID,
+		ExpectedLatestVersionID: body.ExpectedLatestVersionID,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -157,7 +161,10 @@ func BuildUpdatePayload(skillsUpdateBody string, skillsUpdateSessionToken string
 	{
 		err = json.Unmarshal([]byte(skillsUpdateBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"display_name\": \"aaa\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aaa\",\n      \"summary\": \"aaa\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"display_name\": \"aaa\",\n      \"expected_latest_version_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aaa\",\n      \"summary\": \"aaa\",\n      \"tags\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ]\n   }'")
+		}
+		if body.Tags == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("tags", "body"))
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if utf8.RuneCountInString(body.Name) > 64 {
@@ -170,6 +177,17 @@ func BuildUpdatePayload(skillsUpdateBody string, skillsUpdateSessionToken string
 			if utf8.RuneCountInString(*body.Summary) > 1024 {
 				err = goa.MergeErrors(err, goa.InvalidLengthError("body.summary", *body.Summary, utf8.RuneCountInString(*body.Summary), 1024, false))
 			}
+		}
+		if len(body.Tags) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.tags", body.Tags, len(body.Tags), 40, false))
+		}
+		for _, e := range body.Tags {
+			if utf8.RuneCountInString(e) > 64 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.tags[*]", e, utf8.RuneCountInString(e), 64, false))
+			}
+		}
+		if body.ExpectedLatestVersionID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.expected_latest_version_id", *body.ExpectedLatestVersionID, goa.FormatUUID))
 		}
 		if err != nil {
 			return nil, err
@@ -194,10 +212,19 @@ func BuildUpdatePayload(skillsUpdateBody string, skillsUpdateSessionToken string
 		}
 	}
 	v := &skills.UpdatePayload{
-		ID:          body.ID,
-		Name:        body.Name,
-		DisplayName: body.DisplayName,
-		Summary:     body.Summary,
+		ID:                      body.ID,
+		Name:                    body.Name,
+		DisplayName:             body.DisplayName,
+		Summary:                 body.Summary,
+		ExpectedLatestVersionID: body.ExpectedLatestVersionID,
+	}
+	if body.Tags != nil {
+		v.Tags = make([]string, len(body.Tags))
+		for i, val := range body.Tags {
+			v.Tags[i] = val
+		}
+	} else {
+		v.Tags = []string{}
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -208,7 +235,7 @@ func BuildUpdatePayload(skillsUpdateBody string, skillsUpdateSessionToken string
 
 // BuildListPayload builds the payload for the skills list endpoint from CLI
 // flags.
-func BuildListPayload(skillsListCursor string, skillsListLimit string, skillsListSearch string, skillsListSourceKinds string, skillsListClassifications string, skillsListSort string, skillsListSessionToken string, skillsListApikeyToken string, skillsListProjectSlugInput string) (*skills.ListPayload, error) {
+func BuildListPayload(skillsListCursor string, skillsListLimit string, skillsListSearch string, skillsListSourceKinds string, skillsListClassifications string, skillsListTags string, skillsListSort string, skillsListSessionToken string, skillsListApikeyToken string, skillsListProjectSlugInput string) (*skills.ListPayload, error) {
 	var err error
 	var cursor *string
 	{
@@ -282,6 +309,23 @@ func BuildListPayload(skillsListCursor string, skillsListLimit string, skillsLis
 			}
 		}
 	}
+	var tags []string
+	{
+		if skillsListTags != "" {
+			err = json.Unmarshal([]byte(skillsListTags), &tags)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for tags, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"aaa\",\n      \"aaa\",\n      \"aaa\"\n   ]'")
+			}
+			for _, e := range tags {
+				if utf8.RuneCountInString(e) > 64 {
+					err = goa.MergeErrors(err, goa.InvalidLengthError("tags[*]", e, utf8.RuneCountInString(e), 64, false))
+				}
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	var sort string
 	{
 		if skillsListSort != "" {
@@ -318,7 +362,37 @@ func BuildListPayload(skillsListCursor string, skillsListLimit string, skillsLis
 	v.Search = search
 	v.SourceKinds = sourceKinds
 	v.Classifications = classifications
+	v.Tags = tags
 	v.Sort = sort
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListTagsPayload builds the payload for the skills listTags endpoint
+// from CLI flags.
+func BuildListTagsPayload(skillsListTagsSessionToken string, skillsListTagsApikeyToken string, skillsListTagsProjectSlugInput string) (*skills.ListTagsPayload, error) {
+	var sessionToken *string
+	{
+		if skillsListTagsSessionToken != "" {
+			sessionToken = &skillsListTagsSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if skillsListTagsApikeyToken != "" {
+			apikeyToken = &skillsListTagsApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if skillsListTagsProjectSlugInput != "" {
+			projectSlugInput = &skillsListTagsProjectSlugInput
+		}
+	}
+	v := &skills.ListTagsPayload{}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

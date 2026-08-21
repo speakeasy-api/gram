@@ -134,14 +134,14 @@ const DecisionRow = memo(function DecisionRow({
 }) {
   return (
     <div
-      className="rounded-md border border-[var(--edge-soft)] px-3 py-[9px] transition-opacity duration-500"
+      className="border border-[var(--edge-soft)] px-3 py-[9px] transition-opacity duration-500"
       style={{ opacity }}
     >
       <div className="flex items-center justify-between gap-2.5">
         <span className="text-[14px]">{step.label}</span>
         <span
           className={cn(
-            "auth-mono rounded-full px-2.5 py-[3px] text-[10px] transition-opacity duration-400",
+            "auth-mono px-2.5 py-[3px] text-[10px] transition-opacity duration-400",
             step.chipClassName,
           )}
           style={{ opacity: reveal }}
@@ -165,7 +165,7 @@ function AgentSessionCard({ elapsed }: { elapsed: number }) {
   const progress = Math.min(100, (elapsed / (LOOP_SECONDS - 0.5)) * 100);
 
   return (
-    <div className="w-[540px] overflow-hidden rounded-lg border border-[var(--edge)] bg-[var(--card)]">
+    <div className="w-[540px] overflow-hidden border border-[var(--edge)] bg-[var(--card)]">
       <div className="flex h-11 items-center justify-between border-b border-[var(--edge-soft)] px-5">
         <span className="auth-mono flex items-center gap-2.5 text-[12px]">
           <i className="auth-live-dot h-[7px] w-[7px] rounded-full bg-[var(--moss)]" />
@@ -175,7 +175,7 @@ function AgentSessionCard({ elapsed }: { elapsed: number }) {
       </div>
 
       <div
-        className="mx-5 mt-3 rounded-md border border-[var(--edge-soft)] bg-[var(--surface)] px-3.5 py-[9px] transition-opacity duration-500"
+        className="mx-5 mt-3 border border-[var(--edge-soft)] bg-[var(--surface)] px-3.5 py-[9px] transition-opacity duration-500"
         style={{ opacity: elapsed >= CONNECT_AT_SECONDS ? 1 : 0.35 }}
       >
         <div className="flex items-center gap-2.5">

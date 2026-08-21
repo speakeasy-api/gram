@@ -42,11 +42,11 @@ import { Result } from "../types/fp.js";
  * getPlugins agent
  *
  * @remarks
- * Resolve the marketplaces and plugins assigned to the enrolled user. The device agent reconciles these into whichever AI developer tools it manages (Claude Code today), so each tool's own plugin manager fetches and installs the bundles. The response is tool-agnostic: it names what to install, and each tool's syncer decides how to render it into that tool's native configuration.
+ * Resolve the marketplaces, plugins, and optional organization configuration assigned to the enrolled user. The device agent reconciles these into the AI developer tools it manages. Organization configuration is delivered on this existing poll so agents do not need a second control-plane request.
  */
 export function agentGetPlugins(
   client: GramCore,
-  request: GetAgentPluginsRequest,
+  request?: GetAgentPluginsRequest | undefined,
   security?: GetAgentPluginsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
@@ -73,7 +73,7 @@ export function agentGetPlugins(
 
 async function $do(
   client: GramCore,
-  request: GetAgentPluginsRequest,
+  request?: GetAgentPluginsRequest | undefined,
   security?: GetAgentPluginsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
@@ -95,7 +95,8 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(GetAgentPluginsRequest$outboundSchema, value),
+    (value) =>
+      z.parse(z.optional(GetAgentPluginsRequest$outboundSchema), value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -107,25 +108,30 @@ async function $do(
   const path = pathToFunc("/rpc/agent.getPlugins")();
 
   const query = encodeFormQuery({
-    "email": payload.email,
+    "email": payload?.email,
   });
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
     "Gram-Device-Hostname": encodeSimple(
       "Gram-Device-Hostname",
-      payload["Gram-Device-Hostname"],
+      payload?.["Gram-Device-Hostname"],
       { explode: false, charEncoding: "none" },
     ),
     "Gram-Device-Serial": encodeSimple(
       "Gram-Device-Serial",
-      payload["Gram-Device-Serial"],
+      payload?.["Gram-Device-Serial"],
       { explode: false, charEncoding: "none" },
     ),
-    "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
+    "Gram-Key": encodeSimple("Gram-Key", payload?.["Gram-Key"], {
       explode: false,
       charEncoding: "none",
     }),
+    "Gram-User-Email": encodeSimple(
+      "Gram-User-Email",
+      payload?.["Gram-User-Email"],
+      { explode: false, charEncoding: "none" },
+    ),
   }));
 
   const requestSecurity = resolveSecurity(

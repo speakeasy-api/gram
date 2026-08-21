@@ -30,6 +30,15 @@ SET gram_account_type = @gram_account_type,
     updated_at = clock_timestamp()
 WHERE id = @id;
 
+-- name: SetAccountTypeIfUnchanged :one
+UPDATE organization_metadata
+SET gram_account_type = @gram_account_type,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND gram_account_type = @previous_account_type
+  AND gram_account_type NOT IN ('payg', 'enterprise')
+RETURNING *;
+
 -- name: GetOrganizationMetadata :one
 SELECT *
 FROM organization_metadata
@@ -338,6 +347,14 @@ FROM organization_user_relationships
 WHERE workos_membership_id = @workos_membership_id
 ORDER BY updated_at DESC
 LIMIT 1;
+
+-- name: SetOrganizationRelationshipWorkOSCursor :exec
+UPDATE organization_user_relationships
+SET workos_updated_at = @workos_updated_at,
+    workos_last_event_id = @workos_last_event_id,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND user_id = @user_id;
 
 -- name: UpsertWorkOSMembership :exec
 -- Upsert a membership row from a WorkOS organization_membership event. Caller

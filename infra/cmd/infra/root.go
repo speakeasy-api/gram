@@ -41,6 +41,7 @@ func newApp() *cli.App {
 			newDemoCommand(),
 			newGenCCCommand(),
 			newGenDiagramCommand(),
+			newGenTopicsCommand(),
 			newVersionCommand(),
 		},
 		Before: func(c *cli.Context) error {

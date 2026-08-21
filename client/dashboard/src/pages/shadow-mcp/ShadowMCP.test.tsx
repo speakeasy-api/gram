@@ -1,5 +1,6 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import type { ReactElement, ReactNode } from "react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ShadowMCP from "./ShadowMCP";
 
@@ -143,7 +144,7 @@ describe("ShadowMCP", () => {
     id = `${action}-policy`,
     sources = ["shadow_mcp"],
   }: {
-    action: "block" | "flag";
+    action: "block" | "flag" | "warn";
     enabled?: boolean;
     id?: string;
     sources?: string[];
@@ -176,13 +177,15 @@ describe("ShadowMCP", () => {
   });
 
   it("renders the Shadow MCP inventory management page", () => {
-    render(<ShadowMCP />);
+    render(
+      <MemoryRouter>
+        <ShadowMCP />
+      </MemoryRouter>,
+    );
 
     expect(screen.getByRole("heading", { name: "Shadow MCP" })).toBeTruthy();
     expect(
-      screen.getByText(
-        "Manage the Shadow MCP server inventory, allow decisions, and requests.",
-      ),
+      screen.getByText(/Every MCP server this project knows about/),
     ).toBeTruthy();
     expect(screen.getByText("No Policy")).toBeTruthy();
     expect(
@@ -202,7 +205,11 @@ describe("ShadowMCP", () => {
       isLoading: true,
     });
 
-    render(<ShadowMCP />);
+    render(
+      <MemoryRouter>
+        <ShadowMCP />
+      </MemoryRouter>,
+    );
 
     expect(screen.getByRole("status").getAttribute("aria-label")).toBe(
       "Loading Shadow MCP policies",
@@ -228,7 +235,11 @@ describe("ShadowMCP", () => {
       isLoading: false,
     });
 
-    render(<ShadowMCP />);
+    render(
+      <MemoryRouter>
+        <ShadowMCP />
+      </MemoryRouter>,
+    );
 
     const sectionCTA = within(screen.getByTestId("section-cta"));
     expect(sectionCTA.getByText("Blocking")).toBeTruthy();
@@ -249,6 +260,32 @@ describe("ShadowMCP", () => {
     expect(screen.getByText("Members: Admin User")).toBeTruthy();
   });
 
+  it("renders warning policy status when no blocking policy is enabled", () => {
+    mocks.useRiskListPolicies.mockReturnValue({
+      data: { policies: [riskPolicy({ action: "warn" })] },
+      isError: false,
+      isLoading: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <ShadowMCP />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Warning")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Warn policy is enabled. Users must acknowledge warnings before continuing.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Shadow MCP inventory for project-1 with policy warning",
+      ),
+    ).toBeTruthy();
+  });
+
   it("renders flagging policy status when no blocking policy is enabled", () => {
     mocks.useRiskListPolicies.mockReturnValue({
       data: { policies: [riskPolicy({ action: "flag" })] },
@@ -256,7 +293,11 @@ describe("ShadowMCP", () => {
       isLoading: false,
     });
 
-    render(<ShadowMCP />);
+    render(
+      <MemoryRouter>
+        <ShadowMCP />
+      </MemoryRouter>,
+    );
 
     expect(screen.getByText("Flagging")).toBeTruthy();
     expect(
@@ -283,7 +324,11 @@ describe("ShadowMCP", () => {
       isLoading: false,
     });
 
-    render(<ShadowMCP />);
+    render(
+      <MemoryRouter>
+        <ShadowMCP />
+      </MemoryRouter>,
+    );
 
     expect(screen.getByText("No Policy")).toBeTruthy();
     expect(

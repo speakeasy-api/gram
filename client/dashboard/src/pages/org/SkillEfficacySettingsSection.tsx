@@ -12,7 +12,6 @@ import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
 import { useRBAC } from "@/hooks/useRBAC";
 import type { SkillEfficacySettings } from "@gram/client/models/components/skillefficacysettings.js";
-import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import {
   invalidateAllSkillEfficacySettings,
   useSkillEfficacySettings,
@@ -82,14 +81,8 @@ function LimitField({
 
 export function SkillEfficacySettingsSection(): JSX.Element | null {
   const { hasScope, isLoading: isRBACLoading } = useRBAC();
-  const { data: features, isLoading: isFeaturesLoading } = useProductFeatures(
-    undefined,
-    undefined,
-    { staleTime: 30_000, throwOnError: false },
-  );
 
-  if (isRBACLoading || isFeaturesLoading) return null;
-  if (!hasScope("org:admin") || features?.skillsEnabled !== true) return null;
+  if (isRBACLoading || !hasScope("org:admin")) return null;
 
   return <SkillEfficacySettingsQuery />;
 }
@@ -206,7 +199,7 @@ function SkillEfficacySettingsForm({
   };
 
   return (
-    <div className="border-border bg-card max-w-2xl rounded-lg border p-6">
+    <div className="border-border bg-card max-w-2xl border p-6">
       <Stack gap={6}>
         <Stack direction="horizontal" justify="space-between" align="center">
           <div>
@@ -257,7 +250,7 @@ function SkillEfficacySettingsForm({
           />
         </div>
 
-        <div className="bg-muted/40 rounded-md border p-4">
+        <div className="bg-muted/40 border p-4">
           <Text muted small>
             Daily caps reset at 00:00 UTC. The new-version burst bypasses the
             per-skill daily cap until exhausted, but it never bypasses the

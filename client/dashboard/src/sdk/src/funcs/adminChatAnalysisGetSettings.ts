@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeSimple } from "../lib/encodings.js";
+import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
 import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
@@ -42,11 +42,11 @@ import { Result } from "../types/fp.js";
  * getSettings adminChatAnalysis
  *
  * @remarks
- * Get the active organization's chat analysis settings. Requires platform admin.
+ * Get the named organization's chat analysis settings. Requires platform admin.
  */
 export function adminChatAnalysisGetSettings(
   client: GramCore,
-  request?: GetChatAnalysisSettingsRequest | undefined,
+  request: GetChatAnalysisSettingsRequest,
   security?: GetChatAnalysisSettingsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
@@ -73,7 +73,7 @@ export function adminChatAnalysisGetSettings(
 
 async function $do(
   client: GramCore,
-  request?: GetChatAnalysisSettingsRequest | undefined,
+  request: GetChatAnalysisSettingsRequest,
   security?: GetChatAnalysisSettingsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
@@ -95,8 +95,7 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      z.parse(z.optional(GetChatAnalysisSettingsRequest$outboundSchema), value),
+    (value) => z.parse(GetChatAnalysisSettingsRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -107,9 +106,13 @@ async function $do(
 
   const path = pathToFunc("/rpc/adminChatAnalysis.getSettings")();
 
+  const query = encodeFormQuery({
+    "organization_id": payload.organization_id,
+  });
+
   const headers = new Headers(compactMap({
     Accept: "application/json",
-    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -146,6 +149,7 @@ async function $do(
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
+    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,

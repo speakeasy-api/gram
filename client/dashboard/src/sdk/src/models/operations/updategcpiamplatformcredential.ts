@@ -5,10 +5,10 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import {
-  UpdateGcpIamCredentialRequestBody,
-  UpdateGcpIamCredentialRequestBody$Outbound,
-  UpdateGcpIamCredentialRequestBody$outboundSchema,
-} from "../components/updategcpiamcredentialrequestbody.js";
+  UpdateGcpIamPlatformCredentialRequestBody,
+  UpdateGcpIamPlatformCredentialRequestBody$Outbound,
+  UpdateGcpIamPlatformCredentialRequestBody$outboundSchema,
+} from "../components/updategcpiamplatformcredentialrequestbody.js";
 
 export type UpdateGcpIamPlatformCredentialSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -19,7 +19,8 @@ export type UpdateGcpIamPlatformCredentialRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  updateGcpIamCredentialRequestBody: UpdateGcpIamCredentialRequestBody;
+  updateGcpIamPlatformCredentialRequestBody:
+    UpdateGcpIamPlatformCredentialRequestBody;
 };
 
 /** @internal */
@@ -57,7 +58,8 @@ export function updateGcpIamPlatformCredentialSecurityToJSON(
 /** @internal */
 export type UpdateGcpIamPlatformCredentialRequest$Outbound = {
   "Gram-Session"?: string | undefined;
-  UpdateGcpIamCredentialRequestBody: UpdateGcpIamCredentialRequestBody$Outbound;
+  UpdateGcpIamPlatformCredentialRequestBody:
+    UpdateGcpIamPlatformCredentialRequestBody$Outbound;
 };
 
 /** @internal */
@@ -68,13 +70,14 @@ export const UpdateGcpIamPlatformCredentialRequest$outboundSchema:
   > = z.pipe(
     z.object({
       gramSession: z.optional(z.string()),
-      updateGcpIamCredentialRequestBody:
-        UpdateGcpIamCredentialRequestBody$outboundSchema,
+      updateGcpIamPlatformCredentialRequestBody:
+        UpdateGcpIamPlatformCredentialRequestBody$outboundSchema,
     }),
     z.transform((v) => {
       return remap$(v, {
         gramSession: "Gram-Session",
-        updateGcpIamCredentialRequestBody: "UpdateGcpIamCredentialRequestBody",
+        updateGcpIamPlatformCredentialRequestBody:
+          "UpdateGcpIamPlatformCredentialRequestBody",
       });
     }),
   );

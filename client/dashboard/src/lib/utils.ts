@@ -38,6 +38,18 @@ export function getServerURL(): string {
   return __GRAM_SERVER_URL__ ?? window.location.origin;
 }
 
+// Base URL for the dashboard's SDK calls. In dev the dashboard and the server
+// listen on different ports (and worktrees remap both), so every SDK call is
+// cross-origin — and because the requests carry custom headers (gram-project,
+// gram-session, …) each one pays a CORS preflight that the server never lets
+// the browser cache. Vite proxies /rpc (and /chat, /mcp, …) to the server, so
+// pointing the SDK at the dashboard's own origin in dev makes the calls
+// same-origin and the preflights disappear. In prod the dashboard is served
+// from the server's origin, so getServerURL() is already same-origin.
+export function getApiBaseURL(): string {
+  return import.meta.env.DEV ? window.location.origin : getServerURL();
+}
+
 // tunnel.speakeasy.com in prod, tunnel-pr-N.<env> in previews (single label
 // keeps the wildcard cert valid), tunnel.<host> otherwise.
 export function tunnelGatewayURL(): string {
@@ -115,10 +127,35 @@ export function firstPartyConnectUrl(
   }
 }
 
-export function buildLoginRedirectURL(redirectTo: string | null): string {
-  let href = `${getServerURL()}/rpc/auth.login`;
-  if (redirectTo) href += `?redirect=${encodeURIComponent(redirectTo)}`;
-  return href;
+export function buildLoginRedirectURL(
+  redirectTo: string | null,
+  orgName?: string,
+  email?: string,
+): string {
+  // The base is only consulted when getServerURL() is relative (empty in
+  // tests, per vitest.config.ts) — window.location.origin is always
+  // absolute, so `new URL` never throws here or in the browser.
+  const url = new URL(
+    `${getServerURL()}/rpc/auth.login`,
+    window.location.origin,
+  );
+  if (redirectTo) url.searchParams.set("redirect", redirectTo);
+  // Present only from the sign-up page. The server validates it, stashes it
+  // against the login nonce, and creates the org during the auth callback.
+  // As a query param on a top-level navigation it is visible in the address
+  // bar, browser history, and access logs — acceptable for a company name,
+  // which is not a secret, and it goes no further than this request.
+  if (orgName) url.searchParams.set("org_name", orgName);
+  // Also sign-up only. The server turns this into WorkOS's `login_hint`, which
+  // pre-fills the email field on the hosted AuthKit screen. Gram never writes
+  // it to Redis or the database.
+  //
+  // It does land in request logs, though: the logger records full URLs, so
+  // like `email` on agent.getPlugins this address reaches log sinks. Tracked
+  // in AGE-3125, which covers both endpoints — the fixes differ, since this
+  // hand-off is a top-level navigation and cannot use a header.
+  if (email) url.searchParams.set("email", email);
+  return url.toString();
 }
 
 /**

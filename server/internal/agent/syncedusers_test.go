@@ -19,11 +19,6 @@ import (
 // helper.
 func withRBACGrants(t *testing.T, ctx context.Context, grants ...authz.Grant) context.Context {
 	t.Helper()
-	for i := range grants {
-		if grants[i].Effect == "" {
-			grants[i].Effect = authz.PolicyEffectAllow
-		}
-	}
 	return authz.GrantsToContext(ctx, grants)
 }
 
@@ -48,7 +43,7 @@ func TestGetPlugins_RecordsSync(t *testing.T) {
 
 	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
 
-	_, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: mockidp.MockUserEmail})
+	_, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new(mockidp.MockUserEmail)})
 	require.NoError(t, err)
 
 	rows, err := agentrepo.New(ti.conn).ListDeviceAgentSyncs(ctx, ti.orgID)
@@ -58,7 +53,7 @@ func TestGetPlugins_RecordsSync(t *testing.T) {
 	firstSeen := rows[0].LastSeenAt.Time
 
 	// A second poll within the guard window leaves last_seen_at untouched.
-	_, err = ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: mockidp.MockUserEmail})
+	_, err = ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new(mockidp.MockUserEmail)})
 	require.NoError(t, err)
 
 	rows, err = agentrepo.New(ti.conn).ListDeviceAgentSyncs(ctx, ti.orgID)
@@ -77,9 +72,9 @@ func TestListSyncedUsers_AllowsOrgAdmin(t *testing.T) {
 	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
 
 	// Two distinct users poll; the second poll is later, so it sorts first.
-	_, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: "early@acme.corp"})
+	_, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new("early@acme.corp")})
 	require.NoError(t, err)
-	_, err = ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: "later@acme.corp"})
+	_, err = ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new("later@acme.corp")})
 	require.NoError(t, err)
 
 	adminCtx := withOrgAdmin(t, ctx)

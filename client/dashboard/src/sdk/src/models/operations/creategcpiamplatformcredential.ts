@@ -5,10 +5,10 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import {
-  CreateGcpIamCredentialForm,
-  CreateGcpIamCredentialForm$Outbound,
-  CreateGcpIamCredentialForm$outboundSchema,
-} from "../components/creategcpiamcredentialform.js";
+  CreatePlatformGcpIamCredentialForm,
+  CreatePlatformGcpIamCredentialForm$Outbound,
+  CreatePlatformGcpIamCredentialForm$outboundSchema,
+} from "../components/createplatformgcpiamcredentialform.js";
 
 export type CreateGcpIamPlatformCredentialSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -19,7 +19,7 @@ export type CreateGcpIamPlatformCredentialRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  createGcpIamCredentialForm: CreateGcpIamCredentialForm;
+  createPlatformGcpIamCredentialForm: CreatePlatformGcpIamCredentialForm;
 };
 
 /** @internal */
@@ -57,7 +57,8 @@ export function createGcpIamPlatformCredentialSecurityToJSON(
 /** @internal */
 export type CreateGcpIamPlatformCredentialRequest$Outbound = {
   "Gram-Session"?: string | undefined;
-  CreateGcpIamCredentialForm: CreateGcpIamCredentialForm$Outbound;
+  CreatePlatformGcpIamCredentialForm:
+    CreatePlatformGcpIamCredentialForm$Outbound;
 };
 
 /** @internal */
@@ -68,12 +69,14 @@ export const CreateGcpIamPlatformCredentialRequest$outboundSchema:
   > = z.pipe(
     z.object({
       gramSession: z.optional(z.string()),
-      createGcpIamCredentialForm: CreateGcpIamCredentialForm$outboundSchema,
+      createPlatformGcpIamCredentialForm:
+        CreatePlatformGcpIamCredentialForm$outboundSchema,
     }),
     z.transform((v) => {
       return remap$(v, {
         gramSession: "Gram-Session",
-        createGcpIamCredentialForm: "CreateGcpIamCredentialForm",
+        createPlatformGcpIamCredentialForm:
+          "CreatePlatformGcpIamCredentialForm",
       });
     }),
   );

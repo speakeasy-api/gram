@@ -734,8 +734,18 @@ WHERE d.organization_id = $3
   AND ($4::text IS NULL OR c.provider = $4::text)
   AND ($5::uuid IS NULL OR d.id < $5::uuid)
   AND ($6::text IS NULL OR $6::text = cov.coverage_bucket)
+  -- One person's devices. Both legs are needed and neither subsumes the other:
+  -- user_id is only set when the MDM's reported email resolved to a member, so
+  -- matching on it alone would drop the devices of someone whose MDM email is
+  -- a work alias, while matching on email alone would drop a device whose
+  -- assigned email the MDM has since changed.
+  AND (
+    (COALESCE(cardinality($7::text[]), 0) = 0 AND COALESCE(cardinality($8::text[]), 0) = 0)
+    OR d.user_id = ANY($7::text[])
+    OR LOWER(d.user_email) = ANY(ARRAY(SELECT LOWER(e) FROM unnest($8::text[]) AS e))
+  )
 ORDER BY d.id DESC
-LIMIT $7
+LIMIT $9
 `
 
 type ListManagedDevicesParams struct {
@@ -745,6 +755,8 @@ type ListManagedDevicesParams struct {
 	Provider       pgtype.Text
 	CursorID       uuid.NullUUID
 	Bucket         pgtype.Text
+	UserIds        []string
+	UserEmails     []string
 	PageLimit      int32
 }
 
@@ -786,6 +798,8 @@ func (q *Queries) ListManagedDevices(ctx context.Context, arg ListManagedDevices
 		arg.Provider,
 		arg.CursorID,
 		arg.Bucket,
+		arg.UserIds,
+		arg.UserEmails,
 		arg.PageLimit,
 	)
 	if err != nil {
@@ -994,7 +1008,7 @@ func (q *Queries) MarkDevicesMissing(ctx context.Context, arg MarkDevicesMissing
 	return err
 }
 
-const recordSyncFailure = `-- name: RecordSyncFailure :exec
+const recordSyncFailure = `-- name: RecordSyncFailure :one
 
 UPDATE device_integration_syncs s
 SET next_poll_after = clock_timestamp() + make_interval(secs => $1::int),
@@ -1020,6 +1034,7 @@ JOIN device_integration_configs c
 WHERE s.id = $5
   AND sch.id = s.device_integration_schedule_id
   AND c.updated_at = $6
+RETURNING (s.auto_paused_at IS NOT NULL)::boolean AS auto_paused
 `
 
 type RecordSyncFailureParams struct {
@@ -1035,8 +1050,12 @@ type RecordSyncFailureParams struct {
 // positive and the new streak reaches it, auto-pauses the schedule so
 // candidate selection stops re-enqueueing it. Callers pass zero pause_after
 // for failures that should never pause (e.g. transient network errors).
-func (q *Queries) RecordSyncFailure(ctx context.Context, arg RecordSyncFailureParams) error {
-	_, err := q.db.Exec(ctx, recordSyncFailure,
+// Returns whether this call left the schedule auto-paused: the caller loads a
+// runnable (never-paused) sync, so a non-null auto_paused_at can only mean
+// THIS failure crossed the threshold — a clean auto-pause metric signal. Zero
+// rows (a concurrent config save moved updated_at) returns no row.
+func (q *Queries) RecordSyncFailure(ctx context.Context, arg RecordSyncFailureParams) (bool, error) {
+	row := q.db.QueryRow(ctx, recordSyncFailure,
 		arg.NextInSeconds,
 		arg.LastPollError,
 		arg.AuthRejection,
@@ -1044,7 +1063,9 @@ func (q *Queries) RecordSyncFailure(ctx context.Context, arg RecordSyncFailurePa
 		arg.SyncID,
 		arg.ConfigUpdatedAt,
 	)
-	return err
+	var auto_paused bool
+	err := row.Scan(&auto_paused)
+	return auto_paused, err
 }
 
 const recordSyncSuccess = `-- name: RecordSyncSuccess :execrows

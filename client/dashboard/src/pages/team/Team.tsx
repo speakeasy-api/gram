@@ -1,8 +1,7 @@
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
-import { Page } from "@/components/page-layout";
+import { ResourceListPage } from "@/components/page-templates";
 import { Dialog } from "@/components/ui/Dialog";
-import { Heading } from "@/components/ui/Heading";
 import {
   Select,
   SelectContent,
@@ -70,27 +69,9 @@ import {
 } from "@/components/ui/ContextMenu";
 import { useOrgRoutes } from "@/routes";
 import { cn } from "@/lib/utils";
+import { getIdentityTint } from "@/components/gradient-colors";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import { ChangeRoleDialog } from "@/pages/access/ChangeRoleDialog";
-
-function getMemberColors(id: string) {
-  let hash = 2166136261;
-  for (let i = 0; i < id.length; i++) {
-    hash ^= id.charCodeAt(i);
-    hash +=
-      (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
-  }
-  hash = hash >>> 0;
-  const hue1 = hash % 360;
-  const hue2 = (hue1 + ((hash >> 8) % 360)) % 360;
-  const saturation = Math.max(65, (hash >> 16) % 100);
-  const angle = (hash >> 24) % 360;
-  return {
-    from: `hsl(${hue1}, ${saturation}%, 65%)`,
-    to: `hsl(${hue2}, ${saturation}%, 60%)`,
-    angle,
-  };
-}
 
 /**
  * Everything from TeamInner's scope that the member actions menu needs,
@@ -237,16 +218,9 @@ function MemberRowContextMenu({
 
 export default function Team(): JSX.Element {
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <RequireScope scope="org:admin" level="page">
-          <TeamInner />
-        </RequireScope>
-      </Page.Body>
-    </Page>
+    <RequireScope scope="org:admin" level="page">
+      <TeamInner />
+    </RequireScope>
   );
 }
 
@@ -548,10 +522,8 @@ function TeamInner() {
             />
           ) : (
             <div
-              className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-medium text-white"
-              style={{
-                backgroundImage: `linear-gradient(${getMemberColors(member.id).angle}deg, ${getMemberColors(member.id).from}, ${getMemberColors(member.id).to})`,
-              }}
+              className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-medium"
+              style={getIdentityTint(member.id)}
             >
               {member.name
                 .split(" ")
@@ -602,7 +574,7 @@ function TeamInner() {
               <Link
                 key={roleId}
                 to={`${orgRoutes.access.roles.href()}?editRole=${roleId}`}
-                className="text-foreground hover:text-primary rounded-sm border px-1.5 py-0.5 text-xs no-underline transition-colors"
+                className="text-foreground hover:text-primary border px-1.5 py-0.5 text-xs no-underline transition-colors"
               >
                 {getRoleName(roleId)}
               </Link>
@@ -611,7 +583,7 @@ function TeamInner() {
               <SimpleTooltip
                 tooltip={overflow.map((id) => getRoleName(id)).join(", ")}
               >
-                <span className="text-muted-foreground cursor-pointer rounded-sm border px-1.5 py-0.5 text-xs">
+                <span className="text-muted-foreground cursor-pointer border px-1.5 py-0.5 text-xs">
                   +{overflow.length} more
                 </span>
               </SimpleTooltip>
@@ -650,7 +622,7 @@ function TeamInner() {
               <button
                 type="button"
                 className={cn(
-                  "text-muted-foreground hover:bg-accent hover:text-foreground flex h-8 w-8 cursor-pointer items-center justify-center rounded-md transition-colors",
+                  "text-muted-foreground hover:bg-accent hover:text-foreground flex h-8 w-8 cursor-pointer items-center justify-center transition-colors",
                 )}
               >
                 <Ellipsis className="h-4 w-4" />
@@ -715,10 +687,8 @@ function TeamInner() {
             className={isExpired ? "opacity-50" : ""}
           >
             <div
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-medium text-white"
-              style={{
-                backgroundImage: `linear-gradient(${getMemberColors(invite.email).angle}deg, ${getMemberColors(invite.email).from}, ${getMemberColors(invite.email).to})`,
-              }}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-medium"
+              style={getIdentityTint(invite.email)}
             >
               {invite.email
                 .split("@")[0]
@@ -784,10 +754,8 @@ function TeamInner() {
               />
             ) : (
               <div
-                className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium text-white"
-                style={{
-                  backgroundImage: `linear-gradient(${getMemberColors(inviter.id).angle}deg, ${getMemberColors(inviter.id).from}, ${getMemberColors(inviter.id).to})`,
-                }}
+                className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium"
+                style={getIdentityTint(inviter.id)}
               >
                 {inviter.name
                   .split(" ")
@@ -877,205 +845,201 @@ function TeamInner() {
     },
   ];
 
+  const inviteButton = (
+    <RequireScope scope="org:admin" level="component">
+      {organization.scimEnabled ? (
+        <SimpleTooltip tooltip="Managed by your identity provider">
+          <span className="inline-flex">
+            <Button onClick={() => setIsInviteDialogOpen(true)} disabled>
+              <Button.LeftIcon>
+                <UserPlus className="h-4 w-4" />
+              </Button.LeftIcon>
+              <Button.Text>Invite Member</Button.Text>
+            </Button>
+          </span>
+        </SimpleTooltip>
+      ) : (
+        <Button onClick={() => setIsInviteDialogOpen(true)}>
+          <Button.LeftIcon>
+            <UserPlus className="h-4 w-4" />
+          </Button.LeftIcon>
+          <Button.Text>Invite Member</Button.Text>
+        </Button>
+      )}
+    </RequireScope>
+  );
+
   return (
     <>
-      <Stack direction="vertical" gap={8}>
-        {/* Members Section */}
-        <div>
-          <Stack
-            direction="horizontal"
-            justify="space-between"
-            align="center"
-            className="mb-4"
-          >
-            <Stack direction="vertical" gap={1}>
-              <Heading variant="h4">Team Members</Heading>
-              <Text variant="body" className="text-muted-foreground">
-                Manage who has access to {organization.name}
-              </Text>
-            </Stack>
-            <RequireScope scope="org:admin" level="component">
-              {organization.scimEnabled ? (
-                <SimpleTooltip tooltip="Managed by your identity provider">
-                  <span className="inline-flex">
-                    <Button
-                      onClick={() => setIsInviteDialogOpen(true)}
-                      disabled
-                    >
-                      <Button.LeftIcon>
-                        <UserPlus className="h-4 w-4" />
-                      </Button.LeftIcon>
-                      <Button.Text>Invite Member</Button.Text>
-                    </Button>
-                  </span>
-                </SimpleTooltip>
-              ) : (
-                <Button onClick={() => setIsInviteDialogOpen(true)}>
-                  <Button.LeftIcon>
-                    <UserPlus className="h-4 w-4" />
-                  </Button.LeftIcon>
-                  <Button.Text>Invite Member</Button.Text>
-                </Button>
-              )}
-            </RequireScope>
-          </Stack>
-
-          {organization.scimEnabled && (
-            <Alert variant="info" dismissible={false} className="mb-8 text-sm">
-              Directory Sync (SCIM) is enabled. Members are provisioned and
-              roles assigned from your identity provider, not here.{" "}
-              <Link
-                to={orgRoutes.identity.href()}
-                className="underline underline-offset-2"
-              >
-                Manage identity settings
-              </Link>
-            </Alert>
-          )}
-
-          <div className="relative">
-            <Icon
-              name="search"
-              className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
-            />
-            <Input
-              type="text"
-              placeholder="Search members..."
-              value={search}
-              onChange={(value) => {
-                setSearch(value);
-                setPage(0);
-              }}
-              className="mb-4 w-full py-2 pl-9 text-sm"
-            />
-          </div>
-
-          <Table
-            columns={memberColumns}
-            data={visibleMembers}
-            rowKey={(row) => row.userId}
-            renderRow={(row, rowElement) => (
-              <MemberRowContextMenu
-                key={row.userId}
-                member={row}
-                deps={memberMenuDeps}
-              >
-                {rowElement}
-              </MemberRowContextMenu>
-            )}
-            className="min-h-fit"
-            noResultsMessage={
-              <Stack
-                gap={2}
-                className="bg-background h-full p-8"
-                align="center"
-                justify="center"
-              >
-                <Users className="text-muted-foreground h-12 w-12" />
-                <Text variant="body" className="text-muted-foreground">
-                  {search
-                    ? "No members matching your search"
-                    : "No team members yet"}
-                </Text>
-              </Stack>
-            }
-          />
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between border-t px-4 py-3">
-              <Text variant="body" className="text-muted-foreground text-sm">
-                {safePage * MEMBERS_PAGE_SIZE + 1}–
-                {Math.min((safePage + 1) * MEMBERS_PAGE_SIZE, members.length)}{" "}
-                of {members.length}
-              </Text>
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="tertiary"
-                  size="sm"
-                  onClick={() => setPage((p) => p - 1)}
-                  disabled={safePage === 0}
-                >
-                  <Button.LeftIcon>
-                    <ChevronLeft className="size-4" />
-                  </Button.LeftIcon>
-                  <Button.Text className="sr-only">Previous page</Button.Text>
-                </Button>
-                <Button
-                  variant="tertiary"
-                  size="sm"
-                  onClick={() => setPage((p) => p + 1)}
-                  disabled={safePage >= totalPages - 1}
-                >
-                  <Button.LeftIcon>
-                    <ChevronRight className="size-4" />
-                  </Button.LeftIcon>
-                  <Button.Text className="sr-only">Next page</Button.Text>
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Pending Invites Section */}
-        {invites.length > 0 && (
+      <ResourceListPage
+        title="Team Members"
+        description={`Manage who has access to ${organization.name}`}
+        primaryAction={inviteButton}
+      >
+        <Stack direction="vertical" gap={8}>
+          {/* Members Section */}
           <div>
-            <Stack direction="vertical" gap={1} className="mb-4">
-              <Heading variant="h4">Pending Invites</Heading>
-              <Text variant="body" className="text-muted-foreground">
-                Invitations that haven't been accepted yet
-              </Text>
-            </Stack>
+            {organization.scimEnabled && (
+              <Alert
+                variant="info"
+                dismissible={false}
+                className="mb-8 text-sm"
+              >
+                Directory Sync (SCIM) is enabled. Members are provisioned and
+                roles assigned from your identity provider, not here.{" "}
+                <Link
+                  to={orgRoutes.identity.href()}
+                  className="underline underline-offset-2"
+                >
+                  Manage identity settings
+                </Link>
+              </Alert>
+            )}
+
+            <div className="relative">
+              <Icon
+                name="search"
+                className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
+              />
+              <Input
+                type="text"
+                placeholder="Search members..."
+                value={search}
+                onChange={(value) => {
+                  setSearch(value);
+                  setPage(0);
+                }}
+                className="mb-4 w-full py-2 pl-9 text-sm"
+              />
+            </div>
 
             <Table
-              columns={inviteColumns}
-              data={invites}
-              rowKey={(row) => row.id}
+              columns={memberColumns}
+              data={visibleMembers}
+              rowKey={(row) => row.userId}
+              renderRow={(row, rowElement) => (
+                <MemberRowContextMenu
+                  key={row.userId}
+                  member={row}
+                  deps={memberMenuDeps}
+                >
+                  {rowElement}
+                </MemberRowContextMenu>
+              )}
               className="min-h-fit"
+              noResultsMessage={
+                <Stack
+                  gap={2}
+                  className="bg-background h-full p-8"
+                  align="center"
+                  justify="center"
+                >
+                  <Users className="text-muted-foreground h-12 w-12" />
+                  <Text variant="body" className="text-muted-foreground">
+                    {search
+                      ? "No members matching your search"
+                      : "No team members yet"}
+                  </Text>
+                </Stack>
+              }
             />
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between border-t px-4 py-3">
+                <Text variant="body" className="text-muted-foreground text-sm">
+                  {safePage * MEMBERS_PAGE_SIZE + 1}–
+                  {Math.min((safePage + 1) * MEMBERS_PAGE_SIZE, members.length)}{" "}
+                  of {members.length}
+                </Text>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="tertiary"
+                    size="sm"
+                    onClick={() => setPage((p) => p - 1)}
+                    disabled={safePage === 0}
+                  >
+                    <Button.LeftIcon>
+                      <ChevronLeft className="size-4" />
+                    </Button.LeftIcon>
+                    <Button.Text className="sr-only">Previous page</Button.Text>
+                  </Button>
+                  <Button
+                    variant="tertiary"
+                    size="sm"
+                    onClick={() => setPage((p) => p + 1)}
+                    disabled={safePage >= totalPages - 1}
+                  >
+                    <Button.LeftIcon>
+                      <ChevronRight className="size-4" />
+                    </Button.LeftIcon>
+                    <Button.Text className="sr-only">Next page</Button.Text>
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
-        )}
-        {/* Identity signpost */}
-        <div className="border-border border-t pt-8">
-          {organization.scimEnabled ? (
-            <div className="border-border bg-muted/30 flex items-start gap-3 rounded-md border px-4 py-3">
-              <FolderSync className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-              <div className="min-w-0 flex-1">
-                <Text variant="body" className="text-sm font-medium">
-                  Directory Sync is enabled
+
+          {/* Pending Invites Section */}
+          {invites.length > 0 && (
+            <div>
+              <Stack direction="vertical" gap={1} className="mb-4">
+                <h3 className="text-eyebrow">Pending Invites</h3>
+                <Text variant="body" className="text-muted-foreground">
+                  Invitations that haven't been accepted yet
                 </Text>
-                <Text muted small className="mt-0.5">
-                  Team membership and role assignments are managed by your
-                  identity provider.{" "}
-                  <Link
-                    to={orgRoutes.identity.href()}
-                    className="text-foreground underline underline-offset-4"
-                  >
-                    Manage identity settings
-                  </Link>
-                </Text>
-              </div>
-            </div>
-          ) : (
-            <div className="border-border bg-muted/30 flex items-start gap-3 rounded-md border px-4 py-3">
-              <Shield className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-              <div className="min-w-0 flex-1">
-                <Text variant="body" className="text-sm font-medium">
-                  SSO & Directory Sync
-                </Text>
-                <Text muted small className="mt-0.5">
-                  Automate member provisioning and enforce identity provider
-                  authentication.{" "}
-                  <Link
-                    to={orgRoutes.identity.href()}
-                    className="text-foreground underline underline-offset-4"
-                  >
-                    Set up SSO & SCIM
-                  </Link>
-                </Text>
-              </div>
+              </Stack>
+
+              <Table
+                columns={inviteColumns}
+                data={invites}
+                rowKey={(row) => row.id}
+                className="min-h-fit"
+              />
             </div>
           )}
-        </div>
-      </Stack>
+          {/* Identity signpost */}
+          <div className="border-border border-t pt-8">
+            {organization.scimEnabled ? (
+              <div className="border-border bg-muted/30 flex items-start gap-3 border px-4 py-3">
+                <FolderSync className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <Text variant="body" className="text-sm font-medium">
+                    Directory Sync is enabled
+                  </Text>
+                  <Text muted small className="mt-0.5">
+                    Team membership and role assignments are managed by your
+                    identity provider.{" "}
+                    <Link
+                      to={orgRoutes.identity.href()}
+                      className="text-foreground underline underline-offset-4"
+                    >
+                      Manage identity settings
+                    </Link>
+                  </Text>
+                </div>
+              </div>
+            ) : (
+              <div className="border-border bg-muted/30 flex items-start gap-3 border px-4 py-3">
+                <Shield className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <Text variant="body" className="text-sm font-medium">
+                    SSO & Directory Sync
+                  </Text>
+                  <Text muted small className="mt-0.5">
+                    Automate member provisioning and enforce identity provider
+                    authentication.{" "}
+                    <Link
+                      to={orgRoutes.identity.href()}
+                      className="text-foreground underline underline-offset-4"
+                    >
+                      Set up SSO & SCIM
+                    </Link>
+                  </Text>
+                </div>
+              </div>
+            )}
+          </div>
+        </Stack>
+      </ResourceListPage>
 
       {/* Invite Dialog */}
       <Dialog open={isInviteDialogOpen} onOpenChange={setIsInviteDialogOpen}>

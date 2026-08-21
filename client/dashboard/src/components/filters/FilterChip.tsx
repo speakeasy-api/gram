@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
+import { cn } from "@/lib/utils";
 import { Operator } from "@gram/client/models/components/logfilter";
 import { OP_LABELS, type ActiveLogFilter } from "@/pages/logs/log-filter-types";
 
@@ -24,35 +25,69 @@ const OP_OPTIONS: { value: Operator; label: string }[] = [
 ];
 
 /**
- * A solid grey filter pill: `value ✕`. The body opens the editor (the filter
- * sheet); the × clears the filter. Matches the Untitled UI reference where every
- * applied filter reads as a uniform pill.
+ * A bordered filter chip: `▪ VALUE ✕`. The body opens the editor (the filter
+ * sheet); the × clears the filter.
+ *
+ * Follows the Watchdog signal-filter idiom — a square marker, then the value in
+ * uppercase mono inside a hairline box. The marker and border carry whether the
+ * filter is doing anything: a set filter reads solid and dark, a pinned chip
+ * still at its "All …" default stays grey, so a glance along the bar says which
+ * dimensions are actually narrowing the list.
  *
  * `onRemove` is optional: a pinned dimension sitting at its default value (e.g.
  * "All servers" or a daterange on its default preset) has nothing to clear, so
- * the caller omits it and the × is hidden rather than rendered as a no-op.
+ * the caller omits it and the × is hidden rather than rendered as a no-op. That
+ * same signal is what distinguishes a set chip from a default one here.
  */
 export function FilterChip({
   label,
+  color,
+  active = false,
   onClick,
   onRemove,
 }: {
   label: string;
+  /**
+   * The dimension's accent, from the brand spectrum. Identity, not state: the
+   * square says *which* filter this is at a glance, while the border and text
+   * say whether it is doing anything.
+   */
+  color?: string;
+  /**
+   * Whether the filter is narrowing anything. Passed explicitly rather than
+   * inferred from `onRemove`, because a `required` dimension holds a real value
+   * while still offering no × — inferring would render it as if unset.
+   */
+  active?: boolean;
   onClick?: () => void;
   onRemove?: () => void;
 }): JSX.Element {
   return (
     <span
-      className={`border-border bg-card hover:bg-muted/50 inline-flex h-10 shrink-0 items-center gap-2 rounded-md border pl-3 text-sm font-medium transition-colors ${
-        onRemove ? "pr-2" : "pr-3"
-      }`}
+      // Colour is set here and inherited, never merged onto the label beside
+      // `text-eyebrow`: tailwind-merge files both under its `text-*` group and
+      // drops the earlier one, which silently cost the chip its mono uppercase.
+      className={cn(
+        "bg-card hover:bg-muted/50 inline-flex h-10 shrink-0 items-center gap-2 border pl-3 transition-colors",
+        active
+          ? "border-foreground text-foreground"
+          : "border-border text-muted-foreground",
+        onRemove ? "pr-2" : "pr-3",
+      )}
     >
       <button
         type="button"
         onClick={onClick}
-        className="hover:text-foreground transition-colors"
+        className="hover:text-foreground flex items-center gap-2 transition-colors"
       >
-        {label}
+        <span
+          aria-hidden="true"
+          // Faded rather than greyed when the filter sits at its default, so
+          // the dimension stays identifiable by color either way.
+          className={cn("size-2 shrink-0", !active && "opacity-40")}
+          style={{ backgroundColor: color ?? "var(--color-muted-foreground)" }}
+        />
+        <span className="text-eyebrow">{label}</span>
       </button>
       {onRemove && (
         <button
@@ -105,7 +140,7 @@ export function CustomFilterChip({
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <span className="border-border bg-card hover:bg-muted/50 inline-flex h-10 shrink-0 items-center gap-2 rounded-md border pr-2 pl-3 font-mono text-xs transition-colors">
+      <span className="border-border bg-card hover:bg-muted/50 inline-flex h-10 shrink-0 items-center gap-2 border pr-2 pl-3 font-mono text-xs transition-colors">
         <PopoverTrigger asChild>
           <button
             type="button"
@@ -171,7 +206,7 @@ export function CustomFilterChip({
               }
             }}
             placeholder={valuePlaceholder}
-            className="border-border focus-visible:border-ring focus-visible:ring-ring/50 h-8 min-w-0 flex-1 rounded-md border bg-transparent px-2 font-mono text-xs outline-none focus-visible:ring-[3px]"
+            className="border-border focus-visible:border-ring focus-visible:ring-ring/50 h-8 min-w-0 flex-1 border bg-transparent px-2 font-mono text-xs outline-none focus-visible:ring-[3px]"
             autoFocus
           />
         </div>

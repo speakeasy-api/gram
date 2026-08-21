@@ -1,0 +1,73 @@
+/* Consent island stylesheet. Loaded into the server-rendered consent page,
+   which owns its own document styles — so Tailwind's global preflight is
+   deliberately omitted (it would reset the page's headings, buttons, and
+   forms) and a minimal equivalent is scoped under the mount element. */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+
+@source "../consent-tools";
+@source "../components/tool-selection";
+@source "../components/ui/Checkbox";
+@source "../components/ui/Tooltip";
+
+@import "../components/ui/styles/base.css";
+@import "../components/ui/styles/utilities.css";
+
+@custom-variant dark (&:where(.dark, .dark *));
+@custom-variant interact {
+  &:hover,
+  &:focus-visible {
+    @slot;
+  }
+}
+
+@layer base {
+  /* Scoped preflight subset: Tailwind border/box utilities assume these
+     defaults exist. Confined to the island so the host page is untouched. */
+  #consent-tools-root,
+  #consent-tools-root *,
+  #consent-tools-root ::before,
+  #consent-tools-root ::after {
+    box-sizing: border-box;
+    border-width: 0;
+    border-style: solid;
+    border-color: var(--border);
+  }
+
+  #consent-tools-root {
+    color: var(--foreground);
+    font-size: 0.875rem;
+    line-height: 1.4;
+  }
+
+  #consent-tools-root p,
+  #consent-tools-root h1,
+  #consent-tools-root h2,
+  #consent-tools-root h3,
+  #consent-tools-root ul {
+    margin: 0;
+    padding: 0;
+  }
+
+  #consent-tools-root button {
+    background: none;
+    border: 0;
+    color: inherit;
+    font: inherit;
+    padding: 0;
+  }
+
+  #consent-tools-root input[type="text"],
+  #consent-tools-root input[type="search"] {
+    font: inherit;
+    color: inherit;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    #consent-tools-root * {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}

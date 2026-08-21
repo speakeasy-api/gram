@@ -12,6 +12,8 @@ export interface ScopeGatedNavEntry {
   scope?: Scope | Scope[];
   /** Optional resource ID to check the scopes against. */
   resourceId?: string;
+  /** Display text override; see `CollapsibleNavItem`'s `label`. */
+  label?: string;
 }
 
 /**
@@ -54,7 +56,11 @@ export function ScopeGatedNavGroup({
       stage={stage}
     >
       {visible.map((entry) => (
-        <CollapsibleNavItem key={entry.item.url} item={entry.item} />
+        <CollapsibleNavItem
+          key={entry.item.url}
+          item={entry.item}
+          label={entry.label}
+        />
       ))}
     </CollapsibleNavGroup>
   );

@@ -7,6 +7,16 @@ import (
 	"github.com/speakeasy-api/gram/server/design/shared"
 )
 
+var Trial = Type("Trial", func() {
+	Attribute("started_at", String, func() {
+		Format(FormatDateTime)
+	})
+	Attribute("ends_at", String, func() {
+		Format(FormatDateTime)
+	})
+	Required("started_at", "ends_at")
+})
+
 var _ = Service("auth", func() {
 	Description("Managed auth for gram producers and dashboard.")
 	Security(security.Session)
@@ -55,6 +65,9 @@ var _ = Service("auth", func() {
 
 		Payload(func() {
 			Attribute("redirect", String, "Optional URL to redirect to after successful authentication")
+			Attribute("org_name", String, "Optional organization name. When set, the organization is created for a new user during the auth callback.")
+			Attribute("email", String, "Optional email address. Pre-fills the email field on the identity provider's sign-up screen. Never stored.")
+			Attribute("support_handoff", String, "Opaque, one-time organization support handoff. Never included in OAuth state.")
 		})
 
 		Result(func() {
@@ -65,6 +78,12 @@ var _ = Service("auth", func() {
 		HTTP(func() {
 			GET("/rpc/auth.login")
 			Param("redirect")
+			Param("org_name")
+			// A top-level browser navigation reaches this endpoint and carries
+			// no custom headers, so `email` has to be a query param. The
+			// request logging middleware redacts it from logged URLs.
+			Param("email")
+			Param("support_handoff")
 
 			Response(StatusTemporaryRedirect, func() {
 				Header("location:Location", String, func() {
@@ -106,6 +125,33 @@ var _ = Service("auth", func() {
 		Meta("openapi:operationId", "switchAuthScopes")
 		Meta("openapi:extension:x-speakeasy-name-override", "switchScopes")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SwitchScopes"}`)
+	})
+
+	Method("enterDemo", func() {
+		Description("Switches the current session into the shared read-only demo organization.")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(func() {
+			Attribute("session_token", String, "The authentication session")
+			Attribute("session_cookie", String, "The authentication session")
+			Required("session_token", "session_cookie")
+		})
+
+		HTTP(func() {
+			POST("/rpc/auth.enterDemo")
+			security.SessionHeader()
+			Response(StatusOK, func() {
+				security.WriteSessionCookie()
+				security.SessionHeader()
+			})
+		})
+
+		Meta("openapi:operationId", "enterDemo")
+		Meta("openapi:extension:x-speakeasy-name-override", "enterDemo")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "EnterDemo"}`)
 	})
 
 	Method("logout", func() {
@@ -168,16 +214,25 @@ var _ = Service("auth", func() {
 			Attribute("user_display_name", String)
 			Attribute("user_photo_url", String)
 			Attribute("is_admin", Boolean)
+			Attribute("impersonator_email", String, "The WorkOS Dashboard operator who initiated this impersonation session. Empty for ordinary authentication.")
+			Attribute("organization_override", Boolean, "Whether this is a validated, time-bounded organization support session.")
+			Attribute("organization_override_expires_at", String, func() {
+				Description("Fixed expiration of the organization support session.")
+				Format(FormatDateTime)
+			})
 			Attribute("active_organization_id", String)
 			Attribute("gram_account_type", String)
 			Attribute("has_active_subscription", Boolean, "Whether the organization has an active billing subscription")
 			Attribute("whitelisted", Boolean, "Whether the organization is whitelisted to access the platform")
+			Attribute("trial", Trial, func() {
+				Meta("struct:tag:json", "trial")
+			})
 			Attribute("organizations", ArrayOf(shared.OrganizationEntry))
 
 			Attribute("session_token", String, "The authentication session")
 			Attribute("session_cookie", String, "The authentication session")
 
-			Required("user_id", "user_email", "is_admin", "active_organization_id", "organizations", "session_token", "session_cookie", "gram_account_type", "has_active_subscription", "whitelisted")
+			Required("user_id", "user_email", "is_admin", "organization_override", "active_organization_id", "organizations", "session_token", "session_cookie", "gram_account_type", "has_active_subscription", "whitelisted")
 		})
 
 		HTTP(func() {

@@ -112,6 +112,11 @@ var _ promptinjection.Classifier = (*Engine)(nil).Classify
 
 var safeResult = promptinjection.Result{Label: promptinjection.LabelSafe, Score: 0, Rationale: ""}
 
+// unavailableResult is every path where the judge never rendered a verdict.
+// Same fail-open effect as safeResult on the gating path, but callers that
+// record coverage can tell it apart from a judgement. (cubic)
+var unavailableResult = promptinjection.Result{Label: promptinjection.LabelUnavailable, Score: 0, Rationale: ""}
+
 // New constructs an Engine. The composition root constructs the completions
 // client unconditionally, so it is always non-nil here.
 func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, client gramopenrouter.CompletionClient, limiter *ratelimit.Limiter) *Engine {
@@ -136,9 +141,9 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider
 
 // Classify judges each message independently and returns one result per input,
 // aligned by index. It never returns an error: a per-message judge failure or
-// rate limit yields a SAFE result for that message (fail open) so the scanner
-// keeps the other verdicts. Messages with no content are
-// SAFE without a call.
+// rate limit yields an UNAVAILABLE result for that message (fail open) so the
+// scanner keeps the other verdicts. Messages with no content are SAFE without
+// a call — there is nothing there to be an attack.
 func (c *Engine) Classify(ctx context.Context, req promptinjection.Request) (_ []promptinjection.Result, err error) {
 	n := len(req.Messages)
 	if n == 0 {
@@ -168,13 +173,21 @@ func (c *Engine) Classify(ctx context.Context, req promptinjection.Request) (_ [
 		)
 	}
 
+	// The rate-limit bucket is identical for every message in the batch, so
+	// resolve the spending key once rather than per message.
+	bucket := gramopenrouter.ResolveJudgeRateLimitKey(ctx, c.logger, c.client, req.OrgID, req.ProjectID, billing.ModelUsageSourcePromptInjection, c.model)
+
 	results := make([]promptinjection.Result, n)
 	sem := make(chan struct{}, concurrency)
 	var wg sync.WaitGroup
 	for i := range req.Messages {
 		msg := req.Messages[i]
-		if !msg.HasContent() || ctx.Err() != nil {
+		if !msg.HasContent() {
 			results[i] = safeResult
+			continue
+		}
+		if ctx.Err() != nil {
+			results[i] = unavailableResult
 			continue
 		}
 		wg.Add(1)
@@ -186,24 +199,25 @@ func (c *Engine) Classify(ctx context.Context, req promptinjection.Request) (_ [
 		go func(i int, msg judgemessage.Message, userID string) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			results[i] = c.classifyOne(ctx, req, msg, userID)
+			results[i] = c.classifyOne(ctx, req, msg, userID, bucket)
 		}(i, msg, userID)
 	}
 	wg.Wait()
 	return results, nil
 }
 
-// classifyOne returns SAFE for every fail-open path.
-func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, msg judgemessage.Message, userID string) promptinjection.Result {
+// classifyOne returns UNAVAILABLE for every fail-open path and SAFE only for a
+// judgement that cleared the content.
+func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, msg judgemessage.Message, userID string, bucket string) promptinjection.Result {
 	// Bail before spending a rate-limit token (or making the call) on a context
 	// that is already canceled — otherwise a cancellation burst can drain the
-	// org's budget and throttle real requests into fail-open SAFE. (cubic)
+	// org's budget and throttle real requests into fail-open verdicts. (cubic)
 	if ctx.Err() != nil {
-		return safeResult
+		return unavailableResult
 	}
 	// A Store outage is not a throttle — proceed rather than let limiter infra
 	// silence the scanner.
-	switch res, err := c.limiter.Allow(ctx, gramopenrouter.JudgeRateLimitKey(req.OrgID, c.model)); {
+	switch res, err := c.limiter.Allow(ctx, bucket); {
 	case err != nil:
 		c.logger.WarnContext(ctx, "pi judge rate limiter unavailable, allowing call",
 			attr.SlogError(err),
@@ -214,7 +228,7 @@ func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, m
 		c.logger.WarnContext(ctx, "pi judge rate limited; failing open",
 			attr.SlogOrganizationID(req.OrgID),
 		)
-		return safeResult
+		return unavailableResult
 	}
 
 	start := time.Now()
@@ -227,7 +241,7 @@ func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, m
 			attr.SlogOutcome(string(outcome)),
 			attr.SlogOrganizationID(req.OrgID),
 		)
-		return safeResult
+		return unavailableResult
 	}
 	if !verdict.IsAttack {
 		return safeResult
@@ -303,6 +317,7 @@ func (c *Engine) call(ctx context.Context, req promptinjection.Request, msg judg
 		Messages:                  messages,
 		ProjectID:                 req.ProjectID,
 		Tools:                     nil,
+		ToolChoice:                nil,
 		Temperature:               &c.temperature,
 		Model:                     c.model,
 		Stream:                    false,
@@ -319,6 +334,8 @@ func (c *Engine) call(ctx context.Context, req promptinjection.Request, msg judg
 		Reasoning:                 &gramopenrouter.Reasoning{Effort: "none", MaxTokens: nil, Exclude: nil, Enabled: nil},
 		CacheControl:              nil,
 		NormalizeOutboundMessages: false,
+		WebSearch:                 nil,
+		DisableResponseHealing:    false,
 	})
 	if err != nil {
 		return judgeVerdict{}, fmt.Errorf("openrouter completion: %w", err)

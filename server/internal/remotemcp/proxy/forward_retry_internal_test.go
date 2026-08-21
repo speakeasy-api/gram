@@ -68,7 +68,7 @@ func TestForwardRequestWithRetryClosesBodyOnRetryerError(t *testing.T) {
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "http://gram.local/mcp", nil)
-	upstreamReq, upstreamResp, err := p.forwardRequestWithRetry(t.Context(), req, func() io.Reader { return nil })
+	upstreamReq, upstreamResp, err := p.forwardRequestWithRetry(t.Context(), req, func() io.Reader { return nil }, nil)
 	if upstreamResp != nil {
 		// Unreachable when the contract holds; guards the leak if it regresses.
 		defer func() { _ = upstreamResp.Body.Close() }()

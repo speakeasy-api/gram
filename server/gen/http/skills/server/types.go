@@ -33,6 +33,9 @@ type AddVersionRequestBody struct {
 	Content *string `form:"content,omitempty" json:"content,omitempty" xml:"content,omitempty"`
 	// The optional source version this new version was derived from.
 	DerivedFromVersionID *string `form:"derived_from_version_id,omitempty" json:"derived_from_version_id,omitempty" xml:"derived_from_version_id,omitempty"`
+	// The version the caller believes is current. When set, the write is rejected
+	// as a conflict if the skill has moved on.
+	ExpectedLatestVersionID *string `form:"expected_latest_version_id,omitempty" json:"expected_latest_version_id,omitempty" xml:"expected_latest_version_id,omitempty"`
 }
 
 // RestoreVersionRequestBody is the type of the "skills" service
@@ -55,6 +58,11 @@ type UpdateRequestBody struct {
 	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
 	// The optional skill summary.
 	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
+	// Registry tags for categorizing the skill. At most 40 tags.
+	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
+	// The version the caller believes is current. When set, the write is rejected
+	// as a conflict if the skill has moved on.
+	ExpectedLatestVersionID *string `form:"expected_latest_version_id,omitempty" json:"expected_latest_version_id,omitempty" xml:"expected_latest_version_id,omitempty"`
 }
 
 // TriggerSuggestionRequestBody is the type of the "skills" service
@@ -198,6 +206,8 @@ type UpdateResponseBody struct {
 	SourceKind string `form:"source_kind" json:"source_kind" xml:"source_kind"`
 	// The skill classification.
 	Classification string `form:"classification" json:"classification" xml:"classification"`
+	// Registry tags for categorizing the skill.
+	Tags []string `form:"tags" json:"tags" xml:"tags"`
 	// The current version ID, selected by effective promotion time.
 	LatestVersionID *string `form:"latest_version_id,omitempty" json:"latest_version_id,omitempty" xml:"latest_version_id,omitempty"`
 	// The number of immutable versions recorded for the skill.
@@ -227,6 +237,13 @@ type ListResponseBody struct {
 	TotalCount int64 `form:"total_count" json:"total_count" xml:"total_count"`
 	// Cursor for the next page; absent when exhausted.
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
+// ListTagsResponseBody is the type of the "skills" service "listTags" endpoint
+// HTTP response body.
+type ListTagsResponseBody struct {
+	// Distinct tags used by active skills in the project, sorted lexicographically.
+	Tags []string `form:"tags" json:"tags" xml:"tags"`
 }
 
 // ListSuggestionsResponseBody is the type of the "skills" service
@@ -331,6 +348,8 @@ type GetResponseBody struct {
 	Drift *SkillDriftResponseBody `form:"drift" json:"drift" xml:"drift"`
 	// The number of active, non-deleted assistants using the skill.
 	AssistantCount int64 `form:"assistant_count" json:"assistant_count" xml:"assistant_count"`
+	// Open prompt-injection findings for the current skill version.
+	PromptInjectionFindings []*SkillPromptInjectionFindingResponseBody `form:"prompt_injection_findings" json:"prompt_injection_findings" xml:"prompt_injection_findings"`
 }
 
 // ListUnknownActivationsResponseBody is the type of the "skills" service
@@ -1306,6 +1325,186 @@ type ListUnexpectedResponseBody struct {
 // ListGatewayErrorResponseBody is the type of the "skills" service "list"
 // endpoint HTTP response body for the "gateway_error" error.
 type ListGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTagsUnauthorizedResponseBody is the type of the "skills" service
+// "listTags" endpoint HTTP response body for the "unauthorized" error.
+type ListTagsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTagsForbiddenResponseBody is the type of the "skills" service "listTags"
+// endpoint HTTP response body for the "forbidden" error.
+type ListTagsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTagsBadRequestResponseBody is the type of the "skills" service
+// "listTags" endpoint HTTP response body for the "bad_request" error.
+type ListTagsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTagsNotFoundResponseBody is the type of the "skills" service "listTags"
+// endpoint HTTP response body for the "not_found" error.
+type ListTagsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTagsConflictResponseBody is the type of the "skills" service "listTags"
+// endpoint HTTP response body for the "conflict" error.
+type ListTagsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTagsUnsupportedMediaResponseBody is the type of the "skills" service
+// "listTags" endpoint HTTP response body for the "unsupported_media" error.
+type ListTagsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTagsInvalidResponseBody is the type of the "skills" service "listTags"
+// endpoint HTTP response body for the "invalid" error.
+type ListTagsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTagsInvariantViolationResponseBody is the type of the "skills" service
+// "listTags" endpoint HTTP response body for the "invariant_violation" error.
+type ListTagsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTagsUnexpectedResponseBody is the type of the "skills" service
+// "listTags" endpoint HTTP response body for the "unexpected" error.
+type ListTagsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListTagsGatewayErrorResponseBody is the type of the "skills" service
+// "listTags" endpoint HTTP response body for the "gateway_error" error.
+type ListTagsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -4447,6 +4646,8 @@ type SkillResponseBody struct {
 	SourceKind string `form:"source_kind" json:"source_kind" xml:"source_kind"`
 	// The skill classification.
 	Classification string `form:"classification" json:"classification" xml:"classification"`
+	// Registry tags for categorizing the skill.
+	Tags []string `form:"tags" json:"tags" xml:"tags"`
 	// The current version ID, selected by effective promotion time.
 	LatestVersionID *string `form:"latest_version_id,omitempty" json:"latest_version_id,omitempty" xml:"latest_version_id,omitempty"`
 	// The number of immutable versions recorded for the skill.
@@ -4696,6 +4897,17 @@ type SkillDriftResponseBody struct {
 	IndeterminateMachines int64 `form:"indeterminate_machines" json:"indeterminate_machines" xml:"indeterminate_machines"`
 }
 
+// SkillPromptInjectionFindingResponseBody is used to define fields on response
+// body types.
+type SkillPromptInjectionFindingResponseBody struct {
+	// The rule that produced the finding.
+	RuleID string `form:"rule_id" json:"rule_id" xml:"rule_id"`
+	// Why the current skill version was flagged.
+	Description string `form:"description" json:"description" xml:"description"`
+	// The classifier confidence from 0 to 1.
+	Confidence float64 `form:"confidence" json:"confidence" xml:"confidence"`
+}
+
 // UnknownSkillActivationResponseBody is used to define fields on response body
 // types.
 type UnknownSkillActivationResponseBody struct {
@@ -4815,6 +5027,14 @@ func NewUpdateResponseBody(res *types.Skill) *UpdateResponseBody {
 		CreatedAt:       res.CreatedAt,
 		UpdatedAt:       res.UpdatedAt,
 	}
+	if res.Tags != nil {
+		body.Tags = make([]string, len(res.Tags))
+		for i, val := range res.Tags {
+			body.Tags[i] = val
+		}
+	} else {
+		body.Tags = []string{}
+	}
 	return body
 }
 
@@ -4836,6 +5056,21 @@ func NewListResponseBody(res *skills.ListSkillsResult) *ListResponseBody {
 		}
 	} else {
 		body.Skills = []*SkillResponseBody{}
+	}
+	return body
+}
+
+// NewListTagsResponseBody builds the HTTP response body from the result of the
+// "listTags" endpoint of the "skills" service.
+func NewListTagsResponseBody(res *skills.ListSkillTagsResult) *ListTagsResponseBody {
+	body := &ListTagsResponseBody{}
+	if res.Tags != nil {
+		body.Tags = make([]string, len(res.Tags))
+		for i, val := range res.Tags {
+			body.Tags[i] = val
+		}
+	} else {
+		body.Tags = []string{}
 	}
 	return body
 }
@@ -5019,6 +5254,18 @@ func NewGetResponseBody(res *skills.GetSkillResult) *GetResponseBody {
 	}
 	if res.Drift != nil {
 		body.Drift = marshalSkillsSkillDriftToSkillDriftResponseBody(res.Drift)
+	}
+	if res.PromptInjectionFindings != nil {
+		body.PromptInjectionFindings = make([]*SkillPromptInjectionFindingResponseBody, len(res.PromptInjectionFindings))
+		for i, val := range res.PromptInjectionFindings {
+			if val == nil {
+				body.PromptInjectionFindings[i] = nil
+				continue
+			}
+			body.PromptInjectionFindings[i] = marshalSkillsSkillPromptInjectionFindingToSkillPromptInjectionFindingResponseBody(val)
+		}
+	} else {
+		body.PromptInjectionFindings = []*SkillPromptInjectionFindingResponseBody{}
 	}
 	return body
 }
@@ -5823,6 +6070,146 @@ func NewListUnexpectedResponseBody(res *goa.ServiceError) *ListUnexpectedRespons
 // result of the "list" endpoint of the "skills" service.
 func NewListGatewayErrorResponseBody(res *goa.ServiceError) *ListGatewayErrorResponseBody {
 	body := &ListGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTagsUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "listTags" endpoint of the "skills" service.
+func NewListTagsUnauthorizedResponseBody(res *goa.ServiceError) *ListTagsUnauthorizedResponseBody {
+	body := &ListTagsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTagsForbiddenResponseBody builds the HTTP response body from the
+// result of the "listTags" endpoint of the "skills" service.
+func NewListTagsForbiddenResponseBody(res *goa.ServiceError) *ListTagsForbiddenResponseBody {
+	body := &ListTagsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTagsBadRequestResponseBody builds the HTTP response body from the
+// result of the "listTags" endpoint of the "skills" service.
+func NewListTagsBadRequestResponseBody(res *goa.ServiceError) *ListTagsBadRequestResponseBody {
+	body := &ListTagsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTagsNotFoundResponseBody builds the HTTP response body from the
+// result of the "listTags" endpoint of the "skills" service.
+func NewListTagsNotFoundResponseBody(res *goa.ServiceError) *ListTagsNotFoundResponseBody {
+	body := &ListTagsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTagsConflictResponseBody builds the HTTP response body from the
+// result of the "listTags" endpoint of the "skills" service.
+func NewListTagsConflictResponseBody(res *goa.ServiceError) *ListTagsConflictResponseBody {
+	body := &ListTagsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTagsUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "listTags" endpoint of the "skills" service.
+func NewListTagsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListTagsUnsupportedMediaResponseBody {
+	body := &ListTagsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTagsInvalidResponseBody builds the HTTP response body from the result
+// of the "listTags" endpoint of the "skills" service.
+func NewListTagsInvalidResponseBody(res *goa.ServiceError) *ListTagsInvalidResponseBody {
+	body := &ListTagsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTagsInvariantViolationResponseBody builds the HTTP response body from
+// the result of the "listTags" endpoint of the "skills" service.
+func NewListTagsInvariantViolationResponseBody(res *goa.ServiceError) *ListTagsInvariantViolationResponseBody {
+	body := &ListTagsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTagsUnexpectedResponseBody builds the HTTP response body from the
+// result of the "listTags" endpoint of the "skills" service.
+func NewListTagsUnexpectedResponseBody(res *goa.ServiceError) *ListTagsUnexpectedResponseBody {
+	body := &ListTagsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListTagsGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "listTags" endpoint of the "skills" service.
+func NewListTagsGatewayErrorResponseBody(res *goa.ServiceError) *ListTagsGatewayErrorResponseBody {
+	body := &ListTagsGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -8267,9 +8654,10 @@ func NewCreatePayload(body *CreateRequestBody, sessionToken *string, apikeyToken
 // NewAddVersionPayload builds a skills service addVersion endpoint payload.
 func NewAddVersionPayload(body *AddVersionRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *skills.AddVersionPayload {
 	v := &skills.AddVersionPayload{
-		ID:                   *body.ID,
-		Content:              *body.Content,
-		DerivedFromVersionID: body.DerivedFromVersionID,
+		ID:                      *body.ID,
+		Content:                 *body.Content,
+		DerivedFromVersionID:    body.DerivedFromVersionID,
+		ExpectedLatestVersionID: body.ExpectedLatestVersionID,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -8295,10 +8683,15 @@ func NewRestoreVersionPayload(body *RestoreVersionRequestBody, sessionToken *str
 // NewUpdatePayload builds a skills service update endpoint payload.
 func NewUpdatePayload(body *UpdateRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *skills.UpdatePayload {
 	v := &skills.UpdatePayload{
-		ID:          *body.ID,
-		Name:        *body.Name,
-		DisplayName: *body.DisplayName,
-		Summary:     body.Summary,
+		ID:                      *body.ID,
+		Name:                    *body.Name,
+		DisplayName:             *body.DisplayName,
+		Summary:                 body.Summary,
+		ExpectedLatestVersionID: body.ExpectedLatestVersionID,
+	}
+	v.Tags = make([]string, len(body.Tags))
+	for i, val := range body.Tags {
+		v.Tags[i] = val
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -8308,14 +8701,25 @@ func NewUpdatePayload(body *UpdateRequestBody, sessionToken *string, apikeyToken
 }
 
 // NewListPayload builds a skills service list endpoint payload.
-func NewListPayload(cursor *string, limit int, search *string, sourceKinds []string, classifications []string, sort string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *skills.ListPayload {
+func NewListPayload(cursor *string, limit int, search *string, sourceKinds []string, classifications []string, tags []string, sort string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *skills.ListPayload {
 	v := &skills.ListPayload{}
 	v.Cursor = cursor
 	v.Limit = limit
 	v.Search = search
 	v.SourceKinds = sourceKinds
 	v.Classifications = classifications
+	v.Tags = tags
 	v.Sort = sort
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewListTagsPayload builds a skills service listTags endpoint payload.
+func NewListTagsPayload(sessionToken *string, apikeyToken *string, projectSlugInput *string) *skills.ListTagsPayload {
+	v := &skills.ListTagsPayload{}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -8574,6 +8978,9 @@ func ValidateAddVersionRequestBody(body *AddVersionRequestBody) (err error) {
 	if body.DerivedFromVersionID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.derived_from_version_id", *body.DerivedFromVersionID, goa.FormatUUID))
 	}
+	if body.ExpectedLatestVersionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.expected_latest_version_id", *body.ExpectedLatestVersionID, goa.FormatUUID))
+	}
 	return
 }
 
@@ -8606,6 +9013,9 @@ func ValidateUpdateRequestBody(body *UpdateRequestBody) (err error) {
 	if body.DisplayName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("display_name", "body"))
 	}
+	if body.Tags == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tags", "body"))
+	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
@@ -8623,6 +9033,17 @@ func ValidateUpdateRequestBody(body *UpdateRequestBody) (err error) {
 		if utf8.RuneCountInString(*body.Summary) > 1024 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.summary", *body.Summary, utf8.RuneCountInString(*body.Summary), 1024, false))
 		}
+	}
+	if len(body.Tags) > 40 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.tags", body.Tags, len(body.Tags), 40, false))
+	}
+	for _, e := range body.Tags {
+		if utf8.RuneCountInString(e) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.tags[*]", e, utf8.RuneCountInString(e), 64, false))
+		}
+	}
+	if body.ExpectedLatestVersionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.expected_latest_version_id", *body.ExpectedLatestVersionID, goa.FormatUUID))
 	}
 	return
 }

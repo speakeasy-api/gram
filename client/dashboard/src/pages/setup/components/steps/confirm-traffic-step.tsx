@@ -27,6 +27,8 @@ const SOURCE_ICONS: Record<string, string> = {
   cowork: "/icons/platforms/claude.svg",
   cursor: "/icons/platforms/cursor.svg",
   codex: "/icons/platforms/openai.svg",
+  chatgpt: "/icons/platforms/openai.svg",
+  "chatgpt-work": "/icons/platforms/openai.svg",
 };
 
 function eventKey(ev: OnboardingHookEvent): string {
@@ -45,6 +47,10 @@ function sourceLabel(source: string): string {
       return "Cursor";
     case "codex":
       return "Codex";
+    case "chatgpt":
+      return "ChatGPT";
+    case "chatgpt-work":
+      return "ChatGPT Work";
     case "cowork":
       return "Cowork";
     default:
@@ -145,7 +151,7 @@ export function ConfirmTrafficStep({
     return (
       <StepContainer
         icon={
-          <div className="bg-secondary flex h-12 w-12 items-center justify-center rounded-lg">
+          <div className="bg-secondary flex h-12 w-12 items-center justify-center">
             <Activity className="text-foreground h-6 w-6" />
           </div>
         }
@@ -175,7 +181,7 @@ export function ConfirmTrafficStep({
   return (
     <StepContainer
       icon={
-        <div className="bg-secondary flex h-12 w-12 items-center justify-center rounded-lg">
+        <div className="bg-secondary flex h-12 w-12 items-center justify-center">
           <Activity className="text-foreground h-6 w-6" />
         </div>
       }
@@ -187,7 +193,7 @@ export function ConfirmTrafficStep({
       onBack={onBack}
     >
       <div className="space-y-6">
-        <div className="border-border bg-card overflow-hidden rounded-lg border">
+        <div className="border-border bg-card overflow-hidden border">
           <div className="border-border flex items-center justify-between border-b px-4 py-3">
             <span className="text-foreground text-sm font-medium">
               Recent activity
@@ -260,9 +266,9 @@ export function ConfirmTrafficStep({
         </div>
 
         {hasEvents && (
-          <div className="bg-foreground/5 border-foreground/10 rounded-lg border p-4">
+          <div className="bg-foreground/5 border-foreground/10 border p-4">
             <div className="flex items-start gap-3">
-              <div className="bg-foreground mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded">
+              <div className="bg-foreground mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center">
                 <PartyPopper className="text-background h-4 w-4" />
               </div>
               <div>

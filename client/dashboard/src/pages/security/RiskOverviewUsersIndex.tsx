@@ -104,7 +104,7 @@ function RiskOverviewUsersIndexContent() {
             </span>
           </div>
         ) : (
-          <ul className="divide-border divide-y rounded-lg border">
+          <ul className="divide-border divide-y border">
             {users.map((u, i) => {
               const href =
                 u.externalUserId && userDetailRoute

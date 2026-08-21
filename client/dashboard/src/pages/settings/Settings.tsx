@@ -1,72 +1,33 @@
-import { Page } from "@/components/page-layout";
-import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/Heading";
-import { Text } from "@/components/ui/Text";
-import {
-  useIsPlatformAdmin,
-  useOrganization,
-  useProject,
-} from "@/contexts/Auth";
-import { ShieldAlert } from "lucide-react";
-import { Stack } from "@/components/ui/Stack";
+import { SettingsPage } from "@/components/page-templates";
+import { PlatformAdminOnlyPanel } from "@/components/platform-admin-only-panel";
+import { useOrganization, useProject } from "@/contexts/Auth";
 import { SettingsDangerZone } from "./SettingsDangerZone";
 import { RegistryCacheSection } from "./RegistryCacheSection";
 import { ModelProviderKeysSection } from "./ModelProviderKeysSection";
 
 export default function Settings(): JSX.Element {
-  const isAdmin = useIsPlatformAdmin();
   const organization = useOrganization();
   const project = useProject();
 
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <RequireScope scope="project:write" level="page">
-          <Heading variant="h4" className="mb-2">
-            Project Settings
-          </Heading>
-          <Text muted small className="mb-6">
-            Manage your project configuration and perform administrative
-            actions.
-          </Text>
-          <div className="mb-8">
-            <ModelProviderKeysSection />
-          </div>
+    <SettingsPage
+      scope="project:write"
+      title="Project Settings"
+      description="Manage your project configuration and perform administrative actions."
+    >
+      <ModelProviderKeysSection />
 
-          <div>
-            <SettingsDangerZone />
-          </div>
+      <SettingsDangerZone />
 
-          {isAdmin && (
-            <div className="mt-8 rounded-lg border border-red-500/20 bg-red-500/5 p-4">
-              <Stack
-                direction="horizontal"
-                align="center"
-                gap={2}
-                className="mb-3"
-              >
-                <ShieldAlert className="h-5 w-5 text-red-500" />
-                <Heading
-                  variant="h4"
-                  className="text-red-600 dark:text-red-400"
-                >
-                  Platform Admin Only
-                </Heading>
-              </Stack>
-              <dl className="mb-4 grid grid-cols-[max-content_auto] gap-x-6 gap-y-2">
-                <dt className="text-end">Organization ID</dt>
-                <dd className="font-mono text-sm">{organization.id}</dd>
-                <dt className="text-end">Project ID</dt>
-                <dd className="font-mono text-sm">{project.id}</dd>
-              </dl>
-              <RegistryCacheSection />
-            </div>
-          )}
-        </RequireScope>
-      </Page.Body>
-    </Page>
+      <PlatformAdminOnlyPanel>
+        <dl className="mb-4 grid grid-cols-[max-content_auto] gap-x-6 gap-y-2">
+          <dt className="text-end">Organization ID</dt>
+          <dd className="font-mono text-sm">{organization.id}</dd>
+          <dt className="text-end">Project ID</dt>
+          <dd className="font-mono text-sm">{project.id}</dd>
+        </dl>
+        <RegistryCacheSection />
+      </PlatformAdminOnlyPanel>
+    </SettingsPage>
   );
 }

@@ -22,6 +22,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/auditlogs"
 	srv "github.com/speakeasy-api/gram/server/gen/http/auditlogs/server"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -39,10 +40,7 @@ const listAuditLogsPageSize = 50
 // Speakeasy staff actions in customer orgs (e.g. via the dev-tools org
 // override) are shown under a collective label instead of the staff member's
 // email. Logs viewed within the Speakeasy org itself are not masked.
-const (
-	speakeasyTeamOrganizationID = "5a25158b-24dc-4d49-b03d-e85acfbea59c"
-	speakeasyTeamActorLabel     = "Speakeasy Team"
-)
+const speakeasyTeamOrganizationID = "5a25158b-24dc-4d49-b03d-e85acfbea59c"
 
 type Service struct {
 	tracer trace.Tracer
@@ -102,10 +100,11 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 			Int64: 0,
 			Valid: false,
 		},
-		ActorID:     conv.PtrToPGTextEmpty(payload.ActorID),
-		Action:      conv.PtrToPGTextEmpty(payload.Action),
-		SubjectType: conv.PtrToPGTextEmpty(payload.SubjectType),
-		SubjectID:   conv.PtrToPGTextEmpty(payload.SubjectID),
+		ActorID:       conv.PtrToPGTextEmpty(payload.ActorID),
+		Action:        conv.PtrToPGTextEmpty(payload.Action),
+		SubjectType:   conv.PtrToPGTextEmpty(payload.SubjectType),
+		SubjectID:     conv.PtrToPGTextEmpty(payload.SubjectID),
+		ActingSurface: conv.PtrToPGTextEmpty(payload.ActingSurface),
 	}
 
 	if payload.Cursor != nil && *payload.Cursor != "" {
@@ -149,7 +148,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 	}
 	for _, log := range logs {
 		if log.ActorType == "user" && speakeasyActors[log.ActorID] {
-			log.ActorDisplayName = conv.PtrEmpty(speakeasyTeamActorLabel)
+			log.ActorDisplayName = conv.PtrEmpty(audit.SpeakeasyTeamActorLabel)
 			log.ActorSlug = nil
 		}
 	}
@@ -215,6 +214,14 @@ func (s *Service) ListFacets(ctx context.Context, payload *gen.ListFacetsPayload
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing audit action facets").LogError(ctx, s.logger)
 	}
 
+	surfaceRows, err := queries.ListAuditSurfaceFacets(ctx, repo.ListAuditSurfaceFacetsParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing audit surface facets").LogError(ctx, s.logger)
+	}
+
 	actors := toAuditActorFacetOptions(actorRows)
 
 	// Facet values are actor IDs, so mask their display names the same way the
@@ -232,13 +239,14 @@ func (s *Service) ListFacets(ctx context.Context, payload *gen.ListFacetsPayload
 	}
 	for _, actor := range actors {
 		if speakeasyActors[actor.Value] {
-			actor.DisplayName = speakeasyTeamActorLabel
+			actor.DisplayName = audit.SpeakeasyTeamActorLabel
 		}
 	}
 
 	return &gen.ListAuditLogFacetsResult{
-		Actors:  actors,
-		Actions: toAuditActionFacetOptions(actionRows),
+		Actors:   actors,
+		Actions:  toAuditActionFacetOptions(actionRows),
+		Surfaces: toAuditSurfaceFacetOptions(surfaceRows),
 	}, nil
 }
 
@@ -312,32 +320,63 @@ func toAuditLog(row repo.ListAuditLogsRow) (*gen.AuditLog, error) {
 		BeforeSnapshot:     row.BeforeSnapshot,
 		AfterSnapshot:      row.AfterSnapshot,
 		Metadata:           metadata,
+		ActingSurface:      actingSurfaceOrUnknown(row.ActingSurface),
+		ActingClientID:     conv.FromPGText[string](row.ActingClientID),
 		CreatedAt:          row.CreatedAt.Time.Format(time.RFC3339),
 	}, nil
 }
 
-func toAuditActorFacetOptions(rows []repo.ListAuditActorFacetsRow) []*gen.AuditLogFacetOption {
+// actingSurfaceOrUnknown resolves the stored surface for display.
+//
+// The column is nullable so that rows written before attribution existed need
+// no backfill. Those rows are reported as an unknown surface, which is what
+// they are; the API contract keeps the field always present so a client never
+// has to decide what a missing surface means.
+func actingSurfaceOrUnknown(surface pgtype.Text) string {
+	if !surface.Valid || surface.String == "" {
+		return string(audit.SurfaceUnknown)
+	}
+
+	return surface.String
+}
+
+// facetOptions maps one facet query's rows onto the wire type.
+//
+// The three facet queries return distinct generated row types that happen to
+// carry the same three columns, so an accessor keeps the mapping itself in one
+// place: a change to how a facet option is built cannot land for actors and be
+// missed for surfaces.
+func facetOptions[Row any](rows []Row, read func(Row) (value string, displayName string, count int64)) []*gen.AuditLogFacetOption {
 	options := make([]*gen.AuditLogFacetOption, 0, len(rows))
 	for _, row := range rows {
+		value, displayName, count := read(row)
 		options = append(options, &gen.AuditLogFacetOption{
-			Value:       row.Value,
-			DisplayName: row.DisplayName,
-			Count:       row.Count,
+			Value:       value,
+			DisplayName: displayName,
+			Count:       count,
 		})
 	}
 
 	return options
 }
 
-func toAuditActionFacetOptions(rows []repo.ListAuditActionFacetsRow) []*gen.AuditLogFacetOption {
-	options := make([]*gen.AuditLogFacetOption, 0, len(rows))
-	for _, row := range rows {
-		options = append(options, &gen.AuditLogFacetOption{
-			Value:       row.Value,
-			DisplayName: row.DisplayName,
-			Count:       row.Count,
-		})
-	}
+func toAuditActorFacetOptions(rows []repo.ListAuditActorFacetsRow) []*gen.AuditLogFacetOption {
+	return facetOptions(rows, func(row repo.ListAuditActorFacetsRow) (string, string, int64) {
+		return row.Value, row.DisplayName, row.Count
+	})
+}
 
-	return options
+// toAuditSurfaceFacetOptions passes surface values through unlabelled, as the
+// action facets do. The dashboard owns the wording for both, so the label lives
+// in one place rather than being split between here and the client.
+func toAuditSurfaceFacetOptions(rows []repo.ListAuditSurfaceFacetsRow) []*gen.AuditLogFacetOption {
+	return facetOptions(rows, func(row repo.ListAuditSurfaceFacetsRow) (string, string, int64) {
+		return row.Value, row.DisplayName, row.Count
+	})
+}
+
+func toAuditActionFacetOptions(rows []repo.ListAuditActionFacetsRow) []*gen.AuditLogFacetOption {
+	return facetOptions(rows, func(row repo.ListAuditActionFacetsRow) (string, string, int64) {
+		return row.Value, row.DisplayName, row.Count
+	})
 }

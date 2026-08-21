@@ -14,6 +14,21 @@ import (
 // placeholders).
 var sq = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Question)
 
+// Values of risk_findings.excluded_reason: why a suppressed finding's
+// excluded_at is set. The empty string means "not suppressed" (or a legacy
+// row written before the column existed).
+const (
+	// ExcludedReasonRule marks a finding suppressed by an exclusion rule;
+	// exclusion_id records which one.
+	ExcludedReasonRule = "rule"
+	// ExcludedReasonManual marks a finding a user dismissed via the UI or an
+	// agent tool.
+	ExcludedReasonManual = "manual"
+	// ExcludedReasonAutomated marks a finding flagged by the offline
+	// false-positive sweep.
+	ExcludedReasonAutomated = "automated"
+)
+
 // RiskFindingRow is a single row destined for the risk_findings table. The raw
 // matched value is never carried here: only its length, a redacted display
 // string, and one-way fingerprints. See internal/risk/finding_ch.go for how it
@@ -52,6 +67,15 @@ type RiskFindingRow struct {
 	MessageCreatedAt time.Time `ch:"message_created_at"`
 	AssistantID      string    `ch:"assistant_id"`
 
+	// ChatSource is the canonical product surface (codex, cursor, claude-code,
+	// ...) of the scanned message; Team is the resolved user's WorkOS directory
+	// department; UserEmail is the resolved internal user's email. All resolved
+	// from Postgres at ingest alongside the ids above (so Watchdog reads never
+	// need a Postgres lookup) and empty when unresolved.
+	ChatSource string `ch:"chat_source"`
+	Team       string `ch:"team"`
+	UserEmail  string `ch:"user_email"`
+
 	// Category is the canonical risk category for (source, rule_id), computed
 	// via internal/risk/categories at ingest. Empty for dead-letter sentinels.
 	Category string `ch:"category"`
@@ -72,6 +96,24 @@ type RiskFindingRow struct {
 	// (risk.markResultsFalsePositive), independent of ExcludedAt. Nil for a
 	// freshly-scanned finding or after risk.unmarkResultsFalsePositive.
 	FalsePositiveAt *time.Time `ch:"false_positive_at"`
+
+	// ExcludedReason says why ExcludedAt is set — ExcludedReasonRule (exclusion
+	// rule, ExclusionID set), ExcludedReasonManual (user dismissal) or
+	// ExcludedReasonAutomated (offline false-positive sweep). ExcludedDetail is
+	// free-form context: the user-supplied dismissal reason for manual rows,
+	// the catalog reason for automated ones. Both empty when the finding is not
+	// suppressed and on legacy rows written before the columns existed.
+	ExcludedReason string `ch:"excluded_reason"`
+	ExcludedDetail string `ch:"excluded_detail"`
+
+	// Reveal metadata: which text StartPos/EndPos index (Surface), the scanner
+	// field and gjson path the span matched, and the recorded tool call id
+	// anchoring the finding. All empty when unknown; see the risk_findings
+	// column comments for the value sets.
+	Surface    string `ch:"surface"`
+	Field      string `ch:"field"`
+	Path       string `ch:"path"`
+	ToolCallID string `ch:"tool_call_id"`
 }
 
 // chNullable maps a nil pointer to an untyped nil interface so a Nullable
@@ -84,6 +126,58 @@ func chNullable[T any](p *T) any {
 		return nil
 	}
 	return *p
+}
+
+// riskFindingColumns is the full risk_findings column list, in the exact
+// order InsertRiskFindings binds values. The retroactive exclusion queries
+// (retro_exclusion.go) render their INSERT ... SELECT copy projection from
+// this same list so a new column cannot land in one write path and silently
+// default in the other. TestCopyProjection_LockstepWithInsertColumns pins the
+// projection's replacement set against this list; the positional Values()
+// binding in InsertRiskFindings is the one thing no test pins — when editing
+// this list, keep that argument order in lockstep by hand.
+var riskFindingColumns = []string{
+	"id",
+	"created_at",
+	"inserted_at",
+	"organization_id",
+	"project_id",
+	"request_id",
+	"chat_message_id",
+	"content_part_id",
+	"risk_policy_id",
+	"risk_policy_version",
+	"rule_id",
+	"description",
+	"source",
+	"confidence",
+	"tags",
+	"start_pos",
+	"end_pos",
+	"dead_letter_reason",
+	"chat_id",
+	"user_id",
+	"external_user_id",
+	"category",
+	"match_len",
+	"match_redacted",
+	"fingerprint_pepper_version",
+	"fingerprint_global_hs256",
+	"fingerprint_tenant_hs256",
+	"excluded_at",
+	"exclusion_id",
+	"false_positive_at",
+	"excluded_reason",
+	"excluded_detail",
+	"message_created_at",
+	"assistant_id",
+	"chat_source",
+	"team",
+	"user_email",
+	"surface",
+	"field",
+	"path",
+	"tool_call_id",
 }
 
 // InsertRiskFindings writes findings using a server-side async insert
@@ -100,41 +194,7 @@ func (q *Queries) InsertRiskFindings(ctx context.Context, rows []RiskFindingRow)
 		"wait_for_async_insert": 0,
 	}))
 
-	builder := sq.Insert("risk_findings").
-		Columns(
-			"id",
-			"created_at",
-			"inserted_at",
-			"organization_id",
-			"project_id",
-			"request_id",
-			"chat_message_id",
-			"content_part_id",
-			"risk_policy_id",
-			"risk_policy_version",
-			"rule_id",
-			"description",
-			"source",
-			"confidence",
-			"tags",
-			"start_pos",
-			"end_pos",
-			"dead_letter_reason",
-			"chat_id",
-			"user_id",
-			"external_user_id",
-			"category",
-			"match_len",
-			"match_redacted",
-			"fingerprint_pepper_version",
-			"fingerprint_global_hs256",
-			"fingerprint_tenant_hs256",
-			"excluded_at",
-			"exclusion_id",
-			"false_positive_at",
-			"message_created_at",
-			"assistant_id",
-		)
+	builder := sq.Insert("risk_findings").Columns(riskFindingColumns...)
 
 	// inserted_at must be strictly increasing within this batch, not just
 	// "now" — the read-side dedup (ROW_NUMBER() OVER (PARTITION BY id ORDER BY
@@ -194,8 +254,17 @@ func (q *Queries) InsertRiskFindings(ctx context.Context, rows []RiskFindingRow)
 			chNullable(row.ExcludedAt),
 			chNullable(row.ExclusionID),
 			chNullable(row.FalsePositiveAt),
+			row.ExcludedReason,
+			row.ExcludedDetail,
 			row.MessageCreatedAt,
 			row.AssistantID,
+			row.ChatSource,
+			row.Team,
+			row.UserEmail,
+			row.Surface,
+			row.Field,
+			row.Path,
+			row.ToolCallID,
 		)
 	}
 

@@ -10,7 +10,10 @@ import {
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SkillManifestDialog } from "./SkillManifestDialog";
-import { MAX_SKILL_MANIFEST_BYTES } from "./skill-manifest";
+import {
+  MAX_SKILL_MANIFEST_BYTES,
+  SKILL_MANIFEST_TEMPLATE,
+} from "./skill-manifest";
 
 const testState = vi.hoisted(() => ({
   queryClient: { id: "query-client" },
@@ -71,6 +74,9 @@ vi.mock("@gram/client/react-query/skillFeedback.js", () => ({
 }));
 vi.mock("@gram/client/react-query/skillEfficacyInsights.js", () => ({
   invalidateAllSkillEfficacyInsights: testState.invalidateEfficacy,
+}));
+vi.mock("@gram/client/react-query/skillTags.js", () => ({
+  invalidateAllSkillTags: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("nuqs", () => ({
   useQueryState: () => [null, testState.setSkillParam],
@@ -424,6 +430,36 @@ describe("SkillManifestDialog", () => {
     expect(testState.create.mutateAsync).toHaveBeenCalledTimes(1);
   });
 
+  it("prefills the create dialog with a SKILL.md skeleton", () => {
+    render(<SkillManifestDialog mode="create" open onOpenChange={() => {}} />);
+
+    const textarea = screen.getByLabelText("SKILL.md content");
+    expect((textarea as HTMLTextAreaElement).value).toBe("");
+
+    fireEvent.click(screen.getByRole("button", { name: "Insert template" }));
+
+    expect((textarea as HTMLTextAreaElement).value).toBe(
+      SKILL_MANIFEST_TEMPLATE,
+    );
+  });
+
+  it("hides the template button outside create mode", () => {
+    render(
+      <SkillManifestDialog
+        mode="edit"
+        open
+        onOpenChange={() => {}}
+        skillId="skill_a"
+        derivedFromVersionId="version_source"
+        initialContent={UPDATED_MANIFEST}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: "Insert template" }),
+    ).toBeNull();
+  });
+
   it("rejects an oversized upload before reading it", async () => {
     const file = new File(
       [new Uint8Array(MAX_SKILL_MANIFEST_BYTES + 1)],
@@ -450,5 +486,10 @@ describe("SkillManifestDialog", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(onOpenChange).not.toHaveBeenCalled();
+    expect(
+      screen
+        .getByRole("button", { name: "Insert template" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
   });
 });

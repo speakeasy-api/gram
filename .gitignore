@@ -8,9 +8,11 @@ mise.local.toml
 mise.*.local.toml
 flags.local.csv
 *.tsbuildinfo
+.eslintcache
 node_modules
 bin
 junit-report.xml
+rerun-report.txt
 report.md
 .mise-tasks/local
 .assets
@@ -40,6 +42,7 @@ report.md
 /dev-idp/gen/http/openapi3.yaml
 scratch/
 /local/cache
+/local/lgtm
 /local/ssl
 /local/keys
 /local/functions
@@ -67,7 +70,6 @@ gram.code-workspace
 dist/
 **/.claude/settings.local.json
 **/.claude/.gram-install-prompted
-.vercel
 cover.*
 *gram.deploy.json
 .tmp-melange/
@@ -108,3 +110,13 @@ __pycache__/
 
 # Storybook build output
 storybook-static/
+
+# Stray browser-automation screenshots at repo root (agents must use .playwright-cli/)
+/*.png
+
+# Removed orphaned Speakeasy build output (#4947); the SDK generates into
+# client/dashboard/src/sdk — nothing may reappear here.
+/client/sdk/
+
+# Compiled one-off backfill binary; build with `go build ./cmd/workos-backfill`.
+/server/workos-backfill

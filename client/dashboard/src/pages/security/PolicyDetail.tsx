@@ -1,7 +1,9 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { ShadowMCPDispositionPicker } from "@/components/shadow-mcp/ShadowMCPDispositionPicker";
 import { ShadowMCPPolicyServerSelector } from "@/components/shadow-mcp/ShadowMCPPolicyServerSelector";
 import {
+  initialShadowMCPBlockedPolicyURLs,
   initialShadowMCPPolicyURLs,
   invalidateShadowMCPPolicyInventory,
   useShadowMCPPolicyInventory,
@@ -83,9 +85,11 @@ import {
   isBlockingShadowMCPPolicy,
   isShadowMCPBlockConfiguration,
   shadowMCPAllowedURLsForMutation,
+  shadowMCPBlockedURLsForMutation,
   shadowMCPSelectionBaselineForUpdate,
   shadowMCPSelectionIsDirty,
   shadowMCPSelectionIsInitialized,
+  type ShadowMCPDisposition,
 } from "./policy-shadow-mcp-setup";
 import { type Step } from "@/pages/setup/components/onboarding-stepper";
 import {
@@ -102,8 +106,14 @@ import {
 } from "./PolicyCenter";
 import { DetectorCard } from "./DetectorCard";
 import { builtInRuleDisabledReason } from "./policy-built-in-rule-exclusivity";
+import { policyStatusLabel } from "./policy-enabled";
+import {
+  togglePolicyEnabledVariables,
+  useTogglePolicyEnabled,
+} from "./use-toggle-policy-enabled";
 import {
   ALL_CATEGORIES,
+  AVAILABLE_CATEGORIES,
   CATEGORY_LEVEL_DETECTORS,
   FLAG_ONLY_CATEGORIES,
   PRESIDIO_CATEGORIES,
@@ -277,7 +287,20 @@ function PolicyDetailContent({ policyId }: { policyId: string }): JSX.Element {
 // ── Create page (serves both standard and prompt policies) ───────────────────
 
 export function PolicyNew(): JSX.Element {
+  return (
+    <RequireScope scope="org:admin" level="page">
+      <PolicyNewContent />
+    </RequireScope>
+  );
+}
+
+function PolicyNewContent(): JSX.Element {
   const [kind] = useQueryState("kind");
+  const [category] = useQueryState("category");
+  const initialCategories =
+    category && AVAILABLE_CATEGORIES.has(category as RuleCategory)
+      ? new Set<RuleCategory>([category as RuleCategory])
+      : undefined;
   if (kind === "standard") {
     return (
       <Page>
@@ -285,7 +308,10 @@ export function PolicyNew(): JSX.Element {
           <Page.Header.Breadcrumbs />
         </Page.Header>
         <Page.Body>
-          <StandardPolicyEditor policy={null} />
+          <StandardPolicyEditor
+            policy={null}
+            initialCategories={initialCategories}
+          />
         </Page.Body>
       </Page>
     );
@@ -329,7 +355,7 @@ function PolicyKindChooser(): JSX.Element {
             <button
               type="button"
               onClick={() => void setKind("standard")}
-              className="hover:bg-muted/40 rounded-xl border p-5 text-left transition-colors"
+              className="hover:bg-muted/40 border p-5 text-left transition-colors"
             >
               <Shield className="text-muted-foreground mb-3 h-5 w-5" />
               <Text className="font-medium">Built-in detector</Text>
@@ -341,7 +367,7 @@ function PolicyKindChooser(): JSX.Element {
             <button
               type="button"
               onClick={() => void setKind("prompt")}
-              className="hover:bg-muted/40 rounded-xl border p-5 text-left transition-colors"
+              className="hover:bg-muted/40 border p-5 text-left transition-colors"
             >
               <Sparkles className="text-muted-foreground mb-3 h-5 w-5" />
               <Text className="font-medium">Prompt-based</Text>
@@ -381,7 +407,7 @@ function HorizontalStepper({
             <button
               type="button"
               onClick={() => onStep(index)}
-              className="group flex shrink-0 items-center gap-2 rounded-md py-1 pr-1 text-left"
+              className="group flex shrink-0 items-center gap-2 py-1 pr-1 text-left"
             >
               <span
                 className={cn(
@@ -436,7 +462,7 @@ function StepperShell({
     // standard page width).
     <Stack gap={6} className="w-full">
       {header}
-      <div className="bg-muted/20 rounded-lg border px-4 py-3">
+      <div className="bg-muted/20 border px-4 py-3">
         <HorizontalStepper steps={steps} current={current} onStep={onStep} />
       </div>
       <Stack gap={6}>{children}</Stack>
@@ -509,6 +535,7 @@ function PolicyHeader({
   const isCreate = policy === null;
   const routes = useRoutes();
   const [editingName, setEditingName] = useState(false);
+  const toggleEnabledMutation = useTogglePolicyEnabled();
 
   return (
     <Stack
@@ -554,11 +581,32 @@ function PolicyHeader({
               <Pencil className="text-muted-foreground h-4 w-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-100" />
             </button>
           )}
-          {policy ? <StatusBadge /> : null}
+          {policy ? (
+            <>
+              <StatusBadge enabled={policy.enabled} />
+              <Switch
+                checked={policy.enabled}
+                disabled={saving || toggleEnabledMutation.isPending}
+                onCheckedChange={(checked) =>
+                  toggleEnabledMutation.mutate(
+                    togglePolicyEnabledVariables(
+                      policy.id,
+                      policy.name,
+                      checked,
+                    ),
+                  )
+                }
+                aria-label={policy.enabled ? "Disable policy" : "Enable policy"}
+              />
+            </>
+          ) : null}
         </Stack>
         {policy ? (
           <Text small muted>
             Version {policy.version} · {kindLabel}
+            {policy.enabled
+              ? null
+              : " · Inactive — new messages are not scanned"}
           </Text>
         ) : (
           <Text small muted>
@@ -610,8 +658,12 @@ function CreateButton({
   );
 }
 
-function StatusBadge(): JSX.Element {
-  return <Badge variant="success">Enforcing</Badge>;
+function StatusBadge({ enabled }: { enabled: boolean }): JSX.Element {
+  return (
+    <Badge variant={enabled ? "success" : "neutral"}>
+      {policyStatusLabel(enabled)}
+    </Badge>
+  );
 }
 
 // Vertical section header — title stacked over subtext with breathing room.
@@ -768,7 +820,6 @@ function PromptPolicyEditor({
         updateRiskPolicyRequestBody: {
           id: policy.id,
           name: name.trim() || policy.name,
-          enabled: true,
           prompt,
           modelConfig: {
             model: model || undefined,
@@ -1136,7 +1187,7 @@ function LegacyScopeNotice({
   }
   if (parts.length === 0) return null;
   return (
-    <div className="border-border bg-muted/20 rounded-md border px-3 py-2">
+    <div className="border-border bg-muted/20 border px-3 py-2">
       <Text small muted>
         A legacy policy-level scope still narrows this policy in addition to the
         category scopes above ({parts.join("; ")}). It is preserved as-is and
@@ -1390,7 +1441,7 @@ function RecommendedScopeRow({
 
   if (!category.recommendedScopeApplicable) {
     return (
-      <div className="border-border bg-muted/20 flex items-center justify-between gap-3 rounded-md border px-3 py-2.5">
+      <div className="border-border bg-muted/20 flex items-center justify-between gap-3 border px-3 py-2.5">
         <div className="flex min-w-0 items-center gap-2">
           <Text small className="font-medium">
             {category.label}
@@ -1426,7 +1477,7 @@ function RecommendedScopeRow({
   };
 
   return (
-    <div className="border-border rounded-md border px-3 py-2.5">
+    <div className="border-border border px-3 py-2.5">
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <Text small className="font-medium">
@@ -1692,7 +1743,7 @@ function RecommendedScopeCodeLine({
   return (
     <div className="grid gap-1 sm:grid-cols-[4.5rem_minmax(0,1fr)]">
       <span className="text-muted-foreground text-xs">{label}</span>
-      <pre className="bg-muted/50 text-muted-foreground overflow-x-auto rounded px-2 py-1 font-mono text-[11px] leading-tight whitespace-pre">
+      <pre className="bg-muted/50 text-muted-foreground overflow-x-auto px-2 py-1 font-mono text-[11px] leading-tight whitespace-pre">
         {expr}
       </pre>
     </div>
@@ -2518,7 +2569,7 @@ function ScoreStat({
         onClick={() => onSelect(verdict)}
         aria-pressed={active}
         className={cn(
-          "rounded-lg border p-3 text-left transition-colors",
+          "border p-3 text-left transition-colors",
           active
             ? "border-foreground/40 bg-muted/70"
             : "hover:bg-muted/40 hover:border-foreground/30",
@@ -2529,7 +2580,7 @@ function ScoreStat({
     );
   }
 
-  return <div className="rounded-lg border p-3">{content}</div>;
+  return <div className="border p-3">{content}</div>;
 }
 
 function verdictForAgreement(
@@ -2603,7 +2654,7 @@ function highlightQuery(text: string, query: string): ReactNode {
   return (
     <>
       {text.slice(0, matchIndex)}
-      <mark className="rounded-sm bg-yellow-200 px-0.5 text-foreground dark:bg-yellow-700/60">
+      <mark className="bg-yellow-200 px-0.5 text-foreground dark:bg-yellow-700/60">
         {text.slice(matchIndex, matchIndex + query.length)}
       </mark>
       {text.slice(matchIndex + query.length)}
@@ -2823,7 +2874,7 @@ function SessionReview({
             />
             <ReevaluatingIndicator show={reevaluating} />
           </div>
-          <div className="border-border inline-flex self-start rounded-md border p-0.5">
+          <div className="border-border inline-flex self-start border p-0.5">
             {(
               [
                 { key: "all", label: "All" },
@@ -2836,7 +2887,7 @@ function SessionReview({
                 type="button"
                 onClick={() => setFilter(opt.key)}
                 className={cn(
-                  "rounded px-3 py-1 text-xs font-medium transition-colors",
+                  "px-3 py-1 text-xs font-medium transition-colors",
                   filter === opt.key
                     ? "bg-foreground text-background"
                     : "text-muted-foreground hover:text-foreground",
@@ -2849,7 +2900,7 @@ function SessionReview({
         </Stack>
 
         {/* Results list */}
-        <div className="min-h-0 flex-1 overflow-auto rounded-lg border">
+        <div className="min-h-0 flex-1 overflow-auto border">
           {reviewVerdictFilter ? (
             <ReviewedSessionRows
               chatIds={reviewedChatIds}
@@ -2913,7 +2964,7 @@ function ReevaluatingIndicator({
   if (!show) return null;
 
   return (
-    <div className="border-border bg-muted/30 text-muted-foreground flex h-9 items-center gap-1.5 rounded-md border px-2.5">
+    <div className="border-border bg-muted/30 text-muted-foreground flex h-9 items-center gap-1.5 border px-2.5">
       <Loader2 className="h-3.5 w-3.5 animate-spin" />
       <Text small muted>
         Re-evaluating…
@@ -3054,7 +3105,7 @@ function EvalJudgeVerdictBlock({
   verdict: PromptGuardrailMessageVerdict;
 }): JSX.Element {
   return (
-    <div className="border-warning bg-warning/10 rounded-sm border-l-[3px] px-3 py-2.5">
+    <div className="border-warning bg-warning/10 border-l-[3px] px-3 py-2.5">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-xs font-semibold">
           <TriangleAlert className="text-warning size-4 shrink-0" />
@@ -3307,7 +3358,7 @@ function SessionTranscript({
           </div>
           <button
             onClick={onClose}
-            className="hover:bg-muted rounded-md p-1 transition-colors"
+            className="hover:bg-muted p-1 transition-colors"
             aria-label="Close panel"
           >
             <X className="size-5" />
@@ -3443,8 +3494,10 @@ function ReviewAgreementControl({
 
 export function StandardPolicyEditor({
   policy,
+  initialCategories,
 }: {
   policy: RiskPolicy | null;
+  initialCategories?: ReadonlySet<RuleCategory>;
 }): JSX.Element {
   const routes = useRoutes();
   const project = useProject();
@@ -3487,7 +3540,7 @@ export function StandardPolicyEditor({
   const [name, setName] = useState(policy?.name ?? "");
   const [selectedCategories, setSelectedCategories] = useState<
     Set<RuleCategory>
-  >(() => orig?.categories ?? new Set<RuleCategory>());
+  >(() => new Set(orig?.categories ?? initialCategories));
   const [disabledRules, setDisabledRules] = useState<Set<string>>(
     () => new Set(policy?.disabledRules ?? []),
   );
@@ -3500,11 +3553,19 @@ export function StandardPolicyEditor({
   const [action, setAction] = useState<PolicyAction>(
     (policy?.action as PolicyAction) ?? "flag",
   );
+  // Under block_all the URL set holds allowed servers; under allow_all it
+  // holds blocked servers. The disposition is immutable after create, so the
+  // meaning never flips for an existing policy.
   const [selectedShadowMCPURLs, setSelectedShadowMCPURLs] = useState<
     Set<string>
   >(() => new Set());
   const [originalShadowMCPURLs, setOriginalShadowMCPURLs] =
     useState<Set<string> | null>(null);
+  const [shadowMCPDisposition, setShadowMCPDisposition] =
+    useState<ShadowMCPDisposition>(
+      () =>
+        (policy?.shadowMcpDisposition as ShadowMCPDisposition) ?? "block_all",
+    );
   const [userMessage, setUserMessage] = useState(policy?.userMessage ?? "");
   const [audienceType, setAudienceType] = useState<"everyone" | "targeted">(
     policy?.audienceType === "targeted" ? "targeted" : "everyone",
@@ -3554,10 +3615,16 @@ export function StandardPolicyEditor({
       return;
     }
 
-    const initialURLs =
-      policyID && originalHasShadowMCPBlockConfiguration
-        ? initialShadowMCPPolicyURLs(inventoryQuery.data, policyID)
-        : new Set<string>();
+    let initialURLs: ReadonlySet<string> = new Set<string>();
+    if (policyID && originalHasShadowMCPBlockConfiguration) {
+      // Both dispositions derive their URL set from per-URL grants surfaced
+      // on the inventory: bypass grants (allowed) for block_all policies,
+      // block grants (blocked) for allow_all policies.
+      initialURLs =
+        policy?.shadowMcpDisposition === "allow_all"
+          ? initialShadowMCPBlockedPolicyURLs(inventoryQuery.data, policyID)
+          : initialShadowMCPPolicyURLs(inventoryQuery.data, policyID);
+    }
     setSelectedShadowMCPURLs(new Set(initialURLs));
     setOriginalShadowMCPURLs(new Set(initialURLs));
     setInitializedInventoryForPolicy(editorIdentity);
@@ -3566,6 +3633,7 @@ export function StandardPolicyEditor({
     initializedInventoryForPolicy,
     inventoryQuery.data,
     originalHasShadowMCPBlockConfiguration,
+    policy,
     policyID,
     targetIsShadowMCPBlock,
   ]);
@@ -3714,9 +3782,18 @@ export function StandardPolicyEditor({
       selectedCategories,
       selectedURLs: selectedShadowMCPURLs,
       originalPolicy: policy,
+      disposition: shadowMCPDisposition,
     });
-    const setupFields =
-      shadowMcpAllowedUrls === undefined ? {} : { shadowMcpAllowedUrls };
+    const shadowMcpBlockedUrls = shadowMCPBlockedURLsForMutation({
+      action: resolvedAction,
+      selectedCategories,
+      selectedURLs: selectedShadowMCPURLs,
+      disposition: shadowMCPDisposition,
+    });
+    const setupFields = {
+      ...(shadowMcpAllowedUrls === undefined ? {} : { shadowMcpAllowedUrls }),
+      ...(shadowMcpBlockedUrls === undefined ? {} : { shadowMcpBlockedUrls }),
+    };
 
     if (policy) {
       updateMutation.mutate({
@@ -3724,7 +3801,6 @@ export function StandardPolicyEditor({
           updateRiskPolicyRequestBody: {
             id: policy.id,
             name: name.trim() || policy.name,
-            enabled: true,
             sources,
             presidioEntities,
             promptInjectionRules,
@@ -3771,6 +3847,11 @@ export function StandardPolicyEditor({
               ? { presidioScoreThreshold: presidioThreshold }
               : {}),
             ...setupFields,
+            // The disposition only exists on blocking shadow MCP policies and
+            // is immutable after create, so it is never sent on update.
+            ...(isBlockingShadowMCPPolicy(true, sources, resolvedAction)
+              ? { shadowMcpDisposition: shadowMCPDisposition }
+              : {}),
             ...(identityActive ? { approvedEmailDomains } : {}),
           },
         },
@@ -3896,15 +3977,36 @@ export function StandardPolicyEditor({
             flagOnlySelected={flagOnlySelected}
             shadowMCPAllowedServers={
               targetIsShadowMCPBlock ? (
-                <ShadowMCPPolicyServerSelector
-                  servers={inventoryQuery.data ?? []}
-                  originalURLs={originalShadowMCPURLs ?? EMPTY_SHADOW_MCP_URLS}
-                  selectedURLs={selectedShadowMCPURLs}
-                  onSelectionChange={setSelectedShadowMCPURLs}
-                  isLoading={inventoryQuery.isPending}
-                  error={inventoryQuery.error}
-                  onRetry={() => void inventoryQuery.refetch()}
-                />
+                <div className="grid gap-5 lg:grid-cols-3 lg:items-start">
+                  <ShadowMCPDispositionPicker
+                    value={shadowMCPDisposition}
+                    onChange={(next) => {
+                      if (next === shadowMCPDisposition) return;
+                      // The URL set's meaning flips with the disposition
+                      // (allowed vs blocked servers), so a stale selection
+                      // must not carry across.
+                      setShadowMCPDisposition(next);
+                      setSelectedShadowMCPURLs(new Set());
+                    }}
+                    readOnly={policy !== null}
+                  />
+                  <div className="lg:col-span-2">
+                    <ShadowMCPPolicyServerSelector
+                      servers={inventoryQuery.data ?? []}
+                      originalURLs={
+                        originalShadowMCPURLs ?? EMPTY_SHADOW_MCP_URLS
+                      }
+                      selectedURLs={selectedShadowMCPURLs}
+                      onSelectionChange={setSelectedShadowMCPURLs}
+                      isLoading={inventoryQuery.isPending}
+                      error={inventoryQuery.error}
+                      onRetry={() => void inventoryQuery.refetch()}
+                      mode={
+                        shadowMCPDisposition === "allow_all" ? "block" : "allow"
+                      }
+                    />
+                  </div>
+                </div>
               ) : undefined
             }
           />

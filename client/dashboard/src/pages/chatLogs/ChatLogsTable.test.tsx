@@ -37,6 +37,12 @@ vi.mock("@gram/client/react-query/members.js", () => ({
   }),
 }));
 
+vi.mock("@gram/client/react-query/listChatSessionLinks.js", () => ({
+  // No lineage edges by default: rows render without the icon cluster, and
+  // the hook never reaches useGramContext (no SDK provider in these tests).
+  useListChatSessionLinks: () => ({ data: { links: [] } }),
+}));
+
 vi.mock("@gram/client/react-query/chatSetPinned.js", () => ({
   useChatSetPinnedMutation: () => ({
     mutate: vi.fn(),
@@ -156,6 +162,54 @@ describe("ChatLogsTable", () => {
 
     expect(screen.getByText("Claude Chat Desktop")).toBeTruthy();
     expect(screen.queryByText("claude")).toBeNull();
+  });
+
+  it("shows the originating client for a session routed through LiteLLM", () => {
+    renderTable(
+      <ChatLogsTable
+        chats={[
+          {
+            ...makeChat("chat_01HXQ1P84WV3S9J7Z52DKVE7NE"),
+            source: "litellm",
+            originatingClient: "claude-code",
+          },
+        ]}
+        onDeleteChat={() => {
+          /* test stub */
+        }}
+        onSelectChat={() => {
+          /* test stub */
+        }}
+        isLoading={false}
+        error={null}
+      />,
+    );
+
+    expect(screen.getByText("Claude Code via LiteLLM")).toBeTruthy();
+  });
+
+  it("shows plain LiteLLM when the originating client is unknown", () => {
+    renderTable(
+      <ChatLogsTable
+        chats={[
+          {
+            ...makeChat("chat_01HXQ1P84WV3S9J7Z52DKVE7NE"),
+            source: "litellm",
+          },
+        ]}
+        onDeleteChat={() => {
+          /* test stub */
+        }}
+        onSelectChat={() => {
+          /* test stub */
+        }}
+        isLoading={false}
+        error={null}
+      />,
+    );
+
+    expect(screen.getByText("LiteLLM")).toBeTruthy();
+    expect(screen.queryByText(/via LiteLLM/)).toBeNull();
   });
 
   it("shows a resolved member name for a compliance chat", () => {

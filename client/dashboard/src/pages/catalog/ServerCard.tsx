@@ -2,7 +2,7 @@ import {
   PoweredBySpeakeasyBadge,
   ToolCollectionBadge,
 } from "@/components/tool-collection-badge";
-import { DotCard } from "@/components/ui/DotCard";
+import { Card } from "@/components/ui/Card";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/Badge";
@@ -69,7 +69,7 @@ export function ServerCard({
         }
       }}
     >
-      <DotCard
+      <Card.Entity
         className={cn(
           "cursor-pointer",
           isAdded && "border-success/50 ring-success/20 ring-1",
@@ -127,13 +127,14 @@ export function ServerCard({
 
         {/* Footer row with stats and actions */}
         <div className="mt-auto flex items-center justify-between gap-2 pt-2">
-          {/* Selection indicator */}
+          {/* Selection indicator: checkbox-style square, ink-filled when
+              selected, faint hairline outline otherwise. */}
           {isSelected ? (
-            <div className="flex size-6 items-center justify-center rounded-full bg-[#1DA1F2]">
-              <Check className="size-3.5 text-white" strokeWidth={5} />
+            <div className="bg-foreground flex size-5 items-center justify-center">
+              <Check className="text-background size-3.5" strokeWidth={3} />
             </div>
           ) : (
-            <div className="border-muted-foreground/30 size-6 rounded-full border-2" />
+            <div className="border-border size-5 border" />
           )}
 
           {/* View Details button */}
@@ -150,7 +151,7 @@ export function ServerCard({
             </Button>
           </Link>
         </div>
-      </DotCard>
+      </Card.Entity>
     </div>
   );
 }

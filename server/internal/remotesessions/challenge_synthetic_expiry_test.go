@@ -1,15 +1,10 @@
 // challenge_synthetic_expiry_test.go is the regression guard for AIS-115:
 // when an upstream token response omits expires_in, Gram must store
 // access_expires_at as NULL — "no known expiry" — rather than fabricating a
-// now+1h deadline. What NULL then means at the gate depends on the refresh
-// token:
-//
-//   - No refresh token (e.g. Slack non-rotating xoxp): non-expiring. The token
-//     keeps resolving instead of being rejected as ErrNoValidToken.
-//   - Refresh token present: no stated lifetime but a renewal path, so the
-//     gate re-attempts a refresh on an application-layer hourly cadence
-//     anchored on updated_at — mirroring the old fabricated now+1h behavior
-//     without persisting a fake expiry.
+// now+1h deadline. NULL always means "the provider did not report an access
+// expiry." The request path serves that token as-is regardless of whether a
+// refresh grant was also issued; scheduled auto-refresh owns refresh-grant
+// keepalive separately.
 //
 // Pure mock: an httptest server stands in for the upstream token endpoint, so
 // no dev-idp round-trip is needed. The flow is BuildAuthorizationUrl (which
@@ -67,11 +62,11 @@ func TestRemoteLoginCallback_NoExpiresIn_NoRefresh_NonExpiring(t *testing.T) {
 	require.Equal(t, upstreamAccessToken, resolved, "non-expiring token must keep resolving")
 }
 
-// TestRemoteLoginCallback_NoExpiresIn_WithRefresh_HourlyCadence covers the
-// other NULL-expiry case: the upstream omitted expires_in but DID hand us a
-// refresh token. The token is served within the hourly window, then refreshed
-// once the window lapses — the old behavior, now at the application layer.
-func TestRemoteLoginCallback_NoExpiresIn_WithRefresh_HourlyCadence(t *testing.T) {
+// TestRemoteLoginCallback_NoExpiresIn_WithRefresh_DoesNotForceRefresh covers
+// the other NULL-expiry case: the upstream omitted expires_in but DID hand us
+// a refresh token. The refresh token's existence does not prove that access
+// expires, so even an old row keeps serving the current access token.
+func TestRemoteLoginCallback_NoExpiresIn_WithRefresh_DoesNotForceRefresh(t *testing.T) {
 	t.Parallel()
 
 	const initialAccess = "access-initial"
@@ -94,35 +89,69 @@ func TestRemoteLoginCallback_NoExpiresIn_WithRefresh_HourlyCadence(t *testing.T)
 	require.False(t, env.session.AccessExpiresAt.Valid, "no expires_in ⇒ NULL access_expires_at")
 	require.True(t, env.session.RefreshTokenEncrypted.Valid, "refresh token must be persisted")
 
-	// Inside the cadence window (updated_at ≈ now): the stored token is served
-	// and no refresh is attempted.
+	// The stored token is served and no refresh is attempted.
 	resolved, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
 	require.NoError(t, err)
 	require.Equal(t, initialAccess, resolved)
-	require.Equal(t, int64(0), refreshCount.Load(), "must not refresh inside the cadence window")
+	require.Equal(t, int64(0), refreshCount.Load())
 
-	// Backdate updated_at past the window; the next resolve attempts a refresh
-	// and returns the rotated token.
+	// updated_at is the scheduled keepalive clock, not an implicit access-token
+	// expiry. Backdating it must not make the lazy request path refresh.
 	require.NoError(t, env.q.SetRemoteSessionUpdatedAt(ctx, repo.SetRemoteSessionUpdatedAtParams{
 		ID:        env.session.ID,
 		ProjectID: conv.ToNullUUID(env.projectID),
-		UpdatedAt: conv.ToPGTimestamptz(time.Now().Add(-2 * time.Hour)),
+		UpdatedAt: conv.ToPGTimestamptz(time.Now().Add(-48 * time.Hour)),
 	}))
 	resolved, err = env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
 	require.NoError(t, err)
-	require.Equal(t, rotatedAccess, resolved, "past the cadence window the token is refreshed")
-	require.Equal(t, int64(1), refreshCount.Load(), "exactly one refresh attempt past the window")
+	require.Equal(t, initialAccess, resolved)
+	require.Equal(t, int64(0), refreshCount.Load(), "unknown access expiry must not force a refresh")
+}
+
+func TestRemoteLoginCallback_StandardRefreshExpirationFields(t *testing.T) {
+	t.Parallel()
+
+	before := time.Now()
+	_, env := newSyntheticExpiryEnv(t, "standard-refresh-expiry", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"access_token":"access",
+			"refresh_token":"refresh",
+			"token_type":"Bearer",
+			"refresh_token_timeout":7200,
+			"authorization_expires_in":3600
+		}`))
+	})
+
+	require.WithinDuration(t, before.Add(2*time.Hour), env.session.RefreshExpiresAt.Time, time.Minute)
+	require.WithinDuration(t, before.Add(time.Hour), env.session.AuthorizationExpiresAt.Time, time.Minute)
+
+	states, err := env.mgr.RemoteSessionStatuses(
+		t.Context(),
+		env.subject,
+		[]uuid.UUID{env.clientID},
+	)
+	require.NoError(t, err)
+	state := states[env.clientID]
+	require.True(t, state.CanRefresh)
+	require.NotNil(t, state.RefreshExpiresAt)
+	require.WithinDuration(t, before.Add(time.Hour), *state.RefreshExpiresAt, time.Minute,
+		"the consent tooltip must show the earliest known renewal deadline")
 }
 
 // syntheticExpiryEnv is the materialized state after a remote-login round trip
 // against a mock upstream token endpoint.
 type syntheticExpiryEnv struct {
-	mgr       *remotesessions.ChallengeManager
-	q         *repo.Queries
-	projectID uuid.UUID
-	clientID  uuid.UUID
-	subject   urn.SessionSubject
-	session   repo.RemoteSession
+	mgr *remotesessions.ChallengeManager
+	// refresher shares the manager's database, encryption key, and Redis lock
+	// cache, standing in for the scheduled sweep's caller in concurrency tests.
+	refresher    *remotesessions.RefreshService
+	newRefresher func(cache.Cache) *remotesessions.RefreshService
+	q            *repo.Queries
+	projectID    uuid.UUID
+	clientID     uuid.UUID
+	subject      urn.SessionSubject
+	session      repo.RemoteSession
 }
 
 // newSyntheticExpiryEnv wires a ChallengeManager to a mock upstream token
@@ -154,12 +183,15 @@ func newSyntheticExpiryEnv(t *testing.T, slugSuffix string, tokenHandler http.Ha
 	require.NoError(t, err)
 	mgr := remotesessions.NewChallengeManager(
 		logger,
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
 		ti.conn,
 		enc,
 		policy,
 		cache.NewRedisCacheAdapter(redisClient),
 		mustURL(t, "http://localhost"),
 	)
+	refresher := remotesessions.NewRefreshService(logger, ti.conn, enc, policy, cache.NewRedisCacheAdapter(redisClient))
 
 	q := repo.New(ti.conn)
 	issuer, err := q.CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
@@ -241,6 +273,10 @@ func newSyntheticExpiryEnv(t *testing.T, slugSuffix string, tokenHandler http.Ha
 
 	return ctx, syntheticExpiryEnv{
 		mgr:       mgr,
+		refresher: refresher,
+		newRefresher: func(locks cache.Cache) *remotesessions.RefreshService {
+			return remotesessions.NewRefreshService(logger, ti.conn, enc, policy, locks)
+		},
 		q:         q,
 		projectID: *authCtx.ProjectID,
 		clientID:  client.ID,

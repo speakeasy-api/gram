@@ -2,11 +2,6 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { cn } from "@/lib/utils";
 import { ruleIdCategoryLabel } from "@/pages/security/rule-ids";
-import { serializeExclusionExpression } from "@/pages/security/exclusion-expression";
-import {
-  type ExclusionSheetState,
-  GLOBAL_SCOPE,
-} from "@/pages/security/exclusion-sheet";
 import {
   getCategoryCodeForFinding,
   getRuleTitleFallback,
@@ -18,13 +13,13 @@ import { useRevealAll } from "@/pages/security/reveal-all-context";
 /** Soft warning (yellow) wash for a *non-sensitive* flagged span — always shown,
  * so it keeps the natural proportional text. */
 const RISK_MARK_CLASS =
-  "rounded-sm bg-warning-softest px-0.5 text-foreground ring-1 ring-warning-softest";
+  "bg-warning-softest px-0.5 text-foreground ring-1 ring-warning-softest";
 
 /** A sensitive span toggles between dotted-out and revealed, so both states must
  * occupy the exact same width or revealing reflows the message. Shared box +
  * monospace (so char-count == width); red tint matching the risk divider, with a
  * stronger wash once revealed to signal the value is exposed. */
-const SENSITIVE_MARK_BASE = "rounded-sm px-0.5 font-mono ring-1";
+const SENSITIVE_MARK_BASE = "px-0.5 font-mono ring-1";
 const SENSITIVE_MARK_MASKED = "bg-red-700/10 text-red-700 ring-red-700/20";
 const SENSITIVE_MARK_REVEALED = "bg-red-700/15 text-red-700 ring-red-700/30";
 
@@ -316,31 +311,4 @@ export function highlightMatches(
   });
   if (pos < text.length) nodes.push(text.slice(pos));
   return nodes;
-}
-
-export function findingToExclusionState(
-  result: RiskResult,
-): ExclusionSheetState {
-  let expression: string;
-  if (result.match) {
-    expression = serializeExclusionExpression({
-      matchType: "exact",
-      matchValue: result.match,
-    });
-  } else if (result.ruleId) {
-    expression = serializeExclusionExpression({
-      matchType: "rule_id",
-      matchValue: result.ruleId,
-    });
-  } else {
-    expression = serializeExclusionExpression({
-      matchType: "source",
-      matchValue: result.source,
-    });
-  }
-  return {
-    mode: "create",
-    initialExpression: expression,
-    initialScope: result.policyId ?? GLOBAL_SCOPE,
-  };
 }

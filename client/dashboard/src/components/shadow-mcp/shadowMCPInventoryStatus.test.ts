@@ -3,8 +3,11 @@ import type { ShadowMCPInventoryServer } from "@gram/client/models/components/sh
 import { describe, expect, it } from "vitest";
 import {
   eligibleShadowMCPAllowRulePolicies,
+  shadowMCPBlockingPolicyDisposition,
   shadowMCPInventoryStatus,
+  shadowMCPInventoryStatusBadgeVariant,
   shadowMCPInventoryStatusDescription,
+  shadowMCPInventoryStatusLabel,
   shadowMCPPolicyState,
 } from "./shadowMCPInventoryStatus";
 
@@ -36,6 +39,7 @@ function server(
   return {
     access: "none",
     allowedPolicyIds: [],
+    blockedPolicyIds: [],
     canonicalServerUrl: "https://example.com/mcp",
     firstSeen: new Date("2026-01-01T00:00:00Z"),
     lastSeen: new Date("2026-01-02T00:00:00Z"),
@@ -74,13 +78,27 @@ describe("eligibleShadowMCPAllowRulePolicies", () => {
 });
 
 describe("shadowMCPPolicyState", () => {
-  it("prioritizes blocking policies over flagging policies", () => {
+  it("prioritizes blocking policies over warning and flagging policies", () => {
     expect(
       shadowMCPPolicyState([
         policy({ action: "flag", id: "flag" }),
+        policy({ action: "warn", id: "warn" }),
         policy({ action: "block", id: "block" }),
       ]),
     ).toBe("blocking");
+  });
+
+  it("returns warning for enabled warn policy without blocking policy", () => {
+    expect(shadowMCPPolicyState([policy({ action: "warn" })])).toBe("warning");
+  });
+
+  it("prioritizes warning policies over flagging policies", () => {
+    expect(
+      shadowMCPPolicyState([
+        policy({ action: "flag", id: "flag" }),
+        policy({ action: "warn", id: "warn" }),
+      ]),
+    ).toBe("warning");
   });
 
   it("returns flagging for enabled flag policy without blocking policy", () => {
@@ -127,6 +145,9 @@ describe("shadowMCPInventoryStatus", () => {
 
   it("shows observed when blocking is inactive", () => {
     expect(
+      shadowMCPInventoryStatus(server({ access: "none" }), "warning"),
+    ).toBe("observed");
+    expect(
       shadowMCPInventoryStatus(server({ access: "none" }), "flagging"),
     ).toBe("observed");
     expect(shadowMCPInventoryStatus(server({ access: "none" }), "none")).toBe(
@@ -162,5 +183,122 @@ describe("shadowMCPInventoryStatus", () => {
     expect(
       shadowMCPInventoryStatusDescription(server({ access: "none" }), "none"),
     ).toBe("Not blocking");
+  });
+
+  it("credits a denied review alongside the policy in the blocked source", () => {
+    const denied = {
+      id: "request-1",
+      status: "denied" as const,
+      requesterCount: 0,
+      evidenceChangedAt: undefined,
+    };
+    // block_all: the policy already blocks and the deny compounds it.
+    expect(
+      shadowMCPInventoryStatusDescription(
+        server({ access: "blocked", approvalRequest: denied }),
+        "blocking",
+        "block_all",
+      ),
+    ).toBe("Blocked by policy & review");
+    // The frontend-only blocking branch (access still "none") credits it too.
+    expect(
+      shadowMCPInventoryStatusDescription(
+        server({ access: "none", approvalRequest: denied }),
+        "blocking",
+      ),
+    ).toBe("Blocked by policy & review");
+    // allow_all: the block is the review's doing, so it stands alone.
+    expect(
+      shadowMCPInventoryStatusDescription(
+        server({ access: "blocked", approvalRequest: denied }),
+        "blocking",
+        "allow_all",
+      ),
+    ).toBe("Blocked by review");
+  });
+
+  it("surfaces a targeted block as restricted rather than blocked", () => {
+    const restricted = server({ access: "restricted" });
+    expect(shadowMCPInventoryStatus(restricted, "blocking")).toBe("restricted");
+    expect(shadowMCPInventoryStatusLabel("restricted")).toBe("Restricted");
+    expect(shadowMCPInventoryStatusBadgeVariant("restricted")).toBe("warning");
+    expect(
+      shadowMCPInventoryStatusDescription(restricted, "blocking", "block_all"),
+    ).toBe("Blocked for some users");
+    // A denied review outranks the targeted policy: the deny is definitive, so
+    // the row is blocked rather than restricted-for-some.
+    const deniedRestricted = server({
+      access: "restricted",
+      approvalRequest: {
+        id: "request-1",
+        status: "denied" as const,
+        requesterCount: 0,
+        evidenceChangedAt: undefined,
+      },
+    });
+    expect(shadowMCPInventoryStatus(deniedRestricted, "blocking")).toBe(
+      "blocked",
+    );
+    // Disposition-aware, like the blocked branch: under allow_all the deny is
+    // the whole block; under block_all the policy blocks too.
+    expect(
+      shadowMCPInventoryStatusDescription(
+        deniedRestricted,
+        "blocking",
+        "allow_all",
+      ),
+    ).toBe("Blocked by review");
+    expect(
+      shadowMCPInventoryStatusDescription(
+        deniedRestricted,
+        "blocking",
+        "block_all",
+      ),
+    ).toBe("Blocked by policy & review");
+  });
+
+  it("leaves the blocked source unchanged when a review approved or is absent", () => {
+    expect(
+      shadowMCPInventoryStatusDescription(
+        server({
+          access: "blocked",
+          approvalRequest: {
+            id: "request-2",
+            status: "approved" as const,
+            requesterCount: 0,
+            evidenceChangedAt: undefined,
+          },
+        }),
+        "blocking",
+        "block_all",
+      ),
+    ).toBe("Blocked by policy");
+    expect(
+      shadowMCPInventoryStatusDescription(
+        server({ access: "blocked" }),
+        "blocking",
+        "allow_all",
+      ),
+    ).toBe("Blocked by rule");
+  });
+});
+
+describe("shadowMCPBlockingPolicyDisposition", () => {
+  it("returns null with no blocking policies", () => {
+    expect(shadowMCPBlockingPolicyDisposition([])).toBeNull();
+  });
+
+  it("returns allow_all only when every blocking policy declares it", () => {
+    expect(
+      shadowMCPBlockingPolicyDisposition([
+        { shadowMcpDisposition: "allow_all" },
+      ]),
+    ).toBe("allow_all");
+    expect(
+      shadowMCPBlockingPolicyDisposition([
+        { shadowMcpDisposition: "allow_all" },
+        { shadowMcpDisposition: undefined },
+      ]),
+    ).toBe("block_all");
   });
 });

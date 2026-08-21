@@ -5,11 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strings"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -24,39 +24,50 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	chrepo "github.com/speakeasy-api/gram/server/internal/authz/repo"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/database"
+	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	pfRepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 var errConnectedUserNotFound = errors.New("connected user not found")
 
-// ProductFeatures is the subset of *productfeatures.Client the access service
-// needs: enabling RBAC for an org (seed grants + flag, atomically) and keeping
-// the feature cache consistent after a direct DB write.
-type ProductFeatures interface {
-	EnableRBAC(ctx context.Context, organizationID string) error
-	UpdateFeatureCache(ctx context.Context, organizationID string, feature productfeatures.Feature, enabled bool)
+// CanonicalFoldGate reports the organization id an identity-folded query
+// should run under: the org id when the canonical identity fold is rolled out
+// to it, "" when it is not. Injected rather than reimplemented so the rollout
+// flag stays one switch across every service that folds.
+type CanonicalFoldGate interface {
+	CanonicalOrgFor(ctx context.Context, orgID string) string
 }
 
 type Service struct {
-	tracer          trace.Tracer
-	logger          *slog.Logger
-	db              *pgxpool.Pool
-	chConn          driver.Conn
-	auth            *auth.Auth
-	authz           *authz.Engine
-	roleMgr         *RoleManager
-	productFeatures ProductFeatures
-	audit           *audit.Logger
+	tracer   trace.Tracer
+	logger   *slog.Logger
+	db       *pgxpool.Pool
+	chConn   driver.Conn
+	auth     *auth.Auth
+	authz    *authz.Engine
+	roleMgr  *RoleManager
+	audit    *audit.Logger
+	email    *email.Service
+	siteURL  *url.URL
+	foldGate CanonicalFoldGate
+}
+
+// canonicalFoldOrg resolves the org id to fold under. A nil gate means no
+// caller wired the rollout flag in, which fails closed: no fold.
+func (s *Service) canonicalFoldOrg(ctx context.Context, orgID string) string {
+	if s.foldGate == nil {
+		return ""
+	}
+	return s.foldGate.CanonicalOrgFor(ctx, orgID)
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -70,21 +81,25 @@ func NewService(
 	sessions *sessions.Manager,
 	roleMgr *RoleManager,
 	authz *authz.Engine,
-	productFeatures ProductFeatures,
 	auditLogger *audit.Logger,
+	emailService *email.Service,
+	siteURL *url.URL,
+	foldGate CanonicalFoldGate,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("access"))
 
 	return &Service{
-		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/access"),
-		logger:          logger,
-		db:              db,
-		chConn:          chConn,
-		auth:            auth.New(logger, db, sessions, authz),
-		authz:           authz,
-		roleMgr:         roleMgr,
-		productFeatures: productFeatures,
-		audit:           auditLogger,
+		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/access"),
+		logger:   logger,
+		db:       db,
+		chConn:   chConn,
+		auth:     auth.New(logger, db, sessions, authz),
+		authz:    authz,
+		roleMgr:  roleMgr,
+		audit:    auditLogger,
+		email:    emailService,
+		siteURL:  siteURL,
+		foldGate: foldGate,
 	}
 }
 
@@ -104,6 +119,20 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 
 // ListRoles reads local role records and enriches them with Gram's local grant state.
 func (s *Service) ListRoles(ctx context.Context, _ *gen.ListRolesPayload) (*gen.ListRolesResult, error) {
+	// Impersonated orgs without a WorkOS link (e.g. the demo org) can't pass
+	// roleOrgContext, but the listing itself is pure Postgres — serve it.
+	if s.isImpersonatingUnlinkedOrg(ctx) {
+		ac, err := s.authContext(ctx)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
+		}
+		trace.SpanFromContext(ctx).SetAttributes(
+			attr.OrganizationID(ac.ActiveOrganizationID),
+			attr.UserID(ac.UserID),
+		)
+		return s.roleMgr.ListRoles(ctx, ac.ActiveOrganizationID)
+	}
+
 	ac, _, err := s.roleOrgContext(ctx)
 	if err != nil {
 		return nil, err
@@ -256,7 +285,9 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		{scope: authz.ScopeSkillBlockedWrite, description: "Store exceptions for skill write access.", resourceType: "skill"},
 		{scope: authz.ScopeRiskPolicyEvaluate, description: "Evaluate risk policies.", resourceType: "risk_policy"},
 		{scope: authz.ScopeRiskPolicyBypass, description: "Bypass risk policies.", resourceType: "risk_policy"},
-		{scope: authz.ScopeChatRead, description: "Read every member's agent session transcripts and reveal the secret values flagged in Risk Events. Members can always read their own sessions, no one else's; this grant adds access to everyone else's sessions and to unmasking flagged secrets.", resourceType: "chat"},
+		{scope: authz.ScopeRiskPolicyBlock, description: "Block specific shadow MCP servers under allow-by-default risk policies.", resourceType: "risk_policy"},
+		{scope: authz.ScopeChatRead, description: "Read every member's agent session transcripts, pin them, and reveal the secret values flagged in Risk Events. Members can always read and pin their own sessions, no one else's; this grant adds access to everyone else's sessions and to unmasking flagged secrets.", resourceType: "chat"},
+		{scope: authz.ScopeChatWrite, description: "Rename, delete, and submit feedback on every member's agent sessions. Members can always do this to their own sessions; this grant adds it for everyone else's. Separate from chat:read so a session reviewer can read and pin transcripts without being able to delete them.", resourceType: "chat"},
 	}
 	result := make([]*gen.ScopeDefinition, 0, len(scopes))
 	for _, scope := range scopes {
@@ -295,6 +326,20 @@ func scopeDefinition(input scopeDefinitionInput) *gen.ScopeDefinition {
 // ListMembers follows the original access API contract by returning WorkOS user
 // identifiers while decorating them with the role information the UI needs.
 func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*gen.ListMembersResult, error) {
+	// Impersonated orgs without a WorkOS link (e.g. the demo org) can't pass
+	// roleOrgContext, but the listing itself is pure Postgres — serve it.
+	if s.isImpersonatingUnlinkedOrg(ctx) {
+		ac, err := s.authContext(ctx)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
+		}
+		trace.SpanFromContext(ctx).SetAttributes(
+			attr.OrganizationID(ac.ActiveOrganizationID),
+			attr.UserID(ac.UserID),
+		)
+		return s.roleMgr.ListMembers(ctx, ac.ActiveOrganizationID)
+	}
+
 	ac, _, err := s.roleOrgContext(ctx)
 	if err != nil {
 		return nil, err
@@ -327,18 +372,41 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 		return &gen.ListUserGrantsResult{Grants: userVisibleScopeGrants()}, nil
 	}
 
+	// Admins impersonating a customer org won't have an organization_users row
+	// (the Info endpoint intentionally skips that upsert). Return full scopes so
+	// the MembershipSyncGuard doesn't block the dashboard. This must run before
+	// roleOrgContext: impersonated orgs are not necessarily WorkOS-linked (e.g.
+	// a locally provisioned org), and its 400 would mask this carve-out.
+	acPre, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
+	}
+	// A session can exist before organization selection during login. Unlike
+	// sessionless or API-key requests, RBAC still applies and PrepareContext
+	// installs zero grants. Mirror that effective set so dashboard gates remain
+	// closed until registration or organization selection completes.
+	if acPre.ActiveOrganizationID == "" {
+		return &gen.ListUserGrantsResult{Grants: nil}, nil
+	}
+	// Sessions in the shared demo org have no membership rows. Return the
+	// full user-visible scope set so every dashboard page is browsable in the
+	// demo (page gates like Costs require org:admin). This is the same set
+	// authz.DemoScopeGrants installs on the request context;
+	// TestDemoGrantsMatchEnforcedScopes holds the two together.
+	if acPre.ActiveOrganizationID == constants.DemoOrganizationID {
+		return &gen.ListUserGrantsResult{Grants: userVisibleScopeGrants()}, nil
+	}
+	if contextvalues.IsSupportSession(ctx) {
+		trace.SpanFromContext(ctx).SetAttributes(
+			attr.OrganizationID(acPre.ActiveOrganizationID),
+			attr.UserID(acPre.UserID),
+		)
+		return &gen.ListUserGrantsResult{Grants: userVisibleScopeGrants()}, nil
+	}
+
 	ac, _, err := s.roleOrgContext(ctx)
 	if err != nil {
 		return nil, err
-	}
-
-	// Admins impersonating a customer org won't have an organization_users row
-	// (the Info endpoint intentionally skips that upsert). Return full scopes so
-	// the MembershipSyncGuard doesn't block the dashboard.
-	if ac.IsAdmin {
-		if _, hasOverride := contextvalues.GetAdminOverrideFromContext(ctx); hasOverride {
-			return &gen.ListUserGrantsResult{Grants: userVisibleScopeGrants()}, nil
-		}
 	}
 
 	logger := s.logger.With(
@@ -414,6 +482,33 @@ func (s *Service) authContext(ctx context.Context) (*contextvalues.AuthContext, 
 	return ac, nil
 }
 
+// isImpersonatingUnlinkedOrg reports whether a platform admin is impersonating
+// an organization that has no WorkOS link (e.g. a locally provisioned org).
+// WorkOS-backed member/role listings cannot work for such orgs, so the list
+// endpoints return empty results instead of a 400 the frontend treats as
+// fatal (page error boundaries and request retry loops).
+func (s *Service) isImpersonatingUnlinkedOrg(ctx context.Context) bool {
+	ac, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || ac == nil {
+		return false
+	}
+	// The shared demo org is always impersonated (no membership rows, no
+	// WorkOS link) — by any user, not just platform admins.
+	if ac.ActiveOrganizationID == constants.DemoOrganizationID {
+		return true
+	}
+	if !contextvalues.IsSupportSession(ctx) {
+		return false
+	}
+
+	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return false
+	}
+
+	return !org.WorkosID.Valid || org.WorkosID.String == ""
+}
+
 func (s *Service) roleOrgContext(ctx context.Context) (*contextvalues.AuthContext, string, error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
@@ -459,7 +554,6 @@ func roleGrantPayloads(grants []*gen.RoleGrant) []*authz.RoleGrant {
 
 		out = append(out, &authz.RoleGrant{
 			Scope:     grant.Scope,
-			Effect:    authz.PolicyEffectAllow,
 			Selectors: selectors,
 		})
 	}
@@ -536,7 +630,9 @@ func userVisibleScopeGrants() []*gen.ListRoleGrant {
 		{Scope: string(authz.ScopeSkillWrite), Selectors: nil},
 		{Scope: string(authz.ScopeRiskPolicyEvaluate), Selectors: nil},
 		{Scope: string(authz.ScopeRiskPolicyBypass), Selectors: nil},
+		{Scope: string(authz.ScopeRiskPolicyBlock), Selectors: nil},
 		{Scope: string(authz.ScopeChatRead), Selectors: nil},
+		{Scope: string(authz.ScopeChatWrite), Selectors: nil},
 	}
 }
 
@@ -573,83 +669,28 @@ func connectedUser(ctx context.Context, db database.DBTX, organizationID string,
 	return user, nil
 }
 
-func (s *Service) GetRBACStatus(ctx context.Context, _ *gen.GetRBACStatusPayload) (*gen.RBACStatus, error) {
-	ac, err := s.requirePlatformAdmin(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	enabled, err := pfRepo.New(s.db).IsFeatureEnabled(ctx, pfRepo.IsFeatureEnabledParams{
-		OrganizationID: ac.ActiveOrganizationID,
-		FeatureName:    string(productfeatures.FeatureRBAC),
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "check RBAC feature flag").LogError(ctx, s.logger)
-	}
-
-	return &gen.RBACStatus{RbacEnabled: enabled}, nil
+// IsSpeakeasyStaffEmail reports whether email belongs to a Speakeasy-owned
+// domain (@speakeasy.com or @speakeasyapi.dev).
+func IsSpeakeasyStaffEmail(email string) bool {
+	return strings.HasSuffix(email, "@speakeasy.com") || strings.HasSuffix(email, "@speakeasyapi.dev")
 }
 
-func (s *Service) EnableRBAC(ctx context.Context, _ *gen.EnableRBACPayload) error {
-	ac, err := s.requirePlatformAdmin(ctx)
-	if err != nil {
-		return err
-	}
-	if err := s.productFeatures.EnableRBAC(ctx, ac.ActiveOrganizationID); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "enable RBAC").LogError(ctx, s.logger.With(attr.SlogOrganizationID(ac.ActiveOrganizationID)))
-	}
-
-	return nil
-}
-
-func (s *Service) DisableRBAC(ctx context.Context, _ *gen.DisableRBACPayload) error {
-	ac, err := s.requirePlatformAdmin(ctx)
-	if err != nil {
-		return err
-	}
-	logger := s.logger.With(attr.SlogOrganizationID(ac.ActiveOrganizationID))
-
-	if _, err := pfRepo.New(s.db).DeleteFeature(ctx, pfRepo.DeleteFeatureParams{
-		OrganizationID: ac.ActiveOrganizationID,
-		FeatureName:    string(productfeatures.FeatureRBAC),
-	}); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			// Already disabled — no active feature row to soft-delete.
-			return nil
-		}
-		return oops.E(oops.CodeUnexpected, err, "disable RBAC feature flag").LogError(ctx, logger)
-	}
-
-	s.productFeatures.UpdateFeatureCache(ctx, ac.ActiveOrganizationID, productfeatures.FeatureRBAC, false)
-	return nil
-}
-
-// requirePlatformAdmin returns the auth context and an error if the caller is not
-// a Speakeasy employee. Mirrors the exact condition used by the platform-admin
-// impersonation feature in auth/impl.go: email domain OR admin DB flag.
-// Email is read from the auth context (session cache). Admin is read from the
-// DB because AuthContext does not carry it; the DB value is synced from the
-// Speakeasy provider on every login so it matches the session cache.
-func (s *Service) requirePlatformAdmin(ctx context.Context) (*contextvalues.AuthContext, error) {
-	ac, err := s.authContext(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
-	}
+// RequireStaffForUnproxiedMcp rejects the request unless authCtx's email is
+// on the Speakeasy staff domain allowlist. Shared by every package that
+// gates an unproxied-MCP-server action to Speakeasy staff (unproxiedmcp's
+// own create/delete, mcpservers' attach-to-backend check) so the check lives
+// in exactly one place. action is the verb used in the resulting error
+// message, e.g. "added", "deleted", "attached".
+func RequireStaffForUnproxiedMcp(ctx context.Context, authCtx *contextvalues.AuthContext, action string, logger *slog.Logger) error {
 	email := ""
-	if ac.Email != nil {
-		email = *ac.Email
+	if authCtx.Email != nil {
+		email = *authCtx.Email
 	}
-	if strings.HasSuffix(email, "@speakeasy.com") || strings.HasSuffix(email, "@speakeasyapi.dev") {
-		return ac, nil
+	if IsSpeakeasyStaffEmail(email) {
+		return nil
 	}
-	user, err := usersrepo.New(s.db).GetUser(ctx, ac.UserID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "get user for admin check").LogError(ctx, s.logger)
-	}
-	if !user.Admin {
-		return nil, oops.C(oops.CodeForbidden)
-	}
-	return ac, nil
+
+	return oops.E(oops.CodeForbidden, nil, "unproxied MCP servers can only be %s by Speakeasy staff", action).LogWarn(ctx, logger)
 }
 
 type challengeUserInfo struct {
@@ -734,15 +775,17 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 	}
 
 	filters := chrepo.ChallengeListFilters{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      payload.ProjectID,
-		Outcome:        payload.Outcome,
-		PrincipalURN:   payload.PrincipalUrn,
-		Scope:          payload.Scope,
+		ChallengeFilters: chrepo.ChallengeFilters{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			ProjectID:      payload.ProjectID,
+			Outcome:        payload.Outcome,
+			PrincipalURN:   payload.PrincipalUrn,
+			Scope:          payload.Scope,
+			MemberUserIDs:  memberIDs,
+		},
 		Limit:          uint64(payload.Limit),  //nolint:gosec // Goa validates 1..200
 		Offset:         uint64(payload.Offset), //nolint:gosec // Goa validates >= 0
 		SkipPagination: skipPagination,
-		MemberUserIDs:  memberIDs,
 	}
 
 	var total uint64
@@ -935,7 +978,18 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 		attr.UserID(authCtx.UserID),
 	)
 
-	skipPagination := payload.Resolved != nil
+	pgQueries := repo.New(s.db)
+	var resolvedChallengeIDs []string
+	if payload.Resolved != nil {
+		ids, err := pgQueries.ListRetainedResolvedChallengeIDs(ctx, authCtx.ActiveOrganizationID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list resolved challenge ids").LogError(ctx, s.logger)
+		}
+		if *payload.Resolved && len(ids) == 0 {
+			return &gen.ListChallengeBucketsResult{Buckets: []*gen.ChallengeBucket{}, Total: 0}, nil
+		}
+		resolvedChallengeIDs = ids
+	}
 
 	// Suppress challenges from users outside the org (see activeOrgMemberUserIDs).
 	memberIDs, err := s.activeOrgMemberUserIDs(ctx, authCtx.ActiveOrganizationID)
@@ -943,39 +997,33 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 		return nil, err
 	}
 
-	filters := chrepo.ChallengeListFilters{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      payload.ProjectID,
-		Outcome:        payload.Outcome,
-		PrincipalURN:   payload.PrincipalUrn,
-		Scope:          payload.Scope,
-		Limit:          uint64(payload.Limit),  //nolint:gosec // Goa validates 1..200
-		Offset:         uint64(payload.Offset), //nolint:gosec // Goa validates >= 0
-		SkipPagination: skipPagination,
-		MemberUserIDs:  memberIDs,
+	filters := chrepo.ChallengeBucketFilters{
+		ChallengeFilters: chrepo.ChallengeFilters{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			ProjectID:      payload.ProjectID,
+			Outcome:        payload.Outcome,
+			PrincipalURN:   payload.PrincipalUrn,
+			Scope:          payload.Scope,
+			MemberUserIDs:  memberIDs,
+		},
+		Resolved:             payload.Resolved,
+		ResolvedChallengeIDs: resolvedChallengeIDs,
+		Limit:                uint64(payload.Limit),  //nolint:gosec // Goa validates 1..200
+		Offset:               uint64(payload.Offset), //nolint:gosec // Goa validates >= 0
 	}
 
 	chQueries := chrepo.New(s.chConn)
 
-	var total uint64
-	if !skipPagination {
-		count, err := chQueries.CountChallengeBuckets(ctx, filters)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "count challenge buckets from clickhouse").LogError(ctx, s.logger)
-		}
-		if count == 0 {
-			return &gen.ListChallengeBucketsResult{Buckets: []*gen.ChallengeBucket{}, Total: 0}, nil
-		}
-		total = count
-	}
-
-	buckets, err := chQueries.ListChallengeBuckets(ctx, filters)
+	buckets, total, err := chQueries.ListChallengeBuckets(ctx, filters)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list challenge buckets from clickhouse").LogError(ctx, s.logger)
 	}
 
 	if len(buckets) == 0 {
-		return &gen.ListChallengeBucketsResult{Buckets: []*gen.ChallengeBucket{}, Total: int(total)}, nil
+		return &gen.ListChallengeBucketsResult{
+			Buckets: []*gen.ChallengeBucket{},
+			Total:   int(total), //nolint:gosec // Goa models totals as int; retained challenge rows cannot approach MaxInt.
+		}, nil
 	}
 
 	// Batch-lookup resolutions from PG using all challenge IDs across buckets.
@@ -984,7 +1032,7 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 		allChallengeIDs = append(allChallengeIDs, b.ChallengeIDs...)
 	}
 
-	resolutions, err := repo.New(s.db).ListChallengeResolutions(ctx, repo.ListChallengeResolutionsParams{
+	resolutions, err := pgQueries.ListChallengeResolutions(ctx, repo.ListChallengeResolutionsParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ChallengeIds:   allChallengeIDs,
 	})
@@ -994,28 +1042,6 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 	resolutionMap := make(map[string]repo.AuthzChallengeResolution, len(resolutions))
 	for _, r := range resolutions {
 		resolutionMap[r.ChallengeID] = r
-	}
-
-	// Apply resolved filter post-join if requested, then paginate in Go.
-	if payload.Resolved != nil {
-		wantResolved := *payload.Resolved
-		filtered := buckets[:0]
-		for _, b := range buckets {
-			_, hasResolution := resolutionMap[b.ID]
-			if hasResolution == wantResolved {
-				filtered = append(filtered, b)
-			}
-		}
-		buckets = filtered
-		total = uint64(len(buckets))
-		offset := uint64(payload.Offset) //nolint:gosec // Goa validates >= 0
-		limit := uint64(payload.Limit)   //nolint:gosec // Goa validates 1..200
-		if offset >= total {
-			buckets = nil
-		} else {
-			end := min(offset+limit, total)
-			buckets = buckets[offset:end]
-		}
 	}
 
 	// Batch-lookup user photos from PG.
@@ -1115,7 +1141,7 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 
 	return &gen.ListChallengeBucketsResult{
 		Buckets: result,
-		Total:   int(total),
+		Total:   int(total), //nolint:gosec // Goa models totals as int; retained challenge rows cannot approach MaxInt.
 	}, nil
 }
 
@@ -1211,4 +1237,95 @@ func (s *Service) ResolveChallenge(ctx context.Context, payload *gen.ResolveChal
 	}
 
 	return &gen.ResolveChallengesResult{Resolutions: resolutions}, nil
+}
+
+// RequestAccess sends email notifications to organization administrators when a user
+// requests access to a scope they don't have permission for.
+func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessPayload) (*gen.RequestAccessResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
+	}
+
+	logger := s.logger.With(
+		attr.SlogOrganizationID(ac.ActiveOrganizationID),
+		attr.SlogUserID(ac.UserID),
+	)
+	trace.SpanFromContext(ctx).SetAttributes(
+		attr.OrganizationID(ac.ActiveOrganizationID),
+		attr.UserID(ac.UserID),
+	)
+
+	// Get the requester's info
+	requester, err := usersrepo.New(s.db).GetUser(ctx, ac.UserID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get requester info").LogError(ctx, logger)
+	}
+
+	// Get organization info
+	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get organization info").LogError(ctx, logger)
+	}
+
+	// Get active organization administrators.
+	admins, err := repo.New(s.db).ListActiveOrganizationAdmins(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list organization administrators").LogError(ctx, logger)
+	}
+
+	if len(admins) == 0 {
+		logger.WarnContext(ctx, "no org admins found to notify for access request")
+		return &gen.RequestAccessResult{SentToCount: 0}, nil
+	}
+
+	// Build the manage access link. The query params let the dashboard open a
+	// pre-filled grant dialog for the requester and scope.
+	manageAccessLink := ""
+	if s.siteURL != nil {
+		accessURL := s.siteURL.JoinPath(org.Slug, "access", "roles")
+		q := url.Values{}
+		q.Set("grant_user", ac.UserID)
+		q.Set("scope", payload.Scope)
+		if payload.ResourceID != nil && *payload.ResourceID != "" {
+			q.Set("resource_id", *payload.ResourceID)
+		}
+		accessURL.RawQuery = q.Encode()
+		manageAccessLink = accessURL.String()
+	}
+
+	tmpl := email.AccessRequest{
+		RequesterName:    conv.Default(requester.DisplayName, requester.Email),
+		OrganizationName: org.Name,
+		ManageAccessLink: manageAccessLink,
+	}
+
+	// Send emails to all admins
+	sentCount := 0
+	for _, admin := range admins {
+		if admin.Email == "" {
+			continue
+		}
+		if err := s.email.Send(ctx, admin.Email, tmpl); err != nil {
+			// Log but don't fail the entire request if one email fails
+			logger.WarnContext(ctx, "failed to send access request email",
+				attr.SlogError(err),
+				attr.SlogAccessRequestRecipient(admin.Email),
+			)
+			continue
+		}
+		sentCount++
+	}
+
+	if sentCount == 0 {
+		return nil, oops.E(oops.CodeUnexpected, nil, "failed to notify any organization administrator").LogError(ctx, logger)
+	}
+
+	logger.InfoContext(ctx, "access request emails sent",
+		attr.SlogAccessRequestSentCount(sentCount),
+		attr.SlogAccessRequestAdminCount(len(admins)),
+		attr.SlogAccessRequestScope(payload.Scope),
+	)
+
+	return &gen.RequestAccessResult{SentToCount: sentCount}, nil
 }

@@ -50,12 +50,12 @@ export function ChartCard({
   return (
     <div
       className={cn(
-        "border-border bg-card rounded-lg border p-4 transition-all duration-200 ease-in-out",
+        "border-border bg-card border p-4 transition-all duration-200 ease-in-out",
         expandedChart && !isExpanded && "hidden",
       )}
     >
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="text font-semibold">{title}</h3>
+        <h3 className="text-eyebrow">{title}</h3>
         <div className="flex items-center gap-2">
           {isZoomed && onResetZoom && (
             <ChartButton onClick={onResetZoom} ariaLabel="Reset zoom">
@@ -78,7 +78,7 @@ export function ChartCard({
         </div>
       </div>
       {loading ? (
-        <Skeleton className="h-[240px] w-full rounded-md" />
+        <Skeleton className="h-[240px] w-full" />
       ) : error ? (
         <div
           role="alert"

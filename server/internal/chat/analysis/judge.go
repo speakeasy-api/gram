@@ -153,14 +153,15 @@ type StructuredCall struct {
 }
 
 // CallStructured performs one structured-output completion on the platform's
-// internal key, drawing on the shared per-(org, model) judge rate limiter, and
+// internal key, drawing on the shared key-scoped judge rate limiter, and
 // returns the raw response text plus the model that produced it. Errors wrap
 // ErrModelFailure or ErrRetryable exactly as the publisher expects.
 func CallStructured(ctx context.Context, logger *slog.Logger, client openrouter.CompletionClient, limiter *ratelimit.Limiter, in JudgeInput, call StructuredCall) (string, string, error) {
 	// A Store outage is not a throttle: proceed rather than stall the pipeline on
 	// limiter infrastructure. A real throttle is retryable — the unit keeps its
 	// reservation and its attempt budget.
-	switch res, err := limiter.Allow(ctx, openrouter.JudgeRateLimitKey(in.OrgID, call.Model)); {
+	bucket := openrouter.ResolveJudgeRateLimitKey(ctx, logger, client, in.OrgID, in.ProjectID, billing.ModelUsageSourceChatAnalysis, call.Model)
+	switch res, err := limiter.Allow(ctx, bucket); {
 	case err != nil:
 		logger.WarnContext(ctx, "judge rate limiter unavailable, allowing call",
 			attr.SlogError(err),
@@ -196,14 +197,15 @@ func CallStructured(ctx context.Context, logger *slog.Logger, client openrouter.
 		UsageSource:  billing.ModelUsageSourceChatAnalysis,
 		// Platform-initiated inference: bill the org's internal key, never the
 		// customer-facing chat key's monthly cap.
-		KeyType:        openrouter.KeyTypeInternal,
-		KeySlot:        billing.ModelUsageSourceChatAnalysis,
-		UserID:         "",
-		ExternalUserID: "",
-		UserEmail:      "",
-		HTTPMetadata:   nil,
-		JSONSchema:     &jsonSchema,
-		Reasoning:      nil,
+		KeyType:                openrouter.KeyTypeInternal,
+		KeySlot:                billing.ModelUsageSourceChatAnalysis,
+		UserID:                 "",
+		ExternalUserID:         "",
+		UserEmail:              "",
+		HTTPMetadata:           nil,
+		JSONSchema:             &jsonSchema,
+		Reasoning:              nil,
+		DisableResponseHealing: false,
 	})
 	switch {
 	case err != nil && errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil:

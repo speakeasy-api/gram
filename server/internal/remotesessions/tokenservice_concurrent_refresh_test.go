@@ -80,8 +80,8 @@ func (u *rotatingUpstream) handler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	if r.Form.Get("grant_type") != "refresh_token" {
-		// Initial exchange. No expires_in but a refresh token, so the row lands
-		// in the NULL-expiry case whose usable window follows updated_at.
+		// Initial exchange. Tests mark the resulting access token expired
+		// directly so concurrent requests all exercise lazy refresh.
 		_, _ = w.Write([]byte(`{"access_token":"access-initial","refresh_token":"` + initialRefreshToken + `","token_type":"Bearer"}`))
 
 		return
@@ -130,12 +130,10 @@ func resolveConcurrently(t *testing.T, slugSuffix string, upstream *rotatingUpst
 
 	ctx, env := newSyntheticExpiryEnv(t, slugSuffix, upstream.handler)
 
-	// Push updated_at outside the refresh cadence so the next resolve must
-	// refresh, which is the state a user is in when their token has aged out.
-	require.NoError(t, env.q.SetRemoteSessionUpdatedAt(ctx, repo.SetRemoteSessionUpdatedAtParams{
-		ID:        env.session.ID,
-		ProjectID: conv.ToNullUUID(env.projectID),
-		UpdatedAt: conv.ToPGTimestamptz(time.Now().Add(-2 * time.Hour)),
+	require.NoError(t, env.q.SetRemoteSessionAccessExpiresAt(ctx, repo.SetRemoteSessionAccessExpiresAtParams{
+		ID:              env.session.ID,
+		ProjectID:       conv.ToNullUUID(env.projectID),
+		AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(-time.Hour)),
 	}))
 
 	tokens := make([]string, concurrentRefreshCallers)

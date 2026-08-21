@@ -12,7 +12,7 @@ export default meta;
 type Story = StoryObj<typeof Stack>;
 
 const Box = ({ children }: { children: React.ReactNode }) => (
-  <div className="bg-card rounded-md border px-3 py-2 text-sm">{children}</div>
+  <div className="bg-card border px-3 py-2 text-sm">{children}</div>
 );
 
 export const Vertical: Story = {

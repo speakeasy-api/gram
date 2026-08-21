@@ -22,6 +22,11 @@ func SwitchScopesAuthPath() string {
 	return "/rpc/auth.switchScopes"
 }
 
+// EnterDemoAuthPath returns the URL path to the auth service enterDemo HTTP endpoint.
+func EnterDemoAuthPath() string {
+	return "/rpc/auth.enterDemo"
+}
+
 // LogoutAuthPath returns the URL path to the auth service logout HTTP endpoint.
 func LogoutAuthPath() string {
 	return "/rpc/auth.logout"

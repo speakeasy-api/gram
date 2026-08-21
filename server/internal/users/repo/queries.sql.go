@@ -35,9 +35,10 @@ func (q *Queries) DisableUser(ctx context.Context, arg DisableUserParams) error 
 const getConnectedUserByEmail = `-- name: GetConnectedUserByEmail :one
 SELECT u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.workos_created_at, u.workos_updated_at, u.workos_deleted_at, u.deleted_at, u.created_at, u.updated_at FROM users u
 JOIN organization_user_relationships our ON our.user_id = u.id
-WHERE u.email = $1
+WHERE lower(u.email) = lower($1)
   AND our.organization_id = $2
   AND our.deleted_at IS NULL
+ORDER BY (u.email = lower($1)) DESC, u.created_at, u.id
 LIMIT 1
 `
 
@@ -46,6 +47,10 @@ type GetConnectedUserByEmailParams struct {
 	OrganizationID string
 }
 
+// Emails are compared lowercased on both sides since WorkOS-synced rows can
+// preserve the original casing and callers may too.
+// Rows can differ only by casing, so resolution must be deterministic: prefer
+// the already-normalized row, then the oldest.
 func (q *Queries) GetConnectedUserByEmail(ctx context.Context, arg GetConnectedUserByEmailParams) (User, error) {
 	row := q.db.QueryRow(ctx, getConnectedUserByEmail, arg.Email, arg.OrganizationID)
 	var i User
@@ -68,11 +73,12 @@ func (q *Queries) GetConnectedUserByEmail(ctx context.Context, arg GetConnectedU
 }
 
 const getConnectedUsersByEmails = `-- name: GetConnectedUsersByEmails :many
-SELECT u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.workos_created_at, u.workos_updated_at, u.workos_deleted_at, u.deleted_at, u.created_at, u.updated_at FROM users u
+SELECT DISTINCT ON (lower(u.email)) u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.workos_created_at, u.workos_updated_at, u.workos_deleted_at, u.deleted_at, u.created_at, u.updated_at FROM users u
 JOIN organization_user_relationships our ON our.user_id = u.id
-WHERE lower(u.email) = ANY($1::text[])
+WHERE lower(u.email) = ANY(ARRAY(SELECT lower(e) FROM unnest($1::text[]) AS e))
   AND our.organization_id = $2
   AND our.deleted_at IS NULL
+ORDER BY lower(u.email), (u.email = lower(u.email)) DESC, u.created_at, u.id
 `
 
 type GetConnectedUsersByEmailsParams struct {
@@ -80,10 +86,63 @@ type GetConnectedUsersByEmailsParams struct {
 	OrganizationID string
 }
 
-// Callers must pass lowercased emails (conv.NormalizeEmail); stored emails are
-// lowered here since WorkOS-synced rows can preserve the original casing.
+// Emails are compared lowercased on both sides since WorkOS-synced rows can
+// preserve the original casing and callers may too.
+// Rows can differ only by casing, so pick one user per email deterministically:
+// prefer the already-normalized row, then the oldest.
 func (q *Queries) GetConnectedUsersByEmails(ctx context.Context, arg GetConnectedUsersByEmailsParams) ([]User, error) {
 	rows, err := q.db.Query(ctx, getConnectedUsersByEmails, arg.Emails, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []User
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.DisplayName,
+			&i.PhotoUrl,
+			&i.Admin,
+			&i.LastLogin,
+			&i.WorkosID,
+			&i.WorkosCreatedAt,
+			&i.WorkosUpdatedAt,
+			&i.WorkosDeletedAt,
+			&i.DeletedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getConnectedUsersByIDs = `-- name: GetConnectedUsersByIDs :many
+SELECT u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.workos_created_at, u.workos_updated_at, u.workos_deleted_at, u.deleted_at, u.created_at, u.updated_at FROM users u
+JOIN organization_user_relationships our ON our.user_id = u.id
+WHERE u.id = ANY($1::text[])
+  AND our.organization_id = $2
+  AND our.deleted_at IS NULL
+`
+
+type GetConnectedUsersByIDsParams struct {
+	Ids            []string
+	OrganizationID string
+}
+
+// The org-scoped counterpart to GetConnectedUsersByEmails: resolves gram user
+// ids to the directory rows they own. Callers hold a user id from a client
+// payload, so the org join is what keeps one org's ids from resolving against
+// another org's directory.
+func (q *Queries) GetConnectedUsersByIDs(ctx context.Context, arg GetConnectedUsersByIDsParams) ([]User, error) {
+	rows, err := q.db.Query(ctx, getConnectedUsersByIDs, arg.Ids, arg.OrganizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -131,6 +190,57 @@ type GetConnectedUsersByWorkosIDsParams struct {
 
 func (q *Queries) GetConnectedUsersByWorkosIDs(ctx context.Context, arg GetConnectedUsersByWorkosIDsParams) ([]User, error) {
 	rows, err := q.db.Query(ctx, getConnectedUsersByWorkosIDs, arg.WorkosIds, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []User
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.DisplayName,
+			&i.PhotoUrl,
+			&i.Admin,
+			&i.LastLogin,
+			&i.WorkosID,
+			&i.WorkosCreatedAt,
+			&i.WorkosUpdatedAt,
+			&i.WorkosDeletedAt,
+			&i.DeletedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getConnectedUsersMatchingEmails = `-- name: GetConnectedUsersMatchingEmails :many
+SELECT u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.workos_created_at, u.workos_updated_at, u.workos_deleted_at, u.deleted_at, u.created_at, u.updated_at FROM users u
+JOIN organization_user_relationships our ON our.user_id = u.id
+WHERE lower(u.email) = ANY(ARRAY(SELECT lower(e) FROM unnest($1::text[]) AS e))
+  AND u.deleted_at IS NULL
+  AND our.organization_id = $2
+  AND our.deleted_at IS NULL
+ORDER BY lower(u.email), u.created_at, u.id
+`
+
+type GetConnectedUsersMatchingEmailsParams struct {
+	Emails         []string
+	OrganizationID string
+}
+
+// Returns every connected row matching the emails case-insensitively. Callers
+// that assign ownership use this to reject ambiguous case-variant identities.
+func (q *Queries) GetConnectedUsersMatchingEmails(ctx context.Context, arg GetConnectedUsersMatchingEmailsParams) ([]User, error) {
+	rows, err := q.db.Query(ctx, getConnectedUsersMatchingEmails, arg.Emails, arg.OrganizationID)
 	if err != nil {
 		return nil, err
 	}

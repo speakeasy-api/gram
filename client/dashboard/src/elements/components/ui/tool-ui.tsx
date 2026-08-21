@@ -9,6 +9,7 @@ import {
   CopyIcon,
   EyeIcon,
   EyeOffIcon,
+  FileTextIcon,
   LoaderIcon,
   SearchIcon,
   TriangleAlertIcon,
@@ -53,6 +54,17 @@ type ContentItem =
       type: "image";
       data: string;
       _meta?: { "getgram.ai/mime-type"?: string };
+    }
+  // An MCP resource link: a pointer to a document the server serves, returned
+  // alongside the text that cites it. Rendered as a citation rather than raw
+  // JSON so the reader can see what a claim was sourced from.
+  | {
+      type: "resource_link";
+      uri: string;
+      name?: string;
+      title?: string;
+      description?: string;
+      mimeType?: string;
     };
 
 /** MCP tool annotations providing hints about tool behavior */
@@ -634,6 +646,56 @@ function ImageContent({ data }: { data: string }) {
  * StructuredResultContent - Renders structured content array
  * -------------------------------------------------------------------------- */
 
+/* -----------------------------------------------------------------------------
+ * ResourceLinkContent - Citation pointing at a document the server serves
+ * -------------------------------------------------------------------------- */
+
+function ResourceLinkContent({
+  item,
+}: {
+  item: Extract<ContentItem, { type: "resource_link" }>;
+}): React.JSX.Element {
+  // Only http(s) resources are somewhere a browser can go. Scheme-specific URIs
+  // like gram:// address a document on the MCP server, so they are shown and
+  // copyable rather than dressed up as a link that would fail to open.
+  const href = /^https?:\/\//i.test(item.uri) ? item.uri : undefined;
+  const label = item.title ?? item.name ?? item.uri;
+
+  return (
+    <div
+      data-slot="tool-ui-resource-link"
+      className="flex items-start justify-between gap-3 border-b border-border px-5 py-3 last:border-b-0"
+    >
+      <div className="min-w-0">
+        <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+          <FileTextIcon className="size-4 shrink-0 text-muted-foreground" />
+          {href ? (
+            <a
+              href={href}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="truncate underline underline-offset-2 hover:text-primary"
+            >
+              {label}
+            </a>
+          ) : (
+            <span className="truncate">{label}</span>
+          )}
+        </div>
+        {item.description && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            {item.description}
+          </p>
+        )}
+        <p className="mt-1 truncate font-mono text-xs text-muted-foreground/80">
+          {item.uri}
+        </p>
+      </div>
+      <CopyButton content={item.uri} />
+    </div>
+  );
+}
+
 function StructuredResultContent({
   content,
 }: {
@@ -658,6 +720,9 @@ function StructuredResultContent({
           }
           case "image": {
             return <ImageContent key={index} data={item.data} />;
+          }
+          case "resource_link": {
+            return <ResourceLinkContent key={index} item={item} />;
           }
           default:
             return (
@@ -726,6 +791,10 @@ function ToolUIMetaSection({
 }): React.JSX.Element {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
+  useEffect(() => {
+    if (defaultExpanded) setIsExpanded(true);
+  }, [defaultExpanded]);
+
   return (
     <div data-slot="tool-ui-meta-section" className="border-t border-border">
       <SectionDisclosureHeader
@@ -761,6 +830,10 @@ function ToolUISection({
   highlight,
 }: ToolUISectionProps): React.JSX.Element {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+
+  useEffect(() => {
+    if (defaultExpanded) setIsExpanded(true);
+  }, [defaultExpanded]);
 
   // For structured content, we don't stringify it
   const isStructured = isStructuredContent(content);
@@ -1176,31 +1249,21 @@ function ToolUIGroup({
 }: ToolUIGroupProps): React.JSX.Element {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
-  // A headerless group shows its children unconditionally; when it gains a
-  // header mid-stream, start expanded — collapsing would hide content the
-  // user was already looking at.
-  const [prevHeaderless, setPrevHeaderless] = useState(headerless);
-  if (prevHeaderless !== headerless) {
-    setPrevHeaderless(headerless);
-    if (prevHeaderless) setIsExpanded(true);
-  }
+  useEffect(() => {
+    if (defaultExpanded) setIsExpanded(true);
+  }, [defaultExpanded]);
 
   const showChildren = headerless || isExpanded;
 
   return (
-    <div
-      data-slot="tool-ui-group"
-      className={cn(
-        "overflow-hidden rounded-lg border border-border bg-card",
-        className,
-      )}
-    >
-      {/* Group header */}
+    <div data-slot="tool-ui-group" className={className}>
+      {/* Group header — a bare annotation line; the chrome lives on the
+          expanded content below. */}
       {!headerless && (
         <button
           onClick={() => setIsExpanded(!isExpanded)}
           aria-expanded={isExpanded}
-          className="flex w-full items-center gap-2 px-4 py-3 text-left transition-colors hover:bg-accent/50"
+          className="flex w-fit cursor-pointer items-center gap-1.5 py-1 text-left"
         >
           {icon || (
             <StatusIndicator
@@ -1209,27 +1272,29 @@ function ToolUIGroup({
           )}
           <span
             className={cn(
-              "flex-1 text-sm font-medium",
+              "text-sm font-medium text-muted-foreground",
               status === "running" && "shimmer",
             )}
           >
             {title}
           </span>
-          <ChevronDownIcon
+          <ChevronRightIcon
             className={cn(
               "size-4 text-muted-foreground transition-transform duration-200",
-              isExpanded && "rotate-180",
+              isExpanded && "rotate-90",
             )}
           />
         </button>
       )}
 
       {/* Collapsed children are hidden, not unmounted — unmounting would
-          reset their state (expansion, async syntax highlighting). */}
+          reset their state (expansion, async syntax highlighting). The border
+          wraps all tools; the cards inside render borderless. */}
       <div
         data-slot="tool-ui-group-content"
         className={cn(
-          !headerless && "border-t border-border",
+          "overflow-hidden rounded-lg border border-border bg-card",
+          !headerless && "mt-2",
           !showChildren && "hidden",
         )}
       >

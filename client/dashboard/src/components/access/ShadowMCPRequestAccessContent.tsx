@@ -1,4 +1,4 @@
-import { GramLogo } from "@/components/gram-logo";
+import { FullScreenPage } from "@/components/full-screen-page";
 import { Text } from "@/components/ui/Text";
 import { useSession } from "@/contexts/Auth";
 import { buildLoginRedirectURL } from "@/lib/utils";
@@ -6,27 +6,38 @@ import { useRiskCreatePolicyBypassRequestMutation } from "@gram/client/react-que
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { Stack } from "@/components/ui/Stack";
+import { TextArea } from "@/components/ui/Textarea";
 import { useEffect, useState } from "react";
 
 const REQUEST_TOKEN_STORAGE_KEY = "riskPolicyBypassRequestToken";
+const NOTE_FIELD_ID = "request-access-note";
+/**
+ * What the endpoint accepts, counted the way it counts: Goa's MaxLength on a
+ * string is runes, not UTF-16 units, so an emoji costs one here and one there.
+ */
+const NOTE_MAX_CHARACTERS = 4000;
+
+function noteLength(note: string): number {
+  return Array.from(note.trim()).length;
+}
 const LEGACY_REQUEST_TOKEN_STORAGE_KEY = "shadowMcpApprovalRequestToken";
-const inFlightSubmissions = new Map<string, Promise<void>>();
 
 type RequestAccessState =
   | "missing-token"
   | "authenticating"
+  | "prompting"
   | "submitting"
   | "complete"
   | "error";
 
-type SubmissionResult = "idle" | "complete" | "error";
+type SubmissionResult = "idle" | "submitting" | "complete" | "error";
 
 export function ShadowMCPRequestAccessContent(): JSX.Element {
   const session = useSession();
   const requestToken = getRequestToken();
   const [submissionResult, setSubmissionResult] =
     useState<SubmissionResult>("idle");
-  const [retryCount, setRetryCount] = useState(0);
+  const [note, setNote] = useState("");
   const { mutateAsync: createApprovalRequest } =
     useRiskCreatePolicyBypassRequestMutation();
 
@@ -67,42 +78,37 @@ export function ShadowMCPRequestAccessContent(): JSX.Element {
     window.location.href = buildLoginRedirectURL(window.location.pathname);
   }, [session.session, storedRequestToken]);
 
-  useEffect(() => {
-    if (!storedRequestToken || !session.session) return;
+  // The ask is submitted from the button, not on arrival: the note is the
+  // point of this page, and a page that files the request as it loads never
+  // gives the requester anywhere to say what they need the server for.
+  const submit = async () => {
+    if (
+      !storedRequestToken ||
+      note.trim() === "" ||
+      noteLength(note) > NOTE_MAX_CHARACTERS
+    ) {
+      return;
+    }
 
-    let submission = inFlightSubmissions.get(storedRequestToken);
-    if (!submission) {
-      submission = createApprovalRequest({
+    setSubmissionResult("submitting");
+    try {
+      await createApprovalRequest({
         request: {
           createRiskPolicyBypassRequestRequestBody: {
             requestToken: storedRequestToken,
+            note: note.trim(),
           },
         },
-      })
-        .then(() => undefined)
-        .finally(() => {
-          inFlightSubmissions.delete(storedRequestToken);
-        });
-      inFlightSubmissions.set(storedRequestToken, submission);
+      });
+    } catch {
+      setSubmissionResult("error");
+      return;
     }
 
-    let active = true;
-    submission
-      .then(() => {
-        if (!active) return;
-        setSubmissionResult("complete");
-        sessionStorage.removeItem(REQUEST_TOKEN_STORAGE_KEY);
-        sessionStorage.removeItem(LEGACY_REQUEST_TOKEN_STORAGE_KEY);
-      })
-      .catch(() => {
-        if (!active) return;
-        setSubmissionResult("error");
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [createApprovalRequest, retryCount, session.session, storedRequestToken]);
+    setSubmissionResult("complete");
+    sessionStorage.removeItem(REQUEST_TOKEN_STORAGE_KEY);
+    sessionStorage.removeItem(LEGACY_REQUEST_TOKEN_STORAGE_KEY);
+  };
 
   const state = getRequestAccessState({
     hasSession: !!session.session,
@@ -111,19 +117,17 @@ export function ShadowMCPRequestAccessContent(): JSX.Element {
   });
 
   return (
-    <div className="bg-background flex min-h-screen w-full flex-col items-center justify-center p-8">
-      <Stack gap={8} align="center" className="w-full max-w-sm">
-        <GramLogo className="w-25" variant="vertical" />
-        <RequestAccessMessage
-          state={state}
-          isPending={state === "submitting"}
-          onRetry={() => {
-            setSubmissionResult("idle");
-            setRetryCount((count) => count + 1);
-          }}
-        />
-      </Stack>
-    </div>
+    <FullScreenPage>
+      <RequestAccessMessage
+        state={state}
+        note={note}
+        onNoteChange={setNote}
+        onSubmit={() => void submit()}
+        // A failed submit keeps what was typed: the note is the one thing
+        // here the requester cannot get back from the link.
+        onRetry={() => setSubmissionResult("idle")}
+      />
+    </FullScreenPage>
   );
 }
 
@@ -140,7 +144,8 @@ function getRequestAccessState({
   if (submissionResult === "error") return "error";
   if (!hasToken) return "missing-token";
   if (!hasSession) return "authenticating";
-  return "submitting";
+  if (submissionResult === "submitting") return "submitting";
+  return "prompting";
 }
 
 function getRequestToken(): string | null {
@@ -152,19 +157,72 @@ function getRequestToken(): string | null {
 
 function RequestAccessMessage({
   state,
-  isPending,
+  note,
+  onNoteChange,
+  onSubmit,
   onRetry,
 }: {
   state: RequestAccessState;
-  isPending: boolean;
+  note: string;
+  onNoteChange: (value: string) => void;
+  onSubmit: () => void;
   onRetry: () => void;
 }) {
+  if (state === "prompting" || state === "submitting") {
+    const pending = state === "submitting";
+    const tooLong = noteLength(note) > NOTE_MAX_CHARACTERS;
+
+    return (
+      <Stack gap={4} className="w-full max-w-md">
+        <Stack gap={1}>
+          <Text variant="subheading">Request access</Text>
+          <Text muted small>
+            An admin decides whether this server is allowed. Tell them what you
+            need it for — they see this alongside the evidence gathered about
+            the server.
+          </Text>
+        </Stack>
+        <Stack gap={1}>
+          <label htmlFor={NOTE_FIELD_ID} className="text-sm font-medium">
+            Why do you need this server?
+          </label>
+          <TextArea
+            id={NOTE_FIELD_ID}
+            value={note}
+            onChange={onNoteChange}
+            rows={4}
+            placeholder="e.g. The docs team works in Notion and I need meeting notes searchable from the editor."
+            className="resize-none text-sm"
+          />
+          {/* Said before the request is refused rather than after: the server
+              rejects an over-long note with a generic failure, and the note is
+              the one thing here that cannot be recovered from the link. */}
+          {tooLong && (
+            <Text muted small>
+              {(noteLength(note) - NOTE_MAX_CHARACTERS).toLocaleString()}{" "}
+              characters over the {NOTE_MAX_CHARACTERS.toLocaleString()}{" "}
+              character limit.
+            </Text>
+          )}
+        </Stack>
+        <Button
+          onClick={onSubmit}
+          disabled={pending || note.trim() === "" || tooLong}
+        >
+          {pending && (
+            <Button.LeftIcon>
+              <Icon name="loader-circle" className="h-4 w-4 animate-spin" />
+            </Button.LeftIcon>
+          )}
+          <Button.Text>{pending ? "Sending" : "Send request"}</Button.Text>
+        </Button>
+      </Stack>
+    );
+  }
+
   if (state === "complete") {
     return (
       <Stack gap={3} align="center">
-        <div className="bg-primary/10 flex h-11 w-11 items-center justify-center rounded-full">
-          <Icon name="check" className="text-primary h-5 w-5" />
-        </div>
         <Stack gap={1} align="center">
           <Text variant="subheading" className="text-center">
             Request sent
@@ -194,9 +252,6 @@ function RequestAccessMessage({
   if (state === "missing-token") {
     return (
       <Stack gap={3} align="center">
-        <div className="bg-destructive/10 flex h-11 w-11 items-center justify-center rounded-full">
-          <Icon name="circle-x" className="text-destructive h-5 w-5" />
-        </div>
         <Stack gap={1} align="center">
           <Text variant="subheading" className="text-center">
             Link expired
@@ -213,9 +268,6 @@ function RequestAccessMessage({
   if (state === "error") {
     return (
       <Stack gap={3} align="center">
-        <div className="bg-destructive/10 flex h-11 w-11 items-center justify-center rounded-full">
-          <Icon name="circle-x" className="text-destructive h-5 w-5" />
-        </div>
         <Stack gap={1} align="center">
           <Text variant="subheading" className="text-center">
             Request failed
@@ -241,7 +293,7 @@ function RequestAccessMessage({
         className="text-muted-foreground h-6 w-6 animate-spin"
       />
       <Text muted small className="text-center">
-        {isPending ? "Submitting request..." : "Preparing request..."}
+        Preparing request...
       </Text>
     </Stack>
   );

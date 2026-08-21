@@ -16,6 +16,7 @@ import {
   decodeManifestFile,
   manifestByteLength,
   MAX_SKILL_MANIFEST_BYTES,
+  SKILL_MANIFEST_TEMPLATE,
   validateManifestContent,
 } from "./skill-manifest";
 import { invalidateSkillQueries } from "./invalidate-skill-queries";
@@ -240,6 +241,13 @@ export function SkillManifestDialog({
     }
   };
 
+  const insertTemplate = (): void => {
+    setContent(SKILL_MANIFEST_TEMPLATE);
+    setFieldError(null);
+    if (!approvalUncertain) setMutationError(null);
+    setSavedResult(null);
+  };
+
   const continueEditing = (): void => {
     setSavedResult(null);
     setContinuing(true);
@@ -279,19 +287,33 @@ export function SkillManifestDialog({
               <label htmlFor={fieldId} className="text-sm font-medium">
                 SKILL.md content
               </label>
-              <label className="text-primary cursor-pointer text-sm font-medium hover:underline">
-                Upload .md file
-                <input
-                  type="file"
-                  accept=".md,text/markdown,text/plain"
-                  className="sr-only"
-                  disabled={isBusy || savedInvalid}
-                  onChange={(event) => {
-                    void handleFile(event.currentTarget.files?.[0]);
-                    event.currentTarget.value = "";
-                  }}
-                />
-              </label>
+              <div className="flex flex-wrap items-center gap-3">
+                {mode === "create" && (
+                  <Button
+                    type="button"
+                    variant="tertiary"
+                    size="xs"
+                    className="h-auto p-0"
+                    disabled={isBusy || savedInvalid}
+                    onClick={insertTemplate}
+                  >
+                    Insert template
+                  </Button>
+                )}
+                <label className="text-primary cursor-pointer text-sm font-medium hover:underline">
+                  Upload .md file
+                  <input
+                    type="file"
+                    accept=".md,text/markdown,text/plain"
+                    className="sr-only"
+                    disabled={isBusy || savedInvalid}
+                    onChange={(event) => {
+                      void handleFile(event.currentTarget.files?.[0]);
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                </label>
+              </div>
             </div>
             <Textarea
               id={fieldId}
@@ -380,7 +402,7 @@ function SavedManifestResult({
   if (noChanges) title = "No changes detected.";
   return (
     <div
-      className="border-border bg-muted/30 space-y-3 rounded-lg border p-4"
+      className="border-border bg-muted/30 space-y-3 border p-4"
       role="status"
     >
       <Text variant="subheading">{title}</Text>

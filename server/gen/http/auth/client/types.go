@@ -24,18 +24,26 @@ type RegisterRequestBody struct {
 // InfoResponseBody is the type of the "auth" service "info" endpoint HTTP
 // response body.
 type InfoResponseBody struct {
-	UserID               *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
-	UserEmail            *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
-	UserSignature        *string `form:"user_signature,omitempty" json:"user_signature,omitempty" xml:"user_signature,omitempty"`
-	UserDisplayName      *string `form:"user_display_name,omitempty" json:"user_display_name,omitempty" xml:"user_display_name,omitempty"`
-	UserPhotoURL         *string `form:"user_photo_url,omitempty" json:"user_photo_url,omitempty" xml:"user_photo_url,omitempty"`
-	IsAdmin              *bool   `form:"is_admin,omitempty" json:"is_admin,omitempty" xml:"is_admin,omitempty"`
-	ActiveOrganizationID *string `form:"active_organization_id,omitempty" json:"active_organization_id,omitempty" xml:"active_organization_id,omitempty"`
-	GramAccountType      *string `form:"gram_account_type,omitempty" json:"gram_account_type,omitempty" xml:"gram_account_type,omitempty"`
+	UserID          *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	UserEmail       *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
+	UserSignature   *string `form:"user_signature,omitempty" json:"user_signature,omitempty" xml:"user_signature,omitempty"`
+	UserDisplayName *string `form:"user_display_name,omitempty" json:"user_display_name,omitempty" xml:"user_display_name,omitempty"`
+	UserPhotoURL    *string `form:"user_photo_url,omitempty" json:"user_photo_url,omitempty" xml:"user_photo_url,omitempty"`
+	IsAdmin         *bool   `form:"is_admin,omitempty" json:"is_admin,omitempty" xml:"is_admin,omitempty"`
+	// The WorkOS Dashboard operator who initiated this impersonation session.
+	// Empty for ordinary authentication.
+	ImpersonatorEmail *string `form:"impersonator_email,omitempty" json:"impersonator_email,omitempty" xml:"impersonator_email,omitempty"`
+	// Whether this is a validated, time-bounded organization support session.
+	OrganizationOverride *bool `form:"organization_override,omitempty" json:"organization_override,omitempty" xml:"organization_override,omitempty"`
+	// Fixed expiration of the organization support session.
+	OrganizationOverrideExpiresAt *string `form:"organization_override_expires_at,omitempty" json:"organization_override_expires_at,omitempty" xml:"organization_override_expires_at,omitempty"`
+	ActiveOrganizationID          *string `form:"active_organization_id,omitempty" json:"active_organization_id,omitempty" xml:"active_organization_id,omitempty"`
+	GramAccountType               *string `form:"gram_account_type,omitempty" json:"gram_account_type,omitempty" xml:"gram_account_type,omitempty"`
 	// Whether the organization has an active billing subscription
 	HasActiveSubscription *bool `form:"has_active_subscription,omitempty" json:"has_active_subscription,omitempty" xml:"has_active_subscription,omitempty"`
 	// Whether the organization is whitelisted to access the platform
 	Whitelisted   *bool                            `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
+	Trial         *TrialResponseBody               `json:"trial"`
 	Organizations []*OrganizationEntryResponseBody `form:"organizations,omitempty" json:"organizations,omitempty" xml:"organizations,omitempty"`
 }
 
@@ -565,6 +573,186 @@ type SwitchScopesUnexpectedResponseBody struct {
 // SwitchScopesGatewayErrorResponseBody is the type of the "auth" service
 // "switchScopes" endpoint HTTP response body for the "gateway_error" error.
 type SwitchScopesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EnterDemoUnauthorizedResponseBody is the type of the "auth" service
+// "enterDemo" endpoint HTTP response body for the "unauthorized" error.
+type EnterDemoUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EnterDemoForbiddenResponseBody is the type of the "auth" service "enterDemo"
+// endpoint HTTP response body for the "forbidden" error.
+type EnterDemoForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EnterDemoBadRequestResponseBody is the type of the "auth" service
+// "enterDemo" endpoint HTTP response body for the "bad_request" error.
+type EnterDemoBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EnterDemoNotFoundResponseBody is the type of the "auth" service "enterDemo"
+// endpoint HTTP response body for the "not_found" error.
+type EnterDemoNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EnterDemoConflictResponseBody is the type of the "auth" service "enterDemo"
+// endpoint HTTP response body for the "conflict" error.
+type EnterDemoConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EnterDemoUnsupportedMediaResponseBody is the type of the "auth" service
+// "enterDemo" endpoint HTTP response body for the "unsupported_media" error.
+type EnterDemoUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EnterDemoInvalidResponseBody is the type of the "auth" service "enterDemo"
+// endpoint HTTP response body for the "invalid" error.
+type EnterDemoInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EnterDemoInvariantViolationResponseBody is the type of the "auth" service
+// "enterDemo" endpoint HTTP response body for the "invariant_violation" error.
+type EnterDemoInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EnterDemoUnexpectedResponseBody is the type of the "auth" service
+// "enterDemo" endpoint HTTP response body for the "unexpected" error.
+type EnterDemoUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EnterDemoGatewayErrorResponseBody is the type of the "auth" service
+// "enterDemo" endpoint HTTP response body for the "gateway_error" error.
+type EnterDemoGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1120,6 +1308,12 @@ type InfoGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// TrialResponseBody is used to define fields on response body types.
+type TrialResponseBody struct {
+	StartedAt *string `form:"started_at,omitempty" json:"started_at,omitempty" xml:"started_at,omitempty"`
+	EndsAt    *string `form:"ends_at,omitempty" json:"ends_at,omitempty" xml:"ends_at,omitempty"`
+}
+
 // OrganizationEntryResponseBody is used to define fields on response body
 // types.
 type OrganizationEntryResponseBody struct {
@@ -1623,6 +1817,164 @@ func NewSwitchScopesGatewayError(body *SwitchScopesGatewayErrorResponseBody) *go
 	return v
 }
 
+// NewEnterDemoResultOK builds a "auth" service "enterDemo" endpoint result
+// from a HTTP "OK" response.
+func NewEnterDemoResultOK(sessionToken string, sessionCookie string) *auth.EnterDemoResult {
+	v := &auth.EnterDemoResult{}
+	v.SessionToken = sessionToken
+	v.SessionCookie = sessionCookie
+
+	return v
+}
+
+// NewEnterDemoUnauthorized builds a auth service enterDemo endpoint
+// unauthorized error.
+func NewEnterDemoUnauthorized(body *EnterDemoUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEnterDemoForbidden builds a auth service enterDemo endpoint forbidden
+// error.
+func NewEnterDemoForbidden(body *EnterDemoForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEnterDemoBadRequest builds a auth service enterDemo endpoint bad_request
+// error.
+func NewEnterDemoBadRequest(body *EnterDemoBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEnterDemoNotFound builds a auth service enterDemo endpoint not_found
+// error.
+func NewEnterDemoNotFound(body *EnterDemoNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEnterDemoConflict builds a auth service enterDemo endpoint conflict error.
+func NewEnterDemoConflict(body *EnterDemoConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEnterDemoUnsupportedMedia builds a auth service enterDemo endpoint
+// unsupported_media error.
+func NewEnterDemoUnsupportedMedia(body *EnterDemoUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEnterDemoInvalid builds a auth service enterDemo endpoint invalid error.
+func NewEnterDemoInvalid(body *EnterDemoInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEnterDemoInvariantViolation builds a auth service enterDemo endpoint
+// invariant_violation error.
+func NewEnterDemoInvariantViolation(body *EnterDemoInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEnterDemoUnexpected builds a auth service enterDemo endpoint unexpected
+// error.
+func NewEnterDemoUnexpected(body *EnterDemoUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEnterDemoGatewayError builds a auth service enterDemo endpoint
+// gateway_error error.
+func NewEnterDemoGatewayError(body *EnterDemoGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewLogoutResultOK builds a "auth" service "logout" endpoint result from a
 // HTTP "OK" response.
 func NewLogoutResultOK(sessionCookie string) *auth.LogoutResult {
@@ -1926,16 +2278,22 @@ func NewRegisterGatewayError(body *RegisterGatewayErrorResponseBody) *goa.Servic
 // "OK" response.
 func NewInfoResultOK(body *InfoResponseBody, sessionToken string, sessionCookie string) *auth.InfoResult {
 	v := &auth.InfoResult{
-		UserID:                *body.UserID,
-		UserEmail:             *body.UserEmail,
-		UserSignature:         body.UserSignature,
-		UserDisplayName:       body.UserDisplayName,
-		UserPhotoURL:          body.UserPhotoURL,
-		IsAdmin:               *body.IsAdmin,
-		ActiveOrganizationID:  *body.ActiveOrganizationID,
-		GramAccountType:       *body.GramAccountType,
-		HasActiveSubscription: *body.HasActiveSubscription,
-		Whitelisted:           *body.Whitelisted,
+		UserID:                        *body.UserID,
+		UserEmail:                     *body.UserEmail,
+		UserSignature:                 body.UserSignature,
+		UserDisplayName:               body.UserDisplayName,
+		UserPhotoURL:                  body.UserPhotoURL,
+		IsAdmin:                       *body.IsAdmin,
+		ImpersonatorEmail:             body.ImpersonatorEmail,
+		OrganizationOverride:          *body.OrganizationOverride,
+		OrganizationOverrideExpiresAt: body.OrganizationOverrideExpiresAt,
+		ActiveOrganizationID:          *body.ActiveOrganizationID,
+		GramAccountType:               *body.GramAccountType,
+		HasActiveSubscription:         *body.HasActiveSubscription,
+		Whitelisted:                   *body.Whitelisted,
+	}
+	if body.Trial != nil {
+		v.Trial = unmarshalTrialResponseBodyToAuthTrial(body.Trial)
 	}
 	v.Organizations = make([]*auth.OrganizationEntry, len(body.Organizations))
 	for i, val := range body.Organizations {
@@ -2104,6 +2462,9 @@ func ValidateInfoResponseBody(body *InfoResponseBody) (err error) {
 	if body.IsAdmin == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("is_admin", "body"))
 	}
+	if body.OrganizationOverride == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_override", "body"))
+	}
 	if body.ActiveOrganizationID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("active_organization_id", "body"))
 	}
@@ -2118,6 +2479,14 @@ func ValidateInfoResponseBody(body *InfoResponseBody) (err error) {
 	}
 	if body.Whitelisted == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("whitelisted", "body"))
+	}
+	if body.OrganizationOverrideExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.organization_override_expires_at", *body.OrganizationOverrideExpiresAt, goa.FormatDateTime))
+	}
+	if body.Trial != nil {
+		if err2 := ValidateTrialResponseBody(body.Trial); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	for _, e := range body.Organizations {
 		if e != nil {
@@ -2828,6 +3197,246 @@ func ValidateSwitchScopesUnexpectedResponseBody(body *SwitchScopesUnexpectedResp
 // ValidateSwitchScopesGatewayErrorResponseBody runs the validations defined on
 // switchScopes_gateway_error_response_body
 func ValidateSwitchScopesGatewayErrorResponseBody(body *SwitchScopesGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEnterDemoUnauthorizedResponseBody runs the validations defined on
+// enterDemo_unauthorized_response_body
+func ValidateEnterDemoUnauthorizedResponseBody(body *EnterDemoUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEnterDemoForbiddenResponseBody runs the validations defined on
+// enterDemo_forbidden_response_body
+func ValidateEnterDemoForbiddenResponseBody(body *EnterDemoForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEnterDemoBadRequestResponseBody runs the validations defined on
+// enterDemo_bad_request_response_body
+func ValidateEnterDemoBadRequestResponseBody(body *EnterDemoBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEnterDemoNotFoundResponseBody runs the validations defined on
+// enterDemo_not_found_response_body
+func ValidateEnterDemoNotFoundResponseBody(body *EnterDemoNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEnterDemoConflictResponseBody runs the validations defined on
+// enterDemo_conflict_response_body
+func ValidateEnterDemoConflictResponseBody(body *EnterDemoConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEnterDemoUnsupportedMediaResponseBody runs the validations defined
+// on enterDemo_unsupported_media_response_body
+func ValidateEnterDemoUnsupportedMediaResponseBody(body *EnterDemoUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEnterDemoInvalidResponseBody runs the validations defined on
+// enterDemo_invalid_response_body
+func ValidateEnterDemoInvalidResponseBody(body *EnterDemoInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEnterDemoInvariantViolationResponseBody runs the validations defined
+// on enterDemo_invariant_violation_response_body
+func ValidateEnterDemoInvariantViolationResponseBody(body *EnterDemoInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEnterDemoUnexpectedResponseBody runs the validations defined on
+// enterDemo_unexpected_response_body
+func ValidateEnterDemoUnexpectedResponseBody(body *EnterDemoUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEnterDemoGatewayErrorResponseBody runs the validations defined on
+// enterDemo_gateway_error_response_body
+func ValidateEnterDemoGatewayErrorResponseBody(body *EnterDemoGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3565,6 +4174,23 @@ func ValidateInfoGatewayErrorResponseBody(body *InfoGatewayErrorResponseBody) (e
 	}
 	if body.Fault == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTrialResponseBody runs the validations defined on TrialResponseBody
+func ValidateTrialResponseBody(body *TrialResponseBody) (err error) {
+	if body.StartedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("started_at", "body"))
+	}
+	if body.EndsAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("ends_at", "body"))
+	}
+	if body.StartedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.started_at", *body.StartedAt, goa.FormatDateTime))
+	}
+	if body.EndsAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.ends_at", *body.EndsAt, goa.FormatDateTime))
 	}
 	return
 }
