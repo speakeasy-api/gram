@@ -2804,38 +2804,55 @@ func (s *ServiceCore) currentRuntimeMCPServers(ctx context.Context, assistant as
 	if serverURL == nil {
 		return nil
 	}
-	platformSlugs, err := s.assistantPlatformSlugs(ctx, assistant)
+	grant, err := s.assistantPlatformGrant(ctx, assistant)
 	if err != nil {
 		s.logger.WarnContext(ctx, "resolve platform toolsets for mcp reconcile failed; skipping reconcile",
 			attr.SlogError(err),
 		)
 		return nil
 	}
-	return resolveAssistantMCPServers(ctx, s.logger, serverURL, assistant.Toolsets, assistant.MCPServers, platformSlugs)
+	return resolveAssistantMCPServers(ctx, s.logger, serverURL, assistant.Toolsets, assistant.MCPServers, grant.Slugs)
 }
 
-// assistantPlatformSlugs returns the platform toolset slugs granted to this
+// platformGrant is what a runtime is served from the platform side of the
+// catalog: the toolset slugs, whether this is the project's managed assistant,
+// and the rollout variant those slugs were resolved on. The variant travels
+// with the slugs because the managed assistant's system prompt names its tools
+// inline and must describe the same set that was granted.
+type platformGrant struct {
+	Slugs   []string
+	Managed bool
+	Variant feature.Variant
+}
+
+// assistantPlatformGrant returns the platform toolsets granted to this
 // assistant's runtime. Every assistant gets the base assistants toolset; the
 // project's managed assistant additionally gets exactly one managed-only
 // toolset — legacy or Platform MCP, per the rollout variant — which must never
 // be reachable by any other assistant.
-func (s *ServiceCore) assistantPlatformSlugs(ctx context.Context, assistant assistantRecord) ([]string, error) {
-	platformSlugs := []string{platformtools.AssistantsPlatformToolsetSlug}
+func (s *ServiceCore) assistantPlatformGrant(ctx context.Context, assistant assistantRecord) (platformGrant, error) {
+	grant := platformGrant{
+		Slugs:   []string{platformtools.AssistantsPlatformToolsetSlug},
+		Managed: false,
+		Variant: feature.VariantAssistantToolsLegacy,
+	}
 	switch managed, mErr := assistantrepo.New(s.db).GetManagedAssistantByProject(ctx, assistant.ProjectID); {
 	case mErr == nil:
 		if managed.ID == assistant.ID {
-			if s.assistantToolsVariant(ctx, assistant.ProjectID) == feature.VariantAssistantToolsPlatformMCP {
-				platformSlugs = append(platformSlugs, platformtools.PlatformMCPReadToolsetSlug)
+			grant.Managed = true
+			grant.Variant = s.assistantToolsVariant(ctx, assistant.ProjectID)
+			if grant.Variant == feature.VariantAssistantToolsPlatformMCP {
+				grant.Slugs = append(grant.Slugs, platformtools.PlatformMCPReadToolsetSlug)
 			} else {
-				platformSlugs = append(platformSlugs, platformtools.ManagedAssistantPlatformToolsetSlug)
+				grant.Slugs = append(grant.Slugs, platformtools.ManagedAssistantPlatformToolsetSlug)
 			}
 		}
 	case errors.Is(mErr, pgx.ErrNoRows):
 		// Project has no managed assistant; managed-only tools stay ungranted.
 	default:
-		return nil, fmt.Errorf("resolve managed assistant: %w", mErr)
+		return platformGrant{}, fmt.Errorf("resolve managed assistant: %w", mErr)
 	}
-	return platformSlugs, nil
+	return grant, nil
 }
 
 // assistantToolsVariant reports which managed-assistant platform toolset the
@@ -3027,7 +3044,7 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 	// The managed-assistant platform toolset is granted only to the project's
 	// managed assistant; tools in it must not be reachable by any other
 	// assistant.
-	platformSlugs, err := s.assistantPlatformSlugs(ctx, assistant)
+	grant, err := s.assistantPlatformGrant(ctx, assistant)
 	if err != nil {
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "resolve managed assistant").LogError(ctx, s.logger, logAttrs...)
 	}
@@ -3036,9 +3053,17 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 	// best-effort URLs rather than aborting the whole bootstrap. The runner
 	// will discover the failure when it tries to list tools and the
 	// assistant can tell the user which integration is broken.
-	mcpServers := resolveAssistantMCPServers(ctx, s.logger, runtimeServerURL, assistant.Toolsets, assistant.MCPServers, platformSlugs)
+	mcpServers := resolveAssistantMCPServers(ctx, s.logger, runtimeServerURL, assistant.Toolsets, assistant.MCPServers, grant.Slugs)
 
-	instructions, err := composeInstructions(assistant.Instructions, thread, baselineSkills.Skills)
+	// The managed assistant's prompt is owned by the platform, not by the
+	// stored row: it must name the toolset this turn was actually granted,
+	// and the row is written once at provisioning and never reconciled.
+	base := assistant.Instructions
+	if grant.Managed {
+		base = managedAssistantInstructionsFor(grant.Variant)
+	}
+
+	instructions, err := composeInstructions(base, thread, baselineSkills.Skills)
 	if err != nil {
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "compose assistant instructions").LogError(ctx, s.logger, logAttrs...)
 	}

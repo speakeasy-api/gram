@@ -49,7 +49,7 @@ func TestEnableManagedAssistantIsIdempotent(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, managedAssistantName("managed-idempotent"), first.Name)
 	require.Equal(t, managedAssistantModel, first.Model)
-	require.Equal(t, managedAssistantInstructions, first.Instructions)
+	require.Equal(t, managedAssistantInstructionsLegacy, first.Instructions)
 	require.NotEmpty(t, first.Instructions, "managed instructions must be embedded, not empty")
 
 	// A second enable (even by a different user) returns the same assistant.

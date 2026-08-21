@@ -392,8 +392,6 @@ var knownPlatformMCPToolNames = map[string]struct{}{
 	"get_setup_handoff":                     {},
 	"get_mcp_readiness":                     {},
 	"get_mcp_repair_plan":                   {},
-	"distribute_mcp_to_default_plugin":      {},
-	"remove_mcp_from_default_plugin":        {},
 	"register_platform_mcp_for_project":     {},
 	"get_platform_mcp_onboarding_status":    {},
 	"attach_platform_mcp_identity_provider": {},

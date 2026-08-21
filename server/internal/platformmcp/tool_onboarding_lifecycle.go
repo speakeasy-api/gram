@@ -67,8 +67,39 @@ type DistributeOnboardingMCPToolOutput struct {
 	Message          string `json:"message"`
 }
 
+// The onboarding lifecycle tools are registered twice: live here, and as
+// unavailable stubs in tools.go when the dependencies are absent. Identity —
+// name and title — is declared once so the two can only agree. Descriptions
+// stay at each site: the live one instructs, the stub one explains why the
+// capability is not there. Adding a lifecycle tool means adding an entry here
+// and registering it in both places; the stub set is checked against this
+// table in tools_test.go.
+var onboardingLifecycleToolIdentities = []struct {
+	Name  string
+	Title string
+}{
+	{"register_platform_mcp_for_project", "Register Catalogue MCP for Project"},
+	{"get_platform_mcp_onboarding_status", "Get Platform MCP Onboarding Status"},
+	{"attach_platform_mcp_identity_provider", "Attach Platform MCP Identity Provider"},
+	{"add_platform_mcp_to_default_plugin", "Add Platform MCP to Default Plugin"},
+}
+
+// onboardingLifecycleTool returns the identity at index i. Both registrars
+// index the same table, so a rename reaches the stub without a second edit.
+func onboardingLifecycleTool(i int) (string, string) {
+	return onboardingLifecycleToolIdentities[i].Name, onboardingLifecycleToolIdentities[i].Title
+}
+
+const (
+	onboardingToolRegister = iota
+	onboardingToolStatus
+	onboardingToolAttachIdentityProvider
+	onboardingToolAddToDefaultPlugin
+)
+
 func registerOnboardingLifecycleTools(reg *Registrar, onboarding *OnboardingService, registrations *RegistrationService, distributions *DistributionService) {
-	addTool(reg, &mcp.Tool{Name: "register_platform_mcp_for_project", Title: "Register Catalogue MCP for Project", Description: "Register a reviewed MCP Catalogue server for an explicit project. Use the exact candidate returned by search_mcp_catalog and inspect_mcp_candidate. Supply declared non-secret values only; required secrets stay in secure dashboard setup. Registration is private and does not distribute or publish the MCP."}, ToolMeta{
+	registerName, registerTitle := onboardingLifecycleTool(onboardingToolRegister)
+	addTool(reg, &mcp.Tool{Name: registerName, Title: registerTitle, Description: "Register a reviewed MCP Catalogue server for an explicit project. Use the exact candidate returned by search_mcp_catalog and inspect_mcp_candidate. Supply declared non-secret values only; required secrets stay in secure dashboard setup. Registration is private and does not distribute or publish the MCP."}, ToolMeta{
 		// External-only: onboarding milestones are connection-scoped, which a
 		// connection-less surface cannot satisfy.
 		Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input RegisterOnboardingMCPToolInput) (*mcp.CallToolResult, RegisterOnboardingMCPToolOutput, error) {
@@ -118,7 +149,8 @@ func registerOnboardingLifecycleTools(reg *Registrar, onboarding *OnboardingServ
 		return nil, RegisterOnboardingMCPToolOutput{ProjectSlug: input.ProjectSlug, RegistrationID: registrationID.String(), NextAction: nextAction, Message: message, DashboardSetupURL: dashboardSetupURL, SecretFieldsPending: append([]CatalogConfigurationField(nil), result.SecretFieldsPending...)}, nil
 	})
 
-	addTool(reg, &mcp.Tool{Name: "get_platform_mcp_onboarding_status", Title: "Get Platform MCP Onboarding Status", Description: "Check the workflow-bound MCP Catalogue server setup status for an explicit project. This returns bounded readiness facts, the registration ID, and an actionable next step. When there is no readiness evidence yet, it performs one rate-limited authenticated probe. Set force after the user completes dashboard setup or provider authorization to recheck fresh readiness."}, ToolMeta{
+	statusName, statusTitle := onboardingLifecycleTool(onboardingToolStatus)
+	addTool(reg, &mcp.Tool{Name: statusName, Title: statusTitle, Description: "Check the workflow-bound MCP Catalogue server setup status for an explicit project. This returns bounded readiness facts, the registration ID, and an actionable next step. When there is no readiness evidence yet, it performs one rate-limited authenticated probe. Set force after the user completes dashboard setup or provider authorization to recheck fresh readiness."}, ToolMeta{
 		// External-only: onboarding milestones are connection-scoped, which a
 		// connection-less surface cannot satisfy.
 		Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetOnboardingMCPStatusToolInput) (*mcp.CallToolResult, GetOnboardingMCPStatusToolOutput, error) {
@@ -178,7 +210,8 @@ func registerOnboardingLifecycleTools(reg *Registrar, onboarding *OnboardingServ
 		return nil, GetOnboardingMCPStatusToolOutput{ProjectSlug: input.ProjectSlug, RegistrationID: registrationID, Registered: true, Readiness: string(normalized.State), Freshness: readinessFreshness(readiness, found), EvidenceCode: normalized.EvidenceCode, NextAction: nextAction, Message: message}, nil
 	})
 
-	addTool(reg, &mcp.Tool{Name: "attach_platform_mcp_identity_provider", Title: "Attach Platform MCP Identity Provider", Description: "Attach the workflow-bound MCP's one discovered remote identity provider for an explicit project. Ask for explicit user confirmation before calling this tool. It derives provider metadata and dynamic client registration from the persisted reviewed MCP source. Non-secret provider URLs may be returned, but it never accepts or returns credentials, OAuth codes, tokens, client secrets, passwords, or API keys. After success, immediately present authorization_url as a clickable link and tell the user to open it and use Connect or Authorize; do not ask whether they completed an unspecified action or refer to a link above."}, ToolMeta{
+	attachName, attachTitle := onboardingLifecycleTool(onboardingToolAttachIdentityProvider)
+	addTool(reg, &mcp.Tool{Name: attachName, Title: attachTitle, Description: "Attach the workflow-bound MCP's one discovered remote identity provider for an explicit project. Ask for explicit user confirmation before calling this tool. It derives provider metadata and dynamic client registration from the persisted reviewed MCP source. Non-secret provider URLs may be returned, but it never accepts or returns credentials, OAuth codes, tokens, client secrets, passwords, or API keys. After success, immediately present authorization_url as a clickable link and tell the user to open it and use Connect or Authorize; do not ask whether they completed an unspecified action or refer to a link above."}, ToolMeta{
 		// External-only: provider setup is connection-scoped, which a
 		// connection-less surface cannot satisfy.
 		Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input AttachOnboardingMCPIdentityProviderToolInput) (*mcp.CallToolResult, AttachOnboardingMCPIdentityProviderToolOutput, error) {
@@ -218,7 +251,8 @@ func registerOnboardingLifecycleTools(reg *Registrar, onboarding *OnboardingServ
 		return nil, onboardingIdentityProviderAttachmentOutput(input.ProjectSlug, registrationID, attachment, authorizationURL), nil
 	})
 
-	addTool(reg, &mcp.Tool{Name: "add_platform_mcp_to_default_plugin", Title: "Add Platform MCP to Default Plugin", Description: "Add the workflow-bound, ready MCP Catalogue server to the explicit project's existing Default plugin. The project must already be selected, registered, and freshly ready through the dashboard setup flow. This never creates a plugin."}, ToolMeta{
+	addName, addTitle := onboardingLifecycleTool(onboardingToolAddToDefaultPlugin)
+	addTool(reg, &mcp.Tool{Name: addName, Title: addTitle, Description: "Add the workflow-bound, ready MCP Catalogue server to the explicit project's existing Default plugin. The project must already be selected, registered, and freshly ready through the dashboard setup flow. This never creates a plugin."}, ToolMeta{
 		// External-only: distribution rows require a connection, which a
 		// connection-less surface cannot satisfy.
 		Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input DistributeOnboardingMCPToolInput) (*mcp.CallToolResult, DistributeOnboardingMCPToolOutput, error) {

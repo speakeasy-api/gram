@@ -2,7 +2,6 @@ package assistants
 
 import (
 	"context"
-	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -22,14 +21,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// managedAssistantInstructions is the system prompt for the platform-managed
-// assistant that powers the AI Insights sidebar. Ported from the inline prompt
-// that previously lived in the dashboard (insights-sidebar.tsx); the dynamic
-// "current date" line was dropped because the runtime composes time context
-// separately.
-//
-//go:embed managed_assistant_instructions.txt
-var managedAssistantInstructions string
+// The managed assistant's stored instructions are its initial row value only.
+// Every turn composes the prompt from the rollout variant the runtime was
+// granted (see managed_instructions.go), because the row is written once here
+// and never reconciled, and because the two variants serve tool sets that
+// share no names.
 
 const (
 	// managedAssistantModel is the default model for the platform-managed
@@ -271,7 +267,7 @@ func (s *ServiceCore) createManagedAssistant(
 		CreatedByUserID: createdBy,
 		Name:            name,
 		Model:           managedAssistantModel,
-		Instructions:    managedAssistantInstructions,
+		Instructions:    managedAssistantInstructionsLegacy,
 		WarmTtlSeconds:  managedAssistantWarmTTLSeconds,
 		MaxConcurrency:  managedAssistantMaxConcurrency,
 		Status:          StatusActive,

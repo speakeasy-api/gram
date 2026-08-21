@@ -243,22 +243,30 @@ func registerUnavailableSetupHandoffTool(reg *Registrar) {
 	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("setup_handoff"))
 }
 
+// registerUnavailableTools stands in for registerOnboardingLifecycleTools when
+// the onboarding dependencies are absent. It mirrors that function one-for-one:
+// same names, same audiences, same project scope. The pair predates the live
+// tools — they were placeholders for a capability that did not exist yet, and
+// when it arrived it was written in tool_onboarding_lifecycle.go under the
+// onboarding flow's own names, leaving two vocabularies for one capability and
+// nothing to hold them together. Keep them aligned here: a client that meets
+// this deployment on one side of the rollout and the other must see one tool
+// change availability, not one name replace another.
 func registerUnavailableTools(reg *Registrar) {
-	for _, tool := range []struct {
-		name        string
-		title       string
-		description string
-		feature     string
-	}{
+	descriptions := [...]string{
+		onboardingToolRegister:               "Register a reviewed MCP Catalogue server for an explicit project. Guided setup is not enabled in the current rollout.",
+		onboardingToolStatus:                 "Check the workflow-bound MCP Catalogue server setup status for an explicit project. Guided setup is not enabled in the current rollout.",
+		onboardingToolAttachIdentityProvider: "Attach the workflow-bound MCP's discovered remote identity provider for an explicit project. Guided setup is not enabled in the current rollout.",
+		onboardingToolAddToDefaultPlugin:     "Add the workflow-bound, ready MCP Catalogue server to the explicit project's existing Default plugin. Guided setup is not enabled in the current rollout.",
+	}
 
-		{"distribute_mcp_to_default_plugin", "Distribute MCP to Default Plugin", "Distribute a configured MCP to the default plugin. Distribution is not available in the current preview.", "plugin_distribution"},
-		{"remove_mcp_from_default_plugin", "Remove MCP from Default Plugin", "Remove an MCP from the default plugin. Distribution changes are not available in the current preview.", "plugin_distribution"},
-	} {
+	for i, description := range descriptions {
+		name, title := onboardingLifecycleTool(i)
 		addTool(reg, &mcp.Tool{
-			Name:        tool.name,
-			Title:       tool.title,
-			Description: tool.description,
-		}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool(tool.feature))
+			Name:        name,
+			Title:       title,
+			Description: description,
+		}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableTool("onboarding_lifecycle"))
 	}
 }
 

@@ -135,7 +135,13 @@ const (
 	VariantAssistantToolsLegacy Variant = "legacy"
 	// VariantAssistantToolsPlatformMCP serves the managed assistant the
 	// "platform" toolset — the Platform MCP read tools — INSTEAD of the
-	// legacy toolset, not in addition to it.
+	// legacy toolset, not in addition to it. The exclusivity is the point of
+	// the rollout: with both sets in context there is no way to tell whether
+	// the Platform MCP surface answers better than the legacy one. It also
+	// means the variant is not a re-plumbing of the same capabilities — the
+	// catalogue admits no telemetry, chat, risk, or skill tools, so an
+	// assistant on this variant genuinely cannot answer those questions and
+	// its system prompt says so rather than sending the model looking.
 	VariantAssistantToolsPlatformMCP Variant = "platformmcp"
 )
 
