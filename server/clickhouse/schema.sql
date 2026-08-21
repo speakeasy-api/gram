@@ -1402,7 +1402,14 @@ CREATE TABLE IF NOT EXISTS risk_findings (
     -- flow. Declared last for the same append-only migration reason as the
     -- watchdog attribution columns above.
     excluded_reason LowCardinality(String) DEFAULT '' COMMENT 'Why the finding was suppressed: rule (exclusion rule, exclusion_id set), manual (dismissed by a user via UI or agent tool) or automated (offline false-positive sweep). Empty when the finding is not suppressed or on legacy rows written before this column existed.',
-    excluded_detail String DEFAULT '' COMMENT 'Free-form context for the suppression: the user-supplied dismissal reason for manual rows, the false-positive catalog reason for automated rows. Empty for rule rows and when no reason was given.' CODEC(ZSTD)
+    excluded_detail String DEFAULT '' COMMENT 'Free-form context for the suppression: the user-supplied dismissal reason for manual rows, the false-positive catalog reason for automated rows. Empty for rule rows and when no reason was given.' CODEC(ZSTD),
+
+    -- Event-log kind, ranking an id's copies at read time: state-change copies
+    -- (suppression/unsuppression) outrank finding copies regardless of
+    -- inserted_at, so an at-least-once redelivery of the original scanner row
+    -- can never clobber a later dismissal. Declared last for the same
+    -- append-only migration reason as the columns above.
+    event_kind LowCardinality(String) DEFAULT '' COMMENT 'Kind of this copy of the finding: finding (scanner output, dead-letter sentinels included), suppression or unsuppression (appended state-change copies from manual dismiss/undo and the retroactive exclusion reconcile). Empty on rows written before the column existed - such rows rank as finding copies.'
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(created_at)
 ORDER BY (organization_id, project_id, created_at, id)
