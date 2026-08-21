@@ -1,29 +1,34 @@
 // OAuth 2.1 token endpoint (RFC 6749 §4.1.3 / §6) for the issuer-gated
 // authn-challenge surface. HandleToken dispatches on grant_type to one of
-// the two grant handlers below; both funnel through mintSessionAndRespond
-// to write the RFC 6749 §5.1 response.
+// the two grant handlers below; both mint and persist an RFC 6749 §5.1
+// response through mintSession.
 
 package mcp
 
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -49,12 +54,79 @@ type tokenResponse struct {
 	AuthorizationExpiresIn int64  `json:"authorization_expires_in"`
 }
 
+const (
+	// refreshTokenReplayGracePeriod is intentionally short: it only covers
+	// clients that issue parallel refresh requests from several open sessions.
+	refreshTokenReplayGracePeriod     = 30 * time.Second
+	refreshTokenReplayWait            = 5 * time.Second
+	refreshTokenReplayInitialPollWait = 20 * time.Millisecond
+	refreshTokenReplayMaxPollWait     = 1 * time.Second
+)
+
+// userSessionRefreshReplay is the encrypted result of a recent refresh-token
+// rotation. Redis never holds tokens or session identity in plaintext.
+type userSessionRefreshReplay struct {
+	// Key identifies the issuer and hashed refresh token being replayed.
+	Key string `json:"key"`
+
+	// Ciphertext holds the AES-GCM-encrypted replay payload.
+	Ciphertext string `json:"ciphertext"`
+}
+
+type userSessionRefreshReplayPayload struct {
+	AccessExpiresAt        time.Time           `json:"access_expires_at"`
+	AudienceURN            string              `json:"audience_urn"`
+	AuthorizationExpiresAt time.Time           `json:"authorization_expires_at"`
+	ClientID               uuid.UUID           `json:"client_id"`
+	EndpointIssuer         string              `json:"endpoint_issuer"`
+	ErrorDescription       string              `json:"error_description"`
+	FailureReason          string              `json:"failure_reason"`
+	JTI                    string              `json:"jti"`
+	ReplayKey              string              `json:"replay_key"`
+	Response               tokenResponse       `json:"response"`
+	Subject                *urn.SessionSubject `json:"subject,omitempty"`
+}
+
+type mintSessionParams struct {
+	AuthorizationExpiresAt *time.Time
+	BaseURL                string
+	DesiredSessionDuration *time.Duration
+	Replayable             bool
+	Subject                urn.SessionSubject
+	ToolSelection          []byte
+}
+
+type mintedSession struct {
+	AccessExpiresAt        time.Time
+	AuthorizationExpiresAt time.Time
+	Body                   []byte
+	EndpointIssuer         string
+	JTI                    string
+	Response               tokenResponse
+	Subject                urn.SessionSubject
+}
+
+type mintUserSessionAccessTokenParams struct {
+	AccessExpiresAt time.Time
+	AudienceURN     string
+	ClientID        string
+	Issuer          string
+	JTI             string
+	Subject         urn.SessionSubject
+}
+
+var _ cache.CacheableObject[userSessionRefreshReplay] = (*userSessionRefreshReplay)(nil)
+
+func (r userSessionRefreshReplay) CacheKey() string { return r.Key }
+
+func (r userSessionRefreshReplay) TTL() time.Duration { return refreshTokenReplayGracePeriod }
+
 // HandleToken implements the OAuth 2.1 token endpoint (RFC 6749 §4.1.3 /
 // §6). Mounted at `POST /mcp/{mcpSlug}/token`. Performs the common upfront
 // work — parse form, load toolset, authenticate the client — then
 // dispatches on grant_type to handleTokenAuthorizationCodeGrant or
-// handleTokenRefreshTokenGrant. Both grant handlers funnel through
-// mintSessionAndRespond which writes the RFC 6749 §5.1 response.
+// handleTokenRefreshTokenGrant. Both grant handlers mint and persist the
+// RFC 6749 §5.1 response through mintSession.
 func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	mcpSlug := chi.URLParam(r, "mcpSlug")
@@ -74,8 +146,8 @@ func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) error {
 // /x/mcp's mcp_endpoint-keyed route registration. Performs the common
 // upfront work — parse form, authenticate the client — then dispatches
 // on grant_type to handleTokenAuthorizationCodeGrant or
-// handleTokenRefreshTokenGrant. Both grant handlers funnel through
-// mintSessionAndRespond which writes the RFC 6749 §5.1 response.
+// handleTokenRefreshTokenGrant. Both grant handlers mint and persist the
+// RFC 6749 §5.1 response through mintSession.
 func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
 	ctx := r.Context()
 
@@ -173,7 +245,7 @@ func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *R
 // handleTokenAuthorizationCodeGrant implements RFC 6749 §4.1.3. Reads the
 // authorization code from the form, atomically consumes the
 // UserSessionGrant from Redis (single-use), validates redirect_uri + the
-// S256 PKCE verifier, then mints a new session via mintSessionAndRespond.
+// S256 PKCE verifier, then mints a new session via mintSession.
 //
 // No re-check of user_session_consents: possession of a valid grant IS
 // proof of consent. The grant was minted by HandleConsent's POST after
@@ -264,7 +336,15 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		}
 		toolSelection = encoded
 	}
-	if err := s.mintSessionAndRespond(ctx, w, endpoint, clientRow, grant.Subject, desiredSessionDuration, nil, toolSelection, baseURL, logger); err != nil {
+	minted, err := s.mintSession(ctx, endpoint, clientRow, usersessions_repo.New(s.db), mintSessionParams{
+		AuthorizationExpiresAt: nil,
+		BaseURL:                baseURL,
+		DesiredSessionDuration: desiredSessionDuration,
+		Replayable:             false,
+		Subject:                grant.Subject,
+		ToolSelection:          toolSelection,
+	}, logger)
+	if err != nil {
 		// Almost all errors here occur before the 200 is written — issuer
 		// lookup, session_duration validation, signing, or persisting the
 		// user_sessions row — so no token reached the client and failed is
@@ -277,6 +357,10 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 		return err
 	}
+	if err := writeTokenSuccess(ctx, w, logger, minted.Body); err != nil {
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
+		return err
+	}
 
 	s.metrics.RecordOAuthFlowCompleted(ctx, issuerID, mcpSlug)
 	logger.InfoContext(ctx, "oauth flow completed")
@@ -285,10 +369,12 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 
 // handleTokenRefreshTokenGrant implements RFC 6749 §6 (and OAuth 2.1's
 // refresh-token rotation guidance). Hashes the supplied refresh token,
-// atomically soft-deletes the matching user_sessions row (single-use:
-// concurrent refreshes race for the slot), pushes the old access token's
-// JTI into the revocation cache, then mints a new session via
-// mintSessionAndRespond.
+// elects one rotation winner, atomically replaces the matching user_sessions
+// row with a successor, then pushes the old access token's JTI into the
+// revocation cache. Concurrent
+// replays receive the winner's response during a short grace period. A replay
+// through another endpoint surface re-signs only the access token for that
+// surface; the refresh grant remains single-use in persistent storage.
 //
 // Client binding: the soft-deleted row's user_session_client_id MUST match
 // the authenticated client. This blocks Client B from refreshing tokens
@@ -310,77 +396,461 @@ func (s *Service) handleTokenRefreshTokenGrant(
 		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
 	}
 
-	// Soft-delete by hash claims the single-use slot atomically. If the row
-	// is already gone (unknown / replayed / revoked), pgx.ErrNoRows surfaces
-	// here as invalid_grant.
-	oldSession, err := usersessions_repo.New(s.db).RevokeUserSessionByRefreshTokenHash(ctx, usersessions_repo.RevokeUserSessionByRefreshTokenHashParams{
+	refreshTokenHash := sha256Hex(req.RefreshToken)
+	replayKey := "userSessionRefreshReplay:" + endpoint.UserSessionIssuerID.String() + ":" + refreshTokenHash
+	lockKey := "lock:" + replayKey
+	lockOwner, err := generateOpaqueToken()
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "generate refresh replay lock owner").LogError(ctx, logger)
+	}
+	timeout := time.NewTimer(refreshTokenReplayWait)
+	defer timeout.Stop()
+	pollWait := refreshTokenReplayInitialPollWait
+	poll := time.NewTimer(pollWait)
+	defer poll.Stop()
+
+	for {
+		// A completed outcome is authoritative and avoids renewing a coordination
+		// lock after the original winner has already published.
+		if replay, replayErr := s.userSessionRefreshReplayCache.Get(ctx, replayKey); replayErr == nil {
+			return s.writeRefreshTokenReplay(ctx, w, r, endpoint, clientRow, baseURL, presentedAuthMethod, replayKey, replay, logger)
+		}
+
+		rotationWinner := true
+		ownsLock := false
+		if s.userSessionRefreshReplayCoordination != nil {
+			var coordinationErr error
+			if leases, ok := s.userSessionRefreshReplayCoordination.(cache.LeaseCache); ok {
+				rotationWinner, coordinationErr = leases.AcquireLease(ctx, lockKey, lockOwner, refreshTokenReplayGracePeriod)
+			} else {
+				coordinationErr = errors.New("refresh replay cache does not support ownership-aware leases")
+			}
+			if coordinationErr != nil {
+				// The database claim remains authoritative when Redis is
+				// unavailable; only the compatibility grace period is lost.
+				rotationWinner = true
+				logger.WarnContext(ctx, "failed to coordinate refresh token replay grace period", attr.SlogError(coordinationErr))
+			} else {
+				ownsLock = rotationWinner
+			}
+		}
+		if rotationWinner {
+			releaseLease, rotationErr := s.rotateRefreshToken(
+				ctx,
+				w,
+				r,
+				endpoint,
+				clientRow,
+				baseURL,
+				presentedAuthMethod,
+				refreshTokenHash,
+				replayKey,
+				ownsLock,
+				logger,
+			)
+			if ownsLock && releaseLease {
+				// Safe rollback paths and published outcomes release immediately.
+				// Ambiguous commits and post-commit publication failures retain the
+				// lease until its TTL so retries cannot misclassify a consumed token.
+				s.releaseRefreshTokenReplayLock(ctx, lockKey, lockOwner, logger)
+			}
+			return rotationErr
+		}
+
+		replay, replayErr := s.userSessionRefreshReplayCache.Get(ctx, replayKey)
+		if replayErr == nil {
+			return s.writeRefreshTokenReplay(ctx, w, r, endpoint, clientRow, baseURL, presentedAuthMethod, replayKey, replay, logger)
+		}
+		if !errors.Is(replayErr, redisCache.ErrCacheMiss) {
+			logger.WarnContext(ctx, "failed to read refresh token replay response", attr.SlogError(replayErr))
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay unavailable", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_replay_cache_error")
+			return writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "refresh token rotation is still in progress")
+		}
+
+		select {
+		case <-ctx.Done():
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay interrupted", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_replay_context_cancelled")
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				return writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "refresh token rotation is still in progress")
+			}
+			return oops.E(oops.CodeCanceled, ctx.Err(), "wait for refresh token rotation")
+		case <-timeout.C:
+			if replay, finalErr := s.userSessionRefreshReplayCache.Get(ctx, replayKey); finalErr == nil {
+				return s.writeRefreshTokenReplay(ctx, w, r, endpoint, clientRow, baseURL, presentedAuthMethod, replayKey, replay, logger)
+			} else if !errors.Is(finalErr, redisCache.ErrCacheMiss) {
+				logger.WarnContext(ctx, "failed final refresh token replay lookup", attr.SlogError(finalErr))
+			}
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay unavailable", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_replay_wait_timeout")
+			return writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "refresh token rotation is still in progress")
+		case <-poll.C:
+			pollWait = min(pollWait*2, refreshTokenReplayMaxPollWait)
+			poll.Reset(pollWait)
+		}
+	}
+}
+
+func (s *Service) rotateRefreshToken(
+	ctx context.Context,
+	w http.ResponseWriter,
+	r *http.Request,
+	endpoint *ResolvedMcpEndpoint,
+	clientRow *usersessions_repo.UserSessionClient,
+	baseURL string,
+	presentedAuthMethod string,
+	refreshTokenHash string,
+	replayKey string,
+	canPublishFailure bool,
+	logger *slog.Logger,
+) (releaseLease bool, err error) {
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return true, oops.E(oops.CodeUnexpected, err, "begin refresh token rotation").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	txRepo := usersessions_repo.New(dbtx)
+	oldSession, err := txRepo.RevokeUserSessionByRefreshTokenHash(ctx, usersessions_repo.RevokeUserSessionByRefreshTokenHashParams{
 		UserSessionIssuerID: endpoint.UserSessionIssuerID,
-		RefreshTokenHash:    sha256Hex(req.RefreshToken),
+		RefreshTokenHash:    refreshTokenHash,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
+			// Coordination can degrade independently of the response cache
+			// during a Redis reconnect. Adopt a completed winner when possible.
+			replay, replayErr := s.userSessionRefreshReplayCache.Get(ctx, replayKey)
+			if replayErr == nil {
+				return true, s.writeRefreshTokenReplay(ctx, w, r, endpoint, clientRow, baseURL, presentedAuthMethod, replayKey, replay, logger)
+			}
+			if !errors.Is(replayErr, redisCache.ErrCacheMiss) {
+				logger.WarnContext(ctx, "failed to read refresh token replay after database claim loss", attr.SlogError(replayErr))
+				return true, writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "refresh token rotation outcome is unavailable")
+			}
+
+			if !canPublishFailure {
+				// Without an owned coordination lease, a missing active row is
+				// indistinguishable from another winner's unpublished commit.
+				return true, writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "refresh token rotation outcome is unavailable")
+			}
+
+			published := s.storeRefreshTokenReplayFailure(
+				ctx, replayKey, clientRow.ID,
+				"refresh_token_unknown_or_already_used",
+				"refresh_token is unknown or already used", logger,
+			)
+			if !published {
+				if existing, existingErr := s.userSessionRefreshReplayCache.Get(ctx, replayKey); existingErr == nil {
+					return true, s.writeRefreshTokenReplay(ctx, w, r, endpoint, clientRow, baseURL, presentedAuthMethod, replayKey, existing, logger)
+				}
+			}
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_unknown_or_already_used")
-			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refresh_token is unknown or already used")
+			return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refresh_token is unknown or already used")
 		}
-		return oops.E(oops.CodeUnexpected, err, "revoke old refresh token").LogError(ctx, logger)
+		return true, oops.E(oops.CodeUnexpected, err, "revoke old refresh token").LogError(ctx, logger)
 	}
 
-	// Client binding: refuse if the original session was minted for a
-	// different client. We've already soft-deleted the row -- that's
-	// intentional, the alternative would let a leaking client poke at others'
-	// refresh tokens without invalidating them.
+	// Client mismatches and expired grants are terminal. Commit their
+	// revocation so a leaked or dead token cannot be retried by another leader.
 	if !oldSession.UserSessionClientID.Valid || oldSession.UserSessionClientID.UUID != clientRow.ID {
+		if err := dbtx.Commit(ctx); err != nil {
+			return false, oops.E(oops.CodeUnexpected, err, "commit mismatched refresh token revocation").LogError(ctx, logger)
+		}
+		postCommitCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		if revokeErr := s.chatSessionsManager.RevokeToken(postCommitCtx, oldSession.Jti); revokeErr != nil {
+			logger.WarnContext(postCommitCtx, "failed to revoke mismatched refresh token jti", attr.SlogError(revokeErr))
+		}
+		published := s.storeRefreshTokenReplayFailure(
+			postCommitCtx,
+			replayKey,
+			clientRow.ID,
+			"refresh_token_client_mismatch",
+			"refresh_token was issued to a different client",
+			logger,
+		)
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_client_mismatch")
-		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refresh_token was issued to a different client")
+		return published, writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refresh_token was issued to a different client")
 	}
 
 	if !oldSession.RefreshExpiresAt.Valid || !oldSession.RefreshExpiresAt.Time.After(time.Now()) {
+		if err := dbtx.Commit(ctx); err != nil {
+			return false, oops.E(oops.CodeUnexpected, err, "commit expired refresh token revocation").LogError(ctx, logger)
+		}
+		postCommitCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		if revokeErr := s.chatSessionsManager.RevokeToken(postCommitCtx, oldSession.Jti); revokeErr != nil {
+			logger.WarnContext(postCommitCtx, "failed to revoke expired refresh token jti", attr.SlogError(revokeErr))
+		}
+		published := s.storeRefreshTokenReplayFailure(
+			postCommitCtx,
+			replayKey,
+			clientRow.ID,
+			"refresh_token_expired",
+			"refresh_token has expired",
+			logger,
+		)
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_expired")
-		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refresh_token has expired")
-	}
-
-	// Best-effort: invalidate any access token still floating around from
-	// the prior session row. If Redis is down, the access token will expire
-	// naturally on its own clock; we'd rather mint than fail the refresh.
-	if err := s.chatSessionsManager.RevokeToken(ctx, oldSession.Jti); err != nil {
-		logger.WarnContext(ctx, "failed to revoke old access token jti on refresh", attr.SlogError(err))
+		return published, writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refresh_token has expired")
 	}
 
 	// Session length is an absolute authorization lifetime. Rotation carries
 	// that deadline forward verbatim; it never opens a fresh authorization
 	// window merely because the client exchanged its refresh token.
 	authorizationExpiresAt := oldSession.RefreshExpiresAt.Time
-	// The tool selection rides refresh slides verbatim; only a fresh
-	// authorization-code grant (which re-runs consent) replaces it. Validate
-	// before minting: the serve path rejects a malformed or cross-endpoint
-	// policy anyway, so refusing here returns invalid_grant (forcing reauth)
-	// instead of consuming the refresh token and minting tokens that
-	// immediately 401. The resource check matters on issuers shared across
-	// endpoints: sessions are portable there, but a restrictive selection is
-	// bound to the inventory the user consented on and must not slide onto a
-	// sibling.
+	// Tool selection rides refresh slides verbatim; reject malformed or
+	// cross-endpoint policies before consuming the refresh transaction.
 	oldSelection, perr := toolfilter.ParseSessionSelection(oldSession.ToolSelection)
 	if perr != nil {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "tool_selection_malformed")
-		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "session tool selection is malformed; reauthorize")
+		return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "session tool selection is malformed; reauthorize")
 	}
 	if oldSelection != nil && oldSelection.Resource != endpointToolSelectionResource(endpoint) {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "tool_selection_resource_mismatch")
-		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "session tool selection is bound to a different MCP endpoint; reauthorize")
+		return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "session tool selection is bound to a different MCP endpoint; reauthorize")
 	}
-	return s.mintSessionAndRespond(ctx, w, endpoint, clientRow, oldSession.SubjectUrn, nil, &authorizationExpiresAt, oldSession.ToolSelection, baseURL, logger)
+
+	minted, err := s.mintSession(ctx, endpoint, clientRow, txRepo, mintSessionParams{
+		AuthorizationExpiresAt: &authorizationExpiresAt,
+		BaseURL:                baseURL,
+		DesiredSessionDuration: nil,
+		Replayable:             true,
+		Subject:                oldSession.SubjectUrn,
+		ToolSelection:          oldSession.ToolSelection,
+	}, logger)
+	if err != nil {
+		return true, err
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return false, oops.E(oops.CodeUnexpected, err, "commit refresh token rotation").LogError(ctx, logger)
+	}
+
+	// The database rotation is durable before either Redis side effect. Publish
+	// with a bounded detached context so a client disconnect cannot strand the
+	// committed successor before another request can recover it.
+	postCommitCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	published := true
+	if cacheErr := s.storeRefreshTokenReplay(postCommitCtx, replayKey, userSessionRefreshReplayPayload{
+		AccessExpiresAt:        minted.AccessExpiresAt,
+		AudienceURN:            endpoint.AudienceURN,
+		AuthorizationExpiresAt: minted.AuthorizationExpiresAt,
+		ClientID:               clientRow.ID,
+		EndpointIssuer:         minted.EndpointIssuer,
+		ErrorDescription:       "",
+		FailureReason:          "",
+		JTI:                    minted.JTI,
+		ReplayKey:              "",
+		Response:               minted.Response,
+		Subject:                &minted.Subject,
+	}); cacheErr != nil {
+		published = false
+		logger.WarnContext(postCommitCtx, "failed to cache refresh token replay response", attr.SlogError(cacheErr))
+	}
+	if revokeErr := s.chatSessionsManager.RevokeToken(postCommitCtx, oldSession.Jti); revokeErr != nil {
+		logger.WarnContext(postCommitCtx, "failed to revoke old access token jti on refresh", attr.SlogError(revokeErr))
+	}
+
+	return published, writeTokenSuccess(ctx, w, logger, minted.Body)
+}
+
+func (s *Service) releaseRefreshTokenReplayLock(ctx context.Context, lockKey, lockOwner string, logger *slog.Logger) {
+	if s.userSessionRefreshReplayCoordination == nil {
+		return
+	}
+	releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+	defer cancel()
+	leases, ok := s.userSessionRefreshReplayCoordination.(cache.LeaseCache)
+	if !ok {
+		logger.WarnContext(releaseCtx, "refresh replay cache does not support ownership-aware lease release")
+		return
+	}
+	if _, err := leases.ReleaseLeaseIfOwner(releaseCtx, lockKey, lockOwner); err != nil {
+		logger.WarnContext(releaseCtx, "failed to release refresh token replay lock", attr.SlogError(err))
+	}
+}
+
+func (s *Service) writeRefreshTokenReplay(
+	ctx context.Context,
+	w http.ResponseWriter,
+	r *http.Request,
+	endpoint *ResolvedMcpEndpoint,
+	clientRow *usersessions_repo.UserSessionClient,
+	baseURL string,
+	presentedAuthMethod string,
+	replayKey string,
+	replay userSessionRefreshReplay,
+	logger *slog.Logger,
+) error {
+	plaintext, err := s.enc.Decrypt(replay.Ciphertext)
+	if err != nil {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay failed", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_replay_decrypt_error")
+		return oops.E(oops.CodeUnexpected, err, "decrypt refresh token replay response").LogError(ctx, logger)
+	}
+	var payload userSessionRefreshReplayPayload
+	if err := json.Unmarshal([]byte(plaintext), &payload); err != nil {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay failed", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_replay_payload_invalid")
+		return oops.E(oops.CodeUnexpected, err, "unmarshal refresh token replay response").LogError(ctx, logger)
+	}
+	if subtle.ConstantTimeCompare([]byte(payload.ReplayKey), []byte(replayKey)) != 1 {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay failed", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_replay_key_mismatch")
+		return oops.E(oops.CodeUnexpected, nil, "refresh token replay response key mismatch").LogError(ctx, logger)
+	}
+	if payload.ErrorDescription != "" {
+		failureReason := payload.FailureReason
+		if failureReason == "" {
+			failureReason = "refresh_token_replay_rejected"
+		}
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", failureReason)
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", payload.ErrorDescription)
+	}
+	if payload.ClientID != clientRow.ID {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_client_mismatch")
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refresh_token was issued to a different client")
+	}
+	if now := time.Now(); !payload.AccessExpiresAt.After(now) || !payload.AuthorizationExpiresAt.After(now) {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_expired")
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refresh_token has expired")
+	}
+	if payload.Subject == nil {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay failed", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_replay_payload_invalid")
+		return oops.E(oops.CodeUnexpected, nil, "refresh token replay response is missing subject").LogError(ctx, logger)
+	}
+
+	endpointIssuer, err := endpoint.RootURL(baseURL)
+	if err != nil {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay failed", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_replay_resign_error")
+		return oops.E(oops.CodeUnexpected, err, "build replay endpoint issuer URL").LogError(ctx, logger)
+	}
+	if payload.EndpointIssuer != endpointIssuer || payload.AudienceURN != endpoint.AudienceURN {
+		accessToken, _, mintErr := s.mintUserSessionAccessToken(mintUserSessionAccessTokenParams{
+			AccessExpiresAt: payload.AccessExpiresAt,
+			AudienceURN:     endpoint.AudienceURN,
+			ClientID:        clientRow.ClientID,
+			Issuer:          endpointIssuer,
+			JTI:             payload.JTI,
+			Subject:         *payload.Subject,
+		})
+		if mintErr != nil {
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay failed", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_replay_resign_error")
+			return oops.E(oops.CodeUnexpected, mintErr, "mint refresh token replay jwt").LogError(ctx, logger)
+		}
+		payload.Response.AccessToken = accessToken
+	}
+
+	now := time.Now()
+	payload.Response.ExpiresIn = max(0, int64(payload.AccessExpiresAt.Sub(now).Seconds()))
+	payload.Response.AuthorizationExpiresIn = max(0, int64(payload.AuthorizationExpiresAt.Sub(now).Seconds()))
+	body, err := json.Marshal(payload.Response)
+	if err != nil {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay failed", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_replay_payload_invalid")
+		return oops.E(oops.CodeUnexpected, err, "marshal refresh token replay response").LogError(ctx, logger)
+	}
+	if err := writeTokenSuccess(ctx, w, logger, body); err != nil {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay failed", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_replay_write_error")
+		return err
+	}
+
+	logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay served", clientRow.ClientID, presentedAuthMethod, "refresh_token", "")
+	s.metrics.RecordOAuthRefreshTokenReplayServed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug)
+	return nil
+}
+
+func (s *Service) storeRefreshTokenReplay(
+	ctx context.Context,
+	replayKey string,
+	payload userSessionRefreshReplayPayload,
+) error {
+	payload.ReplayKey = replayKey
+	plaintext, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal refresh token replay response: %w", err)
+	}
+	ciphertext, err := s.enc.Encrypt(plaintext)
+	if err != nil {
+		return fmt.Errorf("encrypt refresh token replay response: %w", err)
+	}
+	if err := s.userSessionRefreshReplayCache.Store(ctx, userSessionRefreshReplay{
+		Key:        replayKey,
+		Ciphertext: ciphertext,
+	}); err != nil {
+		return fmt.Errorf("store refresh token replay response: %w", err)
+	}
+	return nil
+}
+
+func (s *Service) storeRefreshTokenReplayFailure(
+	ctx context.Context,
+	replayKey string,
+	clientID uuid.UUID,
+	failureReason string,
+	description string,
+	logger *slog.Logger,
+) bool {
+	payload := userSessionRefreshReplayPayload{
+		AccessExpiresAt:        time.Time{},
+		AudienceURN:            "",
+		AuthorizationExpiresAt: time.Time{},
+		ClientID:               clientID,
+		EndpointIssuer:         "",
+		ErrorDescription:       description,
+		FailureReason:          failureReason,
+		JTI:                    "",
+		ReplayKey:              replayKey,
+		Response: tokenResponse{
+			AccessToken:            "",
+			TokenType:              "",
+			ExpiresIn:              0,
+			RefreshToken:           "",
+			AuthorizationExpiresIn: 0,
+		},
+		Subject: nil,
+	}
+	plaintext, err := json.Marshal(payload)
+	if err != nil {
+		logger.WarnContext(ctx, "failed to marshal refresh token replay rejection", attr.SlogError(err))
+		return false
+	}
+	ciphertext, err := s.enc.Encrypt(plaintext)
+	if err != nil {
+		logger.WarnContext(ctx, "failed to encrypt refresh token replay rejection", attr.SlogError(err))
+		return false
+	}
+	stored, err := s.userSessionRefreshReplayCache.StoreIfAbsent(ctx, userSessionRefreshReplay{
+		Key:        replayKey,
+		Ciphertext: ciphertext,
+	})
+	if err != nil {
+		logger.WarnContext(ctx, "failed to cache refresh token replay rejection", attr.SlogError(err))
+		return false
+	}
+	return stored
+}
+
+func (s *Service) mintUserSessionAccessToken(params mintUserSessionAccessTokenParams) (accessToken, jti string, err error) {
+	accessToken, jti, err = s.userSessionSigner.Mint(sessiontokens.MintParams{
+		Subject:   params.Subject,
+		Audience:  params.AudienceURN,
+		Issuer:    params.Issuer,
+		Lifetime:  0,
+		ExpiresAt: &params.AccessExpiresAt,
+		ClientID:  params.ClientID,
+		JTI:       params.JTI,
+	})
+	if err != nil {
+		return "", "", fmt.Errorf("mint session jwt: %w", err)
+	}
+	return accessToken, jti, nil
 }
 
 // accessTokenLifetime is the wall-clock validity of a minted access-token
 // JWT. Hardcoded because OAuth 2.1 best practice is short access tokens
-// regardless of session policy. mintSessionAndRespond caps it to the remaining
+// regardless of session policy. mintSession caps it to the remaining
 // authorization lifetime.
 const accessTokenLifetime = 1 * time.Hour
 
-// mintSessionAndRespond mints a new access-token JWT (HS256) and an opaque
-// refresh token, persists a fresh user_sessions row, and writes the RFC
-// 6749 §5.1 response. Shared by the authorization_code and refresh_token
-// grant handlers since both produce identical token responses.
+// mintSession mints a new access-token JWT (HS256) and an opaque refresh token,
+// then persists a fresh user_sessions row through queries. Refresh rotation
+// supplies a transaction-backed repository so consuming the old refresh token
+// and creating its successor commit atomically.
 //
 // Lifetimes:
 //   - authorization: the subject's consent choice, capped by the issuer's
@@ -394,116 +864,130 @@ const accessTokenLifetime = 1 * time.Hour
 // metadata document advertises). The audience is the toolset URN
 // `toolset:<UUID>`, globally unique even when slugs collide across
 // projects — prevents cross-project replay.
-// desiredSessionDuration is used only for an initial authorization: nil means
-// "no explicit choice", falling back to the issuer's session_duration.
-// authorizationExpiresAt is used only for rotation and is carried from the
-// prior row. Exactly one is normally non-nil.
-//
-// toolSelection is the consent-screen tool policy JSON persisted verbatim on
-// the new row (nil = all tools). The auth-code grant encodes it from the
-// consent choice; the refresh grant carries the old row's value.
-func (s *Service) mintSessionAndRespond(
+// Params.DesiredSessionDuration is used only for an initial authorization: nil
+// means "no explicit choice", falling back to the issuer's session_duration.
+// Params.AuthorizationExpiresAt is used only for rotation and is carried from
+// the prior row. Exactly one is normally non-nil. Params.Replayable requests a
+// stable high-entropy JTI that can be reused when re-signing for another origin.
+// Params.ToolSelection is the consent-screen policy persisted verbatim; refresh
+// rotation carries the prior session's value forward.
+func (s *Service) mintSession(
 	ctx context.Context,
-	w http.ResponseWriter,
 	endpoint *ResolvedMcpEndpoint,
 	clientRow *usersessions_repo.UserSessionClient,
-	subject urn.SessionSubject,
-	desiredSessionDuration *time.Duration,
-	authorizationExpiresAt *time.Time,
-	toolSelection []byte,
-	baseURL string,
+	queries *usersessions_repo.Queries,
+	params mintSessionParams,
 	logger *slog.Logger,
-) error {
+) (*mintedSession, error) {
 	now := time.Now()
-	if authorizationExpiresAt == nil {
+	if params.AuthorizationExpiresAt == nil {
 		// Resolve the issuer's session_duration — the maximum absolute
 		// authorization lifetime. Microseconds-only: the issuer create handler
 		// stores via conv.PtrToPGInterval which never sets Months/Days; if we
 		// ever see those here, raw SQL bypassed the writer and the conversion
 		// is calendar-dependent — fail rather than silently approximate.
-		issuer, err := usersessions_repo.New(s.db).GetUserSessionIssuerByID(ctx, usersessions_repo.GetUserSessionIssuerByIDParams{
+		issuer, err := queries.GetUserSessionIssuerByID(ctx, usersessions_repo.GetUserSessionIssuerByIDParams{
 			ID:        endpoint.UserSessionIssuerID,
 			ProjectID: endpoint.ProjectID,
 		})
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return oops.E(oops.CodeNotFound, err, "user_session_issuer not found")
+				return nil, oops.E(oops.CodeNotFound, err, "user_session_issuer not found")
 			}
-			return oops.E(oops.CodeUnexpected, err, "lookup user session issuer").LogError(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "lookup user session issuer").LogError(ctx, logger)
 		}
 		if !issuer.SessionDuration.Valid {
-			return oops.E(oops.CodeUnexpected, nil, "issuer session_duration is not set").LogError(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, nil, "issuer session_duration is not set").LogError(ctx, logger)
 		}
 		if issuer.SessionDuration.Months != 0 || issuer.SessionDuration.Days != 0 {
-			return oops.E(oops.CodeUnexpected, nil, "issuer session_duration carries Months/Days; only Microseconds intervals are supported").LogError(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, nil, "issuer session_duration carries Months/Days; only Microseconds intervals are supported").LogError(ctx, logger)
 		}
 		maxLifetime := time.Duration(issuer.SessionDuration.Microseconds) * time.Microsecond
 		if maxLifetime <= 0 {
-			return oops.E(oops.CodeUnexpected, nil, "issuer session_duration is non-positive").LogError(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, nil, "issuer session_duration is non-positive").LogError(ctx, logger)
 		}
 		authorizationLifetime := maxLifetime
-		if desiredSessionDuration != nil && *desiredSessionDuration > 0 {
-			authorizationLifetime = min(*desiredSessionDuration, maxLifetime)
+		if params.DesiredSessionDuration != nil && *params.DesiredSessionDuration > 0 {
+			authorizationLifetime = min(*params.DesiredSessionDuration, maxLifetime)
 		}
 		deadline := now.Add(authorizationLifetime)
-		authorizationExpiresAt = &deadline
+		params.AuthorizationExpiresAt = &deadline
 	}
-	authorizationLifetime := authorizationExpiresAt.Sub(now)
+	authorizationLifetime := params.AuthorizationExpiresAt.Sub(now)
 	if authorizationLifetime <= 0 {
-		return oops.E(oops.CodeUnauthorized, nil, "user authorization has expired").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnauthorized, nil, "user authorization has expired").LogError(ctx, logger)
 	}
 	accessExpiresAt := now.Add(accessTokenLifetime)
-	if authorizationExpiresAt.Before(accessExpiresAt) {
-		accessExpiresAt = *authorizationExpiresAt
+	if params.AuthorizationExpiresAt.Before(accessExpiresAt) {
+		accessExpiresAt = *params.AuthorizationExpiresAt
 	}
 	accessLifetime := accessExpiresAt.Sub(now)
 
-	issuerURL, err := endpoint.RootURL(baseURL)
+	issuerURL, err := endpoint.RootURL(params.BaseURL)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "build issuer URL").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "build issuer URL").LogError(ctx, logger)
 	}
-	access, jti, err := s.userSessionSigner.Mint(sessiontokens.MintParams{
-		Subject:   subject,
-		Audience:  endpoint.AudienceURN,
-		Issuer:    issuerURL,
-		Lifetime:  0,
-		ExpiresAt: &accessExpiresAt,
-		ClientID:  clientRow.ClientID,
-		JTI:       "",
+	jti := ""
+	if params.Replayable {
+		jti, err = generateOpaqueToken()
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "generate replayable session jti").LogError(ctx, logger)
+		}
+	}
+	access, jti, err := s.mintUserSessionAccessToken(mintUserSessionAccessTokenParams{
+		AccessExpiresAt: accessExpiresAt,
+		AudienceURN:     endpoint.AudienceURN,
+		ClientID:        clientRow.ClientID,
+		Issuer:          issuerURL,
+		JTI:             jti,
+		Subject:         params.Subject,
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "mint session jwt").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "mint session access token").LogError(ctx, logger)
 	}
 
 	refreshTokenRaw, err := generateOpaqueToken()
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "generate refresh token").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "generate refresh token").LogError(ctx, logger)
 	}
 
-	if _, err := usersessions_repo.New(s.db).CreateUserSession(ctx, usersessions_repo.CreateUserSessionParams{
+	if _, err := queries.CreateUserSession(ctx, usersessions_repo.CreateUserSessionParams{
 		UserSessionIssuerID: endpoint.UserSessionIssuerID,
 		UserSessionClientID: uuid.NullUUID{UUID: clientRow.ID, Valid: true},
-		SubjectUrn:          subject,
+		SubjectUrn:          params.Subject,
 		Jti:                 jti,
 		RefreshTokenHash:    sha256Hex(refreshTokenRaw),
 		ExpiresAt:           pgtype.Timestamptz{Time: accessExpiresAt, InfinityModifier: 0, Valid: true},
-		RefreshExpiresAt:    pgtype.Timestamptz{Time: *authorizationExpiresAt, InfinityModifier: 0, Valid: true},
-		ToolSelection:       toolSelection,
+		RefreshExpiresAt:    pgtype.Timestamptz{Time: *params.AuthorizationExpiresAt, InfinityModifier: 0, Valid: true},
+		ToolSelection:       params.ToolSelection,
 	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "persist user session").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "persist user session").LogError(ctx, logger)
 	}
 
-	body, err := json.Marshal(tokenResponse{
+	response := tokenResponse{
 		AccessToken:            access,
 		TokenType:              "Bearer",
 		ExpiresIn:              int64(accessLifetime.Seconds()),
 		RefreshToken:           refreshTokenRaw,
 		AuthorizationExpiresIn: int64(authorizationLifetime.Seconds()),
-	})
+	}
+	body, err := json.Marshal(response)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "marshal token response").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "marshal token response").LogError(ctx, logger)
 	}
 
+	return &mintedSession{
+		AccessExpiresAt:        accessExpiresAt,
+		AuthorizationExpiresAt: *params.AuthorizationExpiresAt,
+		Body:                   body,
+		EndpointIssuer:         issuerURL,
+		JTI:                    jti,
+		Response:               response,
+		Subject:                params.Subject,
+	}, nil
+}
+
+func writeTokenSuccess(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, body []byte) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Pragma", "no-cache")

@@ -65,7 +65,7 @@ func newClientIdentityFixture(t *testing.T) (*fakeClientInfoStore, *mcpInputs) {
 		toolVariationsGroupID: nil,
 		mcpServerID:           nil,
 		tags:                  nil,
-		protocolVersionHeader: "",
+		protocolVersion:       mcpversions.Resolve("", mcpversions.SupportedHostedToolset()),
 	}
 }
 
@@ -285,6 +285,43 @@ func TestResolveClientIdentity_StampsBothProtocolVersions(t *testing.T) {
 	}
 
 	require.Equal(t, mcpversions.Version20241105, got[string(attr.McpRequestedProtocolVersionKey)])
-	require.Equal(t, mcpversions.ServedHostedToolset, got[string(attr.McpNegotiatedProtocolVersionKey)],
-		"this surface answers its served constant, so the negotiated half is deterministic here")
+	require.Equal(t, mcpversions.Version20241105, got[string(attr.McpNegotiatedProtocolVersionKey)],
+		"negotiation echoes a supported requested version, so the derived negotiated half matches the handshake's answer")
+}
+
+// TestResolveClientIdentity_DerivesDowngradedNegotiatedVersion covers the
+// derivation's downgrade arm: a session whose handshake requested a revision
+// outside the supported set was answered the newest supported one, and the
+// replayed negotiated attribute must reproduce that answer rather than echo
+// the stored request.
+func TestResolveClientIdentity_DerivesDowngradedNegotiatedVersion(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	logger := testenv.NewLogger(t)
+	store, payload := newClientIdentityFixture(t)
+
+	storeSessionClientInfo(ctx, logger, store, payload, "handshake-client", "1.2.3", mcpversions.Version20260728)
+
+	recorder := tracetest.NewSpanRecorder()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	t.Cleanup(func() { _ = provider.Shutdown(context.Background()) })
+
+	spanCtx, span := provider.Tracer("test").Start(ctx, "tools/call")
+	resolveClientIdentity(spanCtx, logger, store, payload, nil)
+	span.End()
+
+	ended := recorder.Ended()
+	require.Len(t, ended, 1)
+
+	got := map[string]string{}
+	for _, kv := range ended[0].Attributes() {
+		got[string(kv.Key)] = kv.Value.AsString()
+	}
+
+	// The expected value is pinned rather than derived from the supported
+	// set, so raising the ceiling breaks this test and forces choosing a new
+	// out-of-set stored version that keeps the downgrade arm exercised.
+	require.Equal(t, mcpversions.Version20260728, got[string(attr.McpRequestedProtocolVersionKey)])
+	require.Equal(t, mcpversions.Version20251125, got[string(attr.McpNegotiatedProtocolVersionKey)])
 }

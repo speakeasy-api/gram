@@ -6,6 +6,99 @@ info:
 servers:
   - url: https://app.getgram.ai
 paths:
+  /otel/v1/logs:
+    post:
+      description: Endpoint to receive OTEL logs data from LLM providers and harnesses.
+      operationId: uploadLogs
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+        - allowEmptyValue: true
+          description: Encoding applied to the OTLP request body. Supported values are gzip and identity.
+          in: header
+          name: Content-Encoding
+          schema:
+            description: Encoding applied to the OTLP request body. Supported values are gzip and identity.
+            type: string
+      responses:
+        "200":
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: logs otel
+      tags:
+        - otel
+      x-speakeasy-name-override: uploadLogs
+      x-speakeasy-react-hook:
+        name: UploadOpenTelemetryLogs
   /otel/v1/traces:
     post:
       description: Endpoint to receive OTEL traces data from LLM providers and harnesses.
@@ -71226,11 +71319,10 @@ components:
           description: Header name.
         value:
           type: string
-          description: Header value. Stored encrypted at rest; never returned on reads.
-      description: HTTP header value provided when upserting a forwarding config.
+          description: Header value. Omit to preserve an existing value; provide to create, replace, or clear it. Stored encrypted at rest and never returned on reads.
+      description: HTTP header provided when upserting a forwarding config. Omit the value to preserve the existing encrypted value for the same name.
       required:
         - name
-        - value
     Package:
       type: object
       properties:
@@ -82346,7 +82438,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/OtelForwardingHeaderInput'
-          description: Full set of headers to attach. Replaces any existing headers.
+          description: Complete desired header set. Omitted entries are removed; entries with an omitted value preserve the existing encrypted value for the same name.
       required:
         - endpoint_url
         - enabled

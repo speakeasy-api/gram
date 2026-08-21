@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -11,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/management/readmodel"
@@ -282,11 +285,26 @@ func (r *PostgresReadinessRecorder) RecordReady(ctx context.Context, principal P
 }
 
 type PostgresReader struct {
-	reader *readmodel.Reader
+	logger          *slog.Logger
+	reader          *readmodel.Reader
+	inventory       *platformrepo.Queries
+	inventoryCursor *inventoryCursorCodec
 }
 
-func NewPostgresReader(db *pgxpool.Pool) *PostgresReader {
-	return &PostgresReader{reader: readmodel.New(db)}
+func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
+	return &PostgresReader{
+		logger:          logger.With(attr.SlogComponent("platformmcp")),
+		reader:          readmodel.New(db),
+		inventory:       platformrepo.New(db),
+		inventoryCursor: nil,
+	}
+}
+
+func (r *PostgresReader) setInventoryCursorKey(keyMaterial string) {
+	codec, err := newInventoryCursorCodec(keyMaterial)
+	if err == nil {
+		r.inventoryCursor = codec
+	}
 }
 
 func (r *PostgresReader) ListProjects(ctx context.Context, principal Principal, input ListProjectsInput) (ListProjectsOutput, error) {
@@ -307,38 +325,98 @@ func (r *PostgresReader) ListProjects(ctx context.Context, principal Principal, 
 	return output, nil
 }
 
-func (r *PostgresReader) ListProjectMCPs(ctx context.Context, principal Principal, input ListProjectMCPsInput) (ListProjectMCPsOutput, error) {
-	if r.reader == nil {
-		return ListProjectMCPsOutput{}, ErrUnavailable
+func (r *PostgresReader) FindMCP(ctx context.Context, principal Principal, input FindMCPInput) (FindMCPOutput, error) {
+	if r.reader == nil || r.inventory == nil || r.inventoryCursor == nil {
+		return FindMCPOutput{}, ErrUnavailable
 	}
-	projectID, err := uuid.Parse(input.ProjectID)
-	if err != nil {
-		return ListProjectMCPsOutput{}, fmt.Errorf("parse project id: %w", err)
+	if input.ProjectID != "" && input.ProjectSlug != "" {
+		return FindMCPOutput{}, fmt.Errorf("only one of project_id or project_slug may be supplied")
 	}
-	project, err := r.reader.GetProject(ctx, projectID, principal.OrganizationID)
+	if input.Readiness != "" && !isInventoryReadinessState(input.Readiness) {
+		return FindMCPOutput{}, fmt.Errorf("invalid readiness filter")
+	}
+	connectionID, generation, err := inventoryConnection(principal)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return ListProjectMCPsOutput{MCPs: []MCP{}, Truncated: false}, nil
+		return FindMCPOutput{}, err
+	}
+	query := normalizeInventoryQuery(input.Query)
+	if query != "" && input.Cursor != "" {
+		return FindMCPOutput{}, ErrInventoryCursorInvalid
+	}
+
+	projectID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	var cursorProject ResolvedProject
+	if input.ProjectID != "" || input.ProjectSlug != "" || query == "" {
+		cursorProject, err = r.resolveInventoryProject(ctx, principal.OrganizationID, input)
+		if err != nil {
+			return FindMCPOutput{}, err
 		}
-		return ListProjectMCPsOutput{}, fmt.Errorf("get project for platform mcp servers: %w", err)
+		projectID = uuid.NullUUID{UUID: cursorProject.ID, Valid: true}
 	}
 
 	limit := boundedLimit(input.Limit)
-	rows, err := r.reader.ListMCPServersLimited(ctx, project.ID, principal.OrganizationID, int32(limit+1)) // #nosec G115 -- boundedLimit caps the value at 100.
-	if err != nil {
-		return ListProjectMCPsOutput{}, fmt.Errorf("list platform mcp servers: %w", err)
+	afterID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	if query == "" && input.Cursor != "" {
+		cursor, err := r.inventoryCursor.Decode(input.Cursor, principal, cursorProject.ID, query)
+		if err != nil {
+			return FindMCPOutput{}, err
+		}
+		afterID = uuid.NullUUID{UUID: cursor, Valid: true}
 	}
-
-	rows, truncated := boundedRows(rows, limit)
-	output := ListProjectMCPsOutput{MCPs: make([]MCP, 0, len(rows)), Truncated: truncated}
+	if query != "" {
+		limit = min(limit, 10)
+	}
+	rows, err := r.inventory.ListPlatformMCPInventory(ctx, platformrepo.ListPlatformMCPInventoryParams{
+		OrganizationID: principal.OrganizationID,
+		ConnectionID:   connectionID, ConnectionGeneration: generation,
+		UserID: inventoryText(principal.UserID), ActingSurface: inventoryText(string(principal.surface())),
+		ProjectID: projectID, AfterMcpID: afterID, QueryText: query, ReadinessState: inventoryText(input.Readiness),
+		LimitValue: int32(limit + 1), // #nosec G115 -- boundedLimit caps the value at 100.
+	})
+	if err != nil {
+		r.logger.ErrorContext(ctx, "list platform MCP inventory", attr.SlogError(err))
+		return FindMCPOutput{}, fmt.Errorf("%w: inventory could not be read", ErrUnavailable)
+	}
+	registrationIDs := inventoryRegistrationIDs(rows)
+	byRegistration := map[uuid.UUID][]MCPDistribution{}
+	if len(registrationIDs) > 0 {
+		distributions, err := r.inventory.ListPlatformMCPInventoryDistributions(ctx, platformrepo.ListPlatformMCPInventoryDistributionsParams{
+			OrganizationID: principal.OrganizationID,
+			ProjectID:      projectID, RegistrationIds: registrationIDs,
+		})
+		if err != nil {
+			r.logger.ErrorContext(ctx, "list platform MCP inventory distributions", attr.SlogError(err))
+			return FindMCPOutput{}, fmt.Errorf("%w: inventory could not be read", ErrUnavailable)
+		}
+		byRegistration = inventoryDistributions(distributions)
+	}
+	mcps := make([]MCP, 0, len(rows))
 	for _, row := range rows {
-		output.MCPs = append(output.MCPs, mcpFromRow(row.ID, row.ProjectID, row.Name.String, row.Slug.String, row.Visibility))
+		mcps = append(mcps, mcpFromInventoryRow(row, byRegistration))
+	}
+	if query != "" {
+		return FindMCPOutput{MCPs: inventoryQueryResult(mcps, query, limit), NextCursor: ""}, nil
+	}
+	output := FindMCPOutput{MCPs: mcps, NextCursor: ""}
+	if len(output.MCPs) > limit {
+		last := output.MCPs[limit-1]
+		output.MCPs = output.MCPs[:limit]
+		output.NextCursor, err = r.inventoryCursor.Encode(inventoryCursor{
+			OrganizationID: principal.OrganizationID,
+			Binding:        principalCursorBinding(principal),
+			ProjectID:      cursorProject.ID.String(),
+			Query:          query,
+			AfterMCPID:     last.ID,
+		})
+		if err != nil {
+			return FindMCPOutput{}, err
+		}
 	}
 	return output, nil
 }
 
 func (r *PostgresReader) GetMCP(ctx context.Context, principal Principal, input GetMCPInput) (MCP, error) {
-	if r.reader == nil {
+	if r.reader == nil || r.inventory == nil {
 		return MCP{}, ErrUnavailable
 	}
 	projectID, err := uuid.Parse(input.ProjectID)
@@ -349,20 +427,68 @@ func (r *PostgresReader) GetMCP(ctx context.Context, principal Principal, input 
 	if err != nil {
 		return MCP{}, fmt.Errorf("parse mcp id: %w", err)
 	}
-	if _, err := r.reader.GetProject(ctx, projectID, principal.OrganizationID); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return MCP{}, ErrForbidden
-		}
-		return MCP{}, fmt.Errorf("get project for platform mcp server: %w", err)
-	}
-	row, err := r.reader.GetMCPServer(ctx, mcpID, projectID, principal.OrganizationID)
+	connectionID, generation, err := inventoryConnection(principal)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return MCP{}, ErrForbidden
-		}
-		return MCP{}, fmt.Errorf("get platform mcp server: %w", err)
+		return MCP{}, err
 	}
-	return mcpFromRow(row.ID, row.ProjectID, row.Name.String, row.Slug.String, row.Visibility), nil
+	row, err := r.inventory.GetPlatformMCPInventoryItem(ctx, platformrepo.GetPlatformMCPInventoryItemParams{
+		OrganizationID: principal.OrganizationID,
+		ConnectionID:   connectionID, ConnectionGeneration: generation,
+		UserID: inventoryText(principal.UserID), ActingSurface: inventoryText(string(principal.surface())),
+		McpServerID: mcpID, ProjectID: projectID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return MCP{}, ErrForbidden
+	}
+	if err != nil {
+		return MCP{}, fmt.Errorf("get platform MCP inventory item: %w", err)
+	}
+	byRegistration := map[uuid.UUID][]MCPDistribution{}
+	if row.RegistrationID != uuid.Nil {
+		distributions, err := r.inventory.ListPlatformMCPInventoryDistributions(ctx, platformrepo.ListPlatformMCPInventoryDistributionsParams{
+			OrganizationID:  principal.OrganizationID,
+			ProjectID:       uuid.NullUUID{UUID: projectID, Valid: true},
+			RegistrationIds: []uuid.UUID{row.RegistrationID},
+		})
+		if err != nil {
+			return MCP{}, fmt.Errorf("list platform MCP inventory distributions: %w", err)
+		}
+		byRegistration = inventoryDistributions(distributions)
+	}
+	return mcpFromInventoryItem(row, byRegistration), nil
+}
+
+func (r *PostgresReader) resolveInventoryProject(ctx context.Context, organizationID string, input FindMCPInput) (ResolvedProject, error) {
+	if input.ProjectID != "" && input.ProjectSlug != "" {
+		return ResolvedProject{}, fmt.Errorf("only one of project_id or project_slug may be supplied")
+	}
+	var projectID uuid.UUID
+	var projectName, projectSlug string
+	var err error
+	switch {
+	case input.ProjectID != "":
+		projectID, err = uuid.Parse(input.ProjectID)
+		if err == nil {
+			project, getErr := r.reader.GetProject(ctx, projectID, organizationID)
+			err = getErr
+			projectName, projectSlug = project.Name, project.Slug
+		}
+	case input.ProjectSlug != "":
+		project, getErr := r.reader.GetProjectBySlug(ctx, input.ProjectSlug, organizationID)
+		err = getErr
+		projectID, projectName, projectSlug = project.ID, project.Name, project.Slug
+	default:
+		project, getErr := r.reader.GetProjectBySlug(ctx, "default", organizationID)
+		err = getErr
+		projectID, projectName, projectSlug = project.ID, project.Name, project.Slug
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ResolvedProject{}, ErrForbidden
+	}
+	if err != nil {
+		return ResolvedProject{}, fmt.Errorf("resolve platform MCP inventory project: %w", err)
+	}
+	return ResolvedProject{ID: projectID, Name: projectName, Slug: projectSlug}, nil
 }
 
 func boundedRows[T any](rows []T, limit int) ([]T, bool) {
@@ -379,12 +505,48 @@ func uuidString(value uuid.NullUUID) string {
 	return value.UUID.String()
 }
 
-func mcpFromRow(id, projectID uuid.UUID, name, slug, visibility string) MCP {
-	return MCP{
-		ID:         id.String(),
-		ProjectID:  projectID.String(),
-		Name:       name,
-		Slug:       slug,
-		Visibility: visibility,
+func inventoryText(value string) pgtype.Text {
+	return pgtype.Text{String: value, Valid: value != ""}
+}
+
+func inventoryConnection(principal Principal) (uuid.NullUUID, uuid.NullUUID, error) {
+	if !principal.HasConnection() {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, nil
 	}
+	connectionID, err := uuid.Parse(principal.ConnectionID)
+	if err != nil {
+		return uuid.NullUUID{}, uuid.NullUUID{}, fmt.Errorf("parse platform MCP inventory connection: %w", err)
+	}
+	generation, err := uuid.Parse(principal.Generation)
+	if err != nil {
+		return uuid.NullUUID{}, uuid.NullUUID{}, fmt.Errorf("parse platform MCP inventory generation: %w", err)
+	}
+	return uuid.NullUUID{UUID: connectionID, Valid: true}, uuid.NullUUID{UUID: generation, Valid: true}, nil
+}
+
+func normalizeInventoryQuery(query string) string {
+	return strings.ToLower(strings.Join(strings.Fields(query), " "))
+}
+
+func isInventoryReadinessState(value string) bool {
+	if value == "unknown" || value == "unsupported" {
+		return true
+	}
+	return isReadinessState(ReadinessState(value))
+}
+
+// inventoryQueryResult relies on ListPlatformMCPInventory ordering exact matches
+// before substring candidates. The query intentionally requests one extra row,
+// so inspecting the first two rows distinguishes a unique exact match from an
+// ambiguous exact result without widening the bounded candidate response.
+func inventoryQueryResult(mcps []MCP, query string, limit int) []MCP {
+	if len(mcps) == 0 {
+		return mcps
+	}
+	if mcps[0].ID == query || strings.EqualFold(mcps[0].Name, query) || strings.EqualFold(mcps[0].Slug, query) {
+		if len(mcps) == 1 || (mcps[1].ID != query && !strings.EqualFold(mcps[1].Name, query) && !strings.EqualFold(mcps[1].Slug, query)) {
+			return mcps[:1]
+		}
+	}
+	return mcps[:min(len(mcps), limit)]
 }

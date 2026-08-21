@@ -5,6 +5,14 @@ WHERE organization_id = @organization_id
   AND project_id IS NULL
   AND deleted IS FALSE;
 
+-- name: GetOrgOTELForwardingConfigForUpdate :one
+SELECT *
+FROM otel_forwarding_configs
+WHERE organization_id = @organization_id
+  AND project_id IS NULL
+  AND deleted IS FALSE
+FOR UPDATE;
+
 -- name: UpsertOrgOTELForwardingConfig :one
 INSERT INTO otel_forwarding_configs (
     organization_id

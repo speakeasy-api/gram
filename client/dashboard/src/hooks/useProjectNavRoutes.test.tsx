@@ -154,8 +154,9 @@ describe("useProjectNavRoutes", () => {
     expect(navRoutes).toContain(routes.assistants);
     expect(navRoutes).toContain(routes.watchdog);
     expect(navRoutes).not.toContain(routes.deployments);
-    // Watchdog supersedes the legacy risk pages in the nav.
+    // Watchdog supersedes the legacy overview in the nav; Risk Events shows
+    // in both modes.
     expect(navRoutes).not.toContain(routes.riskOverview);
-    expect(navRoutes).not.toContain(routes.riskEvents);
+    expect(navRoutes).toContain(routes.riskEvents);
   });
 });

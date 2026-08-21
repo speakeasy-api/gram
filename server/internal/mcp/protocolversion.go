@@ -12,8 +12,8 @@ import (
 
 // recordMCPProtocolVersionSpan annotates the active span with the MCP protocol
 // revision a client asked for and the one actually in effect, so a trace can
-// be attributed to a protocol version and a pinned or downgraded negotiation
-// is visible rather than implied.
+// be attributed to a protocol version and a downgraded negotiation is visible
+// rather than implied.
 //
 // Either value may be empty — a client can omit protocolVersion from its
 // initialize params — in which case that attribute is omitted rather than

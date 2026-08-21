@@ -53,6 +53,42 @@ function MemberAvatar({
   );
 }
 
+function OverflowAvatar({
+  count,
+  hoveredId,
+  onHover,
+}: {
+  count: number;
+  hoveredId: string | null;
+  onHover: () => void;
+}): React.JSX.Element {
+  const isHovered = hoveredId === OVERFLOW_ID;
+  const dimmed = hoveredId !== null && !isHovered;
+
+  return (
+    <motion.div
+      className="row-start-1 cursor-pointer"
+      onPointerEnter={onHover}
+      animate={{
+        scale: isHovered ? 1.25 : dimmed ? 0.92 : 1,
+        filter: dimmed
+          ? "saturate(0.65) brightness(0.98)"
+          : "saturate(1) brightness(1)",
+        zIndex: isHovered ? 30 : 10,
+      }}
+      transition={
+        isHovered
+          ? { type: "spring", stiffness: 400, damping: 20 }
+          : { type: "tween", duration: 0.3, ease: "easeOut" }
+      }
+    >
+      <div className="ring-background bg-muted text-muted-foreground flex size-7 items-center justify-center rounded-full text-[11px] font-medium ring-2">
+        +{count}
+      </div>
+    </motion.div>
+  );
+}
+
 /**
  * Compact, overlapping avatar stack that reveals the full member list in a
  * popover on click. The popover is portaled, so it is never clipped by the
@@ -61,9 +97,15 @@ function MemberAvatar({
 export function MemberFacepile({
   members,
   maxFaces = 10,
+  renderTrigger,
 }: {
   members: FacepileMember[];
   maxFaces?: number;
+  renderTrigger?: (props: {
+    label: string;
+    onClick: (event: React.MouseEvent) => void;
+    onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void;
+  }) => React.ReactElement;
 }): React.JSX.Element {
   const [hoveredId, setHoveredId] = React.useState<string | null>(null);
 
@@ -75,100 +117,87 @@ export function MemberFacepile({
   const shown = sorted.slice(0, maxFaces);
   const overflow = sorted.length - shown.length;
   const label = `${members.length} member${members.length === 1 ? "" : "s"}`;
+  const stopParentClick = (event: React.MouseEvent) => event.stopPropagation();
+  const activateTrigger = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.click();
+  };
+  const trigger = renderTrigger ? (
+    renderTrigger({
+      label,
+      onClick: stopParentClick,
+      onKeyDown: activateTrigger,
+    })
+  ) : (
+    <button
+      type="button"
+      aria-label={label}
+      onClick={stopParentClick}
+      className="hover:bg-accent/40 -ml-1 flex w-fit cursor-pointer items-center p-1 transition-colors"
+    >
+      {/* Grid overlap: each face sits in a track narrower than itself
+          (auto-cols < avatar width), so faces overlap by a fixed amount and
+          the pile's total width is deterministic — no negative-margin growth
+          that would overflow the table column. */}
+      <div
+        className="grid grid-flow-col items-center justify-start [grid-auto-columns:1.15rem]"
+        // Clear only when leaving the whole pile. Moving between overlapping
+        // faces just updates which is active, avoiding the flicker from
+        // racing per-face enter/leave events.
+        onPointerLeave={() => setHoveredId(null)}
+      >
+        {shown.map((m, i) => {
+          const isHovered = hoveredId === m.id;
+          const dimmed = hoveredId !== null && !isHovered;
+          return (
+            <motion.div
+              key={m.id}
+              style={{ gridColumnStart: i + 1 }}
+              className="relative row-start-1 cursor-pointer"
+              onPointerEnter={() => setHoveredId(m.id)}
+              animate={{
+                scale: isHovered ? 1.25 : dimmed ? 0.92 : 1,
+                filter: dimmed
+                  ? "saturate(0.65) brightness(0.98)"
+                  : "saturate(1) brightness(1)",
+                zIndex: isHovered ? 30 : 0,
+              }}
+              transition={
+                isHovered
+                  ? { type: "spring", stiffness: 400, damping: 20 }
+                  : { type: "tween", duration: 0.3, ease: "easeOut" }
+              }
+            >
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div>
+                    <MemberAvatar
+                      member={m}
+                      className="ring-background size-7 ring-2"
+                    />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="top">{m.email}</TooltipContent>
+              </Tooltip>
+            </motion.div>
+          );
+        })}
+        {overflow > 0 && (
+          <OverflowAvatar
+            count={overflow}
+            hoveredId={hoveredId}
+            onHover={() => setHoveredId(OVERFLOW_ID)}
+          />
+        )}
+      </div>
+    </button>
+  );
 
   return (
     <Popover>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          aria-label={label}
-          // Stop the row's onRowClick from firing when opening the popover.
-          onClick={(e) => e.stopPropagation()}
-          className="hover:bg-accent/40 -ml-1 flex w-fit cursor-pointer items-center p-1 transition-colors"
-        >
-          {/* Grid overlap: each face sits in a track narrower than itself
-              (auto-cols < avatar width), so faces overlap by a fixed amount and
-              the pile's total width is deterministic — no negative-margin growth
-              that would overflow the table column. */}
-          <div
-            className="grid grid-flow-col items-center justify-start [grid-auto-columns:1.15rem]"
-            // Clear only when leaving the whole pile. Moving between overlapping
-            // faces just updates which is active, avoiding the flicker from
-            // racing per-face enter/leave events.
-            onPointerLeave={() => setHoveredId(null)}
-          >
-            {shown.map((m, i) => {
-              const isHovered = hoveredId === m.id;
-              const dimmed = hoveredId !== null && !isHovered;
-              return (
-                <motion.div
-                  key={m.id}
-                  style={{ gridColumnStart: i + 1 }}
-                  className="relative row-start-1 cursor-pointer"
-                  onPointerEnter={() => setHoveredId(m.id)}
-                  animate={{
-                    scale: isHovered ? 1.25 : dimmed ? 0.92 : 1,
-                    // Dim via filter, not opacity: opacity would make the
-                    // overlapped faces behind this one show through.
-                    filter: dimmed
-                      ? "saturate(0.65) brightness(0.98)"
-                      : "saturate(1) brightness(1)",
-                    zIndex: isHovered ? 30 : 0,
-                  }}
-                  // Snap in on hover, but relax back slowly so flicking the
-                  // mouse across faces leaves a gentle settle rather than a
-                  // jittery snap.
-                  transition={
-                    isHovered
-                      ? { type: "spring", stiffness: 400, damping: 20 }
-                      : { type: "tween", duration: 0.3, ease: "easeOut" }
-                  }
-                >
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div>
-                        <MemberAvatar
-                          member={m}
-                          className="ring-background size-7 ring-2"
-                        />
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent side="top">{m.email}</TooltipContent>
-                  </Tooltip>
-                </motion.div>
-              );
-            })}
-            {overflow > 0 &&
-              (() => {
-                const isHovered = hoveredId === OVERFLOW_ID;
-                const dimmed = hoveredId !== null && !isHovered;
-                return (
-                  <motion.div
-                    style={{ gridColumnStart: shown.length + 1 }}
-                    className="row-start-1 cursor-pointer"
-                    onPointerEnter={() => setHoveredId(OVERFLOW_ID)}
-                    animate={{
-                      scale: isHovered ? 1.25 : dimmed ? 0.92 : 1,
-                      filter: dimmed
-                        ? "saturate(0.65) brightness(0.98)"
-                        : "saturate(1) brightness(1)",
-                      zIndex: isHovered ? 30 : 10,
-                    }}
-                    transition={
-                      isHovered
-                        ? { type: "spring", stiffness: 400, damping: 20 }
-                        : { type: "tween", duration: 0.3, ease: "easeOut" }
-                    }
-                  >
-                    <div className="ring-background bg-muted text-muted-foreground flex size-7 items-center justify-center rounded-full text-[11px] font-medium ring-2">
-                      +{overflow}
-                    </div>
-                  </motion.div>
-                );
-              })()}
-          </div>
-        </button>
-      </PopoverTrigger>
+      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
       <PopoverContent
         align="start"
         onClick={(e) => e.stopPropagation()}

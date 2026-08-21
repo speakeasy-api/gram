@@ -50,6 +50,11 @@ type mockWorkOSFetcher struct {
 	// must not hit either path; see TestE2E_Callback_LinkedOrgsSkipWorkOSReads.
 	getOrgCalls           int
 	ensureExternalIDCalls int
+
+	// Signup-time email lookup. Ordinary login must not touch this path.
+	usersByEmail        map[string]*workos.User
+	getUserByEmailErr   error
+	getUserByEmailCalls int
 }
 
 type createdOrgRecord struct {
@@ -102,6 +107,17 @@ func (m *mockWorkOSFetcher) GetOrgMembership(_ context.Context, workosUserID, wo
 		}
 	}
 	return nil, nil
+}
+
+func (m *mockWorkOSFetcher) GetUserByEmail(_ context.Context, email string) (*workos.User, error) {
+	m.getUserByEmailCalls++
+	if m.getUserByEmailErr != nil {
+		return nil, m.getUserByEmailErr
+	}
+	if m.usersByEmail == nil {
+		return nil, nil
+	}
+	return m.usersByEmail[email], nil
 }
 
 func (m *mockWorkOSFetcher) UpdateMemberRoles(_ context.Context, membershipID string, roleSlugs []string) (*workos.Member, error) {

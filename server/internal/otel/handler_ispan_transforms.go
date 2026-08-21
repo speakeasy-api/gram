@@ -13,6 +13,8 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/database"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
@@ -29,6 +31,8 @@ func NewSpanTransformHandler(
 	logger *slog.Logger,
 	meterProvider metric.MeterProvider,
 	spanPublisher gcp.Publisher[*otelv1.Span],
+	replicaDB database.DBTX,
+	cacheImpl cache.Cache,
 ) *SpanTransformHandler {
 	logger = logger.With(attr.SlogComponent("span-transform-handler"))
 
@@ -39,6 +43,7 @@ func NewSpanTransformHandler(
 		enrichers: []SpanEnricher{
 			&enrichTenancy{},
 			NewEnrichSpeakeasyTokens(),
+			NewEnrichDirectory(logger, replicaDB, cacheImpl),
 		},
 	}
 }
@@ -166,9 +171,23 @@ func spanAnyValue(value otelattr.Value) (*otelv1.Span_AnyValue, error) {
 		return (&otelv1.Span_AnyValue_builder{
 			ArrayValue: (&otelv1.Span_ArrayValue_builder{Values: values}).Build(),
 		}).Build(), nil
-	default:
-		return nil, fmt.Errorf("unsupported OpenTelemetry attribute type %v", value.Type())
+	case otelattr.SLICE:
+		input := value.AsSlice()
+		values := make([]*otelv1.Span_AnyValue, len(input))
+		for i, item := range input {
+			converted, err := spanAnyValue(item)
+			if err != nil {
+				return nil, fmt.Errorf("convert slice item %d: %w", i, err)
+			}
+			values[i] = converted
+		}
+		return (&otelv1.Span_AnyValue_builder{
+			ArrayValue: (&otelv1.Span_ArrayValue_builder{Values: values}).Build(),
+		}).Build(), nil
+	case otelattr.EMPTY:
+		return (&otelv1.Span_AnyValue_builder{}).Build(), nil
 	}
+	return nil, fmt.Errorf("unsupported OpenTelemetry attribute type %v", value.Type())
 }
 
 func spanFromInboundSpan(inbound *otelv1.InboundSpan) (*otelv1.Span, error) {

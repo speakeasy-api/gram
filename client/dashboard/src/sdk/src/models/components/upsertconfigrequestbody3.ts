@@ -20,7 +20,7 @@ export type UpsertConfigRequestBody3 = {
    */
   endpointUrl: string;
   /**
-   * Full set of headers to attach. Replaces any existing headers.
+   * Complete desired header set. Omitted entries are removed; entries with an omitted value preserve the existing encrypted value for the same name.
    */
   headers?: Array<OtelForwardingHeaderInput> | undefined;
 };

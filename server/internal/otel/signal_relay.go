@@ -290,12 +290,23 @@ func (r *signalRelay) cachedDestination(organizationID string, now time.Time) (*
 }
 
 func (d *relayDestination) export(ctx context.Context, message proto.Message) error {
+	return d.exportWithLimit(ctx, message, 0)
+}
+
+func (d *relayDestination) exportWithLimit(ctx context.Context, message proto.Message, maxBytes int) error {
 	body, err := proto.Marshal(message)
 	if err != nil {
 		return &relayExportError{
 			reason:    relayReasonInvalid,
 			retryable: false,
 			err:       fmt.Errorf("marshal OTLP %s export: %w", d.signalName, err),
+		}
+	}
+	if maxBytes > 0 && len(body) > maxBytes {
+		return &relayExportError{
+			reason:    relayReasonInvalid,
+			retryable: false,
+			err:       fmt.Errorf("OTLP %s export is %d bytes, limit is %d", d.signalName, len(body), maxBytes),
 		}
 	}
 

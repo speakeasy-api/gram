@@ -2217,6 +2217,148 @@ func (q *Queries) GetPlatformMCPFeedbackByIdempotencyKey(ctx context.Context, ar
 	return i, err
 }
 
+const getPlatformMCPInventoryItem = `-- name: GetPlatformMCPInventoryItem :one
+SELECT mcp_server_id, project_id, project_name, project_slug, mcp_name, mcp_slug, visibility, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, registration_id, source_kind, catalog_provider, catalog_reference, registration_status, registration_remote_mcp_server_id, registration_user_session_issuer_id, registration_mcp_server_id, registration_mcp_endpoint_id, readiness_state, readiness_checked_at, readiness_expires_at
+FROM (
+    SELECT
+        m.id AS mcp_server_id,
+        m.project_id,
+        project.name AS project_name,
+        project.slug AS project_slug,
+        m.name AS mcp_name,
+        m.slug AS mcp_slug,
+        m.visibility,
+        m.remote_mcp_server_id,
+        m.tunneled_mcp_server_id,
+        m.toolset_id,
+        m.unproxied_mcp_server_id,
+        COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
+        COALESCE(registration.source_kind, '') AS source_kind,
+        COALESCE(registration.catalog_provider, '') AS catalog_provider,
+        COALESCE(registration.catalog_reference, '') AS catalog_reference,
+        COALESCE(registration.status, '') AS registration_status,
+        COALESCE(registration.remote_mcp_server_id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_remote_mcp_server_id,
+        COALESCE(registration.user_session_issuer_id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_user_session_issuer_id,
+        COALESCE(registration.mcp_server_id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_mcp_server_id,
+        COALESCE(registration.mcp_endpoint_id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_mcp_endpoint_id,
+        COALESCE(readiness.state, '') AS readiness_state,
+        readiness.checked_at AS readiness_checked_at,
+        readiness.expires_at AS readiness_expires_at
+    FROM mcp_servers AS m
+    JOIN projects AS project
+      ON project.id = m.project_id
+     AND project.organization_id = $1
+     AND project.deleted IS FALSE
+    LEFT JOIN LATERAL (
+        SELECT registration.id, registration.organization_id, registration.project_id, registration.source_kind, registration.catalog_provider, registration.catalog_reference, registration.status, registration.remote_mcp_server_id, registration.remote_mcp_server_owned, registration.user_session_issuer_id, registration.user_session_issuer_owned, registration.mcp_server_id, registration.mcp_server_owned, registration.mcp_endpoint_id, registration.mcp_endpoint_owned, registration.connection_id, registration.connection_generation, registration.user_id, registration.acting_surface, registration.created_at, registration.updated_at, registration.deleted_at, registration.deleted
+        FROM platform_mcp_catalog_registrations AS registration
+        WHERE registration.organization_id = $1
+          AND registration.project_id = m.project_id
+          AND registration.mcp_server_id = m.id
+          AND registration.deleted IS FALSE
+        ORDER BY registration.created_at DESC, registration.id DESC
+        LIMIT 1
+    ) AS registration ON TRUE
+    LEFT JOIN LATERAL (
+        SELECT readiness.id, readiness.organization_id, readiness.project_id, readiness.registration_id, readiness.connection_id, readiness.connection_generation, readiness.user_id, readiness.acting_surface, readiness.provider_authorization_fingerprint, readiness.state, readiness.evidence_code, readiness.checked_at, readiness.expires_at, readiness.created_at, readiness.updated_at
+        FROM platform_mcp_readiness AS readiness
+        WHERE readiness.organization_id = $1
+          AND readiness.project_id = m.project_id
+          AND readiness.registration_id = registration.id
+          AND (
+              ($2::uuid IS NOT NULL
+                  AND readiness.connection_id = $2::uuid
+                  AND readiness.connection_generation = $3::uuid)
+              OR
+              ($2::uuid IS NULL
+                  AND readiness.connection_id IS NULL
+                  AND readiness.user_id = $4
+                  AND readiness.acting_surface = $5)
+          )
+        ORDER BY readiness.checked_at DESC, readiness.id DESC
+        LIMIT 1
+    ) AS readiness ON TRUE
+    WHERE m.id = $6
+      AND m.project_id = $7
+      AND m.deleted IS FALSE
+) AS inventory
+`
+
+type GetPlatformMCPInventoryItemParams struct {
+	OrganizationID       string
+	ConnectionID         uuid.NullUUID
+	ConnectionGeneration uuid.NullUUID
+	UserID               pgtype.Text
+	ActingSurface        pgtype.Text
+	McpServerID          uuid.UUID
+	ProjectID            uuid.UUID
+}
+
+type GetPlatformMCPInventoryItemRow struct {
+	McpServerID                     uuid.UUID
+	ProjectID                       uuid.UUID
+	ProjectName                     string
+	ProjectSlug                     string
+	McpName                         pgtype.Text
+	McpSlug                         pgtype.Text
+	Visibility                      string
+	RemoteMcpServerID               uuid.NullUUID
+	TunneledMcpServerID             uuid.NullUUID
+	ToolsetID                       uuid.NullUUID
+	UnproxiedMcpServerID            uuid.NullUUID
+	RegistrationID                  uuid.UUID
+	SourceKind                      string
+	CatalogProvider                 string
+	CatalogReference                string
+	RegistrationStatus              string
+	RegistrationRemoteMcpServerID   uuid.NullUUID
+	RegistrationUserSessionIssuerID uuid.NullUUID
+	RegistrationMcpServerID         uuid.NullUUID
+	RegistrationMcpEndpointID       uuid.NullUUID
+	ReadinessState                  string
+	ReadinessCheckedAt              pgtype.Timestamptz
+	ReadinessExpiresAt              pgtype.Timestamptz
+}
+
+func (q *Queries) GetPlatformMCPInventoryItem(ctx context.Context, arg GetPlatformMCPInventoryItemParams) (GetPlatformMCPInventoryItemRow, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPInventoryItem,
+		arg.OrganizationID,
+		arg.ConnectionID,
+		arg.ConnectionGeneration,
+		arg.UserID,
+		arg.ActingSurface,
+		arg.McpServerID,
+		arg.ProjectID,
+	)
+	var i GetPlatformMCPInventoryItemRow
+	err := row.Scan(
+		&i.McpServerID,
+		&i.ProjectID,
+		&i.ProjectName,
+		&i.ProjectSlug,
+		&i.McpName,
+		&i.McpSlug,
+		&i.Visibility,
+		&i.RemoteMcpServerID,
+		&i.TunneledMcpServerID,
+		&i.ToolsetID,
+		&i.UnproxiedMcpServerID,
+		&i.RegistrationID,
+		&i.SourceKind,
+		&i.CatalogProvider,
+		&i.CatalogReference,
+		&i.RegistrationStatus,
+		&i.RegistrationRemoteMcpServerID,
+		&i.RegistrationUserSessionIssuerID,
+		&i.RegistrationMcpServerID,
+		&i.RegistrationMcpEndpointID,
+		&i.ReadinessState,
+		&i.ReadinessCheckedAt,
+		&i.ReadinessExpiresAt,
+	)
+	return i, err
+}
+
 const getPlatformMCPLifecycle = `-- name: GetPlatformMCPLifecycle :one
 WITH default_project AS (
     SELECT id
@@ -3469,6 +3611,252 @@ func (q *Queries) ListPlatformMCPConnections(ctx context.Context, organizationID
 			&i.AuthorizedAt,
 			&i.ReauthorizedAt,
 			&i.Ready,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPlatformMCPInventory = `-- name: ListPlatformMCPInventory :many
+SELECT
+    m.id AS mcp_server_id,
+    m.project_id,
+    project.name AS project_name,
+    project.slug AS project_slug,
+    m.name AS mcp_name,
+    m.slug AS mcp_slug,
+    m.visibility,
+    m.remote_mcp_server_id,
+    m.tunneled_mcp_server_id,
+    m.toolset_id,
+    m.unproxied_mcp_server_id,
+    COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
+    COALESCE(registration.source_kind, '') AS source_kind,
+    COALESCE(registration.catalog_provider, '') AS catalog_provider,
+    COALESCE(registration.catalog_reference, '') AS catalog_reference,
+    COALESCE(registration.status, '') AS registration_status,
+    COALESCE(registration.remote_mcp_server_id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_remote_mcp_server_id,
+    COALESCE(registration.user_session_issuer_id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_user_session_issuer_id,
+    COALESCE(registration.mcp_server_id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_mcp_server_id,
+    COALESCE(registration.mcp_endpoint_id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_mcp_endpoint_id,
+    COALESCE(readiness.state, '') AS readiness_state,
+    readiness.checked_at AS readiness_checked_at,
+    readiness.expires_at AS readiness_expires_at
+FROM mcp_servers AS m
+JOIN projects AS project
+  ON project.id = m.project_id
+ AND project.organization_id = $1
+ AND project.deleted IS FALSE
+LEFT JOIN LATERAL (
+    SELECT registration.id, registration.organization_id, registration.project_id, registration.source_kind, registration.catalog_provider, registration.catalog_reference, registration.status, registration.remote_mcp_server_id, registration.remote_mcp_server_owned, registration.user_session_issuer_id, registration.user_session_issuer_owned, registration.mcp_server_id, registration.mcp_server_owned, registration.mcp_endpoint_id, registration.mcp_endpoint_owned, registration.connection_id, registration.connection_generation, registration.user_id, registration.acting_surface, registration.created_at, registration.updated_at, registration.deleted_at, registration.deleted
+    FROM platform_mcp_catalog_registrations AS registration
+    WHERE registration.organization_id = $1
+      AND registration.project_id = m.project_id
+      AND registration.mcp_server_id = m.id
+      AND registration.deleted IS FALSE
+    ORDER BY registration.created_at DESC, registration.id DESC
+    LIMIT 1
+) AS registration ON TRUE
+LEFT JOIN LATERAL (
+    SELECT readiness.id, readiness.organization_id, readiness.project_id, readiness.registration_id, readiness.connection_id, readiness.connection_generation, readiness.user_id, readiness.acting_surface, readiness.provider_authorization_fingerprint, readiness.state, readiness.evidence_code, readiness.checked_at, readiness.expires_at, readiness.created_at, readiness.updated_at
+    FROM platform_mcp_readiness AS readiness
+    WHERE readiness.organization_id = $1
+      AND readiness.project_id = m.project_id
+      AND readiness.registration_id = registration.id
+      AND (
+          ($2::uuid IS NOT NULL
+              AND readiness.connection_id = $2::uuid
+              AND readiness.connection_generation = $3::uuid)
+          OR
+          ($2::uuid IS NULL
+              AND readiness.connection_id IS NULL
+              AND readiness.user_id = $4
+              AND readiness.acting_surface = $5)
+      )
+    ORDER BY readiness.checked_at DESC, readiness.id DESC
+    LIMIT 1
+) AS readiness ON TRUE
+WHERE m.deleted IS FALSE
+  AND ($6::uuid IS NULL OR m.project_id = $6::uuid)
+  AND ($7::uuid IS NULL OR m.id > $7::uuid)
+  AND (
+      $8::text = ''
+      OR m.id::text ILIKE '%' || $8::text || '%'
+      OR COALESCE(m.name, '') ILIKE '%' || $8::text || '%'
+      OR COALESCE(m.slug, '') ILIKE '%' || $8::text || '%'
+  )
+  AND (
+      $9::text IS NULL
+      OR COALESCE(
+          NULLIF(readiness.state, ''),
+          CASE
+              WHEN registration.id IS NOT NULL THEN 'unknown'
+              ELSE 'unsupported'
+          END
+      ) = $9::text
+  )
+ORDER BY
+    CASE
+        WHEN $8::text <> ''
+         AND (m.id::text = $8::text OR LOWER(COALESCE(m.name, '')) = LOWER($8::text) OR LOWER(COALESCE(m.slug, '')) = LOWER($8::text))
+        THEN 0
+        ELSE 1
+    END,
+    m.id ASC
+LIMIT $10
+`
+
+type ListPlatformMCPInventoryParams struct {
+	OrganizationID       string
+	ConnectionID         uuid.NullUUID
+	ConnectionGeneration uuid.NullUUID
+	UserID               pgtype.Text
+	ActingSurface        pgtype.Text
+	ProjectID            uuid.NullUUID
+	AfterMcpID           uuid.NullUUID
+	QueryText            string
+	ReadinessState       pgtype.Text
+	LimitValue           int32
+}
+
+type ListPlatformMCPInventoryRow struct {
+	McpServerID                     uuid.UUID
+	ProjectID                       uuid.UUID
+	ProjectName                     string
+	ProjectSlug                     string
+	McpName                         pgtype.Text
+	McpSlug                         pgtype.Text
+	Visibility                      string
+	RemoteMcpServerID               uuid.NullUUID
+	TunneledMcpServerID             uuid.NullUUID
+	ToolsetID                       uuid.NullUUID
+	UnproxiedMcpServerID            uuid.NullUUID
+	RegistrationID                  uuid.UUID
+	SourceKind                      string
+	CatalogProvider                 string
+	CatalogReference                string
+	RegistrationStatus              string
+	RegistrationRemoteMcpServerID   uuid.NullUUID
+	RegistrationUserSessionIssuerID uuid.NullUUID
+	RegistrationMcpServerID         uuid.NullUUID
+	RegistrationMcpEndpointID       uuid.NullUUID
+	ReadinessState                  string
+	ReadinessCheckedAt              pgtype.Timestamptz
+	ReadinessExpiresAt              pgtype.Timestamptz
+}
+
+// One bounded, tenant-qualified inventory projection for every Platform MCP
+// read surface. It reads persisted readiness/distribution state only; it never
+// contacts a remote MCP or provider.
+func (q *Queries) ListPlatformMCPInventory(ctx context.Context, arg ListPlatformMCPInventoryParams) ([]ListPlatformMCPInventoryRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPInventory,
+		arg.OrganizationID,
+		arg.ConnectionID,
+		arg.ConnectionGeneration,
+		arg.UserID,
+		arg.ActingSurface,
+		arg.ProjectID,
+		arg.AfterMcpID,
+		arg.QueryText,
+		arg.ReadinessState,
+		arg.LimitValue,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPInventoryRow
+	for rows.Next() {
+		var i ListPlatformMCPInventoryRow
+		if err := rows.Scan(
+			&i.McpServerID,
+			&i.ProjectID,
+			&i.ProjectName,
+			&i.ProjectSlug,
+			&i.McpName,
+			&i.McpSlug,
+			&i.Visibility,
+			&i.RemoteMcpServerID,
+			&i.TunneledMcpServerID,
+			&i.ToolsetID,
+			&i.UnproxiedMcpServerID,
+			&i.RegistrationID,
+			&i.SourceKind,
+			&i.CatalogProvider,
+			&i.CatalogReference,
+			&i.RegistrationStatus,
+			&i.RegistrationRemoteMcpServerID,
+			&i.RegistrationUserSessionIssuerID,
+			&i.RegistrationMcpServerID,
+			&i.RegistrationMcpEndpointID,
+			&i.ReadinessState,
+			&i.ReadinessCheckedAt,
+			&i.ReadinessExpiresAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPlatformMCPInventoryDistributions = `-- name: ListPlatformMCPInventoryDistributions :many
+SELECT
+    distribution.registration_id,
+    COALESCE(distribution.plugin_id, distribution.default_plugin_id) AS plugin_id,
+    distribution.state,
+    distribution.publication_state
+FROM platform_mcp_distributions AS distribution
+JOIN projects AS project
+  ON project.id = distribution.project_id
+ AND project.organization_id = distribution.organization_id
+ AND project.deleted IS FALSE
+JOIN platform_mcp_catalog_registrations AS registration
+  ON registration.id = distribution.registration_id
+ AND registration.organization_id = distribution.organization_id
+ AND registration.project_id = distribution.project_id
+ AND registration.deleted IS FALSE
+WHERE distribution.organization_id = $1
+  AND ($2::uuid IS NULL OR distribution.project_id = $2::uuid)
+  AND distribution.registration_id = ANY($3::uuid[])
+ORDER BY distribution.registration_id, distribution.id ASC
+`
+
+type ListPlatformMCPInventoryDistributionsParams struct {
+	OrganizationID  string
+	ProjectID       uuid.NullUUID
+	RegistrationIds []uuid.UUID
+}
+
+type ListPlatformMCPInventoryDistributionsRow struct {
+	RegistrationID   uuid.UUID
+	PluginID         uuid.UUID
+	State            string
+	PublicationState string
+}
+
+func (q *Queries) ListPlatformMCPInventoryDistributions(ctx context.Context, arg ListPlatformMCPInventoryDistributionsParams) ([]ListPlatformMCPInventoryDistributionsRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPInventoryDistributions, arg.OrganizationID, arg.ProjectID, arg.RegistrationIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPInventoryDistributionsRow
+	for rows.Next() {
+		var i ListPlatformMCPInventoryDistributionsRow
+		if err := rows.Scan(
+			&i.RegistrationID,
+			&i.PluginID,
+			&i.State,
+			&i.PublicationState,
 		); err != nil {
 			return nil, err
 		}

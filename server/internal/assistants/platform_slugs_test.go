@@ -50,8 +50,9 @@ func platformSlugsFixture(t *testing.T) (*Service, assistantRecord, assistantRec
 	return svc, managedRecord, otherRecord
 }
 
-// The platformmcp variant REPLACES the legacy managed toolset rather than
-// adding to it: an org on one variant must never see the other's tools.
+// The platformmcp variant REPLACES the whole legacy platformtools surface
+// rather than adding to it — the base assistants toolset included. An org on
+// one variant must never see the other's tools.
 func TestAssistantPlatformSlugsManagedPlatformMCPVariantReplacesLegacy(t *testing.T) {
 	t.Parallel()
 
@@ -61,12 +62,40 @@ func TestAssistantPlatformSlugsManagedPlatformMCPVariantReplacesLegacy(t *testin
 	flags.SetFlagVariant(feature.FlagAssistantPlatformMCP, "org-test", feature.VariantAssistantToolsPlatformMCP)
 	svc.core.SetFeatureProvider(flags)
 
-	slugs, err := svc.core.assistantPlatformSlugs(t.Context(), managedRecord)
+	slugs, err := svc.core.assistantPlatformSlugs(t.Context(), managedRecord, sourceKindDashboard)
 	require.NoError(t, err)
-	require.Equal(t, []string{
-		platformtools.AssistantsPlatformToolsetSlug,
-		platformtools.PlatformMCPReadToolsetSlug,
-	}, slugs)
+	require.Equal(t, []string{platformtools.PlatformMCPReadToolsetSlug}, slugs)
+}
+
+// The rollout is scoped to the dashboard: the same managed assistant answering
+// Slack keeps the legacy toolsets, so flipping an organization never strips a
+// Slack thread of memory, triggers and the insights tools.
+func TestAssistantPlatformSlugsNonDashboardThreadStaysLegacy(t *testing.T) {
+	t.Parallel()
+
+	svc, managedRecord, _ := platformSlugsFixture(t)
+
+	flags := &feature.InMemory{}
+	flags.SetFlagVariant(feature.FlagAssistantPlatformMCP, "org-test", feature.VariantAssistantToolsPlatformMCP)
+	svc.core.SetFeatureProvider(flags)
+
+	for _, sourceKind := range []string{
+		sourceKindSlack,
+		sourceKindMSTeams,
+		sourceKindLinear,
+		sourceKindGithub,
+		sourceKindCron,
+		sourceKindWake,
+		sourceKindWarmup,
+		sourceKindSetup,
+	} {
+		slugs, err := svc.core.assistantPlatformSlugs(t.Context(), managedRecord, sourceKind)
+		require.NoError(t, err)
+		require.Equal(t, []string{
+			platformtools.AssistantsPlatformToolsetSlug,
+			platformtools.ManagedAssistantPlatformToolsetSlug,
+		}, slugs, "source kind %q", sourceKind)
+	}
 }
 
 func TestAssistantPlatformSlugsManagedLegacyVariantUnchanged(t *testing.T) {
@@ -78,7 +107,7 @@ func TestAssistantPlatformSlugsManagedLegacyVariantUnchanged(t *testing.T) {
 	flags.SetFlagVariant(feature.FlagAssistantPlatformMCP, "org-test", feature.VariantAssistantToolsLegacy)
 	svc.core.SetFeatureProvider(flags)
 
-	slugs, err := svc.core.assistantPlatformSlugs(t.Context(), managedRecord)
+	slugs, err := svc.core.assistantPlatformSlugs(t.Context(), managedRecord, sourceKindDashboard)
 	require.NoError(t, err)
 	require.Equal(t, []string{
 		platformtools.AssistantsPlatformToolsetSlug,
@@ -97,7 +126,7 @@ func TestAssistantPlatformSlugsUnknownVariantFallsBackToLegacy(t *testing.T) {
 	flags.SetFlagVariant(feature.FlagAssistantPlatformMCP, "org-test", feature.Variant("control"))
 	svc.core.SetFeatureProvider(flags)
 
-	slugs, err := svc.core.assistantPlatformSlugs(t.Context(), managedRecord)
+	slugs, err := svc.core.assistantPlatformSlugs(t.Context(), managedRecord, sourceKindDashboard)
 	require.NoError(t, err)
 	require.Equal(t, []string{
 		platformtools.AssistantsPlatformToolsetSlug,
@@ -111,7 +140,7 @@ func TestAssistantPlatformSlugsNoVariantUnchanged(t *testing.T) {
 	svc, managedRecord, _ := platformSlugsFixture(t)
 	svc.core.SetFeatureProvider(&feature.InMemory{})
 
-	slugs, err := svc.core.assistantPlatformSlugs(t.Context(), managedRecord)
+	slugs, err := svc.core.assistantPlatformSlugs(t.Context(), managedRecord, sourceKindDashboard)
 	require.NoError(t, err)
 	require.Equal(t, []string{
 		platformtools.AssistantsPlatformToolsetSlug,
@@ -124,7 +153,7 @@ func TestAssistantPlatformSlugsNilProviderFallsBackToLegacy(t *testing.T) {
 
 	svc, managedRecord, _ := platformSlugsFixture(t)
 
-	slugs, err := svc.core.assistantPlatformSlugs(t.Context(), managedRecord)
+	slugs, err := svc.core.assistantPlatformSlugs(t.Context(), managedRecord, sourceKindDashboard)
 	require.NoError(t, err)
 	require.Equal(t, []string{
 		platformtools.AssistantsPlatformToolsetSlug,
@@ -141,7 +170,7 @@ func TestAssistantPlatformSlugsNonManagedNeverGetsPlatformToolset(t *testing.T) 
 	flags.SetFlagVariant(feature.FlagAssistantPlatformMCP, "org-test", feature.VariantAssistantToolsPlatformMCP)
 	svc.core.SetFeatureProvider(flags)
 
-	slugs, err := svc.core.assistantPlatformSlugs(t.Context(), otherRecord)
+	slugs, err := svc.core.assistantPlatformSlugs(t.Context(), otherRecord, sourceKindDashboard)
 	require.NoError(t, err)
 	require.Equal(t, []string{platformtools.AssistantsPlatformToolsetSlug}, slugs)
 }

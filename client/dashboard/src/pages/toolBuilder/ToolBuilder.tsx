@@ -484,7 +484,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
       direction="horizontal"
       className="[&>[role='separator']]:border-border h-full [&>[role='separator']]:mx-8 [&>[role='separator']]:border-1"
     >
-      <ResizablePanel.Pane minSize={35}>
+      <ResizablePanel.Pane minSize="35%">
         <Stack gap={1} className="h-full overflow-y-scroll">
           <Stack direction="horizontal" align="center" className="w-full">
             <Block label="Tool name" className="w-2/3">
@@ -625,7 +625,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
           </Stack>
         </Stack>
       </ResizablePanel.Pane>
-      <ResizablePanel.Pane minSize={35}>
+      <ResizablePanel.Pane minSize="35%">
         <ChatProvider>
           <ChatPanel
             toolsetSlug={toolsetFilter?.slug}
