@@ -145,7 +145,12 @@ type Service struct {
 	platformToolsets       map[string]platformtools.Toolset
 	authnChallengeCache    cache.TypedCacheObject[AuthnChallengeState]
 	userSessionGrantCache  cache.TypedCacheObject[UserSessionGrant]
-	toolSelectionCache     cache.TypedCacheObject[sessionToolSelectionEntry]
+	// userSessionRefreshReplayCache retains the encrypted rotation outcome.
+	userSessionRefreshReplayCache cache.TypedCacheObject[userSessionRefreshReplay]
+
+	// userSessionRefreshReplayCoordination elects the database rotation winner.
+	userSessionRefreshReplayCoordination cache.Cache
+	toolSelectionCache                   cache.TypedCacheObject[sessionToolSelectionEntry]
 	// consentToolInventoryCache holds per-(state, attempt) tool inventory
 	// snapshots captured by the consent MCP transport.
 	consentToolInventoryCache cache.TypedCacheObject[consentToolInventory]
@@ -381,6 +386,12 @@ func NewService(
 			cacheImpl,
 			cache.SuffixNone,
 		),
+		userSessionRefreshReplayCache: cache.NewTypedObjectCache[userSessionRefreshReplay](
+			logger.With(attr.SlogCacheNamespace("user_session_refresh_replay")),
+			cacheImpl,
+			cache.SuffixNone,
+		),
+		userSessionRefreshReplayCoordination: cacheImpl,
 		toolSelectionCache: cache.NewTypedObjectCache[sessionToolSelectionEntry](
 			logger.With(attr.SlogCacheNamespace("session_tool_selection")),
 			cacheImpl,
