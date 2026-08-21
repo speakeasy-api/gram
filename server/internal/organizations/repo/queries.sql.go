@@ -1505,14 +1505,16 @@ upserted AS (
         $6,
         input_role_urns.role_urn,
         $7,
-        $1,
+        COALESCE($1, clock_timestamp()),
         $2
     FROM input_role_urns
     ON CONFLICT (organization_id, workos_user_id, role_urn) WHERE deleted_at IS NULL DO UPDATE SET
         -- COALESCE preserves a backfilled user_id if the sync fires before the Gram user exists.
         user_id = COALESCE(EXCLUDED.user_id, organization_role_assignments.user_id),
         workos_membership_id = EXCLUDED.workos_membership_id,
-        workos_updated_at = COALESCE(EXCLUDED.workos_updated_at, organization_role_assignments.workos_updated_at),
+        -- Use the bind param, not EXCLUDED: INSERT fills a local clock fallback
+        -- for NOT NULL, and that must not overwrite an existing WorkOS cursor.
+        workos_updated_at = COALESCE($1, organization_role_assignments.workos_updated_at),
         workos_last_event_id = COALESCE(EXCLUDED.workos_last_event_id, organization_role_assignments.workos_last_event_id),
         deleted_at = NULL,
         updated_at = clock_timestamp()
@@ -1542,8 +1544,8 @@ type SyncUserOrganizationRoleAssignmentsParams struct {
 // Declaratively set all WorkOS role assignments for a known Gram user in an
 // org. Role slugs are resolved from role sync tables and stale assignments for
 // this WorkOS user are removed. NULL WorkOS event metadata is coalesced so
-// login and invite repairs can rewrite slugs without wiping webhook cursors
-// or inventing a WorkOS timestamp.
+// login and invite repairs can rewrite slugs without wiping webhook cursors.
+// New rows still get clock_timestamp() for the NOT NULL updated-at column.
 func (q *Queries) SyncUserOrganizationRoleAssignments(ctx context.Context, arg SyncUserOrganizationRoleAssignmentsParams) error {
 	_, err := q.db.Exec(ctx, syncUserOrganizationRoleAssignments,
 		arg.WorkosUpdatedAt,
