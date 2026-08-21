@@ -1239,6 +1239,31 @@ describe("ShadowMCPInventoryTable", () => {
   });
 });
 
+describe("superseded review rendering", () => {
+  it("shows the Superseded badge on a row whose decision was displaced", async () => {
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          canonicalServerUrl: "https://superseded.example.com/mcp",
+          serverName: "Superseded MCP",
+          approvalRequest: {
+            id: "r-superseded",
+            requesterCount: 0,
+            status: "superseded",
+          },
+        }),
+      ],
+    });
+
+    renderInventoryTable();
+
+    await waitFor(() => {
+      expect(screen.getByText("Superseded MCP")).toBeTruthy();
+    });
+    expect(screen.getByText("Superseded")).toBeTruthy();
+  });
+});
+
 describe("matchesReviewFilter", () => {
   const url = "https://filtered.example.com/mcp";
 
@@ -1264,6 +1289,17 @@ describe("matchesReviewFilter", () => {
     expect(matchesReviewFilter(requested, "none")).toBe(false);
   });
 
+  it("matches superseded as its own review state, never as 'none' or a decided one", () => {
+    const superseded = inventoryServer({
+      canonicalServerUrl: url,
+      approvalRequest: { id: "r1", requesterCount: 0, status: "superseded" },
+    });
+    expect(matchesReviewFilter(superseded, "superseded")).toBe(true);
+    expect(matchesReviewFilter(superseded, "approved")).toBe(false);
+    expect(matchesReviewFilter(superseded, "denied")).toBe(false);
+    expect(matchesReviewFilter(superseded, "none")).toBe(false);
+  });
+
   it("treats an unreviewed dossier and no review as the same 'none' state", () => {
     const noReview = inventoryServer({ canonicalServerUrl: url });
     const unreviewed = inventoryServer({
@@ -1283,7 +1319,12 @@ describe("reviewSortRank", () => {
 
   it("sorts pending decisions first, decided next, unreviewed last", () => {
     const rank = (
-      status?: "requested" | "approved" | "denied" | "unreviewed",
+      status?:
+        | "requested"
+        | "approved"
+        | "denied"
+        | "superseded"
+        | "unreviewed",
     ) =>
       reviewSortRank(
         inventoryServer({
@@ -1297,6 +1338,10 @@ describe("reviewSortRank", () => {
     expect(rank("requested")).toBe(0);
     expect(rank("approved")).toBe(1);
     expect(rank("denied")).toBe(1);
+    // Superseded is settled review history — an admin deliberately displaced
+    // the decision — so it ranks with the decided states, not the pending
+    // one.
+    expect(rank("superseded")).toBe(1);
     // An unreviewed dossier is a storage detail, not a state: it ranks with
     // "no review".
     expect(rank("unreviewed")).toBe(2);

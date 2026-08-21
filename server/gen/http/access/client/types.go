@@ -4030,8 +4030,17 @@ type ShadowMCPInventoryRequestSummaryResponseBody struct {
 // ShadowMCPInventoryApprovalRequestResponseBody is used to define fields on
 // response body types.
 type ShadowMCPInventoryApprovalRequestResponseBody struct {
-	ID     *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// superseded means the latest decision was explicitly displaced by a policy
+	// URL-list edit: the history is preserved but no enforcement derives from it
+	// until someone re-decides.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// The latest recorded decision still standing for this server, independent of
+	// the request's lifecycle status — a reopened request's prior decision keeps
+	// enforcing until re-decided, and clients checking an edit against standing
+	// intent must read this rather than status. Absent when nothing was ever
+	// decided or the decision was superseded.
+	StandingDecision *string `form:"standing_decision,omitempty" json:"standing_decision,omitempty" xml:"standing_decision,omitempty"`
 	// How many distinct people have asked for this server.
 	RequesterCount *int `form:"requester_count,omitempty" json:"requester_count,omitempty" xml:"requester_count,omitempty"`
 	// When the daily recheck first found the permission-relevant evidence
@@ -12969,8 +12978,13 @@ func ValidateShadowMCPInventoryApprovalRequestResponseBody(body *ShadowMCPInvent
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
 	if body.Status != nil {
-		if !(*body.Status == "unreviewed" || *body.Status == "requested" || *body.Status == "approved" || *body.Status == "denied") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"unreviewed", "requested", "approved", "denied"}))
+		if !(*body.Status == "unreviewed" || *body.Status == "requested" || *body.Status == "approved" || *body.Status == "denied" || *body.Status == "superseded") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"unreviewed", "requested", "approved", "denied", "superseded"}))
+		}
+	}
+	if body.StandingDecision != nil {
+		if !(*body.StandingDecision == "approved" || *body.StandingDecision == "denied") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.standing_decision", *body.StandingDecision, []any{"approved", "denied"}))
 		}
 	}
 	if body.EvidenceChangedAt != nil {

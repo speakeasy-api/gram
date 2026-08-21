@@ -80,6 +80,52 @@ func TestReconcilePolicyURLsAddsRemovesAndPreserves(t *testing.T) {
 	require.Contains(t, policyURLGrantPrincipals(t, ctx, conn, organizationID, otherPolicyID), "https://remove.example.com/mcp")
 }
 
+// A retained URL named in PreserveURLs keeps its grants byte-for-byte — the
+// audience a decision recorded is not rewritten by a policy save that merely
+// re-sends its list. Removal is unaffected: preserve applies to retained
+// URLs only.
+func TestReconcilePolicyURLsPreservesDecisionAudiences(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, organizationID := newURLGrantTestDatabase(t)
+	policyID := uuid.NewString()
+	decisionURL := "https://decided.example.com/mcp"
+	plainURL := "https://plain.example.com/mcp"
+	decisionAudience := []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, "approved-user")}
+	policyAudience := []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeRole, "security-admins")}
+
+	require.NoError(t, ReplacePolicyURLAudience(ctx, conn, organizationID, authz.ScopeRiskPolicyBypass, policyID, decisionURL, decisionAudience))
+	require.NoError(t, ReplacePolicyURLAudience(ctx, conn, organizationID, authz.ScopeRiskPolicyBypass, policyID, plainURL, decisionAudience))
+
+	require.NoError(t, ReconcilePolicyURLs(ctx, conn, ReconcilePolicyURLsInput{
+		OrganizationID: organizationID,
+		PolicyID:       policyID,
+		Scope:          authz.ScopeRiskPolicyBypass,
+		DesiredURLs:    []string{decisionURL, plainURL},
+		Principals:     policyAudience,
+		PreserveURLs:   map[string]struct{}{decisionURL: {}},
+	}))
+
+	require.Equal(t, map[string][]string{
+		decisionURL: {"user:approved-user"},
+		plainURL:    {"role:security-admins"},
+	}, policyURLGrantPrincipals(t, ctx, conn, organizationID, policyID))
+
+	// Dropping the preserved URL from the list still removes it: preserve
+	// protects retained grants, never membership.
+	require.NoError(t, ReconcilePolicyURLs(ctx, conn, ReconcilePolicyURLsInput{
+		OrganizationID: organizationID,
+		PolicyID:       policyID,
+		Scope:          authz.ScopeRiskPolicyBypass,
+		DesiredURLs:    []string{plainURL},
+		Principals:     policyAudience,
+		PreserveURLs:   map[string]struct{}{decisionURL: {}},
+	}))
+	require.Equal(t, map[string][]string{
+		plainURL: {"role:security-admins"},
+	}, policyURLGrantPrincipals(t, ctx, conn, organizationID, policyID))
+}
+
 func TestReconcilePolicyURLsRemovesMixedSelectorForDeselectedURL(t *testing.T) {
 	t.Parallel()
 

@@ -70,6 +70,7 @@ export const AUDIT_ACTIONS = [
   "mcp_approval_request:deny",
   "mcp_approval_request:evidence_changed",
   "mcp_approval_request:research_start",
+  "mcp_approval_request:supersede",
   "mcp_collection:attach_server",
   "mcp_collection:create",
   "mcp_collection:delete",
@@ -376,6 +377,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "detected changed evidence for approved MCP server";
     case "mcp_approval_request:research_start":
       return "started research on";
+    case "mcp_approval_request:supersede":
+      return "superseded the access decision for";
 
     case "mcp_collection:create":
       return "created collection";

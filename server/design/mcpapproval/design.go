@@ -22,7 +22,7 @@ var _ = Service("mcpApproval", func() {
 			security.SessionPayload()
 			security.ByKeyPayload()
 			security.ProjectPayload()
-			Attribute("status", String, "Only return requests in this status.")
+			Attribute("status", String, "Only return requests in this status: unreviewed, requested, approved, denied, or superseded.")
 			Attribute("limit", Int32, "The number of requests to return per page")
 		})
 
@@ -275,7 +275,7 @@ var ApprovalRequestSummary = Type("ApprovalRequestSummary", func() {
 	Attribute("server_slug", String, "The Shadow MCP inventory page slug for a server_url target — the same identifier the inventory derives from the canonical URL, so a request links to the server page it describes. Absent for stdio targets.")
 	Attribute("artifact_ref", String, "The resolved artifact identity. Absent when the server could not be identified, which must surface as unknown rather than as an absence of findings.")
 	Attribute("version_pinned", Boolean, "Whether the reference names an exact version.")
-	Attribute("status", String, "The request's current status.")
+	Attribute("status", String, "The request's current status: unreviewed, requested, approved, denied, or superseded (the latest decision was explicitly displaced by a policy URL-list edit; history preserved, no enforcement derives from it until re-decided).")
 	Attribute("requester_count", Int, "How many people have asked for this server.")
 	Attribute("evidence_changed_at", String, "When the daily recheck first found the permission-relevant evidence differing from what the latest approval rested on. Absent when nothing has drifted. Cleared only by recording a new decision.", func() { Format(FormatDateTime) })
 	Attribute("created_at", String, "When the request was first raised.", func() { Format(FormatDateTime) })

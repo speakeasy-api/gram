@@ -22,7 +22,7 @@ export type ListMcpApprovalRequestsSecurity = {
 
 export type ListMcpApprovalRequestsRequest = {
   /**
-   * Only return requests in this status.
+   * Only return requests in this status: unreviewed, requested, approved, denied, or superseded.
    */
   status?: string | undefined;
   /**

@@ -22394,11 +22394,11 @@ paths:
             operationId: listMcpApprovalRequests
             parameters:
                 - allowEmptyValue: true
-                  description: Only return requests in this status.
+                  description: 'Only return requests in this status: unreviewed, requested, approved, denied, or superseded.'
                   in: query
                   name: status
                   schema:
-                    description: Only return requests in this status.
+                    description: 'Only return requests in this status: unreviewed, requested, approved, denied, or superseded.'
                     type: string
                 - allowEmptyValue: true
                   description: The number of requests to return per page
@@ -61016,7 +61016,7 @@ components:
                     description: The Shadow MCP inventory page slug for a server_url target — the same identifier the inventory derives from the canonical URL, so a request links to the server page it describes. Absent for stdio targets.
                 status:
                     type: string
-                    description: The request's current status.
+                    description: 'The request''s current status: unreviewed, requested, approved, denied, or superseded (the latest decision was explicitly displaced by a policy URL-list edit; history preserved, no enforcement derives from it until re-decided).'
                 target_kind:
                     type: string
                     description: The namespace of the requested reference, such as server_url or stdio_command.
@@ -77863,13 +77863,21 @@ components:
                     type: integer
                     description: How many distinct people have asked for this server.
                     format: int64
+                standing_decision:
+                    type: string
+                    description: The latest recorded decision still standing for this server, independent of the request's lifecycle status — a reopened request's prior decision keeps enforcing until re-decided, and clients checking an edit against standing intent must read this rather than status. Absent when nothing was ever decided or the decision was superseded.
+                    enum:
+                        - approved
+                        - denied
                 status:
                     type: string
+                    description: 'superseded means the latest decision was explicitly displaced by a policy URL-list edit: the history is preserved but no enforcement derives from it until someone re-decides.'
                     enum:
                         - unreviewed
                         - requested
                         - approved
                         - denied
+                        - superseded
             description: The MCP approval request tracking review status for a server. Status records the review outcome, which may cover only selected principals; the server's access field reports enforcement state.
             required:
                 - id
@@ -83009,6 +83017,9 @@ components:
                     items:
                         type: string
                     description: Detection sources to enable.
+                supersede_decisions:
+                    type: boolean
+                    description: Confirms that this edit may displace standing MCP approval decisions its URL lists contradict, transitioning them to superseded (audit-logged, decision history preserved). Without it, a contradicting edit is rejected with a conflict naming the affected servers.
                 user_message:
                     type: string
                     description: Optional message shown to end users when this policy blocks an action or surfaces a flagged finding. Send an empty string to clear.

@@ -756,6 +756,16 @@ SELECT
   , r.evidence_changed_at
   , r.created_at
   , r.updated_at
+  -- Same latest-decision join as ListApprovalRequestsByTargetKeys.
+  , COALESCE((
+      SELECT d.decision
+      FROM mcp_approval_decisions d
+      WHERE d.mcp_approval_request_id = r.id
+        AND d.project_id = r.project_id
+        AND d.deleted IS FALSE
+      ORDER BY d.decided_at DESC, d.id DESC
+      LIMIT 1
+    ), '')::text AS latest_decision
   , (
       SELECT count(*)
       FROM mcp_approval_request_requesters req
@@ -778,6 +788,7 @@ type ListApprovalRequestTargetsRow struct {
 	EvidenceChangedAt pgtype.Timestamptz
 	CreatedAt         pgtype.Timestamptz
 	UpdatedAt         pgtype.Timestamptz
+	LatestDecision    string
 	RequesterCount    int64
 }
 
@@ -802,6 +813,7 @@ func (q *Queries) ListApprovalRequestTargets(ctx context.Context, projectID uuid
 			&i.EvidenceChangedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.LatestDecision,
 			&i.RequesterCount,
 		); err != nil {
 			return nil, err
@@ -914,6 +926,17 @@ SELECT
   , r.target_key
   , r.status
   , r.evidence_changed_at
+  -- The latest decision independent of lifecycle status: a reopened
+  -- request's prior decision still stands until re-decided.
+  , COALESCE((
+      SELECT d.decision
+      FROM mcp_approval_decisions d
+      WHERE d.mcp_approval_request_id = r.id
+        AND d.project_id = r.project_id
+        AND d.deleted IS FALSE
+      ORDER BY d.decided_at DESC, d.id DESC
+      LIMIT 1
+    ), '')::text AS latest_decision
   , (
       SELECT count(*)
       FROM mcp_approval_request_requesters req
@@ -938,6 +961,7 @@ type ListApprovalRequestsByTargetKeysRow struct {
 	TargetKey         string
 	Status            string
 	EvidenceChangedAt pgtype.Timestamptz
+	LatestDecision    string
 	RequesterCount    int64
 }
 
@@ -959,6 +983,7 @@ func (q *Queries) ListApprovalRequestsByTargetKeys(ctx context.Context, arg List
 			&i.TargetKey,
 			&i.Status,
 			&i.EvidenceChangedAt,
+			&i.LatestDecision,
 			&i.RequesterCount,
 		); err != nil {
 			return nil, err
@@ -1226,7 +1251,8 @@ func (q *Queries) ListServerURLApprovalRequests(ctx context.Context, projectID u
 
 const listStandingServerDecisionsForProject = `-- name: ListStandingServerDecisionsForProject :many
 SELECT
-    r.target_key
+    r.id
+  , r.target_key
   , r.target_raw
   , d.decision
   , d.granted_principal_urns
@@ -1242,10 +1268,12 @@ JOIN LATERAL (
 ) d ON TRUE
 WHERE r.project_id = $1
   AND r.target_kind = 'server_url'
+  AND r.status != 'superseded'
   AND r.deleted IS FALSE
 `
 
 type ListStandingServerDecisionsForProjectRow struct {
+	ID                   uuid.UUID
 	TargetKey            string
 	TargetRaw            string
 	Decision             string
@@ -1253,9 +1281,10 @@ type ListStandingServerDecisionsForProjectRow struct {
 }
 
 // The latest decision per server_url review in a project — what enforcement
-// derived its grants from. Read by the policy-creation backfill so a blocking
-// policy created after decisions were recorded honors them, instead of
-// blocking servers whose rows still read approved.
+// derived its grants from. Read by the policy-creation backfill and by the
+// policy URL-list conflict check (which is why the request id rides along).
+// Superseded requests are excluded: their decisions were explicitly
+// overridden and must never be replayed.
 func (q *Queries) ListStandingServerDecisionsForProject(ctx context.Context, projectID uuid.UUID) ([]ListStandingServerDecisionsForProjectRow, error) {
 	rows, err := q.db.Query(ctx, listStandingServerDecisionsForProject, projectID)
 	if err != nil {
@@ -1266,6 +1295,7 @@ func (q *Queries) ListStandingServerDecisionsForProject(ctx context.Context, pro
 	for rows.Next() {
 		var i ListStandingServerDecisionsForProjectRow
 		if err := rows.Scan(
+			&i.ID,
 			&i.TargetKey,
 			&i.TargetRaw,
 			&i.Decision,
@@ -1544,7 +1574,7 @@ ON CONFLICT (project_id, target_kind, target_key) WHERE deleted IS FALSE DO UPDA
 SET updated_at = clock_timestamp()
   , status = CASE
       WHEN EXCLUDED.status = 'requested'
-        AND mcp_approval_requests.status IN ('denied', 'unreviewed')
+        AND mcp_approval_requests.status IN ('denied', 'unreviewed', 'superseded')
         THEN EXCLUDED.status
       ELSE mcp_approval_requests.status
     END
