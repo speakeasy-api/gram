@@ -67,6 +67,7 @@ type Service struct {
 	workos orgprovision.WorkOSOrganizationCreator
 
 	openRouter           TrialKeyReviver
+	openRouterLimit      OpenRouterLimitUpdater
 	openRouterUsage      OpenRouterUsageReader
 	productFeatures      *productfeatures.Client
 	chatAnalysisSignaler analysis.Signaler
@@ -90,6 +91,11 @@ type TrialKeyReviver interface {
 	ReinstateAPIKeyLimitWithDB(ctx context.Context, db openrouter.DBTX, orgID string, keyType openrouter.KeyType, limit *int) (int, error)
 }
 
+// OpenRouterLimitUpdater changes a key while using a caller-held billing-lock session.
+type OpenRouterLimitUpdater interface {
+	RefreshAPIKeyLimitWithDB(ctx context.Context, db openrouter.DBTX, orgID string, keyType openrouter.KeyType, limit *int) (int, error)
+}
+
 // OpenRouterUsageReader reads the current monthly usage for a materialized key.
 type OpenRouterUsageReader interface {
 	GetCreditsUsed(ctx context.Context, orgID string, keyType openrouter.KeyType) (float64, int, error)
@@ -98,6 +104,7 @@ type OpenRouterUsageReader interface {
 // AdminOpenRouter is the complete OpenRouter surface used by the admin service.
 type AdminOpenRouter interface {
 	TrialKeyReviver
+	OpenRouterLimitUpdater
 	OpenRouterUsageReader
 }
 
@@ -118,6 +125,10 @@ const keyBillingLockWaitTimeout = 5 * time.Second
 type TrialKeysUnavailable struct{}
 
 func (TrialKeysUnavailable) RefreshAPIKeyLimit(context.Context, string, openrouter.KeyType, *int) (int, error) {
+	return 0, ErrOpenRouterUnavailable
+}
+
+func (TrialKeysUnavailable) RefreshAPIKeyLimitWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, *int) (int, error) {
 	return 0, ErrOpenRouterUnavailable
 }
 
@@ -182,6 +193,7 @@ func NewService(
 		),
 		workos:               workosClient,
 		openRouter:           openRouter,
+		openRouterLimit:      openRouter,
 		openRouterUsage:      openRouter,
 		productFeatures:      productFeatures,
 		chatAnalysisSignaler: chatAnalysisSignaler,

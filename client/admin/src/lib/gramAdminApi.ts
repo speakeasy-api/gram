@@ -616,6 +616,32 @@ export function getInferenceKeys(
   );
 }
 
+export type AdminInferenceKeyType = "chat" | "internal";
+
+export type AdminInferenceKeyLimit = Pick<
+  AdminInferenceKey,
+  "key_type" | "monthly_credits"
+>;
+
+export function setInferenceKeyMonthlyLimit(input: {
+  organizationID: string;
+  keyType: AdminInferenceKeyType;
+  monthlyCredits: number;
+}): Promise<AdminInferenceKeyLimit> {
+  return gramAdminMutation<AdminInferenceKeyLimit>(
+    "/admin/organization.setInferenceKeyMonthlyLimit",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        organization_id: input.organizationID,
+        key_type: input.keyType,
+        monthly_credits: input.monthlyCredits,
+      }),
+    },
+  );
+}
+
 export type AdminPaygBillingSummary = {
   period_start: string;
   period_end: string;

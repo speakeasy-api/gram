@@ -70,6 +70,8 @@ type Service interface {
 	// Returns the configured state of every materialized platform-managed
 	// OpenRouter key for an organization.
 	GetInferenceKeys(context.Context, *GetInferenceKeysPayload) (res []*AdminInferenceKey, err error)
+	// Sets the monthly limit for one materialized platform-managed OpenRouter key.
+	SetInferenceKeyMonthlyLimit(context.Context, *SetInferenceKeyMonthlyLimitPayload) (res *AdminInferenceKeyLimit, err error)
 	// Returns current PAYG usage and estimated cost for an organization.
 	GetPaygBillingSummary(context.Context, *GetPaygBillingSummaryPayload) (res *AdminPaygBillingSummary, err error)
 	// Returns the live Stripe subscription and payment state for an organization.
@@ -101,7 +103,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [21]string{"login", "callback", "logout", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "getPaygBillingSummary", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription"}
+var MethodNames = [22]string{"login", "callback", "logout", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getPaygBillingSummary", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -122,6 +124,13 @@ type AdminInferenceKey struct {
 	CreditsUsed    float64
 	MonthlyCredits int64
 	Disabled       bool
+}
+
+// AdminInferenceKeyLimit is the result type of the admin service
+// setInferenceKeyMonthlyLimit method.
+type AdminInferenceKeyLimit struct {
+	KeyType        string
+	MonthlyCredits int64
 }
 
 // AdminListOrganizationMembersResult is the result type of the admin service
@@ -509,6 +518,15 @@ type RearmTrialPayload struct {
 type ResumeStripeSubscriptionPayload struct {
 	AdminSessionToken *string
 	OrganizationID    string
+}
+
+// SetInferenceKeyMonthlyLimitPayload is the payload type of the admin service
+// setInferenceKeyMonthlyLimit method.
+type SetInferenceKeyMonthlyLimitPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+	KeyType           string
+	MonthlyCredits    int
 }
 
 // UpdateOrganizationPayload is the payload type of the admin service

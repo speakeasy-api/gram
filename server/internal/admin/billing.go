@@ -6,14 +6,20 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/sync/errgroup"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/background/activities/keybillinglock"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	orrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usage"
 	usagerepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
@@ -72,6 +78,97 @@ func (s *Service) GetInferenceKeys(ctx context.Context, payload *gen.GetInferenc
 	}
 
 	return result, nil
+}
+
+func (s *Service) SetInferenceKeyMonthlyLimit(ctx context.Context, payload *gen.SetInferenceKeyMonthlyLimitPayload) (*gen.AdminInferenceKeyLimit, error) {
+	keyType := openrouter.KeyType(payload.KeyType)
+	if payload.KeyType == "" {
+		return nil, oops.E(oops.CodeInvalid, nil, "key_type is required").LogWarn(ctx, s.logger)
+	}
+	if err := keyType.Validate(); err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid inference key type").LogWarn(ctx, s.logger)
+	}
+	if payload.MonthlyCredits < constants.MinimumPaygSpendCapUSD || payload.MonthlyCredits > constants.MaximumPaygSpendCapUSD {
+		return nil, oops.E(oops.CodeInvalid, nil, "monthly_credits must be between %d and %d", constants.MinimumPaygSpendCapUSD, constants.MaximumPaygSpendCapUSD).LogWarn(ctx, s.logger)
+	}
+
+	organizationID, err := s.canonicalAdminOrganizationID(ctx, payload.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	if s.openRouterLimit == nil {
+		return nil, oops.E(oops.CodeUnavailable, ErrOpenRouterUnavailable, "OpenRouter updates are temporarily unavailable").LogWarn(ctx, s.logger)
+	}
+
+	actor, _ := adminActor(ctx)
+	updatedLimit := 0
+	err = keybillinglock.WithAcquireTimeout(ctx, s.logger, s.db, organizationID, keyType, keyBillingLockWaitTimeout, func(conn *pgxpool.Conn) error {
+		tx, err := conn.Begin(ctx)
+		if err != nil {
+			return fmt.Errorf("begin inference key monthly limit transaction: %w", err)
+		}
+		defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+		key, err := orrepo.New(tx).GetOpenRouterAPIKey(ctx, orrepo.GetOpenRouterAPIKeyParams{
+			OrganizationID: organizationID,
+			KeyType:        string(keyType),
+		})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return oops.E(oops.CodeNotFound, err, "inference key is not available")
+		case err != nil:
+			return fmt.Errorf("load inference key before setting monthly limit: %w", err)
+		case key.Disabled:
+			return oops.E(oops.CodeConflict, nil, "the inference key is disabled")
+		}
+
+		requestedLimit := payload.MonthlyCredits
+		updatedLimit, err = s.openRouterLimit.RefreshAPIKeyLimitWithDB(ctx, tx, organizationID, keyType, &requestedLimit)
+		if err != nil {
+			if errors.Is(err, ErrOpenRouterUnavailable) {
+				return fmt.Errorf("refresh OpenRouter %s inference key monthly limit: %w", keyType, err)
+			}
+			return oops.E(oops.CodeGatewayError, err, "refresh OpenRouter %s inference key monthly limit", keyType).LogError(ctx, s.logger)
+		}
+
+		if err := s.audit.LogOpenRouterAPIKeySetSpendCap(ctx, tx, audit.LogOpenRouterAPIKeySetSpendCapEvent{
+			OrganizationID:      organizationID,
+			Actor:               actor,
+			ActorDisplayName:    conv.PtrEmpty(audit.SpeakeasyTeamActorLabel),
+			ActorSlug:           nil,
+			OpenRouterAPIKeyURN: urn.NewOpenRouterAPIKey(organizationID, string(keyType)),
+			KeyType:             string(keyType),
+			OperationIdentifier: "",
+			OpenRouterAPIKeySnapshotBefore: &audit.OpenRouterAPIKeySpendCapSnapshot{
+				MonthlyCredits: key.MonthlyCredits,
+			},
+			OpenRouterAPIKeySnapshotAfter: &audit.OpenRouterAPIKeySpendCapSnapshot{
+				MonthlyCredits: int64(updatedLimit),
+			},
+		}); err != nil {
+			return fmt.Errorf("record inference key monthly limit audit entry: %w", err)
+		}
+
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("commit inference key monthly limit transaction: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		var shareable *oops.ShareableError
+		switch {
+		case errors.As(err, &shareable):
+			return nil, shareable
+		case errors.Is(err, keybillinglock.ErrAcquireTimeout):
+			return nil, oops.E(oops.CodeUnavailable, err, "another billing operation is in progress; retry shortly").LogWarn(ctx, s.logger)
+		case errors.Is(err, ErrOpenRouterUnavailable):
+			return nil, oops.E(oops.CodeUnavailable, err, "OpenRouter updates are temporarily unavailable").LogWarn(ctx, s.logger)
+		default:
+			return nil, oops.E(oops.CodeUnexpected, err, "set inference key monthly limit").LogError(ctx, s.logger)
+		}
+	}
+
+	return &gen.AdminInferenceKeyLimit{KeyType: string(keyType), MonthlyCredits: int64(updatedLimit)}, nil
 }
 
 func (s *Service) GetPaygBillingSummary(ctx context.Context, payload *gen.GetPaygBillingSummaryPayload) (*gen.AdminPaygBillingSummary, error) {

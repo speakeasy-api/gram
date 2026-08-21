@@ -73,6 +73,14 @@ type RearmTrialRequestBody struct {
 	Days *int `form:"days,omitempty" json:"days,omitempty" xml:"days,omitempty"`
 }
 
+// SetInferenceKeyMonthlyLimitRequestBody is the type of the "admin" service
+// "setInferenceKeyMonthlyLimit" endpoint HTTP request body.
+type SetInferenceKeyMonthlyLimitRequestBody struct {
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	KeyType        *string `form:"key_type,omitempty" json:"key_type,omitempty" xml:"key_type,omitempty"`
+	MonthlyCredits *int    `form:"monthly_credits,omitempty" json:"monthly_credits,omitempty" xml:"monthly_credits,omitempty"`
+}
+
 // CancelStripeSubscriptionRequestBody is the type of the "admin" service
 // "cancelStripeSubscription" endpoint HTTP request body.
 type CancelStripeSubscriptionRequestBody struct {
@@ -408,6 +416,13 @@ type GetOrganizationStatsResponseBody struct {
 // GetInferenceKeysResponseBody is the type of the "admin" service
 // "getInferenceKeys" endpoint HTTP response body.
 type GetInferenceKeysResponseBody []*AdminInferenceKeyResponse
+
+// SetInferenceKeyMonthlyLimitResponseBody is the type of the "admin" service
+// "setInferenceKeyMonthlyLimit" endpoint HTTP response body.
+type SetInferenceKeyMonthlyLimitResponseBody struct {
+	KeyType        string `form:"key_type" json:"key_type" xml:"key_type"`
+	MonthlyCredits int64  `form:"monthly_credits" json:"monthly_credits" xml:"monthly_credits"`
+}
 
 // GetPaygBillingSummaryResponseBody is the type of the "admin" service
 // "getPaygBillingSummary" endpoint HTTP response body.
@@ -3583,6 +3598,196 @@ type GetInferenceKeysGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// SetInferenceKeyMonthlyLimitUnauthorizedResponseBody is the type of the
+// "admin" service "setInferenceKeyMonthlyLimit" endpoint HTTP response body
+// for the "unauthorized" error.
+type SetInferenceKeyMonthlyLimitUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetInferenceKeyMonthlyLimitForbiddenResponseBody is the type of the "admin"
+// service "setInferenceKeyMonthlyLimit" endpoint HTTP response body for the
+// "forbidden" error.
+type SetInferenceKeyMonthlyLimitForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetInferenceKeyMonthlyLimitBadRequestResponseBody is the type of the "admin"
+// service "setInferenceKeyMonthlyLimit" endpoint HTTP response body for the
+// "bad_request" error.
+type SetInferenceKeyMonthlyLimitBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetInferenceKeyMonthlyLimitNotFoundResponseBody is the type of the "admin"
+// service "setInferenceKeyMonthlyLimit" endpoint HTTP response body for the
+// "not_found" error.
+type SetInferenceKeyMonthlyLimitNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetInferenceKeyMonthlyLimitConflictResponseBody is the type of the "admin"
+// service "setInferenceKeyMonthlyLimit" endpoint HTTP response body for the
+// "conflict" error.
+type SetInferenceKeyMonthlyLimitConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetInferenceKeyMonthlyLimitUnsupportedMediaResponseBody is the type of the
+// "admin" service "setInferenceKeyMonthlyLimit" endpoint HTTP response body
+// for the "unsupported_media" error.
+type SetInferenceKeyMonthlyLimitUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetInferenceKeyMonthlyLimitInvalidResponseBody is the type of the "admin"
+// service "setInferenceKeyMonthlyLimit" endpoint HTTP response body for the
+// "invalid" error.
+type SetInferenceKeyMonthlyLimitInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetInferenceKeyMonthlyLimitInvariantViolationResponseBody is the type of the
+// "admin" service "setInferenceKeyMonthlyLimit" endpoint HTTP response body
+// for the "invariant_violation" error.
+type SetInferenceKeyMonthlyLimitInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetInferenceKeyMonthlyLimitUnexpectedResponseBody is the type of the "admin"
+// service "setInferenceKeyMonthlyLimit" endpoint HTTP response body for the
+// "unexpected" error.
+type SetInferenceKeyMonthlyLimitUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetInferenceKeyMonthlyLimitGatewayErrorResponseBody is the type of the
+// "admin" service "setInferenceKeyMonthlyLimit" endpoint HTTP response body
+// for the "gateway_error" error.
+type SetInferenceKeyMonthlyLimitGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetPaygBillingSummaryUnauthorizedResponseBody is the type of the "admin"
 // service "getPaygBillingSummary" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -4696,6 +4901,17 @@ func NewGetInferenceKeysResponseBody(res []*admin.AdminInferenceKey) GetInferenc
 			continue
 		}
 		body[i] = marshalAdminAdminInferenceKeyToAdminInferenceKeyResponse(val)
+	}
+	return body
+}
+
+// NewSetInferenceKeyMonthlyLimitResponseBody builds the HTTP response body
+// from the result of the "setInferenceKeyMonthlyLimit" endpoint of the "admin"
+// service.
+func NewSetInferenceKeyMonthlyLimitResponseBody(res *admin.AdminInferenceKeyLimit) *SetInferenceKeyMonthlyLimitResponseBody {
+	body := &SetInferenceKeyMonthlyLimitResponseBody{
+		KeyType:        res.KeyType,
+		MonthlyCredits: res.MonthlyCredits,
 	}
 	return body
 }
@@ -7200,6 +7416,156 @@ func NewGetInferenceKeysGatewayErrorResponseBody(res *goa.ServiceError) *GetInfe
 	return body
 }
 
+// NewSetInferenceKeyMonthlyLimitUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "setInferenceKeyMonthlyLimit" endpoint
+// of the "admin" service.
+func NewSetInferenceKeyMonthlyLimitUnauthorizedResponseBody(res *goa.ServiceError) *SetInferenceKeyMonthlyLimitUnauthorizedResponseBody {
+	body := &SetInferenceKeyMonthlyLimitUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetInferenceKeyMonthlyLimitForbiddenResponseBody builds the HTTP response
+// body from the result of the "setInferenceKeyMonthlyLimit" endpoint of the
+// "admin" service.
+func NewSetInferenceKeyMonthlyLimitForbiddenResponseBody(res *goa.ServiceError) *SetInferenceKeyMonthlyLimitForbiddenResponseBody {
+	body := &SetInferenceKeyMonthlyLimitForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetInferenceKeyMonthlyLimitBadRequestResponseBody builds the HTTP
+// response body from the result of the "setInferenceKeyMonthlyLimit" endpoint
+// of the "admin" service.
+func NewSetInferenceKeyMonthlyLimitBadRequestResponseBody(res *goa.ServiceError) *SetInferenceKeyMonthlyLimitBadRequestResponseBody {
+	body := &SetInferenceKeyMonthlyLimitBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetInferenceKeyMonthlyLimitNotFoundResponseBody builds the HTTP response
+// body from the result of the "setInferenceKeyMonthlyLimit" endpoint of the
+// "admin" service.
+func NewSetInferenceKeyMonthlyLimitNotFoundResponseBody(res *goa.ServiceError) *SetInferenceKeyMonthlyLimitNotFoundResponseBody {
+	body := &SetInferenceKeyMonthlyLimitNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetInferenceKeyMonthlyLimitConflictResponseBody builds the HTTP response
+// body from the result of the "setInferenceKeyMonthlyLimit" endpoint of the
+// "admin" service.
+func NewSetInferenceKeyMonthlyLimitConflictResponseBody(res *goa.ServiceError) *SetInferenceKeyMonthlyLimitConflictResponseBody {
+	body := &SetInferenceKeyMonthlyLimitConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetInferenceKeyMonthlyLimitUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "setInferenceKeyMonthlyLimit" endpoint
+// of the "admin" service.
+func NewSetInferenceKeyMonthlyLimitUnsupportedMediaResponseBody(res *goa.ServiceError) *SetInferenceKeyMonthlyLimitUnsupportedMediaResponseBody {
+	body := &SetInferenceKeyMonthlyLimitUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetInferenceKeyMonthlyLimitInvalidResponseBody builds the HTTP response
+// body from the result of the "setInferenceKeyMonthlyLimit" endpoint of the
+// "admin" service.
+func NewSetInferenceKeyMonthlyLimitInvalidResponseBody(res *goa.ServiceError) *SetInferenceKeyMonthlyLimitInvalidResponseBody {
+	body := &SetInferenceKeyMonthlyLimitInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetInferenceKeyMonthlyLimitInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "setInferenceKeyMonthlyLimit" endpoint
+// of the "admin" service.
+func NewSetInferenceKeyMonthlyLimitInvariantViolationResponseBody(res *goa.ServiceError) *SetInferenceKeyMonthlyLimitInvariantViolationResponseBody {
+	body := &SetInferenceKeyMonthlyLimitInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetInferenceKeyMonthlyLimitUnexpectedResponseBody builds the HTTP
+// response body from the result of the "setInferenceKeyMonthlyLimit" endpoint
+// of the "admin" service.
+func NewSetInferenceKeyMonthlyLimitUnexpectedResponseBody(res *goa.ServiceError) *SetInferenceKeyMonthlyLimitUnexpectedResponseBody {
+	body := &SetInferenceKeyMonthlyLimitUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetInferenceKeyMonthlyLimitGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "setInferenceKeyMonthlyLimit" endpoint
+// of the "admin" service.
+func NewSetInferenceKeyMonthlyLimitGatewayErrorResponseBody(res *goa.ServiceError) *SetInferenceKeyMonthlyLimitGatewayErrorResponseBody {
+	body := &SetInferenceKeyMonthlyLimitGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetPaygBillingSummaryUnauthorizedResponseBody builds the HTTP response
 // body from the result of the "getPaygBillingSummary" endpoint of the "admin"
 // service.
@@ -7991,6 +8357,19 @@ func NewGetInferenceKeysPayload(organizationID string, adminSessionToken *string
 	return v
 }
 
+// NewSetInferenceKeyMonthlyLimitPayload builds a admin service
+// setInferenceKeyMonthlyLimit endpoint payload.
+func NewSetInferenceKeyMonthlyLimitPayload(body *SetInferenceKeyMonthlyLimitRequestBody, adminSessionToken *string) *admin.SetInferenceKeyMonthlyLimitPayload {
+	v := &admin.SetInferenceKeyMonthlyLimitPayload{
+		OrganizationID: *body.OrganizationID,
+		KeyType:        *body.KeyType,
+		MonthlyCredits: *body.MonthlyCredits,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
 // NewGetPaygBillingSummaryPayload builds a admin service getPaygBillingSummary
 // endpoint payload.
 func NewGetPaygBillingSummaryPayload(organizationID string, adminSessionToken *string) *admin.GetPaygBillingSummaryPayload {
@@ -8166,6 +8545,36 @@ func ValidateRearmTrialRequestBody(body *RearmTrialRequestBody) (err error) {
 	if body.Days != nil {
 		if *body.Days > 365 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.days", *body.Days, 365, false))
+		}
+	}
+	return
+}
+
+// ValidateSetInferenceKeyMonthlyLimitRequestBody runs the validations defined
+// on SetInferenceKeyMonthlyLimitRequestBody
+func ValidateSetInferenceKeyMonthlyLimitRequestBody(body *SetInferenceKeyMonthlyLimitRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.KeyType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("key_type", "body"))
+	}
+	if body.MonthlyCredits == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("monthly_credits", "body"))
+	}
+	if body.KeyType != nil {
+		if !(*body.KeyType == "chat" || *body.KeyType == "internal") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.key_type", *body.KeyType, []any{"chat", "internal"}))
+		}
+	}
+	if body.MonthlyCredits != nil {
+		if *body.MonthlyCredits < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.monthly_credits", *body.MonthlyCredits, 1, true))
+		}
+	}
+	if body.MonthlyCredits != nil {
+		if *body.MonthlyCredits > 10000 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.monthly_credits", *body.MonthlyCredits, 10000, false))
 		}
 	}
 	return

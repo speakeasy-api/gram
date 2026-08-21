@@ -4063,6 +4063,241 @@ func DecodeGetInferenceKeysResponse(decoder func(*http.Response) goahttp.Decoder
 	}
 }
 
+// BuildSetInferenceKeyMonthlyLimitRequest instantiates a HTTP request object
+// with method and path set to call the "admin" service
+// "setInferenceKeyMonthlyLimit" endpoint
+func (c *Client) BuildSetInferenceKeyMonthlyLimitRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetInferenceKeyMonthlyLimitAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "setInferenceKeyMonthlyLimit", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetInferenceKeyMonthlyLimitRequest returns an encoder for requests
+// sent to the admin setInferenceKeyMonthlyLimit server.
+func EncodeSetInferenceKeyMonthlyLimitRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.SetInferenceKeyMonthlyLimitPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "setInferenceKeyMonthlyLimit", "*admin.SetInferenceKeyMonthlyLimitPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewSetInferenceKeyMonthlyLimitRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "setInferenceKeyMonthlyLimit", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetInferenceKeyMonthlyLimitResponse returns a decoder for responses
+// returned by the admin setInferenceKeyMonthlyLimit endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeSetInferenceKeyMonthlyLimitResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetInferenceKeyMonthlyLimitResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SetInferenceKeyMonthlyLimitResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setInferenceKeyMonthlyLimit", err)
+			}
+			err = ValidateSetInferenceKeyMonthlyLimitResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setInferenceKeyMonthlyLimit", err)
+			}
+			res := NewSetInferenceKeyMonthlyLimitAdminInferenceKeyLimitOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetInferenceKeyMonthlyLimitUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setInferenceKeyMonthlyLimit", err)
+			}
+			err = ValidateSetInferenceKeyMonthlyLimitUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setInferenceKeyMonthlyLimit", err)
+			}
+			return nil, NewSetInferenceKeyMonthlyLimitUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetInferenceKeyMonthlyLimitForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setInferenceKeyMonthlyLimit", err)
+			}
+			err = ValidateSetInferenceKeyMonthlyLimitForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setInferenceKeyMonthlyLimit", err)
+			}
+			return nil, NewSetInferenceKeyMonthlyLimitForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetInferenceKeyMonthlyLimitBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setInferenceKeyMonthlyLimit", err)
+			}
+			err = ValidateSetInferenceKeyMonthlyLimitBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setInferenceKeyMonthlyLimit", err)
+			}
+			return nil, NewSetInferenceKeyMonthlyLimitBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetInferenceKeyMonthlyLimitNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setInferenceKeyMonthlyLimit", err)
+			}
+			err = ValidateSetInferenceKeyMonthlyLimitNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setInferenceKeyMonthlyLimit", err)
+			}
+			return nil, NewSetInferenceKeyMonthlyLimitNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetInferenceKeyMonthlyLimitConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setInferenceKeyMonthlyLimit", err)
+			}
+			err = ValidateSetInferenceKeyMonthlyLimitConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setInferenceKeyMonthlyLimit", err)
+			}
+			return nil, NewSetInferenceKeyMonthlyLimitConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetInferenceKeyMonthlyLimitUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setInferenceKeyMonthlyLimit", err)
+			}
+			err = ValidateSetInferenceKeyMonthlyLimitUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setInferenceKeyMonthlyLimit", err)
+			}
+			return nil, NewSetInferenceKeyMonthlyLimitUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetInferenceKeyMonthlyLimitInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setInferenceKeyMonthlyLimit", err)
+			}
+			err = ValidateSetInferenceKeyMonthlyLimitInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setInferenceKeyMonthlyLimit", err)
+			}
+			return nil, NewSetInferenceKeyMonthlyLimitInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetInferenceKeyMonthlyLimitInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "setInferenceKeyMonthlyLimit", err)
+				}
+				err = ValidateSetInferenceKeyMonthlyLimitInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "setInferenceKeyMonthlyLimit", err)
+				}
+				return nil, NewSetInferenceKeyMonthlyLimitInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetInferenceKeyMonthlyLimitUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "setInferenceKeyMonthlyLimit", err)
+				}
+				err = ValidateSetInferenceKeyMonthlyLimitUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "setInferenceKeyMonthlyLimit", err)
+				}
+				return nil, NewSetInferenceKeyMonthlyLimitUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "setInferenceKeyMonthlyLimit", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetInferenceKeyMonthlyLimitGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "setInferenceKeyMonthlyLimit", err)
+			}
+			err = ValidateSetInferenceKeyMonthlyLimitGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "setInferenceKeyMonthlyLimit", err)
+			}
+			return nil, NewSetInferenceKeyMonthlyLimitGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "setInferenceKeyMonthlyLimit", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetPaygBillingSummaryRequest instantiates a HTTP request object with
 // method and path set to call the "admin" service "getPaygBillingSummary"
 // endpoint
