@@ -46,6 +46,7 @@ import (
 	hooksservernamesc "github.com/speakeasy-api/gram/server/gen/http/hooks_server_names/client"
 	instancesc "github.com/speakeasy-api/gram/server/gen/http/instances/client"
 	integrationsc "github.com/speakeasy-api/gram/server/gen/http/integrations/client"
+	jsonwebkeysetsc "github.com/speakeasy-api/gram/server/gen/http/json_web_key_sets/client"
 	keysc "github.com/speakeasy-api/gram/server/gen/http/keys/client"
 	litellmc "github.com/speakeasy-api/gram/server/gen/http/litellm/client"
 	mcpapprovalc "github.com/speakeasy-api/gram/server/gen/http/mcp_approval/client"
@@ -127,6 +128,7 @@ func UsageCommands() []string {
 		"hooks (claude|cursor|codex|ingest|upload-skill-content|skill-feedback|logs|metrics)",
 		"instances get-instance",
 		"integrations (get|list)",
+		"json-web-key-sets (create-set|update-set|list-sets|get-set|delete-set|list-keys|publish-key|activate-key|retire-key|revoke-key)",
 		"keys (create-key|list-keys|revoke-key|verify-key)",
 		"litellm (create-instance|list-instances|rotate-instance-key|revoke-instance|ingest|traces)",
 		"mcp-approval (list-requests|get-request|ensure-server-review|create-request|promote|refresh-evidence|start-research|record-decision)",
@@ -1280,6 +1282,48 @@ func ParseEndpoint(
 		integrationsListKeywordsFlag         = integrationsListFlags.String("keywords", "", "")
 		integrationsListSessionTokenFlag     = integrationsListFlags.String("session-token", "", "")
 		integrationsListProjectSlugInputFlag = integrationsListFlags.String("project-slug-input", "", "")
+
+		jsonWebKeySetsFlags = flag.NewFlagSet("json-web-key-sets", flag.ContinueOnError)
+
+		jsonWebKeySetsCreateSetFlags            = flag.NewFlagSet("create-set", flag.ExitOnError)
+		jsonWebKeySetsCreateSetBodyFlag         = jsonWebKeySetsCreateSetFlags.String("body", "REQUIRED", "")
+		jsonWebKeySetsCreateSetSessionTokenFlag = jsonWebKeySetsCreateSetFlags.String("session-token", "", "")
+
+		jsonWebKeySetsUpdateSetFlags            = flag.NewFlagSet("update-set", flag.ExitOnError)
+		jsonWebKeySetsUpdateSetBodyFlag         = jsonWebKeySetsUpdateSetFlags.String("body", "REQUIRED", "")
+		jsonWebKeySetsUpdateSetSessionTokenFlag = jsonWebKeySetsUpdateSetFlags.String("session-token", "", "")
+
+		jsonWebKeySetsListSetsFlags            = flag.NewFlagSet("list-sets", flag.ExitOnError)
+		jsonWebKeySetsListSetsSessionTokenFlag = jsonWebKeySetsListSetsFlags.String("session-token", "", "")
+
+		jsonWebKeySetsGetSetFlags            = flag.NewFlagSet("get-set", flag.ExitOnError)
+		jsonWebKeySetsGetSetIDFlag           = jsonWebKeySetsGetSetFlags.String("id", "REQUIRED", "")
+		jsonWebKeySetsGetSetSessionTokenFlag = jsonWebKeySetsGetSetFlags.String("session-token", "", "")
+
+		jsonWebKeySetsDeleteSetFlags            = flag.NewFlagSet("delete-set", flag.ExitOnError)
+		jsonWebKeySetsDeleteSetIDFlag           = jsonWebKeySetsDeleteSetFlags.String("id", "REQUIRED", "")
+		jsonWebKeySetsDeleteSetSessionTokenFlag = jsonWebKeySetsDeleteSetFlags.String("session-token", "", "")
+
+		jsonWebKeySetsListKeysFlags              = flag.NewFlagSet("list-keys", flag.ExitOnError)
+		jsonWebKeySetsListKeysSetIDFlag          = jsonWebKeySetsListKeysFlags.String("set-id", "REQUIRED", "")
+		jsonWebKeySetsListKeysIncludeRevokedFlag = jsonWebKeySetsListKeysFlags.String("include-revoked", "", "")
+		jsonWebKeySetsListKeysSessionTokenFlag   = jsonWebKeySetsListKeysFlags.String("session-token", "", "")
+
+		jsonWebKeySetsPublishKeyFlags            = flag.NewFlagSet("publish-key", flag.ExitOnError)
+		jsonWebKeySetsPublishKeySetIDFlag        = jsonWebKeySetsPublishKeyFlags.String("set-id", "REQUIRED", "")
+		jsonWebKeySetsPublishKeySessionTokenFlag = jsonWebKeySetsPublishKeyFlags.String("session-token", "", "")
+
+		jsonWebKeySetsActivateKeyFlags            = flag.NewFlagSet("activate-key", flag.ExitOnError)
+		jsonWebKeySetsActivateKeyIDFlag           = jsonWebKeySetsActivateKeyFlags.String("id", "REQUIRED", "")
+		jsonWebKeySetsActivateKeySessionTokenFlag = jsonWebKeySetsActivateKeyFlags.String("session-token", "", "")
+
+		jsonWebKeySetsRetireKeyFlags            = flag.NewFlagSet("retire-key", flag.ExitOnError)
+		jsonWebKeySetsRetireKeyIDFlag           = jsonWebKeySetsRetireKeyFlags.String("id", "REQUIRED", "")
+		jsonWebKeySetsRetireKeySessionTokenFlag = jsonWebKeySetsRetireKeyFlags.String("session-token", "", "")
+
+		jsonWebKeySetsRevokeKeyFlags            = flag.NewFlagSet("revoke-key", flag.ExitOnError)
+		jsonWebKeySetsRevokeKeyIDFlag           = jsonWebKeySetsRevokeKeyFlags.String("id", "REQUIRED", "")
+		jsonWebKeySetsRevokeKeySessionTokenFlag = jsonWebKeySetsRevokeKeyFlags.String("session-token", "", "")
 
 		keysFlags = flag.NewFlagSet("keys", flag.ContinueOnError)
 
@@ -3816,6 +3860,18 @@ func ParseEndpoint(
 	integrationsGetFlags.Usage = integrationsGetUsage
 	integrationsListFlags.Usage = integrationsListUsage
 
+	jsonWebKeySetsFlags.Usage = jsonWebKeySetsUsage
+	jsonWebKeySetsCreateSetFlags.Usage = jsonWebKeySetsCreateSetUsage
+	jsonWebKeySetsUpdateSetFlags.Usage = jsonWebKeySetsUpdateSetUsage
+	jsonWebKeySetsListSetsFlags.Usage = jsonWebKeySetsListSetsUsage
+	jsonWebKeySetsGetSetFlags.Usage = jsonWebKeySetsGetSetUsage
+	jsonWebKeySetsDeleteSetFlags.Usage = jsonWebKeySetsDeleteSetUsage
+	jsonWebKeySetsListKeysFlags.Usage = jsonWebKeySetsListKeysUsage
+	jsonWebKeySetsPublishKeyFlags.Usage = jsonWebKeySetsPublishKeyUsage
+	jsonWebKeySetsActivateKeyFlags.Usage = jsonWebKeySetsActivateKeyUsage
+	jsonWebKeySetsRetireKeyFlags.Usage = jsonWebKeySetsRetireKeyUsage
+	jsonWebKeySetsRevokeKeyFlags.Usage = jsonWebKeySetsRevokeKeyUsage
+
 	keysFlags.Usage = keysUsage
 	keysCreateKeyFlags.Usage = keysCreateKeyUsage
 	keysListKeysFlags.Usage = keysListKeysUsage
@@ -4380,6 +4436,8 @@ func ParseEndpoint(
 			svcf = instancesFlags
 		case "integrations":
 			svcf = integrationsFlags
+		case "json-web-key-sets":
+			svcf = jsonWebKeySetsFlags
 		case "keys":
 			svcf = keysFlags
 		case "litellm":
@@ -5196,6 +5254,40 @@ func ParseEndpoint(
 
 			case "list":
 				epf = integrationsListFlags
+
+			}
+
+		case "json-web-key-sets":
+			switch epn {
+			case "create-set":
+				epf = jsonWebKeySetsCreateSetFlags
+
+			case "update-set":
+				epf = jsonWebKeySetsUpdateSetFlags
+
+			case "list-sets":
+				epf = jsonWebKeySetsListSetsFlags
+
+			case "get-set":
+				epf = jsonWebKeySetsGetSetFlags
+
+			case "delete-set":
+				epf = jsonWebKeySetsDeleteSetFlags
+
+			case "list-keys":
+				epf = jsonWebKeySetsListKeysFlags
+
+			case "publish-key":
+				epf = jsonWebKeySetsPublishKeyFlags
+
+			case "activate-key":
+				epf = jsonWebKeySetsActivateKeyFlags
+
+			case "retire-key":
+				epf = jsonWebKeySetsRetireKeyFlags
+
+			case "revoke-key":
+				epf = jsonWebKeySetsRevokeKeyFlags
 
 			}
 
@@ -7324,6 +7416,40 @@ func ParseEndpoint(
 			case "list":
 				endpoint = c.List()
 				data, err = integrationsc.BuildListPayload(*integrationsListKeywordsFlag, *integrationsListSessionTokenFlag, *integrationsListProjectSlugInputFlag)
+			}
+		case "json-web-key-sets":
+			c := jsonwebkeysetsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "create-set":
+				endpoint = c.CreateSet()
+				data, err = jsonwebkeysetsc.BuildCreateSetPayload(*jsonWebKeySetsCreateSetBodyFlag, *jsonWebKeySetsCreateSetSessionTokenFlag)
+			case "update-set":
+				endpoint = c.UpdateSet()
+				data, err = jsonwebkeysetsc.BuildUpdateSetPayload(*jsonWebKeySetsUpdateSetBodyFlag, *jsonWebKeySetsUpdateSetSessionTokenFlag)
+			case "list-sets":
+				endpoint = c.ListSets()
+				data, err = jsonwebkeysetsc.BuildListSetsPayload(*jsonWebKeySetsListSetsSessionTokenFlag)
+			case "get-set":
+				endpoint = c.GetSet()
+				data, err = jsonwebkeysetsc.BuildGetSetPayload(*jsonWebKeySetsGetSetIDFlag, *jsonWebKeySetsGetSetSessionTokenFlag)
+			case "delete-set":
+				endpoint = c.DeleteSet()
+				data, err = jsonwebkeysetsc.BuildDeleteSetPayload(*jsonWebKeySetsDeleteSetIDFlag, *jsonWebKeySetsDeleteSetSessionTokenFlag)
+			case "list-keys":
+				endpoint = c.ListKeys()
+				data, err = jsonwebkeysetsc.BuildListKeysPayload(*jsonWebKeySetsListKeysSetIDFlag, *jsonWebKeySetsListKeysIncludeRevokedFlag, *jsonWebKeySetsListKeysSessionTokenFlag)
+			case "publish-key":
+				endpoint = c.PublishKey()
+				data, err = jsonwebkeysetsc.BuildPublishKeyPayload(*jsonWebKeySetsPublishKeySetIDFlag, *jsonWebKeySetsPublishKeySessionTokenFlag)
+			case "activate-key":
+				endpoint = c.ActivateKey()
+				data, err = jsonwebkeysetsc.BuildActivateKeyPayload(*jsonWebKeySetsActivateKeyIDFlag, *jsonWebKeySetsActivateKeySessionTokenFlag)
+			case "retire-key":
+				endpoint = c.RetireKey()
+				data, err = jsonwebkeysetsc.BuildRetireKeyPayload(*jsonWebKeySetsRetireKeyIDFlag, *jsonWebKeySetsRetireKeySessionTokenFlag)
+			case "revoke-key":
+				endpoint = c.RevokeKey()
+				data, err = jsonwebkeysetsc.BuildRevokeKeyPayload(*jsonWebKeySetsRevokeKeyIDFlag, *jsonWebKeySetsRevokeKeySessionTokenFlag)
 			}
 		case "keys":
 			c := keysc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -13624,6 +13750,226 @@ func integrationsListUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "integrations list --keywords '[\n      \"aaa\",\n      \"aaa\",\n      \"aaa\"\n   ]' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// jsonWebKeySetsUsage displays the usage of the json-web-key-sets command and
+// its subcommands.
+func jsonWebKeySetsUsage() {
+	fmt.Fprintln(os.Stderr, `Manage organization-level JSON Web Key Sets — published public keys backed by customer KMS keys — and the publish/activate/retire/revoke lifecycle of their keys.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] json-web-key-sets COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    create-set: Create a JSON Web Key Set backed by an organization external key, minting and publishing the set's first key straight to active. Reads the backing key's public half from the customer's KMS and refuses when the key's real algorithm disagrees with the one recorded against it. Rate limited per organization. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    update-set: Update a JSON Web Key Set's name and backing external key. Requires org:admin. Both fields are replaced, not patched. Re-pointing the backing key is how rotation begins: point the set at the new external key, then publish a key from it. Already-published keys are unaffected — each keeps signing with the external key it was minted from.`)
+	fmt.Fprintln(os.Stderr, `    list-sets: List the organization's JSON Web Key Sets. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    get-set: Get a JSON Web Key Set by ID. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    delete-set: Soft-delete a JSON Web Key Set by ID, withdrawing every key still published in it in the same operation. Requires org:admin. Tokens signed with the set's keys stop verifying, so treat this as decommissioning the set's whole trust anchor rather than tidying up.`)
+	fmt.Fprintln(os.Stderr, `    list-keys: List a JSON Web Key Set's published keys, newest first. Revoked keys drop out of the default listing; pass include_revoked to see the set's full revocation history. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    publish-key: Mint and publish a new key from the set's current backing external key. The key is published as pending — visible to verifiers so their caches warm up — unless the set has no active key, in which case it activates immediately. Publishing the same backing key again while its kid is present in the set (including revoked) is refused as a conflict. Reads the public half from the customer's KMS; rate limited per organization. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    activate-key: Make a published key the set's active signing key, retiring the previously active key in the same operation. The key must be pending or retired; activating the already-active key is a no-op. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    retire-key: Take the set's active key out of signing use without withdrawing it: the key stays published so tokens already signed with it keep verifying. The key must be active. This is the graceful wind-down; use revoke when the key must stop verifying too. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    revoke-key: Withdraw a published key entirely: it leaves the published set and tokens signed with it stop verifying. This is the compromise response, not the graceful wind-down — use retire for that. A revoked kid can never be republished into the set. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s json-web-key-sets COMMAND --help\n", os.Args[0])
+}
+func jsonWebKeySetsCreateSetUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] json-web-key-sets create-set", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a JSON Web Key Set backed by an organization external key, minting and publishing the set's first key straight to active. Reads the backing key's public half from the customer's KMS and refuses when the key's real algorithm disagrees with the one recorded against it. Rate limited per organization. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "json-web-key-sets create-set --body '{\n      \"external_key_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func jsonWebKeySetsUpdateSetUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] json-web-key-sets update-set", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Update a JSON Web Key Set's name and backing external key. Requires org:admin. Both fields are replaced, not patched. Re-pointing the backing key is how rotation begins: point the set at the new external key, then publish a key from it. Already-published keys are unaffected — each keeps signing with the external key it was minted from.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "json-web-key-sets update-set --body '{\n      \"external_key_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func jsonWebKeySetsListSetsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] json-web-key-sets list-sets", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the organization's JSON Web Key Sets. Requires org:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "json-web-key-sets list-sets --session-token \"abc123\"")
+}
+
+func jsonWebKeySetsGetSetUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] json-web-key-sets get-set", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get a JSON Web Key Set by ID. Requires org:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "json-web-key-sets get-set --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func jsonWebKeySetsDeleteSetUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] json-web-key-sets delete-set", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Soft-delete a JSON Web Key Set by ID, withdrawing every key still published in it in the same operation. Requires org:admin. Tokens signed with the set's keys stop verifying, so treat this as decommissioning the set's whole trust anchor rather than tidying up.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "json-web-key-sets delete-set --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func jsonWebKeySetsListKeysUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] json-web-key-sets list-keys", os.Args[0])
+	fmt.Fprint(os.Stderr, " -set-id STRING")
+	fmt.Fprint(os.Stderr, " -include-revoked BOOL")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List a JSON Web Key Set's published keys, newest first. Revoked keys drop out of the default listing; pass include_revoked to see the set's full revocation history. Requires org:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -set-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -include-revoked BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "json-web-key-sets list-keys --set-id \"550e8400-e29b-41d4-a716-446655440000\" --include-revoked false --session-token \"abc123\"")
+}
+
+func jsonWebKeySetsPublishKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] json-web-key-sets publish-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -set-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Mint and publish a new key from the set's current backing external key. The key is published as pending — visible to verifiers so their caches warm up — unless the set has no active key, in which case it activates immediately. Publishing the same backing key again while its kid is present in the set (including revoked) is refused as a conflict. Reads the public half from the customer's KMS; rate limited per organization. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -set-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "json-web-key-sets publish-key --set-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func jsonWebKeySetsActivateKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] json-web-key-sets activate-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Make a published key the set's active signing key, retiring the previously active key in the same operation. The key must be pending or retired; activating the already-active key is a no-op. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "json-web-key-sets activate-key --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func jsonWebKeySetsRetireKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] json-web-key-sets retire-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Take the set's active key out of signing use without withdrawing it: the key stays published so tokens already signed with it keep verifying. The key must be active. This is the graceful wind-down; use revoke when the key must stop verifying too. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "json-web-key-sets retire-key --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func jsonWebKeySetsRevokeKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] json-web-key-sets revoke-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Withdraw a published key entirely: it leaves the published set and tokens signed with it stop verifying. This is the compromise response, not the graceful wind-down — use retire for that. A revoked kid can never be republished into the set. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "json-web-key-sets revoke-key --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
 }
 
 // keysUsage displays the usage of the keys command and its subcommands.

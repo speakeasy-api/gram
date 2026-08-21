@@ -28,6 +28,8 @@ var All = []outbox.EventRegistration{
 	EnvironmentV1,
 	GcpIamCredentialV1,
 	GcpKmsKeyV1,
+	JsonWebKeySetV1,
+	JsonWebKeyV1,
 	LiteLLMInstanceV1,
 	McpApprovalRequestV1,
 	McpCollectionV1,
