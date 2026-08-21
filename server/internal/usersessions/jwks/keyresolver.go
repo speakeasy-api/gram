@@ -226,7 +226,15 @@ func (k *KeyResolver) refreshShared(ctx context.Context, source Source) (*Result
 			// and retry the origin instead of being negative-cached like a
 			// successful consult. Everything else about the stored state is
 			// kept as it was.
-			k.markConsultFailure(ctx, source, state)
+			//
+			// A canceled caller is the exception: its failure says nothing
+			// about the origin, and stamping it would suppress refresh
+			// against a healthy source for the whole cooldown. The check is
+			// on the caller's context, so a fetch timeout (whose deadline
+			// lives on the derived context) still counts as a consult.
+			if ctx.Err() == nil {
+				k.markConsultFailure(ctx, source, state)
+			}
 			return nil, err
 		}
 		k.store(ctx, source, state, resolved)
@@ -280,8 +288,14 @@ func (k *KeyResolver) store(ctx context.Context, source Source, prior CacheState
 
 // markConsultFailure re-stamps RefreshedAt on the stored state after a forced
 // refresh whose upstream consult failed, so the cooldown applies to failures
-// the same as to successes. The write failure policy matches store: log only.
+// the same as to successes. The write failure policy matches store: log only,
+// and so does the recency guard — a concurrent flight that stored a fresher
+// document since this resolution began must not have it overwritten with the
+// prior one.
 func (k *KeyResolver) markConsultFailure(ctx context.Context, source Source, prior CacheState) {
+	if current, err := k.cache.Get(ctx, source.CacheKey()); err == nil && current.RefreshedAt.After(prior.RefreshedAt) {
+		return
+	}
 	marked := CacheState{
 		Document:    prior.Document,
 		ETag:        prior.ETag,

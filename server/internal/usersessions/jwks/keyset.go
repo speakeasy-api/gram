@@ -34,11 +34,12 @@ var (
 
 // ValidatePublicOnly rejects a JWK Set document containing private or
 // symmetric key material. Detection keys on the JWK members that only appear
-// on non-public keys — "d" (RSA / EC / OKP private component) and "k"
-// (symmetric oct key) — over the raw JSON, so a malformed key cannot smuggle
-// material past a stricter parser by failing it. A nil document is accepted:
-// absence of a key set is the caller's policy question, not a validation
-// failure.
+// on non-public keys — "d" (RSA / EC / OKP private component), the RFC 7518
+// §6.3.2 RSA CRT and additional-primes members (p, q, dp, dq, qi, oth), and
+// "k" (symmetric oct key) — over the raw JSON, so a malformed key cannot
+// smuggle material past a stricter parser by failing it. A nil document is
+// accepted: absence of a key set is the caller's policy question, not a
+// validation failure.
 //
 // Shared with the cimd package, whose -02 §4.1 document screening is the same
 // rule with its own wire-format wrapping.
