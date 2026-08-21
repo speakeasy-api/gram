@@ -1,0 +1,25 @@
+server/internal/otel/enrich_logs.go
+  s_a45598db4a4df7::t_464c667ae5c74e 9,80-93
+server/internal/otel/handler_ilog_transforms.go
+  s_a45598db4a4df7::t_464c667ae5c74e 46
+server/internal/otel/enrich_directory_test.go
+  s_a45598db4a4df7::t_464c667ae5c74e 18-20,45,58,61-66,74
+server/internal/otel/enrich_directory.go
+  s_a45598db4a4df7::t_464c667ae5c74e 28,33,42-43,62,65,79,84,91,94,98,106-107,130-131,142,149,151-152,157-162,165-168,171-172,189,232-235,238,240-241,244-245,248-249
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "12aa4bcf9401893a0e315546b6f520dccada96ae",
+  "prompts": {},
+  "sessions": {
+    "s_a45598db4a4df7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a02004-6932-7dc0-8650-7782e08db883",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
