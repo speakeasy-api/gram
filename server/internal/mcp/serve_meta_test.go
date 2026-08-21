@@ -163,8 +163,11 @@ func TestServePublic_MetaEndpoint_Initialize(t *testing.T) {
 	require.NoError(t, json.Unmarshal(envelope["result"], &result))
 	require.Equal(t, mcpversions.ServedMetaServer, result.ProtocolVersion)
 	require.Equal(t, "Gram Gateway", result.ServerInfo.Name)
-	require.Contains(t, result.Instructions, "test gateway")
+	// Instructions are deliberately generic: the member inventory belongs to
+	// list_servers, so neither the meta server's name nor its members appear.
 	require.Contains(t, result.Instructions, "list_servers")
+	require.Contains(t, result.Instructions, "rediscovery")
+	require.NotContains(t, result.Instructions, "test gateway")
 }
 
 func TestServePublic_MetaEndpoint_ServerDiscover(t *testing.T) {

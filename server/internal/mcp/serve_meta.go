@@ -27,52 +27,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
+	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
-
-const metaServerMaxBodyBytes = 1 << 20
-
-const (
-	listServersToolName    = "list_servers"
-	describeServerToolName = "describe_server"
-)
-
-var metaListServersSchema = json.RawMessage(`{
-	"type": "object",
-	"properties": {},
-	"additionalProperties": false
-}`)
-
-var metaDescribeServerSchema = json.RawMessage(`{
-	"type": "object",
-	"properties": {
-		"server": {
-			"type": "string",
-			"description": "Slug of the member server to describe, as returned by list_servers."
-		}
-	},
-	"required": ["server"],
-	"additionalProperties": false
-}`)
-
-var metaDescribeToolsSchema = json.RawMessage(`{
-	"type": "object",
-	"properties": {
-		"tools": {
-			"type": "array",
-			"items": {
-				"type": "string",
-				"description": "Qualified tool name (serverslug--toolname) to fetch the full input schema for."
-			},
-			"description": "Qualified tool names to describe."
-		}
-	},
-	"required": ["tools"],
-	"additionalProperties": false
-}`)
 
 // serveResolvedMetaMCPEndpoint terminates MCP for a meta-MCP-backed
 // endpoint: it runs the issuer gate when the meta server is issuer-gated,
@@ -114,7 +74,7 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		r = r.WithContext(ctx)
 	}
 
-	r.Body = http.MaxBytesReader(w, r.Body, metaServerMaxBodyBytes)
+	r.Body = http.MaxBytesReader(w, r.Body, metamcp.MaxBodyBytes)
 
 	bodyBytes, err := io.ReadAll(r.Body)
 	var maxBytesErr *http.MaxBytesError
@@ -191,9 +151,9 @@ func (s *Service) handleMetaMCPRequest(
 	case "ping":
 		return handlePing(ctx, logger, req.ID, serverInfoMetaServer)
 	case "initialize":
-		return s.handleMetaInitialize(ctx, logger, mcpEndpoint, metaServer, req)
+		return s.handleMetaInitialize(ctx, logger, req)
 	case "server/discover":
-		return s.handleMetaServerDiscover(ctx, logger, mcpEndpoint, metaServer, req)
+		return s.handleMetaServerDiscover(ctx, logger, req)
 	case "notifications/initialized", "notifications/cancelled":
 		return nil, nil
 	case "tools/list":
@@ -287,8 +247,6 @@ func unsupportedMetaProtocolVersionError(req *rawRequest, declared string) *oops
 func (s *Service) handleMetaInitialize(
 	ctx context.Context,
 	logger *slog.Logger,
-	mcpEndpoint *mcpendpointsrepo.McpEndpoint,
-	metaServer *metamcprepo.MetaMcpServer,
 	req *rawRequest,
 ) (json.RawMessage, error) {
 	// Parsed purely for telemetry: this surface answers ServedMetaServer
@@ -301,11 +259,6 @@ func (s *Service) handleMetaInitialize(
 	recordMCPProtocolVersionSpan(ctx, params.ProtocolVersion, mcpversions.ServedMetaServer)
 	s.metrics.RecordMCPInitialize(ctx, params.ProtocolVersion, mcpversions.ServedMetaServer)
 
-	instructions, err := s.buildMetaServerInstructions(ctx, logger, mcpEndpoint, metaServer)
-	if err != nil {
-		return nil, err
-	}
-
 	result := &result[initializeResult]{
 		ID: req.ID,
 		Result: initializeResult{
@@ -314,7 +267,7 @@ func (s *Service) handleMetaInitialize(
 				"tools": json.RawMessage("{}"),
 			},
 			ServerInfo:   serverInfoMetaServer,
-			Instructions: instructions,
+			Instructions: metamcp.Instructions,
 		},
 		serverIdentity: serverInfoMetaServer,
 	}
@@ -325,38 +278,20 @@ func (s *Service) handleMetaInitialize(
 	return bs, nil
 }
 
-// metaServerDiscoverResult is the response shape for MCP 2026-07-28's
-// sessionless server/discover method: the same self-description initialize
-// answers, minus any session establishment, plus the set of protocol
-// revisions the surface can serve.
-type metaServerDiscoverResult struct {
-	ProtocolVersions []string                   `json:"protocolVersions"`
-	Capabilities     map[string]json.RawMessage `json:"capabilities"`
-	ServerInfo       serverInfo                 `json:"serverInfo"`
-	Instructions     string                     `json:"instructions,omitempty"`
-}
-
 func (s *Service) handleMetaServerDiscover(
 	ctx context.Context,
 	logger *slog.Logger,
-	mcpEndpoint *mcpendpointsrepo.McpEndpoint,
-	metaServer *metamcprepo.MetaMcpServer,
 	req *rawRequest,
 ) (json.RawMessage, error) {
-	instructions, err := s.buildMetaServerInstructions(ctx, logger, mcpEndpoint, metaServer)
-	if err != nil {
-		return nil, err
-	}
-
-	result := &result[metaServerDiscoverResult]{
+	result := &result[metamcp.DiscoverResult]{
 		ID: req.ID,
-		Result: metaServerDiscoverResult{
+		Result: metamcp.DiscoverResult{
 			ProtocolVersions: []string{mcpversions.ServedMetaServer},
 			Capabilities: map[string]json.RawMessage{
 				"tools": json.RawMessage("{}"),
 			},
 			ServerInfo:   serverInfoMetaServer,
-			Instructions: instructions,
+			Instructions: metamcp.Instructions,
 		},
 		serverIdentity: serverInfoMetaServer,
 	}
@@ -368,35 +303,16 @@ func (s *Service) handleMetaServerDiscover(
 }
 
 func (s *Service) listMetaServerTools(ctx context.Context, logger *slog.Logger, req *rawRequest) (json.RawMessage, error) {
-	tools := []*toolListEntry{
-		{
-			Name:        listServersToolName,
-			Description: "List the member MCP servers this gateway fronts: which systems are reachable, their ordering, and their connection state. Start here to orient before drilling into a specific server.",
-			InputSchema: metaListServersSchema,
+	contract := metamcp.Tools(dynamicExecuteToolSchema)
+	tools := make([]*toolListEntry, 0, len(contract))
+	for _, tool := range contract {
+		tools = append(tools, &toolListEntry{
+			Name:        tool.Name,
+			Description: tool.Description,
+			InputSchema: tool.InputSchema,
 			Annotations: nil,
 			Meta:        nil,
-		},
-		{
-			Name:        describeServerToolName,
-			Description: "Describe one member server's tool catalog: qualified tool names and descriptions, without input schemas. Call describe_tools for the schemas of the specific tools you intend to use.",
-			InputSchema: metaDescribeServerSchema,
-			Annotations: nil,
-			Meta:        nil,
-		},
-		{
-			Name:        describeToolsToolName,
-			Description: "Fetch full input schemas for named tools. Do not call a tool without first describing it to get its input schema.",
-			InputSchema: metaDescribeToolsSchema,
-			Annotations: nil,
-			Meta:        nil,
-		},
-		{
-			Name:        executeToolToolName,
-			Description: "Execute a specific tool by qualified name (serverslug--toolname), passing arguments that match that tool's schema.",
-			InputSchema: dynamicExecuteToolSchema,
-			Annotations: nil,
-			Meta:        nil,
-		},
+		})
 	}
 
 	bs, err := json.Marshal(&result[toolsListResultTools]{
@@ -426,9 +342,9 @@ func (s *Service) callMetaServerTool(
 	}
 
 	switch params.Name {
-	case listServersToolName:
+	case metamcp.ToolListServers:
 		return s.handleMetaListServersCall(ctx, logger, mcpEndpoint, metaServer, req)
-	case describeServerToolName, describeToolsToolName, executeToolToolName:
+	case metamcp.ToolDescribeServer, metamcp.ToolDescribeTools, metamcp.ToolExecuteTool:
 		// Member tool catalogs and execution routing require the meta-server
 		// runtime (AGE-3291). The tools are part of the fixed contract, so
 		// they answer deterministically rather than as unknown tools.
@@ -436,16 +352,6 @@ func (s *Service) callMetaServerTool(
 	default:
 		return nil, oops.E(oops.CodeNotFound, nil, "unknown tool %q", params.Name).LogError(ctx, logger)
 	}
-}
-
-// metaListedServer is one member entry in a list_servers result. Status is
-// fixed at "unknown" until the meta-server runtime (AGE-3291) holds live
-// member sessions to report on.
-type metaListedServer struct {
-	Slug      string `json:"slug"`
-	Name      string `json:"name,omitempty"`
-	SortOrder int    `json:"sortOrder"`
-	Status    string `json:"status"`
 }
 
 func (s *Service) handleMetaListServersCall(
@@ -463,17 +369,17 @@ func (s *Service) handleMetaListServersCall(
 		return nil, oops.E(oops.CodeUnexpected, err, "list meta mcp members").LogError(ctx, logger)
 	}
 
-	servers := make([]metaListedServer, 0, len(members))
+	servers := make([]metamcp.ListedServer, 0, len(members))
 	for _, member := range members {
-		servers = append(servers, metaListedServer{
+		servers = append(servers, metamcp.ListedServer{
 			Slug:      conv.PtrValOr(conv.FromPGText[string](member.McpServerSlug), ""),
 			Name:      conv.PtrValOr(conv.FromPGText[string](member.McpServerName), ""),
 			SortOrder: int(member.SortOrder),
-			Status:    "unknown",
+			Status:    metamcp.StatusUnknown,
 		})
 	}
 
-	structured, err := json.Marshal(map[string]any{"servers": servers})
+	structured, err := json.Marshal(metamcp.ListServersResult{Servers: servers})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "serialize list_servers result").LogError(ctx, logger)
 	}
@@ -502,42 +408,4 @@ func (s *Service) handleMetaListServersCall(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/call response").LogError(ctx, logger)
 	}
 	return bs, nil
-}
-
-// buildMetaServerInstructions generates the server-instructions block from
-// the meta server's member set: it names the fronted systems and states the
-// drill-down order so a cold agent orients in one turn. Meta MCP servers
-// carry no stored instructions; the block is always generated.
-func (s *Service) buildMetaServerInstructions(
-	ctx context.Context,
-	logger *slog.Logger,
-	mcpEndpoint *mcpendpointsrepo.McpEndpoint,
-	metaServer *metamcprepo.MetaMcpServer,
-) (string, error) {
-	members, err := metamcprepo.New(s.db).ListMetaMCPMembers(ctx, metamcprepo.ListMetaMCPMembersParams{
-		MetaMcpServerID: metaServer.ID,
-		ProjectID:       mcpEndpoint.ProjectID,
-	})
-	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "list meta mcp members for instructions").LogError(ctx, logger)
-	}
-
-	names := make([]string, 0, len(members))
-	for _, member := range members {
-		name := conv.PtrValOr(conv.FromPGText[string](member.McpServerSlug), "")
-		if name == "" {
-			name = conv.PtrValOr(conv.FromPGText[string](member.McpServerName), "")
-		}
-		if name != "" {
-			names = append(names, name)
-		}
-	}
-
-	var b strings.Builder
-	fmt.Fprintf(&b, "%s is a gateway fronting %d member MCP servers.", metaServer.Name, len(members))
-	if len(names) > 0 {
-		fmt.Fprintf(&b, " Members: %s.", strings.Join(names, ", "))
-	}
-	b.WriteString(" Discovery is a drill-down: call list_servers to see the member inventory, describe_server for one member's tool catalog, describe_tools for the full input schemas of named tools, then execute_tool to run one.")
-	return b.String(), nil
 }
