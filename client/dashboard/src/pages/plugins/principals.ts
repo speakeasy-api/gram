@@ -34,20 +34,23 @@ export function isEveryoneAssignmentPrincipal(urn: string): boolean {
   return urn === WILDCARD_PRINCIPAL || urn === "user:all";
 }
 
-// Plugin delivery to everyone subsumes every targeted audience. New picker
-// selections therefore stay unambiguous, while existing unavailable assignments
-// remain removable from their chips.
+// The wildcard reaches every synced identity and therefore subsumes every
+// targeted audience. `user:all` is intentionally excluded: it reaches only
+// synced identities that resolve to organization members, so it can coexist
+// with email assignments for non-members.
 export function selectMutuallyExclusivePluginAudiences(
   previous: string[],
   next: string[],
 ): string[] {
   const previousValues = new Set(previous);
   const addedValues = next.filter((value) => !previousValues.has(value));
-  const addedEveryone = addedValues.find(isEveryoneAssignmentPrincipal);
+  const addedWildcard = addedValues.find(
+    (value) => value === WILDCARD_PRINCIPAL,
+  );
 
-  if (addedEveryone) return [addedEveryone];
-  if (addedValues.some((value) => !isEveryoneAssignmentPrincipal(value))) {
-    return next.filter((value) => !isEveryoneAssignmentPrincipal(value));
+  if (addedWildcard) return [addedWildcard];
+  if (addedValues.some((value) => value !== WILDCARD_PRINCIPAL)) {
+    return next.filter((value) => value !== WILDCARD_PRINCIPAL);
   }
   return next;
 }

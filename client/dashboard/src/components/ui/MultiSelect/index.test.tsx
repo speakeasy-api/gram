@@ -213,6 +213,33 @@ describe("MultiSelect disabled selected options", () => {
 
     expect(onValueChange).toHaveBeenCalledWith([]);
   });
+
+  it("removes nested actions from keyboard navigation", () => {
+    render(
+      <MultiSelect
+        options={[{ label: "Selected", value: "selected" }]}
+        defaultValue={["selected"]}
+        onValueChange={() => undefined}
+        disabled
+      />,
+    );
+
+    expect(screen.getByRole("combobox").hasAttribute("inert")).toBe(true);
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Remove Selected from selection",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Clear all 1 selected options",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+  });
 });
 
 describe("MultiSelect collapsed selections", () => {
@@ -248,7 +275,9 @@ describe("MultiSelect collapsed selections", () => {
     );
 
     fireEvent.click(
-      screen.getByText("+ 2 more").parentElement!.querySelector("svg")!,
+      screen.getByRole("button", {
+        name: "Remove 2 extra selected options",
+      }),
     );
 
     expect(onValueChange).toHaveBeenCalledWith([
@@ -258,6 +287,35 @@ describe("MultiSelect collapsed selections", () => {
       "visible-3",
       "collapsed-2",
     ]);
+  });
+
+  it("uses a controlled selection immediately", () => {
+    const { rerender } = render(
+      <MultiSelect
+        options={[
+          { label: "Everyone", value: "*" },
+          { label: "Engineering", value: "role:engineering" },
+        ]}
+        value={["*"]}
+        onValueChange={() => undefined}
+      />,
+    );
+
+    expect(screen.getByText("Everyone")).toBeTruthy();
+
+    rerender(
+      <MultiSelect
+        options={[
+          { label: "Everyone", value: "*" },
+          { label: "Engineering", value: "role:engineering" },
+        ]}
+        value={["role:engineering"]}
+        onValueChange={() => undefined}
+      />,
+    );
+
+    expect(screen.getByText("Engineering")).toBeTruthy();
+    expect(screen.queryByText("Everyone")).toBeNull();
   });
 
   it("opens a custom summary without opening the options list", () => {

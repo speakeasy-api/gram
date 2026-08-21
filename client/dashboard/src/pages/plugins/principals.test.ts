@@ -173,6 +173,15 @@ describe("plugin audience selection", () => {
     ).toEqual(["role:organization:abc", "user:u-123"]);
   });
 
+  it("keeps member-wide and non-member email assignments together", () => {
+    expect(
+      selectMutuallyExclusivePluginAudiences(
+        ["user:all"],
+        ["user:all", "email:external@example.test"],
+      ),
+    ).toEqual(["user:all", "email:external@example.test"]);
+  });
+
   it("keeps an existing mixed assignment removable without rewriting it", () => {
     expect(
       selectMutuallyExclusivePluginAudiences(["*", "user:u-123"], ["*"]),

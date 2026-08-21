@@ -136,6 +136,13 @@ interface MultiSelectProps
   defaultValue?: string[];
 
   /**
+   * The selected values when the component is controlled by its caller.
+   * When omitted, the component manages its own selection initialized from
+   * `defaultValue`.
+   */
+  value?: string[];
+
+  /**
    * Placeholder text to be displayed when no values are selected.
    * Optional, defaults to "Select options".
    */
@@ -402,6 +409,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
       onValueChange,
       variant,
       defaultValue = [],
+      value,
       placeholder = "Select options",
       animation = 0,
       animationConfig,
@@ -428,8 +436,20 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
     },
     ref,
   ) => {
-    const [selectedValues, setSelectedValues] =
+    const [uncontrolledSelectedValues, setUncontrolledSelectedValues] =
       React.useState<string[]>(defaultValue);
+    const isControlled = value !== undefined;
+    const selectedValues = value ?? uncontrolledSelectedValues;
+
+    const updateSelectedValues = React.useCallback(
+      (next: string[]) => {
+        if (!isControlled) {
+          setUncontrolledSelectedValues(next);
+        }
+        onValueChange(next);
+      },
+      [isControlled, onValueChange],
+    );
     const [isPopoverOpen, setIsPopoverOpen] = React.useState(false);
     const [isAnimating, setIsAnimating] = React.useState(false);
     const [searchValue, setSearchValue] = React.useState("");
@@ -497,11 +517,13 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
     );
 
     const resetToDefault = React.useCallback(() => {
-      setSelectedValues(defaultValue);
+      if (!isControlled) {
+        setUncontrolledSelectedValues(defaultValue);
+      }
       setIsPopoverOpen(false);
       setSearchValue("");
       onValueChange(defaultValue);
-    }, [defaultValue, onValueChange]);
+    }, [defaultValue, isControlled, onValueChange]);
 
     const buttonRef = React.useRef<HTMLDivElement>(null);
 
@@ -511,12 +533,10 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
         reset: resetToDefault,
         getSelectedValues: () => selectedValues,
         setSelectedValues: (values: string[]) => {
-          setSelectedValues(values);
-          onValueChange(values);
+          updateSelectedValues(values);
         },
         clear: () => {
-          setSelectedValues([]);
-          onValueChange([]);
+          updateSelectedValues([]);
         },
         focus: () => {
           if (buttonRef.current) {
@@ -534,7 +554,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
           }
         },
       }),
-      [resetToDefault, selectedValues, onValueChange],
+      [resetToDefault, selectedValues, updateSelectedValues],
     );
 
     const [screenSize, setScreenSize] = React.useState<
@@ -755,8 +775,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
       } else if (event.key === "Backspace" && !event.currentTarget.value) {
         const newSelectedValues = [...selectedValues];
         newSelectedValues.pop();
-        setSelectedValues(newSelectedValues);
-        onValueChange(newSelectedValues);
+        updateSelectedValues(newSelectedValues);
       }
     };
 
@@ -767,8 +786,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
       const newSelectedValues = selectedValues.includes(optionValue)
         ? selectedValues.filter((value) => value !== optionValue)
         : [...selectedValues, optionValue];
-      setSelectedValues(newSelectedValues);
-      onValueChange(newSelectedValues);
+      updateSelectedValues(newSelectedValues);
       if (closeOnSelect) {
         setIsPopoverOpen(false);
       }
@@ -782,8 +800,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
       const newSelectedValues = selectedValues.filter(
         (value) => value !== optionValue,
       );
-      setSelectedValues(newSelectedValues);
-      onValueChange(newSelectedValues);
+      updateSelectedValues(newSelectedValues);
     };
 
     const trimmedSearchValue = searchValue.trim();
@@ -802,8 +819,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
     const handleCreate = () => {
       if (disabled || !canCreateFromSearch) return;
       const newSelectedValues = [...selectedValues, trimmedSearchValue];
-      setSelectedValues(newSelectedValues);
-      onValueChange(newSelectedValues);
+      updateSelectedValues(newSelectedValues);
       setSearchValue("");
       if (closeOnSelect) {
         setIsPopoverOpen(false);
@@ -812,8 +828,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
 
     const handleClear = () => {
       if (disabled) return;
-      setSelectedValues([]);
-      onValueChange([]);
+      updateSelectedValues([]);
     };
 
     const collapsedSelection = collapseSelectedValues?.(selectedValues);
@@ -842,8 +857,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
         (value) =>
           collapsedValues.has(value) || retainedVisibleValues.has(value),
       );
-      setSelectedValues(newSelectedValues);
-      onValueChange(newSelectedValues);
+      updateSelectedValues(newSelectedValues);
     };
 
     const toggleAll = () => {
@@ -853,8 +867,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
         handleClear();
       } else {
         const allValues = allOptions.map((option) => option.value);
-        setSelectedValues(allValues);
-        onValueChange(allValues);
+        updateSelectedValues(allValues);
       }
 
       if (closeOnSelect) {
@@ -863,15 +876,21 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
     };
 
     React.useEffect(() => {
-      if (!resetOnDefaultValueChange) return;
+      if (isControlled || !resetOnDefaultValueChange) return;
       const prevDefaultValue = prevDefaultValueRef.current;
       if (!arraysEqual(prevDefaultValue, defaultValue)) {
         if (!arraysEqual(selectedValues, defaultValue)) {
-          setSelectedValues(defaultValue);
+          setUncontrolledSelectedValues(defaultValue);
         }
         prevDefaultValueRef.current = [...defaultValue];
       }
-    }, [defaultValue, selectedValues, arraysEqual, resetOnDefaultValueChange]);
+    }, [
+      defaultValue,
+      selectedValues,
+      arraysEqual,
+      isControlled,
+      resetOnDefaultValueChange,
+    ]);
 
     const getWidthConstraints = () => {
       const defaultMinWidth = screenSize === "mobile" ? "0px" : "200px";
@@ -1022,6 +1041,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                 aria-label={`Multi-select: ${selectedValues.length} of ${
                   getAllOptions().length
                 } options selected. ${placeholder}`}
+                inert={disabled || undefined}
               >
                 {selectedValues.length > 0 ? (
                   <div className="flex w-full items-center justify-between">
@@ -1101,22 +1121,12 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                               <span className="min-w-0 truncate">
                                 {option.label}
                               </span>
-                              <div
-                                role="button"
-                                tabIndex={0}
+                              <button
+                                type="button"
+                                disabled={disabled}
                                 onClick={(event) => {
                                   event.stopPropagation();
                                   removeOption(value);
-                                }}
-                                onKeyDown={(event) => {
-                                  if (
-                                    event.key === "Enter" ||
-                                    event.key === " "
-                                  ) {
-                                    event.preventDefault();
-                                    event.stopPropagation();
-                                    removeOption(value);
-                                  }
                                 }}
                                 aria-label={`Remove ${option.label} from selection`}
                                 className="flex h-4 w-4 shrink-0 cursor-pointer hover:bg-white/20 focus:ring-1 focus:ring-white/50 focus:outline-none"
@@ -1128,7 +1138,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                                       "h-2.5 w-2.5",
                                   )}
                                 />
-                              </div>
+                              </button>
                             </Badge>
                           );
                         })
@@ -1157,39 +1167,43 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
                             visibleSelectedValues.length -
                             responsiveSettings.maxCount
                           } more`}
-                          <XIcon
-                            className={cn(
-                              "ml-2 h-4 w-4 cursor-pointer",
-                              responsiveSettings.compactMode && "ml-1 h-3 w-3",
-                            )}
+                          <button
+                            type="button"
+                            disabled={disabled}
+                            aria-label={`Remove ${
+                              visibleSelectedValues.length -
+                              responsiveSettings.maxCount
+                            } extra selected options`}
+                            className="ml-2 flex shrink-0 disabled:cursor-not-allowed"
                             onClick={(event) => {
                               event.stopPropagation();
                               clearExtraOptions();
                             }}
-                          />
+                          >
+                            <XIcon
+                              className={cn(
+                                "h-4 w-4 cursor-pointer",
+                                responsiveSettings.compactMode &&
+                                  "ml-1 h-3 w-3",
+                              )}
+                            />
+                          </button>
                         </Badge>
                       )}
                     </div>
                     <div className="flex shrink-0 items-center justify-between">
-                      <div
-                        role="button"
-                        tabIndex={0}
+                      <button
+                        type="button"
+                        disabled={disabled}
                         onClick={(event) => {
                           event.stopPropagation();
                           handleClear();
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            handleClear();
-                          }
                         }}
                         aria-label={`Clear all ${selectedValues.length} selected options`}
                         className="text-muted-foreground hover:text-foreground focus:ring-ring mx-2 flex h-4 w-4 cursor-pointer items-center justify-center focus:ring-2 focus:ring-offset-1 focus:outline-none"
                       >
                         <XIcon className="h-4 w-4" />
-                      </div>
+                      </button>
                       <Separator
                         orientation="vertical"
                         className="flex h-full min-h-6"

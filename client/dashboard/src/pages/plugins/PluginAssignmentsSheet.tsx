@@ -369,7 +369,7 @@ function AssignmentsEditor({
         </label>
         <MultiSelect
           options={groupedOptions}
-          defaultValue={selected}
+          value={selected}
           onValueChange={handleSelectionChange}
           placeholder="Select audiences"
           badgeClassName="h-6 gap-1.5 px-1.5 font-sans text-xs normal-case tracking-normal"
