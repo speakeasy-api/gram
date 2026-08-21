@@ -154,8 +154,8 @@ export function CimdAdmissionModeField({
       {selectedMode === WritableMode.Open && (
         <Alert variant="warning" dismissible={false}>
           Open admission accepts client metadata documents from any origin on
-          the internet. The consent screen and redirect origin-binding become
-          the only guardrails on who can start an authorization flow.
+          the internet. The consent screen becomes the only guardrail on who can
+          start an authorization flow.
         </Alert>
       )}
 
