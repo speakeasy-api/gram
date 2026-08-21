@@ -76,6 +76,11 @@ type Service struct {
 	serverURL          *url.URL
 	siteURL            *url.URL
 	jwtSecret          string
+
+	// gatingScanTimeout bounds the risk enforcement scan on the synchronous
+	// gating hook path. Zero selects defaultGatingScanTimeout, so a
+	// zero-value Service still enforces a deadline.
+	gatingScanTimeout time.Duration
 	// nowFunc supplies the event timestamp for ingest paths that stamp
 	// server-side because the client sends none (the Cursor hook, and the
 	// Codex/OTEL fallbacks). Injectable so tests can pin telemetry event time
@@ -252,6 +257,7 @@ func NewService(
 	serverURL *url.URL,
 	siteURL *url.URL,
 	jwtSecret string,
+	gatingScanTimeout time.Duration,
 ) *Service {
 	return &Service{
 		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/hooks"),
@@ -278,6 +284,7 @@ func NewService(
 		serverURL:          serverURL,
 		siteURL:            siteURL,
 		jwtSecret:          jwtSecret,
+		gatingScanTimeout:  gatingScanTimeout,
 		nowFunc:            time.Now,
 	}
 }

@@ -4,14 +4,30 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 )
+
+// defaultGatingScanTimeout bounds the risk enforcement scan on the synchronous
+// gating hook path (UserPromptSubmit / PreToolUse / BeforeSubmitPrompt /
+// BeforeMCPExecution), where an agent is holding a prompt or tool call open
+// waiting on the verdict. Without it the only bound is the prompt-policy
+// judge's own 10s per-call timeout, which is the latency an end user sees.
+//
+// The value sits deliberately above the judge's observed latency floor of
+// ~1.4s. A deadline at or below that floor would expire on nearly every
+// judge-backed scan, and a fail-closed policy turns each expiry into a block —
+// so a tighter deadline does not trade latency for permissiveness, it blocks
+// almost every prompt. Asynchronous batch analysis is unaffected and keeps the
+// judge's 10s bound.
+const defaultGatingScanTimeout = 3 * time.Second
 
 // riskScanTrackerKey carries a flag the transport handlers install before
 // dispatching an event, flipped when an enforcement scan actually executes
@@ -79,11 +95,28 @@ func (s *Service) scanHookEventForEnforcement(ctx context.Context, ev hookevents
 	}
 
 	markRiskScanned(ctx)
-	result, err := s.riskScanner.ScanForEnforcement(ctx, ev.Context.OrganizationID, ev.Context.ProjectID, ev.Context.User.ID, text, messageType, toolName)
+
+	timeout := s.gatingScanTimeout
+	if timeout <= 0 {
+		timeout = defaultGatingScanTimeout
+	}
+
+	// The deadline is propagated into the scan rather than enforced around it.
+	// Expiry then reaches the prompt-policy judge as a call error, and each
+	// policy's own fail-open/fail-closed mode decides the outcome: fail-open
+	// policies produce no finding (allow), fail-closed policies produce a
+	// block. Cutting the scan off from the outside would instead allow every
+	// policy uniformly, which makes a fail-closed policy bypassable by anyone
+	// who can make the judge slow.
+	scanCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	result, err := s.riskScanner.ScanForEnforcement(scanCtx, ev.Context.OrganizationID, ev.Context.ProjectID, ev.Context.User.ID, text, messageType, toolName)
 	if err != nil {
 		s.logger.WarnContext(ctx, "risk scan failed for hook event",
 			attr.SlogError(err),
 			attr.SlogEvent("risk_scan_error"),
+			attr.SlogOutcome(string(o11y.OutcomeFromErrorWithTimeout(err))),
 			attr.SlogHookSource(string(ev.Provider)),
 			attr.SlogHookEvent(ev.RawEventType),
 		)
