@@ -1290,11 +1290,9 @@ func TestE2E_LoginCallback_OrdinaryLogin(t *testing.T) {
 func TestE2E_LoginCallback_SignupNewWorkOSUser(t *testing.T) {
 	t.Parallel()
 
-	const (
-		workosUserID = "user_01E2E_SIGNUP_NEW"
-		email        = "new-signup@example.com"
-		orgName      = "New Signup Corp"
-	)
+	const workosUserID = "user_01E2E_SIGNUP_NEW"
+	email := "new-signup@example.com"
+	orgName := "New Signup Corp"
 
 	fetcher := &mockWorkOSFetcher{
 		members:      map[string][]workos.Member{},
@@ -1359,11 +1357,9 @@ func TestE2E_LoginCallback_SignupNewWorkOSUser(t *testing.T) {
 func TestE2E_LoginCallback_SignupExistingWorkOSUser(t *testing.T) {
 	t.Parallel()
 
-	const (
-		workosUserID = "user_01E2E_SIGNUP_EXISTING"
-		email        = "existing-signup@example.com"
-		orgName      = "Existing Signup Corp"
-	)
+	const workosUserID = "user_01E2E_SIGNUP_EXISTING"
+	email := "existing-signup@example.com"
+	orgName := "Existing Signup Corp"
 
 	fetcher := &mockWorkOSFetcher{
 		members: map[string][]workos.Member{},
