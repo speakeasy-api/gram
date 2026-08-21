@@ -41,6 +41,7 @@ describe("proxyRegisterUpstreamClient", () => {
     await proxyRegisterUpstreamClient(authedFetch, {
       registrationEndpoint: "https://idp.example/register",
       tunneledMcpServerId: "019c001e-b43d-7000-8000-000000000001",
+      projectSlug: "private-network",
     });
 
     const call = vi.mocked(authedFetch).mock.calls[0];
@@ -51,6 +52,9 @@ describe("proxyRegisterUpstreamClient", () => {
     }
     expect(JSON.parse(init.body)).toMatchObject({
       tunneled_mcp_server_id: "019c001e-b43d-7000-8000-000000000001",
+    });
+    expect(init.headers).toMatchObject({
+      "gram-project": "private-network",
     });
   });
 

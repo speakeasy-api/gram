@@ -375,6 +375,7 @@ export function AttachRemoteIdentityProviderSheet({
             // the client with that method. Omit when blank so the upstream
             // picks its own default.
             tokenEndpointAuthMethod: tokenEndpointAuthMethod || undefined,
+            tunneledMcpServerId: resolvedIssuer?.tunneledMcpServerId,
           });
           const narrowedDcrMethod = narrowTokenEndpointAuthMethod(
             registered.tokenEndpointAuthMethod,
