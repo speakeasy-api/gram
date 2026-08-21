@@ -189,6 +189,11 @@ func newServer(reader Reader, catalog Catalog, registrations *RegistrationServic
 	} else {
 		registerLifecycleMetadataTool(reg, registrations)
 	}
+	if registrations == nil || registrations.lifecycleVisibility == nil {
+		registerUnavailableLifecycleVisibilityTools(reg)
+	} else {
+		registerLifecycleVisibilityTools(reg, registrations)
+	}
 	if registrations == nil || registrations.store == nil || !registrations.budgets.Handoff.valid() {
 		registerUnavailableSetupHandoffTool(reg)
 	} else {
@@ -340,7 +345,7 @@ func operationBudgetToolResult(err error) (*mcp.CallToolResult, bool) {
 	switch {
 	case errors.Is(err, ErrReadinessRegistrationNotFound):
 		result = operationBudgetResult{Code: "registration_not_found", Message: "This registration ID is not available for the selected project and authenticated connection. Use the ID returned by register_platform_mcp_for_project or get_platform_mcp_onboarding_status."}
-	case errors.Is(err, ErrRegistrationInvalid), errors.Is(err, ErrLifecycleMetadataInvalid), errors.Is(err, ErrReadinessInvalid), errors.Is(err, ErrCatalogConfigurationRejected), errors.Is(err, ErrCatalogRejected), errors.Is(err, ErrCatalogCursorInvalid):
+	case errors.Is(err, ErrRegistrationInvalid), errors.Is(err, ErrLifecycleMetadataInvalid), errors.Is(err, ErrLifecycleVisibilityInvalid), errors.Is(err, ErrReadinessInvalid), errors.Is(err, ErrCatalogConfigurationRejected), errors.Is(err, ErrCatalogRejected), errors.Is(err, ErrCatalogCursorInvalid):
 		result = operationBudgetResult{Code: "invalid_request", Message: "The requested Platform MCP operation is invalid or no longer matches the reviewed catalogue. Re-read the supported tool result and do not retry unchanged input."}
 	case errors.Is(err, ErrOperationRateLimited), errors.Is(err, ErrReadinessRateLimited):
 		result = operationBudgetResult{Code: "rate_limited", Message: "This Platform MCP operation is temporarily rate limited. Retry after a short delay."}

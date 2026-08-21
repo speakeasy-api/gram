@@ -1552,6 +1552,7 @@ func newStartCommand() *cli.Command {
 				RemoteChallengeManager: remoteChallengeManager,
 				AuditLogger:            auditLogger,
 				PluginPublisher:        pluginPublisher,
+				TemporalEnv:            temporalEnv,
 				Skills:                 skillsService,
 				Telemetry:              telemetryrepo.New(chDB),
 				TelemetryDrilldown:     telemetryrepo.New(chDB),
