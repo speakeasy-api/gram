@@ -184,7 +184,7 @@ export function ProjectGuideRun({
             {completedSteps.length} of {journey.steps.length} done
           </span>
         </div>
-        <div className="grid min-h-0 min-w-0 flex-1 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_352px] lg:overflow-hidden">
+        <div className="grid min-h-0 min-w-0 flex-1 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_480px] lg:overflow-hidden">
           <ol
             aria-label={`${journey.id === "third-party-mcp" ? "Journey A" : "Journey B"} steps`}
             className="min-w-0 overflow-hidden px-[22px] pt-2 pb-5 lg:overflow-y-auto"
@@ -283,7 +283,7 @@ export function ProjectGuideRun({
               role="log"
               aria-label={`${journey.id === "third-party-mcp" ? "Journey A" : "Journey B"} activity`}
               aria-live="polite"
-              className="flex h-[180px] max-h-[180px] min-h-[120px] flex-none flex-col gap-2 overflow-y-auto bg-[#F7F7F6] p-3.5 shadow-[inset_0_0_0_1px_#E6E5E3]"
+              className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto bg-[#F7F7F6] p-3.5 shadow-[inset_0_0_0_1px_#E6E5E3]"
             >
               <span className="font-mono text-[9px] tracking-[0.09em] text-[#121212]/45 uppercase">
                 Activity

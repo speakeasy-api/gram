@@ -56,6 +56,8 @@ import { useSearchParams } from "react-router";
 type McpGuideOperations = ReturnType<typeof useMcpGuideOperations>;
 type SecretGuideOperations = ReturnType<typeof useSecretGuideOperations>;
 
+const PROJECT_GUIDE_MICRO_STEP_DELAY_MS = 2000;
+
 export function ProjectGuide({
   onOperationSignal,
 }: {
@@ -75,12 +77,23 @@ export function ProjectGuide({
   const reportRef = useRef<(report: ProjectGuideOperationReport) => void>(
     () => undefined,
   );
+  const reportTimersRef = useRef(new Set<number>());
+  const nextReportAtRef = useRef(0);
   operationSignalRef.current = onOperationSignal;
   mcpOperationSignalRef.current = mcpOperations.handleSignal;
   secretOperationSignalRef.current = secretOperations.handleSignal;
   const [snapshot, send] = useMachine(projectGuideMachine, {
     input: {
       onSignal: (signal) => {
+        if (signal.type === "abort") {
+          nextReportAtRef.current = 0;
+        }
+        if (signal.type === "start") {
+          nextReportAtRef.current = Math.max(
+            nextReportAtRef.current,
+            Date.now() + PROJECT_GUIDE_MICRO_STEP_DELAY_MS,
+          );
+        }
         mcpOperationSignalRef.current(signal, reportRef.current);
         secretOperationSignalRef.current(signal, reportRef.current);
         operationSignalRef.current?.(signal, reportRef.current);
@@ -88,11 +101,27 @@ export function ProjectGuide({
     },
   });
   const reportOperation = useCallback(
-    (report: ProjectGuideOperationReport) =>
-      send({ type: "ADAPTER_REPORT", report }),
+    (report: ProjectGuideOperationReport) => {
+      const now = Date.now();
+      const dispatchAt = Math.max(now, nextReportAtRef.current);
+      nextReportAtRef.current = dispatchAt + PROJECT_GUIDE_MICRO_STEP_DELAY_MS;
+      const timer = window.setTimeout(() => {
+        reportTimersRef.current.delete(timer);
+        send({ type: "ADAPTER_REPORT", report });
+      }, dispatchAt - now);
+      reportTimersRef.current.add(timer);
+    },
     [send],
   );
   reportRef.current = reportOperation;
+  useEffect(
+    () => () => {
+      for (const timer of reportTimersRef.current) {
+        window.clearTimeout(timer);
+      }
+    },
+    [],
+  );
   const [searchParams, setSearchParams] = useSearchParams();
   const reducedMotion = useReducedMotion();
   const selected = snapshot.context.activePath;
@@ -180,7 +209,7 @@ export function ProjectGuide({
 
   return (
     <GuideCanvas>
-      <section className="bg-card border-border mx-auto flex min-h-[400px] w-full max-w-[960px] flex-col overflow-hidden border shadow-[0_1px_2px_rgba(18,18,18,.04)]">
+      <section className="bg-card border-border mx-auto flex min-h-[400px] w-full max-w-[1200px] flex-col overflow-hidden border shadow-[0_1px_2px_rgba(18,18,18,.04)]">
         <header className="flex items-baseline gap-3.5 border-b border-[#121212]/10 px-6 py-[18px] pb-[14px]">
           <h2 className="font-display text-[28px] leading-[.95] font-thin tracking-[-0.03em]">
             {selectedJourney?.title ?? "Put your agent traffic under control"}
@@ -1207,7 +1236,7 @@ function JourneyGraphic({
     <span
       data-testid={`project-guide-graphic-${journey.id}`}
       data-animated={animated}
-      className="flex min-h-[400px] flex-col items-center justify-center px-6 pt-10 pb-8"
+      className="flex min-h-[400px] flex-col items-center justify-center px-16 pt-10 pb-8"
     >
       {plates.map((plate, index) => (
         <span key={plate.zone} className="flex w-full flex-col items-center">
@@ -1572,7 +1601,7 @@ function ProjectGuideComplete({
           ? { duration: 0 }
           : { duration: 0.4, ease: [0.2, 0.7, 0.3, 1] }
       }
-      className="bg-card border-border grid w-full max-w-[960px] gap-4 border p-6"
+      className="bg-card border-border grid w-full max-w-[1200px] gap-4 border p-6"
     >
       <span className="text-eyebrow text-primary">
         {PROJECT_GUIDE_COMPLETE.eyebrow}
