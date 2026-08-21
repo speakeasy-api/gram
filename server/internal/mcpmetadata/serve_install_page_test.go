@@ -22,8 +22,10 @@ import (
 	deployments_repo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	externalmcp_repo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	externalmcp_types "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
+	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	metamcp_repo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
@@ -1702,4 +1704,67 @@ func TestServeInstallPage_CustomDomain_RootEndpointRendersBareDomainURL(t *testi
 	body := rr.Body.String()
 	require.Contains(t, body, "https://root-install.example.com", "install page advertises the bare domain")
 	require.NotContains(t, body, "https://root-install.example.com/mcp/", "root endpoint installs do not use the /mcp path")
+}
+
+// TestServeInstallPage_MetaBackedEndpoint_ReturnsNotFound verifies that a
+// meta-MCP-backed endpoint's install page is an authoritative 404 (AGE-3299
+// will add a real page): the response is the rendered not-found page rather
+// than a 500, and the slug must not fall through to an unrelated legacy
+// toolset sharing the same mcp_slug.
+func TestServeInstallPage_MetaBackedEndpoint_ReturnsNotFound(t *testing.T) {
+	t.Parallel()
+	ctx, testInstance := newTestMCPMetadataService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	mcpSlug := "meta-install-" + uuid.New().String()[:8]
+
+	meta, err := metamcp_repo.New(testInstance.conn).CreateMetaMCPServer(ctx, metamcp_repo.CreateMetaMCPServerParams{
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		ProjectID:           *authCtx.ProjectID,
+		Name:                "install page gateway",
+		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	require.NoError(t, err)
+
+	_, err = mcpendpoints_repo.New(testInstance.conn).CreateMCPEndpoint(ctx, mcpendpoints_repo.CreateMCPEndpointParams{
+		ProjectID:       *authCtx.ProjectID,
+		CustomDomainID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		McpServerID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		MetaMcpServerID: uuid.NullUUID{UUID: meta.ID, Valid: true},
+		Slug:            mcpSlug,
+	})
+	require.NoError(t, err)
+
+	// A public legacy toolset sharing the mcp_slug must not be rendered: the
+	// meta-backed endpoint owns the slug.
+	toolset, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Legacy Same-Slug Toolset",
+		Slug:                   "legacy-" + mcpSlug,
+		McpSlug:                conv.ToPGText(mcpSlug),
+		Description:            conv.ToPGText("legacy toolset that must not shadow the meta endpoint"),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+	require.NoError(t, toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+		McpIsPublic: true,
+		ID:          toolset.ID,
+		ProjectID:   toolset.ProjectID,
+	}))
+
+	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", mcpSlug)
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, testInstance.service.ServeInstallPage(rr, req))
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Contains(t, rr.Body.String(), "Server Not Found")
+	assert.NotContains(t, rr.Body.String(), "Legacy Same-Slug Toolset")
 }

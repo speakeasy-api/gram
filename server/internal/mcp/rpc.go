@@ -31,6 +31,7 @@ const (
 var (
 	serverInfoHostedToolset   = serverInfo{Name: "Gram", Version: "0.0.0"}
 	serverInfoPlatformToolset = serverInfo{Name: "Gram Platform Toolset", Version: "0.0.0"}
+	serverInfoMetaServer      = serverInfo{Name: "Gram Gateway", Version: "0.0.0"}
 )
 
 var (

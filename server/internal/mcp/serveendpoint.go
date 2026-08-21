@@ -24,6 +24,7 @@ import (
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
@@ -37,9 +38,22 @@ func (s *Service) ServeMCPEndpoint(w http.ResponseWriter, r *http.Request, slug,
 	ctx := r.Context()
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(slug))
 
-	mcpEndpoint, mcpServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, slug)
+	mcpEndpoint, mcpServer, metaServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, slug)
 	if err != nil {
 		return err
+	}
+
+	if metaServer != nil {
+		// Meta-backed endpoints are served only on the canonical /mcp
+		// surface; /x/mcp stays a generic-backend surface with no meta
+		// exposure.
+		if mcpRouteBase != "mcp" {
+			return oops.E(oops.CodeNotFound, nil, "mcp endpoint not found")
+		}
+		if err := s.enforceCustomDomainLockdown(ctx, logger, mcpEndpoint.ProjectID); err != nil {
+			return err
+		}
+		return s.serveResolvedMetaMCPEndpoint(w, r, logger, mcpEndpoint, metaServer)
 	}
 
 	if err := s.enforceCustomDomainLockdown(ctx, logger, mcpEndpoint.ProjectID); err != nil {
@@ -252,7 +266,7 @@ func singleUpstreamToken(tokens map[uuid.UUID]string) (string, error) {
 //
 // Thin wrapper around mcpendpoints.BySlugAndCustomDomain; kept as a method
 // for the existing /mcp and /x/mcp call sites.
-func (s *Service) ResolveMCPEndpointAndServer(ctx context.Context, logger *slog.Logger, slug string) (*mcpendpointsrepo.McpEndpoint, *mcpserversrepo.McpServer, error) {
+func (s *Service) ResolveMCPEndpointAndServer(ctx context.Context, logger *slog.Logger, slug string) (*mcpendpointsrepo.McpEndpoint, *mcpserversrepo.McpServer, *metamcprepo.MetaMcpServer, error) {
 	return mcpendpoints.BySlugAndCustomDomain(ctx, s.db, logger, slug) //nolint:wrapcheck // thin passthrough; underlying error already carries context.
 }
 
@@ -274,10 +288,18 @@ func (s *Service) ResolveMCPEndpointAndServer(ctx context.Context, logger *slog.
 // mcpRouteBase ("mcp" or "x/mcp") propagates into the resolved endpoint's
 // URL building on both the primary and fallback paths.
 func (s *Service) LoadResolvedMcpEndpointBySlug(ctx context.Context, logger *slog.Logger, slug, mcpRouteBase string) (*ResolvedMcpEndpoint, error) {
-	mcpEndpoint, mcpServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, slug)
+	mcpEndpoint, mcpServer, metaServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, slug)
 	var shareErr *oops.ShareableError
 	switch {
 	case err == nil:
+		if metaServer != nil {
+			// Meta-backed endpoints expose OAuth handlers only on the
+			// canonical /mcp surface, and only when issuer-gated.
+			if mcpRouteBase != "mcp" || !metaServer.UserSessionIssuerID.Valid {
+				return nil, oops.E(oops.CodeNotFound, nil, "not found")
+			}
+			return s.BuildResolvedMcpEndpointForMetaServer(ctx, logger, mcpEndpoint, metaServer, mcpRouteBase)
+		}
 		// Public tunneled servers serve anonymously and expose no OAuth
 		// surface: every issuer-gated handler resolving through here
 		// (authorize, token, register, revoke, consent) must 404 even
@@ -641,4 +663,25 @@ func (s *Service) setProxyBackendProjectContextIfOwner(ctx context.Context, logg
 	}
 
 	return setProxyBackendProjectContext(ctx, authCtx, project.ID, project.Slug), nil
+}
+
+// BuildResolvedMcpEndpointForMetaServer materialises a ResolvedMcpEndpoint
+// from a resolved (mcp_endpoint, meta_mcp_server) pair and verifies its
+// issuer FK is still live. Caller is responsible for first checking
+// metaServer.UserSessionIssuerID.Valid. Unlike the generic-server builder no
+// project lookup is needed: meta_mcp_servers carries the organization id
+// directly.
+func (s *Service) BuildResolvedMcpEndpointForMetaServer(
+	ctx context.Context,
+	logger *slog.Logger,
+	mcpEndpoint *mcpendpointsrepo.McpEndpoint,
+	metaServer *metamcprepo.MetaMcpServer,
+	mcpRouteBase string,
+) (*ResolvedMcpEndpoint, error) {
+	resolved := NewResolvedMcpEndpointFromMetaMcpServer(mcpEndpoint, metaServer, metaServer.OrganizationID, mcpRouteBase)
+	if err := s.RequireUserSessionIssuer(ctx, resolved); err != nil {
+		return nil, err
+	}
+	logger.DebugContext(ctx, "resolved meta mcp endpoint", attr.SlogMetaMcpServerID(metaServer.ID.String()))
+	return resolved, nil
 }

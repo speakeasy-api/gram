@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/httpcache"
 	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	metamcp_repo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -113,10 +114,13 @@ func (s *Service) HandleGetProtectedResource(w http.ResponseWriter, r *http.Requ
 
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
 
-	mcpEndpoint, mcpServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, mcpSlug)
+	mcpEndpoint, mcpServer, metaServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, mcpSlug)
 	var shareErr *oops.ShareableError
 	switch {
 	case err == nil:
+		if metaServer != nil {
+			return s.ServeWellKnownProtectedResourceForMetaServer(ctx, w, r, logger, mcpEndpoint, metaServer, "mcp")
+		}
 		return s.ServeWellKnownProtectedResourceForServer(w, r, logger, mcpEndpoint, mcpServer, "mcp")
 	case errors.As(err, &shareErr) && shareErr.Code == oops.CodeNotFound:
 		// Fall through to the legacy toolset-by-slug lookup below.
@@ -165,10 +169,13 @@ func (s *Service) HandleGetAuthorizationServer(w http.ResponseWriter, r *http.Re
 
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
 
-	mcpEndpoint, mcpServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, mcpSlug)
+	mcpEndpoint, mcpServer, metaServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, mcpSlug)
 	var shareErr *oops.ShareableError
 	switch {
 	case err == nil:
+		if metaServer != nil {
+			return s.ServeWellKnownAuthorizationServerForMetaServer(ctx, w, r, logger, mcpEndpoint, metaServer, "mcp")
+		}
 		return s.ServeWellKnownAuthorizationServerForServer(w, r, logger, mcpEndpoint, mcpServer, "mcp")
 	case errors.As(err, &shareErr) && shareErr.Code == oops.CodeNotFound:
 		// Fall through to the legacy toolset-by-slug lookup below.
@@ -473,4 +480,50 @@ func writeJSONMetadata(ctx context.Context, w http.ResponseWriter, r *http.Reque
 		return oops.E(oops.CodeUnexpected, err, "marshal metadata").LogError(ctx, logger)
 	}
 	return httpcache.WriteCacheableJSON(ctx, w, r, logger, "application/json", metadataCacheMaxAgeSeconds, body)
+}
+
+// ServeWellKnownProtectedResourceForMetaServer serves RFC 9728
+// protected-resource metadata for a meta-MCP-backed endpoint. Issuer-gated
+// meta servers get Gram-hosted metadata; a meta server without an issuer has
+// no OAuth surface, matching the remote/tunneled arms of the generic
+// dispatcher.
+func (s *Service) ServeWellKnownProtectedResourceForMetaServer(
+	ctx context.Context,
+	w http.ResponseWriter,
+	r *http.Request,
+	logger *slog.Logger,
+	mcpEndpoint *mcpendpoints_repo.McpEndpoint,
+	metaServer *metamcp_repo.MetaMcpServer,
+	routeBase string,
+) error {
+	if !metaServer.UserSessionIssuerID.Valid {
+		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found for this MCP server")
+	}
+	endpoint, err := s.BuildResolvedMcpEndpointForMetaServer(ctx, logger, mcpEndpoint, metaServer, routeBase)
+	if err != nil {
+		return err
+	}
+	return s.ServeGetProtectedResource(w, r, endpoint)
+}
+
+// ServeWellKnownAuthorizationServerForMetaServer serves RFC 8414
+// authorization-server metadata for a meta-MCP-backed endpoint, mirroring
+// ServeWellKnownProtectedResourceForMetaServer's issuer semantics.
+func (s *Service) ServeWellKnownAuthorizationServerForMetaServer(
+	ctx context.Context,
+	w http.ResponseWriter,
+	r *http.Request,
+	logger *slog.Logger,
+	mcpEndpoint *mcpendpoints_repo.McpEndpoint,
+	metaServer *metamcp_repo.MetaMcpServer,
+	routeBase string,
+) error {
+	if !metaServer.UserSessionIssuerID.Valid {
+		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found for this MCP server")
+	}
+	endpoint, err := s.BuildResolvedMcpEndpointForMetaServer(ctx, logger, mcpEndpoint, metaServer, routeBase)
+	if err != nil {
+		return err
+	}
+	return s.ServeGetAuthorizationServer(w, r, endpoint)
 }
