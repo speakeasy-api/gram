@@ -42,6 +42,15 @@ export function allTimeOverviewScope(args: {
   };
 }
 
+/** An unreadable overview is not proof that the project is empty. */
+export function isOverviewEmpty(
+  overview: GetProjectOverviewResult | undefined,
+): boolean {
+  if (!overview) return false;
+  const { activeServersCount, totalToolCalls, totalChats } = overview.summary;
+  return activeServersCount === 0 && totalToolCalls === 0 && totalChats === 0;
+}
+
 /**
  * The all-time overview under its own query key, so it never collides with the
  * dashboard's range-scoped copy.
@@ -49,11 +58,12 @@ export function allTimeOverviewScope(args: {
 export function useAllTimeProjectOverview(args: { enabled: boolean }): {
   data: GetProjectOverviewResult | undefined;
   isPending: boolean;
+  isError: boolean;
 } {
   const { orgSlug, projectSlug } = useSlugs();
   const client = useGramContext();
 
-  const { data, isPending } = useQuery({
+  const { data, isPending, isError } = useQuery({
     ...buildProjectOverviewQuery(
       client,
       allTimeOverviewScope({
@@ -66,5 +76,5 @@ export function useAllTimeProjectOverview(args: { enabled: boolean }): {
     throwOnError: false,
   });
 
-  return { data, isPending };
+  return { data, isPending, isError };
 }

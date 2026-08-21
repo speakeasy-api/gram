@@ -45,6 +45,12 @@ vi.mock("./useProjectGuideProgress", () => ({
     isPending: progressPending.current,
   }),
 }));
+vi.mock("./projectGuideStores", () => ({
+  markProjectGuideStarted: vi.fn(),
+}));
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ projectSlug: "project-guide-test" }),
+}));
 
 vi.mock("./useMcpGuideOperations", () => ({
   MCP_GUIDE_CLIENTS: ["claude", "cursor", "codex"],

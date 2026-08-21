@@ -1,3 +1,4 @@
+import { markProjectGuideStarted } from "@/components/project-guide/projectGuideStores";
 import {
   BRAND_MESH_SURFACE_CLASS,
   BrandMeshLayers,
@@ -38,6 +39,7 @@ import {
   type ProjectGuideOperationSignal,
   type ProjectGuideOutputEntry,
 } from "@/components/project-guide/projectGuideMachine";
+import { useSlugs } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
 import { CodeSnippet } from "@/components/ui/CodeSnippet";
 import {
@@ -62,6 +64,7 @@ export function ProjectGuide({
     report: (report: ProjectGuideOperationReport) => void,
   ) => void;
 } = {}): JSX.Element {
+  const { projectSlug } = useSlugs();
   const { statusByJourney, isPending: progressPending } =
     useProjectGuideProgress();
   const mcpOperations = useMcpGuideOperations();
@@ -128,6 +131,7 @@ export function ProjectGuide({
   }, [displayState, returnToProjectHome]);
 
   const openJourney = (journey: JourneyMeta): void => {
+    if (projectSlug) markProjectGuideStarted(projectSlug);
     send({
       type: "OPEN",
       path: journey.id,

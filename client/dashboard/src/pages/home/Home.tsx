@@ -3,21 +3,22 @@ import { ProjectGuide } from "@/components/project-guide/ProjectGuide";
 import { Page } from "@/components/page-layout";
 import { ProjectDashboard } from "@/components/project/ProjectDashboard";
 import { RequireScope } from "@/components/require-scope";
+import { Skeleton } from "@/components/ui/Skeleton";
 import {
   BRAND_MESH_SURFACE_CLASS,
   BrandMeshLayers,
 } from "@/components/brand-mesh";
 import { cn } from "@/lib/utils";
 import { ChatLanding } from "@/pages/chat/Chat";
+import { useProjectGuide } from "@/hooks/useProjectGuide";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useRoutes } from "@/routes";
-import { Navigate, useSearchParams } from "react-router";
+import { Navigate } from "react-router";
 
 export default function Home(): JSX.Element {
   const { hasAnyScope, isLoading } = useRBAC();
   const routes = useRoutes();
-  const [searchParams] = useSearchParams();
-  const showGuide = searchParams.has("showGuide");
+  const { status: projectGuideStatus } = useProjectGuide();
   // Home carries its own "Ask anything" widget, so suppress the floating dock.
   useHideInsightsDock();
 
@@ -36,12 +37,16 @@ export default function Home(): JSX.Element {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body
-        fullWidth={showGuide || undefined}
-        fullHeight={showGuide || undefined}
-        noPadding={showGuide || undefined}
+        fullWidth={projectGuideStatus === "guide" || undefined}
+        fullHeight={projectGuideStatus === "guide" || undefined}
+        noPadding={projectGuideStatus === "guide" || undefined}
       >
         <RequireScope scope="project:read" level="page">
-          {showGuide ? (
+          {projectGuideStatus === "pending" ? (
+            <div data-testid="project-guide-pending" className="w-full p-8">
+              <Skeleton className="h-64 w-full" />
+            </div>
+          ) : projectGuideStatus === "guide" ? (
             <ProjectGuide />
           ) : (
             <>

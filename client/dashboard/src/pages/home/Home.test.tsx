@@ -1,7 +1,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-const searchParams = vi.hoisted(() => new URLSearchParams());
+const projectGuideStatus = vi.hoisted(() => ({ current: "dashboard" }));
 
 vi.mock("@/components/project-guide/ProjectGuide", () => ({
   ProjectGuide: () => <div data-testid="project-guide" />,
@@ -14,6 +14,9 @@ vi.mock("@/pages/chat/Chat", () => ({
 }));
 vi.mock("@/components/insights-context", () => ({
   useHideInsightsDock: () => undefined,
+}));
+vi.mock("@/hooks/useProjectGuide", () => ({
+  useProjectGuide: () => ({ status: projectGuideStatus.current }),
 }));
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -56,21 +59,18 @@ vi.mock("@/hooks/useRBAC", () => ({
 vi.mock("@/routes", () => ({
   useRoutes: () => ({ mcp: { href: () => "/mcp" } }),
 }));
-vi.mock("react-router", () => ({
-  Navigate: () => null,
-  useSearchParams: () => [searchParams],
-}));
+vi.mock("react-router", () => ({ Navigate: () => null }));
 
 import Home from "./Home.tsx";
 
 afterEach(() => {
   cleanup();
-  searchParams.delete("showGuide");
+  projectGuideStatus.current = "dashboard";
 });
 
 describe("Home", () => {
-  it("takes the space with the guide when showGuide is present", () => {
-    searchParams.set("showGuide", "");
+  it("takes the space with the guide when the project is empty", () => {
+    projectGuideStatus.current = "guide";
     render(<Home />);
     expect(screen.getByTestId("project-guide")).toBeTruthy();
     expect(screen.queryByTestId("chat-landing")).toBeNull();
@@ -82,7 +82,7 @@ describe("Home", () => {
     });
   });
 
-  it("keeps the assistant and dashboard when showGuide is absent", () => {
+  it("keeps the assistant and dashboard when the project has data", () => {
     render(<Home />);
     expect(screen.getByTestId("chat-landing")).toBeTruthy();
     expect(screen.getByTestId("project-dashboard")).toBeTruthy();
@@ -90,5 +90,13 @@ describe("Home", () => {
     expect(screen.getByTestId("page-body").dataset.fullWidth).toBeUndefined();
     expect(screen.getByTestId("page-body").dataset.fullHeight).toBeUndefined();
     expect(screen.getByTestId("page-body").dataset.noPadding).toBeUndefined();
+  });
+
+  it("waits for the zero-data checks before choosing a surface", () => {
+    projectGuideStatus.current = "pending";
+    render(<Home />);
+    expect(screen.getByTestId("project-guide-pending")).toBeTruthy();
+    expect(screen.queryByTestId("project-guide")).toBeNull();
+    expect(screen.queryByTestId("project-dashboard")).toBeNull();
   });
 });
