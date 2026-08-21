@@ -312,7 +312,10 @@ export function ProjectGuide({
                       <ProjectGuideOutput
                         entries={snapshot.context.output}
                         accent={PROJECT_GUIDE_FIXTURES[journey.id].accent}
-                        isProcessing={displayState === "running"}
+                        isProcessing={
+                          displayState === "running" ||
+                          displayState === "waiting"
+                        }
                         error={guideStepError(
                           journey,
                           currentStep,
@@ -330,9 +333,6 @@ export function ProjectGuide({
                       ) : null
                     }
                     primaryAction={primaryAction}
-                    listeningElapsedSeconds={
-                      snapshot.context.elapsedListeningSeconds
-                    }
                     onRewind={(step) => send({ type: "REWIND", step })}
                     onSwitchJourney={() => {
                       const otherId = otherProjectGuideJourney(journey.id);
@@ -1035,7 +1035,12 @@ function ProjectGuideOutput({
           accent={accent}
           kind={entry.kind}
           message={entry.message}
-          working={isProcessing && !error && index === entries.length - 1}
+          working={
+            isProcessing &&
+            !error &&
+            entry.kind === "working" &&
+            index === entries.length - 1
+          }
         />
       ))}
       {error && (
@@ -1060,6 +1065,11 @@ const PROJECT_GUIDE_OUTPUT_ENTRY_STYLES: Record<
     icon: "play",
     iconClass: "text-disabled",
     message: "text-foreground",
+  },
+  working: {
+    icon: "info",
+    iconClass: "text-muted-foreground",
+    message: "text-muted-foreground",
   },
   note: {
     icon: "info",

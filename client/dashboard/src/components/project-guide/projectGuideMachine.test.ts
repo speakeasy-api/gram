@@ -1,6 +1,7 @@
 import { createActor } from "xstate";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  LISTEN_TIMEOUT_SECONDS,
   PROJECT_GUIDE_OUTPUT_LIMIT,
   getProjectGuideCurrentStep,
   projectGuideMachine,
@@ -10,7 +11,7 @@ import {
   type ProjectGuideOperationSignal,
 } from "./projectGuideMachine";
 
-function coordinator(listenTimeoutSeconds = 60) {
+function coordinator(listenTimeoutSeconds = LISTEN_TIMEOUT_SECONDS) {
   const signals: ProjectGuideOperationSignal[] = [];
   const service = createActor(projectGuideMachine, {
     input: {
@@ -146,6 +147,7 @@ describe("project guide coordinator contract", () => {
 
     const { context } = service.getSnapshot();
     expect(context.output).toHaveLength(PROJECT_GUIDE_OUTPUT_LIMIT);
+    expect(context.output.at(-1)?.kind).toBe("working");
     expect(context.output[0]?.message).toBe("progress 4");
     expect(context.output.at(-1)?.message).toBe(
       `progress ${PROJECT_GUIDE_OUTPUT_LIMIT + 3}`,
@@ -294,17 +296,21 @@ describe("project guide coordinator contract", () => {
   });
 
   it("tracks listening elapsed time and fails recoverably at the timeout", () => {
-    const { service, signals } = coordinator(60);
+    const { service, signals } = coordinator();
     reachWaiting(service, signals);
 
     expect(service.getSnapshot().value).toBe("waiting");
     service.send({ type: "LISTEN_TICK", elapsedSeconds: 12 });
     expect(service.getSnapshot().context.elapsedListeningSeconds).toBe(12);
 
-    service.send({ type: "LISTEN_TICK", elapsedSeconds: 60 });
+    service.send({
+      type: "LISTEN_TICK",
+      elapsedSeconds: LISTEN_TIMEOUT_SECONDS,
+    });
 
     expect(service.getSnapshot().value).toBe("error");
     expect(service.getSnapshot().context.error).toContain("No event seen");
+    expect(service.getSnapshot().context.output.at(-1)?.kind).toBe("error");
   });
 
   it("rewinds progress and aborts work at the prior step", () => {

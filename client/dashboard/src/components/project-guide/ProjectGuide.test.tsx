@@ -15,6 +15,7 @@ import {
   type JourneyId,
   type JourneyStatus,
 } from "./journeys";
+import { LISTEN_TIMEOUT_SECONDS } from "./projectGuideMachine";
 import type {
   ProjectGuideOperationReport,
   ProjectGuideOperationScope,
@@ -826,7 +827,7 @@ describe("ProjectGuide", () => {
     expect(activity.scrollTop).toBe(400);
   });
 
-  it("keeps elapsed listening ticks out of the polite live status", async () => {
+  it("keeps listening status in the activity narrative", async () => {
     render(
       <ProjectGuideRun
         journey={PROJECT_GUIDE_JOURNEYS[1]!}
@@ -837,14 +838,12 @@ describe("ProjectGuide", () => {
         currentStep={4}
         output={<span>Listening started</span>}
         primaryAction={{ label: "Pause listening" }}
-        listeningElapsedSeconds={12}
         onSwitchJourney={() => undefined}
       />,
     );
 
-    expect(screen.getByRole("status").textContent).toBe(
-      "Listening for an event",
-    );
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.getByRole("log").textContent).toContain("Listening started");
     expect(
       screen.getByRole("button", { name: "Pause listening" }),
     ).toBeTruthy();
@@ -854,9 +853,6 @@ describe("ProjectGuide", () => {
           .getByRole("button", { name: "Pause listening" })
           .querySelector("svg"),
       ).toBeTruthy(),
-    );
-    expect(screen.getByText("12s elapsed").getAttribute("aria-hidden")).toBe(
-      "true",
     );
   });
 
@@ -1474,12 +1470,14 @@ describe("ProjectGuide", () => {
     fireEvent.click(screen.getByText(/Run this exact command in your shell/));
 
     act(() => {
-      vi.advanceTimersByTime(60_000);
+      vi.advanceTimersByTime(LISTEN_TIMEOUT_SECONDS * 1_000);
     });
 
     expect(
       screen.getByRole("log", { name: "Journey B activity" }).textContent,
-    ).toContain("No event seen in 60s. Check the client, then listen again.");
+    ).toContain(
+      `No event seen in ${LISTEN_TIMEOUT_SECONDS}s. Check the client, then listen again.`,
+    );
     expect(screen.queryByRole("alert")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(handleSignal).toHaveBeenLastCalledWith(
@@ -1524,12 +1522,14 @@ describe("ProjectGuide", () => {
     fireEvent.click(screen.getByRole("button", { name: "copy" }));
 
     act(() => {
-      vi.advanceTimersByTime(60_000);
+      vi.advanceTimersByTime(LISTEN_TIMEOUT_SECONDS * 1_000);
     });
 
     expect(
       screen.getByRole("log", { name: "Journey A activity" }).textContent,
-    ).toContain("No event seen in 60s. Check the client, then listen again.");
+    ).toContain(
+      `No event seen in ${LISTEN_TIMEOUT_SECONDS}s. Check the client, then listen again.`,
+    );
     expect(screen.queryByRole("alert")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(handleSignal).toHaveBeenLastCalledWith(
@@ -1544,8 +1544,6 @@ describe("ProjectGuide", () => {
       },
       expect.any(Function),
     );
-    expect(screen.getByRole("status").textContent).toBe(
-      "Listening for an event",
-    );
+    expect(screen.queryByRole("status")).toBeNull();
   });
 });

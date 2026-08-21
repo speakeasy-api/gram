@@ -13,6 +13,7 @@ export type ProjectGuideEventCard = {
 };
 
 export const PROJECT_GUIDE_OUTPUT_LIMIT = 18;
+export const LISTEN_TIMEOUT_SECONDS = 90;
 
 export type ProjectGuideDisplayState =
   | "opening"
@@ -27,7 +28,7 @@ export type ProjectGuideDisplayState =
 
 export type ProjectGuideOutputEntry = {
   id: number;
-  kind: "start" | "note" | "next" | "result";
+  kind: "start" | "working" | "note" | "next" | "result" | "error";
   message: string;
 };
 
@@ -176,7 +177,7 @@ function initialCoordinatorContext(
     errorFrom: "running",
     selectedClient: null,
     nextOutputId: 0,
-    listenTimeoutSeconds: input.listenTimeoutSeconds ?? 60,
+    listenTimeoutSeconds: input.listenTimeoutSeconds ?? LISTEN_TIMEOUT_SECONDS,
     onSignal: input.onSignal,
   };
 }
@@ -448,7 +449,7 @@ export const projectGuideMachine = setup({
       const progress = event.report.progress;
       return {
         ...appendOutput(context, [
-          { kind: "note", message: event.report.message },
+          { kind: "working", message: event.report.message },
         ]),
         operationProgress:
           progress === undefined
@@ -534,7 +535,7 @@ export const projectGuideMachine = setup({
       }
       return {
         ...appendOutput(context, [
-          { kind: "note", message: `Error · ${event.report.message}` },
+          { kind: "error", message: event.report.message },
         ]),
         error: event.report.message,
       };
@@ -543,7 +544,7 @@ export const projectGuideMachine = setup({
       if (event.type !== "LISTEN_TICK") return {};
       const message = `No event seen in ${context.listenTimeoutSeconds}s. Check the client, then listen again.`;
       return {
-        ...appendOutput(context, [{ kind: "note", message }]),
+        ...appendOutput(context, [{ kind: "error", message }]),
         elapsedListeningSeconds: event.elapsedSeconds,
         error: message,
         errorFrom: "waiting" as const,

@@ -32,7 +32,6 @@ export type ProjectGuideRunProps = {
   output?: ReactNode;
   eventCard?: ReactNode;
   primaryAction?: ProjectGuideRunAction | null;
-  listeningElapsedSeconds?: number;
   onRewind?: (step: number) => void;
   onSwitchJourney: () => void;
 };
@@ -82,7 +81,6 @@ export function ProjectGuideRun({
   output,
   eventCard,
   primaryAction,
-  listeningElapsedSeconds = 0,
   onRewind,
   onSwitchJourney,
 }: ProjectGuideRunProps): JSX.Element {
@@ -288,15 +286,6 @@ export function ProjectGuideRun({
                 {resolvedOutput}
                 {resolvedEventCard}
               </div>
-              {displayState === "waiting" && (
-                <div className="text-muted-foreground flex gap-1 font-mono text-xs">
-                  <span role="status">Listening for an event</span>
-                  <span aria-hidden="true">·</span>
-                  <span aria-hidden="true">
-                    {Math.floor(listeningElapsedSeconds)}s elapsed
-                  </span>
-                </div>
-              )}
             </div>
             {resolvedPrimaryAction && (
               <div className="mt-auto grid gap-2">
