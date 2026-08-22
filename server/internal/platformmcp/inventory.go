@@ -151,10 +151,21 @@ func mcpFromInventory(id, projectID uuid.UUID, projectName, projectSlug, name, s
 		if readinessState != "" {
 			mcp.Readiness = MCPReadiness{State: readinessState, CheckedAt: checkedAt, ExpiresAt: expiresAt}
 		}
+		// Disabled MCPs retain historical readiness evidence for audit and later
+		// diagnosis, but it cannot be treated as effective current readiness.
+		if visibility == "disabled" {
+			mcp.Readiness = MCPReadiness{State: "unknown", CheckedAt: "", ExpiresAt: ""}
+		}
 		if registeredDistributions := distributions[registrationID]; registeredDistributions != nil {
 			mcp.Distributions = registeredDistributions
 		}
-		mcp.Operations = []string{"read", "dashboard_setup"}
+		mcp.Operations = []string{"read", "dashboard_setup", "update_mcp_metadata"}
+		switch visibility {
+		case "disabled":
+			mcp.Operations = append(mcp.Operations, "enable_mcp")
+		case "private":
+			mcp.Operations = append(mcp.Operations, "disable_mcp")
+		}
 		mcp.DashboardPath = "dashboard_mcp_settings"
 	case model == "dashboard_managed":
 		mcp.Model = model

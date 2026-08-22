@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -40,6 +41,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
+	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 )
 
 type platformMCPConfig struct {
@@ -65,6 +67,7 @@ type platformMCPConfig struct {
 	RemoteChallengeManager *remotesessions.ChallengeManager
 	AuditLogger            *audit.Logger
 	PluginPublisher        *plugins.Service
+	TemporalEnv            *tenv.Environment
 	Skills                 platformmcp.SkillsManagement
 	LocalFixture           *platformMCPLocalFixtureConfig
 }
@@ -202,9 +205,14 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create Platform MCP lifecycle metadata service: %w", err)
 	}
+	lifecycleVisibility, err := newPlatformMCPLifecycleVisibilityService(config, readiness)
+	if err != nil {
+		return AssistantSurface{}, fmt.Errorf("create Platform MCP lifecycle visibility service: %w", err)
+	}
 	registrations := platformmcp.NewRegistrationService(catalog, registrationGate, store).
 		WithDirectRemoteInspector(platformmcp.NewGuardianDirectRemoteInspector(config.GuardianPolicy)).
 		WithLifecycleMetadata(lifecycleMetadata).
+		WithLifecycleVisibility(lifecycleVisibility).
 		WithOperationBudgets(budgets).
 		WithReadiness(readiness).
 		WithDashboardURL(config.DashboardURL).
@@ -292,6 +300,48 @@ func newPlatformMCPLifecycleMetadataService(config platformMCPConfig) (*platform
 			ToolVariationsGroupID: existing.ToolVariationsGroupID,
 		})
 	}, config.JWTSigningKey)
+}
+
+func newPlatformMCPLifecycleVisibilityService(config platformMCPConfig, readiness *platformmcp.ReadinessService) (*platformmcp.LifecycleVisibilityService, error) {
+	return platformmcp.NewLifecycleVisibilityService(config.DB, config.AuditLogger, mcpservers.LockMCPServerVisibilityDependencies, func(ctx context.Context, tx pgx.Tx, existing mcpserversrepo.McpServer, input platformmcp.LifecycleVisibilityUpdate) (platformmcp.LifecycleVisibilityUpdateResult, error) {
+		updated, err := mcpservers.UpdateMCPServerVisibilityInTransaction(ctx, tx, config.AuditLogger, existing, mcpservers.LifecycleUpdateInput{
+			OrganizationID:        input.OrganizationID,
+			ProjectID:             input.ProjectID,
+			ActorUserID:           input.ActorUserID,
+			ActorEmail:            nil,
+			ServerID:              input.ServerID,
+			Name:                  nil,
+			Visibility:            input.Visibility,
+			EnvironmentID:         existing.EnvironmentID,
+			UserSessionIssuerID:   existing.UserSessionIssuerID,
+			RemoteMcpServerID:     existing.RemoteMcpServerID,
+			TunneledMcpServerID:   existing.TunneledMcpServerID,
+			ToolsetID:             existing.ToolsetID,
+			UnproxiedMcpServerID:  existing.UnproxiedMcpServerID,
+			ToolVariationsGroupID: existing.ToolVariationsGroupID,
+		})
+		if err != nil {
+			return platformmcp.LifecycleVisibilityUpdateResult{}, err
+		}
+		return platformmcp.LifecycleVisibilityUpdateResult{Server: updated.Server, ClearedRootDomainIDs: updated.ClearedRootDomainIDs}, nil
+	}, func(ctx context.Context, projectID uuid.UUID, userID, commitMessage string) error {
+		if config.PluginPublisher == nil {
+			return fmt.Errorf("plugin publishing is not configured")
+		}
+		_, err := config.PluginPublisher.PublishProject(ctx, plugins.PublishProjectInput{ProjectID: projectID, CreatedByUserID: userID, CommitMessage: commitMessage, SkipIfUnchanged: true})
+		return err
+	}, func(ctx context.Context, domainIDs []uuid.UUID) error {
+		if config.TemporalEnv == nil {
+			return nil
+		}
+		var result []error
+		for _, domainID := range domainIDs {
+			if _, err := (&background.CustomDomainRegistrationClient{TemporalEnv: config.TemporalEnv}).ExecuteCustomDomainReconcile(ctx, domainID); err != nil {
+				result = append(result, err)
+			}
+		}
+		return errors.Join(result...)
+	}, readiness, config.JWTSigningKey)
 }
 
 func newPlatformMCPDistributionService(config platformMCPConfig) *platformmcp.DistributionService {
@@ -422,9 +472,14 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create browser Platform MCP lifecycle metadata service: %w", err)
 	}
+	lifecycleVisibility, err := newPlatformMCPLifecycleVisibilityService(config, readiness)
+	if err != nil {
+		return AssistantSurface{}, fmt.Errorf("create local Platform MCP lifecycle visibility service: %w", err)
+	}
 	registrations := platformmcp.NewRegistrationService(catalog, registrationGate, store).
 		WithDirectRemoteInspector(platformmcp.NewGuardianDirectRemoteInspector(config.GuardianPolicy)).
 		WithLifecycleMetadata(lifecycleMetadata).
+		WithLifecycleVisibility(lifecycleVisibility).
 		WithOperationBudgets(budgets).
 		WithReadiness(readiness).
 		WithDashboardURL(config.DashboardURL).

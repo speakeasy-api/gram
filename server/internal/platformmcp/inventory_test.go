@@ -45,6 +45,13 @@ func TestMCPFromInventoryLabelsOwnershipAndNeverProbesLegacy(t *testing.T) {
 	require.Equal(t, "ready", platform.Readiness.State)
 	require.Len(t, platform.Distributions, 1)
 	require.True(t, platform.Registration.ComponentsComplete)
+	require.Equal(t, []string{"read", "dashboard_setup", "update_mcp_metadata", "disable_mcp"}, platform.Operations)
+
+	disabled := mcpFromInventory(mcpID, projectID, "Project", "project", "Reviewed", "reviewed", "disabled", "dashboard_managed", registrationID, "catalog", "registry", "reviewed/server", "registered", complete, complete, complete, complete, "ready", "checked", "expires", nil)
+	require.False(t, disabled.EffectiveEnabled)
+	require.Equal(t, "unknown", disabled.Readiness.State, "disabled Platform-managed MCPs do not expose stale readiness as effective")
+	require.Empty(t, disabled.Readiness.CheckedAt)
+	require.Equal(t, []string{"read", "dashboard_setup", "update_mcp_metadata", "enable_mcp"}, disabled.Operations)
 
 	incomplete := mcpFromInventory(mcpID, projectID, "Project", "project", "Incomplete", "incomplete", "private", "dashboard_managed", registrationID, "catalog", "registry", "reviewed/incomplete", "pending", uuid.NullUUID{UUID: uuid.Nil, Valid: true}, complete, complete, complete, "", "", "", nil)
 	require.False(t, incomplete.Registration.ComponentsComplete, "zero UUID sentinels represent missing persisted components")
