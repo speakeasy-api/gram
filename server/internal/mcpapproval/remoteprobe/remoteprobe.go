@@ -98,9 +98,10 @@ func (p *Probe) ListToolDeclarations(ctx context.Context, serverURL string) ([]c
 	// deadline, and an unreachable host should spend one connection attempt,
 	// not several.
 	client, err := externalmcp.NewClient(ctx, p.logger, p.guardian, serverURL, externalmcptypes.TransportTypeStreamableHTTP, &externalmcp.ClientOptions{
-		Authorization:  "",
-		Headers:        nil,
-		DisableRetries: true,
+		Authorization:    "",
+		Headers:          nil,
+		DisableRetries:   true,
+		MaxResponseBytes: maxProbeResponseBytes,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("connect for tool declarations: %w", err)
@@ -149,6 +150,13 @@ func (p *Probe) ListToolDeclarations(ctx context.Context, serverURL string) ([]c
 // treated as a failed probe rather than truncated, so the cap can never make
 // a server read as having declared fewer tools than it did.
 const maxToolDeclarations = 500
+
+// maxProbeResponseBytes caps each HTTP response body the tool-declaration
+// probe reads. The probe talks to an untrusted candidate server, so an
+// enormous response must fail the probe — which the evidence records as a
+// could-not-consult gap — before it is materialized, never exhaust process
+// memory.
+const maxProbeResponseBytes = 4 << 20
 
 // maxDeclarationFieldBytes bounds each declaration field carried into the
 // evidence document.

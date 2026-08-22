@@ -23,6 +23,8 @@ const (
 	DocsOrganizationLimitName         = "platform-mcp-docs-organization"
 	SkillsConnectionLimitName         = "platform-mcp-skills-connection"
 	SkillsOrganizationLimitName       = "platform-mcp-skills-organization"
+	ProbeConnectionLimitName          = "platform-mcp-probe-connection"
+	ProbeOrganizationLimitName        = "platform-mcp-probe-organization"
 )
 
 const (
@@ -32,6 +34,17 @@ const (
 	// queries rather than to protect a backend.
 	DocsQueriesPerConnectionPerMinute   = 10
 	DocsQueriesPerOrganizationPerMinute = 100
+)
+
+const (
+	// ProbesPerConnectionPerMinute and ProbesPerOrganizationPerMinute bound
+	// remote MCP verification probes. They sit deliberately below the shared
+	// read allowances: each probe makes Gram perform egress to an arbitrary
+	// user-supplied host, so an unbounded probe tool would be an SSRF and
+	// port-scan primitive. The guardian policy bounds where a probe may go;
+	// this budget bounds how often one may go anywhere.
+	ProbesPerConnectionPerMinute   = 3
+	ProbesPerOrganizationPerMinute = 15
 )
 
 var (
@@ -109,8 +122,13 @@ type OperationBudgets struct {
 	// separately would only let a loop spend twice as much reaching the same
 	// write.
 	Skills OperationBudget
+
+	// Probe meters remote MCP verification probes on its own, tighter,
+	// allowance rather than sharing a read budget: every probe is egress to an
+	// arbitrary user-supplied host with Gram as the egress point.
+	Probe OperationBudget
 }
 
 func (b OperationBudgets) Valid() bool {
-	return b.Catalog.valid() && b.Registration.valid() && b.Handoff.valid() && b.SetupStart.valid() && b.Repair.valid() && b.Docs.valid() && b.Skills.valid()
+	return b.Catalog.valid() && b.Registration.valid() && b.Handoff.valid() && b.SetupStart.valid() && b.Repair.valid() && b.Docs.valid() && b.Skills.valid() && b.Probe.valid()
 }

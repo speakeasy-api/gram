@@ -44,6 +44,15 @@ const (
 	// Platform MCP. It is presentation-only; runtime authorization requires
 	// FlagPlatformMCP and the durable organization product feature.
 	FlagPlatformMCPDashboard Flag = "platform-mcp-dashboard"
+	// FlagPlatformMCPRemoteURL controls the engineering rollout of Platform
+	// MCP's remote URL source registration surface — the probe_remote_mcp /
+	// register_remote_mcp_for_project tool pair. It is separate from
+	// FlagPlatformMCP so the user-supplied-URL path can roll out to a narrower
+	// set than the reviewed-catalogue flow; the durable platform_mcp product
+	// feature remains the organization-admin opt-in, and an unavailable flag
+	// service fails closed. Targeted by PostHog organization group (org slug),
+	// like FlagPlatformMCP.
+	FlagPlatformMCPRemoteURL Flag = "platform-mcp-remote-url"
 
 	// FlagAssistantPlatformMCP grants a project's managed (dashboard)
 	// assistant the Platform MCP read toolset — the "platform" platform

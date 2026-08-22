@@ -326,8 +326,9 @@ func (s *RegistrationStore) BeginProviderSetup(ctx context.Context, principal Pr
 }
 
 // ProbeProviderReadiness delegates fixture registrations to their reviewed
-// adapter and browser-catalogue registrations to the persisted Remote MCP
-// source path. Both paths persist only normalized, generation-bound evidence.
+// adapter, and browser-catalogue and remote URL registrations to the persisted
+// Remote MCP source path. Both paths persist only normalized, generation-bound
+// evidence.
 func (s *RegistrationStore) ProbeProviderReadiness(ctx context.Context, principal Principal, projectID, registrationID uuid.UUID, adapters *ProviderAdapters, generic ...CatalogReadinessProber) (Readiness, error) {
 	if s == nil || s.db == nil {
 		return Readiness{}, ErrUnavailable
@@ -356,7 +357,7 @@ func (s *RegistrationStore) ProbeProviderReadiness(ctx context.Context, principa
 		Generation:          generation,
 	}
 	var result ProviderReadinessProbeResult
-	if isBrowserCatalogProviderKey(registration.CatalogProvider) {
+	if isBrowserCatalogProviderKey(registration.CatalogProvider) || registration.SourceKind == remoteURLSourceKind {
 		if len(generic) == 0 || generic[0] == nil {
 			return Readiness{}, ErrProviderAdapterUnavailable
 		}

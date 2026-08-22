@@ -34,6 +34,13 @@ var (
 	ErrIdentityProviderAttachmentUnavailable = errors.New("platform mcp identity provider attachment unavailable")
 	ErrIdentityProviderAttachmentUnsupported = errors.New("platform mcp identity provider attachment unsupported")
 	ErrIdentityProviderAttachmentConflict    = errors.New("platform mcp identity provider attachment conflict")
+
+	// ErrIdentityProviderNotDiscovered reports that live RFC 9728 discovery
+	// against the persisted remote server URL found no OAuth protected-resource
+	// metadata. It is a bounded fact about the server — distinct from an
+	// unsupported provider contract — after which authentication setup falls
+	// through to the dashboard.
+	ErrIdentityProviderNotDiscovered = errors.New("platform mcp identity provider metadata not discovered")
 )
 
 const browserCatalogDCRAuthMethod = string(remotesessions.TokenEndpointAuthMethodBasic)
@@ -47,9 +54,11 @@ type CatalogIdentityProviderAttachmentResult struct {
 }
 
 // CatalogIdentityProviderAttachment attaches the one OAuth provider advertised
-// by a persisted reviewed Remote MCP source. It is a server-owned boundary:
-// neither the tool caller nor the browser supplies a client id, client secret,
-// OAuth code, token, or other credential.
+// by a persisted Remote MCP source — a reviewed browser-catalogue entry or a
+// probed remote URL registration. It is a server-owned boundary: neither the
+// tool caller nor the browser supplies a client id, client secret, OAuth code,
+// token, or other credential, and discovery always runs against the persisted
+// server URL, never chat input.
 type CatalogIdentityProviderAttachment interface {
 	Attach(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (CatalogIdentityProviderAttachmentResult, error)
 }
@@ -116,7 +125,7 @@ func (s *CatalogIdentityProviderAttachmentService) attachLocked(ctx context.Cont
 	if err != nil {
 		return CatalogIdentityProviderAttachmentResult{}, fmt.Errorf("load platform mcp identity-provider registration: %w", err)
 	}
-	if !isBrowserCatalogProviderKey(registration.CatalogProvider) || registration.Status != registrationStatusRegistered || !registrationComponentsComplete(registration) {
+	if !remoteDiscoveryAttachmentRegistration(registration) || registration.Status != registrationStatusRegistered || !registrationComponentsComplete(registration) {
 		return CatalogIdentityProviderAttachmentResult{}, ErrIdentityProviderAttachmentUnsupported
 	}
 
@@ -133,7 +142,7 @@ func (s *CatalogIdentityProviderAttachmentService) attachLocked(ctx context.Cont
 
 	resourceMetadata, _, err := wellknown.DiscoverProtectedResourceMetadata(ctx, s.policy, remote.Url)
 	if err != nil {
-		return CatalogIdentityProviderAttachmentResult{}, fmt.Errorf("discover registered MCP identity provider: %w: %w", ErrIdentityProviderAttachmentUnsupported, err)
+		return CatalogIdentityProviderAttachmentResult{}, identityProviderDiscoveryError(registration.SourceKind, err)
 	}
 	metadata, err := s.discoverSupportedIssuerMetadata(ctx, resourceMetadata.AuthorizationServers)
 	if err != nil {
@@ -387,6 +396,44 @@ func identityProviderDynamicRegistrationError(err error) error {
 		return fmt.Errorf("register identity-provider client: %w", ErrIdentityProviderAttachmentUnsupported)
 	}
 	return fmt.Errorf("register identity-provider client: %w", ErrIdentityProviderAttachmentUnavailable)
+}
+
+// remoteDiscoveryAttachmentRegistration reports whether a registration's
+// identity provider is derived through live RFC 9728/8414 discovery against
+// its persisted Remote MCP source: browser-catalogue registrations and remote
+// URL sources. Fixture adapter registrations own their provider setup and
+// never take this path.
+func remoteDiscoveryAttachmentRegistration(registration platformrepo.PlatformMcpCatalogRegistration) bool {
+	return isBrowserCatalogProviderKey(registration.CatalogProvider) || registration.SourceKind == remoteURLSourceKind
+}
+
+// identityProviderDiscoveryError types a failed protected-resource metadata
+// discovery per registration source. A user-supplied remote URL declares no
+// provider contract, so an upstream that answered its well-known path without
+// producing metadata is a bounded no-metadata fact about the server
+// (ErrIdentityProviderNotDiscovered) that routes setup to the dashboard.
+// Three answers read that way: a 404 ("not_found"), a 200 whose body is not a
+// metadata document ("malformed"), and another error status ("http_error") —
+// the latter two are the non-compliant catch-all shapes the wellknown package
+// documents answering well-known probes with an app page or a 500 rather
+// than a 404. A probe that never got an HTTP answer (timeout, blocked host,
+// transport failure) leaves publication unknown and surfaces as the retryable
+// ErrIdentityProviderAttachmentUnavailable rather than a terminal
+// not-discovered. For a reviewed catalogue source every discovery failure
+// contradicts the reviewed contract and stays
+// ErrIdentityProviderAttachmentUnsupported.
+func identityProviderDiscoveryError(sourceKind string, err error) error {
+	if sourceKind != remoteURLSourceKind {
+		return fmt.Errorf("discover registered MCP identity provider: %w: %w", ErrIdentityProviderAttachmentUnsupported, err)
+	}
+	var discoveryErr *wellknown.ProtectedResourceDiscoveryError
+	if errors.As(err, &discoveryErr) {
+		switch discoveryErr.Code() {
+		case "not_found", "malformed", "http_error":
+			return fmt.Errorf("discover remote MCP identity provider: %w: %w", ErrIdentityProviderNotDiscovered, err)
+		}
+	}
+	return fmt.Errorf("discover remote MCP identity provider: %w: %w", ErrIdentityProviderAttachmentUnavailable, err)
 }
 
 func attachmentIssuerSlug(registrationID uuid.UUID) string {

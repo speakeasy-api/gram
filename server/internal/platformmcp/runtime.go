@@ -127,10 +127,19 @@ func NewRuntimeWithFeedback(logger *slog.Logger, authenticator Authenticator, ga
 // identities and declared configuration fields, never an arbitrary endpoint or
 // provider credential.
 func NewRuntimeWithLifecycle(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL, cursorKeyMaterial string, reader Reader, catalog Catalog, registrations *RegistrationService, readiness ReadinessRecorder, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, candidate CatalogDescriptor) *Runtime {
+	return NewRuntimeWithRemoteMCP(logger, authenticator, gate, authorizer, protectedResourceURL, cursorKeyMaterial, reader, catalog, registrations, readiness, setupResources, feedback, onboarding, distributions, skills, candidate, nil, nil)
+}
+
+// NewRuntimeWithRemoteMCP additionally wires the remote URL source
+// registration pair. remoteProbe verifies user-supplied URLs and issues
+// signed probe receipts; remoteSurfaceGate is the surface-specific two-key
+// rollout check evaluated on every call. While either is nil the pair is
+// served as bounded feature_unavailable stubs.
+func NewRuntimeWithRemoteMCP(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL, cursorKeyMaterial string, reader Reader, catalog Catalog, registrations *RegistrationService, readiness ReadinessRecorder, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, candidate CatalogDescriptor, remoteProbe RemoteMCPProber, remoteSurfaceGate Gate) *Runtime {
 	if postgresReader, ok := reader.(*PostgresReader); ok {
 		postgresReader.setInventoryCursorKey(cursorKeyMaterial)
 	}
-	server, registrar := newServer(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, skills, candidate)
+	server, registrar := newServer(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, skills, candidate, remoteProbe, remoteSurfaceGate)
 	runtime := &Runtime{
 		authenticator:        authenticator,
 		gate:                 gate,

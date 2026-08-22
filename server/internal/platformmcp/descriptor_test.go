@@ -13,7 +13,7 @@ import (
 func TestEveryRegisteredToolDeclaresAnAudience(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, CatalogDescriptor{}, nil, nil)
 	descriptors := registrar.Descriptors()
 	require.NotEmpty(t, descriptors, "the deployment registers tools even when every dependency is absent")
 
@@ -72,7 +72,7 @@ func names(descriptors []Descriptor) []string {
 func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, CatalogDescriptor{}, nil, nil)
 
 	admitted := map[string]bool{}
 	for _, descriptor := range registrar.For(AudienceAssistant) {
@@ -88,6 +88,8 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		"get_platform_mcp_onboarding_status",
 		"attach_platform_mcp_identity_provider",
 		"add_platform_mcp_to_default_plugin",
+		"probe_remote_mcp",
+		"register_remote_mcp_for_project",
 	} {
 		require.False(t, admitted[name], "tool %q needs a connection and must not be admitted to the assistant", name)
 	}
@@ -117,7 +119,7 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 func TestExternalEndpointServesOnlyExternallyAdmittedTools(t *testing.T) {
 	t.Parallel()
 
-	server, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, CatalogDescriptor{})
+	server, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, CatalogDescriptor{}, nil, nil)
 
 	admitted := make(map[string]bool)
 	for _, descriptor := range registrar.For(AudienceExternal) {

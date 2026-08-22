@@ -182,6 +182,13 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 			Organization: ratelimit.New(limitStore, platformmcp.DocsOrganizationLimitName, ratelimit.PerMinute(platformmcp.DocsQueriesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		},
 		Skills: newBudget(platformmcp.SkillsConnectionLimitName, platformmcp.SkillsOrganizationLimitName),
+		// Remote MCP verification probes are egress to arbitrary user-supplied
+		// hosts, so they get their own allowances, tighter than the shared
+		// read budget.
+		Probe: platformmcp.OperationBudget{
+			Connection:   ratelimit.New(limitStore, platformmcp.ProbeConnectionLimitName, ratelimit.PerMinute(platformmcp.ProbesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+			Organization: ratelimit.New(limitStore, platformmcp.ProbeOrganizationLimitName, ratelimit.PerMinute(platformmcp.ProbesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		},
 	}
 	if !budgets.Valid() {
 		return AssistantSurface{}, errors.New("local Platform MCP operation budgets are incomplete")
@@ -200,6 +207,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithReadiness(readiness).
 		WithDashboardURL(config.DashboardURL).
 		WithIdentityProviderAttachment(platformmcp.NewCatalogIdentityProviderAttachmentService(config.DB, config.Encryption, config.GuardianPolicy, config.AuditLogger, config.ServerURL)).
+		WithRemoteRegistration(config.JWTSigningKey, platformmcp.NewPostgresRemoteMCPApprovals(config.DB)).
 		WithTelemetry(telemetry)
 	dashboardSetupStarter := platformmcp.NewDashboardSetupService(store, registrationGate, authorizer, adapters, budgets.SetupStart)
 	feedback := platformmcp.NewFeedbackService(config.DB)
@@ -220,7 +228,16 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	config.Mux.Handle(http.MethodPost, "/platform-mcp/local-fixture/mcp", fixtureMCP.Handler().ServeHTTP)
 
 	skillAuthoring := platformmcp.NewSkillsService(config.Skills, platformmcp.NewPostgresSkillTargets(config.DB), store, config.Authz, registrationGate, budgets.Skills)
-	runtime := platformmcp.NewRuntimeWithLifecycle(
+	remoteProbe, err := platformmcp.NewRemoteProbeService(config.Logger, config.GuardianPolicy, config.JWTSigningKey, budgets.Probe)
+	if err != nil {
+		return AssistantSurface{}, fmt.Errorf("create local Platform MCP remote probe service: %w", err)
+	}
+	remoteSurfaceGate := platformmcp.NewRemoteMCPSurfaceGate(
+		config.ProductFeatures,
+		config.FeatureFlags,
+		platformmcp.NewPostgresOrganizationSlugResolver(config.DB),
+	)
+	runtime := platformmcp.NewRuntimeWithRemoteMCP(
 		config.Logger,
 		authenticator,
 		gate,
@@ -240,6 +257,8 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		distributions,
 		skillAuthoring,
 		fixtureConfig.CatalogDescriptor(),
+		remoteProbe,
+		remoteSurfaceGate,
 	).WithOAuthTelemetry(oauthTelemetry)
 	oauth.Attach(config.Mux)
 	platformmcp.NewDashboardSetupHTTP(dashboardSetupStarter, config.Sessions).Attach(config.Mux)
@@ -373,6 +392,13 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 			Organization: ratelimit.New(limitStore, platformmcp.DocsOrganizationLimitName, ratelimit.PerMinute(platformmcp.DocsQueriesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		},
 		Skills: newBudget(platformmcp.SkillsConnectionLimitName, platformmcp.SkillsOrganizationLimitName),
+		// Remote MCP verification probes are egress to arbitrary user-supplied
+		// hosts, so they get their own allowances, tighter than the shared
+		// read budget.
+		Probe: platformmcp.OperationBudget{
+			Connection:   ratelimit.New(limitStore, platformmcp.ProbeConnectionLimitName, ratelimit.PerMinute(platformmcp.ProbesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+			Organization: ratelimit.New(limitStore, platformmcp.ProbeOrganizationLimitName, ratelimit.PerMinute(platformmcp.ProbesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		},
 	}
 	if !budgets.Valid() {
 		return AssistantSurface{}, errors.New("platform MCP operation budgets are incomplete")
@@ -391,6 +417,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithReadiness(readiness).
 		WithDashboardURL(config.DashboardURL).
 		WithIdentityProviderAttachment(platformmcp.NewCatalogIdentityProviderAttachmentService(config.DB, config.Encryption, config.GuardianPolicy, config.AuditLogger, config.ServerURL)).
+		WithRemoteRegistration(config.JWTSigningKey, platformmcp.NewPostgresRemoteMCPApprovals(config.DB)).
 		WithTelemetry(telemetry)
 	dashboardSetupStarter := platformmcp.NewDashboardSetupService(store, registrationGate, authorizer, adapters, budgets.SetupStart)
 	feedback := platformmcp.NewFeedbackService(config.DB)
@@ -420,7 +447,16 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		},
 	)
 	skillAuthoring := platformmcp.NewSkillsService(config.Skills, platformmcp.NewPostgresSkillTargets(config.DB), store, config.Authz, registrationGate, budgets.Skills)
-	runtime := platformmcp.NewRuntimeWithLifecycle(
+	remoteProbe, err := platformmcp.NewRemoteProbeService(config.Logger, config.GuardianPolicy, config.JWTSigningKey, budgets.Probe)
+	if err != nil {
+		return AssistantSurface{}, fmt.Errorf("create platform mcp remote probe service: %w", err)
+	}
+	remoteSurfaceGate := platformmcp.NewRemoteMCPSurfaceGate(
+		config.ProductFeatures,
+		config.FeatureFlags,
+		platformmcp.NewPostgresOrganizationSlugResolver(config.DB),
+	)
+	runtime := platformmcp.NewRuntimeWithRemoteMCP(
 		config.Logger,
 		authenticator,
 		gate,
@@ -437,6 +473,8 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		distributions,
 		skillAuthoring,
 		platformmcp.CatalogDescriptor{},
+		remoteProbe,
+		remoteSurfaceGate,
 	).WithOAuthTelemetry(oauthTelemetry)
 	oauth.Attach(config.Mux)
 	platformmcp.NewDashboardSetupHTTP(dashboardSetupStarter, config.Sessions).Attach(config.Mux)
