@@ -118,15 +118,11 @@ func remoteMCPSurfaceRefusal(ctx context.Context, surfaceGate Gate, principal Pr
 	if err == nil && enabled {
 		return nil, nil
 	}
-	refusal, ok := remoteMCPBoundedRefusal(featureUnavailableResult{
+	refusal, _ := remoteMCPBoundedRefusal(featureUnavailableResult{
 		Code:    unavailableCode,
 		Feature: featureRemoteURLRegistration,
 		Message: "Remote MCP URL registration is not enabled for this organization. Reviewed catalogue registration may still be available through search_mcp_catalog and register_catalog_mcp.",
 	})
-	if !ok {
-		// A refusal that cannot be rendered must still refuse.
-		return nil, fmt.Errorf("render remote mcp surface refusal: %w", ErrUnavailable)
-	}
 	return refusal, nil
 }
 

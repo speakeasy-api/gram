@@ -8,7 +8,6 @@ import (
 	"unicode"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -102,6 +101,14 @@ type RemoteMCPApprovalState struct {
 // blocked_pending_approval signal instead of quietly admitting the server.
 type RemoteMCPApprovalChecker interface {
 	CheckRemoteMCPApproval(ctx context.Context, organizationID string, projectID uuid.UUID, remoteURL string) (RemoteMCPApprovalState, error)
+}
+
+// RemoteMCPApprovalTxChecker consults org MCP approval enforcement on a
+// caller-supplied database handle, so a mutation can evaluate enforcement
+// under the transaction that commits its effects.
+// *PostgresRemoteMCPApprovals is the production implementation.
+type RemoteMCPApprovalTxChecker interface {
+	CheckRemoteMCPApprovalTx(ctx context.Context, db riskrepo.DBTX, organizationID string, projectID uuid.UUID, remoteURL string) (RemoteMCPApprovalState, error)
 }
 
 // WithRemoteRegistration enables RegisterRemoteMCP. receiptKeyMaterial must be
@@ -335,7 +342,10 @@ func NewPostgresRemoteMCPApprovals(db *pgxpool.Pool) *PostgresRemoteMCPApprovals
 	return &PostgresRemoteMCPApprovals{db: db}
 }
 
-var _ RemoteMCPApprovalChecker = (*PostgresRemoteMCPApprovals)(nil)
+var (
+	_ RemoteMCPApprovalChecker   = (*PostgresRemoteMCPApprovals)(nil)
+	_ RemoteMCPApprovalTxChecker = (*PostgresRemoteMCPApprovals)(nil)
+)
 
 // CheckRemoteMCPApproval reports whether the project's blocking shadow-MCP
 // policies admit the server URL. Mirroring the enforcement writes: a
@@ -352,14 +362,15 @@ func (c *PostgresRemoteMCPApprovals) CheckRemoteMCPApproval(ctx context.Context,
 	return checkRemoteMCPApproval(ctx, c.db, organizationID, projectID, remoteURL)
 }
 
-// CheckRemoteMCPApprovalTx runs the same consult on the caller's open
-// transaction, so a mutation can evaluate enforcement under the transaction
-// that commits its effects instead of on a separate pool connection.
-func (c *PostgresRemoteMCPApprovals) CheckRemoteMCPApprovalTx(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID, remoteURL string) (RemoteMCPApprovalState, error) {
-	if c == nil || tx == nil || organizationID == "" || projectID == uuid.Nil {
+// CheckRemoteMCPApprovalTx runs the same consult on the caller's database
+// handle — typically an open transaction — so a mutation can evaluate
+// enforcement under the transaction that commits its effects instead of on a
+// separate pool connection.
+func (c *PostgresRemoteMCPApprovals) CheckRemoteMCPApprovalTx(ctx context.Context, db riskrepo.DBTX, organizationID string, projectID uuid.UUID, remoteURL string) (RemoteMCPApprovalState, error) {
+	if c == nil || db == nil || organizationID == "" || projectID == uuid.Nil {
 		return RemoteMCPApprovalState{EnforcementActive: false, Approved: false}, ErrRegistrationUnavailable
 	}
-	return checkRemoteMCPApproval(ctx, tx, organizationID, projectID, remoteURL)
+	return checkRemoteMCPApproval(ctx, db, organizationID, projectID, remoteURL)
 }
 
 func checkRemoteMCPApproval(ctx context.Context, db riskrepo.DBTX, organizationID string, projectID uuid.UUID, remoteURL string) (RemoteMCPApprovalState, error) {

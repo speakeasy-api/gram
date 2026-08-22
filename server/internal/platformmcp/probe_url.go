@@ -3,9 +3,11 @@ package platformmcp
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
-	"strconv"
 	"strings"
+
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
 // maxRemoteURLLength bounds user-supplied remote MCP URLs. The URL travels
@@ -67,20 +69,19 @@ func normalizeRemoteURL(raw string) (string, error) {
 		return "", fmt.Errorf("%w: host is required", ErrRemoteURLInvalid)
 	}
 
-	parsed.Host = strings.ToLower(parsed.Host)
-	// The default port is compared numerically so zero-padded spellings such
-	// as ":0443" collapse to the same receipt and registration identity.
-	if port, err := strconv.Atoi(parsed.Port()); err == nil && port == 443 {
-		host := parsed.Hostname()
-		if strings.Contains(host, ":") {
-			// An IPv6 literal loses its brackets through Hostname; restore them.
-			host = "[" + host + "]"
-		}
-		parsed.Host = host
+	// The shared helper lowercases the host and strips the default port with a
+	// numeric comparison, so zero-padded spellings such as ":0443" collapse to
+	// the same receipt and registration identity.
+	host := shadowmcp.NormalizeURLHost(parsed.Scheme, parsed.Host)
+	if strings.Contains(host, ":") && net.ParseIP(host) != nil {
+		// Default-port stripping goes through SplitHostPort, which loses an
+		// IPv6 literal's brackets; restore them. An already-bracketed host
+		// does not parse as a bare IP and passes through untouched.
+		host = "[" + host + "]"
 	}
 	// A dangling separator with no port ("host:") is the same authority as the
 	// bare host.
-	parsed.Host = strings.TrimSuffix(parsed.Host, ":")
+	parsed.Host = strings.TrimSuffix(host, ":")
 
 	return parsed.String(), nil
 }
