@@ -1,14 +1,14 @@
 import { useCallback } from "react";
 
-import { createDismissedCtaStore } from "@/hooks/useDismissedCtaStore";
+import { createPersistedFlagStore } from "@/hooks/usePersistedFlagStore";
 
-const store = createDismissedCtaStore("gram-org-welcome-rollout-started");
+const store = createPersistedFlagStore("gram-org-welcome-rollout-started");
 
 export function useOrgSetupStarted(orgSlug: string | undefined): {
   setupStarted: boolean;
   markSetupStarted: () => void;
 } {
-  const setupStarted = store.useDismissed(orgSlug);
+  const setupStarted = store.useFlag(orgSlug);
   const markSetupStarted = useCallback(() => {
     if (orgSlug) store.write(orgSlug, true);
   }, [orgSlug]);

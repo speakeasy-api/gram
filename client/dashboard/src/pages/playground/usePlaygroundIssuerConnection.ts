@@ -1,3 +1,4 @@
+import { useMcpConnectConsent } from "@/hooks/useMcpConnectConsent";
 import { useProxiedMcpTools } from "@/hooks/useProxiedMcpTools";
 import { useUserSessionToken } from "@/hooks/useUserSessionToken";
 import { useInternalMcpUrl } from "@/hooks/useToolsetUrl";
@@ -22,6 +23,15 @@ export interface PlaygroundIssuerConnection {
   connect: () => void;
   /** Whether a connect URL could be derived (drives button enablement). */
   canConnect: boolean;
+  /**
+   * True while an issuer-gated toolset is waiting for the user's explicit
+   * Connect click. Minting a user-session JWT persists a session row
+   * server-side, so nothing is minted (and no probe runs) until the user
+   * consents via `requestConnect` (or clicks `connect`).
+   */
+  needsExplicitConnect: boolean;
+  /** Records the Connect consent for this toolset (persisted across visits). */
+  requestConnect: () => void;
 }
 
 /**
@@ -41,9 +51,21 @@ export function usePlaygroundIssuerConnection(
 ): PlaygroundIssuerConnection {
   const isIssuerGated = !!toolset?.userSessionIssuerId;
 
+  // Issuer-gated toolsets only mint a user-session token after an explicit
+  // Connect click — minting persists a session row, so opening the playground
+  // alone must not establish one. The consent is persisted (keyed by toolset
+  // id) so return visits reconnect without another click. Both consumers of
+  // this hook share the same persisted flag, so consent recorded from either
+  // surface unblocks the other.
+  const { connectRequested, requestConnect } = useMcpConnectConsent(
+    isIssuerGated ? toolset?.id : undefined,
+  );
+  const needsExplicitConnect = isIssuerGated && !connectRequested;
+
   const { accessToken, isLoading: isTokenLoading } = useUserSessionToken({
     target: { kind: "toolset", id: toolset?.id },
     userSessionIssuerId: toolset?.userSessionIssuerId,
+    enabled: connectRequested,
   });
 
   const mcpUrl = useInternalMcpUrl(toolset);
@@ -76,9 +98,13 @@ export function usePlaygroundIssuerConnection(
     [mcpUrl],
   );
 
+  // Opening the connect page is itself an explicit Connect action, so record
+  // the consent too — otherwise a user who linked their upstream session from
+  // the auth panel would still be blocked on the mint gate afterwards.
   const connect = useCallback(() => {
+    requestConnect();
     if (authUrl) window.open(authUrl, "_blank", "noopener,noreferrer");
-  }, [authUrl]);
+  }, [authUrl, requestConnect]);
 
   return {
     isIssuerGated,
@@ -89,5 +115,7 @@ export function usePlaygroundIssuerConnection(
     refetch,
     connect,
     canConnect: !!authUrl,
+    needsExplicitConnect,
+    requestConnect,
   };
 }

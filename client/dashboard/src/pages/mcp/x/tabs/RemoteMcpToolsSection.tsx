@@ -13,6 +13,7 @@ import {
   type ProxiedMcpTool,
   type ProxiedMcpToolAnnotations,
 } from "@/hooks/useProxiedMcpTools";
+import { useMcpConnectConsent } from "@/hooks/useMcpConnectConsent";
 import { useUserSessionToken } from "@/hooks/useUserSessionToken";
 import { handleError, toError } from "@/lib/errors";
 import { cn, firstPartyConnectUrl, mcpConnectionUrl } from "@/lib/utils";
@@ -64,10 +65,15 @@ type RemoteMcpToolsSectionProps = {
  * Lists the tools advertised by the remote MCP server, connecting through the
  * Gram-proxied `/mcp/<slug>` endpoint via the AI SDK MCP client.
  *
- * For issuer-gated servers we mint a user-session JWT scoped to the mcp_server
- * and connect with it. When no upstream remote_session exists yet the gateway
- * 401s into `needsAuth`, and we surface an Authenticate button that opens the
- * first-party connect page in a new tab; returning focus re-attempts the list.
+ * For issuer-gated servers we require an explicit Connect click before doing
+ * anything: minting the user-session JWT persists a session row server-side,
+ * so merely viewing the page must not establish one. The consent is persisted
+ * per server (localStorage), so a server the user already connected reconnects
+ * automatically on return visits. After the click we mint
+ * the JWT scoped to the mcp_server and connect with it. When no upstream
+ * remote_session exists yet the gateway 401s into `needsAuth`, and we surface
+ * an Authenticate button that opens the first-party connect page in a new tab;
+ * returning focus re-attempts the list.
  *
  * Expected fetch failures are rendered inline (see RemoteMcpToolsBody). The
  * surrounding ErrorBoundary is the defensive layer for unexpected render-time
@@ -175,9 +181,19 @@ function RemoteMcpToolsSectionInner({
 }: RemoteMcpToolsSectionProps): JSX.Element {
   const isIssuerGated = !!userSessionIssuerId;
 
+  // Issuer-gated servers only mint a user-session token after an explicit
+  // Connect click — minting persists a session row, so viewing the page alone
+  // must not establish one. The consent is persisted (keyed by mcp_server id)
+  // so return visits reconnect without another click.
+  const { connectRequested, requestConnect } = useMcpConnectConsent(
+    isIssuerGated ? mcpServerId : undefined,
+  );
+  const needsExplicitConnect = isIssuerGated && !connectRequested;
+
   const { accessToken, isLoading: isTokenLoading } = useUserSessionToken({
     target: { kind: "mcpServer", id: mcpServerId },
     userSessionIssuerId,
+    enabled: connectRequested,
   });
 
   // Speakeasy's stored annotation overrides for this server's tools. Toolset-backed
@@ -258,6 +274,8 @@ function RemoteMcpToolsSectionInner({
       ) : null}
       <RemoteMcpToolsBody
         loading={loading}
+        needsExplicitConnect={needsExplicitConnect}
+        onExplicitConnect={requestConnect}
         needsAuth={needsAuth}
         isError={isError}
         toolEntries={toolEntries}
@@ -271,6 +289,8 @@ function RemoteMcpToolsSectionInner({
 
 function RemoteMcpToolsBody({
   loading,
+  needsExplicitConnect,
+  onExplicitConnect,
   needsAuth,
   isError,
   toolEntries,
@@ -279,6 +299,8 @@ function RemoteMcpToolsBody({
   onConnect,
 }: {
   loading: boolean;
+  needsExplicitConnect: boolean;
+  onExplicitConnect: () => void;
   needsAuth: boolean;
   isError: boolean;
   toolEntries: Array<[string, ProxiedMcpTool]>;
@@ -286,6 +308,17 @@ function RemoteMcpToolsBody({
   onRetry: () => void;
   onConnect?: () => void;
 }): JSX.Element {
+  // Checked before `loading`: until the user opts in nothing is fetching, so
+  // the prompt (not a skeleton) is the resting state for issuer-gated servers.
+  if (needsExplicitConnect) {
+    return (
+      <RemoteMcpToolsConnectPrompt
+        message="Connect to this MCP server to list its tools. Connecting establishes a user session for your account on this server."
+        onConnect={onExplicitConnect}
+      />
+    );
+  }
+
   if (loading) {
     return <ToolsListSkeleton />;
   }
@@ -555,20 +588,24 @@ function ToolRowSkeleton(): JSX.Element {
 }
 
 /**
- * The needs-connect state: a centered card prompting the user to connect
- * upstream before tools can be listed. Connecting opens the first-party connect
- * page; returning focus re-attempts the listing.
+ * A needs-connect state: a centered card prompting the user to connect before
+ * tools can be listed. Used both for the explicit-consent gate on issuer-gated
+ * servers (Connect enables the user-session mint) and for the upstream-auth
+ * prompt (Connect opens the first-party connect page; returning focus
+ * re-attempts the listing).
  */
 function RemoteMcpToolsConnectPrompt({
+  message = "Connect to this MCP to view the tools.",
   onConnect,
 }: {
+  message?: string;
   onConnect?: () => void;
 }): JSX.Element {
   return (
     <div className="border-neutral-softest flex flex-col items-center gap-3 border px-6 py-12 text-center">
       <PlugZap className="text-muted-foreground/70 size-8" />
       <Text muted small>
-        Connect to this MCP to view the tools.
+        {message}
       </Text>
       {onConnect ? (
         <Button variant="secondary" onClick={onConnect}>

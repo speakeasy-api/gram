@@ -1,13 +1,13 @@
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { createDismissedCtaStore } from "./useDismissedCtaStore";
+import { createPersistedFlagStore } from "./usePersistedFlagStore";
 
-describe("createDismissedCtaStore", () => {
+describe("createPersistedFlagStore", () => {
   it("shares a scoped dismissal across hook consumers", () => {
-    const store = createDismissedCtaStore("test-dismissed-cta");
-    const first = renderHook(() => store.useDismissed("user:organization"));
-    const second = renderHook(() => store.useDismissed("user:organization"));
+    const store = createPersistedFlagStore("test-dismissed-cta");
+    const first = renderHook(() => store.useFlag("user:organization"));
+    const second = renderHook(() => store.useFlag("user:organization"));
 
     expect(first.result.current).toBe(false);
     expect(second.result.current).toBe(false);
@@ -19,11 +19,9 @@ describe("createDismissedCtaStore", () => {
   });
 
   it("keeps dismissal scopes isolated", () => {
-    const store = createDismissedCtaStore("test-dismissed-cta-isolation");
-    const first = renderHook(() => store.useDismissed("user-one:organization"));
-    const second = renderHook(() =>
-      store.useDismissed("user-two:organization"),
-    );
+    const store = createPersistedFlagStore("test-dismissed-cta-isolation");
+    const first = renderHook(() => store.useFlag("user-one:organization"));
+    const second = renderHook(() => store.useFlag("user-two:organization"));
 
     act(() => store.write("user-one:organization", true));
 
@@ -33,8 +31,8 @@ describe("createDismissedCtaStore", () => {
 
   it("responds to a dismissal from another browser tab", () => {
     const prefix = "test-dismissed-cta-storage";
-    const store = createDismissedCtaStore(prefix);
-    const hook = renderHook(() => store.useDismissed("user:organization"));
+    const store = createPersistedFlagStore(prefix);
+    const hook = renderHook(() => store.useFlag("user:organization"));
 
     act(() => {
       window.dispatchEvent(
@@ -49,8 +47,8 @@ describe("createDismissedCtaStore", () => {
   });
 
   it("clears in-memory dismissal after storage is cleared in another tab", () => {
-    const store = createDismissedCtaStore("test-dismissed-cta-storage-clear");
-    const hook = renderHook(() => store.useDismissed("user:organization"));
+    const store = createPersistedFlagStore("test-dismissed-cta-storage-clear");
+    const hook = renderHook(() => store.useFlag("user:organization"));
     act(() => store.write("user:organization", true));
 
     act(() => {

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useOrganization, useUser } from "@/contexts/Auth";
 
 import type { RecordDashboardCtaEventRequestBody } from "@gram/client/models/components/recorddashboardctaeventrequestbody.js";
-import { createDismissedCtaStore } from "@/hooks/useDismissedCtaStore";
+import { createPersistedFlagStore } from "@/hooks/usePersistedFlagStore";
 import { useOrganizationPlatformMCPOnboarding } from "@/hooks/useOrganizationPlatformMCPOnboarding";
 import { useOrgRoutes } from "@/routes";
 import { usePlatformMCPPackageStatus } from "@gram/client/react-query/platformMCPPackageStatus.js";
@@ -26,7 +26,7 @@ type PlatformMcpCtaLabel =
   | "Continue Platform MCP setup"
   | "Reconnect Platform MCP";
 
-const store = createDismissedCtaStore(
+const store = createPersistedFlagStore(
   "gram:platform-mcp-promotion-dismissed:v1",
 );
 
@@ -97,7 +97,7 @@ export function usePlatformMcpCta({
     enabled: canQuery,
   });
   const scope = dismissalScope(user.id, organization.id);
-  const dismissed = store.useDismissed(scope);
+  const dismissed = store.useFlag(scope);
   const { mutate: recordDashboardCtaEvent } =
     useRecordPlatformMCPDashboardCtaEventMutation();
   const recorded = useRef(new Set<PlatformMcpCtaAction>());
