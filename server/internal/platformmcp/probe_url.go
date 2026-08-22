@@ -73,11 +73,19 @@ func normalizeRemoteURL(raw string) (string, error) {
 	// numeric comparison, so zero-padded spellings such as ":0443" collapse to
 	// the same receipt and registration identity.
 	host := shadowmcp.NormalizeURLHost(parsed.Scheme, parsed.Host)
-	if strings.Contains(host, ":") && net.ParseIP(host) != nil {
+	if strings.Contains(host, ":") {
 		// Default-port stripping goes through SplitHostPort, which loses an
-		// IPv6 literal's brackets; restore them. An already-bracketed host
-		// does not parse as a bare IP and passes through untouched.
-		host = "[" + host + "]"
+		// IPv6 literal's brackets; restore them. net.ParseIP rejects a %zone
+		// suffix, so the zone is cut for the decision only — the restored
+		// host keeps it. An already-bracketed host does not parse as a bare
+		// IP and passes through untouched.
+		bare := host
+		if zone := strings.Index(bare, "%"); zone >= 0 {
+			bare = bare[:zone]
+		}
+		if net.ParseIP(bare) != nil {
+			host = "[" + host + "]"
+		}
 	}
 	// A dangling separator with no port ("host:") is the same authority as the
 	// bare host.

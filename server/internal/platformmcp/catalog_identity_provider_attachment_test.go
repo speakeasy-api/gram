@@ -45,15 +45,17 @@ func TestIdentityProviderDiscoveryErrorTypesPerRegistrationSource(t *testing.T) 
 	require.NotErrorIs(t, remoteErr, ErrIdentityProviderAttachmentUnavailable)
 
 	// Non-compliant catch-alls answer the well-known probe with an app page
-	// (200 decoded as "malformed") or an error status ("http_error") rather
-	// than a 404 — a permanent non-publication, not a transient fault.
+	// (200 decoded as "malformed"), the CDN/SPA default 500, or another
+	// non-transient status rather than a 404 — content-shaped answers that a
+	// retry would only re-read, so they read as permanent non-publication.
 	for _, catchAll := range []*wellknown.ProtectedResourceDiscoveryError{
 		{ProbeURL: "https://remote.example.test/.well-known/oauth-protected-resource", Status: http.StatusOK},
 		{ProbeURL: "https://remote.example.test/.well-known/oauth-protected-resource", Status: http.StatusInternalServerError},
+		{ProbeURL: "https://remote.example.test/.well-known/oauth-protected-resource", Status: http.StatusForbidden},
 	} {
 		catchAllErr := identityProviderDiscoveryError(remoteURLSourceKind, catchAll)
-		require.ErrorIs(t, catchAllErr, ErrIdentityProviderNotDiscovered, "code %s", catchAll.Code())
-		require.NotErrorIs(t, catchAllErr, ErrIdentityProviderAttachmentUnavailable, "code %s", catchAll.Code())
+		require.ErrorIs(t, catchAllErr, ErrIdentityProviderNotDiscovered, "status %d", catchAll.Status)
+		require.NotErrorIs(t, catchAllErr, ErrIdentityProviderAttachmentUnavailable, "status %d", catchAll.Status)
 	}
 
 	catalogErr := identityProviderDiscoveryError("catalog", notPublished)
@@ -62,17 +64,19 @@ func TestIdentityProviderDiscoveryErrorTypesPerRegistrationSource(t *testing.T) 
 	require.NotErrorIs(t, catalogErr, ErrIdentityProviderNotDiscovered)
 }
 
-// Only an upstream that answered its well-known path (404, catch-all 200, or
-// error status) reads as not-discovered. A probe that never got an HTTP
-// answer — timed out, was blocked, or failed in transport — leaves
-// publication unknown, so it must stay a retryable unavailable — a
-// not-discovered misclassification would steer a transient failure into a
-// terminal dashboard fallback.
+// Request-scoped and infrastructure-transient conditions leave publication
+// unknown: no HTTP answer at all, an untyped failure, or a status that talks
+// about this request rather than the path's content (408, 429, 502, 503,
+// 504). Each must stay a retryable unavailable — a not-discovered
+// misclassification would steer a transient failure into a terminal
+// dashboard fallback.
 func TestIdentityProviderDiscoveryErrorKeepsUnknownRemoteFailuresRetryable(t *testing.T) {
 	t.Parallel()
 
 	unknownFailures := []error{
 		&wellknown.ProtectedResourceDiscoveryError{ProbeURL: "https://remote.example.test/.well-known/oauth-protected-resource", Status: 0},
+		&wellknown.ProtectedResourceDiscoveryError{ProbeURL: "https://remote.example.test/.well-known/oauth-protected-resource", Status: http.StatusTooManyRequests},
+		&wellknown.ProtectedResourceDiscoveryError{ProbeURL: "https://remote.example.test/.well-known/oauth-protected-resource", Status: http.StatusServiceUnavailable},
 		errors.New("discovery failed in an untyped way"),
 	}
 	for _, cause := range unknownFailures {

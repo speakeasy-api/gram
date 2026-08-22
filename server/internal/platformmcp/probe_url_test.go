@@ -88,6 +88,11 @@ func TestNormalizeRemoteURL(t *testing.T) {
 			want: "https://[2001:db8::1]/mcp",
 		},
 		{
+			name: "zone-scoped ipv6 literal keeps brackets and zone when the default port is stripped",
+			raw:  "https://[fe80::1%25eth0]:443/mcp",
+			want: "https://[fe80::1%25eth0]/mcp",
+		},
+		{
 			name:    "empty input",
 			raw:     "",
 			invalid: true,
@@ -189,6 +194,7 @@ func TestNormalizeRemoteURLIsIdempotent(t *testing.T) {
 		"https://EXAMPLE.com:443/MCP",
 		"https://example.com:0443/mcp",
 		"https://[2001:DB8::1]:443/mcp",
+		"https://[fe80::1%25eth0]:443/mcp",
 		"  https://example.com:/mcp ",
 	} {
 		once, err := normalizeRemoteURL(raw)

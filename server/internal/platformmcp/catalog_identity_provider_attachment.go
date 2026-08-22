@@ -409,19 +409,30 @@ func remoteDiscoveryAttachmentRegistration(registration platformrepo.PlatformMcp
 
 // identityProviderDiscoveryError types a failed protected-resource metadata
 // discovery per registration source. A user-supplied remote URL declares no
-// provider contract, so an upstream that answered its well-known path without
-// producing metadata is a bounded no-metadata fact about the server
-// (ErrIdentityProviderNotDiscovered) that routes setup to the dashboard.
-// Three answers read that way: a 404 ("not_found"), a 200 whose body is not a
-// metadata document ("malformed"), and another error status ("http_error") —
-// the latter two are the non-compliant catch-all shapes the wellknown package
-// documents answering well-known probes with an app page or a 500 rather
-// than a 404. A probe that never got an HTTP answer (timeout, blocked host,
-// transport failure) leaves publication unknown and surfaces as the retryable
-// ErrIdentityProviderAttachmentUnavailable rather than a terminal
-// not-discovered. For a reviewed catalogue source every discovery failure
-// contradicts the reviewed contract and stays
-// ErrIdentityProviderAttachmentUnsupported.
+// provider contract, so the split below decides whether a failure is a
+// bounded no-metadata fact (ErrIdentityProviderNotDiscovered, routing setup
+// to the dashboard) or a retryable unknown
+// (ErrIdentityProviderAttachmentUnavailable). The dividing line — settled
+// after review argued both directions, so change it only with a reason
+// neither round considered — is what the failure says about the well-known
+// path's content:
+//
+//   - Content-shaped answers read as non-publication: a 404 ("not_found"), a
+//     200 whose body is not a metadata document ("malformed" — the SPA
+//     catch-all answering every path with the app page), and other
+//     non-transient statuses including the CDN/SPA default 500 ("http_error"
+//     below, outside the transient set). Whatever serves that path is
+//     answering with content that is not metadata; retrying re-reads the
+//     same answer.
+//   - Request-scoped or infrastructure-transient conditions leave
+//     publication unknown: no HTTP answer at all (timeout, blocked host,
+//     transport failure), or a status that talks about this request rather
+//     than the path's content — 408, 429, 502, 503, 504. A retry has a real
+//     chance of a different outcome, so a terminal not-discovered would
+//     wrongly steer the user to the dashboard.
+//
+// For a reviewed catalogue source every discovery failure contradicts the
+// reviewed contract and stays ErrIdentityProviderAttachmentUnsupported.
 func identityProviderDiscoveryError(sourceKind string, err error) error {
 	if sourceKind != remoteURLSourceKind {
 		return fmt.Errorf("discover registered MCP identity provider: %w: %w", ErrIdentityProviderAttachmentUnsupported, err)
@@ -429,8 +440,14 @@ func identityProviderDiscoveryError(sourceKind string, err error) error {
 	var discoveryErr *wellknown.ProtectedResourceDiscoveryError
 	if errors.As(err, &discoveryErr) {
 		switch discoveryErr.Code() {
-		case "not_found", "malformed", "http_error":
+		case "not_found", "malformed":
 			return fmt.Errorf("discover remote MCP identity provider: %w: %w", ErrIdentityProviderNotDiscovered, err)
+		case "http_error":
+			switch discoveryErr.Status {
+			case http.StatusRequestTimeout, http.StatusTooManyRequests, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+			default:
+				return fmt.Errorf("discover remote MCP identity provider: %w: %w", ErrIdentityProviderNotDiscovered, err)
+			}
 		}
 	}
 	return fmt.Errorf("discover remote MCP identity provider: %w: %w", ErrIdentityProviderAttachmentUnavailable, err)
