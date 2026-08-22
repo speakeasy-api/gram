@@ -1333,6 +1333,40 @@ type ModelProviderKey struct {
 	Deleted         bool
 }
 
+type NetworkIngress struct {
+	ID                   uuid.UUID
+	OrganizationID       string
+	Provider             string
+	Hostname             string
+	CredentialKind       string
+	AuthKeyEnc           pgtype.Text
+	OauthClientID        pgtype.Text
+	OauthClientSecretEnc pgtype.Text
+	Tags                 []string
+	Enabled              bool
+	PrivateNetworkOnly   bool
+	IdentityRequired     bool
+	Status               string
+	NetworkName          pgtype.Text
+	DnsName              pgtype.Text
+	NodeID               pgtype.Text
+	LastError            pgtype.Text
+	LastSeenAt           pgtype.Timestamptz
+	ConnectedSince       pgtype.Timestamptz
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	DeletedAt            pgtype.Timestamptz
+	Deleted              bool
+}
+
+type NetworkNodeState struct {
+	IngressID uuid.UUID
+	Key       string
+	Value     []byte
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
 type OauthProxyClientInfo struct {
 	McpSlug                 string
 	ClientID                string
