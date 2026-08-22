@@ -98,9 +98,10 @@ func (p *Probe) ListToolDeclarations(ctx context.Context, serverURL string) ([]c
 	// deadline, and an unreachable host should spend one connection attempt,
 	// not several.
 	client, err := externalmcp.NewClient(ctx, p.logger, p.guardian, serverURL, externalmcptypes.TransportTypeStreamableHTTP, &externalmcp.ClientOptions{
-		Authorization:  "",
-		Headers:        nil,
-		DisableRetries: true,
+		Authorization:    "",
+		Headers:          nil,
+		DisableRetries:   true,
+		MaxResponseBytes: 0,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("connect for tool declarations: %w", err)

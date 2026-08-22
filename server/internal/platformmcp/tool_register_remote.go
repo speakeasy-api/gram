@@ -12,7 +12,7 @@ type RegisterRemoteMCPToolInput struct {
 	ProjectSlug    string `json:"project_slug" jsonschema:"explicit AICP project slug that will own the remote MCP source"`
 	ProbeReceipt   string `json:"probe_receipt" jsonschema:"server-issued probe receipt returned by probe_remote_mcp after the user explicitly confirmed its evidence; this tool never accepts a URL"`
 	IdempotencyKey string `json:"idempotency_key" jsonschema:"caller-generated idempotency key; reuse only to retry the same project and probed server"`
-	DisplayName    string `json:"display_name,omitempty" jsonschema:"optional display name for the registered server; defaults to the probed server's host"`
+	DisplayName    string `json:"display_name,omitempty" jsonschema:"optional display name for the registered server; a single line of at most 256 bytes with no control or line-separator characters; defaults to the probed server's host"`
 }
 
 type RegisterRemoteMCPToolOutput struct {
@@ -50,7 +50,11 @@ func registerRegisterRemoteMCPTool(reg *Registrar, registrations *RegistrationSe
 		if err != nil {
 			return nil, zero, err
 		}
-		if refusal, ok := remoteMCPSurfaceRefusal(ctx, surfaceGate, principal); ok {
+		refusal, err := remoteMCPSurfaceRefusal(ctx, surfaceGate, principal)
+		if err != nil {
+			return nil, zero, err
+		}
+		if refusal != nil {
 			return refusal, zero, nil
 		}
 		result, err := registrations.RegisterRemoteMCP(ctx, principal, RegisterRemoteMCPInput(input))

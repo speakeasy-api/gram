@@ -409,15 +409,23 @@ func remoteDiscoveryAttachmentRegistration(registration platformrepo.PlatformMcp
 
 // identityProviderDiscoveryError types a failed protected-resource metadata
 // discovery per registration source. A user-supplied remote URL declares no
-// provider contract, so finding no metadata there is a bounded fact about the
-// server (ErrIdentityProviderNotDiscovered) that routes setup to the
-// dashboard; for a reviewed catalogue source the same failure contradicts the
-// reviewed contract and stays ErrIdentityProviderAttachmentUnsupported.
+// provider contract, so the server deliberately answering that it publishes no
+// metadata is a bounded fact about the server
+// (ErrIdentityProviderNotDiscovered) that routes setup to the dashboard —
+// only that: a timeout, blocked host, or malformed document leaves publication
+// unknown and surfaces as the retryable ErrIdentityProviderAttachmentUnavailable
+// rather than a terminal not-discovered. For a reviewed catalogue source every
+// discovery failure contradicts the reviewed contract and stays
+// ErrIdentityProviderAttachmentUnsupported.
 func identityProviderDiscoveryError(sourceKind string, err error) error {
-	if sourceKind == remoteURLSourceKind {
+	if sourceKind != remoteURLSourceKind {
+		return fmt.Errorf("discover registered MCP identity provider: %w: %w", ErrIdentityProviderAttachmentUnsupported, err)
+	}
+	var discoveryErr *wellknown.ProtectedResourceDiscoveryError
+	if errors.As(err, &discoveryErr) && discoveryErr.Code() == "not_found" {
 		return fmt.Errorf("discover remote MCP identity provider: %w: %w", ErrIdentityProviderNotDiscovered, err)
 	}
-	return fmt.Errorf("discover registered MCP identity provider: %w: %w", ErrIdentityProviderAttachmentUnsupported, err)
+	return fmt.Errorf("discover remote MCP identity provider: %w: %w", ErrIdentityProviderAttachmentUnavailable, err)
 }
 
 func attachmentIssuerSlug(registrationID uuid.UUID) string {

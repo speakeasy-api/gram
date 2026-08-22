@@ -84,7 +84,9 @@ type DistributionService struct {
 	// consult for remote URL registrations. It is derived from the same
 	// database handle the service already owns, so the enforcement chokepoint
 	// cannot be lost at a composition site; a missing consult fails closed.
-	approvals RemoteMCPApprovalChecker
+	// The concrete type is kept so the consult can run on the distribution
+	// transaction rather than a separate pool connection.
+	approvals *PostgresRemoteMCPApprovals
 }
 
 func NewDistributionService(db *pgxpool.Pool, auditLogger *audit.Logger, attach ExistingDefaultPluginAttacher, publish ProjectPublisher) *DistributionService {
@@ -157,8 +159,10 @@ func (s *DistributionService) Distribute(ctx context.Context, principal Principa
 	}
 	// Enforcement is consulted before readiness: an anonymous probe can read an
 	// open remote server as fresh-ready, so readiness alone must never admit an
-	// enforcement-blocked server into the Default plugin.
-	if err := s.requireApprovedRemoteDistribution(ctx, q, principal, target); err != nil {
+	// enforcement-blocked server into the Default plugin. The consult runs on
+	// this transaction so the approval state it reads cannot predate the
+	// transaction that commits the attachment.
+	if err := s.requireApprovedRemoteDistribution(ctx, tx, principal, target); err != nil {
 		return Distribution{}, err
 	}
 	if err := s.requireFreshReadiness(ctx, q, principal, target.ProjectID, target.RegistrationID.UUID, connectionID, generation); err != nil {
@@ -458,8 +462,8 @@ func (s *DistributionService) onboardingTarget(ctx context.Context, q *repo.Quer
 // ErrDistributionBlockedPendingApproval. Catalogue registrations are never
 // enforcement-blocked here. The consult fails closed: an unknown enforcement
 // state is an error, never "approved".
-func (s *DistributionService) requireApprovedRemoteDistribution(ctx context.Context, q *repo.Queries, principal Principal, target repo.GetPlatformMCPOnboardingDistributionTargetRow) error {
-	registration, err := lifecycleRegistration(ctx, q, principal, target.ProjectID, target.RegistrationID.UUID)
+func (s *DistributionService) requireApprovedRemoteDistribution(ctx context.Context, tx pgx.Tx, principal Principal, target repo.GetPlatformMCPOnboardingDistributionTargetRow) error {
+	registration, err := lifecycleRegistration(ctx, repo.New(tx), principal, target.ProjectID, target.RegistrationID.UUID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrDistributionInvalid
 	}
@@ -472,7 +476,7 @@ func (s *DistributionService) requireApprovedRemoteDistribution(ctx context.Cont
 	if s.approvals == nil || registration.CatalogReference == "" {
 		return ErrDistributionBlockedPendingApproval
 	}
-	approval, err := s.approvals.CheckRemoteMCPApproval(ctx, principal.OrganizationID, target.ProjectID, registration.CatalogReference)
+	approval, err := s.approvals.CheckRemoteMCPApprovalTx(ctx, tx, principal.OrganizationID, target.ProjectID, registration.CatalogReference)
 	if err != nil {
 		return fmt.Errorf("consult remote mcp approval enforcement for distribution: %w", err)
 	}

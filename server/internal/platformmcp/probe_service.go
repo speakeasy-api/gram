@@ -35,6 +35,12 @@ const maxProbeEvidenceToolNames = 50
 // carried into probe evidence.
 const maxProbeEvidenceFieldBytes = 256
 
+// maxProbeResponseBytes caps each HTTP response body the probe reads. The
+// probe talks to an arbitrary user-supplied host, so an enormous tools/list
+// or initialize response must fail as a bounded size refusal before it is
+// materialized, never exhaust probe-process memory.
+const maxProbeResponseBytes = 4 << 20
+
 // probeTruncationMarker flags a clipped evidence field so a bounded value can
 // never pass as the server's own words.
 const probeTruncationMarker = "…[truncated]"
@@ -277,6 +283,7 @@ const (
 	probeGapInitializeDeclined = "server declined the unauthenticated initialize handshake, so server identity and tools were not observed"
 	probeGapToolsDeclined      = "server declined unauthenticated tools/list"
 	probeGapToolListFailed     = "server did not return a usable tools/list response"
+	probeGapToolListTooLarge   = "server's tools/list response exceeded the probe's bounded size, so tools were not observed"
 	probeGapNoOAuthMetadata    = "server publishes no OAuth metadata at the RFC 9728/8414 well-known endpoints"
 	probeGapOAuthIncomplete    = "OAuth metadata discovery did not run to completion"
 )
@@ -293,17 +300,23 @@ func (s *RemoteProbeService) executeProbe(ctx context.Context, normalizedURL str
 	// this is a one-shot bounded probe, and retries would let an unreachable
 	// server take minutes to report as such instead of ~10s.
 	client, err := externalmcp.NewClient(ctx, s.logger, s.policy, normalizedURL, externalmcptypes.TransportTypeStreamableHTTP, &externalmcp.ClientOptions{
-		Authorization:  "",
-		Headers:        nil,
-		DisableRetries: true,
+		Authorization:    "",
+		Headers:          nil,
+		DisableRetries:   true,
+		MaxResponseBytes: maxProbeResponseBytes,
 	})
 	if err != nil {
 		var authErr *externalmcp.AuthRejectedError
 		if !errors.As(err, &authErr) {
 			return probeFindings{}, classifyProbeTransportError(err)
 		}
-		// A 401/403 typed rejection proves an MCP-shaped, auth-walled server:
-		// verified, with the handshake recorded as ungathered evidence.
+		// Only a 401/403 carrying a WWW-Authenticate challenge proves an
+		// MCP-shaped, auth-walled server; any ordinary protected endpoint can
+		// answer a bare 401/403, so without the challenge nothing was
+		// verified and no receipt may issue.
+		if authErr.WWWAuthenticate == "" {
+			return probeFindings{}, ErrProbeNotMCPServer
+		}
 		findings.authRejected = true
 		wwwAuthenticate = authErr.WWWAuthenticate
 		findings.gaps = append(findings.gaps, probeGapInitializeDeclined)
@@ -326,13 +339,16 @@ func (s *RemoteProbeService) executeProbe(ctx context.Context, normalizedURL str
 				}
 				findings.toolNames = append(findings.toolNames, clipProbeEvidenceField(tool.Name))
 			}
-		case errors.As(listErr, &listAuthErr):
+		case errors.As(listErr, &listAuthErr) && listAuthErr.WWWAuthenticate != "":
 			findings.authRejected = true
 			wwwAuthenticate = listAuthErr.WWWAuthenticate
 			findings.gaps = append(findings.gaps, probeGapToolsDeclined)
+		case errors.Is(listErr, externalmcp.ErrResponseTooLarge):
+			findings.gaps = append(findings.gaps, probeGapToolListTooLarge)
 		default:
-			// The handshake already verified the server; an unusable listing
-			// is a bounded gap, not a refusal.
+			// The handshake already verified the server; an unusable listing —
+			// including a bare 401/403 with no WWW-Authenticate challenge,
+			// which is not auth evidence — is a bounded gap, not a refusal.
 			findings.gaps = append(findings.gaps, probeGapToolListFailed)
 		}
 	}
@@ -368,6 +384,12 @@ func (s *RemoteProbeService) executeProbe(ctx context.Context, normalizedURL str
 func classifyProbeTransportError(err error) error {
 	if errors.Is(err, guardian.ErrBlockedIP) || errors.Is(err, guardian.ErrBadHost) {
 		return ErrProbeEgressDenied
+	}
+	// An initialize response past the bounded read: the server answered, but
+	// nothing verifiable was observed, so the probe refuses rather than
+	// treating an unbounded talker as an MCP server.
+	if errors.Is(err, externalmcp.ErrResponseTooLarge) {
+		return ErrProbeNotMCPServer
 	}
 	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 		return ErrProbeUnreachable

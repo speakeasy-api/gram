@@ -24,7 +24,7 @@ type RemoteMCPProber interface {
 }
 
 type ProbeRemoteMCPToolInput struct {
-	RemoteURL string `json:"remote_url" jsonschema:"https URL of the remote MCP server to verify; userinfo and fragments are refused; the probe is read-only and never registers anything"`
+	RemoteURL string `json:"remote_url" jsonschema:"https URL of the remote MCP server to verify; userinfo, fragments, and query strings are refused; the probe is read-only and never registers anything"`
 }
 
 type ProbeRemoteMCPToolOutput struct {
@@ -54,7 +54,11 @@ func registerProbeRemoteMCPTool(reg *Registrar, prober RemoteMCPProber, surfaceG
 		if err != nil {
 			return nil, zero, err
 		}
-		if refusal, ok := remoteMCPSurfaceRefusal(ctx, surfaceGate, principal); ok {
+		refusal, err := remoteMCPSurfaceRefusal(ctx, surfaceGate, principal)
+		if err != nil {
+			return nil, zero, err
+		}
+		if refusal != nil {
 			return refusal, zero, nil
 		}
 		result, err := prober.Probe(ctx, principal, input.RemoteURL)
@@ -97,18 +101,33 @@ func probeRemoteMCPToolManifest() *mcp.Tool {
 }
 
 // remoteMCPSurfaceRefusal enforces the remote URL surface rollout gate for one
-// call. An evaluation failure reads exactly like a disabled organization: the
-// surface fails closed and the refusal carries no gate or flag detail.
-func remoteMCPSurfaceRefusal(ctx context.Context, surfaceGate Gate, principal Principal) (*mcp.CallToolResult, bool) {
+// call, returning a non-nil refusal whenever the call must not proceed. An
+// evaluation failure reads exactly like a disabled organization: the surface
+// fails closed and the refusal carries no gate or flag detail. The one
+// exception is the caller's own context ending mid-evaluation, which is
+// returned as the error it is — matching how every sibling gate consult
+// propagates errors — rather than being misreported as a disabled feature.
+// The request context is the discriminator: a gate dependency's internal
+// timeout also surfaces as a context error value, and that one must stay a
+// bounded fail-closed refusal.
+func remoteMCPSurfaceRefusal(ctx context.Context, surfaceGate Gate, principal Principal) (*mcp.CallToolResult, error) {
 	enabled, err := surfaceGate.Enabled(ctx, principal.OrganizationID)
-	if err != nil || !enabled {
-		return remoteMCPBoundedRefusal(featureUnavailableResult{
-			Code:    unavailableCode,
-			Feature: featureRemoteURLRegistration,
-			Message: "Remote MCP URL registration is not enabled for this organization. Reviewed catalogue registration may still be available through search_mcp_catalog and register_catalog_mcp.",
-		})
+	if err != nil && ctx.Err() != nil {
+		return nil, fmt.Errorf("check remote mcp surface gate: %w", err)
 	}
-	return nil, false
+	if err == nil && enabled {
+		return nil, nil
+	}
+	refusal, ok := remoteMCPBoundedRefusal(featureUnavailableResult{
+		Code:    unavailableCode,
+		Feature: featureRemoteURLRegistration,
+		Message: "Remote MCP URL registration is not enabled for this organization. Reviewed catalogue registration may still be available through search_mcp_catalog and register_catalog_mcp.",
+	})
+	if !ok {
+		// A refusal that cannot be rendered must still refuse.
+		return nil, fmt.Errorf("render remote mcp surface refusal: %w", ErrUnavailable)
+	}
+	return refusal, nil
 }
 
 // probeRemoteMCPToolResult maps the probe service's typed refusals onto the
@@ -119,13 +138,13 @@ func probeRemoteMCPToolResult(err error) (*mcp.CallToolResult, bool) {
 	var result operationBudgetResult
 	switch {
 	case errors.Is(err, ErrRemoteURLInvalid):
-		result = operationBudgetResult{Code: "invalid_url", Reason: "", Message: "This URL fails the shape rules: it must be https, with no userinfo and no fragment. Correct the URL with the user before probing again; nothing was contacted."}
+		result = operationBudgetResult{Code: "invalid_url", Reason: "", Message: "This URL fails the shape rules: it must be https, with no userinfo, no fragment, and no query string. Correct the URL with the user before probing again; nothing was contacted."}
 	case errors.Is(err, ErrProbeEgressDenied):
 		result = operationBudgetResult{Code: "egress_denied", Reason: "", Message: "The egress policy does not allow probing this target. Private and internal addresses cannot be registered as remote MCP sources."}
 	case errors.Is(err, ErrProbeUnreachable):
 		result = operationBudgetResult{Code: "unreachable", Reason: "", Message: "The target could not be reached within the probe's bounded time. Confirm the URL with the user and retry once the server is reachable."}
 	case errors.Is(err, ErrProbeNotMCPServer):
-		result = operationBudgetResult{Code: "not_an_mcp_server", Reason: "", Message: "The target answered but did not behave like an MCP server: no completed initialize handshake and no typed auth rejection. Confirm the exact MCP endpoint URL with the user."}
+		result = operationBudgetResult{Code: "not_an_mcp_server", Reason: "", Message: "The target answered but did not behave like an MCP server: no completed initialize handshake and no 401/403 carrying a WWW-Authenticate challenge. Confirm the exact MCP endpoint URL with the user."}
 	case errors.Is(err, ErrProbeReceiptInvalid):
 		result = operationBudgetResult{Code: "receipt_invalid", Reason: "", Message: "A probe receipt cannot be issued to this caller identity, so the probe was not run. Re-authenticate the Platform MCP connection and retry."}
 	default:

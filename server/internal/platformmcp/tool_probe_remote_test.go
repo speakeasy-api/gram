@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -139,6 +140,46 @@ func TestProbeRemoteMCPToolFailsClosedWhenSurfaceGateUnavailable(t *testing.T) {
 	payload := decodeToolRefusal(t, err)
 	require.Equal(t, unavailableCode, payload["code"])
 	require.NotContains(t, payload["message"], "flag service", "gate detail must not be echoed")
+	require.Zero(t, prober.calls)
+}
+
+// The caller's own context ending during the surface-gate lookup must surface
+// as that error — matching every sibling gate consult — never as a
+// feature_unavailable fact the model would treat as a disabled rollout.
+func TestProbeRemoteMCPToolPreservesContextCancellationFromSurfaceGate(t *testing.T) {
+	t.Parallel()
+
+	registrations := liveRemoteRegistrations(remoteRegistrationStore(ResolvedProject{ID: uuid.New(), Slug: "project"}, uuid.New()), &recordingRemoteApprovalChecker{})
+	prober := &fakeRemoteProber{}
+	registrar := remoteToolsRegistrar(registrations, prober, testGate{err: fmt.Errorf("check remote mcp rollout: %w", context.Canceled)})
+	descriptor := remoteToolDescriptor(t, registrar, "probe_remote_mcp")
+
+	ctx, cancel := context.WithCancel(ContextWithPrincipal(t.Context(), testPrincipal()))
+	cancel()
+	_, err := descriptor.Invoke(ctx, json.RawMessage(`{"remote_url":"https://remote.example.test/mcp"}`))
+
+	require.ErrorIs(t, err, context.Canceled)
+	var refusal *ToolRefusalError
+	require.NotErrorAs(t, err, &refusal, "cancellation must not read as a bounded refusal")
+	require.Zero(t, prober.calls)
+}
+
+// A gate dependency's own internal timeout also surfaces as a context error
+// value — but the caller's context is still alive, so it must stay a bounded
+// fail-closed refusal with no gate detail, not a raw error.
+func TestProbeRemoteMCPToolFailsClosedOnGateDependencyTimeout(t *testing.T) {
+	t.Parallel()
+
+	registrations := liveRemoteRegistrations(remoteRegistrationStore(ResolvedProject{ID: uuid.New(), Slug: "project"}, uuid.New()), &recordingRemoteApprovalChecker{})
+	prober := &fakeRemoteProber{}
+	registrar := remoteToolsRegistrar(registrations, prober, testGate{err: fmt.Errorf("check remote mcp rollout: %w", context.DeadlineExceeded)})
+	descriptor := remoteToolDescriptor(t, registrar, "probe_remote_mcp")
+
+	_, err := descriptor.Invoke(ContextWithPrincipal(t.Context(), testPrincipal()), json.RawMessage(`{"remote_url":"https://remote.example.test/mcp"}`))
+
+	payload := decodeToolRefusal(t, err)
+	require.Equal(t, unavailableCode, payload["code"])
+	require.NotContains(t, payload["message"], "rollout", "gate detail must not be echoed")
 	require.Zero(t, prober.calls)
 }
 

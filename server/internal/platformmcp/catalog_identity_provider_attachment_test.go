@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
@@ -34,17 +35,41 @@ func TestDiscoverSupportedIssuerMetadataRejectsEmptyCandidates(t *testing.T) {
 func TestIdentityProviderDiscoveryErrorTypesPerRegistrationSource(t *testing.T) {
 	t.Parallel()
 
-	cause := errors.New("no protected resource metadata")
+	notPublished := &wellknown.ProtectedResourceDiscoveryError{ProbeURL: "https://remote.example.test/.well-known/oauth-protected-resource", Status: http.StatusNotFound}
+	require.Equal(t, "not_found", notPublished.Code())
 
-	remoteErr := identityProviderDiscoveryError(remoteURLSourceKind, cause)
-	require.ErrorIs(t, remoteErr, ErrIdentityProviderNotDiscovered, "a remote URL source with no discoverable metadata is a bounded fact, not an unsupported contract")
-	require.ErrorIs(t, remoteErr, cause)
+	remoteErr := identityProviderDiscoveryError(remoteURLSourceKind, notPublished)
+	require.ErrorIs(t, remoteErr, ErrIdentityProviderNotDiscovered, "a remote URL source deliberately publishing no metadata is a bounded fact, not an unsupported contract")
+	require.ErrorIs(t, remoteErr, notPublished)
 	require.NotErrorIs(t, remoteErr, ErrIdentityProviderAttachmentUnsupported)
+	require.NotErrorIs(t, remoteErr, ErrIdentityProviderAttachmentUnavailable)
 
-	catalogErr := identityProviderDiscoveryError("catalog", cause)
+	catalogErr := identityProviderDiscoveryError("catalog", notPublished)
 	require.ErrorIs(t, catalogErr, ErrIdentityProviderAttachmentUnsupported)
-	require.ErrorIs(t, catalogErr, cause)
+	require.ErrorIs(t, catalogErr, notPublished)
 	require.NotErrorIs(t, catalogErr, ErrIdentityProviderNotDiscovered)
+}
+
+// Only the server deliberately answering "not published" reads as
+// not-discovered. A probe that timed out, was blocked, hit an unexpected
+// status, or decoded garbage leaves publication unknown, so it must stay a
+// retryable unavailable — a not-discovered misclassification would steer a
+// transient failure into a terminal dashboard fallback.
+func TestIdentityProviderDiscoveryErrorKeepsUnknownRemoteFailuresRetryable(t *testing.T) {
+	t.Parallel()
+
+	unknownFailures := []error{
+		&wellknown.ProtectedResourceDiscoveryError{ProbeURL: "https://remote.example.test/.well-known/oauth-protected-resource", Status: http.StatusInternalServerError},
+		&wellknown.ProtectedResourceDiscoveryError{ProbeURL: "https://remote.example.test/.well-known/oauth-protected-resource", Status: http.StatusOK},
+		&wellknown.ProtectedResourceDiscoveryError{ProbeURL: "https://remote.example.test/.well-known/oauth-protected-resource", Status: 0},
+		errors.New("discovery failed in an untyped way"),
+	}
+	for _, cause := range unknownFailures {
+		remoteErr := identityProviderDiscoveryError(remoteURLSourceKind, cause)
+		require.ErrorIs(t, remoteErr, ErrIdentityProviderAttachmentUnavailable, "cause %v", cause)
+		require.ErrorIs(t, remoteErr, cause, "cause %v", cause)
+		require.NotErrorIs(t, remoteErr, ErrIdentityProviderNotDiscovered, "cause %v", cause)
+	}
 }
 
 func TestIdentityProviderDynamicRegistrationErrorTreatsTimeoutAndRateLimitAsRetryable(t *testing.T) {

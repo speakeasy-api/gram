@@ -44,8 +44,9 @@ type GetOnboardingMCPStatusToolOutput struct {
 
 	// BlockedPendingApproval reports that organization MCP approval enforcement
 	// is active and this registered remote MCP server is not approved under it.
-	// The server stays blocked — and cannot become ready — until an
-	// administrator decides the approval at DashboardApprovalsURL.
+	// The server stays blocked — and cannot become usable or distributable,
+	// whatever Readiness reads — until an administrator decides the approval at
+	// DashboardApprovalsURL.
 	BlockedPendingApproval bool `json:"blocked_pending_approval,omitempty"`
 
 	// DashboardApprovalsURL is where the pending approval is requested and

@@ -61,28 +61,56 @@ func NewOrganizationGate(capabilities CapabilityChecker, flags feature.Provider,
 }
 
 func (g *OrganizationGate) Enabled(ctx context.Context, organizationID string) (bool, error) {
-	if g == nil || g.capabilities == nil || g.flags == nil || g.organizations == nil || organizationID == "" {
+	if g == nil {
+		return false, ErrUnavailable
+	}
+	return evaluateTwoKeyGate(ctx, g.capabilities, g.flags, g.organizations, organizationID, twoKeyGateSurface{
+		flag:              feature.FlagPlatformMCP,
+		resolveContext:    "resolve organization for platform mcp rollout",
+		rolloutContext:    "check platform mcp rollout",
+		capabilityContext: "check platform mcp capability",
+	})
+}
+
+// twoKeyGateSurface carries what distinguishes one two-key gate from another:
+// the surface's PostHog rollout flag and the error contexts its wrapped
+// failures name.
+type twoKeyGateSurface struct {
+	flag              feature.Flag
+	resolveContext    string
+	rolloutContext    string
+	capabilityContext string
+}
+
+// evaluateTwoKeyGate is the shared two-key rollout evaluation: the
+// surface-specific PostHog flag keeps an unreleased surface inaccessible,
+// while the durable Platform MCP product feature — read uncached so
+// revocation is visible on the next request — lets an organization opt out
+// after release. Both keys must be enabled, and any unavailable dependency
+// fails closed.
+func evaluateTwoKeyGate(ctx context.Context, capabilities CapabilityChecker, flags feature.Provider, organizations OrganizationSlugResolver, organizationID string, surface twoKeyGateSurface) (bool, error) {
+	if capabilities == nil || flags == nil || organizations == nil || organizationID == "" {
 		return false, ErrUnavailable
 	}
 
-	organizationSlug, err := g.organizations.OrganizationSlug(ctx, organizationID)
+	organizationSlug, err := organizations.OrganizationSlug(ctx, organizationID)
 	if err != nil {
-		return false, fmt.Errorf("resolve organization for platform mcp rollout: %w", err)
+		return false, fmt.Errorf("%s: %w", surface.resolveContext, err)
 	}
 	if organizationSlug == "" {
 		return false, ErrUnavailable
 	}
-	rollout, err := g.flags.IsFlagEnabled(ctx, feature.FlagPlatformMCP, organizationID, feature.OrgProjectGroups(organizationSlug, ""))
+	rollout, err := flags.IsFlagEnabled(ctx, surface.flag, organizationID, feature.OrgProjectGroups(organizationSlug, ""))
 	if err != nil {
-		return false, fmt.Errorf("check platform mcp rollout: %w", err)
+		return false, fmt.Errorf("%s: %w", surface.rolloutContext, err)
 	}
 	if !rollout {
 		return false, nil
 	}
 
-	capable, err := g.capabilities.IsFeatureEnabledUncached(ctx, organizationID, productfeatures.FeaturePlatformMCP)
+	capable, err := capabilities.IsFeatureEnabledUncached(ctx, organizationID, productfeatures.FeaturePlatformMCP)
 	if err != nil {
-		return false, fmt.Errorf("check platform mcp capability: %w", err)
+		return false, fmt.Errorf("%s: %w", surface.capabilityContext, err)
 	}
 	return capable, nil
 }
@@ -110,30 +138,15 @@ func NewRemoteMCPSurfaceGate(capabilities CapabilityChecker, flags feature.Provi
 }
 
 func (g *RemoteMCPSurfaceGate) Enabled(ctx context.Context, organizationID string) (bool, error) {
-	if g == nil || g.capabilities == nil || g.flags == nil || g.organizations == nil || organizationID == "" {
+	if g == nil {
 		return false, ErrUnavailable
 	}
-
-	organizationSlug, err := g.organizations.OrganizationSlug(ctx, organizationID)
-	if err != nil {
-		return false, fmt.Errorf("resolve organization for remote mcp registration rollout: %w", err)
-	}
-	if organizationSlug == "" {
-		return false, ErrUnavailable
-	}
-	rollout, err := g.flags.IsFlagEnabled(ctx, feature.FlagPlatformMCPRemoteURL, organizationID, feature.OrgProjectGroups(organizationSlug, ""))
-	if err != nil {
-		return false, fmt.Errorf("check remote mcp registration rollout: %w", err)
-	}
-	if !rollout {
-		return false, nil
-	}
-
-	capable, err := g.capabilities.IsFeatureEnabledUncached(ctx, organizationID, productfeatures.FeaturePlatformMCP)
-	if err != nil {
-		return false, fmt.Errorf("check platform mcp capability for remote mcp registration: %w", err)
-	}
-	return capable, nil
+	return evaluateTwoKeyGate(ctx, g.capabilities, g.flags, g.organizations, organizationID, twoKeyGateSurface{
+		flag:              feature.FlagPlatformMCPRemoteURL,
+		resolveContext:    "resolve organization for remote mcp registration rollout",
+		rolloutContext:    "check remote mcp registration rollout",
+		capabilityContext: "check platform mcp capability for remote mcp registration",
+	})
 }
 
 // CatalogRegistrationGate ensures mutations require the main Platform MCP

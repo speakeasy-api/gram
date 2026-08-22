@@ -208,7 +208,7 @@ func TestProbeReceiptBindsConnectionlessCallerToItsSubject(t *testing.T) {
 	require.ErrorIs(t, err, ErrProbeReceiptContextMismatch)
 }
 
-// A principal claiming a connection through its generation alone has an
+// A principal claiming a connection through only one of its two halves has an
 // incomplete identity, mirroring the operation budget's refusal of the same
 // shape.
 func TestProbeReceiptRefusesIncompleteConnectionIdentity(t *testing.T) {
@@ -217,17 +217,22 @@ func TestProbeReceiptRefusesIncompleteConnectionIdentity(t *testing.T) {
 	codec, err := newProbeReceiptCodec("test-receipt-key")
 	require.NoError(t, err)
 	generationOnly := Principal{OrganizationID: "organization", UserID: "user-1", Generation: "generation-1"}
-	require.True(t, generationOnly.HasConnection())
-	require.Empty(t, principalReceiptBinding(generationOnly))
+	connectionOnly := Principal{OrganizationID: "organization", UserID: "user-1", ConnectionID: "connection-1"}
+	for _, incomplete := range []Principal{generationOnly, connectionOnly} {
+		require.True(t, incomplete.HasConnection())
+		require.Empty(t, principalReceiptBinding(incomplete))
 
-	_, err = codec.Encode(generationOnly, "https://example.com/mcp", "digest-1", probeReceiptTestTime)
-	require.ErrorIs(t, err, ErrProbeReceiptInvalid)
+		_, err = codec.Encode(incomplete, "https://example.com/mcp", "digest-1", probeReceiptTestTime)
+		require.ErrorIs(t, err, ErrProbeReceiptInvalid)
+	}
 
 	connected := Principal{OrganizationID: "organization", ConnectionID: "connection-1", Generation: "generation-1"}
 	value, err := codec.Encode(connected, "https://example.com/mcp", "digest-1", probeReceiptTestTime)
 	require.NoError(t, err)
-	_, err = codec.Decode(value, generationOnly, probeReceiptTestTime)
-	require.ErrorIs(t, err, ErrProbeReceiptInvalid)
+	for _, incomplete := range []Principal{generationOnly, connectionOnly} {
+		_, err = codec.Decode(value, incomplete, probeReceiptTestTime)
+		require.ErrorIs(t, err, ErrProbeReceiptInvalid)
+	}
 }
 
 // Encode refuses anything but an already-normalized, shape-valid URL, so a

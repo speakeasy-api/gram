@@ -59,15 +59,24 @@ Input: `remote_url` only. (No project selector: the probe mutates nothing
 project-scoped and its budget is per-connection.)
 
 1. Validate URL shape **before any network I/O**: `https` only, no userinfo,
-   no fragment. Normalize: lowercase host, strip default port.
+   no fragment, no query string. Query strings are refused outright as a
+   bounded v1 rule: query parameters commonly carry credentials, which must
+   never be persisted in a registration row or audit event; the dashboard
+   remains the path for exotic URLs. Normalize: lowercase host, strip default
+   port (compared numerically, so `:0443` also collapses).
 2. Probe through the guardian policy, one-shot, bounded timeout, no retries
    (same discipline as `unproxiedmcp.probeListTools`): MCP initialize
    handshake over streamable HTTP, `tools/list`, and OAuth discovery via
-   RFC 9728/8414 well-knowns.
+   RFC 9728/8414 well-knowns. Every response body the probe reads is capped
+   (a few MB) so an adversarial server cannot exhaust probe-process memory;
+   an oversized `tools/list` on a handshake-verified server is recorded as a
+   bounded evidence gap, while an oversized handshake response refuses.
 3. Verification outcome:
    - handshake completed → verified
    - `AuthRejectedError` (401/403 + `WWW-Authenticate`) → verified, posture
-     `auth_required`
+     `auth_required`; a bare 401/403 with no `WWW-Authenticate` challenge is
+     what any ordinary protected endpoint answers, proves nothing MCP-shaped,
+     and refuses as `not_an_mcp_server`
    - anything else → refused, no receipt
 4. On success, return **evidence** (server name/version from initialize, tool
    count and names, auth posture `oauth_discovered` / `auth_required` /
@@ -83,9 +92,12 @@ point. Guardian bounds _where_; the budget bounds _how often_.
 ### Tool: `register_remote_mcp_for_project` (mutating, `tool_register_remote.go`)
 
 Input: `project_slug`, `probe_receipt`, `idempotency_key`, optional
-`display_name`. **No URL parameter** — the URL travels only inside the
-receipt, preserving the subsystem invariant that mutations accept only
-server-issued identities (catalogue refs, probe receipts).
+`display_name` (bounded before persistence: at most 256 bytes and a single
+line — any control character or Unicode line separator rejects — documented
+in the tool's input schema).
+**No URL parameter** — the URL travels only inside the receipt, preserving
+the subsystem invariant that mutations accept only server-issued identities
+(catalogue refs, probe receipts).
 
 Mirrors `RegisterCatalogMCP`'s spine:
 
@@ -187,8 +199,8 @@ mirror update.
   `catalog_cursor_test.go`): round-trip, expiry, tamper, connection mismatch,
   cross-project reuse. This is the security boundary; it gets the exhaustive
   table.
-- **URL validation** table tests: https-only, userinfo/fragment rejection,
-  normalization, guardian-denied via stubbed policy interface.
+- **URL validation** table tests: https-only, userinfo/fragment/query
+  rejection, normalization, guardian-denied via stubbed policy interface.
 - **Probe classification** against an in-process fake MCP server (`httptest`,
   streamable HTTP — pattern from `externalmcp`/`unproxiedmcp` tests): clean
   handshake → receipt; auth-walled → receipt with `auth_required`; refused /

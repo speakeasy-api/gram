@@ -173,6 +173,15 @@ func isBrowserCatalogProviderKey(providerKey string) bool {
 	return err == nil
 }
 
+// registrationUsesDashboardSetup reports whether a registration's setup
+// continuation is the server-owned Remote MCP Authentication settings
+// dashboard URL rather than a catalogue setup handoff: browser-catalogue
+// entries and remote URL sources. Only fixture adapter registrations take the
+// handoff path.
+func registrationUsesDashboardSetup(providerKey string) bool {
+	return isBrowserCatalogProviderKey(providerKey) || providerKey == remoteURLCatalogProvider
+}
+
 // NewRegistryCatalogSources composes only server-owned registry sources. The
 // opaque ProviderKey remains unique across every source, preventing a selected
 // entry from being reinterpreted against a different registry.

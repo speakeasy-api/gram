@@ -65,13 +65,17 @@ type probeReceipt struct {
 
 // principalReceiptBinding is the caller identity a probe receipt binds to. An
 // OAuth caller binds to its connection ID; a principal claiming a connection
-// without one has an incomplete identity and gets no binding, mirroring the
-// operation budget's refusal. A connection-less caller binds to its acting
-// surface and subject, so the codec keeps working should the assistant
-// audience ever be admitted — and so a receipt still cannot cross between the
-// assistant and an OAuth connection acting for the same user.
+// through only one of its two halves has an incomplete identity and gets no
+// binding, mirroring the operation budget's refusal. A connection-less caller
+// binds to its acting surface and subject, so the codec keeps working should
+// the assistant audience ever be admitted — and so a receipt still cannot
+// cross between the assistant and an OAuth connection acting for the same
+// user.
 func principalReceiptBinding(principal Principal) string {
 	if principal.HasConnection() {
+		if principal.ConnectionID == "" || principal.Generation == "" {
+			return ""
+		}
 		return principal.ConnectionID
 	}
 	if principal.UserID == "" {

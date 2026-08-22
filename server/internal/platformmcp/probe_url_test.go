@@ -48,6 +48,11 @@ func TestNormalizeRemoteURL(t *testing.T) {
 			want: "https://example.com:1443/mcp",
 		},
 		{
+			name: "zero-padded default port is stripped",
+			raw:  "https://example.com:0443/mcp",
+			want: "https://example.com/mcp",
+		},
+		{
 			name: "dangling port separator is stripped",
 			raw:  "https://example.com:/mcp",
 			want: "https://example.com/mcp",
@@ -63,9 +68,14 @@ func TestNormalizeRemoteURL(t *testing.T) {
 			want: "https://example.com",
 		},
 		{
-			name: "query is preserved",
-			raw:  "https://example.com/mcp?tenant=acme&mode=streamable",
-			want: "https://example.com/mcp?tenant=acme&mode=streamable",
+			name:    "query string",
+			raw:     "https://example.com/mcp?tenant=acme&mode=streamable",
+			invalid: true,
+		},
+		{
+			name:    "bare query delimiter",
+			raw:     "https://example.com/mcp?",
+			invalid: true,
 		},
 		{
 			name: "ipv6 literal keeps brackets when the default port is stripped",
@@ -176,7 +186,8 @@ func TestNormalizeRemoteURLIsIdempotent(t *testing.T) {
 	t.Parallel()
 
 	for _, raw := range []string{
-		"https://EXAMPLE.com:443/MCP?x=1",
+		"https://EXAMPLE.com:443/MCP",
+		"https://example.com:0443/mcp",
 		"https://[2001:DB8::1]:443/mcp",
 		"  https://example.com:/mcp ",
 	} {

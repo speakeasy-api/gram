@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -19,11 +20,14 @@ var ErrRemoteURLInvalid = errors.New("invalid remote mcp url")
 
 // normalizeRemoteURL validates a user-supplied remote MCP URL and returns its
 // normalized form. Validation is purely syntactic and happens before any
-// network I/O: https only, no userinfo, no fragment, and no template
-// placeholders (which the registration store also refuses, so admitting one
-// here would only defer the refusal to the mutation). Normalization lowercases
-// the host and strips the default https port so that one server has one
-// receipt identity and one registration row identity.
+// network I/O: https only, no userinfo, no fragment, no query string, and no
+// template placeholders (which the registration store also refuses, so
+// admitting one here would only defer the refusal to the mutation). Query
+// strings are refused outright as a bounded v1 rule: query parameters commonly
+// carry credentials, which must never be persisted in a registration row or
+// audit event, and the dashboard remains the path for exotic URLs.
+// Normalization lowercases the host and strips the default https port so that
+// one server has one receipt identity and one registration row identity.
 //
 // Egress policy (private ranges, denied hosts) is deliberately not consulted
 // here; that refusal belongs to the guardian at probe time and maps to
@@ -40,6 +44,11 @@ func normalizeRemoteURL(raw string) (string, error) {
 	// place a bare fragment delimiter is still visible.
 	if strings.Contains(trimmed, "#") {
 		return "", fmt.Errorf("%w: fragment is not allowed", ErrRemoteURLInvalid)
+	}
+	// Checked on the raw string so a bare delimiter ("...?") is refused the
+	// same as a populated query.
+	if strings.Contains(trimmed, "?") {
+		return "", fmt.Errorf("%w: query string is not allowed", ErrRemoteURLInvalid)
 	}
 	if hasUnresolvedRemoteTemplate(trimmed) {
 		return "", fmt.Errorf("%w: template placeholders are not allowed", ErrRemoteURLInvalid)
@@ -59,7 +68,9 @@ func normalizeRemoteURL(raw string) (string, error) {
 	}
 
 	parsed.Host = strings.ToLower(parsed.Host)
-	if parsed.Port() == "443" {
+	// The default port is compared numerically so zero-padded spellings such
+	// as ":0443" collapse to the same receipt and registration identity.
+	if port, err := strconv.Atoi(parsed.Port()); err == nil && port == 443 {
 		host := parsed.Hostname()
 		if strings.Contains(host, ":") {
 			// An IPv6 literal loses its brackets through Hostname; restore them.

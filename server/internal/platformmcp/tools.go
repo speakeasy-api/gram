@@ -172,7 +172,7 @@ func newServer(reader Reader, catalog Catalog, registrations *RegistrationServic
 	// registration service whose remote path is fully configured; anything less
 	// serves the same tools as bounded feature_unavailable stubs so the surface
 	// never flickers.
-	if remoteProbe == nil || remoteSurfaceGate == nil || registrations == nil || registrations.store == nil || registrations.probeReceipts == nil || registrations.remoteApprovals == nil || !registrations.budgets.Registration.valid() {
+	if remoteProbe == nil || remoteSurfaceGate == nil || registrations == nil || registrations.gate == nil || registrations.store == nil || registrations.probeReceipts == nil || registrations.remoteApprovals == nil || !registrations.budgets.Registration.valid() {
 		registerUnavailableProbeRemoteMCPTool(reg)
 		registerUnavailableRegisterRemoteMCPTool(reg)
 	} else {

@@ -210,7 +210,10 @@ func (s *ManagementService) StartOnboardingSetup(ctx context.Context, _ *platfor
 	if err != nil {
 		return nil, s.mapOnboardingError(err)
 	}
-	if isBrowserCatalogProviderKey(candidate.ProviderKey) {
+	// Remote URL registrations have no catalogue entry behind a setup
+	// handoff; like browser-catalogue entries, their setup surface is the
+	// Authentication settings dashboard page.
+	if registrationUsesDashboardSetup(candidate.ProviderKey) {
 		setupURL, err := s.registrations.DashboardSetupURL(ctx, principal, IssueSetupHandoffInput{ProjectSlug: projection.SelectedProject.Slug, RegistrationID: projection.Workflow.SelectedRegistrationID.String(), ProviderKey: candidate.ProviderKey, CatalogRef: candidate.CatalogRef})
 		if err != nil {
 			return nil, s.mapOnboardingError(err)

@@ -637,6 +637,29 @@ func registrationServicePrincipal() Principal {
 	return Principal{UserID: "user", OrganizationID: "organization", ConnectionID: uuid.NewString(), Generation: uuid.NewString(), ClientID: "client"}
 }
 
+// The remote URL sentinel provider is reserved: a catalogue candidate that
+// claims it must be refused at registration time, so a persisted provider
+// equal to the sentinel always means a remote URL source and downstream
+// classifiers cannot misroute a catalogue registration into remote
+// enforcement.
+func TestRegistrationServiceRefusesCatalogCandidateClaimingRemoteURLSentinel(t *testing.T) {
+	t.Parallel()
+
+	store := &recordingRegistrationStore{}
+	service := newRegistrationService(
+		testCatalog{details: CatalogDetails{CatalogCandidate: CatalogCandidate{ProviderKey: remoteURLCatalogProvider, CatalogRef: "reviewed/mcp", SetupIntent: "authorize"}, Transport: "streamable-http"}},
+		&testRegistrationGate{enabled: true},
+		store,
+	)
+
+	_, err := service.RegisterCatalogMCP(t.Context(), registrationServicePrincipal(), RegisterCatalogMCPInput{
+		ProjectSlug: "project", ProviderKey: remoteURLCatalogProvider, CatalogRef: "reviewed/mcp", IdempotencyKey: "request-key",
+	})
+
+	require.ErrorIs(t, err, ErrCatalogRejected)
+	require.Zero(t, store.beginCalls)
+}
+
 func TestRegistrationServiceReturnsCatalogInspectionErrors(t *testing.T) {
 	t.Parallel()
 

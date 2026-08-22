@@ -147,6 +147,20 @@ func TestBrowserCatalogProviderKeyRequiresValidRegistryUUID(t *testing.T) {
 	require.False(t, isBrowserCatalogProviderKey("provider-7e966bfa-4df0-43ef-a54c-9c8c2e5f1b0d"))
 }
 
+// Browser-catalogue entries and remote URL registrations continue setup on the
+// Remote MCP Authentication settings dashboard page; only fixture adapter
+// registrations take the catalogue setup handoff. A remote URL registration
+// misrouted into the handoff path would fail its catalogue inspection, so the
+// dashboard onboarding continuation depends on this routing.
+func TestRegistrationUsesDashboardSetupRoutesRemoteURLAndBrowserCatalog(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, registrationUsesDashboardSetup(remoteURLCatalogProvider))
+	require.True(t, registrationUsesDashboardSetup("browser-catalog-registry-7e966bfa-4df0-43ef-a54c-9c8c2e5f1b0d"))
+	require.False(t, registrationUsesDashboardSetup("fixture-provider"))
+	require.False(t, registrationUsesDashboardSetup(""))
+}
+
 func TestBrowserCatalogDescriptorUsesRegistryScopedOpaqueIdentity(t *testing.T) {
 	t.Parallel()
 

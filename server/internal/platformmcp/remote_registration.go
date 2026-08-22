@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"unicode"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -23,12 +25,16 @@ const (
 	// remoteURLCatalogProvider is the sentinel provider recorded for remote
 	// URL registrations. The registration row requires a provider identity,
 	// and the sentinel keeps the existing audit event and McpKey derivation
-	// working unchanged while making rows unmistakably non-catalogue.
+	// working unchanged while making rows unmistakably non-catalogue. The key
+	// is reserved: RegisterCatalogMCP refuses any catalogue candidate that
+	// claims it, so a persisted provider equal to the sentinel always means a
+	// remote URL source.
 	remoteURLCatalogProvider = "remote-url"
 
-	// maxRemoteDisplayNameLength bounds the caller-supplied display name, the
-	// same bound idempotency keys carry.
-	maxRemoteDisplayNameLength = 128
+	// maxRemoteDisplayNameLength bounds the caller-supplied display name in
+	// bytes. It is enforced here — the earliest entry point — before the name
+	// reaches persistence, together with the single-line rule below.
+	maxRemoteDisplayNameLength = 256
 )
 
 // RegisterRemoteMCPInput registers a probed remote MCP URL as a project
@@ -150,8 +156,12 @@ func (s *RegistrationService) RegisterRemoteMCP(ctx context.Context, principal P
 		return RegisterRemoteMCPResult{}, err
 	}
 
+	// The display name lands in persisted component names, so it is bounded
+	// and single-line: an embedded control character or line separator would
+	// carry a caller-controlled break or escape sequence into every UI and
+	// log surface that renders the name.
 	displayName := strings.TrimSpace(input.DisplayName)
-	if len(displayName) > maxRemoteDisplayNameLength {
+	if len(displayName) > maxRemoteDisplayNameLength || strings.IndexFunc(displayName, isDisplayNameBreak) >= 0 {
 		return RegisterRemoteMCPResult{}, ErrRegistrationInvalid
 	}
 	if displayName == "" {
@@ -292,6 +302,13 @@ func (s *RegistrationService) remoteApprovalsDashboardURL(ctx context.Context, p
 	return approvalsBase.JoinPath(setup.OrganizationSlug, "projects", project.Slug, "shadow-mcp").String(), nil
 }
 
+// isDisplayNameBreak reports a rune a persisted display name must not carry:
+// every control character (CR, LF, NUL, TAB, ESC, ...) plus the Unicode line
+// and paragraph separators, which break lines without being controls.
+func isDisplayNameBreak(r rune) bool {
+	return unicode.IsControl(r) || r == '\u2028' || r == '\u2029'
+}
+
 // remoteMCPDisplayName derives the default component display name from a
 // normalized remote URL: its host. The URL was validated at probe time, so a
 // parse failure cannot practically occur; the static fallback keeps the
@@ -332,12 +349,26 @@ func (c *PostgresRemoteMCPApprovals) CheckRemoteMCPApproval(ctx context.Context,
 	if c == nil || c.db == nil || organizationID == "" || projectID == uuid.Nil {
 		return RemoteMCPApprovalState{EnforcementActive: false, Approved: false}, ErrRegistrationUnavailable
 	}
+	return checkRemoteMCPApproval(ctx, c.db, organizationID, projectID, remoteURL)
+}
+
+// CheckRemoteMCPApprovalTx runs the same consult on the caller's open
+// transaction, so a mutation can evaluate enforcement under the transaction
+// that commits its effects instead of on a separate pool connection.
+func (c *PostgresRemoteMCPApprovals) CheckRemoteMCPApprovalTx(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID, remoteURL string) (RemoteMCPApprovalState, error) {
+	if c == nil || tx == nil || organizationID == "" || projectID == uuid.Nil {
+		return RemoteMCPApprovalState{EnforcementActive: false, Approved: false}, ErrRegistrationUnavailable
+	}
+	return checkRemoteMCPApproval(ctx, tx, organizationID, projectID, remoteURL)
+}
+
+func checkRemoteMCPApproval(ctx context.Context, db riskrepo.DBTX, organizationID string, projectID uuid.UUID, remoteURL string) (RemoteMCPApprovalState, error) {
 	inventoryURL, ok := shadowmcp.CanonicalizeInventoryURL(remoteURL)
 	if !ok {
 		return RemoteMCPApprovalState{EnforcementActive: false, Approved: false}, fmt.Errorf("canonicalize remote mcp server url for approval consult: %w", ErrRemoteURLInvalid)
 	}
 
-	policies, err := riskrepo.New(c.db).ListEnabledShadowMCPPoliciesByProject(ctx, projectID)
+	policies, err := riskrepo.New(db).ListEnabledShadowMCPPoliciesByProject(ctx, projectID)
 	if err != nil {
 		return RemoteMCPApprovalState{EnforcementActive: false, Approved: false}, fmt.Errorf("list shadow mcp policies for remote mcp approval consult: %w", err)
 	}
@@ -356,7 +387,7 @@ func (c *PostgresRemoteMCPApprovals) CheckRemoteMCPApproval(ctx context.Context,
 		if allowAll {
 			scope = authz.ScopeRiskPolicyBlock
 		}
-		grants, err := authz.ListGrantsForResource(ctx, c.db, authz.Resource{
+		grants, err := authz.ListGrantsForResource(ctx, db, authz.Resource{
 			OrganizationID: organizationID,
 			Scope:          scope,
 			ResourceID:     policy.ID.String(),

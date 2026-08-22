@@ -130,23 +130,46 @@ func TestRegistrationServiceRemoteRegistrationPassesThroughDisplayName(t *testin
 	require.Equal(t, "Vendor MCP", store.remoteDisplayName)
 }
 
-func TestRegistrationServiceRemoteRegistrationRejectsOverlongDisplayName(t *testing.T) {
+// The display name lands in persisted component names, so it is bounded to
+// maxRemoteDisplayNameLength bytes and must be a single line: an embedded
+// control character or line separator would carry a caller-controlled break
+// or escape sequence into every surface rendering the name.
+func TestRegistrationServiceRemoteRegistrationBoundsDisplayName(t *testing.T) {
 	t.Parallel()
 
-	project := ResolvedProject{ID: uuid.New(), Slug: "project"}
-	store := remoteRegistrationStore(project, uuid.New())
-	service := newRemoteRegistrationService(&testRegistrationGate{enabled: true}, store, &recordingRemoteApprovalChecker{})
-	principal := registrationServicePrincipal()
+	tests := []struct {
+		name        string
+		displayName string
+		rejected    bool
+	}{
+		{name: "name at the byte bound is accepted", displayName: strings.Repeat("n", maxRemoteDisplayNameLength)},
+		{name: "name one byte over the bound is rejected", displayName: strings.Repeat("n", maxRemoteDisplayNameLength+1), rejected: true},
+		{name: "embedded carriage return is rejected", displayName: "Vendor\rMCP", rejected: true},
+		{name: "embedded line feed is rejected", displayName: "Vendor\nMCP", rejected: true},
+		{name: "embedded ANSI escape is rejected", displayName: "Vendor\x1b[2KMCP", rejected: true},
+		{name: "embedded unicode line separator is rejected", displayName: "Vendor\u2028MCP", rejected: true},
+	}
+	for _, test := range tests {
+		project := ResolvedProject{ID: uuid.New(), Slug: "project"}
+		store := remoteRegistrationStore(project, uuid.New())
+		service := newRemoteRegistrationService(&testRegistrationGate{enabled: true}, store, &recordingRemoteApprovalChecker{})
+		principal := registrationServicePrincipal()
 
-	_, err := service.RegisterRemoteMCP(t.Context(), principal, RegisterRemoteMCPInput{
-		ProjectSlug:    project.Slug,
-		ProbeReceipt:   mintProbeReceipt(t, remoteRegistrationTestKey, principal, "https://remote.example.test/mcp", remoteRegistrationTestNow),
-		IdempotencyKey: "request-key",
-		DisplayName:    strings.Repeat("n", maxRemoteDisplayNameLength+1),
-	})
+		_, err := service.RegisterRemoteMCP(t.Context(), principal, RegisterRemoteMCPInput{
+			ProjectSlug:    project.Slug,
+			ProbeReceipt:   mintProbeReceipt(t, remoteRegistrationTestKey, principal, "https://remote.example.test/mcp", remoteRegistrationTestNow),
+			IdempotencyKey: "request-key",
+			DisplayName:    test.displayName,
+		})
 
-	require.ErrorIs(t, err, ErrRegistrationInvalid)
-	require.Zero(t, store.beginCalls)
+		if test.rejected {
+			require.ErrorIs(t, err, ErrRegistrationInvalid, test.name)
+			require.Zero(t, store.beginCalls, "%s: a rejected name must not reach persistence", test.name)
+			continue
+		}
+		require.NoError(t, err, test.name)
+		require.Equal(t, test.displayName, store.remoteDisplayName, test.name)
+	}
 }
 
 func TestRegistrationServiceRemoteRegistrationUnavailableUntilConfigured(t *testing.T) {

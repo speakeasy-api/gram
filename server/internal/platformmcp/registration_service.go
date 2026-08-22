@@ -374,6 +374,12 @@ func (s *RegistrationService) RegisterCatalogMCP(ctx context.Context, principal 
 	if catalog.ProviderKey != input.ProviderKey || catalog.CatalogRef != input.CatalogRef || catalog.SetupIntent == "" || catalog.Transport != "streamable-http" {
 		return RegisterCatalogMCPResult{}, ErrCatalogRejected
 	}
+	// The remote URL sentinel provider is reserved: refusing it here keeps
+	// "provider == remote-url" a reliable remote-source discriminator for
+	// every downstream classifier reading persisted registration rows.
+	if catalog.ProviderKey == remoteURLCatalogProvider {
+		return RegisterCatalogMCPResult{}, ErrCatalogRejected
+	}
 
 	project, err := s.store.ResolveProject(ctx, principal.OrganizationID, input.ProjectSlug)
 	if err != nil {

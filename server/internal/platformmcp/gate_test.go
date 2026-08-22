@@ -14,6 +14,15 @@ import (
 type testCapabilityChecker struct {
 	enabled bool
 	err     error
+
+	// uncached, when set, answers IsFeatureEnabledUncached with its own
+	// distinct result so a test can prove which path a gate consulted.
+	uncached *testCapabilityResult
+}
+
+type testCapabilityResult struct {
+	enabled bool
+	err     error
 }
 
 func (c testCapabilityChecker) IsFeatureEnabled(_ context.Context, _ string, capability productfeatures.Feature) (bool, error) {
@@ -24,6 +33,12 @@ func (c testCapabilityChecker) IsFeatureEnabled(_ context.Context, _ string, cap
 }
 
 func (c testCapabilityChecker) IsFeatureEnabledUncached(ctx context.Context, organizationID string, capability productfeatures.Feature) (bool, error) {
+	if c.uncached != nil {
+		if capability != productfeatures.FeaturePlatformMCP {
+			return false, errors.New("unexpected capability")
+		}
+		return c.uncached.enabled, c.uncached.err
+	}
 	return c.IsFeatureEnabled(ctx, organizationID, capability)
 }
 
@@ -259,4 +274,55 @@ func TestRemoteMCPSurfaceGateRequiresOrganization(t *testing.T) {
 
 	require.ErrorIs(t, err, ErrUnavailable)
 	require.False(t, enabled)
+}
+
+// Revocation visibility rides on the uncached capability read, so the gate
+// must consult exactly that path: a stale cached "enabled" must not admit the
+// surface once the uncached state says disabled, and vice versa.
+func TestRemoteMCPSurfaceGateConsultsUncachedCapability(t *testing.T) {
+	t.Parallel()
+
+	staleCache := testCapabilityChecker{enabled: true, uncached: &testCapabilityResult{enabled: false}}
+	gate := NewRemoteMCPSurfaceGate(staleCache, &testRolloutProvider{enabled: true}, testOrganizationSlugResolver{slug: "organization-slug"})
+	enabled, err := gate.Enabled(t.Context(), "organization-1")
+	require.NoError(t, err)
+	require.False(t, enabled, "a revoked capability must be visible through the uncached read")
+
+	freshGrant := testCapabilityChecker{enabled: false, uncached: &testCapabilityResult{enabled: true}}
+	gate = NewRemoteMCPSurfaceGate(freshGrant, &testRolloutProvider{enabled: true}, testOrganizationSlugResolver{slug: "organization-slug"})
+	enabled, err = gate.Enabled(t.Context(), "organization-1")
+	require.NoError(t, err)
+	require.True(t, enabled)
+
+	uncachedDown := testCapabilityChecker{enabled: true, uncached: &testCapabilityResult{err: errors.New("uncached read unavailable")}}
+	gate = NewRemoteMCPSurfaceGate(uncachedDown, &testRolloutProvider{enabled: true}, testOrganizationSlugResolver{slug: "organization-slug"})
+	enabled, err = gate.Enabled(t.Context(), "organization-1")
+	require.ErrorContains(t, err, "check platform mcp capability for remote mcp registration")
+	require.False(t, enabled)
+}
+
+func TestRemoteMCPSurfaceGateFailsClosedWhenOrganizationResolutionFails(t *testing.T) {
+	t.Parallel()
+
+	rollout := &testRolloutProvider{enabled: true}
+	gate := NewRemoteMCPSurfaceGate(testCapabilityChecker{enabled: true}, rollout, testOrganizationSlugResolver{err: errors.New("organizations unavailable")})
+
+	enabled, err := gate.Enabled(t.Context(), "organization-1")
+
+	require.ErrorContains(t, err, "resolve organization for remote mcp registration rollout")
+	require.False(t, enabled)
+	require.Zero(t, rollout.flag, "the rollout must not be evaluated without organization metadata")
+}
+
+func TestRemoteMCPSurfaceGateFailsClosedWhenOrganizationSlugIsEmpty(t *testing.T) {
+	t.Parallel()
+
+	rollout := &testRolloutProvider{enabled: true}
+	gate := NewRemoteMCPSurfaceGate(testCapabilityChecker{enabled: true}, rollout, testOrganizationSlugResolver{})
+
+	enabled, err := gate.Enabled(t.Context(), "organization-1")
+
+	require.ErrorIs(t, err, ErrUnavailable)
+	require.False(t, enabled)
+	require.Zero(t, rollout.flag, "the rollout must not be evaluated without organization metadata")
 }

@@ -189,6 +189,104 @@ func TestRemoteProbeServiceDiscoversOAuthMetadataOnAuthWalledServer(t *testing.T
 	require.NotEmpty(t, result.Receipt)
 }
 
+// A bare 401/403 with no WWW-Authenticate challenge is what any ordinary
+// protected HTTP endpoint answers; it proves nothing MCP-shaped and must not
+// verify, in either auth-rejection branch.
+func TestRemoteProbeServiceRefusesBareAuthRejectionWithoutChallenge(t *testing.T) {
+	t.Parallel()
+
+	for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden} {
+		fixture := startProbeFixture(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "denied", status)
+		}))
+		service := newTestRemoteProbeService(t, probeFixturePolicy(t, fixture))
+
+		result, err := service.Probe(t.Context(), registrationServicePrincipal(), fixture.URL)
+		require.ErrorIs(t, err, ErrProbeNotMCPServer, "status %d", status)
+		require.Empty(t, result.Receipt, "status %d", status)
+	}
+}
+
+// A 403 carrying a WWW-Authenticate challenge is the spec's other typed auth
+// rejection; it verifies exactly like the 401 form.
+func TestRemoteProbeServiceVerifiesForbiddenServerWithChallenge(t *testing.T) {
+	t.Parallel()
+
+	fixture := startProbeFixture(t, withWellKnownNotFound(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("WWW-Authenticate", `Bearer realm="mcp"`)
+		http.Error(w, "forbidden", http.StatusForbidden)
+	})))
+	service := newTestRemoteProbeService(t, probeFixturePolicy(t, fixture))
+	principal := registrationServicePrincipal()
+
+	result, err := service.Probe(t.Context(), principal, fixture.URL)
+	require.NoError(t, err)
+
+	require.Equal(t, ProbeAuthPostureAuthRequired, result.Evidence.AuthPosture)
+	require.Contains(t, result.Evidence.Gaps, probeGapInitializeDeclined)
+	require.NotEmpty(t, result.Receipt)
+}
+
+// When the handshake already verified the server, a bare 401 on tools/list is
+// not auth evidence — the listing is simply unusable, recorded as that gap
+// rather than as an auth_required posture.
+func TestRemoteProbeServiceTreatsBareAuthRejectedToolsListAsUnusableListing(t *testing.T) {
+	t.Parallel()
+
+	mcpHandler := probeFixtureMCPHandler("alpha")
+	fixture := startProbeFixture(t, withWellKnownNotFound(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if bytes.Contains(body, []byte(`"tools/list"`)) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		mcpHandler.ServeHTTP(w, r)
+	})))
+	service := newTestRemoteProbeService(t, probeFixturePolicy(t, fixture))
+
+	result, err := service.Probe(t.Context(), registrationServicePrincipal(), fixture.URL)
+	require.NoError(t, err)
+
+	require.Equal(t, "probe-fixture", result.Evidence.ServerName)
+	require.Equal(t, ProbeAuthPostureOpen, result.Evidence.AuthPosture, "a bare rejection is not auth evidence")
+	require.Zero(t, result.Evidence.ToolCount)
+	require.Contains(t, result.Evidence.Gaps, probeGapToolListFailed)
+	require.NotContains(t, result.Evidence.Gaps, probeGapToolsDeclined)
+	require.NotEmpty(t, result.Receipt)
+}
+
+// An enormous tools/list must fail as a bounded size refusal before it is
+// materialized: the handshake already verified the server, so the oversized
+// listing is an explicit evidence gap, never a memory sink.
+func TestRemoteProbeServiceBoundsOversizedToolsListResponse(t *testing.T) {
+	t.Parallel()
+
+	server := mcp.NewServer(&mcp.Implementation{Name: "probe-fixture", Version: "2.3.4"}, nil)
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "giant",
+		Description: strings.Repeat("x", maxProbeResponseBytes+(1<<20)),
+	}, func(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, any, error) {
+		return &mcp.CallToolResult{}, nil, nil
+	})
+	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
+	fixture := startProbeFixture(t, withWellKnownNotFound(handler))
+	service := newTestRemoteProbeService(t, probeFixturePolicy(t, fixture))
+
+	result, err := service.Probe(t.Context(), registrationServicePrincipal(), fixture.URL)
+	require.NoError(t, err)
+
+	require.Equal(t, "probe-fixture", result.Evidence.ServerName)
+	require.Zero(t, result.Evidence.ToolCount)
+	require.Empty(t, result.Evidence.ToolNames)
+	require.Contains(t, result.Evidence.Gaps, probeGapToolListTooLarge)
+	require.NotEmpty(t, result.Receipt)
+}
+
 func TestRemoteProbeServiceRecordsDeclinedUnauthenticatedToolsList(t *testing.T) {
 	t.Parallel()
 
