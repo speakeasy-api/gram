@@ -141,7 +141,7 @@ func TestRemoteSessionStatuses_FindsGrantMintedByDifferentIssuer(t *testing.T) {
 	bound := listBoundClientIDs(t, ctx, fx, fx.issuerB)
 	requireBoundClient(t, bound, fx.clientID)
 
-	statuses, err := fx.mgr.RemoteSessionStatuses(ctx, fx.subject, bound)
+	statuses, err := fx.mgr.RemoteSessionStatuses(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB)
 	require.NoError(t, err)
 	require.Equal(t, remotesessions.RemoteSessionActive, statuses[fx.clientID].Status)
 
@@ -151,7 +151,7 @@ func TestRemoteSessionStatuses_FindsGrantMintedByDifferentIssuer(t *testing.T) {
 	require.Equal(t, fx.session.ID, reconnect.ID)
 	require.Equal(t, fx.issuerA, reconnect.UserSessionIssuerID)
 
-	statuses, err = fx.mgr.RemoteSessionStatuses(ctx, fx.subject, listBoundClientIDs(t, ctx, fx, fx.issuerB))
+	statuses, err = fx.mgr.RemoteSessionStatuses(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB)
 	require.NoError(t, err)
 	require.Equal(t, remotesessions.RemoteSessionActive, statuses[fx.clientID].Status)
 }
@@ -166,7 +166,7 @@ func TestSetRemoteSessionAutoRefresh_FindsGrantMintedByDifferentIssuer(t *testin
 	bound := listBoundClientIDs(t, ctx, fx, fx.issuerB)
 	requireBoundClient(t, bound, fx.clientID)
 
-	n, err := fx.mgr.SetRemoteSessionAutoRefresh(ctx, fx.subject, fx.clientID, true)
+	n, err := fx.mgr.SetRemoteSessionAutoRefresh(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID, true)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), n)
 
@@ -187,7 +187,7 @@ func TestDisconnectRemoteSession_FindsGrantMintedByDifferentIssuer(t *testing.T)
 	bound := listBoundClientIDs(t, ctx, fx, fx.issuerB)
 	requireBoundClient(t, bound, fx.clientID)
 
-	n, err := fx.mgr.DisconnectRemoteSession(ctx, fx.subject, fx.clientID)
+	n, err := fx.mgr.DisconnectRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), n)
 
@@ -203,7 +203,7 @@ func TestSoftDeleteSubjectSessions_FindsGrantMintedByDifferentIssuer(t *testing.
 
 	ctx, fx := seedSharedGrantAcrossIssuers(t)
 
-	creds, err := newTestUpstreamRevoker(t, fx.ti).SoftDeleteSubjectSessions(ctx, fx.ti.conn, fx.subject, fx.projectID)
+	creds, err := newTestUpstreamRevoker(t, fx.ti).SoftDeleteSubjectSessions(ctx, fx.ti.conn, fx.subject, fx.session.UserSessionIssuerID, fx.projectID, fx.organizationID)
 	require.NoError(t, err)
 	require.Len(t, creds, 1)
 	require.Equal(t, fx.clientID, creds[0].RemoteSessionClientID)
@@ -242,13 +242,13 @@ func TestRemoteSessionStatuses_FiltersToSuppliedClientIDs(t *testing.T) {
 	}))
 	insertRemoteSession(t, ctx, fx.ti.conn, fx.subject, otherUserIssuer.String(), otherClient.ID.String())
 
-	homeStatuses, err := fx.mgr.RemoteSessionStatuses(ctx, fx.subject, []uuid.UUID{fx.clientID})
+	homeStatuses, err := fx.mgr.RemoteSessionStatuses(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerA)
 	require.NoError(t, err)
 	require.Equal(t, remotesessions.RemoteSessionActive, homeStatuses[fx.clientID].Status)
 	_, leaked := homeStatuses[otherClient.ID]
 	require.False(t, leaked)
 
-	otherStatuses, err := fx.mgr.RemoteSessionStatuses(ctx, fx.subject, []uuid.UUID{otherClient.ID})
+	otherStatuses, err := fx.mgr.RemoteSessionStatuses(ctx, fx.subject, otherProject, authCtx.ActiveOrganizationID, otherUserIssuer)
 	require.NoError(t, err)
 	require.Equal(t, remotesessions.RemoteSessionActive, otherStatuses[otherClient.ID].Status)
 	_, leaked = otherStatuses[fx.clientID]
@@ -282,7 +282,7 @@ func TestSoftDeleteSubjectSessions_DoesNotCrossProjects(t *testing.T) {
 	}))
 	insertRemoteSession(t, ctx, fx.ti.conn, fx.subject, otherUserIssuer.String(), otherClient.ID.String())
 
-	creds, err := newTestUpstreamRevoker(t, fx.ti).SoftDeleteSubjectSessions(ctx, fx.ti.conn, fx.subject, fx.projectID)
+	creds, err := newTestUpstreamRevoker(t, fx.ti).SoftDeleteSubjectSessions(ctx, fx.ti.conn, fx.subject, fx.session.UserSessionIssuerID, fx.projectID, fx.organizationID)
 	require.NoError(t, err)
 	require.Len(t, creds, 1)
 	require.Equal(t, fx.clientID, creds[0].RemoteSessionClientID)
@@ -314,7 +314,7 @@ func TestRemoteSessionStatuses_FindsGrantAfterMintingIssuerSoftDeleted(t *testin
 	bound := listBoundClientIDs(t, ctx, fx, fx.issuerB)
 	requireBoundClient(t, bound, fx.clientID)
 
-	statuses, err := fx.mgr.RemoteSessionStatuses(ctx, fx.subject, bound)
+	statuses, err := fx.mgr.RemoteSessionStatuses(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB)
 	require.NoError(t, err)
 	require.Equal(t, remotesessions.RemoteSessionActive, statuses[fx.clientID].Status)
 }
@@ -327,7 +327,7 @@ func TestSetRemoteSessionAutoRefresh_FindsGrantAfterMintingIssuerSoftDeleted(t *
 	bound := listBoundClientIDs(t, ctx, fx, fx.issuerB)
 	requireBoundClient(t, bound, fx.clientID)
 
-	n, err := fx.mgr.SetRemoteSessionAutoRefresh(ctx, fx.subject, fx.clientID, true)
+	n, err := fx.mgr.SetRemoteSessionAutoRefresh(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID, true)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), n)
 
@@ -347,7 +347,7 @@ func TestDisconnectRemoteSession_FindsGrantAfterMintingIssuerSoftDeleted(t *test
 	bound := listBoundClientIDs(t, ctx, fx, fx.issuerB)
 	requireBoundClient(t, bound, fx.clientID)
 
-	n, err := fx.mgr.DisconnectRemoteSession(ctx, fx.subject, fx.clientID)
+	n, err := fx.mgr.DisconnectRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), n)
 
@@ -363,7 +363,7 @@ func TestSoftDeleteSubjectSessions_FindsGrantAfterMintingIssuerSoftDeleted(t *te
 
 	ctx, fx := seedSharedGrantThenSoftDeleteMintingIssuer(t)
 
-	creds, err := newTestUpstreamRevoker(t, fx.ti).SoftDeleteSubjectSessions(ctx, fx.ti.conn, fx.subject, fx.projectID)
+	creds, err := newTestUpstreamRevoker(t, fx.ti).SoftDeleteSubjectSessions(ctx, fx.ti.conn, fx.subject, fx.session.UserSessionIssuerID, fx.projectID, fx.organizationID)
 	require.NoError(t, err)
 	require.Len(t, creds, 1)
 	require.Equal(t, fx.clientID, creds[0].RemoteSessionClientID)
@@ -418,14 +418,14 @@ func TestListClients_ResolvesSharedClientThroughSecondIssuer(t *testing.T) {
 	// client_id against. A UUID from another project is not returned, so a
 	// crafted form posting it never reaches SetRemoteSessionAutoRefresh.
 
-	statuses, err := fx.mgr.RemoteSessionStatuses(ctx, fx.subject, bound)
+	statuses, err := fx.mgr.RemoteSessionStatuses(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB)
 	require.NoError(t, err)
 	require.Equal(t, remotesessions.RemoteSessionActive, statuses[fx.clientID].Status)
 	_, leaked := statuses[otherClientID]
 	require.False(t, leaked)
 
 	for _, clientID := range bound {
-		n, err := fx.mgr.SetRemoteSessionAutoRefresh(ctx, fx.subject, clientID, true)
+		n, err := fx.mgr.SetRemoteSessionAutoRefresh(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, clientID, true)
 		require.NoError(t, err)
 		require.Equal(t, int64(1), n)
 	}
@@ -456,7 +456,7 @@ func TestListClients_ResolvesSharedClientAfterMintingIssuerSoftDeleted(t *testin
 	boundB := listBoundClientIDs(t, ctx, fx, fx.issuerB)
 	requireBoundClient(t, boundB, fx.clientID)
 
-	statuses, err := fx.mgr.RemoteSessionStatuses(ctx, fx.subject, boundB)
+	statuses, err := fx.mgr.RemoteSessionStatuses(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB)
 	require.NoError(t, err)
 	require.Equal(t, remotesessions.RemoteSessionActive, statuses[fx.clientID].Status)
 }
@@ -480,15 +480,15 @@ func TestListClients_ResolvesSharedClientAfterLookupIssuerSoftDeleted(t *testing
 	boundA := listBoundClientIDs(t, ctx, fx, fx.issuerA)
 	requireBoundClient(t, boundA, fx.clientID)
 
-	statuses, err := fx.mgr.RemoteSessionStatuses(ctx, fx.subject, boundA)
+	statuses, err := fx.mgr.RemoteSessionStatuses(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerA)
 	require.NoError(t, err)
 	require.Equal(t, remotesessions.RemoteSessionActive, statuses[fx.clientID].Status)
 
-	n, err := fx.mgr.SetRemoteSessionAutoRefresh(ctx, fx.subject, fx.clientID, true)
+	n, err := fx.mgr.SetRemoteSessionAutoRefresh(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerA, fx.clientID, true)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), n)
 
-	n, err = fx.mgr.DisconnectRemoteSession(ctx, fx.subject, fx.clientID)
+	n, err = fx.mgr.DisconnectRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerA, fx.clientID)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), n)
 }
@@ -610,7 +610,7 @@ func TestRefreshRemoteSession_FindsGrantMintedByDifferentIssuer(t *testing.T) {
 	bound := listBoundClientIDs(t, ctx, fx, fx.issuerB)
 	requireBoundClient(t, bound, fx.clientID)
 
-	result, err := fx.mgr.RefreshRemoteSession(ctx, fx.subject, fx.clientID, "")
+	result, err := fx.mgr.RefreshRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID, "")
 	require.NoError(t, err)
 	require.Equal(t, remotesessions.RefreshOutcomeRefreshed, result.Outcome)
 	require.Equal(t, "rotated-access", result.AccessToken)
@@ -632,7 +632,7 @@ func TestRefreshRemoteSession_FindsGrantAfterMintingIssuerSoftDeleted(t *testing
 	bound := listBoundClientIDs(t, ctx, fx, fx.issuerB)
 	requireBoundClient(t, bound, fx.clientID)
 
-	result, err := fx.mgr.RefreshRemoteSession(ctx, fx.subject, fx.clientID, "")
+	result, err := fx.mgr.RefreshRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID, "")
 	require.NoError(t, err)
 	require.Equal(t, remotesessions.RefreshOutcomeRefreshed, result.Outcome)
 	require.Equal(t, "rotated-after-delete", result.AccessToken)

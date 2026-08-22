@@ -178,11 +178,12 @@ func TestListUserSessionsReturnsUpstreamsForOrgLevelClient(t *testing.T) {
 
 // seedUpstream builds one outbound leg: the remote issuer, a client registered
 // against it, the attachment binding that client to the user-session issuer,
-// and the session Gram holds for the subject.
+// and the session Gram holds for the subject. Returns the client id so a test
+// can bind the same client to additional user-session issuers.
 // clientProject is a NullUUID because the client and issuer it registers can be
 // project-scoped, organization-level, or global; the invalid case is what the
 // org-level coverage below leans on.
-func seedUpstream(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientProject uuid.NullUUID, userSessionIssuerID uuid.UUID, subject urn.SessionSubject, slug string) {
+func seedUpstream(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientProject uuid.NullUUID, userSessionIssuerID uuid.UUID, subject urn.SessionSubject, slug string) uuid.UUID {
 	t.Helper()
 
 	q := remotesessions_repo.New(conn)
@@ -249,4 +250,71 @@ func seedUpstream(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientP
 		AutoRefresh:            false,
 	})
 	require.NoError(t, err)
+
+	return client.ID
+}
+
+// A remote_session is one shared upstream grant per (subject, client); its
+// user_session_issuer_id records only which surface minted it. A session under
+// a sibling issuer bound to the same client must therefore report the same
+// upstream, keyed by the sibling (requesting) issuer.
+func TestListUserSessionsReturnsUpstreamsMintedThroughSiblingIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	provenance, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "shared-upstream-provenance",
+		AuthnChallengeMode:   "chain",
+		SessionDurationHours: 24,
+	})
+	require.NoError(t, err)
+	sibling, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "shared-upstream-sibling",
+		AuthnChallengeMode:   "chain",
+		SessionDurationHours: 24,
+	})
+	require.NoError(t, err)
+
+	provenanceID := uuid.MustParse(provenance.ID)
+	siblingID := uuid.MustParse(sibling.ID)
+	subject := urn.NewUserSubject("shared-upstream-subject")
+
+	// The page shows only the sibling's session; the credential was minted
+	// through the provenance issuer.
+	_, err = seedUserSession(t, ctx, ti.conn, siblingID, subject)
+	require.NoError(t, err)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	clientID := seedUpstream(t, ctx, ti.conn, conv.ToNullUUID(*authCtx.ProjectID), provenanceID, subject, "mcp.shared.example")
+	require.NoError(t, remotesessions_repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: clientID,
+		UserSessionIssuerID:   siblingID,
+	}))
+
+	res, err := ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		SubjectUrn:          nil,
+		UserSessionIssuerID: nil,
+		Status:              nil,
+		ClientID:            nil,
+		Cursor:              nil,
+		Limit:               nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, res.Items, 1)
+	require.Len(t, res.Items[0].Upstreams, 1,
+		"a credential minted through a sibling issuer on the same client belongs to this session's upstreams")
+	require.Equal(t, "mcp.shared.example", res.Items[0].Upstreams[0].IssuerSlug)
 }
