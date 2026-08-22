@@ -601,8 +601,6 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		return nil, oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, logger)
 	}
 
-	beforeView := mv.BuildMcpServerView(existing)
-
 	// Only gate on staff when the unproxied backend reference is actually
 	// changing: a non-staff project member with write access must still be
 	// able to manage (rename, re-publish, delete) a server staff already
@@ -646,9 +644,14 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		}
 	}
 
-	updated, err := txRepo.UpdateMCPServer(ctx, repo.UpdateMCPServerParams{
-		Name:                  name,
-		Slug:                  conv.ToPGText(slug),
+	updated, err := UpdateMCPServerLifecycleInTransaction(ctx, dbtx, s.audit, existing, LifecycleUpdateInput{
+		OrganizationID:        authCtx.ActiveOrganizationID,
+		ProjectID:             *authCtx.ProjectID,
+		ActorUserID:           authCtx.UserID,
+		ActorEmail:            authCtx.Email,
+		ServerID:              serverID,
+		Name:                  payload.Name,
+		Visibility:            string(payload.Visibility),
 		EnvironmentID:         ids.EnvironmentID,
 		UserSessionIssuerID:   issuerID,
 		RemoteMcpServerID:     ids.RemoteMcpServerID,
@@ -656,9 +659,6 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		ToolsetID:             ids.ToolsetID,
 		UnproxiedMcpServerID:  ids.UnproxiedMcpServerID,
 		ToolVariationsGroupID: ids.ToolVariationsGroupID,
-		Visibility:            string(payload.Visibility),
-		ID:                    serverID,
-		ProjectID:             *authCtx.ProjectID,
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -678,35 +678,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogWarn(ctx, logger)
 	}
 
-	oldDisplayName := ServerDisplayName(existing)
-	newDisplayName := ServerDisplayName(updated)
-	if oldDisplayName != newDisplayName {
-		if _, err := pluginsrepo.New(dbtx).SyncMcpServerDisplayName(ctx, pluginsrepo.SyncMcpServerDisplayNameParams{
-			NewDisplayName: newDisplayName,
-			ProjectID:      *authCtx.ProjectID,
-			McpServerID:    uuid.NullUUID{UUID: updated.ID, Valid: true},
-			OldDisplayName: oldDisplayName,
-		}); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "sync plugin server display name").LogError(ctx, logger)
-		}
-	}
-
 	afterView := mv.BuildMcpServerView(updated)
-
-	if err := s.audit.LogMcpServerUpdate(ctx, dbtx, audit.LogMcpServerUpdateEvent{
-		OrganizationID:          authCtx.ActiveOrganizationID,
-		ProjectID:               *authCtx.ProjectID,
-		Actor:                   urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName:        authCtx.Email,
-		ActorSlug:               nil,
-		McpServerURN:            urn.NewMcpServer(updated.ID),
-		McpServerName:           conv.FromPGTextOrEmpty[string](updated.Name),
-		McpServerSlug:           conv.FromPGTextOrEmpty[string](updated.Slug),
-		McpServerSnapshotBefore: beforeView,
-		McpServerSnapshotAfter:  afterView,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log mcp server update").LogError(ctx, logger)
-	}
 
 	var clearedRootEndpoints []mcpendpointsrepo.McpEndpoint
 	if updated.Visibility == VisibilityDisabled {

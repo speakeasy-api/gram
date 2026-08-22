@@ -59,6 +59,18 @@ func TestOperationBudgetMetersAConnectionlessAssistantByUser(t *testing.T) {
 	require.Equal(t, []string{"organization"}, organization.keys)
 }
 
+func TestOperationBudgetMetersAConnectionlessDashboardByUser(t *testing.T) {
+	t.Parallel()
+
+	connection := &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}}
+	organization := &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}}
+	err := (OperationBudget{Connection: connection, Organization: organization}).Allow(t.Context(), Principal{UserID: "user", OrganizationID: "organization", Surface: SurfaceDashboard})
+
+	require.NoError(t, err)
+	require.Equal(t, []string{"dashboard:user"}, connection.keys)
+	require.Equal(t, []string{"organization"}, organization.keys)
+}
+
 func TestOperationBudgetThrottlesAConnectionlessAssistantBeforeOrganization(t *testing.T) {
 	t.Parallel()
 
