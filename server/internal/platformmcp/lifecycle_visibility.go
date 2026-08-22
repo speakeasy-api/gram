@@ -203,8 +203,10 @@ func (s *LifecycleVisibilityService) update(ctx context.Context, principal Princ
 	if to == "private" {
 		// Visibility has already committed. Readiness is an observed post-commit
 		// outcome, so a transient probe failure must not make the completed enable
-		// look uncommitted or consume its idempotency receipt as an error.
-		_, readiness, found, readinessErr := s.readiness.GetReadiness(ctx, principal, project.Slug, registrationID.String(), true)
+		// look uncommitted or consume its idempotency receipt as an error. The
+		// assistant has no OAuth connection to authenticate a fresh probe with, so
+		// it receives only its own persisted user/surface-scoped evidence.
+		_, readiness, found, readinessErr := s.readiness.GetReadiness(ctx, principal, project.Slug, registrationID.String(), principal.HasConnection())
 		if readinessErr == nil && found {
 			result.Readiness = MCPReadiness{State: string(readiness.State), CheckedAt: readinessTimestamp(readiness.CheckedAt), ExpiresAt: readinessTimestamp(readiness.ExpiresAt)}
 		}

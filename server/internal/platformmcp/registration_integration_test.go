@@ -1129,6 +1129,68 @@ func TestCatalogExploredEvidenceIsIdempotentWithoutAConnection(t *testing.T) {
 	require.NoError(t, onboarding.RecordCatalogExplored(ctx, assistant), "a repeat search must stay idempotent")
 }
 
+func TestAssistantReadinessIsAttributedAndReadWithoutAConnection(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_assistant_readiness")
+	require.NoError(t, err)
+
+	connected, project := seedRegistrationLifecycle(t, ctx, conn)
+	assistant := Principal{
+		UserID:         connected.UserID,
+		OrganizationID: connected.OrganizationID,
+		ClientID:       AssistantClientID,
+		Surface:        SurfaceProjectAssistant,
+	}
+	store, err := NewRegistrationStore(conn, RegistrationStoreConfig{ActiveRegistrationCap: 5})
+	require.NoError(t, err)
+
+	request := registrationRequest(project, "assistant-readiness", "assistant-readiness-key")
+	receipt, err := store.BeginReceipt(ctx, assistant, project, request, time.Now().UTC())
+	require.NoError(t, err)
+	receipt, err = store.ConvergeRegistration(ctx, assistant, project, request, receipt)
+	require.NoError(t, err)
+	receipt, err = store.CompleteRegistrationWithRemoteURL(ctx, assistant, project, request, receipt, "https://reviewed.example.test/assistant-readiness")
+	require.NoError(t, err)
+	require.True(t, receipt.RegistrationID.Valid)
+
+	checkedAt := time.Now().UTC()
+	stored, err := store.RecordReadiness(ctx, assistant, ReadinessBinding{
+		ProjectID:                        project.ID,
+		RegistrationID:                   receipt.RegistrationID.UUID,
+		ProviderAuthorizationFingerprint: "assistant-readiness",
+	}, ReadinessReady, "fixture", checkedAt, checkedAt.Add(time.Hour))
+	require.NoError(t, err)
+	require.Equal(t, uuid.Nil, stored.ConnectionID)
+
+	readiness, found, err := store.GetProviderReadiness(ctx, assistant, project.ID, receipt.RegistrationID.UUID)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, stored.ID, readiness.ID)
+
+	refreshed, err := store.RecordReadiness(ctx, assistant, ReadinessBinding{
+		ProjectID:                        project.ID,
+		RegistrationID:                   receipt.RegistrationID.UUID,
+		ProviderAuthorizationFingerprint: "assistant-readiness",
+	}, ReadinessReady, "fixture-refreshed", checkedAt.Add(time.Minute), checkedAt.Add(time.Hour))
+	require.NoError(t, err)
+	require.Equal(t, stored.ID, refreshed.ID, "the same assistant readiness binding refreshes in place")
+
+	otherSurface := assistant
+	otherSurface.Surface = SurfaceDashboard
+	_, err = store.RecordReadiness(ctx, otherSurface, ReadinessBinding{
+		ProjectID:                        project.ID,
+		RegistrationID:                   receipt.RegistrationID.UUID,
+		ProviderAuthorizationFingerprint: "assistant-readiness",
+	}, ReadinessReady, "fixture", checkedAt, checkedAt.Add(time.Hour))
+	require.ErrorIs(t, err, ErrReadinessInvalid, "only the project assistant may write readiness without a connection")
+
+	_, found, err = store.GetProviderReadiness(ctx, otherSurface, project.ID, receipt.RegistrationID.UUID)
+	require.NoError(t, err)
+	require.False(t, found, "connectionless readiness must not cross acting surfaces")
+}
+
 func TestRegistrationStoreWritesWithoutAConnection(t *testing.T) {
 	t.Parallel()
 

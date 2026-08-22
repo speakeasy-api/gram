@@ -1166,12 +1166,21 @@ LIMIT 1;
 -- name: DeleteExpiredPlatformMCPReadiness :execrows
 -- Retain the newest expired projection as stale repair evidence. Only an older
 -- expired row that has been superseded by later evidence is safe to remove.
+-- A connectionless assistant projection is keyed by its real user and surface.
 DELETE FROM platform_mcp_readiness AS stale
 WHERE stale.organization_id = @organization_id
   AND stale.project_id = @project_id
   AND stale.registration_id = @registration_id
-  AND stale.connection_id = @connection_id
-  AND stale.connection_generation = @connection_generation
+  AND (
+      (sqlc.narg(connection_id)::uuid IS NOT NULL
+          AND stale.connection_id = sqlc.narg(connection_id)::uuid
+          AND stale.connection_generation = sqlc.narg(connection_generation)::uuid)
+      OR
+      (sqlc.narg(connection_id)::uuid IS NULL
+          AND stale.connection_id IS NULL
+          AND stale.user_id = @user_id
+          AND stale.acting_surface = @acting_surface)
+  )
   AND stale.expires_at <= clock_timestamp()
   AND EXISTS (
       SELECT 1
@@ -1179,31 +1188,20 @@ WHERE stale.organization_id = @organization_id
       WHERE newer.organization_id = stale.organization_id
         AND newer.project_id = stale.project_id
         AND newer.registration_id = stale.registration_id
-        AND newer.connection_id = stale.connection_id
-        AND newer.connection_generation = stale.connection_generation
+        AND (
+            (stale.connection_id IS NOT NULL
+                AND newer.connection_id = stale.connection_id
+                AND newer.connection_generation = stale.connection_generation)
+            OR
+            (stale.connection_id IS NULL
+                AND newer.connection_id IS NULL
+                AND newer.user_id = stale.user_id
+                AND newer.acting_surface = stale.acting_surface)
+        )
         AND (newer.checked_at, newer.id) > (stale.checked_at, stale.id)
   );
 
 -- name: GetPlatformMCPReadiness :one
-SELECT readiness.*
-FROM platform_mcp_readiness AS readiness
- JOIN platform_mcp_catalog_registrations AS registration
-   ON registration.id = readiness.registration_id
-  AND registration.organization_id = readiness.organization_id
-  AND registration.project_id = readiness.project_id
-  AND registration.deleted IS FALSE
- JOIN projects AS project
-   ON project.id = readiness.project_id
-  AND project.organization_id = readiness.organization_id
-  AND project.deleted IS FALSE
- WHERE readiness.organization_id = @organization_id
-  AND readiness.project_id = @project_id
-  AND readiness.registration_id = @registration_id
-  AND readiness.connection_id = @connection_id
-  AND readiness.connection_generation = @connection_generation
-  AND readiness.provider_authorization_fingerprint = @provider_authorization_fingerprint;
-
--- name: GetLatestPlatformMCPReadinessForLifecycle :one
 SELECT readiness.*
 FROM platform_mcp_readiness AS readiness
 JOIN platform_mcp_catalog_registrations AS registration
@@ -1211,21 +1209,58 @@ JOIN platform_mcp_catalog_registrations AS registration
  AND registration.organization_id = readiness.organization_id
  AND registration.project_id = readiness.project_id
  AND registration.deleted IS FALSE
- JOIN projects AS project
-   ON project.id = readiness.project_id
-  AND project.organization_id = readiness.organization_id
-  AND project.deleted IS FALSE
- JOIN platform_mcp_connections AS connection
-   ON connection.id = readiness.connection_id
+JOIN projects AS project
+  ON project.id = readiness.project_id
+ AND project.organization_id = readiness.organization_id
+ AND project.deleted IS FALSE
+WHERE readiness.organization_id = @organization_id
+  AND readiness.project_id = @project_id
+  AND readiness.registration_id = @registration_id
+  AND readiness.provider_authorization_fingerprint = @provider_authorization_fingerprint
+  AND (
+      (sqlc.narg(connection_id)::uuid IS NOT NULL
+          AND readiness.connection_id = sqlc.narg(connection_id)::uuid
+          AND readiness.connection_generation = sqlc.narg(connection_generation)::uuid)
+      OR
+      (sqlc.narg(connection_id)::uuid IS NULL
+          AND readiness.connection_id IS NULL
+          AND readiness.user_id = @user_id
+          AND readiness.acting_surface = @acting_surface)
+  );
+
+-- name: GetLatestPlatformMCPReadinessForLifecycle :one
+-- External callers retain live connection/generation checks. A connectionless
+-- caller may only read evidence attributed to that same real user and surface.
+SELECT readiness.*
+FROM platform_mcp_readiness AS readiness
+JOIN platform_mcp_catalog_registrations AS registration
+  ON registration.id = readiness.registration_id
+ AND registration.organization_id = readiness.organization_id
+ AND registration.project_id = readiness.project_id
+ AND registration.deleted IS FALSE
+JOIN projects AS project
+  ON project.id = readiness.project_id
+ AND project.organization_id = readiness.organization_id
+ AND project.deleted IS FALSE
+LEFT JOIN platform_mcp_connections AS connection
+  ON connection.id = readiness.connection_id
  AND connection.organization_id = readiness.organization_id
 WHERE readiness.organization_id = @organization_id
   AND readiness.project_id = @project_id
   AND readiness.registration_id = @registration_id
-  AND readiness.connection_id = @connection_id
-  AND readiness.connection_generation = @connection_generation
-  AND connection.subject_urn = @subject_urn
-  AND connection.active_generation = readiness.connection_generation
-  AND connection.revoked_at IS NULL
+  AND (
+      (sqlc.narg(connection_id)::uuid IS NOT NULL
+          AND readiness.connection_id = sqlc.narg(connection_id)::uuid
+          AND readiness.connection_generation = sqlc.narg(connection_generation)::uuid
+          AND connection.subject_urn = @subject_urn
+          AND connection.active_generation = readiness.connection_generation
+          AND connection.revoked_at IS NULL)
+      OR
+      (sqlc.narg(connection_id)::uuid IS NULL
+          AND readiness.connection_id IS NULL
+          AND readiness.user_id = @user_id
+          AND readiness.acting_surface = @acting_surface)
+  )
 ORDER BY readiness.checked_at DESC, readiness.id DESC
 LIMIT 1;
 
@@ -1236,6 +1271,8 @@ INSERT INTO platform_mcp_readiness (
     registration_id,
     connection_id,
     connection_generation,
+    user_id,
+    acting_surface,
     provider_authorization_fingerprint,
     state,
     evidence_code,
@@ -1248,6 +1285,8 @@ SELECT
     @registration_id,
     @connection_id,
     @connection_generation,
+    @user_id,
+    @acting_surface,
     @provider_authorization_fingerprint,
     @state,
     @evidence_code,

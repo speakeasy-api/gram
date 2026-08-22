@@ -88,8 +88,6 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		"get_platform_mcp_onboarding_status",
 		"attach_platform_mcp_identity_provider",
 		"add_platform_mcp_to_default_plugin",
-		"disable_mcp",
-		"enable_mcp",
 	} {
 		require.False(t, admitted[name], "tool %q needs a connection and must not be admitted to the assistant", name)
 	}
@@ -110,6 +108,8 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		"inspect_mcp_candidate",
 		"send_platform_mcp_feedback",
 		"get_setup_handoff",
+		"disable_mcp",
+		"enable_mcp",
 	} {
 		require.True(t, admitted[name], "tool %q works without a connection and should serve the assistant", name)
 	}

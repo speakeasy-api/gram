@@ -392,7 +392,7 @@ func (s *RegistrationStore) GetProviderReadiness(ctx context.Context, principal 
 	if s == nil || s.db == nil {
 		return Readiness{}, false, ErrUnavailable
 	}
-	connectionID, generation, err := parseConnection(principal)
+	connectionID, generation, err := principalConnection(principal)
 	if err != nil {
 		return Readiness{}, false, err
 	}
@@ -401,8 +401,10 @@ func (s *RegistrationStore) GetProviderReadiness(ctx context.Context, principal 
 		OrganizationID:       principal.OrganizationID,
 		ProjectID:            projectID,
 		RegistrationID:       registrationID,
-		ConnectionID:         uuid.NullUUID{UUID: connectionID, Valid: true},
-		ConnectionGeneration: uuid.NullUUID{UUID: generation, Valid: true},
+		ConnectionID:         connectionID,
+		ConnectionGeneration: generation,
+		UserID:               conv.ToPGText(principal.UserID),
+		ActingSurface:        conv.ToPGText(string(principal.surface())),
 	}); err != nil {
 		return Readiness{}, false, fmt.Errorf("delete expired platform mcp readiness: %w", err)
 	}
@@ -410,8 +412,10 @@ func (s *RegistrationStore) GetProviderReadiness(ctx context.Context, principal 
 		OrganizationID:       principal.OrganizationID,
 		ProjectID:            projectID,
 		RegistrationID:       registrationID,
-		ConnectionID:         uuid.NullUUID{UUID: connectionID, Valid: true},
-		ConnectionGeneration: uuid.NullUUID{UUID: generation, Valid: true},
+		ConnectionID:         connectionID,
+		ConnectionGeneration: generation,
+		UserID:               conv.ToPGText(principal.UserID),
+		ActingSurface:        conv.ToPGText(string(principal.surface())),
 		SubjectUrn:           userSubjectURN(principal.UserID),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -430,7 +434,14 @@ func (s *RegistrationStore) RecordReadiness(ctx context.Context, principal Princ
 	if s == nil || s.db == nil {
 		return Readiness{}, ErrUnavailable
 	}
-	connectionID, generation, err := parseConnection(principal)
+	// Only the managed project assistant can persist readiness without an OAuth
+	// connection. External and dashboard setup probes remain connection-bound;
+	// admitting another connectionless writer before the legacy readiness index
+	// contracts would let distinct actors collide on the same row.
+	if !principal.HasConnection() && principal.surface() != SurfaceProjectAssistant {
+		return Readiness{}, ErrReadinessInvalid
+	}
+	connectionID, generation, err := principalConnection(principal)
 	if err != nil {
 		return Readiness{}, err
 	}
@@ -456,8 +467,10 @@ func (s *RegistrationStore) RecordReadiness(ctx context.Context, principal Princ
 		OrganizationID:                   principal.OrganizationID,
 		ProjectID:                        binding.ProjectID,
 		RegistrationID:                   binding.RegistrationID,
-		ConnectionID:                     uuid.NullUUID{UUID: connectionID, Valid: true},
-		ConnectionGeneration:             uuid.NullUUID{UUID: generation, Valid: true},
+		ConnectionID:                     connectionID,
+		ConnectionGeneration:             generation,
+		UserID:                           conv.ToPGText(principal.UserID),
+		ActingSurface:                    conv.ToPGText(string(principal.surface())),
 		ProviderAuthorizationFingerprint: binding.ProviderAuthorizationFingerprint,
 		State:                            string(state),
 		EvidenceCode:                     optionalText(evidenceCode),
@@ -469,8 +482,10 @@ func (s *RegistrationStore) RecordReadiness(ctx context.Context, principal Princ
 			OrganizationID:                   principal.OrganizationID,
 			ProjectID:                        binding.ProjectID,
 			RegistrationID:                   binding.RegistrationID,
-			ConnectionID:                     uuid.NullUUID{UUID: connectionID, Valid: true},
-			ConnectionGeneration:             uuid.NullUUID{UUID: generation, Valid: true},
+			ConnectionID:                     connectionID,
+			ConnectionGeneration:             generation,
+			UserID:                           conv.ToPGText(principal.UserID),
+			ActingSurface:                    conv.ToPGText(string(principal.surface())),
 			ProviderAuthorizationFingerprint: binding.ProviderAuthorizationFingerprint,
 		})
 		if loadErr == nil {
@@ -492,8 +507,8 @@ func (s *RegistrationStore) RecordReadiness(ctx context.Context, principal Princ
 			OrganizationID:       principal.OrganizationID,
 			ProjectID:            binding.ProjectID,
 			RegistrationID:       binding.RegistrationID,
-			ConnectionID:         uuid.NullUUID{UUID: connectionID, Valid: true},
-			ConnectionGeneration: uuid.NullUUID{UUID: generation, Valid: true},
+			ConnectionID:         connectionID,
+			ConnectionGeneration: generation,
 			SubjectUrn:           userSubjectURN(principal.UserID),
 		})
 		switch {
