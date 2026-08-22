@@ -2196,3 +2196,28 @@ WHERE assistants.project_id = @project_id
   AND assistants.status = 'active'
 ORDER BY assistants.name ASC
 LIMIT @result_limit;
+
+-- name: GetPlatformMCPDiagnosticsTarget :one
+-- Resolves one configured MCP to the identities its telemetry is recorded
+-- under: the toolset slug that calls arriving directly at Gram carry, and the
+-- MCP slug that appears in the URL an agent-hook-observed client called.
+-- Scoped to the organization's own project, so a caller cannot diagnose an MCP
+-- it cannot already see through the inventory.
+SELECT
+    m.id AS mcp_server_id,
+    m.project_id,
+    COALESCE(m.slug, '') AS mcp_slug,
+    COALESCE(toolset.slug, '') AS toolset_slug
+FROM mcp_servers AS m
+JOIN projects AS project
+  ON project.id = m.project_id
+ AND project.organization_id = @organization_id
+ AND project.deleted IS FALSE
+LEFT JOIN toolsets AS toolset
+  ON toolset.id = m.toolset_id
+ AND toolset.project_id = m.project_id
+ AND toolset.organization_id = @organization_id
+ AND toolset.deleted IS FALSE
+WHERE m.id = @mcp_server_id
+  AND m.project_id = @project_id
+  AND m.deleted IS FALSE;

@@ -109,8 +109,12 @@ type OperationBudgets struct {
 	// separately would only let a loop spend twice as much reaching the same
 	// write.
 	Skills OperationBudget
+	// Diagnostics meters the observability reads. They are bounded aggregate
+	// queries over Gram-owned telemetry, so the cost being metered is the
+	// ClickHouse scan, not an external egress.
+	Diagnostics OperationBudget
 }
 
 func (b OperationBudgets) Valid() bool {
-	return b.Catalog.valid() && b.Registration.valid() && b.Handoff.valid() && b.SetupStart.valid() && b.Repair.valid() && b.Docs.valid() && b.Skills.valid()
+	return b.Catalog.valid() && b.Registration.valid() && b.Handoff.valid() && b.SetupStart.valid() && b.Repair.valid() && b.Docs.valid() && b.Skills.valid() && b.Diagnostics.valid()
 }
