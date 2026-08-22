@@ -191,3 +191,72 @@ func TestOrganizationGateRequiresPlatformMCPRolloutAndCapability(t *testing.T) {
 		require.False(t, enabled)
 	})
 }
+
+func TestRemoteMCPSurfaceGateAllowsWhenRolloutAndCapabilityEnabled(t *testing.T) {
+	t.Parallel()
+
+	rollout := &testRolloutProvider{enabled: true}
+	gate := NewRemoteMCPSurfaceGate(testCapabilityChecker{enabled: true}, rollout, testOrganizationSlugResolver{slug: "organization-slug"})
+
+	enabled, err := gate.Enabled(t.Context(), "organization-1")
+
+	require.NoError(t, err)
+	require.True(t, enabled)
+	require.Equal(t, feature.FlagPlatformMCPRemoteURL, rollout.flag, "the surface consults its own rollout flag, not the main Platform MCP flag")
+	require.Equal(t, feature.OrgProjectGroups("organization-slug", ""), rollout.groups)
+}
+
+func TestRemoteMCPSurfaceGateDeniesWhenRolloutDisabled(t *testing.T) {
+	t.Parallel()
+
+	gate := NewRemoteMCPSurfaceGate(testCapabilityChecker{enabled: true}, &testRolloutProvider{}, testOrganizationSlugResolver{slug: "organization-slug"})
+
+	enabled, err := gate.Enabled(t.Context(), "organization-1")
+
+	require.NoError(t, err)
+	require.False(t, enabled)
+}
+
+func TestRemoteMCPSurfaceGateDeniesWhenCapabilityDisabled(t *testing.T) {
+	t.Parallel()
+
+	gate := NewRemoteMCPSurfaceGate(testCapabilityChecker{}, &testRolloutProvider{enabled: true}, testOrganizationSlugResolver{slug: "organization-slug"})
+
+	enabled, err := gate.Enabled(t.Context(), "organization-1")
+
+	require.NoError(t, err)
+	require.False(t, enabled)
+}
+
+func TestRemoteMCPSurfaceGateFailsClosedWhenRolloutUnavailable(t *testing.T) {
+	t.Parallel()
+
+	gate := NewRemoteMCPSurfaceGate(testCapabilityChecker{enabled: true}, &testRolloutProvider{err: errors.New("unavailable")}, testOrganizationSlugResolver{slug: "organization-slug"})
+
+	enabled, err := gate.Enabled(t.Context(), "organization-1")
+
+	require.ErrorContains(t, err, "check remote mcp registration rollout")
+	require.False(t, enabled)
+}
+
+func TestRemoteMCPSurfaceGateFailsClosedWhenCapabilityUnavailable(t *testing.T) {
+	t.Parallel()
+
+	gate := NewRemoteMCPSurfaceGate(testCapabilityChecker{err: errors.New("unavailable")}, &testRolloutProvider{enabled: true}, testOrganizationSlugResolver{slug: "organization-slug"})
+
+	enabled, err := gate.Enabled(t.Context(), "organization-1")
+
+	require.ErrorContains(t, err, "check platform mcp capability for remote mcp registration")
+	require.False(t, enabled)
+}
+
+func TestRemoteMCPSurfaceGateRequiresOrganization(t *testing.T) {
+	t.Parallel()
+
+	gate := NewRemoteMCPSurfaceGate(testCapabilityChecker{enabled: true}, &testRolloutProvider{enabled: true}, testOrganizationSlugResolver{slug: "organization-slug"})
+
+	enabled, err := gate.Enabled(t.Context(), "")
+
+	require.ErrorIs(t, err, ErrUnavailable)
+	require.False(t, enabled)
+}

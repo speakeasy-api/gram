@@ -505,7 +505,7 @@ func (s *ManagementService) mapOnboardingError(err error) error {
 		return oops.C(oops.CodeBadRequest)
 	case errors.Is(err, ErrDistributionConflict), errors.Is(err, ErrDistributionDefaultAbsent), errors.Is(err, ErrDistributionNotReady), errors.Is(err, ErrDistributionTargetUnavailable):
 		return oops.C(oops.CodeConflict)
-	case errors.Is(err, ErrForbidden), errors.Is(err, ErrTargetIneligible):
+	case errors.Is(err, ErrForbidden), errors.Is(err, ErrTargetIneligible), errors.Is(err, ErrDistributionBlockedPendingApproval):
 		return oops.C(oops.CodeForbidden)
 	case errors.Is(err, ErrOperationRateLimited), errors.Is(err, ErrReadinessRateLimited):
 		return oops.C(oops.CodeRateLimitExceeded)

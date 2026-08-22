@@ -1,6 +1,8 @@
 package platformmcp
 
 import (
+	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -96,6 +98,12 @@ func TestOnboardingIdentityProviderAttachmentReturnsOnlyBoundedResults(t *testin
 			err:     ErrIdentityProviderAttachmentConflict,
 			code:    "identity_provider_attachment_conflict",
 			message: "This MCP already has a different or ambiguous remote identity-provider configuration. Automatic attachment was not performed. Ask the user how they want to proceed.",
+		},
+		{
+			name:    "no identity provider discovered for a remote url source",
+			err:     fmt.Errorf("discover remote MCP identity provider: %w: %w", ErrIdentityProviderNotDiscovered, errors.New("no metadata")),
+			code:    "no_identity_provider_discovered",
+			message: "Live discovery found no OAuth identity-provider metadata at this remote MCP server's well-known endpoints, so there is no provider to attach automatically. No provider change was made. Continue authentication setup on this server's Authentication settings page in the AI Control Plane dashboard instead; get_setup_handoff returns that page's exact link.",
 		},
 	}
 

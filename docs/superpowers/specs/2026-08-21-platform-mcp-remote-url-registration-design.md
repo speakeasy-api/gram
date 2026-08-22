@@ -129,10 +129,15 @@ tools see only the four provisioned components.
   non-secret ones** — a raw URL declares no configuration fields (unlike
   reviewed catalogue entries), and `remoteprobe` cannot discover install-time
   credential needs. The dashboard is the header surface.
-- **Distribution** (`add_platform_mcp_to_default_plugin`): unchanged.
-  Enforcement-blocked registrations never reach fresh-ready, so the existing
-  "freshly ready" requirement is the single enforcement chokepoint — no new
-  gate in the distribution tool.
+- **Distribution** (`add_platform_mcp_to_default_plugin`): gains an explicit
+  enforcement gate. The design's original premise — "enforcement-blocked
+  registrations never reach fresh-ready, so readiness is the chokepoint" —
+  was disproven in review: an open server that answers anonymous `tools/list`
+  reads as Ready regardless of approval state. `Distribute` therefore
+  consults org approval enforcement itself (fail closed) and refuses with a
+  typed `blocked_pending_approval` error for enforcement-blocked
+  `remote_url` sources; this covers both the MCP tool and the dashboard
+  management path, which share `Distribute`.
 
 ## Error handling
 

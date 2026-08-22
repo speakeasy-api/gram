@@ -9,10 +9,10 @@ import (
 )
 
 type GetSetupHandoffToolInput struct {
-	ProjectSlug    string `json:"project_slug" jsonschema:"explicit AICP project slug that owns the reviewed MCP registration"`
-	RegistrationID string `json:"registration_id" jsonschema:"Platform MCP registration ID returned by register_catalog_mcp"`
-	ProviderKey    string `json:"provider_key" jsonschema:"reviewed provider key returned by register_catalog_mcp"`
-	CatalogRef     string `json:"catalog_ref" jsonschema:"reviewed catalog reference returned by register_catalog_mcp"`
+	ProjectSlug    string `json:"project_slug" jsonschema:"explicit AICP project slug that owns the MCP registration"`
+	RegistrationID string `json:"registration_id" jsonschema:"Platform MCP registration ID returned by register_catalog_mcp or register_remote_mcp_for_project"`
+	ProviderKey    string `json:"provider_key" jsonschema:"provider key returned by register_catalog_mcp or register_remote_mcp_for_project"`
+	CatalogRef     string `json:"catalog_ref" jsonschema:"catalog reference returned by register_catalog_mcp or register_remote_mcp_for_project"`
 }
 
 type GetSetupHandoffToolOutput struct {
@@ -30,7 +30,7 @@ func registerSetupHandoffTool(reg *Registrar, registrations *RegistrationService
 	addTool(reg, &mcp.Tool{
 		Name:        "get_setup_handoff",
 		Title:       "Get Setup Handoff",
-		Description: "Get the secure dashboard continuation for one reviewed MCP registration. Browser Catalogue entries return a server-owned dashboard Inspect URL, which contains the available setup and authorization actions; the local synthetic fixture returns a single-use setup handoff. Never persist, log, or share a handoff.",
+		Description: "Get the secure dashboard continuation for one MCP registration. Browser Catalogue entries and remote URL registrations return the server-owned Authentication settings dashboard URL, where headers and authentication are configured; the local synthetic fixture returns a single-use setup handoff. Never persist, log, or share a handoff.",
 	}, ToolMeta{
 		// The handoff carries the caller to the dashboard, which completes setup
 		// under its own session. A connection-less caller issues a handoff bound
@@ -41,7 +41,7 @@ func registerSetupHandoffTool(reg *Registrar, registrations *RegistrationService
 			return nil, GetSetupHandoffToolOutput{}, err
 		}
 		setupInput := IssueSetupHandoffInput(input)
-		if isBrowserCatalogProviderKey(input.ProviderKey) {
+		if isBrowserCatalogProviderKey(input.ProviderKey) || input.ProviderKey == remoteURLCatalogProvider {
 			if err := registrations.budgets.Handoff.Allow(ctx, principal); err != nil {
 				if budgetResult, ok := operationBudgetToolResult(err); ok {
 					return budgetResult, GetSetupHandoffToolOutput{}, nil

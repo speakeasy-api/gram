@@ -24,6 +24,7 @@ type RegistrationPersistence interface {
 	BeginReceipt(ctx context.Context, principal Principal, project ResolvedProject, request CatalogRegistrationRequest, now time.Time) (OperationReceipt, error)
 	ConvergeRegistration(ctx context.Context, principal Principal, project ResolvedProject, request CatalogRegistrationRequest, receipt OperationReceipt) (OperationReceipt, error)
 	CompleteRegistration(ctx context.Context, principal Principal, project ResolvedProject, request CatalogRegistrationRequest, receipt OperationReceipt, configuration resolvedCatalogConfiguration) (OperationReceipt, error)
+	CompleteRegistrationWithRemoteURL(ctx context.Context, principal Principal, project ResolvedProject, request CatalogRegistrationRequest, receipt OperationReceipt, remoteURL string, displayName ...string) (OperationReceipt, error)
 	ResolveRegistrationPendingSecretFields(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID, declared []CatalogConfigurationField) ([]CatalogConfigurationField, error)
 	ResolveRegistrationCatalogIdentity(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (CatalogCandidate, error)
 	ResolveRegistrationDashboardSetup(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (RegistrationDashboardSetup, error)
@@ -76,6 +77,12 @@ type RegistrationService struct {
 	identityProviderAttachment CatalogIdentityProviderAttachment
 	budgets                    OperationBudgets
 	telemetry                  LifecycleTelemetry
+
+	// probeReceipts and remoteApprovals enable RegisterRemoteMCP. Both are
+	// supplied together by WithRemoteRegistration; while either is nil the
+	// remote URL registration path reports itself unavailable.
+	probeReceipts   *probeReceiptCodec
+	remoteApprovals RemoteMCPApprovalChecker
 }
 
 func NewRegistrationService(catalog Catalog, gate CatalogRegistrationGateChecker, store RegistrationPersistence) *RegistrationService {
@@ -147,14 +154,18 @@ func (s *RegistrationService) RegistrationCatalogIdentity(ctx context.Context, p
 }
 
 // DashboardSetupURL returns the existing Remote MCP server Authentication
-// settings page for a browser-catalogue registration. This is the browser-only
-// fallback for provider attachment; callers cannot provide an endpoint, source,
-// or credential.
+// settings page for a browser-catalogue or remote URL registration. This is
+// the browser-only fallback for provider attachment; callers cannot provide an
+// endpoint, source, or credential.
 func (s *RegistrationService) DashboardSetupURL(ctx context.Context, principal Principal, input IssueSetupHandoffInput) (string, error) {
 	if s == nil || s.catalog == nil || s.gate == nil || s.store == nil || s.dashboardURL == nil || input.ProjectSlug == "" || input.RegistrationID == "" || input.ProviderKey == "" || input.CatalogRef == "" {
 		return "", ErrRegistrationUnavailable
 	}
-	if !isBrowserCatalogProviderKey(input.ProviderKey) {
+	// A remote URL registration has no reviewed catalogue entry to inspect: its
+	// identity is the sentinel provider plus the persisted normalized URL, and
+	// the persisted-identity match below is what authorizes the link.
+	remote := input.ProviderKey == remoteURLCatalogProvider
+	if !remote && !isBrowserCatalogProviderKey(input.ProviderKey) {
 		return "", ErrCatalogRejected
 	}
 	enabled, err := s.gate.Enabled(ctx, principal.OrganizationID, input.ProjectSlug)
@@ -164,12 +175,14 @@ func (s *RegistrationService) DashboardSetupURL(ctx context.Context, principal P
 	if !enabled {
 		return "", ErrRegistrationUnavailable
 	}
-	catalog, err := s.catalog.Inspect(ctx, input.ProviderKey, input.CatalogRef)
-	if err != nil {
-		return "", fmt.Errorf("inspect dashboard setup catalog candidate: %w", err)
-	}
-	if catalog.ProviderKey != input.ProviderKey || catalog.CatalogRef != input.CatalogRef || catalog.SetupIntent == "" || catalog.Transport != "streamable-http" {
-		return "", ErrCatalogRejected
+	if !remote {
+		catalog, err := s.catalog.Inspect(ctx, input.ProviderKey, input.CatalogRef)
+		if err != nil {
+			return "", fmt.Errorf("inspect dashboard setup catalog candidate: %w", err)
+		}
+		if catalog.ProviderKey != input.ProviderKey || catalog.CatalogRef != input.CatalogRef || catalog.SetupIntent == "" || catalog.Transport != "streamable-http" {
+			return "", ErrCatalogRejected
+		}
 	}
 	registrationID, err := uuid.Parse(input.RegistrationID)
 	if err != nil {
@@ -186,7 +199,7 @@ func (s *RegistrationService) DashboardSetupURL(ctx context.Context, principal P
 	if err != nil {
 		return "", err
 	}
-	if persisted.ProviderKey != catalog.ProviderKey || persisted.CatalogRef != catalog.CatalogRef {
+	if persisted.ProviderKey != input.ProviderKey || persisted.CatalogRef != input.CatalogRef {
 		return "", ErrCatalogRejected
 	}
 	setup, err := s.store.ResolveRegistrationDashboardSetup(ctx, principal, project, registrationID)
@@ -255,7 +268,10 @@ func (s *RegistrationService) AttachDefaultIdentityProvider(ctx context.Context,
 	if err != nil {
 		return CatalogIdentityProviderAttachmentResult{}, err
 	}
-	if !isBrowserCatalogProviderKey(candidate.ProviderKey) {
+	// Browser-catalogue and remote URL registrations both derive their provider
+	// from live discovery against the persisted Remote MCP source. Fixture
+	// adapter registrations own their provider setup and are unsupported here.
+	if !isBrowserCatalogProviderKey(candidate.ProviderKey) && candidate.ProviderKey != remoteURLCatalogProvider {
 		return CatalogIdentityProviderAttachmentResult{}, ErrIdentityProviderAttachmentUnsupported
 	}
 	return s.identityProviderAttachment.Attach(ctx, principal, project, parsedID)

@@ -41,8 +41,19 @@ type GetOnboardingMCPStatusToolOutput struct {
 	Readiness      string `json:"readiness"`
 	Freshness      string `json:"freshness"`
 	EvidenceCode   string `json:"evidence_code,omitempty"`
-	NextAction     string `json:"next_action"`
-	Message        string `json:"message"`
+
+	// BlockedPendingApproval reports that organization MCP approval enforcement
+	// is active and this registered remote MCP server is not approved under it.
+	// The server stays blocked — and cannot become ready — until an
+	// administrator decides the approval at DashboardApprovalsURL.
+	BlockedPendingApproval bool `json:"blocked_pending_approval,omitempty"`
+
+	// DashboardApprovalsURL is where the pending approval is requested and
+	// decided. Set only when BlockedPendingApproval.
+	DashboardApprovalsURL string `json:"dashboard_approvals_url,omitempty"`
+
+	NextAction string `json:"next_action"`
+	Message    string `json:"message"`
 }
 type AttachOnboardingMCPIdentityProviderToolInput struct {
 	ProjectSlug string `json:"project_slug" jsonschema:"explicit AICP project slug selected by the user"`
@@ -169,13 +180,30 @@ func registerOnboardingLifecycleTools(reg *Registrar, onboarding *OnboardingServ
 			}
 		}
 		normalized := normalizedReadiness(readiness, found)
-		if normalized.State == ReadinessReady && readinessFreshness(readiness, found) == "fresh" {
+		// A remote URL registration blocked by organization MCP approval
+		// enforcement cannot become usable through any setup step, so the
+		// enforcement state is consulted before the readiness-verified milestone
+		// is recorded and overrides the readiness-derived next action. An open
+		// server can read fresh-ready through an anonymous probe while still
+		// blocked; distribution independently refuses it.
+		enforcement, err := registrations.RemoteRegistrationEnforcementStatus(ctx, principal, *projection.SelectedProject, projection.Workflow.SelectedRegistrationID)
+		if err != nil {
+			if budgetResult, ok := operationBudgetToolResult(err); ok {
+				return budgetResult, GetOnboardingMCPStatusToolOutput{}, nil
+			}
+			return nil, GetOnboardingMCPStatusToolOutput{}, err
+		}
+		if !enforcement.BlockedPendingApproval && normalized.State == ReadinessReady && readinessFreshness(readiness, found) == "fresh" {
 			if err := onboarding.RecordReadinessVerified(ctx, principal, projection.SelectedProject.ID, projection.Workflow.SelectedRegistrationID); err != nil {
 				return nil, GetOnboardingMCPStatusToolOutput{}, err
 			}
 		}
 		nextAction, message := onboardingReadinessNextAction(normalized, found)
-		return nil, GetOnboardingMCPStatusToolOutput{ProjectSlug: input.ProjectSlug, RegistrationID: registrationID, Registered: true, Readiness: string(normalized.State), Freshness: readinessFreshness(readiness, found), EvidenceCode: normalized.EvidenceCode, NextAction: nextAction, Message: message}, nil
+		if enforcement.BlockedPendingApproval {
+			nextAction = "await_org_approval"
+			message = "This organization enforces MCP approval and this remote MCP server is not yet approved. The registration stands, but the server stays blocked until an administrator approves it at dashboard_approvals_url. After approval, force a fresh onboarding status check."
+		}
+		return nil, GetOnboardingMCPStatusToolOutput{ProjectSlug: input.ProjectSlug, RegistrationID: registrationID, Registered: true, Readiness: string(normalized.State), Freshness: readinessFreshness(readiness, found), EvidenceCode: normalized.EvidenceCode, BlockedPendingApproval: enforcement.BlockedPendingApproval, DashboardApprovalsURL: enforcement.DashboardApprovalsURL, NextAction: nextAction, Message: message}, nil
 	})
 
 	addTool(reg, &mcp.Tool{Name: "attach_platform_mcp_identity_provider", Title: "Attach Platform MCP Identity Provider", Description: "Attach the workflow-bound MCP's one discovered remote identity provider for an explicit project. Ask for explicit user confirmation before calling this tool. It derives provider metadata and dynamic client registration from the persisted reviewed MCP source. Non-secret provider URLs may be returned, but it never accepts or returns credentials, OAuth codes, tokens, client secrets, passwords, or API keys. After success, immediately present authorization_url as a clickable link and tell the user to open it and use Connect or Authorize; do not ask whether they completed an unspecified action or refer to a link above."}, ToolMeta{
@@ -300,6 +328,8 @@ func onboardingIdentityProviderAttachmentAuthorizationUnavailableResult() (*mcp.
 func onboardingIdentityProviderAttachmentError(err error) (*mcp.CallToolResult, bool) {
 	var result onboardingLifecycleErrorResult
 	switch {
+	case errors.Is(err, ErrIdentityProviderNotDiscovered):
+		result = onboardingLifecycleErrorResult{Code: "no_identity_provider_discovered", Message: "Live discovery found no OAuth identity-provider metadata at this remote MCP server's well-known endpoints, so there is no provider to attach automatically. No provider change was made. Continue authentication setup on this server's Authentication settings page in the AI Control Plane dashboard instead; get_setup_handoff returns that page's exact link."}
 	case errors.Is(err, ErrIdentityProviderAttachmentUnsupported):
 		result = onboardingLifecycleErrorResult{Code: "automatic_identity_provider_attachment_unsupported", Message: "This reviewed MCP does not advertise exactly one identity provider with supported OAuth metadata and dynamic client registration. Automatic attachment was not performed. Explain this limitation to the user and ask how they want to proceed."}
 	case errors.Is(err, ErrIdentityProviderAttachmentConflict):
@@ -318,6 +348,8 @@ func onboardingIdentityProviderAttachmentError(err error) (*mcp.CallToolResult, 
 func onboardingLifecycleToolError(err error) (*mcp.CallToolResult, bool) {
 	var result onboardingLifecycleErrorResult
 	switch {
+	case errors.Is(err, ErrDistributionBlockedPendingApproval):
+		result = onboardingLifecycleErrorResult{Code: "blocked_pending_approval", Message: "This organization enforces MCP approval and this remote MCP server is not approved under it, so it cannot be added to the Default plugin. Call get_platform_mcp_onboarding_status for dashboard_approvals_url, where an administrator decides the approval."}
 	case errors.Is(err, ErrDistributionNotReady):
 		result = onboardingLifecycleErrorResult{Code: "not_ready", Message: "Complete secure setup and recheck fresh readiness in the AI Control Plane dashboard before adding this MCP."}
 	case errors.Is(err, ErrDistributionDefaultAbsent):

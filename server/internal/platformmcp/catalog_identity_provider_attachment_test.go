@@ -1,6 +1,7 @@
 package platformmcp
 
 import (
+	"errors"
 	"net/http"
 	"testing"
 
@@ -28,6 +29,22 @@ func TestDiscoverSupportedIssuerMetadataRejectsEmptyCandidates(t *testing.T) {
 	_, err := service.discoverSupportedIssuerMetadata(t.Context(), []string{"", "  "})
 
 	require.ErrorIs(t, err, ErrIdentityProviderAttachmentUnsupported)
+}
+
+func TestIdentityProviderDiscoveryErrorTypesPerRegistrationSource(t *testing.T) {
+	t.Parallel()
+
+	cause := errors.New("no protected resource metadata")
+
+	remoteErr := identityProviderDiscoveryError(remoteURLSourceKind, cause)
+	require.ErrorIs(t, remoteErr, ErrIdentityProviderNotDiscovered, "a remote URL source with no discoverable metadata is a bounded fact, not an unsupported contract")
+	require.ErrorIs(t, remoteErr, cause)
+	require.NotErrorIs(t, remoteErr, ErrIdentityProviderAttachmentUnsupported)
+
+	catalogErr := identityProviderDiscoveryError("catalog", cause)
+	require.ErrorIs(t, catalogErr, ErrIdentityProviderAttachmentUnsupported)
+	require.ErrorIs(t, catalogErr, cause)
+	require.NotErrorIs(t, catalogErr, ErrIdentityProviderNotDiscovered)
 }
 
 func TestIdentityProviderDynamicRegistrationErrorTreatsTimeoutAndRateLimitAsRetryable(t *testing.T) {

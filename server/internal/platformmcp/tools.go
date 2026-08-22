@@ -133,13 +133,13 @@ type operationBudgetResult struct {
 // registrar alongside the server so another admitted audience — the project
 // assistant — can be composed from the same registration pass rather than from
 // a second list that would drift.
-func newServer(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, candidate CatalogDescriptor) (*mcp.Server, *Registrar) {
+func newServer(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, candidate CatalogDescriptor, remoteProbe RemoteMCPProber, remoteSurfaceGate Gate) (*mcp.Server, *Registrar) {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "speakeasy-aicp-platform-mcp",
 		Title:   "Speakeasy AICP Platform MCP",
 		Version: "0.1.0",
 	}, &mcp.ServerOptions{
-		Instructions: "Use this server to inspect the selected organization and help distribute reviewed MCP servers to an explicit project. List reviewed catalogue options and eligible projects, then ask the user to choose one of each before mutating. Inspect the chosen candidate and collect only its declared non-secret configuration values. Normal non-secret URLs may be discussed and returned. Register it privately. If readiness says an upstream identity provider is missing, ask the user to explicitly confirm and then call attach_platform_mcp_identity_provider; the server derives the provider from the persisted reviewed MCP source and returns its non-secret provider_url plus an Inspect authorization_url for the user to use Connect or Authorize. Immediately present authorization_url as the exact clickable link—never say a link is above or ask the user to confirm an unspecified authorization action. Never request or accept OAuth codes, tokens, client secrets, passwords, API keys, or secret headers in chat. The registration dashboard_setup_url is the Authentication settings fallback, not the authorization page. Force a fresh readiness check after user authorization and add the ready server to the project's existing Default plugin. For the guided flow, use register_platform_mcp_for_project, get_platform_mcp_onboarding_status, attach_platform_mcp_identity_provider when confirmed, and add_platform_mcp_to_default_plugin.",
+		Instructions: "Use this server to inspect the selected organization and help distribute reviewed MCP servers to an explicit project. List reviewed catalogue options and eligible projects, then ask the user to choose one of each before mutating. Inspect the chosen candidate and collect only its declared non-secret configuration values. Normal non-secret URLs may be discussed and returned. Register it privately. If readiness says an upstream identity provider is missing, ask the user to explicitly confirm and then call attach_platform_mcp_identity_provider; the server derives the provider from the persisted reviewed MCP source and returns its non-secret provider_url plus an Inspect authorization_url for the user to use Connect or Authorize. Immediately present authorization_url as the exact clickable link—never say a link is above or ask the user to confirm an unspecified authorization action. Never request or accept OAuth codes, tokens, client secrets, passwords, API keys, or secret headers in chat. A user-supplied MCP endpoint URL is accepted by exactly one tool: the read-only probe_remote_mcp. Every mutating tool takes server-issued identities only — catalogue references or probe receipts — never a raw URL. Before calling register_remote_mcp_for_project, show the probe evidence to the user, including its gaps, and get their explicit confirmation; secrets stay out of chat unconditionally. The registration dashboard_setup_url is the Authentication settings fallback, not the authorization page. Force a fresh readiness check after user authorization and add the ready server to the project's existing Default plugin. For the guided flow, use register_platform_mcp_for_project, get_platform_mcp_onboarding_status, attach_platform_mcp_identity_provider when confirmed, and add_platform_mcp_to_default_plugin.",
 		PageSize:     32,
 	})
 
@@ -167,6 +167,17 @@ func newServer(reader Reader, catalog Catalog, registrations *RegistrationServic
 		registerUnavailableCatalogRegistrationTool(reg)
 	} else {
 		registerCatalogRegistrationTool(reg, registrations)
+	}
+	// The live pair requires the probe service, the surface rollout gate, and a
+	// registration service whose remote path is fully configured; anything less
+	// serves the same tools as bounded feature_unavailable stubs so the surface
+	// never flickers.
+	if remoteProbe == nil || remoteSurfaceGate == nil || registrations == nil || registrations.store == nil || registrations.probeReceipts == nil || registrations.remoteApprovals == nil || !registrations.budgets.Registration.valid() {
+		registerUnavailableProbeRemoteMCPTool(reg)
+		registerUnavailableRegisterRemoteMCPTool(reg)
+	} else {
+		registerProbeRemoteMCPTool(reg, remoteProbe, remoteSurfaceGate)
+		registerRegisterRemoteMCPTool(reg, registrations, remoteSurfaceGate, onboarding)
 	}
 	if registrations == nil || registrations.store == nil || !registrations.budgets.Handoff.valid() {
 		registerUnavailableSetupHandoffTool(reg)

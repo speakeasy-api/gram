@@ -235,6 +235,49 @@ func TestRegistrationServiceReturnsPersistedSameOriginDashboardSetupURL(t *testi
 	require.Equal(t, 1, store.resolveCalls)
 }
 
+func TestRegistrationServiceReturnsRemoteRegistrationAuthenticationSettingsURL(t *testing.T) {
+	t.Parallel()
+
+	project := ResolvedProject{ID: uuid.New(), Slug: "project"}
+	registrationID := uuid.New()
+	remoteURL := "https://remote.example.test/mcp"
+	store := &recordingRegistrationStore{
+		project:   project,
+		candidate: CatalogCandidate{ProviderKey: remoteURLCatalogProvider, CatalogRef: remoteURL},
+		dashboard: RegistrationDashboardSetup{OrganizationSlug: "organization", MCPServerRoute: "server route"},
+	}
+	// The zero-value catalogue proves the reviewed-catalogue Inspect path is
+	// never consulted: had it been, the empty candidate would be rejected.
+	service := newRegistrationService(testCatalog{}, &testRegistrationGate{enabled: true}, store)
+	service.WithDashboardURL(&url.URL{Scheme: "https", Host: "localhost:5173"})
+
+	setupURL, err := service.DashboardSetupURL(t.Context(), registrationServicePrincipal(), IssueSetupHandoffInput{
+		ProjectSlug: project.Slug, RegistrationID: registrationID.String(), ProviderKey: remoteURLCatalogProvider, CatalogRef: remoteURL,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "https://localhost:5173/organization/projects/project/mcp/x/server%20route/settings#authentication", setupURL)
+}
+
+func TestRegistrationServiceRejectsRemoteSetupURLForMismatchedPersistedIdentity(t *testing.T) {
+	t.Parallel()
+
+	project := ResolvedProject{ID: uuid.New(), Slug: "project"}
+	store := &recordingRegistrationStore{
+		project:   project,
+		candidate: CatalogCandidate{ProviderKey: remoteURLCatalogProvider, CatalogRef: "https://remote.example.test/mcp"},
+		dashboard: RegistrationDashboardSetup{OrganizationSlug: "organization", MCPServerRoute: "server route"},
+	}
+	service := newRegistrationService(testCatalog{}, &testRegistrationGate{enabled: true}, store)
+	service.WithDashboardURL(&url.URL{Scheme: "https", Host: "localhost:5173"})
+
+	_, err := service.DashboardSetupURL(t.Context(), registrationServicePrincipal(), IssueSetupHandoffInput{
+		ProjectSlug: project.Slug, RegistrationID: uuid.NewString(), ProviderKey: remoteURLCatalogProvider, CatalogRef: "https://different.example.test/mcp",
+	})
+
+	require.ErrorIs(t, err, ErrCatalogRejected)
+}
+
 func TestRegistrationServiceBuildsInspectAuthorizationURLOnlyAfterAttachment(t *testing.T) {
 	t.Parallel()
 
@@ -279,6 +322,42 @@ func TestRegistrationServiceStopsBeforeAttachmentWhenSetupBudgetDenies(t *testin
 	require.ErrorIs(t, err, ErrOperationRateLimited)
 	require.Zero(t, gate.calls)
 	require.Zero(t, store.resolveCalls)
+	require.Zero(t, attachment.calls)
+}
+
+func TestRegistrationServiceAttachesIdentityProviderForRemoteURLRegistration(t *testing.T) {
+	t.Parallel()
+
+	project := ResolvedProject{ID: uuid.New(), Slug: "project"}
+	store := &recordingRegistrationStore{
+		project:   project,
+		candidate: CatalogCandidate{ProviderKey: remoteURLCatalogProvider, CatalogRef: "https://remote.example.test/mcp"},
+	}
+	attachment := &recordingIdentityProviderAttachment{result: CatalogIdentityProviderAttachmentResult{Attached: true, ProviderURL: "https://identity.example"}}
+	service := newRegistrationService(testCatalog{}, &testRegistrationGate{enabled: true}, store).WithIdentityProviderAttachment(attachment)
+
+	result, err := service.AttachDefaultIdentityProvider(t.Context(), registrationServicePrincipal(), project.Slug, uuid.NewString())
+
+	require.NoError(t, err, "a remote URL registration takes the live-discovery attachment path")
+	require.True(t, result.Attached)
+	require.Equal(t, "https://identity.example", result.ProviderURL)
+	require.Equal(t, 1, attachment.calls)
+}
+
+func TestRegistrationServiceRejectsIdentityProviderAttachmentForFixtureProviders(t *testing.T) {
+	t.Parallel()
+
+	project := ResolvedProject{ID: uuid.New(), Slug: "project"}
+	store := &recordingRegistrationStore{
+		project:   project,
+		candidate: CatalogCandidate{ProviderKey: "fixture", CatalogRef: "fixture/mcp"},
+	}
+	attachment := &recordingIdentityProviderAttachment{}
+	service := newRegistrationService(testCatalog{}, &testRegistrationGate{enabled: true}, store).WithIdentityProviderAttachment(attachment)
+
+	_, err := service.AttachDefaultIdentityProvider(t.Context(), registrationServicePrincipal(), project.Slug, uuid.NewString())
+
+	require.ErrorIs(t, err, ErrIdentityProviderAttachmentUnsupported)
 	require.Zero(t, attachment.calls)
 }
 
@@ -447,6 +526,9 @@ type recordingRegistrationStore struct {
 	beginCalls               int
 	convergeCalls            int
 	completeCalls            int
+	completeRemoteCalls      int
+	remoteURL                string
+	remoteDisplayName        string
 	handoffCalls             int
 	candidate                CatalogCandidate
 	dashboard                RegistrationDashboardSetup
@@ -482,6 +564,16 @@ func (s *recordingRegistrationStore) CompleteRegistration(_ context.Context, _ P
 	s.completeCalls++
 	s.request = request
 	s.configuration = configuration
+	return s.completed, s.err
+}
+
+func (s *recordingRegistrationStore) CompleteRegistrationWithRemoteURL(_ context.Context, _ Principal, _ ResolvedProject, request CatalogRegistrationRequest, _ OperationReceipt, remoteURL string, displayName ...string) (OperationReceipt, error) {
+	s.completeRemoteCalls++
+	s.request = request
+	s.remoteURL = remoteURL
+	if len(displayName) > 0 {
+		s.remoteDisplayName = displayName[0]
+	}
 	return s.completed, s.err
 }
 

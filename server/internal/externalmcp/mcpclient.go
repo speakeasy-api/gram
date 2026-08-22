@@ -140,6 +140,29 @@ func NewClient(ctx context.Context, logger *slog.Logger, guardianPolicy *guardia
 	}, nil
 }
 
+// ServerIdentity describes how a remote MCP server identified itself during
+// the initialize handshake. Both fields are the server's own declaration and
+// carry no verification beyond the handshake having completed.
+type ServerIdentity struct {
+	// Name is the implementation name the server declared, or empty when it
+	// declared none.
+	Name string
+
+	// Version is the implementation version the server declared, or empty when
+	// it declared none.
+	Version string
+}
+
+// ServerIdentity reports the connected server's self-declared implementation
+// name and version from the initialize handshake result.
+func (c *Client) ServerIdentity() ServerIdentity {
+	result := c.session.InitializeResult()
+	if result == nil || result.ServerInfo == nil {
+		return ServerIdentity{Name: "", Version: ""}
+	}
+	return ServerIdentity{Name: result.ServerInfo.Name, Version: result.ServerInfo.Version}
+}
+
 // Close closes the client connection.
 func (c *Client) Close() error {
 	if err := c.session.Close(); err != nil {

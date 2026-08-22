@@ -87,6 +87,55 @@ func (g *OrganizationGate) Enabled(ctx context.Context, organizationID string) (
 	return capable, nil
 }
 
+// RemoteMCPSurfaceGate admits the remote URL source registration tool pair —
+// probe_remote_mcp and register_remote_mcp_for_project — following the
+// OrganizationGate two-key pattern: the surface-specific PostHog flag keeps an
+// unreleased surface inaccessible, while the durable Platform MCP product
+// feature lets an organization opt out after release. Both must be enabled,
+// and any unavailable dependency fails closed. The main Platform MCP rollout
+// is enforced separately at request admission, so this gate only adds the
+// keys specific to the user-supplied-URL surface.
+type RemoteMCPSurfaceGate struct {
+	capabilities  CapabilityChecker
+	flags         feature.Provider
+	organizations OrganizationSlugResolver
+}
+
+func NewRemoteMCPSurfaceGate(capabilities CapabilityChecker, flags feature.Provider, organizations OrganizationSlugResolver) *RemoteMCPSurfaceGate {
+	return &RemoteMCPSurfaceGate{
+		capabilities:  capabilities,
+		flags:         flags,
+		organizations: organizations,
+	}
+}
+
+func (g *RemoteMCPSurfaceGate) Enabled(ctx context.Context, organizationID string) (bool, error) {
+	if g == nil || g.capabilities == nil || g.flags == nil || g.organizations == nil || organizationID == "" {
+		return false, ErrUnavailable
+	}
+
+	organizationSlug, err := g.organizations.OrganizationSlug(ctx, organizationID)
+	if err != nil {
+		return false, fmt.Errorf("resolve organization for remote mcp registration rollout: %w", err)
+	}
+	if organizationSlug == "" {
+		return false, ErrUnavailable
+	}
+	rollout, err := g.flags.IsFlagEnabled(ctx, feature.FlagPlatformMCPRemoteURL, organizationID, feature.OrgProjectGroups(organizationSlug, ""))
+	if err != nil {
+		return false, fmt.Errorf("check remote mcp registration rollout: %w", err)
+	}
+	if !rollout {
+		return false, nil
+	}
+
+	capable, err := g.capabilities.IsFeatureEnabledUncached(ctx, organizationID, productfeatures.FeaturePlatformMCP)
+	if err != nil {
+		return false, fmt.Errorf("check platform mcp capability for remote mcp registration: %w", err)
+	}
+	return capable, nil
+}
+
 // CatalogRegistrationGate ensures mutations require the main Platform MCP
 // capability and an explicit project slug. Dashboard visibility is not checked:
 // an enabled organization may use the MCP through manual setup alone.

@@ -698,8 +698,17 @@ func (s *RegistrationStore) CompleteRegistration(ctx context.Context, principal 
 	return operationReceiptFromRow(completedReceipt, receipt.Replayed), nil
 }
 
-func (s *RegistrationStore) CompleteRegistrationWithRemoteURL(ctx context.Context, principal Principal, project ResolvedProject, request CatalogRegistrationRequest, receipt OperationReceipt, remoteURL string) (OperationReceipt, error) {
-	return s.CompleteRegistration(ctx, principal, project, request, receipt, resolvedCatalogConfiguration{remoteURL: remoteURL})
+// CompleteRegistrationWithRemoteURL completes a registration whose remote URL
+// is already known directly — a remote URL source, or a test fixture — rather
+// than resolved from a reviewed catalogue configuration. The optional
+// displayName names the provisioned private components; when omitted they use
+// the generic catalogue fallback name.
+func (s *RegistrationStore) CompleteRegistrationWithRemoteURL(ctx context.Context, principal Principal, project ResolvedProject, request CatalogRegistrationRequest, receipt OperationReceipt, remoteURL string, displayName ...string) (OperationReceipt, error) {
+	configuration := resolvedCatalogConfiguration{remoteURL: remoteURL}
+	if len(displayName) > 0 {
+		configuration.displayName = displayName[0]
+	}
+	return s.CompleteRegistration(ctx, principal, project, request, receipt, configuration)
 }
 
 func (s *RegistrationStore) createPrivateRegistrationComponents(ctx context.Context, tx pgx.Tx, project ResolvedProject, registration platformrepo.PlatformMcpCatalogRegistration, configuration resolvedCatalogConfiguration) (platformrepo.PlatformMcpCatalogRegistration, error) {

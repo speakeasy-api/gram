@@ -116,6 +116,16 @@ func TestGeneratePluginPackagesIncludesPlatformMCPOnlyWhenEnabled(t *testing.T) 
 	require.Contains(t, string(claudeSkill), "attach_platform_mcp_identity_provider")
 	require.Contains(t, string(claudeSkill), "add_platform_mcp_to_default_plugin")
 	require.Contains(t, string(claudeSkill), "send_platform_mcp_feedback")
+	require.Contains(t, string(claudeSkill), "add-mcp-from-remote-url", "the catalogue skill routes raw URLs to the remote URL workflow")
+
+	remoteURLSkill := files["platform-mcp/skills/add-mcp-from-remote-url/SKILL.md"]
+	require.Contains(t, string(remoteURLSkill), "probe_remote_mcp")
+	require.Contains(t, string(remoteURLSkill), "register_remote_mcp_for_project")
+	require.Contains(t, string(remoteURLSkill), "get_platform_mcp_onboarding_status")
+	require.Contains(t, string(remoteURLSkill), "attach_platform_mcp_identity_provider")
+	require.Contains(t, string(remoteURLSkill), "add_platform_mcp_to_default_plugin")
+	require.Contains(t, string(remoteURLSkill), "blocked_pending_approval")
+	require.Contains(t, string(remoteURLSkill), "exactly one tool", "the URL admission carve-out must survive into the shipped skill")
 
 	var agentManifest agentPluginManifest
 	require.NoError(t, json.Unmarshal(files["agent-plugins/speakeasy-aicp-platform-mcp/plugin.json"], &agentManifest))
@@ -125,6 +135,7 @@ func TestGeneratePluginPackagesIncludesPlatformMCPOnlyWhenEnabled(t *testing.T) 
 	require.NoError(t, json.Unmarshal(files["agent-plugins/speakeasy-aicp-platform-mcp/mcp.json"], &agentMCP))
 	require.Equal(t, "https://app.getgram.ai/platform-mcp", agentMCP.MCPServers[platformMCPServerName].URL)
 	require.Equal(t, claudeSkill, files["agent-plugins/speakeasy-aicp-platform-mcp/skills/add-mcp-from-catalog/SKILL.md"])
+	require.Equal(t, remoteURLSkill, files["agent-plugins/speakeasy-aicp-platform-mcp/skills/add-mcp-from-remote-url/SKILL.md"])
 
 	platformPrefixes := []string{
 		"platform-mcp/",
