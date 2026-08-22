@@ -1,6 +1,7 @@
 package remoteprobe
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -8,8 +9,10 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -108,6 +111,47 @@ func TestDiscoverAuthority_PublishedMetadataYieldsDeclaration(t *testing.T) {
 	require.Equal(t, "2.1", declaration.OAuthVersion)
 	require.Equal(t, server.URL+"/register", declaration.RegistrationEndpoint)
 	require.Equal(t, []string{"read", "write"}, declaration.Scopes)
+}
+
+// An oversized tools/list must fail the probe as a bounded size refusal —
+// which the evidence records as a could-not-consult gap — before the response
+// is materialized, never exhaust process memory.
+func TestListToolDeclarations_OversizedResponseIsAFailedProbe(t *testing.T) {
+	t.Parallel()
+
+	server := mcp.NewServer(&mcp.Implementation{Name: "candidate", Version: "1.0.0"}, nil)
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "giant",
+		Description: strings.Repeat("x", maxProbeResponseBytes+(1<<20)),
+	}, func(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, any, error) {
+		return &mcp.CallToolResult{}, nil, nil
+	})
+	fixture := httptest.NewServer(mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true}))
+	t.Cleanup(fixture.Close)
+
+	declarations, err := newProbe(t).ListToolDeclarations(t.Context(), fixture.URL)
+	require.ErrorIs(t, err, externalmcp.ErrResponseTooLarge)
+	require.Nil(t, declarations)
+}
+
+// A modest listing passes through the same capped client untouched.
+func TestListToolDeclarations_BoundedResponsePasses(t *testing.T) {
+	t.Parallel()
+
+	server := mcp.NewServer(&mcp.Implementation{Name: "candidate", Version: "1.0.0"}, nil)
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "list_things",
+		Description: "lists things",
+	}, func(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, any, error) {
+		return &mcp.CallToolResult{}, nil, nil
+	})
+	fixture := httptest.NewServer(mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true}))
+	t.Cleanup(fixture.Close)
+
+	declarations, err := newProbe(t).ListToolDeclarations(t.Context(), fixture.URL)
+	require.NoError(t, err)
+	require.Len(t, declarations, 1)
+	require.Equal(t, "list_things", declarations[0].Name)
 }
 
 // The field bounds cap what one declaration can carry into a stored evidence

@@ -144,6 +144,11 @@ func TestRegistrationServiceRemoteRegistrationBoundsDisplayName(t *testing.T) {
 	}{
 		{name: "name at the byte bound is accepted", displayName: strings.Repeat("n", maxRemoteDisplayNameLength)},
 		{name: "name one byte over the bound is rejected", displayName: strings.Repeat("n", maxRemoteDisplayNameLength+1), rejected: true},
+		// The bound is measured in bytes, not runes: two-byte runes reach it
+		// at half the count, and a 256-rune name overflows through one
+		// multibyte rune.
+		{name: "multibyte name at the byte bound is accepted", displayName: strings.Repeat("ñ", maxRemoteDisplayNameLength/2)},
+		{name: "name over the bound through a multibyte rune is rejected", displayName: strings.Repeat("n", maxRemoteDisplayNameLength-1) + "ñ", rejected: true},
 		{name: "embedded carriage return is rejected", displayName: "Vendor\rMCP", rejected: true},
 		{name: "embedded line feed is rejected", displayName: "Vendor\nMCP", rejected: true},
 		{name: "embedded ANSI escape is rejected", displayName: "Vendor\x1b[2KMCP", rejected: true},
