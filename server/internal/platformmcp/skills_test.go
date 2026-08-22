@@ -147,6 +147,10 @@ func (s stubSkillsGate) Enabled(_ context.Context, _, _ string) (bool, error) {
 	return s.enabled, s.err
 }
 
+func (s stubSkillsGate) EnabledOrganization(_ context.Context, _ string) (bool, error) {
+	return s.enabled, s.err
+}
+
 func testTargets() []SkillTarget {
 	return []SkillTarget{
 		{Kind: SkillTargetPlugin, ID: testDefaultPluginID, Name: "Default", Slug: "default", IsDefault: true},

@@ -62,26 +62,16 @@ func (b OperationBudget) Allow(ctx context.Context, principal Principal) error {
 	if !b.valid() || principal.OrganizationID == "" {
 		return ErrOperationBudgetUnavailable
 	}
-	// A surface acting under assistant identity holds no OAuth connection, so
-	// there is no connection bucket to charge and the organization bucket meters
-	// it alone. Refusing the operation instead would deny every connection-less
-	// caller, and keying the connection bucket on the empty string would pool
-	// every such caller across every organization into one bucket.
-	if principal.HasConnection() {
-		// HasConnection is an OR, so a principal claiming a connection through its
-		// generation alone lands here rather than being metered as connection-less.
-		// It has no key to charge, and charging the empty string would pool every
-		// such caller into one bucket, so the budget is unavailable to it.
-		if principal.ConnectionID == "" {
-			return ErrOperationBudgetUnavailable
-		}
-		connection, err := b.Connection.Allow(ctx, principal.ConnectionID)
-		if err != nil {
-			return fmt.Errorf("limit platform mcp connection operation: %w: %w", ErrOperationBudgetUnavailable, err)
-		}
-		if !connection.Allowed {
-			return ErrOperationRateLimited
-		}
+	actorKey, err := operationBudgetActorKey(principal)
+	if err != nil {
+		return err
+	}
+	connection, err := b.Connection.Allow(ctx, actorKey)
+	if err != nil {
+		return fmt.Errorf("limit platform mcp actor operation: %w: %w", ErrOperationBudgetUnavailable, err)
+	}
+	if !connection.Allowed {
+		return ErrOperationRateLimited
 	}
 	organization, err := b.Organization.Allow(ctx, principal.OrganizationID)
 	if err != nil {
@@ -91,6 +81,24 @@ func (b OperationBudget) Allow(ctx context.Context, principal Principal) error {
 		return ErrOperationRateLimited
 	}
 	return nil
+}
+
+// operationBudgetActorKey is the actor bucket for remote egress and mutations.
+// External Platform MCP calls are isolated by their OAuth connection. A managed
+// assistant has no connection, so it is isolated by its fixed client identity
+// and the real user that authorized the action; it never pools all assistants
+// into one empty-key bucket.
+func operationBudgetActorKey(principal Principal) (string, error) {
+	if principal.HasConnection() {
+		if principal.ConnectionID == "" {
+			return "", ErrOperationBudgetUnavailable
+		}
+		return principal.ConnectionID, nil
+	}
+	if principal.surface() != SurfaceProjectAssistant || principal.ClientID == "" || principal.UserID == "" {
+		return "", ErrOperationBudgetUnavailable
+	}
+	return "assistant:" + principal.ClientID + ":" + principal.UserID, nil
 }
 
 // OperationBudgets groups the independently metered public Platform MCP
