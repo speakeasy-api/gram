@@ -379,4 +379,3 @@ GRAM_SVIX_API_KEY = { default = "unset" }
 ## from the environment. However, for local development, it can be set to a
 ## static value.
 GRAM_GCP_PROJECT_ID = "local-dev-project"
-GRAM_LOCAL_FEATURE_FLAGS_CSV = "{{config_root}}/server/flags.csv"
