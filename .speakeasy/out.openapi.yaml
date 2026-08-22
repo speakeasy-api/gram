@@ -26515,6 +26515,430 @@ paths:
       x-speakeasy-name-override: upsertKey
       x-speakeasy-react-hook:
         name: UpsertModelProviderKey
+  /rpc/networkIngress.create:
+    post:
+      description: 'Create a network ingress for an organization. Exactly one credential mode must be provided: an auth key, or an OAuth client id and secret.'
+      operationId: createNetworkIngress
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateIngressRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NetworkIngress'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: createIngress networkIngress
+      tags:
+        - networkIngress
+      x-speakeasy-name-override: createIngress
+      x-speakeasy-react-hook:
+        name: CreateNetworkIngress
+  /rpc/networkIngress.delete:
+    delete:
+      description: Delete the organization's network ingress. The gateway logs the node out of the customer network and purges its stored node state.
+      operationId: deleteNetworkIngress
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: deleteIngress networkIngress
+      tags:
+        - networkIngress
+      x-speakeasy-name-override: deleteIngress
+      x-speakeasy-react-hook:
+        name: DeleteNetworkIngress
+  /rpc/networkIngress.get:
+    get:
+      description: Get the network ingress for an organization
+      operationId: getNetworkIngress
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NetworkIngress'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: getIngress networkIngress
+      tags:
+        - networkIngress
+      x-speakeasy-name-override: getIngress
+      x-speakeasy-react-hook:
+        name: NetworkIngress
+  /rpc/networkIngress.rotateCredentials:
+    post:
+      description: Replace the credential used to join the customer network. Exactly one credential mode must be provided. The node re-authenticates with the new credential.
+      operationId: rotateNetworkIngressCredentials
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RotateCredentialsRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NetworkIngress'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: rotateCredentials networkIngress
+      tags:
+        - networkIngress
+      x-speakeasy-name-override: rotateCredentials
+      x-speakeasy-react-hook:
+        name: RotateNetworkIngressCredentials
+  /rpc/networkIngress.update:
+    post:
+      description: Update settings for the organization's network ingress. Provide at least one setting.
+      operationId: updateNetworkIngress
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateIngressRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NetworkIngress'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: updateIngress networkIngress
+      tags:
+        - networkIngress
+      x-speakeasy-name-override: updateIngress
+      x-speakeasy-react-hook:
+        name: UpdateNetworkIngress
   /rpc/organizationAssets.uploadImage:
     post:
       description: Upload an organization-tier image (e.g. a remote identity provider logo). Requires org:admin.
@@ -63175,6 +63599,35 @@ components:
       required:
         - remote_session_issuer_id
         - client_id
+    CreateIngressRequestBody:
+      type: object
+      properties:
+        auth_key:
+          type: string
+          description: A reusable, non-ephemeral join key for the customer network. Stored encrypted and never returned.
+        hostname:
+          type: string
+          description: The device hostname the node advertises. Defaults to 'gram-mcp'.
+        identity_required:
+          type: boolean
+          description: Whether to reject requests without an attributable network identity. Defaults to true.
+        oauth_client_id:
+          type: string
+          description: The OAuth client ID used to mint join keys on demand.
+        oauth_client_secret:
+          type: string
+          description: The OAuth client secret. Stored encrypted and never returned.
+        private_network_only:
+          type: boolean
+          description: Whether to disable public access to the org's MCP endpoints. Defaults to false.
+        provider:
+          type: string
+          description: The overlay network technology. Defaults to 'tailscale', the only supported provider.
+        tags:
+          type: array
+          items:
+            type: string
+          description: ACL tags the node advertises. Defaults to the provider's recommended tag set.
     CreateInstanceRequestBody:
       type: object
       properties:
@@ -67250,6 +67703,9 @@ components:
         logs_enabled:
           type: boolean
           description: Whether logging is enabled
+        network_ingress_enabled:
+          type: boolean
+          description: Whether the organization can serve MCP endpoints on its private overlay network via a network ingress
         platform_mcp_enabled:
           type: boolean
           description: Whether the organization can use the Gram Platform MCP capability
@@ -67299,6 +67755,7 @@ components:
         - remote_session_auto_refresh_enforced_enabled
         - consent_tool_filtering_enabled
         - session_portability_enabled
+        - network_ingress_enabled
         - device_agent
     GetProjectForm:
       type: object
@@ -71612,6 +72069,88 @@ components:
           format: uuid
       required:
         - id
+    NetworkIngress:
+      type: object
+      properties:
+        auth_key_configured:
+          type: boolean
+          description: Whether a join auth key is currently stored. The key itself is never returned.
+        connected_since:
+          type: string
+          description: When the node's current connection was established.
+          format: date-time
+        created_at:
+          type: string
+          description: When the network ingress was created.
+          format: date-time
+        credential_kind:
+          type: string
+          description: 'The kind of credential configured for joining the customer''s network. One of: auth_key, oauth_client.'
+        dns_name:
+          type: string
+          description: The DNS name the node is reachable at on the customer network, if known
+        enabled:
+          type: boolean
+          description: Whether the ingress node should be running
+        hostname:
+          type: string
+          description: The device hostname the node advertises on the customer's network
+        id:
+          type: string
+          description: The ID of the network ingress
+          format: uuid
+        identity_required:
+          type: boolean
+          description: Whether requests without an attributable network identity are rejected at the gateway
+        last_error:
+          type: string
+          description: The most recent node error, if any
+        last_seen_at:
+          type: string
+          description: When the node last reported in.
+          format: date-time
+        network_name:
+          type: string
+          description: The name of the customer network the node last joined, if known
+        oauth_client_configured:
+          type: boolean
+          description: Whether an OAuth client credential is currently stored. The secret itself is never returned.
+        organization_id:
+          type: string
+          description: The ID of the organization this ingress belongs to
+        private_network_only:
+          type: boolean
+          description: 'Whether public access is disabled: MCP traffic is rejected on the platform host and the org''s custom domain'
+        provider:
+          type: string
+          description: The overlay network technology serving this ingress. Only 'tailscale' is currently supported.
+        status:
+          type: string
+          description: 'The latest observed node status. One of: pending, connecting, online, offline, error, disabled.'
+        tags:
+          type: array
+          items:
+            type: string
+          description: ACL tags the node advertises on the customer's network
+        updated_at:
+          type: string
+          description: When the network ingress was last updated.
+          format: date-time
+      required:
+        - id
+        - organization_id
+        - provider
+        - hostname
+        - tags
+        - enabled
+        - private_network_only
+        - identity_required
+        - credential_kind
+        - auth_key_configured
+        - oauth_client_configured
+        - status
+        - created_at
+        - updated_at
     NotModified:
       type: object
       properties:
@@ -76351,6 +76890,18 @@ components:
         - total_output_tokens
         - total_tokens
         - total_chats
+    RotateCredentialsRequestBody:
+      type: object
+      properties:
+        auth_key:
+          type: string
+          description: A reusable, non-ephemeral join key for the customer network. Stored encrypted and never returned.
+        oauth_client_id:
+          type: string
+          description: The OAuth client ID used to mint join keys on demand.
+        oauth_client_secret:
+          type: string
+          description: The OAuth client secret. Stored encrypted and never returned.
     RotateTunneledMcpServerKeyForm:
       type: object
       properties:
@@ -77465,6 +78016,7 @@ components:
             - remote_session_auto_refresh_enforced
             - consent_tool_filtering
             - session_portability
+            - network_ingress
           maxLength: 60
         organization_id:
           type: string
@@ -82313,6 +82865,21 @@ components:
         - id
         - external_credential_id
         - name
+    UpdateIngressRequestBody:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: Whether the ingress node should be running
+        hostname:
+          type: string
+          description: Replacement device hostname
+        identity_required:
+          type: boolean
+          description: Whether requests without an attributable network identity are rejected
+        private_network_only:
+          type: boolean
+          description: Whether public access to the org's MCP endpoints is disabled
     UpdateInviteRoleRequestBody:
       type: object
       properties:
@@ -84579,6 +85146,8 @@ tags:
     description: 'Managing meta MCP servers: aggregate servers that front an explicitly managed set of MCP servers through a single endpoint.'
   - name: modelKeys
     description: Manage customer-supplied model provider API keys, scoped per project and responsibility slot.
+  - name: networkIngress
+    description: Manage private network ingresses that serve an organization's MCP endpoints on its own overlay network.
   - name: organizations
     description: Organization membership, invitations, and directory.
   - name: otel

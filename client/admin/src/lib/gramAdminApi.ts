@@ -504,6 +504,7 @@ export type AdminOrganizationFeatures = {
   authz_challenge_logging_enabled: boolean;
   customer_managed_encryption_keys_enabled: boolean;
   custom_model_keys_enabled: boolean;
+  network_ingress_enabled: boolean;
   platform_mcp_enabled: boolean;
   remote_session_auto_refresh_enabled: boolean;
   session_portability_enabled: boolean;
@@ -515,6 +516,7 @@ export type AdminOrganizationFeatureName =
   | "authz_challenge_logging"
   | "customer_managed_encryption_keys"
   | "custom_model_keys"
+  | "network_ingress"
   | "platform_mcp"
   | "remote_session_auto_refresh"
   | "session_portability"

@@ -24,6 +24,7 @@ type adminOrganizationFeaturesResponse struct {
 	AuthzChallengeLoggingEnabled         bool `json:"authz_challenge_logging_enabled"`
 	CustomerManagedEncryptionKeysEnabled bool `json:"customer_managed_encryption_keys_enabled"`
 	CustomModelKeysEnabled               bool `json:"custom_model_keys_enabled"`
+	NetworkIngressEnabled                bool `json:"network_ingress_enabled"`
 	PlatformMcpEnabled                   bool `json:"platform_mcp_enabled"`
 	RemoteSessionAutoRefreshEnabled      bool `json:"remote_session_auto_refresh_enabled"`
 	SessionPortabilityEnabled            bool `json:"session_portability_enabled"`
@@ -41,6 +42,7 @@ var adminOrganizationFeatures = map[string]productfeatures.Feature{
 	string(productfeatures.FeatureAuthzChallengeLogging):         productfeatures.FeatureAuthzChallengeLogging,
 	string(productfeatures.FeatureCustomerManagedEncryptionKeys): productfeatures.FeatureCustomerManagedEncryptionKeys,
 	string(productfeatures.FeatureCustomModelKeys):               productfeatures.FeatureCustomModelKeys,
+	string(productfeatures.FeatureNetworkIngress):                productfeatures.FeatureNetworkIngress,
 	string(productfeatures.FeaturePlatformMCP):                   productfeatures.FeaturePlatformMCP,
 	string(productfeatures.FeatureRemoteSessionAutoRefresh):      productfeatures.FeatureRemoteSessionAutoRefresh,
 	string(productfeatures.FeatureSessionPortability):            productfeatures.FeatureSessionPortability,
@@ -89,6 +91,7 @@ func (s *Service) readAdminOrganizationFeatures(ctx context.Context, organizatio
 		AuthzChallengeLoggingEnabled:         readFeature(productfeatures.FeatureAuthzChallengeLogging),
 		CustomerManagedEncryptionKeysEnabled: readFeature(productfeatures.FeatureCustomerManagedEncryptionKeys),
 		CustomModelKeysEnabled:               readFeature(productfeatures.FeatureCustomModelKeys),
+		NetworkIngressEnabled:                readFeature(productfeatures.FeatureNetworkIngress),
 		PlatformMcpEnabled:                   readFeature(productfeatures.FeaturePlatformMCP),
 		RemoteSessionAutoRefreshEnabled:      readFeature(productfeatures.FeatureRemoteSessionAutoRefresh),
 		SessionPortabilityEnabled:            readFeature(productfeatures.FeatureSessionPortability),

@@ -51,6 +51,10 @@ const (
 	// selections is always on; this only governs whether new approvals can
 	// author one.
 	FeatureConsentToolFiltering Feature = "consent_tool_filtering"
+	// FeatureNetworkIngress gates Private Network Ingress: serving an org's
+	// MCP endpoints directly on the customer's overlay network (Tailscale
+	// first) via the networkIngress management API and the network gateway.
+	FeatureNetworkIngress Feature = "network_ingress"
 )
 
 type FeatureCache struct {

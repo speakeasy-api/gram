@@ -41,8 +41,9 @@ var _ = Service("features", func() {
 			Attribute("remote_session_auto_refresh_enforced_enabled", Boolean, "Whether automatic remote-session refresh is enforced as the organization default: forced on for every user, shown locked on consent screens, and applied by the keepalive regardless of per-session preference")
 			Attribute("consent_tool_filtering_enabled", Boolean, "Whether MCP consent screens offer the tool filtering picker for the organization")
 			Attribute("session_portability_enabled", Boolean, "Whether agent session portability is enabled for the organization: session sharing links, move reporting with lineage, and picker title enrichment via the device agent")
+			Attribute("network_ingress_enabled", Boolean, "Whether the organization can serve MCP endpoints on its private overlay network via a network ingress")
 			Attribute("device_agent", Boolean, "Whether the organization uses the device agent (any device has polled agent.getPlugins). Derived from device-agent syncs, not an admin-settable feature.")
-			Required("logs_enabled", "tool_io_logs_enabled", "session_capture_enabled", "authz_challenge_logging_enabled", "sso_enabled", "scim_enabled", "hooks_browser_login_enabled", "hooks_fail_open_enabled", "custom_model_keys_enabled", "skills_enabled", "skill_capture_metadata_only", "ai_platform_push_integrations_enabled", "platform_mcp_enabled", "customer_managed_encryption_keys_enabled", "remote_session_auto_refresh_enabled", "remote_session_auto_refresh_enforced_enabled", "consent_tool_filtering_enabled", "session_portability_enabled", "device_agent")
+			Required("logs_enabled", "tool_io_logs_enabled", "session_capture_enabled", "authz_challenge_logging_enabled", "sso_enabled", "scim_enabled", "hooks_browser_login_enabled", "hooks_fail_open_enabled", "custom_model_keys_enabled", "skills_enabled", "skill_capture_metadata_only", "ai_platform_push_integrations_enabled", "platform_mcp_enabled", "customer_managed_encryption_keys_enabled", "remote_session_auto_refresh_enabled", "remote_session_auto_refresh_enforced_enabled", "consent_tool_filtering_enabled", "session_portability_enabled", "network_ingress_enabled", "device_agent")
 		})
 
 		HTTP(func() {
@@ -64,7 +65,7 @@ var _ = Service("features", func() {
 			Attribute("organization_id", String, "Organization whose product feature to update.")
 			Attribute("feature_name", String, "Name of the feature to update", func() {
 				MaxLength(60)
-				Enum("logs", "tool_io_logs", "session_capture", "authz_challenge_logging", "sso", "scim", "hooks_browser_login", "hooks_fail_open", "custom_model_keys", "skills", "skill_capture_metadata_only", "ai_platform_push_integrations", "platform_mcp", "customer_managed_encryption_keys", "remote_session_auto_refresh", "remote_session_auto_refresh_enforced", "consent_tool_filtering", "session_portability")
+				Enum("logs", "tool_io_logs", "session_capture", "authz_challenge_logging", "sso", "scim", "hooks_browser_login", "hooks_fail_open", "custom_model_keys", "skills", "skill_capture_metadata_only", "ai_platform_push_integrations", "platform_mcp", "customer_managed_encryption_keys", "remote_session_auto_refresh", "remote_session_auto_refresh_enforced", "consent_tool_filtering", "session_portability", "network_ingress")
 			})
 			Attribute("enabled", Boolean, "Whether the feature should be enabled")
 			Required("organization_id", "feature_name", "enabled")

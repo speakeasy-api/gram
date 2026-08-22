@@ -30,7 +30,7 @@ generation:
   versioningStrategy: manual
   persistentEdits: {}
   tests:
-    generateTests: false
+    generateTests: true
     generateNewTests: false
     skipResponseBodyAssertions: false
 go:

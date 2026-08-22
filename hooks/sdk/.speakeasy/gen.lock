@@ -6,8 +6,8 @@ management:
   generationVersion: 2.926.2
   releaseVersion: 0.1.0
 persistentEdits:
-  generation_id: 24194af0-4224-4f48-8d18-b0dd5ff74af0
-  pristine_commit_hash: b4715fcefeb2733ca10c7af186a20f69a01d06be
+  generation_id: c4ee0b80-f5a2-4269-99e6-989053f06c29
+  pristine_commit_hash: e440eca7a0c3e654de25fb05a60078bb36f95915
   pristine_tree_hash: 5af3c193222af5acdec37bf69b6cc16b4552f551
 features:
   go:
@@ -388,3 +388,4 @@ examples:
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
 examplesVersion: 1.0.2
+generatedTests: {}

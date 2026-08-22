@@ -103,6 +103,9 @@ type GetProductFeaturesResult struct {
 	// sharing links, move reporting with lineage, and picker title enrichment via
 	// the device agent
 	SessionPortabilityEnabled bool
+	// Whether the organization can serve MCP endpoints on its private overlay
+	// network via a network ingress
+	NetworkIngressEnabled bool
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
