@@ -474,7 +474,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	}
 	lifecycleVisibility, err := newPlatformMCPLifecycleVisibilityService(config, readiness)
 	if err != nil {
-		return AssistantSurface{}, fmt.Errorf("create local Platform MCP lifecycle visibility service: %w", err)
+		return AssistantSurface{}, fmt.Errorf("create browser Platform MCP lifecycle visibility service: %w", err)
 	}
 	registrations := platformmcp.NewRegistrationService(catalog, registrationGate, store).
 		WithDirectRemoteInspector(platformmcp.NewGuardianDirectRemoteInspector(config.GuardianPolicy)).
