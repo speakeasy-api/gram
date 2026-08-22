@@ -327,6 +327,7 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		RemoteSessionAutoRefreshEnforcedEnabled: isEnabled(FeatureRemoteSessionAutoRefreshEnforced),
 		ConsentToolFilteringEnabled:             isEnabled(FeatureConsentToolFiltering),
 		SessionPortabilityEnabled:               isEnabled(FeatureSessionPortability),
+		NetworkIngressEnabled:                   isEnabled(FeatureNetworkIngress),
 		DeviceAgent:                             deviceAgent,
 	}, nil
 }

@@ -93,6 +93,10 @@ export const AUDIT_ACTIONS = [
   "meta-mcp:update_member",
   "model_provider_key:delete",
   "model_provider_key:upsert",
+  "network_ingress:create",
+  "network_ingress:delete",
+  "network_ingress:rotate_credentials",
+  "network_ingress:update",
   "openrouter-key:disable",
   "openrouter-key:enable",
   "openrouter-key:set_spend_cap",
@@ -422,6 +426,15 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated model provider key";
     case "model_provider_key:delete":
       return "removed model provider key";
+
+    case "network_ingress:create":
+      return "added network ingress";
+    case "network_ingress:update":
+      return "updated network ingress";
+    case "network_ingress:rotate_credentials":
+      return "rotated network ingress credentials";
+    case "network_ingress:delete":
+      return "removed network ingress";
 
     case "openrouter-key:disable":
       return "disabled platform OpenRouter key";

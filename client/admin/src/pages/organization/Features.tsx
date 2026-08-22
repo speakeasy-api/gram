@@ -53,6 +53,13 @@ const PRODUCT_FEATURES: FeatureDefinition[] = [
       "Allows projects in this organization to store OpenRouter API keys for model completions.",
   },
   {
+    featureName: "network_ingress",
+    enabledKey: "network_ingress_enabled",
+    label: "Private Network Ingress",
+    description:
+      "Allows this organization to serve its MCP endpoints on its own private overlay network (Tailscale first) via the network ingress API.",
+  },
+  {
     featureName: "platform_mcp",
     enabledKey: "platform_mcp_enabled",
     label: "Platform MCP access",

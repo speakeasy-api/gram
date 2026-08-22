@@ -22,6 +22,8 @@ function getResourceLabel(resource: string): string {
       return "asset";
     case "custom_domains":
       return "custom domain";
+    case "network_ingress":
+      return "network ingress";
     case "deployments":
       return "deployment";
     case "environment":

@@ -301,6 +301,11 @@ trackedFiles:
   src/funcs/modelKeysListKeys.ts: {}
   src/funcs/modelKeysSetKeyEnabled.ts: {}
   src/funcs/modelKeysUpsertKey.ts: {}
+  src/funcs/networkIngressCreateIngress.ts: {}
+  src/funcs/networkIngressDeleteIngress.ts: {}
+  src/funcs/networkIngressGetIngress.ts: {}
+  src/funcs/networkIngressRotateCredentials.ts: {}
+  src/funcs/networkIngressUpdateIngress.ts: {}
   src/funcs/organizationAssetsUploadImage.ts: {}
   src/funcs/organizationRemoteSessionClientsCreate.ts: {}
   src/funcs/organizationRemoteSessionClientsCreateCimd.ts: {}
@@ -726,6 +731,7 @@ trackedFiles:
   src/models/components/creategcpiamcredentialform.ts: {}
   src/models/components/creategcpkmskeyform.ts: {}
   src/models/components/createglobalremotesessionclientform.ts: {}
+  src/models/components/createingressrequestbody.ts: {}
   src/models/components/createinstancerequestbody.ts: {}
   src/models/components/createissuerrequestbody.ts: {}
   src/models/components/createjsonwebkeysetform.ts: {}
@@ -1077,6 +1083,7 @@ trackedFiles:
   src/models/components/modelproviderkey.ts: {}
   src/models/components/modelusage.ts: {}
   src/models/components/moveissuerrequestbody.ts: {}
+  src/models/components/networkingress.ts: {}
   src/models/components/notmodified.ts: {}
   src/models/components/oauthenablementmetadata.ts: {}
   src/models/components/observabilitysummary.ts: {}
@@ -1225,6 +1232,7 @@ trackedFiles:
   src/models/components/role.ts: {}
   src/models/components/rolegrant.ts: {}
   src/models/components/rolesummary.ts: {}
+  src/models/components/rotatecredentialsrequestbody.ts: {}
   src/models/components/rotatetunneledmcpserverkeyform.ts: {}
   src/models/components/rotatetunneledmcpserverkeyresult.ts: {}
   src/models/components/saveriskevalreviewrequestbody.ts: {}
@@ -1415,6 +1423,7 @@ trackedFiles:
   src/models/components/updategcpiamcredentialrequestbody.ts: {}
   src/models/components/updategcpiamplatformcredentialrequestbody.ts: {}
   src/models/components/updategcpkmskeyrequestbody.ts: {}
+  src/models/components/updateingressrequestbody.ts: {}
   src/models/components/updateinviterolerequestbody.ts: {}
   src/models/components/updatejsonwebkeysetrequestbody.ts: {}
   src/models/components/updatemarketplacesettingsrequestbody.ts: {}
@@ -1546,6 +1555,7 @@ trackedFiles:
   src/models/operations/createmcpendpoint.ts: {}
   src/models/operations/createmcpserver.ts: {}
   src/models/operations/createmetamcpserver.ts: {}
+  src/models/operations/createnetworkingress.ts: {}
   src/models/operations/createorganizationremotesessionclient.ts: {}
   src/models/operations/createorganizationremotesessionissuer.ts: {}
   src/models/operations/createpackage.ts: {}
@@ -1599,6 +1609,7 @@ trackedFiles:
   src/models/operations/deletemcpservertoolmetadata.ts: {}
   src/models/operations/deletemetamcpserver.ts: {}
   src/models/operations/deletemodelproviderkey.ts: {}
+  src/models/operations/deletenetworkingress.ts: {}
   src/models/operations/deleteorganizationremotesessionclient.ts: {}
   src/models/operations/deleteorganizationremotesessionissuer.ts: {}
   src/models/operations/deleteotelforwardingconfig.ts: {}
@@ -1694,6 +1705,7 @@ trackedFiles:
   src/models/operations/getmcpserverdetails.ts: {}
   src/models/operations/getmcpsetupdocs.ts: {}
   src/models/operations/getmetamcpserver.ts: {}
+  src/models/operations/getnetworkingress.ts: {}
   src/models/operations/getobservabilityoverview.ts: {}
   src/models/operations/getonboardingstatus.ts: {}
   src/models/operations/getorganization.ts: {}
@@ -1957,6 +1969,7 @@ trackedFiles:
   src/models/operations/revokeusersessionclient.ts: {}
   src/models/operations/revokeusersessionconsent.ts: {}
   src/models/operations/rotatelitellminstancekey.ts: {}
+  src/models/operations/rotatenetworkingresscredentials.ts: {}
   src/models/operations/rotatetunneledmcpserverkey.ts: {}
   src/models/operations/saveriskevalreview.ts: {}
   src/models/operations/searchbusinessmemories.ts: {}
@@ -2036,6 +2049,7 @@ trackedFiles:
   src/models/operations/updatememberroles.ts: {}
   src/models/operations/updatemetamcpmember.ts: {}
   src/models/operations/updatemetamcpserver.ts: {}
+  src/models/operations/updatenetworkingress.ts: {}
   src/models/operations/updateorganizationremotesessionclient.ts: {}
   src/models/operations/updateorganizationremotesessionissuer.ts: {}
   src/models/operations/updatepackage.ts: {}
@@ -2181,6 +2195,7 @@ trackedFiles:
   src/react-query/createMcpEndpoint.ts: {}
   src/react-query/createMcpServer.ts: {}
   src/react-query/createMetaMcpServer.ts: {}
+  src/react-query/createNetworkIngress.ts: {}
   src/react-query/createOrganizationRemoteSessionClient.ts: {}
   src/react-query/createOrganizationRemoteSessionIssuer.ts: {}
   src/react-query/createPackage.ts: {}
@@ -2224,6 +2239,7 @@ trackedFiles:
   src/react-query/deleteMcpServerToolMetadata.ts: {}
   src/react-query/deleteMetaMcpServer.ts: {}
   src/react-query/deleteModelProviderKey.ts: {}
+  src/react-query/deleteNetworkIngress.ts: {}
   src/react-query/deleteOrganizationRemoteSessionClient.ts: {}
   src/react-query/deleteOrganizationRemoteSessionIssuer.ts: {}
   src/react-query/deleteOtelForwardingConfig.ts: {}
@@ -2537,6 +2553,8 @@ trackedFiles:
   src/react-query/modelProviderKeys.core.ts: {}
   src/react-query/modelProviderKeys.ts: {}
   src/react-query/moveOrganizationRemoteSessionIssuer.ts: {}
+  src/react-query/networkIngress.core.ts: {}
+  src/react-query/networkIngress.ts: {}
   src/react-query/onboardingStatus.core.ts: {}
   src/react-query/onboardingStatus.ts: {}
   src/react-query/organization.core.ts: {}
@@ -2725,6 +2743,7 @@ trackedFiles:
   src/react-query/roles.core.ts: {}
   src/react-query/roles.ts: {}
   src/react-query/rotateLiteLLMInstanceKey.ts: {}
+  src/react-query/rotateNetworkIngressCredentials.ts: {}
   src/react-query/rotateTunneledMcpServerKey.ts: {}
   src/react-query/searchBusinessMemories.ts: {}
   src/react-query/searchChats.core.ts: {}
@@ -2870,6 +2889,7 @@ trackedFiles:
   src/react-query/updateMemberRoles.ts: {}
   src/react-query/updateMetaMcpMember.ts: {}
   src/react-query/updateMetaMcpServer.ts: {}
+  src/react-query/updateNetworkIngress.ts: {}
   src/react-query/updateOrganizationRemoteSessionClient.ts: {}
   src/react-query/updateOrganizationRemoteSessionIssuer.ts: {}
   src/react-query/updatePackage.ts: {}
@@ -2983,6 +3003,7 @@ trackedFiles:
   src/sdk/mcpservers.ts: {}
   src/sdk/metamcp.ts: {}
   src/sdk/modelkeys.ts: {}
+  src/sdk/networkingress.ts: {}
   src/sdk/organizationassets.ts: {}
   src/sdk/organizationremotesessionclients.ts: {}
   src/sdk/organizationremotesessionissuers.ts: {}
@@ -3682,6 +3703,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  createNetworkIngress:
+    speakeasy-default-create-network-ingress:
+      requestBody:
+        application/json: {}
+      responses:
+        "200":
+          application/json: {"auth_key_configured": true, "created_at": "2024-09-28T18:52:17.245Z", "credential_kind": "<value>", "enabled": false, "hostname": "silky-babushka.com", "id": "fde4b2c6-8e9e-4832-ae1a-7b115ac744b3", "identity_required": false, "oauth_client_configured": true, "organization_id": "<id>", "private_network_only": true, "provider": "<value>", "status": "<value>", "tags": ["<value 1>"], "updated_at": "2026-09-23T02:00:53.227Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   createOrganizationRemoteSessionClient:
     speakeasy-default-create-organization-remote-session-client:
       requestBody:
@@ -4273,6 +4305,13 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  deleteNetworkIngress:
+    speakeasy-default-delete-network-ingress:
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   deleteOrganizationRemoteSessionClient:
     speakeasy-default-delete-organization-remote-session-client:
       parameters:
@@ -5389,6 +5428,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getNetworkIngress:
+    speakeasy-default-get-network-ingress:
+      responses:
+        "200":
+          application/json: {"auth_key_configured": true, "created_at": "2026-04-12T01:46:16.095Z", "credential_kind": "<value>", "enabled": true, "hostname": "stiff-retention.net", "id": "67370e4e-3349-4b6f-9c82-105a3ba5c4d5", "identity_required": true, "oauth_client_configured": false, "organization_id": "<id>", "private_network_only": false, "provider": "<value>", "status": "<value>", "tags": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2024-07-06T06:26:23.096Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   getObservabilityOverview:
     speakeasy-default-get-observability-overview:
       requestBody:
@@ -5564,7 +5612,7 @@ examples:
           organization_id: "<id>"
       responses:
         "200":
-          application/json: {"ai_platform_push_integrations_enabled": false, "authz_challenge_logging_enabled": false, "consent_tool_filtering_enabled": false, "custom_model_keys_enabled": false, "customer_managed_encryption_keys_enabled": false, "device_agent": false, "hooks_browser_login_enabled": false, "hooks_fail_open_enabled": false, "logs_enabled": false, "platform_mcp_enabled": false, "remote_session_auto_refresh_enabled": false, "remote_session_auto_refresh_enforced_enabled": false, "scim_enabled": false, "session_capture_enabled": true, "session_portability_enabled": false, "skill_capture_metadata_only": false, "skills_enabled": false, "sso_enabled": false, "tool_io_logs_enabled": true}
+          application/json: {"ai_platform_push_integrations_enabled": false, "authz_challenge_logging_enabled": false, "consent_tool_filtering_enabled": false, "custom_model_keys_enabled": false, "customer_managed_encryption_keys_enabled": false, "device_agent": false, "hooks_browser_login_enabled": false, "hooks_fail_open_enabled": false, "logs_enabled": false, "network_ingress_enabled": false, "platform_mcp_enabled": false, "remote_session_auto_refresh_enabled": false, "remote_session_auto_refresh_enforced_enabled": false, "scim_enabled": false, "session_capture_enabled": true, "session_portability_enabled": false, "skill_capture_metadata_only": false, "skills_enabled": false, "sso_enabled": false, "tool_io_logs_enabled": true}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -8357,6 +8405,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  rotateNetworkIngressCredentials:
+    speakeasy-default-rotate-network-ingress-credentials:
+      requestBody:
+        application/json: {}
+      responses:
+        "200":
+          application/json: {"auth_key_configured": true, "created_at": "2024-07-28T12:11:17.911Z", "credential_kind": "<value>", "enabled": false, "hostname": "made-up-version.com", "id": "870954a1-b5a2-4187-af3d-e4b84d9397d7", "identity_required": true, "oauth_client_configured": true, "organization_id": "<id>", "private_network_only": true, "provider": "<value>", "status": "<value>", "tags": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2024-12-04T14:09:01.604Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   rotateTunneledMcpServerKey:
     speakeasy-default-rotate-tunneled-mcp-server-key:
       requestBody:
@@ -9233,6 +9292,17 @@ examples:
       responses:
         "200":
           application/json: {"created_at": "2026-07-10T17:29:02.697Z", "id": "f5a95ca4-055d-47f6-b62c-b93212fbea06", "name": "<value>", "organization_id": "<id>", "project_id": "0f17506b-1037-4306-ba27-4e8d05871c35", "updated_at": "2025-10-10T20:16:25.755Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  updateNetworkIngress:
+    speakeasy-default-update-network-ingress:
+      requestBody:
+        application/json: {}
+      responses:
+        "200":
+          application/json: {"auth_key_configured": false, "created_at": "2024-02-16T05:32:13.355Z", "credential_kind": "<value>", "enabled": false, "hostname": "serpentine-bathhouse.net", "id": "d220c1f3-09a9-40dc-bfde-80c1c0a5b0d1", "identity_required": true, "oauth_client_configured": false, "organization_id": "<id>", "private_network_only": true, "provider": "<value>", "status": "<value>", "tags": [], "updated_at": "2024-07-18T16:39:57.235Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

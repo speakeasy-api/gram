@@ -38,6 +38,7 @@ const FEATURES: AdminOrganizationFeatures = {
   authz_challenge_logging_enabled: true,
   customer_managed_encryption_keys_enabled: false,
   custom_model_keys_enabled: true,
+  network_ingress_enabled: false,
   platform_mcp_enabled: true,
   remote_session_auto_refresh_enabled: false,
   session_portability_enabled: false,
