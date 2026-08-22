@@ -44,23 +44,34 @@ func TestIdentityProviderDiscoveryErrorTypesPerRegistrationSource(t *testing.T) 
 	require.NotErrorIs(t, remoteErr, ErrIdentityProviderAttachmentUnsupported)
 	require.NotErrorIs(t, remoteErr, ErrIdentityProviderAttachmentUnavailable)
 
+	// Non-compliant catch-alls answer the well-known probe with an app page
+	// (200 decoded as "malformed") or an error status ("http_error") rather
+	// than a 404 — a permanent non-publication, not a transient fault.
+	for _, catchAll := range []*wellknown.ProtectedResourceDiscoveryError{
+		{ProbeURL: "https://remote.example.test/.well-known/oauth-protected-resource", Status: http.StatusOK},
+		{ProbeURL: "https://remote.example.test/.well-known/oauth-protected-resource", Status: http.StatusInternalServerError},
+	} {
+		catchAllErr := identityProviderDiscoveryError(remoteURLSourceKind, catchAll)
+		require.ErrorIs(t, catchAllErr, ErrIdentityProviderNotDiscovered, "code %s", catchAll.Code())
+		require.NotErrorIs(t, catchAllErr, ErrIdentityProviderAttachmentUnavailable, "code %s", catchAll.Code())
+	}
+
 	catalogErr := identityProviderDiscoveryError("catalog", notPublished)
 	require.ErrorIs(t, catalogErr, ErrIdentityProviderAttachmentUnsupported)
 	require.ErrorIs(t, catalogErr, notPublished)
 	require.NotErrorIs(t, catalogErr, ErrIdentityProviderNotDiscovered)
 }
 
-// Only the server deliberately answering "not published" reads as
-// not-discovered. A probe that timed out, was blocked, hit an unexpected
-// status, or decoded garbage leaves publication unknown, so it must stay a
-// retryable unavailable — a not-discovered misclassification would steer a
-// transient failure into a terminal dashboard fallback.
+// Only an upstream that answered its well-known path (404, catch-all 200, or
+// error status) reads as not-discovered. A probe that never got an HTTP
+// answer — timed out, was blocked, or failed in transport — leaves
+// publication unknown, so it must stay a retryable unavailable — a
+// not-discovered misclassification would steer a transient failure into a
+// terminal dashboard fallback.
 func TestIdentityProviderDiscoveryErrorKeepsUnknownRemoteFailuresRetryable(t *testing.T) {
 	t.Parallel()
 
 	unknownFailures := []error{
-		&wellknown.ProtectedResourceDiscoveryError{ProbeURL: "https://remote.example.test/.well-known/oauth-protected-resource", Status: http.StatusInternalServerError},
-		&wellknown.ProtectedResourceDiscoveryError{ProbeURL: "https://remote.example.test/.well-known/oauth-protected-resource", Status: http.StatusOK},
 		&wellknown.ProtectedResourceDiscoveryError{ProbeURL: "https://remote.example.test/.well-known/oauth-protected-resource", Status: 0},
 		errors.New("discovery failed in an untyped way"),
 	}

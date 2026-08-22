@@ -409,21 +409,29 @@ func remoteDiscoveryAttachmentRegistration(registration platformrepo.PlatformMcp
 
 // identityProviderDiscoveryError types a failed protected-resource metadata
 // discovery per registration source. A user-supplied remote URL declares no
-// provider contract, so the server deliberately answering that it publishes no
-// metadata is a bounded fact about the server
-// (ErrIdentityProviderNotDiscovered) that routes setup to the dashboard —
-// only that: a timeout, blocked host, or malformed document leaves publication
-// unknown and surfaces as the retryable ErrIdentityProviderAttachmentUnavailable
-// rather than a terminal not-discovered. For a reviewed catalogue source every
-// discovery failure contradicts the reviewed contract and stays
+// provider contract, so an upstream that answered its well-known path without
+// producing metadata is a bounded no-metadata fact about the server
+// (ErrIdentityProviderNotDiscovered) that routes setup to the dashboard.
+// Three answers read that way: a 404 ("not_found"), a 200 whose body is not a
+// metadata document ("malformed"), and another error status ("http_error") —
+// the latter two are the non-compliant catch-all shapes the wellknown package
+// documents answering well-known probes with an app page or a 500 rather
+// than a 404. A probe that never got an HTTP answer (timeout, blocked host,
+// transport failure) leaves publication unknown and surfaces as the retryable
+// ErrIdentityProviderAttachmentUnavailable rather than a terminal
+// not-discovered. For a reviewed catalogue source every discovery failure
+// contradicts the reviewed contract and stays
 // ErrIdentityProviderAttachmentUnsupported.
 func identityProviderDiscoveryError(sourceKind string, err error) error {
 	if sourceKind != remoteURLSourceKind {
 		return fmt.Errorf("discover registered MCP identity provider: %w: %w", ErrIdentityProviderAttachmentUnsupported, err)
 	}
 	var discoveryErr *wellknown.ProtectedResourceDiscoveryError
-	if errors.As(err, &discoveryErr) && discoveryErr.Code() == "not_found" {
-		return fmt.Errorf("discover remote MCP identity provider: %w: %w", ErrIdentityProviderNotDiscovered, err)
+	if errors.As(err, &discoveryErr) {
+		switch discoveryErr.Code() {
+		case "not_found", "malformed", "http_error":
+			return fmt.Errorf("discover remote MCP identity provider: %w: %w", ErrIdentityProviderNotDiscovered, err)
+		}
 	}
 	return fmt.Errorf("discover remote MCP identity provider: %w: %w", ErrIdentityProviderAttachmentUnavailable, err)
 }
