@@ -1,5 +1,5 @@
 /**
- * Pylon widget initialization.
+ * Pylon widget initialization and chat-visibility tracking.
  *
  * Pylon's widget reads `window.pylon.chat_settings` once on script
  * execution to associate the visitor with their persisted thread history.
@@ -7,8 +7,10 @@
  * treated as anonymous and starts a fresh thread on every load —
  * which is why we must set chat_settings *before* injecting the script.
  *
- * The default launcher bubble is hidden via CSS — chat is triggered
- * from the "Support" button in the header instead.
+ * The default launcher bubble is hidden via CSS — chat is opened from
+ * the account menu (or `showPylonChat()` from other buttons). Visibility
+ * is tracked globally via Pylon's `onShow` / `onHide` so the menu label
+ * stays in sync with the widget's own close control.
  */
 
 export const PYLON_APP_ID = "f9cade16-8d3c-4826-9a2a-034fad495102";
@@ -35,6 +37,55 @@ declare global {
 }
 
 let initialized = false;
+let chatOpen = false;
+const chatListeners = new Set<() => void>();
+
+function setChatOpen(next: boolean): void {
+  if (chatOpen === next) {
+    return;
+  }
+  chatOpen = next;
+  for (const listener of chatListeners) {
+    listener();
+  }
+}
+
+export function isPylonChatOpen(): boolean {
+  return chatOpen;
+}
+
+export function subscribePylonChatOpen(listener: () => void): () => void {
+  chatListeners.add(listener);
+  return () => {
+    chatListeners.delete(listener);
+  };
+}
+
+function bindPylonChatListeners(): void {
+  if (typeof window.Pylon !== "function") {
+    return;
+  }
+  window.Pylon("onShow", () => {
+    setChatOpen(true);
+  });
+  window.Pylon("onHide", () => {
+    setChatOpen(false);
+  });
+}
+
+export function showPylonChat(): void {
+  bindPylonChatListeners();
+  window.Pylon?.("show");
+}
+
+export function togglePylonChat(): void {
+  if (chatOpen) {
+    bindPylonChatListeners();
+    window.Pylon?.("hide");
+  } else {
+    showPylonChat();
+  }
+}
 
 /**
  * Initialize the Pylon widget. Idempotent — subsequent calls update
@@ -46,6 +97,7 @@ export function initializePylon(chatSettings: PylonChatSettings): void {
   window.pylon = { chat_settings: chatSettings };
 
   if (initialized) {
+    bindPylonChatListeners();
     return;
   }
   initialized = true;
@@ -67,6 +119,7 @@ export function initializePylon(chatSettings: PylonChatSettings): void {
   pylonFn.e = enqueue;
 
   window.Pylon = pylonFn;
+  bindPylonChatListeners();
 
   const script = document.createElement("script");
   script.setAttribute("type", "text/javascript");
@@ -77,5 +130,9 @@ export function initializePylon(chatSettings: PylonChatSettings): void {
   );
 
   const firstScript = document.getElementsByTagName("script")[0];
-  firstScript?.parentNode?.insertBefore(script, firstScript);
+  if (firstScript?.parentNode) {
+    firstScript.parentNode.insertBefore(script, firstScript);
+  } else {
+    document.head.appendChild(script);
+  }
 }
