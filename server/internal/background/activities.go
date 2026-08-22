@@ -554,7 +554,7 @@ func (a *Activities) RefreshOpenRouterKey(ctx context.Context, input activities.
 	return a.refreshOpenRouterKey.Do(ctx, input)
 }
 
-func (a *Activities) SetOpenRouterSpendCap(ctx context.Context, input activities.SetOpenRouterSpendCapArgs) error {
+func (a *Activities) SetOpenRouterSpendCap(ctx context.Context, input activities.SetOpenRouterSpendCapArgs) (int, error) {
 	return a.setOpenRouterSpendCap.Do(ctx, input)
 }
 

@@ -34,46 +34,69 @@ type OpenRouterKeyRefresher struct {
 // SetOpenRouterSpendCap starts one durable cap operation and waits until its
 // upstream PATCH, local mirror update, and audit entry have all completed.
 func (w *OpenRouterKeyRefresher) SetOpenRouterSpendCap(ctx context.Context, operationID, orgID string, keyType openrouter.KeyType, limit int, actor urn.Principal, actorDisplayName *string) error {
+	_, err := w.setOpenRouterSpendCap(ctx, operationID, orgID, keyType, limit, actor, actorDisplayName, false)
+	return err
+}
+
+// SetAdminOpenRouterSpendCap bypasses customer billing policy while retaining
+// the durable key update and audit operation.
+func (w *OpenRouterKeyRefresher) SetAdminOpenRouterSpendCap(ctx context.Context, operationID, orgID string, keyType openrouter.KeyType, limit int, actor urn.Principal, actorDisplayName *string) (int, error) {
+	return w.setOpenRouterSpendCap(ctx, operationID, orgID, keyType, limit, actor, actorDisplayName, true)
+}
+
+func (w *OpenRouterKeyRefresher) setOpenRouterSpendCap(ctx context.Context, operationID, orgID string, keyType openrouter.KeyType, limit int, actor urn.Principal, actorDisplayName *string, bypassPolicy bool) (int, error) {
 	if operationID == "" {
-		return errors.New("spend-cap operation ID is required")
+		return 0, errors.New("spend-cap operation ID is required")
 	}
 	if orgID == "" {
-		return errors.New("organization ID is required")
+		return 0, errors.New("organization ID is required")
 	}
 	keyType = keyType.OrDefault()
 	if err := keyType.Validate(); err != nil {
-		return fmt.Errorf("invalid OpenRouter key type: %w", err)
+		return 0, fmt.Errorf("invalid OpenRouter key type: %w", err)
 	}
 	if limit < constants.MinimumPaygSpendCapUSD || limit > constants.MaximumPaygSpendCapUSD {
-		return fmt.Errorf("spend cap must be between %d and %d: %d", constants.MinimumPaygSpendCapUSD, constants.MaximumPaygSpendCapUSD, limit)
+		return 0, fmt.Errorf("spend cap must be between %d and %d: %d", constants.MinimumPaygSpendCapUSD, constants.MaximumPaygSpendCapUSD, limit)
 	}
 
 	workflowID := fmt.Sprintf("v1:openrouter-spend-cap:%s:%s", keyType, operationID)
+	workflowFunc := any(OpenRouterSpendCapWorkflow)
+	if bypassPolicy {
+		workflowFunc = AdminOpenRouterSpendCapWorkflow
+	}
 	run, err := w.TemporalEnv.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:                    workflowID,
 		TaskQueue:             string(w.TemporalEnv.Queue()),
 		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
 		WorkflowRunTimeout:    10 * time.Minute,
-	}, OpenRouterSpendCapWorkflow, OpenRouterSpendCapParams{
+	}, workflowFunc, OpenRouterSpendCapParams{
 		OperationID:      operationID,
 		OrganizationID:   orgID,
 		KeyType:          string(keyType),
 		Limit:            limit,
 		Actor:            actor,
 		ActorDisplayName: actorDisplayName,
+		BypassPolicy:     bypassPolicy,
 	})
 	var alreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
 	switch {
 	case errors.As(err, &alreadyStarted):
 		run = w.TemporalEnv.Client().GetWorkflow(ctx, workflowID, "")
 	case err != nil:
-		return fmt.Errorf("start OpenRouter spend-cap workflow: %w", err)
+		return 0, fmt.Errorf("start OpenRouter spend-cap workflow: %w", err)
 	}
 
-	if err := run.Get(ctx, nil); err != nil {
-		return fmt.Errorf("complete OpenRouter spend-cap workflow: %w", err)
+	if !bypassPolicy {
+		if err := run.Get(ctx, nil); err != nil {
+			return 0, fmt.Errorf("complete OpenRouter spend-cap workflow: %w", err)
+		}
+		return 0, nil
 	}
-	return nil
+	var monthlyCredits int
+	if err := run.Get(ctx, &monthlyCredits); err != nil {
+		return 0, fmt.Errorf("complete OpenRouter spend-cap workflow: %w", err)
+	}
+	return monthlyCredits, nil
 }
 
 type OpenRouterSpendCapParams struct {
@@ -85,9 +108,22 @@ type OpenRouterSpendCapParams struct {
 	Limit            int
 	Actor            urn.Principal
 	ActorDisplayName *string
+	// BypassPolicy is false for existing and customer-initiated workflows.
+	BypassPolicy bool
 }
 
 func OpenRouterSpendCapWorkflow(ctx workflow.Context, params OpenRouterSpendCapParams) error {
+	params.BypassPolicy = false
+	_, err := executeOpenRouterSpendCapWorkflow(ctx, params, false)
+	return err
+}
+
+func AdminOpenRouterSpendCapWorkflow(ctx workflow.Context, params OpenRouterSpendCapParams) (int, error) {
+	params.BypassPolicy = true
+	return executeOpenRouterSpendCapWorkflow(ctx, params, true)
+}
+
+func executeOpenRouterSpendCapWorkflow(ctx workflow.Context, params OpenRouterSpendCapParams, returnResult bool) (int, error) {
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 45 * time.Second,
 		// The heartbeat carries retry state; it does not extend StartToClose.
@@ -100,17 +136,26 @@ func OpenRouterSpendCapWorkflow(ctx workflow.Context, params OpenRouterSpendCapP
 	})
 
 	var a *Activities
-	if err := workflow.ExecuteActivity(ctx, a.SetOpenRouterSpendCap, activities.SetOpenRouterSpendCapArgs{
+	future := workflow.ExecuteActivity(ctx, a.SetOpenRouterSpendCap, activities.SetOpenRouterSpendCapArgs{
 		OperationID:      params.OperationID,
 		OrganizationID:   params.OrganizationID,
 		KeyType:          params.KeyType,
 		Limit:            params.Limit,
 		Actor:            params.Actor,
 		ActorDisplayName: params.ActorDisplayName,
-	}).Get(ctx, nil); err != nil {
-		return fmt.Errorf("set OpenRouter spend cap: %w", err)
+		BypassPolicy:     params.BypassPolicy,
+	})
+	if !returnResult {
+		if err := future.Get(ctx, nil); err != nil {
+			return 0, fmt.Errorf("set OpenRouter spend cap: %w", err)
+		}
+		return 0, nil
 	}
-	return nil
+	var monthlyCredits int
+	if err := future.Get(ctx, &monthlyCredits); err != nil {
+		return 0, fmt.Errorf("set OpenRouter spend cap: %w", err)
+	}
+	return monthlyCredits, nil
 }
 
 func (w *OpenRouterKeyRefresher) ScheduleOpenRouterKeyRefresh(ctx context.Context, orgID string, keyType openrouter.KeyType, limit *int) error {

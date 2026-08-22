@@ -340,10 +340,12 @@ func newAdminCommand() *cli.Command {
 				return fmt.Errorf("failed to create temporal client: %w", err)
 			}
 			chatAnalysisSignaler := analysis.Signaler(admin.ChatAnalysisTriggerUnavailable{})
+			var openRouterSpendCap admin.OpenRouterSpendCapScheduler
 			temporalHealth := []*o11y.NamedResource[client.Client]{}
 			if temporalEnv != nil {
 				shutdownFuncs = append(shutdownFuncs, temporalShutdown)
 				chatAnalysisSignaler = &background.TemporalChatAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger}
+				openRouterSpendCap = &background.OpenRouterKeyRefresher{TemporalEnv: temporalEnv}
 				temporalHealth = append(temporalHealth, &o11y.NamedResource[client.Client]{Name: "default", Resource: temporalEnv.Client()})
 			}
 
@@ -438,7 +440,7 @@ func newAdminCommand() *cli.Command {
 			trialNotifier := trialemails.NewService(db, loopsWorkflowClient, logger, c.String("site-url"))
 
 			billingOperations := usage.NewBillingOperations(logger, db, stripeClient, billingTelemetry, audit.NewLogger())
-			admin.Attach(mux, admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, billingOperations, siteURL))
+			admin.Attach(mux, admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, openRouterSpendCap, billingOperations, siteURL))
 
 			srv := &http.Server{
 				Addr:              c.String("address"),

@@ -1050,6 +1050,82 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
+    /admin/organization.setInferenceKeyMonthlyLimit:
+        post:
+            tags:
+                - admin
+            summary: setInferenceKeyMonthlyLimit admin
+            description: Sets the monthly limit for one materialized platform-managed OpenRouter key.
+            operationId: adminSetInferenceKeyMonthlyLimit
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetInferenceKeyMonthlyLimitRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminInferenceKeyLimit'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
     /admin/organization.stripeSubscription:
         get:
             tags:
@@ -61341,6 +61417,18 @@ components:
                 - credits_used
                 - monthly_credits
                 - disabled
+        AdminInferenceKeyLimit:
+            type: object
+            properties:
+                key_type:
+                    type: string
+                monthly_credits:
+                    type: integer
+                    format: int64
+            description: The configured monthly limit for one materialized platform-managed OpenRouter key.
+            required:
+                - key_type
+                - monthly_credits
         AdminListOrganizationMembersResult:
             type: object
             properties:
@@ -78476,6 +78564,25 @@ components:
                     minimum: 0
             required:
                 - billing_cycle_anchor_day
+        SetInferenceKeyMonthlyLimitRequestBody:
+            type: object
+            properties:
+                key_type:
+                    type: string
+                    enum:
+                        - chat
+                        - internal
+                monthly_credits:
+                    type: integer
+                    format: int64
+                    minimum: 1
+                    maximum: 10000
+                organization_id:
+                    type: string
+            required:
+                - organization_id
+                - key_type
+                - monthly_credits
         SetKeyEnabledRequestBody:
             type: object
             properties:

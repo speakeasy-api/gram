@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   getStripeSubscription: vi.fn(),
   cancelStripeSubscription: vi.fn(),
   resumeStripeSubscription: vi.fn(),
+  setInferenceKeyMonthlyLimit: vi.fn(),
 }));
 
 vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
@@ -90,6 +91,21 @@ beforeEach(() => {
     cancel_at_period_end: true,
   });
   mocks.resumeStripeSubscription.mockResolvedValue(SUBSCRIPTION);
+  mocks.setInferenceKeyMonthlyLimit.mockImplementation(
+    ({
+      keyType,
+      monthlyCredits,
+    }: {
+      keyType: string;
+      monthlyCredits: number;
+    }) =>
+      Promise.resolve({
+        key_type: keyType,
+        credits_used: 0,
+        monthly_credits: monthlyCredits,
+        disabled: false,
+      }),
+  );
 });
 
 afterEach(cleanup);
@@ -134,6 +150,104 @@ describe("Billing", () => {
     expect(mocks.getInferenceKeys).toHaveBeenCalledWith(ORG.id);
     expect(mocks.getStripeSubscription).toHaveBeenCalledWith(ORG.id);
     expect(mocks.getPaygBillingSummary).toHaveBeenCalledWith(ORG.id);
+  });
+
+  it("shows a loaded unlimited key without an error but rejects zero as an edit", async () => {
+    mocks.getInferenceKeys.mockResolvedValue([
+      {
+        key_type: "chat",
+        credits_used: 4.25,
+        monthly_credits: 0,
+        disabled: false,
+      },
+    ]);
+
+    await renderBilling();
+
+    expect(await screen.findByText("Unlimited")).toBeTruthy();
+    const input = screen.getByRole("spinbutton", {
+      name: "chat monthly limit in USD",
+    });
+    const button = within(input.closest("form")!).getByRole("button");
+    expect((input as HTMLInputElement).value).toBe("0");
+    expect(input.getAttribute("aria-invalid")).toBe("false");
+    expect(screen.queryByText(/Enter a whole-dollar limit/)).toBeNull();
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.change(input, { target: { value: "" } });
+    fireEvent.change(input, { target: { value: "0" } });
+
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    expect(screen.getByText(/Enter a whole-dollar limit/)).toBeTruthy();
+    fireEvent.submit(input.closest("form")!);
+    expect(mocks.setInferenceKeyMonthlyLimit).not.toHaveBeenCalled();
+  });
+
+  it("updates one materialized key with the canonical organization id and refreshes the keys", async () => {
+    await renderBilling();
+    const input = await screen.findByRole("spinbutton", {
+      name: "chat monthly limit in USD",
+    });
+    fireEvent.change(input, { target: { value: "750" } });
+    fireEvent.click(within(input.closest("form")!).getByRole("button"));
+
+    await vi.waitFor(() => {
+      expect(mocks.setInferenceKeyMonthlyLimit).toHaveBeenCalledWith({
+        organizationID: ORG.id,
+        keyType: "chat",
+        monthlyCredits: 750,
+      });
+      expect(mocks.getInferenceKeys).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("validates limits and keeps disabled or unsupported keys read-only", async () => {
+    let resolveUpdate: (() => void) | undefined;
+    mocks.setInferenceKeyMonthlyLimit.mockReturnValue(
+      new Promise((resolve) => {
+        resolveUpdate = () =>
+          resolve({
+            key_type: "chat",
+            credits_used: 42.75,
+            monthly_credits: 750,
+            disabled: false,
+          });
+      }),
+    );
+    await renderBilling();
+
+    const chatInput = await screen.findByRole("spinbutton", {
+      name: "chat monthly limit in USD",
+    });
+    const internalInput = screen.getByRole("spinbutton", {
+      name: "internal monthly limit in USD",
+    });
+    expect((internalInput as HTMLInputElement).disabled).toBe(true);
+    expect(
+      screen.queryByRole("spinbutton", {
+        name: "future-purpose monthly limit in USD",
+      }),
+    ).toBeNull();
+
+    fireEvent.change(chatInput, { target: { value: "10001" } });
+    expect(chatInput.getAttribute("aria-invalid")).toBe("true");
+    expect(
+      (
+        within(chatInput.closest("form")!).getByRole(
+          "button",
+        ) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    expect(mocks.setInferenceKeyMonthlyLimit).not.toHaveBeenCalled();
+
+    fireEvent.change(chatInput, { target: { value: "750" } });
+    const chatButton = within(chatInput.closest("form")!).getByRole("button");
+    fireEvent.click(chatButton);
+    await vi.waitFor(() => expect(chatButton.textContent).toBe("Saving…"));
+    expect((chatButton as HTMLButtonElement).disabled).toBe(true);
+
+    resolveUpdate?.();
+    await vi.waitFor(() => expect(chatButton.textContent).toBe("Save limit"));
   });
 
   it.each(["incomplete", "paused"] as const)(
