@@ -256,6 +256,46 @@ func (e *e2eInstance) requireSignupProvisioned(ctx context.Context, t *testing.T
 	require.Equal(t, "enterprise", trial.Tier)
 }
 
+func runSignupLoginCallback(t *testing.T, workosUserID, email, orgName string, usersByEmail map[string]*workos.User, screenHint string) {
+	t.Helper()
+	fetcher := &mockWorkOSFetcher{
+		members:      map[string][]workos.Member{},
+		orgs:         map[string]*workos.Organization{},
+		usersByEmail: usersByEmail,
+	}
+	userInfo := &MockUserInfo{
+		UserID:        workosUserID,
+		Email:         email,
+		Organizations: []MockOrganizationEntry{},
+	}
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+	ctx, login := inst.loginWithNonceBinding(ctx, t, &gen.LoginPayload{
+		OrgName: &orgName,
+		Email:   &email,
+	})
+
+	parsed, err := url.Parse(login.Location)
+	require.NoError(t, err)
+	q := parsed.Query()
+	require.Equal(t, email, q.Get("login_hint"))
+	if screenHint == "" {
+		require.False(t, q.Has("screen_hint"), "existing WorkOS users must land on sign-in, not hosted sign-up")
+	} else {
+		require.Equal(t, screenHint, q.Get("screen_hint"))
+	}
+	require.Equal(t, 1, fetcher.getUserByEmailCalls)
+
+	nonce := nonceFromLocation(t, login.Location)
+	var intent struct {
+		OrgName string
+	}
+	require.NoError(t, inst.nonceStore.Get(ctx, "auth:signup_intent:"+nonce, &intent))
+	require.Equal(t, orgName, intent.OrgName)
+
+	result := inst.callbackFromLogin(ctx, t, login)
+	inst.requireSignupProvisioned(ctx, t, nonce, orgName, workosUserID, result.SessionToken)
+}
+
 // setUserWorkosID stamps the WorkOS user ID on an existing Gram user so the
 // membership reconciliation path can run.
 func (e *e2eInstance) setUserWorkosID(ctx context.Context, t *testing.T, gramUserID, workosUserID string) {
@@ -1321,45 +1361,7 @@ func TestE2E_LoginCallback_OrdinaryLogin(t *testing.T) {
 // provisions the organization and creates a session.
 func TestE2E_LoginCallback_SignupNewWorkOSUser(t *testing.T) {
 	t.Parallel()
-
-	const workosUserID = "user_01E2E_SIGNUP_NEW"
-	email := "new-signup@example.com"
-	orgName := "New Signup Corp"
-
-	fetcher := &mockWorkOSFetcher{
-		members:      map[string][]workos.Member{},
-		orgs:         map[string]*workos.Organization{},
-		usersByEmail: map[string]*workos.User{},
-	}
-
-	userInfo := &MockUserInfo{
-		UserID:        workosUserID,
-		Email:         email,
-		Organizations: []MockOrganizationEntry{},
-	}
-
-	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
-	ctx, login := inst.loginWithNonceBinding(ctx, t, &gen.LoginPayload{
-		OrgName: &orgName,
-		Email:   &email,
-	})
-
-	parsed, err := url.Parse(login.Location)
-	require.NoError(t, err)
-	q := parsed.Query()
-	require.Equal(t, email, q.Get("login_hint"))
-	require.Equal(t, "sign-up", q.Get("screen_hint"))
-	require.Equal(t, 1, fetcher.getUserByEmailCalls)
-
-	nonce := nonceFromLocation(t, login.Location)
-	var intent struct {
-		OrgName string
-	}
-	require.NoError(t, inst.nonceStore.Get(ctx, "auth:signup_intent:"+nonce, &intent))
-	require.Equal(t, orgName, intent.OrgName)
-
-	result := inst.callbackFromLogin(ctx, t, login)
-	inst.requireSignupProvisioned(ctx, t, nonce, orgName, workosUserID, result.SessionToken)
+	runSignupLoginCallback(t, "user_01E2E_SIGNUP_NEW", "new-signup@example.com", "New Signup Corp", map[string]*workos.User{}, "sign-up")
 }
 
 // TestE2E_LoginCallback_SignupExistingWorkOSUser exercises Login → Callback
@@ -1368,47 +1370,11 @@ func TestE2E_LoginCallback_SignupNewWorkOSUser(t *testing.T) {
 // stored so callback can provision a Gram organization and create a session.
 func TestE2E_LoginCallback_SignupExistingWorkOSUser(t *testing.T) {
 	t.Parallel()
-
-	const workosUserID = "user_01E2E_SIGNUP_EXISTING"
 	email := "existing-signup@example.com"
-	orgName := "Existing Signup Corp"
-
-	fetcher := &mockWorkOSFetcher{
-		members: map[string][]workos.Member{},
-		orgs:    map[string]*workos.Organization{},
-		usersByEmail: map[string]*workos.User{
-			email: {ID: workosUserID, Email: email},
-		},
-	}
-
-	userInfo := &MockUserInfo{
-		UserID:        workosUserID,
-		Email:         email,
-		Organizations: []MockOrganizationEntry{},
-	}
-
-	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
-	ctx, login := inst.loginWithNonceBinding(ctx, t, &gen.LoginPayload{
-		OrgName: &orgName,
-		Email:   &email,
-	})
-
-	parsed, err := url.Parse(login.Location)
-	require.NoError(t, err)
-	q := parsed.Query()
-	require.Equal(t, email, q.Get("login_hint"))
-	require.False(t, q.Has("screen_hint"), "existing WorkOS users must land on sign-in, not hosted sign-up")
-	require.Equal(t, 1, fetcher.getUserByEmailCalls)
-
-	nonce := nonceFromLocation(t, login.Location)
-	var intent struct {
-		OrgName string
-	}
-	require.NoError(t, inst.nonceStore.Get(ctx, "auth:signup_intent:"+nonce, &intent))
-	require.Equal(t, orgName, intent.OrgName)
-
-	result := inst.callbackFromLogin(ctx, t, login)
-	inst.requireSignupProvisioned(ctx, t, nonce, orgName, workosUserID, result.SessionToken)
+	workosUserID := "user_01E2E_SIGNUP_EXISTING"
+	runSignupLoginCallback(t, workosUserID, email, "Existing Signup Corp", map[string]*workos.User{
+		email: {ID: workosUserID, Email: email},
+	}, "")
 }
 
 // TestE2E_Logout verifies that after logging out the session is invalidated
