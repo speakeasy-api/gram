@@ -61,14 +61,7 @@ export function subscribePylonChatOpen(listener: () => void): () => void {
   };
 }
 
-/**
- * Attach onShow/onHide to the current `window.Pylon`. Safe to call
- * repeatedly: Pylon keeps one callback per event, so each bind replaces
- * the previous. initializePylon binds the queue stub, then again on script
- * load so the live widget gets the listeners; show/hide and later identity
- * updates rebind the same handlers.
- */
-export function bindPylonChatListeners(): void {
+function bindPylonChatListeners(): void {
   if (typeof window.Pylon !== "function") {
     return;
   }
@@ -85,14 +78,10 @@ export function showPylonChat(): void {
   window.Pylon?.("show");
 }
 
-export function hidePylonChat(): void {
-  bindPylonChatListeners();
-  window.Pylon?.("hide");
-}
-
 export function togglePylonChat(): void {
   if (chatOpen) {
-    hidePylonChat();
+    bindPylonChatListeners();
+    window.Pylon?.("hide");
   } else {
     showPylonChat();
   }
@@ -114,7 +103,6 @@ export function initializePylon(chatSettings: PylonChatSettings): void {
   initialized = true;
 
   const style = document.createElement("style");
-  style.id = "pylon-chat-styles";
   style.textContent = `#pylon-chat-bubble { display: none !important; }`;
   document.head.appendChild(style);
 
@@ -133,7 +121,6 @@ export function initializePylon(chatSettings: PylonChatSettings): void {
   window.Pylon = pylonFn;
   bindPylonChatListeners();
 
-  // onload rebinds after the real widget replaces the queue stub above.
   const script = document.createElement("script");
   script.setAttribute("type", "text/javascript");
   script.setAttribute("async", "true");
@@ -141,7 +128,6 @@ export function initializePylon(chatSettings: PylonChatSettings): void {
     "src",
     `https://widget.usepylon.com/widget/${PYLON_APP_ID}`,
   );
-  script.onload = bindPylonChatListeners;
 
   const firstScript = document.getElementsByTagName("script")[0];
   if (firstScript?.parentNode) {

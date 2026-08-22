@@ -25,10 +25,14 @@ import {
   PencilIcon,
   SettingsIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { useNavigate } from "react-router";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
-import { usePylonChat } from "@/hooks/usePylonChat";
+import {
+  isPylonChatOpen,
+  subscribePylonChatOpen,
+  togglePylonChat,
+} from "@/lib/pylon";
 
 export function SidebarUserMenu(): JSX.Element {
   const user = useUser();
@@ -44,7 +48,11 @@ export function SidebarUserMenu(): JSX.Element {
   const isMultiOrg = session.organizations.length > 1;
 
   const [menuOpen, setMenuOpen] = useState(false);
-  const { isOpen: pylonOpen, toggle: togglePylon } = usePylonChat();
+  const pylonOpen = useSyncExternalStore(
+    subscribePylonChatOpen,
+    isPylonChatOpen,
+    () => false,
+  );
 
   const userInitials =
     user.displayName
@@ -173,7 +181,7 @@ export function SidebarUserMenu(): JSX.Element {
               </a>
             </DropdownMenuItem>
             {"Pylon" in window && (
-              <DropdownMenuItem onClick={togglePylon}>
+              <DropdownMenuItem onClick={togglePylonChat}>
                 <MessageCircleIcon className="mr-2 h-4 w-4" />
                 {pylonOpen ? "Close Support" : "Get Support"}
               </DropdownMenuItem>
