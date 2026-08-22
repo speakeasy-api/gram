@@ -24,6 +24,17 @@ WHERE c.organization_id = @organization_id
   AND c.provider = @provider
   AND c.deleted IS FALSE;
 
+-- name: GetConfigIDByOrgAndProvider :one
+-- Resolves a config row id without requiring its provider-named sync
+-- schedule row to exist, unlike GetConfigByOrgAndProvider which joins on it.
+-- Backs the local agent-telemetry capture, whose config rows deliberately
+-- carry no sync schedules.
+SELECT id
+FROM ai_integration_configs
+WHERE organization_id = @organization_id
+  AND provider = @provider
+  AND deleted IS FALSE;
+
 -- name: CountConfigsByOrganization :one
 SELECT count(*)
 FROM ai_integration_configs

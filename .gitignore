@@ -67,6 +67,9 @@ gram.code-workspace
 /server/cmd/local
 /server/custom-gcl
 /local/cmd
+# Local telemetry capture dumps (gram capture-agent-telemetry); may contain
+# raw provider data when anonymization is disabled — never commit.
+/local/agent-telemetry
 dist/
 **/.claude/settings.local.json
 **/.claude/.gram-install-prompted

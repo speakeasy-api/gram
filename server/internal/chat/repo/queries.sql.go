@@ -2645,6 +2645,164 @@ func (q *Queries) ListClaudeUserMessagesForPromptAttachmentParent(ctx context.Co
 	return items, nil
 }
 
+const listExternalChatMessagesForExport = `-- name: ListExternalChatMessagesForExport :many
+SELECT
+    m.id
+  , m.chat_id
+  , m.role
+  , m.content
+  , m.model
+  , m.user_id
+  , m.external_user_id
+  , m.external_message_id
+  , m.origin
+  , m.user_agent
+  , m.ip_address
+  , m.source
+  , m.created_at
+FROM chat_messages m
+INNER JOIN chats c ON c.id = m.chat_id
+WHERE c.project_id = $1
+  AND c.external_chat_id IS NOT NULL
+  AND m.external_message_id IS NOT NULL
+  AND m.created_at >= $2
+  AND m.created_at < $3
+ORDER BY m.chat_id, m.created_at, m.seq
+`
+
+type ListExternalChatMessagesForExportParams struct {
+	ProjectID uuid.UUID
+	Since     pgtype.Timestamptz
+	Until     pgtype.Timestamptz
+}
+
+type ListExternalChatMessagesForExportRow struct {
+	ID                uuid.UUID
+	ChatID            uuid.UUID
+	Role              string
+	Content           string
+	Model             pgtype.Text
+	UserID            pgtype.Text
+	ExternalUserID    pgtype.Text
+	ExternalMessageID pgtype.Text
+	Origin            pgtype.Text
+	UserAgent         pgtype.Text
+	IpAddress         pgtype.Text
+	Source            pgtype.Text
+	CreatedAt         pgtype.Timestamptz
+}
+
+// Backs the local agent-telemetry capture dump: provider-imported messages
+// of external chats in the export window. created_at is the provider-side
+// message timestamp, so the window filter matches the telemetry dump's.
+// content_raw is deliberately not exported: the rendered content column is
+// enough for fixtures and the raw blocks would need their own deep scrub.
+func (q *Queries) ListExternalChatMessagesForExport(ctx context.Context, arg ListExternalChatMessagesForExportParams) ([]ListExternalChatMessagesForExportRow, error) {
+	rows, err := q.db.Query(ctx, listExternalChatMessagesForExport, arg.ProjectID, arg.Since, arg.Until)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListExternalChatMessagesForExportRow
+	for rows.Next() {
+		var i ListExternalChatMessagesForExportRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChatID,
+			&i.Role,
+			&i.Content,
+			&i.Model,
+			&i.UserID,
+			&i.ExternalUserID,
+			&i.ExternalMessageID,
+			&i.Origin,
+			&i.UserAgent,
+			&i.IpAddress,
+			&i.Source,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listExternalChatsForExport = `-- name: ListExternalChatsForExport :many
+SELECT
+    id
+  , project_id
+  , organization_id
+  , user_id
+  , external_user_id
+  , external_chat_id
+  , title
+  , created_at
+  , updated_at
+FROM chats
+WHERE project_id = $1
+  AND external_chat_id IS NOT NULL
+  AND deleted IS FALSE
+  AND updated_at >= $2
+  AND created_at < $3
+ORDER BY created_at, id
+`
+
+type ListExternalChatsForExportParams struct {
+	ProjectID uuid.UUID
+	Since     pgtype.Timestamptz
+	Until     pgtype.Timestamptz
+}
+
+type ListExternalChatsForExportRow struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	UserID         pgtype.Text
+	ExternalUserID pgtype.Text
+	ExternalChatID pgtype.Text
+	Title          pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+// Backs the local agent-telemetry capture dump: external (provider-imported)
+// chats for a project whose activity falls inside the export window. The
+// lower bound is on updated_at so a chat created before the window but still
+// receiving messages inside it is exported alongside those messages.
+func (q *Queries) ListExternalChatsForExport(ctx context.Context, arg ListExternalChatsForExportParams) ([]ListExternalChatsForExportRow, error) {
+	rows, err := q.db.Query(ctx, listExternalChatsForExport, arg.ProjectID, arg.Since, arg.Until)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListExternalChatsForExportRow
+	for rows.Next() {
+		var i ListExternalChatsForExportRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.UserID,
+			&i.ExternalUserID,
+			&i.ExternalChatID,
+			&i.Title,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLatestGenerationChatMessages = `-- name: ListLatestGenerationChatMessages :many
 SELECT cm.id, cm.seq, cm.chat_id, cm.project_id, cm.role, cm.content, cm.content_raw, cm.content_asset_url, cm.model, cm.message_id, cm.finish_reason, cm.tool_calls, cm.prompt_tokens, cm.completion_tokens, cm.total_tokens, cm.storage_error, cm.user_id, cm.external_user_id, cm.external_message_id, cm.origin, cm.user_agent, cm.ip_address, cm.source, cm.tool_call_id, cm.tool_urn, cm.tool_outcome, cm.tool_outcome_notes, cm.tool_call_summaries, cm.content_hash, cm.generation, cm.replayed, cm.created_at, cm.risk_analyzed_at FROM chat_messages cm
 WHERE cm.chat_id = $1

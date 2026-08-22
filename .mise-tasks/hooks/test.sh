@@ -6,6 +6,7 @@
 #USAGE flag "--local" help="Always use local plugin directory instead of published plugin"
 #USAGE flag "--project <slug>" help="Project slug for OTEL session validation (enables blocking)" default="default"
 #USAGE flag "--agent <agent>" help="Agent to launch with the dev hooks installed: claude or opencode" default="claude"
+#USAGE flag "--print <prompt>" help="Run one headless prompt instead of an interactive session (claude only)"
 
 set -euo pipefail
 
@@ -16,6 +17,32 @@ case "${usage_agent:-claude}" in
     exit 2
     ;;
 esac
+
+if [ -n "${usage_print:-}" ] && [ "${usage_agent:-claude}" = "opencode" ]; then
+  echo "hooks:test: --print is only supported with --agent=claude" >&2
+  exit 2
+fi
+
+# launch_claude starts the session: interactive with --debug by default, or a
+# single headless prompt when --print is set. Headless runs execute tools
+# without permission prompts, so they get a scratch working directory to keep
+# stray writes out of the repo. The OTel exporter env this task provisions
+# applies either way, so headless sessions stream telemetry identically.
+launch_claude() {
+  if [ -n "${usage_print:-}" ]; then
+    headless_dir="$(mktemp -d)"
+    session_id="$(uuidgen | tr '[:upper:]' '[:lower:]')"
+    echo "Running headless claude session ${session_id} in ${headless_dir}"
+    cd "$headless_dir"
+    exec claude "$@" \
+      --debug \
+      --permission-mode bypassPermissions \
+      --allowedTools "Read,Bash" \
+      --session-id "$session_id" \
+      -p "$usage_print"
+  fi
+  exec claude "$@" --debug
+}
 
 export GRAM_HOOKS_SERVER_URL=$GRAM_SERVER_URL
 # Local dev splits the API and dashboard across ports; the browser sign-in
@@ -189,15 +216,17 @@ elif [ "${usage_local:-}" = "true" ]; then
     --browser-login \
     --binary="$hooks_binary"
   echo ""
-  exec claude --setting-sources project,local --plugin-dir "${plugin_out}/plugin-claude" --debug
-elif ! git diff --quiet main -- server/internal/plugins/ server/cmd/export-hook-plugin/; then
+  launch_claude --setting-sources project,local --plugin-dir "${plugin_out}/plugin-claude"
+else
+  # Always render the plugin and load it explicitly with --plugin-dir. The
+  # published (marketplace) plugin is enabled through user-scope settings,
+  # which --setting-sources project,local excludes — claude would register
+  # zero hooks and the session would emit OTel telemetry only. The rendered
+  # tree comes from the same generators that publish the plugin, and its
+  # bootstrap downloads the same pinned binary.
   plugin_out="$(mktemp -d)"
   echo "Rendering local plugin into: ${plugin_out}"
   (cd server && go run ./cmd/export-hook-plugin -out "$plugin_out" >/dev/null)
   echo ""
-  exec claude --setting-sources project,local --plugin-dir "${plugin_out}/plugin-claude" --debug
-else
-  echo "No branch changes to the plugin generators vs main — using published plugin"
-  echo ""
-  exec claude --setting-sources project,local --debug
+  launch_claude --setting-sources project,local --plugin-dir "${plugin_out}/plugin-claude"
 fi
