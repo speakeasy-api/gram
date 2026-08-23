@@ -356,7 +356,12 @@ func (s *RegistrationStore) ProbeProviderReadiness(ctx context.Context, principa
 		Generation:          generation,
 	}
 	var result ProviderReadinessProbeResult
-	if isBrowserCatalogProviderKey(registration.CatalogProvider) {
+	// Browser catalogue and direct remote registrations both persist a Remote
+	// MCP source plus user-session issuer. Their readiness is therefore probed
+	// through that source instead of a reviewed fixture adapter. The provider
+	// key selects only the registration workflow; it must not make the same
+	// persisted source unreachable after direct registration joins onboarding.
+	if isBrowserCatalogProviderKey(registration.CatalogProvider) || registration.CatalogProvider == directRemoteProviderKey {
 		if len(generic) == 0 || generic[0] == nil {
 			return Readiness{}, ErrProviderAdapterUnavailable
 		}

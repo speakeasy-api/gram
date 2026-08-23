@@ -4,6 +4,7 @@ package platformmcp
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -96,7 +97,11 @@ func registerCatalogRegistrationTool(reg *Registrar, registrations *Registration
 	})
 }
 
-func registerRemoteRegistrationTool(reg *Registrar, registrations *RegistrationService) {
+// registerRemoteRegistrationTool registers the existing direct-URL workflow in
+// the caller's onboarding projection after the registration itself succeeds.
+// Assistant calls remain registration-only: their connectionless surface cannot
+// authoritatively record connection-generation onboarding milestones.
+func registerRemoteRegistrationTool(reg *Registrar, registrations *RegistrationService, onboarding *OnboardingService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "register_remote_mcp",
 		Title:       "Register Remote MCP",
@@ -112,6 +117,21 @@ func registerRemoteRegistrationTool(reg *Registrar, registrations *RegistrationS
 				return budgetResult, RegisterRemoteMCPToolOutput{}, nil
 			}
 			return nil, RegisterRemoteMCPToolOutput{}, err
+		}
+		if onboarding != nil && principal.HasConnection() {
+			if _, err := onboarding.Start(ctx, principal.OrganizationID, principal.UserID); err != nil {
+				return nil, RegisterRemoteMCPToolOutput{}, err
+			}
+			registrationID, err := uuid.Parse(result.Registration)
+			if err != nil {
+				return nil, RegisterRemoteMCPToolOutput{}, ErrUnavailable
+			}
+			if _, err := onboarding.BindRegistrationForPrincipal(ctx, principal, result.Project.ID, registrationID); err != nil {
+				return nil, RegisterRemoteMCPToolOutput{}, err
+			}
+			if err := onboarding.RecordRegistrationSucceeded(ctx, principal, result.Project.ID, registrationID); err != nil {
+				return nil, RegisterRemoteMCPToolOutput{}, err
+			}
 		}
 		return nil, RegisterRemoteMCPToolOutput{
 			ProjectSlug:       result.Project.Slug,

@@ -3,9 +3,12 @@ package externalmcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
+	"sync/atomic"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -41,6 +44,42 @@ type ClientOptions struct {
 	// this, an unreachable server can take minutes to report as such instead
 	// of the ~10s the probe intends.
 	DisableRetries bool
+	// MaxResponseBytes caps each HTTP response when greater than zero. It is
+	// intended for short-lived, untrusted probes; the long-lived gateway path
+	// leaves this at zero.
+	MaxResponseBytes int64
+}
+
+var ErrResponseTooLarge = errors.New("external mcp response body exceeds the configured read limit")
+
+type bodyLimitRoundTripper struct {
+	base    http.RoundTripper
+	limit   int64
+	tripped atomic.Bool
+}
+
+func (rt *bodyLimitRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	resp, err := rt.base.RoundTrip(req)
+	if err != nil || resp == nil || resp.Body == nil {
+		return resp, err //nolint:wrapcheck // preserve the base transport's error
+	}
+	resp.Body = &limitedBody{ReadCloser: http.MaxBytesReader(nil, resp.Body, rt.limit), tripped: &rt.tripped}
+	return resp, nil
+}
+
+type limitedBody struct {
+	io.ReadCloser
+	tripped *atomic.Bool
+}
+
+func (b *limitedBody) Read(p []byte) (int, error) {
+	n, err := b.ReadCloser.Read(p)
+	var tooLarge *http.MaxBytesError
+	if errors.As(err, &tooLarge) {
+		b.tripped.Store(true)
+		return n, fmt.Errorf("%w: %w", ErrResponseTooLarge, err)
+	}
+	return n, err //nolint:wrapcheck // io.EOF must be returned unchanged
 }
 
 // Client represents an active connection to an external MCP server.
@@ -50,6 +89,23 @@ type Client struct {
 	remoteURL      string
 	session        *mcp.ClientSession
 	authRT         *authRoundTripper
+	bodyLimitRT    *bodyLimitRoundTripper
+}
+
+func classifyRequestError(op, remoteURL string, authRT *authRoundTripper, bodyLimitRT *bodyLimitRoundTripper, err error) error {
+	if authRT.authRejected {
+		return &AuthRejectedError{RemoteURL: remoteURL, StatusCode: authRT.statusCode, WWWAuthenticate: authRT.wwwAuthenticate}
+	}
+	if bodyLimitRT != nil && bodyLimitRT.tripped.Load() {
+		return fmt.Errorf("%s: %w", op, ErrResponseTooLarge)
+	}
+	return fmt.Errorf("%s: %w", op, err)
+}
+
+func (c *Client) beginRequest() {
+	if c.bodyLimitRT != nil {
+		c.bodyLimitRT.tripped.Store(false)
+	}
 }
 
 // NewClient creates a new client connection to an external MCP server.
@@ -57,9 +113,10 @@ type Client struct {
 func NewClient(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, remoteURL string, transportType types.TransportType, opts *ClientOptions) (*Client, error) {
 	if opts == nil {
 		opts = &ClientOptions{
-			Authorization:  "",
-			Headers:        nil,
-			DisableRetries: false,
+			Authorization:    "",
+			Headers:          nil,
+			DisableRetries:   false,
+			MaxResponseBytes: 0,
 		}
 	}
 
@@ -81,6 +138,11 @@ func NewClient(ctx context.Context, logger *slog.Logger, guardianPolicy *guardia
 		wwwAuthenticate: "",
 	}
 	httpClient.Transport = authRT
+	var bodyLimitRT *bodyLimitRoundTripper
+	if opts.MaxResponseBytes > 0 {
+		bodyLimitRT = &bodyLimitRoundTripper{base: authRT, limit: opts.MaxResponseBytes}
+		httpClient.Transport = bodyLimitRT
+	}
 
 	client := mcp.NewClient(&mcp.Implementation{
 		Name:       "gram-server",
@@ -119,14 +181,7 @@ func NewClient(ctx context.Context, logger *slog.Logger, guardianPolicy *guardia
 
 	session, err := client.Connect(ctx, transport, nil)
 	if err != nil {
-		if authRT.authRejected {
-			return nil, &AuthRejectedError{
-				RemoteURL:       remoteURL,
-				StatusCode:      authRT.statusCode,
-				WWWAuthenticate: authRT.wwwAuthenticate,
-			}
-		}
-		return nil, fmt.Errorf("connect to external mcp server: %w", err)
+		return nil, classifyRequestError("connect to external mcp server", remoteURL, authRT, bodyLimitRT, err)
 	}
 
 	logger.InfoContext(ctx, "connected to external MCP server")
@@ -137,6 +192,7 @@ func NewClient(ctx context.Context, logger *slog.Logger, guardianPolicy *guardia
 		remoteURL:      remoteURL,
 		session:        session,
 		authRT:         authRT,
+		bodyLimitRT:    bodyLimitRT,
 	}, nil
 }
 
@@ -167,16 +223,10 @@ type Tool struct {
 
 // ListTools lists available tools from the external MCP server.
 func (c *Client) ListTools(ctx context.Context) ([]Tool, error) {
+	c.beginRequest()
 	toolsResult, err := c.session.ListTools(ctx, nil)
 	if err != nil {
-		if c.authRT.authRejected {
-			return nil, &AuthRejectedError{
-				RemoteURL:       c.remoteURL,
-				StatusCode:      c.authRT.statusCode,
-				WWWAuthenticate: c.authRT.wwwAuthenticate,
-			}
-		}
-		return nil, fmt.Errorf("list tools from external mcp server: %w", err)
+		return nil, classifyRequestError("list tools from external mcp server", c.remoteURL, c.authRT, c.bodyLimitRT, err)
 	}
 
 	tools := make([]Tool, 0, len(toolsResult.Tools))
@@ -237,20 +287,14 @@ func (c *Client) CallTool(ctx context.Context, toolName string, arguments json.R
 		}
 	}
 
+	c.beginRequest()
 	callResult, err := c.session.CallTool(ctx, &mcp.CallToolParams{
 		Meta:      mcp.Meta{},
 		Name:      toolName,
 		Arguments: args,
 	})
 	if err != nil {
-		if c.authRT.authRejected {
-			return nil, &AuthRejectedError{
-				RemoteURL:       c.remoteURL,
-				StatusCode:      c.authRT.statusCode,
-				WWWAuthenticate: c.authRT.wwwAuthenticate,
-			}
-		}
-		return nil, fmt.Errorf("call tool on external mcp server: %w", err)
+		return nil, classifyRequestError("call tool on external mcp server", c.remoteURL, c.authRT, c.bodyLimitRT, err)
 	}
 
 	// Marshal each content item back to JSON
@@ -300,11 +344,7 @@ func (rt *authRoundTripper) RoundTrip(req *http.Request) (*http.Response, error)
 	}
 
 	switch resp.StatusCode {
-	case http.StatusUnauthorized:
-		rt.statusCode = resp.StatusCode
-		rt.wwwAuthenticate = resp.Header.Get("WWW-Authenticate")
-		rt.authRejected = true
-	case http.StatusForbidden:
+	case http.StatusUnauthorized, http.StatusForbidden:
 		rt.statusCode = resp.StatusCode
 		rt.authRejected = true
 	}

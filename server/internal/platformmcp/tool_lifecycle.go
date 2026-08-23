@@ -30,7 +30,7 @@ func registerSetupHandoffTool(reg *Registrar, registrations *RegistrationService
 	addTool(reg, &mcp.Tool{
 		Name:        "get_setup_handoff",
 		Title:       "Get Setup Handoff",
-		Description: "Get the secure dashboard continuation for one reviewed MCP registration. Browser Catalogue entries return a server-owned dashboard Inspect URL, which contains the available setup and authorization actions; the local synthetic fixture returns a single-use setup handoff. Never persist, log, or share a handoff.",
+		Description: "Get the secure dashboard continuation for one Platform-managed MCP registration. Browser Catalogue and user-supplied remote entries return a server-owned dashboard Inspect URL, which contains the available setup and authorization actions; the local synthetic fixture returns a single-use setup handoff. Never persist, log, or share a handoff.",
 	}, ToolMeta{
 		// The handoff carries the caller to the dashboard, which completes setup
 		// under its own session. A connection-less caller issues a handoff bound
@@ -41,7 +41,7 @@ func registerSetupHandoffTool(reg *Registrar, registrations *RegistrationService
 			return nil, GetSetupHandoffToolOutput{}, err
 		}
 		setupInput := IssueSetupHandoffInput(input)
-		if isBrowserCatalogProviderKey(input.ProviderKey) {
+		if isBrowserCatalogProviderKey(input.ProviderKey) || input.ProviderKey == directRemoteProviderKey {
 			if err := registrations.budgets.Handoff.Allow(ctx, principal); err != nil {
 				if budgetResult, ok := operationBudgetToolResult(err); ok {
 					return budgetResult, GetSetupHandoffToolOutput{}, nil

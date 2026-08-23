@@ -120,19 +120,21 @@ func TestRegistrationServiceRejectsOversizedDirectRemoteDisplayNameBeforePersist
 	require.Zero(t, store.beginCalls)
 }
 
-func TestRegistrationServiceRejectsDirectRemoteDisplayNameWithNewlineBeforePersistence(t *testing.T) {
+func TestRegistrationServiceRejectsDirectRemoteDisplayNameWithLineBreakingCharactersBeforePersistence(t *testing.T) {
 	t.Parallel()
 
 	store := &recordingRegistrationStore{project: ResolvedProject{ID: uuid.New(), Slug: "project"}}
 	inspector := &testDirectRemoteInspector{inspection: DirectRemoteInspection{CanonicalURL: "https://remote.example.test/mcp", Transport: "streamable-http", Trust: "user_supplied_unreviewed"}}
 	service := newRegistrationService(testCatalog{}, &testRegistrationGate{enabled: true}, store).WithDirectRemoteInspector(inspector)
 
-	_, err := service.RegisterRemoteMCP(t.Context(), registrationServicePrincipal(), RegisterRemoteMCPInput{
-		ProjectSlug: "project", RemoteURL: "https://remote.example.test/mcp", DisplayName: "External\r\nMCP", IdempotencyKey: "request-key",
-	})
+	for _, displayName := range []string{"External\r\nMCP", "External\x1bMCP", "External\u2028MCP", "External\u2029MCP"} {
+		_, err := service.RegisterRemoteMCP(t.Context(), registrationServicePrincipal(), RegisterRemoteMCPInput{
+			ProjectSlug: "project", RemoteURL: "https://remote.example.test/mcp", DisplayName: displayName, IdempotencyKey: "request-key",
+		})
 
-	require.ErrorIs(t, err, ErrRegistrationInvalid)
-	require.Equal(t, 1, inspector.calls)
+		require.ErrorIs(t, err, ErrRegistrationInvalid)
+	}
+	require.Equal(t, 4, inspector.calls)
 	require.Zero(t, store.resolveCalls)
 	require.Zero(t, store.beginCalls)
 }
@@ -317,6 +319,28 @@ func TestRegistrationServiceReturnsPersistedSameOriginDashboardSetupURL(t *testi
 
 	setupURL, err := service.DashboardSetupURL(t.Context(), registrationServicePrincipal(), IssueSetupHandoffInput{
 		ProjectSlug: project.Slug, RegistrationID: registrationID.String(), ProviderKey: providerKey, CatalogRef: "reviewed/mcp",
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "https://localhost:5173/organization/projects/project/mcp/x/server%20route/settings#authentication", setupURL)
+	require.Equal(t, 1, store.resolveCalls)
+}
+
+func TestRegistrationServiceReturnsDashboardSetupURLForDirectRemote(t *testing.T) {
+	t.Parallel()
+
+	project := ResolvedProject{ID: uuid.New(), Slug: "project"}
+	registrationID := uuid.New()
+	store := &recordingRegistrationStore{
+		project:   project,
+		candidate: CatalogCandidate{ProviderKey: directRemoteProviderKey, CatalogRef: "https://remote.example.test/mcp"},
+		dashboard: RegistrationDashboardSetup{OrganizationSlug: "organization", MCPServerRoute: "server route"},
+	}
+	service := newRegistrationService(nil, &testRegistrationGate{enabled: true}, store)
+	service.WithDashboardURL(&url.URL{Scheme: "https", Host: "localhost:5173"})
+
+	setupURL, err := service.DashboardSetupURL(t.Context(), registrationServicePrincipal(), IssueSetupHandoffInput{
+		ProjectSlug: project.Slug, RegistrationID: registrationID.String(), ProviderKey: directRemoteProviderKey, CatalogRef: "https://remote.example.test/mcp",
 	})
 
 	require.NoError(t, err)

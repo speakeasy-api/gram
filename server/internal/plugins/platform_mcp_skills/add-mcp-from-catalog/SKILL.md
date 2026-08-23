@@ -7,6 +7,8 @@ description: Add a reviewed MCP Catalogue server to an explicit AICP project thr
 
 Use this workflow only through the authenticated Speakeasy AI Control Plane (AICP) Platform MCP. It follows the same guarded outcome a user would complete manually in the AICP dashboard: select a reviewed MCP, configure it for an explicit project, finish secure setup, verify readiness, and add it to that project's existing Default plugin. The package itself grants no organization access.
 
+If the user instead supplies a remote MCP URL outside the reviewed catalogue, use the `add-mcp-from-remote-url` workflow.
+
 ## Safety rules
 
 - Never ask the user to paste API keys, passwords, access or refresh tokens, OAuth codes, client secrets, secret headers, or MCP credentials into chat.

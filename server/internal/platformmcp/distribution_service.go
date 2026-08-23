@@ -28,11 +28,12 @@ const (
 )
 
 var (
-	ErrDistributionInvalid           = errors.New("invalid platform mcp distribution input")
-	ErrDistributionConflict          = errors.New("platform mcp distribution version conflict")
-	ErrDistributionNotReady          = errors.New("platform mcp distribution requires fresh readiness")
-	ErrDistributionDefaultAbsent     = errors.New("platform mcp distribution requires an existing default plugin")
-	ErrDistributionTargetUnavailable = errors.New("platform mcp distribution target is unavailable")
+	ErrDistributionInvalid                = errors.New("invalid platform mcp distribution input")
+	ErrDistributionConflict               = errors.New("platform mcp distribution version conflict")
+	ErrDistributionNotReady               = errors.New("platform mcp distribution requires fresh readiness")
+	ErrDistributionDefaultAbsent          = errors.New("platform mcp distribution requires an existing default plugin")
+	ErrDistributionTargetUnavailable      = errors.New("platform mcp distribution target is unavailable")
+	ErrDistributionBlockedPendingApproval = errors.New("platform mcp distribution blocked by Shadow MCP approval enforcement")
 )
 
 // DistributionInput deliberately identifies only the project selected by its
@@ -68,18 +69,19 @@ type ProjectPublisher func(context.Context, uuid.UUID, string, string) error
 // existing Default plugin. plugin_servers remains the attachment authority;
 // platform_mcp_distributions records the caller-bound lifecycle projection.
 type DistributionService struct {
-	db      *pgxpool.Pool
-	audit   *audit.Logger
-	attach  ExistingDefaultPluginAttacher
-	publish ProjectPublisher
-	now     func() time.Time
+	db        *pgxpool.Pool
+	audit     *audit.Logger
+	attach    ExistingDefaultPluginAttacher
+	publish   ProjectPublisher
+	now       func() time.Time
+	approvals DirectRemoteApprovalTxChecker
 }
 
 func NewDistributionService(db *pgxpool.Pool, auditLogger *audit.Logger, attach ExistingDefaultPluginAttacher, publish ProjectPublisher) *DistributionService {
 	if auditLogger == nil {
 		auditLogger = audit.NewLogger()
 	}
-	return &DistributionService{db: db, audit: auditLogger, attach: attach, publish: publish, now: time.Now}
+	return &DistributionService{db: db, audit: auditLogger, attach: attach, publish: publish, now: time.Now, approvals: NewPostgresDirectRemoteApprovals(db)}
 }
 
 // Current returns the selected workflow target's live attachment state and its
@@ -141,6 +143,9 @@ func (s *DistributionService) Distribute(ctx context.Context, principal Principa
 	q := repo.New(tx)
 	target, err := s.onboardingTarget(ctx, q, principal, input.ProjectSlug)
 	if err != nil {
+		return Distribution{}, err
+	}
+	if err := s.requireApprovedDirectRemoteDistribution(ctx, tx, q, principal, target); err != nil {
 		return Distribution{}, err
 	}
 	if err := s.requireFreshReadiness(ctx, q, principal, target.ProjectID, target.RegistrationID.UUID, connectionID, generation); err != nil {
@@ -430,6 +435,34 @@ func (s *DistributionService) onboardingTarget(ctx context.Context, q *repo.Quer
 		return repo.GetPlatformMCPOnboardingDistributionTargetRow{}, ErrDistributionInvalid
 	}
 	return target, nil
+}
+
+// requireApprovedDirectRemoteDistribution is the enforcement chokepoint for
+// user-supplied URLs. It runs before readiness because an open server can be
+// fresh-ready anonymously, which is insufficient to override an organization's
+// existing Shadow MCP policy. Reviewed catalogue registrations are unaffected.
+func (s *DistributionService) requireApprovedDirectRemoteDistribution(ctx context.Context, tx pgx.Tx, q *repo.Queries, principal Principal, target repo.GetPlatformMCPOnboardingDistributionTargetRow) error {
+	registration, err := lifecycleRegistration(ctx, q, principal, target.ProjectID, target.RegistrationID.UUID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrDistributionInvalid
+	}
+	if err != nil {
+		return fmt.Errorf("resolve direct remote distribution registration: %w", err)
+	}
+	if registration.CatalogProvider != directRemoteProviderKey {
+		return nil
+	}
+	if s.approvals == nil || registration.CatalogReference == "" {
+		return ErrDistributionBlockedPendingApproval
+	}
+	approval, err := s.approvals.CheckDirectRemoteApprovalTx(ctx, tx, principal.OrganizationID, target.ProjectID, registration.CatalogReference)
+	if err != nil {
+		return fmt.Errorf("consult direct remote approval enforcement for distribution: %w", err)
+	}
+	if approval.EnforcementActive && !approval.Approved {
+		return ErrDistributionBlockedPendingApproval
+	}
+	return nil
 }
 
 func (s *DistributionService) requireFreshReadiness(ctx context.Context, q *repo.Queries, principal Principal, projectID, registrationID, connectionID, generation uuid.UUID) error {

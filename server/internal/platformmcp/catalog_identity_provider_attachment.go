@@ -116,7 +116,7 @@ func (s *CatalogIdentityProviderAttachmentService) attachLocked(ctx context.Cont
 	if err != nil {
 		return CatalogIdentityProviderAttachmentResult{}, fmt.Errorf("load platform mcp identity-provider registration: %w", err)
 	}
-	if !isBrowserCatalogProviderKey(registration.CatalogProvider) || registration.Status != registrationStatusRegistered || !registrationComponentsComplete(registration) {
+	if (!isBrowserCatalogProviderKey(registration.CatalogProvider) && registration.CatalogProvider != directRemoteProviderKey) || registration.Status != registrationStatusRegistered || !registrationComponentsComplete(registration) {
 		return CatalogIdentityProviderAttachmentResult{}, ErrIdentityProviderAttachmentUnsupported
 	}
 
