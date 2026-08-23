@@ -81,7 +81,7 @@ func NewDistributionService(db *pgxpool.Pool, auditLogger *audit.Logger, attach 
 	if auditLogger == nil {
 		auditLogger = audit.NewLogger()
 	}
-	return &DistributionService{db: db, audit: auditLogger, attach: attach, publish: publish, now: time.Now, approvals: NewPostgresDirectRemoteApprovals(db)}
+	return &DistributionService{db: db, audit: auditLogger, attach: attach, publish: publish, now: time.Now, approvals: NewPostgresDirectRemoteApprovals()}
 }
 
 // Current returns the selected workflow target's live attachment state and its
@@ -455,7 +455,7 @@ func (s *DistributionService) requireApprovedDirectRemoteDistribution(ctx contex
 	if s.approvals == nil || registration.CatalogReference == "" {
 		return ErrDistributionBlockedPendingApproval
 	}
-	approval, err := s.approvals.CheckDirectRemoteApprovalTx(ctx, tx, principal.OrganizationID, target.ProjectID, registration.CatalogReference)
+	approval, err := s.approvals.CheckDirectRemoteApprovalTx(ctx, tx, principal.OrganizationID, principal.UserID, target.ProjectID, registration.CatalogReference)
 	if err != nil {
 		return fmt.Errorf("consult direct remote approval enforcement for distribution: %w", err)
 	}

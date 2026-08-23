@@ -119,18 +119,14 @@ func registerRemoteRegistrationTool(reg *Registrar, registrations *RegistrationS
 			return nil, RegisterRemoteMCPToolOutput{}, err
 		}
 		if onboarding != nil && principal.HasConnection() {
-			if _, err := onboarding.Start(ctx, principal.OrganizationID, principal.UserID); err != nil {
-				return nil, RegisterRemoteMCPToolOutput{}, err
-			}
-			registrationID, err := uuid.Parse(result.Registration)
-			if err != nil {
-				return nil, RegisterRemoteMCPToolOutput{}, ErrUnavailable
-			}
-			if _, err := onboarding.BindRegistrationForPrincipal(ctx, principal, result.Project.ID, registrationID); err != nil {
-				return nil, RegisterRemoteMCPToolOutput{}, err
-			}
-			if err := onboarding.RecordRegistrationSucceeded(ctx, principal, result.Project.ID, registrationID); err != nil {
-				return nil, RegisterRemoteMCPToolOutput{}, err
+			// Registration has committed before this projection work begins. A
+			// bookkeeping failure must not tell the caller that the durable
+			// registration failed and encourage a duplicate retry; returning the
+			// receipt lets the user recover through the dashboard if needed.
+			if err := recordRemoteRegistrationOnboarding(ctx, onboarding, principal, result); err != nil {
+				// Onboarding is a post-commit projection. Keep the successful receipt
+				// but classify the failed projection with the bounded lifecycle taxonomy.
+				registrations.telemetry.Record(ctx, LifecycleEvent{Operation: "registration", Phase: "complete", Outcome: lifecycleOutcome(err), State: ""})
 			}
 		}
 		return nil, RegisterRemoteMCPToolOutput{
@@ -143,4 +139,18 @@ func registerRemoteRegistrationTool(reg *Registrar, registrations *RegistrationS
 			DashboardSetupURL: result.DashboardSetupURL,
 		}, nil
 	})
+}
+
+func recordRemoteRegistrationOnboarding(ctx context.Context, onboarding *OnboardingService, principal Principal, result RegisterRemoteMCPResult) error {
+	if _, err := onboarding.Start(ctx, principal.OrganizationID, principal.UserID); err != nil {
+		return err
+	}
+	registrationID, err := uuid.Parse(result.Registration)
+	if err != nil {
+		return ErrUnavailable
+	}
+	if _, err := onboarding.BindRegistrationForPrincipal(ctx, principal, result.Project.ID, registrationID); err != nil {
+		return err
+	}
+	return onboarding.RecordRegistrationSucceeded(ctx, principal, result.Project.ID, registrationID)
 }

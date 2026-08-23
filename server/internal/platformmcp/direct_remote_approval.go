@@ -3,11 +3,12 @@ package platformmcp
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/risk"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
@@ -21,28 +22,36 @@ type DirectRemoteApprovalState struct {
 	Approved          bool
 }
 
-// DirectRemoteApprovalTxChecker evaluates enforcement in the distribution
-// transaction so the consulted policy state cannot predate the attachment it
-// authorizes.
+// DirectRemoteApprovalTxChecker evaluates enforcement after attachment planning
+// from the same distribution transaction snapshot as persistence. Policy reads
+// are not locked, so a concurrent revoke remains race-narrowed rather than
+// race-free.
 type DirectRemoteApprovalTxChecker interface {
-	CheckDirectRemoteApprovalTx(context.Context, riskrepo.DBTX, string, uuid.UUID, string) (DirectRemoteApprovalState, error)
+	CheckDirectRemoteApprovalTx(context.Context, riskrepo.DBTX, string, string, uuid.UUID, string) (DirectRemoteApprovalState, error)
 }
 
 // PostgresDirectRemoteApprovals reads enabled Shadow MCP policies and their
 // URL-scoped grants. It is a narrow adapter over the existing enforcement data,
 // not a parallel approval system.
 type PostgresDirectRemoteApprovals struct {
-	db *pgxpool.Pool
+	logger *slog.Logger
 }
 
-func NewPostgresDirectRemoteApprovals(db *pgxpool.Pool) *PostgresDirectRemoteApprovals {
-	return &PostgresDirectRemoteApprovals{db: db}
+type directRemoteApprovalCandidate struct {
+	policy             riskrepo.RiskPolicy
+	allowAll           bool
+	wholePolicyBypass  risk.PolicyBypassEvaluation
+	serverPolicyBypass risk.PolicyBypassEvaluation
+}
+
+func NewPostgresDirectRemoteApprovals() *PostgresDirectRemoteApprovals {
+	return &PostgresDirectRemoteApprovals{logger: slog.Default().With("component", "platform_mcp")}
 }
 
 var _ DirectRemoteApprovalTxChecker = (*PostgresDirectRemoteApprovals)(nil)
 
-func (c *PostgresDirectRemoteApprovals) CheckDirectRemoteApprovalTx(ctx context.Context, db riskrepo.DBTX, organizationID string, projectID uuid.UUID, remoteURL string) (DirectRemoteApprovalState, error) {
-	if c == nil || c.db == nil || db == nil || organizationID == "" || projectID == uuid.Nil {
+func (c *PostgresDirectRemoteApprovals) CheckDirectRemoteApprovalTx(ctx context.Context, db riskrepo.DBTX, organizationID, userID string, projectID uuid.UUID, remoteURL string) (DirectRemoteApprovalState, error) {
+	if c == nil || db == nil || organizationID == "" || userID == "" || projectID == uuid.Nil {
 		return DirectRemoteApprovalState{}, ErrRegistrationUnavailable
 	}
 	inventoryURL, ok := shadowmcp.CanonicalizeInventoryURL(remoteURL)
@@ -55,37 +64,85 @@ func (c *PostgresDirectRemoteApprovals) CheckDirectRemoteApprovalTx(ctx context.
 		return DirectRemoteApprovalState{}, fmt.Errorf("list Shadow MCP policies for direct remote approval consult: %w", err)
 	}
 
-	state := DirectRemoteApprovalState{Approved: true}
+	principals, err := authz.ResolveUserPrincipals(ctx, db, organizationID, userID)
+	if err != nil {
+		return DirectRemoteApprovalState{}, fmt.Errorf("resolve direct remote approval principals: %w", err)
+	}
+	grants, err := authz.LoadGrants(ctx, db, organizationID, principals)
+	if err != nil {
+		return DirectRemoteApprovalState{}, fmt.Errorf("load direct remote approval grants: %w", err)
+	}
+	logger := c.logger
+	if logger == nil {
+		logger = slog.Default().With("component", "platform_mcp")
+	}
+	bypasses := risk.NewPolicyBypassEvaluator(logger, db)
+
+	candidates := make([]directRemoteApprovalCandidate, 0, len(policies))
+	evaluations := make([]risk.PolicyBypassEvaluation, 0, len(policies)*2)
 	for _, policy := range policies {
-		if policy.Action != "block" {
+		if policy.Action != "block" || !authz.GrantsSatisfy(grants, authz.RiskPolicyEvaluateCheck(policy.ID.String())) {
+			continue
+		}
+		wholeTarget := risk.WholePolicyBypassTarget()
+		candidate := directRemoteApprovalCandidate{
+			policy:   policy,
+			allowAll: policy.ShadowMcpDisposition.Valid && policy.ShadowMcpDisposition.String == shadowmcp.DispositionAllowAll,
+			wholePolicyBypass: risk.PolicyBypassEvaluation{
+				OrganizationID: organizationID,
+				UserID:         userID,
+				PolicyID:       policy.ID.String(),
+				Target:         &wholeTarget,
+			},
+		}
+		evaluations = append(evaluations, candidate.wholePolicyBypass)
+		if !candidate.allowAll {
+			serverTarget := risk.ShadowMCPServerPolicyBypassTarget(inventoryURL.CanonicalURL, "", inventoryURL.CanonicalURL)
+			candidate.serverPolicyBypass = risk.PolicyBypassEvaluation{
+				OrganizationID: organizationID,
+				UserID:         userID,
+				PolicyID:       policy.ID.String(),
+				Target:         &serverTarget,
+			}
+			evaluations = append(evaluations, candidate.serverPolicyBypass)
+		}
+		candidates = append(candidates, candidate)
+	}
+	decisions := bypasses.CanBypassBatch(ctx, evaluations)
+
+	state := DirectRemoteApprovalState{Approved: true}
+	for _, candidate := range candidates {
+		// Match the runtime scanner's dimensionless policy audience check, then
+		// evaluate bypasses through its canonicalizing evaluator. Keeping those
+		// concerns separate avoids raw legacy bypass selectors disagreeing with
+		// the runtime's URL-first policy-bypass semantics.
+		if decisions[candidate.wholePolicyBypass] {
 			continue
 		}
 		state.EnforcementActive = true
 
-		// Legacy policies without an explicit disposition are deny-by-default,
-		// matching the enforcement writer. An allow-all policy instead blocks
-		// only URLs with an explicit block grant.
-		allowAll := policy.ShadowMcpDisposition.Valid && policy.ShadowMcpDisposition.String == shadowmcp.DispositionAllowAll
-		scope := authz.ScopeRiskPolicyBypass
-		if allowAll {
-			scope = authz.ScopeRiskPolicyBlock
-		}
-		grants, err := authz.ListGrantsForResource(ctx, db, authz.Resource{
-			OrganizationID: organizationID,
-			Scope:          scope,
-			ResourceID:     policy.ID.String(),
-		})
-		if err != nil {
-			return DirectRemoteApprovalState{}, fmt.Errorf("list Shadow MCP policy grants for direct remote approval consult: %w", err)
-		}
-		granted := false
-		for _, grant := range grants {
-			if grant.Selector[authz.SelectorKeyServerURL] == inventoryURL.CanonicalURL {
-				granted = true
-				break
+		// An allow-all policy blocks URLs project-wide; it has no user-scoped
+		// bypass path. A block-all policy may be exempted by a canonical
+		// URL-scoped grant, exactly as runtime does.
+		if candidate.allowAll {
+			blockGrants, err := authz.ListGrantsForResource(ctx, db, authz.Resource{
+				OrganizationID: organizationID,
+				Scope:          authz.ScopeRiskPolicyBlock,
+				ResourceID:     candidate.policy.ID.String(),
+			})
+			if err != nil {
+				return DirectRemoteApprovalState{}, fmt.Errorf("list direct remote block grants: %w", err)
 			}
+			for _, grant := range blockGrants {
+				candidate, ok := shadowmcp.CanonicalizeInventoryURL(grant.Selector[authz.SelectorKeyServerURL])
+				if ok && candidate.CanonicalURL == inventoryURL.CanonicalURL {
+					state.Approved = false
+					break
+				}
+			}
+			continue
 		}
-		if granted == allowAll {
+		if !decisions[candidate.serverPolicyBypass] {
 			state.Approved = false
 		}
 	}

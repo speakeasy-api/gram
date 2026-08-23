@@ -43,7 +43,7 @@ func registerLifecycleVisibilityTools(reg *Registrar, registrations *Registratio
 		{
 			name:        "enable_mcp",
 			title:       "Enable MCP",
-			description: "Re-enable one disabled Platform-managed MCP. The MCP is not attached to any plugin; existing attachments are republished and a fresh readiness probe runs. On an idempotent retry, the result reports current persisted visibility while readiness and publication remain best-effort observations.",
+			description: "Re-enable one disabled Platform-managed MCP. The MCP is not attached to any plugin; existing attachments are republished. Connected external callers perform a fresh readiness probe; the managed assistant returns its own persisted readiness evidence because it has no OAuth connection. On an idempotent retry, the result reports current persisted visibility while readiness and publication remain best-effort observations.",
 			call:        registrations.EnableMCP,
 		},
 	} {

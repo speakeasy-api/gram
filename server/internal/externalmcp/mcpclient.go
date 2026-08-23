@@ -346,6 +346,7 @@ func (rt *authRoundTripper) RoundTrip(req *http.Request) (*http.Response, error)
 	switch resp.StatusCode {
 	case http.StatusUnauthorized, http.StatusForbidden:
 		rt.statusCode = resp.StatusCode
+		rt.wwwAuthenticate = resp.Header.Get("WWW-Authenticate")
 		rt.authRejected = true
 	}
 

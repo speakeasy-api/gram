@@ -1264,7 +1264,10 @@ WHERE readiness.organization_id = @organization_id
 ORDER BY readiness.checked_at DESC, readiness.id DESC
 LIMIT 1;
 
--- name: UpsertPlatformMCPReadiness :one
+-- name: UpsertPlatformMCPReadinessExternal :one
+-- External evidence remains connection/generation scoped. The predicate names
+-- the expand-phase external partial index explicitly, so it never races with
+-- connectionless assistant evidence on the legacy full binding index.
 INSERT INTO platform_mcp_readiness (
     organization_id,
     project_id,
@@ -1305,7 +1308,64 @@ WHERE EXISTS (
        AND registration.deleted IS FALSE
 )
 ON CONFLICT (registration_id, connection_id, connection_generation, provider_authorization_fingerprint)
+WHERE connection_id IS NOT NULL
 DO UPDATE SET
+    state = EXCLUDED.state,
+    evidence_code = EXCLUDED.evidence_code,
+    checked_at = EXCLUDED.checked_at,
+    expires_at = EXCLUDED.expires_at,
+    updated_at = clock_timestamp()
+WHERE platform_mcp_readiness.checked_at <= EXCLUDED.checked_at
+RETURNING *;
+
+-- name: UpsertPlatformMCPReadinessAssistant :one
+-- A connectionless assistant is an actor, not an empty connection. Its unique
+-- binding includes the real user and trusted surface, preventing different
+-- assistants from overwriting or hiding each other's evidence.
+INSERT INTO platform_mcp_readiness (
+    organization_id,
+    project_id,
+    registration_id,
+    connection_id,
+    connection_generation,
+    user_id,
+    acting_surface,
+    provider_authorization_fingerprint,
+    state,
+    evidence_code,
+    checked_at,
+    expires_at
+)
+SELECT
+    @organization_id,
+    @project_id,
+    @registration_id,
+    @connection_id,
+    @connection_generation,
+    @user_id,
+    @acting_surface,
+    @provider_authorization_fingerprint,
+    @state,
+    @evidence_code,
+    @checked_at,
+    @expires_at
+WHERE EXISTS (
+    SELECT 1
+     FROM platform_mcp_catalog_registrations AS registration
+     JOIN projects AS project
+       ON project.id = registration.project_id
+      AND project.organization_id = registration.organization_id
+      AND project.deleted IS FALSE
+     WHERE registration.id = @registration_id
+       AND registration.organization_id = @organization_id
+       AND registration.project_id = @project_id
+       AND registration.deleted IS FALSE
+)
+ON CONFLICT (registration_id, user_id, acting_surface, provider_authorization_fingerprint)
+WHERE connection_id IS NULL
+DO UPDATE SET
+    user_id = EXCLUDED.user_id,
+    acting_surface = EXCLUDED.acting_surface,
     state = EXCLUDED.state,
     evidence_code = EXCLUDED.evidence_code,
     checked_at = EXCLUDED.checked_at,

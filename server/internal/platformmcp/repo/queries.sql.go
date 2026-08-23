@@ -5646,7 +5646,115 @@ func (q *Queries) UpdatePlatformMCPDistributionPublication(ctx context.Context, 
 	return i, err
 }
 
-const upsertPlatformMCPReadiness = `-- name: UpsertPlatformMCPReadiness :one
+const upsertPlatformMCPReadinessAssistant = `-- name: UpsertPlatformMCPReadinessAssistant :one
+INSERT INTO platform_mcp_readiness (
+    organization_id,
+    project_id,
+    registration_id,
+    connection_id,
+    connection_generation,
+    user_id,
+    acting_surface,
+    provider_authorization_fingerprint,
+    state,
+    evidence_code,
+    checked_at,
+    expires_at
+)
+SELECT
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7,
+    $8,
+    $9,
+    $10,
+    $11,
+    $12
+WHERE EXISTS (
+    SELECT 1
+     FROM platform_mcp_catalog_registrations AS registration
+     JOIN projects AS project
+       ON project.id = registration.project_id
+      AND project.organization_id = registration.organization_id
+      AND project.deleted IS FALSE
+     WHERE registration.id = $3
+       AND registration.organization_id = $1
+       AND registration.project_id = $2
+       AND registration.deleted IS FALSE
+)
+ON CONFLICT (registration_id, user_id, acting_surface, provider_authorization_fingerprint)
+WHERE connection_id IS NULL
+DO UPDATE SET
+    user_id = EXCLUDED.user_id,
+    acting_surface = EXCLUDED.acting_surface,
+    state = EXCLUDED.state,
+    evidence_code = EXCLUDED.evidence_code,
+    checked_at = EXCLUDED.checked_at,
+    expires_at = EXCLUDED.expires_at,
+    updated_at = clock_timestamp()
+WHERE platform_mcp_readiness.checked_at <= EXCLUDED.checked_at
+RETURNING id, organization_id, project_id, registration_id, connection_id, connection_generation, user_id, acting_surface, provider_authorization_fingerprint, state, evidence_code, checked_at, expires_at, created_at, updated_at
+`
+
+type UpsertPlatformMCPReadinessAssistantParams struct {
+	OrganizationID                   string
+	ProjectID                        uuid.UUID
+	RegistrationID                   uuid.UUID
+	ConnectionID                     uuid.NullUUID
+	ConnectionGeneration             uuid.NullUUID
+	UserID                           pgtype.Text
+	ActingSurface                    pgtype.Text
+	ProviderAuthorizationFingerprint string
+	State                            string
+	EvidenceCode                     pgtype.Text
+	CheckedAt                        pgtype.Timestamptz
+	ExpiresAt                        pgtype.Timestamptz
+}
+
+// A connectionless assistant is an actor, not an empty connection. Its unique
+// binding includes the real user and trusted surface, preventing different
+// assistants from overwriting or hiding each other's evidence.
+func (q *Queries) UpsertPlatformMCPReadinessAssistant(ctx context.Context, arg UpsertPlatformMCPReadinessAssistantParams) (PlatformMcpReadiness, error) {
+	row := q.db.QueryRow(ctx, upsertPlatformMCPReadinessAssistant,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.RegistrationID,
+		arg.ConnectionID,
+		arg.ConnectionGeneration,
+		arg.UserID,
+		arg.ActingSurface,
+		arg.ProviderAuthorizationFingerprint,
+		arg.State,
+		arg.EvidenceCode,
+		arg.CheckedAt,
+		arg.ExpiresAt,
+	)
+	var i PlatformMcpReadiness
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.RegistrationID,
+		&i.ConnectionID,
+		&i.ConnectionGeneration,
+		&i.UserID,
+		&i.ActingSurface,
+		&i.ProviderAuthorizationFingerprint,
+		&i.State,
+		&i.EvidenceCode,
+		&i.CheckedAt,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertPlatformMCPReadinessExternal = `-- name: UpsertPlatformMCPReadinessExternal :one
 INSERT INTO platform_mcp_readiness (
     organization_id,
     project_id,
@@ -5687,6 +5795,7 @@ WHERE EXISTS (
        AND registration.deleted IS FALSE
 )
 ON CONFLICT (registration_id, connection_id, connection_generation, provider_authorization_fingerprint)
+WHERE connection_id IS NOT NULL
 DO UPDATE SET
     state = EXCLUDED.state,
     evidence_code = EXCLUDED.evidence_code,
@@ -5697,7 +5806,7 @@ WHERE platform_mcp_readiness.checked_at <= EXCLUDED.checked_at
 RETURNING id, organization_id, project_id, registration_id, connection_id, connection_generation, user_id, acting_surface, provider_authorization_fingerprint, state, evidence_code, checked_at, expires_at, created_at, updated_at
 `
 
-type UpsertPlatformMCPReadinessParams struct {
+type UpsertPlatformMCPReadinessExternalParams struct {
 	OrganizationID                   string
 	ProjectID                        uuid.UUID
 	RegistrationID                   uuid.UUID
@@ -5712,8 +5821,11 @@ type UpsertPlatformMCPReadinessParams struct {
 	ExpiresAt                        pgtype.Timestamptz
 }
 
-func (q *Queries) UpsertPlatformMCPReadiness(ctx context.Context, arg UpsertPlatformMCPReadinessParams) (PlatformMcpReadiness, error) {
-	row := q.db.QueryRow(ctx, upsertPlatformMCPReadiness,
+// External evidence remains connection/generation scoped. The predicate names
+// the expand-phase external partial index explicitly, so it never races with
+// connectionless assistant evidence on the legacy full binding index.
+func (q *Queries) UpsertPlatformMCPReadinessExternal(ctx context.Context, arg UpsertPlatformMCPReadinessExternalParams) (PlatformMcpReadiness, error) {
+	row := q.db.QueryRow(ctx, upsertPlatformMCPReadinessExternal,
 		arg.OrganizationID,
 		arg.ProjectID,
 		arg.RegistrationID,

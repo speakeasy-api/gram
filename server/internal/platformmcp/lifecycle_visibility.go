@@ -205,8 +205,16 @@ func (s *LifecycleVisibilityService) update(ctx context.Context, principal Princ
 		// outcome, so a transient probe failure must not make the completed enable
 		// look uncommitted or consume its idempotency receipt as an error. The
 		// assistant has no OAuth connection to authenticate a fresh probe with, so
-		// it receives only its own persisted user/surface-scoped evidence.
-		_, readiness, found, readinessErr := s.readiness.GetReadiness(ctx, principal, project.Slug, registrationID.String(), principal.HasConnection())
+		// it reads only its own persisted user/surface-scoped evidence without
+		// spending the repair/probe budget.
+		var readiness Readiness
+		var found bool
+		var readinessErr error
+		if principal.HasConnection() {
+			_, readiness, found, readinessErr = s.readiness.GetReadiness(ctx, principal, project.Slug, registrationID.String(), true)
+		} else {
+			_, readiness, found, readinessErr = s.readiness.CurrentReadiness(ctx, principal, project.Slug, registrationID.String())
+		}
 		if readinessErr == nil && found {
 			result.Readiness = MCPReadiness{State: string(readiness.State), CheckedAt: readinessTimestamp(readiness.CheckedAt), ExpiresAt: readinessTimestamp(readiness.ExpiresAt)}
 		}

@@ -440,9 +440,7 @@ func (s *RegistrationStore) RecordReadiness(ctx context.Context, principal Princ
 		return Readiness{}, ErrUnavailable
 	}
 	// Only the managed project assistant can persist readiness without an OAuth
-	// connection. External and dashboard setup probes remain connection-bound;
-	// admitting another connectionless writer before the legacy readiness index
-	// contracts would let distinct actors collide on the same row.
+	// connection. External and dashboard setup probes remain connection-bound.
 	if !principal.HasConnection() && principal.surface() != SurfaceProjectAssistant {
 		return Readiness{}, ErrReadinessInvalid
 	}
@@ -468,7 +466,15 @@ func (s *RegistrationStore) RecordReadiness(ctx context.Context, principal Princ
 		return Readiness{}, fmt.Errorf("load platform mcp readiness registration lifecycle: %w", err)
 	}
 
-	row, err := q.UpsertPlatformMCPReadiness(ctx, platformrepo.UpsertPlatformMCPReadinessParams{
+	fingerprint := binding.ProviderAuthorizationFingerprint
+	if !principal.HasConnection() {
+		// The retained legacy NULLS-NOT-DISTINCT binding index cannot distinguish
+		// connectionless actors. Scope its persisted key to this user and trusted
+		// surface as well as the provider's authorization state, so two assistants
+		// cannot collide before the assistant partial-index arbiter applies.
+		fingerprint = assistantReadinessFingerprint(fingerprint, principal.UserID, principal.surface())
+	}
+	readinessParams := platformrepo.UpsertPlatformMCPReadinessAssistantParams{
 		OrganizationID:                   principal.OrganizationID,
 		ProjectID:                        binding.ProjectID,
 		RegistrationID:                   binding.RegistrationID,
@@ -476,12 +482,31 @@ func (s *RegistrationStore) RecordReadiness(ctx context.Context, principal Princ
 		ConnectionGeneration:             generation,
 		UserID:                           conv.ToPGText(principal.UserID),
 		ActingSurface:                    conv.ToPGText(string(principal.surface())),
-		ProviderAuthorizationFingerprint: binding.ProviderAuthorizationFingerprint,
+		ProviderAuthorizationFingerprint: fingerprint,
 		State:                            string(state),
 		EvidenceCode:                     optionalText(evidenceCode),
 		CheckedAt:                        timestamp(checkedAt),
 		ExpiresAt:                        optionalLifecycleTimestamp(expiresAt),
-	})
+	}
+	var row platformrepo.PlatformMcpReadiness
+	if principal.HasConnection() {
+		row, err = q.UpsertPlatformMCPReadinessExternal(ctx, platformrepo.UpsertPlatformMCPReadinessExternalParams{
+			OrganizationID:                   readinessParams.OrganizationID,
+			ProjectID:                        readinessParams.ProjectID,
+			RegistrationID:                   readinessParams.RegistrationID,
+			ConnectionID:                     readinessParams.ConnectionID,
+			ConnectionGeneration:             readinessParams.ConnectionGeneration,
+			UserID:                           readinessParams.UserID,
+			ActingSurface:                    readinessParams.ActingSurface,
+			ProviderAuthorizationFingerprint: readinessParams.ProviderAuthorizationFingerprint,
+			State:                            readinessParams.State,
+			EvidenceCode:                     readinessParams.EvidenceCode,
+			CheckedAt:                        readinessParams.CheckedAt,
+			ExpiresAt:                        readinessParams.ExpiresAt,
+		})
+	} else {
+		row, err = q.UpsertPlatformMCPReadinessAssistant(ctx, readinessParams)
+	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		current, loadErr := q.GetPlatformMCPReadiness(ctx, platformrepo.GetPlatformMCPReadinessParams{
 			OrganizationID:                   principal.OrganizationID,
@@ -491,7 +516,7 @@ func (s *RegistrationStore) RecordReadiness(ctx context.Context, principal Princ
 			ConnectionGeneration:             generation,
 			UserID:                           conv.ToPGText(principal.UserID),
 			ActingSurface:                    conv.ToPGText(string(principal.surface())),
-			ProviderAuthorizationFingerprint: binding.ProviderAuthorizationFingerprint,
+			ProviderAuthorizationFingerprint: fingerprint,
 		})
 		if loadErr == nil {
 			if err := tx.Commit(ctx); err != nil {
