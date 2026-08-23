@@ -423,6 +423,11 @@ linters:
               desc: V3 is not ready yet use github.com/urfave/cli/v2
             - pkg: "github.com/pkg/errors"
               desc: Should be replaced by standard lib errors package
+            # The tailscale.com dependency tree (wireguard-go, gVisor) may only
+            # be linked by the network-gateway binary; the serving path must
+            # never grow overlay-network code. See docs/network-ingress-design.md.
+            - pkg: "tailscale.com"
+              desc: Only netgateway/provider/tailscale may import tailscale.com
             # GG011: debug value dumpers write to stdout/stderr and bypass
             # structured logging. Forbidden at the import level (forbidigo only
             # matches call sites). Use a *slog.Logger instead.
