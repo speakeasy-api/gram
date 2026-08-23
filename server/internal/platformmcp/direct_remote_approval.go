@@ -3,7 +3,6 @@ package platformmcp
 import (
 	"context"
 	"fmt"
-	"log/slog"
 
 	"github.com/google/uuid"
 
@@ -33,9 +32,7 @@ type DirectRemoteApprovalTxChecker interface {
 // PostgresDirectRemoteApprovals reads enabled Shadow MCP policies and their
 // URL-scoped grants. It is a narrow adapter over the existing enforcement data,
 // not a parallel approval system.
-type PostgresDirectRemoteApprovals struct {
-	logger *slog.Logger
-}
+type PostgresDirectRemoteApprovals struct{}
 
 type directRemoteApprovalCandidate struct {
 	policy             riskrepo.RiskPolicy
@@ -45,7 +42,7 @@ type directRemoteApprovalCandidate struct {
 }
 
 func NewPostgresDirectRemoteApprovals() *PostgresDirectRemoteApprovals {
-	return &PostgresDirectRemoteApprovals{logger: slog.Default().With("component", "platform_mcp")}
+	return &PostgresDirectRemoteApprovals{}
 }
 
 var _ DirectRemoteApprovalTxChecker = (*PostgresDirectRemoteApprovals)(nil)
@@ -72,12 +69,6 @@ func (c *PostgresDirectRemoteApprovals) CheckDirectRemoteApprovalTx(ctx context.
 	if err != nil {
 		return DirectRemoteApprovalState{}, fmt.Errorf("load direct remote approval grants: %w", err)
 	}
-	logger := c.logger
-	if logger == nil {
-		logger = slog.Default().With("component", "platform_mcp")
-	}
-	bypasses := risk.NewPolicyBypassEvaluator(logger, db)
-
 	candidates := make([]directRemoteApprovalCandidate, 0, len(policies))
 	evaluations := make([]risk.PolicyBypassEvaluation, 0, len(policies)*2)
 	for _, policy := range policies {
@@ -88,6 +79,12 @@ func (c *PostgresDirectRemoteApprovals) CheckDirectRemoteApprovalTx(ctx context.
 		candidate := directRemoteApprovalCandidate{
 			policy:   policy,
 			allowAll: policy.ShadowMcpDisposition.Valid && policy.ShadowMcpDisposition.String == shadowmcp.DispositionAllowAll,
+			serverPolicyBypass: risk.PolicyBypassEvaluation{
+				OrganizationID: organizationID,
+				UserID:         userID,
+				PolicyID:       policy.ID.String(),
+				Target:         nil,
+			},
 			wholePolicyBypass: risk.PolicyBypassEvaluation{
 				OrganizationID: organizationID,
 				UserID:         userID,
@@ -108,9 +105,9 @@ func (c *PostgresDirectRemoteApprovals) CheckDirectRemoteApprovalTx(ctx context.
 		}
 		candidates = append(candidates, candidate)
 	}
-	decisions := bypasses.CanBypassBatch(ctx, evaluations)
+	decisions := risk.CanBypassBatchWithGrants(grants, evaluations)
 
-	state := DirectRemoteApprovalState{Approved: true}
+	state := DirectRemoteApprovalState{EnforcementActive: false, Approved: true}
 	for _, candidate := range candidates {
 		// Match the runtime scanner's dimensionless policy audience check, then
 		// evaluate bypasses through its canonicalizing evaluator. Keeping those

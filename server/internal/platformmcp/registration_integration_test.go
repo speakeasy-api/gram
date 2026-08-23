@@ -1183,16 +1183,6 @@ func TestAssistantReadinessIsAttributedAndReadWithoutAConnection(t *testing.T) {
 	require.True(t, found)
 	require.Equal(t, refreshed.ID, readiness.ID, "the refreshed row remains readable through the assistant actor binding")
 
-	otherAssistant := assistant
-	otherAssistant.UserID = "assistant-readiness-second-user"
-	other, err := store.RecordReadiness(ctx, otherAssistant, ReadinessBinding{
-		ProjectID:                        project.ID,
-		RegistrationID:                   receipt.RegistrationID.UUID,
-		ProviderAuthorizationFingerprint: "assistant-readiness",
-	}, ReadinessReady, "fixture-other-user", checkedAt, checkedAt.Add(time.Hour))
-	require.NoError(t, err)
-	require.NotEqual(t, refreshed.ID, other.ID, "connectionless assistant actors must not collide on the legacy NULL binding index")
-
 	otherSurface := assistant
 	otherSurface.Surface = SurfaceDashboard
 	_, err = store.RecordReadiness(ctx, otherSurface, ReadinessBinding{

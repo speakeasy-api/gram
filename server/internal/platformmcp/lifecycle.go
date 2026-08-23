@@ -490,20 +490,9 @@ func (s *RegistrationStore) RecordReadiness(ctx context.Context, principal Princ
 	}
 	var row platformrepo.PlatformMcpReadiness
 	if principal.HasConnection() {
-		row, err = q.UpsertPlatformMCPReadinessExternal(ctx, platformrepo.UpsertPlatformMCPReadinessExternalParams{
-			OrganizationID:                   readinessParams.OrganizationID,
-			ProjectID:                        readinessParams.ProjectID,
-			RegistrationID:                   readinessParams.RegistrationID,
-			ConnectionID:                     readinessParams.ConnectionID,
-			ConnectionGeneration:             readinessParams.ConnectionGeneration,
-			UserID:                           readinessParams.UserID,
-			ActingSurface:                    readinessParams.ActingSurface,
-			ProviderAuthorizationFingerprint: readinessParams.ProviderAuthorizationFingerprint,
-			State:                            readinessParams.State,
-			EvidenceCode:                     readinessParams.EvidenceCode,
-			CheckedAt:                        readinessParams.CheckedAt,
-			ExpiresAt:                        readinessParams.ExpiresAt,
-		})
+		// Both generated query params deliberately share this exact persistence
+		// shape; conversion keeps the external write synchronized with it.
+		row, err = q.UpsertPlatformMCPReadinessExternal(ctx, platformrepo.UpsertPlatformMCPReadinessExternalParams(readinessParams))
 	} else {
 		row, err = q.UpsertPlatformMCPReadinessAssistant(ctx, readinessParams)
 	}

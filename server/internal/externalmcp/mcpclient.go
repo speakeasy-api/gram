@@ -140,6 +140,7 @@ func NewClient(ctx context.Context, logger *slog.Logger, guardianPolicy *guardia
 	httpClient.Transport = authRT
 	var bodyLimitRT *bodyLimitRoundTripper
 	if opts.MaxResponseBytes > 0 {
+		//nolint:exhaustruct // atomic.Bool must retain its documented zero value.
 		bodyLimitRT = &bodyLimitRoundTripper{base: authRT, limit: opts.MaxResponseBytes}
 		httpClient.Transport = bodyLimitRT
 	}
@@ -346,7 +347,9 @@ func (rt *authRoundTripper) RoundTrip(req *http.Request) (*http.Response, error)
 	switch resp.StatusCode {
 	case http.StatusUnauthorized, http.StatusForbidden:
 		rt.statusCode = resp.StatusCode
-		rt.wwwAuthenticate = resp.Header.Get("WWW-Authenticate")
+		if challenge := resp.Header.Get("WWW-Authenticate"); challenge != "" {
+			rt.wwwAuthenticate = challenge
+		}
 		rt.authRejected = true
 	}
 

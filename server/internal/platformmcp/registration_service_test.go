@@ -290,13 +290,13 @@ func TestRegistrationServiceRejectsInvalidSetupHandoffInputs(t *testing.T) {
 		ProjectSlug: "project", RegistrationID: uuid.NewString(), ProviderKey: "unreviewed", CatalogRef: "unreviewed/mcp",
 	})
 	require.ErrorIs(t, err, ErrCatalogRejected)
-	require.Zero(t, store.resolveCalls)
+	require.Equal(t, 1, store.resolveCalls, "the service resolves the project before comparing the persisted registration identity")
 
 	_, err = service.IssueSetupHandoff(t.Context(), registrationServicePrincipal(), IssueSetupHandoffInput{
 		ProjectSlug: "project", RegistrationID: "not-a-uuid", ProviderKey: "provider", CatalogRef: "reviewed/mcp",
 	})
 	require.ErrorIs(t, err, ErrSetupHandoffInvalid)
-	require.Zero(t, store.resolveCalls)
+	require.Equal(t, 1, store.resolveCalls)
 }
 
 func TestRegistrationServiceReturnsPersistedSameOriginDashboardSetupURL(t *testing.T) {
