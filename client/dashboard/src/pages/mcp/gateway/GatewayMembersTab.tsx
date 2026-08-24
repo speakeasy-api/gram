@@ -79,7 +79,7 @@ const STATUS_BY_CLASSIFICATION: Record<
   },
 };
 
-export function MemberStatusBadge({
+function MemberStatusBadge({
   classification,
 }: {
   classification: MemberClassification;
@@ -197,16 +197,25 @@ export function GatewayMembersTab({
   const [mutating, setMutating] = useState(false);
 
   const invalidateMembers = () =>
-    invalidateAllMetaMcpMembers(queryClient, { refetchType: "all" });
+    Promise.all([
+      invalidateAllMetaMcpMembers(queryClient, { refetchType: "all" }),
+      // The Inspect tab reads list_servers/describe_server straight from the
+      // endpoint and caches it; membership changes what those return.
+      queryClient.invalidateQueries({ queryKey: ["gatewayInspection"] }),
+      queryClient.invalidateQueries({ queryKey: ["gatewayDescribeServer"] }),
+    ]);
 
   const runMutation = async (work: () => Promise<void>, failure: string) => {
     setMutating(true);
     try {
       await work();
-      await invalidateMembers();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : failure);
     } finally {
+      // Always refetch: a reorder writes rows one at a time, so a failure
+      // partway through still changed the server and the table must not keep
+      // rendering the pre-move order.
+      await invalidateMembers();
       setMutating(false);
     }
   };

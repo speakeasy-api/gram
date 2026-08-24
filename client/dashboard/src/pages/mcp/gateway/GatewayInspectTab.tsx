@@ -262,7 +262,10 @@ function DescribeServerCard({
   headers: Record<string, string> | undefined;
 }): JSX.Element {
   const [selected, setSelected] = useState<string | undefined>();
-  const serverSlug = selected ?? servers[0]?.slug;
+  const serverSlug =
+    selected && servers.some((server) => server.slug === selected)
+      ? selected
+      : servers[0]?.slug;
   const { data, isLoading } = useGatewayDescribeServer(connectUrl, serverSlug, {
     headers,
   });
@@ -309,7 +312,7 @@ function DescribeServerCard({
       ) : (
         <CodeSnippet
           language="json"
-          code={JSON.stringify(data.result, null, 2)}
+          code={JSON.stringify(data.result ?? null, null, 2)}
           fontSize="small"
         />
       )}

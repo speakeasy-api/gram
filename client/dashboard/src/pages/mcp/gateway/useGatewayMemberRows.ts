@@ -1,6 +1,7 @@
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useMetaMcpMembers } from "@gram/client/react-query/metaMcpMembers.js";
+import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useMemo } from "react";
 import { buildMemberRows, type MemberRow } from "./memberRows";
 
@@ -18,8 +19,9 @@ export function useGatewayMemberRows(metaMcpServerId: string): {
     useMetaMcpMembers({ metaMcpServerId }, undefined, {
       enabled: metaMcpServerId !== "",
     });
+  const gramProject = useProjectSlugForRequests();
   const { data: serversResult, isLoading: isLoadingServers } = useMcpServers(
-    {},
+    { gramProject },
     undefined,
     { throwOnError: false },
   );

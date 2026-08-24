@@ -32,21 +32,21 @@ export function classifyMemberServer(
   return "unknown";
 }
 
-/** Members joined with their servers, in sort order. */
+/**
+ * Members joined with their backing servers, in the order the API returned
+ * them. listMetaMcpMembers already orders by (sort_order, created_at, id) —
+ * the same ordering the runtime's servable query uses — so re-sorting here
+ * could only disagree with what `list_servers` actually serves.
+ */
 export function buildMemberRows(
   members: MetaMcpMember[],
   servers: McpServer[],
 ): MemberRow[] {
   const serversById = new Map(servers.map((s) => [s.id, s]));
-  return [...members]
-    .sort(
-      (a, b) =>
-        a.sortOrder - b.sortOrder || a.mcpServerId.localeCompare(b.mcpServerId),
-    )
-    .map((member) => {
-      const server = serversById.get(member.mcpServerId);
-      return { member, server, classification: classifyMemberServer(server) };
-    });
+  return members.map((member) => {
+    const server = serversById.get(member.mcpServerId);
+    return { member, server, classification: classifyMemberServer(server) };
+  });
 }
 
 /**

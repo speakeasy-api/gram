@@ -61,11 +61,11 @@ describe("classifyMemberServer", () => {
 });
 
 describe("buildMemberRows", () => {
-  it("orders by sortOrder and joins the backing server", () => {
+  it("preserves the API's order and joins the backing server", () => {
     const rows = buildMemberRows(
       [
-        member({ id: "b", mcpServerId: "s2", sortOrder: 1 }),
         member({ id: "a", mcpServerId: "s1", sortOrder: 0 }),
+        member({ id: "b", mcpServerId: "s2", sortOrder: 1 }),
       ],
       [
         server({ id: "s1", toolsetId: "ts-1" }),
@@ -79,7 +79,10 @@ describe("buildMemberRows", () => {
     ]);
   });
 
-  it("breaks sortOrder ties deterministically", () => {
+  // The runtime orders by (sort_order, created_at, id) and the API returns
+  // that order; re-sorting on sortOrder alone would reshuffle ties into an
+  // order list_servers never serves.
+  it("does not reshuffle members that share a sortOrder", () => {
     const rows = buildMemberRows(
       [
         member({ id: "b", mcpServerId: "s2", sortOrder: 0 }),
@@ -87,7 +90,7 @@ describe("buildMemberRows", () => {
       ],
       [],
     );
-    expect(rows.map((row) => row.member.mcpServerId)).toEqual(["s1", "s2"]);
+    expect(rows.map((row) => row.member.mcpServerId)).toEqual(["s2", "s1"]);
   });
 
   it("keeps a member whose server is missing, classified unknown", () => {

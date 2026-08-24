@@ -15,8 +15,8 @@ const toolSchema = z.object({
   inputSchema: z.unknown().optional(),
 });
 
-export type GatewayTool = z.infer<typeof toolSchema>;
-export type GatewayListedServer = z.infer<typeof listedServerSchema>;
+type GatewayTool = z.infer<typeof toolSchema>;
+type GatewayListedServer = z.infer<typeof listedServerSchema>;
 
 /** One member's catalog as returned by describe_server. */
 export interface GatewayServerDescription {
@@ -37,6 +37,21 @@ export interface GatewayInspection {
 }
 
 const PROTOCOL_VERSION = "2026-07-28";
+
+/**
+ * A cache-key fragment that changes when the credentials do, without putting
+ * the bearer itself in the query key (react-query keys are readable in
+ * devtools, and a rotating token would also accumulate cache entries).
+ */
+function authCacheKey(headers: Record<string, string> | undefined): string {
+  const auth = headers?.["Authorization"];
+  if (!auth) return "anon";
+  let hash = 0;
+  for (let i = 0; i < auth.length; i += 1) {
+    hash = (Math.imul(31, hash) + auth.charCodeAt(i)) | 0;
+  }
+  return `auth:${hash}`;
+}
 
 class UnauthorizedError extends Error {}
 
@@ -115,13 +130,7 @@ export function useGatewayInspection(
   refetch: () => void;
 } {
   const { headers, enabled = true } = options ?? {};
-  // Key on header values so the query refetches when a token arrives or
-  // rotates, without keying on object identity.
-  const headersKey = headers
-    ? Object.entries(headers)
-        .map(([k, v]) => `${k}:${v}`)
-        .sort((a, b) => a.localeCompare(b))
-    : [];
+  const headersKey = authCacheKey(headers);
 
   const query = useQuery<GatewayInspection, Error>({
     queryKey: ["gatewayInspection", mcpUrl, headersKey],
@@ -205,11 +214,7 @@ export function useGatewayDescribeServer(
   isLoading: boolean;
 } {
   const { headers, enabled = true } = options ?? {};
-  const headersKey = headers
-    ? Object.entries(headers)
-        .map(([k, v]) => `${k}:${v}`)
-        .sort((a, b) => a.localeCompare(b))
-    : [];
+  const headersKey = authCacheKey(headers);
 
   const query = useQuery<GatewayServerDescription, Error>({
     queryKey: ["gatewayDescribeServer", mcpUrl, serverSlug, headersKey],
@@ -220,14 +225,24 @@ export function useGatewayDescribeServer(
           name: "describe_server",
           arguments: { server: serverSlug },
         });
-        const { structuredContent, content } = z
+        const { structuredContent, content, isError } = z
           .object({
             structuredContent: z.unknown().optional(),
             content: z
               .array(z.object({ text: z.string().optional() }))
               .optional(),
+            isError: z.boolean().optional(),
           })
           .parse(described);
+        // A tool-level failure answers 200 with isError and a text body, so
+        // without this branch it would render as a normal catalog.
+        if (isError) {
+          return {
+            server: serverSlug,
+            result: undefined,
+            error: content?.[0]?.text ?? "describe_server reported an error",
+          };
+        }
         return {
           server: serverSlug,
           result: structuredContent ?? content?.[0]?.text,
