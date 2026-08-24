@@ -24,7 +24,7 @@ export function GatewayCard({
     // Clickable div rather than a link, as MCPCard is: an <a> may not nest the
     // copy button below.
     <Card.Entity
-      className="cursor-pointer"
+      className="focus-visible:ring-ring cursor-pointer focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
       onClick={() => routes.mcp.gateway.overview.goTo(gateway.id)}
       icon={<Network className="text-muted-foreground h-8 w-8" />}
     >
@@ -45,7 +45,12 @@ export function GatewayCard({
       </div>
 
       {url ? (
-        <div className="flex items-center gap-1">
+        <div
+          className="flex items-center gap-1"
+          // Card.Entity turns Enter/Space into navigation; leave them to the
+          // copy button when it holds focus.
+          onKeyDown={(e) => e.stopPropagation()}
+        >
           <Text muted className="truncate font-mono text-xs">
             {url.replace(/^https?:\/\//, "")}
           </Text>

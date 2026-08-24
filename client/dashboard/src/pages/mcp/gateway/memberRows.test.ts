@@ -40,15 +40,15 @@ describe("classifyMemberServer", () => {
     );
   });
 
-  it("classifies disabled servers as disabled whatever their backend", () => {
+  it.each([
+    "toolsetId",
+    "remoteMcpServerId",
+    "tunneledMcpServerId",
+    "unproxiedMcpServerId",
+  ] as const)("classifies a disabled %s server as disabled", (backend) => {
     expect(
       classifyMemberServer(
-        server({ visibility: "disabled", toolsetId: "ts-1" }),
-      ),
-    ).toBe("disabled");
-    expect(
-      classifyMemberServer(
-        server({ visibility: "disabled", remoteMcpServerId: "r-1" }),
+        server({ visibility: "disabled", [backend]: "b-1" }),
       ),
     ).toBe("disabled");
   });
