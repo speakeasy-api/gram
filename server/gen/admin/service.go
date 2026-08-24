@@ -70,6 +70,9 @@ type Service interface {
 	// Returns the configured state of every materialized platform-managed
 	// OpenRouter key for an organization.
 	GetInferenceKeys(context.Context, *GetInferenceKeysPayload) (res []*AdminInferenceKey, err error)
+	// Returns up to twelve complete UTC calendar months of recorded inference
+	// spend for an organization.
+	GetInferenceSpendHistory(context.Context, *GetInferenceSpendHistoryPayload) (res []*AdminInferenceSpendMonth, err error)
 	// Returns current PAYG usage and estimated cost for an organization.
 	GetPaygBillingSummary(context.Context, *GetPaygBillingSummaryPayload) (res *AdminPaygBillingSummary, err error)
 	// Returns the live Stripe subscription and payment state for an organization.
@@ -101,7 +104,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [21]string{"login", "callback", "logout", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "getPaygBillingSummary", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription"}
+var MethodNames = [22]string{"login", "callback", "logout", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -122,6 +125,13 @@ type AdminInferenceKey struct {
 	CreditsUsed    float64
 	MonthlyCredits int64
 	Disabled       bool
+}
+
+type AdminInferenceSpendMonth struct {
+	PeriodStart string
+	// Exclusive end of the UTC calendar month.
+	PeriodEnd string
+	SpendUsd  string
 }
 
 // AdminListOrganizationMembersResult is the result type of the admin service
@@ -364,6 +374,13 @@ type ExtendTrialPayload struct {
 // GetInferenceKeysPayload is the payload type of the admin service
 // getInferenceKeys method.
 type GetInferenceKeysPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+}
+
+// GetInferenceSpendHistoryPayload is the payload type of the admin service
+// getInferenceSpendHistory method.
+type GetInferenceSpendHistoryPayload struct {
 	AdminSessionToken *string
 	OrganizationID    string
 }

@@ -616,6 +616,21 @@ export function getInferenceKeys(
   );
 }
 
+export type AdminInferenceSpendMonth = {
+  period_start: string;
+  period_end: string;
+  spend_usd: string;
+};
+
+export function getInferenceSpendHistory(
+  organizationID: string,
+): Promise<AdminInferenceSpendMonth[]> {
+  const qs = toSearchParams({ organization_id: organizationID });
+  return gramAdminFetch<AdminInferenceSpendMonth[]>(
+    `/admin/organization.inferenceSpendHistory?${qs}`,
+  );
+}
+
 export type AdminPaygBillingSummary = {
   period_start: string;
   period_end: string;

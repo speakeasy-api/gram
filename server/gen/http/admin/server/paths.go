@@ -92,6 +92,11 @@ func GetInferenceKeysAdminPath() string {
 	return "/admin/organization.inferenceKeys"
 }
 
+// GetInferenceSpendHistoryAdminPath returns the URL path to the admin service getInferenceSpendHistory HTTP endpoint.
+func GetInferenceSpendHistoryAdminPath() string {
+	return "/admin/organization.inferenceSpendHistory"
+}
+
 // GetPaygBillingSummaryAdminPath returns the URL path to the admin service getPaygBillingSummary HTTP endpoint.
 func GetPaygBillingSummaryAdminPath() string {
 	return "/admin/organization.paygBillingSummary"

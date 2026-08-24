@@ -481,6 +481,31 @@ SELECT
     (now() - INTERVAL '7 days')::timestamptz AS seven_days_ago,
     (now() + INTERVAL '7 days')::timestamptz AS in_seven_days;
 
+-- name: SetOpenRouterAPIKeyCreatedAtFixture :exec
+-- Test-only fixture: places a platform-managed key before a historical spend
+-- range so completeness checks expect every day in that range.
+UPDATE openrouter_api_keys
+SET created_at = @created_at
+WHERE organization_id = @organization_id;
+
+-- name: SeedOpenRouterSpendRangeFixture :exec
+-- Test-only fixture: records one exact daily spend amount across an inclusive
+-- UTC date range.
+INSERT INTO openrouter_spend_daily (organization_id, key_type, day, spend_usd)
+SELECT
+    sqlc.arg(organization_id)::text
+  , sqlc.arg(key_type)::text
+  , day::date
+  , sqlc.arg(spend_usd)::text::numeric(14, 6)
+FROM GENERATE_SERIES(sqlc.arg(start_day)::date, sqlc.arg(end_day)::date, INTERVAL '1 day') AS day;
+
+-- name: DeleteOpenRouterSpendDayFixture :exec
+-- Test-only fixture: creates an incomplete historical month.
+DELETE FROM openrouter_spend_daily
+WHERE organization_id = @organization_id
+  AND key_type = @key_type
+  AND day = @day;
+
 -- name: GetSessionHandoffLinkFixture :one
 -- Test-only inspection of a minted session-handoff link, so tests can assert a
 -- consumed link keeps its burn bookkeeping without keeping the blob pointer.

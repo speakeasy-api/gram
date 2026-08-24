@@ -593,6 +593,26 @@ func BuildGetInferenceKeysPayload(adminGetInferenceKeysOrganizationID string, ad
 	return v, nil
 }
 
+// BuildGetInferenceSpendHistoryPayload builds the payload for the admin
+// getInferenceSpendHistory endpoint from CLI flags.
+func BuildGetInferenceSpendHistoryPayload(adminGetInferenceSpendHistoryOrganizationID string, adminGetInferenceSpendHistoryAdminSessionToken string) (*admin.GetInferenceSpendHistoryPayload, error) {
+	var organizationID string
+	{
+		organizationID = adminGetInferenceSpendHistoryOrganizationID
+	}
+	var adminSessionToken *string
+	{
+		if adminGetInferenceSpendHistoryAdminSessionToken != "" {
+			adminSessionToken = &adminGetInferenceSpendHistoryAdminSessionToken
+		}
+	}
+	v := &admin.GetInferenceSpendHistoryPayload{}
+	v.OrganizationID = organizationID
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildGetPaygBillingSummaryPayload builds the payload for the admin
 // getPaygBillingSummary endpoint from CLI flags.
 func BuildGetPaygBillingSummaryPayload(adminGetPaygBillingSummaryOrganizationID string, adminGetPaygBillingSummaryAdminSessionToken string) (*admin.GetPaygBillingSummaryPayload, error) {

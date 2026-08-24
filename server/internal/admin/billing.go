@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/sync/errgroup"
@@ -71,6 +72,32 @@ func (s *Service) GetInferenceKeys(ctx context.Context, payload *gen.GetInferenc
 		return nil, oops.E(oops.CodeUnexpected, err, "read OpenRouter inference key usage").LogError(ctx, s.logger)
 	}
 
+	return result, nil
+}
+
+func (s *Service) GetInferenceSpendHistory(ctx context.Context, payload *gen.GetInferenceSpendHistoryPayload) ([]*gen.AdminInferenceSpendMonth, error) {
+	organizationID, err := s.canonicalAdminOrganizationID(ctx, payload.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+
+	months, err := usagerepo.New(s.db).ListOpenRouterInferenceSpendByMonth(ctx, usagerepo.ListOpenRouterInferenceSpendByMonthParams{
+		OrganizationID:   organizationID,
+		BillableKeyTypes: openrouter.BillableKeyTypeStrings(),
+		CompletedBefore:  conv.ToPGTimestamptz(time.Now().UTC()),
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list inference spend history").LogError(ctx, s.logger)
+	}
+
+	result := make([]*gen.AdminInferenceSpendMonth, len(months))
+	for index, month := range months {
+		result[index] = &gen.AdminInferenceSpendMonth{
+			PeriodStart: month.PeriodStart,
+			PeriodEnd:   month.PeriodEnd,
+			SpendUsd:    month.SpendUsd,
+		}
+	}
 	return result, nil
 }
 
