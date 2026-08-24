@@ -21,9 +21,11 @@ flowchart LR
   t_gram_otel_v1_inbound_log_record_transformer_dlq(["gram-otel-v1-inbound-log-record-transformer-dlq<br/>(dlq)"]):::dlq
   t_gram_otel_v1_inbound_span(["gram-otel-v1-inbound-span<br/>(topic)"]):::topic
   t_gram_otel_v1_inbound_span_transformer_dlq(["gram-otel-v1-inbound-span-transformer-dlq<br/>(dlq)"]):::dlq
+  t_gram_otel_v1_log_event_ch_writer_dlq(["gram-otel-v1-log-event-ch-writer-dlq<br/>(dlq)"]):::dlq
   t_gram_otel_v1_log_record(["gram-otel-v1-log-record<br/>(topic)"]):::topic
   t_gram_otel_v1_log_relay_dlq(["gram-otel-v1-log-relay-dlq<br/>(dlq)"]):::dlq
   t_gram_otel_v1_span(["gram-otel-v1-span<br/>(topic)"]):::topic
+  t_gram_otel_v1_span_event_ch_writer_dlq(["gram-otel-v1-span-event-ch-writer-dlq<br/>(dlq)"]):::dlq
   t_gram_otel_v1_span_relay_dlq(["gram-otel-v1-span-relay-dlq<br/>(dlq)"]):::dlq
   t_gram_ping_v2_message(["gram-ping-v2-message<br/>(topic)"]):::topic
   t_gram_ping_v2_processor_dlq(["gram-ping-v2-processor-dlq<br/>(dlq)"]):::dlq
@@ -40,7 +42,9 @@ flowchart LR
   s_gram_authz_v1_challenge_ch_writer["gram-authz-v1-challenge-ch-writer<br/>(sub)"]:::sub
   s_gram_otel_v1_inbound_log_record_transformer["gram-otel-v1-inbound-log-record-transformer<br/>(sub)"]:::sub
   s_gram_otel_v1_inbound_span_transformer["gram-otel-v1-inbound-span-transformer<br/>(sub)"]:::sub
+  s_gram_otel_v1_log_event_ch_writer["gram-otel-v1-log-event-ch-writer<br/>(sub)"]:::sub
   s_gram_otel_v1_log_relay["gram-otel-v1-log-relay<br/>(sub)"]:::sub
+  s_gram_otel_v1_span_event_ch_writer["gram-otel-v1-span-event-ch-writer<br/>(sub)"]:::sub
   s_gram_otel_v1_span_relay["gram-otel-v1-span-relay<br/>(sub)"]:::sub
   s_gram_ping_v2_processor["gram-ping-v2-processor<br/>(sub)"]:::sub
   s_gram_ping_v2_py_processor["gram-ping-v2-py-processor<br/>(sub)"]:::sub
@@ -83,8 +87,12 @@ flowchart LR
   s_gram_otel_v1_inbound_log_record_transformer -. dead-letter .-> t_gram_otel_v1_inbound_log_record_transformer_dlq
   t_gram_otel_v1_inbound_span --> s_gram_otel_v1_inbound_span_transformer
   s_gram_otel_v1_inbound_span_transformer -. dead-letter .-> t_gram_otel_v1_inbound_span_transformer_dlq
+  t_gram_otel_v1_log_record --> s_gram_otel_v1_log_event_ch_writer
+  s_gram_otel_v1_log_event_ch_writer -. dead-letter .-> t_gram_otel_v1_log_event_ch_writer_dlq
   t_gram_otel_v1_log_record --> s_gram_otel_v1_log_relay
   s_gram_otel_v1_log_relay -. dead-letter .-> t_gram_otel_v1_log_relay_dlq
+  t_gram_otel_v1_span --> s_gram_otel_v1_span_event_ch_writer
+  s_gram_otel_v1_span_event_ch_writer -. dead-letter .-> t_gram_otel_v1_span_event_ch_writer_dlq
   t_gram_otel_v1_span --> s_gram_otel_v1_span_relay
   s_gram_otel_v1_span_relay -. dead-letter .-> t_gram_otel_v1_span_relay_dlq
   t_gram_ping_v2_message --> s_gram_ping_v2_processor
@@ -142,9 +150,11 @@ flowchart LR
 | [`gram-otel-v1-inbound-log-record-transformer-dlq`](../infra/proto/gram/otel/v1/inbound_log_record_transformer.proto) | DLQ | — | — |
 | [`gram-otel-v1-inbound-span`](../infra/proto/gram/otel/v1/inbound_span.proto) | topic | — | — |
 | [`gram-otel-v1-inbound-span-transformer-dlq`](../infra/proto/gram/otel/v1/inbound_span_transformer.proto) | DLQ | — | — |
+| [`gram-otel-v1-log-event-ch-writer-dlq`](../infra/proto/gram/otel/v1/log_event_ch_writer.proto) | DLQ | — | — |
 | [`gram-otel-v1-log-record`](../infra/proto/gram/otel/v1/log_record.proto) | topic | 7d | — |
 | [`gram-otel-v1-log-relay-dlq`](../infra/proto/gram/otel/v1/log_relay.proto) | DLQ | — | — |
 | [`gram-otel-v1-span`](../infra/proto/gram/otel/v1/span.proto) | topic | 7d | — |
+| [`gram-otel-v1-span-event-ch-writer-dlq`](../infra/proto/gram/otel/v1/span_event_ch_writer.proto) | DLQ | — | — |
 | [`gram-otel-v1-span-relay-dlq`](../infra/proto/gram/otel/v1/span_relay.proto) | DLQ | — | — |
 | [`gram-ping-v2-message`](../infra/proto/gram/ping/v2/ping.proto) | topic | 1d | [`server/internal/ping/publisher.go`](../server/internal/ping/publisher.go) |
 | [`gram-ping-v2-processor-dlq`](../infra/proto/gram/ping/v2/processor.proto) | DLQ | — | — |
@@ -166,7 +176,9 @@ flowchart LR
 | [`gram-authz-v1-challenge-ch-writer`](../infra/proto/gram/authz/v1/challenge_ch_writer.proto) | `gram-authz-v1-challenge` | 1m | `gram-authz-v1-challenge-ch-writer-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-otel-v1-inbound-log-record-transformer`](../infra/proto/gram/otel/v1/inbound_log_record_transformer.proto) | `gram-otel-v1-inbound-log-record` | 1m | `gram-otel-v1-inbound-log-record-transformer-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-otel-v1-inbound-span-transformer`](../infra/proto/gram/otel/v1/inbound_span_transformer.proto) | `gram-otel-v1-inbound-span` | 1m | `gram-otel-v1-inbound-span-transformer-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
+| [`gram-otel-v1-log-event-ch-writer`](../infra/proto/gram/otel/v1/log_event_ch_writer.proto) | `gram-otel-v1-log-record` | 1m | `gram-otel-v1-log-event-ch-writer-dlq` | — |
 | [`gram-otel-v1-log-relay`](../infra/proto/gram/otel/v1/log_relay.proto) | `gram-otel-v1-log-record` | 1m | `gram-otel-v1-log-relay-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
+| [`gram-otel-v1-span-event-ch-writer`](../infra/proto/gram/otel/v1/span_event_ch_writer.proto) | `gram-otel-v1-span` | 1m | `gram-otel-v1-span-event-ch-writer-dlq` | — |
 | [`gram-otel-v1-span-relay`](../infra/proto/gram/otel/v1/span_relay.proto) | `gram-otel-v1-span` | 1m | `gram-otel-v1-span-relay-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-ping-v2-processor`](../infra/proto/gram/ping/v2/processor.proto) | `gram-ping-v2-message` | 30s | `gram-ping-v2-processor-dlq` | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-ping-v2-py-processor`](../infra/proto/gram/ping/v2/processor.proto) | `gram-ping-v2-message` | 30s | `gram-ping-v2-py-processor-dlq` | [`pystreams/src/pystreams/cmd/multi.py`](../pystreams/src/pystreams/cmd/multi.py) |
@@ -185,4 +197,6 @@ flowchart LR
 - Topic `gram-otel-v1-inbound-span` has no publisher in `server/` or `pystreams/`.
 - Topic `gram-otel-v1-log-record` has no publisher in `server/` or `pystreams/`.
 - Topic `gram-otel-v1-span` has no publisher in `server/` or `pystreams/`.
+- Subscription `gram-otel-v1-log-event-ch-writer` has no consumer in `server/` or `pystreams/`.
+- Subscription `gram-otel-v1-span-event-ch-writer` has no consumer in `server/` or `pystreams/`.
 
