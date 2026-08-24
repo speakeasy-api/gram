@@ -1,6 +1,6 @@
 import type { ComponentProps, JSX } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { BuildingIcon, FolderIcon } from "lucide-react";
+import { BuildingIcon, CalculatorIcon, FolderIcon } from "lucide-react";
 import { Link, useLocation, useMatchRoute } from "@tanstack/react-router";
 
 import { NavUser } from "@/components/nav-user";
@@ -24,6 +24,11 @@ import { organizationQuery } from "@/lib/adminQueries";
 const navItems = [
   { to: "/organizations", label: "Organizations", icon: BuildingIcon },
   { to: "/projects", label: "Projects", icon: FolderIcon },
+  {
+    to: "/stoken-calculator",
+    label: "S-token calculator",
+    icon: CalculatorIcon,
+  },
 ] as const;
 
 export function AppSidebar({
