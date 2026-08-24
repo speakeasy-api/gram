@@ -424,7 +424,7 @@ func (s *Service) GetPlugin(ctx context.Context, payload *gen.GetPluginPayload) 
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid plugin id").LogError(ctx, s.logger)
 	}
 
-	plugin, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{
+	pluginRow, err := s.repo.GetPluginWithCounts(ctx, repo.GetPluginWithCountsParams{
 		ID:             pluginID,
 		OrganizationID: ac.ActiveOrganizationID,
 		ProjectID:      *ac.ProjectID,
@@ -450,7 +450,25 @@ func (s *Service) GetPlugin(ctx context.Context, payload *gen.GetPluginPayload) 
 	if err != nil {
 		return nil, err
 	}
-	return pluginToGen(plugin, servers, assignments, compatibility[plugin.Slug]), nil
+
+	plugin := repo.Plugin{
+		ID:             pluginRow.ID,
+		OrganizationID: pluginRow.OrganizationID,
+		ProjectID:      pluginRow.ProjectID,
+		Name:           pluginRow.Name,
+		Slug:           pluginRow.Slug,
+		Description:    pluginRow.Description,
+		IsDefault:      pluginRow.IsDefault,
+		CreatedAt:      pluginRow.CreatedAt,
+		UpdatedAt:      pluginRow.UpdatedAt,
+		DeletedAt:      pluginRow.DeletedAt,
+		Deleted:        pluginRow.Deleted,
+	}
+	result := pluginToGen(plugin, servers, assignments, compatibility[plugin.Slug])
+	result.ServerCount = &pluginRow.ServerCount
+	result.SkillCount = &pluginRow.SkillCount
+	result.AssignmentCount = &pluginRow.AssignmentCount
+	return result, nil
 }
 
 func (s *Service) CreatePlugin(ctx context.Context, payload *gen.CreatePluginPayload) (*gen.Plugin, error) {

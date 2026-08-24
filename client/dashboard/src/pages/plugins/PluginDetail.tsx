@@ -85,6 +85,7 @@ import { PluginSkillsSection } from "./PluginSkillsSection";
 import { PluginAssignmentsList } from "./PluginAssignmentsList";
 import {
   activePluginSection,
+  pluginSectionHref,
   PLUGIN_ASSIGNMENTS_SECTION_ID,
   PLUGIN_OVERVIEW_SECTION_ID,
   PLUGIN_SERVERS_SECTION_ID,
@@ -604,6 +605,11 @@ export default function PluginDetail(): JSX.Element | null {
                   tone="information"
                   format="number"
                   icon="network"
+                  link={pluginSectionHref(
+                    routes,
+                    pluginId!,
+                    PLUGIN_SERVERS_SECTION_ID,
+                  )}
                 />
                 <StatTile
                   title="Skills"
@@ -611,6 +617,11 @@ export default function PluginDetail(): JSX.Element | null {
                   tone="information"
                   format="number"
                   icon="sparkles"
+                  link={pluginSectionHref(
+                    routes,
+                    pluginId!,
+                    PLUGIN_SKILLS_SECTION_ID,
+                  )}
                 />
                 {showAssignments && (
                   <>
@@ -621,6 +632,11 @@ export default function PluginDetail(): JSX.Element | null {
                       format="number"
                       icon="users"
                       subtext="Roles, users, and emails"
+                      link={pluginSectionHref(
+                        routes,
+                        pluginId!,
+                        PLUGIN_ASSIGNMENTS_SECTION_ID,
+                      )}
                     />
                     <StatTile
                       title="Installs"
