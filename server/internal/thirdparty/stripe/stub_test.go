@@ -203,5 +203,5 @@ func TestStubClientInvoiceAllocationsAndMeters(t *testing.T) {
 	}))
 	total, err := c.GetMeterEventSummary(t.Context(), GetMeterEventSummaryInput{CustomerID: "cus_local_org"})
 	require.NoError(t, err)
-	require.Equal(t, 12.0, total)
+	require.InEpsilon(t, 12.0, total, 1e-9)
 }
