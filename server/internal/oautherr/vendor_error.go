@@ -146,14 +146,15 @@ func parseVendorErrorCodeMessageObject(body []byte) (RFC6749Error, bool) {
 	return RFC6749Error{Code: key.Code, Description: message, URI: ""}, true
 }
 
-// splitFlattenedError recognizes vendor free text that begins with an
-// IANA-registered OAuth 2.0 error code, optionally followed by a separator and
-// description ("invalid_grant - Invalid or expired refresh token."). The code
-// must end at a byte outside the IANA registry alphabet so that
+// splitFlattenedError recognizes vendor free text that begins with an OAuth
+// 2.0 error code registered by an IETF RFC, optionally followed by a separator
+// and description ("invalid_grant - Invalid or expired refresh token."). The
+// code must end at a byte outside the IANA registry alphabet so that
 // "invalid_grant_extra" is not read as invalid_grant. The description is the
 // remainder with leading whitespace and "-", ":" or "." separators removed.
-// RFC 6749 §8.5 extension codes are not split out of free text, since an
-// unregistered prefix cannot be told apart from an arbitrary vendor message.
+// Non-IETF registry entries (OpenID Connect, UMA 2.0 and similar) and RFC 6749
+// §8.5 extension codes are not split out of free text, since an unrecognized
+// prefix cannot be told apart from an arbitrary vendor message.
 func splitFlattenedError(s string) (code, description string, ok bool) {
 	s = strings.TrimSpace(s)
 	end := len(s)
