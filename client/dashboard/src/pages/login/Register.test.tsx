@@ -7,11 +7,9 @@ import Register from "./Register";
 const mocks = vi.hoisted(() => ({
   useSearchParams: vi.fn(),
   useSession: vi.fn(),
-  useRoutes: vi.fn(),
 }));
 
 vi.mock("@/contexts/Auth", () => ({ useSession: mocks.useSession }));
-vi.mock("@/routes", () => ({ useRoutes: mocks.useRoutes }));
 vi.mock("react-router", () => ({
   Navigate: ({ to }: { to: string }) => (
     <div data-testid="navigate" data-to={to} />
@@ -34,7 +32,6 @@ function renderAt(path: string) {
 let originalLocation: Location | undefined;
 
 beforeEach(() => {
-  mocks.useRoutes.mockReturnValue({ mcp: { goTo: vi.fn() } });
   originalLocation = window.location;
   // @ts-expect-error test-only location replacement for same-origin URL parsing
   delete window.location;
@@ -84,5 +81,17 @@ describe("Register", () => {
     expect(screen.getByTestId("navigate").getAttribute("data-to")).toBe(
       "/sign-up",
     );
+  });
+
+  it("redirects an authenticated session with an organization to the root", () => {
+    mocks.useSession.mockReturnValue({
+      session: "<SESSION>",
+      activeOrganizationId: "<ORG_ID>",
+    });
+
+    renderAt("/register");
+
+    expect(screen.getByTestId("navigate").getAttribute("data-to")).toBe("/");
+    expect(screen.queryByTestId("register-panel")).toBeNull();
   });
 });

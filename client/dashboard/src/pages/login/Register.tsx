@@ -1,10 +1,8 @@
 import { useSession } from "@/contexts/Auth";
 import { safeSameOriginUrl } from "@/lib/safe-external-url";
-import { useRoutes } from "@/routes";
 import { Navigate, useSearchParams } from "react-router";
 
 export default function Register(): JSX.Element {
-  const routes = useRoutes();
   const session = useSession();
   const [searchParams] = useSearchParams();
 
@@ -27,11 +25,5 @@ export default function Register(): JSX.Element {
     return <Navigate to={signUpTarget} replace />;
   }
 
-  if (redirect) {
-    window.location.href = redirect;
-  } else {
-    routes.mcp.goTo();
-  }
-
-  return <></>;
+  return <Navigate to={redirect ?? "/"} replace />;
 }

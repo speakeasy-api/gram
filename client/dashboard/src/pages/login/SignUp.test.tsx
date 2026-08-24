@@ -5,15 +5,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import SignUp from "./SignUp";
 
 const mocks = vi.hoisted(() => ({
-  locationSetter: vi.fn(),
   useSearchParams: vi.fn(),
   useSession: vi.fn(),
-  useRoutes: vi.fn(),
 }));
 
 vi.mock("@/contexts/Auth", () => ({ useSession: mocks.useSession }));
-vi.mock("@/routes", () => ({ useRoutes: mocks.useRoutes }));
 vi.mock("react-router", () => ({
+  Navigate: ({ to }: { to: string }) => (
+    <div data-testid="navigate" data-to={to} />
+  ),
   useSearchParams: mocks.useSearchParams,
 }));
 vi.mock("./components/auth-shell", () => ({
@@ -31,9 +31,7 @@ vi.mock("./components/register-panel", () => ({
 let originalLocation: Location | undefined;
 
 beforeEach(() => {
-  mocks.locationSetter.mockReset();
   mocks.useSearchParams.mockReturnValue([new URLSearchParams(), vi.fn()]);
-  mocks.useRoutes.mockReturnValue({ mcp: { goTo: vi.fn() } });
   originalLocation = window.location;
   // @ts-expect-error test-only location replacement for redirect assertion
   delete window.location;
@@ -41,9 +39,6 @@ beforeEach(() => {
     configurable: true,
     value: {
       origin: "https://app.example",
-      set href(value: string) {
-        mocks.locationSetter(value);
-      },
     },
   });
 });
@@ -85,7 +80,7 @@ describe("SignUp", () => {
     ).toBe("https://app.example/cli/callback");
   });
 
-  it("returns an authenticated session with an organization to the requested destination", () => {
+  it("redirects an authenticated session with an organization to the requested destination", () => {
     mocks.useSession.mockReturnValue({
       session: "<SESSION>",
       activeOrganizationId: "<ORG_ID>",
@@ -96,8 +91,20 @@ describe("SignUp", () => {
 
     render(<SignUp />);
 
-    expect(mocks.locationSetter).toHaveBeenCalledWith(
+    expect(screen.getByTestId("navigate").getAttribute("data-to")).toBe(
       "https://app.example/projects/default",
     );
+  });
+
+  it("redirects an authenticated session with an organization to the root", () => {
+    mocks.useSession.mockReturnValue({
+      session: "<SESSION>",
+      activeOrganizationId: "<ORG_ID>",
+    });
+
+    render(<SignUp />);
+
+    expect(screen.getByTestId("navigate").getAttribute("data-to")).toBe("/");
+    expect(screen.queryByTestId("register-panel")).toBeNull();
   });
 });
