@@ -110,6 +110,17 @@ func (s *Service) describeConsentToolset(ctx context.Context, endpoint *Resolved
 	return toolset, nil
 }
 
+func (s *Service) toolsetConsentInventoryFilterable(ctx context.Context, endpoint *ResolvedMcpEndpoint) (bool, error) {
+	hasProxy, err := toolsets_repo.New(s.db).ToolsetHasExternalMCPProxy(ctx, toolsets_repo.ToolsetHasExternalMCPProxyParams{
+		ToolsetID: endpoint.ToolsetID.UUID,
+		ProjectID: endpoint.ProjectID,
+	})
+	if err != nil {
+		return false, fmt.Errorf("check toolset for external MCP proxy: %w", err)
+	}
+	return !hasProxy, nil
+}
+
 // trueAnnotationValues lists the vocabulary values whose raw hint is
 // explicitly true — the same axis the runtime matcher applies.
 func trueAnnotationValues(annotations *types.ToolAnnotations) []string {

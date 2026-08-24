@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	externalmcp_types "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -1350,6 +1351,39 @@ func seedConsentChallenge(t *testing.T, ctx context.Context, ti *testInstance, t
 	return stateID, csrfToken
 }
 
+func seedModernConsentChallenge(
+	t *testing.T,
+	ctx context.Context,
+	ti *testInstance,
+	issuerID uuid.UUID,
+	client usersessions_repo.UserSessionClient,
+	mcpServerID uuid.UUID,
+	endpointSlug string,
+) string {
+	t.Helper()
+
+	subject := urn.NewUserSubject(mockidp.MockUserID)
+	stateID := uuid.NewString()
+	require.NoError(t, ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
+		ID:                  stateID,
+		UserSessionIssuerID: issuerID,
+		Endpoint: mcp.EndpointRef{
+			RouteBase:   "x/mcp",
+			McpSlug:     endpointSlug,
+			McpServerID: uuid.NullUUID{UUID: mcpServerID, Valid: true},
+		},
+		ClientID:            client.ClientID,
+		RedirectURI:         client.RedirectUris[0],
+		State:               "client-state",
+		CodeChallenge:       "abc",
+		CodeChallengeMethod: "S256",
+		CSRFToken:           "csrf-" + uuid.NewString(),
+		Subject:             &subject,
+		CreatedAt:           time.Now(),
+	}))
+	return stateID
+}
+
 func consentGetPageWithContext(t *testing.T, ctx context.Context, ti *testInstance, mcpSlug, stateID string) string {
 	t.Helper()
 
@@ -1366,6 +1400,18 @@ func consentGetPageWithContext(t *testing.T, ctx context.Context, ti *testInstan
 func consentGetPage(t *testing.T, ti *testInstance, mcpSlug, stateID string) string {
 	t.Helper()
 	return consentGetPageWithContext(t, t.Context(), ti, mcpSlug, stateID)
+}
+
+func modernConsentGetPage(t *testing.T, ctx context.Context, ti *testInstance, endpointSlug, stateID string) string {
+	t.Helper()
+
+	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, endpointSlug, "x/mcp")
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodGet, "/x/mcp/"+endpointSlug+"/connect?state="+stateID, nil).WithContext(ctx)
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.ServeConsent(w, req, endpoint))
+	require.Equal(t, http.StatusOK, w.Code)
+	return w.Body.String()
 }
 
 func consentApproveButtonTag(t *testing.T, page string) string {
@@ -1385,6 +1431,43 @@ func TestHandleConsentGet_LegacyToolsetUsesAllToolsConsent(t *testing.T) {
 	stateID, _ := seedConsentChallenge(t, ctx, ti, toolset, client)
 
 	page := consentGetPage(t, ti, toolset.McpSlug.String, stateID)
+	require.NotContains(t, page, "consent-tools-root")
+	require.NotContains(t, page, "Tool access")
+	require.NotContains(t, consentApproveButtonTag(t, page), "disabled", "unrestricted consent remains available")
+}
+
+func TestHandleConsentGet_ModernToolsetWithoutProxyShowsToolPicker(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	toolset, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	endpointSlug := "modern-clean-" + uuid.NewString()
+	mcpServer := createToolsetMcpEndpoint(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, endpointSlug, "public", uuid.NullUUID{}, issuer.ID)
+	stateID := seedModernConsentChallenge(t, ctx, ti, issuer.ID, client, mcpServer.ID, endpointSlug)
+
+	page := modernConsentGetPage(t, ctx, ti, endpointSlug, stateID)
+	require.Contains(t, page, "consent-tools-root")
+	require.Contains(t, consentApproveButtonTag(t, page), "disabled", "island owns enabling the approve button")
+}
+
+func TestHandleConsentGet_ModernToolsetWithProxyUsesAllToolsConsent(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	proxyToolset := setupToolsetWithExternalMCP(
+		t,
+		ctx,
+		ti,
+		"https://upstream.invalid/mcp",
+		externalmcp_types.TransportTypeStreamableHTTP,
+		"consent-proxy-"+uuid.NewString()[:8],
+	).toolset
+	endpointSlug := "modern-proxy-" + uuid.NewString()
+	mcpServer := createToolsetMcpEndpoint(t, ctx, ti.conn, proxyToolset.ProjectID, proxyToolset.ID, endpointSlug, "public", uuid.NullUUID{}, issuer.ID)
+	stateID := seedModernConsentChallenge(t, ctx, ti, issuer.ID, client, mcpServer.ID, endpointSlug)
+
+	page := modernConsentGetPage(t, ctx, ti, endpointSlug, stateID)
 	require.NotContains(t, page, "consent-tools-root")
 	require.NotContains(t, page, "Tool access")
 	require.NotContains(t, consentApproveButtonTag(t, page), "disabled", "unrestricted consent remains available")

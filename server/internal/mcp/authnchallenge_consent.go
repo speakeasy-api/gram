@@ -403,18 +403,17 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		}
 	}
 
-	// The picker island renders only for endpoints that offer a per-tool
-	// picker at all — endpointToolSelectionResource is empty for backends
-	// without one (meta-MCP gateways), whose consent transport answers 404 —
-	// and never for legacy toolset-backed endpoints, which support
-	// unrestricted consent only because their proxy tools cannot be filtered
-	// reliably. It also requires tool filtering enabled for the org (an
-	// unavailable checker reads as off). Without the island the approve
-	// button must not depend on it for enabling — the template couples the
-	// two.
+	// Only modern endpoints can author per-tool consent: legacy and meta-MCP
+	// endpoints remain unrestricted-only, and toolset-fronting servers qualify
+	// only when every tool is representable in the island. The island owns
+	// approve-button enabling, so unavailable checks must hide it rather than
+	// prevent unrestricted approval.
 	showToolsIsland := false
-	if !challengeState.FirstParty && endpointToolSelectionResource(endpoint) != "" && !endpoint.ToolsetID.Valid {
+	if !challengeState.FirstParty && endpoint.McpServerID.Valid {
 		showToolsIsland = s.consentToolFilteringEnabled(ctx, logger, endpoint.OrganizationID)
+		if showToolsIsland && endpoint.ToolsetID.Valid {
+			showToolsIsland, _ = s.toolsetConsentInventoryFilterable(ctx, endpoint)
+		}
 	}
 	if showToolsIsland {
 		lockedDown, lerr := s.customDomainLockdownApplies(ctx, logger, endpoint.ProjectID)
