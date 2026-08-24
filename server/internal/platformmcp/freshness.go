@@ -1,7 +1,9 @@
 package platformmcp
 
 import (
+	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 )
@@ -39,12 +41,57 @@ const (
 	DiagnosticWindowLastMonth DiagnosticWindow = "30d"
 )
 
-// DefaultDiagnosticWindow is what an unspecified window resolves to.
-const DefaultDiagnosticWindow = DiagnosticWindowLastDay
+// ErrDiagnosticWindowInvalid is returned for a window outside a tool's closed
+// set. The set differs per tool, so the message names the windows that tool
+// accepts rather than every window the type can express.
+var ErrDiagnosticWindowInvalid = errors.New("unsupported window")
 
-// ErrDiagnosticWindowInvalid is returned for a window outside the closed set.
-var ErrDiagnosticWindowInvalid = fmt.Errorf("window must be one of %s, %s, %s, %s",
-	DiagnosticWindowLastHour, DiagnosticWindowLastDay, DiagnosticWindowLastWeek, DiagnosticWindowLastMonth)
+// windowPolicy is one tool's closed set of windows and the one an unspecified
+// request resolves to. Each tool carries its own: a window that answers "what
+// has this project been doing" is not the window that answers "why is this MCP
+// failing right now", and a diagnosis read over weeks averages a live fault
+// into healthy traffic until the attribution can no longer see it.
+type windowPolicy struct {
+	allowed  []DiagnosticWindow
+	fallback DiagnosticWindow
+}
+
+// overviewWindowPolicy bounds get_project_overview: a project summary is a
+// trend question, so it reaches back a month.
+var overviewWindowPolicy = windowPolicy{
+	allowed: []DiagnosticWindow{
+		DiagnosticWindowLastHour,
+		DiagnosticWindowLastDay,
+		DiagnosticWindowLastWeek,
+		DiagnosticWindowLastMonth,
+	},
+	fallback: DiagnosticWindowLastDay,
+}
+
+// diagnosticsWindowPolicy bounds get_mcp_diagnostics. It is deliberately
+// tighter than the overview's. Fault attribution reasons in ratios — a
+// dominant failure class, and this server's failure rate against the rest of
+// the organization's — and readiness can only exonerate while it is fresh, so
+// a long window pairs a minutes-old probe with weeks of outcomes and dilutes a
+// current fault below every threshold that would have caught it.
+var diagnosticsWindowPolicy = windowPolicy{
+	allowed:  []DiagnosticWindow{DiagnosticWindowLastHour, DiagnosticWindowLastDay},
+	fallback: DiagnosticWindowLastHour,
+}
+
+func (p windowPolicy) permits(window DiagnosticWindow) bool {
+	return slices.Contains(p.allowed, window)
+}
+
+// invalid names the windows this policy accepts, so a refused caller learns
+// what to ask for instead of only that it asked wrongly.
+func (p windowPolicy) invalid() error {
+	names := make([]string, 0, len(p.allowed))
+	for _, window := range p.allowed {
+		names = append(names, string(window))
+	}
+	return fmt.Errorf("%w: window must be one of %s", ErrDiagnosticWindowInvalid, strings.Join(names, ", "))
+}
 
 func (w DiagnosticWindow) duration() (time.Duration, bool) {
 	switch w {
@@ -72,18 +119,19 @@ type ResolvedWindow struct {
 	end   time.Time
 }
 
-// resolveWindow turns a requested window name into the interval to read.
-// An empty request resolves to DefaultDiagnosticWindow; anything outside the
-// closed set is refused rather than silently clamped, so a caller never
-// receives a different window than it believes it asked for.
-func resolveWindow(requested string, now time.Time) (ResolvedWindow, error) {
+// resolveWindow turns a requested window name into the interval to read, under
+// the asking tool's policy. An empty request resolves to that policy's
+// fallback; anything outside its closed set is refused rather than silently
+// clamped, so a caller never receives a different window than it believes it
+// asked for.
+func resolveWindow(requested string, now time.Time, policy windowPolicy) (ResolvedWindow, error) {
 	window := DiagnosticWindow(strings.ToLower(strings.TrimSpace(requested)))
 	if window == "" {
-		window = DefaultDiagnosticWindow
+		window = policy.fallback
 	}
 	duration, ok := window.duration()
-	if !ok {
-		return ResolvedWindow{}, ErrDiagnosticWindowInvalid
+	if !ok || !policy.permits(window) {
+		return ResolvedWindow{}, policy.invalid()
 	}
 	// Truncated to the second the window is advertised at, so the interval a
 	// caller is told about is exactly the interval that was queried. Formatting

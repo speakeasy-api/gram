@@ -48,7 +48,7 @@ func TestGetProjectOverviewOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
-	window, err := resolveWindow("24h", now)
+	window, err := resolveWindow("24h", now, overviewWindowPolicy)
 	require.NoError(t, err)
 
 	output := GetProjectOverviewOutput{
@@ -78,7 +78,7 @@ func TestGetMCPDiagnosticsOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
-	window, err := resolveWindow("7d", now)
+	window, err := resolveWindow("1h", now, diagnosticsWindowPolicy)
 	require.NoError(t, err)
 
 	output := GetMCPDiagnosticsOutput{

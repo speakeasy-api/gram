@@ -23,6 +23,16 @@ const (
 	DiagnosticsOrganizationLimitName = "platform-mcp-diagnostics-organization"
 )
 
+const (
+	// DiagnosticQueriesPerConnectionPerMinute and
+	// DiagnosticQueriesPerOrganizationPerMinute bound the observability reads.
+	// A diagnosis is an interactive loop — an agent asks, narrows, and asks
+	// again — so the allowance is wider than a mutation's, and what it meters
+	// is the ClickHouse scan rather than any external egress.
+	DiagnosticQueriesPerConnectionPerMinute   = 30
+	DiagnosticQueriesPerOrganizationPerMinute = 300
+)
+
 // maxDiagnosticClients bounds the per-client evidence list. Client evidence is
 // self-reported and exists to point at a suspect, not to enumerate a fleet.
 const maxDiagnosticClients = 10
@@ -139,7 +149,7 @@ func (s *DiagnosticsService) GetProjectOverview(ctx context.Context, principal P
 		return GetProjectOverviewOutput{}, err
 	}
 	now := s.now()
-	window, err := resolveWindow(input.Window, now)
+	window, err := resolveWindow(input.Window, now, overviewWindowPolicy)
 	if err != nil {
 		return GetProjectOverviewOutput{}, err
 	}
@@ -240,7 +250,7 @@ func (s *DiagnosticsService) GetProjectOverview(ctx context.Context, principal P
 type GetMCPDiagnosticsInput struct {
 	ProjectID string `json:"project_id" jsonschema:"AICP project ID that owns the MCP"`
 	MCPID     string `json:"mcp_id" jsonschema:"configured MCP ID as returned by find_mcp or get_mcp"`
-	Window    string `json:"window,omitempty" jsonschema:"observation window: 1h, 24h (default), 7d, or 30d"`
+	Window    string `json:"window,omitempty" jsonschema:"observation window: 1h (default) or 24h"`
 }
 
 // MCPOutcomeSummary is a server's calls in the window, already summed per
@@ -303,7 +313,7 @@ func (s *DiagnosticsService) GetMCPDiagnostics(ctx context.Context, principal Pr
 		return GetMCPDiagnosticsOutput{}, err
 	}
 	now := s.now()
-	window, err := resolveWindow(input.Window, now)
+	window, err := resolveWindow(input.Window, now, diagnosticsWindowPolicy)
 	if err != nil {
 		return GetMCPDiagnosticsOutput{}, err
 	}
