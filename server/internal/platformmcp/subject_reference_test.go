@@ -26,7 +26,7 @@ func TestSubjectReference_RoundTripsWithinItsSession(t *testing.T) {
 	now := time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
 	principal := testReferencePrincipal()
 
-	reference, err := codec.Encode(principal, subjectKindUser, "alice@example.com", now)
+	reference, err := codec.Encode(principal, subjectKindUser, FormatSubjectIdentity(SubjectIdentityEmail, "alice@example.com"), now)
 	require.NoError(t, err)
 
 	// Decoded before asserting, because base64 is an encoding and not
@@ -41,7 +41,7 @@ func TestSubjectReference_RoundTripsWithinItsSession(t *testing.T) {
 
 	value, err := codec.Decode(reference, principal, subjectKindUser, now)
 	require.NoError(t, err)
-	require.Equal(t, "alice@example.com", value)
+	require.Equal(t, FormatSubjectIdentity(SubjectIdentityEmail, "alice@example.com"), value)
 }
 
 func TestSubjectReference_Rejected(t *testing.T) {
@@ -52,7 +52,7 @@ func TestSubjectReference_Rejected(t *testing.T) {
 
 	now := time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
 	principal := testReferencePrincipal()
-	reference, err := codec.Encode(principal, subjectKindUser, "alice@example.com", now)
+	reference, err := codec.Encode(principal, subjectKindUser, FormatSubjectIdentity(SubjectIdentityEmail, "alice@example.com"), now)
 	require.NoError(t, err)
 
 	otherOrg := testReferencePrincipal()
@@ -142,7 +142,7 @@ func TestSubjectReference_ForgedSignatureRejected(t *testing.T) {
 	now := time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
 	principal := testReferencePrincipal()
 
-	forged, err := other.Encode(principal, subjectKindUser, "alice@example.com", now)
+	forged, err := other.Encode(principal, subjectKindUser, FormatSubjectIdentity(SubjectIdentityEmail, "alice@example.com"), now)
 	require.NoError(t, err)
 
 	_, err = codec.Decode(forged, principal, subjectKindUser, now)
