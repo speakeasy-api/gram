@@ -24,7 +24,7 @@ import { useRiskListResults } from "@gram/client/react-query/riskListResults.js"
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-export type SecretGuideClient = "claude" | "cursor" | "codex" | "opencode";
+export type SecretGuideClient = "claude" | "cursor" | "codex";
 
 export const SECRET_GUIDE_CLIENTS: Record<
   SecretGuideClient,
@@ -44,11 +44,6 @@ export const SECRET_GUIDE_CLIENTS: Record<
     hookSource: "cursor",
     installDirectory: "~/.cursor/extensions/",
     label: "Cursor",
-  },
-  opencode: {
-    hookSource: "opencode",
-    installDirectory: ".opencode/",
-    label: "OpenCode",
   },
 };
 

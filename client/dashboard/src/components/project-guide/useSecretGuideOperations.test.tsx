@@ -335,11 +335,6 @@ describe("useSecretGuideOperations", () => {
       filename: "observability-codex.zip",
       command: "unzip -oq observability-codex.zip -d ~/.codex/plugins/",
     },
-    {
-      client: "opencode" as const,
-      filename: "observability-opencode.zip",
-      command: "unzip -oq observability-opencode.zip -d .opencode/",
-    },
   ])(
     "activates the generated $client archive through its existing install contract",
     async ({ client, filename, command }) => {

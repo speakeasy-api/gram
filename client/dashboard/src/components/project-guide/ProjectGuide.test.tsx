@@ -66,7 +66,6 @@ vi.mock("./useSecretGuideOperations", () => ({
     claude: { label: "Claude Code", directory: "~/.claude/plugins/" },
     codex: { label: "Codex", directory: "~/.codex/plugins/" },
     cursor: { label: "Cursor", directory: "~/.cursor/extensions/" },
-    opencode: { label: "OpenCode", directory: ".opencode/" },
   },
   useSecretGuideOperations: () => secretOperations.current,
 }));
@@ -175,7 +174,7 @@ function resetSecretOperations(): void {
       'Run this exact command in your shell:\n\necho "GITHUB_TOKEN=ghp_R2D2C3POLuk3Skywalker1234567890ab"',
     retryPolicy: vi.fn(),
     riskEventsHref: "/projects/request-project/security/events",
-    setClient: vi.fn((client: "claude" | "cursor" | "codex" | "opencode") => {
+    setClient: vi.fn((client: "claude" | "cursor" | "codex") => {
       secretOperations.current.client = client;
     }),
     telemetryError: false,
@@ -626,7 +625,7 @@ describe("ProjectGuide", () => {
     secretOperations.current.clientSelected = false;
     secretOperations.current.downloadedFilename = undefined;
     secretOperations.current.setClient = vi.fn(
-      (client: "claude" | "cursor" | "codex" | "opencode") => {
+      (client: "claude" | "cursor" | "codex") => {
         secretOperations.current.client = client;
         secretOperations.current.clientSelected = true;
       },
@@ -1116,7 +1115,7 @@ describe("ProjectGuide", () => {
     expect((action as HTMLButtonElement).disabled).toBe(true);
     expect(screen.queryByRole("alert")).toBeNull();
     expect(handleSignal).not.toHaveBeenCalled();
-    for (const agent of ["Claude Code", "Cursor", "Codex", "OpenCode"]) {
+    for (const agent of ["Claude Code", "Cursor", "Codex"]) {
       expect(
         screen
           .getByRole("button", { name: agent })
@@ -1128,14 +1127,14 @@ describe("ProjectGuide", () => {
     expect(screen.getByText("Sign the bundle")).toBeTruthy();
     expect(screen.getAllByText("not run")).toHaveLength(2);
 
-    fireEvent.click(screen.getByRole("button", { name: "OpenCode" }));
-    expect(secretOperations.current.setClient).toHaveBeenCalledWith("opencode");
+    fireEvent.click(screen.getByRole("button", { name: "Codex" }));
+    expect(secretOperations.current.setClient).toHaveBeenCalledWith("codex");
     secretOperations.current.clientSelected = true;
-    secretOperations.current.client = "opencode";
+    secretOperations.current.client = "codex";
     view.rerender(<ProjectGuide />);
     expect(
       screen
-        .getByRole("button", { name: "OpenCode" })
+        .getByRole("button", { name: "Codex" })
         .getAttribute("aria-pressed"),
     ).toBe("true");
     expect(
