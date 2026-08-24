@@ -56,7 +56,7 @@ const CAP_COPY: Record<InferenceSpendCapKeyType, CapCopy> = {
       "This inference is included in the inference spend on this organization's invoice.",
   },
   chat: {
-    name: "Other inference",
+    name: "Customer-facing inference",
     slug: "other",
     paused:
       "Assistants and the other AI-powered dashboard experiences are paused for the rest of the month. Raise the cap to start them again.",

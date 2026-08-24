@@ -30,7 +30,7 @@ describe("inferenceCapLabel", () => {
   // not those names and must never be what a customer reads.
   it.each<[InferenceSpendCap["keyType"], string]>([
     ["internal", "Security inference cap"],
-    ["chat", "Other inference cap"],
+    ["chat", "Customer-facing inference cap"],
   ])("labels the %s key as %s", (keyType, label) => {
     expect(inferenceCapLabel(keyType)).toBe(label);
   });
@@ -39,7 +39,7 @@ describe("inferenceCapLabel", () => {
 describe("inferenceSpendLabel", () => {
   it.each<[InferenceSpendCap["keyType"], string]>([
     ["internal", "Security inference"],
-    ["chat", "Other inference"],
+    ["chat", "Customer-facing inference"],
   ])("labels the %s key as %s", (keyType, label) => {
     expect(inferenceSpendLabel(keyType)).toBe(label);
   });

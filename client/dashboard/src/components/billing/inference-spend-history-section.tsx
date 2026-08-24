@@ -35,9 +35,12 @@ export function InferenceSpendHistorySection(): JSX.Element {
       <Page.Section.Title area="">Inference spend</Page.Section.Title>
       <Page.Section.Description>
         Monthly spend on the inference Gram runs for this organization.
-        OpenRouter caps reset on the first of the month, so these figures follow
-        the calendar rather than the billing cycle. History is recorded going
-        forward from completed days.
+        Customer-facing inference is assistants and the other AI-powered
+        dashboard experiences. Security inference is the automated analysis
+        Gram runs over this organization's traffic. OpenRouter caps reset on
+        the first of the month, so these figures follow the calendar rather
+        than the billing cycle. History is recorded going forward from
+        completed days.
       </Page.Section.Description>
       <Page.Section.Body>
         <InferenceSpendHistoryTable />

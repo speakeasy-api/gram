@@ -99,6 +99,13 @@ describe("InferenceSpendHistorySection", () => {
     expect(
       screen.getByRole("heading", { name: /inference spend/i }),
     ).toBeTruthy();
+    expect(
+      screen.getByText(
+        /Customer-facing inference is assistants and the other AI-powered dashboard experiences/,
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText("Customer-facing inference")).toBeTruthy();
+    expect(screen.getByText("Security inference")).toBeTruthy();
     expect(screen.getByText("August 2026 (current)")).toBeTruthy();
     expect(screen.getByText("July 2026")).toBeTruthy();
     expect(screen.getByText("$1.50")).toBeTruthy();

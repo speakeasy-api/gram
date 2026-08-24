@@ -85,7 +85,7 @@ import {
 
 const DAY = 24 * 60 * 60 * 1000;
 
-const OTHER_LABEL = "Other inference cap";
+const OTHER_LABEL = "Customer-facing inference cap";
 const SECURITY_LABEL = "Security inference cap";
 
 function cap(overrides: Partial<InferenceSpendCap> = {}): InferenceSpendCap {
@@ -98,7 +98,7 @@ function cap(overrides: Partial<InferenceSpendCap> = {}): InferenceSpendCap {
   };
 }
 
-/** The Other inference key as the API reports it. */
+/** The customer-facing inference key as the API reports it. */
 function otherCap(overrides: Partial<InferenceSpendCap> = {}) {
   return cap({ keyType: "chat", monthlyCredits: 250, ...overrides });
 }
@@ -1625,7 +1625,7 @@ describe("InferenceCapsSection", () => {
       const statuses = screen.getAllByRole("status");
       expect(statuses).toHaveLength(2);
       expect(statuses[0]!.textContent).toMatch(
-        /saved the other inference cap/i,
+        /saved the customer-facing inference cap/i,
       );
       expect(screen.queryByText(/checking your subscription/i)).toBeNull();
       // The lock still holds even though it no longer speaks for itself.
@@ -1642,7 +1642,7 @@ describe("InferenceCapsSection", () => {
 
       expect(screen.queryAllByRole("status")).toHaveLength(0);
       expect(screen.getAllByRole("alert")[0]!.textContent).toMatch(
-        /couldn't save the other inference cap/i,
+        /couldn't save the customer-facing inference cap/i,
       );
       expect(screen.queryByText(/checking your subscription/i)).toBeNull();
     });

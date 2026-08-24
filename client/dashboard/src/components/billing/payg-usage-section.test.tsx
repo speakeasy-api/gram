@@ -305,7 +305,7 @@ describe("PaygUsageSection", () => {
       render(<PaygUsageSection />);
 
       expect(meters().map((node) => node.getAttribute("aria-label"))).toEqual([
-        "Other inference cap: $10.00 of the $100.00 monthly cap",
+        "Customer-facing inference cap: $10.00 of the $100.00 monthly cap",
         "Security inference cap: $20.00 of the $200.00 monthly cap",
       ]);
     });
@@ -317,7 +317,7 @@ describe("PaygUsageSection", () => {
 
       expect(meters()).toHaveLength(1);
       expect(screen.getByText("Security inference cap")).toBeTruthy();
-      expect(screen.queryByText("Other inference cap")).toBeNull();
+      expect(screen.queryByText("Customer-facing inference cap")).toBeNull();
     });
 
     // Nothing is assumed into existence: an empty list means no Gram-managed
@@ -450,7 +450,7 @@ describe("PaygUsageSection", () => {
       const { container } = render(<PaygUsageSection />);
 
       expect(meters()).toHaveLength(0);
-      expect(screen.queryByText("Other inference cap")).toBeNull();
+      expect(screen.queryByText("Customer-facing inference cap")).toBeNull();
       expect(container.querySelector(".skeleton")).toBeNull();
     });
   });

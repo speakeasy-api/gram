@@ -195,7 +195,7 @@ describe("PaygCapReachedBanners", () => {
       POLLING_OPTIONS,
     );
     expect(
-      screen.getByRole("link", { name: /view other inference cap/i }),
+      screen.getByRole("link", { name: /view customer-facing inference cap/i }),
     ).toBeTruthy();
   });
 
@@ -214,7 +214,7 @@ describe("PaygCapReachedBanners", () => {
       screen.getByText(/can't be changed until pay as you go begins/i),
     ).toBeTruthy();
     expect(
-      screen.getByRole("link", { name: /view other inference cap/i }),
+      screen.getByRole("link", { name: /view customer-facing inference cap/i }),
     ).toBeTruthy();
     expect(screen.queryByRole("link", { name: /raise/i })).toBeNull();
   });
@@ -228,7 +228,7 @@ describe("PaygCapReachedBanners", () => {
       screen.getByText(/read-only until.*billing status is confirmed/i),
     ).toBeTruthy();
     expect(
-      screen.getByRole("link", { name: /view other inference cap/i }),
+      screen.getByRole("link", { name: /view customer-facing inference cap/i }),
     ).toBeTruthy();
     expect(screen.queryByRole("link", { name: /raise/i })).toBeNull();
   });
@@ -285,7 +285,7 @@ describe("PaygCapReachedBanners", () => {
   // Each banner names the cap it is about: the caps limit unrelated work, and
   // an admin sent to raise the wrong one has learned nothing.
   it.each<[InferenceSpendCap["keyType"], string, string]>([
-    ["chat", "Other inference cap reached", "other"],
+    ["chat", "Customer-facing inference cap reached", "other"],
     ["internal", "Security inference cap reached", "security"],
   ])("names the %s cap it is reporting", (keyType, title, slug) => {
     inferenceCapsState([cap({ keyType })]);
@@ -305,7 +305,9 @@ describe("PaygCapReachedBanners", () => {
     render(<PaygCapReachedBanners />);
 
     expect(capBanners()).toHaveLength(1);
-    expect(screen.queryByText(/other inference cap reached/i)).toBeNull();
+    expect(
+      screen.queryByText(/customer-facing inference cap reached/i),
+    ).toBeNull();
   });
 
   // A disabled key's inference is already off for reasons the cap had nothing
@@ -364,7 +366,9 @@ describe("PaygCapReachedBanners", () => {
 
     const banners = capBanners();
     expect(banners).toHaveLength(2);
-    expect(banners[0]!.textContent).toMatch(/other inference cap reached/i);
+    expect(banners[0]!.textContent).toMatch(
+      /customer-facing inference cap reached/i,
+    );
     expect(banners[1]!.textContent).toMatch(/security inference cap reached/i);
     expect(capCtaHrefs()).toEqual([
       `/billing#${inferenceCapAnchor("chat")}`,
