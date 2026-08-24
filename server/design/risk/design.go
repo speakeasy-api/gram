@@ -42,7 +42,7 @@ var _ = Service("risk", func() {
 			Attribute("scope_include", String, "CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Omit/empty means all messages are in scope.")
 			Attribute("scope_exempt", String, "CEL exemption predicate: the policy is skipped for a message when this boolean expression is true. Omit/empty means no inline exemption.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
-			Attribute("action", String, "Policy action: flag, warn (challenge), or block.", func() {
+			Attribute("action", String, "Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).", func() {
 				shared.RiskPolicyActionEnum()
 				Default("flag")
 			})
@@ -194,7 +194,7 @@ var _ = Service("risk", func() {
 			Attribute("scope_include", String, "CEL scope predicate (in addition to message_types). Omit to preserve the current value; send empty to clear.")
 			Attribute("scope_exempt", String, "CEL exemption predicate. Omit to preserve the current value; send empty to clear.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
-			Attribute("action", String, "Policy action: flag, warn (challenge), or block.", func() {
+			Attribute("action", String, "Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).", func() {
 				shared.RiskPolicyActionEnum()
 			})
 			Attribute("audience_type", String, "Policy audience type: everyone or targeted. Omit to preserve the current audience type.", func() {
@@ -265,6 +265,61 @@ var _ = Service("risk", func() {
 		Meta("openapi:operationId", "deleteRiskPolicy")
 		Meta("openapi:extension:x-speakeasy-group", "risk.policies")
 		Meta("openapi:extension:x-speakeasy-name-override", "delete")
+	})
+
+	Method("listSessionQuarantines", func() {
+		Description("List active session quarantines for the current project.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListSessionQuarantinesResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.listSessionQuarantines")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listSessionQuarantines")
+		Meta("openapi:extension:x-speakeasy-group", "risk.sessionQuarantines")
+		Meta("openapi:extension:x-speakeasy-name-override", "listSessionQuarantines")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListSessionQuarantines"}`)
+	})
+
+	Method("releaseSessionQuarantine", func() {
+		Description("Release an active session quarantine.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The session quarantine ID.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+		})
+
+		Result(SessionQuarantine)
+
+		HTTP(func() {
+			POST("/rpc/risk.releaseSessionQuarantine")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Body(SessionQuarantineReleaseRequestBody)
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "releaseSessionQuarantine")
+		Meta("openapi:extension:x-speakeasy-group", "risk.sessionQuarantines")
+		Meta("openapi:extension:x-speakeasy-name-override", "releaseSessionQuarantine")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskReleaseSessionQuarantine", "type": "mutation"}`)
 	})
 
 	Method("listRiskResults", func() {
@@ -1973,6 +2028,15 @@ var RiskIDRequestBody = Type("RiskIDRequestBody", func() {
 	Required("id")
 })
 
+var SessionQuarantineReleaseRequestBody = Type("SessionQuarantineReleaseRequestBody", func() {
+	Meta("openapi:typename", "SessionQuarantineReleaseRequestBody")
+
+	Attribute("id", String, "The session quarantine ID.", func() {
+		Format(FormatUUID)
+	})
+	Required("id")
+})
+
 var RiskPolicyBypassApprovalRequestBody = Type("RiskPolicyBypassApprovalRequestBody", func() {
 	Meta("openapi:typename", "RiskPolicyBypassApprovalRequestBody")
 
@@ -1986,6 +2050,36 @@ var RiskPolicyBypassApprovalRequestBody = Type("RiskPolicyBypassApprovalRequestB
 var ListRiskPolicyBypassRequestsResult = Type("ListRiskPolicyBypassRequestsResult", func() {
 	Attribute("requests", ArrayOf(RiskPolicyBypassRequest), "Current risk policy bypass request records.")
 	Required("requests")
+})
+
+var SessionQuarantine = Type("SessionQuarantine", func() {
+	Attribute("id", String, "The session quarantine ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("organization_id", String, "The organization ID.")
+	Attribute("project_id", String, "The project ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("session_id", String, "The hook conversation ID that is quarantined.")
+	Attribute("risk_policy_id", String, "The risk policy that opened the quarantine, when still available.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("risk_policy_name", String, "The risk policy name captured when the quarantine opened.")
+	Attribute("user_id", String, "The user whose hook event opened the quarantine.")
+	Attribute("reason", String, "The deny reason captured when the quarantine opened.")
+	Attribute("created_at", String, "When the quarantine opened.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("released_at", String, "When the quarantine was released.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("released_by", String, "The user who released the quarantine.")
+	Required("id", "organization_id", "project_id", "session_id", "risk_policy_name", "user_id", "reason", "created_at")
+})
+
+var ListSessionQuarantinesResult = Type("ListSessionQuarantinesResult", func() {
+	Attribute("quarantines", ArrayOf(SessionQuarantine), "Active session quarantines.")
+	Required("quarantines")
 })
 
 var RiskSignalTopUser = Type("RiskSignalTopUser", func() {

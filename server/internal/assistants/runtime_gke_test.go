@@ -150,6 +150,43 @@ func TestGKERunTurnPostsToRunner(t *testing.T) {
 	require.Equal(t, "jwt-token", gotBody.AuthToken)
 }
 
+func TestGKEInterruptTurnPostsToRunner(t *testing.T) {
+	t.Parallel()
+
+	assistantID := uuid.New()
+	threadID := uuid.New()
+	var gotPath, gotMethod string
+	doer, host, port := testRunner(t, func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotMethod = r.Method
+		_ = json.NewEncoder(w).Encode(runnerInterruptResponse{Interrupted: true})
+	})
+
+	backend := newTestGKEBackend(t, newGKEFakeDynamic(), doer, port)
+	interrupted, err := backend.InterruptTurn(t.Context(), gkeRecord(t, backend, assistantID, host), threadID)
+	require.NoError(t, err)
+	require.True(t, interrupted)
+	// One pod serves every thread under the assistant, so the thread has to be
+	// in the path — an interrupt that lost it would stop an arbitrary turn.
+	require.Equal(t, "/threads/"+threadID.String()+"/interrupt", gotPath)
+	require.Equal(t, http.MethodPost, gotMethod)
+}
+
+// A runner that answers "nothing to stop" is reporting an outcome, not
+// failing: the turn finished, or never reached this pod.
+func TestGKEInterruptTurnReportsNoLiveTurn(t *testing.T) {
+	t.Parallel()
+
+	doer, host, port := testRunner(t, func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(runnerInterruptResponse{Interrupted: false})
+	})
+
+	backend := newTestGKEBackend(t, newGKEFakeDynamic(), doer, port)
+	interrupted, err := backend.InterruptTurn(t.Context(), gkeRecord(t, backend, uuid.New(), host), uuid.New())
+	require.NoError(t, err)
+	require.False(t, interrupted)
+}
+
 func TestGKEStatusReadsRunnerState(t *testing.T) {
 	t.Parallel()
 

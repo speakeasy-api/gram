@@ -1301,6 +1301,7 @@ type MetaMcpServer struct {
 	ProjectID           uuid.UUID
 	UserSessionIssuerID uuid.NullUUID
 	Name                string
+	Visibility          string
 	CreatedAt           pgtype.Timestamptz
 	UpdatedAt           pgtype.Timestamptz
 	DeletedAt           pgtype.Timestamptz
@@ -2291,6 +2292,21 @@ type SessionHandoffLink struct {
 	ConsumedAt     pgtype.Timestamptz
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
+}
+
+type SessionQuarantine struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	SessionID      string
+	RiskPolicyID   uuid.NullUUID
+	RiskPolicyName string
+	UserID         string
+	Reason         string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	ReleasedAt     pgtype.Timestamptz
+	ReleasedBy     pgtype.Text
 }
 
 type Skill struct {

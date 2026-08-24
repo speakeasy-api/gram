@@ -370,7 +370,7 @@ func (s *OAuthHTTP) organizationSelectionGet(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	s.renderOAuthPage(w, oauthPageData{
-		Title:         "Choose an organization · Speakeasy AICP Platform MCP",
+		Title:         "Choose an organization · Platform MCP",
 		Kind:          "organization",
 		ClientName:    client.Name,
 		Organizations: organizations,
@@ -443,7 +443,7 @@ func (s *OAuthHTTP) selectedOrganization(ctx context.Context, challenge oauthCha
 func (s *OAuthHTTP) ProviderSetupCompleteHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		s.renderOAuthPage(w, oauthPageData{
-			Title:     "Provider connected · Speakeasy AICP Platform MCP",
+			Title:     "Provider connected · Platform MCP",
 			Kind:      "provider-complete",
 			AutoClose: true,
 		})
@@ -481,7 +481,7 @@ func (s *OAuthHTTP) connectGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.renderOAuthPage(w, oauthPageData{
-		Title:            "Connect Platform MCP · Speakeasy AICP Platform MCP",
+		Title:            "Connect Platform MCP",
 		Kind:             "connect",
 		ClientName:       client.Name,
 		OrganizationName: organization.Name,

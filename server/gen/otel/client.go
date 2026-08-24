@@ -16,15 +16,21 @@ import (
 
 // Client is the "otel" service client.
 type Client struct {
-	LogsEndpoint   goa.Endpoint
-	TracesEndpoint goa.Endpoint
+	LogsEndpoint           goa.Endpoint
+	TracesEndpoint         goa.Endpoint
+	ListEventLogEndpoint   goa.Endpoint
+	GetEventVolumeEndpoint goa.Endpoint
+	GetEventFacetsEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "otel" service client given the endpoints.
-func NewClient(logs, traces goa.Endpoint) *Client {
+func NewClient(logs, traces, listEventLog, getEventVolume, getEventFacets goa.Endpoint) *Client {
 	return &Client{
-		LogsEndpoint:   logs,
-		TracesEndpoint: traces,
+		LogsEndpoint:           logs,
+		TracesEndpoint:         traces,
+		ListEventLogEndpoint:   listEventLog,
+		GetEventVolumeEndpoint: getEventVolume,
+		GetEventFacetsEndpoint: getEventFacets,
 	}
 }
 
@@ -62,4 +68,70 @@ func (c *Client) Logs(ctx context.Context, p *LogsPayload, req io.ReadCloser) (e
 func (c *Client) Traces(ctx context.Context, p *TracesPayload, req io.ReadCloser) (err error) {
 	_, err = c.TracesEndpoint(ctx, &TracesRequestData{Payload: p, Body: req})
 	return
+}
+
+// ListEventLog calls the "listEventLog" endpoint of the "otel" service.
+// ListEventLog may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListEventLog(ctx context.Context, p *ListEventLogPayload) (res *ListEventLogResult, err error) {
+	var ires any
+	ires, err = c.ListEventLogEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListEventLogResult), nil
+}
+
+// GetEventVolume calls the "getEventVolume" endpoint of the "otel" service.
+// GetEventVolume may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetEventVolume(ctx context.Context, p *GetEventVolumePayload) (res *GetEventVolumeResult, err error) {
+	var ires any
+	ires, err = c.GetEventVolumeEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*GetEventVolumeResult), nil
+}
+
+// GetEventFacets calls the "getEventFacets" endpoint of the "otel" service.
+// GetEventFacets may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetEventFacets(ctx context.Context, p *GetEventFacetsPayload) (res *GetEventFacetsResult, err error) {
+	var ires any
+	ires, err = c.GetEventFacetsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*GetEventFacetsResult), nil
 }

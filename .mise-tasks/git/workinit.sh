@@ -33,16 +33,21 @@ copy_from_main=(
 
 for item in "${copy_from_main[@]}"; do
   src="${main_worktree}/${item}"
-  [ -e "$src" ] && rsync -a "$src" .
+  [ -e "$src" ] || continue
+  if [ -d "$src" ]; then
+    tools/rclone copy --metadata --links --create-empty-src-dirs "$src" "$item"
+  else
+    tools/rclone copyto --metadata --links "$src" "$item"
+  fi
 done
 
 # Seed the custom linter so lint:server can reuse it when build inputs match.
 gcl="${main_worktree}/server/bin/gcl"
 if [ -x "$gcl" ]; then
   mkdir -p "${current_worktree}/server/bin"
-  rsync -a "$gcl" "${current_worktree}/server/bin/"
+  tools/rclone copyto --metadata "$gcl" "${current_worktree}/server/bin/gcl"
   if [ -f "${gcl}.fingerprint" ]; then
-    rsync -a "${gcl}.fingerprint" "${current_worktree}/server/bin/"
+    tools/rclone copyto --metadata "${gcl}.fingerprint" "${current_worktree}/server/bin/gcl.fingerprint"
   fi
 fi
 

@@ -17,7 +17,7 @@ const (
 	ProviderKey           = "local-fixture"
 	CanonicalRef          = "local-fixture/reviewed-mcp"
 	SetupIntent           = "provider_setup"
-	OAuthClientName       = "Speakeasy AICP Platform MCP local fixture"
+	OAuthClientName       = "Platform MCP local fixture"
 	SetupGuideVersion     = "local-fixture-v1"
 	fixtureOAuthPath      = "platform-mcp/local-fixture"
 	fixtureIssuerSlug     = "platform-mcp-local-fixture"
@@ -185,7 +185,7 @@ func (c *Config) SetupResources() []platformmcp.SetupResource {
 		// same citation a real guide carries, rather than a shape that only
 		// exists in the fixture.
 		Text: "# Local fixture provider setup\n\n" +
-			"- Owner: Speakeasy AICP Platform MCP\n" +
+			"- Owner: Platform MCP\n" +
 			"- Source: " + SetupGuideVersion + " (synthetic local fixture; never fetched at request time)\n" +
 			"- Observed: " + observedAt.Format(time.DateOnly) + "\n" +
 			"- Revalidate by: " + observedAt.AddDate(0, 0, 90).Format(time.DateOnly) + "\n" +
@@ -194,7 +194,7 @@ func (c *Config) SetupResources() []platformmcp.SetupResource {
 
 		Provider:     ProviderKey,
 		Intent:       SetupIntent,
-		Owner:        "Speakeasy AICP Platform MCP",
+		Owner:        "Platform MCP",
 		Source:       SetupGuideVersion,
 		ObservedAt:   observedAt,
 		RevalidateBy: observedAt.AddDate(0, 0, 90),

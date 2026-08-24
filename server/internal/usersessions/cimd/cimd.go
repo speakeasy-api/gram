@@ -2,7 +2,7 @@
 // Documents (draft-ietf-oauth-client-id-metadata-document-02): resolving a
 // URL-shaped client_id presented to the user-session authorization server by
 // fetching the document it names, parsing it, and validating it against the
-// spec's rules plus Gram's own origin-binding policy.
+// spec's rules plus this server's own policy rules.
 //
 // The Resolver owns the fetch lifecycle, its cache policy, and its telemetry
 // (metrics + logs) but deliberately not persistence: the caller passes in the
@@ -153,8 +153,9 @@ type Document struct {
 	LogoURI string `json:"logo_uri"`
 
 	// RedirectURIs is the registered redirect set. Required; each entry
-	// must pass the standard redirect-URI scheme rules plus Gram's
-	// same-origin binding with the loopback exception.
+	// must be an https URL or an RFC 8252 loopback http URL. Entries on a
+	// different origin than the client_id URL are accepted but observed
+	// through the cimd.redirect_uris.cross_origin counter.
 	RedirectURIs []string `json:"redirect_uris"`
 
 	// ResponseTypes is parsed but not enforced, for the same reason as
@@ -239,11 +240,12 @@ func newFetchClientFrom(base *guardian.HTTPClient) *guardian.HTTPClient {
 // AS imposes: -02 §3 URL syntax, §4 triple client_id equality (the fetch never
 // follows redirects, so the fetched URL is the presented URL by
 // construction), required client_name + redirect_uris, public-client-only
-// auth method, secret/private-key bans, and Gram's same-origin redirect-URI
-// binding. Those checks run against the document as fetched, so a cached row
-// carries the verdict of the validation code that was deployed when it was
-// last refreshed: tightening a rule in validate.go does not re-reject a
-// cached client until its TTL lapses, up to maxCacheTTL later. Callers that
+// auth method, secret/private-key bans, and the https-or-loopback
+// redirect-URI scheme rule. Those checks run against the document as
+// fetched, so a cached row carries the verdict of the validation code that
+// was deployed when it was last refreshed: tightening a rule in validate.go
+// does not re-reject a cached client until its TTL lapses, up to maxCacheTTL
+// later. Callers that
 // need a rule applied sooner must purge their stored cache state, which
 // forces the next resolve to fetch and re-validate a full document.
 func (r *Resolver) Resolve(ctx context.Context, clientID string, cache CacheState) (*CacheResult, error) {
@@ -280,15 +282,16 @@ func (r *Resolver) inspect(ctx context.Context, clientID string, cache CacheStat
 		// not parse or failed syntax rules), so the origin attribute and the
 		// duration histogram are both deliberately omitted.
 		r.observe(ctx, resolveObservation{
-			clientID:      clientID,
-			origin:        "",
-			result:        fetchResultValidationError,
-			reason:        validationReasonOf(err),
-			status:        0,
-			duration:      0,
-			fetched:       false,
-			responseBytes: 0,
-			err:           err,
+			clientID:                   clientID,
+			origin:                     "",
+			result:                     fetchResultValidationError,
+			reason:                     validationReasonOf(err),
+			status:                     0,
+			duration:                   0,
+			fetched:                    false,
+			responseBytes:              0,
+			crossOriginRedirectOrigins: nil,
+			err:                        err,
 		})
 		return inspection{
 			Document:        nil,
@@ -310,15 +313,16 @@ func (r *Resolver) inspect(ctx context.Context, clientID string, cache CacheStat
 	// reject.
 	if !cache.ExpiresAt.IsZero() && cache.ExpiresAt.After(time.Now()) {
 		r.observe(ctx, resolveObservation{
-			clientID:      clientID,
-			origin:        origin,
-			result:        fetchResultCached,
-			reason:        "",
-			status:        0,
-			duration:      0,
-			fetched:       false,
-			responseBytes: 0,
-			err:           nil,
+			clientID:                   clientID,
+			origin:                     origin,
+			result:                     fetchResultCached,
+			reason:                     "",
+			status:                     0,
+			duration:                   0,
+			fetched:                    false,
+			responseBytes:              0,
+			crossOriginRedirectOrigins: nil,
+			err:                        nil,
 		})
 		return inspection{
 			Document:        nil,
@@ -342,15 +346,16 @@ func (r *Resolver) inspect(ctx context.Context, clientID string, cache CacheStat
 	fetched, err := r.fetchDocument(ctx, origin, clientID, cache.ETag)
 	if err != nil {
 		r.observe(ctx, resolveObservation{
-			clientID:      clientID,
-			origin:        origin,
-			result:        fetchResultFetchError,
-			reason:        "",
-			status:        fetched.status,
-			duration:      time.Since(start),
-			fetched:       true,
-			responseBytes: 0,
-			err:           err,
+			clientID:                   clientID,
+			origin:                     origin,
+			result:                     fetchResultFetchError,
+			reason:                     "",
+			status:                     fetched.status,
+			duration:                   time.Since(start),
+			fetched:                    true,
+			responseBytes:              0,
+			crossOriginRedirectOrigins: nil,
+			err:                        err,
 		})
 		return inspection{
 			Document:        nil,
@@ -368,15 +373,16 @@ func (r *Resolver) inspect(ctx context.Context, clientID string, cache CacheStat
 
 	if fetched.notModified {
 		r.observe(ctx, resolveObservation{
-			clientID:      clientID,
-			origin:        origin,
-			result:        fetchResultConditionalNotModified,
-			reason:        "",
-			status:        fetched.status,
-			duration:      time.Since(start),
-			fetched:       true,
-			responseBytes: 0,
-			err:           nil,
+			clientID:                   clientID,
+			origin:                     origin,
+			result:                     fetchResultConditionalNotModified,
+			reason:                     "",
+			status:                     fetched.status,
+			duration:                   time.Since(start),
+			fetched:                    true,
+			responseBytes:              0,
+			crossOriginRedirectOrigins: nil,
+			err:                        nil,
 		})
 		// RFC 9110 §15.4.5 lets a 304 carry a new validator, and a cache
 		// that ignores one revalidates against a superseded ETag forever.
@@ -418,15 +424,16 @@ func (r *Resolver) inspect(ctx context.Context, clientID string, cache CacheStat
 	var doc Document
 	if err := json.Unmarshal(body, &doc); err != nil {
 		r.observe(ctx, resolveObservation{
-			clientID:      clientID,
-			origin:        origin,
-			result:        fetchResultParseError,
-			reason:        "",
-			status:        status,
-			duration:      time.Since(start),
-			fetched:       true,
-			responseBytes: len(body),
-			err:           err,
+			clientID:                   clientID,
+			origin:                     origin,
+			result:                     fetchResultParseError,
+			reason:                     "",
+			status:                     status,
+			duration:                   time.Since(start),
+			fetched:                    true,
+			responseBytes:              len(body),
+			crossOriginRedirectOrigins: nil,
+			err:                        err,
 		})
 		return inspection{
 			Document:        nil,
@@ -442,17 +449,19 @@ func (r *Resolver) inspect(ctx context.Context, clientID string, cache CacheStat
 		}
 	}
 
-	if err := validateDocument(&doc, clientID, clientIDURL); err != nil {
+	findings, err := validateDocument(&doc, clientID, clientIDURL)
+	if err != nil {
 		r.observe(ctx, resolveObservation{
-			clientID:      clientID,
-			origin:        origin,
-			result:        fetchResultValidationError,
-			reason:        validationReasonOf(err),
-			status:        status,
-			duration:      time.Since(start),
-			fetched:       true,
-			responseBytes: len(body),
-			err:           err,
+			clientID:                   clientID,
+			origin:                     origin,
+			result:                     fetchResultValidationError,
+			reason:                     validationReasonOf(err),
+			status:                     status,
+			duration:                   time.Since(start),
+			fetched:                    true,
+			responseBytes:              len(body),
+			crossOriginRedirectOrigins: nil,
+			err:                        err,
 		})
 		return inspection{
 			Document:        nil,
@@ -469,15 +478,16 @@ func (r *Resolver) inspect(ctx context.Context, clientID string, cache CacheStat
 	}
 
 	r.observe(ctx, resolveObservation{
-		clientID:      clientID,
-		origin:        origin,
-		result:        fetchResultSuccess,
-		reason:        "",
-		status:        status,
-		duration:      time.Since(start),
-		fetched:       true,
-		responseBytes: len(body),
-		err:           nil,
+		clientID:                   clientID,
+		origin:                     origin,
+		result:                     fetchResultSuccess,
+		reason:                     "",
+		status:                     status,
+		duration:                   time.Since(start),
+		fetched:                    true,
+		responseBytes:              len(body),
+		crossOriginRedirectOrigins: findings.crossOriginRedirectOrigins,
+		err:                        nil,
 	})
 	return inspection{
 		Document:        &doc,
@@ -507,7 +517,14 @@ type resolveObservation struct {
 	// read; log-only (the cimd.fetch.response_size histogram is recorded
 	// inside fetchDocument, where the cap-hit case is also visible).
 	responseBytes int
-	err           error
+
+	// crossOriginRedirectOrigins is the validator's cross-origin finding for
+	// a document that passed validation; nil on every other result. The
+	// origins go to the log line only — the counter they trigger carries
+	// just the bounded client_id origin.
+	crossOriginRedirectOrigins []string
+
+	err error
 }
 
 func (r *Resolver) observe(ctx context.Context, o resolveObservation) {
@@ -517,6 +534,9 @@ func (r *Resolver) observe(ctx context.Context, o resolveObservation) {
 	}
 	if o.result == fetchResultValidationError {
 		r.metrics.RecordValidationFailure(ctx, o.reason)
+	}
+	if len(o.crossOriginRedirectOrigins) > 0 {
+		r.metrics.RecordCrossOriginRedirects(ctx, o.origin)
 	}
 
 	// The client_id is attacker-chosen on an unauthenticated surface and, on
@@ -545,6 +565,9 @@ func (r *Resolver) observe(ctx context.Context, o resolveObservation) {
 	}
 	if o.reason != "" {
 		logAttrs = append(logAttrs, attr.SlogCIMDValidationReason(o.reason))
+	}
+	if len(o.crossOriginRedirectOrigins) > 0 {
+		logAttrs = append(logAttrs, attr.SlogCIMDCrossOriginRedirectOrigins(o.crossOriginRedirectOrigins))
 	}
 	if o.err != nil {
 		logAttrs = append(logAttrs, attr.SlogError(o.err))

@@ -21,7 +21,9 @@ type statsFixture struct {
 	// disabled is the age of disabled_at at seed time; zero leaves the
 	// organization active.
 	disabled time.Duration
-	trial    *trialFixture
+	// accountType is the organization's gram_account_type; empty seeds free.
+	accountType string
+	trial       *trialFixture
 }
 
 func seedStatsCorpus(t *testing.T, ctx context.Context, conn *pgxpool.Pool, corpus []statsFixture) {
@@ -41,6 +43,7 @@ func seedStatsCorpus(t *testing.T, ctx context.Context, conn *pgxpool.Pool, corp
 			id:          f.id,
 			name:        "Org " + f.id,
 			slug:        f.id,
+			accountType: f.accountType,
 			whitelisted: true,
 			disabledAt:  disabledAt,
 			createdAt:   &createdAt,
@@ -54,8 +57,8 @@ func seedStatsCorpus(t *testing.T, ctx context.Context, conn *pgxpool.Pool, corp
 	}
 }
 
-// TestGetOrganizationStats_Counts pins all five figures against one corpus in a
-// single assertion. No two of the five are equal, so a handler that deals two
+// TestGetOrganizationStats_Counts pins all seven figures against one corpus in a
+// single assertion. No two of the seven are equal, so a handler that deals two
 // fields out in the wrong order cannot pass by matching a neighbour's value.
 func TestGetOrganizationStats_Counts(t *testing.T) {
 	t.Parallel()
@@ -68,22 +71,27 @@ func TestGetOrganizationStats_Counts(t *testing.T) {
 
 	corpus := []statsFixture{
 		// Active, never trialled. Two old, three inside the created window.
-		{id: "org_stats_old_a", created: -60 * 24 * time.Hour},
-		{id: "org_stats_old_b", created: -90 * 24 * time.Hour},
-		{id: "org_stats_new_a", created: -2 * 24 * time.Hour},
-		{id: "org_stats_new_b", created: -5 * 24 * time.Hour},
+		// Account types are spread over the corpus: a customer count that
+		// only looked at one of payg or enterprise, or that dropped disabled
+		// customers, reads short of the six below. The one customer inside the
+		// created window is a disabled one, so customers_created_last_7_days
+		// cannot pass by counting active customers only.
+		{id: "org_stats_old_a", created: -60 * 24 * time.Hour, accountType: "enterprise"},
+		{id: "org_stats_old_b", created: -90 * 24 * time.Hour, accountType: "payg"},
+		{id: "org_stats_new_a", created: -2 * 24 * time.Hour, accountType: "pro"},
+		{id: "org_stats_new_b", created: -5 * 24 * time.Hour, accountType: "pro"},
 		{id: "org_stats_new_c", created: -6 * 24 * time.Hour},
 
 		// Disabled. The second is also inside the created window, so a
 		// created count that excludes disabled organizations reads one short.
-		{id: "org_stats_disabled_recent_a", created: -60 * 24 * time.Hour, disabled: -24 * time.Hour},
-		{id: "org_stats_disabled_recent_b", created: -3 * 24 * time.Hour, disabled: -2 * 24 * time.Hour},
+		{id: "org_stats_disabled_recent_a", created: -60 * 24 * time.Hour, disabled: -24 * time.Hour, accountType: "enterprise"},
+		{id: "org_stats_disabled_recent_b", created: -3 * 24 * time.Hour, disabled: -2 * 24 * time.Hour, accountType: "payg"},
 		// Disabled long ago but created long ago too, so counting
 		// disabled_last_7_days off created_at cannot accidentally agree.
-		{id: "org_stats_disabled_old", created: -200 * 24 * time.Hour, disabled: -30 * 24 * time.Hour},
+		{id: "org_stats_disabled_old", created: -200 * 24 * time.Hour, disabled: -30 * 24 * time.Hour, accountType: "pro"},
 
 		// Trials that are ending soon.
-		{id: "org_stats_trial_soon_a", created: -40 * 24 * time.Hour, trial: &trialFixture{endsAt: now.Add(2 * 24 * time.Hour)}},
+		{id: "org_stats_trial_soon_a", created: -40 * 24 * time.Hour, accountType: "enterprise", trial: &trialFixture{endsAt: now.Add(2 * 24 * time.Hour)}},
 		{id: "org_stats_trial_soon_b", created: -4 * 24 * time.Hour, trial: &trialFixture{endsAt: now.Add(6 * 24 * time.Hour)}},
 		{id: "org_stats_trial_soon_c", created: -40 * 24 * time.Hour, trial: &trialFixture{endsAt: now.Add(5 * 24 * time.Hour)}},
 		{id: "org_stats_trial_soon_d", created: -40 * 24 * time.Hour, trial: &trialFixture{endsAt: now.Add(24 * time.Hour)}},
@@ -93,7 +101,7 @@ func TestGetOrganizationStats_Counts(t *testing.T) {
 		{id: "org_stats_trial_converted", created: -40 * 24 * time.Hour, trial: &trialFixture{endsAt: now.Add(3 * 24 * time.Hour), convertedAt: &convertedAt}},
 		{id: "org_stats_trial_demoted", created: -40 * 24 * time.Hour, trial: &trialFixture{endsAt: now.Add(3 * 24 * time.Hour), demotedAt: &demotedAt}},
 		{id: "org_stats_trial_expired", created: -40 * 24 * time.Hour, trial: &trialFixture{endsAt: now.Add(-24 * time.Hour)}},
-		{id: "org_stats_trial_running", created: -40 * 24 * time.Hour, trial: &trialFixture{endsAt: now.Add(30 * 24 * time.Hour)}},
+		{id: "org_stats_trial_running", created: -40 * 24 * time.Hour, accountType: "payg", trial: &trialFixture{endsAt: now.Add(30 * 24 * time.Hour)}},
 	}
 
 	seedStatsCorpus(t, ctx, conn, corpus)
@@ -103,11 +111,13 @@ func TestGetOrganizationStats_Counts(t *testing.T) {
 	require.NotNil(t, res)
 
 	require.Equal(t, &gen.AdminOrganizationStats{
-		Total:             16,
-		CreatedLast7Days:  5,
-		TrialsEndingSoon:  4,
-		Disabled:          3,
-		DisabledLast7Days: 2,
+		Total:                     16,
+		CreatedLast7Days:          5,
+		Customers:                 6,
+		CustomersCreatedLast7Days: 1,
+		TrialsEndingSoon:          4,
+		Disabled:                  3,
+		DisabledLast7Days:         2,
 	}, res)
 }
 
@@ -159,7 +169,7 @@ func TestGetOrganizationStats_IgnoresFilters(t *testing.T) {
 
 	now := time.Now().UTC()
 	seedStatsCorpus(t, ctx, conn, []statsFixture{
-		{id: "org_filterproof_active", created: -2 * 24 * time.Hour},
+		{id: "org_filterproof_active", created: -2 * 24 * time.Hour, accountType: "payg"},
 		{id: "org_filterproof_disabled", created: -60 * 24 * time.Hour, disabled: -24 * time.Hour},
 		{id: "org_filterproof_soon", created: -60 * 24 * time.Hour, trial: &trialFixture{endsAt: now.Add(2 * 24 * time.Hour)}},
 	})
@@ -168,6 +178,7 @@ func TestGetOrganizationStats_IgnoresFilters(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = svc.ListOrganizations(ctx, &gen.ListOrganizationsPayload{
+		AccountTypes:   []string{"free"},
 		TrialStates:    []string{"expired"},
 		DisabledStates: []string{"disabled"},
 	})
@@ -178,11 +189,13 @@ func TestGetOrganizationStats_IgnoresFilters(t *testing.T) {
 
 	require.Equal(t, before, after)
 	require.Equal(t, &gen.AdminOrganizationStats{
-		Total:             3,
-		CreatedLast7Days:  1,
-		TrialsEndingSoon:  1,
-		Disabled:          1,
-		DisabledLast7Days: 1,
+		Total:                     3,
+		CreatedLast7Days:          1,
+		Customers:                 1,
+		CustomersCreatedLast7Days: 1,
+		TrialsEndingSoon:          1,
+		Disabled:                  1,
+		DisabledLast7Days:         1,
 	}, after)
 }
 
@@ -226,12 +239,28 @@ func TestGetOrganizationStats_Boundaries(t *testing.T) {
 			createdAt:   &createdAt,
 		})
 	}
+	seedBoundaryCustomer := func(id string, createdAt time.Time) {
+		seedOrg(t, ctx, tx, orgFixture{
+			id:          id,
+			name:        "Org " + id,
+			slug:        id,
+			accountType: "enterprise",
+			whitelisted: true,
+			createdAt:   &createdAt,
+		})
+	}
 	at := func(ts time.Time) *time.Time { return &ts }
 
 	// created_at > now() - INTERVAL '7 days': exactly seven days old is out.
 	seedBoundaryOrg("org_bound_created_inside", windowEdge.Add(time.Hour), nil)
 	seedBoundaryOrg("org_bound_created_exact", windowEdge, nil)
 	seedBoundaryOrg("org_bound_created_outside", windowEdge.Add(-time.Hour), nil)
+
+	// The same edge again for customers_created_last_7_days, which has its own
+	// predicate and so its own chance to include the boundary.
+	seedBoundaryCustomer("org_bound_customer_inside", windowEdge.Add(time.Hour))
+	seedBoundaryCustomer("org_bound_customer_exact", windowEdge)
+	seedBoundaryCustomer("org_bound_customer_outside", windowEdge.Add(-time.Hour))
 
 	// disabled_at > now() - INTERVAL '7 days': the same edge, the other column.
 	seedBoundaryOrg("org_bound_disabled_inside", old, at(windowEdge.Add(time.Hour)))
@@ -255,11 +284,13 @@ func TestGetOrganizationStats_Boundaries(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, repo.AdminGetOrganizationStatsRow{
-		Total:             10,
-		CreatedLast7Days:  1,
-		TrialsEndingSoon:  2,
-		Disabled:          3,
-		DisabledLast7Days: 1,
+		Total:                     13,
+		CreatedLast7Days:          2,
+		Customers:                 3,
+		CustomersCreatedLast7Days: 1,
+		TrialsEndingSoon:          2,
+		Disabled:                  3,
+		DisabledLast7Days:         1,
 	}, row)
 }
 

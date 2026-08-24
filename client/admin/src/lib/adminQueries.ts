@@ -15,6 +15,7 @@ import {
   getOrganizationFeatures,
   getOrganizationStats,
   getInferenceKeys,
+  getInferenceSpendHistory,
   getPaygBillingSummary,
   getStripeSubscription,
   getProject,
@@ -24,6 +25,7 @@ import {
   listOrganizations,
   omitUnset,
   type AdminInferenceKey,
+  type AdminInferenceSpendMonth,
   type AdminOrganization,
   type AdminOrganizationChatAnalysisSettings,
   type AdminOrganizationFeatures,
@@ -152,6 +154,19 @@ export function inferenceKeysQuery(
   return queryOptions({
     queryKey: ["gram-admin-inference-keys", organizationID] as const,
     queryFn: () => getInferenceKeys(organizationID),
+    retry: false,
+  });
+}
+
+export function inferenceSpendHistoryQuery(
+  organizationID: string,
+): AdminQuery<
+  AdminInferenceSpendMonth[],
+  readonly ["gram-admin-inference-spend-history", string]
+> {
+  return queryOptions({
+    queryKey: ["gram-admin-inference-spend-history", organizationID] as const,
+    queryFn: () => getInferenceSpendHistory(organizationID),
     retry: false,
   });
 }

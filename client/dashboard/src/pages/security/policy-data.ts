@@ -1,6 +1,6 @@
 import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governance";
 
-export type PolicyAction = "flag" | "block" | "warn";
+export type PolicyAction = "flag" | "block" | "warn" | "quarantine";
 
 export type PolicyMessageType =
   | "user_message"

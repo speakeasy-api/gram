@@ -16,11 +16,13 @@ const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
   getOrganization: vi.fn(),
   getInferenceKeys: vi.fn(),
+  getInferenceSpendHistory: vi.fn(),
   listOrganizationProjects: vi.fn(),
   getPaygBillingSummary: vi.fn(),
   getStripeSubscription: vi.fn(),
   cancelStripeSubscription: vi.fn(),
   resumeStripeSubscription: vi.fn(),
+  setInferenceKeyMonthlyLimit: vi.fn(),
 }));
 
 vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
@@ -29,6 +31,19 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
 });
 
 const ORG = anOrganization({ account_type: "payg" });
+const HISTORY = [
+  {
+    period_start: "2026-06-01",
+    period_end: "2026-07-01",
+    spend_usd: "3.250000",
+  },
+  {
+    period_start: "2026-07-01",
+    period_end: "2026-08-01",
+    spend_usd: "4.750000",
+  },
+];
+
 const SUBSCRIPTION = {
   status: "active" as const,
   current_period_start: "2026-08-01T00:00:00Z",
@@ -74,6 +89,11 @@ beforeEach(() => {
       disabled: false,
     },
   ]);
+  mocks.getInferenceSpendHistory.mockImplementation((organizationID: string) =>
+    organizationID === ORG.id
+      ? Promise.resolve(HISTORY)
+      : Promise.reject(new Error(`unexpected organization ${organizationID}`)),
+  );
   mocks.listOrganizationProjects.mockResolvedValue({ projects: [] });
   mocks.getStripeSubscription.mockImplementation((organizationID: string) =>
     organizationID === ORG.id
@@ -90,6 +110,21 @@ beforeEach(() => {
     cancel_at_period_end: true,
   });
   mocks.resumeStripeSubscription.mockResolvedValue(SUBSCRIPTION);
+  mocks.setInferenceKeyMonthlyLimit.mockImplementation(
+    ({
+      keyType,
+      monthlyCredits,
+    }: {
+      keyType: string;
+      monthlyCredits: number;
+    }) =>
+      Promise.resolve({
+        key_type: keyType,
+        credits_used: 0,
+        monthly_credits: monthlyCredits,
+        disabled: false,
+      }),
+  );
 });
 
 afterEach(cleanup);
@@ -131,9 +166,137 @@ describe("Billing", () => {
     expect(screen.getAllByText("Enabled")).toHaveLength(2);
     expect(screen.getByText("Disabled")).toBeTruthy();
     expect(screen.getByText(/This is an estimate, not a bill/)).toBeTruthy();
+    expect(screen.getByLabelText("Monthly inference spend graph")).toBeTruthy();
+    expect(screen.getByText("$3.25")).toBeTruthy();
+    expect(screen.getByText("$4.75")).toBeTruthy();
     expect(mocks.getInferenceKeys).toHaveBeenCalledWith(ORG.id);
+    expect(mocks.getInferenceSpendHistory).toHaveBeenCalledWith(ORG.id);
     expect(mocks.getStripeSubscription).toHaveBeenCalledWith(ORG.id);
     expect(mocks.getPaygBillingSummary).toHaveBeenCalledWith(ORG.id);
+  });
+
+  it("hides the graph until two consecutive complete months are available", async () => {
+    mocks.getInferenceSpendHistory.mockResolvedValue(HISTORY.slice(0, 1));
+
+    await renderBilling();
+
+    expect(await screen.findByText("$3.25")).toBeTruthy();
+    expect(screen.queryByLabelText("Monthly inference spend graph")).toBeNull();
+  });
+
+  it("shows the graph when the latest two months are consecutive after a gap", async () => {
+    mocks.getInferenceSpendHistory.mockResolvedValue([
+      {
+        period_start: "2026-04-01",
+        period_end: "2026-05-01",
+        spend_usd: "1.000000",
+      },
+      ...HISTORY,
+    ]);
+
+    await renderBilling();
+
+    expect(
+      await screen.findByLabelText("Monthly inference spend graph"),
+    ).toBeTruthy();
+  });
+
+  it("shows a loaded unlimited key without an error but rejects zero as an edit", async () => {
+    mocks.getInferenceKeys.mockResolvedValue([
+      {
+        key_type: "chat",
+        credits_used: 4.25,
+        monthly_credits: 0,
+        disabled: false,
+      },
+    ]);
+
+    await renderBilling();
+
+    expect(await screen.findByText("Unlimited")).toBeTruthy();
+    const input = screen.getByRole("spinbutton", {
+      name: "chat monthly limit in USD",
+    });
+    const button = within(input.closest("form")!).getByRole("button");
+    expect((input as HTMLInputElement).value).toBe("0");
+    expect(input.getAttribute("aria-invalid")).toBe("false");
+    expect(screen.queryByText(/Enter a whole-dollar limit/)).toBeNull();
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.change(input, { target: { value: "" } });
+    fireEvent.change(input, { target: { value: "0" } });
+
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    expect(screen.getByText(/Enter a whole-dollar limit/)).toBeTruthy();
+    fireEvent.submit(input.closest("form")!);
+    expect(mocks.setInferenceKeyMonthlyLimit).not.toHaveBeenCalled();
+  });
+
+  it("updates one materialized key with the canonical organization id and refreshes the keys", async () => {
+    await renderBilling();
+    const input = await screen.findByRole("spinbutton", {
+      name: "chat monthly limit in USD",
+    });
+    fireEvent.change(input, { target: { value: "750" } });
+    fireEvent.click(within(input.closest("form")!).getByRole("button"));
+
+    await vi.waitFor(() => {
+      expect(mocks.setInferenceKeyMonthlyLimit).toHaveBeenCalledWith({
+        organizationID: ORG.id,
+        keyType: "chat",
+        monthlyCredits: 750,
+      });
+      expect(mocks.getInferenceKeys).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("validates limits and keeps disabled or unsupported keys read-only", async () => {
+    let resolveUpdate: (() => void) | undefined;
+    mocks.setInferenceKeyMonthlyLimit.mockReturnValue(
+      new Promise((resolve) => {
+        resolveUpdate = () =>
+          resolve({
+            key_type: "chat",
+            credits_used: 42.75,
+            monthly_credits: 750,
+            disabled: false,
+          });
+      }),
+    );
+    await renderBilling();
+
+    const chatInput = await screen.findByRole("spinbutton", {
+      name: "chat monthly limit in USD",
+    });
+    const internalInput = screen.getByRole("spinbutton", {
+      name: "internal monthly limit in USD",
+    });
+    expect((internalInput as HTMLInputElement).disabled).toBe(true);
+    expect(
+      screen.queryByRole("spinbutton", {
+        name: "future-purpose monthly limit in USD",
+      }),
+    ).toBeNull();
+
+    fireEvent.change(chatInput, { target: { value: "10001" } });
+    expect(chatInput.getAttribute("aria-invalid")).toBe("true");
+    expect(
+      (
+        within(chatInput.closest("form")!).getByRole(
+          "button",
+        ) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    expect(mocks.setInferenceKeyMonthlyLimit).not.toHaveBeenCalled();
+
+    fireEvent.change(chatInput, { target: { value: "750" } });
+    const chatButton = within(chatInput.closest("form")!).getByRole("button");
+    fireEvent.click(chatButton);
+    await vi.waitFor(() => expect(chatButton.textContent).toBe("Saving…"));
+    expect((chatButton as HTMLButtonElement).disabled).toBe(true);
+
+    resolveUpdate?.();
+    await vi.waitFor(() => expect(chatButton.textContent).toBe("Save limit"));
   });
 
   it.each(["incomplete", "paused"] as const)(
@@ -166,6 +329,7 @@ describe("Billing", () => {
       expect(screen.queryByText("$2.53209845")).toBeNull();
     });
     expect(screen.getByText("canceled")).toBeTruthy();
+    expect(screen.getByLabelText("Monthly inference spend graph")).toBeTruthy();
     expect(mocks.getPaygBillingSummary).toHaveBeenCalledTimes(1);
   });
 

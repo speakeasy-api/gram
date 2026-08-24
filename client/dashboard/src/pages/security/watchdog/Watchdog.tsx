@@ -188,11 +188,19 @@ function WatchdogContent(): JSX.Element {
     if (selected.length === 0) return;
     setCollecting(true);
     try {
+      // Unwindowed on purpose: the listing filters by message event time,
+      // signals exist by scan time — a windowed collection can miss the very
+      // findings the selected signals display.
       const results = await collectFindingsForRules(
         client,
         selected.map((signal) => signal.ruleId),
-        { from: window.from, to: window.to },
+        { from: undefined, to: undefined },
       );
+      if (results.length === 0) {
+        // dismiss() ignores empty batches — fail loudly instead.
+        toast.error("No suppressible findings found for the selection.");
+        return;
+      }
       setPendingDismiss({ results, signalCount: selected.length });
     } catch {
       toast.error("Failed to load the selected signals' findings.");
@@ -416,7 +424,6 @@ function WatchdogContent(): JSX.Element {
               must live under a slot to render at all. */}
           <SignalDrawer
             signal={selectedSignal}
-            window={window}
             onClose={() => setUrlParam("signal", null)}
           />
           <SuppressFindingsDialog

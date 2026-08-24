@@ -1146,6 +1146,92 @@ func (q *Queries) ListMaterializedOpenRouterInferenceKeys(ctx context.Context, a
 	return items, nil
 }
 
+const listOpenRouterInferenceSpendByMonth = `-- name: ListOpenRouterInferenceSpendByMonth :many
+WITH candidate_months AS (
+  SELECT
+      DATE_TRUNC('month', day)::date AS period_start
+    , (DATE_TRUNC('month', day) + INTERVAL '1 month')::date AS period_end
+    , SUM(spend_usd)::numeric(30, 6) AS spend_usd
+  FROM openrouter_spend_daily
+  WHERE organization_id = $1::text
+    AND key_type = ANY($2::text[])
+    AND day < DATE_TRUNC('month', $3::timestamptz AT TIME ZONE 'UTC')::date
+  GROUP BY DATE_TRUNC('month', day)
+), complete_months AS (
+  SELECT candidate_months.period_start, candidate_months.period_end, candidate_months.spend_usd
+  FROM candidate_months
+  WHERE NOT EXISTS (
+    SELECT 1
+    FROM openrouter_api_keys AS inference_key
+    CROSS JOIN LATERAL GENERATE_SERIES(
+      GREATEST(candidate_months.period_start, (inference_key.created_at AT TIME ZONE 'UTC')::date),
+      LEAST(
+        candidate_months.period_end,
+        COALESCE((inference_key.deleted_at AT TIME ZONE 'UTC')::date, candidate_months.period_end)
+      ) - 1,
+      INTERVAL '1 day'
+    ) AS expected_day(day)
+    WHERE inference_key.organization_id = $1::text
+      AND inference_key.key_type = ANY($2::text[])
+      AND (inference_key.created_at AT TIME ZONE 'UTC')::date < candidate_months.period_end
+      AND (
+        inference_key.deleted_at IS NULL
+        OR (inference_key.deleted_at AT TIME ZONE 'UTC')::date > candidate_months.period_start
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM openrouter_spend_daily AS daily_spend
+        WHERE daily_spend.organization_id = inference_key.organization_id
+          AND daily_spend.key_type = inference_key.key_type
+          AND daily_spend.day = expected_day.day::date
+      )
+  )
+), latest_months AS (
+  SELECT period_start, period_end, spend_usd
+  FROM complete_months
+  ORDER BY period_start DESC
+  LIMIT 12
+)
+SELECT
+    period_start::text AS period_start
+  , period_end::text AS period_end
+  , spend_usd::text AS spend_usd
+FROM latest_months
+ORDER BY period_start
+`
+
+type ListOpenRouterInferenceSpendByMonthParams struct {
+	OrganizationID   string
+	BillableKeyTypes []string
+	CompletedBefore  pgtype.Timestamptz
+}
+
+type ListOpenRouterInferenceSpendByMonthRow struct {
+	PeriodStart string
+	PeriodEnd   string
+	SpendUsd    string
+}
+
+func (q *Queries) ListOpenRouterInferenceSpendByMonth(ctx context.Context, arg ListOpenRouterInferenceSpendByMonthParams) ([]ListOpenRouterInferenceSpendByMonthRow, error) {
+	rows, err := q.db.Query(ctx, listOpenRouterInferenceSpendByMonth, arg.OrganizationID, arg.BillableKeyTypes, arg.CompletedBefore)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOpenRouterInferenceSpendByMonthRow
+	for rows.Next() {
+		var i ListOpenRouterInferenceSpendByMonthRow
+		if err := rows.Scan(&i.PeriodStart, &i.PeriodEnd, &i.SpendUsd); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listStaleTUMMeterReportCycles = `-- name: ListStaleTUMMeterReportCycles :many
 SELECT
     stripe_meter_reports.billing_cycle_usage_id

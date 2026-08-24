@@ -22,6 +22,8 @@ type Endpoints struct {
 	GetRiskPolicy                  goa.Endpoint
 	UpdateRiskPolicy               goa.Endpoint
 	DeleteRiskPolicy               goa.Endpoint
+	ListSessionQuarantines         goa.Endpoint
+	ReleaseSessionQuarantine       goa.Endpoint
 	ListRiskResults                goa.Endpoint
 	ListRiskResultsForAgent        goa.Endpoint
 	UnmaskRiskResult               goa.Endpoint
@@ -76,6 +78,8 @@ func NewEndpoints(s Service) *Endpoints {
 		GetRiskPolicy:                  NewGetRiskPolicyEndpoint(s, a.APIKeyAuth),
 		UpdateRiskPolicy:               NewUpdateRiskPolicyEndpoint(s, a.APIKeyAuth),
 		DeleteRiskPolicy:               NewDeleteRiskPolicyEndpoint(s, a.APIKeyAuth),
+		ListSessionQuarantines:         NewListSessionQuarantinesEndpoint(s, a.APIKeyAuth),
+		ReleaseSessionQuarantine:       NewReleaseSessionQuarantineEndpoint(s, a.APIKeyAuth),
 		ListRiskResults:                NewListRiskResultsEndpoint(s, a.APIKeyAuth),
 		ListRiskResultsForAgent:        NewListRiskResultsForAgentEndpoint(s, a.APIKeyAuth),
 		UnmaskRiskResult:               NewUnmaskRiskResultEndpoint(s, a.APIKeyAuth),
@@ -128,6 +132,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetRiskPolicy = m(e.GetRiskPolicy)
 	e.UpdateRiskPolicy = m(e.UpdateRiskPolicy)
 	e.DeleteRiskPolicy = m(e.DeleteRiskPolicy)
+	e.ListSessionQuarantines = m(e.ListSessionQuarantines)
+	e.ReleaseSessionQuarantine = m(e.ReleaseSessionQuarantine)
 	e.ListRiskResults = m(e.ListRiskResults)
 	e.ListRiskResultsForAgent = m(e.ListRiskResultsForAgent)
 	e.UnmaskRiskResult = m(e.UnmaskRiskResult)
@@ -522,6 +528,124 @@ func NewDeleteRiskPolicyEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 			return nil, err
 		}
 		return nil, s.DeleteRiskPolicy(ctx, p)
+	}
+}
+
+// NewListSessionQuarantinesEndpoint returns an endpoint function that calls
+// the method "listSessionQuarantines" of service "risk".
+func NewListSessionQuarantinesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListSessionQuarantinesPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListSessionQuarantines(ctx, p)
+	}
+}
+
+// NewReleaseSessionQuarantineEndpoint returns an endpoint function that calls
+// the method "releaseSessionQuarantine" of service "risk".
+func NewReleaseSessionQuarantineEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ReleaseSessionQuarantinePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ReleaseSessionQuarantine(ctx, p)
 	}
 }
 

@@ -69,6 +69,30 @@ func TestHandleInstallDeviceAgentMacOS_RedirectsToVersionedPkg(t *testing.T) {
 	)
 }
 
+func TestHandleInstallDeviceAgentWindows_RedirectsToVersionedMsi(t *testing.T) {
+	t.Parallel()
+
+	manifest := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"schema_version":1,"latest":{"speakeasyd":{"version":"0.1.31"}}}`))
+	}))
+	defer manifest.Close()
+
+	svc := newTestService(t, manifest.URL)
+
+	req := httptest.NewRequest(http.MethodGet, installDeviceAgentWindowsPath, nil)
+	rec := httptest.NewRecorder()
+	req.URL, _ = url.Parse("https://app.getgram.ai" + installDeviceAgentWindowsPath)
+
+	svc.handleInstallDeviceAgentWindows(rec, req)
+
+	require.Equal(t, http.StatusFound, rec.Code)
+	require.Equal(t,
+		fmt.Sprintf("%s/v0.1.31/speakeasy-agent_0.1.31.msi", deviceAgentReleasesBaseURL),
+		rec.Header().Get("Location"),
+	)
+}
+
 func TestHandleInstallDeviceAgentMacOS_ManifestUnreachable(t *testing.T) {
 	t.Parallel()
 
