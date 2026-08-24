@@ -30,6 +30,15 @@ describe("estimateSTokens", () => {
     });
   });
 
+  test("rejects a ratio small enough to overflow the division", () => {
+    // 1e-320 is a valid positive number, but P ÷ 2 ÷ min is Infinity.
+    expectError(
+      Number.MAX_SAFE_INTEGER,
+      { min: 1e-320, max: 1e-320 },
+      TOKENIZER_RANGE_ERROR,
+    );
+  });
+
   test("accepts zero provider usage", () => {
     expect(estimateSTokens(0, { min: 1, max: 1 })).toEqual({
       ok: true,

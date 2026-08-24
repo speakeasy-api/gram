@@ -39,13 +39,14 @@ export function estimateSTokens(
     return { ok: false, error: TOKENIZER_RANGE_ERROR };
   }
 
-  return {
-    ok: true,
-    value: {
-      low: providerTokens / HIDDEN_MULTIPLIERS.lowEstimate / max,
-      high: providerTokens / HIDDEN_MULTIPLIERS.highEstimate / min,
-    },
-  };
+  const low = providerTokens / HIDDEN_MULTIPLIERS.lowEstimate / max;
+  const high = providerTokens / HIDDEN_MULTIPLIERS.highEstimate / min;
+  // A ratio small enough to overflow the division is a ratio, not a range.
+  if (!Number.isFinite(low) || !Number.isFinite(high)) {
+    return { ok: false, error: TOKENIZER_RANGE_ERROR };
+  }
+
+  return { ok: true, value: { low, high } };
 }
 
 export function sumEstimates(estimates: Estimate[]): Estimate {

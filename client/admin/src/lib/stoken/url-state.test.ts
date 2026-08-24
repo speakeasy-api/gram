@@ -69,6 +69,15 @@ describe("provider row URL state", () => {
     ).toBeNull();
   });
 
+  test.each(["toString", "constructor", "__proto__", "OpenAI"])(
+    "rejects a provider that is not one of the four keys: %p",
+    (provider) => {
+      expect(
+        decodeProviderRows(encodeRawJson([{ ...SHARED_ROWS[1], provider }])),
+      ).toBeNull();
+    },
+  );
+
   test("preserves an explicitly empty worksheet", () => {
     expect(decodeProviderRows(encodeProviderRows([]))).toEqual([]);
   });

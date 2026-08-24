@@ -55,7 +55,9 @@ function validateProviderRows(value: unknown): ProviderRow[] | null {
       !ROW_ID_PATTERN.test(row["id"]) ||
       ids.has(row["id"]) ||
       typeof row["provider"] !== "string" ||
-      !(row["provider"] in PROVIDER_KEYS) ||
+      // Own keys only: `in` walks the prototype, so a crafted link naming
+      // "toString" or "constructor" would otherwise pass as a provider.
+      !Object.hasOwn(PROVIDER_KEYS, row["provider"]) ||
       typeof row["customName"] !== "string" ||
       typeof row["providerTokens"] !== "string" ||
       typeof row["tokenizerMin"] !== "string" ||
