@@ -7,8 +7,8 @@ settings:
 catalogs:
   default:
     '@ai-sdk/react':
-      specifier: ^4.0.67
-      version: 4.0.67
+      specifier: ^4.0.69
+      version: 4.0.69
     '@assistant-ui/react':
       specifier: ^0.15.13
       version: 0.15.13
@@ -31,8 +31,8 @@ catalogs:
       specifier: ^6.0.5
       version: 6.0.5
     ai:
-      specifier: ^7.0.64
-      version: 7.0.64
+      specifier: ^7.0.66
+      version: 7.0.66
     lucide-react:
       specifier: ^1.28.0
       version: 1.28.0
@@ -186,11 +186,11 @@ importers:
   client/dashboard:
     dependencies:
       '@ai-sdk/mcp':
-        specifier: ^2.0.31
-        version: 2.0.31(zod@4.4.3)
+        specifier: ^2.0.32
+        version: 2.0.32(zod@4.4.3)
       '@ai-sdk/react':
         specifier: 'catalog:'
-        version: 4.0.67(react@19.2.8)(zod@4.4.3)
+        version: 4.0.69(react@19.2.8)(zod@4.4.3)
       '@assistant-ui/react':
         specifier: 'catalog:'
         version: 0.15.13(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(immer@11.1.11)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(use-sync-external-store@1.6.0(react@19.2.8))
@@ -214,7 +214,7 @@ importers:
         version: 4.7.0(monaco-editor@0.56.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@openrouter/ai-sdk-provider':
         specifier: ^3.0.0
-        version: 3.0.0(ai@7.0.64(zod@4.4.3))(zod@4.4.3)
+        version: 3.0.0(ai@7.0.66(zod@4.4.3))(zod@4.4.3)
       '@pierre/diffs':
         specifier: ^1.2.11
         version: 1.2.11(@shikijs/themes@4.4.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -295,7 +295,7 @@ importers:
         version: 12.11.1(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(immer@11.1.11)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       ai:
         specifier: 'catalog:'
-        version: 7.0.64(zod@4.4.3)
+        version: 7.0.66(zod@4.4.3)
       assistant-stream:
         specifier: ^0.3.29
         version: 0.3.29
@@ -649,14 +649,14 @@ packages:
   '@adobe/css-tools@4.5.0':
     resolution: {integrity: sha512-6OzddxPio9UiWTCemp4N8cYLV2ZN1ncRnV1cVGtve7dhPOtRkleRyx32GQCYSwDYgaHU3USMm84tNsvKzRCa1Q==}
 
-  '@ai-sdk/gateway@4.0.51':
-    resolution: {integrity: sha512-tQxWGUbg/O3A5EgekJo/C2byLVQ1r+vL6QdEVWmxUSnPhdCupcOeDbQO1tv9Um40VrdwYuSWlYzcbWvtlG5bOA==}
+  '@ai-sdk/gateway@4.0.52':
+    resolution: {integrity: sha512-SXUM8jzzuTUJRq+EOgPd5to6DSx0EKslVn+IVZHbUEX6k/3vCPNrvjckbK26HnNxHU/STxm+zTSJteqrO+7Z0w==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/mcp@2.0.31':
-    resolution: {integrity: sha512-vBxkIg4CB9wQjWYo5uu1G/Vv3Xhbi3JZ47HoT5ywLNTycxKlY2RGGynTyGqcXLcvWBErRyMygDYVFn8VPc1N+w==}
+  '@ai-sdk/mcp@2.0.32':
+    resolution: {integrity: sha512-NkXUnIEUmOmjD42LGpXGdHPULYvAV4SYUojutqw5YVNmQA7g64YRv3NLOaST21b2vIScUAah4qWchi62iUpQdA==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -671,8 +671,8 @@ packages:
     resolution: {integrity: sha512-6or44XprPzKbr8zkmzosowSE0pxkvJcoojBL+mCZvPUt3kvXp3XSNqeVun9golb1acEfSo6yaEBRT18h2VU+1Q==}
     engines: {node: '>=22'}
 
-  '@ai-sdk/react@4.0.67':
-    resolution: {integrity: sha512-gzkiKbgByM8Khg9VRscaPgnG+2Es2v+huFypnkcRho5dz4iE/0DnigxSBFebBmDG94Dzk0IcFsERttBqJCPCng==}
+  '@ai-sdk/react@4.0.69':
+    resolution: {integrity: sha512-AvwDHRXg0md72BOzclcZzlCkjwT8xQefEaVX8e78WZgd0F635+7iWJyCRRq7x2z5zOCK7/wiEpAUoWpGobQyXg==}
     engines: {node: '>=22'}
     peerDependencies:
       react: ^18 || ~19.0.1 || ~19.1.2 || ^19.2.1
@@ -4201,8 +4201,8 @@ packages:
     resolution: {integrity: sha512-7NRMZ/ZDz2vHevQTgJsocBFpakB1/Wx5ip19YSJuj4VOXpraWztTerViNtdSyARKZT9e2yVwUUB5JXXCE7mNrA==}
     hasBin: true
 
-  ai@7.0.64:
-    resolution: {integrity: sha512-29Ufm56e53pRzIPueWzZiwJsgxmZStaBFpwEkVM89sqyIIax/pzDm+ez/ksJ/CcY9UCuYzvCQpE2zkFHICvS3w==}
+  ai@7.0.66:
+    resolution: {integrity: sha512-wBUyoCYF3GVr+62nelBgR8YbpTSsMZrzFyOOjiwijylNSM2TFCW35C+Pml2vc59/WLMpyhS/LWZ55M+B9DAcSg==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -7556,14 +7556,14 @@ snapshots:
 
   '@adobe/css-tools@4.5.0': {}
 
-  '@ai-sdk/gateway@4.0.51(zod@4.4.3)':
+  '@ai-sdk/gateway@4.0.52(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 4.0.7
       '@ai-sdk/provider-utils': 5.0.27(zod@4.4.3)
       '@vercel/oidc': 3.2.0
       zod: 4.4.3
 
-  '@ai-sdk/mcp@2.0.31(zod@4.4.3)':
+  '@ai-sdk/mcp@2.0.32(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 4.0.7
       '@ai-sdk/provider-utils': 5.0.27(zod@4.4.3)
@@ -7583,12 +7583,12 @@ snapshots:
     dependencies:
       json-schema: 0.4.0
 
-  '@ai-sdk/react@4.0.67(react@19.2.8)(zod@4.4.3)':
+  '@ai-sdk/react@4.0.69(react@19.2.8)(zod@4.4.3)':
     dependencies:
-      '@ai-sdk/mcp': 2.0.31(zod@4.4.3)
+      '@ai-sdk/mcp': 2.0.32(zod@4.4.3)
       '@ai-sdk/provider': 4.0.7
       '@ai-sdk/provider-utils': 5.0.27(zod@4.4.3)
-      ai: 7.0.64(zod@4.4.3)
+      ai: 7.0.66(zod@4.4.3)
       react: 19.2.8
       swr: 2.5.0(react@19.2.8)
       throttleit: 2.1.0
@@ -7617,11 +7617,11 @@ snapshots:
 
   '@assistant-ui/react-ai-sdk@1.4.5(@assistant-ui/tap@0.9.11(@types/react@19.2.18)(react@19.2.8))(@types/react@19.2.18)(react@19.2.8)(zod@4.4.3)(zustand@5.0.14(@types/react@19.2.18)(immer@11.1.11)(react@19.2.8)(use-sync-external-store@1.6.0(react@19.2.8)))':
     dependencies:
-      '@ai-sdk/mcp': 2.0.31(zod@4.4.3)
-      '@ai-sdk/react': 4.0.67(react@19.2.8)(zod@4.4.3)
+      '@ai-sdk/mcp': 2.0.32(zod@4.4.3)
+      '@ai-sdk/react': 4.0.69(react@19.2.8)(zod@4.4.3)
       '@assistant-ui/core': 0.3.12(@assistant-ui/store@0.3.8(@assistant-ui/tap@0.9.11(@types/react@19.2.18)(react@19.2.8))(@types/react@19.2.18)(react@19.2.8))(@assistant-ui/tap@0.9.11(@types/react@19.2.18)(react@19.2.8))(@types/react@19.2.18)(assistant-cloud@0.1.37)(react@19.2.8)(zustand@5.0.14(@types/react@19.2.18)(immer@11.1.11)(react@19.2.8)(use-sync-external-store@1.6.0(react@19.2.8)))
       '@assistant-ui/store': 0.3.8(@assistant-ui/tap@0.9.11(@types/react@19.2.18)(react@19.2.8))(@types/react@19.2.18)(react@19.2.8)
-      ai: 7.0.64(zod@4.4.3)
+      ai: 7.0.66(zod@4.4.3)
       assistant-cloud: 0.1.37
       assistant-stream: 0.3.37
       react: 19.2.8
@@ -8557,9 +8557,9 @@ snapshots:
 
   '@open-draft/until@2.1.0': {}
 
-  '@openrouter/ai-sdk-provider@3.0.0(ai@7.0.64(zod@4.4.3))(zod@4.4.3)':
+  '@openrouter/ai-sdk-provider@3.0.0(ai@7.0.66(zod@4.4.3))(zod@4.4.3)':
     dependencies:
-      ai: 7.0.64(zod@4.4.3)
+      ai: 7.0.66(zod@4.4.3)
       zod: 4.4.3
 
   '@oxc-parser/binding-android-arm-eabi@0.127.0':
@@ -11173,9 +11173,9 @@ snapshots:
       prompts: 2.4.2
       yaml: 2.9.0
 
-  ai@7.0.64(zod@4.4.3):
+  ai@7.0.66(zod@4.4.3):
     dependencies:
-      '@ai-sdk/gateway': 4.0.51(zod@4.4.3)
+      '@ai-sdk/gateway': 4.0.52(zod@4.4.3)
       '@ai-sdk/provider': 4.0.7
       '@ai-sdk/provider-utils': 5.0.27(zod@4.4.3)
       zod: 4.4.3
