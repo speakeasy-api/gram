@@ -34,6 +34,14 @@ func TestParseTokenErrorResponseDatadogErrorsArray(t *testing.T) {
 	require.Equal(t, "invalid_grant: Invalid or expired refresh token or code verifier.", got.summary("400 Bad Request"))
 }
 
+func TestParseTokenErrorResponseDatadogMentionMidMessageDoesNotClassify(t *testing.T) {
+	t.Parallel()
+
+	got := parseTokenErrorResponse(http.StatusBadRequest, []byte(`{"errors":["Grant failure: invalid_grant (see docs)"]}`))
+	require.Empty(t, got.Error)
+	require.Equal(t, "HTTP 400 Bad Request", got.summary("400 Bad Request"))
+}
+
 func TestParseTokenErrorResponseDubNestedUnauthorized(t *testing.T) {
 	t.Parallel()
 
@@ -60,44 +68,18 @@ func TestParseTokenErrorResponseDoesNotRemapOtherUnauthorized(t *testing.T) {
 	require.NotEqual(t, oauthErrInvalidGrant, got.Error)
 }
 
-func TestParseTokenErrorResponseDoesNotRemapClientAuthFailureMentioningRefreshToken(t *testing.T) {
+func TestParseTokenErrorResponseDoesNotRemapNonLiteralUnauthorizedMessages(t *testing.T) {
 	t.Parallel()
 
-	got := parseTokenErrorResponse(http.StatusUnauthorized, []byte(`{"error":{"code":"unauthorized","message":"Invalid client credentials for refresh token exchange."}}`))
-	require.Equal(t, "unauthorized", got.Error)
-	require.Equal(t, "Invalid client credentials for refresh token exchange.", got.ErrorDescription)
-}
-
-func TestParseTokenErrorResponseDoesNotRemapClientSubjectFailures(t *testing.T) {
-	t.Parallel()
-
-	got := parseTokenErrorResponse(http.StatusUnauthorized, []byte(`{"error":{"code":"unauthorized","message":"client ID is invalid for refresh token exchange"}}`))
-	require.Equal(t, "unauthorized", got.Error)
-
-	got = parseTokenErrorResponse(http.StatusUnauthorized, []byte(`{"error":{"code":"unauthorized","message":"client is unauthorized"}}`))
-	require.Equal(t, "unauthorized", got.Error)
-}
-
-func TestParseTokenErrorResponseRemapsDeadGrantWasNotFound(t *testing.T) {
-	t.Parallel()
-
-	got := parseTokenErrorResponse(http.StatusUnauthorized, []byte(`{"error":{"code":"unauthorized","message":"Refresh token was not found."}}`))
-	require.Equal(t, oauthErrInvalidGrant, got.Error)
-}
-
-func TestParseTokenErrorResponseDoesNotRemapDeadPhraseWithClientAuthWording(t *testing.T) {
-	t.Parallel()
-
-	got := parseTokenErrorResponse(http.StatusUnauthorized, []byte(`{"error":{"code":"unauthorized","message":"Invalid refresh token: client authentication failed"}}`))
-	require.Equal(t, "unauthorized", got.Error)
-}
-
-func TestParseTokenErrorResponseRemapsDeadGrantNamingAClient(t *testing.T) {
-	t.Parallel()
-
-	got := parseTokenErrorResponse(http.StatusUnauthorized, []byte(`{"error":{"code":"unauthorized","message":"Refresh token not found for client abc."}}`))
-	require.Equal(t, oauthErrInvalidGrant, got.Error)
-	require.Equal(t, "Refresh token not found for client abc.", got.ErrorDescription)
+	for _, msg := range []string{
+		"Invalid client credentials for refresh token exchange.",
+		"client ID is invalid for refresh token exchange",
+		"client is unauthorized",
+		"Refresh token not found for client abc.",
+	} {
+		got := parseTokenErrorResponse(http.StatusUnauthorized, []byte(`{"error":{"code":"unauthorized","message":"`+msg+`"}}`))
+		require.Equal(t, "unauthorized", got.Error, "message %q must not be remapped", msg)
+	}
 }
 
 func TestParseTokenErrorResponseDoesNotOverrideOtherRFCCodes(t *testing.T) {
@@ -124,15 +106,6 @@ func TestParseTokenErrorResponseKeepsRFCMembersNextToMalformedExtension(t *testi
 	require.Equal(t, "Token has been revoked.", got.ErrorDescription)
 }
 
-func TestParseTokenErrorResponseStandaloneMentionDropsUpstreamMessage(t *testing.T) {
-	t.Parallel()
-
-	got := parseTokenErrorResponse(http.StatusBadRequest, []byte(`{"errors":["Grant failure: invalid_grant (see docs)"]}`))
-	require.Equal(t, oauthErrInvalidGrant, got.Error)
-	require.Empty(t, got.ErrorDescription)
-	require.Equal(t, oauthErrInvalidGrant, got.summary("400 Bad Request"))
-}
-
 func TestNewTokenRefreshErrorFromHTTPDatadogInvalidGrant(t *testing.T) {
 	t.Parallel()
 
@@ -157,7 +130,7 @@ func TestNewTokenRefreshErrorFromHTTPDubUnauthorizedInvalidGrant(t *testing.T) {
 	require.Equal(t, "invalid_grant: Refresh token not found.", err.Reason)
 }
 
-func TestNewTokenRefreshErrorFromHTTPGeneric4xxInvalidGrantToken(t *testing.T) {
+func TestNewTokenRefreshErrorFromHTTPRawTextMentionDoesNotClearGrant(t *testing.T) {
 	t.Parallel()
 
 	err := newTokenRefreshErrorFromHTTP(
@@ -165,8 +138,8 @@ func TestNewTokenRefreshErrorFromHTTPGeneric4xxInvalidGrantToken(t *testing.T) {
 		"400 Bad Request",
 		[]byte(`token endpoint rejected refresh: invalid_grant`),
 	)
-	require.True(t, err.invalidGrant())
-	require.Equal(t, oauthErrInvalidGrant, err.Reason)
+	require.False(t, err.invalidGrant())
+	require.Equal(t, "HTTP 400 Bad Request", err.Reason)
 }
 
 func TestNewTokenRefreshErrorFromHTTPServerErrorDoesNotTreatInvalidGrantToken(t *testing.T) {
@@ -181,24 +154,24 @@ func TestNewTokenRefreshErrorFromHTTPServerErrorDoesNotTreatInvalidGrantToken(t 
 	require.Equal(t, "HTTP 500 Internal Server Error", err.Reason)
 }
 
-func TestNewTokenRefreshErrorFromHTTPServerErrorJSONMentionDoesNotClearGrant(t *testing.T) {
+func TestNewTokenRefreshErrorFromHTTPServerErrorDialectDoesNotClearGrant(t *testing.T) {
 	t.Parallel()
 
 	err := newTokenRefreshErrorFromHTTP(
 		http.StatusInternalServerError,
 		"500 Internal Server Error",
-		[]byte(`{"error":"token rejected: invalid_grant"}`),
+		[]byte(`{"errors": ["invalid_grant - transient upstream fault"]}`),
 	)
 	require.False(t, err.invalidGrant())
 }
 
-func TestNewTokenRefreshErrorFromHTTPRateLimitMentionDoesNotClearGrant(t *testing.T) {
+func TestNewTokenRefreshErrorFromHTTPRateLimitDialectDoesNotClearGrant(t *testing.T) {
 	t.Parallel()
 
 	err := newTokenRefreshErrorFromHTTP(
 		http.StatusTooManyRequests,
 		"429 Too Many Requests",
-		[]byte(`{"message":"Too many requests; see https://api.example.com/docs/errors#invalid_grant"}`),
+		[]byte(`{"errors": ["invalid_grant - throttled"]}`),
 	)
 	require.False(t, err.invalidGrant())
 	require.True(t, IsTokenRefreshRateLimited(err))

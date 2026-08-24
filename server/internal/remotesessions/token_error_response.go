@@ -16,25 +16,12 @@ const oauthErrInvalidGrant = "invalid_grant"
 
 // tokenErrorResponse is the public-safe view of an upstream token-endpoint
 // error: an OAuth error code plus optional description. RFC 6749 §5.2 members
-// are preferred; well-known provider shapes (an errors[] of invalid_grant
-// messages, a nested error object) are normalized onto the same fields.
+// are preferred; the known provider shapes recognized by the dialect matchers
+// below are normalized onto the same fields.
 type tokenErrorResponse struct {
 	Error            string
 	ErrorDescription string
 	ErrorURI         string
-}
-
-type rawTokenErrorResponse struct {
-	Error            json.RawMessage
-	ErrorDescription string
-	ErrorURI         string
-	Errors           []string
-}
-
-type nestedTokenError struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-	Error   string `json:"error"`
 }
 
 func newTokenError(code, description, uri string) tokenErrorResponse {
@@ -45,66 +32,48 @@ func newTokenError(code, description, uri string) tokenErrorResponse {
 	}
 }
 
-// allowsHeuristicInvalidGrant reports whether statusCode may carry a heuristic
-// (non-exact-code) invalid_grant classification. 5xx pages, rate limits (429),
-// and request timeouts (408) mention error codes without meaning them, and a
-// false positive here permanently clears a still-usable refresh grant.
-func allowsHeuristicInvalidGrant(statusCode int) bool {
+// nonRFCErrorDefinitive reports whether statusCode can carry a definitive
+// invalid_grant signal from a non-RFC provider shape. 5xx pages, rate limits
+// (429), and request timeouts (408) are never definitive: a false positive
+// here permanently clears a still-usable refresh grant.
+func nonRFCErrorDefinitive(statusCode int) bool {
 	return statusCode >= 400 && statusCode < 500 &&
 		statusCode != http.StatusRequestTimeout &&
 		statusCode != http.StatusTooManyRequests
 }
 
-// parseTokenErrorResponse decodes an upstream token error body. Each member is
+// parseTokenErrorResponse decodes an upstream token error body. Members are
 // decoded independently, so a provider extension with an unexpected shape
-// cannot discard an RFC 6749 error code sitting next to it. A body that does
-// not decode, or that carries no recognizable error, yields the zero value —
-// whose summary falls back to the HTTP status.
+// cannot discard an RFC 6749 error code sitting next to it. Beyond the RFC
+// members, only explicitly recognized provider dialects (Datadog, Dub) can
+// classify — free text never does. A body that does not decode, or that
+// carries no recognizable error, yields the zero value — whose summary falls
+// back to the HTTP status.
 func parseTokenErrorResponse(statusCode int, body []byte) tokenErrorResponse {
 	var members map[string]json.RawMessage
 	if json.Unmarshal(body, &members) != nil {
 		return newTokenError("", "", "")
 	}
 
-	raw := rawTokenErrorResponse{
-		Error:            members["error"],
-		ErrorDescription: "",
-		ErrorURI:         "",
-		Errors:           nil,
-	}
-	_ = json.Unmarshal(members["error_description"], &raw.ErrorDescription)
-	_ = json.Unmarshal(members["error_uri"], &raw.ErrorURI)
+	var desc, uri string
+	_ = json.Unmarshal(members["error_description"], &desc)
+	_ = json.Unmarshal(members["error_uri"], &uri)
 
-	var entries []json.RawMessage
-	_ = json.Unmarshal(members["errors"], &entries)
-	for _, entry := range entries {
-		var s string
-		if json.Unmarshal(entry, &s) == nil {
-			raw.Errors = append(raw.Errors, s)
+	var code string
+	if json.Unmarshal(members["error"], &code) == nil && strings.TrimSpace(code) != "" {
+		return newTokenError(strings.TrimSpace(code), desc, uri)
+	}
+
+	if nonRFCErrorDefinitive(statusCode) {
+		if e, ok := datadogInvalidGrant(members["errors"]); ok {
+			return e
+		}
+		if e, ok := nestedProviderError(members["error"]); ok {
+			return e
 		}
 	}
 
-	heuristicOK := allowsHeuristicInvalidGrant(statusCode)
-
-	if e, ok := parseErrorMember(raw.Error, heuristicOK); ok {
-		if e.ErrorDescription == "" {
-			e.ErrorDescription = raw.ErrorDescription
-		}
-		if e.ErrorURI == "" {
-			e.ErrorURI = raw.ErrorURI
-		}
-		return e
-	}
-
-	if heuristicOK {
-		for _, msg := range raw.Errors {
-			if e, ok := splitInvalidGrant(msg); ok {
-				return e
-			}
-		}
-	}
-
-	return newTokenError("", raw.ErrorDescription, raw.ErrorURI)
+	return newTokenError("", desc, uri)
 }
 
 // summary renders a short, public-safe description of the error, preferring the
@@ -123,98 +92,29 @@ func (e tokenErrorResponse) summary(status string) string {
 	}
 }
 
-// parseErrorMember normalizes the "error" member, which is an RFC 6749 code
-// string for spec-compliant providers and an object for others. An exact
-// invalid_grant code is honored on any status; looser matches (a code with a
-// trailing description, a dead-grant remap) apply only when heuristicOK.
-func parseErrorMember(raw json.RawMessage, heuristicOK bool) (tokenErrorResponse, bool) {
-	if len(raw) == 0 {
-		return newTokenError("", "", ""), false
-	}
-
-	var s string
-	if json.Unmarshal(raw, &s) == nil {
-		s = strings.TrimSpace(s)
-		if s == "" {
-			return newTokenError("", "", ""), false
+// datadogInvalidGrant matches Datadog's token error dialect: an errors[] array
+// with an entry of the form "invalid_grant - <description>". Only entries that
+// begin with the code count; a mention elsewhere in a message never does.
+func datadogInvalidGrant(raw json.RawMessage) (tokenErrorResponse, bool) {
+	var entries []json.RawMessage
+	_ = json.Unmarshal(raw, &entries)
+	for _, entry := range entries {
+		var msg string
+		if json.Unmarshal(entry, &msg) != nil {
+			continue
 		}
-		if s == oauthErrInvalidGrant {
-			return newTokenError(oauthErrInvalidGrant, "", ""), true
+		rest, ok := strings.CutPrefix(strings.TrimSpace(msg), oauthErrInvalidGrant)
+		if !ok || (rest != "" && isErrorTokenByte(rest[0])) {
+			continue
 		}
-		if heuristicOK {
-			if e, ok := splitInvalidGrant(s); ok {
-				return e, true
-			}
-		}
-		return newTokenError(s, "", ""), true
-	}
-
-	var nested nestedTokenError
-	if json.Unmarshal(raw, &nested) != nil {
-		return newTokenError("", "", ""), false
-	}
-
-	code := strings.TrimSpace(conv.Default(nested.Code, nested.Error))
-	desc := strings.TrimSpace(nested.Message)
-	if code == "" && desc == "" {
-		return newTokenError("", "", ""), false
-	}
-
-	if code == oauthErrInvalidGrant {
-		return newTokenError(oauthErrInvalidGrant, desc, ""), true
-	}
-	if heuristicOK && isDeadRefreshGrant(code, desc) {
-		return newTokenError(oauthErrInvalidGrant, conv.Default(desc, code), ""), true
-	}
-	if code == "" {
-		return newTokenError("", "", ""), false
-	}
-	return newTokenError(code, desc, ""), true
-}
-
-// splitInvalidGrant reports whether msg is an invalid_grant signal: it starts
-// with that code (optionally followed by a separator and description), or it
-// contains invalid_grant as a standalone token. In the standalone case the
-// surrounding message is dropped — it is arbitrary upstream text and Reason is
-// public, so only the bare code is kept.
-func splitInvalidGrant(msg string) (tokenErrorResponse, bool) {
-	msg = strings.TrimSpace(msg)
-	if msg == "" {
-		return newTokenError("", "", ""), false
-	}
-
-	if rest, ok := strings.CutPrefix(msg, oauthErrInvalidGrant); ok {
-		if rest == "" || !isErrorTokenByte(rest[0]) {
-			rest = strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(rest), "-:."))
-			return newTokenError(oauthErrInvalidGrant, rest, ""), true
-		}
-	}
-	if containsOAuthErrorToken(msg, oauthErrInvalidGrant) {
-		return newTokenError(oauthErrInvalidGrant, "", ""), true
+		rest = strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(rest), "-:."))
+		return newTokenError(oauthErrInvalidGrant, rest, ""), true
 	}
 	return newTokenError("", "", ""), false
 }
 
-// containsOAuthErrorToken reports whether token appears in s with non-identifier
-// boundaries, so "invalid_grant_extra" does not match "invalid_grant".
-func containsOAuthErrorToken(s, token string) bool {
-	start := 0
-	for {
-		i := strings.Index(s[start:], token)
-		if i < 0 {
-			return false
-		}
-		i += start
-		beforeOK := i == 0 || !isErrorTokenByte(s[i-1])
-		after := i + len(token)
-		afterOK := after == len(s) || !isErrorTokenByte(s[after])
-		if beforeOK && afterOK {
-			return true
-		}
-		start = i + 1
-	}
-}
-
+// isErrorTokenByte reports whether b can be part of an OAuth error code, so
+// "invalid_grant_extra" does not match "invalid_grant".
 func isErrorTokenByte(b byte) bool {
 	return b == '_' ||
 		(b >= 'a' && b <= 'z') ||
@@ -222,47 +122,45 @@ func isErrorTokenByte(b byte) bool {
 		(b >= '0' && b <= '9')
 }
 
-// deadRefreshGrantPhrases are lowercase statements about the refresh token
-// itself being unusable. The dead-verdict word must be anchored to "refresh
-// token" as a phrase: a message where it attaches to something else ("Invalid
-// client credentials for refresh token exchange", "client ID is invalid")
-// describes a recoverable failure, never a dead grant.
-var deadRefreshGrantPhrases = []string{
+// deadGrantMessages are literal (lowercase, period-stripped) provider messages
+// that report the refresh grant itself as permanently unusable under a generic
+// "unauthorized" code. Dub is the only known producer. Add new literals as
+// providers are observed in logs — never patterns: fuzzy matching here has
+// repeatedly misclassified recoverable client-auth failures, and a false
+// positive irreversibly clears live grants.
+var deadGrantMessages = []string{
 	"refresh token not found",
-	"refresh token was not found",
-	"refresh token is invalid",
-	"invalid refresh token",
-	"refresh token is expired",
-	"refresh token has expired",
-	"refresh token expired",
-	"expired refresh token",
-	"refresh token is revoked",
-	"refresh token has been revoked",
-	"refresh token revoked",
-	"revoked refresh token",
-	"refresh token is unknown",
-	"unknown refresh token",
 }
 
-// isDeadRefreshGrant reports whether a nested provider error is a refresh
-// grant that can never succeed again. Dub encodes this as unauthorized plus a
-// "Refresh token not found." message rather than RFC 6749 invalid_grant.
-func isDeadRefreshGrant(code, message string) bool {
-	if !strings.EqualFold(code, "unauthorized") {
-		return false
+// nestedProviderError matches the nested-object dialect used by Dub and
+// similar APIs: {"error": {"code": ..., "message": ...}}. An explicit
+// invalid_grant code counts, as does a known dead-grant literal under
+// "unauthorized"; any other code passes through unclassified.
+func nestedProviderError(raw json.RawMessage) (tokenErrorResponse, bool) {
+	var nested struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+		Error   string `json:"error"`
 	}
-	m := strings.ToLower(message)
-	// Client-auth wording marks the failure recoverable even alongside a
-	// dead-token phrase; merely naming a client does not.
-	for _, excluded := range []string{"credential", "secret", "client authentication"} {
-		if strings.Contains(m, excluded) {
-			return false
+	if len(raw) == 0 || json.Unmarshal(raw, &nested) != nil {
+		return newTokenError("", "", ""), false
+	}
+
+	code := strings.TrimSpace(conv.Default(nested.Code, nested.Error))
+	msg := strings.TrimSpace(nested.Message)
+	if code == oauthErrInvalidGrant {
+		return newTokenError(oauthErrInvalidGrant, msg, ""), true
+	}
+	if strings.EqualFold(code, "unauthorized") {
+		normalized := strings.TrimRight(strings.ToLower(msg), ".")
+		for _, dead := range deadGrantMessages {
+			if normalized == dead {
+				return newTokenError(oauthErrInvalidGrant, msg, ""), true
+			}
 		}
 	}
-	for _, phrase := range deadRefreshGrantPhrases {
-		if strings.Contains(m, phrase) {
-			return true
-		}
+	if code == "" {
+		return newTokenError("", "", ""), false
 	}
-	return false
+	return newTokenError(code, msg, ""), true
 }
