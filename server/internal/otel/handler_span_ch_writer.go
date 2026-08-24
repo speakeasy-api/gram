@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"go.opentelemetry.io/otel/metric"
 
@@ -21,6 +20,11 @@ const (
 	meterSpanCHWriterSpansSkipped  = "gram.otel_ch_writer.spans_skipped"
 	meterSpanCHWriterSpansInserted = "gram.otel_ch_writer.spans_inserted"
 )
+
+// maxEventAnyValueDepth bounds the recursive OTLP AnyValue -> JSON mapping in
+// the log and span CH writers. OTLP attribute values are practically shallow;
+// anything nested deeper is attacker-shaped and encoded as null past the cap.
+const maxEventAnyValueDepth = 32
 
 // OTelTraceInserter writes a batch of span rows to ClickHouse. *chrepo.Queries
 // satisfies it; tests supply a fake.
@@ -126,17 +130,18 @@ func spanEventRow(span *otelv1.Span) (chrepo.OTelTraceRow, string) {
 	// Span timing is validated at the ingest edge (non-zero start, end >=
 	// start), so the fallbacks below only guard against records that predate
 	// or bypass that validation. The start time is the table's sort,
-	// partition, and TTL key, so an epoch-zero value would park the row in a
-	// 1970 partition that TTL removes on the next merge.
+	// partition, TTL, and — with record_id — ReplacingMergeTree dedup key,
+	// so it must be identical across Pub/Sub redeliveries: a span with no
+	// usable timestamp at all has no deterministic key and is dropped.
 	startNano := eventUnixNano(span.GetStartTimeUnixNano())
 	endNano := eventUnixNano(span.GetEndTimeUnixNano())
-	durationNano := max(endNano-startNano, 0)
 	if startNano == 0 {
 		startNano = endNano
 	}
 	if startNano == 0 {
-		startNano = time.Now().UnixNano()
+		return zero, "missing_timestamp"
 	}
+	durationNano := max(endNano-startNano, 0)
 
 	spanAttributes, err := spanEventAttributesJSON(span.GetAttributes())
 	if err != nil {
@@ -239,6 +244,13 @@ func spanEventAttributesJSON(attributes []*otelv1.Span_KeyValue) (string, error)
 }
 
 func spanEventAnyValue(value *otelv1.Span_AnyValue) any {
+	return spanEventAnyValueAtDepth(value, 0)
+}
+
+func spanEventAnyValueAtDepth(value *otelv1.Span_AnyValue, depth int) any {
+	if depth >= maxEventAnyValueDepth {
+		return nil
+	}
 	switch value.WhichValue() {
 	case otelv1.Span_AnyValue_Value_not_set_case:
 		return nil
@@ -254,14 +266,14 @@ func spanEventAnyValue(value *otelv1.Span_AnyValue) any {
 		values := value.GetArrayValue().GetValues()
 		result := make([]any, len(values))
 		for i, item := range values {
-			result[i] = spanEventAnyValue(item)
+			result[i] = spanEventAnyValueAtDepth(item, depth+1)
 		}
 		return result
 	case otelv1.Span_AnyValue_KvlistValue_case:
 		values := value.GetKvlistValue().GetValues()
 		result := make(map[string]any, len(values))
 		for _, item := range values {
-			result[item.GetKey()] = spanEventAnyValue(item.GetValue())
+			result[item.GetKey()] = spanEventAnyValueAtDepth(item.GetValue(), depth+1)
 		}
 		return result
 	case otelv1.Span_AnyValue_BytesValue_case:

@@ -156,6 +156,66 @@ func TestSpanEventCHWriterCanonicalizesSourceFromServiceName(t *testing.T) {
 	require.Equal(t, "unknown", rows[1].Source)
 }
 
+func TestSpanEventCHWriterFallsBackToEndTimeForMissingStart(t *testing.T) {
+	t.Parallel()
+
+	inserter := &captureTraceInserter{batches: nil, err: nil}
+	writer := newSpanEventTestWriter(t, inserter)
+
+	span := spanEventTestSpan("org-1", "claude-code")
+	span.SetStartTimeUnixNano(0)
+	require.NoError(t, writer.HandleBatch(t.Context(), []*otelv1.Span{span}, nil))
+
+	require.Len(t, inserter.batches, 1)
+	row := inserter.batches[0][0]
+	require.Equal(t, int64(1_724_500_000_000_000_501), row.TimeUnixNano)
+	require.Zero(t, row.DurationNano)
+}
+
+func TestSpanEventCHWriterSkipsSpanWhenBothTimesMissing(t *testing.T) {
+	t.Parallel()
+
+	inserter := &captureTraceInserter{batches: nil, err: nil}
+	writer := newSpanEventTestWriter(t, inserter)
+
+	// A wall-clock fallback would give redeliveries of the same span
+	// different sort keys, defeating ReplacingMergeTree dedup, so spans
+	// without any timestamp are unprocessable.
+	span := spanEventTestSpan("org-1", "claude-code")
+	span.SetStartTimeUnixNano(0)
+	span.SetEndTimeUnixNano(0)
+	require.NoError(t, writer.HandleBatch(t.Context(), []*otelv1.Span{span}, nil))
+
+	require.Empty(t, inserter.batches)
+}
+
+func TestSpanEventCHWriterCapsAttributeNestingDepth(t *testing.T) {
+	t.Parallel()
+
+	inserter := &captureTraceInserter{batches: nil, err: nil}
+	writer := newSpanEventTestWriter(t, inserter)
+
+	nested := (&otelv1.Span_AnyValue_builder{StringValue: new("leaf")}).Build()
+	for range 2 * maxEventAnyValueDepth {
+		nested = (&otelv1.Span_AnyValue_builder{
+			ArrayValue: (&otelv1.Span_ArrayValue_builder{
+				Values: []*otelv1.Span_AnyValue{nested},
+			}).Build(),
+		}).Build()
+	}
+	span := spanEventTestSpan("org-1", "claude-code")
+	span.SetAttributes([]*otelv1.Span_KeyValue{
+		(&otelv1.Span_KeyValue_builder{Key: new("deep"), Value: nested}).Build(),
+	})
+
+	require.NoError(t, writer.HandleBatch(t.Context(), []*otelv1.Span{span}, nil))
+
+	require.Len(t, inserter.batches, 1)
+	var spanAttributes map[string]any
+	require.NoError(t, json.Unmarshal([]byte(inserter.batches[0][0].SpanAttributes), &spanAttributes))
+	require.Contains(t, spanAttributes, "deep")
+}
+
 func TestSpanEventCHWriterSkipsUnprocessableSpans(t *testing.T) {
 	t.Parallel()
 

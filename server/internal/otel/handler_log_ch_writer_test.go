@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -157,22 +156,48 @@ func TestLogEventCHWriterFallsBackToObservedTime(t *testing.T) {
 	require.Equal(t, int64(1_724_500_000_000_000_002), inserter.batches[0][0].TimeUnixNano)
 }
 
-func TestLogEventCHWriterStampsWriteTimeWhenBothTimesMissing(t *testing.T) {
+func TestLogEventCHWriterSkipsRecordWhenBothTimesMissing(t *testing.T) {
 	t.Parallel()
 
 	inserter := &captureLogInserter{batches: nil, err: nil}
 	writer := newLogEventTestWriter(t, inserter)
 
-	start := time.Now().UnixNano()
+	// A wall-clock fallback would give redeliveries of the same record_id
+	// different sort keys, defeating ReplacingMergeTree dedup, so records
+	// without any timestamp are unprocessable.
 	record := logEventTestRecord("record-1", "org-1", "claude-code")
 	record.SetTimeUnixNano(0)
 	record.SetObservedTimeUnixNano(0)
 	require.NoError(t, writer.HandleBatch(t.Context(), []*otelv1.LogRecord{record}, nil))
 
+	require.Empty(t, inserter.batches)
+}
+
+func TestLogEventCHWriterCapsAttributeNestingDepth(t *testing.T) {
+	t.Parallel()
+
+	inserter := &captureLogInserter{batches: nil, err: nil}
+	writer := newLogEventTestWriter(t, inserter)
+
+	nested := (&otelv1.LogRecord_AnyValue_builder{StringValue: new("leaf")}).Build()
+	for range 2 * maxEventAnyValueDepth {
+		nested = (&otelv1.LogRecord_AnyValue_builder{
+			ArrayValue: (&otelv1.LogRecord_ArrayValue_builder{
+				Values: []*otelv1.LogRecord_AnyValue{nested},
+			}).Build(),
+		}).Build()
+	}
+	record := logEventTestRecord("record-1", "org-1", "claude-code")
+	record.SetAttributes([]*otelv1.LogRecord_KeyValue{
+		(&otelv1.LogRecord_KeyValue_builder{Key: new("deep"), Value: nested}).Build(),
+	})
+
+	require.NoError(t, writer.HandleBatch(t.Context(), []*otelv1.LogRecord{record}, nil))
+
 	require.Len(t, inserter.batches, 1)
-	row := inserter.batches[0][0]
-	require.GreaterOrEqual(t, row.TimeUnixNano, start)
-	require.Zero(t, row.ObservedTimeUnixNano)
+	var logAttributes map[string]any
+	require.NoError(t, json.Unmarshal([]byte(inserter.batches[0][0].LogAttributes), &logAttributes))
+	require.Contains(t, logAttributes, "deep")
 }
 
 func TestLogEventCHWriterEncodesStructuredBody(t *testing.T) {

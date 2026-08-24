@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"go.opentelemetry.io/otel/metric"
 
@@ -123,16 +122,18 @@ func logEventRow(record *otelv1.LogRecord) (chrepo.OTelLogRow, string) {
 	}
 
 	// The producer's event time, standing in observed time when the producer
-	// did not know it, then write time. The value is the table's sort,
-	// partition, and TTL key, so an epoch-zero value would park the row in a
-	// 1970 partition that TTL removes on the next merge.
+	// did not know it. The value is the table's sort, partition, TTL, and —
+	// with record_id — ReplacingMergeTree dedup key, so it must be identical
+	// across Pub/Sub redeliveries. The ingest edge stamps observed time
+	// before the first publish, so a record with neither timestamp predates
+	// or bypassed that edge and has no deterministic key: drop it.
 	observedNano := eventUnixNano(record.GetObservedTimeUnixNano())
 	timeNano := eventUnixNano(record.GetTimeUnixNano())
 	if timeNano == 0 {
 		timeNano = observedNano
 	}
 	if timeNano == 0 {
-		timeNano = time.Now().UnixNano()
+		return zero, "missing_timestamp"
 	}
 
 	body, err := logEventBody(record.GetBody())
@@ -221,6 +222,13 @@ func logEventAttributesJSON(attributes []*otelv1.LogRecord_KeyValue) (string, er
 }
 
 func logEventAnyValue(value *otelv1.LogRecord_AnyValue) any {
+	return logEventAnyValueAtDepth(value, 0)
+}
+
+func logEventAnyValueAtDepth(value *otelv1.LogRecord_AnyValue, depth int) any {
+	if depth >= maxEventAnyValueDepth {
+		return nil
+	}
 	switch value.WhichValue() {
 	case otelv1.LogRecord_AnyValue_Value_not_set_case:
 		return nil
@@ -236,14 +244,14 @@ func logEventAnyValue(value *otelv1.LogRecord_AnyValue) any {
 		values := value.GetArrayValue().GetValues()
 		result := make([]any, len(values))
 		for i, item := range values {
-			result[i] = logEventAnyValue(item)
+			result[i] = logEventAnyValueAtDepth(item, depth+1)
 		}
 		return result
 	case otelv1.LogRecord_AnyValue_KvlistValue_case:
 		values := value.GetKvlistValue().GetValues()
 		result := make(map[string]any, len(values))
 		for _, item := range values {
-			result[item.GetKey()] = logEventAnyValue(item.GetValue())
+			result[item.GetKey()] = logEventAnyValueAtDepth(item.GetValue(), depth+1)
 		}
 		return result
 	case otelv1.LogRecord_AnyValue_BytesValue_case:
