@@ -1301,6 +1301,7 @@ type MetaMcpServer struct {
 	ProjectID           uuid.UUID
 	UserSessionIssuerID uuid.NullUUID
 	Name                string
+	Visibility          string
 	CreatedAt           pgtype.Timestamptz
 	UpdatedAt           pgtype.Timestamptz
 	DeletedAt           pgtype.Timestamptz

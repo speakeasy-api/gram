@@ -4501,6 +4501,9 @@ CREATE TABLE IF NOT EXISTS meta_mcp_servers (
   user_session_issuer_id uuid,
 
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
+  -- Values are validated in application code. Defaults to the closed state so
+  -- existing rows require an authenticated caller.
+  visibility TEXT NOT NULL DEFAULT 'private',
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
