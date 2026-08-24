@@ -415,7 +415,7 @@ function EventFeedRows({
           description={
             hasActiveFilters
               ? "Try adjusting your filters or time range."
-              : "Events appear here as OpenTelemetry logs and spans are ingested through Gram."
+              : "Events appear here as OpenTelemetry logs and spans are ingested through Speakeasy."
           }
         />
       </div>
