@@ -1,4 +1,5 @@
 import { buildLoginRedirectURL, cn } from "@/lib/utils";
+import { useRoutes } from "@/routes";
 import { Link } from "react-router";
 import { AUTH_BUTTON_CLASSES, AUTH_PILLARS } from "./auth-constants";
 import { SigninErrorNotice } from "./auth-errors";
@@ -8,6 +9,7 @@ export function LoginPanel({
 }: {
   redirectTo: string | null;
 }): JSX.Element {
+  const routes = useRoutes();
   const handleLogin = () => {
     window.location.href = buildLoginRedirectURL(redirectTo);
   };
@@ -50,7 +52,7 @@ export function LoginPanel({
       <p className="mt-2 text-[14px] text-(--muted-strong)">
         No account?{" "}
         <Link
-          to="/sign-up"
+          to={routes.signUp.href()}
           className="text-(--link) underline hover:text-(--focus)"
         >
           Sign-up for a 14-day trial.
