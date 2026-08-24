@@ -97,7 +97,9 @@ async fn state_handler(State(host): State<AppState>) -> Json<RunnerStateResponse
 /// That case answers 200 with `interrupted: false` rather than 404 — the
 /// caller's intent ("this thread should not be generating") holds either way,
 /// and the server treats a miss as success so a stop the user pressed just
-/// after the reply landed does not surface as an error.
+/// after the reply landed does not surface as an error. A thread this VM holds
+/// but which is idle between turns answers `interrupted: false` for the same
+/// reason: nothing was generating.
 ///
 /// The response is an ack, like /turn: the loop unwinds its cancelled turn on
 /// the per-thread task, and the cancelled turn's partial output has already
@@ -115,9 +117,9 @@ async fn thread_interrupt(
         return Ok(Json(ThreadInterruptResponse { interrupted: false }));
     };
 
-    tracing::info!(thread_id = %thread_id, "interrupting thread turn");
-    thread.interrupt();
-    Ok(Json(ThreadInterruptResponse { interrupted: true }))
+    let interrupted = thread.interrupt();
+    tracing::info!(thread_id = %thread_id, interrupted, "interrupting thread turn");
+    Ok(Json(ThreadInterruptResponse { interrupted }))
 }
 
 async fn thread_turn(

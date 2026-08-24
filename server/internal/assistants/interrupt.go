@@ -97,18 +97,21 @@ func (s *ServiceCore) InterruptDashboardTurn(
 	}
 	result.CancelledQueued = cancelled
 
-	interrupted, err := s.interruptThreadRuntime(ctx, projectID, assistantID, threadID)
-	if err != nil {
-		return result, err
-	}
+	interrupted, interruptErr := s.interruptThreadRuntime(ctx, projectID, assistantID, threadID, chatID)
 	result.Interrupted = interrupted
 
+	// Published before the error is returned: a failed runner call still leaves
+	// a cancelled queue behind, and that is a stop whose watchers need
+	// settling. Only the writer knows how to reach the turn stream, and a stop
+	// that leaves watchers hanging is indistinguishable from one that did
+	// nothing. Best-effort: a lost frame costs responsiveness, and the turn is
+	// stopped either way.
 	if result.StoppedSomething() {
-		// Only the writer knows how to reach the turn stream, and a stop that
-		// leaves watchers hanging is indistinguishable from one that did
-		// nothing. Best-effort: a lost frame costs responsiveness, and the
-		// turn is stopped either way.
 		s.chatWriter.PublishTurnInterrupted(ctx, chatID)
+	}
+
+	if interruptErr != nil {
+		return result, interruptErr
 	}
 
 	s.logger.InfoContext(ctx, "assistant turn interrupted",
@@ -122,8 +125,10 @@ func (s *ServiceCore) InterruptDashboardTurn(
 // interruptThreadRuntime asks the thread's live runtime to stop its turn.
 // Absence of a runtime is not a failure — nothing is generating — so it
 // reports false rather than erroring.
-func (s *ServiceCore) interruptThreadRuntime(ctx context.Context, projectID, assistantID, threadID uuid.UUID) (bool, error) {
-	row, err := assistantrepo.New(s.db).GetAssistantRuntimeV2(ctx, assistantrepo.GetAssistantRuntimeV2Params{
+func (s *ServiceCore) interruptThreadRuntime(ctx context.Context, projectID, assistantID, threadID, chatID uuid.UUID) (bool, error) {
+	queries := assistantrepo.New(s.db)
+
+	row, err := queries.GetAssistantRuntimeV2(ctx, assistantrepo.GetAssistantRuntimeV2Params{
 		ProjectID:   projectID,
 		AssistantID: assistantID,
 	})
@@ -139,6 +144,32 @@ func (s *ServiceCore) interruptThreadRuntime(ctx context.Context, projectID, ass
 	// active row can be holding a turn.
 	if row.State != runtimeStateActive {
 		return false, nil
+	}
+
+	// Runtime-layer telemetry reads the organization, assistant name and
+	// correlation id off the context. Every other caller comes through the
+	// thread-event pipeline, which installs them; the stop endpoint reaches
+	// here straight from the dashboard, so its events would land with no
+	// organization to group them under. Enrichment must never fail a stop, so
+	// a lookup error leaves the context as it is.
+	if assistant, aerr := queries.GetAssistant(ctx, assistantrepo.GetAssistantParams{
+		AssistantID: assistantID,
+		ProjectID:   projectID,
+	}); aerr == nil {
+		ctx = withAssistantLogContext(ctx, assistantLogContext{
+			OrganizationID:    assistant.OrganizationID,
+			ProjectID:         projectID.String(),
+			AssistantID:       assistantID.String(),
+			AssistantName:     assistant.Name,
+			ThreadID:          threadID.String(),
+			CorrelationID:     chatID.String(),
+			RuntimeID:         row.ID.String(),
+			RuntimeBackend:    row.Backend,
+			EventID:           "",
+			TriggerEventID:    "",
+			TriggerInstanceID: "",
+			Attempt:           0,
+		})
 	}
 
 	interrupted, err := s.runtime.InterruptTurn(ctx, assistantRuntimeRecord{

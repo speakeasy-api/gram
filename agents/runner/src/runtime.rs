@@ -124,8 +124,19 @@ impl ConfiguredThread {
     /// the driver mid-turn. The idle clock is NOT touched here; `run_loop`
     /// marks the thread idle when the cancelled turn actually finishes, so the
     /// warm-expiry sweep cannot retire a runtime that is still unwinding.
-    pub fn interrupt(&self) {
+    ///
+    /// Returns whether there was a turn to stop — input enqueued, or a driver
+    /// step still running. A warm thread between turns has nothing in flight,
+    /// and the bump is inert until a turn checkpoints the generation, so it
+    /// answers false. A poisoned idle clock answers true: claiming a stop that
+    /// did nothing is the safer error.
+    pub fn interrupt(&self) -> bool {
+        let busy = match self.idle_since.lock() {
+            Ok(guard) => guard.is_none(),
+            Err(_) => true,
+        };
         self.cancellation.interrupt();
+        busy
     }
 }
 
@@ -930,12 +941,27 @@ mod tests {
         let in_flight = thread.cancellation.handle().checkpoint();
         assert!(!in_flight.is_cancelled());
 
-        thread.interrupt();
+        assert!(
+            thread.interrupt(),
+            "a busy thread reports the turn it stopped"
+        );
         assert!(in_flight.is_cancelled());
 
         // A turn that starts after the interrupt checkpoints the new
         // generation, so a stop never leaks into the next turn.
         assert!(!thread.cancellation.handle().checkpoint().is_cancelled());
+    }
+
+    // A warm thread between turns is the other half of the stop button: the
+    // reply landed before the press, so there was nothing to cancel and the
+    // caller must not be told it stopped a turn.
+    #[tokio::test]
+    async fn interrupt_reports_nothing_stopped_on_an_idle_thread() {
+        let host = empty_host();
+        insert_thread(&host, "T", Some(Instant::now()));
+        let thread = lookup_thread(&host, "T").expect("thread should be configured");
+
+        assert!(!thread.interrupt());
     }
 
     fn image_part(url: &str) -> RunnerContentPart {

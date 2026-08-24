@@ -133,6 +133,10 @@ func (t *telemetryRuntimeBackend) RecycleImage(ctx context.Context, runtime assi
 
 func (t *telemetryRuntimeBackend) InterruptTurn(ctx context.Context, runtime assistantRuntimeRecord, threadID uuid.UUID) (bool, error) {
 	interrupted, err := t.inner.InterruptTurn(ctx, runtime, threadID)
+	// A v2 runtime serves every thread on its assistant, and its record names
+	// the thread that admitted it — rarely the one being stopped. These events
+	// are about the thread the caller named, so report that one.
+	runtime.AssistantThreadID = threadID
 	if err != nil {
 		t.emit(ctx, runtime, "runtime_interrupt", "runtime turn interrupt failed", "ERROR", err)
 		return interrupted, fmt.Errorf("runtime interrupt turn: %w", err)
