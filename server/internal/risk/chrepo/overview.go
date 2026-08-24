@@ -23,7 +23,7 @@ type RiskOverviewWindowParams struct {
 // overviewFindings returns the base builder every overview read shares:
 // tenant + window scoped, live findings only.
 //
-// risk_findings is append-only: a manual dismiss/undo (mirrorFalsePositiveToClickHouse)
+// risk_findings is append-only: a manual dismiss/undo (enqueueFalsePositiveMirror)
 // appends a fresh row for an id that may already have one, rather than
 // updating in place, and Pub/Sub's at-least-once delivery can also redeliver
 // an identical row. Deduping to one row per id is therefore required for

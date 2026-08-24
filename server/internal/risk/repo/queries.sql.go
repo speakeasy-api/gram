@@ -2321,11 +2321,7 @@ type GetRiskResultsByIDsParams struct {
 // pattern from a multiselect of findings) — needs match/rule_id/source per
 // row, not just the id, and looking them up server-side (rather than trusting
 // client-supplied content) means the suggestion sees authoritative,
-// unmasked data regardless of what the UI has revealed. Also the retry
-// fallback for the false-positive mark/unmark RPCs' post-commit ClickHouse
-// mirror: when the conditional UPDATE changed fewer rows than were requested,
-// the mirror republishes the authoritative state of every requested id from
-// this refetch, so a retried RPC still repairs the findings store.
+// unmasked data regardless of what the UI has revealed.
 func (q *Queries) GetRiskResultsByIDs(ctx context.Context, arg GetRiskResultsByIDsParams) ([]RiskResult, error) {
 	rows, err := q.db.Query(ctx, getRiskResultsByIDs, arg.ProjectID, arg.Ids)
 	if err != nil {
@@ -4676,10 +4672,9 @@ type MarkRiskResultsFalsePositiveParams struct {
 }
 
 // Returns the full rows the UPDATE actually changed: they drive audit logging
-// and, when every requested id was changed, feed the ClickHouse mirror
-// directly. A retry that changed fewer rows than requested makes the mirror
-// republish from a post-commit GetRiskResultsByIDs refetch instead, so it
-// still repairs the findings store.
+// and the ClickHouse mirror's outbox enqueue, both inside the same
+// transaction as this UPDATE, so a retry that changes nothing correctly
+// audits and mirrors nothing.
 func (q *Queries) MarkRiskResultsFalsePositive(ctx context.Context, arg MarkRiskResultsFalsePositiveParams) ([]RiskResult, error) {
 	rows, err := q.db.Query(ctx, markRiskResultsFalsePositive, arg.Reason, arg.ProjectID, arg.Ids)
 	if err != nil {

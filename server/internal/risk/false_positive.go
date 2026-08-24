@@ -2,14 +2,13 @@ package risk
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
-	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -18,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/outbox"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
@@ -33,9 +33,7 @@ const maxFalsePositiveBatch = 500
 // parseResultIDs converts the payload's result_ids strings to uuid.UUID,
 // rejecting the request if any entry is malformed or the batch exceeds
 // maxFalsePositiveBatch. Duplicates are dropped so the returned slice is a
-// set: the ClickHouse mirror compares its length against the rows an UPDATE
-// changed to decide whether a refetch is needed, and a duplicate would force
-// that refetch on every call.
+// set and every id counts once toward the UPDATE and the mirror.
 func parseResultIDs(raw []string) ([]uuid.UUID, error) {
 	if len(raw) == 0 {
 		return nil, oops.E(oops.CodeInvalid, nil, "result_ids must not be empty")
@@ -102,12 +100,12 @@ func (s *Service) MarkRiskResultsFalsePositive(ctx context.Context, payload *gen
 		}
 	}
 
-	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "commit mark risk results false positive").LogError(ctx, s.logger)
+	if err := enqueueFalsePositiveMirror(ctx, dbtx, authCtx.ActiveOrganizationID, marked); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "record dismissal in the findings store").LogError(ctx, s.logger)
 	}
 
-	if err := s.mirrorFalsePositiveToClickHouse(ctx, *authCtx.ProjectID, ids, marked); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "record dismissal in the findings store").LogError(ctx, s.logger)
+	if err := dbtx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "commit mark risk results false positive").LogError(ctx, s.logger)
 	}
 
 	return nil
@@ -155,80 +153,45 @@ func (s *Service) UnmarkRiskResultsFalsePositive(ctx context.Context, payload *g
 		}
 	}
 
-	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "commit unmark risk results false positive").LogError(ctx, s.logger)
+	if err := enqueueFalsePositiveMirror(ctx, dbtx, authCtx.ActiveOrganizationID, restored); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "record restore in the findings store").LogError(ctx, s.logger)
 	}
 
-	if err := s.mirrorFalsePositiveToClickHouse(ctx, *authCtx.ProjectID, ids, restored); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "record restore in the findings store").LogError(ctx, s.logger)
+	if err := dbtx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "commit unmark risk results false positive").LogError(ctx, s.logger)
 	}
 
 	return nil
 }
 
-// mirrorFalsePositiveToClickHouse republishes each requested result onto the
-// shared findings topic (the same one scanners publish to) so FindingCHWriter
-// appends a fresh risk_findings row recording the result's current
-// suppression state — set for a marked row, cleared for an unmarked one. The
+// enqueueFalsePositiveMirror appends each state change to the transactional
+// outbox using the caller's transaction: the relay publishes the same
+// riskv1.Finding message the scanners produce onto the shared findings topic,
+// where FindingCHWriter appends a fresh risk_findings row recording the
+// result's new suppression state — set for a mark, cleared for an unmark. The
 // mark state is published twice over during the suppression convergence:
-// excluded_at/excluded_reason=manual/excluded_detail are the converged
-// fields, false_positive_at the legacy one the read paths still filter on.
-// Synchronous: every publish must ack before the RPC succeeds, so a state
-// change the caller was told about is durably on the topic. Postgres has
-// already committed by the time this runs, so on error the caller reports the
-// failure and a retry of the mark/unmark republishes.
-//
-// changed is the rows the mark/unmark UPDATE returned. When they don't cover
-// every requested id — a client retry after a failed publish, whose UPDATE
-// matched nothing because the state was already applied — the authoritative
-// state of all requested ids is refetched and republished instead, so the
-// retry still repairs ClickHouse.
-func (s *Service) mirrorFalsePositiveToClickHouse(ctx context.Context, projectID uuid.UUID, ids []uuid.UUID, changed []repo.RiskResult) error {
-	if s.findingsPub == nil {
-		return nil
-	}
-
-	rows := changed
-	if len(changed) != len(ids) {
-		refetched, err := s.repo.GetRiskResultsByIDs(ctx, repo.GetRiskResultsByIDsParams{
-			ProjectID: projectID,
-			Ids:       ids,
-		})
-		if err != nil {
-			return fmt.Errorf("load risk results for findings store mirror: %w", err)
-		}
-		// The FP flow owns a row's ClickHouse state only through
-		// false_positive_at. A refetched row with no FP mark but an exclusion
-		// stamp is suppressed by the exclusion pipeline: publishing an
-		// unsuppression copy for it would race the CH writer's fail-open
-		// exclusion re-check and could resurface a finding the exclusion still
-		// covers, so such rows are skipped rather than republished.
-		rows = refetched[:0:0]
-		for _, row := range refetched {
-			if !row.FalsePositiveAt.Valid && row.ExcludedAt.Valid {
-				continue
-			}
-			rows = append(rows, row)
-		}
-	}
+// excluded_at/excluded_reason=manual/excluded_detail are the converged fields,
+// false_positive_at the legacy one the read paths still filter on.
+// Enqueued-at-commit rather than published post-commit, so the mirror is
+// atomic with the Postgres state change: no publish step remains that can fail
+// after the caller has been told the change happened, and a retried RPC whose
+// UPDATE matches nothing has nothing to repair — the original request either
+// committed (mirror durably enqueued) or changed nothing at all.
+func enqueueFalsePositiveMirror(ctx context.Context, dbtx pgx.Tx, orgID string, rows []repo.RiskResult) error {
 	if len(rows) == 0 {
 		return nil
 	}
 
-	results := make([]gcp.PublishResult, 0, len(rows))
+	msgs := make([]outbox.Message, 0, len(rows))
 	for _, row := range rows {
-		results = append(results, s.findingsPub.Publish(ctx, fpMirrorMessage(row)))
+		msgs = append(msgs, outbox.Message{
+			Proto:      fpMirrorMessage(row),
+			PublicID:   uuid.Nil,
+			Attributes: nil,
+		})
 	}
-
-	var errs error
-	for _, res := range results {
-		waitCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		_, err := res.Get(waitCtx)
-		cancel()
-		errs = errors.Join(errs, err)
-	}
-	if errs != nil {
-		return fmt.Errorf("publish suppression state change: %w", errs)
+	if _, err := outbox.PublishBatch(ctx, dbtx, orgID, msgs); err != nil {
+		return fmt.Errorf("enqueue suppression state change: %w", err)
 	}
 	return nil
 }

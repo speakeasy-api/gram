@@ -1616,7 +1616,6 @@ func newStartCommand() *cli.Command {
 					return urls, nil
 				},
 				riskchrepo.New(chDB),
-				publishers.RiskFindings,
 				assetStorage,
 			)
 			chatWriter.AddObserver(riskService)

@@ -315,7 +315,7 @@ func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.F
 
 		// Set only on messages republished by risk.markResultsFalsePositive /
 		// risk.unmarkResultsFalsePositive to append a state-change row for an
-		// already-persisted finding (see mirrorFalsePositiveToClickHouse). Empty
+		// already-persisted finding (see enqueueFalsePositiveMirror). Empty
 		// on every finding a scanner produces. A parse failure must skip the
 		// message rather than fall through with falsePositiveAt left nil: this
 		// row would still be appended with a fresh (and so dedup-winning)

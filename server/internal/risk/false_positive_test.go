@@ -6,11 +6,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/stretchr/testify/mock"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
-	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -21,9 +21,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
-// chDismissalCopy builds the ClickHouse row mirrorFalsePositiveToClickHouse
+// chDismissalCopy builds the ClickHouse row the FP mirror
+// (enqueueFalsePositiveMirror, via the outbox relay and FindingCHWriter)
 // appends when a result is dismissed: a fresh copy of the finding carrying the
 // suppression on excluded_at/excluded_reason plus the legacy false_positive_at.
 // A zero suppressedAt builds the undo copy instead — same id, no suppression at
@@ -71,10 +73,9 @@ func TestMarkUnmarkRiskResultsFalsePositive(t *testing.T) {
 	require.NoError(t, err)
 
 	// The dismissed listing reads ClickHouse while the mark/unmark RPCs write
-	// Postgres and republish onto the findings topic. The harness wires
-	// findingsPub as nil, so the mirror never runs here and each state change's
-	// ClickHouse copy is appended by hand — the same rows
-	// mirrorFalsePositiveToClickHouse would produce.
+	// Postgres and enqueue the mirror on the transactional outbox. No relay
+	// runs in the harness, so each state change's ClickHouse copy is appended
+	// by hand — the same rows the relayed mirror messages would produce.
 	chQueries := chrepo.New(ti.chConn)
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{
 		chDismissalCopy(t, projectID, orgID, policy.ID, resultUUID, chatID, msgID, time.Time{}),
@@ -154,27 +155,36 @@ func TestMarkUnmarkRiskResultsFalsePositive(t *testing.T) {
 	require.Equal(t, int64(0), dismissedAfterUnmark.TotalCount)
 }
 
-// TestMarkUnmarkRiskResultsFalsePositive_RetryRepublishesMirror pins the
-// at-least-once contract on the ClickHouse mirror: a client retry of a mark or
-// unmark whose findings-topic publish failed after the Postgres commit matches
-// zero rows in the conditional UPDATE, and must still republish the
-// authoritative state of every requested id — otherwise ClickHouse is never
-// repaired. Audit logging stays tied to the rows that actually changed, so the
-// retry adds no duplicate audit entries.
-func TestMarkUnmarkRiskResultsFalsePositive_RetryRepublishesMirror(t *testing.T) {
+// listFindingMirrorRows decodes the riskv1.Finding messages the FP mirror has
+// enqueued on the transactional outbox, in insertion order. Other topics
+// (e.g. audit webhook events) are filtered out.
+func listFindingMirrorRows(t *testing.T, conn *pgxpool.Pool) []*riskv1.Finding {
+	t.Helper()
+
+	rows, err := testrepo.New(conn).ListPublishOutboxRows(t.Context())
+	require.NoError(t, err)
+	topic := string(proto.MessageName(new(riskv1.Finding)))
+	var out []*riskv1.Finding
+	for _, row := range rows {
+		if row.Topic != topic {
+			continue
+		}
+		f := new(riskv1.Finding)
+		require.NoError(t, proto.Unmarshal(row.Message, f))
+		out = append(out, f)
+	}
+	return out
+}
+
+// TestMarkUnmarkRiskResultsFalsePositive_MirrorRidesTheTransaction pins the
+// delivery contract on the ClickHouse mirror: each state change is enqueued on
+// the transactional outbox inside the mark/unmark transaction, so ClickHouse
+// delivery is atomic with the Postgres commit. A client retry whose UPDATE
+// matches nothing enqueues nothing — the original request's enqueue is already
+// durable — and adds no duplicate audit entries either.
+func TestMarkUnmarkRiskResultsFalsePositive_MirrorRidesTheTransaction(t *testing.T) {
 	t.Parallel()
-
-	pub := gcp.NewMockPublisher[*riskv1.Finding]()
-	var published []*riskv1.Finding
-	pub.On("Publish", mock.Anything, mock.Anything).
-		Return(gcp.NewSuccessPublishResult()).
-		Run(func(args mock.Arguments) {
-			msg, ok := args.Get(1).(*riskv1.Finding)
-			require.True(t, ok)
-			published = append(published, msg)
-		})
-
-	ctx, ti := newTestRiskService(t, func(ti *testInstance) { ti.findingsPub = pub })
+	ctx, ti := newTestRiskService(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
@@ -183,7 +193,7 @@ func TestMarkUnmarkRiskResultsFalsePositive_RetryRepublishesMirror(t *testing.T)
 	projectID := *authCtx.ProjectID
 	orgID := authCtx.ActiveOrganizationID
 
-	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Mirror Retry Test")})
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Mirror Outbox Test")})
 	require.NoError(t, err)
 	policyID, err := uuid.Parse(policy.ID)
 	require.NoError(t, err)
@@ -201,23 +211,27 @@ func TestMarkUnmarkRiskResultsFalsePositive_RetryRepublishesMirror(t *testing.T)
 		Reason:    new("noise"),
 	})
 	require.NoError(t, err)
-	require.Len(t, published, 1)
-	require.Equal(t, chrepo.EventKindSuppression, published[0].GetEventKind())
-	require.Equal(t, resultID, published[0].GetId())
+
+	mirrored := listFindingMirrorRows(t, ti.conn)
+	require.Len(t, mirrored, 1)
+	require.Equal(t, chrepo.EventKindSuppression, mirrored[0].GetEventKind())
+	require.Equal(t, resultID, mirrored[0].GetId())
+	require.NotEmpty(t, mirrored[0].GetFalsePositiveAt())
+	require.Equal(t, chrepo.ExcludedReasonManual, mirrored[0].GetExcludedReason())
+	require.Equal(t, "noise", mirrored[0].GetExcludedDetail())
 
 	dismissCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskResultDismiss)
 	require.NoError(t, err)
 
-	// The retry: the result is already marked, so the UPDATE changes nothing —
-	// the mirror must republish the suppression state anyway.
+	// The retry: the result is already marked, so the UPDATE changes nothing
+	// and nothing new needs enqueueing — the first request's mirror row is
+	// already durably on the outbox.
 	err = ti.service.MarkRiskResultsFalsePositive(ctx, &gen.MarkRiskResultsFalsePositivePayload{
 		ResultIds: []string{resultID},
 		Reason:    new("noise"),
 	})
 	require.NoError(t, err)
-	require.Len(t, published, 2)
-	require.Equal(t, chrepo.EventKindSuppression, published[1].GetEventKind())
-	require.Equal(t, resultID, published[1].GetId())
+	require.Len(t, listFindingMirrorRows(t, ti.conn), 1)
 
 	dismissCountAfterRetry, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskResultDismiss)
 	require.NoError(t, err)
@@ -227,17 +241,19 @@ func TestMarkUnmarkRiskResultsFalsePositive_RetryRepublishesMirror(t *testing.T)
 		ResultIds: []string{resultID},
 	})
 	require.NoError(t, err)
-	require.Len(t, published, 3)
-	require.Equal(t, chrepo.EventKindUnsuppression, published[2].GetEventKind())
 
-	// Same repair on the unmark retry.
+	mirrored = listFindingMirrorRows(t, ti.conn)
+	require.Len(t, mirrored, 2)
+	require.Equal(t, chrepo.EventKindUnsuppression, mirrored[1].GetEventKind())
+	require.Equal(t, resultID, mirrored[1].GetId())
+	require.Empty(t, mirrored[1].GetFalsePositiveAt())
+
+	// Same on the unmark retry: nothing changed, nothing enqueued.
 	err = ti.service.UnmarkRiskResultsFalsePositive(ctx, &gen.UnmarkRiskResultsFalsePositivePayload{
 		ResultIds: []string{resultID},
 	})
 	require.NoError(t, err)
-	require.Len(t, published, 4)
-	require.Equal(t, chrepo.EventKindUnsuppression, published[3].GetEventKind())
-	require.Equal(t, resultID, published[3].GetId())
+	require.Len(t, listFindingMirrorRows(t, ti.conn), 2)
 }
 
 func TestMarkRiskResultsFalsePositive_RejectsEmptyIDs(t *testing.T) {
@@ -379,9 +395,9 @@ func TestMarkRiskResultsFalsePositive_ContentPartAnchoredFindingIsListable(t *te
 	})
 	require.NoError(t, err)
 
-	// The harness has no findings publisher, so the mirror the mark would
-	// normally trigger is appended by hand. A content-part-anchored finding
-	// carries its anchor in content_part_id with chat_message_id empty.
+	// No outbox relay runs in the harness, so the mirror row the mark
+	// enqueued is appended by hand. A content-part-anchored finding carries
+	// its anchor in content_part_id with chat_message_id empty.
 	dismissedAt := time.Now().UTC()
 	dismissal := chDismissalCopy(t, projectID, orgID, policy.ID, resultID, chatID, msgID, dismissedAt)
 	dismissal.ChatMessageID = ""

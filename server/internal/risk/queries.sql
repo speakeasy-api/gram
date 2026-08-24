@@ -1596,11 +1596,7 @@ WHERE id = @id
 -- pattern from a multiselect of findings) — needs match/rule_id/source per
 -- row, not just the id, and looking them up server-side (rather than trusting
 -- client-supplied content) means the suggestion sees authoritative,
--- unmasked data regardless of what the UI has revealed. Also the retry
--- fallback for the false-positive mark/unmark RPCs' post-commit ClickHouse
--- mirror: when the conditional UPDATE changed fewer rows than were requested,
--- the mirror republishes the authoritative state of every requested id from
--- this refetch, so a retried RPC still repairs the findings store.
+-- unmasked data regardless of what the UI has revealed.
 SELECT *
 FROM risk_results
 WHERE project_id = @project_id
@@ -1608,10 +1604,9 @@ WHERE project_id = @project_id
 
 -- name: MarkRiskResultsFalsePositive :many
 -- Returns the full rows the UPDATE actually changed: they drive audit logging
--- and, when every requested id was changed, feed the ClickHouse mirror
--- directly. A retry that changed fewer rows than requested makes the mirror
--- republish from a post-commit GetRiskResultsByIDs refetch instead, so it
--- still repairs the findings store.
+-- and the ClickHouse mirror's outbox enqueue, both inside the same
+-- transaction as this UPDATE, so a retry that changes nothing correctly
+-- audits and mirrors nothing.
 UPDATE risk_results
 SET false_positive_at = clock_timestamp()
   , false_positive_reason = sqlc.narg(reason)
