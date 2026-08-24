@@ -44,15 +44,15 @@ func FromRow(row riskrepo.SessionQuarantine) Quarantine {
 	}
 }
 
-func key(sessionID string) string {
-	if sessionID == "" {
+func key(organizationID, projectID, sessionID string) string {
+	if organizationID == "" || projectID == "" || sessionID == "" {
 		return ""
 	}
-	return "session:quarantine:" + sessionID
+	return fmt.Sprintf("session:quarantine:%s:%s:%s", organizationID, projectID, sessionID)
 }
 
-func Read(ctx context.Context, cacheImpl cache.Cache, sessionID string) (*Quarantine, error) {
-	k := key(sessionID)
+func Read(ctx context.Context, cacheImpl cache.Cache, organizationID, projectID, sessionID string) (*Quarantine, error) {
+	k := key(organizationID, projectID, sessionID)
 	if cacheImpl == nil || k == "" {
 		return nil, nil
 	}
@@ -68,7 +68,7 @@ func Read(ctx context.Context, cacheImpl cache.Cache, sessionID string) (*Quaran
 }
 
 func Write(ctx context.Context, cacheImpl cache.Cache, q Quarantine) error {
-	k := key(q.SessionID)
+	k := key(q.OrganizationID, q.ProjectID, q.SessionID)
 	if cacheImpl == nil || k == "" {
 		return nil
 	}
@@ -78,8 +78,8 @@ func Write(ctx context.Context, cacheImpl cache.Cache, q Quarantine) error {
 	return nil
 }
 
-func Delete(ctx context.Context, cacheImpl cache.Cache, sessionID string) error {
-	k := key(sessionID)
+func Delete(ctx context.Context, cacheImpl cache.Cache, organizationID, projectID, sessionID string) error {
+	k := key(organizationID, projectID, sessionID)
 	if cacheImpl == nil || k == "" {
 		return nil
 	}

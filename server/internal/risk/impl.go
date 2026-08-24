@@ -16,6 +16,7 @@ import (
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
+	"github.com/cenkalti/backoff/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
@@ -70,6 +71,8 @@ import (
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
+
+const sessionQuarantineCircuitDeleteAttempts = 3
 
 // RiskAnalysisSignaler signals the per-project risk analysis coordinator workflow.
 type RiskAnalysisSignaler interface {
@@ -713,11 +716,30 @@ func (s *Service) ReleaseSessionQuarantine(ctx context.Context, payload *gen.Rel
 		return nil, oops.E(oops.CodeUnexpected, err, "commit session quarantine release").LogError(ctx, s.logger)
 	}
 
-	if err := sessionquarantine.Delete(ctx, s.cache, row.SessionID); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "clear session quarantine circuit").LogError(ctx, s.logger)
-	}
+	s.clearSessionQuarantineCircuit(ctx, row)
 
 	return buildSessionQuarantine(row), nil
+}
+
+func (s *Service) clearSessionQuarantineCircuit(ctx context.Context, row repo.SessionQuarantine) {
+	exp := backoff.NewExponentialBackOff()
+	exp.InitialInterval = 25 * time.Millisecond
+	exp.MaxInterval = 100 * time.Millisecond
+	exp.RandomizationFactor = 0
+
+	_, err := backoff.Retry(ctx, func() (struct{}, error) {
+		if err := sessionquarantine.Delete(ctx, s.cache, row.OrganizationID, row.ProjectID.String(), row.SessionID); err != nil {
+			return struct{}{}, fmt.Errorf("delete session quarantine circuit: %w", err)
+		}
+		return struct{}{}, nil
+	}, backoff.WithBackOff(exp), backoff.WithMaxTries(sessionQuarantineCircuitDeleteAttempts))
+	if err != nil {
+		s.logger.ErrorContext(ctx, "clear released session quarantine circuit",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(row.OrganizationID),
+			attr.SlogProjectID(row.ProjectID.String()),
+		)
+	}
 }
 
 // ListBuiltinExclusions returns the built-in exclusion library grouped by
@@ -4008,6 +4030,8 @@ func (s *Service) fallbackPolicyName(sources, customRuleTitles []string, action 
 		actionLabel = "Blocker"
 	case "warn":
 		actionLabel = "Warner"
+	case "quarantine":
+		actionLabel = "Quarantiner"
 	}
 
 	return strings.Join(parts, " & ") + " " + actionLabel

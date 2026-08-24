@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -11,6 +12,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
@@ -57,7 +60,14 @@ func TestIngestSessionQuarantineTripsAndFreezesPromptAndTool(t *testing.T) {
 	require.Equal(t, "deny", tool.Decision)
 	require.Equal(t, fixedMessage, requireString(t, tool.Message))
 
-	row, err := riskrepo.New(ti.conn).GetActiveSessionQuarantineBySession(ctx, sessionID)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	row, err := riskrepo.New(ti.conn).GetActiveSessionQuarantineBySession(ctx, riskrepo.GetActiveSessionQuarantineBySessionParams{
+		SessionID:      sessionID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
 	require.NoError(t, err)
 	require.Equal(t, "Sensitive commands", row.RiskPolicyName)
 
@@ -92,22 +102,30 @@ func TestIngestSessionQuarantineRedisErrorFailMode(t *testing.T) {
 	ti.service.riskScanner = &stubResultScanner{}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
 
 	sessionID := "quarantine-cache-error-" + uuid.NewString()
 	ti.service.cache = mcpGetErrorCache{
 		Cache:   ti.service.cache,
-		failKey: "session:quarantine:" + sessionID,
+		failKey: fmt.Sprintf("session:quarantine:%s:%s:%s", authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), sessionID),
 		err:     errors.New("redis unavailable"),
 	}
+
+	_, err := productfeaturesrepo.New(ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		FeatureName:    string(productfeatures.FeatureHooksFailOpen),
+	})
+	require.NoError(t, err)
 
 	failOpen, err := ti.service.Ingest(ctx, canonicalIngestPayload("claude", "prompt.submitted", sessionID))
 	require.NoError(t, err)
 	require.Equal(t, "allow", failOpen.Decision)
 
-	require.NoError(t, riskrepo.New(ti.conn).SetSessionQuarantineFailClosed(ctx, riskrepo.SetSessionQuarantineFailClosedParams{
-		FailClosed:     true,
+	_, err = productfeaturesrepo.New(ti.conn).DeleteFeature(ctx, productfeaturesrepo.DeleteFeatureParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
-	}))
+		FeatureName:    string(productfeatures.FeatureHooksFailOpen),
+	})
+	require.NoError(t, err)
 
 	failClosed, err := ti.service.Ingest(ctx, canonicalIngestPayload("claude", "prompt.submitted", sessionID))
 	require.NoError(t, err)

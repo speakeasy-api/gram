@@ -23,7 +23,13 @@ func (s *Service) checkQuarantineGate(ctx context.Context, ev hookevents.Event) 
 	if s.cache == nil || ev.ConversationID == "" {
 		return nil
 	}
-	q, err := sessionquarantine.Read(ctx, s.cache, ev.ConversationID)
+	q, err := sessionquarantine.Read(
+		ctx,
+		s.cache,
+		ev.Context.OrganizationID,
+		ev.Context.ProjectID.String(),
+		ev.ConversationID,
+	)
 	if err == nil {
 		return q
 	}
@@ -53,7 +59,7 @@ func (s *Service) sessionQuarantineFailClosed(ctx context.Context, organizationI
 	if organizationID == "" || s.db == nil {
 		return false
 	}
-	failClosed, err := riskrepo.New(s.db).GetSessionQuarantineFailClosed(ctx, organizationID)
+	failOpen, err := riskrepo.New(s.db).IsOrganizationHooksFailOpenEnabled(ctx, organizationID)
 	if err != nil {
 		s.logger.WarnContext(ctx, "read session quarantine fail-closed setting",
 			attr.SlogError(err),
@@ -61,7 +67,7 @@ func (s *Service) sessionQuarantineFailClosed(ctx context.Context, organizationI
 		)
 		return false
 	}
-	return failClosed
+	return !failOpen
 }
 
 func (s *Service) openSessionQuarantine(ctx context.Context, ev hookevents.Event, scanResult *risk.ScanResult, auditReason string) *sessionquarantine.Quarantine {
@@ -89,7 +95,11 @@ func (s *Service) openSessionQuarantine(ctx context.Context, ev hookevents.Event
 	created := true
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			row, err = queries.GetActiveSessionQuarantineBySession(ctx, ev.ConversationID)
+			row, err = queries.GetActiveSessionQuarantineBySession(ctx, riskrepo.GetActiveSessionQuarantineBySessionParams{
+				SessionID:      ev.ConversationID,
+				OrganizationID: ev.Context.OrganizationID,
+				ProjectID:      ev.Context.ProjectID,
+			})
 			created = false
 		}
 		if err != nil {

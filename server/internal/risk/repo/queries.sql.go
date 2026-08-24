@@ -906,7 +906,7 @@ INSERT INTO session_quarantines (
   , $6
   , $7
 )
-ON CONFLICT (session_id) WHERE released_at IS NULL DO NOTHING
+ON CONFLICT (organization_id, project_id, session_id) WHERE released_at IS NULL DO NOTHING
 RETURNING id, organization_id, project_id, session_id, risk_policy_id, risk_policy_name, user_id, reason, created_at, updated_at, released_at, released_by
 `
 
@@ -1260,11 +1260,19 @@ const getActiveSessionQuarantineBySession = `-- name: GetActiveSessionQuarantine
 SELECT id, organization_id, project_id, session_id, risk_policy_id, risk_policy_name, user_id, reason, created_at, updated_at, released_at, released_by
 FROM session_quarantines
 WHERE session_id = $1
+  AND organization_id = $2
+  AND project_id = $3
   AND released_at IS NULL
 `
 
-func (q *Queries) GetActiveSessionQuarantineBySession(ctx context.Context, sessionID string) (SessionQuarantine, error) {
-	row := q.db.QueryRow(ctx, getActiveSessionQuarantineBySession, sessionID)
+type GetActiveSessionQuarantineBySessionParams struct {
+	SessionID      string
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) GetActiveSessionQuarantineBySession(ctx context.Context, arg GetActiveSessionQuarantineBySessionParams) (SessionQuarantine, error) {
+	row := q.db.QueryRow(ctx, getActiveSessionQuarantineBySession, arg.SessionID, arg.OrganizationID, arg.ProjectID)
 	var i SessionQuarantine
 	err := row.Scan(
 		&i.ID,
@@ -2309,19 +2317,6 @@ func (q *Queries) GetRiskResultsByIDs(ctx context.Context, arg GetRiskResultsByI
 	return items, nil
 }
 
-const getSessionQuarantineFailClosed = `-- name: GetSessionQuarantineFailClosed :one
-SELECT session_quarantine_fail_closed
-FROM organization_metadata
-WHERE id = $1
-`
-
-func (q *Queries) GetSessionQuarantineFailClosed(ctx context.Context, organizationID string) (bool, error) {
-	row := q.db.QueryRow(ctx, getSessionQuarantineFailClosed, organizationID)
-	var session_quarantine_fail_closed bool
-	err := row.Scan(&session_quarantine_fail_closed)
-	return session_quarantine_fail_closed, err
-}
-
 const getToolCallBlock = `-- name: GetToolCallBlock :one
 SELECT
     b.id,
@@ -2422,6 +2417,23 @@ type InsertRiskResultsParams struct {
 	DeadLetterReason  pgtype.Text
 }
 
+const isOrganizationHooksFailOpenEnabled = `-- name: IsOrganizationHooksFailOpenEnabled :one
+SELECT EXISTS (
+  SELECT 1
+  FROM organization_features
+  WHERE organization_id = $1
+    AND feature_name = 'hooks_fail_open'
+    AND deleted IS FALSE
+) AS enabled
+`
+
+func (q *Queries) IsOrganizationHooksFailOpenEnabled(ctx context.Context, organizationID string) (bool, error) {
+	row := q.db.QueryRow(ctx, isOrganizationHooksFailOpenEnabled, organizationID)
+	var enabled bool
+	err := row.Scan(&enabled)
+	return enabled, err
+}
+
 const linkChatUserAccountForTest = `-- name: LinkChatUserAccountForTest :exec
 UPDATE chats
 SET user_account_id = $1
@@ -2485,15 +2497,26 @@ func (q *Queries) ListActiveSessionQuarantines(ctx context.Context, arg ListActi
 	return items, nil
 }
 
-const listAllActiveSessionQuarantines = `-- name: ListAllActiveSessionQuarantines :many
+const listActiveSessionQuarantinesPage = `-- name: ListActiveSessionQuarantinesPage :many
 SELECT id, organization_id, project_id, session_id, risk_policy_id, risk_policy_name, user_id, reason, created_at, updated_at, released_at, released_by
 FROM session_quarantines
 WHERE released_at IS NULL
-ORDER BY created_at DESC, id DESC
+  AND (
+    $1::timestamptz IS NULL
+    OR (created_at, id) > ($1::timestamptz, $2::uuid)
+  )
+ORDER BY created_at, id
+LIMIT $3
 `
 
-func (q *Queries) ListAllActiveSessionQuarantines(ctx context.Context) ([]SessionQuarantine, error) {
-	rows, err := q.db.Query(ctx, listAllActiveSessionQuarantines)
+type ListActiveSessionQuarantinesPageParams struct {
+	AfterCreatedAt pgtype.Timestamptz
+	AfterID        uuid.NullUUID
+	PageLimit      int32
+}
+
+func (q *Queries) ListActiveSessionQuarantinesPage(ctx context.Context, arg ListActiveSessionQuarantinesPageParams) ([]SessionQuarantine, error) {
+	rows, err := q.db.Query(ctx, listActiveSessionQuarantinesPage, arg.AfterCreatedAt, arg.AfterID, arg.PageLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -4948,22 +4971,6 @@ WHERE id = $1
 
 func (q *Queries) SetRiskResultFalsePositiveForTest(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, setRiskResultFalsePositiveForTest, id)
-	return err
-}
-
-const setSessionQuarantineFailClosed = `-- name: SetSessionQuarantineFailClosed :exec
-UPDATE organization_metadata
-SET session_quarantine_fail_closed = $1
-WHERE id = $2
-`
-
-type SetSessionQuarantineFailClosedParams struct {
-	FailClosed     bool
-	OrganizationID string
-}
-
-func (q *Queries) SetSessionQuarantineFailClosed(ctx context.Context, arg SetSessionQuarantineFailClosedParams) error {
-	_, err := q.db.Exec(ctx, setSessionQuarantineFailClosed, arg.FailClosed, arg.OrganizationID)
 	return err
 }
 

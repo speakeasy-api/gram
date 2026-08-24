@@ -55,17 +55,20 @@ func TestSessionQuarantineReassertRepopulatesCircuit(t *testing.T) {
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
-	t.Cleanup(func() { _ = sessionquarantine.Delete(context.Background(), cacheAdapter, sessionID) })
-	require.NoError(t, sessionquarantine.Delete(ctx, cacheAdapter, sessionID))
+	projectID := project.ID.String()
+	t.Cleanup(func() {
+		_ = sessionquarantine.Delete(context.Background(), cacheAdapter, organizationID, projectID, sessionID)
+	})
+	require.NoError(t, sessionquarantine.Delete(ctx, cacheAdapter, organizationID, projectID, sessionID))
 
-	before, err := sessionquarantine.Read(ctx, cacheAdapter, sessionID)
+	before, err := sessionquarantine.Read(ctx, cacheAdapter, organizationID, projectID, sessionID)
 	require.NoError(t, err)
 	require.Nil(t, before)
 
 	activity := activities.NewSessionQuarantineReassert(testenv.NewLogger(t), db, cacheAdapter)
 	require.NoError(t, activity.Do(ctx))
 
-	after, err := sessionquarantine.Read(ctx, cacheAdapter, sessionID)
+	after, err := sessionquarantine.Read(ctx, cacheAdapter, organizationID, projectID, sessionID)
 	require.NoError(t, err)
 	require.NotNil(t, after)
 	require.Equal(t, "Reassert test policy", after.RiskPolicyName)

@@ -18,12 +18,16 @@ const (
 	sessionQuarantineReassertWorkflowID = "v1:session-quarantine-reassert"
 	sessionQuarantineReassertScheduleID = "v1:session-quarantine-reassert-schedule"
 	sessionQuarantineReassertInterval   = 30 * time.Second
-	sessionQuarantineReassertTimeout    = 30 * time.Second
+	// The activity pages through the durable active set. Two minutes gives each
+	// attempt enough time for large tenants; the workflow budget covers all
+	// three attempts plus retry backoff and queueing slack.
+	sessionQuarantineReassertActivityTimeout = 2 * time.Minute
+	sessionQuarantineReassertWorkflowTimeout = 10 * time.Minute
 )
 
 func SessionQuarantineReassertWorkflow(ctx workflow.Context) error {
 	activityCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-		StartToCloseTimeout: sessionQuarantineReassertTimeout,
+		StartToCloseTimeout: sessionQuarantineReassertActivityTimeout,
 		RetryPolicy: &temporal.RetryPolicy{
 			MaximumAttempts:    3,
 			InitialInterval:    time.Second,
@@ -78,7 +82,7 @@ func buildSessionQuarantineReassertScheduleOptions(temporalEnv *tenv.Environment
 			ID:                 sessionQuarantineReassertWorkflowID,
 			Workflow:           SessionQuarantineReassertWorkflow,
 			TaskQueue:          string(temporalEnv.Queue()),
-			WorkflowRunTimeout: sessionQuarantineReassertTimeout,
+			WorkflowRunTimeout: sessionQuarantineReassertWorkflowTimeout,
 		},
 	}
 }

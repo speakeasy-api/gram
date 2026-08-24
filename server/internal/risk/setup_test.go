@@ -240,7 +240,7 @@ func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context
 	for _, configureInstance := range configure {
 		configureInstance(ti)
 	}
-	ti.service = risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil, &syncResultsCleaner{conn: conn}, ti.completionClient, shadowMCPClient, auditLogger, cacheAdapter, "test-jwt-secret", ti.approvalIntake, nil, nil, flags, testCELEngine(t), testPresetLibrary(t), judge.Evaluate, func(ctx context.Context, db riskrepo.DBTX, input policybypass.ReconcilePolicyURLsInput) error {
+	ti.service = risk.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, sig, nil, &syncResultsCleaner{conn: conn}, ti.completionClient, shadowMCPClient, auditLogger, ti.cacheAdapter, "test-jwt-secret", ti.approvalIntake, nil, nil, flags, testCELEngine(t), testPresetLibrary(t), judge.Evaluate, func(ctx context.Context, db riskrepo.DBTX, input policybypass.ReconcilePolicyURLsInput) error {
 		return ti.reconcileShadowMCPPolicyURLs(ctx, db, input)
 	}, func(ctx context.Context, projectID uuid.UUID, canonicalURLs []string) ([]string, error) {
 		return ti.shadowMCPInventoryURLLookup(ctx, projectID, canonicalURLs)

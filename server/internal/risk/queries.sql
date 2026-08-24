@@ -1356,15 +1356,14 @@ WHERE project_id = @project_id
   AND action IN ('block', 'warn', 'quarantine')
   AND deleted IS FALSE;
 
--- name: GetSessionQuarantineFailClosed :one
-SELECT session_quarantine_fail_closed
-FROM organization_metadata
-WHERE id = @organization_id;
-
--- name: SetSessionQuarantineFailClosed :exec
-UPDATE organization_metadata
-SET session_quarantine_fail_closed = @fail_closed
-WHERE id = @organization_id;
+-- name: IsOrganizationHooksFailOpenEnabled :one
+SELECT EXISTS (
+  SELECT 1
+  FROM organization_features
+  WHERE organization_id = @organization_id
+    AND feature_name = 'hooks_fail_open'
+    AND deleted IS FALSE
+) AS enabled;
 
 -- name: CreateSessionQuarantine :one
 INSERT INTO session_quarantines (
@@ -1384,13 +1383,15 @@ INSERT INTO session_quarantines (
   , @user_id
   , @reason
 )
-ON CONFLICT (session_id) WHERE released_at IS NULL DO NOTHING
+ON CONFLICT (organization_id, project_id, session_id) WHERE released_at IS NULL DO NOTHING
 RETURNING *;
 
 -- name: GetActiveSessionQuarantineBySession :one
 SELECT *
 FROM session_quarantines
 WHERE session_id = @session_id
+  AND organization_id = @organization_id
+  AND project_id = @project_id
   AND released_at IS NULL;
 
 -- name: ListActiveSessionQuarantines :many
@@ -1401,11 +1402,16 @@ WHERE organization_id = @organization_id
   AND released_at IS NULL
 ORDER BY created_at DESC, id DESC;
 
--- name: ListAllActiveSessionQuarantines :many
+-- name: ListActiveSessionQuarantinesPage :many
 SELECT *
 FROM session_quarantines
 WHERE released_at IS NULL
-ORDER BY created_at DESC, id DESC;
+  AND (
+    sqlc.narg(after_created_at)::timestamptz IS NULL
+    OR (created_at, id) > (sqlc.narg(after_created_at)::timestamptz, sqlc.narg(after_id)::uuid)
+  )
+ORDER BY created_at, id
+LIMIT @page_limit;
 
 -- name: ReleaseSessionQuarantine :one
 UPDATE session_quarantines
