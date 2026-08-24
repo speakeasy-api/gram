@@ -1,7 +1,6 @@
 import {
   PROJECT_GUIDE_FIXTURES,
   type JourneyMeta,
-  type JourneyStatus,
 } from "@/components/project-guide/journeys";
 import { Button } from "@/components/ui/Button";
 import type {
@@ -15,6 +14,7 @@ import { Link } from "react-router";
 
 export type ProjectGuideRunAction = {
   label: string;
+  icon?: "play" | "pause";
   onClick?: () => void;
   disabled?: boolean;
   href?: string;
@@ -22,33 +22,18 @@ export type ProjectGuideRunAction = {
 
 export type ProjectGuideRunProps = {
   journey: JourneyMeta;
-  status: JourneyStatus;
   regionId: string;
   completionBody?: string;
-  displayState?: ProjectGuideDisplayState;
-  completedSteps?: number[];
-  currentStep?: number;
-  currentContent?: ReactNode;
-  output?: ReactNode;
-  eventCard?: ReactNode;
-  primaryAction?: ProjectGuideRunAction | null;
+  displayState: ProjectGuideDisplayState;
+  completedSteps: number[];
+  currentStep: number;
+  currentContent: ReactNode;
+  output: ReactNode;
+  eventCard: ReactNode;
+  primaryAction: ProjectGuideRunAction | null;
   onRewind?: (step: number) => void;
   onSwitchJourney: () => void;
 };
-
-function journeyActionIcon(label: string): "play" | "pause" | undefined {
-  if (label === "Start the journey") {
-    return "play";
-  }
-  if (
-    label === "Pause the journey" ||
-    label === "Pause listening" ||
-    label === "Pause"
-  ) {
-    return "pause";
-  }
-  return undefined;
-}
 
 function stepStateLabel(displayState: ProjectGuideDisplayState): string {
   switch (displayState) {
@@ -71,12 +56,11 @@ function stepStateLabel(displayState: ProjectGuideDisplayState): string {
 
 export function ProjectGuideRun({
   journey,
-  status,
   regionId,
   completionBody,
-  displayState: suppliedDisplayState,
-  completedSteps: suppliedCompletedSteps,
-  currentStep: suppliedCurrentStep,
+  displayState,
+  completedSteps,
+  currentStep,
   currentContent,
   output,
   eventCard,
@@ -86,26 +70,9 @@ export function ProjectGuideRun({
 }: ProjectGuideRunProps): JSX.Element {
   const reducedMotion = useReducedMotion();
   const fixture = PROJECT_GUIDE_FIXTURES[journey.id];
-  const displayState =
-    suppliedDisplayState ??
-    (status === "done"
-      ? "complete"
-      : status === "in-progress"
-        ? "running"
-        : "ready");
   const isComplete = displayState === "complete";
-  const isRunning = displayState !== "ready";
-  const currentStep = isComplete
-    ? journey.steps.length
-    : Math.min(
-        suppliedCurrentStep ?? (status === "in-progress" ? 1 : 0),
-        journey.steps.length - 1,
-      );
   const isEndStep = isComplete && currentStep === journey.steps.length;
-  const completedSteps =
-    suppliedCompletedSteps ??
-    Array.from({ length: currentStep }, (_, index) => index);
-  let resolvedCurrentContent = isEndStep ? (
+  const resolvedCurrentContent = isEndStep ? (
     <CompletionStepBody
       journey={journey}
       body={completionBody}
@@ -114,41 +81,11 @@ export function ProjectGuideRun({
   ) : (
     currentContent
   );
-  let resolvedOutput = output;
-  let resolvedEventCard = eventCard;
-  let resolvedPrimaryAction = primaryAction;
-
-  if (resolvedCurrentContent === undefined) {
-    resolvedCurrentContent = (
-      <p className="max-w-md pt-3 text-body-sm text-muted-foreground">
-        {journey.stepBlurbs[currentStep]}
-      </p>
-    );
-  }
-  if (resolvedOutput === undefined) {
-    resolvedOutput = isRunning
-      ? fixture.activity
-      : "nothing has run for this step yet";
-  }
-  if (resolvedEventCard === undefined && (isRunning || isComplete)) {
-    resolvedEventCard = (
-      <ProjectGuideObservedEvent
-        event={fixture.event}
-        label={fixture.event.label}
-      />
-    );
-  }
-  if (resolvedPrimaryAction === undefined) {
-    let label = "Start the journey";
-    if (isRunning) label = "Watching for the event";
-    if (isComplete) label = journey.completion.primaryAction;
-    resolvedPrimaryAction = { label, disabled: !isComplete };
-  }
   const activityLogRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const activityLog = activityLogRef.current;
     if (activityLog) activityLog.scrollTop = activityLog.scrollHeight;
-  }, [resolvedOutput]);
+  }, [output]);
 
   return (
     <section
@@ -283,36 +220,34 @@ export function ProjectGuideRun({
                 Activity
               </span>
               <div className="font-mono text-xs leading-normal text-muted-foreground">
-                {resolvedOutput}
-                {resolvedEventCard}
+                {output}
+                {eventCard}
               </div>
             </div>
-            {resolvedPrimaryAction && (
+            {primaryAction && (
               <div className="mt-auto grid gap-2">
-                {resolvedPrimaryAction?.href ? (
+                {primaryAction.href ? (
                   <Button asChild className="w-full">
-                    <Link to={resolvedPrimaryAction.href}>
+                    <Link to={primaryAction.href}>
                       <Button.Text className="flex-none">
-                        {resolvedPrimaryAction.label}
+                        {primaryAction.label}
                       </Button.Text>
                     </Link>
                   </Button>
                 ) : (
-                  resolvedPrimaryAction && (
-                    <Button
-                      type="button"
-                      onClick={resolvedPrimaryAction.onClick}
-                      disabled={resolvedPrimaryAction.disabled}
-                      aria-label={resolvedPrimaryAction.label}
-                      icon={journeyActionIcon(resolvedPrimaryAction.label)}
-                      iconAfter
-                      className="w-full"
-                    >
-                      <Button.Text className="flex-none">
-                        {resolvedPrimaryAction.label}
-                      </Button.Text>
-                    </Button>
-                  )
+                  <Button
+                    type="button"
+                    onClick={primaryAction.onClick}
+                    disabled={primaryAction.disabled}
+                    aria-label={primaryAction.label}
+                    icon={primaryAction.icon}
+                    iconAfter
+                    className="w-full"
+                  >
+                    <Button.Text className="flex-none">
+                      {primaryAction.label}
+                    </Button.Text>
+                  </Button>
                 )}
               </div>
             )}

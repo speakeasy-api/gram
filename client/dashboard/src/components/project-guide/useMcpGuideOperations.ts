@@ -1,7 +1,4 @@
-import {
-  catalogBackedMcpServers,
-  hasDefaultPluginServer,
-} from "@/components/project-guide/journeyStatus";
+import { catalogBackedMcpServers } from "@/components/project-guide/journeyStatus";
 import { AUTOMATIC_CATALOG_SERVER_NAMES } from "@/components/project-guide/journeys";
 import type {
   ProjectGuideEventCard,
@@ -10,7 +7,6 @@ import type {
   ProjectGuideOperationSignal,
 } from "@/components/project-guide/projectGuideMachine";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
-import { mcpServerRouteParam } from "@/lib/sources";
 import { getServerURL } from "@/lib/utils";
 import { type PulseMCPServer, useListMCPCatalog } from "@/pages/catalog/hooks";
 import {
@@ -21,10 +17,7 @@ import {
   filterToHttpRemotes,
   normalizeRemoteUrl,
 } from "@/pages/catalog/remotes";
-import {
-  type ServerInstallStatus,
-  useRemoteMcpInstallWorkflow,
-} from "@/pages/catalog/useRemoteMcpInstallWorkflow";
+import { useRemoteMcpInstallWorkflow } from "@/pages/catalog/useRemoteMcpInstallWorkflow";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { McpServerActivity } from "@gram/client/models/components/mcpserveractivity.js";
@@ -171,28 +164,22 @@ function catalogServerForMcp(
 }
 
 export function useMcpGuideOperations(): {
-  activityBaselineReady: boolean;
   activityError: boolean;
   catalogError: boolean;
   catalogPending: boolean;
   catalogServers: PulseMCPServer[] | undefined;
   client: McpGuideClient;
   connectionPromptCopied: boolean;
-  deploymentReady: boolean;
   endpointUrl: string | undefined;
   handleSignal: (
     signal: ProjectGuideOperationSignal,
     report: (report: ProjectGuideOperationReport) => void,
   ) => void;
-  installStatuses: ServerInstallStatus[];
   markConnectionPromptCopied: () => void;
-  markPromptCopied: () => void;
   mcpServer: McpServer | undefined;
-  mcpServerHref: string | undefined;
   projectStateError: boolean;
   projectStatePending: boolean;
   prompt: string | undefined;
-  promptCopied: boolean;
   retryActivity: () => void;
   retryCatalog: () => void;
   selectServer: (server: PulseMCPServer) => void;
@@ -209,14 +196,11 @@ export function useMcpGuideOperations(): {
   >(undefined);
   const [client, setClient] = useState<McpGuideClient>("claude");
   const [connectionPromptCopied, setConnectionPromptCopied] = useState(false);
-  const [promptCopied, setPromptCopied] = useState(false);
   const [activeOperation, setActiveOperation] = useState<
     ActiveOperation | undefined
   >(undefined);
   const activeOperationRef = useRef<ActiveOperation | undefined>(undefined);
-  const [activityBaseline, setActivityBaseline] = useState<
-    ActivityBaseline | undefined
-  >(undefined);
+  const [, setActivityBaseline] = useState<ActivityBaseline>();
   const activityBaselineRef = useRef<ActivityBaseline | undefined>(undefined);
   const installStartedFor = useRef<string | undefined>(undefined);
   const progressReportedFor = useRef(new Set<string>());
@@ -285,11 +269,6 @@ export function useMcpGuideOperations(): {
         (candidate) => candidate.mcpServerId === mcpServer?.id,
       )
     : undefined;
-  const deploymentReady = Boolean(
-    mcpServer &&
-    endpoint &&
-    hasDefaultPluginServer(pluginsQuery.data?.plugins, mcpServer.id),
-  );
   const endpointUrl = endpoint?.slug
     ? `${getServerURL()}/mcp/${endpoint.slug}`
     : undefined;
@@ -345,10 +324,6 @@ export function useMcpGuideOperations(): {
       : undefined;
   const prompt =
     clientName && endpointUrl ? promptFor(clientName, endpointUrl) : undefined;
-  const installStatuses =
-    workflow.phase === "installing" || workflow.phase === "complete"
-      ? workflow.statuses
-      : [];
 
   const updateActiveOperation = useCallback(
     (operation: ActiveOperation | undefined) => {
@@ -578,27 +553,19 @@ export function useMcpGuideOperations(): {
   ]);
 
   return {
-    activityBaselineReady: activityBaseline !== undefined,
     activityError,
     catalogError,
     catalogPending: catalog.isPending,
     catalogServers,
     client,
     connectionPromptCopied,
-    deploymentReady,
     endpointUrl,
     handleSignal,
-    installStatuses,
     markConnectionPromptCopied: () => setConnectionPromptCopied(true),
-    markPromptCopied: () => setPromptCopied(true),
     mcpServer,
-    mcpServerHref: mcpServer
-      ? routes.mcp.x.overview.href(mcpServerRouteParam(mcpServer))
-      : undefined,
     projectStateError,
     projectStatePending,
     prompt,
-    promptCopied,
     retryActivity,
     retryCatalog: () => {
       void catalog.refetch();
@@ -606,7 +573,6 @@ export function useMcpGuideOperations(): {
     selectServer: (server) => {
       setSelectedServer(server);
       setConnectionPromptCopied(false);
-      setPromptCopied(false);
       activityBaselineRef.current = undefined;
       setActivityBaseline(undefined);
       setBaselineCaptureError(false);

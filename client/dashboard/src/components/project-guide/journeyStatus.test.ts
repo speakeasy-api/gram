@@ -12,7 +12,6 @@ import {
   deriveJourneyStatus,
   firstIncompleteStepIndex,
   hasBlockingSecretsPolicy,
-  hasCatalogBackedServer,
   hasDefaultPluginServer,
   hasMcpServerActivity,
   latestSecretsFinding,
@@ -110,55 +109,15 @@ function pluginServer(mcpServerId: string): PluginServer {
   };
 }
 
-describe("hasCatalogBackedServer", () => {
-  it("counts only a remote MCP server whose URL comes from the catalog", () => {
+describe("catalogBackedMcpServers", () => {
+  it("matches catalog remote URLs and ignores unread inputs", () => {
     expect(
-      hasCatalogBackedServer(
+      catalogBackedMcpServers(
         [server({ remoteMcpServerId: "remote-id" })],
         [remote()],
         [catalogServer()],
       ),
-    ).toBe(true);
-  });
-
-  it("rejects a custom remote MCP server even when its slug resembles a catalog entry", () => {
-    expect(
-      hasCatalogBackedServer(
-        [
-          server({
-            remoteMcpServerId: "custom-remote",
-            slug: "catalog-server",
-          }),
-        ],
-        [
-          remote({
-            id: "custom-remote",
-            url: "https://custom.example/mcp",
-          }),
-        ],
-        [catalogServer()],
-      ),
-    ).toBe(false);
-  });
-
-  it("ignores toolset-, tunnel-, and unproxied-backed servers", () => {
-    expect(
-      hasCatalogBackedServer(
-        [
-          server({ toolsetId: "toolset-id" }),
-          server({ tunneledMcpServerId: "tunnel-id" }),
-          server({ unproxiedMcpServerId: "unproxied-id" }),
-        ],
-        [remote()],
-        [catalogServer()],
-      ),
-    ).toBe(false);
-  });
-
-  it("handles an unread list", () => {
-    expect(
-      hasCatalogBackedServer(undefined, [remote()], [catalogServer()]),
-    ).toBe(false);
+    ).toHaveLength(1);
     expect(
       catalogBackedMcpServers(
         [server({ remoteMcpServerId: "remote-id" })],

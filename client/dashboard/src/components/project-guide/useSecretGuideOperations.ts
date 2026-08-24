@@ -102,12 +102,11 @@ function shellFilename(value: string): string {
 function installDetails(
   client: SecretGuideClient,
   filename: string | undefined,
-): { command: string; instructions: string } | undefined {
+): { command: string } | undefined {
   if (!filename) return undefined;
-  const { installDirectory, label } = SECRET_GUIDE_CLIENTS[client];
+  const { installDirectory } = SECRET_GUIDE_CLIENTS[client];
   return {
     command: `unzip -oq ${shellFilename(filename)} -d ${installDirectory}`,
-    instructions: `Extract the ZIP into ${installDirectory}, then restart ${label} before confirming below.`,
   };
 }
 
@@ -205,16 +204,12 @@ export function useSecretGuideOperations(): {
     report: (report: ProjectGuideOperationReport) => void,
   ) => void;
   installCommand: string | undefined;
-  installInstructions: string | undefined;
-  markPromptCopied: () => void;
   policyError: boolean;
   policyPending: boolean;
   prompt: string;
-  promptCopied: boolean;
   retryPolicy: () => void;
   riskEventsHref: string;
   setClient: (client: SecretGuideClient) => void;
-  telemetryBaselineReady: boolean;
   telemetryError: boolean;
 } {
   const gramProject = useProjectSlugForRequests();
@@ -224,11 +219,10 @@ export function useSecretGuideOperations(): {
   const queryClient = useQueryClient();
   const [client, setClientState] = useState<SecretGuideClient>();
   const [downloadedFilename, setDownloadedFilename] = useState<string>();
-  const [promptCopied, setPromptCopied] = useState(false);
   const [createdPolicy, setCreatedPolicy] = useState<RiskPolicy>();
   const [activeOperation, setActiveOperation] = useState<ActiveOperation>();
   const activeOperationRef = useRef<ActiveOperation | undefined>(undefined);
-  const [baseline, setBaseline] = useState<TelemetryBaseline>();
+  const [, setBaseline] = useState<TelemetryBaseline>();
   const baselineRef = useRef<TelemetryBaseline | undefined>(undefined);
   const [baselineError, setBaselineError] = useState(false);
   const [suppressTelemetryError, setSuppressTelemetryError] = useState(false);
@@ -595,12 +589,9 @@ export function useSecretGuideOperations(): {
     downloadedFilename,
     handleSignal,
     installCommand: install?.command,
-    installInstructions: install?.instructions,
-    markPromptCopied: () => setPromptCopied(true),
     policyError,
     policyPending,
     prompt: SECRET_GUIDE_PROMPT,
-    promptCopied,
     retryPolicy: () => {
       void policiesQuery.refetch();
     },
@@ -608,9 +599,7 @@ export function useSecretGuideOperations(): {
     setClient: (nextClient) => {
       if (downloadedFilename) return;
       setClientState(nextClient);
-      setPromptCopied(false);
     },
-    telemetryBaselineReady: baseline !== undefined,
     telemetryError,
   };
 }

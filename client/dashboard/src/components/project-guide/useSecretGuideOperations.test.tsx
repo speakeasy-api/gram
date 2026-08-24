@@ -311,9 +311,6 @@ describe("useSecretGuideOperations", () => {
     expect(hook.current.installCommand).toBe(
       "unzip -oq gram-observability.zip -d ~/.claude/plugins/",
     );
-    expect(hook.current.installInstructions).toBe(
-      "Extract the ZIP into ~/.claude/plugins/, then restart Claude Code before confirming below.",
-    );
   });
 
   it("waits without reporting or downloading when Step 2 has no client", async () => {
@@ -332,26 +329,20 @@ describe("useSecretGuideOperations", () => {
       client: "cursor" as const,
       filename: "observability-cursor.zip",
       command: "unzip -oq observability-cursor.zip -d ~/.cursor/extensions/",
-      instructions:
-        "Extract the ZIP into ~/.cursor/extensions/, then restart Cursor before confirming below.",
     },
     {
       client: "codex" as const,
       filename: "observability-codex.zip",
       command: "unzip -oq observability-codex.zip -d ~/.codex/plugins/",
-      instructions:
-        "Extract the ZIP into ~/.codex/plugins/, then restart Codex before confirming below.",
     },
     {
       client: "opencode" as const,
       filename: "observability-opencode.zip",
       command: "unzip -oq observability-opencode.zip -d .opencode/",
-      instructions:
-        "Extract the ZIP into .opencode/, then restart OpenCode before confirming below.",
     },
   ])(
     "activates the generated $client archive through its existing install contract",
-    async ({ client, filename, command, instructions }) => {
+    async ({ client, filename, command }) => {
       authFetch.mockResolvedValueOnce(
         new Response(new Blob(["zip"]), {
           status: 200,
@@ -371,7 +362,6 @@ describe("useSecretGuideOperations", () => {
         expect(hook.current.downloadedFilename).toBe(filename),
       );
       expect(hook.current.installCommand).toBe(command);
-      expect(hook.current.installInstructions).toBe(instructions);
       expect(authFetch).toHaveBeenCalledWith(
         `/rpc/plugins.downloadObservabilityPlugin?platform=${client}`,
         {},
@@ -400,7 +390,7 @@ describe("useSecretGuideOperations", () => {
     expect(results.refetch).not.toHaveBeenCalled();
     act(() => hook.current.handleSignal({ type: "checkpoint", scope }, report));
 
-    await waitFor(() => expect(hook.current.telemetryBaselineReady).toBe(true));
+    await waitFor(() => expect(hooks.refetch).toHaveBeenCalledOnce());
     expect(hooks.refetch).toHaveBeenCalledOnce();
     expect(results.refetch).toHaveBeenCalledOnce();
     expect(report).not.toHaveBeenCalledWith(
@@ -438,7 +428,7 @@ describe("useSecretGuideOperations", () => {
         report,
       ),
     );
-    await waitFor(() => expect(hook.current.telemetryBaselineReady).toBe(true));
+    await waitFor(() => expect(hooks.refetch).toHaveBeenCalledOnce());
 
     const listenScope = { ...POLICY_SCOPE, step: 4, runId: 3 };
     act(() =>
@@ -531,9 +521,7 @@ describe("useSecretGuideOperations", () => {
         report,
       ),
     );
-    await waitFor(() =>
-      expect(view.result.current.telemetryBaselineReady).toBe(true),
-    );
+    await waitFor(() => expect(refetchHooks).toHaveBeenCalledOnce());
 
     const listenScope = { ...POLICY_SCOPE, step: 4, runId: 3 };
     act(() =>
@@ -610,9 +598,7 @@ describe("useSecretGuideOperations", () => {
         report,
       ),
     );
-    await waitFor(() =>
-      expect(view.result.current.telemetryBaselineReady).toBe(true),
-    );
+    await waitFor(() => expect(queryHooks.hooks).toHaveBeenCalled());
     act(() =>
       view.result.current.handleSignal(
         { type: "start", scope: { ...POLICY_SCOPE, step: 4, runId: 3 } },
@@ -678,9 +664,7 @@ describe("useSecretGuideOperations", () => {
         report,
       ),
     );
-    await waitFor(() =>
-      expect(view.result.current.telemetryBaselineReady).toBe(true),
-    );
+    await waitFor(() => expect(queryHooks.hooks).toHaveBeenCalled());
     act(() =>
       view.result.current.handleSignal(
         { type: "start", scope: { ...POLICY_SCOPE, step: 4, runId: 3 } },
@@ -739,9 +723,7 @@ describe("useSecretGuideOperations", () => {
         report,
       ),
     );
-    await waitFor(() =>
-      expect(view.result.current.telemetryBaselineReady).toBe(true),
-    );
+    await waitFor(() => expect(queryHooks.hooks).toHaveBeenCalled());
     act(() =>
       view.result.current.handleSignal(
         { type: "start", scope: { ...POLICY_SCOPE, step: 4, runId: 3 } },
@@ -785,17 +767,13 @@ describe("useSecretGuideOperations", () => {
     expect(hook.current.prompt).toBe(
       'Run this exact command in your shell:\n\necho "GITHUB_TOKEN=ghp_R2D2C3POLuk3Skywalker1234567890ab"',
     );
-    expect(hook.current.promptCopied).toBe(false);
-    act(() => hook.current.markPromptCopied());
-    expect(hook.current.promptCopied).toBe(true);
-
     act(() =>
       hook.current.handleSignal(
         { type: "checkpoint", scope: { ...POLICY_SCOPE, step: 3, runId: 2 } },
         report,
       ),
     );
-    await waitFor(() => expect(hook.current.telemetryBaselineReady).toBe(true));
+    await waitFor(() => expect(hooks.refetch).toHaveBeenCalledOnce());
     act(() =>
       hook.current.handleSignal(
         {
@@ -810,7 +788,6 @@ describe("useSecretGuideOperations", () => {
       expect(hooks.refetch).toHaveBeenCalledTimes(2);
       expect(results.refetch).toHaveBeenCalledTimes(2);
     });
-    expect(hook.current.telemetryBaselineReady).toBe(true);
   });
 
   it("recaptures a missing baseline through the normal retry signal", async () => {
@@ -845,7 +822,7 @@ describe("useSecretGuideOperations", () => {
       ),
     );
 
-    await waitFor(() => expect(hook.current.telemetryBaselineReady).toBe(true));
+    await waitFor(() => expect(hooks.refetch).toHaveBeenCalledTimes(2));
     expect(hooks.refetch).toHaveBeenCalledTimes(2);
     expect(results.refetch).toHaveBeenCalledTimes(2);
   });

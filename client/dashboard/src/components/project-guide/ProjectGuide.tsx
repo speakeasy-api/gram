@@ -254,7 +254,6 @@ export function ProjectGuide({
                 ) : isSelected ? (
                   <ProjectGuideRun
                     journey={journey}
-                    status={status}
                     regionId={projectGuideContentId(journey.id)}
                     completionBody={
                       journey.id === "third-party-mcp"
@@ -274,7 +273,6 @@ export function ProjectGuide({
                         mcpOperations={mcpOperations}
                         secretOperations={secretOperations}
                         onMcpPromptCopied={() => {
-                          mcpOperations.markPromptCopied();
                           if (
                             journey.id === "third-party-mcp" &&
                             currentStep === 2 &&
@@ -288,7 +286,6 @@ export function ProjectGuide({
                           }
                         }}
                         onSecretPromptCopied={() => {
-                          secretOperations.markPromptCopied();
                           if (
                             journey.id === "secret-block" &&
                             currentStep === 3 &&
@@ -331,7 +328,7 @@ export function ProjectGuide({
                         />
                       ) : null
                     }
-                    primaryAction={primaryAction}
+                    primaryAction={primaryAction ?? null}
                     onRewind={(step) => send({ type: "REWIND", step })}
                     onSwitchJourney={() => {
                       const otherId = otherProjectGuideJourney(journey.id);
@@ -371,6 +368,7 @@ function primaryActionFor(
     case "ready":
       return {
         label: "Start the journey",
+        icon: "play",
         disabled:
           (journey.id === "third-party-mcp" &&
             currentStep === 0 &&
@@ -387,6 +385,7 @@ function primaryActionFor(
     case "running":
       return {
         label: "Pause the journey",
+        icon: "pause",
         onClick: () => send({ type: "PAUSE" }),
       };
     case "checkpoint":
@@ -420,6 +419,7 @@ function primaryActionFor(
       if (journey.id === "secret-block" && currentStep === 1) {
         return {
           label: "Start the journey",
+          icon: "play",
           disabled: !secretOperations.clientSelected,
           onClick: () => {
             send({ type: "SELECT_AGENT", client: secretOperations.client });
@@ -441,6 +441,7 @@ function primaryActionFor(
     case "waiting":
       return {
         label: "Pause listening",
+        icon: "pause",
         onClick: () => send({ type: "PAUSE" }),
       };
     case "paused":
@@ -460,7 +461,7 @@ function primaryActionFor(
       };
     case "opening":
     case "exited":
-      return { label: "Start the journey", disabled: true };
+      return { label: "Start the journey", icon: "play", disabled: true };
   }
 }
 
@@ -951,23 +952,14 @@ function McpCatalogSelection({
       </span>
     );
   }
-  if (operations.catalogError || !operations.catalogServers) {
-    return (
-      <button
-        type="button"
-        onClick={operations.retryCatalog}
-        className="border-border w-fit border px-3 py-2 font-mono text-xs uppercase"
-      >
-        Retry catalog
-      </button>
-    );
-  }
-  if (operations.catalogServers.length === 0) {
+  if (operations.catalogError || !operations.catalogServers?.length) {
     return (
       <div className="grid gap-2">
-        <p className="text-muted-foreground text-sm">
-          No curated hosted servers are available right now.
-        </p>
+        {operations.catalogServers && (
+          <p className="text-muted-foreground text-sm">
+            No curated hosted servers are available right now.
+          </p>
+        )}
         <button
           type="button"
           onClick={operations.retryCatalog}

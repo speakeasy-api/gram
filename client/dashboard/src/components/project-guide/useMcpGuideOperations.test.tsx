@@ -385,7 +385,7 @@ describe("useMcpGuideOperations", () => {
     expect(startInstall).not.toHaveBeenCalled();
   });
 
-  it("exposes the endpoint and Default plugin readiness for client setup", () => {
+  it("exposes the endpoint for client setup", () => {
     setExistingServer();
     const { result } = renderHook(() => useMcpGuideOperations());
 
@@ -393,16 +393,11 @@ describe("useMcpGuideOperations", () => {
     expect(result.current.endpointUrl).toBe(
       "https://api.example/mcp/linear-endpoint",
     );
-    expect(result.current.deploymentReady).toBe(true);
     expect(workflowHook).toHaveBeenLastCalledWith({
       servers: [],
       projectSlug: "request-project",
       autoSelectRemotes: true,
     });
-
-    queryHooks.plugins.mockReturnValue(queryResult({ plugins: [] }));
-    const incomplete = renderHook(() => useMcpGuideOperations());
-    expect(incomplete.result.current.deploymentReady).toBe(false);
   });
 
   it("returns namespaced client commands and a list-plus-read-only-call prompt", () => {
@@ -428,22 +423,16 @@ describe("useMcpGuideOperations", () => {
     );
     expect(result.current.prompt).toMatch(/marked read-only/i);
     expect(result.current.prompt).toMatch(/do not create, update, or delete/i);
-    expect(result.current.mcpServerHref).toBe(
-      "/projects/request-project/mcp/linear-governed",
-    );
     expect(result.current.toolLogsHref).toBe("/projects/request-project/logs");
 
     expect(result.current.client).toBe("claude");
     expect(result.current.connectionPromptCopied).toBe(false);
-    expect(result.current.promptCopied).toBe(false);
     act(() => {
       result.current.setClient("codex");
       result.current.markConnectionPromptCopied();
-      result.current.markPromptCopied();
     });
     expect(result.current.client).toBe("codex");
     expect(result.current.connectionPromptCopied).toBe(true);
-    expect(result.current.promptCopied).toBe(true);
   });
 
   it("awaits a fresh selected-server baseline before exposing prompt readiness", async () => {
@@ -470,7 +459,6 @@ describe("useMcpGuideOperations", () => {
     });
 
     expect(refetchActivity).toHaveBeenCalledOnce();
-    expect(result.current.activityBaselineReady).toBe(false);
 
     await act(async () => {
       resolveFreshRead({
@@ -489,10 +477,6 @@ describe("useMcpGuideOperations", () => {
         isError: false,
       });
     });
-
-    await waitFor(() =>
-      expect(result.current.activityBaselineReady).toBe(true),
-    );
 
     setExistingServer({ calls: 5 });
     rerender();
@@ -585,9 +569,6 @@ describe("useMcpGuideOperations", () => {
         report,
       );
     });
-    await waitFor(() =>
-      expect(result.current.activityBaselineReady).toBe(true),
-    );
 
     act(() => {
       result.current.handleSignal(
@@ -633,7 +614,6 @@ describe("useMcpGuideOperations", () => {
 
     await waitFor(() => {
       expect(result.current.activityError).toBe(true);
-      expect(result.current.activityBaselineReady).toBe(false);
     });
 
     refetchActivity.mockResolvedValueOnce({
@@ -657,7 +637,6 @@ describe("useMcpGuideOperations", () => {
     await waitFor(() => {
       expect(refetchActivity).toHaveBeenCalledTimes(2);
       expect(result.current.activityError).toBe(false);
-      expect(result.current.activityBaselineReady).toBe(true);
     });
   });
 
@@ -680,6 +659,5 @@ describe("useMcpGuideOperations", () => {
     expect(result.current.catalogServers).toBeUndefined();
     expect(result.current.catalogError).toBe(true);
     expect(result.current.projectStateError).toBe(true);
-    expect(result.current.deploymentReady).toBe(false);
   });
 });

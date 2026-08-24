@@ -119,32 +119,26 @@ const catalogServer = {
 
 function resetMcpOperations(): void {
   mcpOperations.current = {
-    activityBaselineReady: true,
     activityError: false,
     catalogError: false,
     catalogPending: false,
     catalogServers: [catalogServer],
     client: "claude",
     connectionPromptCopied: true,
-    deploymentReady: true,
     endpointUrl: "https://api.example/mcp/linear-endpoint",
     handleSignal: vi.fn(),
-    installStatuses: [],
     markConnectionPromptCopied: vi.fn(),
-    markPromptCopied: vi.fn(),
     mcpServer: {
       id: "mcp-server-id",
       slug: "linear-governed",
       name: "Linear",
       remoteMcpServerId: "remote-id",
     },
-    mcpServerHref: "/projects/request-project/mcp/linear-governed",
     serverName: "Linear",
     projectStateError: false,
     projectStatePending: false,
     prompt:
       "Using the Linear_Governed MCP server at this exact URL, https://api.example/mcp/linear-endpoint, first list the available tools. If multiple servers have the same name, use only the one at this URL. Then choose one tool marked read-only and call it with a harmless request. Do not create, update, or delete anything.",
-    promptCopied: true,
     retryActivity: vi.fn(),
     retryCatalog: vi.fn(),
     selectServer: vi.fn(),
@@ -169,20 +163,15 @@ function resetSecretOperations(): void {
     downloadedFilename: "gram-observability.zip",
     handleSignal: vi.fn(),
     installCommand: "unzip -oq gram-observability.zip -d ~/.claude/plugins/",
-    installInstructions:
-      "Extract the ZIP into ~/.claude/plugins/, then restart Claude Code before confirming below.",
-    markPromptCopied: vi.fn(),
     policyError: false,
     policyPending: false,
     prompt:
       'Run this exact command in your shell:\n\necho "GITHUB_TOKEN=ghp_R2D2C3POLuk3Skywalker1234567890ab"',
-    promptCopied: true,
     retryPolicy: vi.fn(),
     riskEventsHref: "/projects/request-project/security/events",
     setClient: vi.fn((client: "claude" | "cursor" | "codex" | "opencode") => {
       secretOperations.current.client = client;
     }),
-    telemetryBaselineReady: true,
     telemetryError: false,
   };
 }
@@ -483,7 +472,6 @@ describe("ProjectGuide", () => {
   });
 
   it("keeps the MCP prompt available while its baseline is unresolved", async () => {
-    mcpOperations.current.activityBaselineReady = false;
     mcpOperations.current.activityError = true;
     const handleSignal = vi.fn(
       (
@@ -730,8 +718,9 @@ describe("ProjectGuide", () => {
     render(
       <ProjectGuideRun
         journey={PROJECT_GUIDE_JOURNEYS[1]!}
-        status="not-started"
         regionId="fixture-run"
+        displayState="checkpoint"
+        completedSteps={[]}
         currentStep={2}
         currentContent={<p>Coordinator-provided checkpoint</p>}
         output={<span>Coordinator output line</span>}
@@ -767,10 +756,18 @@ describe("ProjectGuide", () => {
     render(
       <ProjectGuideRun
         journey={PROJECT_GUIDE_JOURNEYS[1]!}
-        status="not-started"
         regionId="ready-run"
         displayState="ready"
-        primaryAction={{ label: "Start the journey", onClick: () => undefined }}
+        completedSteps={[]}
+        currentStep={0}
+        currentContent={null}
+        output={null}
+        eventCard={null}
+        primaryAction={{
+          label: "Start the journey",
+          icon: "play",
+          onClick: () => undefined,
+        }}
         onSwitchJourney={() => undefined}
       />,
     );
@@ -784,10 +781,18 @@ describe("ProjectGuide", () => {
     render(
       <ProjectGuideRun
         journey={PROJECT_GUIDE_JOURNEYS[1]!}
-        status="not-started"
         regionId="disabled-ready-run"
         displayState="ready"
-        primaryAction={{ label: "Start the journey", disabled: true }}
+        completedSteps={[]}
+        currentStep={0}
+        currentContent={null}
+        output={null}
+        eventCard={null}
+        primaryAction={{
+          label: "Start the journey",
+          icon: "play",
+          disabled: true,
+        }}
         onSwitchJourney={() => undefined}
       />,
     );
@@ -801,9 +806,13 @@ describe("ProjectGuide", () => {
     render(
       <ProjectGuideRun
         journey={PROJECT_GUIDE_JOURNEYS[1]!}
-        status="in-progress"
         regionId="checkpoint-run"
         displayState="checkpoint"
+        completedSteps={[]}
+        currentStep={0}
+        currentContent={null}
+        output={null}
+        eventCard={null}
         primaryAction={{
           label: "I've installed and restarted it",
           disabled: false,
@@ -823,9 +832,13 @@ describe("ProjectGuide", () => {
     render(
       <ProjectGuideRun
         journey={PROJECT_GUIDE_JOURNEYS[1]!}
-        status="in-progress"
         regionId="disabled-checkpoint-run"
         displayState="checkpoint"
+        completedSteps={[]}
+        currentStep={0}
+        currentContent={null}
+        output={null}
+        eventCard={null}
         primaryAction={{
           label: "I've installed and restarted it",
           disabled: true,
@@ -846,13 +859,14 @@ describe("ProjectGuide", () => {
     const { rerender } = render(
       <ProjectGuideRun
         journey={journey}
-        status="in-progress"
         regionId="scroll-run"
         displayState="running"
         completedSteps={[]}
         currentStep={0}
+        currentContent={null}
         output={<span>First output</span>}
-        primaryAction={{ label: "Pause the journey" }}
+        eventCard={null}
+        primaryAction={{ label: "Pause the journey", icon: "pause" }}
         onSwitchJourney={() => undefined}
       />,
     );
@@ -866,13 +880,14 @@ describe("ProjectGuide", () => {
     rerender(
       <ProjectGuideRun
         journey={journey}
-        status="in-progress"
         regionId="scroll-run"
         displayState="running"
         completedSteps={[]}
         currentStep={0}
+        currentContent={null}
         output={<span>Latest output</span>}
-        primaryAction={{ label: "Pause the journey" }}
+        eventCard={null}
+        primaryAction={{ label: "Pause the journey", icon: "pause" }}
         onSwitchJourney={() => undefined}
       />,
     );
@@ -885,13 +900,14 @@ describe("ProjectGuide", () => {
     render(
       <ProjectGuideRun
         journey={PROJECT_GUIDE_JOURNEYS[1]!}
-        status="in-progress"
         regionId="waiting-run"
         displayState="waiting"
         completedSteps={[0, 1, 2, 3]}
         currentStep={4}
+        currentContent={null}
         output={<span>Listening started</span>}
-        primaryAction={{ label: "Pause listening" }}
+        eventCard={null}
+        primaryAction={{ label: "Pause listening", icon: "pause" }}
         onSwitchJourney={() => undefined}
       />,
     );
@@ -1356,7 +1372,6 @@ describe("ProjectGuide", () => {
   it("keeps the secret prompt visible and reports send failures in the activity log", async () => {
     const listenerError =
       "Could not check for the blocked event after the prompt was copied. Retry the step.";
-    secretOperations.current.promptCopied = true;
 
     const handleSignal = vi.fn(
       (

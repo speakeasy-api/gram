@@ -11,21 +11,6 @@ type CatalogServerIdentity = {
   remotes?: Array<{ transportType: string; url: string }>;
 };
 
-/**
- * Journey A's own artifact: a server whose backend is a catalog remote MCP
- * server. Toolset-, tunnel-, and unproxied-backed servers are other features.
- */
-export function hasCatalogBackedServer(
-  servers: McpServer[] | undefined,
-  remoteMcpServers: RemoteMcpServer[] | undefined,
-  catalogServers: CatalogServerIdentity[] | undefined,
-): boolean {
-  return (
-    catalogBackedMcpServers(servers, remoteMcpServers, catalogServers).length >
-    0
-  );
-}
-
 export function catalogBackedMcpServers(
   servers: McpServer[] | undefined,
   remoteMcpServers: RemoteMcpServer[] | undefined,

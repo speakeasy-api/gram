@@ -29,8 +29,6 @@ export const JOURNEY_STATUS_LABELS: Record<JourneyStatus, string> = {
 
 export type JourneyMeta = {
   id: JourneyId;
-  /** Matches the numbering language of the org-home welcome banner cards. */
-  index: string;
   title: string;
   /** The observable win, stated as the user would describe it afterwards. */
   win: string;
@@ -65,14 +63,6 @@ export const SECRET_BLOCK_STEPS = [
   "Watch the block land",
 ];
 
-export const THIRD_PARTY_MCP_STEPS = [
-  "Pick a server from the catalog",
-  "Confirm the governed endpoint",
-  "Connect your client",
-  "Ask the agent to list the tools",
-  "Watch the first governed call",
-];
-
 export const PROJECT_GUIDE_MCP_STEPS = [
   "Pick and set up a server",
   "Connect your client",
@@ -90,7 +80,6 @@ export const PROJECT_GUIDE_COMPLETE = {
 export const PROJECT_GUIDE_JOURNEYS: JourneyMeta[] = [
   {
     id: "secret-block",
-    index: "01",
     title: "Block a leaked credential mid-prompt",
     win: "A secrets policy denies any prompt carrying a credential. The attempt lands in Risk Events with the rule that caught it, the matched span, and who sent it.",
     completion: {
@@ -109,7 +98,6 @@ export const PROJECT_GUIDE_JOURNEYS: JourneyMeta[] = [
   },
   {
     id: "third-party-mcp",
-    index: "02",
     title: "Govern a third-party MCP",
     win: "Install a vendor's MCP server, connect your agent to it, and watch the first call arrive with the actor, the tools, and the result attached.",
     completion: {
