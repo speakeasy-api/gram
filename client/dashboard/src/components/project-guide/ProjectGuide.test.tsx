@@ -129,7 +129,6 @@ const catalogServer = {
 
 function resetMcpOperations(): void {
   mcpOperations.current = {
-    activityError: false,
     catalogError: false,
     catalogPending: false,
     catalogServers: [catalogServer],
@@ -149,7 +148,6 @@ function resetMcpOperations(): void {
     projectStatePending: false,
     prompt:
       "Using the Linear_Governed MCP server at this exact URL, https://api.example/mcp/linear-endpoint, first list the available tools. If multiple servers have the same name, use only the one at this URL. Then choose one tool marked read-only and call it with a harmless request. Do not create, update, or delete anything.",
-    retryActivity: vi.fn(),
     retryCatalog: vi.fn(),
     selectServer: vi.fn(),
     selectedServer: catalogServer,
@@ -182,7 +180,6 @@ function resetSecretOperations(): void {
     setClient: vi.fn((client: "claude" | "cursor" | "codex") => {
       secretOperations.current.client = client;
     }),
-    telemetryError: false,
   };
 }
 
@@ -328,13 +325,12 @@ describe("ProjectGuide", () => {
 
   it("dispatches START and the matching operation signal from the primary button", () => {
     const signals: ProjectGuideOperationSignal[] = [];
-    render(
-      <ProjectGuide
-        onOperationSignal={(signal) => {
-          signals.push(signal);
-        }}
-      />,
+    mcpOperations.current.handleSignal = vi.fn(
+      (signal: ProjectGuideOperationSignal) => {
+        signals.push(signal);
+      },
     );
+    render(<ProjectGuide />);
 
     fireEvent.click(
       screen.getByRole("button", { name: /Govern a third-party MCP/ }),
@@ -357,30 +353,32 @@ describe("ProjectGuide", () => {
 
   it("paces automated MCP sub-steps before advancing the step", async () => {
     vi.useFakeTimers();
-    render(
-      <ProjectGuide
-        onOperationSignal={(signal, report) => {
-          if (signal.type !== "start" || signal.scope.step !== 0) return;
-          report({
-            type: "progress",
-            scope: signal.scope,
-            message: "Read the server's tool list",
-            progress: 0.2,
-          });
-          report({
-            type: "progress",
-            scope: signal.scope,
-            message: "Install it into this project",
-            progress: 0.5,
-          });
-          report({
-            type: "success",
-            scope: signal.scope,
-            result: "Server installed",
-          });
-        }}
-      />,
+    mcpOperations.current.handleSignal = vi.fn(
+      (
+        signal: ProjectGuideOperationSignal,
+        report: (report: ProjectGuideOperationReport) => void,
+      ) => {
+        if (signal.type !== "start" || signal.scope.step !== 0) return;
+        report({
+          type: "progress",
+          scope: signal.scope,
+          message: "Read the server's tool list",
+          progress: 0.2,
+        });
+        report({
+          type: "progress",
+          scope: signal.scope,
+          message: "Install it into this project",
+          progress: 0.5,
+        });
+        report({
+          type: "success",
+          scope: signal.scope,
+          result: "Server installed",
+        });
+      },
     );
+    render(<ProjectGuide />);
 
     fireEvent.click(
       screen.getByRole("button", { name: /Govern a third-party MCP/ }),
@@ -407,29 +405,31 @@ describe("ProjectGuide", () => {
     vi.useFakeTimers();
     let report: (report: ProjectGuideOperationReport) => void = () => undefined;
     let activeScope: ProjectGuideOperationScope | null = null;
-    render(
-      <ProjectGuide
-        onOperationSignal={(signal, sendReport) => {
-          report = sendReport;
-          activeScope = signal.scope;
-          if (signal.type !== "start") return;
-          if (signal.scope.step === 0) {
-            sendReport({
-              type: "success",
-              scope: signal.scope,
-              result: "Server installed",
-            });
-          }
-          if (signal.scope.step === 1) {
-            sendReport({
-              type: "success",
-              scope: signal.scope,
-              result: "Endpoint verified",
-            });
-          }
-        }}
-      />,
+    mcpOperations.current.handleSignal = vi.fn(
+      (
+        signal: ProjectGuideOperationSignal,
+        sendReport: (report: ProjectGuideOperationReport) => void,
+      ) => {
+        report = sendReport;
+        activeScope = signal.scope;
+        if (signal.type !== "start") return;
+        if (signal.scope.step === 0) {
+          sendReport({
+            type: "success",
+            scope: signal.scope,
+            result: "Server installed",
+          });
+        }
+        if (signal.scope.step === 1) {
+          sendReport({
+            type: "success",
+            scope: signal.scope,
+            result: "Endpoint verified",
+          });
+        }
+      },
     );
+    render(<ProjectGuide />);
 
     fireEvent.click(
       screen.getByRole("button", { name: /Govern a third-party MCP/ }),
@@ -485,44 +485,6 @@ describe("ProjectGuide", () => {
     ).toContain("linear.tools/list");
     expect(document.querySelectorAll('[aria-current="step"]')).toHaveLength(1);
     expect(screen.getByText("linear.tools/list")).toBeTruthy();
-  });
-
-  it("keeps the MCP prompt available while its baseline is unresolved", async () => {
-    vi.useFakeTimers();
-    mcpOperations.current.activityError = true;
-    const handleSignal = vi.fn(
-      (
-        signal: ProjectGuideOperationSignal,
-        report: (report: ProjectGuideOperationReport) => void,
-      ) => {
-        if (signal.type === "start" && signal.scope.step < 2) {
-          report({
-            type: "success",
-            scope: signal.scope,
-            result: "Step complete",
-          });
-        }
-      },
-    );
-    mcpOperations.current.handleSignal = handleSignal;
-
-    render(<ProjectGuide />);
-    fireEvent.click(
-      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
-    await advanceGuideDelay();
-    fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
-    await advanceGuideDelay();
-
-    expect(screen.getByText(/first list the available tools/)).toBeTruthy();
-    expect(
-      screen.queryByText(/capturing current activity baseline/i),
-    ).toBeNull();
-    expect(
-      screen.queryByText(/could not capture the current activity baseline/i),
-    ).toBeNull();
-    expect(screen.queryByRole("button", { name: "Sent it" })).toBeNull();
   });
 
   it("shows MCP listening guidance only in Activity", async () => {
@@ -635,24 +597,25 @@ describe("ProjectGuide", () => {
         secretOperations.current.clientSelected = true;
       },
     );
-
-    render(
-      <ProjectGuide
-        onOperationSignal={(signal, report) => {
-          if (signal.scope.step === 0) {
-            report({
-              type: "success",
-              scope: signal.scope,
-              result: "Secrets policy created",
-            });
-          }
-          if (signal.scope.step === 1) {
-            downloadReport = report;
-            downloadScope = signal.scope;
-          }
-        }}
-      />,
+    secretOperations.current.handleSignal = vi.fn(
+      (
+        signal: ProjectGuideOperationSignal,
+        report: (report: ProjectGuideOperationReport) => void,
+      ) => {
+        if (signal.scope.step === 0) {
+          report({
+            type: "success",
+            scope: signal.scope,
+            result: "Secrets policy created",
+          });
+        }
+        if (signal.scope.step === 1) {
+          downloadReport = report;
+          downloadScope = signal.scope;
+        }
+      },
     );
+    render(<ProjectGuide />);
 
     fireEvent.click(
       screen.getByRole("button", {
@@ -706,21 +669,23 @@ describe("ProjectGuide", () => {
     vi.useFakeTimers();
     const signals: ProjectGuideOperationSignal[] = [];
     let failStart = true;
-    render(
-      <ProjectGuide
-        onOperationSignal={(signal, report) => {
-          signals.push(signal);
-          if (signal.type === "start" && failStart) {
-            failStart = false;
-            report({
-              type: "error",
-              scope: signal.scope,
-              message: "Catalog unavailable",
-            });
-          }
-        }}
-      />,
+    mcpOperations.current.handleSignal = vi.fn(
+      (
+        signal: ProjectGuideOperationSignal,
+        report: (report: ProjectGuideOperationReport) => void,
+      ) => {
+        signals.push(signal);
+        if (signal.type === "start" && failStart) {
+          failStart = false;
+          report({
+            type: "error",
+            scope: signal.scope,
+            message: "Catalog unavailable",
+          });
+        }
+      },
     );
+    render(<ProjectGuide />);
 
     fireEvent.click(
       screen.getByRole("button", { name: /Govern a third-party MCP/ }),

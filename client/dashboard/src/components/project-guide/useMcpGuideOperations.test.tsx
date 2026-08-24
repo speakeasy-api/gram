@@ -635,9 +635,7 @@ describe("useMcpGuideOperations", () => {
       );
     });
 
-    await waitFor(() => {
-      expect(result.current.activityError).toBe(true);
-    });
+    await waitFor(() => expect(refetchActivity).toHaveBeenCalledOnce());
 
     refetchActivity.mockResolvedValueOnce({
       data: {
@@ -655,11 +653,15 @@ describe("useMcpGuideOperations", () => {
       isError: false,
     });
 
-    act(() => result.current.retryActivity());
+    act(() =>
+      result.current.handleSignal(
+        { type: "retry", scope: { ...SERVER_SCOPE, step: 3, runId: 3 } },
+        report,
+      ),
+    );
 
     await waitFor(() => {
       expect(refetchActivity).toHaveBeenCalledTimes(2);
-      expect(result.current.activityError).toBe(false);
     });
   });
 

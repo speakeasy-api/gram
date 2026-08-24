@@ -102,12 +102,10 @@ export type ProjectGuideMachineContext = {
   errorFrom: "running" | "waiting";
   selectedClient: string | null;
   nextOutputId: number;
-  listenTimeoutSeconds: number;
   onSignal?: (signal: ProjectGuideOperationSignal) => void;
 };
 
 export type ProjectGuideMachineInput = {
-  listenTimeoutSeconds?: number;
   onSignal?: (signal: ProjectGuideOperationSignal) => void;
 };
 
@@ -174,7 +172,6 @@ function initialCoordinatorContext(
     errorFrom: "running",
     selectedClient: null,
     nextOutputId: 0,
-    listenTimeoutSeconds: input.listenTimeoutSeconds ?? LISTEN_TIMEOUT_SECONDS,
     onSignal: input.onSignal,
   };
 }
@@ -386,9 +383,9 @@ export const projectGuideMachine = setup({
       stepMode(context, 1) === "checkpoint",
     pausedWhileWaiting: ({ context }) => context.pausedFrom === "waiting",
     erroredWhileWaiting: ({ context }) => context.errorFrom === "waiting",
-    listenTimedOut: ({ context, event }) =>
+    listenTimedOut: ({ event }) =>
       event.type === "LISTEN_TICK" &&
-      event.elapsedSeconds >= context.listenTimeoutSeconds,
+      event.elapsedSeconds >= LISTEN_TIMEOUT_SECONDS,
   },
   actions: {
     openPath: assign(({ context, event }) => {
@@ -526,7 +523,7 @@ export const projectGuideMachine = setup({
     }),
     recordTimeout: assign(({ context, event }) => {
       if (event.type !== "LISTEN_TICK") return {};
-      const message = `No event seen in ${context.listenTimeoutSeconds}s. Check the client, then listen again.`;
+      const message = `No event seen in ${LISTEN_TIMEOUT_SECONDS}s. Check the client, then listen again.`;
       return {
         ...appendOutput(context, [{ kind: "error", message }]),
         elapsedListeningSeconds: event.elapsedSeconds,

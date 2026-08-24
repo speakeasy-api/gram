@@ -202,7 +202,6 @@ export function useSecretGuideOperations(): {
   retryPolicy: () => void;
   riskEventsHref: string;
   setClient: (client: SecretGuideClient) => void;
-  telemetryError: boolean;
 } {
   const gramProject = useProjectSlugForRequests();
   const organization = useOrganization();
@@ -593,6 +592,5 @@ export function useSecretGuideOperations(): {
       if (downloadedFilename) return;
       setClientState(nextClient);
     },
-    telemetryError,
   };
 }

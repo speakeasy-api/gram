@@ -468,7 +468,7 @@ describe("useSecretGuideOperations", () => {
         report,
       ),
     );
-    await waitFor(() => expect(hook.current.telemetryError).toBe(true));
+    await waitFor(() => expect(hooks.refetch).toHaveBeenCalledOnce());
 
     const listenScope = { ...POLICY_SCOPE, step: 4, runId: 3 };
     act(() =>
@@ -805,7 +805,7 @@ describe("useSecretGuideOperations", () => {
         report,
       ),
     );
-    await waitFor(() => expect(hook.current.telemetryError).toBe(true));
+    await waitFor(() => expect(hooks.refetch).toHaveBeenCalledOnce());
 
     act(() =>
       hook.current.handleSignal(

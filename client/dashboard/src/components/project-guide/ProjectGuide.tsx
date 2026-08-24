@@ -38,7 +38,6 @@ import {
   type ProjectGuideDisplayState,
   type ProjectGuideEvent,
   type ProjectGuideOperationReport,
-  type ProjectGuideOperationSignal,
   type ProjectGuideOutputEntry,
 } from "@/components/project-guide/projectGuideMachine";
 import { useSlugs } from "@/contexts/Sdk";
@@ -63,14 +62,7 @@ import { useNavigate } from "react-router";
 type McpGuideOperations = ReturnType<typeof useMcpGuideOperations>;
 type SecretGuideOperations = ReturnType<typeof useSecretGuideOperations>;
 
-export function ProjectGuide({
-  onOperationSignal,
-}: {
-  onOperationSignal?: (
-    signal: ProjectGuideOperationSignal,
-    report: (report: ProjectGuideOperationReport) => void,
-  ) => void;
-} = {}): JSX.Element {
+export function ProjectGuide(): JSX.Element {
   useHideInsightsDock();
   const { projectSlug } = useSlugs();
   const routes = useRoutes();
@@ -79,7 +71,6 @@ export function ProjectGuide({
     useProjectGuideProgress();
   const mcpOperations = useMcpGuideOperations();
   const secretOperations = useSecretGuideOperations();
-  const operationSignalRef = useRef(onOperationSignal);
   const mcpOperationSignalRef = useRef(mcpOperations.handleSignal);
   const secretOperationSignalRef = useRef(secretOperations.handleSignal);
   const reportRef = useRef<(report: ProjectGuideOperationReport) => void>(
@@ -87,7 +78,6 @@ export function ProjectGuide({
   );
   const reportTimersRef = useRef(new Set<number>());
   const nextReportAtRef = useRef(0);
-  operationSignalRef.current = onOperationSignal;
   mcpOperationSignalRef.current = mcpOperations.handleSignal;
   secretOperationSignalRef.current = secretOperations.handleSignal;
   const [snapshot, send] = useMachine(projectGuideMachine, {
@@ -104,7 +94,6 @@ export function ProjectGuide({
         }
         mcpOperationSignalRef.current(signal, reportRef.current);
         secretOperationSignalRef.current(signal, reportRef.current);
-        operationSignalRef.current?.(signal, reportRef.current);
       },
     },
   });

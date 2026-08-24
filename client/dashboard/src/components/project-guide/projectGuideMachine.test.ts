@@ -11,11 +11,10 @@ import {
   type ProjectGuideOperationSignal,
 } from "./projectGuideMachine";
 
-function coordinator(listenTimeoutSeconds = LISTEN_TIMEOUT_SECONDS) {
+function coordinator() {
   const signals: ProjectGuideOperationSignal[] = [];
   const service = createActor(projectGuideMachine, {
     input: {
-      listenTimeoutSeconds,
       onSignal: (signal) => {
         signals.push(signal);
       },

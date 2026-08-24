@@ -171,7 +171,6 @@ function catalogServerForMcp(
 }
 
 export function useMcpGuideOperations(): {
-  activityError: boolean;
   catalogError: boolean;
   catalogPending: boolean;
   catalogServers: PulseMCPServer[] | undefined;
@@ -187,7 +186,6 @@ export function useMcpGuideOperations(): {
   projectStateError: boolean;
   projectStatePending: boolean;
   prompt: string | undefined;
-  retryActivity: () => void;
   retryCatalog: () => void;
   selectServer: (server: PulseMCPServer) => void;
   selectedServer: PulseMCPServer | undefined;
@@ -562,7 +560,6 @@ export function useMcpGuideOperations(): {
   ]);
 
   return {
-    activityError,
     catalogError,
     catalogPending: catalog.isPending,
     catalogServers,
@@ -575,7 +572,6 @@ export function useMcpGuideOperations(): {
     projectStateError,
     projectStatePending,
     prompt,
-    retryActivity,
     retryCatalog: () => {
       void catalog.refetch();
     },
