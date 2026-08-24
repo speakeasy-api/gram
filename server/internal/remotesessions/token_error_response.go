@@ -222,28 +222,37 @@ func isErrorTokenByte(b byte) bool {
 		(b >= '0' && b <= '9')
 }
 
+// deadRefreshGrantPhrases are lowercase statements about the refresh token
+// itself being unusable. The dead-verdict word must be anchored to "refresh
+// token" as a phrase: a message where it attaches to something else ("Invalid
+// client credentials for refresh token exchange", "client ID is invalid")
+// describes a recoverable failure, never a dead grant.
+var deadRefreshGrantPhrases = []string{
+	"refresh token not found",
+	"refresh token is invalid",
+	"invalid refresh token",
+	"refresh token is expired",
+	"refresh token has expired",
+	"refresh token expired",
+	"expired refresh token",
+	"refresh token is revoked",
+	"refresh token has been revoked",
+	"refresh token revoked",
+	"revoked refresh token",
+	"refresh token is unknown",
+	"unknown refresh token",
+}
+
 // isDeadRefreshGrant reports whether a nested provider error is a refresh
 // grant that can never succeed again. Dub encodes this as unauthorized plus a
 // "Refresh token not found." message rather than RFC 6749 invalid_grant.
-// Client-auth failures ("Invalid client credentials for refresh token
-// exchange") are recoverable by fixing the client configuration and must never
-// be remapped, so client-auth phrasing disqualifies; a message that merely
-// names a client ("Refresh token not found for client abc") does not.
 func isDeadRefreshGrant(code, message string) bool {
 	if !strings.EqualFold(code, "unauthorized") {
 		return false
 	}
 	m := strings.ToLower(message)
-	if !strings.Contains(m, "refresh token") {
-		return false
-	}
-	for _, excluded := range []string{"credential", "secret", "invalid client", "unknown client", "client authentication"} {
-		if strings.Contains(m, excluded) {
-			return false
-		}
-	}
-	for _, needle := range []string{"not found", "invalid", "expired", "revoked", "unknown"} {
-		if strings.Contains(m, needle) {
+	for _, phrase := range deadRefreshGrantPhrases {
+		if strings.Contains(m, phrase) {
 			return true
 		}
 	}

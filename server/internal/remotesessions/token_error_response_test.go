@@ -68,6 +68,16 @@ func TestParseTokenErrorResponseDoesNotRemapClientAuthFailureMentioningRefreshTo
 	require.Equal(t, "Invalid client credentials for refresh token exchange.", got.ErrorDescription)
 }
 
+func TestParseTokenErrorResponseDoesNotRemapClientSubjectFailures(t *testing.T) {
+	t.Parallel()
+
+	got := parseTokenErrorResponse(http.StatusUnauthorized, []byte(`{"error":{"code":"unauthorized","message":"client ID is invalid for refresh token exchange"}}`))
+	require.Equal(t, "unauthorized", got.Error)
+
+	got = parseTokenErrorResponse(http.StatusUnauthorized, []byte(`{"error":{"code":"unauthorized","message":"client is unauthorized"}}`))
+	require.Equal(t, "unauthorized", got.Error)
+}
+
 func TestParseTokenErrorResponseRemapsDeadGrantNamingAClient(t *testing.T) {
 	t.Parallel()
 
