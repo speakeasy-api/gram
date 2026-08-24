@@ -469,6 +469,8 @@ trackedFiles:
   src/funcs/riskResultsUnmarkFalsePositive.ts: {}
   src/funcs/riskResultsUnmask.ts: {}
   src/funcs/riskRulesTest.ts: {}
+  src/funcs/riskSessionQuarantinesListSessionQuarantines.ts: {}
+  src/funcs/riskSessionQuarantinesReleaseSessionQuarantine.ts: {}
   src/funcs/riskSignalsGet.ts: {}
   src/funcs/skillEfficacyGetSettings.ts: {}
   src/funcs/skillEfficacyQueryInsights.ts: {}
@@ -1004,6 +1006,7 @@ trackedFiles:
   src/models/components/listserversresponsebody.ts: {}
   src/models/components/listserversresult.ts: {}
   src/models/components/listsessionlinksresult.ts: {}
+  src/models/components/listsessionquarantinesresult.ts: {}
   src/models/components/listsessionspayload.ts: {}
   src/models/components/listsessionsresult.ts: {}
   src/models/components/listshadowmcpinventoryresult.ts: {}
@@ -1257,6 +1260,8 @@ trackedFiles:
   src/models/components/servernameoverride.ts: {}
   src/models/components/servervariable.ts: {}
   src/models/components/serviceinfo.ts: {}
+  src/models/components/sessionquarantine.ts: {}
+  src/models/components/sessionquarantinereleaserequestbody.ts: {}
   src/models/components/sessionsummary.ts: {}
   src/models/components/setbillingmetadatarequestbody.ts: {}
   src/models/components/setkeyenabledrequestbody.ts: {}
@@ -1860,6 +1865,7 @@ trackedFiles:
   src/models/operations/listroles.ts: {}
   src/models/operations/listscopes.ts: {}
   src/models/operations/listservernameoverrides.ts: {}
+  src/models/operations/listsessionquarantines.ts: {}
   src/models/operations/listsessions.ts: {}
   src/models/operations/listshadowmcpinventory.ts: {}
   src/models/operations/listshadowmcpinventoryserversforuser.ts: {}
@@ -1928,6 +1934,7 @@ trackedFiles:
   src/models/operations/refreshusersessionclientcimd.ts: {}
   src/models/operations/register.ts: {}
   src/models/operations/registerdomain.ts: {}
+  src/models/operations/releasesessionquarantine.ts: {}
   src/models/operations/removemetamcpmember.ts: {}
   src/models/operations/removeoauthserver.ts: {}
   src/models/operations/removeorganizationremotesessionclientfrommcpserver.ts: {}
@@ -2699,6 +2706,8 @@ trackedFiles:
   src/react-query/riskListResultsByChat.ts: {}
   src/react-query/riskListResultsForAgent.core.ts: {}
   src/react-query/riskListResultsForAgent.ts: {}
+  src/react-query/riskListSessionQuarantines.core.ts: {}
+  src/react-query/riskListSessionQuarantines.ts: {}
   src/react-query/riskMarkResultsFalsePositive.ts: {}
   src/react-query/riskOverview.core.ts: {}
   src/react-query/riskOverview.ts: {}
@@ -2709,6 +2718,7 @@ trackedFiles:
   src/react-query/riskPoliciesStatus.ts: {}
   src/react-query/riskPoliciesTrigger.ts: {}
   src/react-query/riskPoliciesUpdate.ts: {}
+  src/react-query/riskReleaseSessionQuarantine.ts: {}
   src/react-query/riskRevokePolicyBypassRequest.ts: {}
   src/react-query/riskRuleBreakdown.core.ts: {}
   src/react-query/riskRuleBreakdown.ts: {}
@@ -3012,6 +3022,7 @@ trackedFiles:
   src/sdk/risk.ts: {}
   src/sdk/rules.ts: {}
   src/sdk/sdk.ts: {}
+  src/sdk/sessionquarantines.ts: {}
   src/sdk/signals.ts: {}
   src/sdk/skillefficacy.ts: {}
   src/sdk/skills.ts: {}
@@ -7192,6 +7203,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listSessionQuarantines:
+    speakeasy-default-list-session-quarantines:
+      responses:
+        "200":
+          application/json: {"quarantines": [{"created_at": "2024-04-20T07:35:23.030Z", "id": "ed113cd8-3358-4654-bda0-8303ce274a8f", "organization_id": "<id>", "project_id": "c15f2fc8-3239-4cf3-b2cf-8280bd30ae53", "reason": "<value>", "risk_policy_name": "<value>", "session_id": "<id>", "user_id": "<id>"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   listSessions:
     speakeasy-default-list-sessions:
       requestBody:
@@ -7261,7 +7281,7 @@ examples:
           limit: 50
       responses:
         "200":
-          application/json: {"servers": [{"access": "allowed", "access_summary": {"allowed_for": "none", "blocked_for": "none", "blocking_default": "none", "decision_coverage": "none", "state": "allowed"}, "allowed_policy_ids": ["<value 1>", "<value 2>"], "blocked_policy_ids": ["<value 1>"], "canonical_server_url": "https://remorseful-kiss.com", "first_seen": "2024-03-19T10:37:25.149Z", "last_seen": "2026-07-31T23:50:12.894Z", "observed_use_count": 201940, "request_count": 731421, "server_slug": "<value>", "top_users": [], "url_host": "<value>", "user_count": 777170}]}
+          application/json: {"servers": [{"access": "allowed", "allowed_policy_ids": ["<value 1>", "<value 2>"], "blocked_policy_ids": ["<value 1>"], "canonical_server_url": "https://remorseful-kiss.com", "first_seen": "2024-03-19T10:37:25.149Z", "last_seen": "2026-07-31T23:50:12.894Z", "observed_use_count": 201940, "request_count": 731421, "server_slug": "<value>", "top_users": [], "url_host": "<value>", "user_count": 777170}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -8006,6 +8026,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  releaseSessionQuarantine:
+    speakeasy-default-release-session-quarantine:
+      requestBody:
+        application/json: {"id": "23ecd88e-091c-49c8-97ca-efa962998649"}
+      responses:
+        "200":
+          application/json: {"created_at": "2025-01-11T01:29:16.674Z", "id": "a7122205-786f-4b15-abff-e6fa9d451167", "organization_id": "<id>", "project_id": "139dc5f1-b529-4109-a8fb-126f8cf08944", "reason": "<value>", "risk_policy_name": "<value>", "session_id": "<id>", "user_id": "<id>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   removeMetaMcpMember:
     speakeasy-default-remove-meta-mcp-member:
       parameters:

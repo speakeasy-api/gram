@@ -44,9 +44,12 @@ where a value is expected.
    status.
 6. **Isolation spot-check** — switch back out of the demo org: your own org's
    pages show no `*@demo.getgram.ai` data anywhere.
-7. **Policy Center** — eight policies listed; Action column shows a mix of
-   Flag / Warn / Block; Severity shows Medium through Critical; "Applies To"
-   varies (All types, Tool Requests, ...); no row renders an empty summary.
+7. **Policy Center** — nine policies listed; Action column shows a mix of
+   Flag / Warn / Block / Quarantine; Severity shows Medium through Critical;
+   "Applies To" varies (All types, Tool Requests, ...); no row renders an
+   empty summary. Open the **Quarantines** tab and confirm one active row for
+   `gram-demo-quarantine-session-1`, attributed to **Acme session quarantine
+   policy**, with a Release action.
 8. **Detection rules** — three custom rules (`custom.sensitive_file_read`,
    `custom.env_secret_dump`, `custom.ssrf_metadata_endpoint`), each opening
    with a populated CEL expression that the editor reports as valid, and each

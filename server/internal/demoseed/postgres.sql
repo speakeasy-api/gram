@@ -151,6 +151,7 @@ DECLARE
   policy_cr CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000f006';
   policy_cd CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000f007';
   policy_tb CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000f008';
+  policy_q  CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000f009';
 
   excl_fixture CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000ec01';
   excl_testcard CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000ec02';
@@ -776,7 +777,22 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     -- Informational, hence the low score.
     (policy_tb, proj_a, demo_org, 'Acme conversation topic guardrail', 'standard',
      '{presidio}', '{}', '{}'::jsonb, '{}', '{user_message}', NULL,
-     TRUE, 'flag', 'everyone', NULL, FALSE, 3.4, 1);
+     TRUE, 'flag', 'everyone', NULL, FALSE, 3.4, 1),
+    -- Disabled so the demo can inspect quarantine configuration without
+    -- freezing exploratory sessions.
+    (policy_q, proj_a, demo_org, 'Acme session quarantine policy', 'standard',
+     '{prompt_injection}', NULL, '{}'::jsonb, '{}', '{user_message,tool_request}', NULL,
+     FALSE, 'quarantine', 'everyone', NULL, FALSE, 9.5, 1);
+
+  INSERT INTO session_quarantines
+    (id, organization_id, project_id, session_id, risk_policy_id,
+     risk_policy_name, user_id, reason, created_at, updated_at)
+  VALUES
+    (demo.det_uuid('gram-demo-session-quarantine-1'), demo_org, proj_a,
+     'gram-demo-quarantine-session-1', policy_q,
+     'Acme session quarantine policy', demo_user_ids[2],
+     'Speakeasy quarantined this prompt after a demo policy match.',
+     now() - interval '35 minutes', now() - interval '35 minutes');
 
   -- Custom CEL detection rules behind policy_cr; also the only data on the
   -- Detection Rules page. detection_expr supersedes the legacy regex /
@@ -1098,6 +1114,26 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
             now() - (interval '19 hours' * i));
   END LOOP;
 
+  -- Quarantine lifecycle events use their own audit subject and action rather
+  -- than reusing a generic policy-block row.
+  INSERT INTO audit_logs (id, organization_id, project_id, actor_id, actor_type,
+                          actor_display_name, action, subject_id, subject_type,
+                          subject_display_name, subject_slug, metadata, created_at)
+  VALUES (demo.det_uuid('gram-demo-audit-session-quarantine-open'), demo_org,
+          proj_a, demo_user_ids[2], 'user', demo_user_names[2],
+          'session_quarantine:open',
+          demo.det_uuid('gram-demo-session-quarantine-1')::text,
+          'session_quarantine', 'Acme session quarantine policy',
+          'gram-demo-quarantine-session-1',
+          jsonb_build_object(
+            'session_id', 'gram-demo-quarantine-session-1',
+            'risk_policy_id', policy_q::text,
+            'risk_policy_name', 'Acme session quarantine policy',
+            'user_id', demo_user_ids[2],
+            'reason', 'Speakeasy quarantined this prompt after a demo policy match.'
+          ),
+          now() - interval '35 minutes');
+
   ------------------------------------------------------------------
   -- Spend rules calibrated to the seeded ClickHouse usage (top spenders in
   -- the low thousands of dollars per month) so the rules page shows one
@@ -1261,10 +1297,34 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     UNION ALL
     SELECT 1 FROM risk_exclusions WHERE organization_id = demo_org AND project_id <> proj_a
     UNION ALL
+    SELECT 1 FROM session_quarantines WHERE organization_id = demo_org AND project_id <> proj_a
+    UNION ALL
     SELECT 1 FROM audit_logs WHERE organization_id = demo_org AND project_id <> proj_a
   ) x;
   IF stray > 0 THEN
     RAISE EXCEPTION 'demo seed postflight: % demo-org rows reference non-demo projects', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM session_quarantines
+  WHERE organization_id = demo_org AND project_id = proj_a AND released_at IS NULL;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 1 active session quarantine, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray
+  FROM audit_logs a
+  JOIN session_quarantines q
+    ON q.id::text = a.subject_id
+   AND q.organization_id = a.organization_id
+   AND q.project_id = a.project_id
+  WHERE a.organization_id = demo_org
+    AND a.project_id = proj_a
+    AND a.action = 'session_quarantine:open'
+    AND a.subject_type = 'session_quarantine'
+    AND a.subject_slug = q.session_id
+    AND a.metadata ->> 'session_id' = q.session_id;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 1 matching session quarantine open audit record, found %', stray;
   END IF;
 
   -- Global (non-org-scoped) tables must only carry rows for the demo roster:

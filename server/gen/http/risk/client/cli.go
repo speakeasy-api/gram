@@ -285,8 +285,8 @@ func BuildUpdateRiskPolicyPayload(riskUpdateRiskPolicyBody string, riskUpdateRis
 			}
 		}
 		if body.Action != nil {
-			if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block"}))
+			if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block" || *body.Action == "quarantine") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block", "quarantine"}))
 			}
 		}
 		if body.AudienceType != nil {
@@ -459,6 +459,78 @@ func BuildDeleteRiskPolicyPayload(riskDeleteRiskPolicyID string, riskDeleteRiskP
 	}
 	v := &risk.DeleteRiskPolicyPayload{}
 	v.ID = id
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListSessionQuarantinesPayload builds the payload for the risk
+// listSessionQuarantines endpoint from CLI flags.
+func BuildListSessionQuarantinesPayload(riskListSessionQuarantinesApikeyToken string, riskListSessionQuarantinesSessionToken string, riskListSessionQuarantinesProjectSlugInput string) (*risk.ListSessionQuarantinesPayload, error) {
+	var apikeyToken *string
+	{
+		if riskListSessionQuarantinesApikeyToken != "" {
+			apikeyToken = &riskListSessionQuarantinesApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskListSessionQuarantinesSessionToken != "" {
+			sessionToken = &riskListSessionQuarantinesSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskListSessionQuarantinesProjectSlugInput != "" {
+			projectSlugInput = &riskListSessionQuarantinesProjectSlugInput
+		}
+	}
+	v := &risk.ListSessionQuarantinesPayload{}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildReleaseSessionQuarantinePayload builds the payload for the risk
+// releaseSessionQuarantine endpoint from CLI flags.
+func BuildReleaseSessionQuarantinePayload(riskReleaseSessionQuarantineBody string, riskReleaseSessionQuarantineApikeyToken string, riskReleaseSessionQuarantineSessionToken string, riskReleaseSessionQuarantineProjectSlugInput string) (*risk.ReleaseSessionQuarantinePayload, error) {
+	var err error
+	var body ReleaseSessionQuarantineRequestBody
+	{
+		err = json.Unmarshal([]byte(riskReleaseSessionQuarantineBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskReleaseSessionQuarantineApikeyToken != "" {
+			apikeyToken = &riskReleaseSessionQuarantineApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskReleaseSessionQuarantineSessionToken != "" {
+			sessionToken = &riskReleaseSessionQuarantineSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskReleaseSessionQuarantineProjectSlugInput != "" {
+			projectSlugInput = &riskReleaseSessionQuarantineProjectSlugInput
+		}
+	}
+	v := &risk.ReleaseSessionQuarantinePayload{
+		ID: body.ID,
+	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

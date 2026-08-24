@@ -1337,6 +1337,7 @@ func newStartCommand() *cli.Command {
 				chatClient,
 				temporalEnv,
 				authzEngine,
+				auditLogger,
 				productFeatures,
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
 				riskScanner,

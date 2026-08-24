@@ -227,6 +227,39 @@ const STANDARD_STEPS: Step[] = [
   },
 ];
 
+const POLICY_ACTION_LABEL: Record<PolicyAction, string> = {
+  flag: "Flag",
+  warn: "Warn",
+  block: "Block",
+  quarantine: "Quarantine",
+};
+
+const POLICY_ACTION_MESSAGE: Record<
+  Exclude<PolicyAction, "flag">,
+  { label: string; description: string; placeholder: string }
+> = {
+  warn: {
+    label: "Warning message",
+    description:
+      "Shown to the user when this policy warns on a tool call or prompt. Supports %{match}, %{entity}, %{policy}, and %{rule} placeholders, substituted at warn time. Leave blank to use the default message.",
+    placeholder: "e.g. %{match} looks sensitive. Acknowledge to proceed.",
+  },
+  block: {
+    label: "Block message",
+    description:
+      "Shown to the user when this policy blocks a tool call or prompt. Leave blank to use the default message.",
+    placeholder:
+      "e.g. This action was blocked by your organization's security policy. Contact your admin for help.",
+  },
+  quarantine: {
+    label: "Quarantine message",
+    description:
+      "Shown to the user when this policy quarantines their session. Leave blank to use the default message.",
+    placeholder:
+      "e.g. This session was quarantined by your organization's security policy. Contact your admin for help.",
+  },
+};
+
 // Back the active step with a `?step=<id>` URL param so browser back/forward
 // (and refresh, and shareable links) traverse the steps. history: "push" makes
 // each step change its own history entry.
@@ -1996,21 +2029,15 @@ function ActionStep({
           {action !== "flag" && (
             <div className="space-y-2">
               <Label className="text-sm font-medium">
-                {action === "warn" ? "Warning message" : "Custom Message"}
+                {POLICY_ACTION_MESSAGE[action].label}
               </Label>
               <p className="text-muted-foreground text-xs">
-                {action === "warn"
-                  ? "Shown to the user when this policy warns on a tool call or prompt. Supports %{match}, %{entity}, %{policy}, and %{rule} placeholders, substituted at warn time. Leave blank to use the default message."
-                  : "Shown to the user when this policy blocks a tool call or prompt. Leave blank to use the default message."}
+                {POLICY_ACTION_MESSAGE[action].description}
               </p>
               <TextArea
                 value={userMessage}
                 onChange={setUserMessage}
-                placeholder={
-                  action === "warn"
-                    ? "e.g. %{match} looks sensitive. Acknowledge to proceed."
-                    : "e.g. This action was blocked by your organization's security policy. Contact your admin for help."
-                }
+                placeholder={POLICY_ACTION_MESSAGE[action].placeholder}
                 rows={3}
               />
             </div>
@@ -2408,11 +2435,7 @@ function PromptReview({
           </SummaryRow>
           <SummaryRow label="Action">
             <Badge variant={action === "flag" ? "neutral" : "warning"}>
-              {action === "block"
-                ? "Block"
-                : action === "warn"
-                  ? "Warn"
-                  : "Flag"}
+              {POLICY_ACTION_LABEL[action]}
             </Badge>
           </SummaryRow>
           <SummaryRow label="Severity">
@@ -4156,7 +4179,7 @@ function StandardReview({
         </SummaryRow>
         <SummaryRow label="Action">
           <Badge variant={action === "flag" ? "neutral" : "warning"}>
-            {action === "block" ? "Block" : action === "warn" ? "Warn" : "Flag"}
+            {POLICY_ACTION_LABEL[action]}
           </Badge>
         </SummaryRow>
         <SummaryRow label="Severity">

@@ -42070,6 +42070,106 @@ paths:
       x-speakeasy-name-override: listForAgent
       x-speakeasy-react-hook:
         name: RiskListResultsForAgent
+  /rpc/risk.listSessionQuarantines:
+    get:
+      description: List active session quarantines for the current project.
+      operationId: listSessionQuarantines
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListSessionQuarantinesResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: listSessionQuarantines risk
+      tags:
+        - risk
+      x-speakeasy-group: risk.sessionQuarantines
+      x-speakeasy-name-override: listSessionQuarantines
+      x-speakeasy-react-hook:
+        name: RiskListSessionQuarantines
   /rpc/risk.markResultsFalsePositive:
     post:
       description: 'Mark one or more risk results as manually-reviewed false positives. Distinct from exclusions: this suppresses the specific results picked, not future findings matching a rule.'
@@ -42172,6 +42272,113 @@ paths:
       x-speakeasy-name-override: markFalsePositive
       x-speakeasy-react-hook:
         name: RiskMarkResultsFalsePositive
+        type: mutation
+  /rpc/risk.releaseSessionQuarantine:
+    post:
+      description: Release an active session quarantine.
+      operationId: releaseSessionQuarantine
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionQuarantineReleaseRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionQuarantine'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: releaseSessionQuarantine risk
+      tags:
+        - risk
+      x-speakeasy-group: risk.sessionQuarantines
+      x-speakeasy-name-override: releaseSessionQuarantine
+      x-speakeasy-react-hook:
+        name: RiskReleaseSessionQuarantine
         type: mutation
   /rpc/risk.revokePolicyBypassRequest:
     post:
@@ -64014,12 +64221,13 @@ components:
       properties:
         action:
           type: string
-          description: 'Policy action: flag, warn (challenge), or block.'
+          description: 'Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).'
           default: flag
           enum:
             - flag
             - warn
             - block
+            - quarantine
         approved_email_domains:
           type: array
           items:
@@ -70168,6 +70376,16 @@ components:
           description: Links touching the requested chats, newest first.
       required:
         - links
+    ListSessionQuarantinesResult:
+      type: object
+      properties:
+        quarantines:
+          type: array
+          items:
+            $ref: '#/components/schemas/SessionQuarantine'
+          description: Active session quarantines.
+      required:
+        - quarantines
     ListSessionsPayload:
       type: object
       properties:
@@ -75519,12 +75737,13 @@ components:
       properties:
         action:
           type: string
-          description: 'Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), or block (deny in real-time).'
+          description: 'Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session).'
           default: flag
           enum:
             - flag
             - warn
             - block
+            - quarantine
         approved_email_domains:
           type: array
           items:
@@ -77395,6 +77614,65 @@ components:
       description: Service information
       required:
         - name
+    SessionQuarantine:
+      type: object
+      properties:
+        created_at:
+          type: string
+          description: When the quarantine opened.
+          format: date-time
+        id:
+          type: string
+          description: The session quarantine ID.
+          format: uuid
+        organization_id:
+          type: string
+          description: The organization ID.
+        project_id:
+          type: string
+          description: The project ID.
+          format: uuid
+        reason:
+          type: string
+          description: The deny reason captured when the quarantine opened.
+        released_at:
+          type: string
+          description: When the quarantine was released.
+          format: date-time
+        released_by:
+          type: string
+          description: The user who released the quarantine.
+        risk_policy_id:
+          type: string
+          description: The risk policy that opened the quarantine, when still available.
+          format: uuid
+        risk_policy_name:
+          type: string
+          description: The risk policy name captured when the quarantine opened.
+        session_id:
+          type: string
+          description: The hook conversation ID that is quarantined.
+        user_id:
+          type: string
+          description: The user whose hook event opened the quarantine.
+      required:
+        - id
+        - organization_id
+        - project_id
+        - session_id
+        - risk_policy_name
+        - user_id
+        - reason
+        - created_at
+    SessionQuarantineReleaseRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The session quarantine ID.
+          format: uuid
+      required:
+        - id
     SessionSummary:
       type: object
       properties:
@@ -83005,11 +83283,12 @@ components:
       properties:
         action:
           type: string
-          description: 'Policy action: flag, warn (challenge), or block.'
+          description: 'Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).'
           enum:
             - flag
             - warn
             - block
+            - quarantine
         approved_email_domains:
           type: array
           items:
