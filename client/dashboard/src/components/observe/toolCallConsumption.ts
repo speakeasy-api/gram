@@ -37,7 +37,7 @@ export type ConsumptionTotals = {
   cost: number;
 };
 
-export const EMPTY_CONSUMPTION_TOTALS: ConsumptionTotals = {
+const EMPTY_CONSUMPTION_TOTALS: ConsumptionTotals = {
   toolCalls: 0,
   inputTokens: 0,
   outputTokens: 0,
@@ -68,7 +68,7 @@ export function sortByForMeasure(
   return measure === "calls" ? "total_tool_calls" : "total_tokens";
 }
 
-export function measureValue(
+function measureValue(
   measures: QueryMeasures,
   measure: ConsumptionMeasure,
 ): number {
