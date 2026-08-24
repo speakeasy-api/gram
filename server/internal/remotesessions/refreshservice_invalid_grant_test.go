@@ -80,3 +80,68 @@ func TestRefreshNow_InvalidGrant_ClearsRefreshGrantWhenCacheUnavailable(t *testi
 	require.Equal(t, "expired-access", resolved, "unknown-expiry access remains usable")
 	require.EqualValues(t, 1, refreshAttempts.Load(), "cache failure must not prevent the upstream attempt")
 }
+
+func TestRefreshNow_InvalidGrant_DatadogErrorsArray_ClearsRefreshGrant(t *testing.T) {
+	t.Parallel()
+
+	assertRefreshNowClearsDeadGrant(
+		t,
+		"refreshnow-datadog-errors",
+		http.StatusBadRequest,
+		`{"errors": ["invalid_grant - Invalid or expired refresh token or code verifier."]}`,
+		"invalid_grant: Invalid or expired refresh token or code verifier.",
+	)
+}
+
+func TestRefreshNow_InvalidGrant_DubUnauthorized_ClearsRefreshGrant(t *testing.T) {
+	t.Parallel()
+
+	assertRefreshNowClearsDeadGrant(
+		t,
+		"refreshnow-dub-unauthorized",
+		http.StatusUnauthorized,
+		`{"error":{"code":"unauthorized","message":"Refresh token not found."}}`,
+		"invalid_grant: Refresh token not found.",
+	)
+}
+
+func assertRefreshNowClearsDeadGrant(t *testing.T, slugSuffix string, status int, body string, wantReason string) {
+	t.Helper()
+
+	ctx, env := newSyntheticExpiryEnv(t, slugSuffix, func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if r.Form.Get("grant_type") != "refresh_token" {
+			_, _ = w.Write([]byte(`{"access_token":"expired-access","refresh_token":"dead-refresh"}`))
+			return
+		}
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(body))
+	})
+
+	session, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
+		SubjectUrn:            env.subject,
+		RemoteSessionClientID: env.clientID,
+	})
+	require.NoError(t, err)
+
+	result, err := env.refresher.RefreshNow(ctx, session, "")
+	require.Error(t, err)
+	require.Empty(t, result.Outcome)
+	require.Empty(t, result.AccessToken)
+
+	var tokenErr *remotesessions.TokenRefreshError
+	require.ErrorAs(t, err, &tokenErr)
+	require.Equal(t, wantReason, tokenErr.Reason)
+
+	active, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
+		SubjectUrn:            env.subject,
+		RemoteSessionClientID: env.clientID,
+	})
+	require.NoError(t, err)
+	require.False(t, active.RefreshTokenEncrypted.Valid)
+	require.False(t, active.RefreshExpiresAt.Valid)
+}

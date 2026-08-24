@@ -52,11 +52,19 @@ func IsTokenRefreshRateLimited(err error) bool {
 }
 
 // newTokenRefreshErrorFromHTTP builds a TokenRefreshError from a non-2xx response
-// from the upstream token endpoint. The public Reason summarizes the RFC 6749
+// from the upstream token endpoint. The public Reason summarizes the parsed
 // error body (falling back to the HTTP status); the raw status and body are kept
 // only as the private cause and never surfaced.
+//
+// A 4xx body that contains the invalid_grant token is treated as definitive
+// even when the provider did not emit a spec-shaped "error" string. 5xx bodies
+// are not, so a mention of the code on an upstream error page does not clear
+// a still-usable refresh grant.
 func newTokenRefreshErrorFromHTTP(statusCode int, status string, body []byte) *TokenRefreshError {
 	response := parseTokenErrorResponse(body)
+	if response.Error == "" && statusCode >= 400 && statusCode < 500 && containsOAuthErrorToken(string(body), oauthErrInvalidGrant) {
+		response.Error = oauthErrInvalidGrant
+	}
 	return &TokenRefreshError{
 		Reason:     response.summary(status),
 		cause:      fmt.Errorf("refresh endpoint %s: %s", status, string(body)),
