@@ -1468,24 +1468,23 @@ type OrganizationMcpCollectionServerAttachment struct {
 }
 
 type OrganizationMetadatum struct {
-	ID                          string
-	Name                        string
-	Slug                        string
-	GramAccountType             string
-	WorkosID                    pgtype.Text
-	WorkosUpdatedAt             pgtype.Timestamptz
-	WorkosLastEventID           pgtype.Text
-	SvixAppID                   pgtype.Text
-	WebhooksEnabled             pgtype.Bool
-	Whitelisted                 bool
-	FreeTrialStartedAt          pgtype.Timestamptz
-	FreeTrialEndsAt             pgtype.Timestamptz
-	ScimEnabled                 pgtype.Bool
-	SsoEnabled                  pgtype.Bool
-	SessionQuarantineFailClosed bool
-	CreatedAt                   pgtype.Timestamptz
-	UpdatedAt                   pgtype.Timestamptz
-	DisabledAt                  pgtype.Timestamptz
+	ID                 string
+	Name               string
+	Slug               string
+	GramAccountType    string
+	WorkosID           pgtype.Text
+	WorkosUpdatedAt    pgtype.Timestamptz
+	WorkosLastEventID  pgtype.Text
+	SvixAppID          pgtype.Text
+	WebhooksEnabled    pgtype.Bool
+	Whitelisted        bool
+	FreeTrialStartedAt pgtype.Timestamptz
+	FreeTrialEndsAt    pgtype.Timestamptz
+	ScimEnabled        pgtype.Bool
+	SsoEnabled         pgtype.Bool
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	DisabledAt         pgtype.Timestamptz
 }
 
 type OrganizationRole struct {
