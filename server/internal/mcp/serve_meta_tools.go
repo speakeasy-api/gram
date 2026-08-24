@@ -49,16 +49,16 @@ func (s *Service) handleMetaDescribeServerCall(
 	}
 	if len(argsRaw) > 0 {
 		if err := json.Unmarshal(argsRaw, &args); err != nil {
-			return nil, oops.E(oops.CodeInvalid, err, "invalid describe_server arguments").LogError(ctx, logger)
+			return nil, oops.E(oops.CodeInvalid, err, "invalid describe_server arguments").LogWarn(ctx, logger)
 		}
 	}
 	if args.Server == "" {
-		return nil, oops.E(oops.CodeInvalid, nil, "server is required").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeInvalid, nil, "server is required").LogWarn(ctx, logger)
 	}
 
 	member, ok := findMetaMember(members, args.Server)
 	if !ok {
-		return nil, oops.E(oops.CodeNotFound, nil, "unknown server %q; call list_servers to see available servers", args.Server).LogError(ctx, logger)
+		return nil, oops.E(oops.CodeNotFound, nil, "unknown server %q; call list_servers to see available servers", args.Server).LogWarn(ctx, logger)
 	}
 	if member.backend != metaMemberBackendHosted {
 		return nil, oops.E(oops.CodeNotImplemented, nil, "describe_server is not yet available for proxied member servers")
@@ -111,11 +111,11 @@ func (s *Service) handleMetaDescribeToolsCall(
 	}
 	if len(argsRaw) > 0 {
 		if err := json.Unmarshal(argsRaw, &args); err != nil {
-			return nil, oops.E(oops.CodeInvalid, err, "invalid describe_tools arguments").LogError(ctx, logger)
+			return nil, oops.E(oops.CodeInvalid, err, "invalid describe_tools arguments").LogWarn(ctx, logger)
 		}
 	}
 	if len(args.Tools) == 0 {
-		return nil, oops.E(oops.CodeInvalid, nil, "tools is required").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeInvalid, nil, "tools is required").LogWarn(ctx, logger)
 	}
 
 	// Group by member so each toolset is described once.
@@ -123,13 +123,24 @@ func (s *Service) handleMetaDescribeToolsCall(
 		member    metaMember
 		toolNames []string
 	}
+	if len(args.Tools) > metamcp.MaxDescribeTools {
+		return nil, oops.E(oops.CodeInvalid, nil, "tools accepts at most %d names per call", metamcp.MaxDescribeTools).LogWarn(ctx, logger)
+	}
+
 	requestsBySlug := map[string]*memberRequest{}
 	order := []string{}
 	notFound := []string{}
+	// A repeated name would otherwise emit one full schema per occurrence,
+	// so a single request can amplify far beyond the body cap.
+	seen := make(map[string]struct{}, len(args.Tools))
 	for _, qualified := range args.Tools {
+		if _, dup := seen[qualified]; dup {
+			continue
+		}
+		seen[qualified] = struct{}{}
 		serverSlug, toolName, err := metamcp.SplitQualifiedName(qualified)
 		if err != nil {
-			return nil, oops.E(oops.CodeInvalid, err, "invalid tool name: must be of the form serverslug--toolname").LogError(ctx, logger)
+			return nil, oops.E(oops.CodeInvalid, err, "invalid tool name: must be of the form serverslug--toolname").LogWarn(ctx, logger)
 		}
 		member, ok := findMetaMember(members, serverSlug)
 		if !ok {
@@ -203,11 +214,11 @@ func (s *Service) handleMetaExecuteToolCall(
 
 	serverSlug, toolName, err := metamcp.SplitQualifiedName(qualified)
 	if err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid tool name: must be of the form serverslug--toolname").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeInvalid, err, "invalid tool name: must be of the form serverslug--toolname").LogWarn(ctx, logger)
 	}
 	member, ok := findMetaMember(members, serverSlug)
 	if !ok {
-		return nil, oops.E(oops.CodeNotFound, nil, "unknown server %q; call list_servers to see available servers", serverSlug).LogError(ctx, logger)
+		return nil, oops.E(oops.CodeNotFound, nil, "unknown server %q; call list_servers to see available servers", serverSlug).LogWarn(ctx, logger)
 	}
 	if member.backend != metaMemberBackendHosted {
 		return nil, oops.E(oops.CodeNotImplemented, nil, "execute_tool is not yet available for proxied member servers")
@@ -307,8 +318,10 @@ func (s *Service) describeMemberToolset(
 		}
 		catalog.byName[entry.Name] = entry
 	}
-	// Duplicated names are dropped entirely so describe and execute agree:
-	// neither lists nor resolves an ambiguous name.
+	// Duplicated names are dropped so describe never presents an ambiguous
+	// name. Execute does not consult this catalog — it resolves by first
+	// match in handleToolsCall — so an ambiguous name still executes, to an
+	// arbitrary one of the collided tools.
 	for name := range duplicates {
 		delete(catalog.byName, name)
 	}
@@ -443,7 +456,7 @@ func (s *Service) loadMemberToolset(
 	}
 	if !toolset.McpIsPublic && !gate.authenticated {
 		// Unauthorized reads as nonexistent (as in ServeToolsetResolved).
-		return nil, uuid.Nil, oops.E(oops.CodeNotFound, nil, "unknown server %q; call list_servers to see available servers", member.slug).LogError(ctx, logger)
+		return nil, uuid.Nil, oops.E(oops.CodeNotFound, nil, "unknown server %q; call list_servers to see available servers", member.slug).LogWarn(ctx, logger)
 	}
 	if !toolset.McpIsPublic && gate.authenticated {
 		// Toolset-level mcp:connect gate, matching ServeToolsetResolved's
@@ -453,7 +466,7 @@ func (s *Service) loadMemberToolset(
 		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), toolset.ProjectID.String())); err != nil {
 			var oopsErr *oops.ShareableError
 			if errors.As(err, &oopsErr) && oopsErr.Code == oops.CodeForbidden {
-				return nil, uuid.Nil, oops.E(oops.CodeNotFound, nil, "unknown server %q; call list_servers to see available servers", member.slug).LogError(ctx, logger)
+				return nil, uuid.Nil, oops.E(oops.CodeNotFound, nil, "unknown server %q; call list_servers to see available servers", member.slug).LogWarn(ctx, logger)
 			}
 			return nil, uuid.Nil, oops.E(oops.CodeUnexpected, err, "check toolset-level authz").LogError(ctx, logger)
 		}

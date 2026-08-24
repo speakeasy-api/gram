@@ -478,9 +478,21 @@ func TestServePublic_MetaEndpoint_ListServers_RBACFiltersPrivateMembers(t *testi
 	require.NoError(t, json.Unmarshal(result.StructuredContent, &listed))
 	require.Empty(t, listed.Servers)
 
-	grantedCtx := authztest.WithExactGrants(t, ctx, authz.Grant{
+	// A grant on the mcp_servers id must NOT admit a toolset-backed member:
+	// the dashboard keys these grants on the toolset id, so accepting the
+	// server id here would let the check pass on an id nothing writes.
+	serverIDCtx := authztest.WithExactGrants(t, ctx, authz.Grant{
 		Scope:    authz.ScopeMCPConnect,
 		Selector: authz.NewSelector(authz.ScopeMCPConnect, member.serverID.String()),
+	})
+	envelope = callMetaTool(t, serverIDCtx, ti, slug, "list_servers", map[string]any{})
+	result = decodeMetaToolResult(t, envelope)
+	require.NoError(t, json.Unmarshal(result.StructuredContent, &listed))
+	require.Empty(t, listed.Servers)
+
+	grantedCtx := authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeMCPConnect,
+		Selector: authz.NewSelector(authz.ScopeMCPConnect, member.toolsetID.String()),
 	})
 	envelope = callMetaTool(t, grantedCtx, ti, slug, "list_servers", map[string]any{})
 	result = decodeMetaToolResult(t, envelope)
@@ -578,8 +590,10 @@ func TestServePublic_MetaEndpoint_ListServers_UnknownVisibilityFailsClosed(t *te
 }
 
 // Ungated meta endpoints serve anonymously: without the issuer gate no
-// identity exists, so a private-toolset member is listed (server visibility
-// is public) but its drill-down reads as nonexistent.
+// identity exists. mcp_servers.visibility is authoritative but floored by the
+// member toolset's own mcp_is_public, so a member the direct surface hides is
+// absent from the listing as well as from drill-down — the gateway never
+// discloses a name that /x/mcp would withhold.
 func TestServePublic_MetaEndpoint_Anonymous_PrivateToolsetMemberHidden(t *testing.T) {
 	t.Parallel()
 
@@ -602,7 +616,7 @@ func TestServePublic_MetaEndpoint_Anonymous_PrivateToolsetMemberHidden(t *testin
 		} `json:"servers"`
 	}
 	require.NoError(t, json.Unmarshal(result.StructuredContent, &listed))
-	require.Len(t, listed.Servers, 1)
+	require.Empty(t, listed.Servers)
 
 	envelope = callMetaTool(t, anonCtx, ti, slug, "describe_server", map[string]any{"server": member.slug})
 	require.Contains(t, string(envelope["error"]), "unknown server")

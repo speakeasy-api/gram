@@ -85,14 +85,32 @@ func (s *Service) resolveMetaMemberSnapshot(
 			backend = metaMemberBackendHosted
 		}
 
+		// mcp:connect grants are keyed on the toolset id for toolset-backed
+		// servers and the mcp_servers id for proxy backends. Checking the
+		// wrong one silently hides the member from every resource-scoped
+		// grant the dashboard writes (see grantResourceIdForMcpServer).
+		connectResourceID := row.McpServerID
+		if row.McpServerToolsetID.Valid {
+			connectResourceID = row.McpServerToolsetID.UUID
+		}
+
+		// mcp_servers.visibility is authoritative, floored by the member
+		// toolset's own mcp_is_public: nothing syncs the two columns, and a
+		// hosted member the direct surface hides must not become visible by
+		// being fronted by a gateway.
+		visibility := row.McpServerVisibility
+		if backend == metaMemberBackendHosted && !row.McpServerToolsetIsPublic.Bool {
+			visibility = mcpservers.VisibilityPrivate
+		}
+
 		// Visibility gates exposure and fails closed: public members are open,
 		// private members require mcp:connect (as authorizeProxyBackendAccess)
 		// with denied members filtered so unauthorized reads as nonexistent,
 		// and any other value (malformed or future) is filtered the same way.
-		switch row.McpServerVisibility {
+		switch visibility {
 		case mcpservers.VisibilityPublic:
 		case mcpservers.VisibilityPrivate:
-			if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, row.McpServerID.String(), projectID.String())); err != nil {
+			if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, connectResourceID.String(), projectID.String())); err != nil {
 				continue
 			}
 		default:
