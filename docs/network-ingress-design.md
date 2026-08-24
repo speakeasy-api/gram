@@ -1,285 +1,175 @@
 # Private Network Ingress for Gram-Hosted MCP Servers
 
-**Status:** Proposed — Phase 0 spike ran 2026-08-21: core assumptions validated (see appendix); two secondary checks outstanding
-**Provider:** Tailscale is the first (and MVP-only) supported provider; the data model, gateway, and API are provider-neutral. A fuller multi-provider RFC lives in the internal RFCs database (Notion).
+**Status:** Revised 2026-08-24 — architecture pivoted to the Tailscale Kubernetes operator per architectural review; Phase 0 spike (embedded tsnet) validated the underlying primitives and its results carry over where noted. A fuller product RFC lives in the internal RFCs database (Notion).
+**Provider:** Tailscale is the first (and MVP-only) supported provider; the data model, router abstraction, and API are provider-neutral.
 **Scope:** Ingress-side network controls (who can reach a Gram-hosted MCP server). Egress (Gram reaching customer-private upstreams over an overlay network) is explicitly out of scope; the existing tunnel feature covers that direction.
 
 ## Summary & recommendation
 
-**Build, behind a new `network_ingress` product feature (Enterprise tier), contingent on a one-week Phase 0 spike.** Estimated effort after the spike: ~4–6 engineer-weeks to MVP, ~3–4 more to GA hardening.
+**Build, behind the `network_ingress` product feature (Enterprise tier), on top of the Tailscale Kubernetes operator — not a hand-rolled gateway.** An org's private ingress becomes a set of Kubernetes resources provisioned through the same router abstraction that serves custom domains today: the existing `CustomDomainProvisioner` seam gains a second provider, `tailscale-ingress`, alongside today's `nginx-ingress`.
 
-Today Gram's only MCP network control is the IPv4 allowlist on an org's custom domain (`custom_domains.ip_allowlist`), enforced at the nginx ingress (`whitelist-source-range`) and backstopped by an app-level lockdown that 403s platform-host access for allowlisted orgs. This proposal adds a second, stronger control configured from the same page: serving an org's MCP endpoints **directly on the customer's private overlay network** (first provider: a Tailscale tailnet), optionally disabling public access entirely.
+Today Gram's only MCP network control is the IPv4 allowlist on an org's custom domain (`custom_domains.ip_allowlist`), enforced as an nginx Ingress annotation. This proposal adds a second, stronger control configured from the same page: serving an org's MCP endpoints **directly on the customer's Tailscale tailnet**, optionally disabling public access entirely (`private_network_only`).
 
-Gram runs one embedded overlay node per opted-in organization inside a new dedicated deployment, **`network-gateway`**, structurally mirroring the existing `tunnel-gateway` (separate binary, own Postgres/Redis access, forward-token trust boundary into gram-server). For the Tailscale provider the node is a `tsnet` instance that joins the customer's tailnet using a customer-supplied credential (OAuth client preferred, raw auth key supported) and reverse-proxies the full MCP HTTP surface (`/mcp/*`, `/.well-known/*`, OAuth, install pages) into gram-server over the cluster network, carrying trusted `X-Gram-NetIngress-*` headers (ingress ID, per-request network identity, forward token).
+The Tailscale Kubernetes operator (v1.96+) supplies the entire data plane:
 
-The one genuinely novel risk is **overlay node state persistence and per-node memory at multi-tenant scale** — that is what the spike de-risks. Everything else maps onto proven in-repo patterns: the tunnel gateway, the custom-domain lockdown, `productfeatures`, the `encryption` client, and the Goa management-API recipe.
+- **Multi-tenancy is first-class.** A cluster-scoped `Tailnet` CR references per-tailnet OAuth credentials (a Kubernetes Secret in the operator's namespace); a `ProxyGroup` pins to a `Tailnet` via its immutable `spec.tailnet`; `ProxyGroupPolicy` fences which namespaces may use which ProxyGroup. One operator install serves every customer tailnet.
+- **L7 ingress with identity.** An `Ingress` with `ingressClassName: tailscale` (annotated onto the org's ProxyGroup) gets a MagicDNS hostname, an automatically provisioned Let's Encrypt certificate, and proxy pods running `tailscale serve` — which injects `Tailscale-User-Login`-family identity headers into forwarded requests.
+- **State and HA are the operator's problem.** Proxy node identity lives in operator-managed Kubernetes Secrets; HA is ProxyGroup replicas. The custom Postgres `ipn.StateStore`, Redis leases, and supervisor from the earlier design are all deleted scope.
 
-## Provider abstraction
+What remains ours: the router-provider abstraction, per-org resource provisioning and lifecycle (reusing the custom-domain Temporal reconcile pattern), the management API and dashboard, the serving-path attribution and lockdown enforcement in gram-server, and the tenant-isolation invariant.
 
-The gateway supervises nodes through two small interfaces so Tailscale specifics stay in one package:
+## What the Phase 0 spike still tells us
 
-```go
-type Provider interface {                  // one per overlay technology
-    Name() string                          // "tailscale"
-    NewNode(ctx, IngressConfig, StateStore) (Node, error)
-    ValidateCredential(ctx, Credential) error
-}
-
-type Node interface {                      // one running overlay endpoint
-    Start(ctx) error                       // join network, begin listening
-    Listener() (net.Listener, error)       // TLS or plain, provider-decided
-    Identity(remoteAddr) (*PeerIdentity, error)  // per-request caller identity, nil if unsupported
-    Status() NodeStatus                    // online/offline/error + provider detail
-    Close(ctx) error                       // leave network, release state
-}
-```
-
-- **Tailscale** (MVP): `tsnet` — userspace WireGuard + netstack in-process, `LocalClient.WhoIs` implements `Identity`, custom `ipn.StateStore` for durable node identity.
-- **Later candidates**, in rough order of fit: **Headscale** (self-hosted Tailscale control plane — same tsnet client, different `ControlURL`; nearly free once Tailscale ships), **NetBird**, **OpenZiti**, **Nebula**, plain **WireGuard**. Each lands as a `provider/<name>` package; no schema or API change beyond a new `provider` enum value.
-- `PeerIdentity` (login, node/device name, tags, capability strings) is the provider-neutral shape behind the `X-Gram-NetIngress-User-*` headers; providers that cannot attest identity return nil and `identity_required` ingresses reject at the gateway.
-
-## Why Tailscale first, and why this shape
-
-- The IP allowlist is a real control but a coarse one: it requires customers to have stable egress IPs, it is IPv4-only, and the server remains publicly reachable (DNS resolves, TLS handshakes complete, only the HTTP layer is filtered at nginx).
-- Serving on the customer's overlay network means the MCP server is **not publicly reachable at all** for `private_network_only` orgs: no public DNS name in use, no public listener. Access is governed by the customer's own network ACLs/grants, and (on Tailscale) every request arrives with a cryptographically-bound device/user identity (`WhoIs`) usable for audit and, later, authorization.
-- `tsnet` embeds a full Tailscale node in-process (userspace WireGuard + gVisor netstack): no daemon, no root, multiple independent nodes per binary, and a pluggable `ipn.StateStore` for node identity — which makes a stateless-container deployment feasible.
+The spike (2026-08-21, embedded tsnet, results in the appendix) predates this revision but validated primitives the operator path still relies on: tailnet join and same-device identity semantics, WhoIs-attested per-request identity (login, display name, device), the single-use-auth-key footgun, and per-node resource costs (~5MB idle RSS — now the operator's budget, not ours). What it validated that we **no longer need**: the Postgres StateStore and unclean-death resume machinery (operator Secrets + ProxyGroup replace it). A new, smaller validation spike targets the operator itself (see Phase 0b below).
 
 ## Architecture
 
-### Where overlay nodes run
+### The router provider abstraction
 
-**Decision: a new dedicated deployment `netgateway/` (binary `network-gateway`), mirroring `tunnel/`.** Embedding in gram-server was rejected:
+The seam already exists. Custom domains are provisioned through `server/internal/k8s`:
 
-- **Device multiplication.** Every gram-server replica embedding an org's node would appear as a separate device on the customer's network (replicas × orgs devices, each consuming a machine slot and confusing the customer's admin console). A dedicated gateway with org→replica assignment keeps it to one device per org.
-- **Memory blast radius.** Each tsnet node is a userspace WireGuard + netstack instance; realistic RSS is tens of MB per node (the spike measures this — no official benchmark exists; full `tailscaled` is ~72MB RSS). Hundreds of orgs would bloat the latency-sensitive MCP serving path. The gateway scales and caps independently (`NETWORK_GATEWAY_MAX_NODES`, mirroring the tunnel gateway's `MaxSessions`).
-- **Dependency weight.** `tailscale.com` is a very large dependency tree (wireguard-go, gVisor). The repo is a single Go module, so it lands in the shared `go.mod` either way — but only the gateway binary links it. Accept root-module placement for MVP (exactly how `tunnel/` works); escape hatch: split into a nested module later if CI/dep-scan pain materializes. Add a depguard/glint rule confining `tailscale.com/...` imports to `netgateway/provider/tailscale/`.
-- **Deployment cadence.** Provider library bumps, node restarts, and provider control-plane incidents should not roll gram-server.
-
-Layout (mirrors `tunnel/`):
-
-```
-netgateway/
-  cmd/network-gateway/main.go       # env config; mise build:network-gateway; pitchfork daemon
-  gateway/supervisor.go             # org lease acquisition, node lifecycle (start/stop/reconfigure)
-  gateway/node.go                   # Provider/Node interfaces + shared lifecycle wrapper
-  gateway/statestore.go             # Postgres-backed state store (ipn.StateStore for tailscale)
-  gateway/proxy.go                  # httputil.ReverseProxy → gram-server internal URL
-  gateway/credentials.go            # decrypt provider credentials; tailscale: mint auth keys via API
-  provider/tailscale/               # tsnet.Server wrapper, WhoIs → PeerIdentity, cert handling
-  wire/headers.go                   # X-Gram-NetIngress-* header constants (shared with server)
+```go
+type CustomDomainProvisioner interface {   // server/internal/k8s/provisioner.go:44
+    Kind() ProvisionerKind
+    Apply(ctx context.Context, config RouteConfig) (SetupResult, error)
+    Get(ctx context.Context, resourceName string) error
+    Delete(ctx context.Context, resourceName, secretName string) error
+}
 ```
 
-### Sharding / HA model
+with exactly one real implementation today (`IngressProvisioner`, hardcoded `ingressClassName: nginx`) and a factory that currently ignores its `kind` argument (`client.go:83-88`). The revision:
 
-Redis-leased org ownership, in the spirit of the tunnel route liveness pattern (`tunnel_routes:*`, 30s TTL, 15s republish):
+- Name the providers explicitly: `nginx-ingress` (today's `ProvisionerKindIngress`, string value unchanged for DB compat) and **`tailscale-ingress`** (new kind).
+- Make the factory dispatch on kind; the tailscale provisioner writes Tailscale CRs through the existing dynamic client (no `tailscale.com` Go imports — the depguard confinement stands).
+- Generalize the three places the single-kind assumption leaks: the infrastructure health check (hardcodes cert-manager Secret + Certificate inspection — moves behind the provisioner interface), orphan-resource listing (hardcodes the ingress kind), and the deletion-time resource-identity checkpoint in `customdomains/impl.go` (kind-guarded).
+- `SetupResult.SecretName` already documents "empty when the provisioner does not own a TLS Secret" — written for exactly this case; the tailscale provider terminates TLS itself via the operator.
 
-- Each gateway replica watches the set of enabled `network_ingresses` rows (poll ~15s plus a Redis pub/sub nudge published by gram-server on create/update).
-- For each unowned ingress, a replica attempts `SET net_ingress_owner:<ingress_id> <replica_id> NX PX 45000`; the winner starts the node and heartbeats the lease every 15s. On replica death the lease expires and another replica claims it, loading node state from the Postgres state store — the node resumes as the **same network device** (same node key): no re-auth, no duplicate device.
-- Rendezvous hashing (reuse `tunnel/wire.RendezvousPick`) over live replica IDs biases claims for even spread; the lease remains the source of truth.
-- **MVP simplification: one replica** (leases still written so the code path is exercised); multi-replica failover lands in Phase 2.
+The IP allowlist stays an nginx-only capability (it is an nginx annotation; on a tailnet, the customer's ACLs are the allowlist).
 
-Coordination is DB-as-source-of-truth plus the Redis nudge. gram-server **never dials the gateway** — traffic flows gateway→gram-server only — so there is **no guardian/SSRF change anywhere** (contrast `tunnel_manager.go:90`, where gram-server dials the tunnel gateway and must relax the blocklist).
+### Per-org Kubernetes resources
 
-### Request flow
+For an enabled `network_ingresses` row, the `tailscale-ingress` provisioner applies, in a dedicated namespace:
+
+1. **Secret** — the customer's OAuth client (`client_id`, `client_secret`), synced from the encrypted columns on the row. Required scopes: `Devices Core`, `Auth Keys`, `Services` (write), tagged `tag:k8s-operator`; the customer's ACL must define `tagOwners` for `tag:k8s-operator` and `tag:k8s`.
+2. **Tailnet CR** (cluster-scoped) — `spec.credentials.secretName` → the Secret; ready state `TailnetReady` is the first health signal.
+3. **ProxyGroup** (type ingress) — `spec.tailnet` → the Tailnet CR; replicas 2. This is the org's device set on the customer network.
+4. **Ingress** — `ingressClassName: tailscale`, `tailscale.com/proxy-group` annotation → the ProxyGroup, hostname from the row (default `gram-mcp`), backend → gram-server's **netingress Service port** (below). The operator provisions MagicDNS + certificate (Let's Encrypt: 50 hostnames/week/tailnet — fine at one hostname per org).
+
+Resource names derive from the ingress id and are **persisted on the row at provision time** (the custom-domain lesson: never re-derive names from a tombstone — a successor's resources would be torn down).
+
+Lifecycle reuses the custom-domain Temporal shape: a signal-coalesced, debounced reconcile workflow per ingress; create/update/delete RPCs nudge it; health checks read `Tailnet`/`ProxyGroup`/`Ingress` status conditions instead of DNS + cert-manager.
+
+### Request flow and trust boundary
 
 ```
-MCP client on customer overlay network
-  └─ https://gram-mcp.<tailnet>.ts.net/mcp/<slug>     (tailscale: ts.net TLS via tsnet, or WireGuard-only HTTP)
-     └─ network-gateway (org's overlay node)
-        1. node.Identity(remoteAddr) → user login, node name, tags, capability grants
-           (tailscale: LocalClient.WhoIs)
-        2. ingress.identity_required && no identity → 403 at the gateway
-        3. Strip any inbound X-Gram-NetIngress-*; set:
-             X-Gram-NetIngress-Forward-Token   (shared secret)
-             X-Gram-NetIngress-Ingress-ID
-             X-Gram-NetIngress-User-Login / -Node / -Caps   (from Identity)
-           Preserve Host; set X-Forwarded-Proto/For.
-        4. ReverseProxy → http://gram-server.<ns>.svc   (in-cluster; NOT via public nginx)
-     └─ gram-server middleware chain (server/cmd/gram/start.go, ~line 1242)
-        5. NEW netingress.Middleware (ordered immediately BEFORE customdomains.Middleware):
-           - requests lacking a valid forward token (constant-time compare) have all
-             X-Gram-NetIngress-* headers stripped — this also sanitizes the public nginx path
-           - valid token: load network_ingresses row (cached), 403 if disabled/deleted,
-             attach netingress.Context{IngressID, OrganizationID, PeerIdentity...}
-        6. customdomains.Middleware: netingress ctx present → pass through (a .ts.net Host is
-           unknown to custom_domains and would otherwise 403 at middleware.go:46-50).
-           If the org has an active custom domain, synthesize customdomains.Context from it
-           so mcp_endpoints resolve in the org's custom-domain namespace.
-        7. mcp.ServePublic → ResolveMCPEndpointAndServer
-        8. NEW invariant — post-resolution org check: resolved endpoint's project.org MUST
-           equal netingress.Context.OrganizationID, else 404.
-           (Load-bearing tenant isolation, esp. for orgs without a custom domain.)
-        9. enforceNetworkLockdown (generalized enforceCustomDomainLockdown,
-           serveendpoint.go:64): netingress ctx present → allow.
-       10. Normal dispatch: issuer gate, visibility/authz.MCPCheck(ScopeMCPConnect),
-           backend switch (remote / tunneled / toolset). Peer identity attached to
-           logs/audit attrs.
+MCP client on customer tailnet
+  └─ https://gram-mcp.<tailnet>.ts.net/mcp/<slug>
+     └─ operator ingress proxy pod (tailscale serve, org's ProxyGroup)
+        - terminates TLS with the MagicDNS certificate
+        - injects Tailscale-User-* identity headers
+     └─ gram-server, dedicated netingress listener port
+        1. netingress middleware (this listener only):
+           - resolve Host → network_ingresses row by dns_name; unknown host → 403
+           - normalize Tailscale-User-* → netingress.Context{IngressID, OrgID, Identity}
+           - identity_required && no identity headers → 403
+        2. customdomains.Middleware: netingress ctx → pass through; synthesize the
+           org's custom-domain context if one exists (same namespace resolution)
+        3. mcp.ServePublic → ResolveMCPEndpointAndServer
+        4. post-resolution org check: endpoint's org == ingress's org, else 404
+        5. enforceNetworkLockdown: netingress ctx → allow
+        6. normal dispatch; identity attached to logs/audit attrs
 ```
 
-### Lockdown matrix
+The trust boundary changes from the earlier design's forward token to **a dedicated listener**: the operator's Ingress backend targets a gram-server Service port that only netingress traffic uses. On every _other_ listener, inbound `Tailscale-*` (and legacy `X-Gram-Netingress-*`) headers are stripped unconditionally, so the public nginx path cannot forge identity; a NetworkPolicy pins the netingress port to the ProxyGroup pods. Host-based attribution on that port mirrors how `customdomains.Middleware` already attributes custom-domain traffic.
 
-`enforceCustomDomainLockdown` generalizes to `enforceNetworkLockdown`:
+### Lockdown matrix (unchanged)
 
-| Request arrives via              | IP allowlist set | `private_network_only` | Result                               |
-| -------------------------------- | ---------------- | ---------------------- | ------------------------------------ |
-| platform host                    | no               | off                    | allow                                |
-| platform host                    | yes              | off                    | 403 (today's behavior, unchanged)    |
-| custom domain                    | any              | off                    | allow (nginx enforced the allowlist) |
-| platform or custom domain        | any              | **on**                 | **403**                              |
-| private network (netingress ctx) | any              | any                    | allow                                |
+| Request arrives via              | IP allowlist | `private_network_only` | Result                               |
+| -------------------------------- | ------------ | ---------------------- | ------------------------------------ |
+| Platform host                    | not set      | off                    | allow                                |
+| Platform host                    | set          | off                    | 403 — today's behavior               |
+| Custom domain                    | any          | off                    | allow (nginx enforced the allowlist) |
+| Platform or custom domain        | any          | **on**                 | **403**                              |
+| Private network (netingress ctx) | any          | any                    | allow                                |
 
-The install-page / well-known platform-host bypass is kept unchanged (see the deliberate comment at `serveendpoint.go:58-63`: private-MCP install pages need the dashboard session cookie on the platform host). Those routes are _also_ fully served over the private network, since the gateway proxies every path. `BaseURLForRequest` derives from `r.Host`, which the gateway preserves, so OAuth issuer/metadata URLs correctly come out as `https://gram-mcp.<tailnet>.ts.net/...` — this is what keeps the OAuth flows working untouched (verified by Phase 1 tests).
+The install-page / well-known platform-host bypass stays (dashboard-cookie sessions), documented: `private_network_only` governs the MCP data plane.
 
-## Data model
+## Data model (revised)
 
-### `network_ingresses` (new table; one per org, like `custom_domains`)
+**`network_ingresses`** — as shipped in the pending migration, minus what the operator obsoletes:
 
-```sql
-CREATE TABLE network_ingresses (
-  id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
-  organization_id TEXT NOT NULL,
-  provider TEXT NOT NULL DEFAULT 'tailscale' CHECK (provider IN ('tailscale')),
-  hostname TEXT NOT NULL DEFAULT 'gram-mcp',        -- overlay device hostname
-  -- credentials (provider-specific; exactly one mode; AES-256-GCM via server/internal/encryption)
-  credential_kind TEXT NOT NULL CHECK (credential_kind IN ('auth_key','oauth_client')),
-  auth_key_enc TEXT,                                 -- one-shot; nulled after first successful join
-  oauth_client_id TEXT,
-  oauth_client_secret_enc TEXT,
-  tags TEXT[] NOT NULL DEFAULT '{tag:gram}',         -- ACL tags the node advertises
-  -- behavior flags
-  enabled BOOLEAN NOT NULL DEFAULT TRUE,
-  private_network_only BOOLEAN NOT NULL DEFAULT FALSE, -- "disable public access"
-  identity_required BOOLEAN NOT NULL DEFAULT TRUE,
-  -- learned/health state (written by the gateway; pattern: custom_domains health columns)
-  status TEXT NOT NULL DEFAULT 'pending',            -- pending|connecting|online|offline|error|disabled
-  network_name TEXT,                                 -- tailscale: e.g. tail1234.ts.net
-  dns_name TEXT,                                     -- tailscale: gram-mcp.tail1234.ts.net (MagicDNS)
-  node_id TEXT,
-  last_error TEXT,
-  last_seen_at timestamptz,
-  connected_since timestamptz,
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
-  deleted BOOLEAN GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED
-);
-CREATE UNIQUE INDEX ON network_ingresses (organization_id) WHERE deleted IS FALSE;
-```
+- **Drop `network_node_state` entirely** (operator Secrets hold node state).
+- **Drop `auth_key_enc` / the `auth_key` credential mode.** The operator's `Tailnet` CR requires an OAuth client; `credential_kind` collapses to `oauth_client` (column retained for future providers).
+- **Add** provisioned-resource identity columns (`resource_name`, mirroring `custom_domains.ingress_name`) written at provision time for tombstone-safe deletion.
+- Keep: org scoping + one-per-org partial unique index, `provider` discriminator, `hostname`, `tags`, flags (`enabled`, `private_network_only`, `identity_required`), encrypted OAuth columns, health columns (`status`, `network_name`, `dns_name`, `node_id` → repurposed for ProxyGroup identity, `last_error`, `last_seen_at`, `connected_since`).
 
-Decisions:
+The pending migration PR is amended before merge (delete + regenerate, per the unmerged-migration rule).
 
-- **New table, not `custom_domains` columns.** Independent lifecycle and secrets, and the private-network path does not use the domain's DNS; an org can have a network ingress with no custom domain at all.
-- **`provider` is an enum-by-CHECK.** Only `tailscale` in MVP; new providers extend the CHECK and add a `provider/<name>` gateway package. Credential columns are provider-specific; if a second provider's credential shape diverges hard, migrate to a `credential jsonb` at that point, not before.
-- **OAuth client is the recommended Tailscale credential.** Auth keys are single-use and expire (≤90 days) — any state loss or expiry in auth-key mode strands the node and generates support tickets. An OAuth client (scope `auth_keys`, tied to `tag:gram`) lets the gateway mint fresh tagged auth keys on demand via the Tailscale API. MVP accepts both; the UI nudges toward OAuth.
-- **Quota:** one per org via the unique index. If per-org node counts ever grow, reuse the `billing_metadata` pattern (`tunneled_mcp_server_limit` precedent).
-- **Secrets** encrypted with the existing `encryption.Client` (AES-256-GCM, `server/internal/encryption`). The gateway gets `GRAM_ENCRYPTION_KEY` and its own DB access (precedent: `tunnel/gateway/pgkeystore.go`). Secrets are never returned by RPCs; rotation is write-only.
+## Management API and UX (largely as shipped)
 
-### `network_node_state` — Postgres-backed state store (spike target)
+The `networkIngress` Goa service survives with a reshaped create/rotate payload: OAuth client id + secret only (no auth-key mode). The dashboard card's setup Sheet documents the heavier customer-side ACL setup (`tag:k8s-operator` OAuth client with the three scopes, `tagOwners` entries) with copy-paste snippets. Everything else — feature gating, RBAC, audit subject, admin surfaces — is unchanged.
 
-`tsnet.Server` accepts a custom `Store ipn.StateStore` (a small `ReadState`/`WriteState` KV interface) holding node identity (machine key, node key, profile) — this is what makes lease failover resume the same device with no PVCs. The table is provider-neutral KV; the tailscale provider is its first client.
+## Security analysis (deltas from v1)
 
-```sql
-CREATE TABLE network_node_state (
-  ingress_id uuid NOT NULL,
-  key TEXT NOT NULL,
-  value bytea NOT NULL,
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  PRIMARY KEY (ingress_id, key)
-);
-```
+1. **Trust boundary**: dedicated listener + NetworkPolicy replaces the shared forward token; header stripping on all other listeners stays. Host attribution is only trusted on the netingress port.
+2. **Identity**: `Tailscale-User-*` headers are injected by the operator's serve proxies; advisory in MVP (log/audit). Capability-grant authz remains Phase 2.
+3. **Tenant isolation**: the post-resolution org check is unchanged and still the load-bearing invariant, with a dedicated test.
+4. **Credentials**: customer OAuth client encrypted at rest in Postgres, synced into the operator namespace as a Secret by the provisioner; rotation updates row + Secret and bounces the Tailnet CR. Blast radius of the Secret is fenced by namespace + RBAC + `ProxyGroupPolicy`.
+5. **SSRF/egress posture**: still untouched — the operator's proxies dial inward to gram-server; gram-server never dials the customer network.
+6. **Operator supply chain**: the operator is a new cluster-privileged dependency (CRDs + controller). Pin its version; review its RBAC; upgrades follow the same policy as other cluster infra.
 
-Caveat to validate in the spike: tsnet also uses a local `Dir` for cert cache and logs. ts.net TLS certs are re-obtainable, so an ephemeral emptyDir should suffice — confirm current tsnet versions tolerate `Dir` loss with `Store` intact, and measure cold-resume time.
+## Phased plan (revised)
 
-## API surface
+### Phase 0b — Operator validation spike (~2-3 days, kind cluster + two test tailnets)
 
-**New Goa service `networkIngress`** (not an extension of `domains` — different secrets and lifecycle; keeps the `domains` SDK surface stable). Per the `gram-management-api` recipe: `server/design/networkingress/design.go` + blank import in `server/design/gram.go`; impl at `server/internal/networkingress/{impl.go,queries.sql}` + repo + `mv` views + changeset.
+- Operator v1.96+ multi-tailnet: `Tailnet` CR + Secret per tailnet, `ProxyGroup` per tailnet, `Ingress` per ProxyGroup; confirm two orgs on two tailnets from one cluster.
+- Confirm `Tailscale-User-*` identity headers on the L7 path, and their exact names/values for the middleware contract.
+- Confirm Host header seen by the backend (MagicDNS name) and TLS behavior; measure proxy pod footprint.
+- Confirm ProxyGroup replica failover keeps the MagicDNS name stable.
+- Output: go/no-go memo + the middleware attribution contract.
 
-Security: `Session` + `ByKey`, org-level (no `ProjectSlug`, same as `domains`); mutations require `authz.ScopeOrgAdmin`; every method is gated on the `network_ingress` product feature.
+### Phase 1 — MVP
 
-| Method              | Notes                                                                   |
-| ------------------- | ----------------------------------------------------------------------- |
-| `getIngress`        | Row + health; secrets redacted to "credential configured" booleans      |
-| `createIngress`     | provider, hostname, credential (auth key XOR oauth client), tags, flags |
-| `updateIngress`     | hostname / `private_network_only` / `identity_required` / `enabled`     |
-| `rotateCredentials` | Replace credential; mark node for re-auth. Write-only                   |
-| `deleteIngress`     | Soft-delete; gateway logs the node out and purges node state            |
-| `checkHealth`       | On-demand freshness poke (mirrors `domain.checkHealth`)                 |
+1. Amend pending migration (drop `network_node_state` + auth-key column; add resource-name columns). _(amends open PR)_
+2. Management API reshape: OAuth-only credential payloads. _(amends open PR)_
+3. Router abstraction: named provider kinds, kind-dispatching factory, `TailscaleIngressProvisioner` (CRs via dynamic client), generalize the three single-kind leaks, reconcile/delete/health workflows for ingress rows. _(replaces the network-gateway binary PR)_
+4. gram-server: netingress listener port + middleware (Host attribution, identity normalization, stripping elsewhere), `enforceNetworkLockdown`, post-resolution org check, wiring.
+5. Dashboard card.
+6. Deploy: operator install (pinned), namespace + RBAC + `ProxyGroupPolicy` + NetworkPolicy, netingress Service port.
 
-## UI changes
+### Phase 2 — Hardening / GA
 
-Extend `client/dashboard/src/pages/org/OrgDomains.tsx` with a second card under the existing domain card, matching its idioms (SettingsPage, Sheet for credential entry, Dialogs for destructive actions, health banners). New components under `client/dashboard/src/pages/org/netingress/`.
-
-- **Not configured:** "Serve MCP over your private network" + Configure button (provider picker shows Tailscale only in MVP); hidden/upsell when the product feature is off (mirrors `canCreateCustomDomain` gating and the `FeatureRequestModal` pattern).
-- **Configured:** status badge (Online/Offline/Error + `last_seen_at`), network name, copyable MCP base URL `https://<dns_name>/mcp/<slug>`, hostname edit, toggles for **Private-network-only access** (strong confirm dialog — it 403s the custom domain too) and **Require network identity**, credential-rotation Sheet (secret never displayed), delete dialog.
-- Setup Sheet includes the customer-side steps (tailscale): create `tag:gram` in ACLs, create an OAuth client scoped to it, optionally enable MagicDNS/HTTPS.
-
-## Security analysis
-
-1. **Forward-header trust boundary.** Same shape as `TUNNEL_GATEWAY_FORWARD_TOKEN`: shared secret env on both deployments, constant-time compare. Stronger than the tunnel path: `netingress.Middleware` _unconditionally strips_ `X-Gram-NetIngress-*` from any request without a valid token, so headers injected via the public nginx path are inert. Defense in depth: also drop these headers at the nginx edge.
-2. **Identity spoofing.** Identity headers are only produced by the gateway post-token-validation; overlay clients cannot set them (the gateway strips inbound copies). Peer identity is advisory in MVP (log/audit attrs); it becomes authz-bearing only in Phase 2 via provider capability grants (tailscale: e.g. `getgram.ai/cap/mcp` in customer ACLs mapped to allowed server slugs), validated against the ingress's org.
-3. **Tenant isolation.** The post-resolution org check (step 8 above) is the critical invariant: a private-network request can only ever resolve endpoints in its own org, including on the legacy platform-namespace fallback path. Requires a dedicated test.
-4. **SSRF/guardian.** No relaxation anywhere: gateway→gram-server is inbound to gram-server, and gram-server never dials the customer network.
-5. **Private-network-only lockdown** is enforced app-level in `enforceNetworkLockdown` (403 on both platform and custom-domain contexts). The install-page/well-known platform-host bypass remains — document that `private_network_only` governs the MCP data plane, not the dashboard-cookie install page.
-6. **Credential compromise/rotation.** Secrets AES-GCM at rest; rotation RPC; docs must state that customers should also revoke the credential and delete the device in their provider's admin console (Gram cannot revoke customer-side). On delete: gateway logs the node out (tailscale: tsnet logout) and purges `network_node_state`.
-7. **Customer ACL changes.** If the customer's network policy cuts the node off, traffic simply stops; health goes offline with `last_error`; no Gram-side failure mode. Tag deletion breaks OAuth-minted keys — surfaced as `error` status.
-8. **OAuth/install flows over the private network.** Full-surface proxying + Host preservation keeps `/.well-known/*`, the issuer gate, and consent/install pages working; the end user's browser is on the customer network by definition of the feature. Third-party IdP redirects leave the private network from the browser — fine.
-
-## Feasibility — the "if"
-
-Costs and risks, honestly:
-
-- **Operational:** Gram becomes an operator of N always-on devices in N customer-controlled networks. Failure modes (expired keys, ACL changes, provider control-plane outages) originate customer-side but page Gram. Mitigate with rich `status`/`last_error` surfacing and docs. This is the largest ongoing cost — hence Enterprise-only gating.
-- **Memory/scale:** estimated 30–100MB RSS per tsnet node (spike measures). At ~50 enterprise orgs that is a few GB in a dedicated deployment — acceptable; at thousands it needs the Phase 2 sharding maturity the lease model already provides.
-- **Control-plane dependency:** joins and re-auth depend on the provider's coordination servers; established WireGuard sessions largely survive short outages.
-- **Library churn:** `tailscale.com` releases frequently; pin and schedule quarterly bumps; nested-module escape hatch if root `go.mod` churn hurts.
-
-Fallback positions (worth documenting regardless — they are the day-1 answer for un-entitled orgs):
-
-1. **Customer-side Tailscale app connector / subnet router + existing IP allowlist:** the customer routes their custom domain through their overlay egress and allowlists that egress IP. Zero Gram code — a docs page. Weaker: the server stays publicly reachable and protection is IP-based.
-2. **tsidp + existing issuer gate:** point `mcp_servers.user_session_issuer_id` at Tailscale's OIDC IdP (tsidp) running on the customer's tailnet — network _identity_ without network _transport_. Complementary, not a substitute.
-
-**Verdict: build behind the `network_ingress` product feature**, MVP scoped to one node per org, the Tailscale provider only, and a single gateway replica, contingent on Phase 0 confirming the Postgres StateStore behavior and memory numbers. If the spike falsifies the StateStore assumption, the fallback is per-node state on a StatefulSet PVC — uglier, not fatal.
-
-## Phased plan
-
-### Phase 0 — Spike (~1 week, throwaway, no product code)
-
-- Scratch binary running 3+ tsnet nodes in one process against a test control plane; measure RSS/goroutines per node.
-- Implement the Postgres-backed `ipn.StateStore`; kill/restart the process; confirm same-device resume with an ephemeral `Dir`; measure resume latency.
-- Validate `LocalClient.WhoIs` fields including capability grants; validate ts.net HTTPS cert issuance and cert-cache-loss tolerance (Let's Encrypt rate limits).
-- Validate OAuth-client → tagged auth-key minting via the Tailscale API.
-- Output: go/no-go memo with measured sizing.
-
-### Phase 1 — MVP (~3–4 weeks)
-
-1. Migration: `network_ingresses` + `network_node_state` (postgresql skill / atlas flow).
-2. Goa service `networkIngress` + impl/repo/mv/tests (gram-management-api recipe); `network_ingress` product feature (4-step productfeatures recipe); `org:admin` RBAC.
-3. `netgateway/` binary (single replica; leases written): supervisor, Provider/Node interfaces + tailscale provider, PG state store, identity headers, reverse proxy, forward token; `mise build:network-gateway`; pitchfork entry; Dockerfile mirroring `tunnel/Dockerfile`; depguard rule confining `tailscale.com`.
-4. gram-server: `server/internal/netingress/{context,middleware}.go`; `customdomains.Middleware` pass-through + domain-ctx synthesis; `enforceCustomDomainLockdown` → `enforceNetworkLockdown`; post-resolution org check; wiring + flags in `start.go`.
-5. Dashboard card on `OrgDomains.tsx` (status, credential Sheet, toggles).
-6. Tests: middleware token/strip tests (pattern: `customdomains/middleware_test.go`); lockdown matrix tests; org-isolation test; optional e2e job against a real test tailnet.
-
-### Phase 2 — Hardening / GA (~3–4 weeks)
-
-- Multi-replica gateway with lease failover + rendezvous claim bias; chaos test (replica kill → device-resume SLO).
-- OAuth-client auto re-auth (mint fresh keys on expiry); rotation UX polish.
-- Identity → audit-log integration (gram-audit-logging pattern); optional capability-grant authz.
-- Health reconciler parity with the custom-domain health workflow (background Temporal check, dashboard banners, `checkHealth` RPC).
-- Metrics/alerts (node up, handshake age, proxy error rate), runbook, customer docs, `tailscale.com` upgrade policy.
-- Nested-module split decision based on observed dependency pain.
-- Second provider (likely Headscale — same client stack) to prove the `Provider` seam before it ossifies.
+- Health reconciler on operator status conditions; `checkHealth` RPC; delete-time teardown validation.
+- OAuth rotation UX; ACL-breakage surfacing (`tag:k8s-operator` removed, credential revoked).
+- Identity → audit-log integration; optional capability-grant authz.
+- Metrics/alerts/runbook/customer docs; operator upgrade policy.
+- Second provider through the same seam (the earlier embedded-tsnet gateway, preserved in a closed PR, is the non-Kubernetes escape hatch if the operator path hits a wall).
 
 ## Open questions
 
-1. Does the current tsnet release route cert storage through `ipn.StateStore`, and is Dir-loss cert reissue safe against Let's Encrypt rate limits? (Spike answers.)
-2. Should `private_network_only` also suppress the platform-host install-page bypass, given dashboard cookies live off-network? MVP: keep the bypass, document it.
-3. TLS posture on the overlay: ts.net HTTPS (requires the customer to enable MagicDNS + HTTPS) vs plain HTTP over WireGuard. MVP: prefer HTTPS, warn on fallback — needs PM sign-off.
-4. Multiple nodes/networks per org (staging vs prod)? MVP: one per org (unique index); relaxing later mirrors how custom domains might go multi.
-5. Local-dev story: `customdomains.Middleware` short-circuits on `env == "local"`; netingress middleware should still be exercisable locally against a dev network — needs a dev-flag design. (The Phase 0 spike's local Headscale setup is a candidate answer.)
+1. Confirm (spike) that a plain `Ingress` + `tailscale.com/proxy-group` annotation serves from a non-default `Tailnet` — the docs pin `spec.tailnet` on ProxyGroup but are silent on Ingress-level selection edge cases.
+2. Exact identity-header set and spoofing posture on the serve proxy path (spike): are headers stripped from inbound tailnet requests by serve itself?
+3. Per-org namespace vs shared namespace for the provisioned resources (Secret blast radius vs operational sprawl). Leaning shared namespace + tight RBAC for MVP.
+4. `Tailnet` CR is cluster-scoped — quota/naming policy for hundreds of orgs; confirm operator scale envelope with Tailscale.
+5. Should `private_network_only` also suppress the platform-host install-page bypass? MVP: keep, document.
+6. Local-dev story: kind + operator + a dev tailnet; how much of it runs in CI.
 
-## Appendix — Phase 0 spike results (2026-08-21)
+## Key files referenced
 
-Method: throwaway binary (gitignored `scratch/`, separate Go module so `tailscale.com` never touched the root `go.sum`) running N `tsnet.Server` instances in one process against a personal test tailnet on the real Tailscale control plane. Each node used the Postgres-backed `ipn.StateStore` (`network_node_state` shape above) in a dedicated scratch database, with a fresh `os.MkdirTemp` `Dir` on every run (simulating emptyDir loss). RSS measured via `ps` after `runtime.GC`.
+| Area                                 | Path                                                                                                              |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| Provisioner seam to extend           | `server/internal/k8s/provisioner.go:44` (interface), `client.go:83-88` (factory to make kind-aware)               |
+| nginx provisioner (template)         | `server/internal/k8s/ingress_provisioner.go`                                                                      |
+| Reconcile workflow shape to reuse    | `server/internal/background/custom_domain_registration.go`, `activities/custom_domain_ingress.go:122`             |
+| Health machinery to generalize       | `server/internal/background/activities/custom_domain_health.go:33`, `server/internal/k8s/custom_domain_health.go` |
+| Lockdown to generalize               | `server/internal/mcp/serveendpoint.go` (`enforceCustomDomainLockdown`)                                            |
+| Custom-domain host resolution        | `server/internal/customdomains/middleware.go`                                                                     |
+| Management API (shipped, to reshape) | `server/design/networkingress/design.go`, `server/internal/networkingress/`                                       |
+| Superseded gateway (escape hatch)    | closed PR #5624 (`netgateway/` tree)                                                                              |
+
+## Appendix — Phase 0 spike results (2026-08-21, embedded tsnet — pre-revision)
+
+Method: throwaway binary (gitignored `scratch/`, separate Go module so `tailscale.com` never touched the root `go.sum`) running N `tsnet.Server` instances in one process against a personal test tailnet on the real Tailscale control plane. Each node used a Postgres-backed `ipn.StateStore` in a dedicated scratch database, with a fresh `os.MkdirTemp` `Dir` on every run (simulating emptyDir loss). RSS measured via `ps` after `runtime.GC`.
 
 | Metric                         | Measured                                                                        |
 | ------------------------------ | ------------------------------------------------------------------------------- |
@@ -293,26 +183,4 @@ Method: throwaway binary (gitignored `scratch/`, separate Go module so `tailscal
 | Auth-key use on resume         | none — tsnet ignores `AuthKey` when the `Store` holds a profile                 |
 | Per-request identity (`WhoIs`) | login, display name, and device name attested end-to-end over the tailnet       |
 
-Findings vs. the design's assumptions:
-
-- **StateStore assumption CONFIRMED — the go/no-go criterion.** Unclean death (`SIGKILL`) + ephemeral `Dir` + Postgres-only state resumes the _same tailnet device_ in under 2 s, with no re-auth and no duplicate device. Stateless containers work; no PVC fallback needed.
-- **The memory estimate was ~10× pessimistic.** Estimated 30–100 MB/node; measured ≈ 5 MB/node marginal at idle. Even 1,000 org nodes ≈ ~5 GB — the dedicated-deployment decision stands for isolation reasons, not memory pressure.
-- **Single-use auth keys are a footgun confirmed in practice:** the first node consumes the key and the second join fails with "invalid key". The UI/docs must require a _reusable_ key or (better) OAuth-minted keys.
-- Caveats: idle-state numbers (no sustained proxy traffic — netstack buffers grow under load); direct WireGuard path on one LAN (DERP-relayed performance untested); `CapMap` arrives empty unless the customer's ACLs define capability grants (mechanism confirmed present in the WhoIs response).
-
-**Not yet validated** (needs tailnet-admin setup; tracked to close out the spike): ts.net HTTPS cert issuance and cert-cache `Dir`-loss behavior (needs MagicDNS + HTTPS enabled on the test tailnet — open question 1); OAuth client → tagged auth-key minting via the Tailscale API.
-
-**Verdict: GO on the core architecture.** The two outstanding checks affect TLS posture and credential UX, not feasibility.
-
-## Key files referenced
-
-| Area                                 | Path                                                                                   |
-| ------------------------------------ | -------------------------------------------------------------------------------------- |
-| Lockdown to generalize               | `server/internal/mcp/serveendpoint.go` (`enforceCustomDomainLockdown`, line ~64)       |
-| Middleware ordering / wiring         | `server/cmd/gram/start.go` (~line 1242)                                                |
-| Custom-domain host resolution        | `server/internal/customdomains/middleware.go`                                          |
-| Deployment + trust-boundary template | `tunnel/cmd/tunnel-gateway/main.go`, `tunnel/gateway/`                                 |
-| Goa service template                 | `server/design/tunneledmcp/design.go` + `.agents/skills/gram-management-api/SKILL.md`  |
-| Secret encryption                    | `server/internal/encryption/encryption.go`                                             |
-| Product feature recipe               | `server/internal/productfeatures/features.go` + `.agents/skills/feature-flag/SKILL.md` |
-| Custom domain page (UI host)         | `client/dashboard/src/pages/org/OrgDomains.tsx`                                        |
+Findings that carry over to the operator architecture: WhoIs identity semantics; the single-use auth-key footgun (now moot — OAuth-only); per-node resource costs as the operator's proxy budget. Findings the operator obsoletes: the Postgres StateStore and unclean-death resume machinery (operator-managed Secrets + ProxyGroup replicas own this now).
