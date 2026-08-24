@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
@@ -466,6 +467,21 @@ func (l *LocalRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRunt
 	}
 
 	return l.runner.turn(ctx, localRuntimeEndpoint(metadata.HostPort), runtime, turn, localRuntimeTurnTimeout)
+}
+
+func (l *LocalRuntimeBackend) InterruptTurn(ctx context.Context, runtime assistantRuntimeRecord, threadID uuid.UUID) (bool, error) {
+	if err := validateRuntimeBackend(l, runtime.Backend); err != nil {
+		return false, err
+	}
+	metadata, err := decodeLocalRuntimeMetadata(runtime.BackendMetadataJSON)
+	if err != nil {
+		return false, err
+	}
+	if metadata.HostPort == 0 {
+		return false, fmt.Errorf("%w: local runtime host port is not available", ErrRuntimeUnhealthy)
+	}
+
+	return l.runner.interrupt(ctx, localRuntimeEndpoint(metadata.HostPort), threadID)
 }
 
 func (l *LocalRuntimeBackend) Status(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendStatus, error) {

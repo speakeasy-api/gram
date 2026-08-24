@@ -116,6 +116,7 @@ trackedFiles:
   src/funcs/assistantsEnsureManaged.ts: {}
   src/funcs/assistantsGet.ts: {}
   src/funcs/assistantsGetManaged.ts: {}
+  src/funcs/assistantsInterruptTurn.ts: {}
   src/funcs/assistantsList.ts: {}
   src/funcs/assistantsSendMessage.ts: {}
   src/funcs/assistantsUpdate.ts: {}
@@ -920,6 +921,8 @@ trackedFiles:
   src/models/components/integration.ts: {}
   src/models/components/integrationentry.ts: {}
   src/models/components/integrationversion.ts: {}
+  src/models/components/interruptturnrequestbody.ts: {}
+  src/models/components/interruptturnresult.ts: {}
   src/models/components/issuerconvergencecandidate.ts: {}
   src/models/components/issuermigratepreflight.ts: {}
   src/models/components/jsonwebkey.ts: {}
@@ -1769,6 +1772,7 @@ trackedFiles:
   src/models/operations/ingesthookevent.ts: {}
   src/models/operations/ingestlitellmguardrail.ts: {}
   src/models/operations/integrationsnumberget.ts: {}
+  src/models/operations/interruptassistantturn.ts: {}
   src/models/operations/listadminopenrouterkeys.ts: {}
   src/models/operations/listaiintegrationschedules.ts: {}
   src/models/operations/listallowedorigins.ts: {}
@@ -2414,6 +2418,7 @@ trackedFiles:
   src/react-query/instance.ts: {}
   src/react-query/integrationsIntegrationsNumberGet.core.ts: {}
   src/react-query/integrationsIntegrationsNumberGet.ts: {}
+  src/react-query/interruptAssistantTurn.ts: {}
   src/react-query/latestDeployment.core.ts: {}
   src/react-query/latestDeployment.ts: {}
   src/react-query/listAPIKeys.core.ts: {}
@@ -6262,6 +6267,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  interruptAssistantTurn:
+    speakeasy-default-interrupt-assistant-turn:
+      requestBody:
+        application/json: {"assistant_id": "edbed52d-499f-463f-9abb-dfaa0a052705", "chat_id": "65cb7674-bdb2-4ef7-9f27-ad546fa6f812"}
+      responses:
+        "200":
+          application/json: {"cancelled_queued": 776480, "interrupted": false, "stopped": false}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   listAIIntegrationSchedules:
     speakeasy-default-list-AI-integration-schedules:
       parameters:

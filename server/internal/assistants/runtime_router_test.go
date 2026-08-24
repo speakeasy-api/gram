@@ -32,6 +32,7 @@ type stubRuntimeBackend struct {
 
 	ensureRecords           []assistantRuntimeRecord
 	runTurnCount            int
+	interruptedThreadIDs    []uuid.UUID
 	stopCount               int
 	reapCount               int
 	reapStoppedMachineCount int
@@ -54,6 +55,11 @@ func (s *stubRuntimeBackend) RecycleImage(_ context.Context, _ assistantRuntimeR
 func (s *stubRuntimeBackend) RunTurn(_ context.Context, _ assistantRuntimeRecord, _ runTurnRequest) error {
 	s.runTurnCount++
 	return nil
+}
+
+func (s *stubRuntimeBackend) InterruptTurn(_ context.Context, _ assistantRuntimeRecord, threadID uuid.UUID) (bool, error) {
+	s.interruptedThreadIDs = append(s.interruptedThreadIDs, threadID)
+	return true, nil
 }
 
 func (s *stubRuntimeBackend) Status(_ context.Context, _ assistantRuntimeRecord) (RuntimeBackendStatus, error) {
@@ -79,8 +85,8 @@ var _ RuntimeBackend = (*stubRuntimeBackend)(nil)
 
 func newTestRouter(t *testing.T, target string) (*runtimeRouter, *stubRuntimeBackend, *stubRuntimeBackend) {
 	t.Helper()
-	fly := &stubRuntimeBackend{name: runtimeBackendFlyIO, serverURL: &url.URL{Scheme: "https", Host: "fly.example.com"}, imageRef: "fly:img", ensureRecords: nil, runTurnCount: 0, stopCount: 0, reapCount: 0}
-	gke := &stubRuntimeBackend{name: runtimeBackendGKE, serverURL: &url.URL{Scheme: "https", Host: "gke.example.com"}, imageRef: "gke:img", ensureRecords: nil, runTurnCount: 0, stopCount: 0, reapCount: 0}
+	fly := &stubRuntimeBackend{name: runtimeBackendFlyIO, serverURL: &url.URL{Scheme: "https", Host: "fly.example.com"}, imageRef: "fly:img", ensureRecords: nil, runTurnCount: 0, interruptedThreadIDs: nil, stopCount: 0, reapCount: 0}
+	gke := &stubRuntimeBackend{name: runtimeBackendGKE, serverURL: &url.URL{Scheme: "https", Host: "gke.example.com"}, imageRef: "gke:img", ensureRecords: nil, runTurnCount: 0, interruptedThreadIDs: nil, stopCount: 0, reapCount: 0}
 	router, err := newRuntimeRouter(target, map[string]RuntimeBackend{
 		runtimeBackendFlyIO: fly,
 		runtimeBackendGKE:   gke,
