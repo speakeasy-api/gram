@@ -344,3 +344,37 @@ func TestFitRows_LeavesAFittingResponseAlone(t *testing.T) {
 	require.False(t, dropped)
 	require.Len(t, fitted, 1)
 }
+
+// TestResumeAfterFit_KeepsTheDroppedSuffixReachable pins that a page cut to fit
+// the response cap still advertises a cursor. Withholding one strands the rows
+// the cut dropped: they are past the last page the caller can ask for, so a
+// high-volume server would silently lose occurrences.
+func TestResumeAfterFit_KeepsTheDroppedSuffixReachable(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		rows     []int
+		fitted   int
+		dropped  bool
+		more     bool
+		wantRows []int
+		wantMore bool
+	}{
+		{name: "untouched page keeps its own verdict", rows: []int{1, 2, 3}, fitted: 3, dropped: false, more: true, wantRows: []int{1, 2, 3}, wantMore: true},
+		{name: "untouched last page stays last", rows: []int{1, 2, 3}, fitted: 3, dropped: false, more: false, wantRows: []int{1, 2, 3}, wantMore: false},
+		{name: "cut page resumes at the last row handed over", rows: []int{1, 2, 3, 4}, fitted: 2, dropped: true, more: false, wantRows: []int{1, 2}, wantMore: true},
+		{name: "cut page that keeps a prefix still pages on", rows: []int{1, 2, 3, 4}, fitted: 2, dropped: true, more: true, wantRows: []int{1, 2}, wantMore: true},
+		{name: "page cut to nothing has no position to resume from", rows: []int{1, 2, 3, 4}, fitted: 0, dropped: true, more: true, wantRows: []int{}, wantMore: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			rows, more := resumeAfterFit(tt.rows, tt.fitted, tt.dropped, tt.more)
+			require.Equal(t, tt.wantRows, rows)
+			require.Equal(t, tt.wantMore, more)
+		})
+	}
+}

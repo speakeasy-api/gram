@@ -334,12 +334,7 @@ func (s *DiagnosticsService) QueryMCPTraces(ctx context.Context, principal Princ
 		return QueryMCPTracesOutput{}, err
 	}
 	output.Traces = fitted
-	// A page cut to fit must not advertise a cursor past the rows it dropped,
-	// or the next page would resume beyond occurrences the caller never saw.
-	if dropped {
-		more = false
-		rows = rows[:len(fitted)]
-	}
+	rows, more = resumeAfterFit(rows, len(fitted), dropped, more)
 	traversed += len(rows)
 	if more && len(rows) > 0 && traversed < maxTraceTraversal {
 		last := rows[len(rows)-1]
@@ -711,6 +706,19 @@ func parseCursorPosition(value string) (int64, string, int, error) {
 // build re-forms the whole result around a candidate row slice, because what is
 // measured has to be the response as it will actually be serialized rather than
 // the rows alone.
+// resumeAfterFit narrows the rows a cursor may resume from to the rows the
+// response actually carried. A page cut to fit still has a next page — the
+// suffix it dropped — so the cursor resumes at the last row handed over rather
+// than being withheld, which would strand those occurrences. A page cut to
+// nothing leaves no position to resume from.
+func resumeAfterFit[R any](rows []R, fitted int, dropped, more bool) ([]R, bool) {
+	if !dropped {
+		return rows, more
+	}
+	rows = rows[:fitted]
+	return rows, len(rows) > 0
+}
+
 func fitRows[R any](rows []R, build func([]R) any) ([]R, bool, error) {
 	fits, err := responseFits(build(rows))
 	if err != nil {
