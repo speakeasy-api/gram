@@ -9,8 +9,8 @@ const (
 	// ACE profile.
 	CodeIncompatibleACEProfiles = "incompatible_ace_profiles"
 
-	// CodeUnsupportedPopKey is RFC 9200 §5.8.3: the client submitted an
+	// CodeUnsupportedPoPKey is RFC 9200 §5.8.3: the client submitted an
 	// asymmetric proof-of-possession key in the token request that the
 	// resource server cannot process.
-	CodeUnsupportedPopKey = "unsupported_pop_key"
+	CodeUnsupportedPoPKey = "unsupported_pop_key"
 )
