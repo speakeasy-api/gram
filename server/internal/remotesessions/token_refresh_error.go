@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
 )
 
 // TokenRefreshError is an operator-actionable failure of a token refresh: a
@@ -39,8 +41,12 @@ func newTokenRefreshError(reason string, cause error) *TokenRefreshError {
 	return &TokenRefreshError{Reason: reason, cause: cause, code: "", statusCode: 0}
 }
 
+// invalidGrant reports whether the upstream answered with RFC 6749 §5.2
+// invalid_grant, the definitive signal that the stored refresh token can never
+// renew, as opposed to a transient failure such as server_error or
+// temporarily_unavailable.
 func (e *TokenRefreshError) invalidGrant() bool {
-	return e.code == oauthErrInvalidGrant
+	return e.code == oautherr.CodeInvalidGrant
 }
 
 // IsTokenRefreshRateLimited reports whether an upstream token endpoint
@@ -52,15 +58,21 @@ func IsTokenRefreshRateLimited(err error) bool {
 }
 
 // newTokenRefreshErrorFromHTTP builds a TokenRefreshError from a non-2xx response
-// from the upstream token endpoint. The public Reason summarizes the RFC 6749
-// error body (falling back to the HTTP status); the raw status and body are kept
-// only as the private cause and never surfaced.
+// from the upstream token endpoint. The public Reason is the error body
+// normalized onto its RFC 6749 §5.2 members ("invalid_grant: ..."), or "HTTP
+// <status>" when the body carried no recognizable error; the raw status and
+// body are kept only as the private cause and never surfaced.
 func newTokenRefreshErrorFromHTTP(statusCode int, status string, body []byte) *TokenRefreshError {
-	response := parseTokenErrorResponse(body)
+	reason := "HTTP " + status
+	code := ""
+	if parsed, ok := oautherr.ParseTokenError(body); ok {
+		reason = parsed.Error()
+		code = parsed.Code
+	}
 	return &TokenRefreshError{
-		Reason:     response.summary(status),
+		Reason:     reason,
 		cause:      fmt.Errorf("refresh endpoint %s: %s", status, string(body)),
-		code:       response.Error,
+		code:       code,
 		statusCode: statusCode,
 	}
 }
