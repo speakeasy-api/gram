@@ -66,6 +66,29 @@ func TestGetUserMCPStatusOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 	}, decodeKeys(t, output))
 }
 
+// TestParseSubjectIdentity_RefusesUnknownColumns pins that a reference states
+// which column its identifier lives in. Guessing wrong filters the wrong column,
+// matches nothing, and reports an active person as inactive.
+func TestParseSubjectIdentity_RefusesUnknownColumns(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct{ value, wantKind, wantID string }{
+		{value: FormatSubjectIdentity(SubjectIdentityEmail, "alice@example.com"), wantKind: SubjectIdentityEmail, wantID: "alice@example.com"},
+		{value: FormatSubjectIdentity(SubjectIdentityExternal, "ext-1"), wantKind: SubjectIdentityExternal, wantID: "ext-1"},
+		{value: FormatSubjectIdentity(SubjectIdentityUser, "user-1"), wantKind: SubjectIdentityUser, wantID: "user-1"},
+	} {
+		identityKind, identifier, err := parseSubjectIdentity(test.value)
+		require.NoError(t, err)
+		require.Equal(t, test.wantKind, identityKind)
+		require.Equal(t, test.wantID, identifier)
+	}
+
+	for _, value := range []string{"", "alice@example.com", "unknown:alice", "email:", ":alice"} {
+		_, _, err := parseSubjectIdentity(value)
+		require.ErrorIs(t, err, ErrSubjectReferenceNotFound, value)
+	}
+}
+
 func TestMaskSubject_RecognizableNotLearnable(t *testing.T) {
 	t.Parallel()
 

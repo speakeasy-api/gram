@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -24,6 +25,39 @@ const (
 	subjectKindUser  = "user"
 	subjectKindTrace = "trace"
 )
+
+// Identity kinds carried inside a user reference. Telemetry records a person
+// under one of three different columns, and the value alone does not say which:
+// filtering an external user id as though it were an email matches nothing and
+// reports an active person as inactive. The minting side states the column, so
+// the reading side can filter the right one.
+const (
+	SubjectIdentityEmail    = "email"
+	SubjectIdentityExternal = "external"
+	SubjectIdentityUser     = "user"
+)
+
+// FormatSubjectIdentity builds the value a user reference carries. Summary
+// tools mint references through this so the kind travels with the identifier.
+func FormatSubjectIdentity(identityKind, identifier string) string {
+	return identityKind + ":" + identifier
+}
+
+// parseSubjectIdentity splits a reference value back into its column and
+// identifier. An unrecognized kind is refused rather than guessed, because
+// guessing wrong reports an active person as inactive.
+func parseSubjectIdentity(value string) (string, string, error) {
+	identityKind, identifier, ok := strings.Cut(value, ":")
+	if !ok || identifier == "" {
+		return "", "", ErrSubjectReferenceNotFound
+	}
+	switch identityKind {
+	case SubjectIdentityEmail, SubjectIdentityExternal, SubjectIdentityUser:
+		return identityKind, identifier, nil
+	default:
+		return "", "", ErrSubjectReferenceNotFound
+	}
+}
 
 // ErrSubjectReferenceNotFound is what an unknown, expired, cross-generation, or
 // cross-organization reference resolves to. It is deliberately a single

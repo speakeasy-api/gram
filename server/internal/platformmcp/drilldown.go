@@ -458,11 +458,15 @@ func (s *DiagnosticsService) GetUserMCPStatus(ctx context.Context, principal Pri
 	if err != nil {
 		return GetUserMCPStatusOutput{}, ErrSubjectReferenceNotFound
 	}
+	identityKind, identifier, err := parseSubjectIdentity(subject)
+	if err != nil {
+		return GetUserMCPStatusOutput{}, ErrSubjectReferenceNotFound
+	}
 
 	output := GetUserMCPStatusOutput{
 		ProjectID:      input.ProjectID,
 		MCPID:          input.MCPID,
-		MaskedIdentity: maskSubject(subject),
+		MaskedIdentity: maskSubject(identifier),
 		Activity:       SubjectStateNoObservations,
 	}
 
@@ -483,15 +487,26 @@ func (s *DiagnosticsService) GetUserMCPStatus(ctx context.Context, principal Pri
 	// Scoped to this one subject rather than filtered out of a truncated
 	// top-user list: a subject outside that list would otherwise be reported as
 	// having no observations, which on a personal-data question is a false
-	// negative rather than a missing row. The value is whichever identity the
-	// telemetry fold resolved, so it is offered as both candidates.
-	summary, err := s.telemetry.GetOverviewSummary(ctx, telemetryrepo.GetOverviewSummaryParams{
+	// negative rather than a missing row.
+	summaryParams := telemetryrepo.GetOverviewSummaryParams{
 		GramProjectID: target.projectID,
 		TimeStart:     target.window.start.UnixNano(),
 		TimeEnd:       target.window.end.UnixNano(),
 		ToolsetSlug:   toolsetSlug,
-		User:          telemetryrepo.UserIdentity{UserIDs: []string{subject}, Emails: []string{subject}},
-	})
+	}
+	// Filtered on the column the identity actually lives in. Telemetry records
+	// a person as an email, an external user id, or a Gram user id, and these
+	// are separate columns: filtering the wrong one matches nothing and would
+	// report an active person as inactive.
+	switch identityKind {
+	case SubjectIdentityEmail:
+		summaryParams.User = telemetryrepo.UserIdentity{Emails: []string{identifier}}
+	case SubjectIdentityExternal:
+		summaryParams.ExternalUserID = identifier
+	default:
+		summaryParams.User = telemetryrepo.UserIdentity{UserIDs: []string{identifier}}
+	}
+	summary, err := s.telemetry.GetOverviewSummary(ctx, summaryParams)
 	if err != nil {
 		return GetUserMCPStatusOutput{}, fmt.Errorf("read mcp user activity: %w", err)
 	}
