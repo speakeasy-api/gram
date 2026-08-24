@@ -227,7 +227,8 @@ func isErrorTokenByte(b byte) bool {
 // "Refresh token not found." message rather than RFC 6749 invalid_grant.
 // Client-auth failures ("Invalid client credentials for refresh token
 // exchange") are recoverable by fixing the client configuration and must never
-// be remapped, so any mention of the client or its credentials disqualifies.
+// be remapped, so client-auth phrasing disqualifies; a message that merely
+// names a client ("Refresh token not found for client abc") does not.
 func isDeadRefreshGrant(code, message string) bool {
 	if !strings.EqualFold(code, "unauthorized") {
 		return false
@@ -236,7 +237,7 @@ func isDeadRefreshGrant(code, message string) bool {
 	if !strings.Contains(m, "refresh token") {
 		return false
 	}
-	for _, excluded := range []string{"client", "credential", "secret"} {
+	for _, excluded := range []string{"credential", "secret", "invalid client", "unknown client", "client authentication"} {
 		if strings.Contains(m, excluded) {
 			return false
 		}

@@ -68,6 +68,14 @@ func TestParseTokenErrorResponseDoesNotRemapClientAuthFailureMentioningRefreshTo
 	require.Equal(t, "Invalid client credentials for refresh token exchange.", got.ErrorDescription)
 }
 
+func TestParseTokenErrorResponseRemapsDeadGrantNamingAClient(t *testing.T) {
+	t.Parallel()
+
+	got := parseTokenErrorResponse(http.StatusUnauthorized, []byte(`{"error":{"code":"unauthorized","message":"Refresh token not found for client abc."}}`))
+	require.Equal(t, oauthErrInvalidGrant, got.Error)
+	require.Equal(t, "Refresh token not found for client abc.", got.ErrorDescription)
+}
+
 func TestParseTokenErrorResponseDoesNotOverrideOtherRFCCodes(t *testing.T) {
 	t.Parallel()
 
