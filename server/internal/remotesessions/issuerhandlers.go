@@ -847,7 +847,7 @@ func (e *discoveryError) UserMessage() string {
 // deviations from the spec callers should be aware of. The supplied
 // guardian.Policy gates the outbound dial.
 //
-// It probes the well-known locations returned by issuerProbeCandidates in
+// It probes the well-known locations returned by IssuerMetadataProbeCandidates in
 // order, returning the first that yields a usable document — one carrying both
 // an authorization_endpoint and a token_endpoint. A 200 that parses but lacks
 // those endpoints is almost always a SPA/gateway catch-all answering our
@@ -911,7 +911,7 @@ func DiscoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 }
 
 func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuerURL string) (rfc8414Document, []string, error) {
-	candidates, err := issuerProbeCandidates(issuerURL)
+	candidates, err := IssuerMetadataProbeCandidates(issuerURL)
 	if err != nil {
 		return rfc8414Document{}, nil, &discoveryError{
 			WellKnownURL: "",
@@ -1035,7 +1035,7 @@ func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKn
 	return doc, nil
 }
 
-// issuerProbeCandidates returns the ordered list of well-known metadata URLs to
+// IssuerMetadataProbeCandidates returns the ordered list of well-known metadata URLs to
 // probe for an issuer. The first candidate is the canonical RFC 8414 location;
 // the rest broaden coverage to OpenID Connect Discovery and to non-compliant
 // upstreams that only serve metadata at the origin root.
@@ -1047,7 +1047,7 @@ func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKn
 // path component we additionally fall back to the origin-style locations, since
 // some gateways and SPA catch-alls serve metadata at the root regardless of the
 // issuer path. Duplicate URLs (e.g. when the issuer has no path) are collapsed.
-func issuerProbeCandidates(issuerURL string) ([]string, error) {
+func IssuerMetadataProbeCandidates(issuerURL string) ([]string, error) {
 	u, err := url.Parse(issuerURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse issuer url: %w", err)
