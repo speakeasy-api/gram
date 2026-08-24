@@ -270,7 +270,7 @@ function EventFeedWorkbench(): JSX.Element {
       eyebrow="Data"
       title="Event Feed"
       stage="preview"
-      description="Every OpenTelemetry log record and span ingested through Gram's /otel/v1 endpoints across this organization."
+      description="Every OpenTelemetry log record and span ingested through Speakeasy's /otel/v1 endpoints across this organization."
       filters={
         <Page.Toolbar>
           <Page.Toolbar.Search
