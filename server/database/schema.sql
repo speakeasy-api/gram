@@ -5070,7 +5070,7 @@ CREATE TABLE IF NOT EXISTS session_quarantines (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS session_quarantines_active_session_key
-ON session_quarantines (session_id)
+ON session_quarantines (organization_id, project_id, session_id)
 WHERE released_at IS NULL;
 
 CREATE INDEX IF NOT EXISTS session_quarantines_active_idx

@@ -1,4 +1,4 @@
-h1:sNGybyTTOXS/CmdHxqpGAS3IYTQWArMhH5lKxFf++M4=
+h1:Om3Ze8CTqfs2bGlfwbbpXcNm+9wioeMoDvSKcYyeP50=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -360,4 +360,4 @@ h1:sNGybyTTOXS/CmdHxqpGAS3IYTQWArMhH5lKxFf++M4=
 20260820053103_platform-mcp-d1-lifecycle-registry-prerequisite.sql h1:4Ci7OgdkcBEp3xDucTJcjzzqfrt4LopTeWolre7Ej50=
 20260820193631_user-session-client-asymmetric-auth.sql h1:gnmZD+REuCyrzSBVkS1Aw7mdaq+M794XwNu09qJUKLM=
 20260820223741_add-meta-mcp-servers.sql h1:IeASYht+IS0A2fUpejqgmnveRLsI/toU3TXQkk0eR0U=
-20260824100320_session-quarantines.sql h1:vlfLF5ptuQrnuTT5Sg9hLSCsvEouBfaIAUMaZaCqqPc=
+20260824101417_session-quarantines.sql h1:qTWT7GuDaF9bRTrEBZ1WGwyyFNwK6Q6a6IGf4yLEVmc=
