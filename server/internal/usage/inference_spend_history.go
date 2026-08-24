@@ -27,6 +27,10 @@ const (
 )
 
 func (s *Service) GetInferenceSpendHistory(ctx context.Context, _ *gen.GetInferenceSpendHistoryPayload) (*gen.InferenceSpendHistory, error) {
+	return s.inferenceSpendHistoryAt(ctx, time.Now().UTC())
+}
+
+func (s *Service) inferenceSpendHistoryAt(ctx context.Context, now time.Time) (*gen.InferenceSpendHistory, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
@@ -40,7 +44,7 @@ func (s *Service) GetInferenceSpendHistory(ctx context.Context, _ *gen.GetInfere
 		return nil, err
 	}
 
-	now := time.Now().UTC()
+	now = now.UTC()
 	today := startOfUTCDay(now)
 	currentMonth := startOfUTCMonth(now)
 	earliest := currentMonth.AddDate(0, -(inferenceSpendHistoryMonths - 1), 0)

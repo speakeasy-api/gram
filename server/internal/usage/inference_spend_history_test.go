@@ -16,6 +16,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
+// Mid-month so fixtures can include a completed day in the current month and
+// an excluded "today" without depending on the wall clock.
+var inferenceSpendHistoryInstant = time.Date(2026, time.August, 21, 15, 0, 0, 0, time.UTC)
+
 func inferenceSpendHistoryContext(t *testing.T, organizationID string, grants ...authz.Grant) context.Context {
 	t.Helper()
 	sessionID := "session-inference-spend-history"
@@ -48,9 +52,9 @@ func TestGetInferenceSpendHistoryIncludesCurrentMonthWhenEmpty(t *testing.T) {
 	service, _, _, _ := newTUMTestService(t, organizationID)
 	ctx := inferenceSpendHistoryContext(t, organizationID, authz.NewGrant(authz.ScopeOrgRead, organizationID))
 
-	now := time.Now().UTC()
+	now := inferenceSpendHistoryInstant
 	currentMonth := startOfUTCMonth(now)
-	result, err := service.GetInferenceSpendHistory(ctx, &gen.GetInferenceSpendHistoryPayload{})
+	result, err := service.inferenceSpendHistoryAt(ctx, now)
 	require.NoError(t, err)
 	require.Len(t, result.Months, 1)
 
@@ -68,30 +72,25 @@ func TestGetInferenceSpendHistoryGroupsCompletedDaysByCalendarMonth(t *testing.T
 	organizationID := "org-inference-history-months"
 	service, db, _, _ := newTUMTestService(t, organizationID)
 
-	now := time.Now().UTC()
+	now := inferenceSpendHistoryInstant
 	today := startOfUTCDay(now)
 	currentMonth := startOfUTCMonth(now)
 	previousMonth := currentMonth.AddDate(0, -1, 0)
-	completed := today.AddDate(0, 0, -1)
-	expectedCurrentSpend := zeroInferenceSpendUSD
-	if !completed.Before(currentMonth) {
-		upsertPaygSummarySpendForKey(t, db, organizationID, openrouter.KeyTypeChat, currentMonth, "1.200000")
-		upsertPaygSummarySpendForKey(t, db, organizationID, openrouter.KeyTypeInternal, currentMonth, "0.300000")
-		expectedCurrentSpend = "1.500000"
-	}
+	upsertPaygSummarySpendForKey(t, db, organizationID, openrouter.KeyTypeChat, currentMonth, "1.200000")
+	upsertPaygSummarySpendForKey(t, db, organizationID, openrouter.KeyTypeInternal, currentMonth, "0.300000")
 	upsertPaygSummarySpendForKey(t, db, organizationID, openrouter.KeyTypeChat, previousMonth, "4.000000")
 	upsertPaygSummarySpendForKey(t, db, organizationID, openrouter.KeyTypeInternal, previousMonth.AddDate(0, 0, 1), "0.500000")
 	upsertPaygSummarySpendForKey(t, db, organizationID, openrouter.KeyType("future"), previousMonth, "100.000000")
 	upsertPaygSummarySpendForKey(t, db, organizationID, openrouter.KeyTypeChat, today, "9.000000")
 
 	ctx := inferenceSpendHistoryContext(t, organizationID, authz.NewGrant(authz.ScopeOrgRead, organizationID))
-	result, err := service.GetInferenceSpendHistory(ctx, &gen.GetInferenceSpendHistoryPayload{})
+	result, err := service.inferenceSpendHistoryAt(ctx, now)
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(result.Months), 2)
 
 	assert.Equal(t, currentMonth.Format(time.RFC3339), result.Months[0].MonthStart)
 	assert.True(t, result.Months[0].Current)
-	assert.Equal(t, expectedCurrentSpend, result.Months[0].SpendUsd)
+	assert.Equal(t, "1.500000", result.Months[0].SpendUsd)
 
 	previous := result.Months[1]
 	assert.Equal(t, previousMonth.Format(time.RFC3339), previous.MonthStart)
@@ -112,12 +111,13 @@ func TestGetInferenceSpendHistoryOmitsMonthsWithoutDurableRows(t *testing.T) {
 	organizationID := "org-inference-history-gaps"
 	service, db, _, _ := newTUMTestService(t, organizationID)
 
-	currentMonth := startOfUTCMonth(time.Now().UTC())
+	now := inferenceSpendHistoryInstant
+	currentMonth := startOfUTCMonth(now)
 	olderMonth := currentMonth.AddDate(0, -2, 0)
 	upsertPaygSummarySpendForKey(t, db, organizationID, openrouter.KeyTypeChat, olderMonth, "2.000000")
 
 	ctx := inferenceSpendHistoryContext(t, organizationID, authz.NewGrant(authz.ScopeOrgRead, organizationID))
-	result, err := service.GetInferenceSpendHistory(ctx, &gen.GetInferenceSpendHistoryPayload{})
+	result, err := service.inferenceSpendHistoryAt(ctx, now)
 	require.NoError(t, err)
 	require.Len(t, result.Months, 2)
 	assert.True(t, result.Months[0].Current)
