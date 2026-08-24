@@ -2,8 +2,8 @@
   "version": 1,
   "defaults": {
     "from_name": "Speakeasy",
-    "from_email": "gram",
-    "reply_to_email": "gram@speakeasy.com"
+    "from_email": "platform",
+    "reply_to_email": "platform@speakeasy.com"
   },
   "templates": {
     "access_paused": {
@@ -29,7 +29,7 @@
     },
     "enterprise_admin_onboarding": {
       "managed_name": "gram.transactional.v2.enterprise_admin_onboarding",
-      "subject": "Set up your Gram organization",
+      "subject": "Set up your Speakeasy organization",
       "preview_text": "Your enterprise workspace is ready to configure.",
       "source": "enterprise_admin_onboarding.lmx",
       "variables": ["setup_link"]
@@ -61,8 +61,8 @@
     },
     "team_invite": {
       "managed_name": "gram.transactional.v2.team_invite",
-      "subject": "Join {data.organization_name} on Gram",
-      "preview_text": "{data.inviter_name} invited you to their Gram organization.",
+      "subject": "Join {data.organization_name} on Speakeasy",
+      "preview_text": "{data.inviter_name} invited you to their Speakeasy organization.",
       "source": "team_invite.lmx",
       "variables": [
         "invite_link",
@@ -73,7 +73,7 @@
     },
     "trial_ending_soon": {
       "managed_name": "gram.transactional.v2.trial_ending_soon",
-      "subject": "Your Gram trial ends on {data.trial_end_date}",
+      "subject": "Your Speakeasy trial ends on {data.trial_end_date}",
       "preview_text": "Set up billing to keep access for {data.organization_name}.",
       "source": "trial_ending_soon.lmx",
       "variables": ["organization_name", "trial_end_date", "action_url"]
