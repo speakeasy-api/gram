@@ -95,13 +95,18 @@ function EventFeedWorkbench(): JSX.Element {
   const names = values.name;
   const searchTerm = search.trim();
 
+  // Bumped on manual refresh so relative presets re-anchor to "now" instead
+  // of serving the window computed when the filter was last touched.
+  const [rangeEpoch, setRangeEpoch] = useState(0);
+
   // The date range always resolves to a concrete window (the API requires
   // from/to): a custom range as picked, otherwise the preset (default 24h).
   const { from, to } = useMemo(() => {
+    void rangeEpoch;
     const d = values.date;
     if (d.customRange) return d.customRange;
     return getPresetRange(d.preset ?? "1d");
-  }, [values.date]);
+  }, [values.date, rangeEpoch]);
   const fromIso = from.toISOString();
   const toIso = to.toISOString();
   const timeRangeMs = to.getTime() - from.getTime();
@@ -222,11 +227,22 @@ function EventFeedWorkbench(): JSX.Element {
     [facetsQuery.data],
   );
 
+  const { refetch: refetchEvents } = eventsQuery;
+  const { refetch: refetchVolume } = volumeQuery;
+  const { refetch: refetchFacets } = facetsQuery;
+  const hasCustomRange = !!values.date.customRange;
   const refetchAll = useCallback(() => {
-    void eventsQuery.refetch();
-    void volumeQuery.refetch();
-    void facetsQuery.refetch();
-  }, [eventsQuery.refetch, volumeQuery.refetch, facetsQuery.refetch]);
+    if (hasCustomRange) {
+      // Custom windows are fixed, so the query keys don't move: refetch them.
+      void refetchEvents();
+      void refetchVolume();
+      void refetchFacets();
+      return;
+    }
+    // Relative presets re-anchor to "now"; the key change refetches all
+    // three queries against the advanced window.
+    setRangeEpoch((epoch) => epoch + 1);
+  }, [hasCustomRange, refetchEvents, refetchVolume, refetchFacets]);
 
   const handleScroll = useCallback(
     (e: React.UIEvent<HTMLDivElement>) => {
@@ -327,6 +343,7 @@ function EventFeedWorkbench(): JSX.Element {
         hasActiveFilters={hasActiveFilters}
         isFetchingNextPage={eventsQuery.isFetchingNextPage}
         onSelect={setSelectedEvent}
+        onRetry={() => void eventsQuery.fetchNextPage()}
       />
     </LogWorkbench>
   );
@@ -356,6 +373,7 @@ function EventFeedRows({
   hasActiveFilters,
   isFetchingNextPage,
   onSelect,
+  onRetry,
 }: {
   error: Error | null;
   isLoading: boolean;
@@ -363,8 +381,12 @@ function EventFeedRows({
   hasActiveFilters: boolean;
   isFetchingNextPage: boolean;
   onSelect: (event: EventLogEntry) => void;
+  onRetry: () => void;
 }) {
-  if (error) {
+  // The full-page error view is reserved for an initial load failure; when a
+  // later page fails, the rows already loaded stay visible and the error
+  // renders as an inline retry strip below them.
+  if (error && events.length === 0) {
     return (
       <div className="flex flex-col items-center gap-3 py-12">
         <div className="bg-destructive/10 flex size-12 items-center justify-center">
@@ -410,6 +432,18 @@ function EventFeedRows({
         <div className="text-muted-foreground flex items-center justify-center gap-2 border-t py-4">
           <Icon name="loader-circle" className="size-4 animate-spin" />
           <span className="text-sm">Loading more events...</span>
+        </div>
+      )}
+
+      {error && !isFetchingNextPage && (
+        <div className="flex items-center justify-center gap-3 border-t py-4">
+          <Icon name="circle-alert" className="text-destructive size-4" />
+          <span className="text-muted-foreground text-sm">
+            Failed to load more events.
+          </span>
+          <Button variant="tertiary" size="sm" onClick={onRetry}>
+            Retry
+          </Button>
         </div>
       )}
     </>

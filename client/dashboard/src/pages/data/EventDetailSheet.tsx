@@ -29,7 +29,11 @@ export function EventDetailSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         className="h-full max-h-screen overflow-y-auto"
-        style={{ width: "33vw", minWidth: 500, maxWidth: "none" }}
+        style={{
+          width: "33vw",
+          minWidth: "min(500px, 100vw)",
+          maxWidth: "none",
+        }}
       >
         {event && <EventDetailContent event={event} />}
       </SheetContent>
@@ -115,6 +119,12 @@ function EventDetailContent({ event }: { event: EventLogEntry }) {
   );
 }
 
+// The Clipboard API is undefined in insecure contexts, so guard before
+// writing rather than throwing from the click handler.
+function copyToClipboard(value: string) {
+  void navigator.clipboard?.writeText(value);
+}
+
 function CopyButton({
   value,
   label,
@@ -130,7 +140,7 @@ function CopyButton({
       aria-label={label}
       title={label}
       className={cn("hover:bg-muted p-1.5", className)}
-      onClick={() => void navigator.clipboard.writeText(value)}
+      onClick={() => copyToClipboard(value)}
     >
       <Copy aria-hidden="true" className="size-4" />
     </button>
@@ -142,7 +152,7 @@ function MetadataRow({ label, value }: { label: string; value: string }) {
     <button
       type="button"
       className="hover:bg-muted/50 flex items-center justify-between gap-4 py-2 text-left transition-colors"
-      onClick={() => void navigator.clipboard.writeText(value)}
+      onClick={() => copyToClipboard(value)}
       title={`Copy ${label}`}
     >
       <span className="text-eyebrow shrink-0">{label}</span>

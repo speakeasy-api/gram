@@ -17,9 +17,12 @@ export function EventKindBadge({
 
 // Sources canonicalized from Gram's own services (e.g. gram-server) carry the
 // Speakeasy mark; everything else routes through the shared agent-provider
-// icon set (claude-code, litellm, ...), which falls back to a globe.
+// icon set (claude-code, litellm, ...), which falls back to a globe. The
+// match is exact-or-hyphenated so unrelated services that merely start with
+// "gram" don't pick up the mark.
 function isGramSource(source: string): boolean {
-  return source.trim().toLowerCase().startsWith("gram");
+  const canonical = source.trim().toLowerCase();
+  return canonical === "gram" || canonical.startsWith("gram-");
 }
 
 /** Logo for a canonicalized event source (resource service name). */
