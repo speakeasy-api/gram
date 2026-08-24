@@ -1,0 +1,29 @@
+server/internal/risk/policy_bypass_token.go
+  s_d8569503ddf9c1::t_c77b948c333e7a 137-139
+client/dashboard/src/components/access/ShadowMCPRequestAccessContent.test.tsx
+  s_d8569503ddf9c1::t_81aa1315ee3ed2 212-216
+  s_d8569503ddf9c1::t_935f00cf48d559 253-257
+  s_d8569503ddf9c1::t_c77b948c333e7a 101-102,235-252,258-264
+  s_d8569503ddf9c1::t_685e0d3ebafb1e 265-267
+client/dashboard/src/components/access/ShadowMCPRequestAccessContent.tsx
+  s_d8569503ddf9c1::t_c77b948c333e7a 13,39,67-71,75,81-82,119,133,169-198,201,208,217,222,229,236
+  s_d8569503ddf9c1::t_125bffd9d1232d 224
+server/internal/hooks/session_quarantine_test.go
+  s_d8569503ddf9c1::t_c77b948c333e7a 76
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "0394ad037a0a2b6803eacfeaad4aee414c8a93e6",
+  "prompts": {},
+  "sessions": {
+    "s_d8569503ddf9c1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a02009-cbbe-7523-85e3-7aa83e894e4c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
