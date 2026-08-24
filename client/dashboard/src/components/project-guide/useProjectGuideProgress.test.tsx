@@ -122,6 +122,7 @@ describe("useProjectGuideProgress", () => {
       data: {
         policies: [
           {
+            id: "policy-1",
             enabled: true,
             action: "block",
             sources: ["gitleaks"],
@@ -182,8 +183,32 @@ describe("useProjectGuideProgress", () => {
       },
       isPending: false,
     });
+    queryHooks.policies.mockReturnValue({
+      data: {
+        policies: [
+          {
+            id: "policy-1",
+            enabled: true,
+            action: "block",
+            sources: ["gitleaks"],
+            messageTypes: ["tool_request", "tool_response"],
+          },
+        ],
+      },
+      isPending: false,
+    });
     queryHooks.results.mockReturnValue({
-      data: { results: [{ id: "result-1" }] },
+      data: {
+        results: [
+          {
+            id: "result-1",
+            blockId: "block-1",
+            createdAt: "2026-01-01T00:00:00Z",
+            policyId: "policy-1",
+            source: "gitleaks",
+          },
+        ],
+      },
       isPending: false,
     });
 
@@ -193,6 +218,40 @@ describe("useProjectGuideProgress", () => {
       "third-party-mcp": "done",
       "secret-block": "done",
     });
+  });
+
+  it("does not complete the secret journey from an unrelated finding", () => {
+    queryHooks.policies.mockReturnValue({
+      data: {
+        policies: [
+          {
+            id: "policy-1",
+            enabled: true,
+            action: "block",
+            sources: ["gitleaks"],
+            messageTypes: ["tool_request", "tool_response"],
+          },
+        ],
+      },
+      isPending: false,
+    });
+    queryHooks.results.mockReturnValue({
+      data: {
+        results: [
+          {
+            id: "result-1",
+            blockId: "block-1",
+            policyId: "other-policy",
+            source: "gitleaks",
+          },
+        ],
+      },
+      isPending: false,
+    });
+
+    const { result } = renderHook(() => useProjectGuideProgress());
+
+    expect(result.current.statusByJourney["secret-block"]).toBe("in-progress");
   });
 
   it("requests enough findings for latest selection", () => {

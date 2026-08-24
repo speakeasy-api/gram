@@ -18,7 +18,9 @@ import { Navigate } from "react-router";
 export default function Home(): JSX.Element {
   const { hasAnyScope, isLoading } = useRBAC();
   const routes = useRoutes();
-  const { status: projectGuideStatus } = useProjectGuide();
+  const { status: projectGuideStatus } = useProjectGuide({
+    enabled: !isLoading && hasAnyScope(["project:read"]),
+  });
   // Home carries its own "Ask anything" widget, so suppress the floating dock.
   useHideInsightsDock();
 

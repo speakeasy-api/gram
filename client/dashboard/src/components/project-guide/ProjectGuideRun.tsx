@@ -198,7 +198,7 @@ export function ProjectGuideRun({
           </ol>
           <aside
             aria-label={`${journey.id === "third-party-mcp" ? "Journey A" : "Journey B"} run panel`}
-            className="border-border bg-card flex min-h-96 min-w-0 flex-col gap-3 border-l px-5 pt-5 pb-5 lg:min-h-0 lg:w-2/5 lg:overflow-y-auto"
+            className="border-border bg-card flex min-h-96 min-w-0 flex-col gap-3 border-l px-5 pt-5 pb-5 lg:min-h-0 lg:w-[480px] lg:overflow-y-auto"
           >
             <div className="flex items-baseline gap-2.5">
               <span className="text-eyebrow" style={{ color: fixture.accent }}>
@@ -310,13 +310,9 @@ function CompletionStepBody({
         {body ?? journey.completion.body}
       </p>
       <div className="border-border mt-3 border-t pt-4">
-        <button
-          type="button"
-          onClick={onSwitchJourney}
-          className="border-border text-muted-foreground w-fit border px-4 py-2 font-mono text-xs uppercase"
-        >
+        <Button type="button" onClick={onSwitchJourney} variant="secondary">
           Start the other journey
-        </button>
+        </Button>
       </div>
     </div>
   );

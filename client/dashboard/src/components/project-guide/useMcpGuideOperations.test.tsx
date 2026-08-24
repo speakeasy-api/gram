@@ -124,7 +124,7 @@ beforeEach(() => {
         catalogServer({
           title: "Vercel",
           isReadOnly: false,
-          supportsDcr: false,
+          supportsDcr: true,
         }),
         catalogServer({ title: "GitHub" }),
         catalogServer({ title: "Notion" }),
@@ -243,6 +243,7 @@ describe("useMcpGuideOperations", () => {
       servers: [SERVER],
       projectSlug: "request-project",
       autoSelectRemotes: true,
+      serverNameSuffix: "_Governed",
     });
   });
 
@@ -355,6 +356,7 @@ describe("useMcpGuideOperations", () => {
       servers: [],
       projectSlug: "request-project",
       autoSelectRemotes: true,
+      serverNameSuffix: "_Governed",
     });
 
     act(() =>
@@ -397,6 +399,7 @@ describe("useMcpGuideOperations", () => {
       servers: [],
       projectSlug: "request-project",
       autoSelectRemotes: true,
+      serverNameSuffix: "_Governed",
     });
   });
 

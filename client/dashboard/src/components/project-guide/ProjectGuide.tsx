@@ -46,6 +46,7 @@ import { Icon } from "@/components/ui/Icon";
 import type { IconName } from "@/components/ui/Icon/names";
 import { cn } from "@/lib/utils";
 import { CodeSnippet } from "@/components/ui/CodeSnippet";
+import { Button } from "@/components/ui/Button";
 import {
   PageTabsList,
   PageTabsTrigger,
@@ -209,7 +210,7 @@ export function ProjectGuide({
 
   return (
     <GuideCanvas>
-      <section className="border-border bg-card mx-auto flex min-h-96 w-full max-w-6xl flex-col overflow-hidden border shadow-sm">
+      <section className="border-border bg-card mx-auto flex min-h-96 w-full max-w-[1200px] flex-col overflow-hidden border shadow-sm">
         <header className="border-border flex items-baseline gap-3.5 border-b px-6 py-5 pb-3">
           <h2 className="text-display-xs">
             {selectedJourney?.title ?? "Put your agent traffic under control"}
@@ -1115,6 +1116,7 @@ function ProjectGuideOutput({
           accent={accent}
           kind={entry.kind}
           message={entry.message}
+          role={entry.kind === "error" ? "alert" : undefined}
           working={
             isProcessing &&
             !error &&
@@ -1772,7 +1774,7 @@ function ProjectGuideComplete({
           ? { duration: 0 }
           : { duration: 0.4, ease: [0.2, 0.7, 0.3, 1] }
       }
-      className="border-border bg-card grid w-full max-w-6xl gap-4 border p-6"
+      className="border-border bg-card grid w-full max-w-[1200px] gap-4 border p-6"
     >
       <span className="text-eyebrow text-primary">
         {PROJECT_GUIDE_COMPLETE.eyebrow}
@@ -1784,13 +1786,9 @@ function ProjectGuideComplete({
         {PROJECT_GUIDE_COMPLETE.body}
       </p>
       <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={onReturnToProjectHome}
-          className="bg-foreground text-background px-4 py-2 font-mono text-xs uppercase"
-        >
+        <Button type="button" onClick={onReturnToProjectHome} variant="primary">
           {PROJECT_GUIDE_COMPLETE.primaryAction}
-        </button>
+        </Button>
       </div>
     </motion.section>
   );

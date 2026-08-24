@@ -110,7 +110,20 @@ export function useProjectGuideProgress(): {
       policies && findings
         ? deriveJourneyStatus({
             startSignal: hasBlockingSecretsPolicy(policies),
-            winSignal: Boolean(latestSecretsFinding(findings)),
+            winSignal: Boolean(
+              latestSecretsFinding(
+                findings.filter(
+                  (finding) =>
+                    finding.source === "gitleaks" &&
+                    Boolean(finding.blockId) &&
+                    policies.some(
+                      (policy) =>
+                        policy.id === finding.policyId &&
+                        hasBlockingSecretsPolicy([policy]),
+                    ),
+                ),
+              ),
+            ),
           })
         : "unreadable",
   };

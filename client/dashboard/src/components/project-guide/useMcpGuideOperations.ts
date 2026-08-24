@@ -12,6 +12,7 @@ import { type PulseMCPServer, useListMCPCatalog } from "@/pages/catalog/hooks";
 import {
   extractAuthType,
   isPulseMcpServer,
+  requiresManualSetup,
 } from "@/pages/catalog/hooks/serverMetadata";
 import {
   filterToHttpRemotes,
@@ -69,6 +70,7 @@ function curateCatalogServers(
   if (!servers) return undefined;
   return servers
     .filter(isPulseMcpServer)
+    .filter((server) => !requiresManualSetup(server))
     .filter((server) =>
       AUTOMATIC_CATALOG_SERVER_NAMES.includes(
         serverName(server) as (typeof AUTOMATIC_CATALOG_SERVER_NAMES)[number],
@@ -82,7 +84,7 @@ function shellQuote(value: string): string {
 }
 
 function governedClientName(name: string): string {
-  return `${name}_Governed`;
+  return name.endsWith("_Governed") ? name : `${name}_Governed`;
 }
 
 function connectionCommandFor(
@@ -296,6 +298,7 @@ export function useMcpGuideOperations(): {
     servers: workflowServers,
     projectSlug: gramProject,
     autoSelectRemotes: true,
+    serverNameSuffix: "_Governed",
   });
 
   const activityQuery = useGetMcpServerActivity(

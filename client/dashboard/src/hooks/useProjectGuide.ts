@@ -11,11 +11,13 @@ import { useProjectSlugForRequests, useSlugs } from "@/contexts/Sdk";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
 
-export function useProjectGuide(): { status: ProjectGuideStatus } {
+export function useProjectGuide(args: { enabled?: boolean } = {}): {
+  status: ProjectGuideStatus;
+} {
   const { projectSlug } = useSlugs();
   const gramProject = useProjectSlugForRequests();
   const started = useProjectGuideStarted(projectSlug);
-  const canCheck = Boolean(projectSlug) && !started;
+  const canCheck = args.enabled !== false && Boolean(projectSlug) && !started;
 
   const {
     data: serversData,
@@ -25,6 +27,8 @@ export function useProjectGuide(): { status: ProjectGuideStatus } {
     enabled: canCheck,
     throwOnError: false,
   });
+  const serversUnreadable =
+    serversError || (!serversPending && serversData === undefined);
   const hasServers = (serversData?.mcpServers.length ?? 0) > 0;
 
   const {
@@ -35,6 +39,8 @@ export function useProjectGuide(): { status: ProjectGuideStatus } {
     enabled: canCheck,
     throwOnError: false,
   });
+  const policiesUnreadable =
+    policiesError || (!policiesPending && policiesData === undefined);
   const hasPolicies = (policiesData?.policies.length ?? 0) > 0;
 
   const {
@@ -45,25 +51,27 @@ export function useProjectGuide(): { status: ProjectGuideStatus } {
     enabled:
       canCheck &&
       !serversPending &&
-      !serversError &&
+      !serversUnreadable &&
       !hasServers &&
       !policiesPending &&
-      !policiesError &&
+      !policiesUnreadable &&
       !hasPolicies,
   });
+  const overviewUnreadable =
+    overviewError || (!overviewPending && overview === undefined);
 
   return {
     status: decideProjectGuideStatus({
       hasProjectSlug: Boolean(projectSlug),
       started,
       serversPending,
-      serversError,
+      serversError: serversUnreadable,
       hasServers,
       policiesPending,
-      policiesError,
+      policiesError: policiesUnreadable,
       hasPolicies,
       overviewPending,
-      overviewError,
+      overviewError: overviewUnreadable,
       hasData: !isOverviewEmpty(overview),
     }),
   };
