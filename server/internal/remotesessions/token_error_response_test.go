@@ -82,6 +82,14 @@ func TestParseTokenErrorResponseDoesNotRemapNonLiteralUnauthorizedMessages(t *te
 	}
 }
 
+func TestParseTokenErrorResponseDialectInheritsTopLevelDescription(t *testing.T) {
+	t.Parallel()
+
+	got := parseTokenErrorResponse(http.StatusBadRequest, []byte(`{"errors":["invalid_grant"],"error_description":"Token has been revoked."}`))
+	require.Equal(t, oauthErrInvalidGrant, got.Error)
+	require.Equal(t, "Token has been revoked.", got.ErrorDescription)
+}
+
 func TestParseTokenErrorResponseDoesNotOverrideOtherRFCCodes(t *testing.T) {
 	t.Parallel()
 

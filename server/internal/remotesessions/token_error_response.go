@@ -65,10 +65,13 @@ func parseTokenErrorResponse(statusCode int, body []byte) tokenErrorResponse {
 	}
 
 	if nonRFCErrorDefinitive(statusCode) {
-		if e, ok := datadogInvalidGrant(members["errors"]); ok {
-			return e
+		e, ok := datadogInvalidGrant(members["errors"])
+		if !ok {
+			e, ok = nestedProviderError(members["error"])
 		}
-		if e, ok := nestedProviderError(members["error"]); ok {
+		if ok {
+			e.ErrorDescription = conv.Default(e.ErrorDescription, desc)
+			e.ErrorURI = conv.Default(e.ErrorURI, uri)
 			return e
 		}
 	}
