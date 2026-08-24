@@ -55,7 +55,6 @@ func IsTokenRefreshRateLimited(err error) bool {
 // from the upstream token endpoint. The public Reason summarizes the parsed
 // error body (falling back to the HTTP status); the raw status and body are kept
 // only as the private cause and never surfaced.
-//
 func newTokenRefreshErrorFromHTTP(statusCode int, status string, body []byte) *TokenRefreshError {
 	response := parseTokenErrorResponse(statusCode, body)
 	return &TokenRefreshError{
