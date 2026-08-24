@@ -88,6 +88,35 @@ func TestCodexLogSkipsEmptyPrompt(t *testing.T) {
 	require.Nil(t, input)
 }
 
+func TestCodexLogEmptyIdentifiersUseSemconvFallback(t *testing.T) {
+	t.Parallel()
+
+	record := codexLogRecord(codexLogScopeName, codexUserPromptEvent,
+		logDialectStringAttribute("conversation.id", ""),
+		logDialectStringAttribute("gen_ai.conversation.id", "semconv-conversation-id"),
+		logDialectStringAttribute("user.email", ""),
+		logDialectStringAttribute("user.account_id", ""),
+		logDialectStringAttribute("user.id", "semconv-user-id"),
+	)
+
+	selected := ForLog(record)
+
+	key, value, err := selected.SessionID(record)
+	require.NoError(t, err)
+	require.Equal(t, "gen_ai.conversation.id", key)
+	require.Equal(t, "semconv-conversation-id", value)
+
+	key, value, err = selected.ExternalUserEmail(record)
+	require.NoError(t, err)
+	require.Empty(t, key)
+	require.Empty(t, value)
+
+	key, value, err = selected.ExternalUserID(record)
+	require.NoError(t, err)
+	require.Equal(t, "user.id", key)
+	require.Equal(t, "semconv-user-id", value)
+}
+
 func TestCodexLogDoesNotApplyToTraceSafeScope(t *testing.T) {
 	t.Parallel()
 
