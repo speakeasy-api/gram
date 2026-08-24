@@ -120,7 +120,8 @@ func (b OperationBudget) Allow(ctx context.Context, principal Principal) error {
 // External Platform MCP calls are isolated by their OAuth connection. A managed
 // assistant has no connection, so it is isolated by its fixed client identity
 // and the real user that authorized the action; it never pools all assistants
-// into one empty-key bucket.
+// into one empty-key bucket. A dashboard setup handoff has no OAuth connection
+// either, so it receives its own user-scoped bucket.
 func operationBudgetActorKey(principal Principal) (string, error) {
 	if principal.HasConnection() {
 		if principal.ConnectionID == "" {
@@ -128,10 +129,20 @@ func operationBudgetActorKey(principal Principal) (string, error) {
 		}
 		return principal.ConnectionID, nil
 	}
-	if principal.surface() != SurfaceProjectAssistant || principal.ClientID == "" || principal.UserID == "" {
+	if principal.UserID == "" {
 		return "", ErrOperationBudgetUnavailable
 	}
-	return "assistant:" + principal.ClientID + ":" + principal.UserID, nil
+	switch principal.surface() {
+	case SurfaceProjectAssistant:
+		if principal.ClientID == "" {
+			return "", ErrOperationBudgetUnavailable
+		}
+		return "assistant:" + principal.ClientID + ":" + principal.UserID, nil
+	case SurfaceDashboard:
+		return "dashboard:" + principal.UserID, nil
+	default:
+		return "", ErrOperationBudgetUnavailable
+	}
 }
 
 // OperationBudgets groups the independently metered public Platform MCP
