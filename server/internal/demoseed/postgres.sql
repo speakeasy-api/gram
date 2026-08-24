@@ -329,6 +329,18 @@ BEGIN
     SET name = EXCLUDED.name, slug = EXCLUDED.slug,
         gram_account_type = EXCLUDED.gram_account_type;
 
+  -- plugin_servers RESTRICTs the mcp_server it attaches, and adding a server
+  -- auto-attaches it to the Default plugin — so in the writable local tenant
+  -- a developer's own servers block the delete below. mcp_servers in turn
+  -- pins its toolset with RESTRICT, so it must go before the toolsets delete.
+  -- Members and both backends' endpoints cascade from mcp_servers and
+  -- meta_mcp_servers.
+  DELETE FROM plugin_servers WHERE plugin_id IN
+    (SELECT id FROM plugins WHERE organization_id = demo_org);
+  DELETE FROM mcp_servers WHERE project_id = proj_a;
+  DELETE FROM meta_mcp_servers WHERE organization_id = demo_org;
+  -- meta_mcp_servers RESTRICTs its issuer, so issuers clear after it.
+  DELETE FROM user_session_issuers WHERE project_id = proj_a;
   DELETE FROM toolsets WHERE organization_id = demo_org;
   -- environments.project_id is NOT NULL but its FK is ON DELETE SET NULL, so
   -- the projects delete below fails outright on any environment row. The demo
@@ -523,6 +535,74 @@ BEGIN
   INSERT INTO toolset_versions (toolset_id, version, tool_urns, resource_urns) VALUES
     (toolset_1, extract(epoch FROM now())::bigint, tool_urns, '{}'),
     (toolset_2, extract(epoch FROM now())::bigint, ARRAY[tool_urns[1], tool_urns[2], tool_urns[5], tool_urns[7], tool_urns[8]], '{}');
+
+  ------------------------------------------------------------------
+  -- MCP servers and the Gateway Endpoint fronting them (AGE-3299).
+  -- Two backends so the gateway's member table shows both classes: the
+  -- toolset-backed pair executes in-process, the third-party remotes are
+  -- proxied. URLs are the vendors' public MCP endpoints — no credentials,
+  -- and nothing here connects on its own.
+  ------------------------------------------------------------------
+  INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
+    (demo.det_uuid('gram-demo-remotemcp-linear'), proj_a, 'Linear', 'linear',
+     'streamable-http', 'https://mcp.linear.app/mcp'),
+    (demo.det_uuid('gram-demo-remotemcp-slack'), proj_a, 'Slack', 'slack',
+     'streamable-http', 'https://mcp.slack.com/mcp');
+
+  -- Remote-backed servers must carry a Gram-as-AS issuer for their lifetime
+  -- (mcp_servers_issuer_required_check); the gateway gets its own so clients
+  -- authenticate to it rather than to a member.
+  -- session_duration must be a Microseconds-only interval: the user-session
+  -- mint rejects Months/Days components (see usersessions/minthandler.go).
+  INSERT INTO user_session_issuers (id, project_id, slug, authn_challenge_mode,
+                                    session_duration) VALUES
+    (demo.det_uuid('gram-demo-issuer-linear'), proj_a, 'linear',
+     'interactive', make_interval(secs => 14 * 24 * 60 * 60)),
+    (demo.det_uuid('gram-demo-issuer-slack'), proj_a, 'slack',
+     'interactive', make_interval(secs => 14 * 24 * 60 * 60)),
+    (demo.det_uuid('gram-demo-issuer-gateway'), proj_a, 'acme-agent-gateway',
+     'interactive', make_interval(secs => 14 * 24 * 60 * 60));
+
+  INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
+                           remote_mcp_server_id, user_session_issuer_id,
+                           visibility) VALUES
+    (demo.det_uuid('gram-demo-mcpserver-support'), proj_a, 'Acme Support Tools',
+     'acme-support-tools', toolset_1, NULL, NULL, 'private'),
+    (demo.det_uuid('gram-demo-mcpserver-ops'), proj_a, 'Acme Ops', 'acme-ops',
+     toolset_2, NULL, NULL, 'private'),
+    (demo.det_uuid('gram-demo-mcpserver-linear'), proj_a, 'Linear', 'linear',
+     NULL, demo.det_uuid('gram-demo-remotemcp-linear'),
+     demo.det_uuid('gram-demo-issuer-linear'), 'private'),
+    (demo.det_uuid('gram-demo-mcpserver-slack'), proj_a, 'Slack', 'slack',
+     NULL, demo.det_uuid('gram-demo-remotemcp-slack'),
+     demo.det_uuid('gram-demo-issuer-slack'), 'private');
+
+  INSERT INTO meta_mcp_servers (id, organization_id, project_id, name,
+                                user_session_issuer_id) VALUES
+    (demo.det_uuid('gram-demo-metamcp-1'), demo_org, proj_a, 'Acme Agent Gateway',
+     demo.det_uuid('gram-demo-issuer-gateway'));
+
+  -- sort_order is the order agents see members in list_servers.
+  INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id,
+                                       mcp_server_id, sort_order) VALUES
+    (demo.det_uuid('gram-demo-metamember-support'), proj_a,
+     demo.det_uuid('gram-demo-metamcp-1'), demo.det_uuid('gram-demo-mcpserver-support'), 0),
+    (demo.det_uuid('gram-demo-metamember-ops'), proj_a,
+     demo.det_uuid('gram-demo-metamcp-1'), demo.det_uuid('gram-demo-mcpserver-ops'), 1),
+    (demo.det_uuid('gram-demo-metamember-linear'), proj_a,
+     demo.det_uuid('gram-demo-metamcp-1'), demo.det_uuid('gram-demo-mcpserver-linear'), 2),
+    (demo.det_uuid('gram-demo-metamember-slack'), proj_a,
+     demo.det_uuid('gram-demo-metamcp-1'), demo.det_uuid('gram-demo-mcpserver-slack'), 3);
+
+  -- Endpoint slugs on the platform domain are globally unique and org-slug
+  -- prefixed, so they rewrite with OrgSlug for the local and test tenants.
+  INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug) VALUES
+    (demo.det_uuid('gram-demo-endpoint-gateway'), proj_a,
+     demo.det_uuid('gram-demo-metamcp-1'), NULL, 'acme-demo-gateway'),
+    (demo.det_uuid('gram-demo-endpoint-linear'), proj_a, NULL,
+     demo.det_uuid('gram-demo-mcpserver-linear'), 'acme-demo-linear'),
+    (demo.det_uuid('gram-demo-endpoint-slack'), proj_a, NULL,
+     demo.det_uuid('gram-demo-mcpserver-slack'), 'acme-demo-slack');
 
   ------------------------------------------------------------------
   -- Prompts (the Prompts page otherwise falls back to onboarding).
@@ -1265,6 +1345,37 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   ) x;
   IF stray > 0 THEN
     RAISE EXCEPTION 'demo seed postflight: % demo-org rows reference non-demo projects', stray;
+  END IF;
+
+  -- The gateway is only a gateway if its members survived the reseed, and an
+  -- endpoint is what gives it a URL — without either the MCP pages render it
+  -- as an empty shell.
+  SELECT count(*) INTO stray
+  FROM meta_mcp_server_members m
+  WHERE m.project_id = proj_a AND m.deleted IS FALSE;
+  IF stray <> 4 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 4 gateway members, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray
+  FROM mcp_endpoints e
+  WHERE e.project_id = proj_a AND e.deleted IS FALSE
+    AND e.meta_mcp_server_id IS NOT NULL;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 1 gateway endpoint, found %', stray;
+  END IF;
+
+  -- A member whose server lost its backend can never be dispatched to, so it
+  -- would sit in the gateway's table permanently unavailable.
+  SELECT count(*) INTO stray
+  FROM meta_mcp_server_members m
+  JOIN mcp_servers s ON s.id = m.mcp_server_id
+  WHERE m.project_id = proj_a AND m.deleted IS FALSE
+    AND (s.deleted IS TRUE OR s.slug IS NULL
+         OR num_nonnulls(s.toolset_id, s.remote_mcp_server_id,
+                         s.tunneled_mcp_server_id, s.unproxied_mcp_server_id) <> 1);
+  IF stray > 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: % gateway members are not servable', stray;
   END IF;
 
   -- Global (non-org-scoped) tables must only carry rows for the demo roster:

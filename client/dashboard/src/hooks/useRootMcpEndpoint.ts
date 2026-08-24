@@ -5,9 +5,38 @@ import {
   type SetRootMcpEndpointMutationVariables,
   useSetRootMcpEndpointMutation,
 } from "@gram/client/react-query/setRootMcpEndpoint.js";
+import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useRef } from "react";
 import { toast } from "sonner";
+
+/**
+ * Writes an updated endpoint into every cached endpoint list.
+ *
+ * Invalidation alone would get there, but only after a refetch round-trip,
+ * and the detail-page sidebar keeps its own observer of the same list — so
+ * the address it shows visibly lags the field the user just saved. Seeding
+ * the response notifies every observer synchronously instead.
+ */
+export function patchMcpEndpointInCache(
+  queryClient: QueryClient,
+  endpoint: McpEndpoint,
+): void {
+  queryClient.setQueriesData<{ mcpEndpoints: McpEndpoint[] }>(
+    { queryKey: ["@gram/client", "mcpEndpoints", "list"] },
+    (current) => {
+      if (!current?.mcpEndpoints.some((e) => e.id === endpoint.id)) {
+        return current;
+      }
+      return {
+        ...current,
+        mcpEndpoints: current.mcpEndpoints.map((e) =>
+          e.id === endpoint.id ? endpoint : e,
+        ),
+      };
+    },
+  );
+}
 
 export async function invalidateRootMcpEndpointQueries(
   queryClient: QueryClient,

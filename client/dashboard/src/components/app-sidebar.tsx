@@ -23,6 +23,7 @@ import { Icon } from "@/components/ui/Icon";
 import { InsightsDockResumeButton } from "./insights-dock-resume-button";
 import { Link } from "react-router";
 import { McpDetailSidebarNav } from "./mcp-detail-sidebar-nav";
+import { GatewaySidebarNav } from "./gateway-sidebar-nav";
 import { McpServerXSidebarNav } from "./mcp-server-x-sidebar-nav";
 import { OnboardingResumeButton } from "./onboarding-resume-button";
 import { PlatformMcpSidebarCta } from "./platform-mcp-sidebar-cta";
@@ -119,6 +120,7 @@ export function AppSidebar({
   const isWideSidebarDetailRoute =
     routes.mcp.details.active ||
     routes.mcp.x.active ||
+    routes.mcp.gateway.active ||
     routes.mcp.builtIn.active ||
     routes.skills.detail.active ||
     routes.plugins.detail.active;
@@ -139,6 +141,8 @@ export function AppSidebar({
     sidebarContent = <McpDetailSidebarNav />;
   } else if (routes.mcp.x.active) {
     sidebarContent = <McpServerXSidebarNav />;
+  } else if (routes.mcp.gateway.active) {
+    sidebarContent = <GatewaySidebarNav />;
   } else if (routes.mcp.builtIn.active) {
     sidebarContent = <BuiltInMcpSidebarNav />;
   } else if (routes.skills.detail.active) {

@@ -25,11 +25,11 @@ type Service interface {
 	// caller's project.
 	ListFacets(context.Context, *ListFacetsPayload) (res *ListUserSessionFacetsResult, err error)
 	// Mint a user_session on behalf of the authenticated dashboard user, bound to
-	// an issuer-gated audience: either a toolset (/mcp) or a remote MCP server
-	// (/x/mcp). Exactly one of toolset_id or mcp_server_id must be provided. The
-	// minted JWT matches the shape /token would emit after a successful OAuth
-	// dance, so the runtime MCP gateway validates it through the same path as a
-	// real MCP client's bearer.
+	// an issuer-gated audience: a toolset (/mcp), a remote MCP server (/x/mcp), or
+	// a meta MCP server (/mcp). Exactly one of toolset_id, mcp_server_id, or
+	// meta_mcp_server_id must be provided. The minted JWT matches the shape /token
+	// would emit after a successful OAuth dance, so the runtime MCP gateway
+	// validates it through the same path as a real MCP client's bearer.
 	MintUserSession(context.Context, *MintUserSessionPayload) (res *MintUserSessionResult, err error)
 	// Push the session's jti into the revocation cache and soft-delete the row.
 	RevokeUserSession(context.Context, *RevokeUserSessionPayload) (err error)
@@ -113,9 +113,13 @@ type MintUserSessionPayload struct {
 	ToolsetID *string
 	// Bind the JWT to this remote MCP server's user_session_issuer audience (the
 	// /x/mcp convention, since remote servers have no toolset). Mutually exclusive
-	// with toolset_id; exactly one must be set. Must be issuer-gated and live in
-	// the caller's project.
-	McpServerID      *string
+	// with the other targets; exactly one must be set. Must be issuer-gated and
+	// live in the caller's project.
+	McpServerID *string
+	// Bind the JWT to this meta MCP server's user_session_issuer audience.
+	// Mutually exclusive with the other targets; exactly one must be set. Must be
+	// issuer-gated and live in the caller's project.
+	MetaMcpServerID  *string
 	SessionToken     *string
 	ProjectSlugInput *string
 }

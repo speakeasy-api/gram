@@ -168,7 +168,11 @@ func TestServePublic_MetaEndpoint_Initialize(t *testing.T) {
 	// Instructions are deliberately generic: the member inventory belongs to
 	// list_servers, so neither the meta server's name nor its members appear.
 	require.Contains(t, result.Instructions, "list_servers")
-	require.Contains(t, result.Instructions, "rediscovery")
+	require.Contains(t, result.Instructions, "describe_tools")
+	// The two rules agents get wrong: guessing arguments, and reading a
+	// degraded member as a missing one.
+	require.Contains(t, result.Instructions, "Never execute a name you have not described")
+	require.Contains(t, result.Instructions, "degraded")
 	require.NotContains(t, result.Instructions, "test gateway")
 }
 
