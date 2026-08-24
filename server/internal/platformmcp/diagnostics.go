@@ -23,16 +23,6 @@ const (
 	DiagnosticsOrganizationLimitName = "platform-mcp-diagnostics-organization"
 )
 
-const (
-	// DiagnosticQueriesPerConnectionPerMinute and
-	// DiagnosticQueriesPerOrganizationPerMinute bound the observability reads.
-	// A diagnosis is an interactive loop — an agent asks, narrows, and asks
-	// again — so the allowance is wider than a mutation's, and what it meters
-	// is the ClickHouse scan rather than any external egress.
-	DiagnosticQueriesPerConnectionPerMinute   = 30
-	DiagnosticQueriesPerOrganizationPerMinute = 300
-)
-
 // maxDiagnosticClients bounds the per-client evidence list. Client evidence is
 // self-reported and exists to point at a suspect, not to enumerate a fleet.
 const maxDiagnosticClients = 10
@@ -73,16 +63,25 @@ type DiagnosticsTelemetryReader interface {
 // DiagnosticsService answers the two overview-first questions: what is this
 // project doing, and why is this one MCP not working.
 type DiagnosticsService struct {
-	db             *pgxpool.Pool
-	telemetry      DiagnosticsTelemetryReader
-	sessions       ProjectOverviewSessionReader
-	sessionCapture FeatureChecker
-	reader         Reader
-	readiness      *ReadinessService
-	budget         OperationBudget
-	now            func() time.Time
+	db              *pgxpool.Pool
+	telemetry       DiagnosticsTelemetryReader
+	drilldown       DrilldownTelemetryReader
+	references      *subjectReferenceCodec
+	sensitiveBudget OperationBudget
+	volume          DrilldownVolumeBudget
+	auditor         DrilldownAuditor
+	sessions        ProjectOverviewSessionReader
+	sessionCapture  FeatureChecker
+	reader          Reader
+	readiness       *ReadinessService
+	budget          OperationBudget
+	now             func() time.Time
 }
 
+// NewDiagnosticsService composes the overview-first entry points. The bounded
+// drill-down tools are attached separately by WithDrilldown, so a deployment
+// that cannot mint subject references serves the overview and withholds the
+// row-level reads rather than serving them unbound.
 func NewDiagnosticsService(db *pgxpool.Pool, telemetry DiagnosticsTelemetryReader, sessionCapture FeatureChecker, reader Reader, readiness *ReadinessService, budget OperationBudget) *DiagnosticsService {
 	var sessions ProjectOverviewSessionReader
 	if db != nil {
@@ -98,6 +97,31 @@ func NewDiagnosticsService(db *pgxpool.Pool, telemetry DiagnosticsTelemetryReade
 		budget:         budget,
 		now:            time.Now,
 	}
+}
+
+// WithDrilldown attaches the bounded drill-down reads. Reference key material
+// is required: without it a trace or subject handle could not be bound to the
+// caller's organization and session, and the tools stay unavailable rather than
+// returning unbound identifiers.
+func (s *DiagnosticsService) WithDrilldown(drilldown DrilldownTelemetryReader, referenceKeyMaterial string, sensitiveBudget OperationBudget, volume DrilldownVolumeBudget, auditor DrilldownAuditor) *DiagnosticsService {
+	if s == nil || drilldown == nil || !sensitiveBudget.valid() || !volume.valid() || auditor == nil {
+		return s
+	}
+	codec, err := newSubjectReferenceCodec(referenceKeyMaterial)
+	if err != nil {
+		return s
+	}
+	s.drilldown = drilldown
+	s.references = codec
+	s.sensitiveBudget = sensitiveBudget
+	s.volume = volume
+	s.auditor = auditor
+	return s
+}
+
+// drilldownValid reports whether the bounded drill-down tools are servable.
+func (s *DiagnosticsService) drilldownValid() bool {
+	return s.valid() && s.drilldown != nil && s.references != nil && s.sensitiveBudget.valid() && s.volume.valid() && s.auditor != nil
 }
 
 func (s *DiagnosticsService) valid() bool {
@@ -149,7 +173,7 @@ func (s *DiagnosticsService) GetProjectOverview(ctx context.Context, principal P
 		return GetProjectOverviewOutput{}, err
 	}
 	now := s.now()
-	window, err := resolveWindow(input.Window, now, overviewWindowPolicy)
+	window, err := resolveWindow(input.Window, now, overviewWindowSpec)
 	if err != nil {
 		return GetProjectOverviewOutput{}, err
 	}
@@ -208,8 +232,11 @@ func (s *DiagnosticsService) GetProjectOverview(ctx context.Context, principal P
 	}
 
 	output := GetProjectOverviewOutput{
-		ProjectID:   input.ProjectID,
-		Envelope:    newDataEnvelope(now, watermarkTime(watermark), window),
+		ProjectID: input.ProjectID,
+		// A project overview is project-scoped, so the watermark and the result
+		// answer for the same scope; observation is still taken from the
+		// result rather than inferred from the watermark.
+		Envelope:    newDataEnvelope(now, watermarkTime(watermark), window, summary != nil && summary.TotalToolCalls > 0),
 		MetricsMode: metricsMode(sessionMode),
 		TopServers:  make([]ProjectOverviewServer, 0, len(servers)),
 	}
@@ -313,7 +340,7 @@ func (s *DiagnosticsService) GetMCPDiagnostics(ctx context.Context, principal Pr
 		return GetMCPDiagnosticsOutput{}, err
 	}
 	now := s.now()
-	window, err := resolveWindow(input.Window, now, diagnosticsWindowPolicy)
+	window, err := resolveWindow(input.Window, now, diagnosticsWindowSpec)
 	if err != nil {
 		return GetMCPDiagnosticsOutput{}, err
 	}
@@ -353,12 +380,7 @@ func (s *DiagnosticsService) GetMCPDiagnostics(ctx context.Context, principal Pr
 	if err != nil {
 		return GetMCPDiagnosticsOutput{}, fmt.Errorf("read organization outcome breakdown: %w", err)
 	}
-	// Scoped to the diagnosed project, not to the organization the comparison
-	// spans. An organization-wide watermark reports the freshest observation
-	// anywhere, so a busy sibling project would stamp this result fresh while
-	// the diagnosed project's own observations had stopped arriving — exactly
-	// the reading that turns an absence of evidence into evidence of health.
-	watermark, err := s.telemetry.GetTelemetryWatermark(ctx, telemetryrepo.GetTelemetryWatermarkParams{GramProjectIDs: []string{input.ProjectID}})
+	watermark, err := s.telemetry.GetTelemetryWatermark(ctx, telemetryrepo.GetTelemetryWatermarkParams{GramProjectIDs: projectIDs})
 	if err != nil {
 		return GetMCPDiagnosticsOutput{}, fmt.Errorf("read diagnostics watermark: %w", err)
 	}
@@ -378,7 +400,7 @@ func (s *DiagnosticsService) GetMCPDiagnostics(ctx context.Context, principal Pr
 	return GetMCPDiagnosticsOutput{
 		ProjectID: input.ProjectID,
 		MCPID:     input.MCPID,
-		Envelope:  newDataEnvelope(now, watermarkTime(watermark), window),
+		Envelope:  newDataEnvelope(now, watermarkTime(watermark), window, serverTotals.Total > 0),
 		Readiness: MCPDiagnosticsReadiness{
 			State:     string(normalizedReadiness(readiness, readinessFound).State),
 			Freshness: readinessFreshness(readiness, readinessFound),
@@ -454,24 +476,30 @@ func (s *DiagnosticsService) currentReadiness(ctx context.Context, principal Pri
 func totalsFromRows(rows []telemetryrepo.MCPOutcomeBreakdownRow) outcomeTotals {
 	var totals outcomeTotals
 	for _, row := range rows {
-		count := boundedCount(row.CallCount)
-		totals.Total += count
-		switch row.Outcome {
-		case telemetryrepo.MCPOutcomeSuccess:
-			totals.Success += count
-		case telemetryrepo.MCPOutcomeUnauthorized:
-			totals.Unauthorized += count
-		case telemetryrepo.MCPOutcomeClientError:
-			totals.ClientError += count
-		case telemetryrepo.MCPOutcomeServerError:
-			totals.ServerError += count
-		case telemetryrepo.MCPOutcomeFailed:
-			totals.Failed += count
-		default:
-			totals.Unknown += count
-		}
+		addOutcome(&totals, row.Outcome, boundedCount(row.CallCount))
 	}
 	return totals
+}
+
+// addOutcome accumulates one classified count. An outcome this build does not
+// know is counted as unknown rather than dropped, so the totals always add up
+// and a new class cannot silently shrink the denominator.
+func addOutcome(totals *outcomeTotals, outcome string, count int64) {
+	totals.Total += count
+	switch outcome {
+	case telemetryrepo.MCPOutcomeSuccess:
+		totals.Success += count
+	case telemetryrepo.MCPOutcomeUnauthorized:
+		totals.Unauthorized += count
+	case telemetryrepo.MCPOutcomeClientError:
+		totals.ClientError += count
+	case telemetryrepo.MCPOutcomeServerError:
+		totals.ServerError += count
+	case telemetryrepo.MCPOutcomeFailed:
+		totals.Failed += count
+	default:
+		totals.Unknown += count
+	}
 }
 
 // summaryFromTotals converts the internal tally into the serialized summary.

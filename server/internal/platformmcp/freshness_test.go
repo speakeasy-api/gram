@@ -14,39 +14,43 @@ func TestResolveWindow_DefaultsAndClosedSet(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		policy    windowPolicy
+		spec      windowSpec
 		requested string
 		want      DiagnosticWindow
 		wantSpan  time.Duration
-		wantErr   bool
+		wantErr   error
 	}{
-		{name: "empty defaults to a day", policy: overviewWindowPolicy, requested: "", want: DiagnosticWindowLastDay, wantSpan: 24 * time.Hour},
-		{name: "hour", policy: overviewWindowPolicy, requested: "1h", want: DiagnosticWindowLastHour, wantSpan: time.Hour},
-		{name: "week", policy: overviewWindowPolicy, requested: "7d", want: DiagnosticWindowLastWeek, wantSpan: 7 * 24 * time.Hour},
-		{name: "month", policy: overviewWindowPolicy, requested: "30d", want: DiagnosticWindowLastMonth, wantSpan: 30 * 24 * time.Hour},
-		{name: "case and space tolerated", policy: overviewWindowPolicy, requested: " 24H ", want: DiagnosticWindowLastDay, wantSpan: 24 * time.Hour},
+		{name: "empty defaults to a day", spec: overviewWindowSpec, requested: "", want: DiagnosticWindowLastDay, wantSpan: 24 * time.Hour},
+		{name: "hour", spec: overviewWindowSpec, requested: "1h", want: DiagnosticWindowLastHour, wantSpan: time.Hour},
+		{name: "week", spec: overviewWindowSpec, requested: "7d", want: DiagnosticWindowLastWeek, wantSpan: 7 * 24 * time.Hour},
+		{name: "month", spec: overviewWindowSpec, requested: "30d", want: DiagnosticWindowLastMonth, wantSpan: 30 * 24 * time.Hour},
+		{name: "case and space tolerated", spec: overviewWindowSpec, requested: " 24H ", want: DiagnosticWindowLastDay, wantSpan: 24 * time.Hour},
 		// Refused, not clamped: a caller must never receive a different window
 		// than the one it believes it asked for.
-		{name: "arbitrary duration refused", policy: overviewWindowPolicy, requested: "90m", wantErr: true},
-		{name: "timestamp grammar refused", policy: overviewWindowPolicy, requested: "2026-08-01T00:00:00Z", wantErr: true},
-		{name: "year refused", policy: overviewWindowPolicy, requested: "365d", wantErr: true},
+		{name: "arbitrary duration refused", spec: overviewWindowSpec, requested: "90m", wantErr: ErrDiagnosticWindowInvalid},
+		{name: "timestamp grammar refused", spec: overviewWindowSpec, requested: "2026-08-01T00:00:00Z", wantErr: ErrDiagnosticWindowInvalid},
+		{name: "year refused", spec: overviewWindowSpec, requested: "365d", wantErr: ErrDiagnosticWindowInvalid},
 
-		// A diagnosis reads a narrower set. Its default is the hour, and the
-		// longer windows the overview accepts are refused here rather than
-		// answered over a span the attribution cannot reason across.
-		{name: "diagnostics empty defaults to an hour", policy: diagnosticsWindowPolicy, requested: "", want: DiagnosticWindowLastHour, wantSpan: time.Hour},
-		{name: "diagnostics day", policy: diagnosticsWindowPolicy, requested: "24h", want: DiagnosticWindowLastDay, wantSpan: 24 * time.Hour},
-		{name: "diagnostics week refused", policy: diagnosticsWindowPolicy, requested: "7d", wantErr: true},
-		{name: "diagnostics month refused", policy: diagnosticsWindowPolicy, requested: "30d", wantErr: true},
+		// Each tool's own reach. A diagnosis defaults to the hour and will not
+		// look back a week, because attribution reasoning in ratios dilutes a
+		// live fault into healthy traffic over a long window. A row-level
+		// drill-down and a metric series are capped for cost, not for reasoning.
+		{name: "diagnostics defaults to an hour", spec: diagnosticsWindowSpec, requested: "", want: DiagnosticWindowLastHour, wantSpan: time.Hour},
+		{name: "diagnostics allows its maximum", spec: diagnosticsWindowSpec, requested: "24h", want: DiagnosticWindowLastDay, wantSpan: 24 * time.Hour},
+		{name: "diagnostics refuses a week", spec: diagnosticsWindowSpec, requested: "7d", wantErr: ErrDiagnosticWindowTooLong},
+		{name: "drilldown defaults to a day", spec: drilldownWindowSpec, requested: "", want: DiagnosticWindowLastDay, wantSpan: 24 * time.Hour},
+		{name: "drilldown refuses a week", spec: drilldownWindowSpec, requested: "7d", wantErr: ErrDiagnosticWindowTooLong},
+		{name: "metrics allow a week", spec: metricsWindowSpec, requested: "7d", want: DiagnosticWindowLastWeek, wantSpan: 7 * 24 * time.Hour},
+		{name: "metrics refuse a month", spec: metricsWindowSpec, requested: "30d", wantErr: ErrDiagnosticWindowTooLong},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			window, err := resolveWindow(test.requested, now, test.policy)
-			if test.wantErr {
-				require.ErrorIs(t, err, ErrDiagnosticWindowInvalid)
+			window, err := resolveWindow(test.requested, now, test.spec)
+			if test.wantErr != nil {
+				require.ErrorIs(t, err, test.wantErr)
 				return
 			}
 			require.NoError(t, err)
@@ -59,11 +63,66 @@ func TestResolveWindow_DefaultsAndClosedSet(t *testing.T) {
 	}
 }
 
+// TestResolveWindow_RefusesWindowsLongerThanTheToolAllows pins each tool's
+// look-back cap. It refuses rather than clamps, for the same reason an unknown
+// window is refused: a caller must never be told about a different interval
+// than the one it asked for.
+func TestResolveWindow_RefusesWindowsLongerThanTheToolAllows(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name      string
+		requested string
+		spec      windowSpec
+		wantErr   bool
+	}{
+		{name: "overview allows a month", requested: "30d", spec: overviewWindowSpec},
+		{name: "diagnostics refuse a month", requested: "30d", spec: diagnosticsWindowSpec, wantErr: true},
+		{name: "diagnostics refuse a week", requested: "7d", spec: diagnosticsWindowSpec, wantErr: true},
+		{name: "diagnostics allow a day", requested: "24h", spec: diagnosticsWindowSpec},
+		{name: "drilldown refuses a week", requested: "7d", spec: drilldownWindowSpec, wantErr: true},
+		{name: "drilldown allows a day", requested: "24h", spec: drilldownWindowSpec},
+		{name: "metrics refuse a month", requested: "30d", spec: metricsWindowSpec, wantErr: true},
+		{name: "metrics allow a week", requested: "7d", spec: metricsWindowSpec},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := resolveWindow(test.requested, now, test.spec)
+			if test.wantErr {
+				require.ErrorIs(t, err, ErrDiagnosticWindowTooLong)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
+// TestResolveWindow_EachToolHasItsOwnDefault pins that an unspecified window
+// means what the tool says it means, not one shared value.
+func TestResolveWindow_EachToolHasItsOwnDefault(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
+
+	window, err := resolveWindow("", now, diagnosticsWindowSpec)
+	require.NoError(t, err)
+	require.Equal(t, DiagnosticWindowLastHour, window.Window)
+
+	window, err = resolveWindow("", now, overviewWindowSpec)
+	require.NoError(t, err)
+	require.Equal(t, DiagnosticWindowLastDay, window.Window)
+}
+
 func TestNewDataEnvelope_ClassifiesFreshness(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
-	window, err := resolveWindow("24h", now, overviewWindowPolicy)
+	window, err := resolveWindow("24h", now, overviewWindowSpec)
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -76,14 +135,14 @@ func TestNewDataEnvelope_ClassifiesFreshness(t *testing.T) {
 		{
 			// Absence of observations is its own answer. Reporting it as fresh
 			// would let a caller read an empty result as a healthy one.
-			name:      "no watermark is no observations",
+			name:      "no watermark is unavailable",
 			watermark: time.Time{},
-			want:      FreshnessNoObservations,
+			want:      FreshnessUnavailable,
 		},
 		{
 			name:        "watermark inside the threshold is fresh",
 			watermark:   now.Add(-2 * time.Minute),
-			want:        FreshnessFresh,
+			want:        FreshnessCurrent,
 			wantThrough: true,
 		},
 		{
@@ -95,7 +154,7 @@ func TestNewDataEnvelope_ClassifiesFreshness(t *testing.T) {
 		{
 			name:        "watermark exactly at the threshold is still fresh",
 			watermark:   now.Add(-StaleWatermarkThreshold),
-			want:        FreshnessFresh,
+			want:        FreshnessCurrent,
 			wantThrough: true,
 		},
 		{
@@ -104,7 +163,7 @@ func TestNewDataEnvelope_ClassifiesFreshness(t *testing.T) {
 			// for being about the past.
 			name:        "watermark at the window end is fresh",
 			watermark:   window.end,
-			want:        FreshnessFresh,
+			want:        FreshnessCurrent,
 			wantThrough: true,
 		},
 	}
@@ -113,8 +172,12 @@ func TestNewDataEnvelope_ClassifiesFreshness(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			envelope := newDataEnvelope(now, test.watermark, window)
+			envelope := newDataEnvelope(now, test.watermark, window, !test.watermark.IsZero())
 			require.Equal(t, test.want, envelope.Freshness)
+			// no_observations is stated positively beside freshness, because
+			// "unavailable" describes the pipeline while this describes the
+			// result, and neither may be read as evidence of health.
+			require.Equal(t, test.watermark.IsZero(), envelope.NoObservations)
 			require.Equal(t, now.Format(time.RFC3339), envelope.QueriedAt)
 			require.Equal(t, window, envelope.ResolvedWindow)
 			if test.wantThrough {
@@ -134,7 +197,7 @@ func TestResolveWindow_AdvertisedBoundsMatchTheQueriedBounds(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, 8, 21, 12, 0, 0, 987_654_321, time.UTC)
-	window, err := resolveWindow("1h", now, overviewWindowPolicy)
+	window, err := resolveWindow("1h", now, overviewWindowSpec)
 	require.NoError(t, err)
 
 	require.Equal(t, window.start.Format(time.RFC3339), window.From)
