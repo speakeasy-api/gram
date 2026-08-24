@@ -151,6 +151,36 @@ func TestVerificationKey_FailedConsultEntersCooldown(t *testing.T) {
 	require.Equal(t, 1, server.Fetches(), "a failed consult negative-caches like a successful one")
 }
 
+func TestVerificationKey_UnusableStoredValidatorIsDropped(t *testing.T) {
+	t.Parallel()
+
+	server := newKeySetServer(t, keySetJSON(t, testKey(t, "a")))
+	kr, cache := newTestKeyResolver(t, server, generousRate())
+	source := remoteSourceFor(t, server)
+
+	// A stored validator today's screening rules reject: unquoted, so it is
+	// not a well-formed entity-tag. Storage is shared across replicas and
+	// outlives any one binary, so a value written under laxer rules is the
+	// case this covers.
+	require.NoError(t, cache.Put(t.Context(), source.CacheKey(), CacheState{
+		Document:    keySetJSON(t, testKey(t, "a")),
+		ETag:        "unquoted-validator",
+		ExpiresAt:   time.Now().Add(time.Hour),
+		RefreshedAt: time.Now().Add(-time.Hour),
+	}))
+
+	// An unknown kid forces a consult; failing it exercises the cooldown
+	// marker, the one write path that carries the stored validator forward.
+	server.SetStatus(500)
+	_, err := kr.VerificationKey(t.Context(), source, "unknown")
+	require.ErrorContains(t, err, "status 500")
+
+	state, err := cache.Get(t.Context(), source.CacheKey())
+	require.NoError(t, err)
+	require.Empty(t, state.ETag, "an unusable stored validator is dropped, not replayed and re-persisted")
+	require.NotEmpty(t, state.Document, "dropping the validator must not discard the document it identified")
+}
+
 func TestVerificationKey_ConcurrentRotationCoalesces(t *testing.T) {
 	t.Parallel()
 

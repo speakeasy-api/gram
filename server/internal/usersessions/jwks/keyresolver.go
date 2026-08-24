@@ -11,6 +11,7 @@ import (
 	"golang.org/x/sync/singleflight"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/httpcache"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 )
 
@@ -145,9 +146,9 @@ func (k *KeyResolver) VerificationKey(ctx context.Context, source Source, kid st
 // flight.
 func (k *KeyResolver) resolveShared(ctx context.Context, source Source) (*Result, error) {
 	result, err, _ := k.group.Do("resolve\x00"+source.CacheKey(), func() (any, error) {
-		state, err := k.cache.Get(ctx, source.CacheKey())
+		state, err := k.cachedState(ctx, source)
 		if err != nil {
-			return nil, fmt.Errorf("read key set cache: %w", err)
+			return nil, err
 		}
 		resolved, err := k.resolver.Resolve(ctx, source, state)
 		if err != nil {
@@ -170,9 +171,9 @@ func (k *KeyResolver) resolveShared(ctx context.Context, source Source) (*Result
 // coalescing concurrent callers into one limiter charge and one fetch.
 func (k *KeyResolver) refreshShared(ctx context.Context, source Source) (*Result, error) {
 	result, err, _ := k.group.Do("refresh\x00"+source.CacheKey(), func() (any, error) {
-		state, err := k.cache.Get(ctx, source.CacheKey())
+		state, err := k.cachedState(ctx, source)
 		if err != nil {
-			return nil, fmt.Errorf("read key set cache: %w", err)
+			return nil, err
 		}
 
 		// The negative cache: an upstream consulted within the cooldown gave
@@ -250,6 +251,23 @@ func (k *KeyResolver) refreshShared(ctx context.Context, source Source) (*Result
 	return resolved, nil
 }
 
+// cachedState reads the stored state for a source and re-screens its
+// validator instead of trusting it. Everything this package writes passes
+// SanitizeETag today, but Cache is an interface and the state it returns
+// crosses a process boundary: an implementation backed by durable storage
+// shared across replicas may hold a value written under laxer rules than the
+// ones now compiled in, and an unscreened tag would otherwise be replayed on
+// the wire and re-persisted on every pass. Dropping it costs one
+// unconditional refresh.
+func (k *KeyResolver) cachedState(ctx context.Context, source Source) (CacheState, error) {
+	state, err := k.cache.Get(ctx, source.CacheKey())
+	if err != nil {
+		return CacheState{Document: nil, ETag: "", ExpiresAt: time.Time{}, RefreshedAt: time.Time{}}, fmt.Errorf("read key set cache: %w", err)
+	}
+	state.ETag = httpcache.SanitizeETag(state.ETag, maxETagLength)
+	return state, nil
+}
+
 // store persists a resolution that consulted the upstream. A Put failure is
 // logged rather than propagated: the resolution in hand is valid and the
 // verification it serves should not fail because storage hiccuped — the cost
@@ -268,7 +286,7 @@ func (k *KeyResolver) store(ctx context.Context, source Source, prior CacheState
 	if result.Outcome != CacheOutcomeRefreshed && result.Outcome != CacheOutcomeNotModified {
 		return
 	}
-	if current, err := k.cache.Get(ctx, source.CacheKey()); err == nil && current.RefreshedAt.After(prior.RefreshedAt) {
+	if current, err := k.cachedState(ctx, source); err == nil && current.RefreshedAt.After(prior.RefreshedAt) {
 		return
 	}
 	state := CacheState{
@@ -293,7 +311,7 @@ func (k *KeyResolver) store(ctx context.Context, source Source, prior CacheState
 // document since this resolution began must not have it overwritten with the
 // prior one.
 func (k *KeyResolver) markConsultFailure(ctx context.Context, source Source, prior CacheState) {
-	if current, err := k.cache.Get(ctx, source.CacheKey()); err == nil && current.RefreshedAt.After(prior.RefreshedAt) {
+	if current, err := k.cachedState(ctx, source); err == nil && current.RefreshedAt.After(prior.RefreshedAt) {
 		return
 	}
 	marked := CacheState{
