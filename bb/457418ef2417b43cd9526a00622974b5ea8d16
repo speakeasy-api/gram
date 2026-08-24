@@ -21,6 +21,7 @@ server/internal/background/activities/session_quarantine.go
   s_d8569503ddf9c1::t_346153be4efc1a 95
   s_d8569503ddf9c1::t_c7aeab78e8a814 40-41,49,51,69
   s_d8569503ddf9c1::t_aeedc6a00516e8 5,37,73,85
+  s_d16499501a966c::t_bef0c20fe995a5 53-68,74-81
 client/dashboard/src/pages/security/PolicyCenter.tsx
   s_d8569503ddf9c1::t_0e2709b8da8947 1259-1263,1280-1281,1310-1314,1348
   s_d8569503ddf9c1::t_4cc4e20bddd484 1078-1080,1087,1198-1210,1213-1214,1223-1232,1241,1243-1257,1282-1290
@@ -46,6 +47,7 @@ server/internal/background/activities/session_quarantine_test.go
   s_d8569503ddf9c1::t_fef2e842d12a39 1-4,6-13,15-45,61-63,65-69,91-94,102,104-109,111-113,118
   s_d8569503ddf9c1::t_925ab7b5ecc1a7 96,99
   s_d8569503ddf9c1::t_6435fb345bdd6e 5,14,46-60,64,70-90,115-117
+  s_d16499501a966c::t_bef0c20fe995a5 98,101,114
 server/internal/background/session_quarantine.go
   s_d8569503ddf9c1::t_5e5f2e8fe75d24 1-20,26-29,31-84,86-88
 server/internal/demoseed/postgres.sql
@@ -60,6 +62,7 @@ server/internal/hooks/session_quarantine_test.go
   s_d8569503ddf9c1::t_6189e4044d3777 51-53,56-61,65-68,114-129
   s_d8569503ddf9c1::t_03d47f82f28929 130-131
   s_d8569503ddf9c1::t_a6d1d40ae091a4 9,20,28-44,48,75-76,78-80,85-87,89-98
+  s_d16499501a966c::t_f3c1e0d9bbbc11 77,88
 server/internal/hooks/quarantine_gate.go
   s_d8569503ddf9c1::t_5e5f2e8fe75d24 144
   s_d8569503ddf9c1::t_c780f069700524 5,99
@@ -71,6 +74,7 @@ server/internal/hooks/quarantine_gate.go
   s_d8569503ddf9c1::t_6cccd908f1a99c 52,196
   s_d8569503ddf9c1::t_e75bfc14563b67 178-180
   s_d8569503ddf9c1::t_3744d9db763484 46
+  s_d16499501a966c::t_f3c1e0d9bbbc11 181,225
 server/internal/risk/impl.go
   s_d8569503ddf9c1::t_bd971aa90a91f7 66
   s_d8569503ddf9c1::t_07a8ca003341ec 707-711,719-726,728-729
@@ -82,10 +86,14 @@ server/internal/risk/impl.go
   s_d8569503ddf9c1::t_9a147e129c2ff6 717
   s_d8569503ddf9c1::t_1e7c09bf50daf1 704
   s_d8569503ddf9c1::t_7c33d18a7631d9 679-690,692-696,727,730
+  s_d16499501a966c::t_89f97e9951d708 691,743-744
+  s_d16499501a966c::t_280aa084621b96 749
+  s_d16499501a966c::t_91a88f25897ef5 745
 server/internal/risk/session_quarantine_test.go
   s_d8569503ddf9c1::t_346153be4efc1a 73
   s_d8569503ddf9c1::t_23874792cf5a37 37
   s_d8569503ddf9c1::t_fef2e842d12a39 1-3,7-16,18,20-23,34-36,38-63,65-67,74-78
+  s_d16499501a966c::t_f01886fdf2173c 150-152,169-173
 server/internal/sessionquarantine/quarantine.go
   s_d8569503ddf9c1::t_5e5f2e8fe75d24 12,27-38,40-44,46-48
   s_d8569503ddf9c1::t_7baa113e445eae 1-11,13-17,19-23,25-26,49-50,53-54,56-57,60-74,76-84,87-102
@@ -233,8 +241,10 @@ server/internal/risk/session_quarantine_approval_test.go
   s_d8569503ddf9c1::t_5e8d43a2bcf7da 4,13,168
   s_d8569503ddf9c1::t_59307a3352591b 160,162,164
   s_d8569503ddf9c1::t_1f66b5b3b422ea 1-3,5-12,14-63,65-73,79,81-82,84-127,133-134,136-137,139-159,161,163,165-167,169-209
+  s_d16499501a966c::t_fe0ad512e573bd 64,74-78,80,83,128-132,135,138
 server/internal/sessionquarantine/request_state.go
   s_d8569503ddf9c1::t_1c56d4da3095ab 1-17,20-21,23-24,27-40,43-51,54-61
+  s_d16499501a966c::t_ac19ba5f550bba 18-19,22,25-26,41-42,52-53
 server/internal/risk/policy_bypass.go
   s_d8569503ddf9c1::t_5c0f218b3b4b83 333,477,549
   s_d8569503ddf9c1::t_c42ee12af5e5a4 285,558,768-787,836-840,851-867
@@ -243,6 +253,7 @@ server/internal/risk/policy_bypass.go
   s_d8569503ddf9c1::t_ffcbb1633ce0d2 14
   s_d8569503ddf9c1::t_099e6a2b78da3e 18,29,42-43,46,48,229-247,274,276-284
   s_d8569503ddf9c1::t_0aa4c4b5ef6806 868-869
+  s_d16499501a966c::t_89f97e9951d708 275,348,368,449-450,520
 server/internal/risk/policy_bypass_token_internal_test.go
   s_d8569503ddf9c1::t_ddf09b200c78a6 74-76
 server/internal/risk/policy_bypass_token.go
@@ -253,6 +264,8 @@ server/internal/risk/shadow_mcp_offline_bypass_integration_test.go
   s_d8569503ddf9c1::t_4cdd39ff25271f 118-120
 seed/demo/PAGES.md
   s_1b89b64f839d5a::t_5a48e075e9e294 12
+  s_d16499501a966c::t_91a88f25897ef5 13-18,20-29,31-37
+  s_d16499501a966c::t_1201701ab9b874 19,30
 ---
 {
   "schema_version": "authorship/3.0.0",
@@ -267,6 +280,14 @@ seed/demo/PAGES.md
         "model": "claude-fable-5"
       },
       "human_author": null
+    },
+    "s_d16499501a966c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a03341-61d8-73b1-b230-ec13908068ae",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
     },
     "s_d8569503ddf9c1": {
       "agent_id": {
