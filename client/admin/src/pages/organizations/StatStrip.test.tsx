@@ -51,6 +51,8 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
 const STATS: AdminOrganizationStats = {
   total: 48213,
   created_last_7_days: 1372,
+  customers: 7318,
+  customers_created_last_7_days: 2417,
   trials_ending_soon: 926,
   disabled: 5904,
   disabled_last_7_days: 1064,
@@ -74,7 +76,7 @@ const ORGS: AdminOrganization[] = [
 // Spoken, never painted: each cell ends with a sentence naming what pressing
 // it does.
 const ACTION: Record<string, string> = {
-  Organizations: "Show every organization",
+  Customers: "Show the PAYG and enterprise organizations",
   "Trials ending in 7 days": "Show the trials ending in 7 days",
   Disabled: "Show the disabled organizations",
 };
@@ -117,7 +119,7 @@ function lastListParams(): ListOrganizationsParams {
 async function renderList(initialPath = "/organizations"): Promise<AnyRouter> {
   const { router } = await renderRouteTree(routeTree, { initialPath });
   await waitFor(() => {
-    expect(within(strip()).getByText(figure(STATS.total))).toBeTruthy();
+    expect(within(strip()).getByText(figure(STATS.customers))).toBeTruthy();
   });
   return router;
 }
@@ -146,8 +148,8 @@ describe("organizations stat strip figures", () => {
   it("reads each cell out of the field the contract names for it", async () => {
     await renderList();
 
-    expect(cell("Organizations").textContent).toBe(
-      `Organizations${figure(STATS.total)}${figure(STATS.created_last_7_days)} new this week${ACTION["Organizations"]}`,
+    expect(cell("Customers").textContent).toBe(
+      `Customers${figure(STATS.customers)}${figure(STATS.customers_created_last_7_days)} new this week${ACTION["Customers"]}`,
     );
     expect(cell("Trials ending in 7 days").textContent).toBe(
       `Trials ending in 7 days${figure(STATS.trials_ending_soon)}${ACTION["Trials ending in 7 days"]}`,
@@ -163,7 +165,7 @@ describe("organizations stat strip figures", () => {
     const trials = cell("Trials ending in 7 days");
     expect(within(trials).queryByText(/this week/)).toBeNull();
     expect(trials.querySelectorAll("span").length).toBe(3);
-    expect(cell("Organizations").querySelectorAll("span").length).toBe(4);
+    expect(cell("Customers").querySelectorAll("span").length).toBe(4);
   });
 
   it("renders a figure of zero as a figure, not as a missing one", async () => {
@@ -187,7 +189,20 @@ describe("organizations stat strip figures", () => {
     expect(cell("Disabled").textContent).toBe(
       `Disabled${figure(STATS.disabled)}— this week${ACTION["Disabled"]}`,
     );
-    expect(cell("Organizations").textContent).toContain(figure(STATS.total));
+    expect(cell("Customers").textContent).toContain(figure(STATS.customers));
+  });
+
+  it("counts customers, not the platform, in the first cell", async () => {
+    await renderList();
+
+    // The two figures are distinct in STATS, so a cell reading `total` by
+    // mistake shows a number no assertion here accepts.
+    expect(within(strip()).queryByText(figure(STATS.total))).toBeNull();
+    expect(
+      within(strip()).queryByText(figure(STATS.created_last_7_days), {
+        exact: false,
+      }),
+    ).toBeNull();
   });
 
   it("says nothing where the figures have not arrived", async () => {
@@ -200,14 +215,14 @@ describe("organizations stat strip figures", () => {
 
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
 
-    expect(cell("Organizations").textContent).toBe(
-      `Organizations—${ACTION["Organizations"]}`,
+    expect(cell("Customers").textContent).toBe(
+      `Customers—${ACTION["Customers"]}`,
     );
     expect(cell("Disabled").textContent).toBe(`Disabled—${ACTION["Disabled"]}`);
 
     settle(STATS);
     await waitFor(() => {
-      expect(cell("Organizations").textContent).toContain(figure(STATS.total));
+      expect(cell("Customers").textContent).toContain(figure(STATS.customers));
     });
   });
 
@@ -223,8 +238,8 @@ describe("organizations stat strip figures", () => {
     );
     // The cells too: a failure falling back to a figure would put three zeroes
     // above a table full of rows.
-    expect(cell("Organizations").textContent).toBe(
-      `Organizations—${ACTION["Organizations"]}`,
+    expect(cell("Customers").textContent).toBe(
+      `Customers—${ACTION["Customers"]}`,
     );
     expect(cell("Trials ending in 7 days").textContent).toBe(
       `Trials ending in 7 days—${ACTION["Trials ending in 7 days"]}`,
@@ -265,23 +280,42 @@ describe("organizations stat strip figures", () => {
 });
 
 describe("organizations stat strip navigation", () => {
-  it("opens every organization from the first cell, disabled ones included", async () => {
+  it("opens the paying organizations from the first cell, disabled ones included", async () => {
     const router = await renderList(
       urlFor({ type: ["pro"], trial: ["running"], disabled: ["disabled"] }),
     );
 
-    fireEvent.click(cell("Organizations"));
+    fireEvent.click(cell("Customers"));
 
-    // Spelled out, because an absent status filter is not "no filter": the
+    // Both paid types, in the order the Type picker offers them. The status is
+    // spelled out, because an absent status filter is not "no filter": the
     // server reads it as active only.
     await waitFor(() => {
-      expect(currentSearch(router)).toBe('?disabled=["active","disabled"]');
+      expect(currentSearch(router)).toBe(
+        '?type=["payg","enterprise"]&disabled=["active","disabled"]',
+      );
     });
     await waitFor(() => {
-      expect(lastListParams().disabled_states).toEqual(["active", "disabled"]);
+      expect(lastListParams().account_types).toEqual(["payg", "enterprise"]);
     });
-    expect(lastListParams().account_types).toBeUndefined();
+    expect(lastListParams().disabled_states).toEqual(["active", "disabled"]);
     expect(lastListParams().trial_states).toBeUndefined();
+  });
+
+  it("names both paid types on the type control rather than counting them", async () => {
+    await renderList();
+
+    fireEvent.click(cell("Customers"));
+
+    // Type has no "all" label, so two chosen values are counted. What matters
+    // is that the control does not read "All types" over a filtered list.
+    await waitFor(() => {
+      expect(
+        screen
+          .getByRole("button", { name: /^Type filter:/ })
+          .getAttribute("aria-label"),
+      ).toBe("Type filter: 2 selected");
+    });
   });
 
   it("filters to the trials the middle cell counted, at either status", async () => {
@@ -441,7 +475,7 @@ describe("organizations stat strip navigation", () => {
   it("names the whole platform on the status control rather than counting it", async () => {
     await renderList();
 
-    fireEvent.click(cell("Organizations"));
+    fireEvent.click(cell("Customers"));
 
     // "2 selected" reads as a narrowing, and "Active only" would be false.
     await waitFor(() => {
@@ -513,6 +547,8 @@ describe("organizations stat strip and the table's filters", () => {
     mocks.getOrganizationStats.mockResolvedValue({
       total: 1,
       created_last_7_days: 1,
+      customers: 1,
+      customers_created_last_7_days: 1,
       trials_ending_soon: 1,
       disabled: 1,
       disabled_last_7_days: 1,
@@ -526,7 +562,7 @@ describe("organizations stat strip and the table's filters", () => {
       expect(lastListParams().disabled_states).toEqual(["disabled"]);
     });
 
-    expect(cell("Organizations").textContent).toContain(figure(STATS.total));
+    expect(cell("Customers").textContent).toContain(figure(STATS.customers));
     expect(cell("Disabled").textContent).toContain(figure(STATS.disabled));
   });
 
@@ -539,7 +575,7 @@ describe("organizations stat strip and the table's filters", () => {
     });
 
     expect(currentSearch(router)).toBe('?disabled=["disabled"]');
-    expect(cell("Organizations").textContent).toContain(figure(STATS.total));
+    expect(cell("Customers").textContent).toContain(figure(STATS.customers));
     expect(cell("Trials ending in 7 days").textContent).toContain(
       figure(STATS.trials_ending_soon),
     );
@@ -571,17 +607,13 @@ describe("organizations stat strip placement", () => {
       within(strip())
         .getAllByRole("button")
         .map((control) => control.querySelector("span")?.textContent),
-    ).toEqual(["Organizations", "Trials ending in 7 days", "Disabled"]);
+    ).toEqual(["Customers", "Trials ending in 7 days", "Disabled"]);
   });
 
   it("offers each figure as a control the keyboard reaches", async () => {
     await renderList();
 
-    for (const label of [
-      "Organizations",
-      "Trials ending in 7 days",
-      "Disabled",
-    ]) {
+    for (const label of ["Customers", "Trials ending in 7 days", "Disabled"]) {
       const control = cell(label);
       // A div with an onClick answers no key; a bare button in a form submits.
       expect(control.tagName).toBe("BUTTON");
@@ -596,7 +628,7 @@ describe("organizations stat strip accessible names", () => {
 
     // The computed name: an aria-label added later would drop the figure.
     for (const name of [
-      `Organizations ${figure(STATS.total)} ${figure(STATS.created_last_7_days)} new this week ${ACTION["Organizations"]}`,
+      `Customers ${figure(STATS.customers)} ${figure(STATS.customers_created_last_7_days)} new this week ${ACTION["Customers"]}`,
       `Trials ending in 7 days ${figure(STATS.trials_ending_soon)} ${ACTION["Trials ending in 7 days"]}`,
       `Disabled ${figure(STATS.disabled)} ${figure(STATS.disabled_last_7_days)} this week ${ACTION["Disabled"]}`,
     ]) {
@@ -614,11 +646,7 @@ describe("organizations stat strip accessible names", () => {
   it("leaves the name to come from the contents", async () => {
     await renderList();
 
-    for (const label of [
-      "Organizations",
-      "Trials ending in 7 days",
-      "Disabled",
-    ]) {
+    for (const label of ["Customers", "Trials ending in 7 days", "Disabled"]) {
       expect(cell(label).getAttribute("aria-label")).toBeNull();
       expect(cell(label).getAttribute("aria-labelledby")).toBeNull();
     }
@@ -634,11 +662,11 @@ describe("organizations stat strip accessible names", () => {
 
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
 
-    expect(cell("Organizations").getAttribute("aria-busy")).toBe("true");
+    expect(cell("Customers").getAttribute("aria-busy")).toBe("true");
 
     settle(STATS);
     await waitFor(() => {
-      expect(cell("Organizations").getAttribute("aria-busy")).toBe("false");
+      expect(cell("Customers").getAttribute("aria-busy")).toBe("false");
     });
   });
 });

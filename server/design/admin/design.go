@@ -140,10 +140,12 @@ var AdminListOrganizationsResult = Type("AdminListOrganizationsResult", func() {
 
 var AdminOrganizationStats = Type("AdminOrganizationStats", func() {
 	Description("Platform-wide organization counts surfaced above the admin organizations list.")
-	Required("total", "created_last_7_days", "trials_ending_soon", "disabled", "disabled_last_7_days")
+	Required("total", "created_last_7_days", "customers", "customers_created_last_7_days", "trials_ending_soon", "disabled", "disabled_last_7_days")
 
 	Attribute("total", Int64, "Every organization on the platform, disabled ones included.")
 	Attribute("created_last_7_days", Int64, "Organizations created in the last 7 days, whatever their current status.")
+	Attribute("customers", Int64, "Organizations on a paid account type (payg or enterprise), disabled ones included.")
+	Attribute("customers_created_last_7_days", Int64, "Customers created in the last 7 days, whatever their current status.")
 	Attribute("trials_ending_soon", Int64, "Organizations whose trial_state is ending_soon.")
 	Attribute("disabled", Int64, "Organizations with disabled_at set.")
 	Attribute("disabled_last_7_days", Int64, "Organizations disabled in the last 7 days.")

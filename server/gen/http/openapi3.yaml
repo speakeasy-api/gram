@@ -62012,6 +62012,14 @@ components:
                     type: integer
                     description: Organizations created in the last 7 days, whatever their current status.
                     format: int64
+                customers:
+                    type: integer
+                    description: Organizations on a paid account type (payg or enterprise), disabled ones included.
+                    format: int64
+                customers_created_last_7_days:
+                    type: integer
+                    description: Customers created in the last 7 days, whatever their current status.
+                    format: int64
                 disabled:
                     type: integer
                     description: Organizations with disabled_at set.
@@ -62032,6 +62040,8 @@ components:
             required:
                 - total
                 - created_last_7_days
+                - customers
+                - customers_created_last_7_days
                 - trials_ending_soon
                 - disabled
                 - disabled_last_7_days

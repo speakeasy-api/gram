@@ -158,6 +158,8 @@ const ORGS: AdminOrganization[] = [
 const STATS: AdminOrganizationStats = {
   total: 12,
   created_last_7_days: 3,
+  customers: 4,
+  customers_created_last_7_days: 1,
   trials_ending_soon: 2,
   disabled: 1,
   disabled_last_7_days: 1,

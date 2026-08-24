@@ -403,6 +403,11 @@ type GetOrganizationStatsResponseBody struct {
 	Total *int64 `form:"total,omitempty" json:"total,omitempty" xml:"total,omitempty"`
 	// Organizations created in the last 7 days, whatever their current status.
 	CreatedLast7Days *int64 `form:"created_last_7_days,omitempty" json:"created_last_7_days,omitempty" xml:"created_last_7_days,omitempty"`
+	// Organizations on a paid account type (payg or enterprise), disabled ones
+	// included.
+	Customers *int64 `form:"customers,omitempty" json:"customers,omitempty" xml:"customers,omitempty"`
+	// Customers created in the last 7 days, whatever their current status.
+	CustomersCreatedLast7Days *int64 `form:"customers_created_last_7_days,omitempty" json:"customers_created_last_7_days,omitempty" xml:"customers_created_last_7_days,omitempty"`
 	// Organizations whose trial_state is ending_soon.
 	TrialsEndingSoon *int64 `form:"trials_ending_soon,omitempty" json:"trials_ending_soon,omitempty" xml:"trials_ending_soon,omitempty"`
 	// Organizations with disabled_at set.
@@ -7429,11 +7434,13 @@ func NewRearmTrialGatewayError(body *RearmTrialGatewayErrorResponseBody) *goa.Se
 // "getOrganizationStats" endpoint result from a HTTP "OK" response.
 func NewGetOrganizationStatsAdminOrganizationStatsOK(body *GetOrganizationStatsResponseBody) *admin.AdminOrganizationStats {
 	v := &admin.AdminOrganizationStats{
-		Total:             *body.Total,
-		CreatedLast7Days:  *body.CreatedLast7Days,
-		TrialsEndingSoon:  *body.TrialsEndingSoon,
-		Disabled:          *body.Disabled,
-		DisabledLast7Days: *body.DisabledLast7Days,
+		Total:                     *body.Total,
+		CreatedLast7Days:          *body.CreatedLast7Days,
+		Customers:                 *body.Customers,
+		CustomersCreatedLast7Days: *body.CustomersCreatedLast7Days,
+		TrialsEndingSoon:          *body.TrialsEndingSoon,
+		Disabled:                  *body.Disabled,
+		DisabledLast7Days:         *body.DisabledLast7Days,
 	}
 
 	return v
@@ -9242,6 +9249,12 @@ func ValidateGetOrganizationStatsResponseBody(body *GetOrganizationStatsResponse
 	}
 	if body.CreatedLast7Days == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_last_7_days", "body"))
+	}
+	if body.Customers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("customers", "body"))
+	}
+	if body.CustomersCreatedLast7Days == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("customers_created_last_7_days", "body"))
 	}
 	if body.TrialsEndingSoon == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("trials_ending_soon", "body"))
