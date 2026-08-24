@@ -494,7 +494,6 @@ SELECT
     s.slug AS mcp_server_slug,
     s.visibility AS mcp_server_visibility,
     s.toolset_id AS mcp_server_toolset_id,
-    t.mcp_is_public AS mcp_server_toolset_is_public,
     s.remote_mcp_server_id AS mcp_server_remote_mcp_server_id,
     s.tunneled_mcp_server_id AS mcp_server_tunneled_mcp_server_id,
     s.unproxied_mcp_server_id AS mcp_server_unproxied_mcp_server_id,
@@ -507,10 +506,6 @@ JOIN mcp_servers s
  AND s.deleted IS FALSE
  AND s.visibility <> 'disabled'
  AND s.slug IS NOT NULL
-LEFT JOIN toolsets t
-  ON t.id = s.toolset_id
- AND t.project_id = s.project_id
- AND t.deleted IS FALSE
 WHERE m.meta_mcp_server_id = $1
   AND m.project_id = $2
   AND m.deleted IS FALSE
@@ -530,7 +525,6 @@ type ListServableMetaMCPMembersRow struct {
 	McpServerSlug                  pgtype.Text
 	McpServerVisibility            string
 	McpServerToolsetID             uuid.NullUUID
-	McpServerToolsetIsPublic       pgtype.Bool
 	McpServerRemoteMcpServerID     uuid.NullUUID
 	McpServerTunneledMcpServerID   uuid.NullUUID
 	McpServerUnproxiedMcpServerID  uuid.NullUUID
@@ -545,8 +539,7 @@ type ListServableMetaMCPMembersRow struct {
 // serverslug--toolname contract cannot address. The dashboard listing keeps
 // the unfiltered query so admins still see every member. Carries the backend
 // and dispatch columns the gateway runtime needs to classify and execute
-// against each member, plus the member toolset's own mcp_is_public, which
-// floors the visibility decision (the two columns are not synced).
+// against each member.
 func (q *Queries) ListServableMetaMCPMembers(ctx context.Context, arg ListServableMetaMCPMembersParams) ([]ListServableMetaMCPMembersRow, error) {
 	rows, err := q.db.Query(ctx, listServableMetaMCPMembers, arg.MetaMcpServerID, arg.ProjectID)
 	if err != nil {
@@ -564,7 +557,6 @@ func (q *Queries) ListServableMetaMCPMembers(ctx context.Context, arg ListServab
 			&i.McpServerSlug,
 			&i.McpServerVisibility,
 			&i.McpServerToolsetID,
-			&i.McpServerToolsetIsPublic,
 			&i.McpServerRemoteMcpServerID,
 			&i.McpServerTunneledMcpServerID,
 			&i.McpServerUnproxiedMcpServerID,

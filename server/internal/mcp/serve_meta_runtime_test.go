@@ -590,10 +590,8 @@ func TestServePublic_MetaEndpoint_ListServers_UnknownVisibilityFailsClosed(t *te
 }
 
 // Ungated meta endpoints serve anonymously: without the issuer gate no
-// identity exists. mcp_servers.visibility is authoritative but floored by the
-// member toolset's own mcp_is_public, so a member the direct surface hides is
-// absent from the listing as well as from drill-down — the gateway never
-// discloses a name that /x/mcp would withhold.
+// identity exists, so a private-toolset member is listed (server visibility
+// is public) but its drill-down reads as nonexistent.
 func TestServePublic_MetaEndpoint_Anonymous_PrivateToolsetMemberHidden(t *testing.T) {
 	t.Parallel()
 
@@ -616,7 +614,7 @@ func TestServePublic_MetaEndpoint_Anonymous_PrivateToolsetMemberHidden(t *testin
 		} `json:"servers"`
 	}
 	require.NoError(t, json.Unmarshal(result.StructuredContent, &listed))
-	require.Empty(t, listed.Servers)
+	require.Len(t, listed.Servers, 1)
 
 	envelope = callMetaTool(t, anonCtx, ti, slug, "describe_server", map[string]any{"server": member.slug})
 	require.Contains(t, string(envelope["error"]), "unknown server")
