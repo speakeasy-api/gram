@@ -48,12 +48,12 @@ func TestGetInferenceSpendHistoryIncludesCurrentMonthWhenEmpty(t *testing.T) {
 	service, _, _, _ := newTUMTestService(t, organizationID)
 	ctx := inferenceSpendHistoryContext(t, organizationID, authz.NewGrant(authz.ScopeOrgRead, organizationID))
 
+	now := time.Now().UTC()
+	currentMonth := startOfUTCMonth(now)
 	result, err := service.GetInferenceSpendHistory(ctx, &gen.GetInferenceSpendHistoryPayload{})
 	require.NoError(t, err)
 	require.Len(t, result.Months, 1)
 
-	now := time.Now().UTC()
-	currentMonth := startOfUTCMonth(now)
 	assert.Equal(t, currentMonth.Format(time.RFC3339), result.Months[0].MonthStart)
 	assert.Equal(t, currentMonth.AddDate(0, 1, 0).Format(time.RFC3339), result.Months[0].MonthEnd)
 	assert.Equal(t, zeroInferenceSpendUSD, result.Months[0].SpendUsd)
@@ -73,9 +73,11 @@ func TestGetInferenceSpendHistoryGroupsCompletedDaysByCalendarMonth(t *testing.T
 	currentMonth := startOfUTCMonth(now)
 	previousMonth := currentMonth.AddDate(0, -1, 0)
 	completed := today.AddDate(0, 0, -1)
+	expectedCurrentSpend := zeroInferenceSpendUSD
 	if !completed.Before(currentMonth) {
 		upsertPaygSummarySpendForKey(t, db, organizationID, openrouter.KeyTypeChat, currentMonth, "1.200000")
 		upsertPaygSummarySpendForKey(t, db, organizationID, openrouter.KeyTypeInternal, currentMonth, "0.300000")
+		expectedCurrentSpend = "1.500000"
 	}
 	upsertPaygSummarySpendForKey(t, db, organizationID, openrouter.KeyTypeChat, previousMonth, "4.000000")
 	upsertPaygSummarySpendForKey(t, db, organizationID, openrouter.KeyTypeInternal, previousMonth.AddDate(0, 0, 1), "0.500000")
@@ -89,7 +91,7 @@ func TestGetInferenceSpendHistoryGroupsCompletedDaysByCalendarMonth(t *testing.T
 
 	assert.Equal(t, currentMonth.Format(time.RFC3339), result.Months[0].MonthStart)
 	assert.True(t, result.Months[0].Current)
-	assert.NotContains(t, result.Months[0].SpendUsd, "9.")
+	assert.Equal(t, expectedCurrentSpend, result.Months[0].SpendUsd)
 
 	previous := result.Months[1]
 	assert.Equal(t, previousMonth.Format(time.RFC3339), previous.MonthStart)
