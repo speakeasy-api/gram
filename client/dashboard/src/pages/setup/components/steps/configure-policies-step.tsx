@@ -165,7 +165,12 @@ const MESSAGE_TYPES: PolicyMessageType[] = [
 // values are validated before entering local state — an unknown value would
 // otherwise crash `formatMessageTypes` (POLICY_MESSAGE_TYPE_META[t].label).
 function isPolicyAction(value: unknown): value is PolicyAction {
-  return value === "flag" || value === "block" || value === "warn";
+  return (
+    value === "flag" ||
+    value === "block" ||
+    value === "warn" ||
+    value === "quarantine"
+  );
 }
 
 function isPolicyMessageType(value: unknown): value is PolicyMessageType {
@@ -631,7 +636,7 @@ export function ConfigurePoliciesStep({
                       })
                     }
                     disabled={!activeConfig.enabled || isShadowMcp}
-                    className="grid grid-cols-3 gap-2"
+                    className="grid grid-cols-2 gap-2 xl:grid-cols-4"
                   >
                     <ActionRadio
                       value="flag"
@@ -653,6 +658,13 @@ export function ConfigurePoliciesStep({
                       description="Reject the call, return an error"
                       disabled={!activeConfig.enabled || isShadowMcp}
                       selected={activeConfig.action === "block"}
+                    />
+                    <ActionRadio
+                      value="quarantine"
+                      label="Quarantine"
+                      description="Reject the call and freeze the session until an admin releases it"
+                      disabled={!activeConfig.enabled || isShadowMcp}
+                      selected={activeConfig.action === "quarantine"}
                     />
                   </RadioGroup>
                 </section>

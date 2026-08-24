@@ -17,7 +17,7 @@ import {
 } from "./riskpolicymodelconfig.js";
 
 /**
- * Policy action: flag, warn (challenge), or block.
+ * Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).
  */
 export const UpdateRiskPolicyRequestBodyAction = {
   Flag: "flag",
@@ -26,7 +26,7 @@ export const UpdateRiskPolicyRequestBodyAction = {
   Quarantine: "quarantine",
 } as const;
 /**
- * Policy action: flag, warn (challenge), or block.
+ * Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).
  */
 export type UpdateRiskPolicyRequestBodyAction = ClosedEnum<
   typeof UpdateRiskPolicyRequestBodyAction
@@ -62,7 +62,7 @@ export type UpdateRiskPolicyRequestBodyShadowMcpDisposition = ClosedEnum<
 
 export type UpdateRiskPolicyRequestBody = {
   /**
-   * Policy action: flag, warn (challenge), or block.
+   * Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).
    */
   action?: UpdateRiskPolicyRequestBodyAction | undefined;
   /**

@@ -43766,7 +43766,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/RiskIDRequestBody'
+                            $ref: '#/components/schemas/SessionQuarantineReleaseRequestBody'
                 required: true
             responses:
                 "200":
@@ -65516,7 +65516,7 @@ components:
             properties:
                 action:
                     type: string
-                    description: 'Policy action: flag, warn (challenge), or block.'
+                    description: 'Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).'
                     default: flag
                     enum:
                         - flag
@@ -78953,6 +78953,15 @@ components:
                 - user_id
                 - reason
                 - created_at
+        SessionQuarantineReleaseRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The session quarantine ID.
+                    format: uuid
+            required:
+                - id
         SessionSummary:
             type: object
             properties:
@@ -84563,7 +84572,7 @@ components:
             properties:
                 action:
                     type: string
-                    description: 'Policy action: flag, warn (challenge), or block.'
+                    description: 'Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).'
                     enum:
                         - flag
                         - warn

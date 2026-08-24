@@ -42,7 +42,7 @@ var _ = Service("risk", func() {
 			Attribute("scope_include", String, "CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Omit/empty means all messages are in scope.")
 			Attribute("scope_exempt", String, "CEL exemption predicate: the policy is skipped for a message when this boolean expression is true. Omit/empty means no inline exemption.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
-			Attribute("action", String, "Policy action: flag, warn (challenge), or block.", func() {
+			Attribute("action", String, "Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).", func() {
 				shared.RiskPolicyActionEnum()
 				Default("flag")
 			})
@@ -194,7 +194,7 @@ var _ = Service("risk", func() {
 			Attribute("scope_include", String, "CEL scope predicate (in addition to message_types). Omit to preserve the current value; send empty to clear.")
 			Attribute("scope_exempt", String, "CEL exemption predicate. Omit to preserve the current value; send empty to clear.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
-			Attribute("action", String, "Policy action: flag, warn (challenge), or block.", func() {
+			Attribute("action", String, "Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).", func() {
 				shared.RiskPolicyActionEnum()
 			})
 			Attribute("audience_type", String, "Policy audience type: everyone or targeted. Omit to preserve the current audience type.", func() {
@@ -312,7 +312,7 @@ var _ = Service("risk", func() {
 			security.ByKeyHeader()
 			security.SessionHeader()
 			security.ProjectHeader()
-			Body(RiskIDRequestBody)
+			Body(SessionQuarantineReleaseRequestBody)
 			Response(StatusOK)
 		})
 
@@ -2023,6 +2023,15 @@ var RiskIDRequestBody = Type("RiskIDRequestBody", func() {
 	Meta("openapi:typename", "RiskIDRequestBody")
 
 	Attribute("id", String, "The resource ID.", func() {
+		Format(FormatUUID)
+	})
+	Required("id")
+})
+
+var SessionQuarantineReleaseRequestBody = Type("SessionQuarantineReleaseRequestBody", func() {
+	Meta("openapi:typename", "SessionQuarantineReleaseRequestBody")
+
+	Attribute("id", String, "The session quarantine ID.", func() {
 		Format(FormatUUID)
 	})
 	Required("id")

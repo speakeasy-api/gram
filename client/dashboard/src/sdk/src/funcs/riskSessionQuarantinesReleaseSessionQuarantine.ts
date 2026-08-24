@@ -102,7 +102,9 @@ async function $do(
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.RiskIDRequestBody, { explode: true });
+  const body = encodeJSON("body", payload.SessionQuarantineReleaseRequestBody, {
+    explode: true,
+  });
 
   const path = pathToFunc("/rpc/risk.releaseSessionQuarantine")();
 

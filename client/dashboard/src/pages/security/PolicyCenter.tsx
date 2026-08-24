@@ -630,8 +630,12 @@ function PolicyCenterContent() {
   const routes = useRoutes();
   const telemetry = useTelemetry();
   const { data, isLoading } = useRiskListPolicies();
-  const { data: quarantinesData, isLoading: quarantinesLoading } =
-    useRiskListSessionQuarantines();
+  const {
+    data: quarantinesData,
+    isLoading: quarantinesLoading,
+    isError: quarantinesError,
+    refetch: refetchQuarantines,
+  } = useRiskListSessionQuarantines();
   const nlEnabled = telemetry.isFeatureEnabled("gram-prompt-policies") ?? false;
 
   const policyRows = useMemo(
@@ -1034,7 +1038,7 @@ function PolicyCenterContent() {
 
   function releaseQuarantine(id: string) {
     releaseQuarantineMutation.mutate({
-      request: { riskIDRequestBody: { id } },
+      request: { sessionQuarantineReleaseRequestBody: { id } },
     });
   }
 
@@ -1139,6 +1143,22 @@ function PolicyCenterContent() {
     quarantinesBody = (
       <div className="flex items-center justify-center py-20">
         <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
+      </div>
+    );
+  } else if (quarantinesError) {
+    quarantinesBody = (
+      <div className="border-border flex flex-col items-center gap-3 border py-12 text-center">
+        <Text small muted>
+          We couldn&apos;t load session quarantines.
+        </Text>
+        <Button
+          variant="tertiary"
+          size="sm"
+          onClick={() => void refetchQuarantines()}
+        >
+          <RefreshCw className="h-4 w-4" />
+          <Button.Text>Retry</Button.Text>
+        </Button>
       </div>
     );
   }

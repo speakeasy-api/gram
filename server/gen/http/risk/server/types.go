@@ -58,7 +58,8 @@ type CreateRiskPolicyRequestBody struct {
 	ScopeExempt *string `form:"scope_exempt,omitempty" json:"scope_exempt,omitempty" xml:"scope_exempt,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
-	// Policy action: flag, warn (challenge), or block.
+	// Policy action: flag, warn (challenge), block, or quarantine (deny and freeze
+	// the hook session).
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
 	// Policy audience type: everyone or targeted.
 	AudienceType *string `form:"audience_type,omitempty" json:"audience_type,omitempty" xml:"audience_type,omitempty"`
@@ -133,7 +134,8 @@ type UpdateRiskPolicyRequestBody struct {
 	ScopeExempt *string `form:"scope_exempt,omitempty" json:"scope_exempt,omitempty" xml:"scope_exempt,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
-	// Policy action: flag, warn (challenge), or block.
+	// Policy action: flag, warn (challenge), block, or quarantine (deny and freeze
+	// the hook session).
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
 	// Policy audience type: everyone or targeted. Omit to preserve the current
 	// audience type.
@@ -175,7 +177,7 @@ type UpdateRiskPolicyRequestBody struct {
 // ReleaseSessionQuarantineRequestBody is the type of the "risk" service
 // "releaseSessionQuarantine" endpoint HTTP request body.
 type ReleaseSessionQuarantineRequestBody struct {
-	// The resource ID.
+	// The session quarantine ID.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 }
 

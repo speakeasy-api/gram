@@ -5,10 +5,10 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import {
-  RiskIDRequestBody,
-  RiskIDRequestBody$Outbound,
-  RiskIDRequestBody$outboundSchema,
-} from "../components/riskidrequestbody.js";
+  SessionQuarantineReleaseRequestBody,
+  SessionQuarantineReleaseRequestBody$Outbound,
+  SessionQuarantineReleaseRequestBody$outboundSchema,
+} from "../components/sessionquarantinereleaserequestbody.js";
 
 export type ReleaseSessionQuarantineSecurityOption1 = {
   apikeyHeaderGramKey: string;
@@ -38,7 +38,7 @@ export type ReleaseSessionQuarantineRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  riskIDRequestBody: RiskIDRequestBody;
+  sessionQuarantineReleaseRequestBody: SessionQuarantineReleaseRequestBody;
 };
 
 /** @internal */
@@ -153,7 +153,8 @@ export type ReleaseSessionQuarantineRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  RiskIDRequestBody: RiskIDRequestBody$Outbound;
+  SessionQuarantineReleaseRequestBody:
+    SessionQuarantineReleaseRequestBody$Outbound;
 };
 
 /** @internal */
@@ -165,14 +166,16 @@ export const ReleaseSessionQuarantineRequest$outboundSchema: z.ZodMiniType<
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    riskIDRequestBody: RiskIDRequestBody$outboundSchema,
+    sessionQuarantineReleaseRequestBody:
+      SessionQuarantineReleaseRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramKey: "Gram-Key",
       gramSession: "Gram-Session",
       gramProject: "Gram-Project",
-      riskIDRequestBody: "RiskIDRequestBody",
+      sessionQuarantineReleaseRequestBody:
+        "SessionQuarantineReleaseRequestBody",
     });
   }),
 );

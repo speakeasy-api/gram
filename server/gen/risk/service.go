@@ -362,7 +362,8 @@ type CreateRiskPolicyPayload struct {
 	ScopeExempt *string
 	// Whether the policy is active.
 	Enabled *bool
-	// Policy action: flag, warn (challenge), or block.
+	// Policy action: flag, warn (challenge), block, or quarantine (deny and freeze
+	// the hook session).
 	Action string
 	// Policy audience type: everyone or targeted.
 	AudienceType string
@@ -1550,7 +1551,8 @@ type UpdateRiskPolicyPayload struct {
 	ScopeExempt *string
 	// Whether the policy is active.
 	Enabled *bool
-	// Policy action: flag, warn (challenge), or block.
+	// Policy action: flag, warn (challenge), block, or quarantine (deny and freeze
+	// the hook session).
 	Action *string
 	// Policy audience type: everyone or targeted. Omit to preserve the current
 	// audience type.
