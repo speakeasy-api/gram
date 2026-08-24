@@ -206,6 +206,16 @@ const (
 	// values as a group; there is no single value meaning "admitted".
 	CIMDAdmissionOutcomeKey = attribute.Key("gram.cimd.admission_outcome")
 
+	// JWKSOriginKey is the host of a remote JWK Set URL — the per-key-host
+	// dimension on jwks.fetch.* metrics. Omitted for inline key sets, which
+	// have no fetch and no origin.
+	JWKSOriginKey = attribute.Key("gram.jwks.origin")
+
+	// JWKSValidationReasonKey is the machine-readable reason a fetched or
+	// stored JWK Set was rejected — the per-reason dimension on
+	// jwks.validation.failures.
+	JWKSValidationReasonKey = attribute.Key("gram.jwks.validation_reason")
+
 	ComponentKey                   = attribute.Key("gram.component")
 	DBDeletedRowsCountKey          = attribute.Key("gram.db.deleted_rows_count")
 	DeploymentIDKey                = attribute.Key("gram.deployment.id")
@@ -1106,6 +1116,17 @@ func CIMDAdmissionOutcome[V ~string](v V) attribute.KeyValue {
 
 func SlogCIMDAdmissionOutcome[V ~string](v V) slog.Attr {
 	return slog.String(string(CIMDAdmissionOutcomeKey), string(v))
+}
+
+func JWKSOrigin(v string) attribute.KeyValue { return JWKSOriginKey.String(v) }
+func SlogJWKSOrigin(v string) slog.Attr      { return slog.String(string(JWKSOriginKey), v) }
+
+func JWKSValidationReason[V ~string](v V) attribute.KeyValue {
+	return JWKSValidationReasonKey.String(string(v))
+}
+
+func SlogJWKSValidationReason[V ~string](v V) slog.Attr {
+	return slog.String(string(JWKSValidationReasonKey), string(v))
 }
 
 func Component(v string) attribute.KeyValue { return ComponentKey.String(v) }
