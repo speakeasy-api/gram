@@ -38,12 +38,6 @@ const maxPluginPageSize = 50
 // ("what is in this plugin") is already answered by the first hundred entries.
 const maxPluginMembers = 100
 
-// maxPluginTargetLookup bounds the candidate set an exact plugin name is
-// resolved against. Trimming it would turn a plugin that exists into
-// not_found, which is the wrong direction for a refusal meaning "you named
-// something that is not there".
-const maxPluginTargetLookup = 500
-
 var (
 	// ErrPluginProjectNotFound is a project this principal may not read, or one
 	// that does not exist. The two are deliberately one answer: distinguishing
@@ -389,30 +383,28 @@ func (s *PluginsService) resolve(ctx context.Context, q *platformrepo.Queries, p
 	if name == "" {
 		return PluginRef{}, ErrPluginNotFound
 	}
-	candidates, err := q.ListPlatformMCPProjectPlugins(ctx, platformrepo.ListPlatformMCPProjectPluginsParams{
+	// Matching happens in SQL over the project's whole plugin set. Matching in
+	// Go over a bounded page would refuse a plugin that exists once a project
+	// outgrew that page, and would resolve an ambiguous name to whichever of
+	// its matches the page happened to carry.
+	matches, err := q.ResolvePlatformMCPPluginTarget(ctx, platformrepo.ResolvePlatformMCPPluginTargetParams{
 		OrganizationID: principal.OrganizationID,
 		ProjectID:      projectID,
-		ResultLimit:    maxPluginTargetLookup,
+		Target:         name,
 	})
 	if err != nil {
-		return PluginRef{}, fmt.Errorf("list platform mcp plugin targets: %w", err)
-	}
-	matches := make([]PluginRef, 0, 2)
-	for _, candidate := range candidates {
-		if matchesTargetName(candidate.ID.String(), candidate.Slug, candidate.Name, name) {
-			matches = append(matches, PluginRef{
-				ID:        candidate.ID,
-				Name:      candidate.Name,
-				Slug:      candidate.Slug,
-				IsDefault: candidate.IsDefault,
-			})
-		}
+		return PluginRef{}, fmt.Errorf("resolve platform mcp plugin target: %w", err)
 	}
 	switch len(matches) {
 	case 0:
 		return PluginRef{}, ErrPluginNotFound
 	case 1:
-		return matches[0], nil
+		return PluginRef{
+			ID:        matches[0].ID,
+			Name:      matches[0].Name,
+			Slug:      matches[0].Slug,
+			IsDefault: matches[0].IsDefault,
+		}, nil
 	default:
 		return PluginRef{}, ErrPluginAmbiguous
 	}
@@ -461,15 +453,4 @@ func pluginFromInventoryRow(row platformrepo.ListPlatformMCPPluginInventoryRow) 
 		},
 		Publication: publication,
 	}
-}
-
-// matchesTargetName accepts the id, the slug, or the exact name. Names are
-// compared case-insensitively because a caller reading a name off a dashboard
-// should not have to reproduce its capitalization, but never by prefix or
-// substring: a partial match is what turns "the marketing plugin" into someone
-// else's plugin.
-func matchesTargetName(id, slug, name, wanted string) bool {
-	return id == wanted ||
-		(slug != "" && strings.EqualFold(slug, wanted)) ||
-		strings.EqualFold(name, wanted)
 }

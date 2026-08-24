@@ -2705,6 +2705,10 @@ SELECT
     (
       SELECT count(*)
       FROM skill_distributions sd
+      JOIN skills sk
+        ON sk.id = sd.skill_id
+        AND sk.project_id = sd.project_id
+        AND sk.archived_at IS NULL
       WHERE sd.plugin_id = p.id
         AND sd.project_id = p.project_id
         AND sd.channel = 'plugin'
@@ -4129,6 +4133,10 @@ SELECT
     (
       SELECT count(*)
       FROM skill_distributions sd
+      JOIN skills sk
+        ON sk.id = sd.skill_id
+        AND sk.project_id = sd.project_id
+        AND sk.archived_at IS NULL
       WHERE sd.plugin_id = p.id
         AND sd.project_id = p.project_id
         AND sd.channel = 'plugin'
@@ -5451,6 +5459,72 @@ func (q *Queries) RecordPlatformMCPSetupMilestone(ctx context.Context, arg Recor
 		arg.AttemptID,
 	)
 	return err
+}
+
+const resolvePlatformMCPPluginTarget = `-- name: ResolvePlatformMCPPluginTarget :many
+SELECT
+    p.id,
+    p.name,
+    p.slug,
+    COALESCE(p.is_default, FALSE) AS is_default
+FROM plugins p
+JOIN projects
+  ON projects.id = p.project_id
+WHERE p.project_id = $1
+  AND p.organization_id = $2
+  AND projects.organization_id = $2
+  AND projects.deleted IS FALSE
+  AND p.deleted IS FALSE
+  AND (
+    p.id::text = $3::text
+    OR lower(p.slug) = lower($3::text)
+    OR lower(p.name) = lower($3::text)
+  )
+ORDER BY p.id ASC
+LIMIT 2
+`
+
+type ResolvePlatformMCPPluginTargetParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	Target         string
+}
+
+type ResolvePlatformMCPPluginTargetRow struct {
+	ID        uuid.UUID
+	Name      string
+	Slug      string
+	IsDefault bool
+}
+
+// Matches one plugin by id, slug, or whole name over the project's entire
+// plugin set. Matching in SQL rather than over a bounded page is what keeps a
+// plugin that exists from being refused as not_found, and an ambiguous name
+// from resolving to whichever match a page happened to include. Two rows are
+// enough to know a name is ambiguous.
+func (q *Queries) ResolvePlatformMCPPluginTarget(ctx context.Context, arg ResolvePlatformMCPPluginTargetParams) ([]ResolvePlatformMCPPluginTargetRow, error) {
+	rows, err := q.db.Query(ctx, resolvePlatformMCPPluginTarget, arg.ProjectID, arg.OrganizationID, arg.Target)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ResolvePlatformMCPPluginTargetRow
+	for rows.Next() {
+		var i ResolvePlatformMCPPluginTargetRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.IsDefault,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const resolvePlatformMCPProjectByID = `-- name: ResolvePlatformMCPProjectByID :one

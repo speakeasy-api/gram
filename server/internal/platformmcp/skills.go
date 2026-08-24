@@ -854,3 +854,14 @@ func adviceTargets(targets []SkillTarget, limit int) []SkillTarget {
 	}
 	return kept
 }
+
+// matchesTargetName accepts the id, the slug, or the exact name. Names are
+// compared case-insensitively because a caller reading a name off a dashboard
+// should not have to reproduce its capitalization, but never by prefix or
+// substring: a partial match is what turns "the marketing plugin" into someone
+// else's plugin.
+func matchesTargetName(id, slug, name, wanted string) bool {
+	return id == wanted ||
+		(slug != "" && strings.EqualFold(slug, wanted)) ||
+		strings.EqualFold(name, wanted)
+}

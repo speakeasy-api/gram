@@ -919,8 +919,8 @@ function PlatformMCPManagement({
           </div>
           <Text muted small className="mt-2">
             These tools discover reviewed options, guide secure setup and
-            readiness, and add a ready MCP only to the chosen project&apos;s
-            existing Default plugin.
+            readiness, and add a ready MCP to one exact existing plugin in the
+            chosen project.
           </Text>
         </div>
       </div>

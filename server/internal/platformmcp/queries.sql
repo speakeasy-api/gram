@@ -2384,6 +2384,10 @@ SELECT
     (
       SELECT count(*)
       FROM skill_distributions sd
+      JOIN skills sk
+        ON sk.id = sd.skill_id
+        AND sk.project_id = sd.project_id
+        AND sk.archived_at IS NULL
       WHERE sd.plugin_id = p.id
         AND sd.project_id = p.project_id
         AND sd.channel = 'plugin'
@@ -2420,6 +2424,10 @@ SELECT
     (
       SELECT count(*)
       FROM skill_distributions sd
+      JOIN skills sk
+        ON sk.id = sd.skill_id
+        AND sk.project_id = sd.project_id
+        AND sk.archived_at IS NULL
       WHERE sd.plugin_id = p.id
         AND sd.project_id = p.project_id
         AND sd.channel = 'plugin'
@@ -2509,6 +2517,33 @@ WHERE sd.plugin_id = @plugin_id
   AND sd.revoked_at IS NULL
 ORDER BY sk.name ASC
 LIMIT @result_limit;
+
+-- name: ResolvePlatformMCPPluginTarget :many
+-- Matches one plugin by id, slug, or whole name over the project's entire
+-- plugin set. Matching in SQL rather than over a bounded page is what keeps a
+-- plugin that exists from being refused as not_found, and an ambiguous name
+-- from resolving to whichever match a page happened to include. Two rows are
+-- enough to know a name is ambiguous.
+SELECT
+    p.id,
+    p.name,
+    p.slug,
+    COALESCE(p.is_default, FALSE) AS is_default
+FROM plugins p
+JOIN projects
+  ON projects.id = p.project_id
+WHERE p.project_id = @project_id
+  AND p.organization_id = @organization_id
+  AND projects.organization_id = @organization_id
+  AND projects.deleted IS FALSE
+  AND p.deleted IS FALSE
+  AND (
+    p.id::text = @target::text
+    OR lower(p.slug) = lower(@target::text)
+    OR lower(p.name) = lower(@target::text)
+  )
+ORDER BY p.id ASC
+LIMIT 2;
 
 -- name: GetPlatformMCPPluginForUpdate :one
 -- Serializes an MCP distribution write against concurrent deletion of the
