@@ -1,0 +1,23 @@
+server/database/schema.sql
+  s_1b89b64f839d5a::t_31efe7dbe2677b 5066-5068
+server/migrations/20260824095557_session-quarantines.sql
+  s_1b89b64f839d5a::t_104d3636f2c7bc 19
+server/migrations/atlas.sum
+  s_1b89b64f839d5a::t_5476b1eeb68589 1,363
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "56ea720145d674dd7dcfd2417739c1e7b5ad10e5",
+  "prompts": {},
+  "sessions": {
+    "s_1b89b64f839d5a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b212c1f3-f9cc-4384-9d8d-3b389aad3c4b",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
