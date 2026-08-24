@@ -568,9 +568,8 @@ func (s *Service) DeleteGcpKmsKey(ctx context.Context, payload *gen.DeleteGcpKms
 // FOR UPDATE, because a JWKS insert takes FOR KEY SHARE on this row and only
 // FOR UPDATE conflicts with that.
 //
-// The refusal path has no test here: no Go package owns json_web_key_sets /
-// json_web_keys yet, and tests may not write raw SQL. AIS-240 introduces that
-// repo and owns the coverage.
+// The refusal path's coverage lives with the jsonwebkeysets package tests,
+// which own the JWKS fixtures this package's tests cannot create.
 func (s *Service) deleteExternalKey(ctx context.Context, provider, rawID string) error {
 	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
 	if err != nil {

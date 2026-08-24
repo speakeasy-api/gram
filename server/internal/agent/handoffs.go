@@ -28,12 +28,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// handoffRoutePrefix is the public serving path. Links are always minted
-// against serverURL, so this is served on the primary app domain only — it is
-// deliberately absent from the custom-domain ingress allowlist in
-// k8s/ingress_provisioner.go, which exists so customer domains can serve skill
-// share pages. It must stay in lockstep with the route attached in Attach and
-// with the token-redaction prefixes in middleware.logSafeURL.
+// handoffRoutePrefix is the public serving path. Links are minted against
+// serverURL (the primary app domain). That host splits traffic: the
+// dashboard SPA is the default backend, so this prefix must appear on the
+// gram-infra helm ingress path list and on the dashboard vite dev proxy.
+// It is deliberately absent from the custom-domain ingress allowlist in
+// k8s/ingress_provisioner.go — customer domains serve skill share pages,
+// not handoff documents. Must stay in lockstep with the route attached in
+// Attach and with the token-redaction prefixes in middleware.logSafeURL.
 const handoffRoutePrefix = "/shared/handoffs/"
 
 const (

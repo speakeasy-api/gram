@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
@@ -88,6 +89,7 @@ func TestLogsPublishesFlattenedRecordsWithAuthenticatedProvenance(t *testing.T) 
 	publisher.AssertExpectations(t)
 	require.NotNil(t, published)
 	require.Equal(t, uint64(123), published.GetTimeUnixNano())
+	require.Equal(t, uint64(456), published.GetObservedTimeUnixNano())
 	require.Equal(t, "hello", published.GetBody().GetStringValue())
 	require.Equal(t, "producer", published.GetResource().GetAttributes()[0].GetValue().GetStringValue())
 	require.Equal(t, "resource-schema", published.GetResourceSchemaUrl())
@@ -98,6 +100,52 @@ func TestLogsPublishesFlattenedRecordsWithAuthenticatedProvenance(t *testing.T) 
 	require.Equal(t, projectID.String(), published.GetProvenance().GetProjectId())
 	_, err = uuid.Parse(published.GetRecordId())
 	require.NoError(t, err)
+}
+
+func TestLogsStampsObservedTimeWhenMissing(t *testing.T) {
+	t.Parallel()
+
+	request := &collectorlogsv1.ExportLogsServiceRequest{
+		ResourceLogs: []*logsv1.ResourceLogs{{
+			ScopeLogs: []*logsv1.ScopeLogs{{
+				LogRecords: []*logsv1.LogRecord{{
+					Body: &commonv1.AnyValue{Value: &commonv1.AnyValue_StringValue{StringValue: "no timestamps"}},
+				}},
+			}},
+		}},
+	}
+	body, err := proto.Marshal(request)
+	require.NoError(t, err)
+
+	var published *otelv1.InboundLogRecord
+	publisher := gcp.NewMockPublisher[*otelv1.InboundLogRecord]()
+	publisher.On("Publish", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		record, ok := args.Get(1).(*otelv1.InboundLogRecord)
+		require.True(t, ok)
+		published = record
+	}).Return(gcp.NewSuccessPublishResult()).Once()
+	service := &Service{
+		logger:        testenv.NewLogger(t),
+		tracer:        testenv.NewTracerProvider(t).Tracer("test"),
+		auth:          nil,
+		logPublisher:  publisher,
+		spanPublisher: nil,
+	}
+	projectID := uuid.MustParse(testLogProjectID)
+	ctx := contextvalues.SetAuthContext(t.Context(), testOTELAuthContext(projectID))
+
+	before := uint64(time.Now().UnixNano())
+	err = service.Logs(ctx, &gen.LogsPayload{
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		ContentEncoding:  nil,
+	}, io.NopCloser(bytes.NewReader(body)))
+
+	require.NoError(t, err)
+	publisher.AssertExpectations(t)
+	require.NotNil(t, published)
+	require.Zero(t, published.GetTimeUnixNano())
+	require.GreaterOrEqual(t, published.GetObservedTimeUnixNano(), before)
 }
 
 func TestLogsRejectsInvalidExportBeforePublishing(t *testing.T) {

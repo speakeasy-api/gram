@@ -268,6 +268,9 @@ export function listOrganizations(
 export type AdminOrganizationStats = {
   total: number;
   created_last_7_days: number;
+  /** Organizations on a paid account type, payg or enterprise. */
+  customers: number;
+  customers_created_last_7_days: number;
   trials_ending_soon: number;
   disabled: number;
   disabled_last_7_days: number;
@@ -613,6 +616,47 @@ export function getInferenceKeys(
   const qs = toSearchParams({ organization_id: organizationID });
   return gramAdminFetch<AdminInferenceKey[]>(
     `/admin/organization.inferenceKeys?${qs}`,
+  );
+}
+
+export type AdminInferenceKeyType = "chat" | "internal";
+
+export type AdminInferenceKeyLimit = Pick<
+  AdminInferenceKey,
+  "key_type" | "monthly_credits"
+>;
+
+export function setInferenceKeyMonthlyLimit(input: {
+  organizationID: string;
+  keyType: AdminInferenceKeyType;
+  monthlyCredits: number;
+}): Promise<AdminInferenceKeyLimit> {
+  return gramAdminMutation<AdminInferenceKeyLimit>(
+    "/admin/organization.setInferenceKeyMonthlyLimit",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        organization_id: input.organizationID,
+        key_type: input.keyType,
+        monthly_credits: input.monthlyCredits,
+      }),
+    },
+  );
+}
+
+export type AdminInferenceSpendMonth = {
+  period_start: string;
+  period_end: string;
+  spend_usd: string;
+};
+
+export function getInferenceSpendHistory(
+  organizationID: string,
+): Promise<AdminInferenceSpendMonth[]> {
+  const qs = toSearchParams({ organization_id: organizationID });
+  return gramAdminFetch<AdminInferenceSpendMonth[]>(
+    `/admin/organization.inferenceSpendHistory?${qs}`,
   );
 }
 

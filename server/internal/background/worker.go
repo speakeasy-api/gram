@@ -483,6 +483,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ListPluginPublishCandidates)
 	temporalWorker.RegisterActivity(activities.PublishPluginProject)
 	// Spend rule evaluation activities
+	temporalWorker.RegisterActivity(activities.ReassertSessionQuarantines)
 	temporalWorker.RegisterActivity(activities.ListSpendRuleOrgs)
 	temporalWorker.RegisterActivity(activities.EvaluateOrgSpendRules)
 	temporalWorker.RegisterActivity(activities.RefreshSpendRuleActor)
@@ -540,6 +541,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(FunctionsReaperWorkflow)
 	temporalWorker.RegisterWorkflow(OpenrouterKeyRefreshWorkflow)
 	temporalWorker.RegisterWorkflow(OpenRouterSpendCapWorkflow)
+	temporalWorker.RegisterWorkflow(AdminOpenRouterSpendCapWorkflow)
 	temporalWorker.RegisterWorkflow(PaygOpenRouterChatKeyReconcileWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainRegistrationWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainDeletionWorkflow)
@@ -603,6 +605,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(PluginGeneratorRolloutWorkflow)
 	temporalWorker.RegisterWorkflow(PluginInitialPublishWorkflow)
 	// Spend rule evaluation workflows
+	temporalWorker.RegisterWorkflow(SessionQuarantineReassertWorkflow)
 	temporalWorker.RegisterWorkflow(SpendRuleEvaluationWorkflow)
 	temporalWorker.RegisterWorkflow(SpendRuleOrgEvaluationWorkflow)
 	temporalWorker.RegisterWorkflow(SpendRuleOrgEvaluationWorkflowDebounced)
@@ -736,6 +739,10 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(ctx, "failed to add spend rule evaluation schedule", attr.SlogError(err))
 		}
+	}
+
+	if err := AddSessionQuarantineReassertSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add session quarantine reassert schedule", attr.SlogError(err))
 	}
 
 	if err := AddSkillObservationReconciliationSchedule(ctx, env); err != nil {

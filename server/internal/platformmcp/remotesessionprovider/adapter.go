@@ -232,7 +232,7 @@ func (a *Adapter) probe(ctx context.Context, descriptor Descriptor, token string
 	httpClient.Transport = authRT
 
 	client := mcp.NewClient(&mcp.Implementation{
-		Name:       "speakeasy-aicp-platform-mcp-readiness",
+		Name:       "platform-mcp-readiness",
 		Title:      "",
 		Version:    "1.0.0",
 		WebsiteURL: "",

@@ -48,6 +48,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
+	otelchrepo "github.com/speakeasy-api/gram/server/internal/otel/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/ping"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -573,6 +574,11 @@ func newStreamsCommand() *cli.Command {
 				mustReceiveBatchWithResult(rg, &otelv1.LogRecord{}, &otelv1.LogRelay{}, logRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
 				mustReceiveBatchWithResult(rg, &otelv1.Span{}, &otelv1.SpanRelay{}, spanRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
 
+				// Event feed tee: mirror the normalized OTEL topics into the
+				// otel_logs / otel_traces ClickHouse tables.
+				mustReceiveBatch(rg, &otelv1.LogRecord{}, &otelv1.LogEventCHWriter{}, otelsvc.NewLogEventCHWriter(logger, meterProvider, otelchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
+				mustReceiveBatch(rg, &otelv1.Span{}, &otelv1.SpanEventCHWriter{}, otelsvc.NewSpanEventCHWriter(logger, meterProvider, otelchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
+
 				if enableCHRiskWrites {
 					mustReceiveBatchWithResult(rg, &riskv1.Finding{}, &riskv1.FindingCHWriter{}, risk.NewFindingCHWriter(logger, replicaDB, meterProvider, chrepo.New(chConn), riskFingerprinter), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second})
 				}
@@ -755,6 +761,89 @@ func mustReceive[M proto.Message](
 	options ...gcp.SubscriberOption,
 ) {
 	must.Nil(receive(g, msg, subscription, handler, options...))
+}
+
+// receiveBatch is the batch counterpart to receive: it registers a
+// streams.BatchHandler that processes messages in groups. It is part of the
+// streams runner surface so consumers can opt into batch processing; register
+// one with mustReceiveBatch in the receivers block alongside the single-message
+// handlers.
+func receiveBatch[M proto.Message](
+	g receiverGroup,
+	msg M,
+	subscription proto.Message,
+	handler streams.BatchHandler[M],
+	settings gcp.BatchReceiveSettings,
+	options ...gcp.SubscriberOption,
+) error {
+	sub, msgName, subName, ctx, err := setupSubscriber(g, msg, subscription, options...)
+	if err != nil {
+		return err
+	}
+
+	g.group.Go(func() error {
+		if err := sub.ReceiveBatch(ctx, settings, func(ctx context.Context, msgs []M, metas []gcp.MessageMetadata) (err error) {
+			// Unlike the single-message path we do not extract per-message trace
+			// context: a batch can aggregate messages from different producer
+			// traces, so there is no single parent span to continue. Start a fresh
+			// span for the batch instead.
+			ctx, span := g.tracer.Start(ctx, "stream.handleBatch", trace.WithAttributes(
+				attr.TopicProtoName(msgName),
+				attr.SubscriptionProtoName(subName),
+				attr.SubscriberBatchSize(len(msgs)),
+			))
+
+			defer func() {
+				if err != nil {
+					span.RecordError(err)
+					span.SetStatus(codes.Error, err.Error())
+				}
+				span.End()
+			}()
+
+			// Recover from panics in the handler so a single bad batch returns an
+			// error (triggering a nack and eventual dead-lettering) instead of
+			// crashing the receive goroutine. Registered after the span defer so it
+			// runs first and sets err before the span records it.
+			defer func() {
+				if r := recover(); r != nil {
+					err = fmt.Errorf("panic recovered in batch message handler: %v", r)
+					g.logger.ErrorContext(ctx, "panic recovered in batch message handler",
+						attr.SlogError(err),
+						attr.SlogErrorStack(string(debug.Stack())),
+					)
+				}
+			}()
+
+			// A context.Canceled here means the handler was interrupted (e.g. by
+			// shutdown) before finishing, so the batch was not fully processed.
+			// Return the error so the batch is nacked and redelivered rather than
+			// acked: mapping cancellation to success would silently drop every
+			// un-processed message in the batch.
+			err = handler.HandleBatch(ctx, msgs, metas)
+			if err != nil {
+				return fmt.Errorf("handle message batch: %w", err)
+			}
+			return nil
+		}); err != nil {
+			return fmt.Errorf("subscriber receive batch error: %w", err)
+		}
+
+		return nil
+	})
+
+	return nil
+}
+
+func mustReceiveBatch[M proto.Message](
+	g receiverGroup,
+	msg M,
+	subscription proto.Message,
+	handler streams.BatchHandler[M],
+	settings gcp.BatchReceiveSettings,
+	options ...gcp.SubscriberOption,
+) {
+	must.Nil(receiveBatch(g, msg, subscription, handler, settings, options...))
 }
 
 // receiveBatchWithResult registers a BatchResultHandler whose messages can

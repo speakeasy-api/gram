@@ -317,6 +317,11 @@ func signalTopUsersByRule(rows []chrepo.RiskSignalUserCount) map[string][]*gen.R
 	}
 	merged := make(map[string]map[userKey]userStats)
 	for _, row := range rows {
+		// Mirror the Users stat's predicate (signalUserNonEmpty): rows it
+		// doesn't count must not appear here as "Unknown user" rows either.
+		if row.ExternalUserID == "" && row.UserID == "" {
+			continue
+		}
 		email := row.Email
 		if email == "" && strings.Contains(row.ExternalUserID, "@") {
 			email = row.ExternalUserID

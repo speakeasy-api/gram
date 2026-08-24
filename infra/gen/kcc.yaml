@@ -732,6 +732,24 @@ pubsub:
         name: gram-otel-v1-inbound-span
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-log-event-ch-writer
+      topic_proto_message: gram-otel-v1-log-record
+    name: gram-otel-v1-log-event-ch-writer
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-otel-v1-log-event-ch-writer-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 604800s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 60s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-otel-v1-log-record
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-log-relay
       topic_proto_message: gram-otel-v1-log-record
     name: gram-otel-v1-log-relay
@@ -748,6 +766,24 @@ pubsub:
         minimumBackoff: 10s
       topicRef:
         name: gram-otel-v1-log-record
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-span-event-ch-writer
+      topic_proto_message: gram-otel-v1-span
+    name: gram-otel-v1-span-event-ch-writer
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-otel-v1-span-event-ch-writer-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 604800s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 60s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-otel-v1-span
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-span-relay
@@ -966,6 +1002,12 @@ pubsub:
     name: gram-otel-v1-inbound-span-transformer-dlq
     spec: {}
   - labels:
+      dlq_for: gram-otel-v1-log-event-ch-writer
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-log-event-ch-writer
+    name: gram-otel-v1-log-event-ch-writer-dlq
+    spec: {}
+  - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-log-record
     name: gram-otel-v1-log-record
@@ -991,6 +1033,12 @@ pubsub:
         encoding: BINARY
         schemaRef:
           name: gram-otel-v1-span
+  - labels:
+      dlq_for: gram-otel-v1-span-event-ch-writer
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-span-event-ch-writer
+    name: gram-otel-v1-span-event-ch-writer-dlq
+    spec: {}
   - labels:
       dlq_for: gram-otel-v1-span-relay
       managed_by: proto-pubsub-orchestrator

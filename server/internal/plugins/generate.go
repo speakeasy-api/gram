@@ -405,7 +405,8 @@ const mcpSharedFingerprintKey = "__shared__"
 const mcpPlatformFingerprintKey = "__platform_mcp__"
 
 const (
-	platformMCPPluginName         = "speakeasy-aicp-platform-mcp"
+	platformMCPPluginName         = "platform-mcp"
+	platformMCPDisplayName        = "Platform MCP"
 	platformMCPServerName         = "platform-mcp"
 	platformMCPPluginRoot         = "platform-mcp"
 	platformMCPDescription        = "Manage MCPs, Risk Policies and explore logs in your favorite agent."
@@ -413,7 +414,21 @@ const (
 	platformMCPCodexPluginRoot    = "platform-mcp-codex"
 	platformMCPOpenCodePluginRoot = opencodePluginRoot + "/platform-mcp"
 	platformMCPAgentPluginRoot    = agentPluginRoot + "/" + platformMCPPluginName
+
+	// platformMCPLegacyPluginName is the Agent Plugin and OpenCode identifier
+	// carry still recognizes in already-published repositories. Indeterminate
+	// admission preserves those bytes; a confirmed decision migrates them to
+	// platformMCPPluginName.
+	platformMCPLegacyPluginName = "speakeasy-aicp-platform-mcp"
+
+	// platformMCPLegacyAgentPluginRoot is the Agent Plugin directory that
+	// already-published repositories may still contain.
+	platformMCPLegacyAgentPluginRoot = agentPluginRoot + "/" + platformMCPLegacyPluginName
 )
+
+func platformMCPPackageFilename(platform string) string {
+	return platformMCPPluginName + "-" + platform + ".zip"
+}
 
 // platformMCPSkillsFS is the single source for reviewed skills distributed with
 // every Platform MCP package. Add skills as
@@ -748,7 +763,7 @@ func generateSharedFilesWithPlatformClients(plugins []PluginInfo, cfg GenerateCo
 	if cfg.PlatformMCPEnabled {
 		claudePlugins = append(claudePlugins, marketplaceEntry{
 			Name:        platformMCPPluginName,
-			DisplayName: "Speakeasy AICP Platform MCP",
+			DisplayName: platformMCPDisplayName,
 			Source:      "./" + platformMCPPluginRoot,
 			Description: platformMCPDescription,
 		})
@@ -871,8 +886,8 @@ func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
 	}
 
 	if cfg.PlatformMCPEnabled {
-		b.WriteString("## Speakeasy AICP Platform MCP\n\n")
-		b.WriteString("The `speakeasy-aicp-platform-mcp` plugin connects supported agents to Speakeasy through OAuth and includes a reviewed workflow for adding an MCP Catalogue server to an explicit project. Installing the package grants no organization access until OAuth and live authorization succeed.\n\n")
+		b.WriteString("## " + platformMCPDisplayName + "\n\n")
+		fmt.Fprintf(&b, "The `%s` plugin connects supported agents to Speakeasy through OAuth and includes a reviewed workflow for adding an MCP catalog server to an explicit project. Installing the package grants no organization access until OAuth and live authorization succeed.\n\n", platformMCPPluginName)
 	}
 
 	if len(plugins) > 0 {
@@ -2117,7 +2132,7 @@ func generatePlatformMCPPackage(cfg GenerateConfig, platformURL string) (map[str
 	files := make(map[string][]byte)
 	meta, err := marshalJSON(claudePluginMeta{
 		Name:        platformMCPPluginName,
-		DisplayName: "Speakeasy AICP Platform MCP",
+		DisplayName: platformMCPDisplayName,
 		Description: platformMCPDescription,
 		Version:     platformMCPManifestVersion(cfg),
 		Author:      pluginAuthor{Name: "Speakeasy", URL: "https://www.speakeasy.com/"},
@@ -2150,7 +2165,7 @@ func generatePlatformMCPPackage(cfg GenerateConfig, platformURL string) (map[str
 
 func platformMCPPluginInfo(platformURL string) PluginInfo {
 	return PluginInfo{
-		Name:        "Speakeasy AICP Platform MCP",
+		Name:        platformMCPDisplayName,
 		Slug:        platformMCPPluginName,
 		Description: platformMCPDescription,
 		Servers: []PluginServerInfo{{
