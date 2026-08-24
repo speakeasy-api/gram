@@ -18,29 +18,30 @@ import (
 
 // Server lists the admin service endpoint HTTP handlers.
 type Server struct {
-	Mounts                   []*MountPoint
-	Login                    http.Handler
-	Callback                 http.Handler
-	Logout                   http.Handler
-	GetProject               http.Handler
-	UpdateOrganization       http.Handler
-	BulkUpdateAccountType    http.Handler
-	DisableOrganization      http.Handler
-	EnableOrganization       http.Handler
-	GetOrganization          http.Handler
-	ListOrganizationMembers  http.Handler
-	ListOrganizationProjects http.Handler
-	ListOrganizations        http.Handler
-	ExtendTrial              http.Handler
-	CreateOrganization       http.Handler
-	RearmTrial               http.Handler
-	GetOrganizationStats     http.Handler
-	GetInferenceKeys         http.Handler
-	GetInferenceSpendHistory http.Handler
-	GetPaygBillingSummary    http.Handler
-	GetStripeSubscription    http.Handler
-	CancelStripeSubscription http.Handler
-	ResumeStripeSubscription http.Handler
+	Mounts                      []*MountPoint
+	Login                       http.Handler
+	Callback                    http.Handler
+	Logout                      http.Handler
+	GetProject                  http.Handler
+	UpdateOrganization          http.Handler
+	BulkUpdateAccountType       http.Handler
+	DisableOrganization         http.Handler
+	EnableOrganization          http.Handler
+	GetOrganization             http.Handler
+	ListOrganizationMembers     http.Handler
+	ListOrganizationProjects    http.Handler
+	ListOrganizations           http.Handler
+	ExtendTrial                 http.Handler
+	CreateOrganization          http.Handler
+	RearmTrial                  http.Handler
+	GetOrganizationStats        http.Handler
+	GetInferenceKeys            http.Handler
+	SetInferenceKeyMonthlyLimit http.Handler
+	GetInferenceSpendHistory    http.Handler
+	GetPaygBillingSummary       http.Handler
+	GetStripeSubscription       http.Handler
+	CancelStripeSubscription    http.Handler
+	ResumeStripeSubscription    http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -87,34 +88,36 @@ func New(
 			{"RearmTrial", "POST", "/admin/trial.rearm"},
 			{"GetOrganizationStats", "GET", "/admin/organizations.stats"},
 			{"GetInferenceKeys", "GET", "/admin/organization.inferenceKeys"},
+			{"SetInferenceKeyMonthlyLimit", "POST", "/admin/organization.setInferenceKeyMonthlyLimit"},
 			{"GetInferenceSpendHistory", "GET", "/admin/organization.inferenceSpendHistory"},
 			{"GetPaygBillingSummary", "GET", "/admin/organization.paygBillingSummary"},
 			{"GetStripeSubscription", "GET", "/admin/organization.stripeSubscription"},
 			{"CancelStripeSubscription", "POST", "/admin/organization.cancelStripeSubscription"},
 			{"ResumeStripeSubscription", "POST", "/admin/organization.resumeStripeSubscription"},
 		},
-		Login:                    NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
-		Callback:                 NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
-		Logout:                   NewLogoutHandler(e.Logout, mux, decoder, encoder, errhandler, formatter),
-		GetProject:               NewGetProjectHandler(e.GetProject, mux, decoder, encoder, errhandler, formatter),
-		UpdateOrganization:       NewUpdateOrganizationHandler(e.UpdateOrganization, mux, decoder, encoder, errhandler, formatter),
-		BulkUpdateAccountType:    NewBulkUpdateAccountTypeHandler(e.BulkUpdateAccountType, mux, decoder, encoder, errhandler, formatter),
-		DisableOrganization:      NewDisableOrganizationHandler(e.DisableOrganization, mux, decoder, encoder, errhandler, formatter),
-		EnableOrganization:       NewEnableOrganizationHandler(e.EnableOrganization, mux, decoder, encoder, errhandler, formatter),
-		GetOrganization:          NewGetOrganizationHandler(e.GetOrganization, mux, decoder, encoder, errhandler, formatter),
-		ListOrganizationMembers:  NewListOrganizationMembersHandler(e.ListOrganizationMembers, mux, decoder, encoder, errhandler, formatter),
-		ListOrganizationProjects: NewListOrganizationProjectsHandler(e.ListOrganizationProjects, mux, decoder, encoder, errhandler, formatter),
-		ListOrganizations:        NewListOrganizationsHandler(e.ListOrganizations, mux, decoder, encoder, errhandler, formatter),
-		ExtendTrial:              NewExtendTrialHandler(e.ExtendTrial, mux, decoder, encoder, errhandler, formatter),
-		CreateOrganization:       NewCreateOrganizationHandler(e.CreateOrganization, mux, decoder, encoder, errhandler, formatter),
-		RearmTrial:               NewRearmTrialHandler(e.RearmTrial, mux, decoder, encoder, errhandler, formatter),
-		GetOrganizationStats:     NewGetOrganizationStatsHandler(e.GetOrganizationStats, mux, decoder, encoder, errhandler, formatter),
-		GetInferenceKeys:         NewGetInferenceKeysHandler(e.GetInferenceKeys, mux, decoder, encoder, errhandler, formatter),
-		GetInferenceSpendHistory: NewGetInferenceSpendHistoryHandler(e.GetInferenceSpendHistory, mux, decoder, encoder, errhandler, formatter),
-		GetPaygBillingSummary:    NewGetPaygBillingSummaryHandler(e.GetPaygBillingSummary, mux, decoder, encoder, errhandler, formatter),
-		GetStripeSubscription:    NewGetStripeSubscriptionHandler(e.GetStripeSubscription, mux, decoder, encoder, errhandler, formatter),
-		CancelStripeSubscription: NewCancelStripeSubscriptionHandler(e.CancelStripeSubscription, mux, decoder, encoder, errhandler, formatter),
-		ResumeStripeSubscription: NewResumeStripeSubscriptionHandler(e.ResumeStripeSubscription, mux, decoder, encoder, errhandler, formatter),
+		Login:                       NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
+		Callback:                    NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
+		Logout:                      NewLogoutHandler(e.Logout, mux, decoder, encoder, errhandler, formatter),
+		GetProject:                  NewGetProjectHandler(e.GetProject, mux, decoder, encoder, errhandler, formatter),
+		UpdateOrganization:          NewUpdateOrganizationHandler(e.UpdateOrganization, mux, decoder, encoder, errhandler, formatter),
+		BulkUpdateAccountType:       NewBulkUpdateAccountTypeHandler(e.BulkUpdateAccountType, mux, decoder, encoder, errhandler, formatter),
+		DisableOrganization:         NewDisableOrganizationHandler(e.DisableOrganization, mux, decoder, encoder, errhandler, formatter),
+		EnableOrganization:          NewEnableOrganizationHandler(e.EnableOrganization, mux, decoder, encoder, errhandler, formatter),
+		GetOrganization:             NewGetOrganizationHandler(e.GetOrganization, mux, decoder, encoder, errhandler, formatter),
+		ListOrganizationMembers:     NewListOrganizationMembersHandler(e.ListOrganizationMembers, mux, decoder, encoder, errhandler, formatter),
+		ListOrganizationProjects:    NewListOrganizationProjectsHandler(e.ListOrganizationProjects, mux, decoder, encoder, errhandler, formatter),
+		ListOrganizations:           NewListOrganizationsHandler(e.ListOrganizations, mux, decoder, encoder, errhandler, formatter),
+		ExtendTrial:                 NewExtendTrialHandler(e.ExtendTrial, mux, decoder, encoder, errhandler, formatter),
+		CreateOrganization:          NewCreateOrganizationHandler(e.CreateOrganization, mux, decoder, encoder, errhandler, formatter),
+		RearmTrial:                  NewRearmTrialHandler(e.RearmTrial, mux, decoder, encoder, errhandler, formatter),
+		GetOrganizationStats:        NewGetOrganizationStatsHandler(e.GetOrganizationStats, mux, decoder, encoder, errhandler, formatter),
+		GetInferenceKeys:            NewGetInferenceKeysHandler(e.GetInferenceKeys, mux, decoder, encoder, errhandler, formatter),
+		SetInferenceKeyMonthlyLimit: NewSetInferenceKeyMonthlyLimitHandler(e.SetInferenceKeyMonthlyLimit, mux, decoder, encoder, errhandler, formatter),
+		GetInferenceSpendHistory:    NewGetInferenceSpendHistoryHandler(e.GetInferenceSpendHistory, mux, decoder, encoder, errhandler, formatter),
+		GetPaygBillingSummary:       NewGetPaygBillingSummaryHandler(e.GetPaygBillingSummary, mux, decoder, encoder, errhandler, formatter),
+		GetStripeSubscription:       NewGetStripeSubscriptionHandler(e.GetStripeSubscription, mux, decoder, encoder, errhandler, formatter),
+		CancelStripeSubscription:    NewCancelStripeSubscriptionHandler(e.CancelStripeSubscription, mux, decoder, encoder, errhandler, formatter),
+		ResumeStripeSubscription:    NewResumeStripeSubscriptionHandler(e.ResumeStripeSubscription, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -140,6 +143,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.RearmTrial = m(s.RearmTrial)
 	s.GetOrganizationStats = m(s.GetOrganizationStats)
 	s.GetInferenceKeys = m(s.GetInferenceKeys)
+	s.SetInferenceKeyMonthlyLimit = m(s.SetInferenceKeyMonthlyLimit)
 	s.GetInferenceSpendHistory = m(s.GetInferenceSpendHistory)
 	s.GetPaygBillingSummary = m(s.GetPaygBillingSummary)
 	s.GetStripeSubscription = m(s.GetStripeSubscription)
@@ -169,6 +173,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountRearmTrialHandler(mux, h.RearmTrial)
 	MountGetOrganizationStatsHandler(mux, h.GetOrganizationStats)
 	MountGetInferenceKeysHandler(mux, h.GetInferenceKeys)
+	MountSetInferenceKeyMonthlyLimitHandler(mux, h.SetInferenceKeyMonthlyLimit)
 	MountGetInferenceSpendHistoryHandler(mux, h.GetInferenceSpendHistory)
 	MountGetPaygBillingSummaryHandler(mux, h.GetPaygBillingSummary)
 	MountGetStripeSubscriptionHandler(mux, h.GetStripeSubscription)
@@ -1061,6 +1066,60 @@ func NewGetInferenceKeysHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getInferenceKeys")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetInferenceKeyMonthlyLimitHandler configures the mux to serve the
+// "admin" service "setInferenceKeyMonthlyLimit" endpoint.
+func MountSetInferenceKeyMonthlyLimitHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/organization.setInferenceKeyMonthlyLimit", f)
+}
+
+// NewSetInferenceKeyMonthlyLimitHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "setInferenceKeyMonthlyLimit"
+// endpoint.
+func NewSetInferenceKeyMonthlyLimitHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetInferenceKeyMonthlyLimitRequest(mux, decoder)
+		encodeResponse = EncodeSetInferenceKeyMonthlyLimitResponse(encoder)
+		encodeError    = EncodeSetInferenceKeyMonthlyLimitError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setInferenceKeyMonthlyLimit")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

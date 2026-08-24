@@ -17,8 +17,36 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	orrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usage"
 )
+
+type fakeOpenRouterSpendCapScheduler struct {
+	operationID      string
+	organizationID   string
+	keyType          openrouter.KeyType
+	limit            int
+	actor            urn.Principal
+	actorDisplayName *string
+	effectiveLimit   int
+	err              error
+}
+
+func (f *fakeOpenRouterSpendCapScheduler) SetAdminOpenRouterSpendCap(_ context.Context, operationID, organizationID string, keyType openrouter.KeyType, limit int, actor urn.Principal, actorDisplayName *string) (int, error) {
+	f.operationID = operationID
+	f.organizationID = organizationID
+	f.keyType = keyType
+	f.limit = limit
+	f.actor = actor
+	f.actorDisplayName = actorDisplayName
+	if f.err != nil {
+		return 0, f.err
+	}
+	if f.effectiveLimit != 0 {
+		return f.effectiveLimit, nil
+	}
+	return limit, nil
+}
 
 type fakeOpenRouterUsage struct {
 	creditsByKeyType map[openrouter.KeyType]float64
@@ -154,6 +182,103 @@ func TestGetInferenceKeysFailsWhenOpenRouterUsageCannotBeRead(t *testing.T) {
 
 	_, err = svc.GetInferenceKeys(ctx, &gen.GetInferenceKeysPayload{OrganizationID: "org_inference_usage_error"})
 	requireOopsCode(t, err, oops.CodeUnexpected)
+}
+
+func TestSetInferenceKeyMonthlyLimitSchedulesDurableAdminOperation(t *testing.T) {
+	t.Parallel()
+	ctx, svc, db := newTestAdminService(t)
+	seedOrg(t, ctx, db, orgFixture{id: "org_limit", name: "Inference Limit", slug: "inference-limit"})
+	_, err := orrepo.New(db).CreateOpenRouterAPIKey(ctx, orrepo.CreateOpenRouterAPIKeyParams{
+		OrganizationID: "org_limit", KeyType: "internal", KeyEncrypted: pgtype.Text{}, KeyHash: "hash-internal", MonthlyCredits: 50,
+	})
+	require.NoError(t, err)
+	scheduler := &fakeOpenRouterSpendCapScheduler{effectiveLimit: 274}
+	svc.openRouterSpendCap = scheduler
+	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{
+		SessionID: "session-limit", Email: "operator@example.test", OIDCSubject: "oidc-subject-limit", Name: "Test Operator", HD: "example.test",
+	})
+
+	result, err := svc.SetInferenceKeyMonthlyLimit(ctx, &gen.SetInferenceKeyMonthlyLimitPayload{
+		OrganizationID: "org_limit", KeyType: "internal", MonthlyCredits: 275,
+	})
+	require.NoError(t, err)
+	require.Equal(t, &gen.AdminInferenceKeyLimit{KeyType: "internal", MonthlyCredits: 274}, result)
+	require.NotEmpty(t, scheduler.operationID)
+	require.Equal(t, "org_limit", scheduler.organizationID)
+	require.Equal(t, openrouter.KeyTypeInternal, scheduler.keyType)
+	require.Equal(t, 275, scheduler.limit)
+	require.Equal(t, "oidc-subject-limit", scheduler.actor.ID)
+	require.Equal(t, urn.PrincipalTypeUser, scheduler.actor.Type)
+	require.NotNil(t, scheduler.actorDisplayName)
+	require.Equal(t, audit.SpeakeasyTeamActorLabel, *scheduler.actorDisplayName)
+}
+
+func TestSetInferenceKeyMonthlyLimitReportsSchedulerFailure(t *testing.T) {
+	t.Parallel()
+	ctx, svc, db := newTestAdminService(t)
+	seedOrg(t, ctx, db, orgFixture{id: "org_limit_failure", name: "Inference Limit Failure", slug: "inference-limit-failure"})
+	_, err := orrepo.New(db).CreateOpenRouterAPIKey(ctx, orrepo.CreateOpenRouterAPIKeyParams{
+		OrganizationID: "org_limit_failure", KeyType: "chat", KeyEncrypted: pgtype.Text{}, KeyHash: "hash-chat-failure", MonthlyCredits: 50,
+	})
+	require.NoError(t, err)
+	svc.openRouterSpendCap = &fakeOpenRouterSpendCapScheduler{err: errors.New("workflow failed")}
+
+	_, err = svc.SetInferenceKeyMonthlyLimit(ctx, &gen.SetInferenceKeyMonthlyLimitPayload{
+		OrganizationID: "org_limit_failure", KeyType: "chat", MonthlyCredits: 275,
+	})
+	requireOopsCode(t, err, oops.CodeUnexpected)
+}
+
+func TestSetInferenceKeyMonthlyLimitValidatesExplicitKeyAndBounds(t *testing.T) {
+	t.Parallel()
+	_, svc, _ := newTestAdminService(t)
+
+	for _, payload := range []*gen.SetInferenceKeyMonthlyLimitPayload{
+		{OrganizationID: "unused", KeyType: "", MonthlyCredits: 100},
+		{OrganizationID: "unused", KeyType: "unsupported", MonthlyCredits: 100},
+		{OrganizationID: "unused", KeyType: "chat", MonthlyCredits: 0},
+		{OrganizationID: "unused", KeyType: "chat", MonthlyCredits: 10001},
+	} {
+		_, err := svc.SetInferenceKeyMonthlyLimit(t.Context(), payload)
+		requireOopsCode(t, err, oops.CodeInvalid)
+	}
+}
+
+func TestSetInferenceKeyMonthlyLimitReportsUnavailableWithoutScheduler(t *testing.T) {
+	t.Parallel()
+	ctx, svc, db := newTestAdminService(t)
+	seedOrg(t, ctx, db, orgFixture{id: "org_limit_unavailable", name: "Inference Limit Unavailable", slug: "inference-limit-unavailable"})
+
+	_, err := svc.SetInferenceKeyMonthlyLimit(ctx, &gen.SetInferenceKeyMonthlyLimitPayload{
+		OrganizationID: "org_limit_unavailable", KeyType: "chat", MonthlyCredits: 100,
+	})
+	requireOopsCode(t, err, oops.CodeUnavailable)
+}
+
+func TestSetInferenceKeyMonthlyLimitRejectsAbsentAndDisabledKeys(t *testing.T) {
+	t.Parallel()
+	ctx, svc, db := newTestAdminService(t)
+	seedOrg(t, ctx, db, orgFixture{id: "org_limit_reject", name: "Inference Limit Reject", slug: "inference-limit-reject"})
+	scheduler := &fakeOpenRouterSpendCapScheduler{}
+	svc.openRouterSpendCap = scheduler
+
+	_, err := svc.SetInferenceKeyMonthlyLimit(ctx, &gen.SetInferenceKeyMonthlyLimitPayload{
+		OrganizationID: "org_limit_reject", KeyType: "internal", MonthlyCredits: 100,
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+	require.Empty(t, scheduler.operationID)
+
+	_, err = orrepo.New(db).CreateOpenRouterAPIKey(ctx, orrepo.CreateOpenRouterAPIKeyParams{
+		OrganizationID: "org_limit_reject", KeyType: "internal", KeyEncrypted: pgtype.Text{}, KeyHash: "hash-disabled", MonthlyCredits: 50,
+	})
+	require.NoError(t, err)
+	require.NoError(t, orrepo.New(db).DisableOpenRouterAPIKey(ctx, orrepo.DisableOpenRouterAPIKeyParams{OrganizationID: "org_limit_reject", KeyType: "internal"}))
+
+	_, err = svc.SetInferenceKeyMonthlyLimit(ctx, &gen.SetInferenceKeyMonthlyLimitPayload{
+		OrganizationID: "org_limit_reject", KeyType: "internal", MonthlyCredits: 100,
+	})
+	requireOopsCode(t, err, oops.CodeConflict)
+	require.Empty(t, scheduler.operationID)
 }
 
 func TestGetInferenceSpendHistoryReturnsCompleteMonths(t *testing.T) {

@@ -15,55 +15,57 @@ import (
 
 // Client is the "admin" service client.
 type Client struct {
-	LoginEndpoint                    goa.Endpoint
-	CallbackEndpoint                 goa.Endpoint
-	LogoutEndpoint                   goa.Endpoint
-	GetProjectEndpoint               goa.Endpoint
-	UpdateOrganizationEndpoint       goa.Endpoint
-	BulkUpdateAccountTypeEndpoint    goa.Endpoint
-	DisableOrganizationEndpoint      goa.Endpoint
-	EnableOrganizationEndpoint       goa.Endpoint
-	GetOrganizationEndpoint          goa.Endpoint
-	ListOrganizationMembersEndpoint  goa.Endpoint
-	ListOrganizationProjectsEndpoint goa.Endpoint
-	ListOrganizationsEndpoint        goa.Endpoint
-	ExtendTrialEndpoint              goa.Endpoint
-	CreateOrganizationEndpoint       goa.Endpoint
-	RearmTrialEndpoint               goa.Endpoint
-	GetOrganizationStatsEndpoint     goa.Endpoint
-	GetInferenceKeysEndpoint         goa.Endpoint
-	GetInferenceSpendHistoryEndpoint goa.Endpoint
-	GetPaygBillingSummaryEndpoint    goa.Endpoint
-	GetStripeSubscriptionEndpoint    goa.Endpoint
-	CancelStripeSubscriptionEndpoint goa.Endpoint
-	ResumeStripeSubscriptionEndpoint goa.Endpoint
+	LoginEndpoint                       goa.Endpoint
+	CallbackEndpoint                    goa.Endpoint
+	LogoutEndpoint                      goa.Endpoint
+	GetProjectEndpoint                  goa.Endpoint
+	UpdateOrganizationEndpoint          goa.Endpoint
+	BulkUpdateAccountTypeEndpoint       goa.Endpoint
+	DisableOrganizationEndpoint         goa.Endpoint
+	EnableOrganizationEndpoint          goa.Endpoint
+	GetOrganizationEndpoint             goa.Endpoint
+	ListOrganizationMembersEndpoint     goa.Endpoint
+	ListOrganizationProjectsEndpoint    goa.Endpoint
+	ListOrganizationsEndpoint           goa.Endpoint
+	ExtendTrialEndpoint                 goa.Endpoint
+	CreateOrganizationEndpoint          goa.Endpoint
+	RearmTrialEndpoint                  goa.Endpoint
+	GetOrganizationStatsEndpoint        goa.Endpoint
+	GetInferenceKeysEndpoint            goa.Endpoint
+	SetInferenceKeyMonthlyLimitEndpoint goa.Endpoint
+	GetInferenceSpendHistoryEndpoint    goa.Endpoint
+	GetPaygBillingSummaryEndpoint       goa.Endpoint
+	GetStripeSubscriptionEndpoint       goa.Endpoint
+	CancelStripeSubscriptionEndpoint    goa.Endpoint
+	ResumeStripeSubscriptionEndpoint    goa.Endpoint
 }
 
 // NewClient initializes a "admin" service client given the endpoints.
-func NewClient(login, callback, logout, getProject, updateOrganization, bulkUpdateAccountType, disableOrganization, enableOrganization, getOrganization, listOrganizationMembers, listOrganizationProjects, listOrganizations, extendTrial, createOrganization, rearmTrial, getOrganizationStats, getInferenceKeys, getInferenceSpendHistory, getPaygBillingSummary, getStripeSubscription, cancelStripeSubscription, resumeStripeSubscription goa.Endpoint) *Client {
+func NewClient(login, callback, logout, getProject, updateOrganization, bulkUpdateAccountType, disableOrganization, enableOrganization, getOrganization, listOrganizationMembers, listOrganizationProjects, listOrganizations, extendTrial, createOrganization, rearmTrial, getOrganizationStats, getInferenceKeys, setInferenceKeyMonthlyLimit, getInferenceSpendHistory, getPaygBillingSummary, getStripeSubscription, cancelStripeSubscription, resumeStripeSubscription goa.Endpoint) *Client {
 	return &Client{
-		LoginEndpoint:                    login,
-		CallbackEndpoint:                 callback,
-		LogoutEndpoint:                   logout,
-		GetProjectEndpoint:               getProject,
-		UpdateOrganizationEndpoint:       updateOrganization,
-		BulkUpdateAccountTypeEndpoint:    bulkUpdateAccountType,
-		DisableOrganizationEndpoint:      disableOrganization,
-		EnableOrganizationEndpoint:       enableOrganization,
-		GetOrganizationEndpoint:          getOrganization,
-		ListOrganizationMembersEndpoint:  listOrganizationMembers,
-		ListOrganizationProjectsEndpoint: listOrganizationProjects,
-		ListOrganizationsEndpoint:        listOrganizations,
-		ExtendTrialEndpoint:              extendTrial,
-		CreateOrganizationEndpoint:       createOrganization,
-		RearmTrialEndpoint:               rearmTrial,
-		GetOrganizationStatsEndpoint:     getOrganizationStats,
-		GetInferenceKeysEndpoint:         getInferenceKeys,
-		GetInferenceSpendHistoryEndpoint: getInferenceSpendHistory,
-		GetPaygBillingSummaryEndpoint:    getPaygBillingSummary,
-		GetStripeSubscriptionEndpoint:    getStripeSubscription,
-		CancelStripeSubscriptionEndpoint: cancelStripeSubscription,
-		ResumeStripeSubscriptionEndpoint: resumeStripeSubscription,
+		LoginEndpoint:                       login,
+		CallbackEndpoint:                    callback,
+		LogoutEndpoint:                      logout,
+		GetProjectEndpoint:                  getProject,
+		UpdateOrganizationEndpoint:          updateOrganization,
+		BulkUpdateAccountTypeEndpoint:       bulkUpdateAccountType,
+		DisableOrganizationEndpoint:         disableOrganization,
+		EnableOrganizationEndpoint:          enableOrganization,
+		GetOrganizationEndpoint:             getOrganization,
+		ListOrganizationMembersEndpoint:     listOrganizationMembers,
+		ListOrganizationProjectsEndpoint:    listOrganizationProjects,
+		ListOrganizationsEndpoint:           listOrganizations,
+		ExtendTrialEndpoint:                 extendTrial,
+		CreateOrganizationEndpoint:          createOrganization,
+		RearmTrialEndpoint:                  rearmTrial,
+		GetOrganizationStatsEndpoint:        getOrganizationStats,
+		GetInferenceKeysEndpoint:            getInferenceKeys,
+		SetInferenceKeyMonthlyLimitEndpoint: setInferenceKeyMonthlyLimit,
+		GetInferenceSpendHistoryEndpoint:    getInferenceSpendHistory,
+		GetPaygBillingSummaryEndpoint:       getPaygBillingSummary,
+		GetStripeSubscriptionEndpoint:       getStripeSubscription,
+		CancelStripeSubscriptionEndpoint:    cancelStripeSubscription,
+		ResumeStripeSubscriptionEndpoint:    resumeStripeSubscription,
 	}
 }
 
@@ -445,6 +447,29 @@ func (c *Client) GetInferenceKeys(ctx context.Context, p *GetInferenceKeysPayloa
 		return
 	}
 	return ires.([]*AdminInferenceKey), nil
+}
+
+// SetInferenceKeyMonthlyLimit calls the "setInferenceKeyMonthlyLimit" endpoint
+// of the "admin" service.
+// SetInferenceKeyMonthlyLimit may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SetInferenceKeyMonthlyLimit(ctx context.Context, p *SetInferenceKeyMonthlyLimitPayload) (res *AdminInferenceKeyLimit, err error) {
+	var ires any
+	ires, err = c.SetInferenceKeyMonthlyLimitEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminInferenceKeyLimit), nil
 }
 
 // GetInferenceSpendHistory calls the "getInferenceSpendHistory" endpoint of

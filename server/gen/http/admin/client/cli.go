@@ -593,6 +593,45 @@ func BuildGetInferenceKeysPayload(adminGetInferenceKeysOrganizationID string, ad
 	return v, nil
 }
 
+// BuildSetInferenceKeyMonthlyLimitPayload builds the payload for the admin
+// setInferenceKeyMonthlyLimit endpoint from CLI flags.
+func BuildSetInferenceKeyMonthlyLimitPayload(adminSetInferenceKeyMonthlyLimitBody string, adminSetInferenceKeyMonthlyLimitAdminSessionToken string) (*admin.SetInferenceKeyMonthlyLimitPayload, error) {
+	var err error
+	var body SetInferenceKeyMonthlyLimitRequestBody
+	{
+		err = json.Unmarshal([]byte(adminSetInferenceKeyMonthlyLimitBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"key_type\": \"internal\",\n      \"monthly_credits\": 2,\n      \"organization_id\": \"abc123\"\n   }'")
+		}
+		if !(body.KeyType == "chat" || body.KeyType == "internal") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.key_type", body.KeyType, []any{"chat", "internal"}))
+		}
+		if body.MonthlyCredits < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.monthly_credits", body.MonthlyCredits, 1, true))
+		}
+		if body.MonthlyCredits > 10000 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.monthly_credits", body.MonthlyCredits, 10000, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminSetInferenceKeyMonthlyLimitAdminSessionToken != "" {
+			adminSessionToken = &adminSetInferenceKeyMonthlyLimitAdminSessionToken
+		}
+	}
+	v := &admin.SetInferenceKeyMonthlyLimitPayload{
+		OrganizationID: body.OrganizationID,
+		KeyType:        body.KeyType,
+		MonthlyCredits: body.MonthlyCredits,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildGetInferenceSpendHistoryPayload builds the payload for the admin
 // getInferenceSpendHistory endpoint from CLI flags.
 func BuildGetInferenceSpendHistoryPayload(adminGetInferenceSpendHistoryOrganizationID string, adminGetInferenceSpendHistoryAdminSessionToken string) (*admin.GetInferenceSpendHistoryPayload, error) {

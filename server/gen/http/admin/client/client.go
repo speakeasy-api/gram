@@ -83,6 +83,10 @@ type Client struct {
 	// getInferenceKeys endpoint.
 	GetInferenceKeysDoer goahttp.Doer
 
+	// SetInferenceKeyMonthlyLimit Doer is the HTTP client used to make requests to
+	// the setInferenceKeyMonthlyLimit endpoint.
+	SetInferenceKeyMonthlyLimitDoer goahttp.Doer
+
 	// GetInferenceSpendHistory Doer is the HTTP client used to make requests to
 	// the getInferenceSpendHistory endpoint.
 	GetInferenceSpendHistoryDoer goahttp.Doer
@@ -123,33 +127,34 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		LoginDoer:                    doer,
-		CallbackDoer:                 doer,
-		LogoutDoer:                   doer,
-		GetProjectDoer:               doer,
-		UpdateOrganizationDoer:       doer,
-		BulkUpdateAccountTypeDoer:    doer,
-		DisableOrganizationDoer:      doer,
-		EnableOrganizationDoer:       doer,
-		GetOrganizationDoer:          doer,
-		ListOrganizationMembersDoer:  doer,
-		ListOrganizationProjectsDoer: doer,
-		ListOrganizationsDoer:        doer,
-		ExtendTrialDoer:              doer,
-		CreateOrganizationDoer:       doer,
-		RearmTrialDoer:               doer,
-		GetOrganizationStatsDoer:     doer,
-		GetInferenceKeysDoer:         doer,
-		GetInferenceSpendHistoryDoer: doer,
-		GetPaygBillingSummaryDoer:    doer,
-		GetStripeSubscriptionDoer:    doer,
-		CancelStripeSubscriptionDoer: doer,
-		ResumeStripeSubscriptionDoer: doer,
-		RestoreResponseBody:          restoreBody,
-		scheme:                       scheme,
-		host:                         host,
-		decoder:                      dec,
-		encoder:                      enc,
+		LoginDoer:                       doer,
+		CallbackDoer:                    doer,
+		LogoutDoer:                      doer,
+		GetProjectDoer:                  doer,
+		UpdateOrganizationDoer:          doer,
+		BulkUpdateAccountTypeDoer:       doer,
+		DisableOrganizationDoer:         doer,
+		EnableOrganizationDoer:          doer,
+		GetOrganizationDoer:             doer,
+		ListOrganizationMembersDoer:     doer,
+		ListOrganizationProjectsDoer:    doer,
+		ListOrganizationsDoer:           doer,
+		ExtendTrialDoer:                 doer,
+		CreateOrganizationDoer:          doer,
+		RearmTrialDoer:                  doer,
+		GetOrganizationStatsDoer:        doer,
+		GetInferenceKeysDoer:            doer,
+		SetInferenceKeyMonthlyLimitDoer: doer,
+		GetInferenceSpendHistoryDoer:    doer,
+		GetPaygBillingSummaryDoer:       doer,
+		GetStripeSubscriptionDoer:       doer,
+		CancelStripeSubscriptionDoer:    doer,
+		ResumeStripeSubscriptionDoer:    doer,
+		RestoreResponseBody:             restoreBody,
+		scheme:                          scheme,
+		host:                            host,
+		decoder:                         dec,
+		encoder:                         enc,
 	}
 }
 
@@ -556,6 +561,30 @@ func (c *Client) GetInferenceKeys() goa.Endpoint {
 		resp, err := c.GetInferenceKeysDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "getInferenceKeys", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetInferenceKeyMonthlyLimit returns an endpoint that makes HTTP requests to
+// the admin service setInferenceKeyMonthlyLimit server.
+func (c *Client) SetInferenceKeyMonthlyLimit() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetInferenceKeyMonthlyLimitRequest(c.encoder)
+		decodeResponse = DecodeSetInferenceKeyMonthlyLimitResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetInferenceKeyMonthlyLimitRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetInferenceKeyMonthlyLimitDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "setInferenceKeyMonthlyLimit", err)
 		}
 		return decodeResponse(resp)
 	}

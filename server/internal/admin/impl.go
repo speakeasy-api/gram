@@ -67,6 +67,7 @@ type Service struct {
 	workos orgprovision.WorkOSOrganizationCreator
 
 	openRouter           TrialKeyReviver
+	openRouterSpendCap   OpenRouterSpendCapScheduler
 	openRouterUsage      OpenRouterUsageReader
 	productFeatures      *productfeatures.Client
 	chatAnalysisSignaler analysis.Signaler
@@ -88,6 +89,10 @@ type TrialKeyReviver interface {
 	RefreshAPIKeyLimit(ctx context.Context, orgID string, keyType openrouter.KeyType, limit *int) (int, error)
 	ReinstateAPIKeyLimit(ctx context.Context, orgID string, keyType openrouter.KeyType, limit *int) (int, error)
 	ReinstateAPIKeyLimitWithDB(ctx context.Context, db openrouter.DBTX, orgID string, keyType openrouter.KeyType, limit *int) (int, error)
+}
+
+type OpenRouterSpendCapScheduler interface {
+	SetAdminOpenRouterSpendCap(context.Context, string, string, openrouter.KeyType, int, urn.Principal, *string) (int, error)
 }
 
 // OpenRouterUsageReader reads the current monthly usage for a materialized key.
@@ -149,6 +154,7 @@ func NewService(
 	trialNotifier trialemails.Notifier,
 	productFeatures *productfeatures.Client,
 	chatAnalysisSignaler analysis.Signaler,
+	openRouterSpendCap OpenRouterSpendCapScheduler,
 	billing BillingOperations,
 	dashboardURL *url.URL,
 ) *Service {
@@ -182,6 +188,7 @@ func NewService(
 		),
 		workos:               workosClient,
 		openRouter:           openRouter,
+		openRouterSpendCap:   openRouterSpendCap,
 		openRouterUsage:      openRouter,
 		productFeatures:      productFeatures,
 		chatAnalysisSignaler: chatAnalysisSignaler,

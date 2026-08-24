@@ -181,6 +181,13 @@ var AdminInferenceKey = Type("AdminInferenceKey", func() {
 	Required("key_type", "credits_used", "monthly_credits", "disabled")
 })
 
+var AdminInferenceKeyLimit = Type("AdminInferenceKeyLimit", func() {
+	Description("The configured monthly limit for one materialized platform-managed OpenRouter key.")
+	Attribute("key_type", String)
+	Attribute("monthly_credits", Int64)
+	Required("key_type", "monthly_credits")
+})
+
 var AdminInferenceSpendMonth = Type("AdminInferenceSpendMonth", func() {
 	Attribute("period_start", String, func() { Format(FormatDate) })
 	Attribute("period_end", String, "Exclusive end of the UTC calendar month.", func() { Format(FormatDate) })
@@ -655,6 +662,24 @@ var _ = Service("admin", func() {
 		Result(ArrayOf(AdminInferenceKey))
 		HTTP(func() { GET("/admin/organization.inferenceKeys"); Param("organization_id"); Response(StatusOK) })
 		Meta("openapi:operationId", "adminGetInferenceKeys")
+	})
+
+	Method("setInferenceKeyMonthlyLimit", func() {
+		Description("Sets the monthly limit for one materialized platform-managed OpenRouter key.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("organization_id", "key_type", "monthly_credits")
+			Attribute("organization_id", String)
+			Attribute("key_type", String, func() { Enum("chat", "internal") })
+			Attribute("monthly_credits", Int, func() {
+				Minimum(constants.MinimumPaygSpendCapUSD)
+				Maximum(constants.MaximumPaygSpendCapUSD)
+			})
+			Meta("openapi:typename", "SetInferenceKeyMonthlyLimitRequestBody")
+		})
+		Result(AdminInferenceKeyLimit)
+		HTTP(func() { POST("/admin/organization.setInferenceKeyMonthlyLimit"); Response(StatusOK) })
+		Meta("openapi:operationId", "adminSetInferenceKeyMonthlyLimit")
 	})
 
 	Method("getInferenceSpendHistory", func() {

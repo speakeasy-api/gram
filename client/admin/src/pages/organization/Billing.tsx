@@ -1,9 +1,10 @@
-import { useEffect, useRef, type JSX, type ReactNode } from "react";
+import { useEffect, useRef, useState, type JSX, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 
 import { useConfirmDialog } from "@/components/ConfirmDialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   inferenceKeysQuery,
   inferenceSpendHistoryQuery,
@@ -17,7 +18,9 @@ import {
   errorMessage,
   GramAdminError,
   resumeStripeSubscription,
+  setInferenceKeyMonthlyLimit,
   type AdminInferenceKey,
+  type AdminInferenceKeyType,
   type AdminInferenceSpendMonth,
   type AdminOrganization,
   type AdminPaygBillingSummary,
@@ -93,7 +96,135 @@ function formatCredits(value: number): string {
   }).format(value);
 }
 
-function InferenceKeys({ keys }: { keys: AdminInferenceKey[] }): JSX.Element {
+const MIN_MONTHLY_LIMIT = 1;
+const MAX_MONTHLY_LIMIT = 10_000;
+
+function isWritableInferenceKey(
+  key: AdminInferenceKey,
+): key is AdminInferenceKey & { key_type: AdminInferenceKeyType } {
+  return key.key_type === "chat" || key.key_type === "internal";
+}
+
+function InferenceKeyLimitEditor({
+  organizationID,
+  inferenceKey,
+}: {
+  organizationID: string;
+  inferenceKey: AdminInferenceKey & { key_type: AdminInferenceKeyType };
+}): JSX.Element {
+  const qc = useQueryClient();
+  const { announce, showFailure } = useWriteReport();
+  const [value, setValue] = useState(String(inferenceKey.monthly_credits));
+  const [edited, setEdited] = useState(false);
+  const parsed = Number(value);
+  const invalid =
+    value.trim() === "" ||
+    !Number.isInteger(parsed) ||
+    parsed < MIN_MONTHLY_LIMIT ||
+    parsed > MAX_MONTHLY_LIMIT;
+  const mutation = useMutation({
+    mutationFn: (monthlyCredits: number) =>
+      setInferenceKeyMonthlyLimit({
+        organizationID,
+        keyType: inferenceKey.key_type,
+        monthlyCredits,
+      }),
+    onSuccess: async () => {
+      showFailure(null);
+      announce(`${inferenceKey.key_type} monthly limit updated.`);
+      await qc.invalidateQueries({
+        queryKey: inferenceKeysQuery(organizationID).queryKey,
+      });
+    },
+    onError: (error) => {
+      const message = `Could not update ${inferenceKey.key_type} monthly limit: ${errorMessage(error)}`;
+      announce(message);
+      showFailure(message);
+    },
+  });
+
+  useEffect(() => {
+    setValue(String(inferenceKey.monthly_credits));
+    setEdited(false);
+  }, [inferenceKey.monthly_credits]);
+
+  const inputID = `inference-key-limit-${inferenceKey.key_type}`;
+  const errorID = `${inputID}-error`;
+
+  return (
+    <Row label="Monthly limit">
+      <form
+        className="flex max-w-sm items-start gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!invalid && !inferenceKey.disabled) {
+            showFailure(null);
+            mutation.mutate(parsed);
+          }
+        }}
+      >
+        <div className="flex-1">
+          <label className="sr-only" htmlFor={inputID}>
+            {inferenceKey.key_type} monthly limit in USD
+          </label>
+          <Input
+            id={inputID}
+            type="number"
+            min={MIN_MONTHLY_LIMIT}
+            max={MAX_MONTHLY_LIMIT}
+            step={1}
+            value={value}
+            disabled={inferenceKey.disabled || mutation.isPending}
+            aria-invalid={!inferenceKey.disabled && edited && invalid}
+            aria-describedby={
+              !inferenceKey.disabled && edited && invalid ? errorID : undefined
+            }
+            onChange={(event) => {
+              mutation.reset();
+              setValue(event.target.value);
+              setEdited(true);
+            }}
+          />
+          {!inferenceKey.disabled && edited && invalid && (
+            <p id={errorID} className="text-destructive mt-1 text-xs">
+              Enter a whole-dollar limit from $1 to $10,000.
+            </p>
+          )}
+          {mutation.isError && (
+            <p role="alert" className="text-destructive mt-1 text-xs">
+              {errorMessage(mutation.error)}
+            </p>
+          )}
+          {inferenceKey.disabled && (
+            <p className="text-muted-foreground mt-1 text-xs">
+              Enable this key before changing its limit.
+            </p>
+          )}
+        </div>
+        <Button
+          type="submit"
+          size="sm"
+          disabled={
+            inferenceKey.disabled ||
+            invalid ||
+            mutation.isPending ||
+            parsed === inferenceKey.monthly_credits
+          }
+        >
+          {mutation.isPending ? "Saving…" : "Save limit"}
+        </Button>
+      </form>
+    </Row>
+  );
+}
+
+function InferenceKeys({
+  organizationID,
+  keys,
+}: {
+  organizationID: string;
+  keys: AdminInferenceKey[];
+}): JSX.Element {
   return (
     <Group title="Platform-managed OpenRouter keys">
       {keys.length === 0 && (
@@ -120,6 +251,12 @@ function InferenceKeys({ keys }: { keys: AdminInferenceKey[] }): JSX.Element {
               : formatCredits(key.monthly_credits)}
           </Row>
           <Row label="State">{key.disabled ? "Disabled" : "Enabled"}</Row>
+          {isWritableInferenceKey(key) && (
+            <InferenceKeyLimitEditor
+              organizationID={organizationID}
+              inferenceKey={key}
+            />
+          )}
         </div>
       ))}
     </Group>
@@ -392,7 +529,10 @@ export function Billing({ org }: { org: AdminOrganization }): JSX.Element {
       {subscription && <SubscriptionDetails subscription={subscription} />}
 
       {inferenceKeysResult.data && (
-        <InferenceKeys keys={inferenceKeysResult.data} />
+        <InferenceKeys
+          organizationID={org.id}
+          keys={inferenceKeysResult.data}
+        />
       )}
       {inferenceKeysResult.isPending && (
         <p className="text-muted-foreground mt-5 text-sm">
