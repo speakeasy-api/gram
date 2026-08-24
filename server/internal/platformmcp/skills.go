@@ -623,7 +623,7 @@ func (s *SkillsService) resolveTarget(ctx context.Context, principal Principal, 
 
 	matches := make([]SkillTarget, 0, 2)
 	for _, candidate := range candidates {
-		if candidate.Kind == kind && matchesSkillTarget(candidate, wanted) {
+		if candidate.Kind == kind && matchesTargetName(candidate.ID, candidate.Slug, candidate.Name, wanted) {
 			matches = append(matches, candidate)
 		}
 	}
@@ -635,17 +635,6 @@ func (s *SkillsService) resolveTarget(ctx context.Context, principal Principal, 
 	default:
 		return SkillTarget{}, ErrSkillTargetAmbiguous
 	}
-}
-
-// matchesSkillTarget accepts the id, the slug, or the exact name. Names are
-// compared case-insensitively because a caller reading a name off a dashboard
-// should not have to reproduce its capitalization, but never by prefix or
-// substring: a partial match is what turns "the marketing plugin" into someone
-// else's plugin.
-func matchesSkillTarget(candidate SkillTarget, wanted string) bool {
-	return candidate.ID == wanted ||
-		(candidate.Slug != "" && strings.EqualFold(candidate.Slug, wanted)) ||
-		strings.EqualFold(candidate.Name, wanted)
 }
 
 // authoringResult states what an authoring write did and, deliberately, what it

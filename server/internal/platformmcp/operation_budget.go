@@ -162,6 +162,11 @@ type OperationBudgets struct {
 	// write.
 	Skills            OperationBudget
 	LifecycleMetadata OperationBudget
+	// Plugins meters the plugin inventory reads. They are bounded PostgreSQL
+	// reads of a project's own plugins, metered separately from diagnostics so
+	// an administrator walking the inventory does not spend the allowance the
+	// failure diagnosis it leads to will need.
+	Plugins OperationBudget
 	// Diagnostics meters the observability reads. They are bounded aggregate
 	// queries over Gram-owned telemetry, so the cost being metered is the
 	// ClickHouse scan, not an external egress.

@@ -83,10 +83,10 @@ func (r *SelectedUseRecorder) record(ctx context.Context, observation toolcallob
 		return nil
 	}
 	if err := q.LockPlatformMCPDistribution(ctx, repo.LockPlatformMCPDistributionParams{
-		OrganizationID:  observation.OrganizationID,
-		ProjectID:       observation.ProjectID.String(),
-		RegistrationID:  target.RegistrationID.String(),
-		DefaultPluginID: target.DefaultPluginID.String(),
+		OrganizationID: observation.OrganizationID,
+		ProjectID:      observation.ProjectID.String(),
+		RegistrationID: target.RegistrationID.String(),
+		PluginID:       target.DefaultPluginID.String(),
 	}); err != nil {
 		return fmt.Errorf("lock platform mcp selected-use distribution: %w", err)
 	}

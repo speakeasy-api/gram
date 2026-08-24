@@ -399,5 +399,7 @@ var knownPlatformMCPToolNames = map[string]struct{}{
 	"update_mcp_metadata":                   {},
 	"disable_mcp":                           {},
 	"enable_mcp":                            {},
+	"list_plugins":                          {},
+	"get_plugin":                            {},
 	"send_platform_mcp_feedback":            {},
 }
