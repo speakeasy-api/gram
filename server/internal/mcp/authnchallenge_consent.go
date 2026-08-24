@@ -409,10 +409,11 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	// approve-button enabling, so unavailable checks must hide it rather than
 	// prevent unrestricted approval.
 	showToolsIsland := false
-	if !challengeState.FirstParty && endpoint.McpServerID.Valid {
-		showToolsIsland = s.consentToolFilteringEnabled(ctx, logger, endpoint.OrganizationID)
-		if showToolsIsland && endpoint.ToolsetID.Valid {
-			showToolsIsland, _ = s.toolsetConsentInventoryFilterable(ctx, endpoint)
+	if !challengeState.FirstParty && s.consentToolFilteringEnabled(ctx, logger, endpoint.OrganizationID) {
+		var eligibilityErr error
+		showToolsIsland, eligibilityErr = s.consentToolPickerEligible(ctx, endpoint)
+		if eligibilityErr != nil {
+			logger.WarnContext(ctx, "consent tool picker eligibility unavailable", attr.SlogError(eligibilityErr))
 		}
 	}
 	if showToolsIsland {
@@ -582,6 +583,14 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	// field can only widen a submission to the status quo, never past it.
 	var boundInventory *consentToolInventory
 	if r.PostForm.Get("tool_filtering") == "on" {
+		eligible, eerr := s.consentToolPickerEligible(ctx, endpoint)
+		if eerr != nil {
+			return oops.E(oops.CodeUnavailable, eerr, "service temporarily unavailable").LogError(ctx, logger)
+		}
+		if !eligible {
+			return oops.E(oops.CodeConflict, nil, "tool filtering is not available for this endpoint").LogWarn(ctx, logger)
+		}
+
 		attempt, aerr := consentAttemptID(r.PostForm.Get("tool_inventory_id"))
 		if aerr != nil {
 			return oops.E(oops.CodeConflict, aerr, "tool inventory is no longer available; reload the page and try again").LogWarn(ctx, logger)

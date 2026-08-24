@@ -456,22 +456,20 @@ func TestHandleConsentPost_RejectsInvalidCSRFToken(t *testing.T) {
 // MCP session runs on page load, returning the attempt id the approve form
 // must submit as tool_inventory_id: approval binds to the completed
 // snapshot this hydration captures.
-func hydrateConsentInventory(t *testing.T, ctx context.Context, ti *testInstance, mcpSlug, stateID, csrfToken string) string {
+func hydrateConsentInventory(t *testing.T, ctx context.Context, ti *testInstance, endpoint *mcp.ResolvedMcpEndpoint, stateID, csrfToken string) string {
 	t.Helper()
 
 	attempt := uuid.NewString()
 	body := `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`
-	req := httptest.NewRequest(http.MethodPost, "/mcp/"+mcpSlug+"/connect/mcp", strings.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/"+endpoint.RouteBase+"/"+endpoint.Slug+"/connect/mcp", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Gram-Consent-State", stateID)
 	req.Header.Set("Gram-Consent-Csrf", csrfToken)
 	req.Header.Set("Gram-Consent-Inventory-Attempt", attempt)
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("mcpSlug", mcpSlug)
-	req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+	req = req.WithContext(ctx)
 
 	w := httptest.NewRecorder()
-	require.NoError(t, ti.service.HandleConsentMCP(w, req))
+	require.NoError(t, ti.service.ServeConsentMCP(w, req, endpoint))
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Contains(t, w.Body.String(), `"tools"`)
 	return attempt
@@ -507,13 +505,10 @@ func TestHandleConsentPost_ApproveWithCSRFRedirectsWithCode(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	attempt := hydrateConsentInventory(t, ctx, ti, toolset.McpSlug.String, stateID, csrfToken)
-
 	form := url.Values{}
 	form.Set("state", stateID)
 	form.Set("csrf_token", csrfToken)
 	form.Set("action", "approve")
-	form.Set("tool_inventory_id", attempt)
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.McpSlug.String+"/connect", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rctx := chi.NewRouteContext()
@@ -565,13 +560,10 @@ func TestHandleConsentPost_PropagatesFlowIDIntoGrant(t *testing.T) {
 		CreatedAt:           time.Now(),
 	}))
 
-	attempt := hydrateConsentInventory(t, ctx, ti, toolset.McpSlug.String, stateID, csrfToken)
-
 	form := url.Values{}
 	form.Set("state", stateID)
 	form.Set("csrf_token", csrfToken)
 	form.Set("action", "approve")
-	form.Set("tool_inventory_id", attempt)
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.McpSlug.String+"/connect", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rctx := chi.NewRouteContext()
@@ -1359,11 +1351,12 @@ func seedModernConsentChallenge(
 	client usersessions_repo.UserSessionClient,
 	mcpServerID uuid.UUID,
 	endpointSlug string,
-) string {
+) (string, string) {
 	t.Helper()
 
 	subject := urn.NewUserSubject(mockidp.MockUserID)
 	stateID := uuid.NewString()
+	csrfToken := "csrf-" + uuid.NewString()
 	require.NoError(t, ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
 		ID:                  stateID,
 		UserSessionIssuerID: issuerID,
@@ -1377,11 +1370,11 @@ func seedModernConsentChallenge(
 		State:               "client-state",
 		CodeChallenge:       "abc",
 		CodeChallengeMethod: "S256",
-		CSRFToken:           "csrf-" + uuid.NewString(),
+		CSRFToken:           csrfToken,
 		Subject:             &subject,
 		CreatedAt:           time.Now(),
 	}))
-	return stateID
+	return stateID, csrfToken
 }
 
 func consentGetPageWithContext(t *testing.T, ctx context.Context, ti *testInstance, mcpSlug, stateID string) string {
@@ -1443,33 +1436,57 @@ func TestHandleConsentGet_ModernToolsetWithoutProxyShowsToolPicker(t *testing.T)
 	toolset, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
 	endpointSlug := "modern-clean-" + uuid.NewString()
 	mcpServer := createToolsetMcpEndpoint(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, endpointSlug, "public", uuid.NullUUID{}, issuer.ID)
-	stateID := seedModernConsentChallenge(t, ctx, ti, issuer.ID, client, mcpServer.ID, endpointSlug)
+	stateID, _ := seedModernConsentChallenge(t, ctx, ti, issuer.ID, client, mcpServer.ID, endpointSlug)
 
 	page := modernConsentGetPage(t, ctx, ti, endpointSlug, stateID)
 	require.Contains(t, page, "consent-tools-root")
 	require.Contains(t, consentApproveButtonTag(t, page), "disabled", "island owns enabling the approve button")
 }
 
-func TestHandleConsentGet_ModernToolsetWithProxyUsesAllToolsConsent(t *testing.T) {
+func TestHandleConsentGet_ModernMixedToolsetWithProxyUsesAllToolsConsent(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
 	_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
-	proxyToolset := setupToolsetWithExternalMCP(
+	proxyConfig := setupToolsetWithExternalMCP(
 		t,
 		ctx,
 		ti,
 		"https://upstream.invalid/mcp",
 		externalmcp_types.TransportTypeStreamableHTTP,
 		"consent-proxy-"+uuid.NewString()[:8],
-	).toolset
+	)
+	addOrdinaryToolToExternalMCPToolset(t, ctx, ti, proxyConfig)
+	proxyToolset := proxyConfig.toolset
 	endpointSlug := "modern-proxy-" + uuid.NewString()
 	mcpServer := createToolsetMcpEndpoint(t, ctx, ti.conn, proxyToolset.ProjectID, proxyToolset.ID, endpointSlug, "public", uuid.NullUUID{}, issuer.ID)
-	stateID := seedModernConsentChallenge(t, ctx, ti, issuer.ID, client, mcpServer.ID, endpointSlug)
+	stateID, _ := seedModernConsentChallenge(t, ctx, ti, issuer.ID, client, mcpServer.ID, endpointSlug)
 
 	page := modernConsentGetPage(t, ctx, ti, endpointSlug, stateID)
 	require.NotContains(t, page, "consent-tools-root")
 	require.NotContains(t, page, "Tool access")
+	require.NotContains(t, consentApproveButtonTag(t, page), "disabled", "unrestricted consent remains available")
+}
+
+func TestHandleConsentGet_CustomDomainLockdownHidesModernToolsetPicker(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	toolset, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	toolset, _ = attachCustomDomainToToolset(t, ctx, ti, authCtx, toolset, "consent-lockdown-"+uuid.NewString()+".example.com")
+	_, err := customdomains_repo.New(ti.conn).UpdateCustomDomainIPAllowlist(ctx, customdomains_repo.UpdateCustomDomainIPAllowlistParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		IpAllowlist:    []string{"203.0.113.0/24"},
+	})
+	require.NoError(t, err)
+	endpointSlug := "modern-lockdown-" + uuid.NewString()
+	mcpServer := createToolsetMcpEndpoint(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, endpointSlug, "public", uuid.NullUUID{}, issuer.ID)
+	stateID, _ := seedModernConsentChallenge(t, ctx, ti, issuer.ID, client, mcpServer.ID, endpointSlug)
+
+	page := modernConsentGetPage(t, ctx, ti, endpointSlug, stateID)
+	require.NotContains(t, page, "consent-tools-root")
 	require.NotContains(t, consentApproveButtonTag(t, page), "disabled", "unrestricted consent remains available")
 }
 
@@ -1483,7 +1500,7 @@ func TestHandleConsentGet_CustomDomainLockdownBlocksLegacyInventory(t *testing.T
 	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	toolset, domain := attachCustomDomainToToolset(t, ctx, ti, authCtx, toolset, "consent-lockdown-"+uuid.NewString()+".example.com")
+	toolset, domain := attachCustomDomainToToolset(t, ctx, ti, authCtx, toolset, "consent-lockdown-legacy-"+uuid.NewString()+".example.com")
 	_, err := customdomains_repo.New(ti.conn).UpdateCustomDomainIPAllowlist(ctx, customdomains_repo.UpdateCustomDomainIPAllowlistParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		IpAllowlist:    []string{"203.0.113.0/24"},
@@ -1491,11 +1508,11 @@ func TestHandleConsentGet_CustomDomainLockdownBlocksLegacyInventory(t *testing.T
 	require.NoError(t, err)
 	stateID, csrfToken := seedConsentChallenge(t, ctx, ti, toolset, client)
 
-	page := consentGetPageWithContext(t, context.Background(), ti, toolset.McpSlug.String, stateID)
+	page := consentGetPageWithContext(t, ctx, ti, toolset.McpSlug.String, stateID)
 	require.NotContains(t, page, "consent-tools-root")
 	require.NotContains(t, consentApproveButtonTag(t, page), "disabled")
 
-	customCtx := customdomains.WithContext(context.Background(), &customdomains.Context{
+	customCtx := customdomains.WithContext(ctx, &customdomains.Context{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		Domain:         domain.Domain,
 		DomainID:       domain.ID,
@@ -1511,45 +1528,19 @@ func TestHandleConsentGet_CustomDomainLockdownBlocksLegacyInventory(t *testing.T
 	req.Header.Set("Gram-Consent-Inventory-Attempt", uuid.NewString())
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
-	req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
 	err = ti.service.HandleConsentMCP(httptest.NewRecorder(), req)
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
-// TestHandleConsentMCP_PrivateToolsetRequiresConnect ensures consent-time
-// enumeration applies the same server-level gate as runtime dispatch. Tool
-// names must not leak through roleHidden metadata to a subject with no
-// mcp:connect grant.
-func TestHandleConsentMCP_PrivateToolsetRequiresConnect(t *testing.T) {
+func TestHandleConsentMCP_LegacyEndpointNotFound(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
 	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-	ti.addToolWithSecurity(ctx, t, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
-	subject := urn.NewUserSubject("ungranted-user-" + uuid.NewString())
-	stateID := uuid.NewString()
-	csrfToken := "csrf-" + uuid.NewString()
-	require.NoError(t, ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
-		ID:                  stateID,
-		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
-		Endpoint: mcp.EndpointRef{
-			McpSlug:        toolset.McpSlug.String,
-			CustomDomainID: toolset.CustomDomainID,
-		},
-		ClientID:            client.ClientID,
-		RedirectURI:         client.RedirectUris[0],
-		State:               "client-state",
-		CodeChallenge:       "abc",
-		CodeChallengeMethod: "S256",
-		CSRFToken:           csrfToken,
-		Subject:             &subject,
-		CreatedAt:           time.Now(),
-	}))
+	stateID, csrfToken := seedConsentChallenge(t, ctx, ti, toolset, client)
 
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.McpSlug.String+"/connect/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -1558,15 +1549,12 @@ func TestHandleConsentMCP_PrivateToolsetRequiresConnect(t *testing.T) {
 	req.Header.Set("Gram-Consent-Inventory-Attempt", uuid.NewString())
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
-	req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
 
-	w := httptest.NewRecorder()
-	err := ti.service.HandleConsentMCP(w, req)
+	err := ti.service.HandleConsentMCP(httptest.NewRecorder(), req)
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
-	require.NotContains(t, w.Body.String(), `"tools"`)
-	require.NotContains(t, w.Body.String(), "roleHiddenTools")
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 }
 
 // TestHandleConsentPost_FilteringOnWithoutInventoryConflicts asserts a
@@ -1577,8 +1565,12 @@ func TestHandleConsentPost_FilteringOnWithoutInventoryConflicts(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
-	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
-	stateID, csrfToken := seedConsentChallenge(t, ctx, ti, toolset, client)
+	toolset, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	endpointSlug := "modern-no-inventory-" + uuid.NewString()
+	mcpServer := createToolsetMcpEndpoint(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, endpointSlug, "public", uuid.NullUUID{}, issuer.ID)
+	stateID, csrfToken := seedModernConsentChallenge(t, ctx, ti, issuer.ID, client, mcpServer.ID, endpointSlug)
+	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, endpointSlug, "x/mcp")
+	require.NoError(t, err)
 
 	form := url.Values{}
 	form.Set("state", stateID)
@@ -1586,16 +1578,43 @@ func TestHandleConsentPost_FilteringOnWithoutInventoryConflicts(t *testing.T) {
 	form.Set("action", "approve")
 	form.Set("tool_filtering", "on")
 	form.Set("tool_selection_mode", "tools")
+	req := httptest.NewRequest(http.MethodPost, "/x/mcp/"+endpointSlug+"/connect", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req = req.WithContext(ctx)
+
+	err = ti.service.ServeConsent(httptest.NewRecorder(), req, endpoint)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeConflict, oopsErr.Code)
+
+	_, err = ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
+	require.NoError(t, err, "conflict must not consume the challenge")
+}
+
+func TestHandleConsentPost_LegacyRestrictiveApprovalConflicts(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	stateID, csrfToken := seedConsentChallenge(t, ctx, ti, toolset, client)
+
+	form := url.Values{}
+	form.Set("state", stateID)
+	form.Set("csrf_token", csrfToken)
+	form.Set("action", "approve")
+	form.Set("tool_inventory_id", uuid.NewString())
+	form.Set("tool_filtering", "on")
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.McpSlug.String+"/connect", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
-	req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
 
 	err := ti.service.HandleConsent(httptest.NewRecorder(), req)
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeConflict, oopsErr.Code)
+	require.Contains(t, err.Error(), "tool filtering is not available for this endpoint")
 
 	_, err = ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	require.NoError(t, err, "conflict must not consume the challenge")
@@ -1610,10 +1629,14 @@ func TestHandleConsentPost_ApproveWithToolFilteringBindsSelection(t *testing.T) 
 	t.Parallel()
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
-	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
-	stateID, csrfToken := seedConsentChallenge(t, ctx, ti, toolset, client)
+	toolset, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	endpointSlug := "modern-filtered-" + uuid.NewString()
+	mcpServer := createToolsetMcpEndpoint(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, endpointSlug, "public", uuid.NullUUID{}, issuer.ID)
+	stateID, csrfToken := seedModernConsentChallenge(t, ctx, ti, issuer.ID, client, mcpServer.ID, endpointSlug)
+	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, endpointSlug, "x/mcp")
+	require.NoError(t, err)
 
-	attempt := hydrateConsentInventory(t, ctx, ti, toolset.McpSlug.String, stateID, csrfToken)
+	attempt := hydrateConsentInventory(t, ctx, ti, endpoint, stateID, csrfToken)
 
 	form := url.Values{}
 	form.Set("state", stateID)
@@ -1622,14 +1645,12 @@ func TestHandleConsentPost_ApproveWithToolFilteringBindsSelection(t *testing.T) 
 	form.Set("tool_inventory_id", attempt)
 	form.Set("tool_filtering", "on")
 	form.Add("tools", "not-in-inventory")
-	req := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.McpSlug.String+"/connect", strings.NewReader(form.Encode()))
+	req := httptest.NewRequest(http.MethodPost, "/x/mcp/"+endpointSlug+"/connect", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
-	req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+	req = req.WithContext(ctx)
 
 	w := httptest.NewRecorder()
-	require.NoError(t, ti.service.HandleConsent(w, req))
+	require.NoError(t, ti.service.ServeConsent(w, req, endpoint))
 	require.Equal(t, http.StatusSeeOther, w.Code)
 
 	loc, err := url.Parse(w.Header().Get("Location"))
@@ -1638,10 +1659,10 @@ func TestHandleConsentPost_ApproveWithToolFilteringBindsSelection(t *testing.T) 
 	require.NotEmpty(t, code)
 
 	grantCache := cache.NewTypedObjectCache[mcp.UserSessionGrant](ti.logger, ti.cacheAdapter, cache.SuffixNone)
-	grant, err := grantCache.Get(ctx, "userSessionGrant:"+toolset.UserSessionIssuerID.UUID.String()+":"+code)
+	grant, err := grantCache.Get(ctx, "userSessionGrant:"+issuer.ID.String()+":"+code)
 	require.NoError(t, err)
 	require.NotNil(t, grant.ToolSelection, "restrictive approve must persist a selection")
-	require.Equal(t, "toolset:"+toolset.ID.String(), grant.ToolSelection.Resource)
+	require.Equal(t, "mcp_server:"+mcpServer.ID.String(), grant.ToolSelection.Resource)
 	require.NotEqual(t, uuid.Nil, grant.ToolSelection.GrantID)
 	require.Empty(t, grant.ToolSelection.Allow, "names outside the snapshot are intersected away")
 	require.False(t, grant.ToolSelection.AllowsName("not-in-inventory"))

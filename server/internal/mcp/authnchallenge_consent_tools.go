@@ -110,7 +110,14 @@ func (s *Service) describeConsentToolset(ctx context.Context, endpoint *Resolved
 	return toolset, nil
 }
 
-func (s *Service) toolsetConsentInventoryFilterable(ctx context.Context, endpoint *ResolvedMcpEndpoint) (bool, error) {
+func (s *Service) consentToolPickerEligible(ctx context.Context, endpoint *ResolvedMcpEndpoint) (bool, error) {
+	if !endpoint.McpServerID.Valid {
+		return false, nil
+	}
+	if !endpoint.ToolsetID.Valid {
+		return true, nil
+	}
+
 	hasProxy, err := toolsets_repo.New(s.db).ToolsetHasExternalMCPProxy(ctx, toolsets_repo.ToolsetHasExternalMCPProxyParams{
 		ToolsetID: endpoint.ToolsetID.UUID,
 		ProjectID: endpoint.ProjectID,

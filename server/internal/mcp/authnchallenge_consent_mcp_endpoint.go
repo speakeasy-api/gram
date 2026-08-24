@@ -108,12 +108,11 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 	if !s.consentToolFilteringEnabled(ctx, logger, endpoint.OrganizationID) {
 		return oops.E(oops.CodeNotFound, nil, "not found").LogWarn(ctx, logger)
 	}
-	// Meta-MCP-backed endpoints have no per-tool picker: their member tool
-	// catalogs land with the meta-server runtime (AGE-3291), and the consent
-	// page never renders the picker island for them (their
-	// endpointToolSelectionResource is empty). Fail closed like the
-	// filtering-off case, where the surface does not exist.
-	if endpoint.MetaMcpServerID.Valid {
+	eligible, err := s.consentToolPickerEligible(ctx, endpoint)
+	if err != nil {
+		return oops.E(oops.CodeUnavailable, err, "service temporarily unavailable").LogError(ctx, logger)
+	}
+	if !eligible {
 		return oops.E(oops.CodeNotFound, nil, "not found").LogWarn(ctx, logger)
 	}
 	// Mixed credentials are a confusion smell: the consent transport never
