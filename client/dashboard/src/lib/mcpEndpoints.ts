@@ -39,7 +39,8 @@ export async function createDefaultGatewayEndpoint(
     .toLowerCase()
     .replace(/[^a-z0-9_-]+/g, "-")
     .replace(/^-+|-+$/g, "")
-    .slice(0, PLATFORM_SLUG_MAX_LENGTH - prefix.length)
+    // Math.max: a prefix past the cap would make this a negative-end slice.
+    .slice(0, Math.max(0, PLATFORM_SLUG_MAX_LENGTH - prefix.length))
     .replace(/-+$/, "");
 
   const create = (slug: string) =>

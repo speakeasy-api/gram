@@ -1,4 +1,8 @@
-import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
+import {
+  StatTile,
+  StatTileGroup,
+  StatTileSkeleton,
+} from "@/components/chart/stat-tile";
 import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
@@ -36,8 +40,9 @@ export function GatewayOverviewTab({
       <Page.Section>
         <Page.Section.Title>{metaMcpServer.name}</Page.Section.Title>
         <Page.Section.Description>
-          Agents connect to this one URL and reach every member through
-          list_servers, describe_server, describe_tools, and execute_tool.
+          Agents connect to this one URL and work through list_servers,
+          describe_server, describe_tools, and execute_tool instead of every
+          member's full catalog.
         </Page.Section.Description>
         <Page.Section.Body>
           <div className="flex flex-col gap-6">
@@ -57,23 +62,33 @@ export function GatewayOverviewTab({
             )}
 
             <StatTileGroup>
-              <StatTile
-                title="Members"
-                value={rows.length}
-                format="number"
-                icon="network"
-                subtext={
-                  servable === rows.length ? undefined : `${servable} servable`
-                }
-                tooltip="MCP servers this gateway fronts."
-              />
-              <StatTile
-                title="Addresses"
-                value={endpoints.length}
-                format="number"
-                icon="link"
-                tooltip="URLs clients can connect to, including custom domains."
-              />
+              {isLoading ? (
+                <StatTileSkeleton />
+              ) : (
+                <StatTile
+                  title="Members"
+                  value={rows.length}
+                  format="number"
+                  icon="network"
+                  subtext={
+                    servable === rows.length
+                      ? undefined
+                      : `${servable} servable`
+                  }
+                  tooltip="MCP servers this gateway fronts."
+                />
+              )}
+              {isLoadingEndpoints ? (
+                <StatTileSkeleton />
+              ) : (
+                <StatTile
+                  title="Addresses"
+                  value={endpoints.length}
+                  format="number"
+                  icon="link"
+                  tooltip="URLs clients can connect to, including custom domains."
+                />
+              )}
               <StatTile
                 title="Authentication"
                 value={0}

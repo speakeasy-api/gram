@@ -8,11 +8,24 @@ import {
 const ID = "00000000-0000-4000-8000-00000000ffff";
 const BASE = `/acme/projects/demo/mcp/gateway/${ID}`;
 
+// Spelled out rather than read off GATEWAY_TAB_URLS, so dropping or renaming a
+// tab fails here instead of quietly shrinking the expectations.
+const TABS = [
+  "overview",
+  "members",
+  "inspect",
+  "team-access",
+  "sessions",
+  "settings",
+] as const;
+
 describe("activeTabFromPath", () => {
-  it("resolves each declared tab", () => {
-    for (const tab of GATEWAY_TAB_URLS) {
-      expect(activeTabFromPath(`${BASE}/${tab}`, ID)).toBe(tab);
-    }
+  it("declares exactly the gateway tabs the shell routes", () => {
+    expect(GATEWAY_TAB_URLS).toEqual([...TABS]);
+  });
+
+  it.each(TABS)("resolves the %s tab", (tab) => {
+    expect(activeTabFromPath(`${BASE}/${tab}`, ID)).toBe(tab);
   });
 
   it("returns undefined for the bare detail path and unknown tabs", () => {

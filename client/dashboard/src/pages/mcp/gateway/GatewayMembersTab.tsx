@@ -40,6 +40,7 @@ import { useGatewayMemberRows } from "./useGatewayMemberRows";
 const CLASSIFICATION_LABEL: Record<MemberClassification, string> = {
   hosted: "Hosted",
   proxied: "Proxied",
+  disabled: "Disabled",
   unproxied: "Unproxied",
   slugless: "No slug",
   unknown: "Unknown",
@@ -61,6 +62,11 @@ const STATUS_BY_CLASSIFICATION: Record<
     label: "Unknown",
     variant: "neutral",
     why: "The gateway can't reach this member's upstream yet, so it reports no health rather than guessing. Drill-down and execution arrive with per-upstream credential routing.",
+  },
+  disabled: {
+    label: "Excluded",
+    variant: "warning",
+    why: "The backing server is disabled, so the gateway serves nothing for it. Re-enable it on the server's own page.",
   },
   unproxied: {
     label: "Excluded",
@@ -501,8 +507,8 @@ function AddMemberSheet({
         <SheetHeader className="px-6 pt-6 pb-0">
           <SheetTitle>Add member</SheetTitle>
           <SheetDescription>
-            Front another MCP server through this gateway. Unproxied and
-            slugless servers can be added but are excluded from serving.
+            Front another MCP server through this gateway. Disabled, unproxied
+            and slugless servers can be added but are excluded from serving.
           </SheetDescription>
         </SheetHeader>
 

@@ -40,6 +40,19 @@ describe("classifyMemberServer", () => {
     );
   });
 
+  it("classifies disabled servers as disabled whatever their backend", () => {
+    expect(
+      classifyMemberServer(
+        server({ visibility: "disabled", toolsetId: "ts-1" }),
+      ),
+    ).toBe("disabled");
+    expect(
+      classifyMemberServer(
+        server({ visibility: "disabled", remoteMcpServerId: "r-1" }),
+      ),
+    ).toBe("disabled");
+  });
+
   it("classifies unproxied servers as unproxied even when toolset-backed", () => {
     expect(
       classifyMemberServer(

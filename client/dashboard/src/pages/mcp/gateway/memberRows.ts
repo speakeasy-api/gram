@@ -5,12 +5,13 @@ import type { MetaMcpMember } from "@gram/client/models/components/metamcpmember
  * Backend-attested member classification. "hosted" (toolset-backed) members
  * execute in-process and are always available; "proxied" (remote/tunneled)
  * members report unknown until the runtime holds live sessions (AGE-3291
- * PR 2); "unproxied" and slugless members have no gateway dispatch path and
- * are excluded from serving.
+ * PR 2); "disabled", "unproxied" and "slugless" members have no gateway
+ * dispatch path and are excluded from serving.
  */
 export type MemberClassification =
   | "hosted"
   | "proxied"
+  | "disabled"
   | "unproxied"
   | "slugless"
   | "unknown";
@@ -25,6 +26,8 @@ export function classifyMemberServer(
   server: McpServer | undefined,
 ): MemberClassification {
   if (!server) return "unknown";
+  // ListServableMetaMCPMembers drops disabled servers whatever their backend.
+  if (server.visibility === "disabled") return "disabled";
   if (server.unproxiedMcpServerId) return "unproxied";
   if (!server.slug) return "slugless";
   if (server.toolsetId) return "hosted";

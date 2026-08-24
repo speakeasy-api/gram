@@ -15,7 +15,7 @@ export type MintUserSessionRequestBody = {
    */
   metaMcpServerId?: string | undefined;
   /**
-   * Bind the JWT to this toolset's /mcp/{slug} audience. Mutually exclusive with mcp_server_id; exactly one must be set. Must be issuer-gated and live in the caller's project.
+   * Bind the JWT to this toolset's /mcp/{slug} audience. Mutually exclusive with the other targets; exactly one must be set. Must be issuer-gated and live in the caller's project.
    */
   toolsetId?: string | undefined;
 };
