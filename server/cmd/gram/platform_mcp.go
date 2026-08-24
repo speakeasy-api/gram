@@ -138,6 +138,11 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		Signer:        sessiontokens.NewSigner(config.JWTSigningKey),
 		Encryption:    config.Encryption,
 		Telemetry:     oauthTelemetry,
+		Logger:        config.Logger,
+		// Backs the inbound CIMD document fetcher's SSRF protection; without
+		// it the authorization server serves DCR only.
+		GuardianPolicy: config.GuardianPolicy,
+		MeterProvider:  config.MeterProvider,
 	})
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create local Platform MCP OAuth service: %w", err)
@@ -460,6 +465,11 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		Signer:        sessiontokens.NewSigner(config.JWTSigningKey),
 		Encryption:    config.Encryption,
 		Telemetry:     oauthTelemetry,
+		Logger:        config.Logger,
+		// Backs the inbound CIMD document fetcher's SSRF protection; without
+		// it the authorization server serves DCR only.
+		GuardianPolicy: config.GuardianPolicy,
+		MeterProvider:  config.MeterProvider,
 	})
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create platform mcp oauth service: %w", err)

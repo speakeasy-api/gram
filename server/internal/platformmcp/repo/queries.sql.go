@@ -5662,6 +5662,146 @@ func (q *Queries) UpdatePlatformMCPDistributionPublication(ctx context.Context, 
 	return i, err
 }
 
+const updatePlatformMCPOAuthClientCIMDCache = `-- name: UpdatePlatformMCPOAuthClientCIMDCache :one
+UPDATE platform_mcp_oauth_clients
+SET client_id_metadata_fetched_at = clock_timestamp(),
+    client_id_metadata_cache_expires_at = clock_timestamp() + make_interval(secs => $1::double precision),
+    client_id_metadata_etag = $2,
+    updated_at = clock_timestamp()
+WHERE client_id = $3
+  AND client_id_metadata_uri IS NOT NULL
+  AND client_secret_hash IS NULL
+  AND revoked_at IS NULL
+RETURNING id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, revoked_at, client_id_metadata_uri, client_id_metadata_fetched_at, client_id_metadata_cache_expires_at, client_id_metadata_etag, created_at, updated_at
+`
+
+type UpdatePlatformMCPOAuthClientCIMDCacheParams struct {
+	CacheTtlSeconds      float64
+	ClientIDMetadataEtag pgtype.Text
+	ClientID             string
+}
+
+// Refreshes the cache bookkeeping on a CIMD-resolved client whose document
+// host answered 304 Not Modified. The stored client_name and redirect_uris
+// are current by definition of the 304, so they are deliberately untouched;
+// only the fetch stamp, the expiry, and the validator move.
+//
+// The guards mirror UpsertPlatformMCPOAuthClientFromCIMD's, so this statement
+// can never push a row into violating the client_id_metadata_uri CHECK
+// constraints; such a collision surfaces as no-rows, which the resolver maps
+// to invalid_client.
+func (q *Queries) UpdatePlatformMCPOAuthClientCIMDCache(ctx context.Context, arg UpdatePlatformMCPOAuthClientCIMDCacheParams) (PlatformMcpOauthClient, error) {
+	row := q.db.QueryRow(ctx, updatePlatformMCPOAuthClientCIMDCache, arg.CacheTtlSeconds, arg.ClientIDMetadataEtag, arg.ClientID)
+	var i PlatformMcpOauthClient
+	err := row.Scan(
+		&i.ID,
+		&i.ClientID,
+		&i.ClientSecretHash,
+		&i.ClientName,
+		&i.RedirectUris,
+		&i.ClientIDIssuedAt,
+		&i.ClientSecretExpiresAt,
+		&i.RevokedAt,
+		&i.ClientIDMetadataUri,
+		&i.ClientIDMetadataFetchedAt,
+		&i.ClientIDMetadataCacheExpiresAt,
+		&i.ClientIDMetadataEtag,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertPlatformMCPOAuthClientFromCIMD = `-- name: UpsertPlatformMCPOAuthClientFromCIMD :one
+INSERT INTO platform_mcp_oauth_clients (
+    client_id,
+    client_secret_hash,
+    client_name,
+    redirect_uris,
+    client_secret_expires_at,
+    client_id_metadata_uri,
+    client_id_metadata_fetched_at,
+    client_id_metadata_cache_expires_at,
+    client_id_metadata_etag
+) VALUES (
+    $1,
+    NULL,
+    $2,
+    $3,
+    NULL,
+    $1,
+    clock_timestamp(),
+    clock_timestamp() + make_interval(secs => $4::double precision),
+    $5
+)
+ON CONFLICT (client_id)
+DO UPDATE SET
+    client_name = EXCLUDED.client_name,
+    redirect_uris = EXCLUDED.redirect_uris,
+    client_id_metadata_uri = EXCLUDED.client_id_metadata_uri,
+    client_id_metadata_fetched_at = EXCLUDED.client_id_metadata_fetched_at,
+    client_id_metadata_cache_expires_at = EXCLUDED.client_id_metadata_cache_expires_at,
+    client_id_metadata_etag = EXCLUDED.client_id_metadata_etag,
+    updated_at = clock_timestamp()
+WHERE platform_mcp_oauth_clients.client_secret_hash IS NULL
+  AND platform_mcp_oauth_clients.revoked_at IS NULL
+RETURNING id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, revoked_at, client_id_metadata_uri, client_id_metadata_fetched_at, client_id_metadata_cache_expires_at, client_id_metadata_etag, created_at, updated_at
+`
+
+type UpsertPlatformMCPOAuthClientFromCIMDParams struct {
+	ClientID             string
+	ClientName           string
+	RedirectUris         []string
+	CacheTtlSeconds      float64
+	ClientIDMetadataEtag pgtype.Text
+}
+
+// Lazy upsert for a client resolved from a Client ID Metadata Document at
+// authorize time. For CIMD rows the document URL IS the client_id, so the
+// conflict target is the same unique index that serves DCR lookups. On
+// refresh the mutable metadata (client_name, redirect_uris) and every cache
+// column are replaced wholesale, including the ETag, which is set to NULL
+// when the response carried no usable validator so the next refresh is
+// unconditional rather than replaying a stale one.
+//
+// The cache expiry is derived from the database clock rather than the
+// application's, so it can never land before the client_id_metadata_fetched_at
+// written in the same statement.
+//
+// The DO UPDATE is guarded so it can never touch a secret-bearing DCR row
+// that happens to share the client_id, nor resurrect a revoked one:
+// rewriting the former would trip the client_id_metadata_uri CHECK
+// constraints with an opaque 500, and the latter would undo an operator's
+// revocation. Either collision surfaces as no-rows, which the resolver maps
+// to invalid_client.
+func (q *Queries) UpsertPlatformMCPOAuthClientFromCIMD(ctx context.Context, arg UpsertPlatformMCPOAuthClientFromCIMDParams) (PlatformMcpOauthClient, error) {
+	row := q.db.QueryRow(ctx, upsertPlatformMCPOAuthClientFromCIMD,
+		arg.ClientID,
+		arg.ClientName,
+		arg.RedirectUris,
+		arg.CacheTtlSeconds,
+		arg.ClientIDMetadataEtag,
+	)
+	var i PlatformMcpOauthClient
+	err := row.Scan(
+		&i.ID,
+		&i.ClientID,
+		&i.ClientSecretHash,
+		&i.ClientName,
+		&i.RedirectUris,
+		&i.ClientIDIssuedAt,
+		&i.ClientSecretExpiresAt,
+		&i.RevokedAt,
+		&i.ClientIDMetadataUri,
+		&i.ClientIDMetadataFetchedAt,
+		&i.ClientIDMetadataCacheExpiresAt,
+		&i.ClientIDMetadataEtag,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const upsertPlatformMCPReadinessAssistant = `-- name: UpsertPlatformMCPReadinessAssistant :one
 INSERT INTO platform_mcp_readiness (
     organization_id,
