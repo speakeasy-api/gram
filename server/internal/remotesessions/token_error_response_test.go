@@ -78,6 +78,20 @@ func TestParseTokenErrorResponseDoesNotRemapClientSubjectFailures(t *testing.T) 
 	require.Equal(t, "unauthorized", got.Error)
 }
 
+func TestParseTokenErrorResponseRemapsDeadGrantWasNotFound(t *testing.T) {
+	t.Parallel()
+
+	got := parseTokenErrorResponse(http.StatusUnauthorized, []byte(`{"error":{"code":"unauthorized","message":"Refresh token was not found."}}`))
+	require.Equal(t, oauthErrInvalidGrant, got.Error)
+}
+
+func TestParseTokenErrorResponseDoesNotRemapDeadPhraseWithClientAuthWording(t *testing.T) {
+	t.Parallel()
+
+	got := parseTokenErrorResponse(http.StatusUnauthorized, []byte(`{"error":{"code":"unauthorized","message":"Invalid refresh token: client authentication failed"}}`))
+	require.Equal(t, "unauthorized", got.Error)
+}
+
 func TestParseTokenErrorResponseRemapsDeadGrantNamingAClient(t *testing.T) {
 	t.Parallel()
 

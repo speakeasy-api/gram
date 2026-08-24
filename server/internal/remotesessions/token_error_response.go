@@ -229,6 +229,7 @@ func isErrorTokenByte(b byte) bool {
 // describes a recoverable failure, never a dead grant.
 var deadRefreshGrantPhrases = []string{
 	"refresh token not found",
+	"refresh token was not found",
 	"refresh token is invalid",
 	"invalid refresh token",
 	"refresh token is expired",
@@ -251,6 +252,13 @@ func isDeadRefreshGrant(code, message string) bool {
 		return false
 	}
 	m := strings.ToLower(message)
+	// Client-auth wording marks the failure recoverable even alongside a
+	// dead-token phrase; merely naming a client does not.
+	for _, excluded := range []string{"credential", "secret", "client authentication"} {
+		if strings.Contains(m, excluded) {
+			return false
+		}
+	}
 	for _, phrase := range deadRefreshGrantPhrases {
 		if strings.Contains(m, phrase) {
 			return true
