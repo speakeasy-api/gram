@@ -73,12 +73,14 @@ func TestGetOrganizationStats_Counts(t *testing.T) {
 		// Active, never trialled. Two old, three inside the created window.
 		// Account types are spread over the corpus: a customer count that
 		// only looked at one of payg or enterprise, or that dropped disabled
-		// customers, reads short of the eight below.
+		// customers, reads short of the six below. The one customer inside the
+		// created window is a disabled one, so customers_created_last_7_days
+		// cannot pass by counting active customers only.
 		{id: "org_stats_old_a", created: -60 * 24 * time.Hour, accountType: "enterprise"},
 		{id: "org_stats_old_b", created: -90 * 24 * time.Hour, accountType: "payg"},
-		{id: "org_stats_new_a", created: -2 * 24 * time.Hour, accountType: "payg"},
+		{id: "org_stats_new_a", created: -2 * 24 * time.Hour, accountType: "pro"},
 		{id: "org_stats_new_b", created: -5 * 24 * time.Hour, accountType: "pro"},
-		{id: "org_stats_new_c", created: -6 * 24 * time.Hour, accountType: "payg"},
+		{id: "org_stats_new_c", created: -6 * 24 * time.Hour},
 
 		// Disabled. The second is also inside the created window, so a
 		// created count that excludes disabled organizations reads one short.
@@ -111,8 +113,8 @@ func TestGetOrganizationStats_Counts(t *testing.T) {
 	require.Equal(t, &gen.AdminOrganizationStats{
 		Total:                     16,
 		CreatedLast7Days:          5,
-		Customers:                 8,
-		CustomersCreatedLast7Days: 3,
+		Customers:                 6,
+		CustomersCreatedLast7Days: 1,
 		TrialsEndingSoon:          4,
 		Disabled:                  3,
 		DisabledLast7Days:         2,
