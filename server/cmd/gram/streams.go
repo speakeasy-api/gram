@@ -54,6 +54,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
+	"github.com/speakeasy-api/gram/server/internal/risk/replyinbox"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
@@ -439,6 +440,19 @@ func newStreamsCommand() *cli.Command {
 			}
 
 			gitleaksHandler := gitleaks.NewHandler(logger, findingsPub)
+			gitleaksEnforceHandler, err := gitleaks.NewEnforceHandler(
+				logger,
+				meterProvider,
+				replyinbox.NewWriter(redisClient),
+				func(tenantID string, message []byte) (string, error) {
+					sum, _, fingerprintErr := riskFingerprinter.TenantedHS256(tenantID, message)
+					return risk.EncodeFingerprint(sum), fingerprintErr
+				},
+				gitleaks.EnforceHandlerConfig{MaxRequestAge: gitleaks.DefaultMaxRequestAge},
+			)
+			if err != nil {
+				return fmt.Errorf("create gitleaks enforcement handler: %w", err)
+			}
 			promptInjectionScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, judgeRateLimiter).Classify)
 			promptInjectionStubScanner := promptinjection.NewScanner(logger, promptinjection.NoopClassifier)
 			promptInjectionHandler := promptinjection.NewHandler(logger, meterProvider, promptInjectionScanner, promptInjectionStubScanner, findingsPub, scanners.NewAsyncShadowGate(logger, featureFlags, replicaDB))
@@ -561,6 +575,7 @@ func newStreamsCommand() *cli.Command {
 				mustReceive(rg, &pingv2.Message{}, &pingv2.Processor{}, ping.NewHandler(logger, slog.LevelDebug))
 
 				mustReceive(rg, &riskv1.GitleaksAnalysis{}, &riskv1.GitleaksAnalyzer{}, gitleaksHandler)
+				mustReceive(rg, &riskv1.GitleaksEnforcement{}, &riskv1.GitleaksEnforcer{}, gitleaksEnforceHandler)
 				mustReceive(rg, &riskv1.PromptInjectionAnalysis{}, &riskv1.PromptInjectionAnalyzer{}, promptInjectionHandler)
 				mustReceive(rg, &riskv1.PromptPolicyAnalysis{}, &riskv1.PromptPolicyAnalyzer{}, promptPolicyHandler)
 				mustReceive(rg, &riskv1.CustomRulesAnalysis{}, &riskv1.CustomRulesAnalyzer{}, customRulesHandler)
