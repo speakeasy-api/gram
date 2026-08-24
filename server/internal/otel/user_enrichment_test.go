@@ -3,6 +3,7 @@ package otel
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -193,16 +194,16 @@ func (blockingUserEnrichmentDB) Exec(context.Context, string, ...any) (pgconn.Co
 	return pgconn.CommandTag{}, errors.New("unexpected exec")
 }
 
-func (blockingUserEnrichmentDB) Query(context.Context, string, ...any) (pgx.Rows, error) {
-	return nil, errors.New("unexpected query")
-}
-
-func (b blockingUserEnrichmentDB) QueryRow(ctx context.Context, _ string, _ ...any) pgx.Row {
+func (b blockingUserEnrichmentDB) Query(ctx context.Context, _ string, _ ...any) (pgx.Rows, error) {
 	if b.started != nil {
 		close(b.started)
 	}
 	<-ctx.Done()
-	return userEnrichmentErrorRow{err: ctx.Err()}
+	return nil, fmt.Errorf("block user enrichment query: %w", ctx.Err())
+}
+
+func (blockingUserEnrichmentDB) QueryRow(context.Context, string, ...any) pgx.Row {
+	return userEnrichmentErrorRow{err: errors.New("unexpected query row")}
 }
 
 type userEnrichmentErrorRow struct {

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
@@ -46,4 +47,21 @@ func TestEnrichLogDirectoryIncludesCachedUserEnrichment(t *testing.T) {
 		DirectoryGroupNames([]string{"Developers"}),
 		GramUserRoles([]string{"member"}),
 	}, got)
+}
+
+func TestEnrichLogDirectoryResolvesSubaddress(t *testing.T) {
+	t.Parallel()
+
+	db := newTestDatabase(t)
+	seed := seedUserEnrichment(t, db)
+	enricher := newEnrichLogDirectory(testenv.NewLogger(t), db, cache.NoopCache)
+	record := (&otelv1.InboundLogRecord_builder{
+		Provenance: (&otelv1.InboundLogRecord_Provenance_builder{OrganizationId: new(seed.organizationID)}).Build(),
+		Attributes: []*otelv1.InboundLogRecord_KeyValue{logStringAttribute("user.email", "user+log@example.invalid")},
+	}).Build()
+
+	got, err := enricher.Enrich(t.Context(), record)
+
+	require.NoError(t, err)
+	require.ElementsMatch(t, seed.want.attributes(), got)
 }
