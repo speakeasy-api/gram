@@ -24,25 +24,27 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
-// chDismissalCopy builds the ClickHouse row the FP mirror
-// (enqueueFalsePositiveMirror, via the outbox relay and FindingCHWriter)
-// appends when a result is dismissed: a fresh copy of the finding carrying the
-// suppression on excluded_at/excluded_reason plus the legacy false_positive_at.
-// A zero suppressedAt builds the undo copy instead — same id, no suppression at
-// all — which is what an unmark republish produces.
-func chDismissalCopy(t *testing.T, projectID uuid.UUID, orgID, policyID string, id, chatID, msgID uuid.UUID, suppressedAt time.Time) chrepo.RiskFindingRow {
+// chDismissalCopy builds one ClickHouse copy of a finding in the FP flow,
+// with the event kind the producing pipeline would stamp: the scanner's
+// original row (EventKindFinding), the mirror's dismissal copy
+// (EventKindSuppression, carrying the suppression on
+// excluded_at/excluded_reason plus the legacy false_positive_at), or the
+// mirror's undo copy (EventKindUnsuppression — same id, no suppression at
+// all). Stamping the kind per producer makes these hand-appended rows
+// exercise the same state-change-outranks-finding dedup the relayed
+// production rows rely on. suppressedAt must be set exactly for suppression
+// copies.
+func chDismissalCopy(t *testing.T, projectID uuid.UUID, orgID, policyID string, id, chatID, msgID uuid.UUID, suppressedAt time.Time, eventKind string) chrepo.RiskFindingRow {
 	t.Helper()
+	require.Equal(t, eventKind == chrepo.EventKindSuppression, !suppressedAt.IsZero(),
+		"suppression copies carry a suppression time; finding and unsuppression copies never do")
 
 	created := time.Now().UTC().AddDate(0, 0, -1)
 	row := chListFinding(t, projectID, orgID, chatID, msgID, policyID, created, created, "gitleaks", "aws-access-key-id", "alice@example.com", "AKIA**************LE", "fp-dismissal", "")
 	row.ID = id
-	// Stamp the event kind the way the relayed mirror messages do, so these
-	// hand-appended copies exercise the same state-change-outranks-finding
-	// dedup the production rows rely on.
-	row.EventKind = chrepo.EventKindUnsuppression
+	row.EventKind = eventKind
 	if !suppressedAt.IsZero() {
 		at := suppressedAt
-		row.EventKind = chrepo.EventKindSuppression
 		row.ExcludedAt = &at
 		row.ExcludedReason = chrepo.ExcludedReasonManual
 		row.ExcludedDetail = "noise"
@@ -83,7 +85,7 @@ func TestMarkUnmarkRiskResultsFalsePositive(t *testing.T) {
 	// by hand — the same rows the relayed mirror messages would produce.
 	chQueries := chrepo.New(ti.chConn)
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{
-		chDismissalCopy(t, projectID, orgID, policy.ID, resultUUID, chatID, msgID, time.Time{}),
+		chDismissalCopy(t, projectID, orgID, policy.ID, resultUUID, chatID, msgID, time.Time{}, chrepo.EventKindFinding),
 	}))
 	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
@@ -108,7 +110,7 @@ func TestMarkUnmarkRiskResultsFalsePositive(t *testing.T) {
 
 	dismissedAt := time.Now().UTC()
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{
-		chDismissalCopy(t, projectID, orgID, policy.ID, resultUUID, chatID, msgID, dismissedAt),
+		chDismissalCopy(t, projectID, orgID, policy.ID, resultUUID, chatID, msgID, dismissedAt, chrepo.EventKindSuppression),
 	}))
 	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
@@ -150,7 +152,7 @@ func TestMarkUnmarkRiskResultsFalsePositive(t *testing.T) {
 	require.Len(t, afterUnmark.Results, 1)
 
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{
-		chDismissalCopy(t, projectID, orgID, policy.ID, resultUUID, chatID, msgID, time.Time{}),
+		chDismissalCopy(t, projectID, orgID, policy.ID, resultUUID, chatID, msgID, time.Time{}, chrepo.EventKindUnsuppression),
 	}))
 	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
@@ -466,7 +468,7 @@ func TestMarkRiskResultsFalsePositive_ContentPartAnchoredFindingIsListable(t *te
 	// enqueued is appended by hand. A content-part-anchored finding carries
 	// its anchor in content_part_id with chat_message_id empty.
 	dismissedAt := time.Now().UTC()
-	dismissal := chDismissalCopy(t, projectID, orgID, policy.ID, resultID, chatID, msgID, dismissedAt)
+	dismissal := chDismissalCopy(t, projectID, orgID, policy.ID, resultID, chatID, msgID, dismissedAt, chrepo.EventKindSuppression)
 	dismissal.ChatMessageID = ""
 	dismissal.ContentPartID = partID.String()
 
@@ -488,7 +490,7 @@ func TestMarkRiskResultsFalsePositive_ContentPartAnchoredFindingIsListable(t *te
 	})
 	require.NoError(t, err)
 
-	restored := chDismissalCopy(t, projectID, orgID, policy.ID, resultID, chatID, msgID, time.Time{})
+	restored := chDismissalCopy(t, projectID, orgID, policy.ID, resultID, chatID, msgID, time.Time{}, chrepo.EventKindUnsuppression)
 	restored.ChatMessageID = ""
 	restored.ContentPartID = partID.String()
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{restored}))
@@ -781,14 +783,14 @@ func TestListDismissedRiskResults_ClickHouseResolvesLatestCopy(t *testing.T) {
 	dismissedAt := time.Now().UTC().Add(-time.Hour)
 
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{
-		chDismissalCopy(t, projectID, orgID, policy.ID, restoredID, chatID, msgID, dismissedAt),
-		chDismissalCopy(t, projectID, orgID, policy.ID, stillDismissedID, chatID, msgID, dismissedAt),
+		chDismissalCopy(t, projectID, orgID, policy.ID, restoredID, chatID, msgID, dismissedAt, chrepo.EventKindSuppression),
+		chDismissalCopy(t, projectID, orgID, policy.ID, stillDismissedID, chatID, msgID, dismissedAt, chrepo.EventKindSuppression),
 	}))
 	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	// The undo's copy: same id, no suppression, inserted later.
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{
-		chDismissalCopy(t, projectID, orgID, policy.ID, restoredID, chatID, msgID, time.Time{}),
+		chDismissalCopy(t, projectID, orgID, policy.ID, restoredID, chatID, msgID, time.Time{}, chrepo.EventKindUnsuppression),
 	}))
 	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 

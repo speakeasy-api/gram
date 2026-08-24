@@ -1081,120 +1081,80 @@ func (q *Queries) DeleteRiskResultsByPolicy(ctx context.Context, arg DeleteRiskR
 	return result.RowsAffected(), nil
 }
 
-const deleteRiskResultsForContentParts = `-- name: DeleteRiskResultsForContentParts :many
+const deleteRiskResultsForUnits = `-- name: DeleteRiskResultsForUnits :many
 DELETE FROM risk_results
 WHERE risk_policy_id = $1
   AND project_id = $2
-  AND chat_content_part_id = ANY($3::uuid[])
-RETURNING id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, chat_content_part_id, skill_version_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, spans, dead_letter_reason, excluded_at, excluded_exclusion_id, false_positive_at, false_positive_reason, created_at
+  AND (chat_message_id = ANY($3::uuid[])
+    OR chat_content_part_id = ANY($4::uuid[]))
+RETURNING id, risk_policy_version, chat_message_id, chat_content_part_id,
+  found, source, rule_id, description, match, start_pos, end_pos,
+  dead_letter_reason, false_positive_at, false_positive_reason
 `
 
-type DeleteRiskResultsForContentPartsParams struct {
+type DeleteRiskResultsForUnitsParams struct {
 	RiskPolicyID   uuid.UUID
 	ProjectID      uuid.UUID
+	MessageIds     []uuid.UUID
 	ContentPartIds []uuid.UUID
 }
 
-func (q *Queries) DeleteRiskResultsForContentParts(ctx context.Context, arg DeleteRiskResultsForContentPartsParams) ([]RiskResult, error) {
-	rows, err := q.db.Query(ctx, deleteRiskResultsForContentParts, arg.RiskPolicyID, arg.ProjectID, arg.ContentPartIds)
+type DeleteRiskResultsForUnitsRow struct {
+	ID                  uuid.UUID
+	RiskPolicyVersion   int64
+	ChatMessageID       uuid.NullUUID
+	ChatContentPartID   uuid.NullUUID
+	Found               bool
+	Source              string
+	RuleID              pgtype.Text
+	Description         pgtype.Text
+	Match               pgtype.Text
+	StartPos            pgtype.Int4
+	EndPos              pgtype.Int4
+	DeadLetterReason    pgtype.Text
+	FalsePositiveAt     pgtype.Timestamptz
+	FalsePositiveReason pgtype.Text
+}
+
+// Replaces a batch's rows across both anchor kinds in one statement.
+// Returns the identity and dismissal columns of what the re-analysis
+// replaced: the writer recomputes each row's deterministic id from the
+// identity columns to learn which findings an earlier committed attempt
+// already announced (their webhook outbox events must not be re-emitted) and
+// which carried a manual dismissal to re-stamp onto the reinserted rows.
+// Recomputing from identity rather than trusting the stored id keeps rows
+// written before ids became deterministic (random UUIDs) on the same footing
+// as new ones. Heavy payload columns (match aside, which is identity) stay
+// out of the RETURNING set.
+func (q *Queries) DeleteRiskResultsForUnits(ctx context.Context, arg DeleteRiskResultsForUnitsParams) ([]DeleteRiskResultsForUnitsRow, error) {
+	rows, err := q.db.Query(ctx, deleteRiskResultsForUnits,
+		arg.RiskPolicyID,
+		arg.ProjectID,
+		arg.MessageIds,
+		arg.ContentPartIds,
+	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []RiskResult
+	var items []DeleteRiskResultsForUnitsRow
 	for rows.Next() {
-		var i RiskResult
+		var i DeleteRiskResultsForUnitsRow
 		if err := rows.Scan(
 			&i.ID,
-			&i.ProjectID,
-			&i.OrganizationID,
-			&i.RiskPolicyID,
 			&i.RiskPolicyVersion,
 			&i.ChatMessageID,
 			&i.ChatContentPartID,
-			&i.SkillVersionID,
-			&i.Source,
 			&i.Found,
+			&i.Source,
 			&i.RuleID,
 			&i.Description,
 			&i.Match,
 			&i.StartPos,
 			&i.EndPos,
-			&i.Confidence,
-			&i.Tags,
-			&i.Spans,
 			&i.DeadLetterReason,
-			&i.ExcludedAt,
-			&i.ExcludedExclusionID,
 			&i.FalsePositiveAt,
 			&i.FalsePositiveReason,
-			&i.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const deleteRiskResultsForMessages = `-- name: DeleteRiskResultsForMessages :many
-DELETE FROM risk_results
-WHERE risk_policy_id = $1
-  AND project_id = $2
-  AND chat_message_id = ANY($3::uuid[])
-RETURNING id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, chat_content_part_id, skill_version_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, spans, dead_letter_reason, excluded_at, excluded_exclusion_id, false_positive_at, false_positive_reason, created_at
-`
-
-type DeleteRiskResultsForMessagesParams struct {
-	RiskPolicyID uuid.UUID
-	ProjectID    uuid.UUID
-	MessageIds   []uuid.UUID
-}
-
-// Returns the full rows the re-analysis replaced: the writer recomputes each
-// row's deterministic id from its identity columns to learn which findings an
-// earlier committed attempt already announced (their webhook outbox events
-// must not be re-emitted) and which carried a manual dismissal to re-stamp
-// onto the reinserted rows. Recomputing from identity rather than trusting
-// the stored id keeps rows written before ids became deterministic (random
-// UUIDs) on the same footing as new ones.
-func (q *Queries) DeleteRiskResultsForMessages(ctx context.Context, arg DeleteRiskResultsForMessagesParams) ([]RiskResult, error) {
-	rows, err := q.db.Query(ctx, deleteRiskResultsForMessages, arg.RiskPolicyID, arg.ProjectID, arg.MessageIds)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []RiskResult
-	for rows.Next() {
-		var i RiskResult
-		if err := rows.Scan(
-			&i.ID,
-			&i.ProjectID,
-			&i.OrganizationID,
-			&i.RiskPolicyID,
-			&i.RiskPolicyVersion,
-			&i.ChatMessageID,
-			&i.ChatContentPartID,
-			&i.SkillVersionID,
-			&i.Source,
-			&i.Found,
-			&i.RuleID,
-			&i.Description,
-			&i.Match,
-			&i.StartPos,
-			&i.EndPos,
-			&i.Confidence,
-			&i.Tags,
-			&i.Spans,
-			&i.DeadLetterReason,
-			&i.ExcludedAt,
-			&i.ExcludedExclusionID,
-			&i.FalsePositiveAt,
-			&i.FalsePositiveReason,
-			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1212,7 +1172,7 @@ FROM chat_content_parts ccp
 WHERE ccp.project_id = $1
   AND ccp.risk_analyzed_at IS NULL
   AND ccp.id >= $2
-ORDER BY ccp.id DESC
+ORDER BY ccp.id ASC
 LIMIT $3
 `
 
@@ -1224,7 +1184,8 @@ type FetchUnanalyzedContentPartIDsParams struct {
 
 // Scans the partial index chat_content_parts_risk_analyzed_at_null_idx
 // (project_id, id WHERE risk_analyzed_at IS NULL), mirroring the chat_messages
-// unanalyzed sweep for non-turn content.
+// unanalyzed sweep for non-turn content, including its oldest-first order so
+// a backlog cannot starve units nearing the lookback's edge.
 func (q *Queries) FetchUnanalyzedContentPartIDs(ctx context.Context, arg FetchUnanalyzedContentPartIDsParams) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, fetchUnanalyzedContentPartIDs, arg.ProjectID, arg.IDLowerBound, arg.BatchLimit)
 	if err != nil {
@@ -1251,7 +1212,7 @@ FROM chat_messages cm
 WHERE cm.project_id = $1
   AND cm.risk_analyzed_at IS NULL
   AND cm.id >= $2
-ORDER BY cm.id DESC
+ORDER BY cm.id ASC
 LIMIT $3
 `
 
@@ -1265,7 +1226,11 @@ type FetchUnanalyzedMessageIDsParams struct {
 // (project_id, id WHERE risk_analyzed_at IS NULL), which shrinks toward
 // zero at steady state. The id >= @id_lower_bound bound (a UUIDv7 lower
 // bound computed from the configured lookback) further limits the scan to
-// recent messages, reusing the same partial index ordering.
+// recent messages, reusing the same partial index ordering. Oldest-first:
+// under a backlog above the batch limit, newest-first would keep serving
+// fresh messages while units nearing the lookback's edge age out without a
+// retry; ascending order drains the window fairly and costs at most the
+// lookback in added freshness latency.
 func (q *Queries) FetchUnanalyzedMessageIDs(ctx context.Context, arg FetchUnanalyzedMessageIDsParams) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, fetchUnanalyzedMessageIDs, arg.ProjectID, arg.IDLowerBound, arg.BatchLimit)
 	if err != nil {

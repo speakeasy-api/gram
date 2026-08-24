@@ -856,13 +856,17 @@ ORDER BY buckets.bucket_start ASC, categories.category ASC;
 -- (project_id, id WHERE risk_analyzed_at IS NULL), which shrinks toward
 -- zero at steady state. The id >= @id_lower_bound bound (a UUIDv7 lower
 -- bound computed from the configured lookback) further limits the scan to
--- recent messages, reusing the same partial index ordering.
+-- recent messages, reusing the same partial index ordering. Oldest-first:
+-- under a backlog above the batch limit, newest-first would keep serving
+-- fresh messages while units nearing the lookback's edge age out without a
+-- retry; ascending order drains the window fairly and costs at most the
+-- lookback in added freshness latency.
 SELECT cm.id
 FROM chat_messages cm
 WHERE cm.project_id = @project_id
   AND cm.risk_analyzed_at IS NULL
   AND cm.id >= @id_lower_bound
-ORDER BY cm.id DESC
+ORDER BY cm.id ASC
 LIMIT @batch_limit;
 
 -- name: MarkMessagesRiskAnalyzed :exec
@@ -874,13 +878,14 @@ WHERE id = ANY(@message_ids::uuid[])
 -- name: FetchUnanalyzedContentPartIDs :many
 -- Scans the partial index chat_content_parts_risk_analyzed_at_null_idx
 -- (project_id, id WHERE risk_analyzed_at IS NULL), mirroring the chat_messages
--- unanalyzed sweep for non-turn content.
+-- unanalyzed sweep for non-turn content, including its oldest-first order so
+-- a backlog cannot starve units nearing the lookback's edge.
 SELECT ccp.id
 FROM chat_content_parts ccp
 WHERE ccp.project_id = @project_id
   AND ccp.risk_analyzed_at IS NULL
   AND ccp.id >= @id_lower_bound
-ORDER BY ccp.id DESC
+ORDER BY ccp.id ASC
 LIMIT @batch_limit;
 
 -- name: MarkContentPartsRiskAnalyzed :exec
@@ -1098,26 +1103,25 @@ DO UPDATE SET
 WHERE EXCLUDED.found IS TRUE
   AND risk_results.found IS FALSE;
 
--- name: DeleteRiskResultsForMessages :many
--- Returns the full rows the re-analysis replaced: the writer recomputes each
--- row's deterministic id from its identity columns to learn which findings an
--- earlier committed attempt already announced (their webhook outbox events
--- must not be re-emitted) and which carried a manual dismissal to re-stamp
--- onto the reinserted rows. Recomputing from identity rather than trusting
--- the stored id keeps rows written before ids became deterministic (random
--- UUIDs) on the same footing as new ones.
+-- name: DeleteRiskResultsForUnits :many
+-- Replaces a batch's rows across both anchor kinds in one statement.
+-- Returns the identity and dismissal columns of what the re-analysis
+-- replaced: the writer recomputes each row's deterministic id from the
+-- identity columns to learn which findings an earlier committed attempt
+-- already announced (their webhook outbox events must not be re-emitted) and
+-- which carried a manual dismissal to re-stamp onto the reinserted rows.
+-- Recomputing from identity rather than trusting the stored id keeps rows
+-- written before ids became deterministic (random UUIDs) on the same footing
+-- as new ones. Heavy payload columns (match aside, which is identity) stay
+-- out of the RETURNING set.
 DELETE FROM risk_results
 WHERE risk_policy_id = @risk_policy_id
   AND project_id = @project_id
-  AND chat_message_id = ANY(@message_ids::uuid[])
-RETURNING *;
-
--- name: DeleteRiskResultsForContentParts :many
-DELETE FROM risk_results
-WHERE risk_policy_id = @risk_policy_id
-  AND project_id = @project_id
-  AND chat_content_part_id = ANY(@content_part_ids::uuid[])
-RETURNING *;
+  AND (chat_message_id = ANY(@message_ids::uuid[])
+    OR chat_content_part_id = ANY(@content_part_ids::uuid[]))
+RETURNING id, risk_policy_version, chat_message_id, chat_content_part_id,
+  found, source, rule_id, description, match, start_pos, end_pos,
+  dead_letter_reason, false_positive_at, false_positive_reason;
 
 -- name: RestoreRiskResultFalsePositiveState :exec
 -- Re-stamps manual dismissals onto re-analyzed rows in the same transaction

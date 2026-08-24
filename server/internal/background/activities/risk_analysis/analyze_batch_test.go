@@ -2034,10 +2034,11 @@ func TestAnalyzeBatch_LegacyRandomIDRowsConverge(t *testing.T) {
 	// Rewrite history into the pre-rollout shape: identical rows under random
 	// v7 ids, one of them dismissed by a reviewer.
 	riskQueries := riskrepo.New(conn)
-	_, err = riskQueries.DeleteRiskResultsForMessages(t.Context(), riskrepo.DeleteRiskResultsForMessagesParams{
-		RiskPolicyID: td.policyID,
-		ProjectID:    td.projectID,
-		MessageIds:   []uuid.UUID{msgID},
+	_, err = riskQueries.DeleteRiskResultsForUnits(t.Context(), riskrepo.DeleteRiskResultsForUnitsParams{
+		RiskPolicyID:   td.policyID,
+		ProjectID:      td.projectID,
+		MessageIds:     []uuid.UUID{msgID},
+		ContentPartIds: nil,
 	})
 	require.NoError(t, err)
 

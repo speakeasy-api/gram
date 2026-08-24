@@ -273,6 +273,54 @@ func TestCoordinatorWorkflow_UnitFailedForOnePolicyNotMarked(t *testing.T) {
 	require.Equal(t, 0, markCallCount, "a unit that failed under any policy must not be marked analyzed")
 }
 
+// TestCoordinatorWorkflow_MarkFailureRetriesViaContinueAsNew pins that a
+// failed MarkMessagesAnalyzed joins the self-retry decision: its units remain
+// unmarked exactly like a failed batch's, so the run must ContinueAsNew after
+// the backoff instead of completing and waiting for an organic signal.
+func TestCoordinatorWorkflow_MarkFailureRetriesViaContinueAsNew(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+
+	projectID := uuid.New()
+	messageID := uuid.New()
+
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ risk_analysis.FetchUnanalyzedArgs) (*risk_analysis.FetchUnanalyzedResult, error) {
+			return &risk_analysis.FetchUnanalyzedResult{
+				MessageIDs: []uuid.UUID{messageID},
+				Policies:   []risk_analysis.PolicyForAnalysis{{ID: uuid.New(), OrganizationID: "org1", Version: 1}},
+			}, nil
+		},
+		activity.RegisterOptions{Name: "FetchUnanalyzedMessages"},
+	)
+
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, args risk_analysis.AnalyzeBatchArgs) (*risk_analysis.AnalyzeBatchResult, error) {
+			return &risk_analysis.AnalyzeBatchResult{Processed: len(args.MessageIDs), Findings: 0}, nil
+		},
+		activity.RegisterOptions{Name: "AnalyzeBatch"},
+	)
+
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ risk_analysis.MarkMessagesAnalyzedArgs) error {
+			return temporal.NewApplicationError("mark failed", "", nil)
+		},
+		activity.RegisterOptions{Name: "MarkMessagesAnalyzed"},
+	)
+
+	env.ExecuteWorkflow(RiskAnalysisCoordinatorWorkflow, RiskAnalysisCoordinatorParams{
+		ProjectID: projectID,
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	err := env.GetWorkflowError()
+	require.Error(t, err, "a run whose mark failed must ContinueAsNew to retry it")
+	var continueAsNewErr *workflow.ContinueAsNewError
+	require.ErrorAs(t, err, &continueAsNewErr)
+}
+
 func TestChunkUUIDs(t *testing.T) {
 	t.Parallel()
 

@@ -1,10 +1,12 @@
 package risk_analysis
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -126,14 +128,14 @@ func insertRowIdentity(row repo.InsertRiskResultsParams) resultRowIdentity {
 	}
 }
 
-// storedRowIdentity rebuilds the identity of an already-stored row, ignoring
-// its stored id: recomputing the deterministic id from identity columns puts
-// legacy random-id rows on the same footing as rows written after ids became
-// deterministic.
-func storedRowIdentity(row repo.RiskResult) resultRowIdentity {
+// deletedRowIdentity rebuilds the identity of a replaced row from the
+// delete's RETURNING columns, ignoring its stored id: recomputing the
+// deterministic id from identity puts legacy random-id rows on the same
+// footing as rows written after ids became deterministic.
+func deletedRowIdentity(projectID, riskPolicyID uuid.UUID, row repo.DeleteRiskResultsForUnitsRow) resultRowIdentity {
 	return resultRowIdentity{
-		projectID:        row.ProjectID,
-		riskPolicyID:     row.RiskPolicyID,
+		projectID:        projectID,
+		riskPolicyID:     riskPolicyID,
 		policyVersion:    row.RiskPolicyVersion,
 		chatMessageID:    row.ChatMessageID,
 		contentPartID:    row.ChatContentPartID,
@@ -149,12 +151,12 @@ func storedRowIdentity(row repo.RiskResult) resultRowIdentity {
 }
 
 // resultRowIDs mints risk_results row ids: uuid5 over the row's canonical
-// identity plus a per-key ordinal disambiguating byte-identical duplicates
-// within one population. Determinism is a delivery-guarantee requirement, the
-// same one batchScanRequestID meets for scan requests: the webhook outbox
-// event id derives from the row id, so a redriven activity must rebuild
-// identical ids or every retry would re-announce every finding under fresh
-// event ids.
+// identity key plus a per-key ordinal disambiguating byte-identical
+// duplicates within one population. Determinism is a delivery-guarantee
+// requirement, the same one batchScanRequestID meets for scan requests: the
+// webhook outbox event id derives from the row id, so a redriven activity
+// must rebuild identical ids or every retry would re-announce every finding
+// under fresh event ids.
 type resultRowIDs struct {
 	seen map[string]int
 }
@@ -163,11 +165,49 @@ func newResultRowIDs() *resultRowIDs {
 	return &resultRowIDs{seen: map[string]int{}}
 }
 
-func (r *resultRowIDs) next(identity resultRowIdentity) uuid.UUID {
-	key := identity.key()
+func (r *resultRowIDs) mint(key string) uuid.UUID {
 	ordinal := r.seen[key]
 	r.seen[key]++
 	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("gram:risk:result:"+key+"\x00"+strconv.Itoa(ordinal)))
+}
+
+// priorRowIndex recomputes the deterministic id of every replaced row and
+// maps it to the row's dismissal state. Rows are sorted before ordinal
+// assignment — identity key, then dismissed-first, then stored id — because
+// the DELETE returns rows in unspecified order: within a group of
+// byte-identical rows, buildRows hands ordinals 0..n-1 to whatever the
+// scanner reproduces, so pinning dismissals to the lowest ordinals is what
+// makes a redrive land them on rows that exist, deterministically, instead of
+// scattering them by RETURNING order onto ordinals the scanner may not have
+// reproduced.
+func priorRowIndex(projectID, riskPolicyID uuid.UUID, deleted []repo.DeleteRiskResultsForUnitsRow) map[uuid.UUID]repo.DeleteRiskResultsForUnitsRow {
+	type keyedRow struct {
+		key string
+		row repo.DeleteRiskResultsForUnitsRow
+	}
+	keyed := make([]keyedRow, 0, len(deleted))
+	for _, d := range deleted {
+		keyed = append(keyed, keyedRow{key: deletedRowIdentity(projectID, riskPolicyID, d).key(), row: d})
+	}
+	slices.SortFunc(keyed, func(a, b keyedRow) int {
+		if c := strings.Compare(a.key, b.key); c != 0 {
+			return c
+		}
+		if a.row.FalsePositiveAt.Valid != b.row.FalsePositiveAt.Valid {
+			if a.row.FalsePositiveAt.Valid {
+				return -1
+			}
+			return 1
+		}
+		return bytes.Compare(a.row.ID[:], b.row.ID[:])
+	})
+
+	ids := newResultRowIDs()
+	index := make(map[uuid.UUID]repo.DeleteRiskResultsForUnitsRow, len(keyed))
+	for _, k := range keyed {
+		index[ids.mint(k.key)] = k.row
+	}
+	return index
 }
 
 func (a *AnalyzeBatch) buildRows(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, batchFindings [][]scanners.Finding) ([]repo.InsertRiskResultsParams, int) {
@@ -175,7 +215,7 @@ func (a *AnalyzeBatch) buildRows(ctx context.Context, args AnalyzeBatchArgs, mes
 	findingsCount := 0
 	rowIDs := newResultRowIDs()
 	appendRow := func(row repo.InsertRiskResultsParams) {
-		row.ID = rowIDs.next(insertRowIdentity(row))
+		row.ID = rowIDs.mint(insertRowIdentity(row).key())
 		rows = append(rows, row)
 	}
 
@@ -305,35 +345,19 @@ func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, 
 	// on it must survive the replacement (re-stamped below). A policy version
 	// bump changes every identity, so bumped re-analyses re-announce and drop
 	// old dismissals by design.
-	prior := make(map[uuid.UUID]repo.RiskResult)
-	priorIDs := newResultRowIDs()
-	if len(args.MessageIDs) > 0 {
-		deleted, err := txRepo.DeleteRiskResultsForMessages(ctx, repo.DeleteRiskResultsForMessagesParams{
-			RiskPolicyID: args.RiskPolicyID,
-			ProjectID:    args.ProjectID,
-			MessageIds:   args.MessageIDs,
+	prior := map[uuid.UUID]repo.DeleteRiskResultsForUnitsRow{}
+	if len(args.MessageIDs) > 0 || len(args.ContentPartIDs) > 0 {
+		deleted, err := txRepo.DeleteRiskResultsForUnits(ctx, repo.DeleteRiskResultsForUnitsParams{
+			RiskPolicyID:   args.RiskPolicyID,
+			ProjectID:      args.ProjectID,
+			MessageIds:     args.MessageIDs,
+			ContentPartIds: args.ContentPartIDs,
 		})
 		if err != nil {
 			writeSpan.SetStatus(codes.Error, err.Error())
 			return false, fmt.Errorf("delete old results: %w", err)
 		}
-		for _, d := range deleted {
-			prior[priorIDs.next(storedRowIdentity(d))] = d
-		}
-	}
-	if len(args.ContentPartIDs) > 0 {
-		deleted, err := txRepo.DeleteRiskResultsForContentParts(ctx, repo.DeleteRiskResultsForContentPartsParams{
-			RiskPolicyID:   args.RiskPolicyID,
-			ProjectID:      args.ProjectID,
-			ContentPartIds: args.ContentPartIDs,
-		})
-		if err != nil {
-			writeSpan.SetStatus(codes.Error, err.Error())
-			return false, fmt.Errorf("delete old content part results: %w", err)
-		}
-		for _, d := range deleted {
-			prior[priorIDs.next(storedRowIdentity(d))] = d
-		}
+		prior = priorRowIndex(args.ProjectID, args.RiskPolicyID, deleted)
 	}
 
 	if len(rows) > 0 {
@@ -384,7 +408,7 @@ func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, 
 	return true, nil
 }
 
-func findingCreatedEvents(rows []repo.InsertRiskResultsParams, prior map[uuid.UUID]repo.RiskResult, now time.Time) []outbox.IdentifiedWebhookEvent[events.RiskFindingCreatedPayloadV1] {
+func findingCreatedEvents(rows []repo.InsertRiskResultsParams, prior map[uuid.UUID]repo.DeleteRiskResultsForUnitsRow, now time.Time) []outbox.IdentifiedWebhookEvent[events.RiskFindingCreatedPayloadV1] {
 	var evs []outbox.IdentifiedWebhookEvent[events.RiskFindingCreatedPayloadV1]
 	for _, row := range rows {
 		if !row.Found || !row.RuleID.Valid {

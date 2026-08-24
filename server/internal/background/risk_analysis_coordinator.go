@@ -179,6 +179,7 @@ func RiskAnalysisCoordinatorWorkflow(ctx workflow.Context, params RiskAnalysisCo
 
 		markMessages := excludeUUIDs(fetchResult.MessageIDs, failedMessages)
 		markParts := excludeUUIDs(fetchResult.ContentPartIDs, failedParts)
+		markFailed := false
 		if len(markMessages) > 0 || len(markParts) > 0 {
 			if err := workflow.ExecuteActivity(ctx, a.MarkMessagesAnalyzed, risk_analysis.MarkMessagesAnalyzedArgs{
 				ProjectID:      params.ProjectID,
@@ -186,15 +187,18 @@ func RiskAnalysisCoordinatorWorkflow(ctx workflow.Context, params RiskAnalysisCo
 				ContentPartIDs: markParts,
 			}).Get(ctx, nil); err != nil {
 				logger.Error("mark messages analyzed failed", "error", err.Error())
+				markFailed = true
 			}
 		}
 
-		// Self-retry: withheld units are only refetched by a fresh run's
+		// Self-retry: unmarked units are only refetched by a fresh run's
 		// lookback query, and no later signal is guaranteed to arrive. Back
-		// off, then ContinueAsNew to retry them. The loop ends on its own —
-		// either a retry succeeds, or the failing units age out of the
-		// lookback and the next run's fetch dispatches nothing.
-		if len(failedMessages) > 0 || len(failedParts) > 0 {
+		// off, then ContinueAsNew to retry them. A failed mark leaves its
+		// units unmarked exactly like a failed batch, so it retries the same
+		// way. The loop ends on its own — either a retry succeeds, or the
+		// failing units age out of the lookback and the next run's fetch
+		// dispatches nothing.
+		if markFailed || len(failedMessages) > 0 || len(failedParts) > 0 {
 			if err := workflow.Sleep(ctx, riskAnalysisRetryBackoff); err != nil {
 				return fmt.Errorf("retry backoff: %w", err)
 			}
