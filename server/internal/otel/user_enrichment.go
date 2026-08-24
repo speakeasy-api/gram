@@ -7,9 +7,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/sync/singleflight"
 
@@ -108,17 +108,25 @@ func fetchUserEnrichmentWithLookupContext(
 }
 
 func loadUserEnrichment(ctx context.Context, replicaDB database.DBTX, organizationID string, email string) (userEnrichment, error) {
-	user, err := usersrepo.New(replicaDB).GetConnectedUserByEmail(ctx, usersrepo.GetConnectedUserByEmailParams{
-		Email:          email,
+	users, err := usersrepo.New(replicaDB).GetConnectedUsersByEmails(ctx, usersrepo.GetConnectedUsersByEmailsParams{
+		Emails:         userEnrichmentEmailCandidates(email),
 		OrganizationID: organizationID,
 	})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		var empty userEnrichment
-		return empty, nil
-	case err != nil:
+	if err != nil {
 		var empty userEnrichment
 		return empty, fmt.Errorf("resolve connected user by email: %w", err)
+	}
+	if len(users) == 0 {
+		var empty userEnrichment
+		return empty, nil
+	}
+
+	user := users[0]
+	for _, candidate := range users {
+		if conv.NormalizeEmail(candidate.Email) == email {
+			user = candidate
+			break
+		}
 	}
 
 	var result userEnrichment
@@ -151,6 +159,21 @@ func loadUserEnrichment(ctx context.Context, replicaDB database.DBTX, organizati
 	}
 
 	return result, profileErr
+}
+
+func userEnrichmentEmailCandidates(email string) []string {
+	emails := []string{email}
+	local, domain, found := strings.Cut(email, "@")
+	if !found || local == "" || domain == "" || strings.Contains(domain, "@") {
+		return emails
+	}
+
+	canonicalLocal, _, found := strings.Cut(local, "+")
+	if !found || canonicalLocal == "" {
+		return emails
+	}
+
+	return append(emails, canonicalLocal+"@"+domain)
 }
 
 type userEnrichment struct {
