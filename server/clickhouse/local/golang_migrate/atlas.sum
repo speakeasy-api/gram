@@ -1,4 +1,4 @@
-h1:96bIrWquUCuKV+2U4zlQ0yAS9030JL4cJyYIgbYObvo=
+h1:PkzsDF7KirZTgp8CqNz0EgwSlC08Ik9zHk430fL38aA=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -89,3 +89,4 @@ h1:96bIrWquUCuKV+2U4zlQ0yAS9030JL4cJyYIgbYObvo=
 20260811155533_challenge-bucket-summaries.up.sql h1:4+W+EYUk8z5tcrifQZAKKkecKy527L9MkVN/cWbPKhQ=
 20260813175845_identity-map.up.sql h1:2IG8WUJ7IjZ09mEZDv6Vm53g3w9a7wltgN4469roano=
 20260817165153_add-risk-findings-suppression-reason.up.sql h1:janOxO76sl27TabZZDLDtpq3/+t8GpigxITjcj+GsNQ=
+20260821180408_add-risk-findings-event-kind.up.sql h1:QkhOhO7Q4cfBVkbhvAatxmHdTbZtDm9MQ7+78USDRFQ=
