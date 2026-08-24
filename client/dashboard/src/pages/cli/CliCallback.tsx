@@ -64,7 +64,7 @@ export default function CliCallback(props: CliCallbackProps): JSX.Element {
     }
 
     if (!session?.activeOrganizationId) {
-      window.location.href = `/register?redirect=${redirectUrl}`;
+      window.location.href = `/sign-up?redirect=${redirectUrl}`;
       return;
     }
   }, [session, status]);

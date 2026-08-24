@@ -32,7 +32,7 @@ export const LoginCheck = (): JSX.Element => {
 
   if (!session.activeOrganizationId) {
     const redirectTo = encodeURIComponent(location.pathname + location.search);
-    return <Navigate to={`/register?redirect=${redirectTo}`} />;
+    return <Navigate to={`/sign-up?redirect=${redirectTo}`} />;
   }
 
   return <Outlet />;
