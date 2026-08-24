@@ -27,8 +27,8 @@ Use this workflow only through the authenticated Speakeasy AI Control Plane (AIC
 5. After confirmation, call `register_remote_mcp` with the exact project, URL, optional safe display name, and a fresh idempotency key. This re-inspects the URL and creates private project configuration only.
 6. If this workflow is running in a managed project assistant, stop after registration and present the returned dashboard setup URL when one exists. The assistant reads only persisted, actor-scoped readiness evidence and does not force provider probes or attach providers.
 7. For an external Platform MCP client, if `next_action` is `secure_dashboard_setup_required`, present the exact `dashboard_setup_url`. The user completes authentication or secret entry outside chat; never request the resulting value.
-8. Call `get_mcp_readiness` with the selected project and returned registration ID. For a non-ready result, follow only its server-provided repair action. When it requires provider attachment, ask for explicit confirmation before `attach_platform_mcp_identity_provider`, then present its exact authorization URL.
-9. After secure setup or authorization, call `get_mcp_readiness` with `force: true`. Do not rely on stale or inferred readiness.
-10. When readiness is current and ready, report the server-returned evidence. Registration remains private until a separately rollout-gated exact-plugin distribution is available.
+8. For an external Platform MCP client, call `get_mcp_readiness` with the selected project and returned registration ID. For a non-ready result, follow only its server-provided repair action. When it requires provider attachment, ask for explicit confirmation before `attach_platform_mcp_identity_provider`, then present its exact authorization URL.
+9. For an external Platform MCP client, after secure setup or authorization, call `get_mcp_readiness` with `force: true`. Do not rely on stale or inferred readiness.
+10. For an external Platform MCP client, when readiness is current and ready, report the server-returned evidence. Registration remains private until a separately rollout-gated exact-plugin distribution is available.
 
 OAuth consent, secret entry, and provider authorization are the expected out-of-agent stops. URL and project selection, registration confirmation, and provider-attachment confirmation stay in the conversation.

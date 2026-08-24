@@ -29,7 +29,9 @@ If the user instead supplies a remote MCP URL outside the reviewed catalogue, us
    - For `upstream_identity_provider_not_configured`, explain that AICP can attach the one identity provider discovered from the persisted reviewed MCP source. Ask for explicit confirmation, then call `attach_platform_mcp_identity_provider`, present its exact Inspect authorization URL, and wait for the user to use Connect or Authorize.
    - For `upstream_authorization_required`, call `attach_platform_mcp_identity_provider` again with confirmation to retrieve the current server-issued Inspect authorization URL. Present that exact clickable URL and wait for the user to use Connect or Authorize.
    - For any other secure dashboard setup result, present only its exact server-returned setup URL. The user completes OAuth or secret entry outside the agent. Never request the resulting code, token, or secret in chat.
-7. After the user completes any secure handoff, call `get_mcp_readiness` with `force: true`. Do not rely on stale or inferred readiness.
+7. After the user completes any secure handoff, branch by caller surface:
+   - For a connected external Platform MCP client, call `get_mcp_readiness` with `force: true`. Do not rely on stale or inferred readiness.
+   - For a managed project assistant, call `get_mcp_readiness` without `force` and report only the persisted actor-scoped evidence. The user continues secure setup in the AICP dashboard.
 8. When readiness is current and ready, report the server-returned evidence. Registration remains private until a separately rollout-gated exact-plugin distribution is available.
 
 OAuth consent and approved secret entry are the expected out-of-agent stops. Project and catalog selection and identity-provider attachment confirmation stay in the conversation.
