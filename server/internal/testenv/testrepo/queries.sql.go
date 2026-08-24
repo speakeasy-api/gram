@@ -265,6 +265,25 @@ func (q *Queries) DeferDeviceIntegrationSyncsFixture(ctx context.Context, device
 	return err
 }
 
+const deleteOpenRouterSpendDayFixture = `-- name: DeleteOpenRouterSpendDayFixture :exec
+DELETE FROM openrouter_spend_daily
+WHERE organization_id = $1
+  AND key_type = $2
+  AND day = $3
+`
+
+type DeleteOpenRouterSpendDayFixtureParams struct {
+	OrganizationID string
+	KeyType        string
+	Day            pgtype.Date
+}
+
+// Test-only fixture: creates an incomplete historical month.
+func (q *Queries) DeleteOpenRouterSpendDayFixture(ctx context.Context, arg DeleteOpenRouterSpendDayFixtureParams) error {
+	_, err := q.db.Exec(ctx, deleteOpenRouterSpendDayFixture, arg.OrganizationID, arg.KeyType, arg.Day)
+	return err
+}
+
 const disableDeviceIntegrationSchedulesFixture = `-- name: DisableDeviceIntegrationSchedulesFixture :exec
 UPDATE device_integration_schedules
 SET disabled_at = clock_timestamp()
@@ -1348,6 +1367,37 @@ func (q *Queries) ScrubDeploymentFunctionMachineSpecs(ctx context.Context, deplo
 	return err
 }
 
+const seedOpenRouterSpendRangeFixture = `-- name: SeedOpenRouterSpendRangeFixture :exec
+INSERT INTO openrouter_spend_daily (organization_id, key_type, day, spend_usd)
+SELECT
+    $1::text
+  , $2::text
+  , day::date
+  , $3::text::numeric(14, 6)
+FROM GENERATE_SERIES($4::date, $5::date, INTERVAL '1 day') AS day
+`
+
+type SeedOpenRouterSpendRangeFixtureParams struct {
+	OrganizationID string
+	KeyType        string
+	SpendUsd       string
+	StartDay       pgtype.Date
+	EndDay         pgtype.Date
+}
+
+// Test-only fixture: records one exact daily spend amount across an inclusive
+// UTC date range.
+func (q *Queries) SeedOpenRouterSpendRangeFixture(ctx context.Context, arg SeedOpenRouterSpendRangeFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedOpenRouterSpendRangeFixture,
+		arg.OrganizationID,
+		arg.KeyType,
+		arg.SpendUsd,
+		arg.StartDay,
+		arg.EndDay,
+	)
+	return err
+}
+
 const seedOutboxEntry = `-- name: SeedOutboxEntry :one
 INSERT INTO outbox (organization_id, event_type, payload)
 VALUES ($1, $2, $3)
@@ -1464,6 +1514,24 @@ type SetFunctionToolVariablesParams struct {
 
 func (q *Queries) SetFunctionToolVariables(ctx context.Context, arg SetFunctionToolVariablesParams) error {
 	_, err := q.db.Exec(ctx, setFunctionToolVariables, arg.Variables, arg.ID, arg.ProjectID)
+	return err
+}
+
+const setOpenRouterAPIKeyCreatedAtFixture = `-- name: SetOpenRouterAPIKeyCreatedAtFixture :exec
+UPDATE openrouter_api_keys
+SET created_at = $1
+WHERE organization_id = $2
+`
+
+type SetOpenRouterAPIKeyCreatedAtFixtureParams struct {
+	CreatedAt      pgtype.Timestamptz
+	OrganizationID string
+}
+
+// Test-only fixture: places a platform-managed key before a historical spend
+// range so completeness checks expect every day in that range.
+func (q *Queries) SetOpenRouterAPIKeyCreatedAtFixture(ctx context.Context, arg SetOpenRouterAPIKeyCreatedAtFixtureParams) error {
+	_, err := q.db.Exec(ctx, setOpenRouterAPIKeyCreatedAtFixture, arg.CreatedAt, arg.OrganizationID)
 	return err
 }
 

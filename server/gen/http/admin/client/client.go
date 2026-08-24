@@ -83,6 +83,10 @@ type Client struct {
 	// getInferenceKeys endpoint.
 	GetInferenceKeysDoer goahttp.Doer
 
+	// GetInferenceSpendHistory Doer is the HTTP client used to make requests to
+	// the getInferenceSpendHistory endpoint.
+	GetInferenceSpendHistoryDoer goahttp.Doer
+
 	// GetPaygBillingSummary Doer is the HTTP client used to make requests to the
 	// getPaygBillingSummary endpoint.
 	GetPaygBillingSummaryDoer goahttp.Doer
@@ -136,6 +140,7 @@ func NewClient(
 		RearmTrialDoer:               doer,
 		GetOrganizationStatsDoer:     doer,
 		GetInferenceKeysDoer:         doer,
+		GetInferenceSpendHistoryDoer: doer,
 		GetPaygBillingSummaryDoer:    doer,
 		GetStripeSubscriptionDoer:    doer,
 		CancelStripeSubscriptionDoer: doer,
@@ -551,6 +556,30 @@ func (c *Client) GetInferenceKeys() goa.Endpoint {
 		resp, err := c.GetInferenceKeysDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "getInferenceKeys", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetInferenceSpendHistory returns an endpoint that makes HTTP requests to the
+// admin service getInferenceSpendHistory server.
+func (c *Client) GetInferenceSpendHistory() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetInferenceSpendHistoryRequest(c.encoder)
+		decodeResponse = DecodeGetInferenceSpendHistoryResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetInferenceSpendHistoryRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetInferenceSpendHistoryDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getInferenceSpendHistory", err)
 		}
 		return decodeResponse(resp)
 	}
