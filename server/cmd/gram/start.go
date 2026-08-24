@@ -1552,6 +1552,8 @@ func newStartCommand() *cli.Command {
 				AuditLogger:            auditLogger,
 				PluginPublisher:        pluginPublisher,
 				Skills:                 skillsService,
+				Telemetry:              telemetryrepo.New(chDB),
+				SessionCapture:         platformmcp.FeatureChecker(sessionCaptureEnabled),
 				LocalFixture:           platformFixture,
 			})
 			if err != nil {

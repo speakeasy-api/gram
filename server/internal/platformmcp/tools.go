@@ -133,7 +133,7 @@ type operationBudgetResult struct {
 // registrar alongside the server so another admitted audience — the project
 // assistant — can be composed from the same registration pass rather than from
 // a second list that would drift.
-func newServer(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, candidate CatalogDescriptor) (*mcp.Server, *Registrar) {
+func newServer(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, candidate CatalogDescriptor) (*mcp.Server, *Registrar) {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "platform-mcp",
 		Title:   "Platform MCP",
@@ -182,6 +182,11 @@ func newServer(reader Reader, catalog Catalog, registrations *RegistrationServic
 		registerUnavailableTools(reg)
 	} else {
 		registerOnboardingLifecycleTools(reg, onboarding, registrations, distributions)
+	}
+	if !diagnostics.valid() {
+		registerUnavailableDiagnosticsTools(reg)
+	} else {
+		registerDiagnosticsTools(reg, diagnostics)
 	}
 	if !skills.valid() {
 		registerUnavailableSkillsTools(reg)
