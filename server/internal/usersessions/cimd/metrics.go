@@ -17,16 +17,11 @@ const (
 	meterFetchResponseSize    = "cimd.fetch.response_size"
 	meterValidationFailures   = "cimd.validation.failures"
 
-	// meterCrossOriginRedirects counts validated documents carrying at least
-	// one non-loopback redirect_uri whose origin differs from the client_id
-	// URL. Cross-origin redirects are accepted; this instrument exists so a
-	// monitor can flag a catalog preset vendor moving to cross-origin
-	// redirects, not to block anything. One point per document per validating
-	// resolution: fresh fetches only (cached resolutions skip validation),
-	// and the authenticated verifyURL preflight shares the emission path, so
-	// operator-driven inspections count too — treat it as a presence signal,
-	// not a precise rate. The redirect origins themselves go to logs, never
-	// labels; the only attribute is the bounded client_id origin.
+	// meterCrossOriginRedirects observes validated documents whose
+	// redirect_uris leave the client_id origin. Such redirects are accepted;
+	// the counter only makes the shift visible. Emitted wherever validation
+	// runs (cached resolutions skip it), so treat it as a presence signal
+	// rather than a rate. The origins themselves go to logs, never labels.
 	meterCrossOriginRedirects = "cimd.redirect_uris.cross_origin"
 )
 
