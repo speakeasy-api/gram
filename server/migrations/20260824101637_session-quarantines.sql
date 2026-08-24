@@ -1,5 +1,3 @@
--- Modify "organization_metadata" table
-ALTER TABLE "organization_metadata" ADD COLUMN "session_quarantine_fail_closed" boolean NOT NULL DEFAULT false;
 -- Create "session_quarantines" table
 CREATE TABLE "session_quarantines" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
