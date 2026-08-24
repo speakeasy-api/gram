@@ -637,6 +637,30 @@ export const INSIGHTS_SUGGESTIONS = {
     },
   ],
 
+  insights: [
+    {
+      title: "How is usage trending?",
+      label: "Top tools & users",
+      icon: "trend",
+      prompt:
+        "Summarize tool usage for this period: top tools, top users, and how the volume is trending.",
+    },
+    {
+      title: "Which harness is busiest?",
+      label: "Agent harness usage",
+      icon: "terminal",
+      prompt:
+        "Which CLI or agent harness is used most in this period — Claude Code, Cursor, or others — and how do their tool-call counts and token consumption compare?",
+    },
+    {
+      title: "Which tools cost tokens?",
+      label: "Token consumption",
+      icon: "coins",
+      prompt:
+        "Which MCP servers and tools consume the most tokens in this period? Break it down by input vs output tokens and call out any outliers.",
+    },
+  ],
+
   "insights/tools": [
     {
       title: "How is usage trending?",
@@ -646,17 +670,18 @@ export const INSIGHTS_SUGGESTIONS = {
         "Summarize tool usage for this period: top tools, top users, and how the volume is trending.",
     },
     {
-      title: "Which tools fail most?",
-      label: "Highest failure rates",
-      icon: "alert",
+      title: "Which harness is busiest?",
+      label: "Agent harness usage",
+      icon: "terminal",
       prompt:
-        "Which tools have the highest failure rates right now, and what do the errors look like?",
+        "Which CLI or agent harness is used most in this period — Claude Code, Cursor, or others — and how do their tool-call counts and token consumption compare?",
     },
     {
-      title: "Slowest tools?",
-      label: "Slowest tools",
-      icon: "gauge",
-      prompt: "Find tools with the slowest p95 latency in this period.",
+      title: "Which tools cost tokens?",
+      label: "Token consumption",
+      icon: "coins",
+      prompt:
+        "Which MCP servers and tools consume the most tokens in this period? Break it down by input vs output tokens and call out any outliers.",
     },
   ],
 
