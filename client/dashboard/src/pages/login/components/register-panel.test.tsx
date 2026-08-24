@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RegisterPanel } from "./register-panel";
 
+const locationReplace = vi.fn();
+
 const mocks = vi.hoisted(() => ({
   buildRegisterMutation: vi.fn(),
   useGramContext: vi.fn(),
@@ -32,7 +34,7 @@ beforeEach(() => {
   }));
   vi.stubGlobal("location", {
     origin: "https://app.example",
-    replace: vi.fn(),
+    replace: locationReplace,
   });
 });
 
@@ -56,7 +58,7 @@ describe("RegisterPanel", () => {
       screen.getByRole("button", { name: /create organization/i }),
     );
 
-    expect(window.location.replace).toHaveBeenCalledWith(
+    expect(locationReplace).toHaveBeenCalledWith(
       "https://app.example/cli/callback",
     );
   });
@@ -74,6 +76,6 @@ describe("RegisterPanel", () => {
       screen.getByRole("button", { name: /create organization/i }),
     );
 
-    expect(window.location.replace).toHaveBeenCalledWith("/");
+    expect(locationReplace).toHaveBeenCalledWith("/");
   });
 });
