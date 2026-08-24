@@ -20,6 +20,7 @@ import (
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
@@ -111,6 +112,21 @@ func TestFetchUserEnrichmentReturnsEmptyWithoutMatchingUser(t *testing.T) {
 	loads := singleflight.Group{}
 
 	got, err := fetchUserEnrichment(t.Context(), db, &enrichmentCache, &loads, "organization-id", "missing@example.invalid")
+
+	require.NoError(t, err)
+	require.Empty(t, got)
+}
+
+func TestFetchUserEnrichmentIgnoresDeletedCanonicalCandidate(t *testing.T) {
+	t.Parallel()
+
+	db := newTestDatabase(t)
+	seed := seedUserEnrichment(t, db)
+	require.NoError(t, testrepo.New(db).ForceSoftDeleteUser(t.Context(), seed.userID))
+	enrichmentCache := cache.NewTypedObjectCache[cachedUserEnrichment](testenv.NewLogger(t), cache.NoopCache, cache.SuffixNone)
+	loads := singleflight.Group{}
+
+	got, err := fetchUserEnrichment(t.Context(), db, &enrichmentCache, &loads, seed.organizationID, "user+deleted@example.invalid")
 
 	require.NoError(t, err)
 	require.Empty(t, got)
@@ -216,6 +232,7 @@ func (r userEnrichmentErrorRow) Scan(...any) error {
 
 type userEnrichmentSeed struct {
 	organizationID string
+	userID         string
 	email          string
 	want           userEnrichment
 }
@@ -311,6 +328,7 @@ func seedUserEnrichment(t *testing.T, db *pgxpool.Pool) userEnrichmentSeed {
 
 	return userEnrichmentSeed{
 		organizationID: organizationID,
+		userID:         userID,
 		email:          email,
 		want: userEnrichment{
 			DirectoryID: directoryUserID,
@@ -322,6 +340,56 @@ func seedUserEnrichment(t *testing.T, db *pgxpool.Pool) userEnrichmentSeed {
 			DirectoryGroupIDs:   []string{directoryGroupID},
 			DirectoryGroupNames: []string{"Developers"},
 			Roles:               []string{role},
+		},
+	}
+}
+
+func seedSubaddressUserEnrichment(t *testing.T, db *pgxpool.Pool, organizationID string) userEnrichmentSeed {
+	t.Helper()
+
+	const userID = "user-enrichment-subaddress"
+	const email = "user+log@example.invalid"
+	const directoryUserID = "directory-user-enrichment-subaddress"
+	syncedAt := time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC)
+
+	_, err := usersrepo.New(db).UpsertUser(t.Context(), usersrepo.UpsertUserParams{
+		ID:          userID,
+		Email:       email,
+		DisplayName: "Subaddress User Enrichment",
+		PhotoUrl:    conv.PtrToPGText(nil),
+		Admin:       false,
+	})
+	require.NoError(t, err)
+
+	_, err = organizationsrepo.New(db).UpsertOrganizationUserRelationship(t.Context(), organizationsrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: organizationID,
+		UserID:         conv.ToPGText(userID),
+	})
+	require.NoError(t, err)
+
+	_, err = directoryrepo.New(db).UpsertDirectoryUser(t.Context(), directoryrepo.UpsertDirectoryUserParams{
+		OrganizationID:        organizationID,
+		UserID:                conv.ToPGText(userID),
+		WorkosDirectoryUserID: directoryUserID,
+		Email:                 conv.ToPGText(email),
+		Attributes:            []byte(`{"department":"Raw"}`),
+		RestoreDeleted:        true,
+		WorkosCreatedAt:       conv.ToPGTimestamptz(syncedAt),
+		WorkosUpdatedAt:       conv.ToPGTimestamptz(syncedAt),
+		WorkosLastEventID:     conv.ToPGText("event-directory-user-enrichment-subaddress"),
+	})
+	require.NoError(t, err)
+
+	return userEnrichmentSeed{
+		organizationID: organizationID,
+		userID:         userID,
+		email:          email,
+		want: userEnrichment{
+			DirectoryID:         directoryUserID,
+			DirectoryAttributes: map[string]any{"department": "Raw"},
+			DirectoryGroupIDs:   nil,
+			DirectoryGroupNames: nil,
+			Roles:               nil,
 		},
 	}
 }

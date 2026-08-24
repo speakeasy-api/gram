@@ -65,3 +65,21 @@ func TestEnrichLogDirectoryResolvesSubaddress(t *testing.T) {
 	require.NoError(t, err)
 	require.ElementsMatch(t, seed.want.attributes(), got)
 }
+
+func TestEnrichLogDirectoryPrefersRawSubaddress(t *testing.T) {
+	t.Parallel()
+
+	db := newTestDatabase(t)
+	canonical := seedUserEnrichment(t, db)
+	raw := seedSubaddressUserEnrichment(t, db, canonical.organizationID)
+	enricher := newEnrichLogDirectory(testenv.NewLogger(t), db, cache.NoopCache)
+	record := (&otelv1.InboundLogRecord_builder{
+		Provenance: (&otelv1.InboundLogRecord_Provenance_builder{OrganizationId: new(raw.organizationID)}).Build(),
+		Attributes: []*otelv1.InboundLogRecord_KeyValue{logStringAttribute("user.email", raw.email)},
+	}).Build()
+
+	got, err := enricher.Enrich(t.Context(), record)
+
+	require.NoError(t, err)
+	require.ElementsMatch(t, raw.want.attributes(), got)
+}

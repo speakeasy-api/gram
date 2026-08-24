@@ -79,6 +79,7 @@ LIMIT 1;
 SELECT DISTINCT ON (lower(u.email)) u.* FROM users u
 JOIN organization_user_relationships our ON our.user_id = u.id
 WHERE lower(u.email) = ANY(ARRAY(SELECT lower(e) FROM unnest(@emails::text[]) AS e))
+  AND u.deleted_at IS NULL
   AND our.organization_id = @organization_id
   AND our.deleted_at IS NULL
 ORDER BY lower(u.email), (u.email = lower(u.email)) DESC, u.created_at, u.id;
