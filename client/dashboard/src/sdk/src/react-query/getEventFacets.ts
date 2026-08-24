@@ -56,7 +56,7 @@ export type GetEventFacetsQueryError =
   | SDKValidationError;
 
 /**
- * getEventFacets telemetry
+ * getEventFacets otel
  *
  * @remarks
  * Org-scoped filter facets for the event feed: the distinct sources and event/span names observed in a time range.
@@ -79,7 +79,7 @@ export function useGetEventFacets(
 }
 
 /**
- * getEventFacets telemetry
+ * getEventFacets otel
  *
  * @remarks
  * Org-scoped filter facets for the event feed: the distinct sources and event/span names observed in a time range.
@@ -123,7 +123,7 @@ export function invalidateGetEventFacets(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "telemetry", "getEventFacets", ...queryKeyBase],
+    queryKey: ["@gram/client", "otel", "getEventFacets", ...queryKeyBase],
   });
 }
 
@@ -133,6 +133,6 @@ export function invalidateAllGetEventFacets(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "telemetry", "getEventFacets"],
+    queryKey: ["@gram/client", "otel", "getEventFacets"],
   });
 }

@@ -84,18 +84,6 @@ type Client struct {
 	// listSessions endpoint.
 	ListSessionsDoer goahttp.Doer
 
-	// ListEventLog Doer is the HTTP client used to make requests to the
-	// listEventLog endpoint.
-	ListEventLogDoer goahttp.Doer
-
-	// GetEventVolume Doer is the HTTP client used to make requests to the
-	// getEventVolume endpoint.
-	GetEventVolumeDoer goahttp.Doer
-
-	// GetEventFacets Doer is the HTTP client used to make requests to the
-	// getEventFacets endpoint.
-	GetEventFacetsDoer goahttp.Doer
-
 	// ListFilterOptions Doer is the HTTP client used to make requests to the
 	// listFilterOptions endpoint.
 	ListFilterOptionsDoer goahttp.Doer
@@ -193,9 +181,6 @@ func NewClient(
 		QueryDoer:                            doer,
 		QueryTumDetailsDoer:                  doer,
 		ListSessionsDoer:                     doer,
-		ListEventLogDoer:                     doer,
-		GetEventVolumeDoer:                   doer,
-		GetEventFacetsDoer:                   doer,
 		ListFilterOptionsDoer:                doer,
 		ListAttributeKeysDoer:                doer,
 		GetHooksSummaryDoer:                  doer,
@@ -622,78 +607,6 @@ func (c *Client) ListSessions() goa.Endpoint {
 		resp, err := c.ListSessionsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("telemetry", "listSessions", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// ListEventLog returns an endpoint that makes HTTP requests to the telemetry
-// service listEventLog server.
-func (c *Client) ListEventLog() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeListEventLogRequest(c.encoder)
-		decodeResponse = DecodeListEventLogResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildListEventLogRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.ListEventLogDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("telemetry", "listEventLog", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// GetEventVolume returns an endpoint that makes HTTP requests to the telemetry
-// service getEventVolume server.
-func (c *Client) GetEventVolume() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeGetEventVolumeRequest(c.encoder)
-		decodeResponse = DecodeGetEventVolumeResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildGetEventVolumeRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.GetEventVolumeDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("telemetry", "getEventVolume", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// GetEventFacets returns an endpoint that makes HTTP requests to the telemetry
-// service getEventFacets server.
-func (c *Client) GetEventFacets() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeGetEventFacetsRequest(c.encoder)
-		decodeResponse = DecodeGetEventFacetsResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildGetEventFacetsRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.GetEventFacetsDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("telemetry", "getEventFacets", err)
 		}
 		return decodeResponse(resp)
 	}

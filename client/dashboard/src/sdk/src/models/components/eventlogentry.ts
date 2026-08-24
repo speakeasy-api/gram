@@ -46,10 +46,6 @@ export type EventLogEntry = {
    */
   projectId: string;
   /**
-   * Stable dedup id assigned at the ingest edge
-   */
-  recordId: string;
-  /**
    * Resource attributes as a JSON object
    */
   resourceAttributes: any;
@@ -87,7 +83,6 @@ export const EventLogEntry$inboundSchema: z.ZodMiniType<
     kind: EventLogEntryKind$inboundSchema,
     name: z.string(),
     project_id: z.string(),
-    record_id: z.string(),
     resource_attributes: z.any(),
     source: z.string(),
     span_id: z.string(),
@@ -98,7 +93,6 @@ export const EventLogEntry$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "body_preview": "bodyPreview",
       "project_id": "projectId",
-      "record_id": "recordId",
       "resource_attributes": "resourceAttributes",
       "span_id": "spanId",
       "time_unix_nano": "timeUnixNano",

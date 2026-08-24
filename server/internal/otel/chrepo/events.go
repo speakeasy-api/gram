@@ -1,4 +1,4 @@
-package repo
+package chrepo
 
 import (
 	"context"
@@ -137,17 +137,18 @@ func eventUnionSource(subs []squirrel.SelectBuilder) (string, []any, error) {
 type ListEventLogParams struct {
 	EventLogFilters
 
-	// CursorTimeUnixNano and CursorRecordID hold the keyset position of the
-	// last event on the previous page; both zero-valued means first page.
+	// CursorTimeUnixNano holds the keyset position (event time of the last
+	// event on the previous page); zero means first page. The next page
+	// resumes at strictly older times, so events sharing the boundary
+	// nanosecond are skipped — an accepted trade-off at nanosecond
+	// resolution.
 	CursorTimeUnixNano int64
-	CursorRecordID     string
 
 	Limit int
 }
 
 // EventLogRow is one merged feed event as returned by ClickHouse.
 type EventLogRow struct {
-	RecordID           string `ch:"record_id"`
 	TimeUnixNano       int64  `ch:"time_unix_nano"`
 	Kind               string `ch:"kind"`
 	Source             string `ch:"source"`
@@ -161,7 +162,6 @@ type EventLogRow struct {
 }
 
 var eventLogOuterColumns = []string{
-	"record_id",
 	"time_unix_nano",
 	"kind",
 	"source",
@@ -185,7 +185,6 @@ func buildListEventLogQuery(arg ListEventLogParams) (string, []any, error) {
 			bodyPreview = fmt.Sprintf("leftUTF8(%s, %d) AS body_preview", spec.bodyCol, EventBodyPreviewChars)
 		}
 		sb := sq.Select(
-			"record_id",
 			"time_unix_nano",
 			"'"+spec.kind+"' AS kind",
 			"source",
@@ -198,15 +197,12 @@ func buildListEventLogQuery(arg ListEventLogParams) (string, []any, error) {
 			"toString(resource_attributes) AS resource_attributes",
 		).From(spec.table)
 		sb = spec.applyEventFilters(sb, arg.EventLogFilters)
-		if arg.CursorRecordID != "" {
-			sb = sb.Where("(time_unix_nano, record_id) < (?, ?)", arg.CursorTimeUnixNano, arg.CursorRecordID)
+		if arg.CursorTimeUnixNano != 0 {
+			sb = sb.Where("time_unix_nano < ?", arg.CursorTimeUnixNano)
 		}
-		// LIMIT 1 BY drops the duplicate rows a Pub/Sub redelivery can leave
-		// behind until the ReplacingMergeTree merges them away; duplicates are
-		// adjacent in the sort order, so the pass is cheap.
 		sb = sb.
-			OrderBy("time_unix_nano DESC", "record_id DESC").
-			Suffix(fmt.Sprintf("LIMIT 1 BY record_id LIMIT %d", arg.Limit))
+			OrderBy("time_unix_nano DESC").
+			Suffix(fmt.Sprintf("LIMIT %d", arg.Limit))
 		subs = append(subs, sb)
 	}
 
@@ -217,7 +213,7 @@ func buildListEventLogQuery(arg ListEventLogParams) (string, []any, error) {
 
 	outer := sq.Select(eventLogOuterColumns...).
 		From(source).
-		OrderBy("time_unix_nano DESC", "record_id DESC").
+		OrderBy("time_unix_nano DESC").
 		Limit(uint64(arg.Limit)) //nolint:gosec // callers pass a validated positive limit
 
 	query, args, err := outer.ToSql()
@@ -231,7 +227,9 @@ func buildListEventLogQuery(arg ListEventLogParams) (string, []any, error) {
 }
 
 // ListEventLog returns one page of the org's merged event feed, newest first
-// with (time_unix_nano, record_id) keyset pagination.
+// with time_unix_nano keyset pagination. The tables are plain MergeTree fed
+// at-least-once, so a Pub/Sub redelivery can surface the same event twice;
+// readers tolerate duplicates like standard OTel ClickHouse tables do.
 func (q *Queries) ListEventLog(ctx context.Context, arg ListEventLogParams) ([]EventLogRow, error) {
 	if arg.Limit <= 0 || len(selectedEventTables(arg.Kinds)) == 0 {
 		return []EventLogRow{}, nil

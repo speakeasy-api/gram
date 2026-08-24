@@ -33,9 +33,6 @@ type Endpoints struct {
 	Query                            goa.Endpoint
 	QueryTumDetails                  goa.Endpoint
 	ListSessions                     goa.Endpoint
-	ListEventLog                     goa.Endpoint
-	GetEventVolume                   goa.Endpoint
-	GetEventFacets                   goa.Endpoint
 	ListFilterOptions                goa.Endpoint
 	ListAttributeKeys                goa.Endpoint
 	GetHooksSummary                  goa.Endpoint
@@ -75,9 +72,6 @@ func NewEndpoints(s Service) *Endpoints {
 		Query:                            NewQueryEndpoint(s, a.APIKeyAuth),
 		QueryTumDetails:                  NewQueryTumDetailsEndpoint(s, a.APIKeyAuth),
 		ListSessions:                     NewListSessionsEndpoint(s, a.APIKeyAuth),
-		ListEventLog:                     NewListEventLogEndpoint(s, a.APIKeyAuth),
-		GetEventVolume:                   NewGetEventVolumeEndpoint(s, a.APIKeyAuth),
-		GetEventFacets:                   NewGetEventFacetsEndpoint(s, a.APIKeyAuth),
 		ListFilterOptions:                NewListFilterOptionsEndpoint(s, a.APIKeyAuth),
 		ListAttributeKeys:                NewListAttributeKeysEndpoint(s, a.APIKeyAuth),
 		GetHooksSummary:                  NewGetHooksSummaryEndpoint(s, a.APIKeyAuth),
@@ -115,9 +109,6 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Query = m(e.Query)
 	e.QueryTumDetails = m(e.QueryTumDetails)
 	e.ListSessions = m(e.ListSessions)
-	e.ListEventLog = m(e.ListEventLog)
-	e.GetEventVolume = m(e.GetEventVolume)
-	e.GetEventFacets = m(e.GetEventFacets)
 	e.ListFilterOptions = m(e.ListFilterOptions)
 	e.ListAttributeKeys = m(e.ListAttributeKeys)
 	e.GetHooksSummary = m(e.GetHooksSummary)
@@ -1040,75 +1031,6 @@ func NewListSessionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 			return nil, err
 		}
 		return s.ListSessions(ctx, p)
-	}
-}
-
-// NewListEventLogEndpoint returns an endpoint function that calls the method
-// "listEventLog" of service "telemetry".
-func NewListEventLogEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
-	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*ListEventLogPayload)
-		var err error
-		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
-		}
-		var key string
-		if p.SessionToken != nil {
-			key = *p.SessionToken
-		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err != nil {
-			return nil, err
-		}
-		return s.ListEventLog(ctx, p)
-	}
-}
-
-// NewGetEventVolumeEndpoint returns an endpoint function that calls the method
-// "getEventVolume" of service "telemetry".
-func NewGetEventVolumeEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
-	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*GetEventVolumePayload)
-		var err error
-		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
-		}
-		var key string
-		if p.SessionToken != nil {
-			key = *p.SessionToken
-		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err != nil {
-			return nil, err
-		}
-		return s.GetEventVolume(ctx, p)
-	}
-}
-
-// NewGetEventFacetsEndpoint returns an endpoint function that calls the method
-// "getEventFacets" of service "telemetry".
-func NewGetEventFacetsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
-	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*GetEventFacetsPayload)
-		var err error
-		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
-		}
-		var key string
-		if p.SessionToken != nil {
-			key = *p.SessionToken
-		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err != nil {
-			return nil, err
-		}
-		return s.GetEventFacets(ctx, p)
 	}
 }
 

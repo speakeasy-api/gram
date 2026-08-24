@@ -16,3 +16,18 @@ func LogsOtelPath() string {
 func TracesOtelPath() string {
 	return "/otel/v1/traces"
 }
+
+// ListEventLogOtelPath returns the URL path to the otel service listEventLog HTTP endpoint.
+func ListEventLogOtelPath() string {
+	return "/rpc/otel.listEventLog"
+}
+
+// GetEventVolumeOtelPath returns the URL path to the otel service getEventVolume HTTP endpoint.
+func GetEventVolumeOtelPath() string {
+	return "/rpc/otel.getEventVolume"
+}
+
+// GetEventFacetsOtelPath returns the URL path to the otel service getEventFacets HTTP endpoint.
+func GetEventFacetsOtelPath() string {
+	return "/rpc/otel.getEventFacets"
+}

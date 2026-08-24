@@ -56,7 +56,7 @@ export type ListEventLogQueryError =
   | SDKValidationError;
 
 /**
- * listEventLog telemetry
+ * listEventLog otel
  *
  * @remarks
  * Org-scoped event feed over ingested OpenTelemetry signals: log records and spans merged into one reverse-chronological list with keyset pagination and a capped total count.
@@ -79,7 +79,7 @@ export function useListEventLog(
 }
 
 /**
- * listEventLog telemetry
+ * listEventLog otel
  *
  * @remarks
  * Org-scoped event feed over ingested OpenTelemetry signals: log records and spans merged into one reverse-chronological list with keyset pagination and a capped total count.
@@ -123,7 +123,7 @@ export function invalidateListEventLog(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "telemetry", "listEventLog", ...queryKeyBase],
+    queryKey: ["@gram/client", "otel", "listEventLog", ...queryKeyBase],
   });
 }
 
@@ -133,6 +133,6 @@ export function invalidateAllListEventLog(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "telemetry", "listEventLog"],
+    queryKey: ["@gram/client", "otel", "listEventLog"],
   });
 }

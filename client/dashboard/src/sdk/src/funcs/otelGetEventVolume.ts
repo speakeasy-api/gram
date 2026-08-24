@@ -39,12 +39,12 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * getEventVolume telemetry
+ * getEventVolume otel
  *
  * @remarks
  * Org-scoped event volume timeseries for the event feed: bucketed counts of ingested OpenTelemetry log records vs spans over a time range, honoring the same filters as listEventLog.
  */
-export function telemetryGetEventVolume(
+export function otelGetEventVolume(
   client: GramCore,
   request: GetEventVolumeRequest,
   security?: GetEventVolumeSecurity | undefined,
@@ -106,7 +106,7 @@ async function $do(
     explode: true,
   });
 
-  const path = pathToFunc("/rpc/telemetry.getEventVolume")();
+  const path = pathToFunc("/rpc/otel.getEventVolume")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",

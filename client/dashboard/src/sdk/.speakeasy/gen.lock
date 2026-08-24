@@ -345,6 +345,9 @@ trackedFiles:
   src/funcs/otelForwardingDeleteConfig.ts: {}
   src/funcs/otelForwardingGetConfig.ts: {}
   src/funcs/otelForwardingUpsertConfig.ts: {}
+  src/funcs/otelGetEventFacets.ts: {}
+  src/funcs/otelGetEventVolume.ts: {}
+  src/funcs/otelListEventLog.ts: {}
   src/funcs/otelUploadLogs.ts: {}
   src/funcs/otelUploadTraces.ts: {}
   src/funcs/packagesCreate.ts: {}
@@ -509,8 +512,6 @@ trackedFiles:
   src/funcs/spendRulesRulesUpdate.ts: {}
   src/funcs/telemetryCaptureEvent.ts: {}
   src/funcs/telemetryGetEmployeeDataFlowGraph.ts: {}
-  src/funcs/telemetryGetEventFacets.ts: {}
-  src/funcs/telemetryGetEventVolume.ts: {}
   src/funcs/telemetryGetHooksSummary.ts: {}
   src/funcs/telemetryGetMcpServerActivity.ts: {}
   src/funcs/telemetryGetObservabilityOverview.ts: {}
@@ -531,7 +532,6 @@ trackedFiles:
   src/funcs/telemetryGetUnproxiedMcpServerUserUsage.ts: {}
   src/funcs/telemetryGetUserMetricsSummary.ts: {}
   src/funcs/telemetryListAttributeKeys.ts: {}
-  src/funcs/telemetryListEventLog.ts: {}
   src/funcs/telemetryListFilterOptions.ts: {}
   src/funcs/telemetryListHooksTraces.ts: {}
   src/funcs/telemetryListSessions.ts: {}

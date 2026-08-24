@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
@@ -18,15 +19,23 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/otel/chrepo"
 )
 
 const maxOTLPExportBytes = 20 * constants.MiB
 const otelProvenanceSource = "speakeasy"
 
+// FeatureChecker reports whether a product feature is enabled for an
+// organization.
+type FeatureChecker func(ctx context.Context, organizationID string) (bool, error)
+
 type Service struct {
 	logger        *slog.Logger
 	tracer        trace.Tracer
 	auth          *auth.Auth
+	authz         *authz.Engine
+	chRepo        *chrepo.Queries
+	logsEnabled   FeatureChecker
 	logPublisher  gcp.Publisher[*otelv1.InboundLogRecord]
 	spanPublisher gcp.Publisher[*otelv1.InboundSpan]
 }
@@ -38,8 +47,10 @@ func NewService(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
+	chConn clickhouse.Conn,
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
+	logsEnabled FeatureChecker,
 	spanPublisher gcp.Publisher[*otelv1.InboundSpan],
 	logPublisher gcp.Publisher[*otelv1.InboundLogRecord],
 ) *Service {
@@ -47,6 +58,9 @@ func NewService(
 		logger:        logger,
 		tracer:        tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/otel"),
 		auth:          auth.New(logger, db, sessions, authzEngine),
+		authz:         authzEngine,
+		chRepo:        chrepo.New(chConn),
+		logsEnabled:   logsEnabled,
 		logPublisher:  logPublisher,
 		spanPublisher: spanPublisher,
 	}

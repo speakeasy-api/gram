@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  ListEventLogResult,
-  ListEventLogResult$inboundSchema,
-} from "../models/components/listeventlogresult.js";
+  GetEventFacetsResult,
+  GetEventFacetsResult$inboundSchema,
+} from "../models/components/geteventfacetsresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -31,27 +31,27 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  ListEventLogRequest,
-  ListEventLogRequest$outboundSchema,
-  ListEventLogSecurity,
-} from "../models/operations/listeventlog.js";
+  GetEventFacetsRequest,
+  GetEventFacetsRequest$outboundSchema,
+  GetEventFacetsSecurity,
+} from "../models/operations/geteventfacets.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * listEventLog telemetry
+ * getEventFacets otel
  *
  * @remarks
- * Org-scoped event feed over ingested OpenTelemetry signals: log records and spans merged into one reverse-chronological list with keyset pagination and a capped total count.
+ * Org-scoped filter facets for the event feed: the distinct sources and event/span names observed in a time range.
  */
-export function telemetryListEventLog(
+export function otelGetEventFacets(
   client: GramCore,
-  request: ListEventLogRequest,
-  security?: ListEventLogSecurity | undefined,
+  request: GetEventFacetsRequest,
+  security?: GetEventFacetsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    ListEventLogResult,
+    GetEventFacetsResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -73,13 +73,13 @@ export function telemetryListEventLog(
 
 async function $do(
   client: GramCore,
-  request: ListEventLogRequest,
-  security?: ListEventLogSecurity | undefined,
+  request: GetEventFacetsRequest,
+  security?: GetEventFacetsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      ListEventLogResult,
+      GetEventFacetsResult,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -95,18 +95,18 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(ListEventLogRequest$outboundSchema, value),
+    (value) => z.parse(GetEventFacetsRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.ListEventLogPayload, {
+  const body = encodeJSON("body", payload.GetEventFacetsPayload, {
     explode: true,
   });
 
-  const path = pathToFunc("/rpc/telemetry.listEventLog")();
+  const path = pathToFunc("/rpc/otel.getEventFacets")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
@@ -130,7 +130,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "listEventLog",
+    operationID: "getEventFacets",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -174,7 +174,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    ListEventLogResult,
+    GetEventFacetsResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -185,7 +185,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, ListEventLogResult$inboundSchema),
+    M.json(200, GetEventFacetsResult$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

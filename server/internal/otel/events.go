@@ -1,4 +1,4 @@
-package telemetry
+package otel
 
 import (
 	"context"
@@ -6,15 +6,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"time"
 
 	"golang.org/x/sync/errgroup"
 
-	telem_gen "github.com/speakeasy-api/gram/server/gen/telemetry"
+	gen "github.com/speakeasy-api/gram/server/gen/otel"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
+	"github.com/speakeasy-api/gram/server/internal/otel/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/telemetryerrs"
 )
 
@@ -24,16 +25,16 @@ const (
 )
 
 // eventLogCursor is the keyset position of the last event on a page,
-// serialized as base64 JSON into the opaque cursor string.
+// serialized as base64 JSON into the opaque cursor string. Paging by event
+// time alone can skip events sharing the boundary nanosecond — an accepted
+// trade-off at nanosecond resolution.
 type eventLogCursor struct {
-	TimeUnixNano int64  `json:"time_unix_nano"`
-	RecordID     string `json:"record_id"`
+	TimeUnixNano int64 `json:"time_unix_nano"`
 }
 
-func encodeEventLogCursor(timeUnixNano int64, recordID string) string {
+func encodeEventLogCursor(timeUnixNano int64) string {
 	payload, err := json.Marshal(eventLogCursor{
 		TimeUnixNano: timeUnixNano,
-		RecordID:     recordID,
 	})
 	if err != nil {
 		// The cursor payload is made from primitive values and should always marshal.
@@ -52,16 +53,16 @@ func decodeEventLogCursor(cursor string) (eventLogCursor, error) {
 	if err := json.Unmarshal(decoded, &payload); err != nil {
 		return eventLogCursor{}, fmt.Errorf("unmarshal event log cursor: %w", err)
 	}
-	if payload.RecordID == "" {
-		return eventLogCursor{}, fmt.Errorf("missing record_id")
+	if payload.TimeUnixNano <= 0 {
+		return eventLogCursor{}, fmt.Errorf("missing time_unix_nano")
 	}
 	return payload, nil
 }
 
 // authorizeOrgEventRead authorizes the caller for org-wide event feed reads
 // (session + org read scope + logs enabled) and parses the time window. The
-// new signal tables carry organization_id as a first-class column, so unlike
-// resolveOrgQueryScope no project resolution is needed.
+// signal tables carry organization_id as a first-class column, so no project
+// resolution is needed.
 func (s *Service) authorizeOrgEventRead(ctx context.Context, from, to string) (orgID string, timeStart, timeEnd int64, err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
@@ -79,7 +80,7 @@ func (s *Service) authorizeOrgEventRead(ctx context.Context, from, to string) (o
 		return "", 0, 0, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
 	}
 
-	timeStart, timeEnd, err = parseTimeRange(&from, &to)
+	timeStart, timeEnd, err = parseEventTimeRange(from, to)
 	if err != nil {
 		return "", 0, 0, err
 	}
@@ -91,7 +92,7 @@ func (s *Service) authorizeOrgEventRead(ctx context.Context, from, to string) (o
 // callers.
 func validateEventKinds(kinds []string) error {
 	for _, k := range kinds {
-		if k != repo.EventKindLog && k != repo.EventKindSpan {
+		if k != chrepo.EventKindLog && k != chrepo.EventKindSpan {
 			return oops.E(oops.CodeBadRequest, nil, "invalid event kind %q", k)
 		}
 	}
@@ -101,7 +102,7 @@ func validateEventKinds(kinds []string) error {
 // ListEventLog returns one page of the org's merged OpenTelemetry event feed
 // (logs and spans, newest first) plus a capped total count for the
 // "n of m events" display.
-func (s *Service) ListEventLog(ctx context.Context, payload *telem_gen.ListEventLogPayload) (*telem_gen.ListEventLogResult, error) {
+func (s *Service) ListEventLog(ctx context.Context, payload *gen.ListEventLogPayload) (*gen.ListEventLogResult, error) {
 	orgID, timeStart, timeEnd, err := s.authorizeOrgEventRead(ctx, payload.From, payload.To)
 	if err != nil {
 		return nil, err
@@ -119,17 +120,15 @@ func (s *Service) ListEventLog(ctx context.Context, payload *telem_gen.ListEvent
 	}
 
 	var cursorTimeUnixNano int64
-	var cursorRecordID string
 	if payload.Cursor != nil && *payload.Cursor != "" {
 		cursor, err := decodeEventLogCursor(*payload.Cursor)
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor")
 		}
 		cursorTimeUnixNano = cursor.TimeUnixNano
-		cursorRecordID = cursor.RecordID
 	}
 
-	filters := repo.EventLogFilters{
+	filters := chrepo.EventLogFilters{
 		OrganizationID: orgID,
 		TimeStart:      timeStart,
 		TimeEnd:        timeEnd,
@@ -142,17 +141,16 @@ func (s *Service) ListEventLog(ctx context.Context, payload *telem_gen.ListEvent
 	// The page and the capped count are independent reads — run them
 	// concurrently.
 	var (
-		items       []repo.EventLogRow
+		items       []chrepo.EventLogRow
 		totalCount  int64
 		totalCapped bool
 	)
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
 		var egErr error
-		items, egErr = s.chRepo.ListEventLog(egCtx, repo.ListEventLogParams{
+		items, egErr = s.chRepo.ListEventLog(egCtx, chrepo.ListEventLogParams{
 			EventLogFilters:    filters,
 			CursorTimeUnixNano: cursorTimeUnixNano,
-			CursorRecordID:     cursorRecordID,
 			Limit:              limit + 1,
 		})
 		if egErr != nil {
@@ -176,11 +174,11 @@ func (s *Service) ListEventLog(ctx context.Context, payload *telem_gen.ListEvent
 	if len(items) > limit {
 		items = items[:limit]
 		last := items[limit-1]
-		next := encodeEventLogCursor(last.TimeUnixNano, last.RecordID)
+		next := encodeEventLogCursor(last.TimeUnixNano)
 		nextCursor = &next
 	}
 
-	events := make([]*telem_gen.EventLogEntry, 0, len(items))
+	events := make([]*gen.EventLogEntry, 0, len(items))
 	for _, item := range items {
 		entry, err := toEventLogEntry(item)
 		if err != nil {
@@ -189,7 +187,7 @@ func (s *Service) ListEventLog(ctx context.Context, payload *telem_gen.ListEvent
 		events = append(events, entry)
 	}
 
-	return &telem_gen.ListEventLogResult{
+	return &gen.ListEventLogResult{
 		Events:           events,
 		NextCursor:       nextCursor,
 		TotalCount:       totalCount,
@@ -199,7 +197,7 @@ func (s *Service) ListEventLog(ctx context.Context, payload *telem_gen.ListEvent
 
 // toEventLogEntry converts a ClickHouse feed row to the API type, parsing the
 // JSON-encoded attribute payloads into objects.
-func toEventLogEntry(row repo.EventLogRow) (*telem_gen.EventLogEntry, error) {
+func toEventLogEntry(row chrepo.EventLogRow) (*gen.EventLogEntry, error) {
 	var attributes any
 	var resourceAttributes any
 	if err := json.Unmarshal([]byte(row.Attributes), &attributes); err != nil {
@@ -209,8 +207,7 @@ func toEventLogEntry(row repo.EventLogRow) (*telem_gen.EventLogEntry, error) {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to parse event resource attributes")
 	}
 
-	return &telem_gen.EventLogEntry{
-		RecordID:           row.RecordID,
+	return &gen.EventLogEntry{
 		TimeUnixNano:       strconv.FormatInt(row.TimeUnixNano, 10),
 		Kind:               row.Kind,
 		Source:             row.Source,
@@ -225,9 +222,9 @@ func toEventLogEntry(row repo.EventLogRow) (*telem_gen.EventLogEntry, error) {
 }
 
 // GetEventVolume returns the zero-filled logs-vs-spans volume timeseries for
-// the event feed chart. Bucket width adapts to the range like the other
-// telemetry timeseries endpoints.
-func (s *Service) GetEventVolume(ctx context.Context, payload *telem_gen.GetEventVolumePayload) (*telem_gen.GetEventVolumeResult, error) {
+// the event feed chart. Bucket width adapts to the range like the telemetry
+// service's timeseries endpoints.
+func (s *Service) GetEventVolume(ctx context.Context, payload *gen.GetEventVolumePayload) (*gen.GetEventVolumeResult, error) {
 	orgID, timeStart, timeEnd, err := s.authorizeOrgEventRead(ctx, payload.From, payload.To)
 	if err != nil {
 		return nil, err
@@ -236,10 +233,10 @@ func (s *Service) GetEventVolume(ctx context.Context, payload *telem_gen.GetEven
 		return nil, err
 	}
 
-	interval := calculateInterval(timeStart, timeEnd)
+	interval := calculateEventInterval(timeStart, timeEnd)
 
-	rows, err := s.chRepo.GetEventVolume(ctx, repo.GetEventVolumeParams{
-		EventLogFilters: repo.EventLogFilters{
+	rows, err := s.chRepo.GetEventVolume(ctx, chrepo.GetEventVolumeParams{
+		EventLogFilters: chrepo.EventLogFilters{
 			OrganizationID: orgID,
 			TimeStart:      timeStart,
 			TimeEnd:        timeEnd,
@@ -254,12 +251,12 @@ func (s *Service) GetEventVolume(ctx context.Context, payload *telem_gen.GetEven
 		return nil, oops.E(oops.CodeUnexpected, err, "error querying event volume").LogError(ctx, s.logger)
 	}
 
-	starts := bucketStarts(timeStart, timeEnd, interval)
+	starts := eventBucketStarts(timeStart, timeEnd, interval)
 	bucketIndex := make(map[int64]int, len(starts))
-	buckets := make([]*telem_gen.EventVolumeBucket, len(starts))
+	buckets := make([]*gen.EventVolumeBucket, len(starts))
 	for i, start := range starts {
 		bucketIndex[start] = i
-		buckets[i] = &telem_gen.EventVolumeBucket{
+		buckets[i] = &gen.EventVolumeBucket{
 			BucketTimeUnixNano: strconv.FormatInt(start, 10),
 			LogCount:           0,
 			SpanCount:          0,
@@ -272,14 +269,14 @@ func (s *Service) GetEventVolume(ctx context.Context, payload *telem_gen.GetEven
 			continue
 		}
 		switch row.Kind {
-		case repo.EventKindLog:
+		case chrepo.EventKindLog:
 			buckets[i].LogCount = int64(row.EventCount) //nolint:gosec // bounded count
-		case repo.EventKindSpan:
+		case chrepo.EventKindSpan:
 			buckets[i].SpanCount = int64(row.EventCount) //nolint:gosec // bounded count
 		}
 	}
 
-	return &telem_gen.GetEventVolumeResult{
+	return &gen.GetEventVolumeResult{
 		IntervalSeconds: interval,
 		Buckets:         buckets,
 	}, nil
@@ -288,7 +285,7 @@ func (s *Service) GetEventVolume(ctx context.Context, payload *telem_gen.GetEven
 // GetEventFacets returns the distinct sources and event/span names observed
 // in the range, powering the event feed's filter dropdowns. The kind list is
 // static (log/span), so it is not returned here.
-func (s *Service) GetEventFacets(ctx context.Context, payload *telem_gen.GetEventFacetsPayload) (*telem_gen.GetEventFacetsResult, error) {
+func (s *Service) GetEventFacets(ctx context.Context, payload *gen.GetEventFacetsPayload) (*gen.GetEventFacetsResult, error) {
 	orgID, timeStart, timeEnd, err := s.authorizeOrgEventRead(ctx, payload.From, payload.To)
 	if err != nil {
 		return nil, err
@@ -297,7 +294,7 @@ func (s *Service) GetEventFacets(ctx context.Context, payload *telem_gen.GetEven
 		return nil, err
 	}
 
-	facets, err := s.chRepo.GetEventFacets(ctx, repo.EventLogFilters{
+	facets, err := s.chRepo.GetEventFacets(ctx, chrepo.EventLogFilters{
 		OrganizationID: orgID,
 		TimeStart:      timeStart,
 		TimeEnd:        timeEnd,
@@ -310,8 +307,67 @@ func (s *Service) GetEventFacets(ctx context.Context, payload *telem_gen.GetEven
 		return nil, oops.E(oops.CodeUnexpected, err, "error querying event facets").LogError(ctx, s.logger)
 	}
 
-	return &telem_gen.GetEventFacetsResult{
+	return &gen.GetEventFacetsResult{
 		Sources: facets.Sources,
 		Names:   facets.Names,
 	}, nil
+}
+
+// parseEventTimeRange parses the ISO 8601 window into Unix nanoseconds,
+// mirroring the telemetry service's parseTimeRange.
+func parseEventTimeRange(from, to string) (timeStart, timeEnd int64, err error) {
+	fromTime, parseErr := time.Parse(time.RFC3339, from)
+	if parseErr != nil {
+		return 0, 0, oops.E(oops.CodeBadRequest, parseErr, "invalid 'from' time format, expected ISO 8601 (e.g., '2025-12-19T10:00:00Z')")
+	}
+	toTime, parseErr := time.Parse(time.RFC3339, to)
+	if parseErr != nil {
+		return 0, 0, oops.E(oops.CodeBadRequest, parseErr, "invalid 'to' time format, expected ISO 8601 (e.g., '2025-12-19T11:00:00Z')")
+	}
+
+	timeStart = fromTime.UnixNano()
+	timeEnd = toTime.UnixNano()
+
+	// Validate that from < to to prevent unsigned integer overflow in ClickHouse queries
+	if timeStart >= timeEnd {
+		return 0, 0, oops.E(oops.CodeBadRequest, nil, "'from' time must be before 'to' time")
+	}
+
+	return timeStart, timeEnd, nil
+}
+
+// calculateEventInterval determines the bucket width for a time range,
+// mirroring the telemetry service's calculateInterval.
+func calculateEventInterval(timeStart, timeEnd int64) int64 {
+	durationHours := (timeEnd - timeStart) / int64(time.Hour)
+
+	switch {
+	case durationHours <= 1:
+		return 60 // 1 minute buckets
+	case durationHours <= 24:
+		return 900 // 15 minute buckets
+	case durationHours <= 168: // 7 days
+		return 3600 // 1 hour buckets
+	case durationHours <= 720: // 30 days
+		return 21600 // 6 hour buckets
+	default:
+		return 86400 // 1 day buckets for 90+ days
+	}
+}
+
+// eventBucketStarts returns the aligned bucket start times (unix nanoseconds)
+// that span [timeStart, timeEnd] at the given interval, matching the SQL
+// toStartOfInterval bucketing.
+func eventBucketStarts(timeStart, timeEnd, intervalSeconds int64) []int64 {
+	intervalNanos := intervalSeconds * 1_000_000_000
+	if intervalNanos <= 0 {
+		return nil
+	}
+	alignedStart := (timeStart / intervalNanos) * intervalNanos
+	alignedEnd := (timeEnd / intervalNanos) * intervalNanos
+	var buckets []int64
+	for b := alignedStart; b <= alignedEnd; b += intervalNanos {
+		buckets = append(buckets, b)
+	}
+	return buckets
 }

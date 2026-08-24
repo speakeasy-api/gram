@@ -8,7 +8,7 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { telemetryGetEventVolume } from "../funcs/telemetryGetEventVolume.js";
+import { otelGetEventVolume } from "../funcs/otelGetEventVolume.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { GetEventVolumeResult } from "../models/components/geteventvolumeresult.js";
@@ -61,7 +61,7 @@ export function buildGetEventVolumeQuery(
         signal: sig,
       };
 
-      return unwrapAsync(telemetryGetEventVolume(
+      return unwrapAsync(otelGetEventVolume(
         client$,
         request,
         security,
@@ -74,5 +74,5 @@ export function buildGetEventVolumeQuery(
 export function queryKeyGetEventVolume(
   parameters: { gramSession?: string | undefined },
 ): QueryKey {
-  return ["@gram/client", "telemetry", "getEventVolume", parameters];
+  return ["@gram/client", "otel", "getEventVolume", parameters];
 }

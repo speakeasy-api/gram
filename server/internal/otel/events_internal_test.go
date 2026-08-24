@@ -1,18 +1,17 @@
-package telemetry
+package otel
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
+	"github.com/speakeasy-api/gram/server/internal/otel/chrepo"
 )
 
 // eventLogRowFixture builds a fully populated feed row so each test only has
 // to override the field it exercises.
-func eventLogRowFixture() repo.EventLogRow {
-	return repo.EventLogRow{
-		RecordID:           "rec-1",
+func eventLogRowFixture() chrepo.EventLogRow {
+	return chrepo.EventLogRow{
 		TimeUnixNano:       1766138400000000000,
 		Kind:               "log",
 		Source:             "unit-test-source",
@@ -29,13 +28,12 @@ func eventLogRowFixture() repo.EventLogRow {
 func TestEventLogCursor_RoundTrip(t *testing.T) {
 	t.Parallel()
 
-	encoded := encodeEventLogCursor(1766138400123456789, "rec-abc")
+	encoded := encodeEventLogCursor(1766138400123456789)
 	require.NotEmpty(t, encoded)
 
 	decoded, err := decodeEventLogCursor(encoded)
 	require.NoError(t, err)
 	require.Equal(t, int64(1766138400123456789), decoded.TimeUnixNano)
-	require.Equal(t, "rec-abc", decoded.RecordID)
 }
 
 func TestDecodeEventLogCursor_RejectsInvalidBase64(t *testing.T) {
@@ -53,12 +51,12 @@ func TestDecodeEventLogCursor_RejectsInvalidJSON(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestDecodeEventLogCursor_RejectsMissingRecordID(t *testing.T) {
+func TestDecodeEventLogCursor_RejectsMissingTime(t *testing.T) {
 	t.Parallel()
 
-	// Base64 of {"time_unix_nano":1} — no record_id.
-	_, err := decodeEventLogCursor("eyJ0aW1lX3VuaXhfbmFubyI6MX0")
-	require.ErrorContains(t, err, "record_id")
+	// Base64 of {} — no time_unix_nano.
+	_, err := decodeEventLogCursor("e30")
+	require.ErrorContains(t, err, "time_unix_nano")
 }
 
 func TestValidateEventKinds_AcceptsKnownKinds(t *testing.T) {
@@ -80,7 +78,6 @@ func TestToEventLogEntry_ParsesAttributeJSON(t *testing.T) {
 
 	entry, err := toEventLogEntry(eventLogRowFixture())
 	require.NoError(t, err)
-	require.Equal(t, "rec-1", entry.RecordID)
 	require.Equal(t, "1766138400000000000", entry.TimeUnixNano)
 	require.Equal(t, "log", entry.Kind)
 	require.Equal(t, map[string]any{"http.route": "/v1/things"}, entry.Attributes)

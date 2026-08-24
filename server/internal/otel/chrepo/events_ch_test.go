@@ -1,4 +1,4 @@
-package repo_test
+package chrepo
 
 import (
 	"testing"
@@ -7,8 +7,6 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-
-	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
 // The tests in this file exercise the org-scoped event feed queries against
@@ -17,7 +15,6 @@ import (
 // database across tests.
 
 type otelLogFixture struct {
-	recordID           string
 	orgID              string
 	projectID          uuid.UUID
 	timeUnixNano       int64
@@ -32,7 +29,6 @@ type otelLogFixture struct {
 
 func newOtelLogFixture(orgID string, timeUnixNano int64) otelLogFixture {
 	return otelLogFixture{
-		recordID:           "log-" + uuid.NewString(),
 		orgID:              orgID,
 		projectID:          uuid.New(),
 		timeUnixNano:       timeUnixNano,
@@ -51,18 +47,17 @@ func insertOtelLog(t *testing.T, conn clickhouse.Conn, row otelLogFixture) {
 
 	err := conn.Exec(t.Context(), `
 		INSERT INTO otel_logs (
-			record_id, organization_id, project_id, time_unix_nano,
+			organization_id, project_id, time_unix_nano,
 			source, event_name, body, trace_id, span_id,
 			log_attributes, resource_attributes
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, row.recordID, row.orgID, row.projectID, row.timeUnixNano,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, row.orgID, row.projectID, row.timeUnixNano,
 		row.source, row.eventName, row.body, row.traceID, row.spanID,
 		row.logAttributes, row.resourceAttributes)
 	require.NoError(t, err)
 }
 
 type otelSpanFixture struct {
-	recordID           string
 	orgID              string
 	projectID          uuid.UUID
 	timeUnixNano       int64
@@ -76,7 +71,6 @@ type otelSpanFixture struct {
 
 func newOtelSpanFixture(orgID string, timeUnixNano int64) otelSpanFixture {
 	return otelSpanFixture{
-		recordID:           "span-" + uuid.NewString(),
 		orgID:              orgID,
 		projectID:          uuid.New(),
 		timeUnixNano:       timeUnixNano,
@@ -94,11 +88,11 @@ func insertOtelSpan(t *testing.T, conn clickhouse.Conn, row otelSpanFixture) {
 
 	err := conn.Exec(t.Context(), `
 		INSERT INTO otel_traces (
-			record_id, organization_id, project_id, time_unix_nano,
+			organization_id, project_id, time_unix_nano,
 			source, span_name, trace_id, span_id,
 			span_attributes, resource_attributes
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, row.recordID, row.orgID, row.projectID, row.timeUnixNano,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, row.orgID, row.projectID, row.timeUnixNano,
 		row.source, row.spanName, row.traceID, row.spanID,
 		row.spanAttributes, row.resourceAttributes)
 	require.NoError(t, err)
@@ -112,9 +106,8 @@ func TestListEventLog_MergesLogsAndSpansNewestFirst(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	conn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-	queries := repo.New(conn)
+	conn := newTestClickhouse(t)
+	queries := New(conn)
 
 	orgID := "org-" + uuid.NewString()
 	base := time.Now().UTC()
@@ -130,8 +123,8 @@ func TestListEventLog_MergesLogsAndSpansNewestFirst(t *testing.T) {
 	insertOtelLog(t, conn, otherOrg)
 
 	timeStart, timeEnd := eventTestWindow(base)
-	items, err := queries.ListEventLog(ctx, repo.ListEventLogParams{
-		EventLogFilters: repo.EventLogFilters{
+	items, err := queries.ListEventLog(ctx, ListEventLogParams{
+		EventLogFilters: EventLogFilters{
 			OrganizationID: orgID,
 			TimeStart:      timeStart,
 			TimeEnd:        timeEnd,
@@ -141,14 +134,13 @@ func TestListEventLog_MergesLogsAndSpansNewestFirst(t *testing.T) {
 			Search:         "",
 		},
 		CursorTimeUnixNano: 0,
-		CursorRecordID:     "",
 		Limit:              10,
 	})
 	require.NoError(t, err)
 	require.Len(t, items, 3)
 
-	require.Equal(t, newest.recordID, items[0].RecordID)
-	require.Equal(t, repo.EventKindLog, items[0].Kind)
+	require.Equal(t, newest.timeUnixNano, items[0].TimeUnixNano)
+	require.Equal(t, EventKindLog, items[0].Kind)
 	require.Equal(t, "test.log.event", items[0].Name)
 	require.Equal(t, "test log body", items[0].BodyPreview)
 	require.Equal(t, newest.projectID.String(), items[0].ProjectID)
@@ -157,33 +149,34 @@ func TestListEventLog_MergesLogsAndSpansNewestFirst(t *testing.T) {
 	require.JSONEq(t, `{"test":{"attr":"log-value"}}`, items[0].Attributes)
 	require.JSONEq(t, `{"service":{"name":"test-log-source"}}`, items[0].ResourceAttributes)
 
-	require.Equal(t, middle.recordID, items[1].RecordID)
-	require.Equal(t, repo.EventKindSpan, items[1].Kind)
+	require.Equal(t, middle.timeUnixNano, items[1].TimeUnixNano)
+	require.Equal(t, EventKindSpan, items[1].Kind)
 	require.Equal(t, "test.span.operation", items[1].Name)
 	require.Empty(t, items[1].BodyPreview)
 	require.JSONEq(t, `{"test":{"attr":"span-value"}}`, items[1].Attributes)
 
-	require.Equal(t, oldest.recordID, items[2].RecordID)
+	require.Equal(t, oldest.timeUnixNano, items[2].TimeUnixNano)
 }
 
 func TestListEventLog_KeysetPaginationAcrossTables(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	conn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-	queries := repo.New(conn)
+	conn := newTestClickhouse(t)
+	queries := New(conn)
 
 	orgID := "org-" + uuid.NewString()
 	base := time.Now().UTC()
 
+	// Every event carries a distinct timestamp, so the time-based keyset
+	// cursor partitions pages cleanly.
 	for i := range 2 {
 		insertOtelLog(t, conn, newOtelLogFixture(orgID, base.Add(-time.Duration(2*i+1)*time.Minute).UnixNano()))
 		insertOtelSpan(t, conn, newOtelSpanFixture(orgID, base.Add(-time.Duration(2*i+2)*time.Minute).UnixNano()))
 	}
 
 	timeStart, timeEnd := eventTestWindow(base)
-	filters := repo.EventLogFilters{
+	filters := EventLogFilters{
 		OrganizationID: orgID,
 		TimeStart:      timeStart,
 		TimeEnd:        timeEnd,
@@ -193,29 +186,27 @@ func TestListEventLog_KeysetPaginationAcrossTables(t *testing.T) {
 		Search:         "",
 	}
 
-	firstPage, err := queries.ListEventLog(ctx, repo.ListEventLogParams{
+	firstPage, err := queries.ListEventLog(ctx, ListEventLogParams{
 		EventLogFilters:    filters,
 		CursorTimeUnixNano: 0,
-		CursorRecordID:     "",
 		Limit:              2,
 	})
 	require.NoError(t, err)
 	require.Len(t, firstPage, 2)
 
-	secondPage, err := queries.ListEventLog(ctx, repo.ListEventLogParams{
+	secondPage, err := queries.ListEventLog(ctx, ListEventLogParams{
 		EventLogFilters:    filters,
 		CursorTimeUnixNano: firstPage[1].TimeUnixNano,
-		CursorRecordID:     firstPage[1].RecordID,
 		Limit:              2,
 	})
 	require.NoError(t, err)
 	require.Len(t, secondPage, 2)
 
-	seen := map[string]bool{}
+	seen := map[int64]bool{}
 	var allTimes []int64
 	for _, item := range append(firstPage, secondPage...) {
-		require.False(t, seen[item.RecordID], "record %s returned twice", item.RecordID)
-		seen[item.RecordID] = true
+		require.False(t, seen[item.TimeUnixNano], "event at %d returned twice", item.TimeUnixNano)
+		seen[item.TimeUnixNano] = true
 		allTimes = append(allTimes, item.TimeUnixNano)
 	}
 	for i := 1; i < len(allTimes); i++ {
@@ -227,9 +218,8 @@ func TestListEventLog_TruncatesBodyPreview(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	conn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-	queries := repo.New(conn)
+	conn := newTestClickhouse(t)
+	queries := New(conn)
 
 	orgID := "org-" + uuid.NewString()
 	base := time.Now().UTC()
@@ -243,8 +233,8 @@ func TestListEventLog_TruncatesBodyPreview(t *testing.T) {
 	insertOtelLog(t, conn, row)
 
 	timeStart, timeEnd := eventTestWindow(base)
-	items, err := queries.ListEventLog(ctx, repo.ListEventLogParams{
-		EventLogFilters: repo.EventLogFilters{
+	items, err := queries.ListEventLog(ctx, ListEventLogParams{
+		EventLogFilters: EventLogFilters{
 			OrganizationID: orgID,
 			TimeStart:      timeStart,
 			TimeEnd:        timeEnd,
@@ -254,21 +244,19 @@ func TestListEventLog_TruncatesBodyPreview(t *testing.T) {
 			Search:         "",
 		},
 		CursorTimeUnixNano: 0,
-		CursorRecordID:     "",
 		Limit:              1,
 	})
 	require.NoError(t, err)
 	require.Len(t, items, 1)
-	require.Len(t, items[0].BodyPreview, repo.EventBodyPreviewChars)
+	require.Len(t, items[0].BodyPreview, EventBodyPreviewChars)
 }
 
 func TestListEventLog_KindSourceAndSearchFilters(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	conn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-	queries := repo.New(conn)
+	conn := newTestClickhouse(t)
+	queries := New(conn)
 
 	orgID := "org-" + uuid.NewString()
 	base := time.Now().UTC()
@@ -281,7 +269,7 @@ func TestListEventLog_KindSourceAndSearchFilters(t *testing.T) {
 	insertOtelSpan(t, conn, span)
 
 	timeStart, timeEnd := eventTestWindow(base)
-	baseFilters := repo.EventLogFilters{
+	baseFilters := EventLogFilters{
 		OrganizationID: orgID,
 		TimeStart:      timeStart,
 		TimeEnd:        timeEnd,
@@ -292,48 +280,46 @@ func TestListEventLog_KindSourceAndSearchFilters(t *testing.T) {
 	}
 
 	kindFilters := baseFilters
-	kindFilters.Kinds = []string{repo.EventKindSpan}
-	items, err := queries.ListEventLog(ctx, repo.ListEventLogParams{
+	kindFilters.Kinds = []string{EventKindSpan}
+	items, err := queries.ListEventLog(ctx, ListEventLogParams{
 		EventLogFilters:    kindFilters,
 		CursorTimeUnixNano: 0,
-		CursorRecordID:     "",
 		Limit:              10,
 	})
 	require.NoError(t, err)
 	require.Len(t, items, 1)
-	require.Equal(t, span.recordID, items[0].RecordID)
+	require.Equal(t, EventKindSpan, items[0].Kind)
+	require.Equal(t, span.timeUnixNano, items[0].TimeUnixNano)
 
 	sourceFilters := baseFilters
 	sourceFilters.Sources = []string{"test-log-source"}
-	items, err = queries.ListEventLog(ctx, repo.ListEventLogParams{
+	items, err = queries.ListEventLog(ctx, ListEventLogParams{
 		EventLogFilters:    sourceFilters,
 		CursorTimeUnixNano: 0,
-		CursorRecordID:     "",
 		Limit:              10,
 	})
 	require.NoError(t, err)
 	require.Len(t, items, 1)
-	require.Equal(t, log.recordID, items[0].RecordID)
+	require.Equal(t, EventKindLog, items[0].Kind)
+	require.Equal(t, log.timeUnixNano, items[0].TimeUnixNano)
 
 	nameFilters := baseFilters
 	nameFilters.Names = []string{"operation.with.needle"}
-	items, err = queries.ListEventLog(ctx, repo.ListEventLogParams{
+	items, err = queries.ListEventLog(ctx, ListEventLogParams{
 		EventLogFilters:    nameFilters,
 		CursorTimeUnixNano: 0,
-		CursorRecordID:     "",
 		Limit:              10,
 	})
 	require.NoError(t, err)
 	require.Len(t, items, 1)
-	require.Equal(t, span.recordID, items[0].RecordID)
+	require.Equal(t, "operation.with.needle", items[0].Name)
 
 	// Case-insensitive search matches the log body and the span name.
 	searchFilters := baseFilters
 	searchFilters.Search = "needle"
-	items, err = queries.ListEventLog(ctx, repo.ListEventLogParams{
+	items, err = queries.ListEventLog(ctx, ListEventLogParams{
 		EventLogFilters:    searchFilters,
 		CursorTimeUnixNano: 0,
-		CursorRecordID:     "",
 		Limit:              10,
 	})
 	require.NoError(t, err)
@@ -344,9 +330,8 @@ func TestCountEventLog_CountsAcrossTables(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	conn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-	queries := repo.New(conn)
+	conn := newTestClickhouse(t)
+	queries := New(conn)
 
 	orgID := "org-" + uuid.NewString()
 	base := time.Now().UTC()
@@ -356,7 +341,7 @@ func TestCountEventLog_CountsAcrossTables(t *testing.T) {
 	insertOtelSpan(t, conn, newOtelSpanFixture(orgID, base.Add(-3*time.Minute).UnixNano()))
 
 	timeStart, timeEnd := eventTestWindow(base)
-	total, capped, err := queries.CountEventLog(ctx, repo.EventLogFilters{
+	total, capped, err := queries.CountEventLog(ctx, EventLogFilters{
 		OrganizationID: orgID,
 		TimeStart:      timeStart,
 		TimeEnd:        timeEnd,
@@ -374,9 +359,8 @@ func TestGetEventVolume_BucketsLogsAndSpans(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	conn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-	queries := repo.New(conn)
+	conn := newTestClickhouse(t)
+	queries := New(conn)
 
 	orgID := "org-" + uuid.NewString()
 	// Aligned to a minute boundary so bucket math is exact.
@@ -387,8 +371,8 @@ func TestGetEventVolume_BucketsLogsAndSpans(t *testing.T) {
 	insertOtelSpan(t, conn, newOtelSpanFixture(orgID, base.Add(15*time.Second).UnixNano()))
 	insertOtelSpan(t, conn, newOtelSpanFixture(orgID, base.Add(time.Minute+5*time.Second).UnixNano()))
 
-	rows, err := queries.GetEventVolume(ctx, repo.GetEventVolumeParams{
-		EventLogFilters: repo.EventLogFilters{
+	rows, err := queries.GetEventVolume(ctx, GetEventVolumeParams{
+		EventLogFilters: EventLogFilters{
 			OrganizationID: orgID,
 			TimeStart:      base.UnixNano(),
 			TimeEnd:        base.Add(2 * time.Minute).UnixNano(),
@@ -411,19 +395,18 @@ func TestGetEventVolume_BucketsLogsAndSpans(t *testing.T) {
 		counts[row.BucketUnixNano][row.Kind] = row.EventCount
 	}
 
-	require.Equal(t, uint64(2), counts[firstBucket][repo.EventKindLog])
-	require.Equal(t, uint64(1), counts[firstBucket][repo.EventKindSpan])
-	require.Equal(t, uint64(1), counts[secondBucket][repo.EventKindSpan])
-	require.Zero(t, counts[secondBucket][repo.EventKindLog])
+	require.Equal(t, uint64(2), counts[firstBucket][EventKindLog])
+	require.Equal(t, uint64(1), counts[firstBucket][EventKindSpan])
+	require.Equal(t, uint64(1), counts[secondBucket][EventKindSpan])
+	require.Zero(t, counts[secondBucket][EventKindLog])
 }
 
 func TestGetEventFacets_DistinctSourcesAndNames(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	conn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-	queries := repo.New(conn)
+	conn := newTestClickhouse(t)
+	queries := New(conn)
 
 	orgID := "org-" + uuid.NewString()
 	base := time.Now().UTC()
@@ -444,7 +427,7 @@ func TestGetEventFacets_DistinctSourcesAndNames(t *testing.T) {
 	insertOtelSpan(t, conn, span2)
 
 	timeStart, timeEnd := eventTestWindow(base)
-	facets, err := queries.GetEventFacets(ctx, repo.EventLogFilters{
+	facets, err := queries.GetEventFacets(ctx, EventLogFilters{
 		OrganizationID: orgID,
 		TimeStart:      timeStart,
 		TimeEnd:        timeEnd,

@@ -1,4 +1,4 @@
-package repo
+package chrepo
 
 import (
 	"strings"
@@ -25,7 +25,6 @@ func TestBuildListEventLogQuery_PlaceholdersMatchArgs(t *testing.T) {
 	sql, args, err := buildListEventLogQuery(ListEventLogParams{
 		EventLogFilters:    fullEventLogFilters(),
 		CursorTimeUnixNano: 42,
-		CursorRecordID:     "rec-cursor",
 		Limit:              51,
 	})
 	require.NoError(t, err)
@@ -46,7 +45,6 @@ func TestBuildListEventLogQuery_MergesBothTables(t *testing.T) {
 			Search:         "",
 		},
 		CursorTimeUnixNano: 0,
-		CursorRecordID:     "",
 		Limit:              10,
 	})
 	require.NoError(t, err)
@@ -61,8 +59,6 @@ func TestBuildListEventLogQuery_MergesBothTables(t *testing.T) {
 	require.Contains(t, sql, "'' AS body_preview")
 	// Log bodies are truncated server-side.
 	require.Contains(t, sql, "leftUTF8(body, 200) AS body_preview")
-	// Redelivery dedup until the ReplacingMergeTree merges.
-	require.Contains(t, sql, "LIMIT 1 BY record_id")
 }
 
 func TestBuildListEventLogQuery_KindFilterDropsOtherTable(t *testing.T) {
@@ -79,7 +75,6 @@ func TestBuildListEventLogQuery_KindFilterDropsOtherTable(t *testing.T) {
 			Search:         "",
 		},
 		CursorTimeUnixNano: 0,
-		CursorRecordID:     "",
 		Limit:              10,
 	}
 	sql, _, err := buildListEventLogQuery(logOnly)
@@ -110,20 +105,17 @@ func TestBuildListEventLogQuery_CursorAddsKeysetPredicate(t *testing.T) {
 			Search:         "",
 		},
 		CursorTimeUnixNano: 0,
-		CursorRecordID:     "",
 		Limit:              10,
 	}
 	noCursorSQL, _, err := buildListEventLogQuery(params)
 	require.NoError(t, err)
-	require.NotContains(t, noCursorSQL, "(time_unix_nano, record_id) < (?, ?)")
+	require.NotContains(t, noCursorSQL, "time_unix_nano < ?")
 
 	params.CursorTimeUnixNano = 42
-	params.CursorRecordID = "rec-cursor"
 	sql, args, err := buildListEventLogQuery(params)
 	require.NoError(t, err)
-	require.Contains(t, sql, "(time_unix_nano, record_id) < (?, ?)")
+	require.Contains(t, sql, "time_unix_nano < ?")
 	require.Contains(t, args, int64(42))
-	require.Contains(t, args, "rec-cursor")
 }
 
 func TestBuildListEventLogQuery_SearchMatchesBodyAndNameForLogsOnly(t *testing.T) {
@@ -140,7 +132,6 @@ func TestBuildListEventLogQuery_SearchMatchesBodyAndNameForLogsOnly(t *testing.T
 			Search:         "needle",
 		},
 		CursorTimeUnixNano: 0,
-		CursorRecordID:     "",
 		Limit:              10,
 	})
 	require.NoError(t, err)

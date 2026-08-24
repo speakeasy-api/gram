@@ -36,9 +36,6 @@ type Server struct {
 	Query                            http.Handler
 	QueryTumDetails                  http.Handler
 	ListSessions                     http.Handler
-	ListEventLog                     http.Handler
-	GetEventVolume                   http.Handler
-	GetEventFacets                   http.Handler
 	ListFilterOptions                http.Handler
 	ListAttributeKeys                http.Handler
 	GetHooksSummary                  http.Handler
@@ -100,9 +97,6 @@ func New(
 			{"Query", "POST", "/rpc/telemetry.query"},
 			{"QueryTumDetails", "POST", "/rpc/telemetry.queryTumDetails"},
 			{"ListSessions", "POST", "/rpc/telemetry.listSessions"},
-			{"ListEventLog", "POST", "/rpc/telemetry.listEventLog"},
-			{"GetEventVolume", "POST", "/rpc/telemetry.getEventVolume"},
-			{"GetEventFacets", "POST", "/rpc/telemetry.getEventFacets"},
 			{"ListFilterOptions", "POST", "/rpc/telemetry.listFilterOptions"},
 			{"ListAttributeKeys", "POST", "/rpc/telemetry.listAttributeKeys"},
 			{"GetHooksSummary", "POST", "/rpc/telemetry.getHooksSummary"},
@@ -136,9 +130,6 @@ func New(
 		Query:                            NewQueryHandler(e.Query, mux, decoder, encoder, errhandler, formatter),
 		QueryTumDetails:                  NewQueryTumDetailsHandler(e.QueryTumDetails, mux, decoder, encoder, errhandler, formatter),
 		ListSessions:                     NewListSessionsHandler(e.ListSessions, mux, decoder, encoder, errhandler, formatter),
-		ListEventLog:                     NewListEventLogHandler(e.ListEventLog, mux, decoder, encoder, errhandler, formatter),
-		GetEventVolume:                   NewGetEventVolumeHandler(e.GetEventVolume, mux, decoder, encoder, errhandler, formatter),
-		GetEventFacets:                   NewGetEventFacetsHandler(e.GetEventFacets, mux, decoder, encoder, errhandler, formatter),
 		ListFilterOptions:                NewListFilterOptionsHandler(e.ListFilterOptions, mux, decoder, encoder, errhandler, formatter),
 		ListAttributeKeys:                NewListAttributeKeysHandler(e.ListAttributeKeys, mux, decoder, encoder, errhandler, formatter),
 		GetHooksSummary:                  NewGetHooksSummaryHandler(e.GetHooksSummary, mux, decoder, encoder, errhandler, formatter),
@@ -179,9 +170,6 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.Query = m(s.Query)
 	s.QueryTumDetails = m(s.QueryTumDetails)
 	s.ListSessions = m(s.ListSessions)
-	s.ListEventLog = m(s.ListEventLog)
-	s.GetEventVolume = m(s.GetEventVolume)
-	s.GetEventFacets = m(s.GetEventFacets)
 	s.ListFilterOptions = m(s.ListFilterOptions)
 	s.ListAttributeKeys = m(s.ListAttributeKeys)
 	s.GetHooksSummary = m(s.GetHooksSummary)
@@ -221,9 +209,6 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountQueryHandler(mux, h.Query)
 	MountQueryTumDetailsHandler(mux, h.QueryTumDetails)
 	MountListSessionsHandler(mux, h.ListSessions)
-	MountListEventLogHandler(mux, h.ListEventLog)
-	MountGetEventVolumeHandler(mux, h.GetEventVolume)
-	MountGetEventFacetsHandler(mux, h.GetEventFacets)
 	MountListFilterOptionsHandler(mux, h.ListFilterOptions)
 	MountListAttributeKeysHandler(mux, h.ListAttributeKeys)
 	MountGetHooksSummaryHandler(mux, h.GetHooksSummary)
@@ -1131,165 +1116,6 @@ func NewListSessionsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listSessions")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "telemetry")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountListEventLogHandler configures the mux to serve the "telemetry" service
-// "listEventLog" endpoint.
-func MountListEventLogHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("POST", "/rpc/telemetry.listEventLog", f)
-}
-
-// NewListEventLogHandler creates a HTTP handler which loads the HTTP request
-// and calls the "telemetry" service "listEventLog" endpoint.
-func NewListEventLogHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeListEventLogRequest(mux, decoder)
-		encodeResponse = EncodeListEventLogResponse(encoder)
-		encodeError    = EncodeListEventLogError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "listEventLog")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "telemetry")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountGetEventVolumeHandler configures the mux to serve the "telemetry"
-// service "getEventVolume" endpoint.
-func MountGetEventVolumeHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("POST", "/rpc/telemetry.getEventVolume", f)
-}
-
-// NewGetEventVolumeHandler creates a HTTP handler which loads the HTTP request
-// and calls the "telemetry" service "getEventVolume" endpoint.
-func NewGetEventVolumeHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeGetEventVolumeRequest(mux, decoder)
-		encodeResponse = EncodeGetEventVolumeResponse(encoder)
-		encodeError    = EncodeGetEventVolumeError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "getEventVolume")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "telemetry")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountGetEventFacetsHandler configures the mux to serve the "telemetry"
-// service "getEventFacets" endpoint.
-func MountGetEventFacetsHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("POST", "/rpc/telemetry.getEventFacets", f)
-}
-
-// NewGetEventFacetsHandler creates a HTTP handler which loads the HTTP request
-// and calls the "telemetry" service "getEventFacets" endpoint.
-func NewGetEventFacetsHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeGetEventFacetsRequest(mux, decoder)
-		encodeResponse = EncodeGetEventFacetsResponse(encoder)
-		encodeError    = EncodeGetEventFacetsError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "getEventFacets")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "telemetry")
 		payload, err := decodeRequest(r)
 		if err != nil {

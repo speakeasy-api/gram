@@ -8,7 +8,7 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { telemetryGetEventFacets } from "../funcs/telemetryGetEventFacets.js";
+import { otelGetEventFacets } from "../funcs/otelGetEventFacets.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { GetEventFacetsResult } from "../models/components/geteventfacetsresult.js";
@@ -61,7 +61,7 @@ export function buildGetEventFacetsQuery(
         signal: sig,
       };
 
-      return unwrapAsync(telemetryGetEventFacets(
+      return unwrapAsync(otelGetEventFacets(
         client$,
         request,
         security,
@@ -74,5 +74,5 @@ export function buildGetEventFacetsQuery(
 export function queryKeyGetEventFacets(
   parameters: { gramSession?: string | undefined },
 ): QueryKey {
-  return ["@gram/client", "telemetry", "getEventFacets", parameters];
+  return ["@gram/client", "otel", "getEventFacets", parameters];
 }

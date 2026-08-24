@@ -56,7 +56,7 @@ export type GetEventVolumeQueryError =
   | SDKValidationError;
 
 /**
- * getEventVolume telemetry
+ * getEventVolume otel
  *
  * @remarks
  * Org-scoped event volume timeseries for the event feed: bucketed counts of ingested OpenTelemetry log records vs spans over a time range, honoring the same filters as listEventLog.
@@ -79,7 +79,7 @@ export function useGetEventVolume(
 }
 
 /**
- * getEventVolume telemetry
+ * getEventVolume otel
  *
  * @remarks
  * Org-scoped event volume timeseries for the event feed: bucketed counts of ingested OpenTelemetry log records vs spans over a time range, honoring the same filters as listEventLog.
@@ -123,7 +123,7 @@ export function invalidateGetEventVolume(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "telemetry", "getEventVolume", ...queryKeyBase],
+    queryKey: ["@gram/client", "otel", "getEventVolume", ...queryKeyBase],
   });
 }
 
@@ -133,6 +133,6 @@ export function invalidateAllGetEventVolume(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "telemetry", "getEventVolume"],
+    queryKey: ["@gram/client", "otel", "getEventVolume"],
   });
 }

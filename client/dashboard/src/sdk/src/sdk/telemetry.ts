@@ -4,8 +4,6 @@
 
 import { telemetryCaptureEvent } from "../funcs/telemetryCaptureEvent.js";
 import { telemetryGetEmployeeDataFlowGraph } from "../funcs/telemetryGetEmployeeDataFlowGraph.js";
-import { telemetryGetEventFacets } from "../funcs/telemetryGetEventFacets.js";
-import { telemetryGetEventVolume } from "../funcs/telemetryGetEventVolume.js";
 import { telemetryGetHooksSummary } from "../funcs/telemetryGetHooksSummary.js";
 import { telemetryGetMcpServerActivity } from "../funcs/telemetryGetMcpServerActivity.js";
 import { telemetryGetObservabilityOverview } from "../funcs/telemetryGetObservabilityOverview.js";
@@ -26,7 +24,6 @@ import { telemetryGetUnproxiedMcpServerUsage } from "../funcs/telemetryGetUnprox
 import { telemetryGetUnproxiedMcpServerUserUsage } from "../funcs/telemetryGetUnproxiedMcpServerUserUsage.js";
 import { telemetryGetUserMetricsSummary } from "../funcs/telemetryGetUserMetricsSummary.js";
 import { telemetryListAttributeKeys } from "../funcs/telemetryListAttributeKeys.js";
-import { telemetryListEventLog } from "../funcs/telemetryListEventLog.js";
 import { telemetryListFilterOptions } from "../funcs/telemetryListFilterOptions.js";
 import { telemetryListHooksTraces } from "../funcs/telemetryListHooksTraces.js";
 import { telemetryListSessions } from "../funcs/telemetryListSessions.js";
@@ -40,8 +37,6 @@ import { telemetrySearchUsers } from "../funcs/telemetrySearchUsers.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { CaptureEventResult } from "../models/components/captureeventresult.js";
 import { GetEmployeeDataFlowGraphResult } from "../models/components/getemployeedataflowgraphresult.js";
-import { GetEventFacetsResult } from "../models/components/geteventfacetsresult.js";
-import { GetEventVolumeResult } from "../models/components/geteventvolumeresult.js";
 import { GetHooksSummaryResult } from "../models/components/gethookssummaryresult.js";
 import { GetMcpServerActivityResult } from "../models/components/getmcpserveractivityresult.js";
 import { GetMetricsSummaryResult } from "../models/components/getmetricssummaryresult.js";
@@ -62,7 +57,6 @@ import { GetUnproxiedMcpServerUsageResult } from "../models/components/getunprox
 import { GetUnproxiedMcpServerUserUsageResult } from "../models/components/getunproxiedmcpserveruserusageresult.js";
 import { GetUserMetricsSummaryResult } from "../models/components/getusermetricssummaryresult.js";
 import { ListAttributeKeysResult } from "../models/components/listattributekeysresult.js";
-import { ListEventLogResult } from "../models/components/listeventlogresult.js";
 import { ListFilterOptionsResult } from "../models/components/listfilteroptionsresult.js";
 import { ListHooksTracesResult } from "../models/components/listhookstracesresult.js";
 import { ListSessionsResult } from "../models/components/listsessionsresult.js";
@@ -81,14 +75,6 @@ import {
   GetEmployeeDataFlowGraphRequest,
   GetEmployeeDataFlowGraphSecurity,
 } from "../models/operations/getemployeedataflowgraph.js";
-import {
-  GetEventFacetsRequest,
-  GetEventFacetsSecurity,
-} from "../models/operations/geteventfacets.js";
-import {
-  GetEventVolumeRequest,
-  GetEventVolumeSecurity,
-} from "../models/operations/geteventvolume.js";
 import {
   GetHooksSummaryRequest,
   GetHooksSummarySecurity,
@@ -170,10 +156,6 @@ import {
   ListAttributeKeysSecurity,
 } from "../models/operations/listattributekeys.js";
 import {
-  ListEventLogRequest,
-  ListEventLogSecurity,
-} from "../models/operations/listeventlog.js";
-import {
   ListFilterOptionsRequest,
   ListFilterOptionsSecurity,
 } from "../models/operations/listfilteroptions.js";
@@ -244,44 +226,6 @@ export class Telemetry extends ClientSDK {
     options?: RequestOptions,
   ): Promise<GetEmployeeDataFlowGraphResult> {
     return unwrapAsync(telemetryGetEmployeeDataFlowGraph(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * getEventFacets telemetry
-   *
-   * @remarks
-   * Org-scoped filter facets for the event feed: the distinct sources and event/span names observed in a time range.
-   */
-  async getEventFacets(
-    request: GetEventFacetsRequest,
-    security?: GetEventFacetsSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<GetEventFacetsResult> {
-    return unwrapAsync(telemetryGetEventFacets(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * getEventVolume telemetry
-   *
-   * @remarks
-   * Org-scoped event volume timeseries for the event feed: bucketed counts of ingested OpenTelemetry log records vs spans over a time range, honoring the same filters as listEventLog.
-   */
-  async getEventVolume(
-    request: GetEventVolumeRequest,
-    security?: GetEventVolumeSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<GetEventVolumeResult> {
-    return unwrapAsync(telemetryGetEventVolume(
       this,
       request,
       security,
@@ -662,25 +606,6 @@ export class Telemetry extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListAttributeKeysResult> {
     return unwrapAsync(telemetryListAttributeKeys(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * listEventLog telemetry
-   *
-   * @remarks
-   * Org-scoped event feed over ingested OpenTelemetry signals: log records and spans merged into one reverse-chronological list with keyset pagination and a capped total count.
-   */
-  async listEventLog(
-    request: ListEventLogRequest,
-    security?: ListEventLogSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<ListEventLogResult> {
-    return unwrapAsync(telemetryListEventLog(
       this,
       request,
       security,

@@ -8,7 +8,11 @@
 package client
 
 import (
+	"encoding/json"
+	"fmt"
+
 	otel "github.com/speakeasy-api/gram/server/gen/otel"
+	goa "goa.design/goa/v3/pkg"
 )
 
 // BuildLogsPayload builds the payload for the otel logs endpoint from CLI
@@ -65,6 +69,172 @@ func BuildTracesPayload(otelTracesApikeyToken string, otelTracesProjectSlugInput
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ContentEncoding = contentEncoding
+
+	return v, nil
+}
+
+// BuildListEventLogPayload builds the payload for the otel listEventLog
+// endpoint from CLI flags.
+func BuildListEventLogPayload(otelListEventLogBody string, otelListEventLogSessionToken string) (*otel.ListEventLogPayload, error) {
+	var err error
+	var body ListEventLogRequestBody
+	{
+		err = json.Unmarshal([]byte(otelListEventLogBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"cursor\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"kinds\": [\n         \"span\"\n      ],\n      \"limit\": 2,\n      \"names\": [\n         \"abc123\"\n      ],\n      \"search\": \"abc123\",\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"to\": \"2025-12-26T10:00:00Z\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
+		for _, e := range body.Kinds {
+			if !(e == "log" || e == "span") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kinds[*]", e, []any{"log", "span"}))
+			}
+		}
+		if body.Limit < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", body.Limit, 1, true))
+		}
+		if body.Limit > 200 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.limit", body.Limit, 200, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if otelListEventLogSessionToken != "" {
+			sessionToken = &otelListEventLogSessionToken
+		}
+	}
+	v := &otel.ListEventLogPayload{
+		From:   body.From,
+		To:     body.To,
+		Search: body.Search,
+		Limit:  body.Limit,
+		Cursor: body.Cursor,
+	}
+	if body.Kinds != nil {
+		v.Kinds = make([]string, len(body.Kinds))
+		for i, val := range body.Kinds {
+			v.Kinds[i] = val
+		}
+	}
+	if body.Sources != nil {
+		v.Sources = make([]string, len(body.Sources))
+		for i, val := range body.Sources {
+			v.Sources[i] = val
+		}
+	}
+	if body.Names != nil {
+		v.Names = make([]string, len(body.Names))
+		for i, val := range body.Names {
+			v.Names[i] = val
+		}
+	}
+	{
+		var zero int
+		if v.Limit == zero {
+			v.Limit = 50
+		}
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildGetEventVolumePayload builds the payload for the otel getEventVolume
+// endpoint from CLI flags.
+func BuildGetEventVolumePayload(otelGetEventVolumeBody string, otelGetEventVolumeSessionToken string) (*otel.GetEventVolumePayload, error) {
+	var err error
+	var body GetEventVolumeRequestBody
+	{
+		err = json.Unmarshal([]byte(otelGetEventVolumeBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"kinds\": [\n         \"span\"\n      ],\n      \"names\": [\n         \"abc123\"\n      ],\n      \"search\": \"abc123\",\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"to\": \"2025-12-26T10:00:00Z\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
+		for _, e := range body.Kinds {
+			if !(e == "log" || e == "span") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kinds[*]", e, []any{"log", "span"}))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if otelGetEventVolumeSessionToken != "" {
+			sessionToken = &otelGetEventVolumeSessionToken
+		}
+	}
+	v := &otel.GetEventVolumePayload{
+		From:   body.From,
+		To:     body.To,
+		Search: body.Search,
+	}
+	if body.Kinds != nil {
+		v.Kinds = make([]string, len(body.Kinds))
+		for i, val := range body.Kinds {
+			v.Kinds[i] = val
+		}
+	}
+	if body.Sources != nil {
+		v.Sources = make([]string, len(body.Sources))
+		for i, val := range body.Sources {
+			v.Sources[i] = val
+		}
+	}
+	if body.Names != nil {
+		v.Names = make([]string, len(body.Names))
+		for i, val := range body.Names {
+			v.Names[i] = val
+		}
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildGetEventFacetsPayload builds the payload for the otel getEventFacets
+// endpoint from CLI flags.
+func BuildGetEventFacetsPayload(otelGetEventFacetsBody string, otelGetEventFacetsSessionToken string) (*otel.GetEventFacetsPayload, error) {
+	var err error
+	var body GetEventFacetsRequestBody
+	{
+		err = json.Unmarshal([]byte(otelGetEventFacetsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"kinds\": [\n         \"span\"\n      ],\n      \"to\": \"2025-12-26T10:00:00Z\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
+		for _, e := range body.Kinds {
+			if !(e == "log" || e == "span") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kinds[*]", e, []any{"log", "span"}))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if otelGetEventFacetsSessionToken != "" {
+			sessionToken = &otelGetEventFacetsSessionToken
+		}
+	}
+	v := &otel.GetEventFacetsPayload{
+		From: body.From,
+		To:   body.To,
+	}
+	if body.Kinds != nil {
+		v.Kinds = make([]string, len(body.Kinds))
+		for i, val := range body.Kinds {
+			v.Kinds[i] = val
+		}
+	}
+	v.SessionToken = sessionToken
 
 	return v, nil
 }

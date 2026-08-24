@@ -8,7 +8,7 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { telemetryListEventLog } from "../funcs/telemetryListEventLog.js";
+import { otelListEventLog } from "../funcs/otelListEventLog.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { ListEventLogResult } from "../models/components/listeventlogresult.js";
@@ -61,7 +61,7 @@ export function buildListEventLogQuery(
         signal: sig,
       };
 
-      return unwrapAsync(telemetryListEventLog(
+      return unwrapAsync(otelListEventLog(
         client$,
         request,
         security,
@@ -74,5 +74,5 @@ export function buildListEventLogQuery(
 export function queryKeyListEventLog(
   parameters: { gramSession?: string | undefined },
 ): QueryKey {
-  return ["@gram/client", "telemetry", "listEventLog", parameters];
+  return ["@gram/client", "otel", "listEventLog", parameters];
 }
