@@ -5063,7 +5063,9 @@ CREATE TABLE IF NOT EXISTS session_quarantines (
 
   CONSTRAINT session_quarantines_pkey PRIMARY KEY (id),
   CONSTRAINT session_quarantines_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE,
-  CONSTRAINT session_quarantines_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+  -- Composite tenant FK: a row can only reference a project inside its own
+  -- organization (same pattern as meta_mcp_servers / litellm_instances).
+  CONSTRAINT session_quarantines_organization_id_project_id_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects(organization_id, id) ON DELETE CASCADE,
   CONSTRAINT session_quarantines_risk_policy_id_fkey FOREIGN KEY (risk_policy_id) REFERENCES risk_policies(id) ON DELETE SET NULL
 );
 

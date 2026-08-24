@@ -16,7 +16,7 @@ CREATE TABLE "session_quarantines" (
   "released_by" text NULL,
   PRIMARY KEY ("id"),
   CONSTRAINT "session_quarantines_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
-  CONSTRAINT "session_quarantines_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "projects" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
+  CONSTRAINT "session_quarantines_organization_id_project_id_fkey" FOREIGN KEY ("organization_id", "project_id") REFERENCES "projects" ("organization_id", "id") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "session_quarantines_risk_policy_id_fkey" FOREIGN KEY ("risk_policy_id") REFERENCES "risk_policies" ("id") ON UPDATE NO ACTION ON DELETE SET NULL
 );
 -- Create index "session_quarantines_active_idx" to table: "session_quarantines"
