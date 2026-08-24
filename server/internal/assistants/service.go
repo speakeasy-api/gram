@@ -2742,7 +2742,7 @@ func (s *ServiceCore) processEventTurn(
 		notice = renderAssistantSkillSetChange(claimedSnapshot, currentSnapshot)
 	}
 
-	mcpServers := s.currentRuntimeMCPServers(ctx, assistant, thread.SourceKind)
+	mcpServers := s.currentRuntimeMCPServers(ctx, assistant)
 
 	prompt, actorUserID := "", assistant.CreatedByUserID
 	var inputParts []runtimeContentPart
@@ -2799,12 +2799,12 @@ func (s *ServiceCore) processEventTurn(
 // dispatch a turn with bogus URLs. Platform toolsets must be included so
 // the reconcile target matches what bootstrap granted — otherwise the
 // runner would treat them as removed and disconnect them mid-thread.
-func (s *ServiceCore) currentRuntimeMCPServers(ctx context.Context, assistant assistantRecord, sourceKind string) []runtimeMCPServer {
+func (s *ServiceCore) currentRuntimeMCPServers(ctx context.Context, assistant assistantRecord) []runtimeMCPServer {
 	serverURL := s.runtime.ServerURL()
 	if serverURL == nil {
 		return nil
 	}
-	platformSlugs, err := s.assistantPlatformSlugs(ctx, assistant, sourceKind)
+	platformSlugs, err := s.assistantPlatformSlugs(ctx, assistant)
 	if err != nil {
 		s.logger.WarnContext(ctx, "resolve platform toolsets for mcp reconcile failed; skipping reconcile",
 			attr.SlogError(err),
@@ -2819,41 +2819,23 @@ func (s *ServiceCore) currentRuntimeMCPServers(ctx context.Context, assistant as
 // project's managed assistant additionally gets exactly one managed-only
 // toolset — legacy or Platform MCP, per the rollout variant — which must never
 // be reachable by any other assistant.
-//
-// The Platform MCP variant is exclusive rather than additive: a managed
-// assistant on it is served the Platform MCP catalogue and nothing else, so
-// the legacy platformtools surface — the base assistants toolset included —
-// stays out of its reach. Rolling an organization onto the variant is a
-// statement about which catalogue that assistant speaks, and a half-migrated
-// assistant carrying both would answer "what can you do" with two generations
-// of the same product.
-//
-// The variant is scoped to the dashboard, though, not to the assistant: the
-// same managed assistant also answers Slack, cron and wake turns, and those
-// surfaces are not part of this rollout. They keep the legacy toolsets, so a
-// Slack thread does not silently lose memory, triggers and the insights tools
-// the moment an organization is flipped. Source kind therefore decides the
-// grant, and every thread resolves it independently.
-func (s *ServiceCore) assistantPlatformSlugs(ctx context.Context, assistant assistantRecord, sourceKind string) ([]string, error) {
-	legacySlugs := []string{
-		platformtools.AssistantsPlatformToolsetSlug,
-		platformtools.ManagedAssistantPlatformToolsetSlug,
-	}
+func (s *ServiceCore) assistantPlatformSlugs(ctx context.Context, assistant assistantRecord) ([]string, error) {
+	platformSlugs := []string{platformtools.AssistantsPlatformToolsetSlug}
 	switch managed, mErr := assistantrepo.New(s.db).GetManagedAssistantByProject(ctx, assistant.ProjectID); {
 	case mErr == nil:
 		if managed.ID == assistant.ID {
-			if sourceKind == sourceKindDashboard &&
-				s.assistantToolsVariant(ctx, assistant.ProjectID) == feature.VariantAssistantToolsPlatformMCP {
-				return []string{platformtools.PlatformMCPReadToolsetSlug}, nil
+			if s.assistantToolsVariant(ctx, assistant.ProjectID) == feature.VariantAssistantToolsPlatformMCP {
+				platformSlugs = append(platformSlugs, platformtools.PlatformMCPReadToolsetSlug)
+			} else {
+				platformSlugs = append(platformSlugs, platformtools.ManagedAssistantPlatformToolsetSlug)
 			}
-			return legacySlugs, nil
 		}
 	case errors.Is(mErr, pgx.ErrNoRows):
 		// Project has no managed assistant; managed-only tools stay ungranted.
 	default:
 		return nil, fmt.Errorf("resolve managed assistant: %w", mErr)
 	}
-	return []string{platformtools.AssistantsPlatformToolsetSlug}, nil
+	return platformSlugs, nil
 }
 
 // assistantToolsVariant reports which managed-assistant platform toolset the
@@ -3045,7 +3027,7 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 	// The managed-assistant platform toolset is granted only to the project's
 	// managed assistant; tools in it must not be reachable by any other
 	// assistant.
-	platformSlugs, err := s.assistantPlatformSlugs(ctx, assistant, thread.SourceKind)
+	platformSlugs, err := s.assistantPlatformSlugs(ctx, assistant)
 	if err != nil {
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "resolve managed assistant").LogError(ctx, s.logger, logAttrs...)
 	}
