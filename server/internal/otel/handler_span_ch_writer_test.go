@@ -214,6 +214,16 @@ func TestSpanEventCHWriterCapsAttributeNestingDepth(t *testing.T) {
 	var spanAttributes map[string]any
 	require.NoError(t, json.Unmarshal([]byte(inserter.batches[0][0].SpanAttributes), &spanAttributes))
 	require.Contains(t, spanAttributes, "deep")
+
+	// The arrays survive down to the cap; past it the encoder emits null.
+	value := spanAttributes["deep"]
+	for range maxEventAnyValueDepth {
+		values, ok := value.([]any)
+		require.True(t, ok)
+		require.Len(t, values, 1)
+		value = values[0]
+	}
+	require.Nil(t, value)
 }
 
 func TestSpanEventCHWriterSkipsUnprocessableSpans(t *testing.T) {
