@@ -509,6 +509,8 @@ trackedFiles:
   src/funcs/spendRulesRulesUpdate.ts: {}
   src/funcs/telemetryCaptureEvent.ts: {}
   src/funcs/telemetryGetEmployeeDataFlowGraph.ts: {}
+  src/funcs/telemetryGetEventFacets.ts: {}
+  src/funcs/telemetryGetEventVolume.ts: {}
   src/funcs/telemetryGetHooksSummary.ts: {}
   src/funcs/telemetryGetMcpServerActivity.ts: {}
   src/funcs/telemetryGetObservabilityOverview.ts: {}
@@ -529,6 +531,7 @@ trackedFiles:
   src/funcs/telemetryGetUnproxiedMcpServerUserUsage.ts: {}
   src/funcs/telemetryGetUserMetricsSummary.ts: {}
   src/funcs/telemetryListAttributeKeys.ts: {}
+  src/funcs/telemetryListEventLog.ts: {}
   src/funcs/telemetryListFilterOptions.ts: {}
   src/funcs/telemetryListHooksTraces.ts: {}
   src/funcs/telemetryListSessions.ts: {}
@@ -810,6 +813,8 @@ trackedFiles:
   src/models/components/environmententry.ts: {}
   src/models/components/environmententryinput.ts: {}
   src/models/components/evaluatepromptguardrailrequestbody.ts: {}
+  src/models/components/eventlogentry.ts: {}
+  src/models/components/eventvolumebucket.ts: {}
   src/models/components/evidenceadvisorychange.ts: {}
   src/models/components/evidencediff.ts: {}
   src/models/components/evidencefieldchange.ts: {}
@@ -852,6 +857,10 @@ trackedFiles:
   src/models/components/getdeploymentresult.ts: {}
   src/models/components/getemployeedataflowgraphpayload.ts: {}
   src/models/components/getemployeedataflowgraphresult.ts: {}
+  src/models/components/geteventfacetspayload.ts: {}
+  src/models/components/geteventfacetsresult.ts: {}
+  src/models/components/geteventvolumepayload.ts: {}
+  src/models/components/geteventvolumeresult.ts: {}
   src/models/components/gethookssummarypayload.ts: {}
   src/models/components/gethookssummaryresult.ts: {}
   src/models/components/getinstanceresult.ts: {}
@@ -956,6 +965,8 @@ trackedFiles:
   src/models/components/listdeviceintegrationprovidersresult.ts: {}
   src/models/components/listdeviceintegrationschedulesresult.ts: {}
   src/models/components/listenvironmentsresult.ts: {}
+  src/models/components/listeventlogpayload.ts: {}
+  src/models/components/listeventlogresult.ts: {}
   src/models/components/listexternalcredentialsresult.ts: {}
   src/models/components/listexternalkeysresult.ts: {}
   src/models/components/listfilteroptionspayload.ts: {}
@@ -1679,6 +1690,8 @@ trackedFiles:
   src/models/operations/getdeviceintegrationcoverage.ts: {}
   src/models/operations/getdomain.ts: {}
   src/models/operations/getemployeedataflowgraph.ts: {}
+  src/models/operations/geteventfacets.ts: {}
+  src/models/operations/geteventvolume.ts: {}
   src/models/operations/getgcpiamcredential.ts: {}
   src/models/operations/getgcpiamplatformcredential.ts: {}
   src/models/operations/getgcpkmskey.ts: {}
@@ -1810,6 +1823,7 @@ trackedFiles:
   src/models/operations/listdismissedriskresults.ts: {}
   src/models/operations/listdomains.ts: {}
   src/models/operations/listenvironments.ts: {}
+  src/models/operations/listeventlog.ts: {}
   src/models/operations/listexternalcredentials.ts: {}
   src/models/operations/listexternalkeys.ts: {}
   src/models/operations/listfilteroptions.ts: {}
@@ -2306,6 +2320,10 @@ trackedFiles:
   src/react-query/getDomain.ts: {}
   src/react-query/getEmployeeDataFlowGraph.core.ts: {}
   src/react-query/getEmployeeDataFlowGraph.ts: {}
+  src/react-query/getEventFacets.core.ts: {}
+  src/react-query/getEventFacets.ts: {}
+  src/react-query/getEventVolume.core.ts: {}
+  src/react-query/getEventVolume.ts: {}
   src/react-query/getGcpIamCredential.core.ts: {}
   src/react-query/getGcpIamCredential.ts: {}
   src/react-query/getGcpIamPlatformCredential.core.ts: {}
@@ -2460,6 +2478,8 @@ trackedFiles:
   src/react-query/listDomains.ts: {}
   src/react-query/listEnvironments.core.ts: {}
   src/react-query/listEnvironments.ts: {}
+  src/react-query/listEventLog.core.ts: {}
+  src/react-query/listEventLog.ts: {}
   src/react-query/listExternalCredentials.core.ts: {}
   src/react-query/listExternalCredentials.ts: {}
   src/react-query/listExternalKeys.core.ts: {}
@@ -5149,6 +5169,28 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getEventFacets:
+    speakeasy-default-get-event-facets:
+      requestBody:
+        application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-26T10:00:00Z"}
+      responses:
+        "200":
+          application/json: {"names": ["<value 1>", "<value 2>"], "sources": ["<value 1>", "<value 2>", "<value 3>"]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getEventVolume:
+    speakeasy-default-get-event-volume:
+      requestBody:
+        application/json: {"from": "2025-12-19T10:00:00Z", "to": "2025-12-26T10:00:00Z"}
+      responses:
+        "200":
+          application/json: {"buckets": [{"bucket_time_unix_nano": "<value>", "log_count": 606460, "span_count": 845075}], "interval_seconds": 101493}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   getGcpIamCredential:
     speakeasy-default-get-gcp-iam-credential:
       parameters:
@@ -6646,6 +6688,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listEventLog:
+    speakeasy-default-list-event-log:
+      requestBody:
+        application/json: {"from": "2025-12-19T10:00:00Z", "limit": 50, "to": "2025-12-26T10:00:00Z"}
+      responses:
+        "200":
+          application/json: {"events": [], "total_count": 829515, "total_count_capped": true}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   listExternalCredentials:
     speakeasy-default-list-external-credentials:
       responses:

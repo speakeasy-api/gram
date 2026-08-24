@@ -32,6 +32,9 @@ type Client struct {
 	QueryEndpoint                            goa.Endpoint
 	QueryTumDetailsEndpoint                  goa.Endpoint
 	ListSessionsEndpoint                     goa.Endpoint
+	ListEventLogEndpoint                     goa.Endpoint
+	GetEventVolumeEndpoint                   goa.Endpoint
+	GetEventFacetsEndpoint                   goa.Endpoint
 	ListFilterOptionsEndpoint                goa.Endpoint
 	ListAttributeKeysEndpoint                goa.Endpoint
 	GetHooksSummaryEndpoint                  goa.Endpoint
@@ -50,7 +53,7 @@ type Client struct {
 }
 
 // NewClient initializes a "telemetry" service client given the endpoints.
-func NewClient(searchLogs, searchToolCalls, searchChats, searchUsers, captureEvent, getProjectMetricsSummary, getUserMetricsSummary, getEmployeeDataFlowGraph, getObservabilityOverview, getProjectOverview, getUnproxiedMcpServerUsage, getUnproxiedMcpServerToolUsage, getUnproxiedMcpServerUserUsage, getUnproxiedMcpServerClientUsage, query, queryTumDetails, listSessions, listFilterOptions, listAttributeKeys, getHooksSummary, getToolUsageSummary, getToolUsageTotals, getToolUsageTargets, getToolUsageUsers, getToolUsageTargetTimeSeries, getToolUsageUserTimeSeries, getToolUsageUsersByTarget, getToolUsageTargetToolBreakdown, listToolUsageTraces, getToolUsageFilterOptions, getMcpServerActivity, listHooksTraces goa.Endpoint) *Client {
+func NewClient(searchLogs, searchToolCalls, searchChats, searchUsers, captureEvent, getProjectMetricsSummary, getUserMetricsSummary, getEmployeeDataFlowGraph, getObservabilityOverview, getProjectOverview, getUnproxiedMcpServerUsage, getUnproxiedMcpServerToolUsage, getUnproxiedMcpServerUserUsage, getUnproxiedMcpServerClientUsage, query, queryTumDetails, listSessions, listEventLog, getEventVolume, getEventFacets, listFilterOptions, listAttributeKeys, getHooksSummary, getToolUsageSummary, getToolUsageTotals, getToolUsageTargets, getToolUsageUsers, getToolUsageTargetTimeSeries, getToolUsageUserTimeSeries, getToolUsageUsersByTarget, getToolUsageTargetToolBreakdown, listToolUsageTraces, getToolUsageFilterOptions, getMcpServerActivity, listHooksTraces goa.Endpoint) *Client {
 	return &Client{
 		SearchLogsEndpoint:                       searchLogs,
 		SearchToolCallsEndpoint:                  searchToolCalls,
@@ -69,6 +72,9 @@ func NewClient(searchLogs, searchToolCalls, searchChats, searchUsers, captureEve
 		QueryEndpoint:                            query,
 		QueryTumDetailsEndpoint:                  queryTumDetails,
 		ListSessionsEndpoint:                     listSessions,
+		ListEventLogEndpoint:                     listEventLog,
+		GetEventVolumeEndpoint:                   getEventVolume,
+		GetEventFacetsEndpoint:                   getEventFacets,
 		ListFilterOptionsEndpoint:                listFilterOptions,
 		ListAttributeKeysEndpoint:                listAttributeKeys,
 		GetHooksSummaryEndpoint:                  getHooksSummary,
@@ -470,6 +476,74 @@ func (c *Client) ListSessions(ctx context.Context, p *ListSessionsPayload) (res 
 		return
 	}
 	return ires.(*ListSessionsResult), nil
+}
+
+// ListEventLog calls the "listEventLog" endpoint of the "telemetry" service.
+// ListEventLog may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListEventLog(ctx context.Context, p *ListEventLogPayload) (res *ListEventLogResult, err error) {
+	var ires any
+	ires, err = c.ListEventLogEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListEventLogResult), nil
+}
+
+// GetEventVolume calls the "getEventVolume" endpoint of the "telemetry"
+// service.
+// GetEventVolume may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetEventVolume(ctx context.Context, p *GetEventVolumePayload) (res *GetEventVolumeResult, err error) {
+	var ires any
+	ires, err = c.GetEventVolumeEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*GetEventVolumeResult), nil
+}
+
+// GetEventFacets calls the "getEventFacets" endpoint of the "telemetry"
+// service.
+// GetEventFacets may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetEventFacets(ctx context.Context, p *GetEventFacetsPayload) (res *GetEventFacetsResult, err error) {
+	var ires any
+	ires, err = c.GetEventFacetsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*GetEventFacetsResult), nil
 }
 
 // ListFilterOptions calls the "listFilterOptions" endpoint of the "telemetry"

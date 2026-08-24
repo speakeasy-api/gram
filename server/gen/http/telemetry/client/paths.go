@@ -92,6 +92,21 @@ func ListSessionsTelemetryPath() string {
 	return "/rpc/telemetry.listSessions"
 }
 
+// ListEventLogTelemetryPath returns the URL path to the telemetry service listEventLog HTTP endpoint.
+func ListEventLogTelemetryPath() string {
+	return "/rpc/telemetry.listEventLog"
+}
+
+// GetEventVolumeTelemetryPath returns the URL path to the telemetry service getEventVolume HTTP endpoint.
+func GetEventVolumeTelemetryPath() string {
+	return "/rpc/telemetry.getEventVolume"
+}
+
+// GetEventFacetsTelemetryPath returns the URL path to the telemetry service getEventFacets HTTP endpoint.
+func GetEventFacetsTelemetryPath() string {
+	return "/rpc/telemetry.getEventFacets"
+}
+
 // ListFilterOptionsTelemetryPath returns the URL path to the telemetry service listFilterOptions HTTP endpoint.
 func ListFilterOptionsTelemetryPath() string {
 	return "/rpc/telemetry.listFilterOptions"

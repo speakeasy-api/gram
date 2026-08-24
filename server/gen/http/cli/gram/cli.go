@@ -163,7 +163,7 @@ func UsageCommands() []string {
 		"skill-efficacy (get-settings|upsert-settings|query-insights)",
 		"skills (create|add-version|restore-version|update|list|list-tags|list-suggestions|list-feedback|trigger-suggestion|approve-suggestion|dismiss-suggestion|list-suggestion-feedback|approve-all-suggestions|get|list-unknown-activations|list-versions|archive|distribute|undistribute|share|unshare|get-shared|list-distributions)",
 		"spend-rules (create-spend-rule|list-spend-rules|get-spend-rule|update-spend-rule|archive-spend-rule|preview-spend-rule|list-spend-rule-events|get-spend-rules-overview|list-actor-attributes)",
-		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-project-overview|get-unproxied-mcp-server-usage|get-unproxied-mcp-server-tool-usage|get-unproxied-mcp-server-user-usage|get-unproxied-mcp-server-client-usage|query|query-tum-details|list-sessions|list-filter-options|list-attribute-keys|get-hooks-summary|get-tool-usage-summary|get-tool-usage-totals|get-tool-usage-targets|get-tool-usage-users|get-tool-usage-target-time-series|get-tool-usage-user-time-series|get-tool-usage-users-by-target|get-tool-usage-target-tool-breakdown|list-tool-usage-traces|get-tool-usage-filter-options|get-mcp-server-activity|list-hooks-traces)",
+		"telemetry (search-logs|search-tool-calls|search-chats|search-users|capture-event|get-project-metrics-summary|get-user-metrics-summary|get-employee-data-flow-graph|get-observability-overview|get-project-overview|get-unproxied-mcp-server-usage|get-unproxied-mcp-server-tool-usage|get-unproxied-mcp-server-user-usage|get-unproxied-mcp-server-client-usage|query|query-tum-details|list-sessions|list-event-log|get-event-volume|get-event-facets|list-filter-options|list-attribute-keys|get-hooks-summary|get-tool-usage-summary|get-tool-usage-totals|get-tool-usage-targets|get-tool-usage-users|get-tool-usage-target-time-series|get-tool-usage-user-time-series|get-tool-usage-users-by-target|get-tool-usage-target-tool-breakdown|list-tool-usage-traces|get-tool-usage-filter-options|get-mcp-server-activity|list-hooks-traces)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"token-exchange exchange",
 		"tools list-tools",
@@ -3099,6 +3099,18 @@ func ParseEndpoint(
 		telemetryListSessionsBodyFlag         = telemetryListSessionsFlags.String("body", "REQUIRED", "")
 		telemetryListSessionsSessionTokenFlag = telemetryListSessionsFlags.String("session-token", "", "")
 
+		telemetryListEventLogFlags            = flag.NewFlagSet("list-event-log", flag.ExitOnError)
+		telemetryListEventLogBodyFlag         = telemetryListEventLogFlags.String("body", "REQUIRED", "")
+		telemetryListEventLogSessionTokenFlag = telemetryListEventLogFlags.String("session-token", "", "")
+
+		telemetryGetEventVolumeFlags            = flag.NewFlagSet("get-event-volume", flag.ExitOnError)
+		telemetryGetEventVolumeBodyFlag         = telemetryGetEventVolumeFlags.String("body", "REQUIRED", "")
+		telemetryGetEventVolumeSessionTokenFlag = telemetryGetEventVolumeFlags.String("session-token", "", "")
+
+		telemetryGetEventFacetsFlags            = flag.NewFlagSet("get-event-facets", flag.ExitOnError)
+		telemetryGetEventFacetsBodyFlag         = telemetryGetEventFacetsFlags.String("body", "REQUIRED", "")
+		telemetryGetEventFacetsSessionTokenFlag = telemetryGetEventFacetsFlags.String("session-token", "", "")
+
 		telemetryListFilterOptionsFlags                = flag.NewFlagSet("list-filter-options", flag.ExitOnError)
 		telemetryListFilterOptionsBodyFlag             = telemetryListFilterOptionsFlags.String("body", "REQUIRED", "")
 		telemetryListFilterOptionsApikeyTokenFlag      = telemetryListFilterOptionsFlags.String("apikey-token", "", "")
@@ -4331,6 +4343,9 @@ func ParseEndpoint(
 	telemetryQueryFlags.Usage = telemetryQueryUsage
 	telemetryQueryTumDetailsFlags.Usage = telemetryQueryTumDetailsUsage
 	telemetryListSessionsFlags.Usage = telemetryListSessionsUsage
+	telemetryListEventLogFlags.Usage = telemetryListEventLogUsage
+	telemetryGetEventVolumeFlags.Usage = telemetryGetEventVolumeUsage
+	telemetryGetEventFacetsFlags.Usage = telemetryGetEventFacetsUsage
 	telemetryListFilterOptionsFlags.Usage = telemetryListFilterOptionsUsage
 	telemetryListAttributeKeysFlags.Usage = telemetryListAttributeKeysUsage
 	telemetryGetHooksSummaryFlags.Usage = telemetryGetHooksSummaryUsage
@@ -6454,6 +6469,15 @@ func ParseEndpoint(
 
 			case "list-sessions":
 				epf = telemetryListSessionsFlags
+
+			case "list-event-log":
+				epf = telemetryListEventLogFlags
+
+			case "get-event-volume":
+				epf = telemetryGetEventVolumeFlags
+
+			case "get-event-facets":
+				epf = telemetryGetEventFacetsFlags
 
 			case "list-filter-options":
 				epf = telemetryListFilterOptionsFlags
@@ -8671,6 +8695,15 @@ func ParseEndpoint(
 			case "list-sessions":
 				endpoint = c.ListSessions()
 				data, err = telemetryc.BuildListSessionsPayload(*telemetryListSessionsBodyFlag, *telemetryListSessionsSessionTokenFlag)
+			case "list-event-log":
+				endpoint = c.ListEventLog()
+				data, err = telemetryc.BuildListEventLogPayload(*telemetryListEventLogBodyFlag, *telemetryListEventLogSessionTokenFlag)
+			case "get-event-volume":
+				endpoint = c.GetEventVolume()
+				data, err = telemetryc.BuildGetEventVolumePayload(*telemetryGetEventVolumeBodyFlag, *telemetryGetEventVolumeSessionTokenFlag)
+			case "get-event-facets":
+				endpoint = c.GetEventFacets()
+				data, err = telemetryc.BuildGetEventFacetsPayload(*telemetryGetEventFacetsBodyFlag, *telemetryGetEventFacetsSessionTokenFlag)
 			case "list-filter-options":
 				endpoint = c.ListFilterOptions()
 				data, err = telemetryc.BuildListFilterOptionsPayload(*telemetryListFilterOptionsBodyFlag, *telemetryListFilterOptionsApikeyTokenFlag, *telemetryListFilterOptionsSessionTokenFlag, *telemetryListFilterOptionsProjectSlugInputFlag)
@@ -21562,6 +21595,9 @@ func telemetryUsage() {
 	fmt.Fprintln(os.Stderr, `    query: Generic, org-scoped analytics query over pre-aggregated usage metrics. Returns both a grouped table and a per-group hourly timeseries for the same slice of data, supporting arbitrary allowlisted group-by dimensions and filters (e.g. group by department_name, then drill in by filtering department_name and grouping by role).`)
 	fmt.Fprintln(os.Stderr, `    query-tum-details: Org-scoped daily usage details for the billing page, computed in one pass: the tokens-under-management daily token-type split (observed agent traffic; cache reads excluded) and per-dimension breakdowns over the same population.`)
 	fmt.Fprintln(os.Stderr, `    list-sessions: Org-scoped list of individual chat sessions for a slice of usage, filtered by the same allowlisted dimensions as telemetry.query. Returns per-session cost, token, and tool metrics with cursor pagination.`)
+	fmt.Fprintln(os.Stderr, `    list-event-log: Org-scoped event feed over ingested OpenTelemetry signals: log records and spans merged into one reverse-chronological list with keyset pagination and a capped total count.`)
+	fmt.Fprintln(os.Stderr, `    get-event-volume: Org-scoped event volume timeseries for the event feed: bucketed counts of ingested OpenTelemetry log records vs spans over a time range, honoring the same filters as listEventLog.`)
+	fmt.Fprintln(os.Stderr, `    get-event-facets: Org-scoped filter facets for the event feed: the distinct sources and event/span names observed in a time range.`)
 	fmt.Fprintln(os.Stderr, `    list-filter-options: List available filter options (API keys or users) for the observability overview`)
 	fmt.Fprintln(os.Stderr, `    list-attribute-keys: List distinct attribute keys available for filtering`)
 	fmt.Fprintln(os.Stderr, `    get-hooks-summary: Get aggregated hooks metrics grouped by server`)
@@ -21977,6 +22013,66 @@ func telemetryListSessionsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry list-sessions --body '{\n      \"cursor\": \"abc123\",\n      \"filters\": [\n         {\n            \"dimension\": \"job_title\",\n            \"values\": [\n               \"abc123\",\n               \"abc123\"\n            ]\n         }\n      ],\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"limit\": 2,\n      \"sort_by\": \"total_tokens\",\n      \"to\": \"2025-12-26T10:00:00Z\"\n   }' --session-token \"abc123\"")
+}
+
+func telemetryListEventLogUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] telemetry list-event-log", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Org-scoped event feed over ingested OpenTelemetry signals: log records and spans merged into one reverse-chronological list with keyset pagination and a capped total count.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry list-event-log --body '{\n      \"cursor\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"kinds\": [\n         \"span\"\n      ],\n      \"limit\": 2,\n      \"names\": [\n         \"abc123\"\n      ],\n      \"search\": \"abc123\",\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"to\": \"2025-12-26T10:00:00Z\"\n   }' --session-token \"abc123\"")
+}
+
+func telemetryGetEventVolumeUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] telemetry get-event-volume", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Org-scoped event volume timeseries for the event feed: bucketed counts of ingested OpenTelemetry log records vs spans over a time range, honoring the same filters as listEventLog.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-event-volume --body '{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"kinds\": [\n         \"span\"\n      ],\n      \"names\": [\n         \"abc123\"\n      ],\n      \"search\": \"abc123\",\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"to\": \"2025-12-26T10:00:00Z\"\n   }' --session-token \"abc123\"")
+}
+
+func telemetryGetEventFacetsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] telemetry get-event-facets", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Org-scoped filter facets for the event feed: the distinct sources and event/span names observed in a time range.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-event-facets --body '{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"kinds\": [\n         \"span\"\n      ],\n      \"to\": \"2025-12-26T10:00:00Z\"\n   }' --session-token \"abc123\"")
 }
 
 func telemetryListFilterOptionsUsage() {
