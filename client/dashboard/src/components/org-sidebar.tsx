@@ -91,6 +91,8 @@ export function OrgSidebar({
     orgRoutes.encryptionKeys,
   ].some((r) => r.active);
 
+  const dataActive = [orgRoutes.data].some((r) => r.active);
+
   const secureActive = [
     orgRoutes.auditLogs,
     orgRoutes.deviceAgent,
@@ -112,15 +114,14 @@ export function OrgSidebar({
     orgRoutes.platformRemoteIdentityProviders,
   ].some((r) => r.active);
 
-  const activeGroup = settingsActive
-    ? "Settings"
-    : secureActive
-      ? "Secure"
-      : identityActive
-        ? "Identity"
-        : platformAdminActive
-          ? "Platform Admin"
-          : undefined;
+  const groupActivations: Array<[string, boolean]> = [
+    ["Settings", settingsActive],
+    ["Data", dataActive],
+    ["Secure", secureActive],
+    ["Identity", identityActive],
+    ["Platform Admin", platformAdminActive],
+  ];
+  const activeGroup = groupActivations.find(([, active]) => active)?.[0];
 
   const allOrgNavRoutes = [
     orgRoutes.home,
@@ -136,6 +137,7 @@ export function OrgSidebar({
     orgRoutes.webhooks,
     orgRoutes.externalServices,
     orgRoutes.encryptionKeys,
+    orgRoutes.data,
     orgRoutes.auditLogs,
     orgRoutes.deviceAgent,
     orgRoutes.access,
@@ -174,7 +176,7 @@ export function OrgSidebar({
         ) : (
           <NavGroupProvider
             activeGroup={activeGroup}
-            defaultOpenGroups={["Settings", "Secure", "Identity"]}
+            defaultOpenGroups={["Settings", "Data", "Secure", "Identity"]}
             activeItem={activeItem}
           >
             <SidebarMenu className="gap-1 px-2">
@@ -230,6 +232,14 @@ export function OrgSidebar({
                   { item: orgRoutes.aiIntegrations, scope: orgReadOrAdmin },
                   { item: orgRoutes.webhooks, scope: orgReadOrAdmin },
                 ]}
+              />
+
+              {/* Data group — org-wide ingested telemetry surfaces. The Event
+                  Feed item carries a Preview badge via its route's `stage`. */}
+              <ScopeGatedNavGroup
+                label="Data"
+                Icon={(p) => <Icon {...p} name="database" />}
+                items={[{ item: orgRoutes.data, scope: orgReadOrAdmin }]}
               />
 
               {/* Secure group */}
