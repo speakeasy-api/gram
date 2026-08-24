@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/google/uuid"
 	"io"
 	"log/slog"
 	"net/http"
@@ -17,7 +16,6 @@ import (
 
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -173,33 +171,15 @@ func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, aut
 		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
 	}
 
-	// The two managed-only toolsets are rollout variants of each other: a
-	// thread reaches exactly one, never both. The attachment decision in the
+	// The two managed-only toolsets are rollout variants of each other: an org
+	// reaches exactly one, never both. The attachment decision in the
 	// assistants service resolves the same variant, but the assistant token
 	// lives inside the runner VM, so the serve path re-resolves rather than
 	// trusting attachment. A variant that cannot be resolved falls back to
 	// legacy, matching attachment, so an outage never leaves the managed
 	// assistant with no toolset at all.
-	//
-	// The rollout is scoped to dashboard threads, so the calling thread's
-	// source kind is part of the decision — the same managed assistant serves
-	// Slack, cron and wake turns on the legacy toolsets. The principal carries
-	// the thread it was minted for, which is what makes that resolvable here
-	// without trusting anything the runner sends.
-	//
-	// A source kind that cannot be read — a thread deleted mid-turn, a database
-	// blip — falls back to the flag alone, which is how this decision was made
-	// before the rollout was scoped to the dashboard. Reporting it as
-	// not-dashboard instead would 404 the Platform MCP toolset that bootstrap
-	// attached to a dashboard thread, stripping the assistant of every tool it
-	// has mid-turn; the reverse error only costs a non-dashboard thread its
-	// tools on an organization that is already on the variant, and neither
-	// error can reach an organization that is not.
-	sourceKind, resolvedSourceKind := s.threadSourceKind(ctx, principal.ThreadID, *authCtx.ProjectID)
-	dashboardScoped := !resolvedSourceKind || sourceKind == bgtriggers.DefinitionSlugDashboard
-
 	variant := feature.VariantAssistantToolsLegacy
-	if s.features != nil && dashboardScoped {
+	if s.features != nil {
 		resolved, err := feature.FlagVariant(ctx, s.features, feature.FlagAssistantPlatformMCP,
 			authCtx.ActiveOrganizationID, feature.OrgProjectGroups(authCtx.OrganizationSlug, ""))
 		if err != nil {
@@ -214,25 +194,6 @@ func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, aut
 	}
 
 	return nil
-}
-
-// threadSourceKind reads the surface the calling thread was opened from,
-// reporting false when it cannot be read — a thread deleted mid-turn, or a
-// database blip.
-//
-// Scoped to the request's project so a thread id belonging to another project
-// cannot decide which toolset this one is served, even though the id comes
-// from a signed principal rather than the request body.
-func (s *Service) threadSourceKind(ctx context.Context, threadID, projectID uuid.UUID) (string, bool) {
-	sourceKind, err := assistantrepo.New(s.db).GetAssistantThreadSourceKind(ctx, assistantrepo.GetAssistantThreadSourceKindParams{
-		ThreadID:  threadID,
-		ProjectID: projectID,
-	})
-	if err != nil {
-		s.logger.WarnContext(ctx, "resolve assistant thread source kind", attr.SlogError(err))
-		return "", false
-	}
-	return sourceKind, true
 }
 
 // wantedToolsetSlug maps a resolved rollout variant to the single managed-only
