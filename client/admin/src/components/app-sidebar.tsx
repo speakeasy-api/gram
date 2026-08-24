@@ -55,7 +55,9 @@ export function AppSidebar({
             >
               <Link to="/">
                 <SpeakeasyMark className="!size-5 group-data-[collapsible=icon]:!size-4" />
-                <span className="text-base font-semibold">AI Control Plane Admin</span>
+                <span className="text-base font-semibold">
+                  AI Control Plane Admin
+                </span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
