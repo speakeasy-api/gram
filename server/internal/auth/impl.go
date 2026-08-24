@@ -851,8 +851,9 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error loading existing session").LogError(ctx, s.logger)
 	}
-	existingSession.ActiveOrganizationID = authCtx.ActiveOrganizationID
-	if err := s.sessions.UpdateSession(ctx, existingSession); err != nil {
+	updatedSession := existingSession
+	updatedSession.ActiveOrganizationID = authCtx.ActiveOrganizationID
+	if err := s.sessions.UpdateSession(ctx, existingSession, updatedSession); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error updating auth session").LogError(ctx, s.logger)
 	}
 
@@ -886,13 +887,14 @@ func (s *Service) EnterDemo(ctx context.Context, payload *gen.EnterDemoPayload) 
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error loading existing session").LogError(ctx, s.logger)
 	}
-	existingSession.ActiveOrganizationID = constants.DemoOrganizationID
+	updatedSession := existingSession
+	updatedSession.ActiveOrganizationID = constants.DemoOrganizationID
 	// Entering the shared demo ends support access. Otherwise the support
 	// target would no longer match the active organization and the next
 	// authenticated request would reject the session.
-	existingSession.SupportOrganizationID = ""
-	existingSession.SupportExpiresAt = time.Time{}
-	if err := s.sessions.UpdateSession(ctx, existingSession); err != nil {
+	updatedSession.SupportOrganizationID = ""
+	updatedSession.SupportExpiresAt = time.Time{}
+	if err := s.sessions.UpdateSession(ctx, existingSession, updatedSession); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error updating auth session").LogError(ctx, s.logger)
 	}
 
@@ -1188,8 +1190,9 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error loading existing session").LogError(ctx, s.logger)
 	}
-	existingSession.ActiveOrganizationID = org.ID
-	if err := s.sessions.UpdateSession(ctx, existingSession); err != nil {
+	updatedSession := existingSession
+	updatedSession.ActiveOrganizationID = org.ID
+	if err := s.sessions.UpdateSession(ctx, existingSession, updatedSession); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error storing session").LogError(ctx, s.logger)
 	}
 

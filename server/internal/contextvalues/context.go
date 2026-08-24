@@ -105,7 +105,7 @@ func WithSessionCookieRefresh(ctx context.Context, refresh func(sessionID string
 }
 
 func RefreshSessionCookie(ctx context.Context, sessionID string) {
-	if refresh, ok := ctx.Value(sessionCookieRefreshContextKey).(func(string)); ok {
+	if refresh, ok := ctx.Value(sessionCookieRefreshContextKey).(func(string)); ok && refresh != nil {
 		refresh(sessionID)
 	}
 }

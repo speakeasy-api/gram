@@ -252,16 +252,13 @@ func (s *Manager) StoreSession(ctx context.Context, session Session) error {
 	return nil
 }
 
-func (s *Manager) UpdateSession(ctx context.Context, session Session) error {
-	if err := s.sessionCache.Update(ctx, session); err != nil {
+func (s *Manager) UpdateSession(ctx context.Context, expected, replacement Session) error {
+	updated, err := s.sessionCache.CompareAndSwap(ctx, expected, replacement)
+	if err != nil {
 		return fmt.Errorf("update session: %w", err)
 	}
-	refreshed, err := s.sessionCache.CompareAndSwap(ctx, session, session)
-	if err != nil {
-		return fmt.Errorf("refresh updated session ttl: %w", err)
-	}
-	if !refreshed {
-		return errors.New("refresh updated session ttl: session no longer exists")
+	if !updated {
+		return errors.New("update session: session changed or no longer exists")
 	}
 
 	return nil

@@ -55,9 +55,7 @@ func TestSessionMiddlewareDoesNotRefreshDifferentSession(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, req)
 
-	for _, cookie := range recorder.Result().Cookies() {
-		require.NotEqual(t, "header-session", cookie.Value)
-	}
+	require.Empty(t, recorder.Result().Cookies())
 }
 
 func TestSessionMiddlewareDoesNotRefreshLogoutCookie(t *testing.T) {
