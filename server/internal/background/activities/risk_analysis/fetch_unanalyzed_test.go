@@ -146,6 +146,58 @@ func TestFetchUnanalyzed_KeepsSlackAssistantMessages(t *testing.T) {
 	require.False(t, analyzedAt.Valid, "slack assistant messages stay in the unanalyzed sweep")
 }
 
+func TestFetchUnanalyzed_LaterSlackThreadKeepsChatInSweep(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+
+	chatID := seedAssistantLinkedChat(t, conn, td, "dashboard")
+	msgs := seedMessagesInChat(t, conn, td, chatID, 1)
+	seedAssistantThreadOnChat(t, conn, td, chatID, "slack")
+
+	activity := risk_analysis.NewFetchUnanalyzed(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn)
+	result, err := activity.Do(t.Context(), risk_analysis.FetchUnanalyzedArgs{
+		ProjectID:    td.projectID,
+		IDLowerBound: zeroLowerBound,
+		BatchLimit:   100,
+	})
+	require.NoError(t, err)
+	require.Equal(t, msgs, result.MessageIDs)
+
+	analyzedAt, err := riskrepo.New(conn).GetChatMessageRiskAnalyzedAtForTest(t.Context(), riskrepo.GetChatMessageRiskAnalyzedAtForTestParams{
+		ID:        msgs[0],
+		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
+	})
+	require.NoError(t, err)
+	require.False(t, analyzedAt.Valid, "latest slack thread must keep the chat in the unanalyzed sweep")
+}
+
+func TestFetchUnanalyzed_LaterDashboardThreadExcludesChat(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+
+	chatID := seedAssistantLinkedChat(t, conn, td, "slack")
+	msgs := seedMessagesInChat(t, conn, td, chatID, 1)
+	seedAssistantThreadOnChat(t, conn, td, chatID, "dashboard")
+
+	activity := risk_analysis.NewFetchUnanalyzed(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn)
+	result, err := activity.Do(t.Context(), risk_analysis.FetchUnanalyzedArgs{
+		ProjectID:    td.projectID,
+		IDLowerBound: zeroLowerBound,
+		BatchLimit:   100,
+	})
+	require.NoError(t, err)
+	require.Empty(t, result.MessageIDs)
+
+	analyzedAt, err := riskrepo.New(conn).GetChatMessageRiskAnalyzedAtForTest(t.Context(), riskrepo.GetChatMessageRiskAnalyzedAtForTestParams{
+		ID:        msgs[0],
+		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
+	})
+	require.NoError(t, err)
+	require.True(t, analyzedAt.Valid, "latest dashboard thread must mark the chat analyzed without scanning")
+}
+
 func TestFetchUnanalyzed_ExcludesDashboardAssistantContentParts(t *testing.T) {
 	t.Parallel()
 	conn := cloneDB(t)

@@ -88,39 +88,47 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (_ *
 		}, nil
 	}
 
-	skippedMessages, err := queries.MarkDashboardAssistantMessagesRiskAnalyzed(ctx, repo.MarkDashboardAssistantMessagesRiskAnalyzedParams{
-		ProjectID:           uuid.NullUUID{UUID: args.ProjectID, Valid: true},
-		IDLowerBound:        args.IDLowerBound,
+	dashboardChatIDs, err := queries.ListDashboardAssistantChatIDs(ctx, repo.ListDashboardAssistantChatIDsParams{
 		DashboardSourceKind: dashboardAssistantSourceKind,
-		BatchLimit:          args.BatchLimit,
+		ProjectID:           args.ProjectID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list dashboard assistant chat IDs: %w", err)
+	}
+
+	skippedMessages, err := queries.MarkDashboardAssistantMessagesRiskAnalyzed(ctx, repo.MarkDashboardAssistantMessagesRiskAnalyzedParams{
+		ProjectID:        uuid.NullUUID{UUID: args.ProjectID, Valid: true},
+		IDLowerBound:     args.IDLowerBound,
+		DashboardChatIds: dashboardChatIDs,
+		BatchLimit:       args.BatchLimit,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("mark dashboard assistant messages analyzed: %w", err)
 	}
 	skippedContentParts, err := queries.MarkDashboardAssistantContentPartsRiskAnalyzed(ctx, repo.MarkDashboardAssistantContentPartsRiskAnalyzedParams{
-		ProjectID:           uuid.NullUUID{UUID: args.ProjectID, Valid: true},
-		IDLowerBound:        args.IDLowerBound,
-		DashboardSourceKind: dashboardAssistantSourceKind,
-		BatchLimit:          args.BatchLimit,
+		ProjectID:        uuid.NullUUID{UUID: args.ProjectID, Valid: true},
+		IDLowerBound:     args.IDLowerBound,
+		DashboardChatIds: dashboardChatIDs,
+		BatchLimit:       args.BatchLimit,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("mark dashboard assistant content parts analyzed: %w", err)
 	}
 
 	messageIDs, err := queries.FetchUnanalyzedMessageIDs(ctx, repo.FetchUnanalyzedMessageIDsParams{
-		ProjectID:           uuid.NullUUID{UUID: args.ProjectID, Valid: true},
-		IDLowerBound:        args.IDLowerBound,
-		DashboardSourceKind: dashboardAssistantSourceKind,
-		BatchLimit:          args.BatchLimit,
+		ProjectID:        uuid.NullUUID{UUID: args.ProjectID, Valid: true},
+		IDLowerBound:     args.IDLowerBound,
+		DashboardChatIds: dashboardChatIDs,
+		BatchLimit:       args.BatchLimit,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("fetch unanalyzed message IDs: %w", err)
 	}
 	contentPartIDs, err := queries.FetchUnanalyzedContentPartIDs(ctx, repo.FetchUnanalyzedContentPartIDsParams{
-		ProjectID:           uuid.NullUUID{UUID: args.ProjectID, Valid: true},
-		IDLowerBound:        args.IDLowerBound,
-		DashboardSourceKind: dashboardAssistantSourceKind,
-		BatchLimit:          args.BatchLimit,
+		ProjectID:        uuid.NullUUID{UUID: args.ProjectID, Valid: true},
+		IDLowerBound:     args.IDLowerBound,
+		DashboardChatIds: dashboardChatIDs,
+		BatchLimit:       args.BatchLimit,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("fetch unanalyzed content part IDs: %w", err)

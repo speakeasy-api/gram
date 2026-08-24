@@ -1065,35 +1065,31 @@ FROM chat_content_parts ccp
 WHERE ccp.project_id = $1
   AND ccp.risk_analyzed_at IS NULL
   AND ccp.id >= $2
-  AND NOT EXISTS (
-    SELECT 1
-    FROM assistant_threads at
-    WHERE at.chat_id = ccp.chat_id
-      AND at.project_id = $1
-      AND at.deleted IS FALSE
-      AND at.source_kind = $3
+  AND (
+    COALESCE(cardinality($3::uuid[]), 0) = 0
+    OR ccp.chat_id <> ALL($3::uuid[])
   )
 ORDER BY ccp.id DESC
 LIMIT $4
 `
 
 type FetchUnanalyzedContentPartIDsParams struct {
-	ProjectID           uuid.NullUUID
-	IDLowerBound        uuid.UUID
-	DashboardSourceKind string
-	BatchLimit          int32
+	ProjectID        uuid.NullUUID
+	IDLowerBound     uuid.UUID
+	DashboardChatIds []uuid.UUID
+	BatchLimit       int32
 }
 
 // Scans the partial index chat_content_parts_risk_analyzed_at_null_idx
 // (project_id, id WHERE risk_analyzed_at IS NULL), mirroring the chat_messages
-// unanalyzed sweep for non-turn content. In-dashboard assistant conversations
-// (assistant_threads.source_kind = @dashboard_source_kind) are out of scope:
-// the project assistant is core dashboard functionality, not a sold artifact.
+// unanalyzed sweep for non-turn content. @dashboard_chat_ids are chats whose
+// latest live assistant thread has source_kind dashboard, which is out of
+// scope: core dashboard functionality, not a sold artifact.
 func (q *Queries) FetchUnanalyzedContentPartIDs(ctx context.Context, arg FetchUnanalyzedContentPartIDsParams) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, fetchUnanalyzedContentPartIDs,
 		arg.ProjectID,
 		arg.IDLowerBound,
-		arg.DashboardSourceKind,
+		arg.DashboardChatIds,
 		arg.BatchLimit,
 	)
 	if err != nil {
@@ -1120,23 +1116,19 @@ FROM chat_messages cm
 WHERE cm.project_id = $1
   AND cm.risk_analyzed_at IS NULL
   AND cm.id >= $2
-  AND NOT EXISTS (
-    SELECT 1
-    FROM assistant_threads at
-    WHERE at.chat_id = cm.chat_id
-      AND at.project_id = $1
-      AND at.deleted IS FALSE
-      AND at.source_kind = $3
+  AND (
+    COALESCE(cardinality($3::uuid[]), 0) = 0
+    OR cm.chat_id <> ALL($3::uuid[])
   )
 ORDER BY cm.id DESC
 LIMIT $4
 `
 
 type FetchUnanalyzedMessageIDsParams struct {
-	ProjectID           uuid.NullUUID
-	IDLowerBound        uuid.UUID
-	DashboardSourceKind string
-	BatchLimit          int32
+	ProjectID        uuid.NullUUID
+	IDLowerBound     uuid.UUID
+	DashboardChatIds []uuid.UUID
+	BatchLimit       int32
 }
 
 // Scans the partial index chat_messages_risk_analyzed_at_null_idx
@@ -1145,16 +1137,16 @@ type FetchUnanalyzedMessageIDsParams struct {
 // bound computed from the configured lookback) further limits the scan to
 // recent messages, reusing the same partial index ordering.
 //
-// In-dashboard assistant conversations (assistant_threads.source_kind =
-// @dashboard_source_kind) are out of scope: the project assistant is core
-// dashboard functionality, not a sold artifact, and scanning it produces
-// meta-findings when it is used to investigate other risk results. Sold
-// surfaces (Slack, Teams, ...) stay in the sweep.
+// @dashboard_chat_ids are chats whose latest live assistant thread has
+// source_kind dashboard. Those conversations are out of scope: the project
+// assistant is core dashboard functionality, not a sold artifact, and
+// scanning it produces meta-findings when it is used to investigate other
+// risk results. Sold surfaces (Slack, Teams, ...) stay in the sweep.
 func (q *Queries) FetchUnanalyzedMessageIDs(ctx context.Context, arg FetchUnanalyzedMessageIDsParams) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, fetchUnanalyzedMessageIDs,
 		arg.ProjectID,
 		arg.IDLowerBound,
-		arg.DashboardSourceKind,
+		arg.DashboardChatIds,
 		arg.BatchLimit,
 	)
 	if err != nil {
@@ -2492,6 +2484,51 @@ func (q *Queries) ListCustomDetectionRules(ctx context.Context, projectID uuid.U
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDashboardAssistantChatIDs = `-- name: ListDashboardAssistantChatIDs :many
+WITH latest_thread AS (
+  SELECT DISTINCT ON (at.chat_id)
+    at.chat_id,
+    at.source_kind
+  FROM assistant_threads at
+  WHERE at.project_id = $2
+    AND at.deleted IS FALSE
+  ORDER BY at.chat_id, at.created_at DESC, at.id DESC
+)
+SELECT chat_id
+FROM latest_thread
+WHERE source_kind = $1
+`
+
+type ListDashboardAssistantChatIDsParams struct {
+	DashboardSourceKind string
+	ProjectID           uuid.UUID
+}
+
+// Chats whose current assistant thread is the in-dashboard project assistant.
+// One project-scoped scan of live assistant_threads (project_id is the leading
+// column of assistant_threads_project_id_assistant_id_correlation_id_key).
+// DISTINCT ON keeps the latest live thread per chat so an older dashboard
+// link cannot hide a later Slack/Teams thread, matching GetChatMessageAttribution.
+func (q *Queries) ListDashboardAssistantChatIDs(ctx context.Context, arg ListDashboardAssistantChatIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listDashboardAssistantChatIDs, arg.DashboardSourceKind, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var chat_id uuid.UUID
+		if err := rows.Scan(&chat_id); err != nil {
+			return nil, err
+		}
+		items = append(items, chat_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -4282,31 +4319,24 @@ WHERE chat_content_parts.project_id = $1
     WHERE ccp.project_id = $1
       AND ccp.risk_analyzed_at IS NULL
       AND ccp.id >= $2
-      AND EXISTS (
-        SELECT 1
-        FROM assistant_threads at
-        WHERE at.chat_id = ccp.chat_id
-          AND at.project_id = $1
-          AND at.deleted IS FALSE
-          AND at.source_kind = $3
-      )
+      AND ccp.chat_id = ANY($3::uuid[])
     ORDER BY ccp.id DESC
     LIMIT $4
   )
 `
 
 type MarkDashboardAssistantContentPartsRiskAnalyzedParams struct {
-	ProjectID           uuid.NullUUID
-	IDLowerBound        uuid.UUID
-	DashboardSourceKind string
-	BatchLimit          int32
+	ProjectID        uuid.NullUUID
+	IDLowerBound     uuid.UUID
+	DashboardChatIds []uuid.UUID
+	BatchLimit       int32
 }
 
 func (q *Queries) MarkDashboardAssistantContentPartsRiskAnalyzed(ctx context.Context, arg MarkDashboardAssistantContentPartsRiskAnalyzedParams) (int64, error) {
 	result, err := q.db.Exec(ctx, markDashboardAssistantContentPartsRiskAnalyzed,
 		arg.ProjectID,
 		arg.IDLowerBound,
-		arg.DashboardSourceKind,
+		arg.DashboardChatIds,
 		arg.BatchLimit,
 	)
 	if err != nil {
@@ -4325,24 +4355,17 @@ WHERE chat_messages.project_id = $1
     WHERE cm.project_id = $1
       AND cm.risk_analyzed_at IS NULL
       AND cm.id >= $2
-      AND EXISTS (
-        SELECT 1
-        FROM assistant_threads at
-        WHERE at.chat_id = cm.chat_id
-          AND at.project_id = $1
-          AND at.deleted IS FALSE
-          AND at.source_kind = $3
-      )
+      AND cm.chat_id = ANY($3::uuid[])
     ORDER BY cm.id DESC
     LIMIT $4
   )
 `
 
 type MarkDashboardAssistantMessagesRiskAnalyzedParams struct {
-	ProjectID           uuid.NullUUID
-	IDLowerBound        uuid.UUID
-	DashboardSourceKind string
-	BatchLimit          int32
+	ProjectID        uuid.NullUUID
+	IDLowerBound     uuid.UUID
+	DashboardChatIds []uuid.UUID
+	BatchLimit       int32
 }
 
 // Stamp risk_analyzed_at on in-dashboard assistant messages so they leave
@@ -4352,7 +4375,7 @@ func (q *Queries) MarkDashboardAssistantMessagesRiskAnalyzed(ctx context.Context
 	result, err := q.db.Exec(ctx, markDashboardAssistantMessagesRiskAnalyzed,
 		arg.ProjectID,
 		arg.IDLowerBound,
-		arg.DashboardSourceKind,
+		arg.DashboardChatIds,
 		arg.BatchLimit,
 	)
 	if err != nil {

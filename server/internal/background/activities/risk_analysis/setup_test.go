@@ -169,6 +169,28 @@ func seedAssistantLinkedChat(t *testing.T, conn *pgxpool.Pool, td testData, sour
 	return chatID
 }
 
+func seedAssistantThreadOnChat(t *testing.T, conn *pgxpool.Pool, td testData, chatID uuid.UUID, sourceKind string) {
+	t.Helper()
+	ctx := t.Context()
+	queries := riskrepo.New(conn)
+
+	assistantID, err := queries.CreateAssistantForTest(ctx, riskrepo.CreateAssistantForTestParams{
+		ProjectID:      td.projectID,
+		OrganizationID: td.orgID,
+		Name:           "assistant-" + sourceKind + "-" + uuid.NewString()[:8],
+	})
+	require.NoError(t, err)
+
+	_, err = queries.CreateAssistantThreadForTest(ctx, riskrepo.CreateAssistantThreadForTestParams{
+		AssistantID:   assistantID,
+		ProjectID:     td.projectID,
+		CorrelationID: "corr-" + uuid.NewString()[:8],
+		ChatID:        chatID,
+		SourceKind:    sourceKind,
+	})
+	require.NoError(t, err)
+}
+
 func seedContentPartInChat(t *testing.T, conn *pgxpool.Pool, td testData, chatID uuid.UUID) uuid.UUID {
 	t.Helper()
 	partID, err := riskrepo.New(conn).CreateChatContentPartForTest(t.Context(), riskrepo.CreateChatContentPartForTestParams{
