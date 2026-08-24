@@ -39,10 +39,11 @@ strip `@font-face`.
    add a variable only in LMX or only in Go.
 4. Treat the inline MJML starter below as the approved visual source of truth.
    Preserve its Speakeasy lockup header, light canvas, uppercase gray eyebrow,
-   RGB gradient line under the headline, square black CTA, and plain gray
-   footer reason. Transactional emails end there — no marketing-style black
-   brand banner. Never change the starter to match a reduced implementation or
-   invent a new palette.
+   RGB gradient line under the headline, square black CTA, and closing footer:
+   a hairline divider followed by the 12px gray footer reason on the white
+   body — no gray band and no marketing-style black brand banner.
+   Transactional emails end there. Never change the starter to match a reduced
+   implementation or invent a new palette.
 
 ## Author production LMX
 
@@ -296,13 +297,13 @@ palette.
       </mj-column>
     </mj-section>
 
-    <mj-section
-      css-class="mobile-pad"
-      background-color="#fafafa"
-      border-top="1px solid #dcdcdc"
-      padding="20px 32px 24px"
-    >
+    <mj-section css-class="mobile-pad" padding="0 32px 24px">
       <mj-column>
+        <mj-divider
+          border-width="1px"
+          border-color="#dcdcdc"
+          padding="0 0 16px"
+        />
         <mj-text color="#6e6e6e" font-size="12px" line-height="1.6" padding="0">
           {DATA_VARIABLE:footer_reason}
         </mj-text>

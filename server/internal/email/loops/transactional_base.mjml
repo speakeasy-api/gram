@@ -114,13 +114,13 @@
       </mj-column>
     </mj-section>
 
-    <mj-section
-      css-class="mobile-pad"
-      background-color="#fafafa"
-      border-top="1px solid #dcdcdc"
-      padding="20px 32px 24px"
-    >
+    <mj-section css-class="mobile-pad" padding="0 32px 24px">
       <mj-column>
+        <mj-divider
+          border-width="1px"
+          border-color="#dcdcdc"
+          padding="0 0 16px"
+        />
         <mj-text color="#6e6e6e" font-size="12px" line-height="1.6" padding="0">
           {DATA_VARIABLE:footer_reason}
         </mj-text>
