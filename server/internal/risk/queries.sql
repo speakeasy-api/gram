@@ -1098,17 +1098,40 @@ DO UPDATE SET
 WHERE EXCLUDED.found IS TRUE
   AND risk_results.found IS FALSE;
 
--- name: DeleteRiskResultsForMessages :exec
+-- name: DeleteRiskResultsForMessages :many
+-- Returns what the re-analysis replaced: row ids tell the writer which
+-- findings an earlier committed attempt already announced (their webhook
+-- outbox events must not be re-emitted), and the false-positive columns are
+-- re-stamped onto the reinserted rows — ids are deterministic, so a re-run
+-- reproducing a finding reinserts it under the same id and a reviewer's
+-- manual dismissal must survive the replacement.
 DELETE FROM risk_results
 WHERE risk_policy_id = @risk_policy_id
   AND project_id = @project_id
-  AND chat_message_id = ANY(@message_ids::uuid[]);
+  AND chat_message_id = ANY(@message_ids::uuid[])
+RETURNING id, false_positive_at, false_positive_reason;
 
--- name: DeleteRiskResultsForContentParts :exec
+-- name: DeleteRiskResultsForContentParts :many
 DELETE FROM risk_results
 WHERE risk_policy_id = @risk_policy_id
   AND project_id = @project_id
-  AND chat_content_part_id = ANY(@content_part_ids::uuid[]);
+  AND chat_content_part_id = ANY(@content_part_ids::uuid[])
+RETURNING id, false_positive_at, false_positive_reason;
+
+-- name: RestoreRiskResultFalsePositiveState :exec
+-- Re-stamps manual dismissals onto re-analyzed rows in the same transaction
+-- that replaced them. Ids that were not reinserted (the finding disappeared)
+-- match nothing, so a vanished finding's dismissal dies with it.
+UPDATE risk_results
+SET false_positive_at = v.false_positive_at
+  , false_positive_reason = NULLIF(v.false_positive_reason, '')
+FROM (
+    SELECT UNNEST(@ids::uuid[]) AS id
+         , UNNEST(@false_positive_ats::timestamptz[]) AS false_positive_at
+         , UNNEST(@false_positive_reasons::text[]) AS false_positive_reason
+) v
+WHERE risk_results.id = v.id
+  AND risk_results.project_id = @project_id;
 
 -- name: GetRiskResultByID :one
 -- Single-row lookup backing risk.results.unmask: fetch a result's raw match
@@ -1573,16 +1596,22 @@ WHERE id = @id
 -- pattern from a multiselect of findings) — needs match/rule_id/source per
 -- row, not just the id, and looking them up server-side (rather than trusting
 -- client-supplied content) means the suggestion sees authoritative,
--- unmasked data regardless of what the UI has revealed.
+-- unmasked data regardless of what the UI has revealed. Also the retry
+-- fallback for the false-positive mark/unmark RPCs' post-commit ClickHouse
+-- mirror: when the conditional UPDATE changed fewer rows than were requested,
+-- the mirror republishes the authoritative state of every requested id from
+-- this refetch, so a retried RPC still repairs the findings store.
 SELECT *
 FROM risk_results
 WHERE project_id = @project_id
   AND id = ANY(@ids::uuid[]);
 
 -- name: MarkRiskResultsFalsePositive :many
--- Returns full rows (not just id): the caller republishes each one onto the
--- findings topic to append a ClickHouse state-change row, and needs the
--- finding content (source/rule_id/match/...) to build that message.
+-- Returns the full rows the UPDATE actually changed: they drive audit logging
+-- and, when every requested id was changed, feed the ClickHouse mirror
+-- directly. A retry that changed fewer rows than requested makes the mirror
+-- republish from a post-commit GetRiskResultsByIDs refetch instead, so it
+-- still repairs the findings store.
 UPDATE risk_results
 SET false_positive_at = clock_timestamp()
   , false_positive_reason = sqlc.narg(reason)

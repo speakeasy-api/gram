@@ -15,6 +15,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
@@ -185,6 +187,10 @@ type testInstance struct {
 	chConn                       clickhouse.Conn
 	// assetStorage backs content-part reads on the ClickHouse reveal path.
 	assetStorage blobio.Reader
+	// findingsPub backs the false-positive ClickHouse mirror. Nil in the
+	// default harness (the mirror is skipped); mirror tests set a capturing
+	// publisher before the service is built.
+	findingsPub gcp.Publisher[*riskv1.Finding]
 }
 
 func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context.Context, *testInstance) {
@@ -236,6 +242,7 @@ func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context
 		cacheDeletes:     cacheAdapter,
 		chConn:           chConn,
 		assetStorage:     assetstest.NewTestBlobStore(t),
+		findingsPub:      nil,
 	}
 	for _, configureInstance := range configure {
 		configureInstance(ti)
@@ -244,7 +251,7 @@ func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context
 		return ti.reconcileShadowMCPPolicyURLs(ctx, db, input)
 	}, func(ctx context.Context, projectID uuid.UUID, canonicalURLs []string) ([]string, error) {
 		return ti.shadowMCPInventoryURLLookup(ctx, projectID, canonicalURLs)
-	}, chrepo.New(chConn), nil, ti.assetStorage)
+	}, chrepo.New(chConn), ti.findingsPub, ti.assetStorage)
 
 	return ctx, ti
 }

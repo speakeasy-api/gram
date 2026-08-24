@@ -1081,11 +1081,12 @@ func (q *Queries) DeleteRiskResultsByPolicy(ctx context.Context, arg DeleteRiskR
 	return result.RowsAffected(), nil
 }
 
-const deleteRiskResultsForContentParts = `-- name: DeleteRiskResultsForContentParts :exec
+const deleteRiskResultsForContentParts = `-- name: DeleteRiskResultsForContentParts :many
 DELETE FROM risk_results
 WHERE risk_policy_id = $1
   AND project_id = $2
   AND chat_content_part_id = ANY($3::uuid[])
+RETURNING id, false_positive_at, false_positive_reason
 `
 
 type DeleteRiskResultsForContentPartsParams struct {
@@ -1094,16 +1095,38 @@ type DeleteRiskResultsForContentPartsParams struct {
 	ContentPartIds []uuid.UUID
 }
 
-func (q *Queries) DeleteRiskResultsForContentParts(ctx context.Context, arg DeleteRiskResultsForContentPartsParams) error {
-	_, err := q.db.Exec(ctx, deleteRiskResultsForContentParts, arg.RiskPolicyID, arg.ProjectID, arg.ContentPartIds)
-	return err
+type DeleteRiskResultsForContentPartsRow struct {
+	ID                  uuid.UUID
+	FalsePositiveAt     pgtype.Timestamptz
+	FalsePositiveReason pgtype.Text
 }
 
-const deleteRiskResultsForMessages = `-- name: DeleteRiskResultsForMessages :exec
+func (q *Queries) DeleteRiskResultsForContentParts(ctx context.Context, arg DeleteRiskResultsForContentPartsParams) ([]DeleteRiskResultsForContentPartsRow, error) {
+	rows, err := q.db.Query(ctx, deleteRiskResultsForContentParts, arg.RiskPolicyID, arg.ProjectID, arg.ContentPartIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DeleteRiskResultsForContentPartsRow
+	for rows.Next() {
+		var i DeleteRiskResultsForContentPartsRow
+		if err := rows.Scan(&i.ID, &i.FalsePositiveAt, &i.FalsePositiveReason); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const deleteRiskResultsForMessages = `-- name: DeleteRiskResultsForMessages :many
 DELETE FROM risk_results
 WHERE risk_policy_id = $1
   AND project_id = $2
   AND chat_message_id = ANY($3::uuid[])
+RETURNING id, false_positive_at, false_positive_reason
 `
 
 type DeleteRiskResultsForMessagesParams struct {
@@ -1112,9 +1135,36 @@ type DeleteRiskResultsForMessagesParams struct {
 	MessageIds   []uuid.UUID
 }
 
-func (q *Queries) DeleteRiskResultsForMessages(ctx context.Context, arg DeleteRiskResultsForMessagesParams) error {
-	_, err := q.db.Exec(ctx, deleteRiskResultsForMessages, arg.RiskPolicyID, arg.ProjectID, arg.MessageIds)
-	return err
+type DeleteRiskResultsForMessagesRow struct {
+	ID                  uuid.UUID
+	FalsePositiveAt     pgtype.Timestamptz
+	FalsePositiveReason pgtype.Text
+}
+
+// Returns what the re-analysis replaced: row ids tell the writer which
+// findings an earlier committed attempt already announced (their webhook
+// outbox events must not be re-emitted), and the false-positive columns are
+// re-stamped onto the reinserted rows — ids are deterministic, so a re-run
+// reproducing a finding reinserts it under the same id and a reviewer's
+// manual dismissal must survive the replacement.
+func (q *Queries) DeleteRiskResultsForMessages(ctx context.Context, arg DeleteRiskResultsForMessagesParams) ([]DeleteRiskResultsForMessagesRow, error) {
+	rows, err := q.db.Query(ctx, deleteRiskResultsForMessages, arg.RiskPolicyID, arg.ProjectID, arg.MessageIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DeleteRiskResultsForMessagesRow
+	for rows.Next() {
+		var i DeleteRiskResultsForMessagesRow
+		if err := rows.Scan(&i.ID, &i.FalsePositiveAt, &i.FalsePositiveReason); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const fetchUnanalyzedContentPartIDs = `-- name: FetchUnanalyzedContentPartIDs :many
@@ -2271,7 +2321,11 @@ type GetRiskResultsByIDsParams struct {
 // pattern from a multiselect of findings) — needs match/rule_id/source per
 // row, not just the id, and looking them up server-side (rather than trusting
 // client-supplied content) means the suggestion sees authoritative,
-// unmasked data regardless of what the UI has revealed.
+// unmasked data regardless of what the UI has revealed. Also the retry
+// fallback for the false-positive mark/unmark RPCs' post-commit ClickHouse
+// mirror: when the conditional UPDATE changed fewer rows than were requested,
+// the mirror republishes the authoritative state of every requested id from
+// this refetch, so a retried RPC still repairs the findings store.
 func (q *Queries) GetRiskResultsByIDs(ctx context.Context, arg GetRiskResultsByIDsParams) ([]RiskResult, error) {
 	rows, err := q.db.Query(ctx, getRiskResultsByIDs, arg.ProjectID, arg.Ids)
 	if err != nil {
@@ -4621,9 +4675,11 @@ type MarkRiskResultsFalsePositiveParams struct {
 	Ids       []uuid.UUID
 }
 
-// Returns full rows (not just id): the caller republishes each one onto the
-// findings topic to append a ClickHouse state-change row, and needs the
-// finding content (source/rule_id/match/...) to build that message.
+// Returns the full rows the UPDATE actually changed: they drive audit logging
+// and, when every requested id was changed, feed the ClickHouse mirror
+// directly. A retry that changed fewer rows than requested makes the mirror
+// republish from a post-commit GetRiskResultsByIDs refetch instead, so it
+// still repairs the findings store.
 func (q *Queries) MarkRiskResultsFalsePositive(ctx context.Context, arg MarkRiskResultsFalsePositiveParams) ([]RiskResult, error) {
 	rows, err := q.db.Query(ctx, markRiskResultsFalsePositive, arg.Reason, arg.ProjectID, arg.Ids)
 	if err != nil {
@@ -4881,6 +4937,39 @@ func (q *Queries) ResolveRequestedRiskPolicyBypassRequest(ctx context.Context, a
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const restoreRiskResultFalsePositiveState = `-- name: RestoreRiskResultFalsePositiveState :exec
+UPDATE risk_results
+SET false_positive_at = v.false_positive_at
+  , false_positive_reason = NULLIF(v.false_positive_reason, '')
+FROM (
+    SELECT UNNEST($2::uuid[]) AS id
+         , UNNEST($3::timestamptz[]) AS false_positive_at
+         , UNNEST($4::text[]) AS false_positive_reason
+) v
+WHERE risk_results.id = v.id
+  AND risk_results.project_id = $1
+`
+
+type RestoreRiskResultFalsePositiveStateParams struct {
+	ProjectID            uuid.UUID
+	Ids                  []uuid.UUID
+	FalsePositiveAts     []pgtype.Timestamptz
+	FalsePositiveReasons []string
+}
+
+// Re-stamps manual dismissals onto re-analyzed rows in the same transaction
+// that replaced them. Ids that were not reinserted (the finding disappeared)
+// match nothing, so a vanished finding's dismissal dies with it.
+func (q *Queries) RestoreRiskResultFalsePositiveState(ctx context.Context, arg RestoreRiskResultFalsePositiveStateParams) error {
+	_, err := q.db.Exec(ctx, restoreRiskResultFalsePositiveState,
+		arg.ProjectID,
+		arg.Ids,
+		arg.FalsePositiveAts,
+		arg.FalsePositiveReasons,
+	)
+	return err
 }
 
 const reverseExclusionFlagsBatch = `-- name: ReverseExclusionFlagsBatch :many

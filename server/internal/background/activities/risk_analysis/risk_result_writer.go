@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -45,25 +47,69 @@ func overlapsAny(kept []scanners.Finding, candidate scanners.Finding) bool {
 	return false
 }
 
+// resultRowIDs mints risk_results row ids for one batch, deterministic over
+// the batch identity plus each row's own identity — the same delivery-
+// guarantee requirement batchScanRequestID meets for scan requests. Random
+// per-attempt ids would make a redriven activity re-emit every finding's
+// webhook outbox event under a fresh id (the event id derives from the row
+// id), turning at-least-once redrives into duplicate customer webhooks. A
+// per-key ordinal keeps ids unique within the batch when rows are otherwise
+// identical (e.g. two zero-width findings for the same rule at one position).
+type resultRowIDs struct {
+	prefix string
+	seen   map[string]int
+}
+
+func newResultRowIDs(args AnalyzeBatchArgs) *resultRowIDs {
+	return &resultRowIDs{
+		prefix: strings.Join([]string{
+			args.ProjectID.String(),
+			args.RiskPolicyID.String(),
+			strconv.FormatInt(args.PolicyVersion, 10),
+		}, "\x00"),
+		seen: map[string]int{},
+	}
+}
+
+// next derives the id for one row from its anchor, its kind (finding, empty,
+// deadletter) and the identity fields of f — the zero Finding for sentinel
+// rows without one.
+func (r *resultRowIDs) next(msg batchMessage, kind string, f scanners.Finding) uuid.UUID {
+	key := strings.Join([]string{
+		r.prefix,
+		strconv.FormatBool(msg.ContentPart),
+		msg.ID.String(),
+		kind,
+		f.Source,
+		f.RuleID,
+		strconv.Itoa(f.StartPos),
+		strconv.Itoa(f.EndPos),
+		f.DeadLetterReason,
+	}, "\x00")
+	ordinal := r.seen[key]
+	r.seen[key]++
+	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("gram:risk:result:"+key+"\x00"+strconv.Itoa(ordinal)))
+}
+
 func (a *AnalyzeBatch) buildRows(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, batchFindings [][]scanners.Finding) ([]repo.InsertRiskResultsParams, int) {
 	var rows []repo.InsertRiskResultsParams
 	findingsCount := 0
+	rowIDs := newResultRowIDs(args)
+	var noFinding scanners.Finding
 
 	for i, msg := range messages {
 		findings := batchFindings[i]
 		realFindings := findings[:0:0]
 		for _, f := range findings {
 			if f.DeadLetterReason != "" {
-				resultID, _ := uuid.NewV7()
-				rows = append(rows, deadLetterRow(resultID, args, msg, f))
+				rows = append(rows, deadLetterRow(rowIDs.next(msg, "deadletter", f), args, msg, f))
 				continue
 			}
 			realFindings = append(realFindings, f)
 		}
 
 		if len(realFindings) == 0 {
-			resultID, _ := uuid.NewV7()
-			rows = append(rows, emptyResultRow(resultID, args, msg))
+			rows = append(rows, emptyResultRow(rowIDs.next(msg, "empty", noFinding), args, msg))
 			continue
 		}
 
@@ -71,7 +117,7 @@ func (a *AnalyzeBatch) buildRows(ctx context.Context, args AnalyzeBatchArgs, mes
 			f := grp.primary
 			findingsCount++
 			a.metrics.RecordFindingConfidence(ctx, args.OrganizationID, f.RuleID, f.Confidence)
-			resultID, _ := uuid.NewV7()
+			resultID := rowIDs.next(msg, "finding", f)
 			spansJSON, err := json.Marshal(grp.spans)
 			if err != nil {
 				spansJSON = nil
@@ -170,24 +216,41 @@ func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, 
 		return false, fmt.Errorf("re-check risk policy before writing results: %w", err)
 	}
 
+	// prior holds the replaced rows' false-positive state by id. Row ids are
+	// deterministic, so a re-analysis reproducing a finding reinserts it under
+	// the id it was deleted with: presence in prior means an earlier committed
+	// attempt already announced the finding (skip its webhook event) and a
+	// manual dismissal on it must survive the replacement (re-stamped below).
+	prior := make(map[uuid.UUID]pgtype.Timestamptz)
+	priorReasons := make(map[uuid.UUID]pgtype.Text)
 	if len(args.MessageIDs) > 0 {
-		if err := txRepo.DeleteRiskResultsForMessages(ctx, repo.DeleteRiskResultsForMessagesParams{
+		deleted, err := txRepo.DeleteRiskResultsForMessages(ctx, repo.DeleteRiskResultsForMessagesParams{
 			RiskPolicyID: args.RiskPolicyID,
 			ProjectID:    args.ProjectID,
 			MessageIds:   args.MessageIDs,
-		}); err != nil {
+		})
+		if err != nil {
 			writeSpan.SetStatus(codes.Error, err.Error())
 			return false, fmt.Errorf("delete old results: %w", err)
 		}
+		for _, d := range deleted {
+			prior[d.ID] = d.FalsePositiveAt
+			priorReasons[d.ID] = d.FalsePositiveReason
+		}
 	}
 	if len(args.ContentPartIDs) > 0 {
-		if err := txRepo.DeleteRiskResultsForContentParts(ctx, repo.DeleteRiskResultsForContentPartsParams{
+		deleted, err := txRepo.DeleteRiskResultsForContentParts(ctx, repo.DeleteRiskResultsForContentPartsParams{
 			RiskPolicyID:   args.RiskPolicyID,
 			ProjectID:      args.ProjectID,
 			ContentPartIds: args.ContentPartIDs,
-		}); err != nil {
+		})
+		if err != nil {
 			writeSpan.SetStatus(codes.Error, err.Error())
 			return false, fmt.Errorf("delete old content part results: %w", err)
+		}
+		for _, d := range deleted {
+			prior[d.ID] = d.FalsePositiveAt
+			priorReasons[d.ID] = d.FalsePositiveReason
 		}
 	}
 
@@ -198,9 +261,35 @@ func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, 
 		}
 	}
 
-	payloads := findingCreatedPayloads(rows, time.Now())
-	if len(payloads) > 0 {
-		if _, err := outbox.PublishWebhookEvents(ctx, tx, args.OrganizationID, events.RiskFindingCreatedV1, payloads); err != nil {
+	restore := repo.RestoreRiskResultFalsePositiveStateParams{
+		ProjectID:            args.ProjectID,
+		Ids:                  nil,
+		FalsePositiveAts:     nil,
+		FalsePositiveReasons: nil,
+	}
+	for _, row := range rows {
+		if fpAt, ok := prior[row.ID]; ok && fpAt.Valid {
+			restore.Ids = append(restore.Ids, row.ID)
+			restore.FalsePositiveAts = append(restore.FalsePositiveAts, fpAt)
+			restore.FalsePositiveReasons = append(restore.FalsePositiveReasons, priorReasons[row.ID].String)
+		}
+	}
+	if len(restore.Ids) > 0 {
+		if err := txRepo.RestoreRiskResultFalsePositiveState(ctx, restore); err != nil {
+			writeSpan.SetStatus(codes.Error, err.Error())
+			return false, fmt.Errorf("restore false positive state: %w", err)
+		}
+	}
+
+	// Only findings this transaction writes for the first time are announced:
+	// an id present in prior was already announced by the committed transaction
+	// that first wrote it (delete, insert and outbox share one transaction).
+	// Event ids stay pinned to the deterministic row ids as the backstop for
+	// the residual race — a zombie attempt and its retry can both commit "new"
+	// rows, and delivery then dedups on the Svix idempotency key.
+	webhookEvents := findingCreatedEvents(rows, prior, time.Now())
+	if len(webhookEvents) > 0 {
+		if _, err := outbox.PublishIdentifiedWebhookEvents(ctx, tx, args.OrganizationID, events.RiskFindingCreatedV1, webhookEvents); err != nil {
 			writeSpan.SetStatus(codes.Error, err.Error())
 			return false, fmt.Errorf("append risk findings to outbox: %w", err)
 		}
@@ -213,10 +302,15 @@ func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, 
 	return true, nil
 }
 
-func findingCreatedPayloads(rows []repo.InsertRiskResultsParams, now time.Time) []events.RiskFindingCreatedPayloadV1 {
-	var payloads []events.RiskFindingCreatedPayloadV1
+func findingCreatedEvents(rows []repo.InsertRiskResultsParams, prior map[uuid.UUID]pgtype.Timestamptz, now time.Time) []outbox.IdentifiedWebhookEvent[events.RiskFindingCreatedPayloadV1] {
+	var evs []outbox.IdentifiedWebhookEvent[events.RiskFindingCreatedPayloadV1]
 	for _, row := range rows {
 		if !row.Found || !row.RuleID.Valid {
+			continue
+		}
+		// Replaced-in-place: the transaction that first wrote this id already
+		// emitted its created event.
+		if _, existed := prior[row.ID]; existed {
 			continue
 		}
 		// Content-part findings emit no webhook yet. The v1 payload pins
@@ -226,21 +320,33 @@ func findingCreatedPayloads(rows []repo.InsertRiskResultsParams, now time.Time) 
 		if !row.ChatMessageID.Valid {
 			continue
 		}
-		payloads = append(payloads, events.RiskFindingCreatedPayloadV1{
-			ID:                row.ID,
-			ProjectID:         row.ProjectID,
-			OrganizationID:    row.OrganizationID,
-			RiskPolicyID:      row.RiskPolicyID,
-			RiskPolicyVersion: row.RiskPolicyVersion,
-			ChatMessageID:     row.ChatMessageID.UUID,
-			RuleID:            row.RuleID.String,
-			Description:       row.Description.String,
-			Confidence:        row.Confidence.Float64,
-			Tags:              row.Tags,
-			CreatedAt:         now,
+		evs = append(evs, outbox.IdentifiedWebhookEvent[events.RiskFindingCreatedPayloadV1]{
+			ID: findingWebhookEventID(row.ID),
+			Payload: events.RiskFindingCreatedPayloadV1{
+				ID:                row.ID,
+				ProjectID:         row.ProjectID,
+				OrganizationID:    row.OrganizationID,
+				RiskPolicyID:      row.RiskPolicyID,
+				RiskPolicyVersion: row.RiskPolicyVersion,
+				ChatMessageID:     row.ChatMessageID.UUID,
+				RuleID:            row.RuleID.String,
+				Description:       row.Description.String,
+				Confidence:        row.Confidence.Float64,
+				Tags:              row.Tags,
+				CreatedAt:         now,
+			},
 		})
 	}
-	return payloads
+	return evs
+}
+
+// findingWebhookEventID pins the created-event's id to the finding's row id,
+// which is itself deterministic over the batch identity: every redriven write
+// of the same row re-emits the same event id — the Svix idempotency key — so
+// delivery dedups instead of double-sending. Hashed into its own namespace so
+// the event id never collides with the row id it derives from.
+func findingWebhookEventID(rowID uuid.UUID) uuid.UUID {
+	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("gram:risk:finding-created-event:"+rowID.String()))
 }
 
 func emptyResultRow(id uuid.UUID, args AnalyzeBatchArgs, msg batchMessage) repo.InsertRiskResultsParams {

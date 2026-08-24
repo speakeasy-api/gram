@@ -54,7 +54,7 @@ var batchOnlyFindingSources = map[string]struct{}{
 // ids and findings are the message-aligned pair buildRows consumed, so the
 // published set matches what was written (exclusions and disabled rules
 // already applied). Dead-letter sentinels are skipped, mirroring the outbox
-// emission (findingCreatedPayloads). Publishes are issued for the whole batch
+// emission (findingCreatedEvents). Publishes are issued for the whole batch
 // first and the acks drained through drainPublishAcks, which caps each ack,
 // survives activity cancellation, and heartbeats between acks — the same
 // discipline every other publish in this activity uses.

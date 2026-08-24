@@ -122,25 +122,53 @@ func TestPublishWebhookEvent_SetsEventTypeAttribute(t *testing.T) {
 		"subscription filters can only see attributes, never the message body")
 }
 
-// TestPublishWebhookEvents_MintsDistinctIDs would fail against a shared id: the
-// unique index on public_id turns a collision into a write error rather than a
-// silent duplicate, and the batch path has to survive it.
-func TestPublishWebhookEvents_MintsDistinctIDs(t *testing.T) {
+// TestPublishIdentifiedWebhookEvents_AcceptsRepeatEventIDs pins the redrive
+// contract: publish_outbox has no unique index on public_id, so a producer
+// re-emitting the same pinned event id appends a second row instead of hitting
+// a write error. Redriven Temporal activities depend on that — dedup happens
+// at delivery, where the id is the Svix idempotency key. Adding a unique index
+// on public_id would break every redriven COPY.
+func TestPublishIdentifiedWebhookEvents_AcceptsRepeatEventIDs(t *testing.T) {
 	t.Parallel()
 
 	inst := newOutboxTestInstance(t)
 	orgID := inst.seedOrg(t)
 
-	payloads := []events.AuditLogCreatedPayloadV1{
-		{ID: uuid.New(), OrganizationID: orgID},
-		{ID: uuid.New(), OrganizationID: orgID},
-		{ID: uuid.New(), OrganizationID: orgID},
+	pinned := uuid.New()
+	evs := []outbox.IdentifiedWebhookEvent[events.AuditLogCreatedPayloadV1]{
+		{ID: pinned, Payload: events.AuditLogCreatedPayloadV1{ID: uuid.New(), OrganizationID: orgID}},
 	}
 
-	res, err := outbox.PublishWebhookEvents(t.Context(), inst.conn, orgID, events.AssetV1, payloads)
+	res, err := outbox.PublishIdentifiedWebhookEvents(t.Context(), inst.conn, orgID, events.AssetV1, evs)
 	require.NoError(t, err)
-	require.Equal(t, int64(3), res.Count)
-	require.Equal(t, int64(3), inst.countRows(t))
+	require.Equal(t, int64(1), res.Count)
+
+	res, err = outbox.PublishIdentifiedWebhookEvents(t.Context(), inst.conn, orgID, events.AssetV1, evs)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), res.Count)
+	require.Equal(t, int64(2), inst.countRows(t))
+
+	rows, err := testrepo.New(inst.conn).ListPublishOutboxRows(t.Context())
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	require.Equal(t, pinned, rows[0].PublicID)
+	require.Equal(t, pinned, rows[1].PublicID)
+}
+
+// TestPublishIdentifiedWebhookEvents_RejectsMissingID pins the misuse guard: a
+// zero id would silently defeat the whole point of pinning, so it fails
+// permanently instead.
+func TestPublishIdentifiedWebhookEvents_RejectsMissingID(t *testing.T) {
+	t.Parallel()
+
+	inst := newOutboxTestInstance(t)
+	orgID := inst.seedOrg(t)
+
+	_, err := outbox.PublishIdentifiedWebhookEvents(t.Context(), inst.conn, orgID, events.AssetV1, []outbox.IdentifiedWebhookEvent[events.AuditLogCreatedPayloadV1]{
+		{ID: uuid.Nil, Payload: events.AuditLogCreatedPayloadV1{ID: uuid.New(), OrganizationID: orgID}},
+	})
+	require.Error(t, err)
+	require.Equal(t, int64(0), inst.countRows(t))
 }
 
 // TestWebhookEnvelopeRoundTrips is the drift guard between the typed event

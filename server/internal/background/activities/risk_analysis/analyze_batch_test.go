@@ -17,7 +17,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/testsuite"
 
+	"google.golang.org/protobuf/proto"
+
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
+	webhooksv1 "github.com/speakeasy-api/gram/infra/gen/gram/webhooks/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
@@ -29,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
@@ -1894,4 +1898,97 @@ func TestAnalyzeBatch_SkipsWhenPolicyDeleted(t *testing.T) {
 	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{"gitleaks"}, newFindingsPub())
 	assert.Equal(t, 0, result.Processed)
 	assert.Equal(t, 0, result.Findings)
+}
+
+// TestAnalyzeBatch_RedriveConvergesRowsAndWebhookEvents pins the redrive
+// contract behind at-least-once delivery: writeResults can commit and a later
+// publish step can still fail the activity, so Temporal re-runs the whole
+// batch. The re-run must rebuild the same risk result ids, emit no new webhook
+// outbox events for findings the first run already announced, and carry a
+// reviewer's manual dismissal across the delete/reinsert replacement.
+func TestAnalyzeBatch_RedriveConvergesRowsAndWebhookEvents(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+
+	testQueries := testrepo.New(conn)
+	msgID, err := testQueries.InsertChatMessage(t.Context(), testrepo.InsertChatMessageParams{
+		ChatID:    td.chatID,
+		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
+		Role:      "user",
+		Content:   "AccessKeyId ASIAZ2XY3WNBQR5TUVWX SecretAccessKey wJalrXUtnFEMIbKp7MDoRZfiCYqTvHgNsQ8xLcWd",
+	})
+	require.NoError(t, err)
+
+	first := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{"gitleaks"}, newFindingsPub())
+	require.GreaterOrEqual(t, first.Findings, 1)
+
+	firstRows, err := testQueries.ListRiskResultsAll(t.Context(), testrepo.ListRiskResultsAllParams{
+		ProjectID:    td.projectID,
+		RiskPolicyID: td.policyID,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, firstRows)
+	rowIDSet := riskResultIDs(firstRows)
+
+	firstOutbox, err := testQueries.ListPublishOutboxRows(t.Context())
+	require.NoError(t, err)
+	require.NotEmpty(t, firstOutbox)
+	for _, row := range firstOutbox {
+		require.Equal(t, td.orgID, row.OrganizationID)
+
+		envelope := new(webhooksv1.Event)
+		require.NoError(t, proto.Unmarshal(row.Message, envelope))
+		require.Equal(t, row.PublicID.String(), envelope.GetEventId())
+
+		var payload events.RiskFindingCreatedPayloadV1
+		require.NoError(t, json.Unmarshal(envelope.GetPayload(), &payload))
+		require.Contains(t, rowIDSet, payload.ID, "webhook payload must reference a persisted row id")
+	}
+
+	// A reviewer dismisses one finding between the attempts; the redrive's
+	// delete/reinsert must not undo it.
+	dismissed, err := riskrepo.New(conn).MarkRiskResultsFalsePositive(t.Context(), riskrepo.MarkRiskResultsFalsePositiveParams{
+		ProjectID: td.projectID,
+		Ids:       rowIDSet[:1],
+		Reason:    pgtype.Text{String: "known fixture", Valid: true},
+	})
+	require.NoError(t, err)
+	require.Len(t, dismissed, 1)
+
+	second := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{"gitleaks"}, newFindingsPub())
+	require.Equal(t, first.Findings, second.Findings)
+
+	secondRows, err := testQueries.ListRiskResultsAll(t.Context(), testrepo.ListRiskResultsAllParams{
+		ProjectID:    td.projectID,
+		RiskPolicyID: td.policyID,
+	})
+	require.NoError(t, err)
+	require.ElementsMatch(t, rowIDSet, riskResultIDs(secondRows),
+		"a redrive must rebuild the same risk result ids, not mint fresh ones")
+
+	preserved := false
+	for _, row := range secondRows {
+		if row.ID != rowIDSet[0] {
+			continue
+		}
+		preserved = true
+		require.True(t, row.FalsePositiveAt.Valid, "the dismissal must survive the redrive's delete/reinsert")
+		require.Equal(t, "known fixture", row.FalsePositiveReason.String)
+	}
+	require.True(t, preserved, "the dismissed row must be reinserted under its original id")
+
+	// The redrive replaced every row in place, so it announced nothing new:
+	// the outbox still holds exactly the first attempt's emissions.
+	allOutbox, err := testQueries.ListPublishOutboxRows(t.Context())
+	require.NoError(t, err)
+	require.Len(t, allOutbox, len(firstOutbox), "a redrive must not re-emit webhook events for already-announced findings")
+}
+
+func riskResultIDs(rows []testrepo.RiskResult) []uuid.UUID {
+	ids := make([]uuid.UUID, 0, len(rows))
+	for _, row := range rows {
+		ids = append(ids, row.ID)
+	}
+	return ids
 }

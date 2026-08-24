@@ -32,7 +32,10 @@ const maxFalsePositiveBatch = 500
 
 // parseResultIDs converts the payload's result_ids strings to uuid.UUID,
 // rejecting the request if any entry is malformed or the batch exceeds
-// maxFalsePositiveBatch.
+// maxFalsePositiveBatch. Duplicates are dropped so the returned slice is a
+// set: the ClickHouse mirror compares its length against the rows an UPDATE
+// changed to decide whether a refetch is needed, and a duplicate would force
+// that refetch on every call.
 func parseResultIDs(raw []string) ([]uuid.UUID, error) {
 	if len(raw) == 0 {
 		return nil, oops.E(oops.CodeInvalid, nil, "result_ids must not be empty")
@@ -41,11 +44,16 @@ func parseResultIDs(raw []string) ([]uuid.UUID, error) {
 		return nil, oops.E(oops.CodeInvalid, nil, "too many result_ids (max %d)", maxFalsePositiveBatch)
 	}
 	ids := make([]uuid.UUID, 0, len(raw))
+	seen := make(map[uuid.UUID]struct{}, len(raw))
 	for _, r := range raw {
 		id, err := uuid.Parse(r)
 		if err != nil {
 			return nil, oops.E(oops.CodeInvalid, err, "invalid result id %q", r)
 		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
 		ids = append(ids, id)
 	}
 	return ids, nil
@@ -98,7 +106,7 @@ func (s *Service) MarkRiskResultsFalsePositive(ctx context.Context, payload *gen
 		return oops.E(oops.CodeUnexpected, err, "commit mark risk results false positive").LogError(ctx, s.logger)
 	}
 
-	if err := s.mirrorFalsePositiveToClickHouse(ctx, marked); err != nil {
+	if err := s.mirrorFalsePositiveToClickHouse(ctx, *authCtx.ProjectID, ids, marked); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "record dismissal in the findings store").LogError(ctx, s.logger)
 	}
 
@@ -151,27 +159,59 @@ func (s *Service) UnmarkRiskResultsFalsePositive(ctx context.Context, payload *g
 		return oops.E(oops.CodeUnexpected, err, "commit unmark risk results false positive").LogError(ctx, s.logger)
 	}
 
-	if err := s.mirrorFalsePositiveToClickHouse(ctx, restored); err != nil {
+	if err := s.mirrorFalsePositiveToClickHouse(ctx, *authCtx.ProjectID, ids, restored); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "record restore in the findings store").LogError(ctx, s.logger)
 	}
 
 	return nil
 }
 
-// mirrorFalsePositiveToClickHouse republishes each affected result onto the
-// shared findings topic (the same one scanners publish to) so
-// FindingCHWriter appends a fresh risk_findings row recording the result's
-// new suppression state — set for a mark, cleared for an unmark, read
-// straight off the row the UPDATE ... RETURNING already gave us. The mark
-// state is published twice over during the suppression convergence:
+// mirrorFalsePositiveToClickHouse republishes each requested result onto the
+// shared findings topic (the same one scanners publish to) so FindingCHWriter
+// appends a fresh risk_findings row recording the result's current
+// suppression state — set for a marked row, cleared for an unmarked one. The
+// mark state is published twice over during the suppression convergence:
 // excluded_at/excluded_reason=manual/excluded_detail are the converged
 // fields, false_positive_at the legacy one the read paths still filter on.
 // Synchronous: every publish must ack before the RPC succeeds, so a state
 // change the caller was told about is durably on the topic. Postgres has
 // already committed by the time this runs, so on error the caller reports the
-// failure and a retry of the (idempotent) mark/unmark republishes.
-func (s *Service) mirrorFalsePositiveToClickHouse(ctx context.Context, rows []repo.RiskResult) error {
-	if s.findingsPub == nil || len(rows) == 0 {
+// failure and a retry of the mark/unmark republishes.
+//
+// changed is the rows the mark/unmark UPDATE returned. When they don't cover
+// every requested id — a client retry after a failed publish, whose UPDATE
+// matched nothing because the state was already applied — the authoritative
+// state of all requested ids is refetched and republished instead, so the
+// retry still repairs ClickHouse.
+func (s *Service) mirrorFalsePositiveToClickHouse(ctx context.Context, projectID uuid.UUID, ids []uuid.UUID, changed []repo.RiskResult) error {
+	if s.findingsPub == nil {
+		return nil
+	}
+
+	rows := changed
+	if len(changed) != len(ids) {
+		refetched, err := s.repo.GetRiskResultsByIDs(ctx, repo.GetRiskResultsByIDsParams{
+			ProjectID: projectID,
+			Ids:       ids,
+		})
+		if err != nil {
+			return fmt.Errorf("load risk results for findings store mirror: %w", err)
+		}
+		// The FP flow owns a row's ClickHouse state only through
+		// false_positive_at. A refetched row with no FP mark but an exclusion
+		// stamp is suppressed by the exclusion pipeline: publishing an
+		// unsuppression copy for it would race the CH writer's fail-open
+		// exclusion re-check and could resurface a finding the exclusion still
+		// covers, so such rows are skipped rather than republished.
+		rows = refetched[:0:0]
+		for _, row := range refetched {
+			if !row.FalsePositiveAt.Valid && row.ExcludedAt.Valid {
+				continue
+			}
+			rows = append(rows, row)
+		}
+	}
+	if len(rows) == 0 {
 		return nil
 	}
 
@@ -193,8 +233,8 @@ func (s *Service) mirrorFalsePositiveToClickHouse(ctx context.Context, rows []re
 	return nil
 }
 
-// fpMirrorMessage renders one UPDATE ... RETURNING row as the finding message
-// the mirror republishes. falsePositiveAt doubles as the converged
+// fpMirrorMessage renders one risk_results row as the finding message the
+// mirror republishes. falsePositiveAt doubles as the converged
 // excluded_at: same timestamp on a mark (with excluded_reason=manual and the
 // user-supplied reason as excluded_detail), all empty on an unmark. An unmark
 // republish deliberately carries no excluded state so the CH writer re-runs

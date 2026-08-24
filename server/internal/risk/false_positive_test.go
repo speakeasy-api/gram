@@ -6,8 +6,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -149,6 +152,92 @@ func TestMarkUnmarkRiskResultsFalsePositive(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, dismissedAfterUnmark.Results, "the undo's ClickHouse copy supersedes the dismissal")
 	require.Equal(t, int64(0), dismissedAfterUnmark.TotalCount)
+}
+
+// TestMarkUnmarkRiskResultsFalsePositive_RetryRepublishesMirror pins the
+// at-least-once contract on the ClickHouse mirror: a client retry of a mark or
+// unmark whose findings-topic publish failed after the Postgres commit matches
+// zero rows in the conditional UPDATE, and must still republish the
+// authoritative state of every requested id — otherwise ClickHouse is never
+// repaired. Audit logging stays tied to the rows that actually changed, so the
+// retry adds no duplicate audit entries.
+func TestMarkUnmarkRiskResultsFalsePositive_RetryRepublishesMirror(t *testing.T) {
+	t.Parallel()
+
+	pub := gcp.NewMockPublisher[*riskv1.Finding]()
+	var published []*riskv1.Finding
+	pub.On("Publish", mock.Anything, mock.Anything).
+		Return(gcp.NewSuccessPublishResult()).
+		Run(func(args mock.Arguments) {
+			msg, ok := args.Get(1).(*riskv1.Finding)
+			require.True(t, ok)
+			published = append(published, msg)
+		})
+
+	ctx, ti := newTestRiskService(t, func(ti *testInstance) { ti.findingsPub = pub })
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Mirror Retry Test")})
+	require.NoError(t, err)
+	policyID, err := uuid.Parse(policy.ID)
+	require.NoError(t, err)
+
+	_, msgID := seedChatMessage(t, ti, projectID, orgID)
+	seedRiskResult(t, ti, projectID, orgID, policyID, 1, msgID, true)
+
+	listed, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{PolicyID: &policy.ID})
+	require.NoError(t, err)
+	require.Len(t, listed.Results, 1)
+	resultID := listed.Results[0].ID
+
+	err = ti.service.MarkRiskResultsFalsePositive(ctx, &gen.MarkRiskResultsFalsePositivePayload{
+		ResultIds: []string{resultID},
+		Reason:    new("noise"),
+	})
+	require.NoError(t, err)
+	require.Len(t, published, 1)
+	require.Equal(t, chrepo.EventKindSuppression, published[0].GetEventKind())
+	require.Equal(t, resultID, published[0].GetId())
+
+	dismissCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskResultDismiss)
+	require.NoError(t, err)
+
+	// The retry: the result is already marked, so the UPDATE changes nothing —
+	// the mirror must republish the suppression state anyway.
+	err = ti.service.MarkRiskResultsFalsePositive(ctx, &gen.MarkRiskResultsFalsePositivePayload{
+		ResultIds: []string{resultID},
+		Reason:    new("noise"),
+	})
+	require.NoError(t, err)
+	require.Len(t, published, 2)
+	require.Equal(t, chrepo.EventKindSuppression, published[1].GetEventKind())
+	require.Equal(t, resultID, published[1].GetId())
+
+	dismissCountAfterRetry, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskResultDismiss)
+	require.NoError(t, err)
+	require.Equal(t, dismissCount, dismissCountAfterRetry, "a retry that changes nothing must not add audit entries")
+
+	err = ti.service.UnmarkRiskResultsFalsePositive(ctx, &gen.UnmarkRiskResultsFalsePositivePayload{
+		ResultIds: []string{resultID},
+	})
+	require.NoError(t, err)
+	require.Len(t, published, 3)
+	require.Equal(t, chrepo.EventKindUnsuppression, published[2].GetEventKind())
+
+	// Same repair on the unmark retry.
+	err = ti.service.UnmarkRiskResultsFalsePositive(ctx, &gen.UnmarkRiskResultsFalsePositivePayload{
+		ResultIds: []string{resultID},
+	})
+	require.NoError(t, err)
+	require.Len(t, published, 4)
+	require.Equal(t, chrepo.EventKindUnsuppression, published[3].GetEventKind())
+	require.Equal(t, resultID, published[3].GetId())
 }
 
 func TestMarkRiskResultsFalsePositive_RejectsEmptyIDs(t *testing.T) {
