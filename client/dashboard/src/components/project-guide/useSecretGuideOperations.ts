@@ -4,6 +4,7 @@ import type {
   ProjectGuideOperationScope,
   ProjectGuideOperationSignal,
 } from "@/components/project-guide/projectGuideMachine";
+import { projectGuideOperationKey } from "@/components/project-guide/projectGuideMachine";
 import { hasBlockingSecretsPolicy } from "@/components/project-guide/journeyStatus";
 import { useOrganization } from "@/contexts/Auth";
 import { useFetcher } from "@/contexts/Fetcher";
@@ -67,10 +68,6 @@ type TelemetryBaseline = {
   traceIds: Set<string>;
   resultIds: Set<string>;
 };
-
-function operationKey(scope: ProjectGuideOperationScope): string {
-  return `${scope.path}:${scope.step}:${scope.attempt}:${scope.runId}`;
-}
 
 function matchingSecretsPolicy(
   policies: RiskPolicy[] | undefined,
@@ -340,7 +337,8 @@ export function useSecretGuideOperations(): {
         const current = activeOperationRef.current;
         if (
           current &&
-          operationKey(current.scope) === operationKey(signal.scope)
+          projectGuideOperationKey(current.scope) ===
+            projectGuideOperationKey(signal.scope)
         ) {
           updateActiveOperation({ ...current, paused: true });
         }
@@ -393,7 +391,7 @@ export function useSecretGuideOperations(): {
       });
       return;
     }
-    const key = operationKey(operation.scope);
+    const key = projectGuideOperationKey(operation.scope);
     if (startedFor.current.has(key)) return;
     startedFor.current.add(key);
     for (const [message, progress] of [
@@ -470,7 +468,7 @@ export function useSecretGuideOperations(): {
       });
       return;
     }
-    const key = operationKey(operation.scope);
+    const key = projectGuideOperationKey(operation.scope);
     if (startedFor.current.has(key)) return;
     startedFor.current.add(key);
     for (const [message, progress] of [

@@ -6,6 +6,7 @@ import type {
   ProjectGuideOperationScope,
   ProjectGuideOperationSignal,
 } from "@/components/project-guide/projectGuideMachine";
+import { projectGuideOperationKey } from "@/components/project-guide/projectGuideMachine";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { getServerURL } from "@/lib/utils";
 import { type PulseMCPServer, useListMCPCatalog } from "@/pages/catalog/hooks";
@@ -150,10 +151,6 @@ function isNewActivity(
   activity: McpServerActivity | undefined,
 ): boolean {
   return Boolean(activity && activity.totalToolCalls > baseline.totalToolCalls);
-}
-
-function operationKey(scope: ProjectGuideOperationScope): string {
-  return `${scope.path}:${scope.step}:${scope.attempt}:${scope.runId}`;
 }
 
 function catalogServerForMcp(
@@ -392,7 +389,8 @@ export function useMcpGuideOperations(): {
         const current = activeOperationRef.current;
         if (
           current &&
-          operationKey(current.scope) === operationKey(signal.scope)
+          projectGuideOperationKey(current.scope) ===
+            projectGuideOperationKey(signal.scope)
         ) {
           updateActiveOperation({ ...current, paused: true });
         }
@@ -422,7 +420,7 @@ export function useMcpGuideOperations(): {
   useEffect(() => {
     const operation = activeOperation;
     if (!operation || operation.paused || operation.scope.step !== 0) return;
-    const key = operationKey(operation.scope);
+    const key = projectGuideOperationKey(operation.scope);
     if (!selectedServer) {
       updateActiveOperation(undefined);
       operation.report({

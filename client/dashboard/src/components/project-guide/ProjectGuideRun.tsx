@@ -47,7 +47,6 @@ function stepStateLabel(displayState: ProjectGuideDisplayState): string {
       return "action needed";
     case "checkpoint":
     case "complete":
-    case "exited":
     case "opening":
     case "ready":
       return "waiting";

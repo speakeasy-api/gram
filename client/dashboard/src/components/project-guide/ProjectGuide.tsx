@@ -160,10 +160,6 @@ export function ProjectGuide({
     return () => window.clearInterval(interval);
   }, [displayState, send, snapshot.context.elapsedListeningSeconds]);
 
-  useEffect(() => {
-    if (displayState === "exited") returnToProjectHome();
-  }, [displayState, returnToProjectHome]);
-
   const openJourney = (journey: JourneyMeta): void => {
     if (projectSlug) markProjectGuideStarted(projectSlug);
     send({
@@ -490,7 +486,6 @@ function primaryActionFor(
         href: secretOperations.riskEventsHref,
       };
     case "opening":
-    case "exited":
       return { label: "Start the journey", icon: "play", disabled: true };
   }
 }
@@ -573,47 +568,33 @@ type ProjectGuidePhaseStatus =
   | "ok"
   | "failed";
 
-function secretPolicyPhaseStatuses(
+function phaseStatuses(
+  labels: readonly string[],
   displayState: ProjectGuideDisplayState,
   operationProgress: number | null,
   hasError: boolean,
+  runningAt = labels.map((_, index) => index / labels.length),
 ): ProjectGuidePhaseStatus[] {
-  if (hasError) return ["failed", "queued", "queued"];
+  if (hasError) {
+    return labels.map((_, index) => (index === 0 ? "failed" : "queued"));
+  }
   if (displayState !== "running" && displayState !== "paused") {
-    return ["not run", "not run", "not run"];
+    return labels.map(() => "not run");
   }
   if (operationProgress === null) {
-    return ["not run", "not run", "not run"];
+    return labels.map(() => "not run");
   }
 
-  const progress = operationProgress;
-  const currentPhase = Math.min(
-    SECRET_POLICY_PHASES.length - 1,
-    Math.floor(progress * SECRET_POLICY_PHASES.length),
+  const currentPhase = runningAt.reduce(
+    (phase, threshold, index) =>
+      operationProgress >= threshold ? index : phase,
+    0,
   );
-  return SECRET_POLICY_PHASES.map((_, index) => {
-    if (progress >= 1 || index < currentPhase) return "ok";
+  return labels.map((_, index) => {
+    if (operationProgress >= 1 || index < currentPhase) return "ok";
     if (index === currentPhase) return "running";
     return "queued";
   });
-}
-
-function secretPluginPhaseStatuses(
-  displayState: ProjectGuideDisplayState,
-  operationProgress: number | null,
-  hasError: boolean,
-): ProjectGuidePhaseStatus[] {
-  if (hasError) return ["failed", "queued"];
-  if (displayState !== "running" && displayState !== "paused") {
-    return ["not run", "not run"];
-  }
-  if (operationProgress === null) {
-    return ["not run", "not run"];
-  }
-
-  const progress = operationProgress;
-  if (progress >= 1) return ["ok", "ok"];
-  return progress >= 0.75 ? ["ok", "running"] : ["running", "queued"];
 }
 
 function SecretPolicyPhases({
@@ -625,7 +606,8 @@ function SecretPolicyPhases({
   operationProgress: number | null;
   hasError: boolean;
 }): JSX.Element {
-  const statuses = secretPolicyPhaseStatuses(
+  const statuses = phaseStatuses(
+    SECRET_POLICY_PHASES,
     displayState,
     operationProgress,
     hasError,
@@ -638,24 +620,6 @@ function SecretPolicyPhases({
       statuses={statuses}
     />
   );
-}
-
-function mcpCatalogPhaseStatuses(
-  displayState: ProjectGuideDisplayState,
-  operationProgress: number | null,
-  hasError: boolean,
-): ProjectGuidePhaseStatus[] {
-  if (hasError) return ["failed", "queued"];
-  if (displayState !== "running" && displayState !== "paused") {
-    return ["not run", "not run"];
-  }
-  if (operationProgress === null) {
-    return ["not run", "not run"];
-  }
-
-  const progress = operationProgress;
-  if (progress >= 1) return ["ok", "ok"];
-  return progress >= 0.5 ? ["ok", "running"] : ["running", "queued"];
 }
 
 function McpCatalogPhases({
@@ -671,10 +635,12 @@ function McpCatalogPhases({
     <ProjectGuidePhaseChecklist
       title="What the wizard does"
       labels={MCP_CATALOG_PHASES}
-      statuses={mcpCatalogPhaseStatuses(
+      statuses={phaseStatuses(
+        MCP_CATALOG_PHASES,
         displayState,
         operationProgress,
         hasError,
+        [0, 0.5],
       )}
     />
   );
@@ -865,10 +831,12 @@ function SecretPluginPhases({
   operationProgress: number | null;
   hasError: boolean;
 }): JSX.Element {
-  const statuses = secretPluginPhaseStatuses(
+  const statuses = phaseStatuses(
+    SECRET_PLUGIN_PHASES,
     displayState,
     operationProgress,
     hasError,
+    [0, 0.75],
   );
 
   return (

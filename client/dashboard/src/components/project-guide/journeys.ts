@@ -44,7 +44,6 @@ export type JourneyMeta = {
 export type JourneyFixture = {
   meta: string;
   accent: string;
-  activity: string;
   event: {
     label: string;
     kind: string;
@@ -119,7 +118,6 @@ export const PROJECT_GUIDE_FIXTURES: Record<JourneyId, JourneyFixture> = {
   "third-party-mcp": {
     meta: "govern a third-party MCP",
     accent: "#2879D8",
-    activity: "Endpoint verified, client connected, no calls recorded.",
     event: {
       label: "The call you watched",
       kind: "Governed call",
@@ -135,7 +133,6 @@ export const PROJECT_GUIDE_FIXTURES: Record<JourneyId, JourneyFixture> = {
   "secret-block": {
     meta: "block a leaked credential",
     accent: "#B45A28",
-    activity: "Policy enforcing, one agent streaming, no findings yet.",
     event: {
       label: "The event you watched",
       kind: "Denied · risk event",

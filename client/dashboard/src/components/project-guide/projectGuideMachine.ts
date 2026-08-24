@@ -24,18 +24,12 @@ export type ProjectGuideDisplayState =
   | "waiting"
   | "paused"
   | "error"
-  | "complete"
-  | "exited";
+  | "complete";
 
 export type ProjectGuideOutputEntry = {
   id: number;
   kind: "start" | "working" | "note" | "next" | "result" | "error";
   message: string;
-};
-
-export type ProjectGuideCheckpoint = {
-  step: number;
-  label: string;
 };
 
 export type ProjectGuideOperationScope = {
@@ -77,7 +71,7 @@ export type ProjectGuideOperationSignal =
   | {
       type: "abort";
       scope: ProjectGuideOperationScope;
-      reason: "switch" | "back" | "exit" | "rewind" | "reset";
+      reason: "switch" | "back" | "rewind";
     };
 
 export type ProjectGuideEvent =
@@ -92,15 +86,12 @@ export type ProjectGuideEvent =
   | { type: "ADAPTER_REPORT"; report: ProjectGuideOperationReport }
   | { type: "LISTEN_TICK"; elapsedSeconds: number }
   | { type: "RETRY" }
-  | { type: "REWIND"; step: number }
-  | { type: "EXIT" }
-  | { type: "RESET" };
+  | { type: "REWIND"; step: number };
 
 export type ProjectGuideMachineContext = {
   activePath: JourneyId | null;
   completedByPath: Record<JourneyId, number[]>;
   output: ProjectGuideOutputEntry[];
-  checkpoint: ProjectGuideCheckpoint | null;
   elapsedListeningSeconds: number;
   operationProgress: number | null;
   error: string | null;
@@ -157,6 +148,12 @@ const NARRATIVE_STEP_RESULTS: Record<JourneyId, readonly string[]> = {
   ],
 };
 
+export function projectGuideOperationKey(
+  scope: ProjectGuideOperationScope,
+): string {
+  return `${scope.path}:${scope.step}:${scope.attempt}:${scope.runId}`;
+}
+
 function initialCoordinatorContext(
   input: ProjectGuideMachineInput,
 ): ProjectGuideMachineContext {
@@ -167,7 +164,6 @@ function initialCoordinatorContext(
       "secret-block": [],
     },
     output: [],
-    checkpoint: null,
     elapsedListeningSeconds: 0,
     operationProgress: null,
     error: null,
@@ -412,7 +408,6 @@ export const projectGuideMachine = setup({
           [event.path]: completed,
         },
         ...readyOutput,
-        checkpoint: null,
         elapsedListeningSeconds: 0,
         operationProgress: null,
         error: null,
@@ -430,13 +425,6 @@ export const projectGuideMachine = setup({
         ...appendOutput(context, [
           { kind: "start", message: `Started · ${stepLabel(context)}` },
         ]),
-        checkpoint:
-          mode === "checkpoint"
-            ? {
-                step: getProjectGuideCurrentStep(context),
-                label: stepLabel(context),
-              }
-            : null,
         error: null,
         operationProgress: null,
         attempt: 0,
@@ -487,10 +475,6 @@ export const projectGuideMachine = setup({
           ),
         },
         ...appendOutput(context, entries),
-        checkpoint:
-          stepMode(context, 1) === "checkpoint"
-            ? { step: nextStep, label: nextLabel ?? "Checkpoint" }
-            : null,
         elapsedListeningSeconds: 0,
         operationProgress: null,
         error: null,
@@ -525,7 +509,6 @@ export const projectGuideMachine = setup({
           },
         ]),
         observedEvent: event.report.event,
-        checkpoint: null,
         operationProgress: null,
         error: null,
       };
@@ -590,7 +573,6 @@ export const projectGuideMachine = setup({
         ...appendOutput({ ...context, output: [] }, [
           { kind: "note", message: `Ready · ${label ?? "Journey"}` },
         ]),
-        checkpoint: null,
         elapsedListeningSeconds: 0,
         operationProgress: null,
         error: null,
@@ -600,19 +582,11 @@ export const projectGuideMachine = setup({
     clearActivePath: assign({
       activePath: null,
       output: [],
-      checkpoint: null,
       elapsedListeningSeconds: 0,
       operationProgress: null,
       error: null,
       observedEvent: null,
     }),
-    reset: assign(({ context }) => ({
-      ...initialCoordinatorContext({
-        listenTimeoutSeconds: context.listenTimeoutSeconds,
-        onSignal: context.onSignal,
-      }),
-      runId: context.runId,
-    })),
     signalStart: ({ context }) => emitCurrentSignal(context, "start"),
     signalPause: ({ context }) => emitCurrentSignal(context, "pause"),
     signalResume: ({ context }) => emitCurrentSignal(context, "resume"),
@@ -633,11 +607,7 @@ export const projectGuideMachine = setup({
           ? "switch"
           : event.type === "BACK"
             ? "back"
-            : event.type === "EXIT"
-              ? "exit"
-              : event.type === "REWIND"
-                ? "rewind"
-                : "reset";
+            : "rewind";
       context.onSignal?.({
         type: "abort",
         scope,
@@ -674,14 +644,6 @@ export const projectGuideMachine = setup({
     REWIND: {
       target: "#projectGuideCoordinator.ready",
       actions: ["signalAbort", "rewind"],
-    },
-    EXIT: {
-      target: "#projectGuideCoordinator.exited",
-      actions: ["signalAbort", "clearActivePath"],
-    },
-    RESET: {
-      target: "#projectGuideCoordinator.opening",
-      actions: ["signalAbort", "reset"],
     },
   },
   states: {
@@ -859,6 +821,5 @@ export const projectGuideMachine = setup({
       },
     },
     complete: {},
-    exited: {},
   },
 });
