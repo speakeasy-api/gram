@@ -17,11 +17,14 @@ const (
 	meterFetchResponseSize    = "cimd.fetch.response_size"
 	meterValidationFailures   = "cimd.validation.failures"
 
-	// meterCrossOriginRedirects observes validated documents whose
-	// redirect_uris leave the client_id origin. Such redirects are accepted;
+	// meterCrossOriginRedirects observes validated documents carrying a
+	// non-loopback redirect_uri that leaves the client_id origin. RFC 8252
+	// http loopback redirects are exempt, so a client whose only off-origin
+	// redirect is a loopback URL never counts. Such redirects are accepted;
 	// the counter only makes the shift visible. Emitted wherever validation
 	// runs (cached resolutions skip it), so treat it as a presence signal
-	// rather than a rate. The origins themselves go to logs, never labels.
+	// rather than a rate. Its one label is the bounded client_id origin; the
+	// redirect origins themselves go to logs, never labels.
 	meterCrossOriginRedirects = "cimd.redirect_uris.cross_origin"
 )
 
