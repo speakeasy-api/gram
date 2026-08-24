@@ -1,5 +1,15 @@
 # admin
 
+## 0.3.0
+
+### Minor Changes
+
+- 2baff19: Allow platform administrators to configure per-key inference limits from the billing admin page.
+
+### Patch Changes
+
+- a232927: Admin organization billing now reports complete monthly inference spend history and shows a graph once two consecutive months are available.
+
 ## 0.2.4
 
 ### Patch Changes
