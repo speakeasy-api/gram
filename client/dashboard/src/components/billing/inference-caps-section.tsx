@@ -53,7 +53,7 @@ const NOT_BILLING_NOTE =
 // The endpoint answers with the Gram-managed inference keys that have been
 // materialized for this organization, which can be none of them.
 const NO_CAPS_NOTE =
-  "No Gram-managed inference keys are available to configure yet.";
+  "No Speakeasy-managed inference keys are available to configure yet.";
 
 /** The same note for a Stripe trial, which knows when billing takes over. */
 function stripeTrialNote(convertsOn: Date | null | undefined): string {
@@ -187,7 +187,7 @@ export function InferenceCapsSection(): JSX.Element | null {
         <Page.Section.Title area="">Inference caps</Page.Section.Title>
         <Page.Section.Description>
           Limit what this organization can spend each month on the inference
-          Gram runs for it. Each cap is enforced on its own.
+          Speakeasy runs for it. Each cap is enforced on its own.
         </Page.Section.Description>
         <Page.Section.Body>
           {mode === "product-trial" ? (

@@ -39,7 +39,7 @@ export function InferenceSpendHistorySection(): JSX.Element {
       {/* Secondary section below Usage / Billing: suppress the area eyebrow. */}
       <Page.Section.Title area="">Inference spend</Page.Section.Title>
       <Page.Section.Description>
-        Monthly spend on the inference Gram runs for this organization.
+        Monthly spend on the inference Speakeasy runs for this organization.
         OpenRouter caps reset on the first of the month, so these figures follow
         the calendar rather than the billing cycle. History is recorded going
         forward from completed days.

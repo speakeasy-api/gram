@@ -442,7 +442,7 @@ describe("InferenceCapsSection", () => {
       expect(securityField()).toBeNull();
       expect(
         screen.getByText(
-          "No Gram-managed inference keys are available to configure yet.",
+          "No Speakeasy-managed inference keys are available to configure yet.",
         ),
       ).toBeTruthy();
       expect(container.querySelector(".skeleton")).toBeNull();
@@ -1399,7 +1399,7 @@ describe("InferenceCapsSection", () => {
         if (count === 0) {
           expect(
             screen.getByText(
-              "No Gram-managed inference keys are available to configure yet.",
+              "No Speakeasy-managed inference keys are available to configure yet.",
             ),
           ).toBeTruthy();
         }
@@ -1465,7 +1465,7 @@ describe("InferenceCapsSection", () => {
         if (count === 0) {
           expect(
             screen.getByText(
-              "No Gram-managed inference keys are available to configure yet.",
+              "No Speakeasy-managed inference keys are available to configure yet.",
             ),
           ).toBeTruthy();
         }
