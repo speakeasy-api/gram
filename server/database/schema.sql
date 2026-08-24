@@ -5077,6 +5077,12 @@ CREATE INDEX IF NOT EXISTS session_quarantines_active_idx
 ON session_quarantines (organization_id, project_id, created_at DESC)
 WHERE released_at IS NULL;
 
+-- Non-partial index backing the composite tenant FK: keeps org/project
+-- cascade deletes off a seq scan, including released rows the partial
+-- indexes above exclude (same rationale as model_provider_keys).
+CREATE INDEX IF NOT EXISTS session_quarantines_organization_id_project_id_idx
+ON session_quarantines (organization_id, project_id);
+
 CREATE TABLE IF NOT EXISTS risk_custom_detection_rules (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,

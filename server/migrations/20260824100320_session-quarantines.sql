@@ -23,3 +23,5 @@ CREATE TABLE "session_quarantines" (
 CREATE INDEX "session_quarantines_active_idx" ON "session_quarantines" ("organization_id", "project_id", "created_at" DESC) WHERE (released_at IS NULL);
 -- Create index "session_quarantines_active_session_key" to table: "session_quarantines"
 CREATE UNIQUE INDEX "session_quarantines_active_session_key" ON "session_quarantines" ("session_id") WHERE (released_at IS NULL);
+-- Create index "session_quarantines_organization_id_project_id_idx" to table: "session_quarantines"
+CREATE INDEX "session_quarantines_organization_id_project_id_idx" ON "session_quarantines" ("organization_id", "project_id");
