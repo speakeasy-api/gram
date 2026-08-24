@@ -31965,6 +31965,270 @@ paths:
             x-speakeasy-name-override: verifyOnboardingHooksSetup
             x-speakeasy-react-hook:
                 name: VerifyOnboardingHooksSetup
+    /rpc/otel.getEventFacets:
+        post:
+            description: 'Org-scoped filter facets for the event feed: the distinct sources and event/span names observed in a time range.'
+            operationId: getEventFacets
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GetEventFacetsPayload'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetEventFacetsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getEventFacets otel
+            tags:
+                - otel
+            x-speakeasy-name-override: getEventFacets
+            x-speakeasy-react-hook:
+                name: GetEventFacets
+                type: query
+    /rpc/otel.getEventVolume:
+        post:
+            description: 'Org-scoped event volume timeseries for the event feed: bucketed counts of ingested OpenTelemetry log records vs spans over a time range, honoring the same filters as listEventLog.'
+            operationId: getEventVolume
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GetEventVolumePayload'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetEventVolumeResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getEventVolume otel
+            tags:
+                - otel
+            x-speakeasy-name-override: getEventVolume
+            x-speakeasy-react-hook:
+                name: GetEventVolume
+                type: query
+    /rpc/otel.listEventLog:
+        post:
+            description: 'Org-scoped event feed over ingested OpenTelemetry signals: log records and spans merged into one reverse-chronological list with keyset pagination and a capped total count.'
+            operationId: listEventLog
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ListEventLogPayload'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListEventLogResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listEventLog otel
+            tags:
+                - otel
+            x-speakeasy-name-override: listEventLog
+            x-speakeasy-react-hook:
+                name: ListEventLog
+                type: query
     /rpc/otelForwarding.deleteConfig:
         post:
             description: Delete the org-wide OTEL forwarding config.
@@ -67194,6 +67458,71 @@ components:
             required:
                 - chat_id
                 - prompt
+        EventLogEntry:
+            type: object
+            properties:
+                attributes:
+                    description: Signal attributes as a JSON object
+                body_preview:
+                    type: string
+                    description: Log body truncated to 200 characters; empty for spans
+                kind:
+                    type: string
+                    description: Signal kind
+                    enum:
+                        - log
+                        - span
+                name:
+                    type: string
+                    description: Event name for logs, span name for spans
+                project_id:
+                    type: string
+                    description: Project the event was recorded under
+                resource_attributes:
+                    description: Resource attributes as a JSON object
+                source:
+                    type: string
+                    description: Canonicalized source derived from the resource service name
+                span_id:
+                    type: string
+                    description: W3C span ID
+                time_unix_nano:
+                    type: string
+                    description: Event time in Unix nanoseconds (string for JS int64 precision)
+                trace_id:
+                    type: string
+                    description: W3C trace ID
+            description: A single ingested OpenTelemetry signal (log record or span) in the event feed
+            required:
+                - time_unix_nano
+                - kind
+                - source
+                - name
+                - body_preview
+                - trace_id
+                - span_id
+                - project_id
+                - attributes
+                - resource_attributes
+        EventVolumeBucket:
+            type: object
+            properties:
+                bucket_time_unix_nano:
+                    type: string
+                    description: Bucket start in Unix nanoseconds (string for JS int64 precision)
+                log_count:
+                    type: integer
+                    description: Log records in this bucket
+                    format: int64
+                span_count:
+                    type: integer
+                    description: Spans in this bucket
+                    format: int64
+            description: One event volume bucket
+            required:
+                - bucket_time_unix_nano
+                - log_count
+                - span_count
         EvidenceAdvisoryChange:
             type: object
             properties:
@@ -68507,6 +68836,102 @@ components:
             required:
                 - nodes
                 - edges
+        GetEventFacetsPayload:
+            type: object
+            properties:
+                from:
+                    type: string
+                    description: Start time in ISO 8601 format
+                    example: "2025-12-19T10:00:00Z"
+                    format: date-time
+                kinds:
+                    type: array
+                    items:
+                        type: string
+                        enum:
+                            - log
+                            - span
+                    description: Optional signal kind filter. Empty means facets from both logs and spans.
+                to:
+                    type: string
+                    description: End time in ISO 8601 format
+                    example: "2025-12-26T10:00:00Z"
+                    format: date-time
+            description: Payload for listing event feed filter facets
+            required:
+                - from
+                - to
+        GetEventFacetsResult:
+            type: object
+            properties:
+                names:
+                    type: array
+                    items:
+                        type: string
+                    description: Distinct event/span names in ascending order
+                sources:
+                    type: array
+                    items:
+                        type: string
+                    description: Distinct sources in ascending order
+            description: Distinct filterable values observed in the range
+            required:
+                - sources
+                - names
+        GetEventVolumePayload:
+            type: object
+            properties:
+                from:
+                    type: string
+                    description: Start time in ISO 8601 format
+                    example: "2025-12-19T10:00:00Z"
+                    format: date-time
+                kinds:
+                    type: array
+                    items:
+                        type: string
+                        enum:
+                            - log
+                            - span
+                    description: Optional signal kind filter. Empty means both logs and spans.
+                names:
+                    type: array
+                    items:
+                        type: string
+                    description: Optional event/span name filter. Values are ORed.
+                search:
+                    type: string
+                    description: Optional case-insensitive substring match over event body and name
+                sources:
+                    type: array
+                    items:
+                        type: string
+                    description: Optional source filter (canonicalized service names). Values are ORed.
+                to:
+                    type: string
+                    description: End time in ISO 8601 format
+                    example: "2025-12-26T10:00:00Z"
+                    format: date-time
+            description: Payload for the org-scoped event volume timeseries
+            required:
+                - from
+                - to
+        GetEventVolumeResult:
+            type: object
+            properties:
+                buckets:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/EventVolumeBucket'
+                    description: Zero-filled buckets in ascending time order
+                interval_seconds:
+                    type: integer
+                    description: Bucket width in seconds
+                    format: int64
+            description: Bucketed counts of logs vs spans over the requested range
+            required:
+                - interval_seconds
+                - buckets
         GetHooksSummaryPayload:
             type: object
             properties:
@@ -70982,6 +71407,77 @@ components:
             description: Result type for listing environments
             required:
                 - environments
+        ListEventLogPayload:
+            type: object
+            properties:
+                cursor:
+                    type: string
+                    description: Opaque cursor for pagination
+                from:
+                    type: string
+                    description: Start time in ISO 8601 format
+                    example: "2025-12-19T10:00:00Z"
+                    format: date-time
+                kinds:
+                    type: array
+                    items:
+                        type: string
+                        enum:
+                            - log
+                            - span
+                    description: Optional signal kind filter. Empty means both logs and spans.
+                limit:
+                    type: integer
+                    description: Number of events to return (1-200)
+                    default: 50
+                    format: int64
+                    minimum: 1
+                    maximum: 200
+                names:
+                    type: array
+                    items:
+                        type: string
+                    description: Optional event/span name filter. Values are ORed.
+                search:
+                    type: string
+                    description: Optional case-insensitive substring match over event body and name
+                sources:
+                    type: array
+                    items:
+                        type: string
+                    description: Optional source filter (canonicalized service names). Values are ORed.
+                to:
+                    type: string
+                    description: End time in ISO 8601 format
+                    example: "2025-12-26T10:00:00Z"
+                    format: date-time
+            description: Payload for listing org-scoped OpenTelemetry events
+            required:
+                - from
+                - to
+        ListEventLogResult:
+            type: object
+            properties:
+                events:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/EventLogEntry'
+                    description: Events ordered newest first
+                next_cursor:
+                    type: string
+                    description: Cursor for next page
+                total_count:
+                    type: integer
+                    description: Number of events matching the filters, capped at 10000
+                    format: int64
+                total_count_capped:
+                    type: boolean
+                    description: True when total_count hit the cap and the true count is higher
+            description: Result of listing org-scoped OpenTelemetry events
+            required:
+                - events
+                - total_count
+                - total_count_capped
         ListExternalCredentialsResult:
             type: object
             properties:

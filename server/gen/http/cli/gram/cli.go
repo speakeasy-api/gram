@@ -139,7 +139,7 @@ func UsageCommands() []string {
 		"meta-mcp (create-meta-mcp-server|get-meta-mcp-server|list-meta-mcp-servers|update-meta-mcp-server|delete-meta-mcp-server|list-meta-mcp-members|add-meta-mcp-member|update-meta-mcp-member|remove-meta-mcp-member)",
 		"model-keys (list-keys|upsert-key|set-key-enabled|delete-key)",
 		"organizations (get|send-invite|revoke-invite|update-invite-role|list-invites|list-users|remove-user|enable-webhooks|disable-webhooks|create-portal-session|get-onboarding-status|verify-onboarding-hooks-setup|send-enterprise-admin-onboarding-email|generate-work-os-admin-portal-link)",
-		"otel (logs|traces)",
+		"otel (logs|traces|list-event-log|get-event-volume|get-event-facets)",
 		"otel-forwarding (get-config|upsert-config|delete-config)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
 		"admin-assets upload-platform-image",
@@ -1723,6 +1723,18 @@ func ParseEndpoint(
 		otelTracesProjectSlugInputFlag = otelTracesFlags.String("project-slug-input", "", "")
 		otelTracesContentEncodingFlag  = otelTracesFlags.String("content-encoding", "", "")
 		otelTracesStreamFlag           = otelTracesFlags.String("stream", "REQUIRED", "path to file containing the streamed request body")
+
+		otelListEventLogFlags            = flag.NewFlagSet("list-event-log", flag.ExitOnError)
+		otelListEventLogBodyFlag         = otelListEventLogFlags.String("body", "REQUIRED", "")
+		otelListEventLogSessionTokenFlag = otelListEventLogFlags.String("session-token", "", "")
+
+		otelGetEventVolumeFlags            = flag.NewFlagSet("get-event-volume", flag.ExitOnError)
+		otelGetEventVolumeBodyFlag         = otelGetEventVolumeFlags.String("body", "REQUIRED", "")
+		otelGetEventVolumeSessionTokenFlag = otelGetEventVolumeFlags.String("session-token", "", "")
+
+		otelGetEventFacetsFlags            = flag.NewFlagSet("get-event-facets", flag.ExitOnError)
+		otelGetEventFacetsBodyFlag         = otelGetEventFacetsFlags.String("body", "REQUIRED", "")
+		otelGetEventFacetsSessionTokenFlag = otelGetEventFacetsFlags.String("session-token", "", "")
 
 		otelForwardingFlags = flag.NewFlagSet("otel-forwarding", flag.ContinueOnError)
 
@@ -4044,6 +4056,9 @@ func ParseEndpoint(
 	otelFlags.Usage = otelUsage
 	otelLogsFlags.Usage = otelLogsUsage
 	otelTracesFlags.Usage = otelTracesUsage
+	otelListEventLogFlags.Usage = otelListEventLogUsage
+	otelGetEventVolumeFlags.Usage = otelGetEventVolumeUsage
+	otelGetEventFacetsFlags.Usage = otelGetEventFacetsUsage
 
 	otelForwardingFlags.Usage = otelForwardingUsage
 	otelForwardingGetConfigFlags.Usage = otelForwardingGetConfigUsage
@@ -5641,6 +5656,15 @@ func ParseEndpoint(
 
 			case "traces":
 				epf = otelTracesFlags
+
+			case "list-event-log":
+				epf = otelListEventLogFlags
+
+			case "get-event-volume":
+				epf = otelGetEventVolumeFlags
+
+			case "get-event-facets":
+				epf = otelGetEventFacetsFlags
 
 			}
 
@@ -7855,6 +7879,15 @@ func ParseEndpoint(
 				if err == nil {
 					data, err = otelc.BuildTracesStreamPayload(data, *otelTracesStreamFlag)
 				}
+			case "list-event-log":
+				endpoint = c.ListEventLog()
+				data, err = otelc.BuildListEventLogPayload(*otelListEventLogBodyFlag, *otelListEventLogSessionTokenFlag)
+			case "get-event-volume":
+				endpoint = c.GetEventVolume()
+				data, err = otelc.BuildGetEventVolumePayload(*otelGetEventVolumeBodyFlag, *otelGetEventVolumeSessionTokenFlag)
+			case "get-event-facets":
+				endpoint = c.GetEventFacets()
+				data, err = otelc.BuildGetEventFacetsPayload(*otelGetEventFacetsBodyFlag, *otelGetEventFacetsSessionTokenFlag)
 			}
 		case "otel-forwarding":
 			c := otelforwardingc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -15885,6 +15918,9 @@ func otelUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    logs: Endpoint to receive OTEL logs data from LLM providers and harnesses.`)
 	fmt.Fprintln(os.Stderr, `    traces: Endpoint to receive OTEL traces data from LLM providers and harnesses.`)
+	fmt.Fprintln(os.Stderr, `    list-event-log: Org-scoped event feed over ingested OpenTelemetry signals: log records and spans merged into one reverse-chronological list with keyset pagination and a capped total count.`)
+	fmt.Fprintln(os.Stderr, `    get-event-volume: Org-scoped event volume timeseries for the event feed: bucketed counts of ingested OpenTelemetry log records vs spans over a time range, honoring the same filters as listEventLog.`)
+	fmt.Fprintln(os.Stderr, `    get-event-facets: Org-scoped filter facets for the event feed: the distinct sources and event/span names observed in a time range.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s otel COMMAND --help\n", os.Args[0])
@@ -15935,6 +15971,66 @@ func otelTracesUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "otel traces --apikey-token \"abc123\" --project-slug-input \"abc123\" --content-encoding \"abc123\" --stream \"goa.png\"")
+}
+
+func otelListEventLogUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] otel list-event-log", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Org-scoped event feed over ingested OpenTelemetry signals: log records and spans merged into one reverse-chronological list with keyset pagination and a capped total count.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "otel list-event-log --body '{\n      \"cursor\": \"abc123\",\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"kinds\": [\n         \"span\"\n      ],\n      \"limit\": 2,\n      \"names\": [\n         \"abc123\"\n      ],\n      \"search\": \"abc123\",\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"to\": \"2025-12-26T10:00:00Z\"\n   }' --session-token \"abc123\"")
+}
+
+func otelGetEventVolumeUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] otel get-event-volume", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Org-scoped event volume timeseries for the event feed: bucketed counts of ingested OpenTelemetry log records vs spans over a time range, honoring the same filters as listEventLog.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "otel get-event-volume --body '{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"kinds\": [\n         \"span\"\n      ],\n      \"names\": [\n         \"abc123\"\n      ],\n      \"search\": \"abc123\",\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"to\": \"2025-12-26T10:00:00Z\"\n   }' --session-token \"abc123\"")
+}
+
+func otelGetEventFacetsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] otel get-event-facets", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Org-scoped filter facets for the event feed: the distinct sources and event/span names observed in a time range.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "otel get-event-facets --body '{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"kinds\": [\n         \"span\"\n      ],\n      \"to\": \"2025-12-26T10:00:00Z\"\n   }' --session-token \"abc123\"")
 }
 
 // otelForwardingUsage displays the usage of the otel-forwarding command and

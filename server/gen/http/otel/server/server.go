@@ -18,9 +18,12 @@ import (
 
 // Server lists the otel service endpoint HTTP handlers.
 type Server struct {
-	Mounts []*MountPoint
-	Logs   http.Handler
-	Traces http.Handler
+	Mounts         []*MountPoint
+	Logs           http.Handler
+	Traces         http.Handler
+	ListEventLog   http.Handler
+	GetEventVolume http.Handler
+	GetEventFacets http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -52,9 +55,15 @@ func New(
 		Mounts: []*MountPoint{
 			{"Logs", "POST", "/otel/v1/logs"},
 			{"Traces", "POST", "/otel/v1/traces"},
+			{"ListEventLog", "POST", "/rpc/otel.listEventLog"},
+			{"GetEventVolume", "POST", "/rpc/otel.getEventVolume"},
+			{"GetEventFacets", "POST", "/rpc/otel.getEventFacets"},
 		},
-		Logs:   NewLogsHandler(e.Logs, mux, decoder, encoder, errhandler, formatter),
-		Traces: NewTracesHandler(e.Traces, mux, decoder, encoder, errhandler, formatter),
+		Logs:           NewLogsHandler(e.Logs, mux, decoder, encoder, errhandler, formatter),
+		Traces:         NewTracesHandler(e.Traces, mux, decoder, encoder, errhandler, formatter),
+		ListEventLog:   NewListEventLogHandler(e.ListEventLog, mux, decoder, encoder, errhandler, formatter),
+		GetEventVolume: NewGetEventVolumeHandler(e.GetEventVolume, mux, decoder, encoder, errhandler, formatter),
+		GetEventFacets: NewGetEventFacetsHandler(e.GetEventFacets, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -65,6 +74,9 @@ func (s *Server) Service() string { return "otel" }
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.Logs = m(s.Logs)
 	s.Traces = m(s.Traces)
+	s.ListEventLog = m(s.ListEventLog)
+	s.GetEventVolume = m(s.GetEventVolume)
+	s.GetEventFacets = m(s.GetEventFacets)
 }
 
 // MethodNames returns the methods served.
@@ -74,6 +86,9 @@ func (s *Server) MethodNames() []string { return otel.MethodNames[:] }
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountLogsHandler(mux, h.Logs)
 	MountTracesHandler(mux, h.Traces)
+	MountListEventLogHandler(mux, h.ListEventLog)
+	MountGetEventVolumeHandler(mux, h.GetEventVolume)
+	MountGetEventFacetsHandler(mux, h.GetEventFacets)
 }
 
 // Mount configures the mux to serve the otel endpoints.
@@ -175,6 +190,165 @@ func NewTracesHandler(
 		}
 		data := &otel.TracesRequestData{Payload: payload, Body: r.Body}
 		res, err := endpoint(ctx, data)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListEventLogHandler configures the mux to serve the "otel" service
+// "listEventLog" endpoint.
+func MountListEventLogHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/otel.listEventLog", f)
+}
+
+// NewListEventLogHandler creates a HTTP handler which loads the HTTP request
+// and calls the "otel" service "listEventLog" endpoint.
+func NewListEventLogHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListEventLogRequest(mux, decoder)
+		encodeResponse = EncodeListEventLogResponse(encoder)
+		encodeError    = EncodeListEventLogError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listEventLog")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "otel")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetEventVolumeHandler configures the mux to serve the "otel" service
+// "getEventVolume" endpoint.
+func MountGetEventVolumeHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/otel.getEventVolume", f)
+}
+
+// NewGetEventVolumeHandler creates a HTTP handler which loads the HTTP request
+// and calls the "otel" service "getEventVolume" endpoint.
+func NewGetEventVolumeHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetEventVolumeRequest(mux, decoder)
+		encodeResponse = EncodeGetEventVolumeResponse(encoder)
+		encodeError    = EncodeGetEventVolumeError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getEventVolume")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "otel")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetEventFacetsHandler configures the mux to serve the "otel" service
+// "getEventFacets" endpoint.
+func MountGetEventFacetsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/otel.getEventFacets", f)
+}
+
+// NewGetEventFacetsHandler creates a HTTP handler which loads the HTTP request
+// and calls the "otel" service "getEventFacets" endpoint.
+func NewGetEventFacetsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetEventFacetsRequest(mux, decoder)
+		encodeResponse = EncodeGetEventFacetsResponse(encoder)
+		encodeError    = EncodeGetEventFacetsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getEventFacets")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "otel")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
 		if err != nil {
 			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
 				errhandler(ctx, w, err)

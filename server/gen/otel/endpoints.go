@@ -17,8 +17,11 @@ import (
 
 // Endpoints wraps the "otel" service endpoints.
 type Endpoints struct {
-	Logs   goa.Endpoint
-	Traces goa.Endpoint
+	Logs           goa.Endpoint
+	Traces         goa.Endpoint
+	ListEventLog   goa.Endpoint
+	GetEventVolume goa.Endpoint
+	GetEventFacets goa.Endpoint
 }
 
 // LogsRequestData holds both the payload and the HTTP request body reader of
@@ -44,8 +47,11 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		Logs:   NewLogsEndpoint(s, a.APIKeyAuth),
-		Traces: NewTracesEndpoint(s, a.APIKeyAuth),
+		Logs:           NewLogsEndpoint(s, a.APIKeyAuth),
+		Traces:         NewTracesEndpoint(s, a.APIKeyAuth),
+		ListEventLog:   NewListEventLogEndpoint(s, a.APIKeyAuth),
+		GetEventVolume: NewGetEventVolumeEndpoint(s, a.APIKeyAuth),
+		GetEventFacets: NewGetEventFacetsEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -53,6 +59,9 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Logs = m(e.Logs)
 	e.Traces = m(e.Traces)
+	e.ListEventLog = m(e.ListEventLog)
+	e.GetEventVolume = m(e.GetEventVolume)
+	e.GetEventFacets = m(e.GetEventFacets)
 }
 
 // NewLogsEndpoint returns an endpoint function that calls the method "logs" of
@@ -122,5 +131,74 @@ func NewTracesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endp
 			return nil, err
 		}
 		return nil, s.Traces(ctx, ep.Payload, ep.Body)
+	}
+}
+
+// NewListEventLogEndpoint returns an endpoint function that calls the method
+// "listEventLog" of service "otel".
+func NewListEventLogEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListEventLogPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListEventLog(ctx, p)
+	}
+}
+
+// NewGetEventVolumeEndpoint returns an endpoint function that calls the method
+// "getEventVolume" of service "otel".
+func NewGetEventVolumeEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetEventVolumePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetEventVolume(ctx, p)
+	}
+}
+
+// NewGetEventFacetsEndpoint returns an endpoint function that calls the method
+// "getEventFacets" of service "otel".
+func NewGetEventFacetsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetEventFacetsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetEventFacets(ctx, p)
 	}
 }
