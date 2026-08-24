@@ -343,7 +343,12 @@ func (s *DiagnosticsService) GetMCPDiagnostics(ctx context.Context, principal Pr
 	if err != nil {
 		return GetMCPDiagnosticsOutput{}, fmt.Errorf("read organization outcome breakdown: %w", err)
 	}
-	watermark, err := s.telemetry.GetTelemetryWatermark(ctx, telemetryrepo.GetTelemetryWatermarkParams{GramProjectIDs: projectIDs})
+	// Scoped to the diagnosed project, not to the organization the comparison
+	// spans. An organization-wide watermark reports the freshest observation
+	// anywhere, so a busy sibling project would stamp this result fresh while
+	// the diagnosed project's own observations had stopped arriving — exactly
+	// the reading that turns an absence of evidence into evidence of health.
+	watermark, err := s.telemetry.GetTelemetryWatermark(ctx, telemetryrepo.GetTelemetryWatermarkParams{GramProjectIDs: []string{input.ProjectID}})
 	if err != nil {
 		return GetMCPDiagnosticsOutput{}, fmt.Errorf("read diagnostics watermark: %w", err)
 	}

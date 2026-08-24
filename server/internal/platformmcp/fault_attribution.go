@@ -75,6 +75,29 @@ func (t outcomeTotals) failures() int64 {
 	return t.Unauthorized + t.ClientError + t.ServerError + t.Failed
 }
 
+// without removes one server's calls from a wider tally, so a comparison can be
+// taken against the rest of the organization rather than against a total that
+// already contains the server under diagnosis.
+//
+// Each class is floored at zero. The two tallies come from separate reads, so a
+// subset can legitimately arrive larger than the set it was taken from — a call
+// observed by one read and not the other — and a negative class would otherwise
+// travel into a rate.
+func (t outcomeTotals) without(other outcomeTotals) outcomeTotals {
+	sub := func(a, b int64) int64 {
+		return max(a-b, 0)
+	}
+	return outcomeTotals{
+		Total:        sub(t.Total, other.Total),
+		Success:      sub(t.Success, other.Success),
+		Unauthorized: sub(t.Unauthorized, other.Unauthorized),
+		ClientError:  sub(t.ClientError, other.ClientError),
+		ServerError:  sub(t.ServerError, other.ServerError),
+		Failed:       sub(t.Failed, other.Failed),
+		Unknown:      sub(t.Unknown, other.Unknown),
+	}
+}
+
 // dominant reports whether one failure class accounts for most of the failures.
 // A single class carrying the majority is a signal; an even spread is not, and
 // resolves to indeterminate rather than to whichever class happened to lead.
@@ -166,10 +189,12 @@ func attributeFault(readiness Readiness, readinessFound bool, server, organizati
 		attribution.Fault = FaultClient
 	case reasonUnauthorizedDominant:
 		if exonerates {
-			// Gram's own probe authorized successfully, so the credentials the
-			// server holds are good and the rejections belong to how callers
-			// are presenting themselves.
-			attribution.Fault = FaultClient
+			// A contradiction, not a diagnosis: the status classified here is
+			// the one the provider returned to Gram's own call, so a probe that
+			// authorized successfully and calls the provider rejects cannot
+			// both describe the same credentials. Reporting the caller at fault
+			// would blame the one party this evidence says nothing about.
+			attribution.Fault = FaultIndeterminate
 			attribution.Reason = reasonReadyAndFailing
 			return attribution
 		}
@@ -196,15 +221,23 @@ func attributeFault(readiness Readiness, readinessFound bool, server, organizati
 }
 
 // compareScope answers whether this server fails materially more often than the
-// organization as a whole. It is computed server-side: an external caller has
+// rest of the organization. It is computed server-side: an external caller has
 // no way to divide two numbers it was never given.
+//
+// The organization totals span every project in scope, so they include this
+// server's own calls. Comparing against them directly makes the comparison
+// self-cancelling wherever this server is most of the organization's traffic:
+// the two rates converge, every pattern reads organization_wide, and a genuine
+// single-server fault is reported as a fault of everything. The comparison is
+// therefore taken against the organization minus this server.
 func compareScope(server, organization outcomeTotals) FaultScope {
-	if organization.Total < organizationWideComparisonFloor || server.Total == 0 {
+	others := organization.without(server)
+	if others.Total < organizationWideComparisonFloor || server.Total == 0 {
 		return FaultScopeUnknown
 	}
 	serverRate := float64(server.failures()) / float64(server.Total)
-	organizationRate := float64(organization.failures()) / float64(organization.Total)
-	if serverRate-organizationRate > organizationWideFailureMargin {
+	othersRate := float64(others.failures()) / float64(others.Total)
+	if serverRate-othersRate > organizationWideFailureMargin {
 		return FaultScopeServerSpecific
 	}
 	return FaultScopeOrganizationWide

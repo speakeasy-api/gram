@@ -75,13 +75,15 @@ func TestAttributeFault(t *testing.T) {
 			wantScope:  FaultScopeUnknown,
 		},
 		{
-			// The probe authorized with the credentials the server holds, so
-			// the rejections are about how callers present themselves.
-			name:           "fresh ready exonerates gram on unauthorized calls",
+			// The rejections classified here are the provider's answer to
+			// Gram's own calls, so a probe that authorized with the same
+			// credentials contradicts them. Naming the caller at fault would
+			// blame the one party this evidence says nothing about.
+			name:           "fresh ready with unauthorized calls is indeterminate",
 			readiness:      freshReadiness(ReadinessReady),
 			readinessFound: true,
 			server:         outcomeTotals{Total: 20, Success: 2, Unauthorized: 18},
-			wantFault:      FaultClient,
+			wantFault:      FaultIndeterminate,
 			wantReason:     reasonReadyAndFailing,
 			wantScope:      FaultScopeUnknown,
 		},
@@ -138,6 +140,19 @@ func TestAttributeFault(t *testing.T) {
 			wantScope:    FaultScopeServerSpecific,
 		},
 		{
+			// The organization totals contain this server's own calls. When it
+			// is the only thing generating traffic, comparing against them
+			// unmodified makes every pattern look organization-wide and
+			// downgrades the diagnosis to indeterminate — silencing the answer
+			// in exactly the case a small tenant asks for it.
+			name:         "sole server in the organization still gets its own diagnosis",
+			server:       outcomeTotals{Total: 20, Success: 2, Unauthorized: 18},
+			organization: outcomeTotals{Total: 20, Success: 2, Unauthorized: 18},
+			wantFault:    FaultGramConfiguration,
+			wantReason:   reasonUnauthorizedDominant,
+			wantScope:    FaultScopeUnknown,
+		},
+		{
 			// A stale readiness result states nothing about the system as it is
 			// now, so it must not exonerate anything.
 			name:           "stale ready does not exonerate",
@@ -175,14 +190,38 @@ func TestAttributeFault_ExonerationRequiresFreshReady(t *testing.T) {
 	require.False(t, attributeFault(freshReadiness(ReadinessDegraded), true, server, outcomeTotals{}).ReadinessExonerates)
 }
 
-func TestCompareScope_NeedsEnoughOrganizationTraffic(t *testing.T) {
+// TestCompareScope_ComparesAgainstTheRestOfTheOrganization pins that the floor
+// and the rates are both taken over the organization minus this server. The
+// organization totals a caller of attributeFault supplies always contain the
+// server under diagnosis, so every case here includes it.
+func TestCompareScope_ComparesAgainstTheRestOfTheOrganization(t *testing.T) {
 	t.Parallel()
 
 	server := outcomeTotals{Total: 20, Success: 2, Unauthorized: 18}
+	withServer := func(rest outcomeTotals) outcomeTotals {
+		return outcomeTotals{
+			Total:        server.Total + rest.Total,
+			Success:      server.Success + rest.Success,
+			Unauthorized: server.Unauthorized + rest.Unauthorized,
+			ClientError:  rest.ClientError,
+			ServerError:  rest.ServerError,
+			Failed:       rest.Failed,
+			Unknown:      rest.Unknown,
+		}
+	}
 
 	// Below the floor the comparison is noise, so the scope is reported unknown
 	// rather than asserted from a handful of calls.
-	require.Equal(t, FaultScopeUnknown, compareScope(server, outcomeTotals{Total: 19, Success: 19}))
-	require.Equal(t, FaultScopeServerSpecific, compareScope(server, outcomeTotals{Total: 20, Success: 20}))
+	require.Equal(t, FaultScopeUnknown, compareScope(server, withServer(outcomeTotals{Total: 19, Success: 19})))
+	require.Equal(t, FaultScopeServerSpecific, compareScope(server, withServer(outcomeTotals{Total: 20, Success: 20})))
+
+	// The rest of the organization fails the same way, so nothing here is
+	// specific to this server.
+	require.Equal(t, FaultScopeOrganizationWide, compareScope(server, withServer(outcomeTotals{Total: 100, Success: 10, Unauthorized: 90})))
+
+	// A server that is the organization's only traffic leaves nothing to
+	// compare against, which is unknown rather than organization-wide.
+	require.Equal(t, FaultScopeUnknown, compareScope(server, server))
+
 	require.Equal(t, FaultScopeUnknown, compareScope(outcomeTotals{}, outcomeTotals{Total: 500, Success: 500}))
 }
