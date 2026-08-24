@@ -41,14 +41,15 @@ func TestAuthorize_MemberSessionSucceeds(t *testing.T) {
 	require.NotEmpty(t, redeemed.ProjectSlug)
 }
 
-// An admin impersonating the active org via the dev-tools override is refused.
-func TestAuthorize_ImpersonatingAdminOrgOverrideBlocked(t *testing.T) {
+// An admin impersonating the active org via a support session is refused.
+func TestAuthorize_ImpersonatingAdminSupportSessionBlocked(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	authCtx.IsAdmin = true
-	ctx = contextvalues.SetAdminOverrideInContext(ctx, mockidp.MockOrgSlug)
+	authCtx.SupportOrganizationID = authCtx.ActiveOrganizationID
+	ctx = contextvalues.WithValidatedSupportSession(ctx, authCtx)
 
 	_, challenge := pkcePair(t)
 	_, err := ti.service.Authorize(ctx, &gen.AuthorizePayload{
@@ -61,15 +62,16 @@ func TestAuthorize_ImpersonatingAdminOrgOverrideBlocked(t *testing.T) {
 	require.ErrorContains(t, err, "impersonating an organization")
 }
 
-// A stale override cookie pointing at another org must not block an admin's
+// A support session opened against another org must not block an admin's
 // own-org enrollment.
-func TestAuthorize_AdminWithStaleOverrideOnOwnOrgSucceeds(t *testing.T) {
+func TestAuthorize_AdminWithSupportSessionElsewhereOnOwnOrgSucceeds(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	authCtx.IsAdmin = true
-	ctx = contextvalues.SetAdminOverrideInContext(ctx, "customer-org")
+	authCtx.SupportOrganizationID = "customer-org"
+	ctx = contextvalues.WithValidatedSupportSession(ctx, authCtx)
 
 	_, challenge := pkcePair(t)
 	authorized, err := ti.service.Authorize(ctx, &gen.AuthorizePayload{
@@ -82,11 +84,15 @@ func TestAuthorize_AdminWithStaleOverrideOnOwnOrgSucceeds(t *testing.T) {
 	require.NotEmpty(t, authorized.Code)
 }
 
-// The override only takes effect for admins; a non-admin member enrolls fine.
-func TestAuthorize_NonAdminWithOverrideValueSucceeds(t *testing.T) {
+// Support authority only takes effect for admins; a non-admin member with a
+// support org recorded on the session still enrolls fine.
+func TestAuthorize_NonAdminWithSupportOrgSucceeds(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
-	ctx = contextvalues.SetAdminOverrideInContext(ctx, "customer-org")
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	authCtx.SupportOrganizationID = authCtx.ActiveOrganizationID
+	ctx = contextvalues.WithValidatedSupportSession(ctx, authCtx)
 
 	_, challenge := pkcePair(t)
 	authorized, err := ti.service.Authorize(ctx, &gen.AuthorizePayload{
@@ -123,8 +129,11 @@ func TestAuthorize_ImpersonatedUserSessionBlocked(t *testing.T) {
 	require.ErrorContains(t, err, "impersonating a user")
 }
 
-// An admin session on a non-member org is refused even with no override set.
-func TestAuthorize_AdminSessionOnNonMemberOrgBlocked(t *testing.T) {
+// An admin parked on a non-member org without a live support session never
+// reaches the handler: session authentication itself refuses. Pinned here so a
+// relaxation upstream shows up as a cliauth failure — the membership backstop
+// in Authorize is the second line of defense, not the first.
+func TestAuthorize_AdminSessionOnNonMemberOrgRefusedAtAuth(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 
@@ -132,23 +141,17 @@ func TestAuthorize_AdminSessionOnNonMemberOrgBlocked(t *testing.T) {
 	customerOrgID := uuid.NewString()
 	seedOrgMetadata(t, ctx, ti.conn, customerOrgID, "Customer Org", "customer-org-"+customerOrgID[:8])
 
-	ctx = authenticateSession(t, ctx, ti, sessions.Session{
+	session := sessions.Session{
 		SessionID:            uuid.NewString(),
 		UserID:               adminID,
 		ActiveOrganizationID: customerOrgID,
 		WorkOSSessionID:      "",
 		ImpersonatorEmail:    "",
-	})
+	}
+	require.NoError(t, ti.sessionManager.StoreSession(ctx, session))
 
-	_, challenge := pkcePair(t)
-	_, err := ti.service.Authorize(ctx, &gen.AuthorizePayload{
-		CodeChallenge:       challenge,
-		CodeChallengeMethod: "S256",
-		ProjectSlug:         nil,
-		SessionToken:        nil,
-	})
+	_, err := ti.sessionManager.Authenticate(ctx, session.SessionID)
 	requireOopsCode(t, err, oops.CodeForbidden)
-	require.ErrorContains(t, err, "requires membership")
 }
 
 // The shared demo org has no memberships; devices must never enroll there.

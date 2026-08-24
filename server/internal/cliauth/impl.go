@@ -153,10 +153,11 @@ func (s *Service) Authorize(ctx context.Context, payload *gen.AuthorizePayload) 
 	// device to the impersonated org's policies and transcript reporting.
 	// RBAC cannot gate this — impersonating admins hold every scope.
 
-	// Admin org-override impersonation. Only refused when the override
-	// targets the active org: the cookie outlives impersonation, and the
-	// membership check below still catches parked sessions.
-	if override, impersonating := contextvalues.GetAdminOverrideFromContext(ctx); impersonating && authCtx.IsAdmin && override == authCtx.OrganizationSlug {
+	// Platform-admin support session (the same predicate chat uses to protect
+	// transcripts). It is already scoped to the active org, so a support
+	// session opened against a different org does not block an admin from
+	// enrolling into their own.
+	if contextvalues.IsSupportSession(ctx) {
 		return nil, oops.E(oops.CodeForbidden, nil, "device enrollment is not available while impersonating an organization").LogError(ctx, s.logger)
 	}
 
@@ -173,9 +174,12 @@ func (s *Service) Authorize(ctx context.Context, payload *gen.AuthorizePayload) 
 		return nil, oops.E(oops.CodeForbidden, nil, "device enrollment is not available while impersonating a user").LogError(ctx, s.logger)
 	}
 
-	// Backstop: the user must be a real member of the active org (the demo
-	// org has no memberships). Resolved via GetUserInfo so lookup failures
-	// surface as unexpected errors, not a misleading 403.
+	// Backstop: the user must be a real member of the active org. Session
+	// authentication already refuses a foreign org without a live support
+	// session, but the shared demo org is exempt there (no membership rows by
+	// design) — enrolling a real device into it would report the operator's
+	// transcripts into a shared workspace. Resolved via GetUserInfo so lookup
+	// failures surface as unexpected errors, not a misleading 403.
 	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load user info").LogError(ctx, s.logger)
