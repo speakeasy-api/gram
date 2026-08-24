@@ -20,8 +20,10 @@ describe("LoginPanel", () => {
   it("links to the sign-up page", () => {
     renderPanel();
 
-    const link = screen.getByRole("link", { name: /sign up/i });
+    const link = screen.getByRole("link", {
+      name: /sign-up for a 14-day trial/i,
+    });
     expect(link.getAttribute("href")).toBe("/sign-up");
-    expect(screen.getByText(/don't have an account/i)).toBeTruthy();
+    expect(screen.getByText(/no account/i)).toBeTruthy();
   });
 });

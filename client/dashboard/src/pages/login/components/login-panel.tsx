@@ -48,12 +48,12 @@ export function LoginPanel({
       </p>
 
       <p className="mt-2 text-[14px] text-(--muted-strong)">
-        Don't have an account?{" "}
+        No account?{" "}
         <Link
           to="/sign-up"
           className="text-(--link) underline hover:text-(--focus)"
         >
-          Sign up
+          Sign-up for a 14-day trial.
         </Link>
       </p>
     </>
