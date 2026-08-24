@@ -22,20 +22,20 @@ The harness sampled Redis `LLEN`, `CLIENT LIST`, pool stats, and `INFO memory`. 
 
 Configuration common to the Redis sweeps:
 
-| Setting | Value |
-|---|---:|
-| Redis | 6.2.22, local Docker container |
-| Redis address | `127.0.0.1:5445` |
-| Drainer pool size | 2 configured, 1 connection used |
-| Drainer BLPOP timeout | 1 s |
-| Drainer read timeout | 2 s |
-| Shared writer pool | 128 connections |
-| Reply TTL | 60 s |
-| Redis sample interval | 2 ms, 5 ms for full-loop mode |
-| Go | 1.26.5, linux/arm64 |
-| Host allocation | 17 available CPUs, 37.8 GB RAM |
-| Host | shared Apple ARM virtual machine |
-| Git base | `1c1a56106b`, with the AIS-402 worktree changes under test |
+| Setting               |                                                      Value |
+| --------------------- | ---------------------------------------------------------: |
+| Redis                 |                             6.2.22, local Docker container |
+| Redis address         |                                           `127.0.0.1:5445` |
+| Drainer pool size     |                            2 configured, 1 connection used |
+| Drainer BLPOP timeout |                                                        1 s |
+| Drainer read timeout  |                                                        2 s |
+| Shared writer pool    |                                            128 connections |
+| Reply TTL             |                                                       60 s |
+| Redis sample interval |                              2 ms, 5 ms for full-loop mode |
+| Go                    |                                        1.26.5, linux/arm64 |
+| Host allocation       |                             17 available CPUs, 37.8 GB RAM |
+| Host                  |                           shared Apple ARM virtual machine |
+| Git base              | `1c1a56106b`, with the AIS-402 worktree changes under test |
 
 The host already had about 26.6 GB of RAM in use and 12.0 GB of swap in use. Results are single-run observations on a shared development box, not controlled capacity benchmarks. The sampler itself adds Redis commands and shared-pool connections. Redis memory is sampled `used_memory`, not process RSS, and includes allocator and connection-pool effects.
 
@@ -44,21 +44,21 @@ The host already had about 26.6 GB of RAM in use and 12.0 GB of swap in use. Res
 Small synthetic replies serialized to 41 bytes. `Replies/s` is completed scans/s multiplied by replies expected per scan.
 
 | In-flight scans | Replies/scan | Burst replies | p50 ms | p99 ms | Max ms | Scans/s | Replies/s | Depth high-water | Largest drain batch | Redis clients peak | Timeouts/orphans |
-|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 10 | 1 | 10 | 1.42 | 1.43 | 1.43 | 6,989 | 6,989 | 6 | 10 | 12 | 0/0 |
-| 50 | 1 | 50 | 1.03 | 1.74 | 1.74 | 28,653 | 28,653 | 5 | 50 | 29 | 0/0 |
-| 100 | 1 | 100 | 3.17 | 5.43 | 5.43 | 18,401 | 18,401 | 27 | 73 | 81 | 0/0 |
-| 500 | 1 | 500 | 10.35 | 11.68 | 11.68 | 42,816 | 42,816 | 177 | 500 | 129 | 0/0 |
-| 1,000 | 1 | 1,000 | 8.19 | 8.92 | 8.92 | 112,071 | 112,071 | 465 | 1,000 | 129 | 0/0 |
-| 2,500 | 1 | 2,500 | 17.89 | 24.18 | 24.19 | 103,329 | 103,329 | 361 | 2,500 | 129 | 0/0 |
-| 5,000 | 1 | 5,000 | 40.99 | 46.95 | 46.97 | 106,448 | 106,448 | 1,539 | 5,000 | 129 | 0/0 |
-| 10 | 5 | 50 | 2.09 | 2.17 | 2.17 | 4,614 | 23,068 | 0 | 50 | 11 | 0/0 |
-| 50 | 5 | 250 | 9.18 | 10.32 | 10.32 | 4,845 | 24,227 | 136 | 250 | 37 | 0/0 |
-| 100 | 5 | 500 | 9.17 | 9.98 | 10.18 | 9,828 | 49,138 | 14 | 500 | 102 | 0/0 |
-| 500 | 5 | 2,500 | 31.44 | 32.33 | 32.68 | 15,292 | 76,462 | 60 | 1,712 | 129 | 0/0 |
-| 1,000 | 5 | 5,000 | 50.79 | 53.11 | 53.44 | 18,712 | 93,562 | 256 | 5,000 | 129 | 0/0 |
-| 2,500 | 5 | 12,500 | 132.52 | 139.83 | 139.84 | 17,878 | 89,388 | 986 | 12,500 | 129 | 0/0 |
-| 5,000 | 5 | 25,000 | 244.78 | 257.44 | 257.52 | 19,412 | 97,062 | 1,596 | 25,000 | 129 | 0/0 |
+| --------------: | -----------: | ------------: | -----: | -----: | -----: | ------: | --------: | ---------------: | ------------------: | -----------------: | ---------------: |
+|              10 |            1 |            10 |   1.42 |   1.43 |   1.43 |   6,989 |     6,989 |                6 |                  10 |                 12 |              0/0 |
+|              50 |            1 |            50 |   1.03 |   1.74 |   1.74 |  28,653 |    28,653 |                5 |                  50 |                 29 |              0/0 |
+|             100 |            1 |           100 |   3.17 |   5.43 |   5.43 |  18,401 |    18,401 |               27 |                  73 |                 81 |              0/0 |
+|             500 |            1 |           500 |  10.35 |  11.68 |  11.68 |  42,816 |    42,816 |              177 |                 500 |                129 |              0/0 |
+|           1,000 |            1 |         1,000 |   8.19 |   8.92 |   8.92 | 112,071 |   112,071 |              465 |               1,000 |                129 |              0/0 |
+|           2,500 |            1 |         2,500 |  17.89 |  24.18 |  24.19 | 103,329 |   103,329 |              361 |               2,500 |                129 |              0/0 |
+|           5,000 |            1 |         5,000 |  40.99 |  46.95 |  46.97 | 106,448 |   106,448 |            1,539 |               5,000 |                129 |              0/0 |
+|              10 |            5 |            50 |   2.09 |   2.17 |   2.17 |   4,614 |    23,068 |                0 |                  50 |                 11 |              0/0 |
+|              50 |            5 |           250 |   9.18 |  10.32 |  10.32 |   4,845 |    24,227 |              136 |                 250 |                 37 |              0/0 |
+|             100 |            5 |           500 |   9.17 |   9.98 |  10.18 |   9,828 |    49,138 |               14 |                 500 |                102 |              0/0 |
+|             500 |            5 |         2,500 |  31.44 |  32.33 |  32.68 |  15,292 |    76,462 |               60 |               1,712 |                129 |              0/0 |
+|           1,000 |            5 |         5,000 |  50.79 |  53.11 |  53.44 |  18,712 |    93,562 |              256 |               5,000 |                129 |              0/0 |
+|           2,500 |            5 |        12,500 | 132.52 | 139.83 | 139.84 |  17,878 |    89,388 |              986 |              12,500 |                129 |              0/0 |
+|           5,000 |            5 |        25,000 | 244.78 | 257.44 | 257.52 |  19,412 |    97,062 |            1,596 |              25,000 |                129 |              0/0 |
 
 The non-monotonic low-concurrency rows are scheduler, connection warm-up, and burst-shape noise. The stable high-volume observation is the approximately 90,000 to 100,000 small replies/s plateau. Tail latency begins rising materially once a burst contains roughly 2,500 replies, then grows approximately with the number of replies the single drainer must demultiplex.
 
@@ -67,14 +67,14 @@ The non-monotonic low-concurrency rows are scheduler, connection warm-up, and bu
 Each large synthetic reply contained 100 safe findings and serialized to 17,305 bytes.
 
 | In-flight scans | p50 ms | p99 ms | Max ms | Scans/s | Depth high-water | Redis memory increase | Timeouts/orphans |
-|---:|---:|---:|---:|---:|---:|---:|---:|
-| 10 | 4.79 | 4.89 | 4.89 | 2,043 | 5 | 0.60 MB | 0/0 |
-| 50 | 11.78 | 13.24 | 13.24 | 3,776 | 31 | 0.76 MB | 0/0 |
-| 100 | 15.20 | 22.67 | 22.67 | 4,411 | 26 | 1.87 MB | 0/0 |
-| 500 | 57.41 | 82.99 | 83.00 | 6,024 | 357 | 9.90 MB | 0/0 |
-| 1,000 | 118.55 | 152.57 | 152.58 | 6,554 | 951 | 23.00 MB | 0/0 |
-| 2,500 | 211.82 | 295.39 | 295.41 | 8,463 | 2,243 | 46.01 MB | 0/0 |
-| 5,000 | 367.28 | 503.98 | 505.08 | 9,899 | 4,102 | 84.16 MB | 0/0 |
+| --------------: | -----: | -----: | -----: | ------: | ---------------: | --------------------: | ---------------: |
+|              10 |   4.79 |   4.89 |   4.89 |   2,043 |                5 |               0.60 MB |              0/0 |
+|              50 |  11.78 |  13.24 |  13.24 |   3,776 |               31 |               0.76 MB |              0/0 |
+|             100 |  15.20 |  22.67 |  22.67 |   4,411 |               26 |               1.87 MB |              0/0 |
+|             500 |  57.41 |  82.99 |  83.00 |   6,024 |              357 |               9.90 MB |              0/0 |
+|           1,000 | 118.55 | 152.57 | 152.58 |   6,554 |              951 |              23.00 MB |              0/0 |
+|           2,500 | 211.82 | 295.39 | 295.41 |   8,463 |            2,243 |              46.01 MB |              0/0 |
+|           5,000 | 367.28 | 503.98 | 505.08 |   9,899 |            4,102 |              84.16 MB |              0/0 |
 
 Payload size, protobuf serialization, Redis network transfer, and unmarshalling become the limiting work before waiter demultiplexing does. At 5,000 scans, the queue held up to 4,102 replies and the sampled Redis increase was 84.2 MB. The separate paused case held 4,999 replies and measured 109.8 MB above baseline, which better captures the full queued footprint.
 
@@ -83,11 +83,11 @@ Payload size, protobuf serialization, Redis network transfer, and unmarshalling 
 All pause cases held the drainer for one second after the writers completed. The drainer had already removed one item with BLPOP, so backlog at release is one less than the waiter count.
 
 | Waiters | Findings/reply | Backlog at release | Serialized payload | Catch-up after release | TTL remaining | Redis memory increase | Timeouts/orphans |
-|---:|---:|---:|---:|---:|---:|---:|---:|
-| 1,000 | 0 | 999 | 41 KB | 2.9 ms | 59 s | 7.35 MB | 0/0 |
-| 5,000 | 0 | 4,999 | 205 KB | 9.0 ms | 59 s | 7.78 MB | 0/0 |
-| 25,000 | 0 | 24,999 | 1.03 MB | 56.2 ms | 59 s | 8.45 MB | 0/0 |
-| 5,000 | 100 | 4,999 | 86.5 MB | 264.3 ms | 59 s | 109.81 MB | 0/0 |
+| ------: | -------------: | -----------------: | -----------------: | ---------------------: | ------------: | --------------------: | ---------------: |
+|   1,000 |              0 |                999 |              41 KB |                 2.9 ms |          59 s |               7.35 MB |              0/0 |
+|   5,000 |              0 |              4,999 |             205 KB |                 9.0 ms |          59 s |               7.78 MB |              0/0 |
+|  25,000 |              0 |             24,999 |            1.03 MB |                56.2 ms |          59 s |               8.45 MB |              0/0 |
+|   5,000 |            100 |              4,999 |            86.5 MB |               264.3 ms |          59 s |             109.81 MB |              0/0 |
 
 The small-reply memory deltas are dominated by expanding the 128-connection writer pool and Redis allocator behavior, not the serialized list contents. The heavy paused case is the useful memory sizing point.
 
@@ -99,10 +99,10 @@ The actual mutex-protected waiter map registered 5,000 waiters in 6.5 ms in the 
 
 The harness also ran five rounds of 5,000 goroutines performing a store and delete against a mirrored mutex map and `sync.Map`. Median results were:
 
-| Map | Time per operation | Relative |
-|---|---:|---:|
-| Mutex plus native map | 187 ns | 1.21x |
-| `sync.Map` | 154 ns | 1.00x |
+| Map                   | Time per operation | Relative |
+| --------------------- | -----------------: | -------: |
+| Mutex plus native map |             187 ns |    1.21x |
+| `sync.Map`            |             154 ns |    1.00x |
 
 The absolute cost is negligible beside even the smallest measured reply RTT. The mutex implementation retains type safety and simple atomic registration semantics. There is no evidence to replace it at 5,000 waiters.
 
@@ -112,15 +112,15 @@ Waiter count and Redis connection count were independent. With 5,000 active wait
 
 The full-loop sweep used a real gitleaks finding and the real enforcement handler. Every scan completed with one finding-bearing reply, and there were no timeouts, errors, or orphans.
 
-| In-flight scans | p50 ms | p99 ms | Max ms | Scans/s | Inbox depth high-water | Timeouts/orphans |
-|---:|---:|---:|---:|---:|---:|---:|
-| 10 | 124.52 | 193.15 | 193.15 | 52 | 0 | 0/0 |
-| 50 | 58.23 | 145.17 | 145.17 | 344 | 0 | 0/0 |
-| 100 | 19.33 | 20.39 | 20.49 | 4,838 | 13 | 0/0 |
-| 500 | 151.10 | 267.86 | 271.46 | 1,834 | 22 | 0/0 |
-| 1,000 | 280.26 | 518.78 | 519.72 | 1,917 | 41 | 0/0 |
-| 2,500 | 662.48 | 1,274.53 | 1,275.77 | 1,952 | 38 | 0/0 |
-| 5,000 | 1,291.87 | 2,554.23 | 2,557.29 | 1,950 | 88 | 0/0 |
+| In-flight scans |   p50 ms |   p99 ms |   Max ms | Scans/s | Inbox depth high-water | Timeouts/orphans |
+| --------------: | -------: | -------: | -------: | ------: | ---------------------: | ---------------: |
+|              10 |   124.52 |   193.15 |   193.15 |      52 |                      0 |              0/0 |
+|              50 |    58.23 |   145.17 |   145.17 |     344 |                      0 |              0/0 |
+|             100 |    19.33 |    20.39 |    20.49 |   4,838 |                     13 |              0/0 |
+|             500 |   151.10 |   267.86 |   271.46 |   1,834 |                     22 |              0/0 |
+|           1,000 |   280.26 |   518.78 |   519.72 |   1,917 |                     41 |              0/0 |
+|           2,500 |   662.48 | 1,274.53 | 1,275.77 |   1,952 |                     38 |              0/0 |
+|           5,000 | 1,291.87 | 2,554.23 | 2,557.29 |   1,950 |                     88 |              0/0 |
 
 The 100-scan row is much faster than the 10 and 50 rows because the local emulator and publisher batch more efficiently at that burst size. Above 1,000 scans, emulator plus gitleaks throughput plateaus near 1,950 scans/s. This is not a prediction of GCP Pub/Sub latency, tail behavior, or production scanner capacity. It only proves the topology and implementation remain functional at the requested local concurrency.
 
