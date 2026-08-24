@@ -12,6 +12,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -52,7 +53,7 @@ func TestLocalStripeCheckoutStartsPayg(t *testing.T) {
 	Attach(mux, ti.service)
 	recorder := httptest.NewRecorder()
 	mux.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, parsed.RequestURI(), nil))
-	require.Equal(t, http.StatusSeeOther, recorder.Code)
+	require.Equal(t, http.StatusSeeOther, recorder.Code, recorder.Body.String())
 	require.Equal(t, "https://app.example.test/"+ti.orgSlug+"/billing", recorder.Header().Get("Location"))
 
 	metadata, err := repo.New(ti.db).GetBillingMetadata(t.Context(), ti.orgID)
@@ -115,6 +116,7 @@ func newLocalStripeCheckoutTestInstance(t *testing.T) *stripeCheckoutTestInstanc
 	t.Helper()
 
 	ti := newStripeCheckoutTestInstance(t)
+	require.NoError(t, authz.SeedSystemRoleGrantsTx(t.Context(), ti.db, ti.orgID))
 	publicURL, err := url.Parse("https://localhost:8000")
 	require.NoError(t, err)
 	stripe := stripeclient.NewStubClient(testenv.NewLogger(t), publicURL)
