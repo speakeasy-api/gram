@@ -1,9 +1,9 @@
+import { assistantsInterruptTurn } from "@gram/client/funcs/assistantsInterruptTurn";
 import { assistantsSendMessage } from "@gram/client/funcs/assistantsSendMessage";
 import { chatLoad } from "@gram/client/funcs/chatLoad";
 import type { GramCore } from "@gram/client/core";
 import { sleep, type ElementsTransportContext } from "@/elements";
 import { chatAttachmentAssetId } from "@/elements/lib/attachmentUpload";
-import { interruptTurn } from "@/lib/interruptTurn";
 import { streamTurn } from "@/lib/turnStream";
 import {
   type ChatTransport,
@@ -197,17 +197,24 @@ export function createServerAssistantTransport(
           const requestInterrupt = () => {
             const target = chatId;
             if (!target) return;
-            void interruptTurn({
-              chatId: target,
-              assistantId: deps.assistantId,
-              projectSlug: deps.projectSlug,
-              sessionToken: deps.getSessionToken?.(),
-            }).catch((err: unknown) => {
-              // Nothing to retry and nothing to show: the composer has already
-              // returned to its idle state. Logged because a failure here means
-              // the assistant is still generating in the background.
-              console.error("[interrupt] failed to stop the turn:", err);
-            });
+            // Deliberately without `fetchOptions.signal`: the request has to
+            // outlive the very abort that triggers it.
+            void assistantsInterruptTurn(deps.client, {
+              gramProject: deps.projectSlug,
+              interruptTurnRequestBody: {
+                assistantId: deps.assistantId,
+                chatId: target,
+              },
+            })
+              .then((res) => {
+                if (!res.ok) throw res.error;
+              })
+              .catch((err: unknown) => {
+                // Nothing to retry and nothing to show: the composer has already
+                // returned to its idle state. Logged because a failure here means
+                // the assistant is still generating in the background.
+                console.error("[interrupt] failed to stop the turn:", err);
+              });
           };
           abortSignal?.addEventListener("abort", requestInterrupt, {
             once: true,
