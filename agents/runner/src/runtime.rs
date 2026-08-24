@@ -594,9 +594,11 @@ where
                 // model call of its own, and spending one right after the user
                 // asked the assistant to stop both delays the thread going idle
                 // and bakes a half-written turn into the summary the next cold
-                // bootstrap replays. The uncompacted transcript is still
-                // correct — compaction is an optimisation, and the next turn's
-                // end runs it over the same history.
+                // bootstrap replays. Deferring it is safe rather than free:
+                // compaction is what keeps the transcript inside the context
+                // window, but the next turn compacts over the same history once
+                // the user's prompt arrives, so skipping it here only moves the
+                // work to a point where the turn it summarises is complete.
                 if turn.finish_reason == FinishReason::Cancelled {
                     tracing::info!(thread_id = %thread_id, "turn cancelled by user");
                 } else if let Some(compactor) = &turn_end_compactor {
