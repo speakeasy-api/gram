@@ -56,17 +56,3 @@ const (
 	// the requested response_type.
 	CodeUnsupportedResponseType = "unsupported_response_type"
 )
-
-// IsRFC6749TokenEndpointCode reports whether code is one of the six error
-// codes RFC 6749 §5.2 defines for the token endpoint error response. Codes
-// later RFCs register for the same endpoint (RFC 8628 §3.5, RFC 8707 §2, RFC
-// 9396 §5, RFC 9449 §5) and RFC 6749 §8.5 extension codes are not included.
-func IsRFC6749TokenEndpointCode(code string) bool {
-	switch code {
-	case CodeInvalidClient, CodeInvalidGrant, CodeInvalidRequest,
-		CodeInvalidScope, CodeUnauthorizedClient, CodeUnsupportedGrantType:
-		return true
-	default:
-		return false
-	}
-}

@@ -41,9 +41,9 @@ type vendorErrorsStringArray struct {
 	Errors []string `json:"errors"`
 }
 
-// parseVendorErrorsStringArray reads flattened RFC 6749 §5.2 errors out of a
-// vendorErrorsStringArray body. Entries that do not start with a §5.2 code are
-// arbitrary vendor text and are dropped. A CodeInvalidGrant entry wins over
+// parseVendorErrorsStringArray reads flattened OAuth 2.0 errors out of a
+// vendorErrorsStringArray body. Entries that do not start with a registered
+// code are arbitrary vendor text and are dropped. A CodeInvalidGrant entry wins over
 // any other regardless of position; otherwise the first recognized entry does.
 func parseVendorErrorsStringArray(body []byte) (RFC6749Error, bool) {
 	var v vendorErrorsStringArray
@@ -146,11 +146,11 @@ func parseVendorErrorCodeMessageObject(body []byte) (RFC6749Error, bool) {
 	return RFC6749Error{Code: key.Code, Description: message, URI: ""}, true
 }
 
-// splitFlattenedError recognizes vendor free text that begins with one of the
-// six RFC 6749 §5.2 token endpoint error codes, optionally followed by a
-// separator and description ("invalid_grant - Invalid or expired refresh
-// token."). The code must end at a byte outside the IANA registry alphabet so
-// that "invalid_grant_extra" is not read as invalid_grant. The description is the
+// splitFlattenedError recognizes vendor free text that begins with an
+// IANA-registered OAuth 2.0 error code, optionally followed by a separator and
+// description ("invalid_grant - Invalid or expired refresh token."). The code
+// must end at a byte outside the IANA registry alphabet so that
+// "invalid_grant_extra" is not read as invalid_grant. The description is the
 // remainder with leading whitespace and "-", ":" or "." separators removed.
 // RFC 6749 §8.5 extension codes are not split out of free text, since an
 // unregistered prefix cannot be told apart from an arbitrary vendor message.
@@ -164,7 +164,7 @@ func splitFlattenedError(s string) (code, description string, ok bool) {
 		}
 	}
 	code = s[:end]
-	if !IsRFC6749TokenEndpointCode(code) {
+	if !IsIANARegisteredCode(code) {
 		return "", "", false
 	}
 	description = strings.TrimSpace(strings.TrimLeft(s[end:], " \t-:."))

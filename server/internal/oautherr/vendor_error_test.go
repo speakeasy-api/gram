@@ -135,8 +135,13 @@ func TestSplitFlattenedError(t *testing.T) {
 	_, _, ok = splitFlattenedError("Invalid_Grant - x")
 	require.False(t, ok, "RFC 6749 §5.2 codes are lowercase")
 
-	_, _, ok = splitFlattenedError("expired_token - x")
-	require.False(t, ok, "only the six §5.2 codes are split out of free text")
+	code, description, ok = splitFlattenedError("expired_token - device code expired")
+	require.True(t, ok, "any IANA-registered code is split out of free text")
+	require.Equal(t, CodeExpiredToken, code)
+	require.Equal(t, "device code expired", description)
+
+	_, _, ok = splitFlattenedError("login_required - x")
+	require.False(t, ok, "non-IETF registry entries are not registered here")
 
 	_, _, ok = splitFlattenedError("")
 	require.False(t, ok)
