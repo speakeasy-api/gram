@@ -1533,15 +1533,12 @@ CREATE TABLE IF NOT EXISTS identity_map_staging (
 COMMENT 'Staging twin of identity_map. The sync worker rebuilds this table then swaps it live with EXCHANGE TABLES so readers never observe a partial map.';
 
 CREATE TABLE IF NOT EXISTS otel_logs (
-    -- Identity / dedup
-    record_id String COMMENT 'Edge-assigned unique id for the log record (gram.otel.v1.LogRecord.record_id). Pub/Sub delivery is at-least-once, so this is the ReplacingMergeTree dedup key.' CODEC(ZSTD),
-
     -- Tenancy, stamped by the ingest edge from authenticated state.
     organization_id String COMMENT 'Organization the record belongs to, from the provenance stamped at the ingest edge.' CODEC(ZSTD),
     project_id String COMMENT 'Project the record was ingested under, from the provenance stamped at the ingest edge.' CODEC(ZSTD),
 
     -- Timing
-    time_unix_nano Int64 COMMENT 'Unix time (ns) when the event occurred. The writer substitutes observed_time_unix_nano (then write time) when the producer sent 0, so this is never epoch zero.' CODEC(Delta, ZSTD),
+    time_unix_nano Int64 COMMENT 'Unix time (ns) when the event occurred. The writer substitutes observed_time_unix_nano when the producer sent 0 and drops records with neither, so this is never epoch zero.' CODEC(Delta, ZSTD),
     observed_time_unix_nano Int64 COMMENT 'Unix time (ns) when the event was observed by the collection system. 0 when the producer omitted it.' CODEC(Delta, ZSTD),
     timestamp DateTime64(9) DEFAULT fromUnixTimestamp64Nano(time_unix_nano) COMMENT 'Human-readable timestamp derived from time_unix_nano.',
 
@@ -1566,12 +1563,12 @@ CREATE TABLE IF NOT EXISTS otel_logs (
     scope_name LowCardinality(String) COMMENT 'Instrumentation scope name. The transform pipeline rewrites this to com.speakeasy.ai.logging and keeps the producer scope in log_attributes under speakeasy.original_instrumentation_scope.name.',
     scope_version String COMMENT 'Instrumentation scope version. Empty when not reported.' CODEC(ZSTD),
     scope_attributes JSON COMMENT 'Instrumentation scope attributes.' CODEC(ZSTD)
-) ENGINE = ReplacingMergeTree
+) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))
-ORDER BY (organization_id, time_unix_nano, record_id)
+ORDER BY (organization_id, time_unix_nano)
 TTL fromUnixTimestamp64Nano(time_unix_nano) + INTERVAL 90 DAY
 SETTINGS index_granularity = 8192
-COMMENT 'Normalized OTel log records teed off the gram.otel.v1.LogRecord topic after transform/enrichment, powering the org-scoped Event Feed. Pub/Sub redelivery is deduped by the sort key via ReplacingMergeTree.';
+COMMENT 'Normalized OTel log records teed off the gram.otel.v1.LogRecord topic after transform/enrichment, powering the org-scoped Event Feed. Ingestion is at-least-once, so Pub/Sub redelivery can produce duplicate rows and readers must tolerate them.';
 
 -- organization_id leads the ORDER BY, so no index is needed for it.
 CREATE INDEX IF NOT EXISTS idx_otel_logs_trace_id ON otel_logs (trace_id) TYPE bloom_filter(0.01) GRANULARITY 1;
@@ -1580,10 +1577,6 @@ CREATE INDEX IF NOT EXISTS idx_otel_logs_source ON otel_logs (source) TYPE set(0
 CREATE INDEX IF NOT EXISTS idx_otel_logs_severity ON otel_logs (severity_text) TYPE set(0) GRANULARITY 4;
 
 CREATE TABLE IF NOT EXISTS otel_traces (
-    -- Identity / dedup. Spans carry no edge-assigned record id (they have
-    -- natural identity), so the writer derives one deterministically.
-    record_id String COMMENT 'Dedup key derived by the writer as hex(trace_id):hex(span_id). Stable across Pub/Sub redelivery, so ReplacingMergeTree dedups on it.' CODEC(ZSTD),
-
     -- Tenancy, stamped by the ingest edge from authenticated state.
     organization_id String COMMENT 'Organization the span belongs to, from the provenance stamped at the ingest edge.' CODEC(ZSTD),
     project_id String COMMENT 'Project the span was ingested under, from the provenance stamped at the ingest edge.' CODEC(ZSTD),
@@ -1613,12 +1606,12 @@ CREATE TABLE IF NOT EXISTS otel_traces (
     scope_name LowCardinality(String) COMMENT 'Instrumentation scope name. The transform pipeline rewrites this to com.speakeasy.ai.logging and keeps the producer scope in span_attributes under speakeasy.original_instrumentation_scope.name.',
     scope_version String COMMENT 'Instrumentation scope version. Empty when not reported.' CODEC(ZSTD),
     scope_attributes JSON COMMENT 'Instrumentation scope attributes.' CODEC(ZSTD)
-) ENGINE = ReplacingMergeTree
+) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))
-ORDER BY (organization_id, time_unix_nano, record_id)
+ORDER BY (organization_id, time_unix_nano)
 TTL fromUnixTimestamp64Nano(time_unix_nano) + INTERVAL 90 DAY
 SETTINGS index_granularity = 8192
-COMMENT 'Normalized OTel spans teed off the gram.otel.v1.Span topic after transform/enrichment, powering the org-scoped Event Feed. Pub/Sub redelivery is deduped by the sort key via ReplacingMergeTree.';
+COMMENT 'Normalized OTel spans teed off the gram.otel.v1.Span topic after transform/enrichment, powering the org-scoped Event Feed. Ingestion is at-least-once, so Pub/Sub redelivery can produce duplicate rows and readers must tolerate them.';
 
 -- organization_id leads the ORDER BY, so no index is needed for it.
 CREATE INDEX IF NOT EXISTS idx_otel_traces_trace_id ON otel_traces (trace_id) TYPE bloom_filter(0.01) GRANULARITY 1;

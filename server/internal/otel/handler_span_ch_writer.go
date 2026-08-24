@@ -36,8 +36,8 @@ type OTelTraceInserter interface {
 // shared Pub/Sub topic and writes them to the ClickHouse otel_traces table
 // that powers the Event Feed. Invalid messages are poison records: they are
 // logged and acknowledged, while ClickHouse failures are returned so the batch
-// is redelivered — safe because otel_traces dedups redelivered rows on the
-// trace/span-derived record_id via ReplacingMergeTree.
+// is redelivered — otel_traces is plain MergeTree, so redelivery can produce
+// duplicate rows that readers tolerate.
 type SpanEventCHWriter struct {
 	logger        *slog.Logger
 	inserter      OTelTraceInserter
@@ -130,9 +130,8 @@ func spanEventRow(span *otelv1.Span) (chrepo.OTelTraceRow, string) {
 	// Span timing is validated at the ingest edge (non-zero start, end >=
 	// start), so the fallbacks below only guard against records that predate
 	// or bypass that validation. The start time is the table's sort,
-	// partition, TTL, and — with record_id — ReplacingMergeTree dedup key,
-	// so it must be identical across Pub/Sub redeliveries: a span with no
-	// usable timestamp at all has no deterministic key and is dropped.
+	// partition, and TTL key, so it must never be epoch zero: a span with no
+	// usable timestamp at all is dropped.
 	startNano := eventUnixNano(span.GetStartTimeUnixNano())
 	endNano := eventUnixNano(span.GetEndTimeUnixNano())
 	if startNano == 0 {
@@ -157,9 +156,6 @@ func spanEventRow(span *otelv1.Span) (chrepo.OTelTraceRow, string) {
 	}
 
 	return chrepo.OTelTraceRow{
-		// Spans carry no edge-assigned record id — they have natural identity
-		// in (trace_id, span_id) — so the dedup key is derived from it.
-		RecordID:           traceID + ":" + spanID,
 		OrganizationID:     organizationID,
 		ProjectID:          span.GetProvenance().GetProjectId(),
 		TimeUnixNano:       startNano,

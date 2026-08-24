@@ -16,10 +16,6 @@ var sq = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Question)
 // internal/otel/handler_log_ch_writer.go for how it is populated from a
 // normalized gram.otel.v1.LogRecord.
 type OTelLogRow struct {
-	// RecordID is the edge-assigned unique id for the record, the
-	// ReplacingMergeTree dedup key against Pub/Sub redelivery.
-	RecordID string `ch:"record_id"`
-
 	// OrganizationID and ProjectID are the tenancy stamped by the ingest edge
 	// from authenticated state, carried on the record's provenance.
 	OrganizationID string `ch:"organization_id"`
@@ -65,10 +61,6 @@ type OTelLogRow struct {
 // internal/otel/handler_span_ch_writer.go for how it is populated from a
 // normalized gram.otel.v1.Span.
 type OTelTraceRow struct {
-	// RecordID is the writer-derived dedup key hex(trace_id):hex(span_id),
-	// stable across Pub/Sub redelivery.
-	RecordID string `ch:"record_id"`
-
 	// OrganizationID and ProjectID are the tenancy stamped by the ingest edge
 	// from authenticated state, carried on the span's provenance.
 	OrganizationID string `ch:"organization_id"`
@@ -116,7 +108,6 @@ type OTelTraceRow struct {
 // InsertOTelLogs binds values. The derived timestamp column is deliberately
 // absent so ClickHouse computes it from time_unix_nano.
 var otelLogColumns = []string{
-	"record_id",
 	"organization_id",
 	"project_id",
 	"time_unix_nano",
@@ -141,7 +132,6 @@ var otelLogColumns = []string{
 // InsertOTelTraces binds values. The derived timestamp column is deliberately
 // absent so ClickHouse computes it from time_unix_nano.
 var otelTraceColumns = []string{
-	"record_id",
 	"organization_id",
 	"project_id",
 	"time_unix_nano",
@@ -167,7 +157,8 @@ var otelTraceColumns = []string{
 // writers: the server may batch concurrent inserts, but the call waits for the
 // flush so the Pub/Sub batch handler only acks durably accepted rows. Failed
 // inserts are returned to the handler, which nacks the batch for redelivery —
-// safe because ReplacingMergeTree dedups redelivered rows on the sort key.
+// the tables are plain MergeTree, so redelivered rows land as duplicates that
+// readers must tolerate.
 func chWriterInsertContext(ctx context.Context) context.Context {
 	return clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
 		"async_insert":          1,
@@ -184,7 +175,6 @@ func (q *Queries) InsertOTelLogs(ctx context.Context, rows []OTelLogRow) error {
 	builder := sq.Insert("otel_logs").Columns(otelLogColumns...)
 	for _, row := range rows {
 		builder = builder.Values(
-			row.RecordID,
 			row.OrganizationID,
 			row.ProjectID,
 			row.TimeUnixNano,
@@ -227,7 +217,6 @@ func (q *Queries) InsertOTelTraces(ctx context.Context, rows []OTelTraceRow) err
 	builder := sq.Insert("otel_traces").Columns(otelTraceColumns...)
 	for _, row := range rows {
 		builder = builder.Values(
-			row.RecordID,
 			row.OrganizationID,
 			row.ProjectID,
 			row.TimeUnixNano,

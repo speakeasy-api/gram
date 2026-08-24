@@ -88,7 +88,6 @@ func TestSpanEventCHWriterMapsSpanToRow(t *testing.T) {
 	require.Len(t, inserter.batches[0], 1)
 	row := inserter.batches[0][0]
 
-	require.Equal(t, "abababababababababababababababab:cdcdcdcdcdcdcdcd", row.RecordID)
 	require.Equal(t, "org-1", row.OrganizationID)
 	require.Equal(t, "project-1", row.ProjectID)
 	require.Equal(t, int64(1_724_500_000_000_000_001), row.TimeUnixNano)
@@ -178,9 +177,8 @@ func TestSpanEventCHWriterSkipsSpanWhenBothTimesMissing(t *testing.T) {
 	inserter := &captureTraceInserter{batches: nil, err: nil}
 	writer := newSpanEventTestWriter(t, inserter)
 
-	// A wall-clock fallback would give redeliveries of the same span
-	// different sort keys, defeating ReplacingMergeTree dedup, so spans
-	// without any timestamp are unprocessable.
+	// The span start time is the table's sort, partition, and TTL key, so
+	// spans without any timestamp are unprocessable.
 	span := spanEventTestSpan("org-1", "claude-code")
 	span.SetStartTimeUnixNano(0)
 	span.SetEndTimeUnixNano(0)

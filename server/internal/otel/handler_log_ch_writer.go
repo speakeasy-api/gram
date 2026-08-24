@@ -31,8 +31,8 @@ type OTelLogInserter interface {
 // shared Pub/Sub topic and writes them to the ClickHouse otel_logs table that
 // powers the Event Feed. Invalid messages are poison records: they are logged
 // and acknowledged, while ClickHouse failures are returned so the batch is
-// redelivered — safe because otel_logs dedups redelivered rows on record_id
-// via ReplacingMergeTree.
+// redelivered — otel_logs is plain MergeTree, so redelivery can produce
+// duplicate rows that readers tolerate.
 type LogEventCHWriter struct {
 	logger          *slog.Logger
 	inserter        OTelLogInserter
@@ -112,21 +112,16 @@ func logEventRow(record *otelv1.LogRecord) (chrepo.OTelLogRow, string) {
 	if record == nil {
 		return zero, "nil_record"
 	}
-	recordID := record.GetRecordId()
-	if recordID == "" {
-		return zero, "missing_record_id"
-	}
 	organizationID := record.GetProvenance().GetOrganizationId()
 	if organizationID == "" {
 		return zero, "missing_organization_id"
 	}
 
 	// The producer's event time, standing in observed time when the producer
-	// did not know it. The value is the table's sort, partition, TTL, and —
-	// with record_id — ReplacingMergeTree dedup key, so it must be identical
-	// across Pub/Sub redeliveries. The ingest edge stamps observed time
+	// did not know it. The value is the table's sort, partition, and TTL key,
+	// so it must never be epoch zero. The ingest edge stamps observed time
 	// before the first publish, so a record with neither timestamp predates
-	// or bypassed that edge and has no deterministic key: drop it.
+	// or bypassed that edge and has no usable event time: drop it.
 	observedNano := eventUnixNano(record.GetObservedTimeUnixNano())
 	timeNano := eventUnixNano(record.GetTimeUnixNano())
 	if timeNano == 0 {
@@ -154,7 +149,6 @@ func logEventRow(record *otelv1.LogRecord) (chrepo.OTelLogRow, string) {
 	}
 
 	return chrepo.OTelLogRow{
-		RecordID:             recordID,
 		OrganizationID:       organizationID,
 		ProjectID:            record.GetProvenance().GetProjectId(),
 		TimeUnixNano:         timeNano,

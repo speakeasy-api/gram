@@ -90,7 +90,6 @@ func TestLogEventCHWriterMapsRecordToRow(t *testing.T) {
 	require.Len(t, inserter.batches[0], 1)
 	row := inserter.batches[0][0]
 
-	require.Equal(t, "record-1", row.RecordID)
 	require.Equal(t, "org-1", row.OrganizationID)
 	require.Equal(t, "project-1", row.ProjectID)
 	require.Equal(t, int64(1_724_500_000_000_000_001), row.TimeUnixNano)
@@ -162,8 +161,7 @@ func TestLogEventCHWriterSkipsRecordWhenBothTimesMissing(t *testing.T) {
 	inserter := &captureLogInserter{batches: nil, err: nil}
 	writer := newLogEventTestWriter(t, inserter)
 
-	// A wall-clock fallback would give redeliveries of the same record_id
-	// different sort keys, defeating ReplacingMergeTree dedup, so records
+	// The event time is the table's sort, partition, and TTL key, so records
 	// without any timestamp are unprocessable.
 	record := logEventTestRecord("record-1", "org-1", "claude-code")
 	record.SetTimeUnixNano(0)
@@ -234,17 +232,16 @@ func TestLogEventCHWriterSkipsUnprocessableRecords(t *testing.T) {
 	inserter := &captureLogInserter{batches: nil, err: nil}
 	writer := newLogEventTestWriter(t, inserter)
 
-	missingRecordID := logEventTestRecord("", "org-1", "claude-code")
 	missingOrganization := logEventTestRecord("record-2", "", "claude-code")
 	valid := logEventTestRecord("record-3", "org-1", "claude-code")
 
-	messages := []*otelv1.LogRecord{nil, missingRecordID, missingOrganization, valid}
+	messages := []*otelv1.LogRecord{nil, missingOrganization, valid}
 	require.NoError(t, writer.HandleBatch(t.Context(), messages, nil))
 
 	require.Len(t, inserter.batches, 1)
 	rows := inserter.batches[0]
 	require.Len(t, rows, 1)
-	require.Equal(t, "record-3", rows[0].RecordID)
+	require.Equal(t, "org-1", rows[0].OrganizationID)
 }
 
 func TestLogEventCHWriterAcksBatchOfOnlyUnprocessableRecords(t *testing.T) {

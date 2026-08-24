@@ -3,18 +3,23 @@ package chrepo
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
-func testLogRow(organizationID, recordID string) OTelLogRow {
+// testEventTimeNano is a recent event time for test rows. It must stay inside
+// the tables' 90-day TTL window: rows past the TTL are dropped whenever
+// ClickHouse rewrites a part, which makes counts nondeterministic.
+var testEventTimeNano = time.Now().Add(-time.Hour).UnixNano()
+
+func testLogRow(organizationID string) OTelLogRow {
 	return OTelLogRow{
-		RecordID:             recordID,
 		OrganizationID:       organizationID,
 		ProjectID:            "11111111-2222-3333-4444-555555555555",
-		TimeUnixNano:         1_724_500_000_000_000_001,
-		ObservedTimeUnixNano: 1_724_500_000_000_000_002,
+		TimeUnixNano:         testEventTimeNano,
+		ObservedTimeUnixNano: testEventTimeNano + 1,
 		Source:               "claude-code",
 		TraceID:              "abababababababababababababababab",
 		SpanID:               "cdcdcdcdcdcdcdcd",
@@ -32,12 +37,11 @@ func testLogRow(organizationID, recordID string) OTelLogRow {
 	}
 }
 
-func testTraceRow(organizationID, recordID string) OTelTraceRow {
+func testTraceRow(organizationID string) OTelTraceRow {
 	return OTelTraceRow{
-		RecordID:           recordID,
 		OrganizationID:     organizationID,
 		ProjectID:          "11111111-2222-3333-4444-555555555555",
-		TimeUnixNano:       1_724_500_000_000_000_001,
+		TimeUnixNano:       testEventTimeNano,
 		DurationNano:       500,
 		Source:             "claude-code",
 		TraceID:            "abababababababababababababababab",
@@ -64,12 +68,12 @@ func TestInsertOTelLogsRoundTrip(t *testing.T) {
 	queries := New(conn)
 	organizationID := "org-" + uuid.NewString()
 
-	require.NoError(t, queries.InsertOTelLogs(t.Context(), []OTelLogRow{testLogRow(organizationID, "record-1")}))
+	require.NoError(t, queries.InsertOTelLogs(t.Context(), []OTelLogRow{testLogRow(organizationID)}))
 
 	// The insert waits for the async flush, so rows are readable immediately.
 	rows, err := conn.Query(t.Context(), `
 		SELECT
-			record_id, project_id, time_unix_nano, observed_time_unix_nano,
+			project_id, time_unix_nano, observed_time_unix_nano,
 			toUnixTimestamp64Nano(timestamp), toString(source), trace_id, span_id,
 			event_name, toString(severity_text), severity_number, body,
 			toJSONString(log_attributes), flags, toJSONString(resource_attributes),
@@ -83,15 +87,15 @@ func TestInsertOTelLogsRoundTrip(t *testing.T) {
 
 	require.True(t, rows.Next(), "no row returned: %v", rows.Err())
 	var (
-		recordID, projectID, traceID, spanID, eventName, severityText string
-		body, logAttributes, resourceAttributes, resourceSchemaURL    string
-		scopeName, scopeVersion, scopeAttributes, source              string
-		timeUnixNano, observedTimeUnixNano, derivedTimestampNano      int64
-		severityNumber                                                int32
-		flags                                                         uint32
+		projectID, traceID, spanID, eventName, severityText        string
+		body, logAttributes, resourceAttributes, resourceSchemaURL string
+		scopeName, scopeVersion, scopeAttributes, source           string
+		timeUnixNano, observedTimeUnixNano, derivedTimestampNano   int64
+		severityNumber                                             int32
+		flags                                                      uint32
 	)
 	require.NoError(t, rows.Scan(
-		&recordID, &projectID, &timeUnixNano, &observedTimeUnixNano,
+		&projectID, &timeUnixNano, &observedTimeUnixNano,
 		&derivedTimestampNano, &source, &traceID, &spanID,
 		&eventName, &severityText, &severityNumber, &body,
 		&logAttributes, &flags, &resourceAttributes,
@@ -101,10 +105,9 @@ func TestInsertOTelLogsRoundTrip(t *testing.T) {
 	require.False(t, rows.Next())
 	require.NoError(t, rows.Err())
 
-	require.Equal(t, "record-1", recordID)
 	require.Equal(t, "11111111-2222-3333-4444-555555555555", projectID)
-	require.Equal(t, int64(1_724_500_000_000_000_001), timeUnixNano)
-	require.Equal(t, int64(1_724_500_000_000_000_002), observedTimeUnixNano)
+	require.Equal(t, testEventTimeNano, timeUnixNano)
+	require.Equal(t, testEventTimeNano+1, observedTimeUnixNano)
 	require.Equal(t, timeUnixNano, derivedTimestampNano)
 	require.Equal(t, "claude-code", source)
 	require.Equal(t, "abababababababababababababababab", traceID)
@@ -127,27 +130,27 @@ func TestInsertOTelLogsRoundTrip(t *testing.T) {
 	require.Contains(t, resourceAttributes, "claude-code")
 }
 
-func TestInsertOTelLogsDedupsRedeliveryOnRecordID(t *testing.T) {
+func TestInsertOTelLogsKeepsRedeliveredDuplicates(t *testing.T) {
 	t.Parallel()
 
 	conn := newTestClickhouse(t)
 	queries := New(conn)
 	organizationID := "org-" + uuid.NewString()
 
-	// A redelivered Pub/Sub batch re-inserts identical rows: same record_id
-	// and time, so they share a ReplacingMergeTree sort key.
-	row := testLogRow(organizationID, "record-1")
+	// A redelivered Pub/Sub batch re-inserts identical rows. otel_logs is
+	// plain MergeTree, so both copies are kept and readers tolerate them.
+	row := testLogRow(organizationID)
 	require.NoError(t, queries.InsertOTelLogs(t.Context(), []OTelLogRow{row}))
 	require.NoError(t, queries.InsertOTelLogs(t.Context(), []OTelLogRow{row}))
 
-	rows, err := conn.Query(t.Context(), "SELECT count() FROM otel_logs FINAL WHERE organization_id = ?", organizationID)
+	rows, err := conn.Query(t.Context(), "SELECT count() FROM otel_logs WHERE organization_id = ?", organizationID)
 	require.NoError(t, err)
 	defer rows.Close() //nolint:errcheck // best-effort close
 
 	require.True(t, rows.Next())
 	var count uint64
 	require.NoError(t, rows.Scan(&count))
-	require.Equal(t, uint64(1), count)
+	require.Equal(t, uint64(2), count)
 }
 
 func TestInsertOTelTracesRoundTrip(t *testing.T) {
@@ -157,12 +160,11 @@ func TestInsertOTelTracesRoundTrip(t *testing.T) {
 	queries := New(conn)
 	organizationID := "org-" + uuid.NewString()
 
-	recordID := "abababababababababababababababab:cdcdcdcdcdcdcdcd"
-	require.NoError(t, queries.InsertOTelTraces(t.Context(), []OTelTraceRow{testTraceRow(organizationID, recordID)}))
+	require.NoError(t, queries.InsertOTelTraces(t.Context(), []OTelTraceRow{testTraceRow(organizationID)}))
 
 	rows, err := conn.Query(t.Context(), `
 		SELECT
-			record_id, project_id, time_unix_nano, duration_nano,
+			project_id, time_unix_nano, duration_nano,
 			toUnixTimestamp64Nano(timestamp), toString(source), trace_id, span_id,
 			parent_span_id, span_name, toString(span_kind), toString(status_code),
 			status_message, trace_state, toJSONString(span_attributes),
@@ -176,14 +178,14 @@ func TestInsertOTelTracesRoundTrip(t *testing.T) {
 
 	require.True(t, rows.Next(), "no row returned: %v", rows.Err())
 	var (
-		gotRecordID, projectID, source, traceID, spanID, parentSpanID string
-		spanName, spanKind, statusCode, statusMessage, traceState     string
-		spanAttributes, resourceAttributes, resourceSchemaURL         string
-		scopeName, scopeVersion, scopeAttributes                      string
-		timeUnixNano, durationNano, derivedTimestampNano              int64
+		projectID, source, traceID, spanID, parentSpanID          string
+		spanName, spanKind, statusCode, statusMessage, traceState string
+		spanAttributes, resourceAttributes, resourceSchemaURL     string
+		scopeName, scopeVersion, scopeAttributes                  string
+		timeUnixNano, durationNano, derivedTimestampNano          int64
 	)
 	require.NoError(t, rows.Scan(
-		&gotRecordID, &projectID, &timeUnixNano, &durationNano,
+		&projectID, &timeUnixNano, &durationNano,
 		&derivedTimestampNano, &source, &traceID, &spanID,
 		&parentSpanID, &spanName, &spanKind, &statusCode,
 		&statusMessage, &traceState, &spanAttributes,
@@ -193,9 +195,8 @@ func TestInsertOTelTracesRoundTrip(t *testing.T) {
 	require.False(t, rows.Next())
 	require.NoError(t, rows.Err())
 
-	require.Equal(t, recordID, gotRecordID)
 	require.Equal(t, "11111111-2222-3333-4444-555555555555", projectID)
-	require.Equal(t, int64(1_724_500_000_000_000_001), timeUnixNano)
+	require.Equal(t, testEventTimeNano, timeUnixNano)
 	require.Equal(t, int64(500), durationNano)
 	require.Equal(t, timeUnixNano, derivedTimestampNano)
 	require.Equal(t, "claude-code", source)
@@ -216,25 +217,27 @@ func TestInsertOTelTracesRoundTrip(t *testing.T) {
 	require.Equal(t, "session-1", parsedSpanAttributes["session_key"])
 }
 
-func TestInsertOTelTracesDedupsRedeliveryOnRecordID(t *testing.T) {
+func TestInsertOTelTracesKeepsRedeliveredDuplicates(t *testing.T) {
 	t.Parallel()
 
 	conn := newTestClickhouse(t)
 	queries := New(conn)
 	organizationID := "org-" + uuid.NewString()
 
-	row := testTraceRow(organizationID, "abababababababababababababababab:cdcdcdcdcdcdcdcd")
+	// A redelivered Pub/Sub batch re-inserts identical rows. otel_traces is
+	// plain MergeTree, so both copies are kept and readers tolerate them.
+	row := testTraceRow(organizationID)
 	require.NoError(t, queries.InsertOTelTraces(t.Context(), []OTelTraceRow{row}))
 	require.NoError(t, queries.InsertOTelTraces(t.Context(), []OTelTraceRow{row}))
 
-	rows, err := conn.Query(t.Context(), "SELECT count() FROM otel_traces FINAL WHERE organization_id = ?", organizationID)
+	rows, err := conn.Query(t.Context(), "SELECT count() FROM otel_traces WHERE organization_id = ?", organizationID)
 	require.NoError(t, err)
 	defer rows.Close() //nolint:errcheck // best-effort close
 
 	require.True(t, rows.Next())
 	var count uint64
 	require.NoError(t, rows.Scan(&count))
-	require.Equal(t, uint64(1), count)
+	require.Equal(t, uint64(2), count)
 }
 
 func TestInsertOTelLogsEmptyBatchIsNoop(t *testing.T) {
