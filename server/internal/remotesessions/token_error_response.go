@@ -142,7 +142,7 @@ func splitInvalidGrant(msg string) (tokenErrorResponse, bool) {
 
 	if rest, ok := strings.CutPrefix(msg, oauthErrInvalidGrant); ok {
 		if rest == "" || !isErrorTokenByte(rest[0]) {
-			rest = strings.TrimSpace(strings.TrimLeft(rest, "-:."))
+			rest = strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(rest), "-:."))
 			return newTokenError(oauthErrInvalidGrant, rest, ""), true
 		}
 	}
