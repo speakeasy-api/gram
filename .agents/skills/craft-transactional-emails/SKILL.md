@@ -70,9 +70,9 @@ two-variable template:
 {
   "version": 1,
   "defaults": {
-    "from_name": "Speakeasy",
-    "from_email": "platform",
-    "reply_to_email": "platform@speakeasy.com"
+    "from_name": "Example Organization",
+    "from_email": "example",
+    "reply_to_email": "person@example.com"
   },
   "templates": {
     "example_notice": {
@@ -87,11 +87,13 @@ two-variable template:
 ```
 
 In the existing repository manifest, preserve `version`, `defaults`, and all
-existing templates; add only the new object under `templates`.
-Transactional email sends from `platform@speakeasy.com`: `from_email` is the
-sender local-part configured in Loops (`platform`), `from_name` is `Speakeasy`,
-and `reply_to_email` is the full address. Never change these defaults per
-template.
+existing templates; add only the new object under `templates`. The example
+above is deliberately neutral — keep placeholders like these in examples,
+tests, and previews. The real sender identity lives only in the checked-in
+manifest defaults: transactional email sends from `platform@speakeasy.com`
+(`from_email` is the Loops sender local-part `platform`, `from_name` is
+`Speakeasy`, `reply_to_email` is the full address). Never change those
+defaults per template.
 
 Identity map:
 
