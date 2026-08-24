@@ -36,8 +36,13 @@ func chDismissalCopy(t *testing.T, projectID uuid.UUID, orgID, policyID string, 
 	created := time.Now().UTC().AddDate(0, 0, -1)
 	row := chListFinding(t, projectID, orgID, chatID, msgID, policyID, created, created, "gitleaks", "aws-access-key-id", "alice@example.com", "AKIA**************LE", "fp-dismissal", "")
 	row.ID = id
+	// Stamp the event kind the way the relayed mirror messages do, so these
+	// hand-appended copies exercise the same state-change-outranks-finding
+	// dedup the production rows rely on.
+	row.EventKind = chrepo.EventKindUnsuppression
 	if !suppressedAt.IsZero() {
 		at := suppressedAt
+		row.EventKind = chrepo.EventKindSuppression
 		row.ExcludedAt = &at
 		row.ExcludedReason = chrepo.ExcludedReasonManual
 		row.ExcludedDetail = "noise"
@@ -254,6 +259,68 @@ func TestMarkUnmarkRiskResultsFalsePositive_MirrorRidesTheTransaction(t *testing
 	})
 	require.NoError(t, err)
 	require.Len(t, listFindingMirrorRows(t, ti.conn), 2)
+}
+
+// TestMarkRiskResultsFalsePositive_ExclusionOwnedRowNotMirrored pins the
+// boundary between the two suppression pipelines: marking a batch that
+// includes a rule-excluded row must not enqueue a manual-suppression mirror
+// for it — the exclusion owns that finding's ClickHouse identity, and a
+// manual copy would overwrite the rule suppression at read time. Other rows
+// in the batch still mirror, and Postgres marks every requested row.
+func TestMarkRiskResultsFalsePositive_ExclusionOwnedRowNotMirrored(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Exclusion Owned Mirror Test")})
+	require.NoError(t, err)
+	policyID, err := uuid.Parse(policy.ID)
+	require.NoError(t, err)
+
+	_, msgID := seedChatMessage(t, ti, projectID, orgID)
+	excludedID := seedRiskResultWith(t, ti, projectID, orgID, policyID, msgID, "gitleaks", "aws-access-key-id", "EXCLUDED_MATCH_TOKEN")
+	plainID := seedRiskResultWith(t, ti, projectID, orgID, policyID, msgID, "gitleaks", "generic-api-key", "PLAIN_MATCH_TOKEN")
+
+	// Stamp the exclusion on one row the way the reconcile sweep does.
+	stamped, err := riskrepo.New(ti.conn).ApplyExactExclusionBatch(ctx, riskrepo.ApplyExactExclusionBatchParams{
+		ExclusionID:  uuid.NullUUID{UUID: uuid.Must(uuid.NewV7()), Valid: true},
+		ProjectID:    projectID,
+		PolicyID:     uuid.NullUUID{UUID: policyID, Valid: true},
+		MatchValue:   pgtype.Text{String: "EXCLUDED_MATCH_TOKEN", Valid: true},
+		RuleIDFilter: pgtype.Text{String: "", Valid: false},
+		SourceFilter: pgtype.Text{String: "", Valid: false},
+		Cursor:       uuid.Nil,
+		BatchLimit:   10,
+	})
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{excludedID}, stamped)
+
+	err = ti.service.MarkRiskResultsFalsePositive(ctx, &gen.MarkRiskResultsFalsePositivePayload{
+		ResultIds: []string{excludedID.String(), plainID.String()},
+		Reason:    new("noise"),
+	})
+	require.NoError(t, err)
+
+	mirrored := listFindingMirrorRows(t, ti.conn)
+	require.Len(t, mirrored, 1, "the exclusion-owned row must not be mirrored")
+	require.Equal(t, plainID.String(), mirrored[0].GetId())
+
+	// Postgres still carries the mark on both rows.
+	rows, err := riskrepo.New(ti.conn).GetRiskResultsByIDs(ctx, riskrepo.GetRiskResultsByIDsParams{
+		ProjectID: projectID,
+		Ids:       []uuid.UUID{excludedID, plainID},
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	for _, row := range rows {
+		require.True(t, row.FalsePositiveAt.Valid, "marking must apply in Postgres regardless of the mirror")
+	}
 }
 
 func TestMarkRiskResultsFalsePositive_RejectsEmptyIDs(t *testing.T) {

@@ -184,11 +184,22 @@ func enqueueFalsePositiveMirror(ctx context.Context, dbtx pgx.Tx, orgID string, 
 
 	msgs := make([]outbox.Message, 0, len(rows))
 	for _, row := range rows {
+		// A row carrying an exclusion stamp is suppressed by the exclusion
+		// pipeline, which owns its ClickHouse identity: mirroring a manual
+		// suppression (or an unsuppression) over it would overwrite the rule
+		// suppression at read time, resurfacing or re-labeling a finding the
+		// exclusion still covers. Postgres keeps the mark either way.
+		if row.ExcludedAt.Valid {
+			continue
+		}
 		msgs = append(msgs, outbox.Message{
 			Proto:      fpMirrorMessage(row),
 			PublicID:   uuid.Nil,
 			Attributes: nil,
 		})
+	}
+	if len(msgs) == 0 {
+		return nil
 	}
 	if _, err := outbox.PublishBatch(ctx, dbtx, orgID, msgs); err != nil {
 		return fmt.Errorf("enqueue suppression state change: %w", err)

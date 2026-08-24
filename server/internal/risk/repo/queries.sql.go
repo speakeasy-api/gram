@@ -1086,7 +1086,7 @@ DELETE FROM risk_results
 WHERE risk_policy_id = $1
   AND project_id = $2
   AND chat_content_part_id = ANY($3::uuid[])
-RETURNING id, false_positive_at, false_positive_reason
+RETURNING id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, chat_content_part_id, skill_version_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, spans, dead_letter_reason, excluded_at, excluded_exclusion_id, false_positive_at, false_positive_reason, created_at
 `
 
 type DeleteRiskResultsForContentPartsParams struct {
@@ -1095,22 +1095,41 @@ type DeleteRiskResultsForContentPartsParams struct {
 	ContentPartIds []uuid.UUID
 }
 
-type DeleteRiskResultsForContentPartsRow struct {
-	ID                  uuid.UUID
-	FalsePositiveAt     pgtype.Timestamptz
-	FalsePositiveReason pgtype.Text
-}
-
-func (q *Queries) DeleteRiskResultsForContentParts(ctx context.Context, arg DeleteRiskResultsForContentPartsParams) ([]DeleteRiskResultsForContentPartsRow, error) {
+func (q *Queries) DeleteRiskResultsForContentParts(ctx context.Context, arg DeleteRiskResultsForContentPartsParams) ([]RiskResult, error) {
 	rows, err := q.db.Query(ctx, deleteRiskResultsForContentParts, arg.RiskPolicyID, arg.ProjectID, arg.ContentPartIds)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []DeleteRiskResultsForContentPartsRow
+	var items []RiskResult
 	for rows.Next() {
-		var i DeleteRiskResultsForContentPartsRow
-		if err := rows.Scan(&i.ID, &i.FalsePositiveAt, &i.FalsePositiveReason); err != nil {
+		var i RiskResult
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.RiskPolicyID,
+			&i.RiskPolicyVersion,
+			&i.ChatMessageID,
+			&i.ChatContentPartID,
+			&i.SkillVersionID,
+			&i.Source,
+			&i.Found,
+			&i.RuleID,
+			&i.Description,
+			&i.Match,
+			&i.StartPos,
+			&i.EndPos,
+			&i.Confidence,
+			&i.Tags,
+			&i.Spans,
+			&i.DeadLetterReason,
+			&i.ExcludedAt,
+			&i.ExcludedExclusionID,
+			&i.FalsePositiveAt,
+			&i.FalsePositiveReason,
+			&i.CreatedAt,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1126,7 +1145,7 @@ DELETE FROM risk_results
 WHERE risk_policy_id = $1
   AND project_id = $2
   AND chat_message_id = ANY($3::uuid[])
-RETURNING id, false_positive_at, false_positive_reason
+RETURNING id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, chat_content_part_id, skill_version_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, spans, dead_letter_reason, excluded_at, excluded_exclusion_id, false_positive_at, false_positive_reason, created_at
 `
 
 type DeleteRiskResultsForMessagesParams struct {
@@ -1135,28 +1154,48 @@ type DeleteRiskResultsForMessagesParams struct {
 	MessageIds   []uuid.UUID
 }
 
-type DeleteRiskResultsForMessagesRow struct {
-	ID                  uuid.UUID
-	FalsePositiveAt     pgtype.Timestamptz
-	FalsePositiveReason pgtype.Text
-}
-
-// Returns what the re-analysis replaced: row ids tell the writer which
-// findings an earlier committed attempt already announced (their webhook
-// outbox events must not be re-emitted), and the false-positive columns are
-// re-stamped onto the reinserted rows — ids are deterministic, so a re-run
-// reproducing a finding reinserts it under the same id and a reviewer's
-// manual dismissal must survive the replacement.
-func (q *Queries) DeleteRiskResultsForMessages(ctx context.Context, arg DeleteRiskResultsForMessagesParams) ([]DeleteRiskResultsForMessagesRow, error) {
+// Returns the full rows the re-analysis replaced: the writer recomputes each
+// row's deterministic id from its identity columns to learn which findings an
+// earlier committed attempt already announced (their webhook outbox events
+// must not be re-emitted) and which carried a manual dismissal to re-stamp
+// onto the reinserted rows. Recomputing from identity rather than trusting
+// the stored id keeps rows written before ids became deterministic (random
+// UUIDs) on the same footing as new ones.
+func (q *Queries) DeleteRiskResultsForMessages(ctx context.Context, arg DeleteRiskResultsForMessagesParams) ([]RiskResult, error) {
 	rows, err := q.db.Query(ctx, deleteRiskResultsForMessages, arg.RiskPolicyID, arg.ProjectID, arg.MessageIds)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []DeleteRiskResultsForMessagesRow
+	var items []RiskResult
 	for rows.Next() {
-		var i DeleteRiskResultsForMessagesRow
-		if err := rows.Scan(&i.ID, &i.FalsePositiveAt, &i.FalsePositiveReason); err != nil {
+		var i RiskResult
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.RiskPolicyID,
+			&i.RiskPolicyVersion,
+			&i.ChatMessageID,
+			&i.ChatContentPartID,
+			&i.SkillVersionID,
+			&i.Source,
+			&i.Found,
+			&i.RuleID,
+			&i.Description,
+			&i.Match,
+			&i.StartPos,
+			&i.EndPos,
+			&i.Confidence,
+			&i.Tags,
+			&i.Spans,
+			&i.DeadLetterReason,
+			&i.ExcludedAt,
+			&i.ExcludedExclusionID,
+			&i.FalsePositiveAt,
+			&i.FalsePositiveReason,
+			&i.CreatedAt,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

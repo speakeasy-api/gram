@@ -47,45 +47,124 @@ func overlapsAny(kept []scanners.Finding, candidate scanners.Finding) bool {
 	return false
 }
 
-// resultRowIDs mints risk_results row ids for one batch, deterministic over
-// the batch identity plus each row's own identity — the same delivery-
-// guarantee requirement batchScanRequestID meets for scan requests. Random
-// per-attempt ids would make a redriven activity re-emit every finding's
-// webhook outbox event under a fresh id (the event id derives from the row
-// id), turning at-least-once redrives into duplicate customer webhooks. A
-// per-key ordinal keeps ids unique within the batch when rows are otherwise
-// identical (e.g. two zero-width findings for the same rule at one position).
-type resultRowIDs struct {
-	prefix string
-	seen   map[string]int
+// resultRowIdentity is the canonical identity of one stored risk_results row.
+// Every field is recoverable from stored (and delete-RETURNING) columns, so
+// the deterministic id derived from it can be recomputed for rows written by
+// any binary — including legacy rows inserted under random ids before ids
+// became deterministic. Content fields (match, description) are part of the
+// identity, so rows differing only in content get distinct ids and a redrive
+// whose scanner output changed re-announces instead of silently swapping
+// content under a known id.
+type resultRowIdentity struct {
+	projectID        uuid.UUID
+	riskPolicyID     uuid.UUID
+	policyVersion    int64
+	chatMessageID    uuid.NullUUID
+	contentPartID    uuid.NullUUID
+	found            bool
+	source           string
+	ruleID           string
+	description      string
+	match            string
+	startPos         int32
+	endPos           int32
+	deadLetterReason string
 }
 
-func newResultRowIDs(args AnalyzeBatchArgs) *resultRowIDs {
-	return &resultRowIDs{
-		prefix: strings.Join([]string{
-			args.ProjectID.String(),
-			args.RiskPolicyID.String(),
-			strconv.FormatInt(args.PolicyVersion, 10),
-		}, "\x00"),
-		seen: map[string]int{},
+// key renders the identity as the canonical hash input. The row kind is
+// derived the way buildRows constructs rows: a dead-letter reason marks a
+// sentinel, found marks a finding, anything else is the per-message empty row.
+func (ri resultRowIdentity) key() string {
+	kind := "empty"
+	switch {
+	case ri.deadLetterReason != "":
+		kind = "deadletter"
+	case ri.found:
+		kind = "finding"
+	}
+	messageID := ""
+	if ri.chatMessageID.Valid {
+		messageID = ri.chatMessageID.UUID.String()
+	}
+	partID := ""
+	if ri.contentPartID.Valid {
+		partID = ri.contentPartID.UUID.String()
+	}
+	return strings.Join([]string{
+		ri.projectID.String(),
+		ri.riskPolicyID.String(),
+		strconv.FormatInt(ri.policyVersion, 10),
+		messageID,
+		partID,
+		kind,
+		ri.source,
+		ri.ruleID,
+		ri.description,
+		ri.match,
+		strconv.Itoa(int(ri.startPos)),
+		strconv.Itoa(int(ri.endPos)),
+		ri.deadLetterReason,
+	}, "\x00")
+}
+
+// insertRowIdentity extracts the identity of a row about to be written.
+func insertRowIdentity(row repo.InsertRiskResultsParams) resultRowIdentity {
+	return resultRowIdentity{
+		projectID:        row.ProjectID,
+		riskPolicyID:     row.RiskPolicyID,
+		policyVersion:    row.RiskPolicyVersion,
+		chatMessageID:    row.ChatMessageID,
+		contentPartID:    row.ChatContentPartID,
+		found:            row.Found,
+		source:           row.Source,
+		ruleID:           row.RuleID.String,
+		description:      row.Description.String,
+		match:            row.Match.String,
+		startPos:         row.StartPos.Int32,
+		endPos:           row.EndPos.Int32,
+		deadLetterReason: row.DeadLetterReason.String,
 	}
 }
 
-// next derives the id for one row from its anchor, its kind (finding, empty,
-// deadletter) and the identity fields of f — the zero Finding for sentinel
-// rows without one.
-func (r *resultRowIDs) next(msg batchMessage, kind string, f scanners.Finding) uuid.UUID {
-	key := strings.Join([]string{
-		r.prefix,
-		strconv.FormatBool(msg.ContentPart),
-		msg.ID.String(),
-		kind,
-		f.Source,
-		f.RuleID,
-		strconv.Itoa(f.StartPos),
-		strconv.Itoa(f.EndPos),
-		f.DeadLetterReason,
-	}, "\x00")
+// storedRowIdentity rebuilds the identity of an already-stored row, ignoring
+// its stored id: recomputing the deterministic id from identity columns puts
+// legacy random-id rows on the same footing as rows written after ids became
+// deterministic.
+func storedRowIdentity(row repo.RiskResult) resultRowIdentity {
+	return resultRowIdentity{
+		projectID:        row.ProjectID,
+		riskPolicyID:     row.RiskPolicyID,
+		policyVersion:    row.RiskPolicyVersion,
+		chatMessageID:    row.ChatMessageID,
+		contentPartID:    row.ChatContentPartID,
+		found:            row.Found,
+		source:           row.Source,
+		ruleID:           row.RuleID.String,
+		description:      row.Description.String,
+		match:            row.Match.String,
+		startPos:         row.StartPos.Int32,
+		endPos:           row.EndPos.Int32,
+		deadLetterReason: row.DeadLetterReason.String,
+	}
+}
+
+// resultRowIDs mints risk_results row ids: uuid5 over the row's canonical
+// identity plus a per-key ordinal disambiguating byte-identical duplicates
+// within one population. Determinism is a delivery-guarantee requirement, the
+// same one batchScanRequestID meets for scan requests: the webhook outbox
+// event id derives from the row id, so a redriven activity must rebuild
+// identical ids or every retry would re-announce every finding under fresh
+// event ids.
+type resultRowIDs struct {
+	seen map[string]int
+}
+
+func newResultRowIDs() *resultRowIDs {
+	return &resultRowIDs{seen: map[string]int{}}
+}
+
+func (r *resultRowIDs) next(identity resultRowIdentity) uuid.UUID {
+	key := identity.key()
 	ordinal := r.seen[key]
 	r.seen[key]++
 	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("gram:risk:result:"+key+"\x00"+strconv.Itoa(ordinal)))
@@ -94,22 +173,25 @@ func (r *resultRowIDs) next(msg batchMessage, kind string, f scanners.Finding) u
 func (a *AnalyzeBatch) buildRows(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, batchFindings [][]scanners.Finding) ([]repo.InsertRiskResultsParams, int) {
 	var rows []repo.InsertRiskResultsParams
 	findingsCount := 0
-	rowIDs := newResultRowIDs(args)
-	var noFinding scanners.Finding
+	rowIDs := newResultRowIDs()
+	appendRow := func(row repo.InsertRiskResultsParams) {
+		row.ID = rowIDs.next(insertRowIdentity(row))
+		rows = append(rows, row)
+	}
 
 	for i, msg := range messages {
 		findings := batchFindings[i]
 		realFindings := findings[:0:0]
 		for _, f := range findings {
 			if f.DeadLetterReason != "" {
-				rows = append(rows, deadLetterRow(rowIDs.next(msg, "deadletter", f), args, msg, f))
+				appendRow(deadLetterRow(args, msg, f))
 				continue
 			}
 			realFindings = append(realFindings, f)
 		}
 
 		if len(realFindings) == 0 {
-			rows = append(rows, emptyResultRow(rowIDs.next(msg, "empty", noFinding), args, msg))
+			appendRow(emptyResultRow(args, msg))
 			continue
 		}
 
@@ -117,13 +199,12 @@ func (a *AnalyzeBatch) buildRows(ctx context.Context, args AnalyzeBatchArgs, mes
 			f := grp.primary
 			findingsCount++
 			a.metrics.RecordFindingConfidence(ctx, args.OrganizationID, f.RuleID, f.Confidence)
-			resultID := rowIDs.next(msg, "finding", f)
 			spansJSON, err := json.Marshal(grp.spans)
 			if err != nil {
 				spansJSON = nil
 			}
-			rows = append(rows, repo.InsertRiskResultsParams{
-				ID:                resultID,
+			appendRow(repo.InsertRiskResultsParams{
+				ID:                uuid.Nil,
 				ProjectID:         args.ProjectID,
 				OrganizationID:    args.OrganizationID,
 				RiskPolicyID:      args.RiskPolicyID,
@@ -216,13 +297,16 @@ func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, 
 		return false, fmt.Errorf("re-check risk policy before writing results: %w", err)
 	}
 
-	// prior holds the replaced rows' false-positive state by id. Row ids are
-	// deterministic, so a re-analysis reproducing a finding reinserts it under
-	// the id it was deleted with: presence in prior means an earlier committed
-	// attempt already announced the finding (skip its webhook event) and a
-	// manual dismissal on it must survive the replacement (re-stamped below).
-	prior := make(map[uuid.UUID]pgtype.Timestamptz)
-	priorReasons := make(map[uuid.UUID]pgtype.Text)
+	// prior holds each replaced row keyed by its RECOMPUTED deterministic id,
+	// not its stored one: legacy rows predate deterministic ids, so only the
+	// identity-derived key lines them up with the rows about to be reinserted.
+	// A key present in prior means an earlier committed attempt already
+	// announced that finding (skip its webhook event) and a manual dismissal
+	// on it must survive the replacement (re-stamped below). A policy version
+	// bump changes every identity, so bumped re-analyses re-announce and drop
+	// old dismissals by design.
+	prior := make(map[uuid.UUID]repo.RiskResult)
+	priorIDs := newResultRowIDs()
 	if len(args.MessageIDs) > 0 {
 		deleted, err := txRepo.DeleteRiskResultsForMessages(ctx, repo.DeleteRiskResultsForMessagesParams{
 			RiskPolicyID: args.RiskPolicyID,
@@ -234,8 +318,7 @@ func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, 
 			return false, fmt.Errorf("delete old results: %w", err)
 		}
 		for _, d := range deleted {
-			prior[d.ID] = d.FalsePositiveAt
-			priorReasons[d.ID] = d.FalsePositiveReason
+			prior[priorIDs.next(storedRowIdentity(d))] = d
 		}
 	}
 	if len(args.ContentPartIDs) > 0 {
@@ -249,8 +332,7 @@ func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, 
 			return false, fmt.Errorf("delete old content part results: %w", err)
 		}
 		for _, d := range deleted {
-			prior[d.ID] = d.FalsePositiveAt
-			priorReasons[d.ID] = d.FalsePositiveReason
+			prior[priorIDs.next(storedRowIdentity(d))] = d
 		}
 	}
 
@@ -268,10 +350,10 @@ func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, 
 		FalsePositiveReasons: nil,
 	}
 	for _, row := range rows {
-		if fpAt, ok := prior[row.ID]; ok && fpAt.Valid {
+		if d, ok := prior[row.ID]; ok && d.FalsePositiveAt.Valid {
 			restore.Ids = append(restore.Ids, row.ID)
-			restore.FalsePositiveAts = append(restore.FalsePositiveAts, fpAt)
-			restore.FalsePositiveReasons = append(restore.FalsePositiveReasons, priorReasons[row.ID].String)
+			restore.FalsePositiveAts = append(restore.FalsePositiveAts, d.FalsePositiveAt)
+			restore.FalsePositiveReasons = append(restore.FalsePositiveReasons, d.FalsePositiveReason.String)
 		}
 	}
 	if len(restore.Ids) > 0 {
@@ -302,7 +384,7 @@ func (a *AnalyzeBatch) writeResults(ctx context.Context, args AnalyzeBatchArgs, 
 	return true, nil
 }
 
-func findingCreatedEvents(rows []repo.InsertRiskResultsParams, prior map[uuid.UUID]pgtype.Timestamptz, now time.Time) []outbox.IdentifiedWebhookEvent[events.RiskFindingCreatedPayloadV1] {
+func findingCreatedEvents(rows []repo.InsertRiskResultsParams, prior map[uuid.UUID]repo.RiskResult, now time.Time) []outbox.IdentifiedWebhookEvent[events.RiskFindingCreatedPayloadV1] {
 	var evs []outbox.IdentifiedWebhookEvent[events.RiskFindingCreatedPayloadV1]
 	for _, row := range rows {
 		if !row.Found || !row.RuleID.Valid {
@@ -349,9 +431,9 @@ func findingWebhookEventID(rowID uuid.UUID) uuid.UUID {
 	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("gram:risk:finding-created-event:"+rowID.String()))
 }
 
-func emptyResultRow(id uuid.UUID, args AnalyzeBatchArgs, msg batchMessage) repo.InsertRiskResultsParams {
+func emptyResultRow(args AnalyzeBatchArgs, msg batchMessage) repo.InsertRiskResultsParams {
 	return repo.InsertRiskResultsParams{
-		ID:                id,
+		ID:                uuid.Nil,
 		ProjectID:         args.ProjectID,
 		OrganizationID:    args.OrganizationID,
 		RiskPolicyID:      args.RiskPolicyID,
@@ -372,9 +454,9 @@ func emptyResultRow(id uuid.UUID, args AnalyzeBatchArgs, msg batchMessage) repo.
 	}
 }
 
-func deadLetterRow(id uuid.UUID, args AnalyzeBatchArgs, msg batchMessage, f scanners.Finding) repo.InsertRiskResultsParams {
+func deadLetterRow(args AnalyzeBatchArgs, msg batchMessage, f scanners.Finding) repo.InsertRiskResultsParams {
 	return repo.InsertRiskResultsParams{
-		ID:                id,
+		ID:                uuid.Nil,
 		ProjectID:         args.ProjectID,
 		OrganizationID:    args.OrganizationID,
 		RiskPolicyID:      args.RiskPolicyID,

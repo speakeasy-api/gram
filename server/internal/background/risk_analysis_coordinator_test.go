@@ -155,8 +155,9 @@ func TestCoordinatorWorkflow_StartSignalDoesNotSelfLoop(t *testing.T) {
 
 // TestCoordinatorWorkflow_FailedBatchExcludedFromMark pins the at-least-once
 // contract on the analyzed mark: a batch whose activity exhausted its retries
-// must leave its units unmarked (the next cycle's lookback refetches them),
-// while units from batches that succeeded are still marked.
+// must leave its units unmarked, while units from batches that succeeded are
+// still marked — and the run must retry the withheld units via ContinueAsNew
+// after the backoff rather than waiting for an organic signal.
 func TestCoordinatorWorkflow_FailedBatchExcludedFromMark(t *testing.T) {
 	t.Parallel()
 
@@ -206,7 +207,10 @@ func TestCoordinatorWorkflow_FailedBatchExcludedFromMark(t *testing.T) {
 	})
 
 	require.True(t, env.IsWorkflowCompleted())
-	require.NoError(t, env.GetWorkflowError(), "workflow must return nil even when a batch activity fails")
+	err := env.GetWorkflowError()
+	require.Error(t, err, "a run with a failed batch must ContinueAsNew to retry it")
+	var continueAsNewErr *workflow.ContinueAsNewError
+	require.ErrorAs(t, err, &continueAsNewErr)
 	require.Equal(t, 1, markCallCount, "mark activity still runs for the surviving units")
 }
 
@@ -214,7 +218,7 @@ func TestCoordinatorWorkflow_FailedBatchExcludedFromMark(t *testing.T) {
 // intersection: the same batch is dispatched once per policy, and a unit is
 // only durably analyzed when every policy's activity covering it succeeded.
 // When nothing succeeded for every policy, the mark activity is skipped
-// entirely.
+// entirely and the run retries via ContinueAsNew.
 func TestCoordinatorWorkflow_UnitFailedForOnePolicyNotMarked(t *testing.T) {
 	t.Parallel()
 
@@ -262,7 +266,10 @@ func TestCoordinatorWorkflow_UnitFailedForOnePolicyNotMarked(t *testing.T) {
 	})
 
 	require.True(t, env.IsWorkflowCompleted())
-	require.NoError(t, env.GetWorkflowError())
+	err := env.GetWorkflowError()
+	require.Error(t, err, "a run with a failed batch must ContinueAsNew to retry it")
+	var continueAsNewErr *workflow.ContinueAsNewError
+	require.ErrorAs(t, err, &continueAsNewErr)
 	require.Equal(t, 0, markCallCount, "a unit that failed under any policy must not be marked analyzed")
 }
 

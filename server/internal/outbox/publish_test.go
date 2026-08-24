@@ -10,6 +10,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	webhooksv1 "github.com/speakeasy-api/gram/infra/gen/gram/webhooks/v1"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/outbox"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
@@ -168,6 +169,8 @@ func TestPublishIdentifiedWebhookEvents_RejectsMissingID(t *testing.T) {
 		{ID: uuid.Nil, Payload: events.AuditLogCreatedPayloadV1{ID: uuid.New(), OrganizationID: orgID}},
 	})
 	require.Error(t, err)
+	require.ErrorIs(t, err, oops.ErrPermanent, "a zero id is a programming error, not a retryable condition")
+	require.ErrorContains(t, err, "has no id")
 	require.Equal(t, int64(0), inst.countRows(t))
 }
 

@@ -1099,24 +1099,25 @@ WHERE EXCLUDED.found IS TRUE
   AND risk_results.found IS FALSE;
 
 -- name: DeleteRiskResultsForMessages :many
--- Returns what the re-analysis replaced: row ids tell the writer which
--- findings an earlier committed attempt already announced (their webhook
--- outbox events must not be re-emitted), and the false-positive columns are
--- re-stamped onto the reinserted rows — ids are deterministic, so a re-run
--- reproducing a finding reinserts it under the same id and a reviewer's
--- manual dismissal must survive the replacement.
+-- Returns the full rows the re-analysis replaced: the writer recomputes each
+-- row's deterministic id from its identity columns to learn which findings an
+-- earlier committed attempt already announced (their webhook outbox events
+-- must not be re-emitted) and which carried a manual dismissal to re-stamp
+-- onto the reinserted rows. Recomputing from identity rather than trusting
+-- the stored id keeps rows written before ids became deterministic (random
+-- UUIDs) on the same footing as new ones.
 DELETE FROM risk_results
 WHERE risk_policy_id = @risk_policy_id
   AND project_id = @project_id
   AND chat_message_id = ANY(@message_ids::uuid[])
-RETURNING id, false_positive_at, false_positive_reason;
+RETURNING *;
 
 -- name: DeleteRiskResultsForContentParts :many
 DELETE FROM risk_results
 WHERE risk_policy_id = @risk_policy_id
   AND project_id = @project_id
   AND chat_content_part_id = ANY(@content_part_ids::uuid[])
-RETURNING id, false_positive_at, false_positive_reason;
+RETURNING *;
 
 -- name: RestoreRiskResultFalsePositiveState :exec
 -- Re-stamps manual dismissals onto re-analyzed rows in the same transaction

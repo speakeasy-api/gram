@@ -1903,9 +1903,12 @@ func TestAnalyzeBatch_SkipsWhenPolicyDeleted(t *testing.T) {
 // TestAnalyzeBatch_RedriveConvergesRowsAndWebhookEvents pins the redrive
 // contract behind at-least-once delivery: writeResults can commit and a later
 // publish step can still fail the activity, so Temporal re-runs the whole
-// batch. The re-run must rebuild the same risk result ids, emit no new webhook
-// outbox events for findings the first run already announced, and carry a
-// reviewer's manual dismissal across the delete/reinsert replacement.
+// batch. The second Do call below stands in for that redrive — this harness
+// cannot cheaply fail a post-commit publish, since gitleaks findings have no
+// batch-only findings-topic publish to sabotage. The re-run must rebuild the
+// same risk result ids, emit no new webhook outbox events for findings the
+// first run already announced, and carry a reviewer's manual dismissal across
+// the delete/reinsert replacement.
 func TestAnalyzeBatch_RedriveConvergesRowsAndWebhookEvents(t *testing.T) {
 	t.Parallel()
 	conn := cloneDB(t)
@@ -1991,4 +1994,112 @@ func riskResultIDs(rows []testrepo.RiskResult) []uuid.UUID {
 		ids = append(ids, row.ID)
 	}
 	return ids
+}
+
+// TestAnalyzeBatch_LegacyRandomIDRowsConverge pins the migration path for rows
+// written before row ids became deterministic: the writer matches replaced
+// rows by recomputed identity, never by stored id, so a re-analysis over
+// legacy random-id rows restores their dismissals onto the deterministic
+// reinsertions and does not re-announce findings the legacy rows already
+// announced.
+func TestAnalyzeBatch_LegacyRandomIDRowsConverge(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+
+	testQueries := testrepo.New(conn)
+	msgID, err := testQueries.InsertChatMessage(t.Context(), testrepo.InsertChatMessageParams{
+		ChatID:    td.chatID,
+		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
+		Role:      "user",
+		Content:   "AccessKeyId ASIAZ2XY3WNBQR5TUVWX SecretAccessKey wJalrXUtnFEMIbKp7MDoRZfiCYqTvHgNsQ8xLcWd",
+	})
+	require.NoError(t, err)
+
+	// First analysis establishes the canonical rows and their announcements.
+	first := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{"gitleaks"}, newFindingsPub())
+	require.GreaterOrEqual(t, first.Findings, 1)
+
+	canonical, err := testQueries.ListRiskResultsAll(t.Context(), testrepo.ListRiskResultsAllParams{
+		ProjectID:    td.projectID,
+		RiskPolicyID: td.policyID,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, canonical)
+
+	announced, err := testQueries.ListPublishOutboxRows(t.Context())
+	require.NoError(t, err)
+	require.NotEmpty(t, announced)
+
+	// Rewrite history into the pre-rollout shape: identical rows under random
+	// v7 ids, one of them dismissed by a reviewer.
+	riskQueries := riskrepo.New(conn)
+	_, err = riskQueries.DeleteRiskResultsForMessages(t.Context(), riskrepo.DeleteRiskResultsForMessagesParams{
+		RiskPolicyID: td.policyID,
+		ProjectID:    td.projectID,
+		MessageIds:   []uuid.UUID{msgID},
+	})
+	require.NoError(t, err)
+
+	legacy := make([]riskrepo.InsertRiskResultsParams, 0, len(canonical))
+	for _, row := range canonical {
+		legacy = append(legacy, riskrepo.InsertRiskResultsParams{
+			ID:                uuid.Must(uuid.NewV7()),
+			ProjectID:         row.ProjectID,
+			OrganizationID:    row.OrganizationID,
+			RiskPolicyID:      row.RiskPolicyID,
+			RiskPolicyVersion: row.RiskPolicyVersion,
+			ChatMessageID:     row.ChatMessageID,
+			ChatContentPartID: row.ChatContentPartID,
+			Source:            row.Source,
+			Found:             row.Found,
+			RuleID:            row.RuleID,
+			Description:       row.Description,
+			Match:             row.Match,
+			StartPos:          row.StartPos,
+			EndPos:            row.EndPos,
+			Confidence:        row.Confidence,
+			Tags:              row.Tags,
+			Spans:             row.Spans,
+			DeadLetterReason:  row.DeadLetterReason,
+		})
+	}
+	_, err = riskQueries.InsertRiskResults(t.Context(), legacy)
+	require.NoError(t, err)
+
+	dismissed, err := riskQueries.MarkRiskResultsFalsePositive(t.Context(), riskrepo.MarkRiskResultsFalsePositiveParams{
+		ProjectID: td.projectID,
+		Ids:       []uuid.UUID{legacy[0].ID},
+		Reason:    pgtype.Text{String: "legacy dismissal", Valid: true},
+	})
+	require.NoError(t, err)
+	require.Len(t, dismissed, 1)
+
+	// Re-analysis replaces the legacy rows with deterministic ones. Identity
+	// matching must carry the dismissal over and announce nothing new.
+	second := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{"gitleaks"}, newFindingsPub())
+	require.Equal(t, first.Findings, second.Findings)
+
+	after, err := testQueries.ListRiskResultsAll(t.Context(), testrepo.ListRiskResultsAllParams{
+		ProjectID:    td.projectID,
+		RiskPolicyID: td.policyID,
+	})
+	require.NoError(t, err)
+	require.ElementsMatch(t, riskResultIDs(canonical), riskResultIDs(after),
+		"re-analysis over legacy rows must land back on the deterministic ids")
+
+	preserved := false
+	for _, row := range after {
+		if row.ID != canonical[0].ID {
+			continue
+		}
+		preserved = true
+		require.True(t, row.FalsePositiveAt.Valid, "a legacy row's dismissal must survive by identity, not stored id")
+		require.Equal(t, "legacy dismissal", row.FalsePositiveReason.String)
+	}
+	require.True(t, preserved)
+
+	afterOutbox, err := testQueries.ListPublishOutboxRows(t.Context())
+	require.NoError(t, err)
+	require.Len(t, afterOutbox, len(announced), "legacy rows were already announced; the re-analysis must not re-announce them")
 }
