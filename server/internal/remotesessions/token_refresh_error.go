@@ -57,12 +57,12 @@ func IsTokenRefreshRateLimited(err error) bool {
 // only as the private cause and never surfaced.
 //
 // A 4xx body that contains the invalid_grant token is treated as definitive
-// even when the provider did not emit a spec-shaped "error" string. 5xx bodies
-// are not, so a mention of the code on an upstream error page does not clear
-// a still-usable refresh grant.
+// even when the provider did not emit a spec-shaped "error" string. 5xx pages,
+// rate limits, and request timeouts are not, so a mention of the code on an
+// upstream error page does not clear a still-usable refresh grant.
 func newTokenRefreshErrorFromHTTP(statusCode int, status string, body []byte) *TokenRefreshError {
-	response := parseTokenErrorResponse(body)
-	if response.Error == "" && statusCode >= 400 && statusCode < 500 && containsOAuthErrorToken(string(body), oauthErrInvalidGrant) {
+	response := parseTokenErrorResponse(statusCode, body)
+	if response.Error == "" && allowsHeuristicInvalidGrant(statusCode) && containsOAuthErrorToken(string(body), oauthErrInvalidGrant) {
 		response.Error = oauthErrInvalidGrant
 	}
 	return &TokenRefreshError{

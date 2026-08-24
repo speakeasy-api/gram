@@ -105,6 +105,18 @@ func TestRefreshNow_InvalidGrant_DubUnauthorized_ClearsRefreshGrant(t *testing.T
 	)
 }
 
+func TestRefreshNow_InvalidGrant_Generic4xxTokenMention_ClearsRefreshGrant(t *testing.T) {
+	t.Parallel()
+
+	assertRefreshNowClearsDeadGrant(
+		t,
+		"refreshnow-generic-4xx",
+		http.StatusBadRequest,
+		`token endpoint rejected refresh: invalid_grant`,
+		"invalid_grant",
+	)
+}
+
 func assertRefreshNowClearsDeadGrant(t *testing.T, slugSuffix string, status int, body string, wantReason string) {
 	t.Helper()
 
