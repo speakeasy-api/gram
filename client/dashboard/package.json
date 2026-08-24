@@ -24,7 +24,7 @@
     "build:storybook": "storybook build"
   },
   "dependencies": {
-    "@ai-sdk/mcp": "^2.0.31",
+    "@ai-sdk/mcp": "^2.0.32",
     "@ai-sdk/react": "catalog:",
     "@assistant-ui/react": "catalog:",
     "@assistant-ui/react-ai-sdk": "~1.4.5",
