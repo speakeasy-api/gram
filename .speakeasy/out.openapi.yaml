@@ -60197,6 +60197,22 @@ components:
         - credits_used
         - monthly_credits
         - disabled
+    AdminInferenceSpendMonth:
+      type: object
+      properties:
+        period_end:
+          type: string
+          description: Exclusive end of the UTC calendar month.
+          format: date
+        period_start:
+          type: string
+          format: date
+        spend_usd:
+          type: string
+      required:
+        - period_start
+        - period_end
+        - spend_usd
     AdminListOrganizationMembersResult:
       type: object
       properties:
