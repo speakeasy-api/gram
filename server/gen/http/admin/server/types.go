@@ -405,6 +405,11 @@ type GetOrganizationStatsResponseBody struct {
 	Total int64 `form:"total" json:"total" xml:"total"`
 	// Organizations created in the last 7 days, whatever their current status.
 	CreatedLast7Days int64 `form:"created_last_7_days" json:"created_last_7_days" xml:"created_last_7_days"`
+	// Organizations on a paid account type (payg or enterprise), disabled ones
+	// included.
+	Customers int64 `form:"customers" json:"customers" xml:"customers"`
+	// Customers created in the last 7 days, whatever their current status.
+	CustomersCreatedLast7Days int64 `form:"customers_created_last_7_days" json:"customers_created_last_7_days" xml:"customers_created_last_7_days"`
 	// Organizations whose trial_state is ending_soon.
 	TrialsEndingSoon int64 `form:"trials_ending_soon" json:"trials_ending_soon" xml:"trials_ending_soon"`
 	// Organizations with disabled_at set.
@@ -5085,11 +5090,13 @@ func NewRearmTrialResponseBody(res *admin.AdminOrganization) *RearmTrialResponse
 // result of the "getOrganizationStats" endpoint of the "admin" service.
 func NewGetOrganizationStatsResponseBody(res *admin.AdminOrganizationStats) *GetOrganizationStatsResponseBody {
 	body := &GetOrganizationStatsResponseBody{
-		Total:             res.Total,
-		CreatedLast7Days:  res.CreatedLast7Days,
-		TrialsEndingSoon:  res.TrialsEndingSoon,
-		Disabled:          res.Disabled,
-		DisabledLast7Days: res.DisabledLast7Days,
+		Total:                     res.Total,
+		CreatedLast7Days:          res.CreatedLast7Days,
+		Customers:                 res.Customers,
+		CustomersCreatedLast7Days: res.CustomersCreatedLast7Days,
+		TrialsEndingSoon:          res.TrialsEndingSoon,
+		Disabled:                  res.Disabled,
+		DisabledLast7Days:         res.DisabledLast7Days,
 	}
 	return body
 }

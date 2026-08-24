@@ -268,6 +268,9 @@ export function listOrganizations(
 export type AdminOrganizationStats = {
   total: number;
   created_last_7_days: number;
+  /** Organizations on a paid account type, payg or enterprise. */
+  customers: number;
+  customers_created_last_7_days: number;
   trials_ending_soon: number;
   disabled: number;
   disabled_last_7_days: number;

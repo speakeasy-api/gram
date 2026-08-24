@@ -655,11 +655,13 @@ func (s *Service) GetOrganizationStats(ctx context.Context, payload *gen.GetOrga
 	}
 
 	return &gen.AdminOrganizationStats{
-		Total:             row.Total,
-		CreatedLast7Days:  row.CreatedLast7Days,
-		TrialsEndingSoon:  row.TrialsEndingSoon,
-		Disabled:          row.Disabled,
-		DisabledLast7Days: row.DisabledLast7Days,
+		Total:                     row.Total,
+		CreatedLast7Days:          row.CreatedLast7Days,
+		Customers:                 row.Customers,
+		CustomersCreatedLast7Days: row.CustomersCreatedLast7Days,
+		TrialsEndingSoon:          row.TrialsEndingSoon,
+		Disabled:                  row.Disabled,
+		DisabledLast7Days:         row.DisabledLast7Days,
 	}, nil
 }
 

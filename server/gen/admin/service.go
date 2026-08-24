@@ -223,6 +223,11 @@ type AdminOrganizationStats struct {
 	Total int64
 	// Organizations created in the last 7 days, whatever their current status.
 	CreatedLast7Days int64
+	// Organizations on a paid account type (payg or enterprise), disabled ones
+	// included.
+	Customers int64
+	// Customers created in the last 7 days, whatever their current status.
+	CustomersCreatedLast7Days int64
 	// Organizations whose trial_state is ending_soon.
 	TrialsEndingSoon int64
 	// Organizations with disabled_at set.
