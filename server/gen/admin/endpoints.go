@@ -34,6 +34,7 @@ type Endpoints struct {
 	GetOrganizationStats        goa.Endpoint
 	GetInferenceKeys            goa.Endpoint
 	SetInferenceKeyMonthlyLimit goa.Endpoint
+	GetInferenceSpendHistory    goa.Endpoint
 	GetPaygBillingSummary       goa.Endpoint
 	GetStripeSubscription       goa.Endpoint
 	CancelStripeSubscription    goa.Endpoint
@@ -63,6 +64,7 @@ func NewEndpoints(s Service) *Endpoints {
 		GetOrganizationStats:        NewGetOrganizationStatsEndpoint(s, a.APIKeyAuth),
 		GetInferenceKeys:            NewGetInferenceKeysEndpoint(s, a.APIKeyAuth),
 		SetInferenceKeyMonthlyLimit: NewSetInferenceKeyMonthlyLimitEndpoint(s, a.APIKeyAuth),
+		GetInferenceSpendHistory:    NewGetInferenceSpendHistoryEndpoint(s, a.APIKeyAuth),
 		GetPaygBillingSummary:       NewGetPaygBillingSummaryEndpoint(s, a.APIKeyAuth),
 		GetStripeSubscription:       NewGetStripeSubscriptionEndpoint(s, a.APIKeyAuth),
 		CancelStripeSubscription:    NewCancelStripeSubscriptionEndpoint(s, a.APIKeyAuth),
@@ -90,6 +92,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetOrganizationStats = m(e.GetOrganizationStats)
 	e.GetInferenceKeys = m(e.GetInferenceKeys)
 	e.SetInferenceKeyMonthlyLimit = m(e.SetInferenceKeyMonthlyLimit)
+	e.GetInferenceSpendHistory = m(e.GetInferenceSpendHistory)
 	e.GetPaygBillingSummary = m(e.GetPaygBillingSummary)
 	e.GetStripeSubscription = m(e.GetStripeSubscription)
 	e.CancelStripeSubscription = m(e.CancelStripeSubscription)
@@ -465,6 +468,29 @@ func NewSetInferenceKeyMonthlyLimitEndpoint(s Service, authAPIKeyFn security.Aut
 			return nil, err
 		}
 		return s.SetInferenceKeyMonthlyLimit(ctx, p)
+	}
+}
+
+// NewGetInferenceSpendHistoryEndpoint returns an endpoint function that calls
+// the method "getInferenceSpendHistory" of service "admin".
+func NewGetInferenceSpendHistoryEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetInferenceSpendHistoryPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetInferenceSpendHistory(ctx, p)
 	}
 }
 

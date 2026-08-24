@@ -52,13 +52,15 @@ const PLATFORM_MCP_INSTALL_CLIENTS: PlatformMCPInstallClient[] = [
 export type PlatformMCPInstallMethod = "marketplace" | "download" | "manual";
 type PackagePlatform = "claude" | "cursor" | "codex" | "opencode";
 
+const PLATFORM_MCP_PLUGIN_NAME = "platform-mcp";
+
 function packagePlatform(client: ClientFamily): PackagePlatform {
   if (client === "claude_code" || client === "claude_cowork") return "claude";
   return client;
 }
 
 function packageFilename(client: ClientFamily): string {
-  return `speakeasy-aicp-platform-mcp-${packagePlatform(client)}.zip`;
+  return `${PLATFORM_MCP_PLUGIN_NAME}-${packagePlatform(client)}.zip`;
 }
 
 type PlatformMCPInstallWalkthroughProps = {
@@ -72,13 +74,13 @@ type PlatformMCPInstallWalkthroughProps = {
 
 function manualConfig(client: ClientFamily, mcpUrl: string): string {
   if (client === "codex") {
-    return `[mcp_servers.speakeasy-aicp-platform-mcp]\nurl = "${mcpUrl}"`;
+    return `[mcp_servers.${PLATFORM_MCP_PLUGIN_NAME}]\nurl = "${mcpUrl}"`;
   }
   if (client === "opencode") {
     return JSON.stringify(
       {
         mcp: {
-          "speakeasy-aicp-platform-mcp": {
+          [PLATFORM_MCP_PLUGIN_NAME]: {
             type: "remote",
             url: mcpUrl,
             enabled: true,
@@ -92,7 +94,7 @@ function manualConfig(client: ClientFamily, mcpUrl: string): string {
   return JSON.stringify(
     {
       mcpServers: {
-        "speakeasy-aicp-platform-mcp": {
+        [PLATFORM_MCP_PLUGIN_NAME]: {
           type: "http",
           url: mcpUrl,
         },
@@ -206,14 +208,14 @@ function marketplaceSteps(
       {
         title: "Make the plugin available to your account",
         description:
-          "Find Speakeasy AICP Platform MCP and choose an availability policy that lets your admin account install it. Do not mark it Required unless your organization has separately decided to deploy it more broadly.",
-        code: "speakeasy-aicp-platform-mcp",
+          "Find Platform MCP and choose an availability policy that lets your admin account install it. Do not mark it Required unless your organization has separately decided to deploy it more broadly.",
+        code: PLATFORM_MCP_PLUGIN_NAME,
         language: "text",
       },
       {
         title: "Install it for yourself and complete OAuth",
         description:
-          "Install Speakeasy AICP Platform MCP for your own Claude account, open a new Cowork session, and complete AI Control Plane browser authorization when you first use the MCP.",
+          "Install Platform MCP for your own Claude account, open a new Cowork session, and complete AI Control Plane browser authorization when you first use the MCP.",
       },
     ];
   }
@@ -230,7 +232,7 @@ function marketplaceSteps(
       {
         title: "Install Platform MCP for your account",
         description:
-          "Find Speakeasy AICP Platform MCP in the imported marketplace and install it for your Cursor account. Do not require it for the whole team unless your organization has made that separate rollout decision.",
+          "Find Platform MCP in the imported marketplace and install it for your Cursor account. Do not require it for the whole team unless your organization has made that separate rollout decision.",
         code: "platform-mcp-cursor",
         language: "text",
       },
@@ -275,7 +277,7 @@ function marketplaceSteps(
       title: "Install Platform MCP for your profile",
       description:
         "Install only the Platform MCP package into your Claude Code profile. This does not install it for other organization members.",
-      code: `/plugin install speakeasy-aicp-platform-mcp@${marketplaceName}`,
+      code: `/plugin install ${PLATFORM_MCP_PLUGIN_NAME}@${marketplaceName}`,
     },
     {
       title: "Restart your Claude Code session and complete OAuth",

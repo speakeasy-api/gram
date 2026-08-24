@@ -3782,6 +3782,196 @@ type SetInferenceKeyMonthlyLimitGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetInferenceSpendHistoryUnauthorizedResponseBody is the type of the "admin"
+// service "getInferenceSpendHistory" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetInferenceSpendHistoryUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetInferenceSpendHistoryForbiddenResponseBody is the type of the "admin"
+// service "getInferenceSpendHistory" endpoint HTTP response body for the
+// "forbidden" error.
+type GetInferenceSpendHistoryForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetInferenceSpendHistoryBadRequestResponseBody is the type of the "admin"
+// service "getInferenceSpendHistory" endpoint HTTP response body for the
+// "bad_request" error.
+type GetInferenceSpendHistoryBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetInferenceSpendHistoryNotFoundResponseBody is the type of the "admin"
+// service "getInferenceSpendHistory" endpoint HTTP response body for the
+// "not_found" error.
+type GetInferenceSpendHistoryNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetInferenceSpendHistoryConflictResponseBody is the type of the "admin"
+// service "getInferenceSpendHistory" endpoint HTTP response body for the
+// "conflict" error.
+type GetInferenceSpendHistoryConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetInferenceSpendHistoryUnsupportedMediaResponseBody is the type of the
+// "admin" service "getInferenceSpendHistory" endpoint HTTP response body for
+// the "unsupported_media" error.
+type GetInferenceSpendHistoryUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetInferenceSpendHistoryInvalidResponseBody is the type of the "admin"
+// service "getInferenceSpendHistory" endpoint HTTP response body for the
+// "invalid" error.
+type GetInferenceSpendHistoryInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetInferenceSpendHistoryInvariantViolationResponseBody is the type of the
+// "admin" service "getInferenceSpendHistory" endpoint HTTP response body for
+// the "invariant_violation" error.
+type GetInferenceSpendHistoryInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetInferenceSpendHistoryUnexpectedResponseBody is the type of the "admin"
+// service "getInferenceSpendHistory" endpoint HTTP response body for the
+// "unexpected" error.
+type GetInferenceSpendHistoryUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetInferenceSpendHistoryGatewayErrorResponseBody is the type of the "admin"
+// service "getInferenceSpendHistory" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetInferenceSpendHistoryGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // GetPaygBillingSummaryUnauthorizedResponseBody is the type of the "admin"
 // service "getPaygBillingSummary" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -4611,6 +4801,15 @@ type AdminInferenceKeyResponse struct {
 	CreditsUsed    *float64 `form:"credits_used,omitempty" json:"credits_used,omitempty" xml:"credits_used,omitempty"`
 	MonthlyCredits *int64   `form:"monthly_credits,omitempty" json:"monthly_credits,omitempty" xml:"monthly_credits,omitempty"`
 	Disabled       *bool    `form:"disabled,omitempty" json:"disabled,omitempty" xml:"disabled,omitempty"`
+}
+
+// AdminInferenceSpendMonthResponse is used to define fields on response body
+// types.
+type AdminInferenceSpendMonthResponse struct {
+	PeriodStart *string `form:"period_start,omitempty" json:"period_start,omitempty" xml:"period_start,omitempty"`
+	// Exclusive end of the UTC calendar month.
+	PeriodEnd *string `form:"period_end,omitempty" json:"period_end,omitempty" xml:"period_end,omitempty"`
+	SpendUsd  *string `form:"spend_usd,omitempty" json:"spend_usd,omitempty" xml:"spend_usd,omitempty"`
 }
 
 // NewUpdateOrganizationRequestBody builds the HTTP request body from the
@@ -7705,6 +7904,171 @@ func NewSetInferenceKeyMonthlyLimitUnexpected(body *SetInferenceKeyMonthlyLimitU
 // NewSetInferenceKeyMonthlyLimitGatewayError builds a admin service
 // setInferenceKeyMonthlyLimit endpoint gateway_error error.
 func NewSetInferenceKeyMonthlyLimitGatewayError(body *SetInferenceKeyMonthlyLimitGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetInferenceSpendHistoryAdminInferenceSpendMonthOK builds a "admin"
+// service "getInferenceSpendHistory" endpoint result from a HTTP "OK" response.
+func NewGetInferenceSpendHistoryAdminInferenceSpendMonthOK(body []*AdminInferenceSpendMonthResponse) []*admin.AdminInferenceSpendMonth {
+	v := make([]*admin.AdminInferenceSpendMonth, len(body))
+	for i, val := range body {
+		if val == nil {
+			v[i] = nil
+			continue
+		}
+		v[i] = unmarshalAdminInferenceSpendMonthResponseToAdminAdminInferenceSpendMonth(val)
+	}
+
+	return v
+}
+
+// NewGetInferenceSpendHistoryUnauthorized builds a admin service
+// getInferenceSpendHistory endpoint unauthorized error.
+func NewGetInferenceSpendHistoryUnauthorized(body *GetInferenceSpendHistoryUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetInferenceSpendHistoryForbidden builds a admin service
+// getInferenceSpendHistory endpoint forbidden error.
+func NewGetInferenceSpendHistoryForbidden(body *GetInferenceSpendHistoryForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetInferenceSpendHistoryBadRequest builds a admin service
+// getInferenceSpendHistory endpoint bad_request error.
+func NewGetInferenceSpendHistoryBadRequest(body *GetInferenceSpendHistoryBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetInferenceSpendHistoryNotFound builds a admin service
+// getInferenceSpendHistory endpoint not_found error.
+func NewGetInferenceSpendHistoryNotFound(body *GetInferenceSpendHistoryNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetInferenceSpendHistoryConflict builds a admin service
+// getInferenceSpendHistory endpoint conflict error.
+func NewGetInferenceSpendHistoryConflict(body *GetInferenceSpendHistoryConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetInferenceSpendHistoryUnsupportedMedia builds a admin service
+// getInferenceSpendHistory endpoint unsupported_media error.
+func NewGetInferenceSpendHistoryUnsupportedMedia(body *GetInferenceSpendHistoryUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetInferenceSpendHistoryInvalid builds a admin service
+// getInferenceSpendHistory endpoint invalid error.
+func NewGetInferenceSpendHistoryInvalid(body *GetInferenceSpendHistoryInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetInferenceSpendHistoryInvariantViolation builds a admin service
+// getInferenceSpendHistory endpoint invariant_violation error.
+func NewGetInferenceSpendHistoryInvariantViolation(body *GetInferenceSpendHistoryInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetInferenceSpendHistoryUnexpected builds a admin service
+// getInferenceSpendHistory endpoint unexpected error.
+func NewGetInferenceSpendHistoryUnexpected(body *GetInferenceSpendHistoryUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetInferenceSpendHistoryGatewayError builds a admin service
+// getInferenceSpendHistory endpoint gateway_error error.
+func NewGetInferenceSpendHistoryGatewayError(body *GetInferenceSpendHistoryGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -13399,6 +13763,248 @@ func ValidateSetInferenceKeyMonthlyLimitGatewayErrorResponseBody(body *SetInfere
 	return
 }
 
+// ValidateGetInferenceSpendHistoryUnauthorizedResponseBody runs the
+// validations defined on getInferenceSpendHistory_unauthorized_response_body
+func ValidateGetInferenceSpendHistoryUnauthorizedResponseBody(body *GetInferenceSpendHistoryUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetInferenceSpendHistoryForbiddenResponseBody runs the validations
+// defined on getInferenceSpendHistory_forbidden_response_body
+func ValidateGetInferenceSpendHistoryForbiddenResponseBody(body *GetInferenceSpendHistoryForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetInferenceSpendHistoryBadRequestResponseBody runs the validations
+// defined on getInferenceSpendHistory_bad_request_response_body
+func ValidateGetInferenceSpendHistoryBadRequestResponseBody(body *GetInferenceSpendHistoryBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetInferenceSpendHistoryNotFoundResponseBody runs the validations
+// defined on getInferenceSpendHistory_not_found_response_body
+func ValidateGetInferenceSpendHistoryNotFoundResponseBody(body *GetInferenceSpendHistoryNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetInferenceSpendHistoryConflictResponseBody runs the validations
+// defined on getInferenceSpendHistory_conflict_response_body
+func ValidateGetInferenceSpendHistoryConflictResponseBody(body *GetInferenceSpendHistoryConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetInferenceSpendHistoryUnsupportedMediaResponseBody runs the
+// validations defined on
+// getInferenceSpendHistory_unsupported_media_response_body
+func ValidateGetInferenceSpendHistoryUnsupportedMediaResponseBody(body *GetInferenceSpendHistoryUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetInferenceSpendHistoryInvalidResponseBody runs the validations
+// defined on getInferenceSpendHistory_invalid_response_body
+func ValidateGetInferenceSpendHistoryInvalidResponseBody(body *GetInferenceSpendHistoryInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetInferenceSpendHistoryInvariantViolationResponseBody runs the
+// validations defined on
+// getInferenceSpendHistory_invariant_violation_response_body
+func ValidateGetInferenceSpendHistoryInvariantViolationResponseBody(body *GetInferenceSpendHistoryInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetInferenceSpendHistoryUnexpectedResponseBody runs the validations
+// defined on getInferenceSpendHistory_unexpected_response_body
+func ValidateGetInferenceSpendHistoryUnexpectedResponseBody(body *GetInferenceSpendHistoryUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetInferenceSpendHistoryGatewayErrorResponseBody runs the
+// validations defined on getInferenceSpendHistory_gateway_error_response_body
+func ValidateGetInferenceSpendHistoryGatewayErrorResponseBody(body *GetInferenceSpendHistoryGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateGetPaygBillingSummaryUnauthorizedResponseBody runs the validations
 // defined on getPaygBillingSummary_unauthorized_response_body
 func ValidateGetPaygBillingSummaryUnauthorizedResponseBody(body *GetPaygBillingSummaryUnauthorizedResponseBody) (err error) {
@@ -14492,6 +15098,27 @@ func ValidateAdminInferenceKeyResponse(body *AdminInferenceKeyResponse) (err err
 	}
 	if body.Disabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("disabled", "body"))
+	}
+	return
+}
+
+// ValidateAdminInferenceSpendMonthResponse runs the validations defined on
+// AdminInferenceSpendMonthResponse
+func ValidateAdminInferenceSpendMonthResponse(body *AdminInferenceSpendMonthResponse) (err error) {
+	if body.PeriodStart == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("period_start", "body"))
+	}
+	if body.PeriodEnd == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("period_end", "body"))
+	}
+	if body.SpendUsd == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("spend_usd", "body"))
+	}
+	if body.PeriodStart != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.period_start", *body.PeriodStart, goa.FormatDate))
+	}
+	if body.PeriodEnd != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.period_end", *body.PeriodEnd, goa.FormatDate))
 	}
 	return
 }

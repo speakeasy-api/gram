@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   inferenceKeysQuery,
+  inferenceSpendHistoryQuery,
   invalidateOrganizationBilling,
   organizationQuery,
   paygBillingSummaryQuery,
@@ -20,6 +21,7 @@ import {
   setInferenceKeyMonthlyLimit,
   type AdminInferenceKey,
   type AdminInferenceKeyType,
+  type AdminInferenceSpendMonth,
   type AdminOrganization,
   type AdminPaygBillingSummary,
   type AdminStripeSubscription,
@@ -261,6 +263,81 @@ function InferenceKeys({
   );
 }
 
+function hasSufficientHistory(months: AdminInferenceSpendMonth[]): boolean {
+  const previous = months.at(-2);
+  const latest = months.at(-1);
+  return previous !== undefined && previous.period_end === latest?.period_start;
+}
+
+function InferenceSpendHistory({
+  months,
+}: {
+  months: AdminInferenceSpendMonth[];
+}): JSX.Element {
+  const showGraph = hasSufficientHistory(months);
+  const amounts = months.map((month) => Number.parseFloat(month.spend_usd));
+  const maximum = Math.max(0, ...amounts);
+
+  return (
+    <Group title="Monthly inference spend">
+      {months.length === 0 ? (
+        <p className="text-muted-foreground text-sm">
+          No complete monthly inference spend has been recorded yet.
+        </p>
+      ) : showGraph ? (
+        <figure
+          aria-label="Monthly inference spend graph"
+          className="space-y-2"
+        >
+          <figcaption className="sr-only">
+            Monthly inference spend by completed UTC calendar month
+          </figcaption>
+          {months.map((month, index) => {
+            const amount = amounts[index] ?? 0;
+            const width = maximum === 0 ? 0 : (amount / maximum) * 100;
+            return (
+              <div
+                key={month.period_start}
+                className="grid grid-cols-[5rem_minmax(8rem,1fr)_7rem] items-center gap-3"
+              >
+                <span className="text-muted-foreground text-xs">
+                  {formatBillingDate(month.period_start) ?? month.period_start}
+                </span>
+                <div
+                  aria-hidden="true"
+                  className="bg-muted h-3 overflow-hidden rounded-sm"
+                >
+                  <div
+                    className="bg-primary h-full rounded-sm"
+                    style={{ width: `${width}%` }}
+                  />
+                </div>
+                <span className="text-right text-sm tabular-nums">
+                  {formatExactUsd(month.spend_usd) ?? "—"}
+                </span>
+              </div>
+            );
+          })}
+        </figure>
+      ) : (
+        months.map((month) => (
+          <Row
+            key={month.period_start}
+            label={formatBillingDate(month.period_start) ?? month.period_start}
+          >
+            {formatExactUsd(month.spend_usd) ?? "—"}
+          </Row>
+        ))
+      )}
+      {months.length > 0 ? (
+        <p className="text-muted-foreground mt-2 text-xs">
+          Complete UTC calendar months only.
+        </p>
+      ) : null}
+    </Group>
+  );
+}
+
 function BillingSummary({
   summary,
 }: {
@@ -371,6 +448,9 @@ export function Billing({ org }: { org: AdminOrganization }): JSX.Element {
   const restoreFocus = useRef(false);
 
   const inferenceKeysResult = useQuery(inferenceKeysQuery(org.id));
+  const inferenceSpendHistoryResult = useQuery(
+    inferenceSpendHistoryQuery(org.id),
+  );
   const subscriptionQuery = useQuery(stripeSubscriptionQuery(org.id));
   const subscription = subscriptionQuery.data;
   const state = subscription ? billingState(subscription) : null;
@@ -482,6 +562,21 @@ export function Billing({ org }: { org: AdminOrganization }): JSX.Element {
           {errorMessage(summaryQuery.error)}
         </p>
       )}
+
+      {inferenceSpendHistoryResult.data ? (
+        <InferenceSpendHistory months={inferenceSpendHistoryResult.data} />
+      ) : null}
+      {inferenceSpendHistoryResult.isPending ? (
+        <p className="text-muted-foreground mt-5 text-sm">
+          Loading inference spend history…
+        </p>
+      ) : null}
+      {inferenceSpendHistoryResult.isError ? (
+        <p role="alert" className="text-destructive mt-5 text-sm">
+          Could not load inference spend history:{" "}
+          {errorMessage(inferenceSpendHistoryResult.error)}
+        </p>
+      ) : null}
 
       {state &&
         (state.kind === "active" ||

@@ -184,6 +184,14 @@ const (
 	// per-reason dimension on cimd.validation.failures.
 	CIMDValidationReasonKey = attribute.Key("gram.cimd.validation_reason")
 
+	// CIMDCrossOriginRedirectOriginsKey lists the origins of a validated
+	// Client ID Metadata Document's non-loopback redirect_uris that differ
+	// from the client_id URL's origin. Log-only: the origins are
+	// attacker-chosen on the unauthenticated OAuth surface, so they never
+	// become metric labels — the cimd.redirect_uris.cross_origin counter
+	// carries only the bounded client_id origin.
+	CIMDCrossOriginRedirectOriginsKey = attribute.Key("gram.cimd.cross_origin_redirect_origins")
+
 	// CIMDAdmissionModeKey is the effective per-issuer CIMD admission policy
 	// ("disabled", "presets", "open") — the low-cardinality dimension on
 	// cimd.admission.decisions. Operator-chosen, never attacker-influenced.
@@ -197,6 +205,16 @@ const (
 	// "denied_oversized", and "denied_unknown_mode". Chart the admitted_*
 	// values as a group; there is no single value meaning "admitted".
 	CIMDAdmissionOutcomeKey = attribute.Key("gram.cimd.admission_outcome")
+
+	// JWKSOriginKey is the host of a remote JWK Set URL — the per-key-host
+	// dimension on jwks.fetch.* metrics. Omitted for inline key sets, which
+	// have no fetch and no origin.
+	JWKSOriginKey = attribute.Key("gram.jwks.origin")
+
+	// JWKSValidationReasonKey is the machine-readable reason a fetched or
+	// stored JWK Set was rejected — the per-reason dimension on
+	// jwks.validation.failures.
+	JWKSValidationReasonKey = attribute.Key("gram.jwks.validation_reason")
 
 	ComponentKey                   = attribute.Key("gram.component")
 	DBDeletedRowsCountKey          = attribute.Key("gram.db.deleted_rows_count")
@@ -293,6 +311,7 @@ const (
 	McpToolsReturnedKey           = attribute.Key("gram.mcp.tools_returned")
 	McpToolsFilteredKey           = attribute.Key("gram.mcp.tools_filtered")
 	McpServerIDKey                = attribute.Key("gram.mcp_server.id")
+	MetaMcpServerIDKey            = attribute.Key("gram.meta_mcp_server.id")
 	McpURLKey                     = attribute.Key("gram.mcp.url")
 	ToolVariationsGroupIDKey      = attribute.Key("gram.tool_variations_group.id")
 	MetricNameKey                 = attribute.Key("gram.metric.name")
@@ -1079,6 +1098,10 @@ func SlogCIMDValidationReason[V ~string](v V) slog.Attr {
 	return slog.String(string(CIMDValidationReasonKey), string(v))
 }
 
+func SlogCIMDCrossOriginRedirectOrigins(v []string) slog.Attr {
+	return slog.Any(string(CIMDCrossOriginRedirectOriginsKey), v)
+}
+
 func CIMDAdmissionMode[V ~string](v V) attribute.KeyValue {
 	return CIMDAdmissionModeKey.String(string(v))
 }
@@ -1093,6 +1116,17 @@ func CIMDAdmissionOutcome[V ~string](v V) attribute.KeyValue {
 
 func SlogCIMDAdmissionOutcome[V ~string](v V) slog.Attr {
 	return slog.String(string(CIMDAdmissionOutcomeKey), string(v))
+}
+
+func JWKSOrigin(v string) attribute.KeyValue { return JWKSOriginKey.String(v) }
+func SlogJWKSOrigin(v string) slog.Attr      { return slog.String(string(JWKSOriginKey), v) }
+
+func JWKSValidationReason[V ~string](v V) attribute.KeyValue {
+	return JWKSValidationReasonKey.String(string(v))
+}
+
+func SlogJWKSValidationReason[V ~string](v V) slog.Attr {
+	return slog.String(string(JWKSValidationReasonKey), string(v))
 }
 
 func Component(v string) attribute.KeyValue { return ComponentKey.String(v) }
@@ -1881,6 +1915,9 @@ func SlogResourceURI(v string) slog.Attr      { return slog.String(string(Resour
 
 func McpServerID(v string) attribute.KeyValue { return McpServerIDKey.String(v) }
 func SlogMcpServerID(v string) slog.Attr      { return slog.String(string(McpServerIDKey), v) }
+
+func MetaMcpServerID(v string) attribute.KeyValue { return MetaMcpServerIDKey.String(v) }
+func SlogMetaMcpServerID(v string) slog.Attr      { return slog.String(string(MetaMcpServerIDKey), v) }
 
 func ToolsetID(v string) attribute.KeyValue { return ToolsetIDKey.String(v) }
 func SlogToolsetID(v string) slog.Attr      { return slog.String(string(ToolsetIDKey), v) }

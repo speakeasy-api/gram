@@ -8465,6 +8465,103 @@ paths:
       tags:
         - assistants
       x-speakeasy-name-override: getManaged
+  /rpc/assistants.interruptTurn:
+    post:
+      description: 'Stop whatever a conversation is currently generating. Cancels turns still queued on the conversation''s thread and interrupts the turn in flight on the assistant runtime, so the reply stops where it is rather than finishing in the background. Idempotent and safe to call when nothing is running: `stopped` is false when the reply had already finished.'
+      operationId: interruptAssistantTurn
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InterruptTurnRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InterruptTurnResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: interruptTurn assistants
+      tags:
+        - assistants
+      x-speakeasy-name-override: interruptTurn
+      x-speakeasy-react-hook:
+        name: InterruptAssistantTurn
+        type: mutation
   /rpc/assistants.list:
     get:
       description: List assistants for the current project.
@@ -11689,7 +11786,7 @@ paths:
       x-speakeasy-name-override: revoke
   /rpc/cliAuth.authorize:
     post:
-      description: Mint a short-lived one-time code bound to a PKCE code_challenge, on behalf of the authenticated dashboard user. Resolves the target project (given slug, else the org's default/first project) and records {user, org, project, scopes:[agent,hooks], challenge} against the code with a ~5 minute TTL. Requires a member-available session (org:read); NOT org-admin.
+      description: Mint a short-lived one-time code bound to a PKCE code_challenge, on behalf of the authenticated dashboard user. Resolves the target project (given slug, else the org's default/first project) and records {user, org, project, scopes:[agent,hooks], challenge} against the code with a ~5 minute TTL. Requires a member-available session (org:read); NOT org-admin. Refused (403) while impersonating an organization or user, or without membership in the active org.
       operationId: cliAuthAuthorize
       parameters:
         - allowEmptyValue: true
@@ -19748,6 +19845,917 @@ paths:
       x-speakeasy-name-override: list
       x-speakeasy-react-hook:
         name: ListIntegrations
+  /rpc/jsonWebKeySets.activateKey:
+    post:
+      description: Make a published key the set's active signing key, retiring the previously active key in the same operation. The key must be pending or retired; activating the already-active key is a no-op. Requires org:admin.
+      operationId: activateJsonWebKey
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the key to activate.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The ID of the key to activate.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JSONWebKey'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: activateKey jsonWebKeySets
+      tags:
+        - jsonWebKeySets
+      x-speakeasy-name-override: activateKey
+      x-speakeasy-react-hook:
+        name: ActivateJsonWebKey
+  /rpc/jsonWebKeySets.create:
+    post:
+      description: Create a JSON Web Key Set backed by an organization external key, minting and publishing the set's first key straight to active. Reads the backing key's public half from the customer's KMS and refuses when the key's real algorithm disagrees with the one recorded against it. Rate limited per organization. Requires org:admin.
+      operationId: createJsonWebKeySet
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateJSONWebKeySetForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JSONWebKeySet'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'rate_limit_exceeded: rate limit exceeded'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: createSet jsonWebKeySets
+      tags:
+        - jsonWebKeySets
+      x-speakeasy-name-override: create
+      x-speakeasy-react-hook:
+        name: CreateJsonWebKeySet
+  /rpc/jsonWebKeySets.delete:
+    delete:
+      description: Soft-delete a JSON Web Key Set by ID, withdrawing every key still published in it in the same operation. Requires org:admin. Tokens signed with the set's keys stop verifying, so treat this as decommissioning the set's whole trust anchor rather than tidying up.
+      operationId: deleteJsonWebKeySet
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the key set to delete.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The ID of the key set to delete.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: deleteSet jsonWebKeySets
+      tags:
+        - jsonWebKeySets
+      x-speakeasy-name-override: delete
+      x-speakeasy-react-hook:
+        name: DeleteJsonWebKeySet
+  /rpc/jsonWebKeySets.get:
+    get:
+      description: Get a JSON Web Key Set by ID. Requires org:read.
+      operationId: getJsonWebKeySet
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the key set to get.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The ID of the key set to get.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JSONWebKeySet'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: getSet jsonWebKeySets
+      tags:
+        - jsonWebKeySets
+      x-speakeasy-name-override: get
+      x-speakeasy-react-hook:
+        name: GetJsonWebKeySet
+  /rpc/jsonWebKeySets.list:
+    get:
+      description: List the organization's JSON Web Key Sets. Requires org:read.
+      operationId: listJsonWebKeySets
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListJSONWebKeySetsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listSets jsonWebKeySets
+      tags:
+        - jsonWebKeySets
+      x-speakeasy-name-override: list
+      x-speakeasy-react-hook:
+        name: ListJsonWebKeySets
+  /rpc/jsonWebKeySets.listKeys:
+    get:
+      description: List a JSON Web Key Set's published keys, newest first. Revoked keys drop out of the default listing; pass include_revoked to see the set's full revocation history. Requires org:read.
+      operationId: listJsonWebKeys
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the key set whose keys to list.
+          in: query
+          name: set_id
+          required: true
+          schema:
+            description: The ID of the key set whose keys to list.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Also return revoked keys.
+          in: query
+          name: include_revoked
+          schema:
+            default: false
+            description: Also return revoked keys.
+            type: boolean
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListJSONWebKeysResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listKeys jsonWebKeySets
+      tags:
+        - jsonWebKeySets
+      x-speakeasy-name-override: listKeys
+      x-speakeasy-react-hook:
+        name: ListJsonWebKeys
+  /rpc/jsonWebKeySets.publishKey:
+    post:
+      description: Mint and publish a new key from the set's current backing external key. The key is published as pending — visible to verifiers so their caches warm up — unless the set has no active key, in which case it activates immediately. Publishing the same backing key again while its kid is present in the set (including revoked) is refused as a conflict. Reads the public half from the customer's KMS; rate limited per organization. Requires org:admin.
+      operationId: publishJsonWebKey
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the key set to publish into.
+          in: query
+          name: set_id
+          required: true
+          schema:
+            description: The ID of the key set to publish into.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JSONWebKey'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'rate_limit_exceeded: rate limit exceeded'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: publishKey jsonWebKeySets
+      tags:
+        - jsonWebKeySets
+      x-speakeasy-name-override: publishKey
+      x-speakeasy-react-hook:
+        name: PublishJsonWebKey
+  /rpc/jsonWebKeySets.retireKey:
+    post:
+      description: 'Take the set''s active key out of signing use without withdrawing it: the key stays published so tokens already signed with it keep verifying. The key must be active. This is the graceful wind-down; use revoke when the key must stop verifying too. Requires org:admin.'
+      operationId: retireJsonWebKey
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the key to retire.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The ID of the key to retire.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JSONWebKey'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: retireKey jsonWebKeySets
+      tags:
+        - jsonWebKeySets
+      x-speakeasy-name-override: retireKey
+      x-speakeasy-react-hook:
+        name: RetireJsonWebKey
+  /rpc/jsonWebKeySets.revokeKey:
+    post:
+      description: 'Withdraw a published key entirely: it leaves the published set and tokens signed with it stop verifying. This is the compromise response, not the graceful wind-down — use retire for that. A revoked kid can never be republished into the set. Requires org:admin.'
+      operationId: revokeJsonWebKey
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the key to revoke.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The ID of the key to revoke.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JSONWebKey'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: revokeKey jsonWebKeySets
+      tags:
+        - jsonWebKeySets
+      x-speakeasy-name-override: revokeKey
+      x-speakeasy-react-hook:
+        name: RevokeJsonWebKey
+  /rpc/jsonWebKeySets.update:
+    post:
+      description: 'Update a JSON Web Key Set''s name and backing external key. Requires org:admin. Both fields are replaced, not patched. Re-pointing the backing key is how rotation begins: point the set at the new external key, then publish a key from it. Already-published keys are unaffected — each keeps signing with the external key it was minted from.'
+      operationId: updateJsonWebKeySet
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateJSONWebKeySetRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JSONWebKeySet'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: updateSet jsonWebKeySets
+      tags:
+        - jsonWebKeySets
+      x-speakeasy-name-override: update
+      x-speakeasy-react-hook:
+        name: UpdateJsonWebKeySet
   /rpc/keys.create:
     post:
       description: Create a new api key
@@ -20876,11 +21884,11 @@ paths:
       operationId: listMcpApprovalRequests
       parameters:
         - allowEmptyValue: true
-          description: Only return requests in this status.
+          description: 'Only return requests in this status: unreviewed, requested, approved, denied, or superseded.'
           in: query
           name: status
           schema:
-            description: Only return requests in this status.
+            description: 'Only return requests in this status: unreviewed, requested, approved, denied, or superseded.'
             type: string
         - allowEmptyValue: true
           description: The number of requests to return per page
@@ -59298,6 +60306,22 @@ components:
       required:
         - key_type
         - monthly_credits
+    AdminInferenceSpendMonth:
+      type: object
+      properties:
+        period_end:
+          type: string
+          description: Exclusive end of the UTC calendar month.
+          format: date
+        period_start:
+          type: string
+          format: date
+        spend_usd:
+          type: string
+      required:
+        - period_start
+        - period_end
+        - spend_usd
     AdminListOrganizationMembersResult:
       type: object
       properties:
@@ -59874,7 +60898,7 @@ components:
           description: The Shadow MCP inventory page slug for a server_url target — the same identifier the inventory derives from the canonical URL, so a request links to the server page it describes. Absent for stdio targets.
         status:
           type: string
-          description: The request's current status.
+          description: 'The request''s current status: unreviewed, requested, approved, denied, or superseded (the latest decision was explicitly displaced by a policy URL-list edit; history preserved, no enforcement derives from it until re-decided).'
         target_kind:
           type: string
           description: The namespace of the requested reference, such as server_url or stdio_command.
@@ -62373,6 +63397,19 @@ components:
       required:
         - slug
         - issuer
+    CreateJSONWebKeySetForm:
+      type: object
+      properties:
+        external_key_id:
+          type: string
+          description: The external key to back the set with. Must be a live, organization-owned GCP KMS key; AWS KMS keys are not supported yet.
+          format: uuid
+        name:
+          type: string
+          description: A human-readable name for the key set. Names may repeat within an organization.
+      required:
+        - name
+        - external_key_id
     CreateKeyForm:
       type: object
       properties:
@@ -67787,6 +68824,37 @@ components:
       required:
         - version
         - created_at
+    InterruptTurnRequestBody:
+      type: object
+      properties:
+        assistant_id:
+          type: string
+          description: The assistant whose conversation should stop generating.
+          format: uuid
+        chat_id:
+          type: string
+          description: The conversation to stop, as returned by sendMessage.
+          format: uuid
+      required:
+        - assistant_id
+        - chat_id
+    InterruptTurnResult:
+      type: object
+      properties:
+        cancelled_queued:
+          type: integer
+          description: How many turns were dropped from the conversation's queue before any runtime claimed them.
+          format: int64
+        interrupted:
+          type: boolean
+          description: Whether a turn in flight on the assistant runtime was cancelled.
+        stopped:
+          type: boolean
+          description: Whether the call stopped anything. False means nothing was generating — the reply had already finished, or the conversation never started a turn.
+      required:
+        - stopped
+        - interrupted
+        - cancelled_queued
     IssuerConvergenceCandidate:
       type: object
       properties:
@@ -67863,6 +68931,101 @@ components:
         - warnings
         - can_migrate
         - target_tenant_client_count
+    JSONWebKey:
+      type: object
+      properties:
+        activated_at:
+          type: string
+          description: When the key last became the set's active signing key.
+          format: date-time
+        created_at:
+          type: string
+          description: When the key was published.
+          format: date-time
+        external_key_id:
+          type: string
+          description: The external key the key was minted from. Signing for this kid always uses exactly this key, even after the set is re-pointed at another external key.
+          format: uuid
+        id:
+          type: string
+          description: The ID of the published key.
+          format: uuid
+        json_web_key_set_id:
+          type: string
+          description: The key set the key is published in.
+          format: uuid
+        key_state:
+          type: string
+          description: 'The lifecycle state of the key. pending: published for verifier cache warm-up but not signing yet. active: the key new signatures use; at most one per set. retired: no longer signing, still published so outstanding tokens keep verifying. revoked: withdrawn entirely; tokens signed with it stop verifying.'
+          enum:
+            - pending
+            - active
+            - retired
+            - revoked
+        kid:
+          type: string
+          description: 'The key ID: the RFC 7638 SHA-256 thumbprint of the public key, base64url-encoded. Carried in the JWK document and in the header of every token signed with the key.'
+        organization_id:
+          type: string
+          description: The organization that owns the key.
+        public_jwk:
+          description: The public JWK document (RFC 7517) as published, including kid, alg and use.
+        retired_at:
+          type: string
+          description: When the key last left active signing use.
+          format: date-time
+        revoked_at:
+          type: string
+          description: When the key was revoked.
+          format: date-time
+        updated_at:
+          type: string
+          description: When the key was last updated.
+          format: date-time
+      description: A published JSON Web Key inside a key set.
+      required:
+        - id
+        - organization_id
+        - json_web_key_set_id
+        - external_key_id
+        - kid
+        - key_state
+        - public_jwk
+        - created_at
+        - updated_at
+    JSONWebKeySet:
+      type: object
+      properties:
+        created_at:
+          type: string
+          description: When the key set was created.
+          format: date-time
+        external_key_id:
+          type: string
+          description: 'The external key currently backing the set: new keys are published from it. Already-published keys keep signing with the external key they were minted from.'
+          format: uuid
+        id:
+          type: string
+          description: The ID of the key set.
+          format: uuid
+        name:
+          type: string
+          description: A human-readable name for the key set.
+        organization_id:
+          type: string
+          description: The organization that owns the key set.
+        updated_at:
+          type: string
+          description: When the key set was last updated.
+          format: date-time
+      description: A JSON Web Key Set — a named collection of published public keys backed by an organization external key.
+      required:
+        - id
+        - organization_id
+        - external_key_id
+        - name
+        - created_at
+        - updated_at
     Key:
       type: object
       properties:
@@ -68497,6 +69660,26 @@ components:
       description: Result type for the platform-administrator convergence-candidate listing.
       required:
         - items
+    ListJSONWebKeySetsResult:
+      type: object
+      properties:
+        sets:
+          type: array
+          items:
+            $ref: '#/components/schemas/JSONWebKeySet'
+          description: The organization's JSON Web Key Sets.
+      required:
+        - sets
+    ListJSONWebKeysResult:
+      type: object
+      properties:
+        keys:
+          type: array
+          items:
+            $ref: '#/components/schemas/JSONWebKey'
+          description: The set's published keys.
+      required:
+        - keys
     ListKeysResponseBody:
       type: object
       properties:
@@ -76681,6 +77864,58 @@ components:
           type: string
           description: The user_session_issuer id to link, or null to unlink.
           format: uuid
+    ShadowMCPAccessSummary:
+      type: object
+      properties:
+        allowed_for:
+          type: string
+          description: 'Reach of explicit allow grants: everyone when every deny-by-default policy''s audience is covered (an all-users grant, or grants naming the policy''s whole audience), selected when grants free only part of an audience, none without grants. A role grant whose membership happens to span the organization still reads selected — reach compares principal sets, not expanded memberships.'
+          enum:
+            - everyone
+            - selected
+            - none
+        blocked_for:
+          type: string
+          description: 'Reach of explicit block mechanisms: an everyone-audience block rule, a targeted rule or targeted deny-by-default policy, or none.'
+          enum:
+            - everyone
+            - some
+            - none
+        blocking_default:
+          type: string
+          description: 'What happens to a user no rule names: deny under an everyone-audience deny-by-default policy, allow when blocking exists without one, none when no blocking policy is enabled.'
+          enum:
+            - deny
+            - allow
+            - none
+        decision:
+          type: string
+          description: The recorded review decision, when one exists.
+          enum:
+            - approved
+            - denied
+        decision_coverage:
+          type: string
+          description: 'How much of the recorded decision enforcement delivers. full: the decision''s own writes are intact — an approval''s grants survive unoverridden (a scoped blast radius is the decision as recorded, not a shortfall), or a denial lands as a project-wide block. partial: something carries the decision but not all of it, such as a denial only a targeted policy enforces, or an approval whose grants were later removed or overridden. none: nothing carries it — no blocking policy exists, the target is a local command (stdio decisions are recorded without writing enforcement), or no decision is recorded at all.'
+          enum:
+            - full
+            - partial
+            - none
+        state:
+          type: string
+          description: 'The shape of the user-to-access function: allowed and blocked are uniform, restricted varies by user, unenforced means no blocking policy applies.'
+          enum:
+            - allowed
+            - restricted
+            - blocked
+            - unenforced
+      description: The enforcement verdict for a shadow MCP server, computed server-side from policies, grants, and the recorded decision. state is the canonical compression of who may call the server; the remaining fields name the mechanisms so a client renders wording without re-deriving enforcement.
+      required:
+        - state
+        - allowed_for
+        - blocked_for
+        - blocking_default
+        - decision_coverage
     ShadowMCPInventoryApprovalRequest:
       type: object
       properties:
@@ -76695,13 +77930,21 @@ components:
           type: integer
           description: How many distinct people have asked for this server.
           format: int64
+        standing_decision:
+          type: string
+          description: The latest recorded decision still standing for this server, independent of the request's lifecycle status — a reopened request's prior decision keeps enforcing until re-decided, and clients checking an edit against standing intent must read this rather than status. Absent when nothing was ever decided or the decision was superseded.
+          enum:
+            - approved
+            - denied
         status:
           type: string
+          description: 'superseded means the latest decision was explicitly displaced by a policy URL-list edit: the history is preserved but no enforcement derives from it until someone re-decides.'
           enum:
             - unreviewed
             - requested
             - approved
             - denied
+            - superseded
       description: The MCP approval request tracking review status for a server. Status records the review outcome, which may cover only selected principals; the server's access field reports enforcement state.
       required:
         - id
@@ -76752,11 +77995,14 @@ components:
       properties:
         access:
           type: string
+          description: 'Deprecated: read access_summary.state. Kept one release so older clients keep rendering, then removed together with making access_summary required. Note the values themselves are corrected in this release: URLs whose bypass grants cover only part of a policy''s audience now read restricted where they previously read allowed.'
           enum:
             - none
             - allowed
             - blocked
             - restricted
+        access_summary:
+          $ref: '#/components/schemas/ShadowMCPAccessSummary'
         allowed_policy_ids:
           type: array
           items:
@@ -76824,11 +78070,14 @@ components:
       properties:
         access:
           type: string
+          description: 'Deprecated: read access_summary.state. Kept one release so older clients keep rendering, then removed together with making access_summary required. Note the values themselves are corrected in this release: URLs whose bypass grants cover only part of a policy''s audience now read restricted where they previously read allowed.'
           enum:
             - none
             - allowed
             - blocked
             - restricted
+        access_summary:
+          $ref: '#/components/schemas/ShadowMCPAccessSummary'
         allowed_policy_ids:
           type: array
           items:
@@ -81251,6 +82500,37 @@ components:
       required:
         - invitation_id
         - role_id
+    UpdateJSONWebKeySetForm:
+      type: object
+      properties:
+        external_key_id:
+          type: string
+          description: 'The external key to back the set with from now on. Must be a live, organization-owned GCP KMS key; AWS KMS keys are not supported yet. Already-published keys are unaffected: each keeps signing with the external key it was minted from.'
+          format: uuid
+        name:
+          type: string
+          description: A human-readable name for the key set.
+      required:
+        - name
+        - external_key_id
+    UpdateJSONWebKeySetRequestBody:
+      type: object
+      properties:
+        external_key_id:
+          type: string
+          description: 'The external key to back the set with from now on. Must be a live, organization-owned GCP KMS key; AWS KMS keys are not supported yet. Already-published keys are unaffected: each keeps signing with the external key it was minted from.'
+          format: uuid
+        id:
+          type: string
+          description: The ID of the key set to update.
+          format: uuid
+        name:
+          type: string
+          description: A human-readable name for the key set.
+      required:
+        - id
+        - name
+        - external_key_id
     UpdateMarketplaceSettingsRequestBody:
       type: object
       properties:
@@ -81835,6 +83115,9 @@ components:
           items:
             type: string
           description: Detection sources to enable.
+        supersede_decisions:
+          type: boolean
+          description: Confirms that this edit may displace standing MCP approval decisions its URL lists contradict, transitioning them to superseded (audit-logged, decision history preserved). Without it, a contradicting edit is rejected with a conflict naming the affected servers.
         user_message:
           type: string
           description: Optional message shown to end users when this policy blocks an action or surfaces a flagged finding. Send an empty string to clear.
@@ -83453,6 +84736,8 @@ tags:
     description: Consumer APIs for interacting with all relevant data for an instance of a toolset and environment.
   - name: integrations
     description: Explore third-party tools in Gram.
+  - name: jsonWebKeySets
+    description: Manage organization-level JSON Web Key Sets — published public keys backed by customer KMS keys — and the publish/activate/retire/revoke lifecycle of their keys.
   - name: keys
     description: Managing system api keys.
   - name: litellm

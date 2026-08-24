@@ -151,6 +151,11 @@ type UpdateRiskPolicyRequestBody struct {
 	// For allow_all policies: complete desired canonical URL block set. Omit to
 	// preserve; send empty to clear.
 	ShadowMcpBlockedUrls []string `json:"shadow_mcp_blocked_urls"`
+	// Confirms that this edit may displace standing MCP approval decisions its URL
+	// lists contradict, transitioning them to superseded (audit-logged, decision
+	// history preserved). Without it, a contradicting edit is rejected with a
+	// conflict naming the affected servers.
+	SupersedeDecisions *bool `json:"supersede_decisions"`
 	// Whether the policy name should be auto-generated.
 	AutoName *bool `form:"auto_name,omitempty" json:"auto_name,omitempty" xml:"auto_name,omitempty"`
 	// Optional message shown to end users when this policy blocks an action or
@@ -18821,6 +18826,7 @@ func NewUpdateRiskPolicyPayload(body *UpdateRiskPolicyRequestBody, apikeyToken *
 		Action:                 body.Action,
 		AudienceType:           body.AudienceType,
 		ShadowMcpDisposition:   body.ShadowMcpDisposition,
+		SupersedeDecisions:     body.SupersedeDecisions,
 		AutoName:               body.AutoName,
 		UserMessage:            body.UserMessage,
 		Prompt:                 body.Prompt,

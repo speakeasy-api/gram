@@ -37,6 +37,7 @@ type Server struct {
 	GetOrganizationStats        http.Handler
 	GetInferenceKeys            http.Handler
 	SetInferenceKeyMonthlyLimit http.Handler
+	GetInferenceSpendHistory    http.Handler
 	GetPaygBillingSummary       http.Handler
 	GetStripeSubscription       http.Handler
 	CancelStripeSubscription    http.Handler
@@ -88,6 +89,7 @@ func New(
 			{"GetOrganizationStats", "GET", "/admin/organizations.stats"},
 			{"GetInferenceKeys", "GET", "/admin/organization.inferenceKeys"},
 			{"SetInferenceKeyMonthlyLimit", "POST", "/admin/organization.setInferenceKeyMonthlyLimit"},
+			{"GetInferenceSpendHistory", "GET", "/admin/organization.inferenceSpendHistory"},
 			{"GetPaygBillingSummary", "GET", "/admin/organization.paygBillingSummary"},
 			{"GetStripeSubscription", "GET", "/admin/organization.stripeSubscription"},
 			{"CancelStripeSubscription", "POST", "/admin/organization.cancelStripeSubscription"},
@@ -111,6 +113,7 @@ func New(
 		GetOrganizationStats:        NewGetOrganizationStatsHandler(e.GetOrganizationStats, mux, decoder, encoder, errhandler, formatter),
 		GetInferenceKeys:            NewGetInferenceKeysHandler(e.GetInferenceKeys, mux, decoder, encoder, errhandler, formatter),
 		SetInferenceKeyMonthlyLimit: NewSetInferenceKeyMonthlyLimitHandler(e.SetInferenceKeyMonthlyLimit, mux, decoder, encoder, errhandler, formatter),
+		GetInferenceSpendHistory:    NewGetInferenceSpendHistoryHandler(e.GetInferenceSpendHistory, mux, decoder, encoder, errhandler, formatter),
 		GetPaygBillingSummary:       NewGetPaygBillingSummaryHandler(e.GetPaygBillingSummary, mux, decoder, encoder, errhandler, formatter),
 		GetStripeSubscription:       NewGetStripeSubscriptionHandler(e.GetStripeSubscription, mux, decoder, encoder, errhandler, formatter),
 		CancelStripeSubscription:    NewCancelStripeSubscriptionHandler(e.CancelStripeSubscription, mux, decoder, encoder, errhandler, formatter),
@@ -141,6 +144,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetOrganizationStats = m(s.GetOrganizationStats)
 	s.GetInferenceKeys = m(s.GetInferenceKeys)
 	s.SetInferenceKeyMonthlyLimit = m(s.SetInferenceKeyMonthlyLimit)
+	s.GetInferenceSpendHistory = m(s.GetInferenceSpendHistory)
 	s.GetPaygBillingSummary = m(s.GetPaygBillingSummary)
 	s.GetStripeSubscription = m(s.GetStripeSubscription)
 	s.CancelStripeSubscription = m(s.CancelStripeSubscription)
@@ -170,6 +174,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetOrganizationStatsHandler(mux, h.GetOrganizationStats)
 	MountGetInferenceKeysHandler(mux, h.GetInferenceKeys)
 	MountSetInferenceKeyMonthlyLimitHandler(mux, h.SetInferenceKeyMonthlyLimit)
+	MountGetInferenceSpendHistoryHandler(mux, h.GetInferenceSpendHistory)
 	MountGetPaygBillingSummaryHandler(mux, h.GetPaygBillingSummary)
 	MountGetStripeSubscriptionHandler(mux, h.GetStripeSubscription)
 	MountCancelStripeSubscriptionHandler(mux, h.CancelStripeSubscription)
@@ -1115,6 +1120,60 @@ func NewSetInferenceKeyMonthlyLimitHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "setInferenceKeyMonthlyLimit")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetInferenceSpendHistoryHandler configures the mux to serve the "admin"
+// service "getInferenceSpendHistory" endpoint.
+func MountGetInferenceSpendHistoryHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/organization.inferenceSpendHistory", f)
+}
+
+// NewGetInferenceSpendHistoryHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "getInferenceSpendHistory"
+// endpoint.
+func NewGetInferenceSpendHistoryHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetInferenceSpendHistoryRequest(mux, decoder)
+		encodeResponse = EncodeGetInferenceSpendHistoryResponse(encoder)
+		encodeError    = EncodeGetInferenceSpendHistoryError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getInferenceSpendHistory")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

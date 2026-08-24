@@ -1,6 +1,6 @@
 ---
 name: authoring-platform-mcp-skills
-description: Use when adding, editing, reviewing, testing, or locating a reviewed skill distributed with the Speakeasy AICP Platform MCP plugin; triggers include "Platform MCP skill", "platform_mcp_skills", "add a catalog workflow", "bundle a skill with Platform MCP", and "where should this Platform skill live?".
+description: Use when adding, editing, reviewing, testing, or locating a reviewed skill distributed with the Platform MCP plugin; triggers include "Platform MCP skill", "platform_mcp_skills", "add a catalog workflow", "bundle a skill with Platform MCP", and "where should this Platform skill live?".
 ---
 
 # Authoring Platform MCP skills
@@ -23,7 +23,7 @@ Use product language in every distributed skill: **Speakeasy AI Control Plane**,
 | Generator and validation          | `server/internal/plugins/generate.go` (`loadPlatformMCPSkills`, `emitPlatformMCPSkills`) |
 | Package tests                     | `server/internal/plugins/generate_test.go`                                               |
 | Claude package output             | `platform-mcp/skills/<skill-name>/SKILL.md`                                              |
-| Portable Agent Plugin output      | `agent-plugins/speakeasy-aicp-platform-mcp/skills/<skill-name>/SKILL.md`                 |
+| Portable Agent Plugin output      | `agent-plugins/platform-mcp/skills/<skill-name>/SKILL.md`                                |
 | Contributor guidance only         | `.agents/skills/authoring-platform-mcp-skills/SKILL.md` (this file)                      |
 
 Do not put a user-facing Platform workflow under `.agents/skills/`: that directory teaches contributors and coding agents how to work on this repository. It is not copied into the customer Platform Plugin.

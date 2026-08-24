@@ -188,6 +188,13 @@ var AdminInferenceKeyLimit = Type("AdminInferenceKeyLimit", func() {
 	Required("key_type", "monthly_credits")
 })
 
+var AdminInferenceSpendMonth = Type("AdminInferenceSpendMonth", func() {
+	Attribute("period_start", String, func() { Format(FormatDate) })
+	Attribute("period_end", String, "Exclusive end of the UTC calendar month.", func() { Format(FormatDate) })
+	Attribute("spend_usd", String)
+	Required("period_start", "period_end", "spend_usd")
+})
+
 var AdminPaygBillingSummary = Type("AdminPaygBillingSummary", func() {
 	Attribute("period_start", String, func() { Format(FormatDateTime) })
 	Attribute("period_end", String, func() { Format(FormatDateTime) })
@@ -673,6 +680,14 @@ var _ = Service("admin", func() {
 		Result(AdminInferenceKeyLimit)
 		HTTP(func() { POST("/admin/organization.setInferenceKeyMonthlyLimit"); Response(StatusOK) })
 		Meta("openapi:operationId", "adminSetInferenceKeyMonthlyLimit")
+	})
+
+	Method("getInferenceSpendHistory", func() {
+		Description("Returns up to twelve complete UTC calendar months of recorded inference spend for an organization.")
+		Payload(func() { security.AdminAuthPayload(); Required("organization_id"); Attribute("organization_id", String) })
+		Result(ArrayOf(AdminInferenceSpendMonth))
+		HTTP(func() { GET("/admin/organization.inferenceSpendHistory"); Param("organization_id"); Response(StatusOK) })
+		Meta("openapi:operationId", "adminGetInferenceSpendHistory")
 	})
 
 	Method("getPaygBillingSummary", func() {

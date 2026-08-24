@@ -616,7 +616,7 @@ func (s *Service) serveProxyBackedEndpoint(w http.ResponseWriter, r *http.Reques
 	}
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
 
-	mcpEndpoint, mcpServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, mcpSlug)
+	mcpEndpoint, mcpServer, metaServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, mcpSlug)
 	var shareErr *oops.ShareableError
 	switch {
 	case err == nil:
@@ -624,6 +624,12 @@ func (s *Service) serveProxyBackedEndpoint(w http.ResponseWriter, r *http.Reques
 		return false, nil
 	default:
 		return true, err
+	}
+
+	// Meta-backed endpoints hold no upstream session and no proxied GET/SSE
+	// stream; the caller's legacy behavior (install page or 405) applies.
+	if metaServer != nil {
+		return false, nil
 	}
 
 	if !mcpServer.RemoteMcpServerID.Valid && !mcpServer.TunneledMcpServerID.Valid {
@@ -707,12 +713,15 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	// Try mcp_endpoints → mcp_servers first. On hit, dispatch through the
 	// unified backend switch (remote proxy / toolset). On 404, fall through
 	// to the legacy toolset-by-slug path below.
-	mcpEndpoint, mcpServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, mcpSlug)
+	mcpEndpoint, mcpServer, metaServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, mcpSlug)
 	var shareErr *oops.ShareableError
 	switch {
 	case err == nil:
 		if err := s.enforceCustomDomainLockdown(ctx, logger, mcpEndpoint.ProjectID); err != nil {
 			return err
+		}
+		if metaServer != nil {
+			return s.serveResolvedMetaMCPEndpoint(w, r, logger, mcpEndpoint, metaServer)
 		}
 		return s.serveResolvedMCPEndpoint(w, r, logger, mcpEndpoint, mcpServer, mcpSlug, "mcp")
 	case errors.As(err, &shareErr) && shareErr.Code == oops.CodeNotFound:

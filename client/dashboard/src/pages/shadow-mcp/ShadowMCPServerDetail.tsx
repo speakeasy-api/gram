@@ -26,11 +26,8 @@ import {
   shadowMCPInventoryStatus,
   shadowMCPInventoryStatusDescription,
   shadowMCPInventoryStatusLabel,
-  shadowMCPPolicyState,
   type ShadowMCPInventoryStatus,
   type ShadowMCPPolicy,
-  type ShadowMCPPolicyDisposition,
-  type ShadowMCPPolicyState,
 } from "@/components/shadow-mcp/shadowMCPInventoryStatus";
 import { useProject } from "@/contexts/Auth";
 import { formatPlatform } from "@/lib/formatPlatform";
@@ -147,10 +144,12 @@ function statusTone(status: ShadowMCPInventoryStatus): MetricCardProps["tone"] {
     case "blocked":
       return "destructive";
     case "restricted":
-    case "pending":
       return "warning";
+    case "pending":
+      // Blue like the inventory badge and the review's own awaiting-decision
+      // vocabulary; orange stays reserved for the partial-access family.
+      return "information";
     case "observed":
-    case "unavailable":
       return "neutral";
   }
 }
@@ -164,16 +163,8 @@ function statusTone(status: ShadowMCPInventoryStatus): MetricCardProps["tone"] {
  * island — giving every figure the same shape and its own column fills the
  * width by construction instead.
  */
-function ServerSummary({
-  disposition,
-  policyState,
-  server,
-}: {
-  disposition: ShadowMCPPolicyDisposition | null;
-  policyState: ShadowMCPPolicyState;
-  server: ShadowMCPInventoryServer;
-}) {
-  const status = shadowMCPInventoryStatus(server, policyState);
+function ServerSummary({ server }: { server: ShadowMCPInventoryServer }) {
+  const status = shadowMCPInventoryStatus(server);
 
   return (
     <MetricCard.Group className="flex-wrap">
@@ -183,11 +174,7 @@ function ServerSummary({
         tone={statusTone(status)}
         size="xs"
         className={SUMMARY_TILE_CLASS}
-        description={shadowMCPInventoryStatusDescription(
-          server,
-          policyState,
-          disposition,
-        )}
+        description={shadowMCPInventoryStatusDescription(server)}
       />
       {/* First-seen rides under the call count rather than taking a tile of
           its own: it is the span those calls happened over, not a figure
@@ -329,11 +316,18 @@ function TopUsersTable({
 function DetailActionButtons({
   disabled,
   onOpenDecide,
+  policiesUnavailable,
   server,
   projectSlug,
 }: {
   disabled: boolean;
   onOpenDecide: () => void;
+  /**
+   * The policy list failed to load. Deciding writes grants against the
+   * policies the sheet can see, so with none loaded an approval would record
+   * a decision that enforces nothing — the button waits instead.
+   */
+  policiesUnavailable: boolean;
   server: ShadowMCPInventoryServer;
   projectSlug: string;
 }) {
@@ -349,10 +343,15 @@ function DetailActionButtons({
         />
       )}
       <Button
-        disabled={disabled}
+        disabled={disabled || policiesUnavailable}
         onClick={onOpenDecide}
         variant={pendingReview ? "primary" : "secondary"}
         size="sm"
+        title={
+          policiesUnavailable
+            ? "Policy data could not be loaded — deciding now would not be enforced"
+            : undefined
+        }
       >
         <Button.Text>
           {pendingReview ? "Review Request" : "Decide Access"}
@@ -463,9 +462,6 @@ export default function ShadowMCPServerDetail(): JSX.Element {
   const policiesQuery = useRiskListPolicies();
   const membersQuery = useMembers();
   const rolesQuery = useRoles();
-  const policyState = policiesQuery.isError
-    ? "unavailable"
-    : shadowMCPPolicyState(policiesQuery.data?.policies);
   let shadowMCPPolicies: ShadowMCPPolicy[] = [];
   if (!policiesQuery.isError) {
     shadowMCPPolicies = eligibleShadowMCPAllowRulePolicies(
@@ -692,6 +688,7 @@ export default function ShadowMCPServerDetail(): JSX.Element {
                 <DetailActionButtons
                   disabled={decideTarget !== null}
                   onOpenDecide={openDecide}
+                  policiesUnavailable={policiesQuery.isError}
                   server={server}
                   projectSlug={project.slug}
                 />
@@ -737,24 +734,14 @@ export default function ShadowMCPServerDetail(): JSX.Element {
                         requestId={server.approvalRequest.id}
                         title="Access review"
                         usage={usersPanel}
-                        summary={
-                          <ServerSummary
-                            disposition={disposition}
-                            policyState={policyState}
-                            server={server}
-                          />
-                        }
+                        summary={<ServerSummary server={server} />}
                       />
                     ) : (
                       <>
                         {/* No dossier yet, so the review has no header to
                             share a row with — the strip stands alone until
                             the gather lands and the two-column row appears. */}
-                        <ServerSummary
-                          disposition={disposition}
-                          policyState={policyState}
-                          server={server}
-                        />
+                        <ServerSummary server={server} />
                         <EnsureServerReview
                           canonicalServerUrl={server.canonicalServerUrl}
                         />

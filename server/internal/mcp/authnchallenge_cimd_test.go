@@ -341,14 +341,18 @@ func TestOAuthCIMD_DocumentClientIDMismatchRejected(t *testing.T) {
 	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client_metadata")
 }
 
-func TestOAuthCIMD_CrossOriginRedirectURIRejected(t *testing.T) {
+// TestOAuthCIMD_CrossOriginRedirectURIAccepted: a document may register
+// redirect_uris on a different origin than the client_id URL (AIS-597
+// removed the same-origin binding); the authorization request matching the
+// registered URI exactly proceeds to consent.
+func TestOAuthCIMD_CrossOriginRedirectURIAccepted(t *testing.T) {
 	t.Parallel()
 
 	_, ti, ds, toolset := newTestCIMDService(t)
 	ds.set(t, func(ds *cimdDocServer) { ds.doc["redirect_uris"] = []any{"https://elsewhere.example.com/callback"} })
 
 	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "https://elsewhere.example.com/callback", pkceChallenge(pkceVerifier(t)))
-	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_redirect_uri")
+	require.Equal(t, http.StatusFound, w.Code, "cross-origin registered redirect_uris must be accepted: %s", w.Body.String())
 }
 
 func TestOAuthCIMD_UnregisteredRedirectURIRejected(t *testing.T) {

@@ -1512,6 +1512,11 @@ type UpdateRiskPolicyPayload struct {
 	// For allow_all policies: complete desired canonical URL block set. Omit to
 	// preserve; send empty to clear.
 	ShadowMcpBlockedUrls []string `json:"shadow_mcp_blocked_urls"`
+	// Confirms that this edit may displace standing MCP approval decisions its URL
+	// lists contradict, transitioning them to superseded (audit-logged, decision
+	// history preserved). Without it, a contradicting edit is rejected with a
+	// conflict naming the affected servers.
+	SupersedeDecisions *bool `json:"supersede_decisions"`
 	// Whether the policy name should be auto-generated.
 	AutoName *bool
 	// Optional message shown to end users when this policy blocks an action or

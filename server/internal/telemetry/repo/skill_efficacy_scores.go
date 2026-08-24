@@ -58,6 +58,22 @@ type ListSkillEfficacyScoreSessionsParams struct {
 	Limit          uint64
 }
 
+// ListExistingSkillEfficacyScoreIDs' filters. Named rather than positional
+// because the query takes two bare strings, three string slices and two
+// timestamps: every adjacent pair is assignment-compatible, so a transposition
+// still compiles and silently reads the wrong rows — and this read is the
+// dedup guard, where a wrong answer either re-pays for inference or suppresses
+// a score that was never written.
+type ListExistingSkillEfficacyScoreIDsParams struct {
+	OrganizationID  string
+	ProjectID       string
+	SkillIDs        []string
+	SkillVersionIDs []string
+	IDs             []string
+	MinCreatedAt    time.Time
+	MaxCreatedAt    time.Time
+}
+
 type SkillEfficacyScoreSession struct {
 	ID                    string    `ch:"id"`
 	SkillID               string    `ch:"skill_id"`
@@ -72,126 +88,6 @@ type SkillEfficacyScoreSession struct {
 	ROIConfidence         *string   `ch:"roi_confidence"`
 	Flags                 []string  `ch:"flags"`
 	GramChatID            string    `ch:"gram_chat_id"`
-}
-
-type skillEfficacyScoreScope struct {
-	organizationID  string
-	projectID       string
-	skillIDs        []string
-	skillVersionIDs []string
-}
-
-// deduplicatedSkillEfficacyScores returns one coherent first-published row per
-// event ID. Physical inserts are at-least-once, so every analytical read uses
-// this scoped source before aggregating, joining, ordering, or limiting.
-func deduplicatedSkillEfficacyScores(scope skillEfficacyScoreScope) (string, []any, error) {
-	const eventTuple = "tuple(created_at, organization_id, project_id, session_id, skill_id, skill_version_id, canonical_sha256, surface, trace_id, gram_chat_id, score, rationale, est_turns_saved, est_minutes_saved, roi_confidence, flags, judge_model, judge_prompt_version)"
-
-	physical := sq.Select(
-		"id",
-		"argMin("+eventTuple+", tuple(inserted_at, created_at)) AS event",
-	).
-		From("skill_efficacy_scores").
-		Where(squirrel.Eq{"organization_id": scope.organizationID}).
-		Where(squirrel.Eq{"project_id": scope.projectID})
-	if len(scope.skillIDs) > 0 {
-		physical = physical.Where(squirrel.Eq{"toString(skill_id)": scope.skillIDs})
-	}
-	if len(scope.skillVersionIDs) > 0 {
-		physical = physical.Where(squirrel.Eq{"toString(skill_version_id)": scope.skillVersionIDs})
-	}
-	physicalSQL, args, err := physical.GroupBy("id").ToSql()
-	if err != nil {
-		return "", nil, fmt.Errorf("building deduplicated skill efficacy scores query: %w", err)
-	}
-
-	columns := []string{
-		"id",
-		"tupleElement(event, 1) AS created_at",
-		"tupleElement(event, 2) AS organization_id",
-		"tupleElement(event, 3) AS project_id",
-		"tupleElement(event, 4) AS session_id",
-		"tupleElement(event, 5) AS skill_id",
-		"tupleElement(event, 6) AS skill_version_id",
-		"tupleElement(event, 7) AS canonical_sha256",
-		"tupleElement(event, 8) AS surface",
-		"tupleElement(event, 9) AS trace_id",
-		"tupleElement(event, 10) AS gram_chat_id",
-		"tupleElement(event, 11) AS score",
-		"tupleElement(event, 12) AS rationale",
-		"tupleElement(event, 13) AS est_turns_saved",
-		"tupleElement(event, 14) AS est_minutes_saved",
-		"tupleElement(event, 15) AS roi_confidence",
-		"tupleElement(event, 16) AS flags",
-		"tupleElement(event, 17) AS judge_model",
-		"tupleElement(event, 18) AS judge_prompt_version",
-	}
-	return "SELECT " + strings.Join(columns, ", ") + " FROM (" + physicalSQL + ")", args, nil
-}
-
-func (q *Queries) ListSkillEfficacyScoreSessions(ctx context.Context, arg ListSkillEfficacyScoreSessionsParams) ([]SkillEfficacyScoreSession, error) {
-	if arg.OrganizationID == "" || arg.ProjectID == "" || len(arg.SkillIDs) == 0 || !arg.From.Before(arg.To) || arg.Limit == 0 || arg.Limit > 101 || arg.CursorScoredAt.IsZero() != (arg.CursorID == "") {
-		return nil, fmt.Errorf("list skill efficacy score sessions: invalid scope, window, or limit")
-	}
-	mappings := sq.Select(
-		"toString(project_id) AS project_id", "session_id", "surface",
-		"toString(skill_id) AS skill_id", "toString(skill_version_id) AS skill_version_id",
-		"max(seen_at) AS activated_at",
-	).
-		From("skill_session_versions").
-		Where(squirrel.Eq{"organization_id": arg.OrganizationID}).
-		Where(squirrel.Eq{"project_id": arg.ProjectID}).
-		Where(squirrel.Eq{"toString(skill_id)": arg.SkillIDs}).
-		Where("seen_at >= ?", arg.From).
-		Where("seen_at <= ?", arg.To).
-		GroupBy("project_id", "session_id", "surface", "skill_id", "skill_version_id")
-	mappingSQL, mappingArgs, err := mappings.ToSql()
-	if err != nil {
-		return nil, fmt.Errorf("building scored session mappings query: %w", err)
-	}
-	scoreSQL, scoreArgs, err := deduplicatedSkillEfficacyScores(skillEfficacyScoreScope{
-		organizationID: arg.OrganizationID, projectID: arg.ProjectID, skillIDs: arg.SkillIDs, skillVersionIDs: nil,
-	})
-	if err != nil {
-		return nil, err
-	}
-	sessions := sq.Select(
-		"toString(e.id) AS id", "toString(e.skill_id) AS skill_id", "toString(e.skill_version_id) AS skill_version_id",
-		"e.surface AS surface", "m.activated_at AS activated_at", "e.created_at AS scored_at", "e.score AS score",
-		"e.rationale AS rationale", "e.est_turns_saved AS estimated_turns_saved", "e.est_minutes_saved AS estimated_minutes_saved",
-		"e.roi_confidence AS roi_confidence", "e.flags AS flags", "e.gram_chat_id AS gram_chat_id",
-	).
-		From("score_events e").
-		Join("mappings m ON m.project_id = e.project_id AND m.session_id = e.session_id AND m.surface = e.surface AND m.skill_id = toString(e.skill_id) AND m.skill_version_id = toString(e.skill_version_id)")
-	if arg.CursorID != "" {
-		sessions = sessions.Where("(e.created_at, e.id) < (?, toUUID(?))", arg.CursorScoredAt, arg.CursorID)
-	}
-	query, args, err := sessions.
-		OrderBy("e.created_at DESC", "e.id DESC").
-		Limit(arg.Limit).
-		Prefix("WITH mappings AS ("+mappingSQL+"), score_events AS ("+scoreSQL+")", append(mappingArgs, scoreArgs...)...).
-		ToSql()
-	if err != nil {
-		return nil, fmt.Errorf("building scored sessions query: %w", err)
-	}
-	rows, err := q.conn.Query(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("querying scored sessions: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-	var result []SkillEfficacyScoreSession
-	for rows.Next() {
-		var row SkillEfficacyScoreSession
-		if err := rows.ScanStruct(&row); err != nil {
-			return nil, fmt.Errorf("scanning scored session: %w", err)
-		}
-		result = append(result, row)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterating scored sessions: %w", err)
-	}
-
-	return result, nil
 }
 
 // SkillInsightBucket is one activation-time bucket for a skill version. Score
@@ -228,117 +124,9 @@ func (q *Queries) QuerySkillInsights(ctx context.Context, arg QuerySkillInsights
 		return nil, fmt.Errorf("query skill insights: invalid scope, window, or interval")
 	}
 
-	sessions := sq.Select(
-		"toString(gram_project_id) AS project_id",
-		"chat_id AS session_id",
-		"if("+skillVersionAssistantUsagePredicate+", 'assistant', 'dev') AS surface",
-		"countIf("+skillVersionUsageMeasureFilter+") > 0 AS has_usage",
-		skillVersionCostExpr+" AS total_cost",
-	).
-		From("telemetry_logs").
-		Where(squirrel.Eq{"gram_project_id": []string{arg.ProjectID}}).
-		Where("time_unix_nano >= ?", arg.From.UnixNano()).
-		Where("time_unix_nano <= ?", arg.To.UnixNano()).
-		Where(skillVersionSourceRowPredicate).
-		Where("chat_id != ''").
-		GroupBy("gram_project_id", "chat_id", "surface")
-	sessionSQL, sessionArgs, err := sessions.ToSql()
-	if err != nil {
-		return nil, fmt.Errorf("building skill insight sessions query: %w", err)
-	}
-
-	mappings := sq.Select(
-		"toString(project_id) AS project_id",
-		"session_id",
-		"surface",
-		"toString(skill_id) AS skill_id",
-		"toString(skill_version_id) AS skill_version_id",
-		"max(seen_at) AS observed_at",
-		"uniqExact(id) AS activation_count",
-	).
-		From("skill_session_versions").
-		Where(squirrel.Eq{"organization_id": arg.OrganizationID}).
-		Where(squirrel.Eq{"project_id": arg.ProjectID}).
-		Where("seen_at >= ?", arg.From).
-		Where("seen_at <= ?", arg.To)
-	if len(arg.SkillIDs) > 0 {
-		mappings = mappings.Where(squirrel.Eq{"toString(skill_id)": arg.SkillIDs})
-	}
-	if len(arg.SkillVersionIDs) > 0 {
-		mappings = mappings.Where(squirrel.Eq{"toString(skill_version_id)": arg.SkillVersionIDs})
-	}
-	mappings = mappings.GroupBy("project_id", "session_id", "surface", "skill_id", "skill_version_id")
-	mappingSQL, mappingArgs, err := mappings.ToSql()
-	if err != nil {
-		return nil, fmt.Errorf("building skill insight mappings query: %w", err)
-	}
-
-	scoreEventSQL, scoreEventArgs, err := deduplicatedSkillEfficacyScores(skillEfficacyScoreScope{
-		organizationID: arg.OrganizationID, projectID: arg.ProjectID, skillIDs: arg.SkillIDs, skillVersionIDs: arg.SkillVersionIDs,
-	})
+	query, args, err := buildSkillInsightsQuery(arg)
 	if err != nil {
 		return nil, err
-	}
-
-	scores := sq.Select(
-		"project_id",
-		"session_id",
-		"surface",
-		"toString(skill_id) AS skill_id",
-		"toString(skill_version_id) AS skill_version_id",
-		"count() AS score_count",
-		"sum(score) AS score_sum",
-		"sum(ifNull(est_turns_saved, 0)) AS turns_sum",
-		"countIf(est_turns_saved IS NOT NULL) AS turns_count",
-		"sum(ifNull(est_minutes_saved, 0)) AS minutes_sum",
-		"countIf(est_minutes_saved IS NOT NULL) AS minutes_count",
-		"countIf(roi_confidence = 'low') AS confidence_low",
-		"countIf(roi_confidence = 'med') AS confidence_med",
-		"countIf(roi_confidence = 'high') AS confidence_high",
-		"countIf(has(flags, 'ignored')) AS ignored_count",
-		"countIf(has(flags, 'misapplied')) AS misapplied_count",
-		"countIf(has(flags, 'partially_followed')) AS partially_followed_count",
-		"countIf(has(flags, 'harmful')) AS harmful_count",
-	).
-		From("score_events")
-	scores = scores.GroupBy("project_id", "session_id", "surface", "skill_id", "skill_version_id")
-	scoreSQL, scoreArgs, err := scores.ToSql()
-	if err != nil {
-		return nil, fmt.Errorf("building skill insight scores query: %w", err)
-	}
-
-	outer := sq.Select(
-		"m.skill_id AS skill_id",
-		"m.skill_version_id AS skill_version_id",
-	).
-		Column(squirrel.Expr("toInt64(toStartOfInterval(m.observed_at, toIntervalSecond(?))) * 1000000000 AS bucket_time_unix_nano", arg.IntervalSeconds)).
-		Columns(
-			"sum(m.activation_count) AS activation_count",
-			"count() AS activated_sessions",
-			"sum(if(s.has_usage, s.total_cost, 0)) AS total_session_cost",
-			"sum(ifNull(e.score_count, 0)) AS scored_sessions",
-			"sum(ifNull(e.score_sum, 0)) AS score_sum",
-			"sum(ifNull(e.turns_sum, 0)) AS estimated_turns_saved_sum",
-			"sum(ifNull(e.turns_count, 0)) AS estimated_turns_samples",
-			"sum(ifNull(e.minutes_sum, 0)) AS estimated_minutes_saved_sum",
-			"sum(ifNull(e.minutes_count, 0)) AS estimated_minutes_samples",
-			"sum(ifNull(e.confidence_low, 0)) AS roi_confidence_low",
-			"sum(ifNull(e.confidence_med, 0)) AS roi_confidence_med",
-			"sum(ifNull(e.confidence_high, 0)) AS roi_confidence_high",
-			"sum(ifNull(e.ignored_count, 0)) AS ignored_count",
-			"sum(ifNull(e.misapplied_count, 0)) AS misapplied_count",
-			"sum(ifNull(e.partially_followed_count, 0)) AS partially_followed_count",
-			"sum(ifNull(e.harmful_count, 0)) AS harmful_count",
-		).
-		From("mappings m").
-		LeftJoin("sessions s ON s.project_id = m.project_id AND s.session_id = m.session_id AND s.surface = m.surface").
-		LeftJoin("scores e ON e.project_id = m.project_id AND e.session_id = m.session_id AND e.surface = m.surface AND e.skill_id = m.skill_id AND e.skill_version_id = m.skill_version_id").
-		GroupBy("m.skill_id", "m.skill_version_id", "bucket_time_unix_nano").
-		OrderBy("bucket_time_unix_nano ASC", "m.skill_id ASC", "m.skill_version_id ASC").
-		Prefix("WITH sessions AS ("+sessionSQL+"), mappings AS ("+mappingSQL+"), score_events AS ("+scoreEventSQL+"), scores AS ("+scoreSQL+")", append(append(append(sessionArgs, mappingArgs...), scoreEventArgs...), scoreArgs...)...)
-	query, args, err := outer.ToSql()
-	if err != nil {
-		return nil, fmt.Errorf("building skill insights query: %w", err)
 	}
 
 	rows, err := q.conn.Query(ctx, query, args...)
@@ -358,6 +146,70 @@ func (q *Queries) QuerySkillInsights(ctx context.Context, arg QuerySkillInsights
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterating skill insight buckets: %w", err)
 	}
+	return result, nil
+}
+
+func (q *Queries) ListSkillEfficacyScoreSessions(ctx context.Context, arg ListSkillEfficacyScoreSessionsParams) ([]SkillEfficacyScoreSession, error) {
+	if arg.OrganizationID == "" || arg.ProjectID == "" || len(arg.SkillIDs) == 0 || !arg.From.Before(arg.To) || arg.Limit == 0 || arg.Limit > 101 || arg.CursorScoredAt.IsZero() != (arg.CursorID == "") {
+		return nil, fmt.Errorf("list skill efficacy score sessions: invalid scope, window, or limit")
+	}
+	mappings := sq.Select(
+		"toString(project_id) AS project_id", "session_id", "surface",
+		"toString(skill_id) AS skill_id", "toString(skill_version_id) AS skill_version_id",
+		"max(seen_at) AS activated_at",
+	).
+		From("skill_session_versions").
+		Where(squirrel.Eq{"organization_id": arg.OrganizationID}).
+		Where(squirrel.Eq{"project_id": arg.ProjectID}).
+		Where(squirrel.Eq{"toString(skill_id)": arg.SkillIDs}).
+		Where("seen_at >= ?", arg.From).
+		Where("seen_at <= ?", arg.To).
+		GroupBy("project_id", "session_id", "surface", "skill_id", "skill_version_id")
+	scoreSQL, scoreArgs, err := deduplicatedSkillEfficacyScores(skillEfficacyScoreScope{
+		organizationID: arg.OrganizationID, projectID: arg.ProjectID, skillIDs: arg.SkillIDs, skillVersionIDs: nil,
+	})
+	if err != nil {
+		return nil, err
+	}
+	sessions := sq.Select(
+		"toString(e.id) AS id", "toString(e.skill_id) AS skill_id", "toString(e.skill_version_id) AS skill_version_id",
+		"e.surface AS surface", "m.activated_at AS activated_at", "e.created_at AS scored_at", "e.score AS score",
+		"e.rationale AS rationale", "e.est_turns_saved AS estimated_turns_saved", "e.est_minutes_saved AS estimated_minutes_saved",
+		"e.roi_confidence AS roi_confidence", "e.flags AS flags", "e.gram_chat_id AS gram_chat_id",
+	).
+		From("score_events e").
+		Join("mappings m ON m.project_id = e.project_id AND m.session_id = e.session_id AND m.surface = e.surface AND m.skill_id = toString(e.skill_id) AND m.skill_version_id = toString(e.skill_version_id)")
+	if arg.CursorID != "" {
+		sessions = sessions.Where("(e.created_at, e.id) < (?, toUUID(?))", arg.CursorScoredAt, arg.CursorID)
+	}
+	query, args, err := sessions.
+		OrderBy("e.created_at DESC", "e.id DESC").
+		Limit(arg.Limit).
+		PrefixExpr(squirrel.ConcatExpr(
+			"WITH mappings AS (", mappings,
+			"), score_events AS (", squirrel.Expr(scoreSQL, scoreArgs...), ")",
+		)).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building scored sessions query: %w", err)
+	}
+	rows, err := q.conn.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("querying scored sessions: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var result []SkillEfficacyScoreSession
+	for rows.Next() {
+		var row SkillEfficacyScoreSession
+		if err := rows.ScanStruct(&row); err != nil {
+			return nil, fmt.Errorf("scanning scored session: %w", err)
+		}
+		result = append(result, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating scored sessions: %w", err)
+	}
+
 	return result, nil
 }
 
@@ -437,22 +289,6 @@ func (q *Queries) InsertSkillEfficacyScores(ctx context.Context, rows []SkillEff
 	return nil
 }
 
-// ListExistingSkillEfficacyScoreIDs' filters. Named rather than positional
-// because the query takes two bare strings, three string slices and two
-// timestamps: every adjacent pair is assignment-compatible, so a transposition
-// still compiles and silently reads the wrong rows — and this read is the
-// dedup guard, where a wrong answer either re-pays for inference or suppresses
-// a score that was never written.
-type ListExistingSkillEfficacyScoreIDsParams struct {
-	OrganizationID  string
-	ProjectID       string
-	SkillIDs        []string
-	SkillVersionIDs []string
-	IDs             []string
-	MinCreatedAt    time.Time
-	MaxCreatedAt    time.Time
-}
-
 // ListExistingSkillEfficacyScoreIDs returns which of the given score ids are
 // already published — the publication dedup guard. The filters follow the
 // table's ORDER BY prefix — organization_id, project_id, skill_id,
@@ -509,4 +345,190 @@ func (q *Queries) ListExistingSkillEfficacyScoreIDs(ctx context.Context, arg Lis
 		return nil, fmt.Errorf("iterating existing skill efficacy score ids: %w", err)
 	}
 	return result, nil
+}
+
+type skillEfficacyScoreScope struct {
+	organizationID  string
+	projectID       string
+	skillIDs        []string
+	skillVersionIDs []string
+}
+
+// deduplicatedSkillEfficacyScores returns one coherent first-published row per
+// event ID. Physical inserts are at-least-once, so every analytical read uses
+// this scoped source before aggregating, joining, ordering, or limiting.
+func deduplicatedSkillEfficacyScores(scope skillEfficacyScoreScope) (string, []any, error) {
+	const eventTuple = "tuple(created_at, organization_id, project_id, session_id, skill_id, skill_version_id, canonical_sha256, surface, trace_id, gram_chat_id, score, rationale, est_turns_saved, est_minutes_saved, roi_confidence, flags, judge_model, judge_prompt_version)"
+
+	physical := sq.Select(
+		"id",
+		"argMin("+eventTuple+", tuple(inserted_at, created_at)) AS event",
+	).
+		From("skill_efficacy_scores").
+		Where(squirrel.Eq{"organization_id": scope.organizationID}).
+		Where(squirrel.Eq{"project_id": scope.projectID})
+	if len(scope.skillIDs) > 0 {
+		physical = physical.Where(squirrel.Eq{"toString(skill_id)": scope.skillIDs})
+	}
+	if len(scope.skillVersionIDs) > 0 {
+		physical = physical.Where(squirrel.Eq{"toString(skill_version_id)": scope.skillVersionIDs})
+	}
+	physicalSQL, args, err := physical.GroupBy("id").ToSql()
+	if err != nil {
+		return "", nil, fmt.Errorf("building deduplicated skill efficacy scores query: %w", err)
+	}
+
+	columns := []string{
+		"id",
+		"tupleElement(event, 1) AS created_at",
+		"tupleElement(event, 2) AS organization_id",
+		"tupleElement(event, 3) AS project_id",
+		"tupleElement(event, 4) AS session_id",
+		"tupleElement(event, 5) AS skill_id",
+		"tupleElement(event, 6) AS skill_version_id",
+		"tupleElement(event, 7) AS canonical_sha256",
+		"tupleElement(event, 8) AS surface",
+		"tupleElement(event, 9) AS trace_id",
+		"tupleElement(event, 10) AS gram_chat_id",
+		"tupleElement(event, 11) AS score",
+		"tupleElement(event, 12) AS rationale",
+		"tupleElement(event, 13) AS est_turns_saved",
+		"tupleElement(event, 14) AS est_minutes_saved",
+		"tupleElement(event, 15) AS roi_confidence",
+		"tupleElement(event, 16) AS flags",
+		"tupleElement(event, 17) AS judge_model",
+		"tupleElement(event, 18) AS judge_prompt_version",
+	}
+	return "SELECT " + strings.Join(columns, ", ") + " FROM (" + physicalSQL + ")", args, nil
+}
+
+func skillInsightMappingRows(arg QuerySkillInsightsParams) squirrel.SelectBuilder {
+	rows := sq.Select().
+		From("skill_session_versions").
+		Where(squirrel.Eq{"organization_id": arg.OrganizationID}).
+		Where(squirrel.Eq{"project_id": arg.ProjectID}).
+		Where("seen_at >= ?", arg.From).
+		Where("seen_at <= ?", arg.To)
+	if len(arg.SkillIDs) > 0 {
+		rows = rows.Where(squirrel.Eq{"toString(skill_id)": arg.SkillIDs})
+	}
+	if len(arg.SkillVersionIDs) > 0 {
+		rows = rows.Where(squirrel.Eq{"toString(skill_version_id)": arg.SkillVersionIDs})
+	}
+	return rows
+}
+
+func skillInsightMappings(rows squirrel.SelectBuilder) squirrel.SelectBuilder {
+	return rows.Columns(
+		"toString(project_id) AS project_id",
+		"session_id",
+		"surface",
+		"toString(skill_id) AS skill_id",
+		"toString(skill_version_id) AS skill_version_id",
+		"max(seen_at) AS observed_at",
+		"uniqExact(id) AS activation_count",
+	).
+		GroupBy("project_id", "session_id", "surface", "skill_id", "skill_version_id")
+}
+
+func skillInsightSessionUsage(arg QuerySkillInsightsParams, mappingRows squirrel.SelectBuilder) squirrel.SelectBuilder {
+	return mappedSkillTelemetryQuery(
+		[]string{arg.ProjectID},
+		arg.From.UnixNano(),
+		arg.To.UnixNano(),
+		mappingRows.Column("session_id").Distinct(),
+	).
+		Columns(
+			"toString(gram_project_id) AS project_id",
+			"chat_id AS session_id",
+			"if("+skillVersionAssistantUsagePredicate+", 'assistant', 'dev') AS surface",
+			"countIf("+skillVersionUsageMeasureFilter+") > 0 AS has_usage",
+			skillVersionCostExpr+" AS total_cost",
+		).
+		GroupBy("gram_project_id", "chat_id", "surface")
+}
+
+func skillInsightScores() squirrel.SelectBuilder {
+	return sq.Select(
+		"project_id",
+		"session_id",
+		"surface",
+		"toString(skill_id) AS skill_id",
+		"toString(skill_version_id) AS skill_version_id",
+		"count() AS score_count",
+		"sum(score) AS score_sum",
+		"sum(ifNull(est_turns_saved, 0)) AS turns_sum",
+		"countIf(est_turns_saved IS NOT NULL) AS turns_count",
+		"sum(ifNull(est_minutes_saved, 0)) AS minutes_sum",
+		"countIf(est_minutes_saved IS NOT NULL) AS minutes_count",
+		"countIf(roi_confidence = 'low') AS confidence_low",
+		"countIf(roi_confidence = 'med') AS confidence_med",
+		"countIf(roi_confidence = 'high') AS confidence_high",
+		"countIf(has(flags, 'ignored')) AS ignored_count",
+		"countIf(has(flags, 'misapplied')) AS misapplied_count",
+		"countIf(has(flags, 'partially_followed')) AS partially_followed_count",
+		"countIf(has(flags, 'harmful')) AS harmful_count",
+	).
+		From("score_events").
+		GroupBy("project_id", "session_id", "surface", "skill_id", "skill_version_id")
+}
+
+func skillInsightResult(intervalSeconds int64) squirrel.SelectBuilder {
+	return sq.Select(
+		"m.skill_id AS skill_id",
+		"m.skill_version_id AS skill_version_id",
+	).
+		Column(squirrel.Expr("toInt64(toStartOfInterval(m.observed_at, toIntervalSecond(?))) * 1000000000 AS bucket_time_unix_nano", intervalSeconds)).
+		Columns(
+			"sum(m.activation_count) AS activation_count",
+			"count() AS activated_sessions",
+			"sum(if(s.has_usage, s.total_cost, 0)) AS total_session_cost",
+			"sum(ifNull(e.score_count, 0)) AS scored_sessions",
+			"sum(ifNull(e.score_sum, 0)) AS score_sum",
+			"sum(ifNull(e.turns_sum, 0)) AS estimated_turns_saved_sum",
+			"sum(ifNull(e.turns_count, 0)) AS estimated_turns_samples",
+			"sum(ifNull(e.minutes_sum, 0)) AS estimated_minutes_saved_sum",
+			"sum(ifNull(e.minutes_count, 0)) AS estimated_minutes_samples",
+			"sum(ifNull(e.confidence_low, 0)) AS roi_confidence_low",
+			"sum(ifNull(e.confidence_med, 0)) AS roi_confidence_med",
+			"sum(ifNull(e.confidence_high, 0)) AS roi_confidence_high",
+			"sum(ifNull(e.ignored_count, 0)) AS ignored_count",
+			"sum(ifNull(e.misapplied_count, 0)) AS misapplied_count",
+			"sum(ifNull(e.partially_followed_count, 0)) AS partially_followed_count",
+			"sum(ifNull(e.harmful_count, 0)) AS harmful_count",
+		).
+		From("mappings m").
+		LeftJoin("sessions s ON s.project_id = m.project_id AND s.session_id = m.session_id AND s.surface = m.surface").
+		LeftJoin("scores e ON e.project_id = m.project_id AND e.session_id = m.session_id AND e.surface = m.surface AND e.skill_id = m.skill_id AND e.skill_version_id = m.skill_version_id").
+		GroupBy("m.skill_id", "m.skill_version_id", "bucket_time_unix_nano").
+		OrderBy("bucket_time_unix_nano ASC", "m.skill_id ASC", "m.skill_version_id ASC")
+}
+
+func buildSkillInsightsQuery(arg QuerySkillInsightsParams) (string, []any, error) {
+	mappingRows := skillInsightMappingRows(arg)
+	mappings := skillInsightMappings(mappingRows)
+	sessions := skillInsightSessionUsage(arg, mappingRows)
+
+	scoreEventSQL, scoreEventArgs, err := deduplicatedSkillEfficacyScores(skillEfficacyScoreScope{
+		organizationID:  arg.OrganizationID,
+		projectID:       arg.ProjectID,
+		skillIDs:        arg.SkillIDs,
+		skillVersionIDs: arg.SkillVersionIDs,
+	})
+	if err != nil {
+		return "", nil, err
+	}
+
+	query, args, err := skillInsightResult(arg.IntervalSeconds).
+		PrefixExpr(squirrel.ConcatExpr(
+			"WITH mappings AS (", mappings,
+			"), sessions AS (", sessions,
+			"), score_events AS (", squirrel.Expr(scoreEventSQL, scoreEventArgs...),
+			"), scores AS (", skillInsightScores(), ")",
+		)).
+		ToSql()
+	if err != nil {
+		return "", nil, fmt.Errorf("building skill insights query: %w", err)
+	}
+	return query, args, nil
 }

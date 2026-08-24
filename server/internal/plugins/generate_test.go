@@ -80,7 +80,7 @@ func TestGeneratePluginPackagesIncludesPlatformMCPOnlyWhenEnabled(t *testing.T) 
 	var meta claudePluginMeta
 	require.NoError(t, json.Unmarshal(files["platform-mcp/.claude-plugin/plugin.json"], &meta))
 	require.Equal(t, platformMCPPluginName, meta.Name)
-	require.Equal(t, "Speakeasy AICP Platform MCP", meta.DisplayName)
+	require.Equal(t, platformMCPDisplayName, meta.DisplayName)
 	require.Equal(t, platformMCPDescription, meta.Description)
 	require.Equal(t, "Speakeasy", meta.Author.Name)
 	require.Nil(t, meta.UserConfig, "Platform MCP must not request tenant credentials")
@@ -102,8 +102,8 @@ func TestGeneratePluginPackagesIncludesPlatformMCPOnlyWhenEnabled(t *testing.T) 
 			"platform-mcp/skills/" + name + "/SKILL.md",
 			"cursor-plugins/platform-mcp-cursor/skills/" + name + "/SKILL.md",
 			"platform-mcp-codex/skills/" + name + "/SKILL.md",
-			"opencode-plugins/platform-mcp/speakeasy-aicp-platform-mcp/skills/" + name + "/SKILL.md",
-			"agent-plugins/speakeasy-aicp-platform-mcp/skills/" + name + "/SKILL.md",
+			"opencode-plugins/platform-mcp/" + platformMCPPluginName + "/skills/" + name + "/SKILL.md",
+			platformMCPAgentPluginRoot + "/skills/" + name + "/SKILL.md",
 		}
 		for _, packagePath := range paths {
 			require.Equal(t, skill, files[packagePath], "missing or changed Platform MCP skill %q at %s", name, packagePath)
@@ -118,20 +118,20 @@ func TestGeneratePluginPackagesIncludesPlatformMCPOnlyWhenEnabled(t *testing.T) 
 	require.Contains(t, string(claudeSkill), "send_platform_mcp_feedback")
 
 	var agentManifest agentPluginManifest
-	require.NoError(t, json.Unmarshal(files["agent-plugins/speakeasy-aicp-platform-mcp/plugin.json"], &agentManifest))
+	require.NoError(t, json.Unmarshal(files[platformMCPAgentPluginRoot+"/plugin.json"], &agentManifest))
 	require.Equal(t, platformMCPPluginName, agentManifest.Name)
 	require.Equal(t, "Speakeasy", agentManifest.Author.Name)
 	var agentMCP agentMCPConfig
-	require.NoError(t, json.Unmarshal(files["agent-plugins/speakeasy-aicp-platform-mcp/mcp.json"], &agentMCP))
+	require.NoError(t, json.Unmarshal(files[platformMCPAgentPluginRoot+"/mcp.json"], &agentMCP))
 	require.Equal(t, "https://app.getgram.ai/platform-mcp", agentMCP.MCPServers[platformMCPServerName].URL)
-	require.Equal(t, claudeSkill, files["agent-plugins/speakeasy-aicp-platform-mcp/skills/add-mcp-from-catalog/SKILL.md"])
+	require.Equal(t, claudeSkill, files[platformMCPAgentPluginRoot+"/skills/add-mcp-from-catalog/SKILL.md"])
 
 	platformPrefixes := []string{
 		"platform-mcp/",
 		"cursor-plugins/platform-mcp-cursor/",
 		"platform-mcp-codex/",
 		"opencode-plugins/platform-mcp/",
-		"agent-plugins/speakeasy-aicp-platform-mcp/",
+		"agent-plugins/" + platformMCPPluginName + "/",
 	}
 	for path, content := range files {
 		if slices.ContainsFunc(platformPrefixes, func(prefix string) bool { return strings.HasPrefix(path, prefix) }) {
@@ -145,13 +145,17 @@ func TestGeneratePluginPackagesIncludesPlatformMCPOnlyWhenEnabled(t *testing.T) 
 		}
 	}
 
+	require.Contains(t, string(files["README.md"]), "## "+platformMCPDisplayName)
+	require.Contains(t, string(files["README.md"]), "`"+platformMCPPluginName+"`")
+	require.NotContains(t, strings.ToLower(string(files["README.md"])), "aicp")
+
 	var claude marketplaceManifest
 	require.NoError(t, json.Unmarshal(files[".claude-plugin/marketplace.json"], &claude))
 	require.Len(t, claude.Plugins, len(fingerprintTestPlugins())+2)
 	require.Equal(t, "acme-corp-observability", claude.Plugins[0].Name)
 	require.Equal(t, marketplaceEntry{
 		Name:        platformMCPPluginName,
-		DisplayName: "Speakeasy AICP Platform MCP",
+		DisplayName: platformMCPDisplayName,
 		Source:      "./platform-mcp",
 		Description: platformMCPDescription,
 	}, claude.Plugins[1])
@@ -217,6 +221,76 @@ func TestCarryPlatformMCPSubtreeAcceptsB1AndFullNativeLayouts(t *testing.T) {
 	require.False(t, nativeClientsAvailable)
 	require.NotContains(t, carried, platformMCPCursorPluginRoot+"/.cursor-plugin/plugin.json")
 	require.NotContains(t, carried, platformMCPOpenCodePluginRoot+"/plugin/"+platformMCPPluginName+".ts")
+}
+
+func TestCarryPlatformMCPSubtreeAcceptsLegacyAgentPluginLayout(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{ServerURL: "https://app.getgram.ai", Version: "42"}
+	current, err := generatePlatformMCPFiles(cfg)
+	require.NoError(t, err)
+
+	legacy := remapPlatformMCPFilesToLegacyLayout(current)
+	require.NotContains(t, legacy, platformMCPAgentPluginRoot+"/plugin.json")
+	require.Contains(t, legacy, platformMCPLegacyAgentPluginRoot+"/plugin.json")
+	require.Contains(t, legacy, platformMCPOpenCodePluginRoot+"/plugin/"+platformMCPLegacyPluginName+".ts")
+
+	carried := make(map[string][]byte)
+	intact, nativeClientsAvailable := carryPlatformMCPSubtree(carried, legacy)
+	require.True(t, intact)
+	require.True(t, nativeClientsAvailable)
+	require.Equal(t, legacy, carried)
+
+	b1Legacy := make(map[string][]byte)
+	for filePath, content := range legacy {
+		if strings.HasPrefix(filePath, platformMCPPluginRoot+"/") || strings.HasPrefix(filePath, platformMCPLegacyAgentPluginRoot+"/") {
+			b1Legacy[filePath] = content
+		}
+	}
+	carried = make(map[string][]byte)
+	intact, nativeClientsAvailable = carryPlatformMCPSubtree(carried, b1Legacy)
+	require.True(t, intact)
+	require.False(t, nativeClientsAvailable)
+	require.Equal(t, b1Legacy, carried)
+
+	// A B1-only repair of this layout must hash the Agent Plugin bytes that
+	// were actually preserved, not only the Claude package.
+	withAgent := platformMCPFingerprintFromFiles(b1Legacy)
+	withoutAgent := maps.Clone(b1Legacy)
+	delete(withoutAgent, platformMCPLegacyAgentPluginRoot+"/plugin.json")
+	require.NotEqual(t, withAgent, platformMCPFingerprintFromFiles(withoutAgent))
+}
+
+// remapPlatformMCPFilesToLegacyLayout rewrites only the Agent Plugin directory
+// and the OpenCode identifier so already-published repositories can be
+// reconstructed in tests. Claude, Cursor, Codex, and the OpenCode package root
+// stay on their current paths.
+func remapPlatformMCPFilesToLegacyLayout(files map[string][]byte) map[string][]byte {
+	legacy := make(map[string][]byte, len(files))
+	for filePath, content := range files {
+		legacy[remapPlatformMCPPathToLegacyLayout(filePath)] = content
+	}
+	return legacy
+}
+
+func remapPlatformMCPPathToLegacyLayout(filePath string) string {
+	currentAgentPrefix := platformMCPAgentPluginRoot + "/"
+	legacyAgentPrefix := platformMCPLegacyAgentPluginRoot + "/"
+	if rest, ok := strings.CutPrefix(filePath, currentAgentPrefix); ok {
+		return legacyAgentPrefix + rest
+	}
+
+	currentOpenCodePlugin := platformMCPOpenCodePluginRoot + "/plugin/" + platformMCPPluginName + ".ts"
+	if filePath == currentOpenCodePlugin {
+		return platformMCPOpenCodePluginRoot + "/plugin/" + platformMCPLegacyPluginName + ".ts"
+	}
+
+	currentOpenCodeIDPrefix := platformMCPOpenCodePluginRoot + "/" + platformMCPPluginName + "/"
+	legacyOpenCodeIDPrefix := platformMCPOpenCodePluginRoot + "/" + platformMCPLegacyPluginName + "/"
+	if rest, ok := strings.CutPrefix(filePath, currentOpenCodeIDPrefix); ok {
+		return legacyOpenCodeIDPrefix + rest
+	}
+	return filePath
 }
 
 func TestGeneratePlatformMCPPluginPackageDirectDownloadsShareDefinition(t *testing.T) {

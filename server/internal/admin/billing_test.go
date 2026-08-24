@@ -3,7 +3,9 @@ package admin
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
@@ -12,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	orrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -276,6 +279,71 @@ func TestSetInferenceKeyMonthlyLimitRejectsAbsentAndDisabledKeys(t *testing.T) {
 	})
 	requireOopsCode(t, err, oops.CodeConflict)
 	require.Empty(t, scheduler.operationID)
+}
+
+func TestGetInferenceSpendHistoryReturnsCompleteMonths(t *testing.T) {
+	t.Parallel()
+	ctx, svc, db := newTestAdminService(t)
+	const organizationID = "org_inference_history"
+	seedOrg(t, ctx, db, orgFixture{id: organizationID, name: "Inference History", slug: "inference-history"})
+
+	now := time.Now().UTC()
+	currentMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	firstMonth := currentMonth.AddDate(0, -2, 0)
+	openRouterRepo := orrepo.New(db)
+	for _, keyType := range []string{"chat", "internal"} {
+		_, err := openRouterRepo.CreateOpenRouterAPIKey(ctx, orrepo.CreateOpenRouterAPIKeyParams{
+			OrganizationID: organizationID, KeyType: keyType, KeyEncrypted: pgtype.Text{}, KeyHash: "hash-" + keyType, MonthlyCredits: 100,
+		})
+		require.NoError(t, err)
+	}
+	fixtures := testrepo.New(db)
+	err := fixtures.SetOpenRouterAPIKeyCreatedAtFixture(ctx, testrepo.SetOpenRouterAPIKeyCreatedAtFixtureParams{
+		CreatedAt:      pgtype.Timestamptz{Time: firstMonth, Valid: true},
+		OrganizationID: organizationID,
+	})
+	require.NoError(t, err)
+	for keyType, spendUSD := range map[string]string{"chat": "1.0", "internal": "0.5"} {
+		err = fixtures.SeedOpenRouterSpendRangeFixture(ctx, testrepo.SeedOpenRouterSpendRangeFixtureParams{
+			OrganizationID: organizationID,
+			KeyType:        keyType,
+			SpendUsd:       spendUSD,
+			StartDay:       pgtype.Date{Time: firstMonth, Valid: true},
+			EndDay:         pgtype.Date{Time: currentMonth.AddDate(0, 0, -1), Valid: true},
+		})
+		require.NoError(t, err)
+	}
+	err = fixtures.SeedOpenRouterSpendRangeFixture(ctx, testrepo.SeedOpenRouterSpendRangeFixtureParams{
+		OrganizationID: organizationID,
+		KeyType:        "unsupported",
+		SpendUsd:       "999.0",
+		StartDay:       pgtype.Date{Time: firstMonth, Valid: true},
+		EndDay:         pgtype.Date{Time: firstMonth, Valid: true},
+	})
+	require.NoError(t, err)
+
+	result, err := svc.GetInferenceSpendHistory(ctx, &gen.GetInferenceSpendHistoryPayload{OrganizationID: organizationID})
+	require.NoError(t, err)
+	require.Len(t, result, 2)
+	for index, month := range result {
+		periodStart := firstMonth.AddDate(0, index, 0)
+		periodEnd := periodStart.AddDate(0, 1, 0)
+		days := periodEnd.Sub(periodStart).Hours() / 24
+		require.Equal(t, periodStart.Format(time.DateOnly), month.PeriodStart)
+		require.Equal(t, periodEnd.Format(time.DateOnly), month.PeriodEnd)
+		require.Equal(t, fmt.Sprintf("%.6f", days*1.5), month.SpendUsd)
+	}
+
+	err = fixtures.DeleteOpenRouterSpendDayFixture(ctx, testrepo.DeleteOpenRouterSpendDayFixtureParams{
+		OrganizationID: organizationID,
+		KeyType:        "internal",
+		Day:            pgtype.Date{Time: firstMonth, Valid: true},
+	})
+	require.NoError(t, err)
+	result, err = svc.GetInferenceSpendHistory(ctx, &gen.GetInferenceSpendHistoryPayload{OrganizationID: organizationID})
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+	require.Equal(t, firstMonth.AddDate(0, 1, 0).Format(time.DateOnly), result[0].PeriodStart)
 }
 
 func TestGetPaygBillingSummaryUsesCanonicalOrganizationID(t *testing.T) {

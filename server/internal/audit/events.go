@@ -28,6 +28,8 @@ const (
 	subjectTypeEnvironment                 subjectType = "environment"
 	subjectTypeGcpIamCredential            subjectType = "gcp_iam_credential"
 	subjectTypeGcpKmsKey                   subjectType = "gcp_kms_key"
+	subjectTypeJsonWebKey                  subjectType = "json_web_key"
+	subjectTypeJsonWebKeySet               subjectType = "json_web_key_set"
 	subjectTypeLiteLLMInstance             subjectType = "litellm_instance"
 	subjectTypeMcpApprovalRequest          subjectType = "mcp_approval_request"
 	subjectTypeMcpCollection               subjectType = "mcp_collection"

@@ -31,6 +31,7 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/hooks"
 	_ "github.com/speakeasy-api/gram/server/design/instances"
 	_ "github.com/speakeasy-api/gram/server/design/integrations"
+	_ "github.com/speakeasy-api/gram/server/design/jsonwebkeysets"
 	_ "github.com/speakeasy-api/gram/server/design/keys"
 	_ "github.com/speakeasy-api/gram/server/design/litellm"
 	_ "github.com/speakeasy-api/gram/server/design/mcpapproval"

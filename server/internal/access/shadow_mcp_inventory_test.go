@@ -915,6 +915,22 @@ func grantShadowMCPInventoryBypass(t *testing.T, ctx context.Context, ti *testIn
 	}))
 }
 
+func grantShadowMCPInventoryBypassForPrincipals(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, policyID string, serverURL string, principals ...urn.Principal) {
+	t.Helper()
+
+	selector := authz.NewSelector(authz.ScopeRiskPolicyBypass, policyID)
+	selector[authz.SelectorKeyServerURL] = serverURL
+	require.NoError(t, authz.GrantResourceToPrincipals(ctx, ti.conn, authz.ResourceGrant{
+		Resource: authz.Resource{
+			OrganizationID: organizationID,
+			Scope:          authz.ScopeRiskPolicyBypass,
+			ResourceID:     policyID,
+		},
+		Principals: principals,
+		Selector:   selector,
+	}))
+}
+
 func grantShadowMCPInventoryPolicyAudience(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, policyID string, principals ...urn.Principal) {
 	t.Helper()
 
@@ -1182,6 +1198,196 @@ func TestService_ListShadowMCPInventory_TargetedBlockAllPolicyIsRestricted(t *te
 	scoped := shadowMCPInventoryServerByURL(result.Servers, "https://scoped.example.com/mcp")
 	require.NotNil(t, scoped)
 	require.Equal(t, shadowMCPInventoryAccessRestricted, scoped.Access)
+}
+
+func TestService_ListShadowMCPInventory_ScopedApprovalIsRestricted(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	projectID := authCtx.ProjectID.String()
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+
+	ch := telemetryRepo.New(ti.chConn)
+	now := time.Now().UTC()
+	require.NoError(t, ch.UpsertShadowMCPInventoryURLs(ctx, []telemetryRepo.UpsertShadowMCPInventoryURLParams{
+		{
+			GramProjectID:      projectID,
+			CanonicalServerURL: "https://scoped-allow.example.com/mcp",
+			URLHost:            "scoped-allow.example.com",
+			ServerName:         "Scoped Allow",
+			SeenAt:             now.Add(-1 * time.Hour),
+			FirstSeen:          now.Add(-1 * time.Hour),
+			LastSeen:           now.Add(-1 * time.Hour),
+			UpdatedAt:          now.Add(-1 * time.Hour),
+		},
+		{
+			GramProjectID:      projectID,
+			CanonicalServerURL: "https://everyone-allow.example.com/mcp",
+			URLHost:            "everyone-allow.example.com",
+			ServerName:         "Everyone Allow",
+			SeenAt:             now.Add(-1 * time.Hour),
+			FirstSeen:          now.Add(-1 * time.Hour),
+			LastSeen:           now.Add(-1 * time.Hour),
+			UpdatedAt:          now.Add(-1 * time.Hour),
+		},
+	}))
+
+	policy := createShadowMCPInventoryPolicy(t, ctx, ti, shadowMCPInventoryPolicyInput{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+		Name:           "Block All Shadow MCP",
+		Action:         "block",
+		Disposition:    "block_all",
+		AudienceType:   "everyone",
+	})
+
+	// A bypass grant naming one user lets that user through while the policy
+	// still blocks everyone else — restricted, not allowed. The all-users
+	// grant on the second URL is the everyone-approval and stays allowed.
+	grantShadowMCPInventoryBypassForPrincipals(t, ctx, ti, authCtx.ActiveOrganizationID, policy.ID.String(), "https://scoped-allow.example.com/mcp", urn.NewPrincipal(urn.PrincipalTypeUser, "user_scoped_approval"))
+	grantShadowMCPInventoryBypass(t, ctx, ti, authCtx.ActiveOrganizationID, policy.ID.String(), "https://everyone-allow.example.com/mcp")
+
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	result, err := ti.service.ListShadowMCPInventory(ctx, &gen.ListShadowMCPInventoryPayload{
+		ProjectID: projectID,
+		Limit:     10,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Servers, 2)
+
+	scoped := shadowMCPInventoryServerByURL(result.Servers, "https://scoped-allow.example.com/mcp")
+	require.NotNil(t, scoped)
+	require.Equal(t, shadowMCPInventoryAccessRestricted, scoped.Access)
+	require.NotNil(t, scoped.AccessSummary)
+	require.Equal(t, shadowMCPAccessStateRestricted, scoped.AccessSummary.State)
+	require.Equal(t, shadowMCPAccessReachSelected, scoped.AccessSummary.AllowedFor)
+	require.Equal(t, shadowMCPAccessReachNone, scoped.AccessSummary.BlockedFor)
+	require.Equal(t, shadowMCPAccessDefaultDeny, scoped.AccessSummary.BlockingDefault)
+	require.Nil(t, scoped.AccessSummary.Decision)
+	require.Equal(t, shadowMCPAccessCoverageNone, scoped.AccessSummary.DecisionCoverage)
+
+	everyone := shadowMCPInventoryServerByURL(result.Servers, "https://everyone-allow.example.com/mcp")
+	require.NotNil(t, everyone)
+	require.Equal(t, shadowMCPInventoryAccessAllowed, everyone.Access)
+	require.NotNil(t, everyone.AccessSummary)
+	require.Equal(t, shadowMCPAccessStateAllowed, everyone.AccessSummary.State)
+	require.Equal(t, shadowMCPAccessReachEveryone, everyone.AccessSummary.AllowedFor)
+}
+
+func TestService_ListShadowMCPInventory_TargetedPolicyFullAudienceGrantIsAllowed(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	projectID := authCtx.ProjectID.String()
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+
+	ch := telemetryRepo.New(ti.chConn)
+	now := time.Now().UTC()
+	require.NoError(t, ch.UpsertShadowMCPInventoryURLs(ctx, []telemetryRepo.UpsertShadowMCPInventoryURLParams{
+		{
+			GramProjectID:      projectID,
+			CanonicalServerURL: "https://audience-covered.example.com/mcp",
+			URLHost:            "audience-covered.example.com",
+			ServerName:         "Audience Covered",
+			SeenAt:             now.Add(-1 * time.Hour),
+			FirstSeen:          now.Add(-1 * time.Hour),
+			LastSeen:           now.Add(-1 * time.Hour),
+			UpdatedAt:          now.Add(-1 * time.Hour),
+		},
+	}))
+
+	// A deny-by-default policy targeted at one role blocks only that role. A
+	// bypass grant naming the same role frees everyone the policy ever
+	// blocked — users outside the audience were never blocked — so the
+	// server is effectively open to the whole project and must read allowed,
+	// not restricted. Comparing grants against the literal all-users
+	// principal alone got this wrong.
+	policy := createShadowMCPInventoryPolicy(t, ctx, ti, shadowMCPInventoryPolicyInput{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+		Name:           "Targeted Block All Covered",
+		Action:         "block",
+		Disposition:    "block_all",
+		AudienceType:   "targeted",
+	})
+	engineering := urn.NewPrincipal(urn.PrincipalTypeRole, "engineering")
+	grantShadowMCPInventoryPolicyAudience(t, ctx, ti, authCtx.ActiveOrganizationID, policy.ID.String(), engineering)
+	grantShadowMCPInventoryBypassForPrincipals(t, ctx, ti, authCtx.ActiveOrganizationID, policy.ID.String(), "https://audience-covered.example.com/mcp", engineering)
+
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	result, err := ti.service.ListShadowMCPInventory(ctx, &gen.ListShadowMCPInventoryPayload{
+		ProjectID: projectID,
+		Limit:     10,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Servers, 1)
+
+	covered := shadowMCPInventoryServerByURL(result.Servers, "https://audience-covered.example.com/mcp")
+	require.NotNil(t, covered)
+	require.Equal(t, shadowMCPInventoryAccessAllowed, covered.Access)
+	require.NotNil(t, covered.AccessSummary)
+	require.Equal(t, shadowMCPAccessStateAllowed, covered.AccessSummary.State)
+	require.Equal(t, shadowMCPAccessReachEveryone, covered.AccessSummary.AllowedFor)
+}
+
+func TestService_ListShadowMCPInventory_StdioOnlyPageLoadsPolicyPosture(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	projectID := authCtx.ProjectID.String()
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+
+	// No observed URLs at all: the page's only row is a denied stdio review.
+	// The policy posture must still load — one row's verdict cannot depend on
+	// which other rows share the page — and the denial must read as recorded
+	// but uncarried, since stdio decisions write no enforcement.
+	createShadowMCPInventoryPolicy(t, ctx, ti, shadowMCPInventoryPolicyInput{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+		Name:           "Block All For Stdio Page",
+		Action:         "block",
+		Disposition:    "block_all",
+		AudienceType:   "everyone",
+	})
+
+	queries := mcpapprovalrepo.New(ti.conn)
+	_, err := queries.UpsertApprovalRequest(ctx, mcpapprovalrepo.UpsertApprovalRequestParams{
+		OrganizationID:            authCtx.ActiveOrganizationID,
+		ProjectID:                 *authCtx.ProjectID,
+		TargetKind:                "stdio_command",
+		TargetRaw:                 "npx -y stdio-only-package",
+		TargetKey:                 "npx -y stdio-only-package",
+		ArtifactRef:               conv.ToPGTextEmpty(""),
+		VersionPinned:             false,
+		Status:                    "denied",
+		RiskPolicyBypassRequestID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.ListShadowMCPInventory(ctx, &gen.ListShadowMCPInventoryPayload{
+		ProjectID: projectID,
+		Limit:     10,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Servers, 1)
+
+	row := result.Servers[0]
+	require.Equal(t, "npx -y stdio-only-package", row.CanonicalServerURL)
+	require.NotNil(t, row.AccessSummary)
+	// Deny-by-default posture reaches local commands too.
+	require.Equal(t, shadowMCPAccessStateBlocked, row.AccessSummary.State)
+	require.Equal(t, shadowMCPAccessDefaultDeny, row.AccessSummary.BlockingDefault)
+	require.NotNil(t, row.AccessSummary.Decision)
+	require.Equal(t, "denied", *row.AccessSummary.Decision)
+	// Recorded, not enforced: no grant writer acts on stdio targets.
+	require.Equal(t, shadowMCPAccessCoverageNone, row.AccessSummary.DecisionCoverage)
+	// Legacy parity: the deprecated field keeps its historical stdio value.
+	require.Equal(t, shadowMCPInventoryAccessNone, row.Access)
 }
 
 func TestService_ResolveShadowMCPInventoryRequest_AllowAllApprovalUnblocksURL(t *testing.T) {

@@ -955,11 +955,36 @@ type fakeApprovalIntake struct {
 	gotServerURL      string
 	gotRequesterID    string
 	gotNote           string
+
+	// URL-edit review fixtures and recordings: what the fake reports as the
+	// project's standing decisions, and what the update path handed back.
+	reviewConflicts     []shadowmcp.StandingDecisionConflict
+	reviewStandingURLs  []string
+	gotReviewPolicyID   uuid.UUID
+	gotReviewAllowed    []string
+	gotReviewBlocked    []string
+	supersededConflicts []shadowmcp.StandingDecisionConflict
+	gotSupersedeActor   urn.Principal
 }
 
 // The fake never backfills: these tests exercise the intake seam's admission
 // half, and a no-op mirrors an org whose project has no recorded decisions.
 func (f *fakeApprovalIntake) ReconcileStandingDecisionsForPolicy(_ context.Context, _ pgx.Tx, _ string, _ uuid.UUID, _ uuid.UUID) error {
+	return nil
+}
+
+// The zero-value fake reports no standing decisions, mirroring an org whose
+// project has never recorded one — URL-list edits proceed without conflicts.
+func (f *fakeApprovalIntake) ReviewShadowMCPPolicyURLEdit(_ context.Context, _ pgx.Tx, _ string, _ uuid.UUID, policyID uuid.UUID, _ string, desiredAllowedURLs []string, desiredBlockedURLs []string) (shadowmcp.StandingDecisionReview, error) {
+	f.gotReviewPolicyID = policyID
+	f.gotReviewAllowed = desiredAllowedURLs
+	f.gotReviewBlocked = desiredBlockedURLs
+	return shadowmcp.StandingDecisionReview{Conflicts: f.reviewConflicts, StandingURLs: f.reviewStandingURLs}, nil
+}
+
+func (f *fakeApprovalIntake) SupersedeShadowMCPDecisions(_ context.Context, _ pgx.Tx, _ string, _ uuid.UUID, conflicts []shadowmcp.StandingDecisionConflict, actor urn.Principal, _ *string) error {
+	f.supersededConflicts = conflicts
+	f.gotSupersedeActor = actor
 	return nil
 }
 

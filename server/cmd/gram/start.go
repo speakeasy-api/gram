@@ -71,6 +71,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hooks"
 	"github.com/speakeasy-api/gram/server/internal/instances"
 	"github.com/speakeasy-api/gram/server/internal/integrations"
+	"github.com/speakeasy-api/gram/server/internal/jsonwebkeysets"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/keys"
 	"github.com/speakeasy-api/gram/server/internal/litellm"
@@ -1475,6 +1476,7 @@ func newStartCommand() *cli.Command {
 			}
 			externalcredentials.Attach(mux, externalcredentials.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, auditLogger, gcpIdentity, productFeatures, ratelimit.NewRedisStore(redisClient)))
 			externalkeys.Attach(mux, externalkeys.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, auditLogger, gcpIdentity, kmsSigningClients, productFeatures, ratelimit.NewRedisStore(redisClient)))
+			jsonwebkeysets.Attach(mux, jsonwebkeysets.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, auditLogger, gcpIdentity, kmsSigningClients, productFeatures, ratelimit.NewRedisStore(redisClient)))
 			cliauth.Attach(mux, cliauth.NewService(logger, tracerProvider, db, sessionManager, authzEngine, redisClient, c.String("environment")))
 			chatsessionssvc.Attach(mux, chatsessionssvc.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, authzEngine))
 			environments.Attach(mux, environments.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, auditLogger))
@@ -1550,6 +1552,9 @@ func newStartCommand() *cli.Command {
 				AuditLogger:            auditLogger,
 				PluginPublisher:        pluginPublisher,
 				Skills:                 skillsService,
+				Telemetry:              telemetryrepo.New(chDB),
+				TelemetryDrilldown:     telemetryrepo.New(chDB),
+				SessionCapture:         platformmcp.FeatureChecker(sessionCaptureEnabled),
 				LocalFixture:           platformFixture,
 			})
 			if err != nil {

@@ -8,6 +8,7 @@ import {
   errorMessage,
   extendTrial,
   getInferenceKeys,
+  getInferenceSpendHistory,
   getPaygBillingSummary,
   getStripeSubscription,
   getProject,
@@ -164,6 +165,7 @@ describe("organization billing endpoints", () => {
     const fetch = stubFetch();
 
     await getInferenceKeys("org one");
+    await getInferenceSpendHistory("org one");
     await getPaygBillingSummary("org one");
     await getStripeSubscription("org one");
 
@@ -171,9 +173,12 @@ describe("organization billing endpoints", () => {
       "/admin/organization.inferenceKeys?organization_id=org+one",
     );
     expect(fetch.mock.calls[1]?.[0]).toBe(
-      "/admin/organization.paygBillingSummary?organization_id=org+one",
+      "/admin/organization.inferenceSpendHistory?organization_id=org+one",
     );
     expect(fetch.mock.calls[2]?.[0]).toBe(
+      "/admin/organization.paygBillingSummary?organization_id=org+one",
+    );
+    expect(fetch.mock.calls[3]?.[0]).toBe(
       "/admin/organization.stripeSubscription?organization_id=org+one",
     );
   });
