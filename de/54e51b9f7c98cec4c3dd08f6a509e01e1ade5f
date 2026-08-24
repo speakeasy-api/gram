@@ -1,0 +1,97 @@
+server/internal/risk/session_quarantine_test.go
+  s_d16499501a966c::t_496fc3d46ae864 64,68-72
+  s_d16499501a966c::t_16dfac1099b19b 4-6,17,19,24-33,79-167
+server/internal/background/activities/session_quarantine_test.go
+  s_d16499501a966c::t_63c897676d19df 59-61
+  s_d16499501a966c::t_496fc3d46ae864 58,62,64,71
+server/internal/organizations/repo/models.go
+  s_d16499501a966c::t_63c897676d19df 28-44
+server/internal/hooks/session_quarantine_test.go
+  s_d16499501a966c::t_496fc3d46ae864 15-16,63-70,105,110,114-119,124,126-128
+  s_d16499501a966c::t_70fd543e43ca23 5
+server/internal/risk/scanner.go
+  s_d16499501a966c::t_40c81550a79903 305-333,337,340-341,350,353-354,369,546,749-760
+  s_d16499501a966c::t_8a1a3ecdee6488 761-762
+server/internal/risk/scanner_test.go
+  s_d16499501a966c::t_5ffc29059f0ab4 485-540
+server/internal/risk/impl.go
+  s_d16499501a966c::t_d6d5f586bd1930 19,75-76,719,724-731,733-742
+  s_d16499501a966c::t_c4fef5a7ae29be 4033-4034
+  s_d16499501a966c::t_85435156f0ba3f 743-744
+server/internal/database/models.go
+  s_d16499501a966c::t_63c897676d19df 1471-1487
+server/internal/sessionquarantine/quarantine.go
+  s_d16499501a966c::t_91e37b00b1ea0b 47-48,51,54-55,71,81-82
+server/internal/hooks/quarantine_gate.go
+  s_d16499501a966c::t_91e37b00b1ea0b 26-32,62,70,98-102
+server/internal/background/session_quarantine.go
+  s_d16499501a966c::t_2c15e2571b025e 21-25,30,85
+server/internal/risk/queries.sql
+  s_d16499501a966c::t_91e37b00b1ea0b 1359-1366,1386,1393-1394,1405,1409-1414
+server/internal/background/activities/session_quarantine.go
+  s_d16499501a966c::t_2c15e2571b025e 9-10,19-20,36-38,40-47,49-61
+server/internal/risk/setup_test.go
+  s_d16499501a966c::t_16dfac1099b19b 243
+server/internal/organizations/repo/queries.sql.go
+  s_d16499501a966c::t_eb45db60860a59 200,411,442,473,1236,1276,1603,1673,1737
+server/internal/projects/repo/queries.sql.go
+  s_d16499501a966c::t_32f18bce423c70 191,200-219
+server/internal/risk/repo/queries.sql.go
+  s_d16499501a966c::t_4cb18732061874 909,1263-1264,1268-1275,2420-2436,2500,2504-2509,2512-2519
+client/dashboard/src/pages/security/policy-delete-dialog.ts
+  s_d16499501a966c::t_b1ca5172104358 93-99,107-109
+client/dashboard/src/pages/security/PolicyCenter.tsx
+  s_d16499501a966c::t_48f6784ecf99e8 633-638,1148-1161
+  s_d16499501a966c::t_3d967970bb9ae4 1041
+  s_d16499501a966c::t_072a20ac9379bb 1162-1163
+server/design/risk/design.go
+  s_d16499501a966c::t_c4fef5a7ae29be 45,197,315,2031-2034
+  s_d16499501a966c::t_c102bd60ac3a69 2035-2037
+  s_d16499501a966c::t_6e67e24ee92129 2038-2039
+client/dashboard/src/pages/security/policy-delete-dialog.test.ts
+  s_d16499501a966c::t_b1ca5172104358 126-131,146-151,153
+  s_d16499501a966c::t_60d85626479849 152
+client/dashboard/src/pages/security/PolicyDetail.tsx
+  s_d16499501a966c::t_04d6275da0058c 230-262,2032,2035,2040,2438,4182
+client/dashboard/src/pages/setup/components/steps/configure-policies-step.tsx
+  s_d16499501a966c::t_d736489515de20 168-173,639,662-667
+  s_d16499501a966c::t_85f9d278eef1dd 668
+.speakeasy/out.openapi.yaml
+  s_d16499501a966c::t_2930ee3d5038d3 42209,64099,77511-77519,83111
+client/dashboard/src/sdk/.speakeasy/gen.lock
+  s_d16499501a966c::t_f9d22af5999faf 1261
+client/dashboard/src/sdk/src/funcs/riskSessionQuarantinesReleaseSessionQuarantine.ts
+  s_d16499501a966c::t_c2df9a4c40f4d8 105-107
+client/dashboard/src/sdk/src/models/components/createriskpolicyrequestbody.ts
+  s_d16499501a966c::t_7b22e8a1b52352 20,29,73
+client/dashboard/src/sdk/src/models/components/sessionquarantinereleaserequestbody.ts
+  s_d16499501a966c::t_6bf7b6761843b0 1-35
+client/dashboard/src/sdk/src/models/components/updateriskpolicyrequestbody.ts
+  s_d16499501a966c::t_ad348166dbf18e 20,29,65
+client/dashboard/src/sdk/src/models/operations/releasesessionquarantine.ts
+  s_d16499501a966c::t_a93343596ce801 8-11,41,156-157,169-170,177-178
+server/gen/http/openapi3.yaml
+  s_d16499501a966c::t_f9c341f3f70327 43518,65240,78646-78654,84246
+server/gen/http/risk/client/types.go
+  s_d16499501a966c::t_6ad538b4d815ba 59-60,135-136,178
+server/gen/http/risk/server/types.go
+  s_d16499501a966c::t_9dbeee9f4b48d1 61-62,137-138,180
+server/gen/risk/service.go
+  s_d16499501a966c::t_5de405fd3ed606 365-366,1554-1555
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "de54e51b9f7c98cec4c3dd08f6a509e01e1ade5f",
+  "prompts": {},
+  "sessions": {
+    "s_d16499501a966c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a03341-61d8-73b1-b230-ec13908068ae",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
