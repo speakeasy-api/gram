@@ -2293,6 +2293,21 @@ type SessionHandoffLink struct {
 	UpdatedAt      pgtype.Timestamptz
 }
 
+type SessionQuarantine struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	SessionID      string
+	RiskPolicyID   uuid.NullUUID
+	RiskPolicyName string
+	UserID         string
+	Reason         string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	ReleasedAt     pgtype.Timestamptz
+	ReleasedBy     pgtype.Text
+}
+
 type Skill struct {
 	ID             uuid.UUID
 	ProjectID      uuid.UUID
