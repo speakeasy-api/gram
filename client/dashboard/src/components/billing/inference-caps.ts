@@ -18,6 +18,10 @@ export const INFERENCE_CAPS_ANCHOR = "inference-caps";
 type CapCopy = {
   /** The functional name of the cap, as a sentence-leading noun phrase. */
   name: string;
+  /** Short spend-history heading. The full name stays on the cap. */
+  column: string;
+  /** What this column counts, for the heading's info popover. */
+  columnHint: string;
   /** The URL-facing half of the anchor. Never an API identifier. */
   slug: string;
   /** What stops when this cap is reached, and how to start it again. */
@@ -47,6 +51,9 @@ type CapCopy = {
 const CAP_COPY: Record<InferenceSpendCapKeyType, CapCopy> = {
   internal: {
     name: "Security inference",
+    column: "Security",
+    columnHint:
+      "The automated analysis Gram runs over this organization's traffic, including security scanning.",
     slug: "security",
     paused:
       "The automated analysis Gram runs over this organization's traffic, including security scanning, is paused for the rest of the month. Raise the cap to start it again.",
@@ -57,6 +64,8 @@ const CAP_COPY: Record<InferenceSpendCapKeyType, CapCopy> = {
   },
   chat: {
     name: "Customer-facing inference",
+    column: "Customer-facing",
+    columnHint: "Assistants and the other AI-powered dashboard experiences.",
     slug: "other",
     paused:
       "Assistants and the other AI-powered dashboard experiences are paused for the rest of the month. Raise the cap to start them again.",
@@ -104,9 +113,14 @@ export function inferenceCapLabel(keyType: InferenceSpendCapKeyType): string {
   return `${CAP_COPY[keyType].name} cap`;
 }
 
-/** The key's name without "cap", for spend history that is not a limit. */
+/** The short spend-history heading. The cap keeps the longer name. */
 export function inferenceSpendLabel(keyType: InferenceSpendCapKeyType): string {
-  return CAP_COPY[keyType].name;
+  return CAP_COPY[keyType].column;
+}
+
+/** What a spend-history column counts, for the heading's info popover. */
+export function inferenceSpendHint(keyType: InferenceSpendCapKeyType): string {
+  return CAP_COPY[keyType].columnHint;
 }
 
 /** The anchor for a cap's own control, unique per key and free of identifiers. */

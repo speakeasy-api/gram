@@ -9,6 +9,7 @@ import {
   inferenceCapLabel,
   inferenceCapPausedNote,
   inferenceCapRaiseLabel,
+  inferenceSpendHint,
   inferenceSpendLabel,
   isInferenceCapAnchor,
   isInferenceCapReached,
@@ -38,10 +39,21 @@ describe("inferenceCapLabel", () => {
 
 describe("inferenceSpendLabel", () => {
   it.each<[InferenceSpendCap["keyType"], string]>([
-    ["internal", "Security inference"],
-    ["chat", "Customer-facing inference"],
+    ["internal", "Security"],
+    ["chat", "Customer-facing"],
   ])("labels the %s key as %s", (keyType, label) => {
     expect(inferenceSpendLabel(keyType)).toBe(label);
+  });
+});
+
+describe("inferenceSpendHint", () => {
+  it("explains customer-facing spend without the leftover Other name", () => {
+    expect(inferenceSpendHint("chat")).toMatch(/assistants/i);
+    expect(inferenceSpendHint("chat")).not.toMatch(/other inference/i);
+  });
+
+  it("explains security spend as automated analysis", () => {
+    expect(inferenceSpendHint("internal")).toMatch(/automated analysis/i);
   });
 });
 
@@ -119,6 +131,8 @@ describe("cap copy", () => {
     (keyType) => {
       const copy = [
         inferenceCapLabel(keyType),
+        inferenceSpendLabel(keyType),
+        inferenceSpendHint(keyType),
         inferenceCapPausedNote(keyType),
         inferenceCapRaiseLabel(keyType),
         inferenceCapBillingNote(keyType),

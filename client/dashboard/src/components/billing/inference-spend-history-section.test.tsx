@@ -1,7 +1,8 @@
 import type { InferenceSpendHistory } from "@gram/client/models/components/inferencespendhistory.js";
 import type { InferenceSpendMonth } from "@gram/client/models/components/inferencespendmonth.js";
 import { RFCDate } from "@gram/client/types/rfcdate.js";
-import { cleanup, render, screen } from "@testing-library/react";
+import { TooltipProvider } from "@/components/ui/Tooltip";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -25,7 +26,16 @@ vi.mock("@/components/page-layout", () => {
   return { Page: { Section } };
 });
 
+import { inferenceSpendHint, inferenceSpendLabel } from "./inference-caps";
 import { InferenceSpendHistorySection } from "./inference-spend-history-section";
+
+function renderSection(): void {
+  render(
+    <TooltipProvider>
+      <InferenceSpendHistorySection />
+    </TooltipProvider>,
+  );
+}
 
 function month(
   overrides: Partial<InferenceSpendMonth> = {},
@@ -59,7 +69,7 @@ describe("InferenceSpendHistorySection", () => {
       refetch: vi.fn(),
     });
 
-    render(<InferenceSpendHistorySection />);
+    renderSection();
 
     expect(mocks.query).toHaveBeenCalledWith(undefined, undefined, {
       throwOnError: false,
@@ -94,18 +104,19 @@ describe("InferenceSpendHistorySection", () => {
       refetch: vi.fn(),
     });
 
-    render(<InferenceSpendHistorySection />);
+    renderSection();
 
     expect(
       screen.getByRole("heading", { name: /inference spend/i }),
     ).toBeTruthy();
+    expect(screen.getByText("Customer-facing")).toBeTruthy();
+    expect(screen.getByText("Security")).toBeTruthy();
     expect(
-      screen.getByText(
-        /Customer-facing inference is assistants and the other AI-powered dashboard experiences/,
-      ),
+      screen.getByRole("button", { name: "About Customer-facing" }),
     ).toBeTruthy();
-    expect(screen.getByText("Customer-facing inference")).toBeTruthy();
-    expect(screen.getByText("Security inference")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "About Security" })).toBeTruthy();
+    expect(screen.queryByText("Customer-facing inference")).toBeNull();
+    expect(screen.queryByText("Other inference")).toBeNull();
     expect(screen.getByText("August 2026 (current)")).toBeTruthy();
     expect(screen.getByText("July 2026")).toBeTruthy();
     expect(screen.getByText("$1.50")).toBeTruthy();
@@ -115,6 +126,27 @@ describe("InferenceSpendHistorySection", () => {
         /Completed days through August 20, 2026; today isn't counted yet./,
       ),
     ).toBeTruthy();
+  });
+
+  it("explains a breakdown column from its heading info control", async () => {
+    mocks.query.mockReturnValue({
+      data: history([month({ current: true })]),
+      isError: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    });
+
+    renderSection();
+
+    fireEvent.focus(
+      screen.getByRole("button", {
+        name: `About ${inferenceSpendLabel("chat")}`,
+      }),
+    );
+
+    expect((await screen.findByRole("tooltip")).textContent).toBe(
+      inferenceSpendHint("chat"),
+    );
   });
 
   it("keeps a missing key as an em dash rather than a fabricated zero", () => {
@@ -133,7 +165,7 @@ describe("InferenceSpendHistorySection", () => {
       refetch: vi.fn(),
     });
 
-    render(<InferenceSpendHistorySection />);
+    renderSection();
 
     expect(screen.getAllByText("$2.00").length).toBe(2);
     expect(screen.getAllByText("—").length).toBeGreaterThan(0);
@@ -148,7 +180,7 @@ describe("InferenceSpendHistorySection", () => {
       refetch,
     });
 
-    render(<InferenceSpendHistorySection />);
+    renderSection();
 
     expect(
       screen.getByText(/Couldn't load inference spend history./),

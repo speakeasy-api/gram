@@ -1,14 +1,19 @@
-import { inferenceSpendLabel } from "@/components/billing/inference-caps";
+import {
+  inferenceSpendHint,
+  inferenceSpendLabel,
+} from "@/components/billing/inference-caps";
 import {
   formatExactUsd,
   formatRecordedThrough,
 } from "@/components/billing/payg-billing-estimate";
 import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Stack } from "@/components/ui/Stack";
 import { Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
 import type { InferenceSpendCapKeyType } from "@gram/client/models/components/inferencespendcap.js";
 import type { InferenceSpendMonth } from "@gram/client/models/components/inferencespendmonth.js";
 import { useGetInferenceSpendHistory } from "@gram/client/react-query/getInferenceSpendHistory.js";
@@ -35,12 +40,9 @@ export function InferenceSpendHistorySection(): JSX.Element {
       <Page.Section.Title area="">Inference spend</Page.Section.Title>
       <Page.Section.Description>
         Monthly spend on the inference Gram runs for this organization.
-        Customer-facing inference is assistants and the other AI-powered
-        dashboard experiences. Security inference is the automated analysis
-        Gram runs over this organization's traffic. OpenRouter caps reset on
-        the first of the month, so these figures follow the calendar rather
-        than the billing cycle. History is recorded going forward from
-        completed days.
+        OpenRouter caps reset on the first of the month, so these figures follow
+        the calendar rather than the billing cycle. History is recorded going
+        forward from completed days.
       </Page.Section.Description>
       <Page.Section.Body>
         <InferenceSpendHistoryTable />
@@ -104,6 +106,29 @@ function InferenceSpendHistoryTable(): JSX.Element {
   );
 }
 
+function SpendColumnHeader({
+  keyType,
+}: {
+  keyType: InferenceSpendCapKeyType;
+}): JSX.Element {
+  const label = inferenceSpendLabel(keyType);
+
+  return (
+    <span className="inline-flex items-center gap-1">
+      {label}
+      <SimpleTooltip tooltip={inferenceSpendHint(keyType)}>
+        <button
+          type="button"
+          aria-label={`About ${label}`}
+          className="text-muted-foreground hover:text-foreground inline-flex cursor-help items-center"
+        >
+          <Icon name="info" className="size-3.5" />
+        </button>
+      </SimpleTooltip>
+    </span>
+  );
+}
+
 const monthColumns: Column<InferenceSpendMonth>[] = [
   {
     key: "month",
@@ -113,7 +138,7 @@ const monthColumns: Column<InferenceSpendMonth>[] = [
   },
   ...KEY_COLUMNS.map((keyType): Column<InferenceSpendMonth> => ({
     key: keyType,
-    header: inferenceSpendLabel(keyType),
+    header: <SpendColumnHeader keyType={keyType} />,
     render: (month) => <SpendCell amount={spendForKey(month, keyType)} />,
   })),
   {
