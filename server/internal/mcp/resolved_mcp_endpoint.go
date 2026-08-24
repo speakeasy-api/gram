@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcp_repo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	metamcp_visibility "github.com/speakeasy-api/gram/server/internal/metamcp/visibility"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -522,6 +523,11 @@ func (s *Service) buildResolvedMetaMcpEndpointByRef(ctx context.Context, ref End
 	}
 	if !metaServer.UserSessionIssuerID.Valid {
 		// An issuer detached mid-flow closes in-flight challenges.
+		return nil, oops.E(oops.CodeNotFound, nil, "not found")
+	}
+	if metaServer.Visibility == metamcp_visibility.Disabled {
+		// A gateway disabled mid-flow closes in-flight challenges, matching
+		// the generic-server branch's visibility check.
 		return nil, oops.E(oops.CodeNotFound, nil, "not found")
 	}
 	project, err := projects_repo.New(s.db).GetProjectByID(ctx, mcpEndpoint.ProjectID)
