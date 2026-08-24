@@ -136,7 +136,7 @@ func TestSplitFlattenedError(t *testing.T) {
 	require.False(t, ok, "RFC 6749 §5.2 codes are lowercase")
 
 	code, description, ok = splitFlattenedError("expired_token - device code expired")
-	require.True(t, ok, "any IANA-registered code is split out of free text")
+	require.True(t, ok, "any code registered by an IETF RFC is split out of free text")
 	require.Equal(t, CodeExpiredToken, code)
 	require.Equal(t, "device code expired", description)
 

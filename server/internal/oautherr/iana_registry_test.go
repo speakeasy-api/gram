@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestIsIANARegisteredCode(t *testing.T) {
+func TestIsIETFRegisteredCode(t *testing.T) {
 	t.Parallel()
 
 	for _, code := range []string{
@@ -29,7 +29,7 @@ func TestIsIANARegisteredCode(t *testing.T) {
 		CodeUseDPoPNonce,
 		CodeInsufficientUserAuthentication,
 	} {
-		require.True(t, IsIANARegisteredCode(code), code)
+		require.True(t, IsIETFRegisteredCode(code), code)
 	}
 
 	for _, code := range []string{
@@ -41,15 +41,15 @@ func TestIsIANARegisteredCode(t *testing.T) {
 		"login_required",
 		"request_denied",
 	} {
-		require.False(t, IsIANARegisteredCode(code), code)
+		require.False(t, IsIETFRegisteredCode(code), code)
 	}
 }
 
-// Every Code constant declared in this package must be in registeredCodes,
-// and registeredCodes must hold nothing else, so adding a constant without
+// Every Code constant declared in this package must be in ietfRegisteredCodes,
+// and ietfRegisteredCodes must hold nothing else, so adding a constant without
 // registering it (or the reverse) fails here instead of silently narrowing
 // what ParseTokenError recognizes.
-func TestIANARegistryIsComplete(t *testing.T) {
+func TestIETFRegistryIsComplete(t *testing.T) {
 	t.Parallel()
 
 	entries, err := os.ReadDir(".")
@@ -91,7 +91,7 @@ func TestIANARegistryIsComplete(t *testing.T) {
 	require.NotEmpty(t, declared)
 
 	for name, value := range declared {
-		require.True(t, IsIANARegisteredCode(value), "%s (%q) is declared but not in registeredCodes", name, value)
+		require.True(t, IsIETFRegisteredCode(value), "%s (%q) is declared but not in ietfRegisteredCodes", name, value)
 	}
-	require.Len(t, registeredCodes, len(declared), "registeredCodes holds entries with no Code constant")
+	require.Len(t, ietfRegisteredCodes, len(declared), "ietfRegisteredCodes holds entries with no Code constant")
 }

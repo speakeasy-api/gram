@@ -164,7 +164,7 @@ func splitFlattenedError(s string) (code, description string, ok bool) {
 		}
 	}
 	code = s[:end]
-	if !IsIANARegisteredCode(code) {
+	if !IsIETFRegisteredCode(code) {
 		return "", "", false
 	}
 	description = strings.TrimSpace(strings.TrimLeft(s[end:], " \t-:."))
