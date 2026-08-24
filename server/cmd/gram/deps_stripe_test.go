@@ -7,10 +7,53 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli/v2"
 
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 )
+
+func TestNewLocalFeatureFlagsEnablesPaygSelfServe(t *testing.T) {
+	t.Parallel()
+
+	flags := newLocalFeatureFlags(t.Context(), testenv.NewLogger(t), "")
+	enabled, err := flags.IsFlagEnabled(t.Context(), feature.FlagPaygSelfServeBilling, "org-local", nil)
+	require.NoError(t, err)
+	require.True(t, enabled)
+}
+
+func TestNewStripeClientLocalWithoutAPIKeyUsesServerURLForCheckout(t *testing.T) {
+	t.Parallel()
+
+	ctx := newStripeCLIContext(t, map[string]string{
+		"environment":    "local",
+		"stripe-api-key": "unset",
+		"server-url":     "https://localhost:8000",
+	})
+
+	client, err := newStripeClient(
+		t.Context(),
+		testenv.NewLogger(t),
+		guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)),
+		ctx,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, client)
+	local, ok := client.(stripeclient.LocalCheckout)
+	require.True(t, ok)
+
+	checkout, err := client.CreateCheckoutSession(t.Context(), stripeclient.CreateCheckoutSessionInput{
+		CustomerID:       "cus_local_org",
+		OrganizationSlug: "billing-test",
+		SuccessURL:       "https://localhost:4000/billing-test/billing",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "https://localhost:8000/rpc/stripe.local-checkout?session="+checkout.ID, checkout.URL)
+
+	result, err := local.CompleteCheckout(t.Context(), checkout.ID)
+	require.NoError(t, err)
+	require.Equal(t, "https://localhost:4000/billing-test/billing", result.SuccessURL)
+}
 
 func TestNewStripeClientLocalWithoutAPIKeyUsesStubBeforeCatalogValidation(t *testing.T) {
 	t.Parallel()
@@ -141,7 +184,7 @@ func TestNewBillingProviderAcceptsStripeWithoutPolar(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		stripeclient.NewStubClient(logger),
+		stripeclient.NewStubClient(logger, nil),
 		ctx,
 	)
 	require.NoError(t, err)
@@ -179,6 +222,7 @@ func newStripeCLIContext(t *testing.T, values map[string]string) *cli.Context {
 	set.String("stripe-meter-id-tum", "", "")
 	set.String("stripe-meter-event-name", "", "")
 	set.String("stripe-portal-configuration-id", "", "")
+	set.String("server-url", "", "")
 	set.String("polar-api-key", "", "")
 	for key, value := range values {
 		require.NoError(t, set.Set(key, value))

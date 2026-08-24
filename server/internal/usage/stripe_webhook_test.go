@@ -412,7 +412,7 @@ func TestStripeWebhookRejectsInvalidRequests(t *testing.T) {
 		t.Parallel()
 		service := &Service{
 			logger:        testenv.NewLogger(t),
-			stripeClient:  stripeclient.NewStubClient(testenv.NewLogger(t)),
+			stripeClient:  stripeclient.NewStubClient(testenv.NewLogger(t), nil),
 			stripeHandler: testStripeWebhookHandler,
 		}
 		require.Equal(t, http.StatusServiceUnavailable, serveStripeWebhook(service, "{}").Code)

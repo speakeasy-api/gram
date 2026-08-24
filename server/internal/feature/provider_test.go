@@ -31,6 +31,30 @@ func TestEvaluateFlagInMemory(t *testing.T) {
 	require.Equal(t, feature.EvaluationIndeterminate, missing)
 }
 
+func TestInMemoryWildcardDistinctID(t *testing.T) {
+	t.Parallel()
+
+	provider := &feature.InMemory{}
+	provider.SetFlag(testFeatureFlag, feature.LocalWildcardDistinctID, true)
+	provider.SetFlag(testFeatureFlag, "disabled-org", false)
+
+	enabled, err := provider.IsFlagEnabled(t.Context(), testFeatureFlag, "any-org", nil)
+	require.NoError(t, err)
+	require.True(t, enabled)
+
+	disabled, err := provider.IsFlagEnabled(t.Context(), testFeatureFlag, "disabled-org", nil)
+	require.NoError(t, err)
+	require.False(t, disabled)
+
+	evaluation, err := feature.EvaluateFlag(t.Context(), provider, testFeatureFlag, "any-org", nil)
+	require.NoError(t, err)
+	require.Equal(t, feature.EvaluationEnabled, evaluation)
+
+	override, err := feature.EvaluateFlag(t.Context(), provider, testFeatureFlag, "disabled-org", nil)
+	require.NoError(t, err)
+	require.Equal(t, feature.EvaluationDisabled, override)
+}
+
 func TestEvaluateFlagLegacyProviderIsIndeterminate(t *testing.T) {
 	t.Parallel()
 

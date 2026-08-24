@@ -435,6 +435,10 @@ func newTemporalClient(logger *slog.Logger, meterProvider metric.MeterProvider, 
 
 func newLocalFeatureFlags(ctx context.Context, logger *slog.Logger, csvPath string) *feature.InMemory {
 	inmem := &feature.InMemory{}
+	// Local dashboard telemetry enables every flag. PAYG checkout is backed by
+	// the Stripe stub when Stripe is unconfigured, so the rollout gate stays on
+	// for every local organization unless a CSV row overrides it.
+	inmem.SetFlag(feature.FlagPaygSelfServeBilling, feature.LocalWildcardDistinctID, true)
 
 	if csvPath == "" {
 		logger.DebugContext(ctx, "newLocalFeatureFlags: no csv path provided, using empty in-memory feature flag provider")
@@ -565,7 +569,7 @@ func newStripeClient(
 	if !stripeclient.IsConfigured(apiKey) {
 		if c.String("environment") == "local" {
 			logger.WarnContext(ctx, "using stub Stripe client: Stripe not configured")
-			return stripeclient.NewStubClient(logger), nil
+			return stripeclient.NewStubClient(logger, localStripePublicURL(c)), nil
 		}
 
 		logger.InfoContext(ctx, "Stripe client not configured")
@@ -588,6 +592,18 @@ func newStripeClient(
 		c.String("stripe-webhook-secret"),
 		catalog,
 	), nil
+}
+
+func localStripePublicURL(c *cli.Context) *url.URL {
+	raw := c.String("server-url")
+	if raw == "" {
+		return nil
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return nil
+	}
+	return parsed
 }
 
 // workosClientOpts builds the ClientOpts threaded into every workos.NewClient

@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -63,6 +64,57 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 		}
 		return oops.E(oops.CodeBadRequest, err, "invalid Stripe webhook signature").LogWarn(ctx, s.logger)
 	}
+	return s.processStripeWebhookEvent(ctx, event)
+}
+
+func (s *Service) handleLocalStripeCheckout(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	completer, ok := s.stripeClient.(stripeclient.LocalCheckout)
+	if !ok {
+		return oops.E(oops.CodeNotFound, nil, "local Stripe checkout is unavailable").LogWarn(ctx, s.logger)
+	}
+
+	sessionID := r.URL.Query().Get("session")
+	result, err := completer.CompleteCheckout(ctx, sessionID)
+	if err != nil {
+		switch {
+		case errors.Is(err, stripeclient.ErrLocalCheckoutSessionRequired):
+			return oops.E(oops.CodeBadRequest, err, "missing checkout session").LogWarn(ctx, s.logger)
+		case errors.Is(err, stripeclient.ErrLocalCheckoutSessionUnknown):
+			return oops.E(oops.CodeNotFound, err, "checkout session not found").LogWarn(ctx, s.logger)
+		case errors.Is(err, stripeclient.ErrLocalCheckoutSessionExpired):
+			return oops.E(oops.CodeConflict, err, "checkout session is expired").LogWarn(ctx, s.logger)
+		default:
+			return oops.E(oops.CodeUnexpected, err, "failed to complete local Stripe checkout").LogError(ctx, s.logger)
+		}
+	}
+	if result == nil || result.Event == nil {
+		return oops.E(oops.CodeUnexpected, nil, "local Stripe checkout did not return a completion event").LogError(ctx, s.logger)
+	}
+	if err := s.processStripeWebhookEvent(ctx, result.Event); err != nil {
+		return err
+	}
+
+	successURL, err := localCheckoutRedirectURL(result.SuccessURL)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "local Stripe checkout success URL is invalid").LogError(ctx, s.logger)
+	}
+	http.Redirect(w, r, successURL, http.StatusSeeOther)
+	return nil
+}
+
+func localCheckoutRedirectURL(raw string) (string, error) {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return "", fmt.Errorf("parse success URL: %w", err)
+	}
+	if parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return "", errors.New("success URL must be an absolute HTTP URL")
+	}
+	return parsed.String(), nil
+}
+
+func (s *Service) processStripeWebhookEvent(ctx context.Context, event *stripeclient.WebhookEvent) error {
 	if event == nil || event.ID == "" || event.Type == "" {
 		return oops.E(oops.CodeBadRequest, nil, "invalid Stripe webhook event").LogWarn(ctx, s.logger)
 	}

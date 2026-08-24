@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
-	"net/url"
 	"strconv"
 	"time"
 
@@ -998,94 +996,4 @@ func expandedObjectID(raw json.RawMessage) string {
 
 func (c *client) Catalog() Catalog {
 	return c.catalog
-}
-
-type stubClient struct {
-	logger *slog.Logger
-}
-
-// NewStubClient returns a local no-op Stripe client.
-func NewStubClient(logger *slog.Logger) Client {
-	return &stubClient{logger: logger}
-}
-
-func (s *stubClient) CreateCustomer(ctx context.Context, _ CreateCustomerInput) (*Customer, error) {
-	s.logger.DebugContext(ctx, "stub Stripe customer creation skipped")
-	return &Customer{ID: "cus_local_stub"}, nil
-}
-
-func (s *stubClient) CreateCheckoutSession(ctx context.Context, input CreateCheckoutSessionInput) (*CheckoutSession, error) {
-	s.logger.DebugContext(ctx, "stub Stripe Checkout session creation skipped")
-	return &CheckoutSession{ID: "cs_local_stub", URL: fmt.Sprintf("http://localhost:3000/%s/billing", url.PathEscape(input.OrganizationSlug))}, nil
-}
-
-func (s *stubClient) GetCheckoutSession(context.Context, string) (*CheckoutSessionState, error) {
-	return nil, errors.New("retrieve Stripe Checkout session is unavailable locally")
-}
-
-func (s *stubClient) GetSubscription(context.Context, string) (*SubscriptionState, error) {
-	return nil, errors.New("retrieve Stripe subscription is unavailable locally")
-}
-
-func (s *stubClient) SetSubscriptionCancelAtPeriodEnd(context.Context, SetSubscriptionCancelAtPeriodEndInput) (*SubscriptionState, error) {
-	return nil, errors.New("update Stripe subscription is unavailable locally")
-}
-
-func (s *stubClient) CreatePortalSession(context.Context, CreatePortalSessionInput) (*PortalSession, error) {
-	return nil, errors.New("create Stripe billing portal session is unavailable locally")
-}
-
-func (s *stubClient) CreateMeterEvent(ctx context.Context, _ CreateMeterEventInput) error {
-	s.logger.DebugContext(ctx, "stub Stripe meter event skipped")
-	return nil
-}
-
-func (s *stubClient) GetMeterEventSummary(ctx context.Context, _ GetMeterEventSummaryInput) (float64, error) {
-	s.logger.DebugContext(ctx, "stub Stripe meter event summary skipped")
-	return 0, nil
-}
-
-func (s *stubClient) GetInvoice(context.Context, string) (*InvoiceState, error) {
-	return nil, errors.New("retrieve Stripe invoice is unavailable locally")
-}
-
-func (s *stubClient) CreateInvoiceItem(ctx context.Context, input CreateInvoiceItemInput) (*InvoiceItem, error) {
-	s.logger.DebugContext(ctx, "stub Stripe invoice item skipped")
-	return &InvoiceItem{
-		ID:          "ii_local_stub",
-		InvoiceID:   input.InvoiceID,
-		Currency:    "usd",
-		AmountCents: input.AmountCents,
-	}, nil
-}
-
-func (s *stubClient) CreateCreditNote(ctx context.Context, input CreateCreditNoteInput) (*CreditNote, error) {
-	s.logger.DebugContext(ctx, "stub Stripe credit note skipped")
-	return &CreditNote{
-		ID:          "cn_local_stub",
-		InvoiceID:   input.InvoiceID,
-		Currency:    "usd",
-		AmountCents: input.AmountCents,
-	}, nil
-}
-
-func (s *stubClient) FindInvoiceItem(context.Context, FindInvoiceAllocationInput) (*InvoiceItem, error) {
-	return nil, nil
-}
-
-func (s *stubClient) FindCreditNote(context.Context, FindInvoiceAllocationInput) (*CreditNote, error) {
-	return nil, nil
-}
-
-func (s *stubClient) VerifyWebhook(_ []byte, _ string) (*WebhookEvent, error) {
-	return nil, fmt.Errorf("verify Stripe webhook: %w", ErrWebhookNotConfigured)
-}
-
-func (s *stubClient) Catalog() Catalog {
-	return Catalog{
-		PriceIDTUM:            "",
-		MeterIDTUM:            "",
-		MeterEventName:        "",
-		PortalConfigurationID: "",
-	}
 }

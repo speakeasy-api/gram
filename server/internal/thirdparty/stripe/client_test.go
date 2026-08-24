@@ -1132,14 +1132,16 @@ func TestVerifyWebhookAcceptsSignedEventsAcrossAPIVersions(t *testing.T) {
 func TestStubClientIsSafeToCall(t *testing.T) {
 	t.Parallel()
 
-	c := NewStubClient(testenv.NewLogger(t))
+	c := NewStubClient(testenv.NewLogger(t), nil)
 
 	customer, err := c.CreateCustomer(t.Context(), CreateCustomerInput{})
 	require.NoError(t, err)
-	require.Equal(t, "cus_local_stub", customer.ID)
-	checkout, err := c.CreateCheckoutSession(t.Context(), CreateCheckoutSessionInput{OrganizationSlug: "test/org"})
+	require.Equal(t, "cus_local_1", customer.ID)
+	checkout, err := c.CreateCheckoutSession(t.Context(), CreateCheckoutSessionInput{
+		OrganizationSlug: "test/org",
+	})
 	require.NoError(t, err)
-	require.Equal(t, "cs_local_stub", checkout.ID)
+	require.Equal(t, "cs_local_2", checkout.ID)
 	require.Equal(t, "http://localhost:3000/test%2Forg/billing", checkout.URL)
 	require.NoError(t, c.CreateMeterEvent(t.Context(), CreateMeterEventInput{}))
 	require.Equal(t, Catalog{}, c.Catalog())

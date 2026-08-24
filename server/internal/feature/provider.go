@@ -27,22 +27,30 @@ type Provider interface {
 	FlagPayload(ctx context.Context, flag Flag, distinctID string, groups map[string]string) ([]byte, error)
 }
 
+// LocalWildcardDistinctID enables an in-memory flag for every distinct ID that
+// does not have its own entry. Local development uses it so rollout flags do
+// not need a row per organization.
+const LocalWildcardDistinctID = "*"
+
 type InMemory sync.Map
 
-func (imp *InMemory) IsFlagEnabled(ctx context.Context, flag Flag, distinctID string, groups map[string]string) (bool, error) {
-	key := distinctID + ":" + string(flag)
-
-	val, ok := (*sync.Map)(imp).Load(key)
+func (imp *InMemory) lookupBool(flag Flag, distinctID string) (bool, bool) {
+	val, ok := (*sync.Map)(imp).Load(distinctID + ":" + string(flag))
 	if !ok {
-		return false, nil
+		return false, false
 	}
-
 	enabled, ok := val.(bool)
-	if !ok {
-		return false, nil
-	}
+	return enabled, ok
+}
 
-	return enabled, nil
+func (imp *InMemory) IsFlagEnabled(ctx context.Context, flag Flag, distinctID string, groups map[string]string) (bool, error) {
+	if enabled, ok := imp.lookupBool(flag, distinctID); ok {
+		return enabled, nil
+	}
+	if enabled, ok := imp.lookupBool(flag, LocalWildcardDistinctID); ok {
+		return enabled, nil
+	}
+	return false, nil
 }
 
 func (imp *InMemory) IsFlagEnabledLocal(ctx context.Context, flag Flag, distinctID string, groups, personProperties map[string]string) (bool, error) {
@@ -61,18 +69,23 @@ func payloadKey(flag Flag, distinctID string) string {
 	return "payload:" + distinctID + ":" + string(flag)
 }
 
-func (imp *InMemory) FlagPayload(ctx context.Context, flag Flag, distinctID string, groups map[string]string) ([]byte, error) {
+func (imp *InMemory) lookupPayload(flag Flag, distinctID string) ([]byte, bool) {
 	val, ok := (*sync.Map)(imp).Load(payloadKey(flag, distinctID))
 	if !ok {
-		return nil, nil
+		return nil, false
 	}
-
 	payload, ok := val.([]byte)
-	if !ok {
-		return nil, nil
-	}
+	return payload, ok
+}
 
-	return payload, nil
+func (imp *InMemory) FlagPayload(ctx context.Context, flag Flag, distinctID string, groups map[string]string) ([]byte, error) {
+	if payload, ok := imp.lookupPayload(flag, distinctID); ok {
+		return payload, nil
+	}
+	if payload, ok := imp.lookupPayload(flag, LocalWildcardDistinctID); ok {
+		return payload, nil
+	}
+	return nil, nil
 }
 
 func (imp *InMemory) SetFlagPayload(flag Flag, distinctID string, payload []byte) {
@@ -85,18 +98,23 @@ func variantKey(flag Flag, distinctID string) string {
 	return "variant:" + distinctID + ":" + string(flag)
 }
 
-func (imp *InMemory) FlagVariant(ctx context.Context, flag Flag, distinctID string, groups map[string]string) (Variant, error) {
+func (imp *InMemory) lookupVariant(flag Flag, distinctID string) (Variant, bool) {
 	val, ok := (*sync.Map)(imp).Load(variantKey(flag, distinctID))
 	if !ok {
-		return "", nil
+		return "", false
 	}
-
 	variant, ok := val.(Variant)
-	if !ok {
-		return "", nil
-	}
+	return variant, ok
+}
 
-	return variant, nil
+func (imp *InMemory) FlagVariant(ctx context.Context, flag Flag, distinctID string, groups map[string]string) (Variant, error) {
+	if variant, ok := imp.lookupVariant(flag, distinctID); ok {
+		return variant, nil
+	}
+	if variant, ok := imp.lookupVariant(flag, LocalWildcardDistinctID); ok {
+		return variant, nil
+	}
+	return "", nil
 }
 
 func (imp *InMemory) SetFlagVariant(flag Flag, distinctID string, variant Variant) {
@@ -168,20 +186,21 @@ func EvaluateFlag(ctx context.Context, provider Provider, flag Flag, distinctID 
 	return EvaluationIndeterminate, nil
 }
 
-func (imp *InMemory) EvaluateFlag(_ context.Context, flag Flag, distinctID string, _ map[string]string) (Evaluation, error) {
-	key := distinctID + ":" + string(flag)
-	value, ok := (*sync.Map)(imp).Load(key)
-	if !ok {
-		return EvaluationIndeterminate, nil
-	}
-	enabled, ok := value.(bool)
-	if !ok {
-		return EvaluationIndeterminate, nil
-	}
+func evaluationFromEnabled(enabled bool) Evaluation {
 	if enabled {
-		return EvaluationEnabled, nil
+		return EvaluationEnabled
 	}
-	return EvaluationDisabled, nil
+	return EvaluationDisabled
+}
+
+func (imp *InMemory) EvaluateFlag(_ context.Context, flag Flag, distinctID string, _ map[string]string) (Evaluation, error) {
+	if enabled, ok := imp.lookupBool(flag, distinctID); ok {
+		return evaluationFromEnabled(enabled), nil
+	}
+	if enabled, ok := imp.lookupBool(flag, LocalWildcardDistinctID); ok {
+		return evaluationFromEnabled(enabled), nil
+	}
+	return EvaluationIndeterminate, nil
 }
 
 // OrgProjectGroups returns the PostHog group memberships used to evaluate

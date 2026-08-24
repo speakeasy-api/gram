@@ -155,6 +155,11 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		o11y.AttachHandler(mux, "POST", "/rpc/stripe.webhook", func(w http.ResponseWriter, r *http.Request) {
 			oops.ErrHandle(service.logger, service.handleStripeWebhook).ServeHTTP(w, r)
 		})
+		if _, ok := service.stripeClient.(stripeclient.LocalCheckout); ok {
+			o11y.AttachHandler(mux, "GET", stripeclient.LocalCheckoutPath, func(w http.ResponseWriter, r *http.Request) {
+				oops.ErrHandle(service.logger, service.handleLocalStripeCheckout).ServeHTTP(w, r)
+			})
+		}
 	}
 }
 
