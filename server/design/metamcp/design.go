@@ -252,6 +252,12 @@ var _ = Service("metaMcp", func() {
 	})
 })
 
+var MetaMcpServerVisibility = Type("MetaMcpServerVisibility", String, func() {
+	Description("The visibility of a meta MCP server. Disabled refuses traffic; private requires a user session.")
+	Enum("disabled", "private")
+	Meta("struct:pkg:path", "types")
+})
+
 var CreateMetaMcpServerForm = Type("CreateMetaMcpServerForm", func() {
 	Description("Form for creating a new meta MCP server. URL addressability is managed separately through MCP endpoints.")
 
@@ -262,12 +268,13 @@ var CreateMetaMcpServerForm = Type("CreateMetaMcpServerForm", func() {
 	Attribute("user_session_issuer_id", String, "The ID of the user session issuer used to authenticate callers. Omit for no issuer.", func() {
 		Format(FormatUUID)
 	})
+	Attribute("visibility", MetaMcpServerVisibility, "The visibility of the gateway. Defaults to private, which requires callers to authenticate.")
 
 	Required("name")
 })
 
 var UpdateMetaMcpServerForm = Type("UpdateMetaMcpServerForm", func() {
-	Description("Form for updating a meta MCP server. This is a full-record replace: a user_session_issuer_id omitted from the request becomes null on the stored record.")
+	Description("Form for updating a meta MCP server. This is a full-record replace: a user_session_issuer_id omitted from the request becomes null on the stored record. Visibility is the exception — omitting it preserves the stored value, so a caller that does not manage visibility cannot re-enable a disabled gateway by saving an unrelated field.")
 
 	Attribute("id", String, "The ID of the meta MCP server to update", func() {
 		Format(FormatUUID)
@@ -279,6 +286,7 @@ var UpdateMetaMcpServerForm = Type("UpdateMetaMcpServerForm", func() {
 	Attribute("user_session_issuer_id", String, "The ID of the user session issuer used to authenticate callers. Omit for no issuer.", func() {
 		Format(FormatUUID)
 	})
+	Attribute("visibility", MetaMcpServerVisibility, "The visibility of the gateway. Omit to leave it unchanged.")
 
 	Required("id", "name")
 })
@@ -299,6 +307,7 @@ var MetaMcpServer = Type("MetaMcpServer", func() {
 	Attribute("user_session_issuer_id", String, "The ID of the user session issuer used to authenticate callers. Null when no issuer is attached.", func() {
 		Format(FormatUUID)
 	})
+	Attribute("visibility", MetaMcpServerVisibility, "The visibility of the gateway.")
 	Attribute("created_at", String, func() {
 		Description("When the meta MCP server was created")
 		Format(FormatDateTime)
@@ -308,7 +317,7 @@ var MetaMcpServer = Type("MetaMcpServer", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "organization_id", "project_id", "name", "created_at", "updated_at")
+	Required("id", "organization_id", "project_id", "name", "visibility", "created_at", "updated_at")
 })
 
 var AddMetaMcpMemberForm = Type("AddMetaMcpMemberForm", func() {

@@ -122,6 +122,7 @@ func (s *Service) CreateMetaMcpServer(ctx context.Context, payload *gen.CreateMe
 		ProjectID:           *authCtx.ProjectID,
 		Name:                payload.Name,
 		UserSessionIssuerID: issuerID,
+		Visibility:          string(conv.PtrValOrEmpty(payload.Visibility, VisibilityPrivate)),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create meta mcp server").LogError(ctx, logger)
@@ -246,6 +247,7 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 	updated, err := txRepo.UpdateMetaMCPServer(ctx, repo.UpdateMetaMCPServerParams{
 		Name:                payload.Name,
 		UserSessionIssuerID: issuerID,
+		Visibility:          conv.PtrToPGText((*string)(payload.Visibility)),
 		ID:                  serverID,
 		OrganizationID:      authCtx.ActiveOrganizationID,
 		ProjectID:           *authCtx.ProjectID,

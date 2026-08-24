@@ -302,10 +302,11 @@ func NewResolvedMcpEndpointFromMcpServer(
 // NewResolvedMcpEndpointFromMetaMcpServer materialises a ResolvedMcpEndpoint
 // from a resolved (mcp_endpoint, meta_mcp_server) pair plus the owning
 // project's organisation id. Caller is responsible for first checking
-// metaServer.UserSessionIssuerID.Valid. Meta MCP servers have no visibility
-// column, so IsPublic reflects only whether an issuer gates the endpoint.
-// AudienceURN is bound to the issuer URN, matching the generic-server
-// constructor, so tokens stay portable between backends under one issuer.
+// metaServer.UserSessionIssuerID.Valid. AudienceURN is bound to the issuer URN,
+// matching the generic-server constructor, so tokens stay portable between
+// backends under one issuer. IsPublic is always false: a gateway's visibility
+// vocabulary has no anonymous state, and one with no issuer is already refused
+// by RequireUserSessionIssuer.
 func NewResolvedMcpEndpointFromMetaMcpServer(
 	mcpEndpoint *mcpendpoints_repo.McpEndpoint,
 	metaServer *metamcp_repo.MetaMcpServer,
@@ -317,7 +318,7 @@ func NewResolvedMcpEndpointFromMetaMcpServer(
 		// Stamped by RequireUserSessionIssuer, which every path runs next.
 		CIMDAdmissionModeRaw: pgtype.Text{String: "", Valid: false},
 		CustomDomainID:       mcpEndpoint.CustomDomainID,
-		IsPublic:             !metaServer.UserSessionIssuerID.Valid,
+		IsPublic:             false,
 		McpServerID:          uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		MetaMcpServerID:      uuid.NullUUID{UUID: metaServer.ID, Valid: true},
 		OrganizationID:       organizationID,

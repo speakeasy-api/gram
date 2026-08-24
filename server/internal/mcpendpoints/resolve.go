@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcp_repo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	metamcp_visibility "github.com/speakeasy-api/gram/server/internal/metamcp/visibility"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -23,9 +24,9 @@ import (
 // the mcp_endpoint by (slug, custom domain), then loads whichever backend the
 // endpoint addresses. Exactly one of the returned server and metaServer is
 // non-nil, matching the endpoint table's backend-exclusivity check. Disabled
-// generic servers and missing rows both surface as oops.CodeNotFound to avoid
-// leaking existence to unauthenticated callers. logger should already carry
-// the slug attribute.
+// backends of either kind and missing rows all surface as oops.CodeNotFound to
+// avoid leaking existence to unauthenticated callers. logger should already
+// carry the slug attribute.
 //
 // Callers that want to fall back to a legacy lookup (e.g. /mcp's existing
 // toolsets.mcp_slug path) should check for oops.CodeNotFound and proceed
@@ -48,8 +49,6 @@ func BySlugAndCustomDomain(ctx context.Context, db *pgxpool.Pool, logger *slog.L
 	}
 
 	if endpoint.MetaMcpServerID.Valid {
-		// Meta MCP servers have no visibility column: a live row is
-		// addressable, and access control is the endpoint's issuer gate.
 		metaServer, err := metamcp_repo.New(db).GetMetaMCPServerByIDAndProjectID(ctx, metamcp_repo.GetMetaMCPServerByIDAndProjectIDParams{
 			ID:        endpoint.MetaMcpServerID.UUID,
 			ProjectID: endpoint.ProjectID,
@@ -60,6 +59,11 @@ func BySlugAndCustomDomain(ctx context.Context, db *pgxpool.Pool, logger *slog.L
 		case err != nil:
 			return nil, nil, nil, oops.E(oops.CodeUnexpected, err, "load meta mcp server").LogError(ctx, logger)
 		}
+
+		if metaServer.Visibility == metamcp_visibility.Disabled {
+			return nil, nil, nil, oops.C(oops.CodeNotFound)
+		}
+
 		return &endpoint, nil, &metaServer, nil
 	}
 

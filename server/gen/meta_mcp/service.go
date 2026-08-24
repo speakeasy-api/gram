@@ -88,6 +88,9 @@ type CreateMetaMcpServerPayload struct {
 	// The ID of the user session issuer used to authenticate callers. Omit for no
 	// issuer.
 	UserSessionIssuerID *string
+	// The visibility of the gateway. Defaults to private, which requires callers
+	// to authenticate.
+	Visibility *types.MetaMcpServerVisibility
 }
 
 // DeleteMetaMcpServerPayload is the payload type of the metaMcp service
@@ -175,6 +178,8 @@ type UpdateMetaMcpServerPayload struct {
 	// The ID of the user session issuer used to authenticate callers. Omit for no
 	// issuer.
 	UserSessionIssuerID *string
+	// The visibility of the gateway. Omit to leave it unchanged.
+	Visibility *types.MetaMcpServerVisibility
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

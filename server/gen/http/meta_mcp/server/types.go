@@ -23,6 +23,9 @@ type CreateMetaMcpServerRequestBody struct {
 	// The ID of the user session issuer used to authenticate callers. Omit for no
 	// issuer.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// The visibility of the gateway. Defaults to private, which requires callers
+	// to authenticate.
+	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
 }
 
 // UpdateMetaMcpServerRequestBody is the type of the "metaMcp" service
@@ -35,6 +38,8 @@ type UpdateMetaMcpServerRequestBody struct {
 	// The ID of the user session issuer used to authenticate callers. Omit for no
 	// issuer.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// The visibility of the gateway. Omit to leave it unchanged.
+	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
 }
 
 // AddMetaMcpMemberRequestBody is the type of the "metaMcp" service
@@ -71,6 +76,8 @@ type CreateMetaMcpServerResponseBody struct {
 	// The ID of the user session issuer used to authenticate callers. Null when no
 	// issuer is attached.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// The visibility of the gateway.
+	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
 	// When the meta MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the meta MCP server was last updated
@@ -91,6 +98,8 @@ type GetMetaMcpServerResponseBody struct {
 	// The ID of the user session issuer used to authenticate callers. Null when no
 	// issuer is attached.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// The visibility of the gateway.
+	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
 	// When the meta MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the meta MCP server was last updated
@@ -117,6 +126,8 @@ type UpdateMetaMcpServerResponseBody struct {
 	// The ID of the user session issuer used to authenticate callers. Null when no
 	// issuer is attached.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// The visibility of the gateway.
+	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
 	// When the meta MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the meta MCP server was last updated
@@ -1847,6 +1858,8 @@ type MetaMcpServerResponseBody struct {
 	// The ID of the user session issuer used to authenticate callers. Null when no
 	// issuer is attached.
 	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// The visibility of the gateway.
+	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
 	// When the meta MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the meta MCP server was last updated
@@ -1876,6 +1889,7 @@ func NewCreateMetaMcpServerResponseBody(res *types.MetaMcpServer) *CreateMetaMcp
 		ProjectID:           res.ProjectID,
 		Name:                res.Name,
 		UserSessionIssuerID: res.UserSessionIssuerID,
+		Visibility:          string(res.Visibility),
 		CreatedAt:           res.CreatedAt,
 		UpdatedAt:           res.UpdatedAt,
 	}
@@ -1891,6 +1905,7 @@ func NewGetMetaMcpServerResponseBody(res *types.MetaMcpServer) *GetMetaMcpServer
 		ProjectID:           res.ProjectID,
 		Name:                res.Name,
 		UserSessionIssuerID: res.UserSessionIssuerID,
+		Visibility:          string(res.Visibility),
 		CreatedAt:           res.CreatedAt,
 		UpdatedAt:           res.UpdatedAt,
 	}
@@ -1925,6 +1940,7 @@ func NewUpdateMetaMcpServerResponseBody(res *types.MetaMcpServer) *UpdateMetaMcp
 		ProjectID:           res.ProjectID,
 		Name:                res.Name,
 		UserSessionIssuerID: res.UserSessionIssuerID,
+		Visibility:          string(res.Visibility),
 		CreatedAt:           res.CreatedAt,
 		UpdatedAt:           res.UpdatedAt,
 	}
@@ -3306,6 +3322,10 @@ func NewCreateMetaMcpServerPayload(body *CreateMetaMcpServerRequestBody, session
 		Name:                *body.Name,
 		UserSessionIssuerID: body.UserSessionIssuerID,
 	}
+	if body.Visibility != nil {
+		visibility := types.MetaMcpServerVisibility(*body.Visibility)
+		v.Visibility = &visibility
+	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -3343,6 +3363,10 @@ func NewUpdateMetaMcpServerPayload(body *UpdateMetaMcpServerRequestBody, session
 		ID:                  *body.ID,
 		Name:                *body.Name,
 		UserSessionIssuerID: body.UserSessionIssuerID,
+	}
+	if body.Visibility != nil {
+		visibility := types.MetaMcpServerVisibility(*body.Visibility)
+		v.Visibility = &visibility
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -3435,6 +3459,11 @@ func ValidateCreateMetaMcpServerRequestBody(body *CreateMetaMcpServerRequestBody
 	if body.UserSessionIssuerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
 	}
+	if body.Visibility != nil {
+		if !(*body.Visibility == "disabled" || *body.Visibility == "private") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", *body.Visibility, []any{"disabled", "private"}))
+		}
+	}
 	return
 }
 
@@ -3462,6 +3491,11 @@ func ValidateUpdateMetaMcpServerRequestBody(body *UpdateMetaMcpServerRequestBody
 	}
 	if body.UserSessionIssuerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
+	}
+	if body.Visibility != nil {
+		if !(*body.Visibility == "disabled" || *body.Visibility == "private") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", *body.Visibility, []any{"disabled", "private"}))
+		}
 	}
 	return
 }
