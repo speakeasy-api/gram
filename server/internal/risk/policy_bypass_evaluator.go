@@ -5,7 +5,6 @@ import (
 	"context"
 	"log/slog"
 	"maps"
-	"net/url"
 	"slices"
 	"strings"
 
@@ -177,12 +176,16 @@ func canonicalizeRiskPolicyBypassGrants(grants []authz.Grant) []authz.Grant {
 	normalized := slices.Clone(grants)
 	for i := range normalized {
 		selector := normalized[i].Selector
-		if normalized[i].Scope != authz.ScopeRiskPolicyBypass ||
-			selector[authz.SelectorKeyServerURL] == "" ||
-			selector[authz.SelectorKeyServerIdentity] == "" {
+		if normalized[i].Scope != authz.ScopeRiskPolicyBypass || selector[authz.SelectorKeyServerURL] == "" {
 			continue
 		}
 		normalized[i].Selector = maps.Clone(selector)
+		if inventoryURL, ok := shadowmcp.CanonicalizeInventoryURL(selector[authz.SelectorKeyServerURL]); ok {
+			normalized[i].Selector[authz.SelectorKeyServerURL] = inventoryURL.CanonicalURL
+		}
+		// Legacy access-request approvals paired an identity label with the URL.
+		// A resolved canonical URL is the authorization target, not a second
+		// constraint. Malformed legacy URLs remain URL-only and non-matching.
 		delete(normalized[i].Selector, authz.SelectorKeyServerIdentity)
 	}
 	return normalized
@@ -227,13 +230,9 @@ func ShadowMCPPolicyBypassTarget(evidence shadowmcp.AccessEvidence, toolName str
 }
 
 func normalizedShadowMCPServerURL(raw string) string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
+	inventoryURL, ok := shadowmcp.CanonicalizeInventoryURL(raw)
+	if !ok {
 		return ""
 	}
-	parsed, err := url.Parse(raw)
-	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
-		return ""
-	}
-	return parsed.String()
+	return inventoryURL.CanonicalURL
 }

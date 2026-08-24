@@ -19,10 +19,12 @@ func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 func TestAuthRoundTripperRetainsPriorOAuthChallenge(t *testing.T) {
 	t.Parallel()
 
+	challengedHeader := make(http.Header)
+	challengedHeader.Set("WWW-Authenticate", "Bearer resource_metadata=\"https://mcp.example.test/.well-known/oauth-protected-resource\"")
 	responses := []*http.Response{
 		{
 			StatusCode: http.StatusUnauthorized,
-			Header:     http.Header{"WWW-Authenticate": []string{"Bearer resource_metadata=\"https://mcp.example.test/.well-known/oauth-protected-resource\""}},
+			Header:     challengedHeader,
 			Body:       io.NopCloser(strings.NewReader("")),
 		},
 		{
