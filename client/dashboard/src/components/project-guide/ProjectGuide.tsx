@@ -63,8 +63,25 @@ type McpGuideOperations = ReturnType<typeof useMcpGuideOperations>;
 type SecretGuideOperations = ReturnType<typeof useSecretGuideOperations>;
 
 export function ProjectGuide(): JSX.Element {
+  const { orgSlug, projectSlug } = useSlugs();
+
+  return (
+    <ProjectGuideContent
+      key={`${orgSlug ?? ""}:${projectSlug ?? ""}`}
+      orgSlug={orgSlug}
+      projectSlug={projectSlug}
+    />
+  );
+}
+
+function ProjectGuideContent({
+  orgSlug,
+  projectSlug,
+}: {
+  orgSlug: string | undefined;
+  projectSlug: string | undefined;
+}): JSX.Element {
   useHideInsightsDock();
-  const { projectSlug } = useSlugs();
   const routes = useRoutes();
   const navigate = useNavigate();
   const { statusByJourney, isPending: progressPending } =
@@ -150,7 +167,7 @@ export function ProjectGuide(): JSX.Element {
   }, [displayState, send, snapshot.context.elapsedListeningSeconds]);
 
   const openJourney = (journey: JourneyMeta): void => {
-    if (projectSlug) markProjectGuideStarted(projectSlug);
+    if (orgSlug && projectSlug) markProjectGuideStarted(orgSlug, projectSlug);
     send({
       type: "OPEN",
       path: journey.id,

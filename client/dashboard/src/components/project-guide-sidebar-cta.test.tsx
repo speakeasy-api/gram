@@ -7,7 +7,7 @@ vi.mock("@/components/project-guide/projectGuideStores", () => ({
   useProjectGuideStarted: () => started.current,
 }));
 vi.mock("@/contexts/Sdk", () => ({
-  useSlugs: () => ({ projectSlug: "project" }),
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 vi.mock("@/routes", () => ({
   useRoutes: () => ({ guide: { href: () => "/org/projects/project/guide" } }),

@@ -36,6 +36,9 @@ const statusByJourney = vi.hoisted(
 );
 const progressPending = vi.hoisted(() => ({ current: false }));
 const navigate = vi.hoisted(() => vi.fn());
+const slugs = vi.hoisted(() => ({
+  current: { orgSlug: "org", projectSlug: "project-guide-test" },
+}));
 const mcpOperations = vi.hoisted(() => ({
   current: {} as Record<string, unknown>,
 }));
@@ -53,7 +56,7 @@ vi.mock("./projectGuideStores", () => ({
   markProjectGuideStarted: vi.fn(),
 }));
 vi.mock("@/contexts/Sdk", () => ({
-  useSlugs: () => ({ projectSlug: "project-guide-test" }),
+  useSlugs: () => slugs.current,
 }));
 vi.mock("@/routes", () => ({
   useRoutes: () => ({
@@ -192,6 +195,7 @@ afterEach(() => {
     "third-party-mcp": "not-started",
     "secret-block": "not-started",
   };
+  slugs.current = { orgSlug: "org", projectSlug: "project-guide-test" };
   resetMcpOperations();
   resetSecretOperations();
 });
@@ -200,6 +204,29 @@ resetMcpOperations();
 resetSecretOperations();
 
 describe("ProjectGuide", () => {
+  it("resets in-memory state when the project changes", () => {
+    const { rerender } = render(<ProjectGuide />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
+    );
+    expect(
+      screen.getByRole("heading", { name: "Govern a third-party MCP" }),
+    ).toBeTruthy();
+
+    slugs.current = { orgSlug: "org", projectSlug: "another-project" };
+    rerender(<ProjectGuide />);
+
+    expect(
+      screen.getByRole("heading", {
+        name: "Put your agent traffic under control",
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("heading", { name: "Govern a third-party MCP" }),
+    ).toBeNull();
+  });
+
   it("renders the approved opening with both selectable journeys", () => {
     render(<ProjectGuide />);
 
