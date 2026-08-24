@@ -68,6 +68,8 @@ type DiagnosticsService struct {
 	drilldown       DrilldownTelemetryReader
 	references      *subjectReferenceCodec
 	sensitiveBudget OperationBudget
+	volume          DrilldownVolumeBudget
+	auditor         DrilldownAuditor
 	sessions        ProjectOverviewSessionReader
 	sessionCapture  FeatureChecker
 	reader          Reader
@@ -101,8 +103,8 @@ func NewDiagnosticsService(db *pgxpool.Pool, telemetry DiagnosticsTelemetryReade
 // is required: without it a trace or subject handle could not be bound to the
 // caller's organization and session, and the tools stay unavailable rather than
 // returning unbound identifiers.
-func (s *DiagnosticsService) WithDrilldown(drilldown DrilldownTelemetryReader, referenceKeyMaterial string, sensitiveBudget OperationBudget) *DiagnosticsService {
-	if s == nil || drilldown == nil || !sensitiveBudget.valid() {
+func (s *DiagnosticsService) WithDrilldown(drilldown DrilldownTelemetryReader, referenceKeyMaterial string, sensitiveBudget OperationBudget, volume DrilldownVolumeBudget, auditor DrilldownAuditor) *DiagnosticsService {
+	if s == nil || drilldown == nil || !sensitiveBudget.valid() || !volume.valid() || auditor == nil {
 		return s
 	}
 	codec, err := newSubjectReferenceCodec(referenceKeyMaterial)
@@ -112,12 +114,14 @@ func (s *DiagnosticsService) WithDrilldown(drilldown DrilldownTelemetryReader, r
 	s.drilldown = drilldown
 	s.references = codec
 	s.sensitiveBudget = sensitiveBudget
+	s.volume = volume
+	s.auditor = auditor
 	return s
 }
 
 // drilldownValid reports whether the bounded drill-down tools are servable.
 func (s *DiagnosticsService) drilldownValid() bool {
-	return s.valid() && s.drilldown != nil && s.references != nil && s.sensitiveBudget.valid()
+	return s.valid() && s.drilldown != nil && s.references != nil && s.sensitiveBudget.valid() && s.volume.valid() && s.auditor != nil
 }
 
 func (s *DiagnosticsService) valid() bool {

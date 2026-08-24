@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 )
@@ -33,19 +34,32 @@ const (
 	DocsQueriesPerConnectionPerMinute   = 10
 	DocsQueriesPerOrganizationPerMinute = 100
 
-	// DiagnosticQueriesPer* bound the aggregate diagnostic reads. They are
-	// generous because an administrator investigating an incident legitimately
-	// makes many of them in a short burst, and none of them reach personal
-	// data.
+	// DiagnosticQueriesPer* bound the summary reads: the project overview and
+	// the per-MCP diagnosis. They are generous because an administrator
+	// investigating an incident legitimately makes many of them in a short
+	// burst, and each one is a bounded aggregate that names no subject.
 	DiagnosticQueriesPerConnectionPerMinute   = 60
 	DiagnosticQueriesPerOrganizationPerMinute = 600
 
-	// SensitiveDiagnosticQueriesPer* bound the reads that reach personal data.
-	// Lower than the ordinary allowance, and metered separately so the two
-	// cannot be traded against each other.
+	// SensitiveDiagnosticQueriesPer* bound the drill-downs. They are metered
+	// separately and lower than the summaries because they reach row-level
+	// occurrences and, in one case, an individual: a caller must not be able to
+	// fund them by spending the summary allowance.
 	SensitiveDiagnosticQueriesPerConnectionPerMinute   = 30
 	SensitiveDiagnosticQueriesPerOrganizationPerMinute = 300
+
+	// DrilldownRowsPerConnectionPerWindow and
+	// DrilldownMetricQueriesPerConnectionPerWindow are the second cap the
+	// drill-downs carry, over DrilldownVolumeWindow. A per-minute call budget
+	// alone does not bound how much a caller can accumulate: paging steadily
+	// under the call rate still walks an entire window's occurrences. These
+	// meter the volume rather than the calls.
+	DrilldownRowsPerConnectionPerWindow          = 1000
+	DrilldownMetricQueriesPerConnectionPerWindow = 20
 )
+
+// DrilldownVolumeWindow is the interval the drill-down volume caps refill over.
+const DrilldownVolumeWindow = 10 * time.Minute
 
 var (
 	ErrOperationRateLimited       = errors.New("platform mcp operation rate limited")
@@ -57,6 +71,10 @@ var (
 // backing-store failure without depending on Redis.
 type Limiter interface {
 	Allow(ctx context.Context, key string) (ratelimit.Result, error)
+	// AllowN charges n units at once. A volume cap meters rows or spans rather
+	// than calls, and charging them one at a time would let a page that cannot
+	// be afforded in full be paid for halfway.
+	AllowN(ctx context.Context, key string, n int) (ratelimit.Result, error)
 }
 
 // OperationBudget applies independently configured connection and organization
@@ -126,12 +144,64 @@ type OperationBudgets struct {
 	// queries over Gram-owned telemetry, so the cost being metered is the
 	// ClickHouse scan, not an external egress.
 	Diagnostics OperationBudget
-	// SensitiveDiagnostics meters the one drill-down that reaches personal
-	// data. It is separate so exhausting it is not possible by spending the
-	// ordinary diagnostic allowance, and so it can be tightened on its own.
+	// SensitiveDiagnostics meters the bounded drill-downs. It is separate from
+	// Diagnostics so exhausting it is not possible by spending the summary
+	// allowance, and so it can be tightened on its own.
 	SensitiveDiagnostics OperationBudget
+	// DrilldownVolume meters what the drill-downs return rather than how often
+	// they are called: rows and spans against one bucket, metric queries
+	// against another, both per connection over DrilldownVolumeWindow.
+	DrilldownVolume DrilldownVolumeBudget
+}
+
+// DrilldownVolumeBudget is the second cap on the drill-down tools. It is keyed
+// on the connection alone: it exists to stop one caller from walking a window
+// row by row, which an organization-wide bucket would not catch until every
+// other connection had already been starved.
+type DrilldownVolumeBudget struct {
+	Rows          Limiter
+	MetricQueries Limiter
+}
+
+func (b DrilldownVolumeBudget) valid() bool {
+	return b.Rows != nil && b.MetricQueries != nil
+}
+
+// AllowRows charges n rows or spans. A connection-less principal is not
+// metered here: it holds no connection key to charge, and the per-call
+// organization budget already bounds it.
+func (b DrilldownVolumeBudget) AllowRows(ctx context.Context, principal Principal, n int) error {
+	return b.allow(ctx, principal, b.Rows, n, "rows")
+}
+
+// AllowMetricQuery charges one metric query.
+func (b DrilldownVolumeBudget) AllowMetricQuery(ctx context.Context, principal Principal) error {
+	return b.allow(ctx, principal, b.MetricQueries, 1, "metric queries")
+}
+
+func (b DrilldownVolumeBudget) allow(ctx context.Context, principal Principal, limiter Limiter, n int, what string) error {
+	if !b.valid() || principal.OrganizationID == "" {
+		return ErrOperationBudgetUnavailable
+	}
+	if n <= 0 {
+		return nil
+	}
+	if !principal.HasConnection() {
+		return nil
+	}
+	if principal.ConnectionID == "" {
+		return ErrOperationBudgetUnavailable
+	}
+	result, err := limiter.AllowN(ctx, principal.ConnectionID, n)
+	if err != nil {
+		return fmt.Errorf("limit platform mcp drilldown %s: %w: %w", what, ErrOperationBudgetUnavailable, err)
+	}
+	if !result.Allowed {
+		return ErrOperationRateLimited
+	}
+	return nil
 }
 
 func (b OperationBudgets) Valid() bool {
-	return b.Catalog.valid() && b.Registration.valid() && b.Handoff.valid() && b.SetupStart.valid() && b.Repair.valid() && b.Docs.valid() && b.Skills.valid() && b.Diagnostics.valid() && b.SensitiveDiagnostics.valid()
+	return b.Catalog.valid() && b.Registration.valid() && b.Handoff.valid() && b.SetupStart.valid() && b.Repair.valid() && b.Docs.valid() && b.Skills.valid() && b.Diagnostics.valid() && b.SensitiveDiagnostics.valid() && b.DrilldownVolume.valid()
 }

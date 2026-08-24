@@ -1,6 +1,9 @@
 package platformmcp
 
 import (
+	"encoding/json"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -264,13 +267,80 @@ func TestFailureRate_RoundsServerSide(t *testing.T) {
 func TestCursorPosition_CarriesTheCompositeKey(t *testing.T) {
 	t.Parallel()
 
-	position, traceID, err := parseCursorPosition(formatCursorPosition(1_700_000_000_000_000_000, "abc123"))
+	position, traceID, traversed, err := parseCursorPosition(formatCursorPosition(1_700_000_000_000_000_000, "abc123", 40))
 	require.NoError(t, err)
 	require.Equal(t, int64(1_700_000_000_000_000_000), position)
 	require.Equal(t, "abc123", traceID)
+	require.Equal(t, 40, traversed)
 
-	for _, value := range []string{"", "1700000000", "t:", "t:abc", "t:-1:x", "t:0:x", "t:1700000000"} {
-		_, _, err := parseCursorPosition(value)
+	for _, value := range []string{"", "1700000000", "t:", "t:abc", "t:-1:0:x", "t:0:0:x", "t:1700000000", "t:1700000000:x", "t:1700000000:abc:x", "t:1700000000:-1:x"} {
+		_, _, _, err := parseCursorPosition(value)
 		require.ErrorIs(t, err, ErrSubjectReferenceNotFound, value)
 	}
+}
+
+// TestCursorPosition_RefusesATraversalPastTheCap pins that the traversal count
+// a cursor carries cannot exceed the cap. The count is sealed inside the token,
+// but a decode that accepted an over-large value would let one forged or
+// replayed cursor reopen a traversal the cap had already closed.
+func TestCursorPosition_RefusesATraversalPastTheCap(t *testing.T) {
+	t.Parallel()
+
+	_, _, _, err := parseCursorPosition(formatCursorPosition(1_700_000_000_000_000_000, "abc123", maxTraceTraversal+1))
+	require.ErrorIs(t, err, ErrSubjectReferenceNotFound)
+}
+
+// TestFitRows_TrimsToTheResponseCap pins that an oversized projection is cut to
+// fit rather than returned whole. The rows arrive ordered by what a caller
+// should see first, so the trim costs it the least useful ones.
+func TestFitRows_TrimsToTheResponseCap(t *testing.T) {
+	t.Parallel()
+
+	traces := make([]MCPTraceReference, 0, 4000)
+	for i := range 4000 {
+		traces = append(traces, MCPTraceReference{
+			Reference:  strings.Repeat("r", 128) + strconv.Itoa(i),
+			OccurredAt: "2026-08-21T12:00:00Z",
+			ToolName:   "search",
+			Outcome:    "server_error",
+			Client:     "claude-code",
+		})
+	}
+	output := QueryMCPTracesOutput{ProjectID: "project-1", MCPID: "mcp-1", Traces: traces}
+
+	fitted, dropped, err := fitRows(output.Traces, func(rows []MCPTraceReference) any {
+		candidate := output
+		candidate.Traces = rows
+		return candidate
+	})
+	require.NoError(t, err)
+	require.True(t, dropped)
+	require.Less(t, len(fitted), len(traces))
+
+	candidate := output
+	candidate.Traces = fitted
+	encoded, err := json.Marshal(candidate)
+	require.NoError(t, err)
+	require.LessOrEqual(t, len(encoded), maxDrilldownResponseBytes)
+}
+
+// TestFitRows_LeavesAFittingResponseAlone pins that the cap never trims a
+// result that already fits: a caller must not silently lose rows to a
+// measurement that was not needed.
+func TestFitRows_LeavesAFittingResponseAlone(t *testing.T) {
+	t.Parallel()
+
+	output := QueryMCPEventsOutput{
+		ProjectID: "project-1",
+		MCPID:     "mcp-1",
+		Tools:     []MCPToolEvents{{ToolName: "search", Outcomes: MCPOutcomeSummary{Total: 3, Success: 3}}},
+	}
+	fitted, dropped, err := fitRows(output.Tools, func(rows []MCPToolEvents) any {
+		candidate := output
+		candidate.Tools = rows
+		return candidate
+	})
+	require.NoError(t, err)
+	require.False(t, dropped)
+	require.Len(t, fitted, 1)
 }

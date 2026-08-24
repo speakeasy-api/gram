@@ -526,6 +526,10 @@ func (allowOperationLimiter) Allow(context.Context, string) (ratelimit.Result, e
 	return ratelimit.Result{Allowed: true}, nil
 }
 
+func (allowOperationLimiter) AllowN(context.Context, string, int) (ratelimit.Result, error) {
+	return ratelimit.Result{Allowed: true, Remaining: 1, RetryAfter: 0}, nil
+}
+
 func allowBudget() OperationBudget {
 	return OperationBudget{Connection: allowOperationLimiter{}, Organization: allowOperationLimiter{}}
 }

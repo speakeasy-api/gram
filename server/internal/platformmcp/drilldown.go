@@ -3,6 +3,7 @@ package platformmcp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strconv"
@@ -15,6 +16,8 @@ import (
 const (
 	SensitiveDiagnosticsConnectionLimitName   = "platform-mcp-sensitive-diagnostics-connection"
 	SensitiveDiagnosticsOrganizationLimitName = "platform-mcp-sensitive-diagnostics-organization"
+	DrilldownRowsLimitName                    = "platform-mcp-drilldown-rows"
+	DrilldownMetricQueriesLimitName           = "platform-mcp-drilldown-metric-queries"
 )
 
 const (
@@ -22,7 +25,23 @@ const (
 	maxDrilldownTools = 25
 	// maxTraceReferences bounds one page of correlation references.
 	maxTraceReferences = 20
+	// maxTraceTraversal bounds how many occurrences one investigation may page
+	// through in total. A page cap alone bounds a single response; without a
+	// traversal cap a caller can still walk an entire window one page at a
+	// time, which is the export this surface exists not to be.
+	maxTraceTraversal = 300
+	// maxDrilldownResponseBytes bounds a serialized drill-down result. Rows are
+	// dropped until the projection fits rather than the response being refused,
+	// so a caller always receives the leading rows it was ordered by.
+	maxDrilldownResponseBytes = 256 * 1024
 )
+
+// DrilldownAuditor records the one drill-down that answers about a person.
+// It is an interface so the diagnostics service depends on the recording, not
+// on the audit logger's transaction handling.
+type DrilldownAuditor interface {
+	RecordUserMCPStatusRead(ctx context.Context, principal Principal, projectID, mcpID, maskedIdentity, window string) error
+}
 
 // DrilldownTelemetryReader is the additional telemetry the bounded drill-down
 // tools read. It stays separate from DiagnosticsTelemetryReader so the
@@ -138,8 +157,13 @@ type QueryMCPEventsOutput struct {
 }
 
 func (s *DiagnosticsService) QueryMCPEvents(ctx context.Context, principal Principal, input QueryMCPEventsInput) (QueryMCPEventsOutput, error) {
-	target, err := s.resolveDrilldown(ctx, principal, input.ProjectID, input.MCPID, input.Window, s.budget, drilldownWindowSpec)
+	target, err := s.resolveDrilldown(ctx, principal, input.ProjectID, input.MCPID, input.Window, s.sensitiveBudget, drilldownWindowSpec)
 	if err != nil {
+		return QueryMCPEventsOutput{}, err
+	}
+	// Charged for the page it may return, before the read rather than after:
+	// a caller that cannot afford the rows should not spend the scan either.
+	if err := s.volume.AllowRows(ctx, principal, maxDrilldownTools); err != nil {
 		return QueryMCPEventsOutput{}, err
 	}
 	rows, err := s.drilldown.GetMCPToolOutcomeBreakdown(ctx, telemetryrepo.GetMCPToolOutcomeBreakdownParams{
@@ -153,13 +177,24 @@ func (s *DiagnosticsService) QueryMCPEvents(ctx context.Context, principal Princ
 	if err != nil {
 		return QueryMCPEventsOutput{}, err
 	}
-	return QueryMCPEventsOutput{
+	output := QueryMCPEventsOutput{
 		ProjectID: input.ProjectID,
 		MCPID:     input.MCPID,
 		Envelope:  envelope,
 		Tools:     tools,
 		Truncated: truncated,
-	}, nil
+	}
+	fitted, dropped, err := fitRows(output.Tools, func(tools []MCPToolEvents) any {
+		candidate := output
+		candidate.Tools = tools
+		return candidate
+	})
+	if err != nil {
+		return QueryMCPEventsOutput{}, err
+	}
+	output.Tools = fitted
+	output.Truncated = output.Truncated || dropped
+	return output, nil
 }
 
 // toolEvents folds the breakdown to one row per tool, ordered by failures then
@@ -223,12 +258,18 @@ func (s *DiagnosticsService) QueryMCPTraces(ctx context.Context, principal Princ
 	if input.Outcome != "" && !validOutcomeClass(input.Outcome) {
 		return QueryMCPTracesOutput{}, fmt.Errorf("outcome must be one of success, unauthorized, client_error, server_error, failed, unknown")
 	}
-	target, err := s.resolveDrilldown(ctx, principal, input.ProjectID, input.MCPID, input.Window, s.budget, drilldownWindowSpec)
+	target, err := s.resolveDrilldown(ctx, principal, input.ProjectID, input.MCPID, input.Window, s.sensitiveBudget, drilldownWindowSpec)
 	if err != nil {
 		return QueryMCPTracesOutput{}, err
 	}
+	if err := s.volume.AllowRows(ctx, principal, maxTraceReferences); err != nil {
+		return QueryMCPTracesOutput{}, err
+	}
 
-	before, beforeTraceID, err := s.decodeTraceCursor(input.Cursor, principal, target.now)
+	// The cursor resolves only against the query that minted it, so a position
+	// cannot be replayed on a different MCP, outcome class, or window.
+	scope := traceCursorScope(target, input.Outcome)
+	before, beforeTraceID, traversed, err := s.decodeTraceCursor(input.Cursor, principal, scope, target.now)
 	if err != nil {
 		return QueryMCPTracesOutput{}, err
 	}
@@ -257,6 +298,12 @@ func (s *DiagnosticsService) QueryMCPTraces(ctx context.Context, principal Princ
 	if more {
 		rows = rows[:maxTraceReferences]
 	}
+	// Trimmed to what the traversal budget still allows, so the cap bounds the
+	// occurrences actually handed over rather than only the number of pages.
+	if remaining := maxTraceTraversal - traversed; remaining < len(rows) {
+		rows = rows[:max(remaining, 0)]
+		more = false
+	}
 	traces := make([]MCPTraceReference, 0, len(rows))
 	for _, row := range rows {
 		reference, err := s.references.Encode(principal, subjectKindTrace, row.TraceID, target.now)
@@ -278,15 +325,42 @@ func (s *DiagnosticsService) QueryMCPTraces(ctx context.Context, principal Princ
 		Envelope:  envelope,
 		Traces:    traces,
 	}
-	if more && len(rows) > 0 {
+	fitted, dropped, err := fitRows(output.Traces, func(traces []MCPTraceReference) any {
+		candidate := output
+		candidate.Traces = traces
+		return candidate
+	})
+	if err != nil {
+		return QueryMCPTracesOutput{}, err
+	}
+	output.Traces = fitted
+	// A page cut to fit must not advertise a cursor past the rows it dropped,
+	// or the next page would resume beyond occurrences the caller never saw.
+	if dropped {
+		more = false
+		rows = rows[:len(fitted)]
+	}
+	traversed += len(rows)
+	if more && len(rows) > 0 && traversed < maxTraceTraversal {
 		last := rows[len(rows)-1]
-		cursor, err := s.references.Encode(principal, subjectKindTrace, formatCursorPosition(last.OccurredAt, last.TraceID), target.now)
+		cursor, err := s.references.EncodeScoped(principal, subjectKindCursor, scope, formatCursorPosition(last.OccurredAt, last.TraceID, traversed), target.now)
 		if err != nil {
 			return QueryMCPTracesOutput{}, fmt.Errorf("mint trace cursor: %w", err)
 		}
 		output.NextCursor = cursor
 	}
 	return output, nil
+}
+
+// traceCursorScope is the normalized query a trace cursor belongs to: the MCP,
+// the outcome class, and the window it was read over.
+func traceCursorScope(target drilldownTarget, outcome string) string {
+	return queryScope(
+		target.projectID,
+		target.mcpServerID,
+		outcome,
+		string(target.window.Window),
+	)
 }
 
 // summaryIdentityParams scopes the summary read to exactly one identity filter.
@@ -339,8 +413,13 @@ type QueryMCPMetricsOutput struct {
 }
 
 func (s *DiagnosticsService) QueryMCPMetrics(ctx context.Context, principal Principal, input QueryMCPMetricsInput) (QueryMCPMetricsOutput, error) {
-	target, err := s.resolveDrilldown(ctx, principal, input.ProjectID, input.MCPID, input.Window, s.budget, metricsWindowSpec)
+	target, err := s.resolveDrilldown(ctx, principal, input.ProjectID, input.MCPID, input.Window, s.sensitiveBudget, metricsWindowSpec)
 	if err != nil {
+		return QueryMCPMetricsOutput{}, err
+	}
+	// Metric queries meter on their own count rather than on rows: one call
+	// returns a handful of numbers but scans the whole window.
+	if err := s.volume.AllowMetricQuery(ctx, principal); err != nil {
 		return QueryMCPMetricsOutput{}, err
 	}
 	toolsetSlug := target.hostedToolsetSlug()
@@ -470,6 +549,14 @@ func (s *DiagnosticsService) GetUserMCPStatus(ctx context.Context, principal Pri
 		Activity:       SubjectStateNoObservations,
 	}
 
+	// Recorded before the answer is composed, and a failure to record refuses
+	// the call. An exact user-MCP diagnosis that cannot be audited is one that
+	// leaves no trace of who asked about whom, which is the whole reason this
+	// read is audited separately from the aggregate ones.
+	if err := s.auditor.RecordUserMCPStatusRead(ctx, principal, input.ProjectID, input.MCPID, output.MaskedIdentity, string(target.window.Window)); err != nil {
+		return GetUserMCPStatusOutput{}, fmt.Errorf("record user mcp status read: %w", err)
+	}
+
 	toolsetSlug := target.hostedToolsetSlug()
 	// A remote, tunneled, or unproxied server carries no toolset slug, and the
 	// read below narrows by nothing else. Answering anyway would report the
@@ -548,19 +635,19 @@ func maskToken(value string) string {
 	return string(runes[0]) + strings.Repeat("*", min(len(runes)-1, 3))
 }
 
-func (s *DiagnosticsService) decodeTraceCursor(cursor string, principal Principal, now time.Time) (int64, string, error) {
+func (s *DiagnosticsService) decodeTraceCursor(cursor string, principal Principal, scope string, now time.Time) (int64, string, int, error) {
 	if cursor == "" {
-		return 0, "", nil
+		return 0, "", 0, nil
 	}
-	value, err := s.references.Decode(cursor, principal, subjectKindTrace, now)
+	value, err := s.references.DecodeScoped(cursor, principal, subjectKindCursor, scope, now)
 	if err != nil {
-		return 0, "", ErrSubjectReferenceNotFound
+		return 0, "", 0, ErrSubjectReferenceNotFound
 	}
-	position, traceID, err := parseCursorPosition(value)
+	position, traceID, traversed, err := parseCursorPosition(value)
 	if err != nil {
-		return 0, "", ErrSubjectReferenceNotFound
+		return 0, "", 0, ErrSubjectReferenceNotFound
 	}
-	return position, traceID, nil
+	return position, traceID, traversed, nil
 }
 
 // sortToolEvents puts the tool a caller should look at first at the top:
@@ -580,29 +667,80 @@ func sortToolEvents(events []MCPToolEvents) {
 	})
 }
 
-// A trace cursor carries only a position, minted through the same bound,
-// expiring reference codec as everything else a caller holds between calls.
-func formatCursorPosition(unixNano int64, traceID string) string {
-	return "t:" + strconv.FormatInt(unixNano, 10) + ":" + traceID
+// A trace cursor carries a position and how far the traversal has already
+// reached, minted through the same bound, expiring reference codec as
+// everything else a caller holds between calls. The count travels inside the
+// sealed token rather than beside it, so a caller cannot reset its own
+// traversal budget by editing what it was handed.
+func formatCursorPosition(unixNano int64, traceID string, traversed int) string {
+	return "t:" + strconv.FormatInt(unixNano, 10) + ":" + strconv.Itoa(traversed) + ":" + traceID
 }
 
-// parseCursorPosition recovers the composite page key. Both halves are
-// required: the repo orders by (event_time_ns, trace_id), and a cursor carrying
-// only the timestamp would skip every trace sharing the boundary nanosecond.
-func parseCursorPosition(value string) (int64, string, error) {
+// parseCursorPosition recovers the composite page key and the traversal count.
+// Both halves of the key are required: the repo orders by (event_time_ns,
+// trace_id), and a cursor carrying only the timestamp would skip every trace
+// sharing the boundary nanosecond.
+func parseCursorPosition(value string) (int64, string, int, error) {
 	rest, ok := strings.CutPrefix(value, "t:")
 	if !ok {
-		return 0, "", ErrSubjectReferenceNotFound
+		return 0, "", 0, ErrSubjectReferenceNotFound
 	}
-	timestamp, traceID, ok := strings.Cut(rest, ":")
+	timestamp, rest, ok := strings.Cut(rest, ":")
+	if !ok {
+		return 0, "", 0, ErrSubjectReferenceNotFound
+	}
+	count, traceID, ok := strings.Cut(rest, ":")
 	if !ok || traceID == "" {
-		return 0, "", ErrSubjectReferenceNotFound
+		return 0, "", 0, ErrSubjectReferenceNotFound
 	}
 	position, err := strconv.ParseInt(timestamp, 10, 64)
 	if err != nil || position <= 0 {
-		return 0, "", ErrSubjectReferenceNotFound
+		return 0, "", 0, ErrSubjectReferenceNotFound
 	}
-	return position, traceID, nil
+	traversed, err := strconv.Atoi(count)
+	if err != nil || traversed < 0 || traversed > maxTraceTraversal {
+		return 0, "", 0, ErrSubjectReferenceNotFound
+	}
+	return position, traceID, traversed, nil
+}
+
+// fitRows drops trailing rows until the serialized result fits the response
+// cap, and reports whether it had to. The rows are already ordered by what a
+// caller should see first, so trimming the tail costs it the least useful rows.
+//
+// build re-forms the whole result around a candidate row slice, because what is
+// measured has to be the response as it will actually be serialized rather than
+// the rows alone.
+func fitRows[R any](rows []R, build func([]R) any) ([]R, bool, error) {
+	fits, err := responseFits(build(rows))
+	if err != nil {
+		return nil, false, err
+	}
+	if fits {
+		return rows, false, nil
+	}
+	// Each row contributes at least one byte, so halving converges. Measuring
+	// rather than estimating keeps the cap true for any row shape.
+	fitted := rows
+	for len(fitted) > 0 {
+		fitted = fitted[:len(fitted)/2]
+		fits, err := responseFits(build(fitted))
+		if err != nil {
+			return nil, false, err
+		}
+		if fits {
+			return fitted, true, nil
+		}
+	}
+	return fitted, true, nil
+}
+
+func responseFits(output any) (bool, error) {
+	encoded, err := json.Marshal(output)
+	if err != nil {
+		return false, fmt.Errorf("measure drilldown response: %w", err)
+	}
+	return len(encoded) <= maxDrilldownResponseBytes, nil
 }
 
 func validOutcomeClass(outcome string) bool {

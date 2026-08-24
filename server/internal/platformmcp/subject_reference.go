@@ -24,6 +24,10 @@ const SubjectReferenceTTL = 10 * time.Minute
 const (
 	subjectKindUser  = "user"
 	subjectKindTrace = "trace"
+	// subjectKindCursor is separate from subjectKindTrace so a correlation
+	// handle a caller was given to quote cannot be presented back as a page
+	// position, and a cursor cannot be quoted as an occurrence.
+	subjectKindCursor = "cursor"
 )
 
 // Identity kinds carried inside a user reference. Telemetry records a person
@@ -71,8 +75,14 @@ type subjectReference struct {
 	// Binding ties the reference to the caller's session, exactly as a
 	// pagination cursor is bound. A reference handed to another connection, or
 	// surviving a reauthorization, stops resolving.
-	Binding   string `json:"binding"`
-	Kind      string `json:"kind"`
+	Binding string `json:"binding"`
+	Kind    string `json:"kind"`
+	// Scope is the normalized query a reference belongs to, empty for
+	// references that belong to no particular query. A cursor carries one so it
+	// resumes only the query that minted it: the same position replayed against
+	// a different MCP, outcome class, or window is a different page of a
+	// different question.
+	Scope     string `json:"scope"`
 	Value     string `json:"value"`
 	ExpiresAt int64  `json:"expires_at"`
 }
@@ -110,11 +120,25 @@ func newSubjectReferenceCodec(keyMaterial string) (*subjectReferenceCodec, error
 // the AEAD's associated data. The same facts are inside the ciphertext, but
 // carrying them here means a token minted for another organization, session, or
 // kind fails to open at all rather than being decrypted and then rejected.
-func referenceAAD(organizationID, binding, kind string) []byte {
-	return []byte("platform-mcp-subject-reference|" + organizationID + "|" + binding + "|" + kind)
+func referenceAAD(organizationID, binding, kind, scope string) []byte {
+	return []byte("platform-mcp-subject-reference|" + organizationID + "|" + binding + "|" + kind + "|" + scope)
+}
+
+// queryScope is the normalized query a cursor is bound to. It is hashed rather
+// than carried plainly so the scope adds no readable detail to a token whose
+// whole purpose is to be opaque.
+func queryScope(parts ...string) string {
+	sum := sha256.Sum256([]byte(strings.Join(parts, "|")))
+	return base64.RawURLEncoding.EncodeToString(sum[:16])
 }
 
 func (c *subjectReferenceCodec) Encode(principal Principal, kind, value string, now time.Time) (string, error) {
+	return c.EncodeScoped(principal, kind, "", value, now)
+}
+
+// EncodeScoped mints a reference bound to one normalized query as well as to
+// the organization, session, and kind.
+func (c *subjectReferenceCodec) EncodeScoped(principal Principal, kind, scope, value string, now time.Time) (string, error) {
 	binding := principalCursorBinding(principal)
 	if c == nil || c.aead == nil || principal.OrganizationID == "" || binding == "" || kind == "" || value == "" {
 		return "", ErrSubjectReferenceNotFound
@@ -123,6 +147,7 @@ func (c *subjectReferenceCodec) Encode(principal Principal, kind, value string, 
 		OrganizationID: principal.OrganizationID,
 		Binding:        binding,
 		Kind:           kind,
+		Scope:          scope,
 		Value:          value,
 		ExpiresAt:      now.Add(SubjectReferenceTTL).UnixNano(),
 	})
@@ -133,11 +158,17 @@ func (c *subjectReferenceCodec) Encode(principal Principal, kind, value string, 
 	if _, err := rand.Read(nonce); err != nil {
 		return "", fmt.Errorf("generate platform mcp subject reference nonce: %w", err)
 	}
-	sealed := c.aead.Seal(nonce, nonce, payload, referenceAAD(principal.OrganizationID, binding, kind))
+	sealed := c.aead.Seal(nonce, nonce, payload, referenceAAD(principal.OrganizationID, binding, kind, scope))
 	return base64.RawURLEncoding.EncodeToString(sealed), nil
 }
 
 func (c *subjectReferenceCodec) Decode(token string, principal Principal, kind string, now time.Time) (string, error) {
+	return c.DecodeScoped(token, principal, kind, "", now)
+}
+
+// DecodeScoped resolves a reference only within the query scope it was minted
+// for. A cursor presented against a different query fails to open at all.
+func (c *subjectReferenceCodec) DecodeScoped(token string, principal Principal, kind, scope string, now time.Time) (string, error) {
 	binding := principalCursorBinding(principal)
 	if c == nil || c.aead == nil || token == "" || principal.OrganizationID == "" || binding == "" || kind == "" {
 		return "", ErrSubjectReferenceNotFound
@@ -147,7 +178,7 @@ func (c *subjectReferenceCodec) Decode(token string, principal Principal, kind s
 		return "", ErrSubjectReferenceNotFound
 	}
 	nonce, ciphertext := raw[:c.aead.NonceSize()], raw[c.aead.NonceSize():]
-	payload, err := c.aead.Open(nil, nonce, ciphertext, referenceAAD(principal.OrganizationID, binding, kind))
+	payload, err := c.aead.Open(nil, nonce, ciphertext, referenceAAD(principal.OrganizationID, binding, kind, scope))
 	if err != nil {
 		return "", ErrSubjectReferenceNotFound
 	}
@@ -160,6 +191,7 @@ func (c *subjectReferenceCodec) Decode(token string, principal Principal, kind s
 	if reference.OrganizationID != principal.OrganizationID ||
 		reference.Binding != binding ||
 		reference.Kind != kind ||
+		reference.Scope != scope ||
 		reference.Value == "" ||
 		// Rejected at the boundary, so the advertised lifetime is a limit
 		// rather than a floor.

@@ -208,6 +208,22 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 			Connection:   ratelimit.New(limitStore, platformmcp.SensitiveDiagnosticsConnectionLimitName, ratelimit.PerMinute(platformmcp.SensitiveDiagnosticQueriesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 			Organization: ratelimit.New(limitStore, platformmcp.SensitiveDiagnosticsOrganizationLimitName, ratelimit.PerMinute(platformmcp.SensitiveDiagnosticQueriesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		},
+		// The second drill-down cap: what a connection may accumulate over ten
+		// minutes, rather than how often it may call. Both buckets refill over
+		// that window, so a caller paging steadily under the per-minute rate
+		// still runs out of rows before it has walked a whole window.
+		DrilldownVolume: platformmcp.DrilldownVolumeBudget{
+			Rows: ratelimit.New(limitStore, platformmcp.DrilldownRowsLimitName, ratelimit.Rate{
+				Tokens:   platformmcp.DrilldownRowsPerConnectionPerWindow,
+				Interval: platformmcp.DrilldownVolumeWindow,
+				Burst:    platformmcp.DrilldownRowsPerConnectionPerWindow,
+			}, ratelimit.WithMetrics(config.MeterProvider)),
+			MetricQueries: ratelimit.New(limitStore, platformmcp.DrilldownMetricQueriesLimitName, ratelimit.Rate{
+				Tokens:   platformmcp.DrilldownMetricQueriesPerConnectionPerWindow,
+				Interval: platformmcp.DrilldownVolumeWindow,
+				Burst:    platformmcp.DrilldownMetricQueriesPerConnectionPerWindow,
+			}, ratelimit.WithMetrics(config.MeterProvider)),
+		},
 	}
 	if !budgets.Valid() {
 		return AssistantSurface{}, errors.New("local Platform MCP operation budgets are incomplete")
@@ -248,7 +264,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	skillAuthoring := platformmcp.NewSkillsService(config.Skills, platformmcp.NewPostgresSkillTargets(config.DB), store, config.Authz, registrationGate, budgets.Skills)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB)
 	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics).
-		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics)
+		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB))
 	runtime := platformmcp.NewRuntimeWithLifecycle(
 		config.Logger,
 		authenticator,
@@ -417,6 +433,22 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 			Connection:   ratelimit.New(limitStore, platformmcp.SensitiveDiagnosticsConnectionLimitName, ratelimit.PerMinute(platformmcp.SensitiveDiagnosticQueriesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 			Organization: ratelimit.New(limitStore, platformmcp.SensitiveDiagnosticsOrganizationLimitName, ratelimit.PerMinute(platformmcp.SensitiveDiagnosticQueriesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		},
+		// The second drill-down cap: what a connection may accumulate over ten
+		// minutes, rather than how often it may call. Both buckets refill over
+		// that window, so a caller paging steadily under the per-minute rate
+		// still runs out of rows before it has walked a whole window.
+		DrilldownVolume: platformmcp.DrilldownVolumeBudget{
+			Rows: ratelimit.New(limitStore, platformmcp.DrilldownRowsLimitName, ratelimit.Rate{
+				Tokens:   platformmcp.DrilldownRowsPerConnectionPerWindow,
+				Interval: platformmcp.DrilldownVolumeWindow,
+				Burst:    platformmcp.DrilldownRowsPerConnectionPerWindow,
+			}, ratelimit.WithMetrics(config.MeterProvider)),
+			MetricQueries: ratelimit.New(limitStore, platformmcp.DrilldownMetricQueriesLimitName, ratelimit.Rate{
+				Tokens:   platformmcp.DrilldownMetricQueriesPerConnectionPerWindow,
+				Interval: platformmcp.DrilldownVolumeWindow,
+				Burst:    platformmcp.DrilldownMetricQueriesPerConnectionPerWindow,
+			}, ratelimit.WithMetrics(config.MeterProvider)),
+		},
 	}
 	if !budgets.Valid() {
 		return AssistantSurface{}, errors.New("platform MCP operation budgets are incomplete")
@@ -466,7 +498,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	skillAuthoring := platformmcp.NewSkillsService(config.Skills, platformmcp.NewPostgresSkillTargets(config.DB), store, config.Authz, registrationGate, budgets.Skills)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB)
 	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics).
-		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics)
+		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB))
 	runtime := platformmcp.NewRuntimeWithLifecycle(
 		config.Logger,
 		authenticator,
