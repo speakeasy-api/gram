@@ -414,6 +414,16 @@ const (
 	platformMCPCodexPluginRoot    = "platform-mcp-codex"
 	platformMCPOpenCodePluginRoot = opencodePluginRoot + "/platform-mcp"
 	platformMCPAgentPluginRoot    = agentPluginRoot + "/" + platformMCPPluginName
+
+	// platformMCPLegacyPluginName is the Agent Plugin and OpenCode identifier
+	// carry still recognizes in already-published repositories. Indeterminate
+	// admission preserves those bytes; a confirmed decision migrates them to
+	// platformMCPPluginName.
+	platformMCPLegacyPluginName = "speakeasy-aicp-platform-mcp"
+
+	// platformMCPLegacyAgentPluginRoot is the Agent Plugin directory that
+	// already-published repositories may still contain.
+	platformMCPLegacyAgentPluginRoot = agentPluginRoot + "/" + platformMCPLegacyPluginName
 )
 
 func platformMCPPackageFilename(platform string) string {

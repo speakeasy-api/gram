@@ -223,6 +223,76 @@ func TestCarryPlatformMCPSubtreeAcceptsB1AndFullNativeLayouts(t *testing.T) {
 	require.NotContains(t, carried, platformMCPOpenCodePluginRoot+"/plugin/"+platformMCPPluginName+".ts")
 }
 
+func TestCarryPlatformMCPSubtreeAcceptsLegacyAgentPluginLayout(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{ServerURL: "https://app.getgram.ai", Version: "42"}
+	current, err := generatePlatformMCPFiles(cfg)
+	require.NoError(t, err)
+
+	legacy := remapPlatformMCPFilesToLegacyLayout(current)
+	require.NotContains(t, legacy, platformMCPAgentPluginRoot+"/plugin.json")
+	require.Contains(t, legacy, platformMCPLegacyAgentPluginRoot+"/plugin.json")
+	require.Contains(t, legacy, platformMCPOpenCodePluginRoot+"/plugin/"+platformMCPLegacyPluginName+".ts")
+
+	carried := make(map[string][]byte)
+	intact, nativeClientsAvailable := carryPlatformMCPSubtree(carried, legacy)
+	require.True(t, intact)
+	require.True(t, nativeClientsAvailable)
+	require.Equal(t, legacy, carried)
+
+	b1Legacy := make(map[string][]byte)
+	for filePath, content := range legacy {
+		if strings.HasPrefix(filePath, platformMCPPluginRoot+"/") || strings.HasPrefix(filePath, platformMCPLegacyAgentPluginRoot+"/") {
+			b1Legacy[filePath] = content
+		}
+	}
+	carried = make(map[string][]byte)
+	intact, nativeClientsAvailable = carryPlatformMCPSubtree(carried, b1Legacy)
+	require.True(t, intact)
+	require.False(t, nativeClientsAvailable)
+	require.Equal(t, b1Legacy, carried)
+
+	// A B1-only repair of this layout must hash the Agent Plugin bytes that
+	// were actually preserved, not only the Claude package.
+	withAgent := platformMCPFingerprintFromFiles(b1Legacy)
+	withoutAgent := maps.Clone(b1Legacy)
+	delete(withoutAgent, platformMCPLegacyAgentPluginRoot+"/plugin.json")
+	require.NotEqual(t, withAgent, platformMCPFingerprintFromFiles(withoutAgent))
+}
+
+// remapPlatformMCPFilesToLegacyLayout rewrites only the Agent Plugin directory
+// and the OpenCode identifier so already-published repositories can be
+// reconstructed in tests. Claude, Cursor, Codex, and the OpenCode package root
+// stay on their current paths.
+func remapPlatformMCPFilesToLegacyLayout(files map[string][]byte) map[string][]byte {
+	legacy := make(map[string][]byte, len(files))
+	for filePath, content := range files {
+		legacy[remapPlatformMCPPathToLegacyLayout(filePath)] = content
+	}
+	return legacy
+}
+
+func remapPlatformMCPPathToLegacyLayout(filePath string) string {
+	currentAgentPrefix := platformMCPAgentPluginRoot + "/"
+	legacyAgentPrefix := platformMCPLegacyAgentPluginRoot + "/"
+	if rest, ok := strings.CutPrefix(filePath, currentAgentPrefix); ok {
+		return legacyAgentPrefix + rest
+	}
+
+	currentOpenCodePlugin := platformMCPOpenCodePluginRoot + "/plugin/" + platformMCPPluginName + ".ts"
+	if filePath == currentOpenCodePlugin {
+		return platformMCPOpenCodePluginRoot + "/plugin/" + platformMCPLegacyPluginName + ".ts"
+	}
+
+	currentOpenCodeIDPrefix := platformMCPOpenCodePluginRoot + "/" + platformMCPPluginName + "/"
+	legacyOpenCodeIDPrefix := platformMCPOpenCodePluginRoot + "/" + platformMCPLegacyPluginName + "/"
+	if rest, ok := strings.CutPrefix(filePath, currentOpenCodeIDPrefix); ok {
+		return legacyOpenCodeIDPrefix + rest
+	}
+	return filePath
+}
+
 func TestGeneratePlatformMCPPluginPackageDirectDownloadsShareDefinition(t *testing.T) {
 	t.Parallel()
 

@@ -2690,11 +2690,10 @@ func platformMCPOnlyFingerprintChange(current, published map[string]string) bool
 	return maps.Equal(current, published)
 }
 
-// carryPlatformMCPSubtree preserves a complete currently-published Platform
-// package. B1 repositories contain Claude plus portable Agent Plugins; B2/B3
-// add Cursor, Codex, and OpenCode as one native-client set. During indeterminate
-// admission, preserving B1 is valid, but partial native sets are never copied or
-// advertised. The second result reports whether the complete B2/B3 set exists.
+// platformMCPFingerprintFromFiles hashes the Platform MCP files present in
+// files. It includes both the current Agent Plugin root and the identifier
+// still present in already-published repositories so a B1-only repair of
+// either layout records the bytes that were actually pushed.
 func platformMCPFingerprintFromFiles(files map[string][]byte) string {
 	platformRoots := []string{
 		platformMCPPluginRoot,
@@ -2702,6 +2701,7 @@ func platformMCPFingerprintFromFiles(files map[string][]byte) string {
 		platformMCPCodexPluginRoot,
 		platformMCPOpenCodePluginRoot,
 		platformMCPAgentPluginRoot,
+		platformMCPLegacyAgentPluginRoot,
 	}
 	platformFiles := make(map[string][]byte)
 	for filePath, content := range files {
@@ -2712,6 +2712,14 @@ func platformMCPFingerprintFromFiles(files map[string][]byte) string {
 	return hashFiles(platformMCPGeneratorVersion, platformFiles)
 }
 
+// carryPlatformMCPSubtree preserves a complete currently-published Platform
+// package. B1 repositories contain Claude plus portable Agent Plugins; B2/B3
+// add Cursor, Codex, and OpenCode as one native-client set. Carry accepts
+// either the current Agent Plugin/OpenCode identifier or the identifier still
+// present in already-published repositories, so an unavailable admission
+// decision cannot regenerate those bytes. During indeterminate admission,
+// preserving B1 is valid, but partial native sets are never copied or
+// advertised. The second result reports whether the complete B2/B3 set exists.
 func carryPlatformMCPSubtree(dst, existing map[string][]byte) (bool, bool) {
 	if len(existing) == 0 {
 		return false, false
@@ -2719,32 +2727,6 @@ func carryPlatformMCPSubtree(dst, existing map[string][]byte) (bool, bool) {
 	skills, err := loadPlatformMCPSkills()
 	if err != nil {
 		return false, false
-	}
-
-	b1Required := []string{
-		platformMCPPluginRoot + "/.claude-plugin/plugin.json",
-		platformMCPPluginRoot + "/.mcp.json",
-		platformMCPAgentPluginRoot + "/plugin.json",
-		platformMCPAgentPluginRoot + "/mcp.json",
-	}
-	nativeRequired := []string{
-		platformMCPCursorPluginRoot + "/.cursor-plugin/plugin.json",
-		platformMCPCursorPluginRoot + "/mcp.json",
-		platformMCPCodexPluginRoot + "/.codex-plugin/plugin.json",
-		platformMCPCodexPluginRoot + "/.mcp.json",
-		platformMCPOpenCodePluginRoot + "/plugin/" + platformMCPPluginName + ".ts",
-		platformMCPOpenCodePluginRoot + "/" + platformMCPPluginName + "/mcp.json",
-	}
-	for name := range skills {
-		b1Required = append(b1Required,
-			platformMCPPluginRoot+"/skills/"+name+"/SKILL.md",
-			platformMCPAgentPluginRoot+"/skills/"+name+"/SKILL.md",
-		)
-		nativeRequired = append(nativeRequired,
-			platformMCPCursorPluginRoot+"/skills/"+name+"/SKILL.md",
-			platformMCPCodexPluginRoot+"/skills/"+name+"/SKILL.md",
-			platformMCPOpenCodePluginRoot+"/"+platformMCPPluginName+"/skills/"+name+"/SKILL.md",
-		)
 	}
 
 	stageRoots := func(roots []string, required []string) (map[string][]byte, bool) {
@@ -2762,20 +2744,55 @@ func carryPlatformMCPSubtree(dst, existing map[string][]byte) (bool, bool) {
 		return staged, true
 	}
 
-	b1, ok := stageRoots([]string{platformMCPPluginRoot, platformMCPAgentPluginRoot}, b1Required)
-	if !ok {
-		return false, false
-	}
-	maps.Copy(dst, b1)
+	for _, layout := range []struct {
+		pluginName string
+		agentRoot  string
+	}{
+		{platformMCPPluginName, platformMCPAgentPluginRoot},
+		{platformMCPLegacyPluginName, platformMCPLegacyAgentPluginRoot},
+	} {
+		b1Required := []string{
+			platformMCPPluginRoot + "/.claude-plugin/plugin.json",
+			platformMCPPluginRoot + "/.mcp.json",
+			layout.agentRoot + "/plugin.json",
+			layout.agentRoot + "/mcp.json",
+		}
+		nativeRequired := []string{
+			platformMCPCursorPluginRoot + "/.cursor-plugin/plugin.json",
+			platformMCPCursorPluginRoot + "/mcp.json",
+			platformMCPCodexPluginRoot + "/.codex-plugin/plugin.json",
+			platformMCPCodexPluginRoot + "/.mcp.json",
+			platformMCPOpenCodePluginRoot + "/plugin/" + layout.pluginName + ".ts",
+			platformMCPOpenCodePluginRoot + "/" + layout.pluginName + "/mcp.json",
+		}
+		for name := range skills {
+			b1Required = append(b1Required,
+				platformMCPPluginRoot+"/skills/"+name+"/SKILL.md",
+				layout.agentRoot+"/skills/"+name+"/SKILL.md",
+			)
+			nativeRequired = append(nativeRequired,
+				platformMCPCursorPluginRoot+"/skills/"+name+"/SKILL.md",
+				platformMCPCodexPluginRoot+"/skills/"+name+"/SKILL.md",
+				platformMCPOpenCodePluginRoot+"/"+layout.pluginName+"/skills/"+name+"/SKILL.md",
+			)
+		}
 
-	native, nativeOK := stageRoots(
-		[]string{platformMCPCursorPluginRoot, platformMCPCodexPluginRoot, platformMCPOpenCodePluginRoot},
-		nativeRequired,
-	)
-	if nativeOK {
-		maps.Copy(dst, native)
+		b1, ok := stageRoots([]string{platformMCPPluginRoot, layout.agentRoot}, b1Required)
+		if !ok {
+			continue
+		}
+		maps.Copy(dst, b1)
+
+		native, nativeOK := stageRoots(
+			[]string{platformMCPCursorPluginRoot, platformMCPCodexPluginRoot, platformMCPOpenCodePluginRoot},
+			nativeRequired,
+		)
+		if nativeOK {
+			maps.Copy(dst, native)
+		}
+		return true, nativeOK
 	}
-	return true, nativeOK
+	return false, false
 }
 
 // carryHooksSubtree copies the published hooks (observability) subtree
