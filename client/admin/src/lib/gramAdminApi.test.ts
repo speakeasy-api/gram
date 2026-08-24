@@ -8,6 +8,7 @@ import {
   errorMessage,
   extendTrial,
   getInferenceKeys,
+  getInferenceSpendHistory,
   getPaygBillingSummary,
   getStripeSubscription,
   getProject,
@@ -20,6 +21,7 @@ import {
   MIN_TRIAL_REARM_DAYS,
   rearmTrial,
   resumeStripeSubscription,
+  setInferenceKeyMonthlyLimit,
   toSearchParams,
   type AdminOrganization,
 } from "@/lib/gramAdminApi";
@@ -163,6 +165,7 @@ describe("organization billing endpoints", () => {
     const fetch = stubFetch();
 
     await getInferenceKeys("org one");
+    await getInferenceSpendHistory("org one");
     await getPaygBillingSummary("org one");
     await getStripeSubscription("org one");
 
@@ -170,10 +173,35 @@ describe("organization billing endpoints", () => {
       "/admin/organization.inferenceKeys?organization_id=org+one",
     );
     expect(fetch.mock.calls[1]?.[0]).toBe(
-      "/admin/organization.paygBillingSummary?organization_id=org+one",
+      "/admin/organization.inferenceSpendHistory?organization_id=org+one",
     );
     expect(fetch.mock.calls[2]?.[0]).toBe(
+      "/admin/organization.paygBillingSummary?organization_id=org+one",
+    );
+    expect(fetch.mock.calls[3]?.[0]).toBe(
       "/admin/organization.stripeSubscription?organization_id=org+one",
+    );
+  });
+
+  it("posts the canonical organization and materialized key when setting a monthly limit", async () => {
+    const fetch = stubFetch();
+
+    await setInferenceKeyMonthlyLimit({
+      organizationID: "org_1",
+      keyType: "internal",
+      monthlyCredits: 750,
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/admin/organization.setInferenceKeyMonthlyLimit",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          organization_id: "org_1",
+          key_type: "internal",
+          monthly_credits: 750,
+        }),
+      }),
     );
   });
 

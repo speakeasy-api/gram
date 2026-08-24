@@ -64,8 +64,11 @@ lint_input_fingerprint() (
     special_index=$(
         while IFS= read -r entry; do
             tag=${entry%% *}
+            # The pattern carries a leading parenthesis because bash 3.2, which
+            # is still the /bin/bash macOS ships, cannot parse a case statement
+            # inside $( ) without one and fails the whole script at parse time.
             case "$tag" in
-                [a-z]|S) printf '%s\n' "${entry#? }" ;;
+                ([a-z]|S) printf '%s\n' "${entry#? }" ;;
             esac
         done < <(git ls-files -v)
     )
@@ -78,14 +81,15 @@ lint_input_fingerprint() (
     )
     go_work=$(go env GOWORK)
     go_env_file=$(go env GOENV)
+    # Leading parentheses on the patterns for the bash 3.2 reason above.
     go_config_paths=$(
         case "$go_work" in
-            ''|off) ;;
-            *) printf '%s\n%s.sum\n' "$go_work" "$go_work" ;;
+            (''|off) ;;
+            (*) printf '%s\n%s.sum\n' "$go_work" "$go_work" ;;
         esac
         case "$go_env_file" in
-            ''|off) ;;
-            *) printf '%s\n' "$go_env_file" ;;
+            (''|off) ;;
+            (*) printf '%s\n' "$go_env_file" ;;
         esac
     )
 

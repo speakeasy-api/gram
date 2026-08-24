@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
 
+	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
@@ -93,21 +95,36 @@ func ValidateClientIDURL(clientID string) (*url.URL, error) {
 	return parsed, nil
 }
 
-// validateDocument applies the -02 §4 document rules plus Gram policy to a
+// validationFindings carries the non-blocking observations validateDocument
+// made about a document it accepted. Only meaningful alongside a nil error;
+// every rejection returns the zero value.
+type validationFindings struct {
+	// crossOriginRedirectOrigins lists the distinct origins (scheme://host,
+	// compared without normalization) of non-loopback redirect_uris that do
+	// not share the client_id URL's origin, in first-seen order. Cross-origin
+	// redirects are accepted — the load-bearing control is exact-match
+	// validation of the authorization request's redirect_uri against the
+	// document at authorize time — so this exists purely to feed the
+	// cimd.redirect_uris.cross_origin counter and its log line.
+	crossOriginRedirectOrigins []string
+}
+
+// validateDocument applies the -02 §4 document rules plus local policy to a
 // parsed document. clientID is both the client_id the OAuth client presented
 // and the URL that was fetched (the fetcher never follows redirects), so the
 // single equality check here completes the §4 triple equality requirement.
-func validateDocument(doc *Document, clientID string, clientIDURL *url.URL) error {
+func validateDocument(doc *Document, clientID string, clientIDURL *url.URL) (validationFindings, error) {
+	var none validationFindings
 	if doc.ClientID != clientID {
-		return oauthValidationError(reasonClientIDMismatch, "invalid_client_metadata", "document client_id does not match the client identifier URL")
+		return none, oauthValidationError(reasonClientIDMismatch, "invalid_client_metadata", "document client_id does not match the client identifier URL")
 	}
 	// MCP requires client_name, and the user_session_clients.client_name
 	// column is NOT NULL — requiring it here avoids fallback logic.
 	if doc.ClientName == "" {
-		return oauthValidationError(reasonMissingClientName, "invalid_client_metadata", "client_name is required")
+		return none, oauthValidationError(reasonMissingClientName, "invalid_client_metadata", "client_name is required")
 	}
 	if len(doc.ClientName) > maxClientNameLength {
-		return oauthValidationError(reasonClientNameTooLong, "invalid_client_metadata", fmt.Sprintf("client_name exceeds the %d byte limit", maxClientNameLength))
+		return none, oauthValidationError(reasonClientNameTooLong, "invalid_client_metadata", fmt.Sprintf("client_name exceeds the %d byte limit", maxClientNameLength))
 	}
 	// Only public clients are accepted. -02 §8.2's direction of travel is
 	// that capable clients SHOULD authenticate (MCP clients MAY use
@@ -128,63 +145,71 @@ func validateDocument(doc *Document, clientID string, clientIDURL *url.URL) erro
 	// entirely while being plain public clients, and rejecting them here
 	// would make any preset for them dead on arrival.
 	if doc.TokenEndpointAuthMethod != "" && doc.TokenEndpointAuthMethod != "none" {
-		return oauthValidationError(reasonInvalidAuthMethod, "invalid_client_metadata", `token_endpoint_auth_method must be "none" or absent`)
+		return none, oauthValidationError(reasonInvalidAuthMethod, "invalid_client_metadata", `token_endpoint_auth_method must be "none" or absent`)
 	}
 	// -02 §4.1: a metadata document is public, so it must never carry a
 	// client secret in any form. Presence alone invalidates the document.
 	if doc.ClientSecret != nil || doc.ClientSecretExpiresAt != nil {
-		return oauthValidationError(reasonContainsSecret, "invalid_client_metadata", "document must not contain client_secret or client_secret_expires_at")
+		return none, oauthValidationError(reasonContainsSecret, "invalid_client_metadata", "document must not contain client_secret or client_secret_expires_at")
 	}
 	if err := validateJWKSPublicOnly(doc.JWKS); err != nil {
-		return err
+		return none, err
 	}
 
 	if len(doc.RedirectURIs) == 0 {
-		return oauthValidationError(reasonMissingRedirectURIs, "invalid_redirect_uri", "redirect_uris is required")
+		return none, oauthValidationError(reasonMissingRedirectURIs, "invalid_redirect_uri", "redirect_uris is required")
 	}
 	if len(doc.RedirectURIs) > maxRedirectURIs {
-		return oauthValidationError(reasonTooManyRedirectURIs, "invalid_redirect_uri", fmt.Sprintf("redirect_uris exceeds the limit of %d entries", maxRedirectURIs))
+		return none, oauthValidationError(reasonTooManyRedirectURIs, "invalid_redirect_uri", fmt.Sprintf("redirect_uris exceeds the limit of %d entries", maxRedirectURIs))
 	}
+	var crossOrigins []string
 	for _, uri := range doc.RedirectURIs {
 		if len(uri) > maxRedirectURILength {
-			return oauthValidationError(reasonRedirectURITooLong, "invalid_redirect_uri", fmt.Sprintf("redirect_uri exceeds the %d byte limit", maxRedirectURILength))
+			return none, oauthValidationError(reasonRedirectURITooLong, "invalid_redirect_uri", fmt.Sprintf("redirect_uri exceeds the %d byte limit", maxRedirectURILength))
 		}
 		// ValidateRedirectURI returns *oauthwire.Error values of its
 		// own, so the wrap preserves the client-safe wire mapping while the
 		// annotation adds the shared metric reason.
 		if err := oauthwire.ValidateRedirectURI(uri); err != nil {
-			return &validationError{reason: reasonRedirectURIInvalid, err: fmt.Errorf("validate redirect_uri: %w", err)}
+			return none, &validationError{reason: reasonRedirectURIInvalid, err: fmt.Errorf("validate redirect_uri: %w", err)}
 		}
-		if err := validateOriginBinding(clientIDURL, uri); err != nil {
-			return err
+		parsed, err := url.Parse(uri)
+		if err != nil {
+			// Unreachable in practice: ValidateRedirectURI parses the same
+			// string above. Kept so a divergence between the two parses
+			// fails closed instead of skipping the scheme rule.
+			return none, oauthValidationError(reasonRedirectURIInvalid, "invalid_redirect_uri", "redirect_uri must be an absolute URL")
+		}
+		if IsLoopbackRedirectURI(parsed) {
+			continue
+		}
+		// Non-loopback redirect URIs must use https. This is stricter than
+		// oauthwire.ValidateRedirectURI, which deliberately tolerates
+		// native-app custom schemes for DCR clients (AIS-434): a CIMD
+		// document is fetched from an https URL and self-asserts its
+		// registration, so the redirect set is held to web-grade schemes
+		// until a concrete client needs otherwise.
+		if parsed.Scheme != "https" {
+			return none, oauthValidationError(reasonRedirectURIScheme, "invalid_redirect_uri", fmt.Sprintf("redirect_uri %q must use the https scheme or be an RFC 8252 loopback http URL", uri))
+		}
+		// Cross-origin redirect URIs are accepted (no surveyed CIMD
+		// implementation binds redirect origins to the client_id origin, and
+		// -02 §8.1 leaves it optional) but observed: the origins feed a
+		// counter and log line so a preset vendor moving to cross-origin
+		// redirects is visible. Both URLs are https by this point, so the
+		// origin comparison reduces to the host — compared without
+		// normalization, so an explicit :443 is a different origin, and an
+		// https URL on a loopback host counts as cross-origin too
+		// (IsLoopbackRedirectURI exempts only http, per RFC 8252 §7.3).
+		if parsed.Host != clientIDURL.Host {
+			origin := parsed.Scheme + "://" + parsed.Host
+			if !slices.Contains(crossOrigins, origin) {
+				crossOrigins = append(crossOrigins, origin)
+			}
 		}
 	}
 
-	return nil
-}
-
-// validateOriginBinding enforces Gram's CIMD redirect-URI origin-binding
-// policy: every redirect_uri in the document must share the client_id URL's
-// origin (scheme + host + port, compared without normalization), except
-// loopback redirects, which are always allowed on any port. This is
-// deliberate Gram policy expressly permitted by -02 §8.1, not a spec
-// requirement — under open admission the client_id origin is the only
-// identity anchor, and binding ensures authorization codes are only ever
-// delivered to that origin (or to loopback). All known vendor CIMD documents
-// pass this rule (verified 2026-07); a legitimate cross-origin client would
-// need a per-URL exemption on the admission allowlist (follow-up work).
-func validateOriginBinding(clientIDURL *url.URL, redirectURI string) error {
-	parsed, err := url.Parse(redirectURI)
-	if err != nil {
-		return oauthValidationError(reasonRedirectURIInvalid, "invalid_redirect_uri", "redirect_uri must be an absolute URL")
-	}
-	if IsLoopbackRedirectURI(parsed) {
-		return nil
-	}
-	if parsed.Scheme != clientIDURL.Scheme || parsed.Host != clientIDURL.Host {
-		return oauthValidationError(reasonRedirectOriginMismatch, "invalid_redirect_uri", fmt.Sprintf("redirect_uri %q is not same-origin with the client_id URL", redirectURI))
-	}
-	return nil
+	return validationFindings{crossOriginRedirectOrigins: crossOrigins}, nil
 }
 
 // IsLoopbackRedirectURI reports whether a parsed redirect URI is an RFC 8252
@@ -207,27 +232,18 @@ func IsLoopbackRedirectURI(u *url.URL) bool {
 // validateJWKSPublicOnly rejects a jwks member containing private or
 // symmetric key material (-02 §4.1 — new in -02). A public metadata document
 // carrying a private key would let anyone impersonate the client, so the
-// whole document is invalid. Detection keys on the JWK members that only
-// appear on non-public keys: "d" (RSA / EC / OKP private component) and "k"
-// (symmetric oct key).
+// whole document is invalid. The screening itself is the shared
+// jwks.ValidatePublicOnly; this wrapper maps its sentinels onto this
+// package's metric reasons and client-safe OAuth wire errors.
 func validateJWKSPublicOnly(raw json.RawMessage) error {
-	if raw == nil {
+	switch err := jwks.ValidatePublicOnly(raw); {
+	case err == nil:
 		return nil
-	}
-
-	var jwks struct {
-		Keys []map[string]json.RawMessage `json:"keys"`
-	}
-	if err := json.Unmarshal(raw, &jwks); err != nil {
+	case errors.Is(err, jwks.ErrPrivateKeyMaterial):
+		return oauthValidationError(reasonJWKSPrivateKey, "invalid_client_metadata", "jwks must not contain private key material")
+	case errors.Is(err, jwks.ErrSymmetricKeyMaterial):
+		return oauthValidationError(reasonJWKSSymmetricKey, "invalid_client_metadata", "jwks must not contain symmetric key material")
+	default:
 		return oauthValidationError(reasonJWKSInvalid, "invalid_client_metadata", "jwks is not a valid JWK Set")
 	}
-	for _, key := range jwks.Keys {
-		if _, ok := key["d"]; ok {
-			return oauthValidationError(reasonJWKSPrivateKey, "invalid_client_metadata", "jwks must not contain private key material")
-		}
-		if _, ok := key["k"]; ok {
-			return oauthValidationError(reasonJWKSSymmetricKey, "invalid_client_metadata", "jwks must not contain symmetric key material")
-		}
-	}
-	return nil
 }

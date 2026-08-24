@@ -253,6 +253,7 @@ WITH orgs AS (
     SELECT
         om.created_at,
         om.disabled_at,
+        om.gram_account_type IN ('payg', 'enterprise') AS is_customer,
         -- Must stay identical to AdminListOrganizations: a figure counted from a
         -- shortened predicate would disagree with the rows clicking it lands on.
         CASE
@@ -269,6 +270,8 @@ WITH orgs AS (
 SELECT
     count(*)::bigint AS total,
     count(*) FILTER (WHERE created_at > now() - INTERVAL '7 days')::bigint AS created_last_7_days,
+    count(*) FILTER (WHERE is_customer)::bigint AS customers,
+    count(*) FILTER (WHERE is_customer AND created_at > now() - INTERVAL '7 days')::bigint AS customers_created_last_7_days,
     count(*) FILTER (WHERE trial_state = 'ending_soon')::bigint AS trials_ending_soon,
     count(*) FILTER (WHERE disabled_at IS NOT NULL)::bigint AS disabled,
     count(*) FILTER (WHERE disabled_at > now() - INTERVAL '7 days')::bigint AS disabled_last_7_days
@@ -276,11 +279,13 @@ FROM orgs
 `
 
 type AdminGetOrganizationStatsRow struct {
-	Total             int64
-	CreatedLast7Days  int64
-	TrialsEndingSoon  int64
-	Disabled          int64
-	DisabledLast7Days int64
+	Total                     int64
+	CreatedLast7Days          int64
+	Customers                 int64
+	CustomersCreatedLast7Days int64
+	TrialsEndingSoon          int64
+	Disabled                  int64
+	DisabledLast7Days         int64
 }
 
 // Blind to the list's filters by design: these figures must not move when an
@@ -290,12 +295,18 @@ type AdminGetOrganizationStatsRow struct {
 //
 // The join stays count-safe because organization_id is the trials primary key.
 // Both 7-day windows exclude their boundary: exactly seven days old is outside.
+//
+// A customer is an organization on a paid account type, payg or enterprise. The
+// pair is the same one the organizations service uses to tell a paying account
+// from the rest, and the customer figures count disabled customers too.
 func (q *Queries) AdminGetOrganizationStats(ctx context.Context) (AdminGetOrganizationStatsRow, error) {
 	row := q.db.QueryRow(ctx, adminGetOrganizationStats)
 	var i AdminGetOrganizationStatsRow
 	err := row.Scan(
 		&i.Total,
 		&i.CreatedLast7Days,
+		&i.Customers,
+		&i.CustomersCreatedLast7Days,
 		&i.TrialsEndingSoon,
 		&i.Disabled,
 		&i.DisabledLast7Days,

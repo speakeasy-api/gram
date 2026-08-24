@@ -9,22 +9,31 @@ Create a Pull Request for the current changes and/or branch:
 1. Ask user what the scope of the changes is for context
 2. Use the current branch or create a new branch if on main
 3. **Validate conventional commit prefix**: Ensure PR title and any commits use proper conventional commit prefixes:
-   - `chore:` - for maintenance tasks, configuration changes, tooling updates
-   - `feat:` - for new features or functionality additions
+   - `feat:` - for new **user-facing** features or functionality additions
    - `fix:` - for bug fixes and error corrections
    - `mig:` - for database migrations and schema changes
+   - `chore:` - for maintenance tasks, configuration changes, tooling updates, and generally anything not user-facing
    - Ask user to clarify the change type if unclear, and enforce one of these four prefixes
 4. If there are uncommitted changes, create a single line conventional commit summarizing the changes eg. `feat: add new feature`
 5. **Scrub the branch**: Before pushing, check the branch name and every commit message on the branch against the rules in [Public metadata hygiene](#public-metadata-hygiene) below. Fix anything that fails before continuing — a push publishes both.
 6. Ensure the branch is up-to-date with `origin/main`
 7. Push the branch to `origin`
-8. Create a short but well-structured PR description in a temporary file (with a unique file name) in the /tmp directory for reviewers
+8. Draft the PR description in a uniquely named file under `/tmp`, following [Writing style](#writing-style).
 9. **Scrub the PR metadata**: Check the PR title and the drafted description against the same rules. Fix them in place before opening the PR — once created, they are public.
 10. Create PR with the description file using GitHub CLI, ensuring the title starts with `chore:`, `feat:`, `fix:`, or `mig:` and targets `main`
 11. Add appropriate labels based on change type (enhancement, bug, documentation, etc.). Ensure to query for the available labels beforehand.
 12. Provide a clickable link to the PR in the output
 
 Follow conventional commit standards and keep PR descriptions concise but informative. **IMPORTANT**: All PR titles MUST start with one of the four prefixes: `chore:`, `feat:`, `fix:`, or `mig:`.
+
+## Writing style
+
+Derive the PR description from the diff, commits, and user intent. Do not merely restate the title or list commit subjects. Include:
+
+- `## Summary`: the concrete, reviewer-relevant changes and their scope.
+- `## Motivation`: the problem being solved and why this approach was taken.
+
+Do not add a `Testing` or `Verification` section or enumerate test commands and steps. Keep each included section concise but complete. If a Linear ticket was provided, include it at the top. Otherwise, tell the user after creating the PR; if they then provide one, amend the description.
 
 ## Public metadata hygiene
 

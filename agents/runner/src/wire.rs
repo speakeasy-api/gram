@@ -64,6 +64,14 @@ impl ThreadTurnResponse {
     }
 }
 
+/// Ack returned by `/threads/{thread_id}/interrupt`. `interrupted` is false
+/// when the runner holds no live task for the thread — the turn either never
+/// reached this VM or has already finished, and there is nothing to stop.
+#[derive(Debug, Serialize)]
+pub struct ThreadInterruptResponse {
+    pub interrupted: bool,
+}
+
 #[derive(Debug, Deserialize, Serialize, Clone, Hash)]
 pub struct RunnerMessage {
     pub role: String,

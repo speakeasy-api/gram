@@ -23,6 +23,18 @@ type Client struct {
 	// Traces Doer is the HTTP client used to make requests to the traces endpoint.
 	TracesDoer goahttp.Doer
 
+	// ListEventLog Doer is the HTTP client used to make requests to the
+	// listEventLog endpoint.
+	ListEventLogDoer goahttp.Doer
+
+	// GetEventVolume Doer is the HTTP client used to make requests to the
+	// getEventVolume endpoint.
+	GetEventVolumeDoer goahttp.Doer
+
+	// GetEventFacets Doer is the HTTP client used to make requests to the
+	// getEventFacets endpoint.
+	GetEventFacetsDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -45,6 +57,9 @@ func NewClient(
 	return &Client{
 		LogsDoer:            doer,
 		TracesDoer:          doer,
+		ListEventLogDoer:    doer,
+		GetEventVolumeDoer:  doer,
+		GetEventFacetsDoer:  doer,
 		RestoreResponseBody: restoreBody,
 		scheme:              scheme,
 		host:                host,
@@ -96,6 +111,78 @@ func (c *Client) Traces() goa.Endpoint {
 		resp, err := c.TracesDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("otel", "traces", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListEventLog returns an endpoint that makes HTTP requests to the otel
+// service listEventLog server.
+func (c *Client) ListEventLog() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListEventLogRequest(c.encoder)
+		decodeResponse = DecodeListEventLogResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListEventLogRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListEventLogDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("otel", "listEventLog", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetEventVolume returns an endpoint that makes HTTP requests to the otel
+// service getEventVolume server.
+func (c *Client) GetEventVolume() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetEventVolumeRequest(c.encoder)
+		decodeResponse = DecodeGetEventVolumeResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetEventVolumeRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetEventVolumeDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("otel", "getEventVolume", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetEventFacets returns an endpoint that makes HTTP requests to the otel
+// service getEventFacets server.
+func (c *Client) GetEventFacets() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetEventFacetsRequest(c.encoder)
+		decodeResponse = DecodeGetEventFacetsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetEventFacetsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetEventFacetsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("otel", "getEventFacets", err)
 		}
 		return decodeResponse(resp)
 	}

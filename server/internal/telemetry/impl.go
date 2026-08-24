@@ -35,6 +35,7 @@ import (
 	orgsRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/telemetry/overview"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/telemetryerrs"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -2352,7 +2353,7 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 	var (
 		chatMetrics           chatRepo.GetChatMetricsSummaryRow
 		chatMetricsComparison chatRepo.GetChatMetricsSummaryRow
-		clickHouseResult      projectOverviewClickHouseResult
+		clickHouseResult      overview.Result
 		serverNameOverrides   []hooksRepo.ListHooksServerNameOverridesRow
 
 		// Session-mode (PostgreSQL) results; only populated when sessionMode is true.
@@ -2365,15 +2366,18 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 
 	eg.Go(func() error {
 		var fetchErr error
-		clickHouseResult, fetchErr = fetchProjectOverviewClickHouse(egCtx, s.chRepo, projectOverviewClickHouseParams{
-			projectID:       projectID,
-			timeStart:       timeStart,
-			timeEnd:         timeEnd,
-			comparisonStart: comparisonStart,
-			comparisonEnd:   comparisonEnd,
-			sessionMode:     sessionMode,
+		clickHouseResult, fetchErr = overview.FetchClickHouse(egCtx, s.chRepo, overview.Params{
+			ProjectID:       projectID,
+			TimeStart:       timeStart,
+			TimeEnd:         timeEnd,
+			ComparisonStart: comparisonStart,
+			ComparisonEnd:   comparisonEnd,
+			SessionMode:     sessionMode,
 		})
-		return fetchErr
+		if fetchErr != nil {
+			return oops.E(oops.CodeUnexpected, fetchErr, "error retrieving project overview ClickHouse data")
+		}
+		return nil
 	})
 
 	// PostgreSQL lanes: the pgxpool is safe for concurrent use, so fan these out.
@@ -2460,7 +2464,7 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 	}
 
 	// Resolve active counts and top lists now that every query has returned.
-	activeServersCount := int64(clickHouseResult.activeCounts.ActiveServersCount) //nolint:gosec // Bounded count that won't overflow int64
+	activeServersCount := int64(clickHouseResult.ActiveCounts.ActiveServersCount) //nolint:gosec // Bounded count that won't overflow int64
 	var activeUsersCount int64
 	var topUsers []*telem_gen.TopUser
 	var llmClientBreakdown []*telem_gen.LLMClientUsage
@@ -2469,9 +2473,9 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 		topUsers = toTopUsersFromPG(topUsersPG)
 		llmClientBreakdown = toLLMClientUsageFromPG(llmClientsPG)
 	} else {
-		activeUsersCount = int64(clickHouseResult.activeCounts.ActiveUsersCount) //nolint:gosec // Bounded count that won't overflow int64
-		topUsers = toTopUsers(clickHouseResult.topUsers)
-		llmClientBreakdown = toLLMClientUsage(clickHouseResult.llmClients)
+		activeUsersCount = int64(clickHouseResult.ActiveCounts.ActiveUsersCount) //nolint:gosec // Bounded count that won't overflow int64
+		topUsers = toTopUsers(clickHouseResult.TopUsers)
+		llmClientBreakdown = toLLMClientUsage(clickHouseResult.LLMClients)
 	}
 
 	// Build a map for quick lookup: raw_server_name -> display_name
@@ -2481,13 +2485,13 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 	}
 
 	// Apply overrides to top servers
-	topServersWithOverrides := applyServerNameOverrides(clickHouseResult.topServers, overrideMap)
+	topServersWithOverrides := applyServerNameOverrides(clickHouseResult.TopServers, overrideMap)
 
 	// Convert to API types - build summaries with nested fields
 	return &telem_gen.GetProjectOverviewResult{
 		Summary: buildProjectOverviewSummary(
 			chatMetrics,
-			clickHouseResult.toolMetrics,
+			clickHouseResult.ToolMetrics,
 			activeServersCount,
 			activeUsersCount,
 			topUsers,
@@ -2496,7 +2500,7 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 		),
 		Comparison: buildProjectOverviewSummary(
 			chatMetricsComparison,
-			clickHouseResult.toolMetricsComparison,
+			clickHouseResult.ToolMetricsComparison,
 			0, // Don't need active counts for comparison
 			0,
 			nil, // Don't need top lists for comparison

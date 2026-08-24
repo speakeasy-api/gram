@@ -16,6 +16,16 @@ const (
 	meterFetchDurationSeconds = "cimd.fetch.duration_seconds"
 	meterFetchResponseSize    = "cimd.fetch.response_size"
 	meterValidationFailures   = "cimd.validation.failures"
+
+	// meterCrossOriginRedirects observes validated documents carrying a
+	// non-loopback redirect_uri that leaves the client_id origin. RFC 8252
+	// http loopback redirects are exempt, so a client whose only off-origin
+	// redirect is a loopback URL never counts. Such redirects are accepted;
+	// the counter only makes the shift visible. Emitted wherever validation
+	// runs (cached resolutions skip it), so treat it as a presence signal
+	// rather than a rate. Its one label is the bounded client_id origin; the
+	// redirect origins themselves go to logs, never labels.
+	meterCrossOriginRedirects = "cimd.redirect_uris.cross_origin"
 )
 
 // fetchResult labels the outcome of one Resolve attempt on the cimd.fetch.*
@@ -52,34 +62,35 @@ const (
 type validationReason string
 
 const (
-	reasonClientIDTooLong        validationReason = "client_id_too_long"
-	reasonClientIDScheme         validationReason = "client_id_scheme"
-	reasonClientIDFragment       validationReason = "client_id_fragment"
-	reasonClientIDUnparseable    validationReason = "client_id_unparseable"
-	reasonClientIDUserinfo       validationReason = "client_id_userinfo"
-	reasonClientIDMissingHost    validationReason = "client_id_missing_host"
-	reasonClientIDMissingPath    validationReason = "client_id_missing_path"
-	reasonClientIDDotSegments    validationReason = "client_id_dot_segments"
-	reasonClientIDMismatch       validationReason = "client_id_mismatch"
-	reasonMissingClientName      validationReason = "missing_client_name"
-	reasonClientNameTooLong      validationReason = "client_name_too_long"
-	reasonInvalidAuthMethod      validationReason = "invalid_auth_method"
-	reasonContainsSecret         validationReason = "contains_secret"
-	reasonJWKSInvalid            validationReason = "jwks_invalid"
-	reasonJWKSPrivateKey         validationReason = "jwks_private_key"
-	reasonJWKSSymmetricKey       validationReason = "jwks_symmetric_key"
-	reasonMissingRedirectURIs    validationReason = "missing_redirect_uris"
-	reasonTooManyRedirectURIs    validationReason = "too_many_redirect_uris"
-	reasonRedirectURITooLong     validationReason = "redirect_uri_too_long"
-	reasonRedirectURIInvalid     validationReason = "redirect_uri_invalid"
-	reasonRedirectOriginMismatch validationReason = "redirect_origin_mismatch"
+	reasonClientIDTooLong     validationReason = "client_id_too_long"
+	reasonClientIDScheme      validationReason = "client_id_scheme"
+	reasonClientIDFragment    validationReason = "client_id_fragment"
+	reasonClientIDUnparseable validationReason = "client_id_unparseable"
+	reasonClientIDUserinfo    validationReason = "client_id_userinfo"
+	reasonClientIDMissingHost validationReason = "client_id_missing_host"
+	reasonClientIDMissingPath validationReason = "client_id_missing_path"
+	reasonClientIDDotSegments validationReason = "client_id_dot_segments"
+	reasonClientIDMismatch    validationReason = "client_id_mismatch"
+	reasonMissingClientName   validationReason = "missing_client_name"
+	reasonClientNameTooLong   validationReason = "client_name_too_long"
+	reasonInvalidAuthMethod   validationReason = "invalid_auth_method"
+	reasonContainsSecret      validationReason = "contains_secret"
+	reasonJWKSInvalid         validationReason = "jwks_invalid"
+	reasonJWKSPrivateKey      validationReason = "jwks_private_key"
+	reasonJWKSSymmetricKey    validationReason = "jwks_symmetric_key"
+	reasonMissingRedirectURIs validationReason = "missing_redirect_uris"
+	reasonTooManyRedirectURIs validationReason = "too_many_redirect_uris"
+	reasonRedirectURITooLong  validationReason = "redirect_uri_too_long"
+	reasonRedirectURIInvalid  validationReason = "redirect_uri_invalid"
+	reasonRedirectURIScheme   validationReason = "redirect_uri_scheme"
 )
 
 type metrics struct {
-	fetchAttempts      metric.Int64Counter
-	fetchDuration      metric.Float64Histogram
-	fetchResponseSize  metric.Int64Histogram
-	validationFailures metric.Int64Counter
+	fetchAttempts        metric.Int64Counter
+	fetchDuration        metric.Float64Histogram
+	fetchResponseSize    metric.Int64Histogram
+	validationFailures   metric.Int64Counter
+	crossOriginRedirects metric.Int64Counter
 }
 
 func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metrics {
@@ -124,11 +135,21 @@ func newMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *metric
 		logger.ErrorContext(ctx, "failed to create metric", attr.SlogMetricName(meterValidationFailures), attr.SlogError(err))
 	}
 
+	crossOriginRedirects, err := meter.Int64Counter(
+		meterCrossOriginRedirects,
+		metric.WithDescription("Count of validated CIMD metadata documents carrying at least one non-loopback redirect_uri not same-origin with the client_id URL, by client_id origin"),
+		metric.WithUnit("{document}"),
+	)
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to create metric", attr.SlogMetricName(meterCrossOriginRedirects), attr.SlogError(err))
+	}
+
 	return &metrics{
-		fetchAttempts:      fetchAttempts,
-		fetchDuration:      fetchDuration,
-		fetchResponseSize:  fetchResponseSize,
-		validationFailures: validationFailures,
+		fetchAttempts:        fetchAttempts,
+		fetchDuration:        fetchDuration,
+		fetchResponseSize:    fetchResponseSize,
+		validationFailures:   validationFailures,
+		crossOriginRedirects: crossOriginRedirects,
 	}
 }
 
@@ -154,6 +175,13 @@ func (m *metrics) RecordResponseSize(ctx context.Context, origin string, bytes i
 		return
 	}
 	m.fetchResponseSize.Record(ctx, bytes, metric.WithAttributes(attr.CIMDOrigin(origin)))
+}
+
+func (m *metrics) RecordCrossOriginRedirects(ctx context.Context, origin string) {
+	if m == nil || m.crossOriginRedirects == nil {
+		return
+	}
+	m.crossOriginRedirects.Add(ctx, 1, metric.WithAttributes(attr.CIMDOrigin(origin)))
 }
 
 func (m *metrics) RecordValidationFailure(ctx context.Context, reason validationReason) {

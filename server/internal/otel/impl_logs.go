@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/google/uuid"
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
@@ -76,6 +77,13 @@ func decodeOTLPLogExport(raw []byte, provenance *otelv1.InboundLogRecord_Provena
 				}
 
 				converted.SetRecordId(uuid.NewString())
+				// OTLP receivers stamp observed time when the producer did
+				// not. Stamping before the first publish keeps the value
+				// stable across Pub/Sub redeliveries, which downstream
+				// ClickHouse writers rely on for a deterministic dedup key.
+				if converted.GetObservedTimeUnixNano() == 0 {
+					converted.SetObservedTimeUnixNano(uint64(time.Now().UnixNano()))
+				}
 				converted.SetResource(resource)
 				converted.SetProvenance(provenance)
 				converted.SetScope(scope)

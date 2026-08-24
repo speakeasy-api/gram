@@ -40,11 +40,13 @@ jobs:
             mkdir -p "$dest_path"
             # Exclude the root docs index.mdx from being copied and protect any existing
             # destination file from deletion/overwrites.
-            rsync -a --delete \
+            tools/rclone sync \
+              --metadata \
+              --links \
+              --create-empty-src-dirs \
               --exclude='.DS_Store' \
               --exclude='/index.mdx' \
-              --filter='P /index.mdx' \
-              "$src_path/" "$dest_path/"
+              "$src_path" "$dest_path"
           else
             echo "Warning: $src_path does not exist; nothing to sync."
           fi
@@ -64,9 +66,12 @@ jobs:
               'favicon.ico'
               'favicon.png'
             )
-            rsync -a --delete \
+            tools/rclone sync \
+              --metadata \
+              --links \
+              --create-empty-src-dirs \
               "${EXCLUDES[@]/#/--exclude=}" \
-              "$src_assets/" "$dest_assets/"
+              "$src_assets" "$dest_assets"
           else
             echo "Warning: $src_assets does not exist; no assets to sync."
           fi

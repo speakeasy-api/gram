@@ -540,6 +540,8 @@ describe("Overview", () => {
             resolve({
               total: 1,
               created_last_7_days: 0,
+              customers: 0,
+              customers_created_last_7_days: 0,
               trials_ending_soon: 0,
               disabled: 0,
               disabled_last_7_days: 0,
@@ -554,6 +556,8 @@ describe("Overview", () => {
     qc.setQueryData(organizationsStatsQuery.queryKey, {
       total: 2,
       created_last_7_days: 0,
+      customers: 0,
+      customers_created_last_7_days: 0,
       trials_ending_soon: 0,
       disabled: 0,
       disabled_last_7_days: 0,

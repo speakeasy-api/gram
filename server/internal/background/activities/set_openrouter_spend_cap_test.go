@@ -45,6 +45,14 @@ type spendCapHeartbeatFixture struct {
 	Applied              bool
 }
 
+type spendCapResultHeartbeatFixture struct {
+	BeforeMonthlyCredits  int64
+	ObservedKeyUpdatedAt  time.Time
+	AppliedKeyUpdatedAt   time.Time
+	AppliedMonthlyCredits int64
+	Applied               bool
+}
+
 type spendCapAlertGenerationFixture struct {
 	OperationID    string `json:"operation_id"`
 	MonthlyCredits int64  `json:"monthly_credits"`
@@ -134,8 +142,11 @@ func TestSetOpenRouterSpendCapTargetsSecurityInferenceKey(t *testing.T) {
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestActivityEnvironment()
 	env.RegisterActivity(setter.Do)
-	_, err := env.ExecuteActivity(setter.Do, args)
+	encodedResult, err := env.ExecuteActivity(setter.Do, args)
 	require.NoError(t, err)
+	var monthlyCredits int
+	require.NoError(t, encodedResult.Get(&monthlyCredits))
+	require.Equal(t, 75, monthlyCredits)
 	provisioner.AssertExpectations(t)
 
 	entry, err := audittest.LatestAuditLogByAction(t.Context(), db, audit.ActionOpenRouterAPIKeySetSpendCap)
@@ -199,6 +210,43 @@ func TestSetOpenRouterSpendCapRechecksActiveTrialBeforePatch(t *testing.T) {
 	_, err := env.ExecuteActivity(setter.Do, spendCapActivityArgs("operation_trial_placeholder", organizationID, 75))
 	require.ErrorContains(t, err, "active trial")
 	provisioner.AssertNotCalled(t, "RefreshAPIKeyLimit", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestSetOpenRouterSpendCapAdminBypassesBillingAndTrialPolicy(t *testing.T) {
+	t.Parallel()
+
+	_, provisioner, db, organizationID := setupPaygChatKeyReconciler(t, "free", pgtype.Text{})
+	createSpendCapActivityKey(t, db, organizationID, 100)
+	now := time.Now().UTC()
+	require.NoError(t, trialsrepo.New(db).InsertTrialFixture(t.Context(), trialsrepo.InsertTrialFixtureParams{
+		OrganizationID: organizationID,
+		Tier:           "enterprise",
+		CreatedAt:      pgtype.Timestamptz{Time: now.Add(-time.Hour), Valid: true},
+		EndsAt:         pgtype.Timestamptz{Time: now.Add(time.Hour), Valid: true},
+	}))
+	provisioner.On(
+		"RefreshAPIKeyLimit",
+		mock.Anything,
+		organizationID,
+		openrouter.KeyTypeChat,
+		mock.MatchedBy(func(limit *int) bool { return limit != nil && *limit == 75 }),
+	).Run(func(args mock.Arguments) {
+		ctx, ok := args.Get(0).(context.Context)
+		require.True(t, ok)
+		require.NoError(t, openrouterrepo.New(db).UpdateOpenRouterKeyMonthlyCredits(ctx, openrouterrepo.UpdateOpenRouterKeyMonthlyCreditsParams{
+			MonthlyCredits: 75, OrganizationID: organizationID, KeyType: string(openrouter.KeyTypeChat),
+		}))
+	}).Return(75, nil).Once()
+
+	setter := activities.NewSetOpenRouterSpendCap(testenv.NewLogger(t), db, provisioner, audit.NewLogger(), newSpendCapActivityCache(t))
+	args := spendCapActivityArgs("operation_admin_placeholder", organizationID, 75)
+	args.BypassPolicy = true
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestActivityEnvironment()
+	env.RegisterActivity(setter.Do)
+	_, err := env.ExecuteActivity(setter.Do, args)
+	require.NoError(t, err)
+	provisioner.AssertExpectations(t)
 }
 
 func TestSetOpenRouterSpendCapRetryPreservesOriginalAuditSnapshot(t *testing.T) {
@@ -566,25 +614,33 @@ func TestSetOpenRouterSpendCapRetryDoesNotOverwriteNewerUnauditedOperation(t *te
 
 	firstRetryEnv := suite.NewTestActivityEnvironment()
 	firstRetryEnv.RegisterActivity(firstSetter.Do)
-	firstRetryEnv.SetHeartbeatDetails(spendCapHeartbeatFixture{
-		BeforeMonthlyCredits: 100,
-		ObservedKeyUpdatedAt: initialKey.UpdatedAt.Time,
-		AppliedKeyUpdatedAt:  firstAppliedKey.UpdatedAt.Time,
-		Applied:              true,
+	firstRetryEnv.SetHeartbeatDetails(spendCapResultHeartbeatFixture{
+		BeforeMonthlyCredits:  100,
+		ObservedKeyUpdatedAt:  initialKey.UpdatedAt.Time,
+		AppliedKeyUpdatedAt:   firstAppliedKey.UpdatedAt.Time,
+		AppliedMonthlyCredits: 600,
+		Applied:               true,
 	})
-	_, err = firstRetryEnv.ExecuteActivity(firstSetter.Do, spendCapActivityArgs("operation_first_placeholder", organizationID, 600))
+	firstResult, err := firstRetryEnv.ExecuteActivity(firstSetter.Do, spendCapActivityArgs("operation_first_placeholder", organizationID, 600))
 	require.NoError(t, err)
+	var firstMonthlyCredits int
+	require.NoError(t, firstResult.Get(&firstMonthlyCredits))
+	require.Equal(t, 700, firstMonthlyCredits, "superseded operation must return the current effective limit")
 
 	secondRetryEnv := suite.NewTestActivityEnvironment()
 	secondRetryEnv.RegisterActivity(secondSetter.Do)
-	secondRetryEnv.SetHeartbeatDetails(spendCapHeartbeatFixture{
-		BeforeMonthlyCredits: 600,
-		ObservedKeyUpdatedAt: firstAppliedKey.UpdatedAt.Time,
-		AppliedKeyUpdatedAt:  secondAppliedKey.UpdatedAt.Time,
-		Applied:              true,
+	secondRetryEnv.SetHeartbeatDetails(spendCapResultHeartbeatFixture{
+		BeforeMonthlyCredits:  600,
+		ObservedKeyUpdatedAt:  firstAppliedKey.UpdatedAt.Time,
+		AppliedKeyUpdatedAt:   secondAppliedKey.UpdatedAt.Time,
+		AppliedMonthlyCredits: 700,
+		Applied:               true,
 	})
-	_, err = secondRetryEnv.ExecuteActivity(secondSetter.Do, spendCapActivityArgs("operation_second_placeholder", organizationID, 700))
+	secondResult, err := secondRetryEnv.ExecuteActivity(secondSetter.Do, spendCapActivityArgs("operation_second_placeholder", organizationID, 700))
 	require.NoError(t, err)
+	var secondMonthlyCredits int
+	require.NoError(t, secondResult.Get(&secondMonthlyCredits))
+	require.Equal(t, 700, secondMonthlyCredits)
 	provisioner.AssertExpectations(t)
 	require.EqualValues(t, 1, firstAuditLogger.calls.Load(), "superseded retry must not audit")
 	require.EqualValues(t, 2, secondAuditLogger.calls.Load(), "newest retry must audit")
@@ -770,7 +826,7 @@ func TestSetOpenRouterSpendCapRetryRepairsAlertGeneration(t *testing.T) {
 	require.EqualValues(t, 600, generation.MonthlyCredits)
 }
 
-func TestSetOpenRouterSpendCapStaleRetryCannotReplaceNewerSameLimitGeneration(t *testing.T) {
+func TestSetOpenRouterSpendCapRecordedRetryReturnsNewerEffectiveLimit(t *testing.T) {
 	t.Parallel()
 
 	_, provisioner, db, organizationID := setupPaygChatKeyReconciler(
@@ -793,31 +849,57 @@ func TestSetOpenRouterSpendCapStaleRetryCannotReplaceNewerSameLimitGeneration(t 
 			OrganizationID: organizationID,
 			KeyType:        string(openrouter.KeyTypeChat),
 		}))
-	}).Return(600, nil).Twice()
+	}).Return(600, nil).Once()
+	provisioner.On(
+		"RefreshAPIKeyLimit",
+		mock.Anything,
+		organizationID,
+		openrouter.KeyTypeChat,
+		mock.MatchedBy(func(limit *int) bool { return limit != nil && *limit == 700 }),
+	).Run(func(args mock.Arguments) {
+		ctx, ok := args.Get(0).(context.Context)
+		require.True(t, ok)
+		require.NoError(t, openrouterrepo.New(db).UpdateOpenRouterKeyMonthlyCredits(ctx, openrouterrepo.UpdateOpenRouterKeyMonthlyCreditsParams{
+			MonthlyCredits: 700,
+			OrganizationID: organizationID,
+			KeyType:        string(openrouter.KeyTypeChat),
+		}))
+	}).Return(700, nil).Once()
 
 	redisCache := newSpendCapActivityCache(t)
 	generationCache := &failFirstSpendCapGenerationCache{Cache: redisCache}
 	setter := activities.NewSetOpenRouterSpendCap(testenv.NewLogger(t), db, provisioner, audit.NewLogger(), generationCache)
-	run := func(operationID string) error {
+	run := func(operationID string, limit int, heartbeat *spendCapResultHeartbeatFixture) (int, error) {
 		var suite testsuite.WorkflowTestSuite
 		env := suite.NewTestActivityEnvironment()
 		env.RegisterActivity(setter.Do)
-		_, err := env.ExecuteActivity(setter.Do, spendCapActivityArgs(operationID, organizationID, 600))
-		if err != nil {
-			return fmt.Errorf("execute spend-cap activity: %w", err)
+		if heartbeat != nil {
+			env.SetHeartbeatDetails(*heartbeat)
 		}
-		return nil
+		result, err := env.ExecuteActivity(setter.Do, spendCapActivityArgs(operationID, organizationID, limit))
+		if err != nil {
+			return 0, fmt.Errorf("execute spend-cap activity: %w", err)
+		}
+		var monthlyCredits int
+		if err := result.Get(&monthlyCredits); err != nil {
+			return 0, fmt.Errorf("decode spend-cap activity result: %w", err)
+		}
+		return monthlyCredits, nil
 	}
 
-	require.ErrorContains(t, run("operation_first_placeholder"), "re-arm OpenRouter chat credits alerts")
-	require.NoError(t, run("operation_second_placeholder"))
-	require.NoError(t, run("operation_first_placeholder"))
+	_, err := run("operation_first_placeholder", 600, nil)
+	require.ErrorContains(t, err, "re-arm OpenRouter chat credits alerts")
+	_, err = run("operation_second_placeholder", 700, nil)
+	require.NoError(t, err)
+	monthlyCredits, err := run("operation_first_placeholder", 600, &spendCapResultHeartbeatFixture{AppliedMonthlyCredits: 600})
+	require.NoError(t, err)
+	require.Equal(t, 700, monthlyCredits)
 	provisioner.AssertExpectations(t)
 
 	var generation spendCapAlertGenerationFixture
 	require.NoError(t, redisCache.Get(t.Context(), spendCapGenerationKey(organizationID), &generation))
 	require.Equal(t, "operation_second_placeholder", generation.OperationID)
-	require.EqualValues(t, 600, generation.MonthlyCredits)
+	require.EqualValues(t, 700, generation.MonthlyCredits)
 }
 
 func TestSetOpenRouterSpendCapRecordedRetryNoopsWhenKeyIsDisabled(t *testing.T) {

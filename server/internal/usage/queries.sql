@@ -59,6 +59,59 @@ SELECT
 FROM inputs
 CROSS JOIN completed_spend;
 
+-- name: ListOpenRouterInferenceSpendByMonth :many
+WITH candidate_months AS (
+  SELECT
+      DATE_TRUNC('month', day)::date AS period_start
+    , (DATE_TRUNC('month', day) + INTERVAL '1 month')::date AS period_end
+    , SUM(spend_usd)::numeric(30, 6) AS spend_usd
+  FROM openrouter_spend_daily
+  WHERE organization_id = sqlc.arg(organization_id)::text
+    AND key_type = ANY(sqlc.arg(billable_key_types)::text[])
+    AND day < DATE_TRUNC('month', sqlc.arg(completed_before)::timestamptz AT TIME ZONE 'UTC')::date
+  GROUP BY DATE_TRUNC('month', day)
+), complete_months AS (
+  SELECT candidate_months.*
+  FROM candidate_months
+  WHERE NOT EXISTS (
+    SELECT 1
+    FROM openrouter_api_keys AS inference_key
+    CROSS JOIN LATERAL GENERATE_SERIES(
+      GREATEST(candidate_months.period_start, (inference_key.created_at AT TIME ZONE 'UTC')::date),
+      LEAST(
+        candidate_months.period_end,
+        COALESCE((inference_key.deleted_at AT TIME ZONE 'UTC')::date, candidate_months.period_end)
+      ) - 1,
+      INTERVAL '1 day'
+    ) AS expected_day(day)
+    WHERE inference_key.organization_id = sqlc.arg(organization_id)::text
+      AND inference_key.key_type = ANY(sqlc.arg(billable_key_types)::text[])
+      AND (inference_key.created_at AT TIME ZONE 'UTC')::date < candidate_months.period_end
+      AND (
+        inference_key.deleted_at IS NULL
+        OR (inference_key.deleted_at AT TIME ZONE 'UTC')::date > candidate_months.period_start
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM openrouter_spend_daily AS daily_spend
+        WHERE daily_spend.organization_id = inference_key.organization_id
+          AND daily_spend.key_type = inference_key.key_type
+          AND daily_spend.day = expected_day.day::date
+      )
+  )
+), latest_months AS (
+  SELECT *
+  FROM complete_months
+  ORDER BY period_start DESC
+  LIMIT 12
+)
+SELECT
+    period_start::text AS period_start
+  , period_end::text AS period_end
+  , spend_usd::text AS spend_usd
+FROM latest_months
+ORDER BY period_start;
+
 -- name: ListMaterializedOpenRouterInferenceKeys :many
 SELECT key_type, monthly_credits, disabled
 FROM openrouter_api_keys

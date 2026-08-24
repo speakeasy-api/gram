@@ -11,7 +11,7 @@ use tracing::Instrument;
 
 use crate::mcp_actor::McpCmd;
 use crate::runtime::{
-    AppState, DEFAULT_THREAD_IDLE_TTL, build_host, ensure_thread, snapshot_threads,
+    AppState, DEFAULT_THREAD_IDLE_TTL, build_host, ensure_thread, lookup_thread, snapshot_threads,
 };
 use crate::telemetry::SpanIdentity;
 
@@ -22,7 +22,8 @@ const IDEMPOTENCY_HEADER: &str = "x-idempotency-key";
 /// 2 MB default body limit would 413 them before the handler runs.
 const TURN_BODY_LIMIT_BYTES: usize = 32 * 1024 * 1024;
 use crate::wire::{
-    RunnerContent, RunnerStateResponse, ThreadStateView, ThreadTurnRequest, ThreadTurnResponse,
+    RunnerContent, RunnerStateResponse, ThreadInterruptResponse, ThreadStateView,
+    ThreadTurnRequest, ThreadTurnResponse,
 };
 
 pub struct ServeConfig {
@@ -49,6 +50,7 @@ pub async fn serve(config: ServeConfig) -> Result<(), std::io::Error> {
         .route("/healthz", get(healthz))
         .route("/state", get(state_handler))
         .route("/threads/{thread_id}/turn", post(thread_turn))
+        .route("/threads/{thread_id}/interrupt", post(thread_interrupt))
         .layer(DefaultBodyLimit::max(TURN_BODY_LIMIT_BYTES))
         .with_state(host);
 
@@ -86,6 +88,38 @@ async fn state_handler(State(host): State<AppState>) -> Json<RunnerStateResponse
             })
             .collect(),
     })
+}
+
+/// Stops the turn in flight on a thread.
+///
+/// Never bootstraps: a thread this VM has not configured has no turn to stop,
+/// and bringing one up here would spend a bootstrap fetch to cancel nothing.
+/// That case answers 200 with `interrupted: false` rather than 404 — the
+/// caller's intent ("this thread should not be generating") holds either way,
+/// and the server treats a miss as success so a stop the user pressed just
+/// after the reply landed does not surface as an error. A thread this VM holds
+/// but which is idle between turns answers `interrupted: false` for the same
+/// reason: nothing was generating.
+///
+/// The response is an ack, like /turn: the loop unwinds its cancelled turn on
+/// the per-thread task, and the cancelled turn's partial output has already
+/// gone out through /chat/completions.
+async fn thread_interrupt(
+    State(host): State<AppState>,
+    Path(thread_id): Path<String>,
+) -> Result<Json<ThreadInterruptResponse>, (StatusCode, String)> {
+    if thread_id.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "missing thread_id".to_string()));
+    }
+
+    let Some(thread) = lookup_thread(&host, &thread_id) else {
+        tracing::info!(thread_id = %thread_id, "interrupt: no live thread on this runtime");
+        return Ok(Json(ThreadInterruptResponse { interrupted: false }));
+    };
+
+    let interrupted = thread.interrupt();
+    tracing::info!(thread_id = %thread_id, interrupted, "interrupting thread turn");
+    Ok(Json(ThreadInterruptResponse { interrupted }))
 }
 
 async fn thread_turn(

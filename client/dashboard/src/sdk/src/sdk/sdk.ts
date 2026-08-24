@@ -33,6 +33,7 @@ import { Hooks } from "./hooks.js";
 import { HooksServerNames } from "./hooksservernames.js";
 import { Instances } from "./instances.js";
 import { Integrations } from "./integrations.js";
+import { JsonWebKeySets } from "./jsonwebkeysets.js";
 import { Keys } from "./keys.js";
 import { Litellm } from "./litellm.js";
 import { McpApproval } from "./mcpapproval.js";
@@ -235,6 +236,11 @@ export class Gram extends ClientSDK {
   private _integrations?: Integrations;
   get integrations(): Integrations {
     return (this._integrations ??= new Integrations(this._options));
+  }
+
+  private _jsonWebKeySets?: JsonWebKeySets;
+  get jsonWebKeySets(): JsonWebKeySets {
+    return (this._jsonWebKeySets ??= new JsonWebKeySets(this._options));
   }
 
   private _keys?: Keys;

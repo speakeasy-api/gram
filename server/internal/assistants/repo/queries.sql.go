@@ -197,6 +197,44 @@ func (q *Queries) CallerOwnsDashboardChat(ctx context.Context, arg CallerOwnsDas
 	return ok, err
 }
 
+const cancelPendingAssistantThreadEvents = `-- name: CancelPendingAssistantThreadEvents :execrows
+UPDATE assistant_thread_events
+SET
+  status = $1,
+  processed_at = clock_timestamp(),
+  updated_at = clock_timestamp()
+WHERE project_id = $2
+  AND assistant_thread_id = $3
+  AND status = $4
+  AND deleted IS FALSE
+`
+
+type CancelPendingAssistantThreadEventsParams struct {
+	CancelledStatus string
+	ProjectID       uuid.UUID
+	ThreadID        uuid.UUID
+	PendingStatus   string
+}
+
+// Drops every turn queued on a thread that no runner has claimed yet. Used by
+// the stop button: a turn still waiting on a cold runtime has no in-flight
+// generation to cancel, so unless it is taken out of the queue here it starts
+// generating moments after the user asked it not to. Claimed ('processing')
+// events are deliberately untouched — those are already dispatched, and the
+// runner's own interrupt is what stops them.
+func (q *Queries) CancelPendingAssistantThreadEvents(ctx context.Context, arg CancelPendingAssistantThreadEventsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, cancelPendingAssistantThreadEvents,
+		arg.CancelledStatus,
+		arg.ProjectID,
+		arg.ThreadID,
+		arg.PendingStatus,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const claimAssistantMCPOAuthClientRegistration = `-- name: ClaimAssistantMCPOAuthClientRegistration :execrows
 INSERT INTO assistant_mcp_oauth_clients AS clients (
   project_id,
@@ -1292,25 +1330,6 @@ func (q *Queries) GetAssistantThreadIDByCorrelation(ctx context.Context, arg Get
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
-}
-
-const getAssistantThreadSourceKind = `-- name: GetAssistantThreadSourceKind :one
-SELECT source_kind
-FROM assistant_threads
-WHERE id = $1
-  AND project_id = $2
-`
-
-type GetAssistantThreadSourceKindParams struct {
-	ThreadID  uuid.UUID
-	ProjectID uuid.UUID
-}
-
-func (q *Queries) GetAssistantThreadSourceKind(ctx context.Context, arg GetAssistantThreadSourceKindParams) (string, error) {
-	row := q.db.QueryRow(ctx, getAssistantThreadSourceKind, arg.ThreadID, arg.ProjectID)
-	var source_kind string
-	err := row.Scan(&source_kind)
-	return source_kind, err
 }
 
 const getLatestAssistantRuntimeByThreadID = `-- name: GetLatestAssistantRuntimeByThreadID :one

@@ -69,36 +69,76 @@ type SetOpenRouterSpendCapArgs struct {
 	Limit            int
 	Actor            urn.Principal
 	ActorDisplayName *string
+	// BypassPolicy is false for existing and customer-initiated workflows.
+	BypassPolicy bool
 }
 
 type setOpenRouterSpendCapHeartbeat struct {
-	BeforeMonthlyCredits int64
-	ObservedKeyUpdatedAt time.Time
-	AppliedKeyUpdatedAt  time.Time
-	Applied              bool
+	BeforeMonthlyCredits  int64
+	ObservedKeyUpdatedAt  time.Time
+	AppliedKeyUpdatedAt   time.Time
+	AppliedMonthlyCredits int64
+	Applied               bool
 }
 
-func (s *SetOpenRouterSpendCap) Do(ctx context.Context, args SetOpenRouterSpendCapArgs) error {
+func (s *SetOpenRouterSpendCap) Do(ctx context.Context, args SetOpenRouterSpendCapArgs) (int, error) {
 	if args.OperationID == "" {
-		return errors.New("spend-cap operation ID is required")
+		return 0, errors.New("spend-cap operation ID is required")
 	}
 	if args.OrganizationID == "" {
-		return errors.New("organization ID is required")
+		return 0, errors.New("organization ID is required")
 	}
 	keyType := openrouter.KeyType(args.KeyType).OrDefault()
 	if err := keyType.Validate(); err != nil {
-		return fmt.Errorf("invalid OpenRouter key type: %w", err)
+		return 0, fmt.Errorf("invalid OpenRouter key type: %w", err)
 	}
 	if args.Limit < constants.MinimumPaygSpendCapUSD || args.Limit > constants.MaximumPaygSpendCapUSD {
-		return fmt.Errorf("spend cap must be between %d and %d: %d", constants.MinimumPaygSpendCapUSD, constants.MaximumPaygSpendCapUSD, args.Limit)
+		return 0, fmt.Errorf("spend cap must be between %d and %d: %d", constants.MinimumPaygSpendCapUSD, constants.MaximumPaygSpendCapUSD, args.Limit)
 	}
 
-	return withOpenRouterKeyBillingConnectionLockTimeout(ctx, s.logger, s.db, args.OrganizationID, keyType, spendCapKeyBillingLockWaitTimeout, func(conn *pgxpool.Conn, queries *activitiesrepo.Queries) error {
-		return s.setLocked(ctx, conn, queries, args, keyType)
+	monthlyCredits := 0
+	operationRecorded := false
+	err := withOpenRouterKeyBillingConnectionLockTimeout(ctx, s.logger, s.db, args.OrganizationID, keyType, spendCapKeyBillingLockWaitTimeout, func(conn *pgxpool.Conn, queries *activitiesrepo.Queries) error {
+		if err := s.setLocked(ctx, conn, queries, args, keyType, &operationRecorded); err != nil {
+			return err
+		}
+
+		latest, err := auditrepo.New(conn).GetLatestOpenRouterSpendCapAuditOperation(ctx, auditrepo.GetLatestOpenRouterSpendCapAuditOperationParams{
+			OrganizationID: args.OrganizationID,
+			SubjectID:      urn.NewOpenRouterAPIKey(args.OrganizationID, string(keyType)).ID,
+		})
+		if err != nil {
+			return fmt.Errorf("read latest spend-cap operation: %w", err)
+		}
+		if latest.OperationID == args.OperationID {
+			if operationRecorded && activity.HasHeartbeatDetails(ctx) {
+				var heartbeat setOpenRouterSpendCapHeartbeat
+				if err := activity.GetHeartbeatDetails(ctx, &heartbeat); err != nil {
+					return fmt.Errorf("restore spend-cap result heartbeat: %w", err)
+				}
+				if heartbeat.AppliedMonthlyCredits > 0 {
+					monthlyCredits = int(heartbeat.AppliedMonthlyCredits)
+					return nil
+				}
+			}
+			monthlyCredits = int(latest.MonthlyCredits)
+			return nil
+		}
+
+		key, err := openrouterrepo.New(conn).GetOpenRouterAPIKey(ctx, openrouterrepo.GetOpenRouterAPIKeyParams{
+			OrganizationID: args.OrganizationID,
+			KeyType:        string(keyType),
+		})
+		if err != nil {
+			return fmt.Errorf("read effective %s inference cap: %w", keyType, err)
+		}
+		monthlyCredits = int(key.MonthlyCredits)
+		return nil
 	})
+	return monthlyCredits, err
 }
 
-func (s *SetOpenRouterSpendCap) setLocked(ctx context.Context, conn *pgxpool.Conn, queries *activitiesrepo.Queries, args SetOpenRouterSpendCapArgs, keyType openrouter.KeyType) error {
+func (s *SetOpenRouterSpendCap) setLocked(ctx context.Context, conn *pgxpool.Conn, queries *activitiesrepo.Queries, args SetOpenRouterSpendCapArgs, keyType openrouter.KeyType, operationRecorded *bool) error {
 	subject := urn.NewOpenRouterAPIKey(args.OrganizationID, string(keyType))
 	auditQueries := auditrepo.New(conn)
 	recorded, err := auditQueries.HasOpenRouterSpendCapAuditOperation(ctx, auditrepo.HasOpenRouterSpendCapAuditOperationParams{
@@ -109,6 +149,7 @@ func (s *SetOpenRouterSpendCap) setLocked(ctx context.Context, conn *pgxpool.Con
 	if err != nil {
 		return fmt.Errorf("check spend-cap audit operation: %w", err)
 	}
+	*operationRecorded = recorded
 	if recorded {
 		latest, err := auditQueries.GetLatestOpenRouterSpendCapAuditOperation(ctx, auditrepo.GetLatestOpenRouterSpendCapAuditOperationParams{
 			OrganizationID: args.OrganizationID,
@@ -117,9 +158,10 @@ func (s *SetOpenRouterSpendCap) setLocked(ctx context.Context, conn *pgxpool.Con
 		if err != nil {
 			return fmt.Errorf("check latest spend-cap audit operation: %w", err)
 		}
-		if latest.OperationID != args.OperationID || latest.MonthlyCredits != int64(args.Limit) {
+		if latest.OperationID != args.OperationID {
 			return nil
 		}
+		args.Limit = int(latest.MonthlyCredits)
 	}
 
 	key, err := openrouterrepo.New(conn).GetOpenRouterAPIKey(ctx, openrouterrepo.GetOpenRouterAPIKeyParams{
@@ -142,6 +184,7 @@ func (s *SetOpenRouterSpendCap) setLocked(ctx context.Context, conn *pgxpool.Con
 		return s.rearmCreditsAlertsIfCurrent(ctx, conn, queries, args, keyType)
 	}
 	before := key.MonthlyCredits
+	refreshed := args.Limit
 	applied := false
 	if activity.HasHeartbeatDetails(ctx) {
 		var heartbeat setOpenRouterSpendCapHeartbeat
@@ -157,7 +200,11 @@ func (s *SetOpenRouterSpendCap) setLocked(ctx context.Context, conn *pgxpool.Con
 					nil,
 				)
 			}
-			if !key.UpdatedAt.Time.Equal(heartbeat.AppliedKeyUpdatedAt) && key.MonthlyCredits != int64(args.Limit) {
+			appliedMonthlyCredits := int64(args.Limit)
+			if heartbeat.AppliedMonthlyCredits > 0 {
+				appliedMonthlyCredits = heartbeat.AppliedMonthlyCredits
+			}
+			if !key.UpdatedAt.Time.Equal(heartbeat.AppliedKeyUpdatedAt) && key.MonthlyCredits != appliedMonthlyCredits {
 				// Every cap application advances the mirrored key generation. A
 				// different generation and value means another operation won after
 				// this attempt applied the key, so this retry must not overwrite it.
@@ -166,6 +213,7 @@ func (s *SetOpenRouterSpendCap) setLocked(ctx context.Context, conn *pgxpool.Con
 			}
 			// Credits polling may advance the mirror generation while reconciling
 			// the same value. This operation still owns its missing audit record.
+			refreshed = int(appliedMonthlyCredits)
 			applied = true
 		} else if heartbeat.ObservedKeyUpdatedAt.IsZero() {
 			return errors.New("restore spend-cap operation heartbeat: missing observed key generation")
@@ -187,29 +235,31 @@ func (s *SetOpenRouterSpendCap) setLocked(ctx context.Context, conn *pgxpool.Con
 		// An attempt with no heartbeat has not made an external change, so it
 		// remains eligible and concurrent requests stay completion-ordered.
 		activity.RecordHeartbeat(ctx, setOpenRouterSpendCapHeartbeat{
-			BeforeMonthlyCredits: before,
-			ObservedKeyUpdatedAt: key.UpdatedAt.Time,
-			AppliedKeyUpdatedAt:  time.Time{},
-			Applied:              false,
+			BeforeMonthlyCredits:  before,
+			ObservedKeyUpdatedAt:  key.UpdatedAt.Time,
+			AppliedKeyUpdatedAt:   time.Time{},
+			AppliedMonthlyCredits: 0,
+			Applied:               false,
 		})
 	}
 
-	refreshed := args.Limit
 	if !applied {
-		projection, err := queries.GetPaygOpenRouterChatKeyProjection(ctx, args.OrganizationID)
-		if err != nil {
-			return fmt.Errorf("read billing state before setting OpenRouter spend cap: %w", err)
-		}
-		hasSubscription := projection.StripeSubscriptionID.Valid && projection.StripeSubscriptionID.String != ""
-		if projection.GramAccountType != string(billing.TierPayg) || !hasSubscription {
-			return fmt.Errorf("PAYG subscription required to set OpenRouter spend cap: account_type=%q has_subscription=%t", projection.GramAccountType, hasSubscription)
-		}
-		_, err = trialsrepo.New(conn).GetActiveTrial(ctx, args.OrganizationID)
-		switch {
-		case err == nil:
-			return temporal.NewNonRetryableApplicationError("inference caps cannot be changed during an active trial", "active-trial", nil)
-		case !errors.Is(err, pgx.ErrNoRows):
-			return fmt.Errorf("check active trial before setting inference cap: %w", err)
+		if !args.BypassPolicy {
+			projection, err := queries.GetPaygOpenRouterChatKeyProjection(ctx, args.OrganizationID)
+			if err != nil {
+				return fmt.Errorf("read billing state before setting OpenRouter spend cap: %w", err)
+			}
+			hasSubscription := projection.StripeSubscriptionID.Valid && projection.StripeSubscriptionID.String != ""
+			if projection.GramAccountType != string(billing.TierPayg) || !hasSubscription {
+				return fmt.Errorf("PAYG subscription required to set OpenRouter spend cap: account_type=%q has_subscription=%t", projection.GramAccountType, hasSubscription)
+			}
+			_, err = trialsrepo.New(conn).GetActiveTrial(ctx, args.OrganizationID)
+			switch {
+			case err == nil:
+				return temporal.NewNonRetryableApplicationError("inference caps cannot be changed during an active trial", "active-trial", nil)
+			case !errors.Is(err, pgx.ErrNoRows):
+				return fmt.Errorf("check active trial before setting inference cap: %w", err)
+			}
 		}
 		if key.Disabled {
 			return fmt.Errorf("cannot set inference cap while the %s key is disabled", keyType)
@@ -231,10 +281,11 @@ func (s *SetOpenRouterSpendCap) setLocked(ctx context.Context, conn *pgxpool.Con
 			return fmt.Errorf("read %s key after setting inference cap: %w", keyType, err)
 		}
 		activity.RecordHeartbeat(ctx, setOpenRouterSpendCapHeartbeat{
-			BeforeMonthlyCredits: before,
-			ObservedKeyUpdatedAt: key.UpdatedAt.Time,
-			AppliedKeyUpdatedAt:  appliedKey.UpdatedAt.Time,
-			Applied:              true,
+			BeforeMonthlyCredits:  before,
+			ObservedKeyUpdatedAt:  key.UpdatedAt.Time,
+			AppliedKeyUpdatedAt:   appliedKey.UpdatedAt.Time,
+			AppliedMonthlyCredits: appliedKey.MonthlyCredits,
+			Applied:               true,
 		})
 	}
 
@@ -276,6 +327,8 @@ func (s *SetOpenRouterSpendCap) setLocked(ctx context.Context, conn *pgxpool.Con
 	if err := dbtx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit spend-cap audit transaction: %w", err)
 	}
+	*operationRecorded = true
+	args.Limit = refreshed
 
 	return s.rearmCreditsAlertsIfCurrent(ctx, conn, queries, args, keyType)
 }

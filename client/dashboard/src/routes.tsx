@@ -29,6 +29,7 @@ import SkillVersionHistory from "./pages/skills/SkillVersionHistory";
 import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
 import UserSessions from "./pages/org/UserSessions";
+import EventFeed from "./pages/data/EventFeed";
 import DeviceAgent, { DeviceAgentRoot } from "./pages/device-agent/DeviceAgent";
 import MdmIntegrationDetail from "./pages/org/device-integrations/MdmIntegrationDetail";
 import Elements from "./pages/elements/Elements";
@@ -1055,6 +1056,13 @@ const ORG_ROUTE_STRUCTURE = {
     url: "logs",
     icon: "file-text",
     component: OrgLogs,
+  },
+  data: {
+    title: "Event Feed",
+    url: "data",
+    icon: "activity",
+    stage: "preview",
+    component: EventFeed,
   },
   skills: {
     title: "Skills",
