@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const queryHooks = vi.hoisted(() => ({
   activity: vi.fn(),
   catalog: vi.fn(),
-  overview: vi.fn(),
   policies: vi.fn(),
   plugins: vi.fn(),
   remoteServers: vi.fn(),
@@ -14,9 +13,6 @@ const queryHooks = vi.hoisted(() => ({
 
 const requestProject = vi.hoisted(() => ({ slug: "request-project" }));
 
-vi.mock("@/components/project-guide/allTimeOverviewQuery", () => ({
-  useAllTimeProjectOverview: queryHooks.overview,
-}));
 vi.mock("@/pages/catalog/hooks", () => ({
   useListMCPCatalog: queryHooks.catalog,
 }));
@@ -77,7 +73,6 @@ beforeEach(() => {
     data: { policies: [] },
     isPending: false,
   });
-  queryHooks.overview.mockReturnValue({ data: undefined, isPending: false });
   queryHooks.plugins.mockReturnValue({
     data: { plugins: [] },
     isPending: false,

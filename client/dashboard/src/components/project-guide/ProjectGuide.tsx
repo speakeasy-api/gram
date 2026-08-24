@@ -42,6 +42,8 @@ import {
   type ProjectGuideOutputEntry,
 } from "@/components/project-guide/projectGuideMachine";
 import { useSlugs } from "@/contexts/Sdk";
+import { useHideInsightsDock } from "@/components/insights-context";
+import { useRoutes } from "@/routes";
 import { Icon } from "@/components/ui/Icon";
 import type { IconName } from "@/components/ui/Icon/names";
 import { cn } from "@/lib/utils";
@@ -56,7 +58,7 @@ import {
 import { useMachine } from "@xstate/react";
 import { motion, useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useRef } from "react";
-import { useSearchParams } from "react-router";
+import { useNavigate } from "react-router";
 
 type McpGuideOperations = ReturnType<typeof useMcpGuideOperations>;
 type SecretGuideOperations = ReturnType<typeof useSecretGuideOperations>;
@@ -69,7 +71,10 @@ export function ProjectGuide({
     report: (report: ProjectGuideOperationReport) => void,
   ) => void;
 } = {}): JSX.Element {
+  useHideInsightsDock();
   const { projectSlug } = useSlugs();
+  const routes = useRoutes();
+  const navigate = useNavigate();
   const { statusByJourney, isPending: progressPending } =
     useProjectGuideProgress();
   const mcpOperations = useMcpGuideOperations();
@@ -125,7 +130,6 @@ export function ProjectGuide({
     },
     [],
   );
-  const [searchParams, setSearchParams] = useSearchParams();
   const reducedMotion = useReducedMotion();
   const selected = snapshot.context.activePath;
   const displayState = snapshot.value as ProjectGuideDisplayState;
@@ -140,8 +144,8 @@ export function ProjectGuide({
     statusByJourney["secret-block"] === "done";
 
   const returnToProjectHome = useCallback(() => {
-    setSearchParams(searchParams, { replace: true });
-  }, [searchParams, setSearchParams]);
+    void navigate(routes.home.href(), { replace: true });
+  }, [navigate, routes.home]);
 
   useEffect(() => {
     if (displayState !== "waiting") return;
@@ -326,6 +330,11 @@ export function ProjectGuide({
                         <ProjectGuideObservedEvent
                           event={snapshot.context.observedEvent}
                           label={PROJECT_GUIDE_FIXTURES[journey.id].event.label}
+                          href={
+                            journey.id === "secret-block"
+                              ? secretOperations.riskEventsHref
+                              : undefined
+                          }
                         />
                       ) : null
                     }
@@ -367,6 +376,26 @@ function primaryActionFor(
 ): ProjectGuideRunAction | null {
   switch (displayState) {
     case "ready":
+      if (
+        journey.id === "third-party-mcp" &&
+        currentStep === 0 &&
+        mcpOperations.catalogError
+      ) {
+        return {
+          label: "Retry catalog",
+          onClick: mcpOperations.retryCatalog,
+        };
+      }
+      if (
+        journey.id === "secret-block" &&
+        currentStep === 0 &&
+        secretOperations.policyError
+      ) {
+        return {
+          label: "Retry policy check",
+          onClick: secretOperations.retryPolicy,
+        };
+      }
       return {
         label: "Start the journey",
         icon: "play",
@@ -722,15 +751,6 @@ function SecretStepBody({
             operationProgress={operationProgress}
             hasError={Boolean(error) || operations.policyError}
           />
-          {operations.policyError && (
-            <button
-              type="button"
-              onClick={operations.retryPolicy}
-              className="border-border w-fit border px-3 py-2 font-mono text-xs uppercase"
-            >
-              Retry policy check
-            </button>
-          )}
         </div>
       );
     case 1:
@@ -961,13 +981,6 @@ function McpCatalogSelection({
             No curated hosted servers are available right now.
           </p>
         )}
-        <button
-          type="button"
-          onClick={operations.retryCatalog}
-          className="border-border w-fit border px-3 py-2 font-mono text-xs uppercase"
-        >
-          Retry catalog
-        </button>
       </div>
     );
   }
@@ -1225,23 +1238,11 @@ function guideStepError(
     if (step === 0 && mcpOperations.catalogError) {
       return "Could not load the automatic catalog servers.";
     }
-    if (
-      step === 1 &&
-      (!mcpOperations.endpointUrl || !mcpOperations.connectionPrompts)
-    ) {
-      return "The governed endpoint is not ready yet.";
-    }
-    if (step === 2 && !mcpOperations.prompt) {
-      return "The safe prompt is unavailable until the server is ready.";
-    }
     return null;
   }
 
   if (step === 0 && secretOperations.policyError) {
     return "Could not read this project's risk policies.";
-  }
-  if (step === 2 && !secretOperations.installCommand) {
-    return "The observability ZIP is not ready. Retry the download step.";
   }
   return null;
 }

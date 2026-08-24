@@ -261,9 +261,11 @@ export function ProjectGuideRun({
 export function ProjectGuideObservedEvent({
   event,
   label,
+  href,
 }: {
   event: ProjectGuideEventCard;
   label: string;
+  href?: string;
 }): JSX.Element {
   const toneClasses =
     event.tone === "deny"
@@ -290,6 +292,14 @@ export function ProjectGuideObservedEvent({
       <span className="border-neutral-softest text-muted-foreground border-t pt-1.5 text-sm leading-normal">
         {event.note}
       </span>
+      {href && (
+        <Link
+          to={href}
+          className="text-default-destructive text-eyebrow underline underline-offset-2"
+        >
+          View risk events
+        </Link>
+      )}
     </section>
   );
 }

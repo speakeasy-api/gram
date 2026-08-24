@@ -35,7 +35,7 @@ const statusByJourney = vi.hoisted(
     }) as { current: Record<JourneyId, JourneyStatus> },
 );
 const progressPending = vi.hoisted(() => ({ current: false }));
-const setSearchParams = vi.hoisted(() => vi.fn());
+const navigate = vi.hoisted(() => vi.fn());
 const mcpOperations = vi.hoisted(() => ({
   current: {} as Record<string, unknown>,
 }));
@@ -54,6 +54,11 @@ vi.mock("./projectGuideStores", () => ({
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ projectSlug: "project-guide-test" }),
+}));
+vi.mock("@/routes", () => ({
+  useRoutes: () => ({
+    home: { href: () => "/org/projects/project-guide-test" },
+  }),
 }));
 
 vi.mock("./useMcpGuideOperations", () => ({
@@ -83,7 +88,7 @@ vi.mock("react-router", () => ({
       {children}
     </a>
   ),
-  useSearchParams: () => [new URLSearchParams(), setSearchParams],
+  useNavigate: () => navigate,
 }));
 
 import { ProjectGuide } from "./ProjectGuide";
@@ -1007,7 +1012,7 @@ describe("ProjectGuide", () => {
     ).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Go to project home" }));
 
-    expect(setSearchParams).toHaveBeenCalledWith(new URLSearchParams(), {
+    expect(navigate).toHaveBeenCalledWith("/org/projects/project-guide-test", {
       replace: true,
     });
   });
@@ -1387,6 +1392,11 @@ describe("ProjectGuide", () => {
     expect(
       screen
         .getByRole("link", { name: "Open Risk Events" })
+        .getAttribute("href"),
+    ).toBe("/projects/request-project/security/events");
+    expect(
+      screen
+        .getByRole("link", { name: "View risk events" })
         .getAttribute("href"),
     ).toBe("/projects/request-project/security/events");
   });

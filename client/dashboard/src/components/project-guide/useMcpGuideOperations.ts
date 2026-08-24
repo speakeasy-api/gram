@@ -64,13 +64,21 @@ function compareCatalogServers(
   );
 }
 
+function canConfigureWithoutUserCredentials(server: PulseMCPServer): boolean {
+  const authType = extractAuthType(server);
+  return (
+    authType === "none" ||
+    (authType === "oauth" && !requiresManualSetup(server))
+  );
+}
+
 function curateCatalogServers(
   servers: ExternalMCPServer[] | undefined,
 ): PulseMCPServer[] | undefined {
   if (!servers) return undefined;
   return servers
     .filter(isPulseMcpServer)
-    .filter((server) => !requiresManualSetup(server))
+    .filter(canConfigureWithoutUserCredentials)
     .filter((server) =>
       AUTOMATIC_CATALOG_SERVER_NAMES.includes(
         serverName(server) as (typeof AUTOMATIC_CATALOG_SERVER_NAMES)[number],

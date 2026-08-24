@@ -247,6 +247,26 @@ describe("useMcpGuideOperations", () => {
     });
   });
 
+  it("excludes curated servers that require user-supplied credentials", () => {
+    const apiKeyServer = catalogServer({
+      title: "Notion",
+      meta: {
+        "com.pulsemcp/server-version": {
+          "remotes[0]": { authOptions: [{ type: "api_key" }] },
+        },
+      },
+    });
+    queryHooks.catalog.mockReturnValue(
+      queryResult({ servers: [catalogServer(), apiKeyServer] }),
+    );
+
+    const { result } = renderHook(() => useMcpGuideOperations());
+
+    expect(
+      result.current.catalogServers?.map((server) => server.title),
+    ).toEqual(["Linear"]);
+  });
+
   it("reports OAuth setup in the activity output", async () => {
     const oauthServer = catalogServer({
       title: "Notion",
