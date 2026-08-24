@@ -53,7 +53,7 @@ const CAP_COPY: Record<InferenceSpendCapKeyType, CapCopy> = {
     name: "Security inference",
     column: "Security",
     columnHint:
-      "The automated analysis Gram runs over this organization's traffic, including security scanning.",
+      "Platform-initiated inference Gram runs for this organization, including security scanning and other automated analysis.",
     slug: "security",
     paused:
       "The automated analysis Gram runs over this organization's traffic, including security scanning, is paused for the rest of the month. Raise the cap to start it again.",

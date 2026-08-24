@@ -52,8 +52,9 @@ describe("inferenceSpendHint", () => {
     expect(inferenceSpendHint("chat")).not.toMatch(/other inference/i);
   });
 
-  it("explains security spend as automated analysis", () => {
-    expect(inferenceSpendHint("internal")).toMatch(/automated analysis/i);
+  it("explains security spend as platform-initiated inference", () => {
+    expect(inferenceSpendHint("internal")).toMatch(/platform-initiated/i);
+    expect(inferenceSpendHint("internal")).toMatch(/security scanning/i);
   });
 });
 
