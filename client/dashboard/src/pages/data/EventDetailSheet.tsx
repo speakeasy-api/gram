@@ -72,7 +72,6 @@ function EventDetailContent({ event }: { event: EventLogEntry }) {
 
         {/* Meta — definition-list rows with eyebrow keys and copyable mono values */}
         <div className="border-border divide-border flex flex-col divide-y border-y">
-          <MetadataRow label="Record ID" value={event.recordId} />
           {event.traceId && (
             <MetadataRow label="Trace ID" value={event.traceId} />
           )}

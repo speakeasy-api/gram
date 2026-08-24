@@ -15,9 +15,9 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { getPresetRange } from "@/elements";
 import { formatPlatform } from "@/lib/formatPlatform";
 import { cn } from "@/lib/utils";
-import { telemetryGetEventFacets } from "@gram/client/funcs/telemetryGetEventFacets";
-import { telemetryGetEventVolume } from "@gram/client/funcs/telemetryGetEventVolume";
-import { telemetryListEventLog } from "@gram/client/funcs/telemetryListEventLog";
+import { otelGetEventFacets } from "@gram/client/funcs/otelGetEventFacets";
+import { otelGetEventVolume } from "@gram/client/funcs/otelGetEventVolume";
+import { otelListEventLog } from "@gram/client/funcs/otelListEventLog";
 import {
   EventLogEntryKind,
   type EventLogEntry,
@@ -115,7 +115,7 @@ function EventFeedWorkbench(): JSX.Element {
     queryKey: ["event-feed", "facets", fromIso, toIso, kinds],
     queryFn: () =>
       unwrapAsync(
-        telemetryGetEventFacets(client, {
+        otelGetEventFacets(client, {
           getEventFacetsPayload: {
             from,
             to,
@@ -139,7 +139,7 @@ function EventFeedWorkbench(): JSX.Element {
     ],
     queryFn: () =>
       unwrapAsync(
-        telemetryGetEventVolume(client, {
+        otelGetEventVolume(client, {
           getEventVolumePayload: {
             from,
             to,
@@ -166,7 +166,7 @@ function EventFeedWorkbench(): JSX.Element {
     ],
     queryFn: ({ pageParam }) =>
       unwrapAsync(
-        telemetryListEventLog(client, {
+        otelListEventLog(client, {
           listEventLogPayload: {
             from,
             to,
@@ -424,8 +424,15 @@ function EventFeedRows({
 
   return (
     <>
-      {events.map((event) => (
-        <EventFeedRow key={event.recordId} event={event} onSelect={onSelect} />
+      {events.map((event, i) => (
+        // Events have no server-side identity (at-least-once ingestion can
+        // even surface duplicates), so key by position: the list only ever
+        // appends as pages load, keeping index keys stable.
+        <EventFeedRow
+          key={`${event.timeUnixNano}-${i}`}
+          event={event}
+          onSelect={onSelect}
+        />
       ))}
 
       {isFetchingNextPage && (
