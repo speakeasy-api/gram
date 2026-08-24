@@ -15,6 +15,7 @@ import (
 	goahttp "goa.design/goa/v3/http"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/organizations"
@@ -33,6 +34,14 @@ func TestInviteCallback_AdminInviteNotifiesTrialAdminAdded(t *testing.T) {
 
 	recorder := serveInviteCallback(t, ti, rawToken)
 	require.Equal(t, http.StatusTemporaryRedirect, recorder.Code)
+	var sessionCookie *http.Cookie
+	for _, cookie := range recorder.Result().Cookies() {
+		if cookie.Name == constants.SessionCookie {
+			sessionCookie = cookie
+		}
+	}
+	require.NotNil(t, sessionCookie)
+	require.Equal(t, constants.SessionCookieMaxAgeSeconds, sessionCookie.MaxAge)
 	require.Equal(t, []adminAddedNotification{{
 		organizationID: authCtx.ActiveOrganizationID,
 		userID:         "user_01INVITEE",

@@ -12,6 +12,30 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
+func TestAuthenticateRefreshesValidatedSession(t *testing.T) {
+	t.Parallel()
+
+	userInfo := defaultMockUserInfo()
+	ctx, instance := newTestAuthService(t, userInfo)
+	require.NoError(t, instance.createTestUser(ctx, userInfo))
+	require.NoError(t, instance.createTestOrganization(ctx, userInfo.Organizations[0], userInfo.UserID))
+
+	session := sessions.Session{
+		SessionID:            "refresh-validated-session",
+		UserID:               userInfo.UserID,
+		ActiveOrganizationID: userInfo.Organizations[0].ID,
+	}
+	require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
+
+	var refreshedSessionID string
+	ctx = contextvalues.WithSessionCookieRefresh(ctx, func(sessionID string) {
+		refreshedSessionID = sessionID
+	})
+	_, err := instance.sessionManager.Authenticate(ctx, session.SessionID)
+	require.NoError(t, err)
+	require.Equal(t, session.SessionID, refreshedSessionID)
+}
+
 // A validated, unexpired support session lets a platform admin access a non-member org.
 func TestAuthenticate_SupportAdminCanAccessNonMemberOrg(t *testing.T) {
 	t.Parallel()

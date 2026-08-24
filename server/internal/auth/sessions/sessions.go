@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -147,6 +148,9 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 			authCtx.Email = &email
 			authCtx.IsAdmin = userInfo.Admin
 		}
+		if err := s.refreshSession(ctx, session); err != nil {
+			return ctx, err
+		}
 		ctx = contextvalues.SetAuthContext(ctx, authCtx)
 		return ctx, nil
 	}
@@ -187,6 +191,10 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 	authCtx.OrganizationSlug = orgMetadata.Slug
 	authCtx.Email = &email
 
+	if err := s.refreshSession(ctx, session); err != nil {
+		return ctx, err
+	}
+
 	if validatedSupportAdmin {
 		ctx = contextvalues.WithValidatedSupportSession(ctx, authCtx)
 	} else {
@@ -194,6 +202,18 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 	}
 
 	return ctx, nil
+}
+
+func (s *Manager) refreshSession(ctx context.Context, session Session) error {
+	refreshed, err := s.sessionCache.CompareAndSwap(ctx, session, session)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error refreshing session expiry").LogError(ctx, s.logger)
+	}
+	if !refreshed {
+		return oops.C(oops.CodeUnauthorized)
+	}
+	contextvalues.RefreshSessionCookie(ctx, session.SessionID)
+	return nil
 }
 
 func (s *Manager) AuthenticateWithCookie(ctx context.Context) (context.Context, error) {
@@ -233,9 +253,15 @@ func (s *Manager) StoreSession(ctx context.Context, session Session) error {
 }
 
 func (s *Manager) UpdateSession(ctx context.Context, session Session) error {
-	err := s.sessionCache.Update(ctx, session)
-	if err != nil {
+	if err := s.sessionCache.Update(ctx, session); err != nil {
 		return fmt.Errorf("update session: %w", err)
+	}
+	refreshed, err := s.sessionCache.CompareAndSwap(ctx, session, session)
+	if err != nil {
+		return fmt.Errorf("refresh updated session ttl: %w", err)
+	}
+	if !refreshed {
+		return errors.New("refresh updated session ttl: session no longer exists")
 	}
 
 	return nil
