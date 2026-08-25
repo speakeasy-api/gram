@@ -24,7 +24,7 @@
     "build:storybook": "storybook build"
   },
   "dependencies": {
-    "@ai-sdk/mcp": "^2.0.31",
+    "@ai-sdk/mcp": "^2.0.32",
     "@ai-sdk/react": "catalog:",
     "@assistant-ui/react": "catalog:",
     "@assistant-ui/react-ai-sdk": "~1.4.5",
@@ -99,7 +99,8 @@
     "vega-interpreter": "^2.3.1",
     "xstate": "^5.32.4",
     "zod": "^4",
-    "zustand": "^5.0.14"
+    "zustand": "^5.0.14",
+    "@cfworker/json-schema": "catalog:"
   },
   "devDependencies": {
     "@storybook/addon-docs": "^10.5.7",
@@ -119,7 +120,7 @@
     "oxlint-tsgolint": "^7.0.2001",
     "react-grab": "^0.1.48",
     "storybook": "^10.5.7",
-    "svix": "1.92.2",
+    "svix": "1.99.1",
     "svix-react": "^1.13.9",
     "typescript": "catalog:",
     "vite": "catalog:",

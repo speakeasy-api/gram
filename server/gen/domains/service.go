@@ -22,11 +22,18 @@ type Service interface {
 	// custom domain has been configured.
 	ListDomains(context.Context, *ListDomainsPayload) (res *ListCustomDomainsResult, err error)
 	// Create a custom domain for an organization
-	CreateDomain(context.Context, *CreateDomainPayload) (err error)
+	CreateDomain(context.Context, *CreateDomainPayload) (res *CustomDomain, err error)
 	// Update settings for the organization's custom domain
 	UpdateDomain(context.Context, *UpdateDomainPayload) (res *CustomDomain, err error)
-	// Set or clear the MCP endpoint mapped to a custom domain's root
+	// Set or clear the MCP endpoint mapped to a custom domain's root. Pass
+	// mcp_endpoint_id for an endpoint already attached to the domain, or
+	// mcp_server_id to attach a server (creating its domain endpoint if needed)
+	// and map it in one call — usable while the domain is still pending
+	// verification, so a migration can be staged before DNS cuts over.
 	SetRootMcpEndpoint(context.Context, *SetRootMcpEndpointPayload) (res *CustomDomain, err error)
+	// List the organization's MCP servers that can be mapped to the custom domain
+	// root, including servers not yet attached to the domain
+	ListRootMcpServers(context.Context, *ListRootMcpServersPayload) (res *ListRootMcpServersResult, err error)
 	// Check the routing and certificate health of the organization's custom domain
 	CheckHealth(context.Context, *CheckHealthPayload) (res *CustomDomain, err error)
 	// Delete a custom domain
@@ -58,7 +65,7 @@ const ServiceName = "domains"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [8]string{"getDomain", "listDomains", "createDomain", "updateDomain", "setRootMcpEndpoint", "checkHealth", "deleteDomain", "listMcpEndpoints"}
+var MethodNames = [9]string{"getDomain", "listDomains", "createDomain", "updateDomain", "setRootMcpEndpoint", "listRootMcpServers", "checkHealth", "deleteDomain", "listMcpEndpoints"}
 
 // CheckHealthPayload is the payload type of the domains service checkHealth
 // method.
@@ -117,6 +124,9 @@ type CustomDomain struct {
 	RootMcpEndpointID *string
 	// The token served for OpenAI app-submission domain verification, if configured
 	OpenaiAppsChallengeToken *string
+	// The suggested DNS record type for this domain. A suggestion only — delegated
+	// subzones can make an apex-looking domain CNAME-capable.
+	SuggestedRecordType string
 }
 
 // An MCP endpoint registered under a custom domain, with its parent MCP server
@@ -153,6 +163,13 @@ type DeleteDomainPayload struct {
 	SessionToken *string
 }
 
+type DomainDNSConfig struct {
+	// The CNAME target subdomain custom domains should point at, if configured
+	CnameTarget *string
+	// The static IP addresses apex custom domains should point A records at
+	ARecords []string
+}
+
 // GetDomainPayload is the payload type of the domains service getDomain method.
 type GetDomainPayload struct {
 	SessionToken *string
@@ -168,6 +185,9 @@ type ListCustomDomainMcpEndpointsResult struct {
 // listDomains method.
 type ListCustomDomainsResult struct {
 	Domains []*CustomDomain
+	// The DNS targets custom domains must point at. Present even when no domain is
+	// configured yet, so setup instructions can be shown before registration.
+	DNSConfig *DomainDNSConfig
 }
 
 // ListDomainsPayload is the payload type of the domains service listDomains
@@ -182,14 +202,50 @@ type ListMcpEndpointsPayload struct {
 	SessionToken *string
 }
 
+// ListRootMcpServersPayload is the payload type of the domains service
+// listRootMcpServers method.
+type ListRootMcpServersPayload struct {
+	SessionToken *string
+}
+
+// ListRootMcpServersResult is the result type of the domains service
+// listRootMcpServers method.
+type ListRootMcpServersResult struct {
+	McpServers []*RootMcpServerOption
+}
+
+type RootMcpServerOption struct {
+	// The MCP server
+	McpServerID string
+	// The MCP server's display name, if set
+	Name *string
+	// The MCP server's slug, if set
+	Slug *string
+	// The project the server belongs to
+	ProjectID string
+	// The project's display name
+	ProjectName string
+	// The server's endpoint on this custom domain, when one exists
+	AttachedEndpointID *string
+	// The attached endpoint's slug (its /mcp/<slug> path on the domain), when one
+	// exists
+	AttachedEndpointSlug *string
+	// Whether this server currently serves the domain root
+	IsDomainRoot bool
+}
+
 // SetRootMcpEndpointPayload is the payload type of the domains service
 // setRootMcpEndpoint method.
 type SetRootMcpEndpointPayload struct {
 	SessionToken *string
 	// The custom domain whose root mapping to change
 	CustomDomainID string
-	// The MCP endpoint to map to the domain root. Omit to clear the mapping.
+	// The MCP endpoint to map to the domain root. Omit both ids to clear the
+	// mapping.
 	McpEndpointID *string
+	// An MCP server to map to the domain root; its domain endpoint is created when
+	// missing. Mutually exclusive with mcp_endpoint_id.
+	McpServerID *string
 }
 
 // UpdateDomainPayload is the payload type of the domains service updateDomain

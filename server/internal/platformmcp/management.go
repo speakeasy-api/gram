@@ -210,7 +210,7 @@ func (s *ManagementService) StartOnboardingSetup(ctx context.Context, _ *platfor
 	if err != nil {
 		return nil, s.mapOnboardingError(err)
 	}
-	if isBrowserCatalogProviderKey(candidate.ProviderKey) {
+	if isBrowserCatalogProviderKey(candidate.ProviderKey) || candidate.ProviderKey == directRemoteProviderKey {
 		setupURL, err := s.registrations.DashboardSetupURL(ctx, principal, IssueSetupHandoffInput{ProjectSlug: projection.SelectedProject.Slug, RegistrationID: projection.Workflow.SelectedRegistrationID.String(), ProviderKey: candidate.ProviderKey, CatalogRef: candidate.CatalogRef})
 		if err != nil {
 			return nil, s.mapOnboardingError(err)
@@ -446,7 +446,10 @@ func (s *ManagementService) currentDistribution(ctx context.Context, authCtx *co
 	if err != nil {
 		return Distribution{}, false
 	}
-	distribution, err := s.distributions.Current(ctx, principal, projection.SelectedProject.Slug)
+	// The dashboard onboarding surface asks about the project's default plugin,
+	// which is the plugin its own action distributes to. Naming a target is the
+	// agent-facing tools' concern.
+	distribution, err := s.distributions.Current(ctx, principal, projection.SelectedProject.Slug, "")
 	if err != nil {
 		return Distribution{}, false
 	}
@@ -503,7 +506,7 @@ func (s *ManagementService) mapOnboardingError(err error) error {
 	switch {
 	case errors.Is(err, ErrOnboardingInvalid), errors.Is(err, ErrRegistrationInvalid), errors.Is(err, ErrSetupHandoffInvalid), errors.Is(err, ErrReadinessInvalid), errors.Is(err, ErrReadinessRegistrationNotFound), errors.Is(err, ErrDistributionInvalid), errors.Is(err, ErrDistributionVersionTokenInvalid):
 		return oops.C(oops.CodeBadRequest)
-	case errors.Is(err, ErrDistributionConflict), errors.Is(err, ErrDistributionDefaultAbsent), errors.Is(err, ErrDistributionNotReady), errors.Is(err, ErrDistributionTargetUnavailable):
+	case errors.Is(err, ErrDistributionConflict), errors.Is(err, ErrDistributionDefaultAbsent), errors.Is(err, ErrDistributionNotReady), errors.Is(err, ErrDistributionTargetUnavailable), errors.Is(err, ErrDistributionBlockedPendingApproval):
 		return oops.C(oops.CodeConflict)
 	case errors.Is(err, ErrForbidden), errors.Is(err, ErrTargetIneligible):
 		return oops.C(oops.CodeForbidden)

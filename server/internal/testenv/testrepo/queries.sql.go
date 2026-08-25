@@ -423,7 +423,7 @@ func (q *Queries) ForceSoftDeleteUserAccountsByEmail(ctx context.Context, arg Fo
 const forceSoftDeleteUserSessionIssuer = `-- name: ForceSoftDeleteUserSessionIssuer :exec
 UPDATE user_session_issuers
 SET deleted_at = clock_timestamp()
-WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
+WHERE id = $1 AND project_id = $2::uuid AND deleted IS FALSE
 `
 
 type ForceSoftDeleteUserSessionIssuerParams struct {
@@ -1571,10 +1571,29 @@ func (q *Queries) SetProjectSlugFixture(ctx context.Context, arg SetProjectSlugF
 	return err
 }
 
+const setRemoteSessionResourceFixture = `-- name: SetRemoteSessionResourceFixture :exec
+UPDATE remote_sessions
+SET resource = $1
+WHERE subject_urn = $2
+  AND remote_session_client_id = $3
+`
+
+type SetRemoteSessionResourceFixtureParams struct {
+	Resource              pgtype.Text
+	SubjectUrn            urn.SessionSubject
+	RemoteSessionClientID uuid.UUID
+}
+
+// Test-only fixture stamping a stored RFC 8707 resource binding on a row.
+func (q *Queries) SetRemoteSessionResourceFixture(ctx context.Context, arg SetRemoteSessionResourceFixtureParams) error {
+	_, err := q.db.Exec(ctx, setRemoteSessionResourceFixture, arg.Resource, arg.SubjectUrn, arg.RemoteSessionClientID)
+	return err
+}
+
 const setUserSessionIssuerCIMDAdmissionMode = `-- name: SetUserSessionIssuerCIMDAdmissionMode :exec
 UPDATE user_session_issuers
 SET client_id_metadata_admission_mode = $1
-WHERE id = $2 AND project_id = $3 AND deleted IS FALSE
+WHERE id = $2 AND project_id = $3::uuid AND deleted IS FALSE
 `
 
 type SetUserSessionIssuerCIMDAdmissionModeParams struct {

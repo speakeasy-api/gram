@@ -147,6 +147,10 @@ func (s stubSkillsGate) Enabled(_ context.Context, _, _ string) (bool, error) {
 	return s.enabled, s.err
 }
 
+func (s stubSkillsGate) EnabledOrganization(_ context.Context, _ string) (bool, error) {
+	return s.enabled, s.err
+}
+
 func testTargets() []SkillTarget {
 	return []SkillTarget{
 		{Kind: SkillTargetPlugin, ID: testDefaultPluginID, Name: "Default", Slug: "default", IsDefault: true},
@@ -614,7 +618,7 @@ func TestSkillsToolsAreDeclaredWithAndWithoutTheirDependencies(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, test.build(), nil, CatalogDescriptor{})
+			_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, test.build(), nil, nil, CatalogDescriptor{})
 
 			registered := make(map[string]Descriptor, len(wanted))
 			for _, descriptor := range registrar.Descriptors() {

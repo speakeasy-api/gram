@@ -47,29 +47,40 @@ func TestOperationBudgetDistinguishesLimiterFailureFromThrottle(t *testing.T) {
 	require.NotErrorIs(t, err, ErrOperationRateLimited)
 }
 
-func TestOperationBudgetMetersAConnectionlessPrincipalOnTheOrganizationAlone(t *testing.T) {
+func TestOperationBudgetMetersAConnectionlessAssistantByUser(t *testing.T) {
 	t.Parallel()
 
 	connection := &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}}
 	organization := &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}}
-	err := (OperationBudget{Connection: connection, Organization: organization}).Allow(t.Context(), Principal{ConnectionID: "", OrganizationID: "organization"})
+	err := (OperationBudget{Connection: connection, Organization: organization}).Allow(t.Context(), Principal{UserID: "user", OrganizationID: "organization", ClientID: AssistantClientID, Surface: SurfaceProjectAssistant})
 
 	require.NoError(t, err)
-	require.Empty(t, connection.keys)
+	require.Equal(t, []string{"assistant:" + AssistantClientID + ":user"}, connection.keys)
 	require.Equal(t, []string{"organization"}, organization.keys)
 }
 
-func TestOperationBudgetThrottlesAConnectionlessPrincipalOnTheOrganization(t *testing.T) {
+func TestOperationBudgetMetersAConnectionlessDashboardByUser(t *testing.T) {
 	t.Parallel()
 
-	organization := &recordingOperationLimiter{result: ratelimit.Result{Allowed: false}}
-	err := (OperationBudget{
-		Connection:   &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}},
-		Organization: organization,
-	}).Allow(t.Context(), Principal{ConnectionID: "", OrganizationID: "organization"})
+	connection := &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}}
+	organization := &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}}
+	err := (OperationBudget{Connection: connection, Organization: organization}).Allow(t.Context(), Principal{UserID: "user", OrganizationID: "organization", Surface: SurfaceDashboard})
+
+	require.NoError(t, err)
+	require.Equal(t, []string{"dashboard:user"}, connection.keys)
+	require.Equal(t, []string{"organization"}, organization.keys)
+}
+
+func TestOperationBudgetThrottlesAConnectionlessAssistantBeforeOrganization(t *testing.T) {
+	t.Parallel()
+
+	connection := &recordingOperationLimiter{result: ratelimit.Result{Allowed: false}}
+	organization := &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}}
+	err := (OperationBudget{Connection: connection, Organization: organization}).Allow(t.Context(), Principal{UserID: "user", OrganizationID: "organization", ClientID: AssistantClientID, Surface: SurfaceProjectAssistant})
 
 	require.ErrorIs(t, err, ErrOperationRateLimited)
-	require.Equal(t, []string{"organization"}, organization.keys)
+	require.Equal(t, []string{"assistant:" + AssistantClientID + ":user"}, connection.keys)
+	require.Empty(t, organization.keys)
 }
 
 func TestOperationBudgetRejectsAConnectionClaimedByGenerationAlone(t *testing.T) {
@@ -90,7 +101,7 @@ func TestOperationBudgetStillRequiresAnOrganization(t *testing.T) {
 	err := (OperationBudget{
 		Connection:   &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}},
 		Organization: &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}},
-	}).Allow(t.Context(), Principal{ConnectionID: "", OrganizationID: ""})
+	}).Allow(t.Context(), Principal{UserID: "user", ClientID: AssistantClientID, Surface: SurfaceProjectAssistant, OrganizationID: ""})
 
 	require.ErrorIs(t, err, ErrOperationBudgetUnavailable)
 }

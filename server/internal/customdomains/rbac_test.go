@@ -78,7 +78,7 @@ func TestCustomDomainsService_CreateDomain_ForbiddenWithoutOrgAdminGrant(t *test
 	ctx, ti := newTestCustomDomainsService(t)
 	ctx = authztest.WithExactGrants(t, ctx)
 
-	err := ti.service.CreateDomain(ctx, &gen.CreateDomainPayload{Domain: "create.example.com"})
+	_, err := ti.service.CreateDomain(ctx, &gen.CreateDomainPayload{Domain: "create.example.com"})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
@@ -91,7 +91,7 @@ func TestCustomDomainsService_CreateDomain_AllowsOrgAdminGrant(t *testing.T) {
 	authCtx := testAuthContext(t, ctx)
 	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
 
-	err := ti.service.CreateDomain(ctx, &gen.CreateDomainPayload{Domain: "create.example.com"})
+	_, err := ti.service.CreateDomain(ctx, &gen.CreateDomainPayload{Domain: "create.example.com"})
 	require.NoError(t, err)
 	require.Equal(t, 1, ti.temporal.registrationCalls)
 	require.Equal(t, "create.example.com", ti.temporal.lastDomain)
@@ -103,7 +103,7 @@ func TestCustomDomainsService_CreateDomain_ForbiddenWithGrantForDifferentOrganiz
 	ctx, ti := newTestCustomDomainsService(t)
 	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, "org_other")})
 
-	err := ti.service.CreateDomain(ctx, &gen.CreateDomainPayload{Domain: "create.example.com"})
+	_, err := ti.service.CreateDomain(ctx, &gen.CreateDomainPayload{Domain: "create.example.com"})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
@@ -174,7 +174,7 @@ func TestCustomDomainsService_CreateDomain_UnauthorizedWithEmptyOrgID(t *testing
 	authCtx.ActiveOrganizationID = ""
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
-	err := ti.service.CreateDomain(ctx, &gen.CreateDomainPayload{Domain: "create.example.com"})
+	_, err := ti.service.CreateDomain(ctx, &gen.CreateDomainPayload{Domain: "create.example.com"})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)

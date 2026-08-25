@@ -5,9 +5,11 @@ import { FC } from "react";
 
 import { Button } from "@/elements/components/ui/button";
 import { useDensity } from "@/elements/hooks/useDensity";
+import { useElements } from "@/elements/hooks/useElements";
 import { useFollowOnSuggestions } from "@/elements/hooks/useFollowOnSuggestions";
 import { useRadius } from "@/elements/hooks/useRadius";
 import { EASE_OUT_QUINT } from "@/elements/lib/easing";
+import { mcpToolsSendBlocked } from "@/elements/lib/mcpToolsAvailability";
 import { cn } from "@/lib/utils";
 
 const suggestionVariants = {
@@ -60,11 +62,20 @@ const containerVariants = {
  * These are dynamically generated based on the conversation context.
  */
 export const FollowOnSuggestions: FC = () => {
+  const { config, mcpTools, mcpToolsLoading, mcpToolsError } = useElements();
   const { suggestions, isLoading } = useFollowOnSuggestions();
   const r = useRadius();
   const d = useDensity();
 
-  const showSuggestions = !isLoading && suggestions.length > 0;
+  const showSuggestions =
+    !isLoading &&
+    suggestions.length > 0 &&
+    !mcpToolsSendBlocked(
+      config.composer?.requireMcpTools,
+      mcpToolsLoading,
+      mcpTools,
+      mcpToolsError,
+    );
 
   return (
     <div

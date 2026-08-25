@@ -3,6 +3,7 @@ package activities_test
 import (
 	"context"
 	"errors"
+	"net/netip"
 	"net/url"
 	"testing"
 	"time"
@@ -90,7 +91,7 @@ func TestCustomDomainHealthCheckMissingDomainIsNoop(t *testing.T) {
 
 	conn, err := infra.CloneTestDatabase(t, "custom_domain_health_missing")
 	require.NoError(t, err)
-	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, nil, "custom-domain.example.com", noopEmailService(t), nil, nil)
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, nil, "custom-domain.example.com", nil, noopEmailService(t), nil, nil)
 
 	_, err = checker.Check(t.Context(), activities.CheckCustomDomainHealthArgs{
 		CustomDomainID: uuid.New(),
@@ -131,11 +132,11 @@ func createActivatedCustomDomain(t *testing.T, repository *customdomainsrepo.Que
 func mismatchResolverConfig(domainName string) dns.MockResolverConfig {
 	return dns.MockResolverConfig{
 		LookupCNAMEFunc: func(_ context.Context, host string) (string, error) { return host + ".", nil },
-		LookupHostFunc: func(_ context.Context, host string) ([]string, error) {
+		LookupNetIPFunc: func(_ context.Context, _ string, host string) ([]netip.Addr, error) {
 			if host == domainName {
-				return []string{"1.2.3.4"}, nil
+				return []netip.Addr{netip.MustParseAddr("1.2.3.4")}, nil
 			}
-			return []string{"5.6.7.8"}, nil
+			return []netip.Addr{netip.MustParseAddr("5.6.7.8")}, nil
 		},
 		LookupTXTFunc: func(context.Context, string) ([]string, error) { return nil, nil },
 	}
@@ -149,7 +150,7 @@ func TestCustomDomainHealthCheckProbeRescuesDNSMismatch(t *testing.T) {
 	repository := customdomainsrepo.New(conn)
 	domainID := createActivatedCustomDomain(t, repository, "test-organization", "proxied.example.com")
 
-	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil, provisioner: nil}, "custom-domain.example.com", noopEmailService(t), nil, nil)
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil, provisioner: nil}, "custom-domain.example.com", nil, noopEmailService(t), nil, nil)
 	checker.SetResolver(dns.NewMockResolver(mismatchResolverConfig("proxied.example.com")))
 	checker.SetProbe(func(context.Context, string) error { return nil })
 
@@ -177,7 +178,7 @@ func TestCustomDomainHealthCheckProbeFailureKeepsDNSMismatch(t *testing.T) {
 	repository := customdomainsrepo.New(conn)
 	domainID := createActivatedCustomDomain(t, repository, "test-organization", "broken.example.com")
 
-	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil, provisioner: nil}, "custom-domain.example.com", noopEmailService(t), nil, nil)
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil, provisioner: nil}, "custom-domain.example.com", nil, noopEmailService(t), nil, nil)
 	checker.SetResolver(dns.NewMockResolver(mismatchResolverConfig("broken.example.com")))
 	checker.SetProbe(func(context.Context, string) error { return errors.New("connection refused") })
 
@@ -206,7 +207,7 @@ func TestCustomDomainHealthCheckRetryReemitsNotification(t *testing.T) {
 	repository := customdomainsrepo.New(conn)
 	domainID := createActivatedCustomDomain(t, repository, "test-organization", "retry.example.com")
 
-	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil, provisioner: nil}, "custom-domain.example.com", noopEmailService(t), nil, nil)
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil, provisioner: nil}, "custom-domain.example.com", nil, noopEmailService(t), nil, nil)
 	checker.SetResolver(dns.NewMockResolver(mismatchResolverConfig("retry.example.com")))
 	checker.SetProbe(func(context.Context, string) error { return errors.New("connection refused") })
 
@@ -291,7 +292,7 @@ func TestCustomDomainNotifyOrgAdminsSendsIdempotentEmail(t *testing.T) {
 	captured := &captureLoopsClient{sent: nil, failNext: 0}
 	siteURL, err := url.Parse("https://app.example.com")
 	require.NoError(t, err)
-	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil, provisioner: nil}, "custom-domain.example.com", email.NewService(testenv.NewLogger(t), captured, email.NewTemplateIDs(map[string]string{
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil, provisioner: nil}, "custom-domain.example.com", nil, email.NewService(testenv.NewLogger(t), captured, email.NewTemplateIDs(map[string]string{
 		"custom_domain_unhealthy": "domain-unhealthy-test-id",
 	}), true), siteURL, nil)
 
@@ -333,7 +334,7 @@ func TestCustomDomainHealthCheckAutoDisablesAfterProlongedFailure(t *testing.T) 
 	require.NoError(t, err)
 
 	stubProvisioner := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, testenv.NewLogger(t))
-	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil, provisioner: stubProvisioner}, "custom-domain.example.com", noopEmailService(t), nil, nil)
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil, provisioner: stubProvisioner}, "custom-domain.example.com", nil, noopEmailService(t), nil, nil)
 	checker.SetResolver(dns.NewMockResolver(mismatchResolverConfig("prolonged.example.com")))
 	checker.SetProbe(func(context.Context, string) error { return errors.New("connection refused") })
 
@@ -380,7 +381,7 @@ func TestCustomDomainHealthCheckNoAutoDisableBelowFailureThreshold(t *testing.T)
 	require.NoError(t, err)
 
 	stubProvisioner := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, testenv.NewLogger(t))
-	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil, provisioner: stubProvisioner}, "custom-domain.example.com", noopEmailService(t), nil, nil)
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil, provisioner: stubProvisioner}, "custom-domain.example.com", nil, noopEmailService(t), nil, nil)
 	checker.SetResolver(dns.NewMockResolver(mismatchResolverConfig("belowbar.example.com")))
 	checker.SetProbe(func(context.Context, string) error { return errors.New("connection refused") })
 
@@ -421,10 +422,10 @@ func TestCustomDomainHealthCheckFailedNeverAutoDisables(t *testing.T) {
 	require.NoError(t, err)
 
 	stubProvisioner := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, testenv.NewLogger(t))
-	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil, provisioner: stubProvisioner}, "custom-domain.example.com", noopEmailService(t), nil, nil)
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil, provisioner: stubProvisioner}, "custom-domain.example.com", nil, noopEmailService(t), nil, nil)
 	checker.SetResolver(dns.NewMockResolver(dns.MockResolverConfig{
 		LookupCNAMEFunc: func(context.Context, string) (string, error) { return "", errors.New("dns timeout") },
-		LookupHostFunc:  func(context.Context, string) ([]string, error) { return nil, errors.New("dns timeout") },
+		LookupNetIPFunc: func(context.Context, string, string) ([]netip.Addr, error) { return nil, errors.New("dns timeout") },
 		LookupTXTFunc:   func(context.Context, string) ([]string, error) { return nil, nil },
 	}))
 
@@ -453,7 +454,7 @@ func TestFindOrphanCustomDomainResourcesFlagsUnknownDomains(t *testing.T) {
 		{Kind: k8s.ProvisionerKindIngress, Name: "active-example-com", Domain: "active.example.com"},
 		{Kind: k8s.ProvisionerKindIngress, Name: "orphan-example-com", Domain: "orphan.example.com"},
 	}}
-	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, stub, "custom-domain.example.com", noopEmailService(t), nil, nil)
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, stub, "custom-domain.example.com", nil, noopEmailService(t), nil, nil)
 
 	err = checker.FindOrphanResources(t.Context())
 	require.Error(t, err)
@@ -472,7 +473,7 @@ func TestFindOrphanCustomDomainResourcesAllResourcesAccountedFor(t *testing.T) {
 	stub := &stubInfrastructureChecker{provisioner: nil, resources: []k8s.ManagedCustomDomainResource{
 		{Kind: k8s.ProvisionerKindIngress, Name: "active-example-com", Domain: "active.example.com"},
 	}}
-	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, stub, "custom-domain.example.com", noopEmailService(t), nil, nil)
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, stub, "custom-domain.example.com", nil, noopEmailService(t), nil, nil)
 
 	require.NoError(t, checker.FindOrphanResources(t.Context()))
 }
@@ -491,7 +492,7 @@ func TestFindOrphanCustomDomainResourcesFlagsClearedRootIngress(t *testing.T) {
 		{Kind: k8s.ProvisionerKindIngress, Name: "cleared-root-example-com", Domain: domainName},
 		{Kind: k8s.ProvisionerKindIngress, Name: rootName, Domain: domainName},
 	}}
-	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, stub, "custom-domain.example.com", noopEmailService(t), nil, nil)
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, stub, "custom-domain.example.com", nil, noopEmailService(t), nil, nil)
 
 	err = checker.FindOrphanResources(t.Context())
 	require.Error(t, err)
@@ -513,7 +514,7 @@ func TestFindOrphanCustomDomainResourcesFlagsClearedWellKnownRootIngress(t *test
 		{Kind: k8s.ProvisionerKindIngress, Name: "cleared-wellknown-root-example-com", Domain: domainName},
 		{Kind: k8s.ProvisionerKindIngress, Name: wellKnownRootName, Domain: domainName},
 	}}
-	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, stub, "custom-domain.example.com", noopEmailService(t), nil, nil)
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, stub, "custom-domain.example.com", nil, noopEmailService(t), nil, nil)
 
 	err = checker.FindOrphanResources(t.Context())
 	require.Error(t, err)
@@ -539,7 +540,7 @@ func TestFindOrphanCustomDomainResourcesFlagsUnactivatedDomain(t *testing.T) {
 	stub := &stubInfrastructureChecker{provisioner: nil, resources: []k8s.ManagedCustomDomainResource{
 		{Kind: k8s.ProvisionerKindIngress, Name: "pending-example-com", Domain: "pending.example.com"},
 	}}
-	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, stub, "custom-domain.example.com", noopEmailService(t), nil, nil)
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, stub, "custom-domain.example.com", nil, noopEmailService(t), nil, nil)
 
 	err = checker.FindOrphanResources(t.Context())
 	require.Error(t, err)
@@ -558,10 +559,48 @@ func TestFindOrphanCustomDomainResourcesFlagsMismatchedIdentity(t *testing.T) {
 		{Kind: k8s.ProvisionerKindIngress, Name: "active-example-com", Domain: "active.example.com"},
 		{Kind: k8s.ProvisionerKindIngress, Name: "duplicate-active-example-com", Domain: "active.example.com"},
 	}}
-	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, stub, "custom-domain.example.com", noopEmailService(t), nil, nil)
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, stub, "custom-domain.example.com", nil, noopEmailService(t), nil, nil)
 
 	err = checker.FindOrphanResources(t.Context())
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "1 orphaned custom domain resources")
 	require.Contains(t, err.Error(), "duplicate-active-example-com")
+}
+
+// A provider serving address records alongside a matching CNAME (illegal per
+// RFC 1034 §3.6.2, but observed in the wild) diverts resolvers that prefer
+// the address records, so a matching CNAME must not skip RRset validation.
+func TestCustomDomainHealthCheckCNAMEMatchWithForeignAddressesIsMismatch(t *testing.T) {
+	t.Parallel()
+
+	conn, err := infra.CloneTestDatabase(t, "custom_domain_health_cname_coexist")
+	require.NoError(t, err)
+	repository := customdomainsrepo.New(conn)
+	domainID := createActivatedCustomDomain(t, repository, "test-organization", "coexist.example.com")
+
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil, provisioner: nil}, "custom-domain.example.com", nil, noopEmailService(t), nil, nil)
+	checker.SetResolver(dns.NewMockResolver(dns.MockResolverConfig{
+		LookupCNAMEFunc: func(context.Context, string) (string, error) { return "custom-domain.example.com.", nil },
+		LookupNetIPFunc: func(_ context.Context, _ string, host string) ([]netip.Addr, error) {
+			if host == "coexist.example.com" {
+				return []netip.Addr{netip.MustParseAddr("9.9.9.9")}, nil
+			}
+			return []netip.Addr{netip.MustParseAddr("1.2.3.4")}, nil
+		},
+		LookupTXTFunc: func(context.Context, string) ([]string, error) { return nil, nil },
+	}))
+	checker.SetProbe(func(context.Context, string) error { return errors.New("connection refused") })
+
+	checkedAt := time.Now().UTC().Truncate(time.Microsecond)
+	_, err = checker.Check(t.Context(), activities.CheckCustomDomainHealthArgs{
+		CustomDomainID: domainID,
+		OrganizationID: "test-organization",
+		CheckedAt:      checkedAt,
+	})
+	require.NoError(t, err)
+
+	domain, err := repository.GetCustomDomainByDomain(t.Context(), "coexist.example.com")
+	require.NoError(t, err)
+	require.Equal(t, "unhealthy", domain.HealthStatus.String)
+	require.Equal(t, "dns_target_mismatch", domain.HealthIssue.String)
 }

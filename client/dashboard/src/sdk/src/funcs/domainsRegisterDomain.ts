@@ -12,6 +12,10 @@ import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
+import {
+  CustomDomain,
+  CustomDomain$inboundSchema,
+} from "../models/components/customdomain.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -47,7 +51,7 @@ export function domainsRegisterDomain(
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    void,
+    CustomDomain,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -75,7 +79,7 @@ async function $do(
 ): Promise<
   [
     Result<
-      void,
+      CustomDomain,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -170,7 +174,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    void,
+    CustomDomain,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -181,7 +185,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.nil(200, z.void()),
+    M.json(200, CustomDomain$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

@@ -185,15 +185,17 @@ type AdminOrganization struct {
 	Whitelisted bool
 	// The time at which the organization was disabled, if any.
 	DisabledAt *string
-	// The time at which the free trial started.
-	FreeTrialStartedAt *string
-	// The time at which the free trial ends.
-	FreeTrialEndsAt *string
 	// Lifecycle state of the organization's enterprise trial.
 	TrialState *string
+	// The trial tier. Absent when the organization never trialled.
+	TrialTier *string
 	// The time at which the enterprise trial ends. Absent when the organization
 	// never trialled.
 	TrialEndsAt *string
+	// The time at which the trial converted to a paid plan, if any.
+	TrialConvertedAt *string
+	// The time at which the organization was demoted after its trial, if any.
+	TrialDemotedAt *string
 	// Number of active members in the organization.
 	MemberCount int
 	// The creation date of the organization.

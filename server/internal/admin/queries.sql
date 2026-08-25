@@ -95,8 +95,6 @@ filtered AS (
         om.workos_id,
         om.whitelisted,
         om.disabled_at,
-        om.free_trial_started_at,
-        om.free_trial_ends_at,
         -- converted/demoted precede the dates: those rows keep an ends_at that would otherwise read as running or expired.
         CASE
             WHEN t.organization_id IS NULL THEN 'none'
@@ -360,9 +358,7 @@ SELECT
     om.workos_id,
     om.whitelisted,
     om.disabled_at,
-    om.free_trial_started_at,
-    om.free_trial_ends_at,
-    -- Must stay identical to AdminListOrganizations.
+    -- The lifecycle state calculation must stay identical to AdminListOrganizations.
     CASE
         WHEN t.organization_id IS NULL THEN 'none'
         WHEN t.converted_at IS NOT NULL THEN 'converted'
@@ -371,7 +367,10 @@ SELECT
         WHEN t.ends_at <= now() + INTERVAL '7 days' THEN 'ending_soon'
         ELSE 'running'
     END::text AS trial_state,
+    t.tier AS trial_tier,
     t.ends_at AS trial_ends_at,
+    t.converted_at AS trial_converted_at,
+    t.demoted_at AS trial_demoted_at,
     om.created_at,
     om.updated_at,
     (

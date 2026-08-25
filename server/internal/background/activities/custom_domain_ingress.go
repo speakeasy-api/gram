@@ -192,6 +192,13 @@ func (c *CustomDomainIngress) ReconcileCustomDomain(ctx context.Context, args Re
 	if desired.Activated {
 		return nil
 	}
+	// Only ownership verification (the _gram TXT check) may promote a domain.
+	// Desired state for a pending domain is still applied above so routing and
+	// certificates can converge ahead of verification, but activation — which
+	// opens the middleware gate for this Host — must wait for proof.
+	if !desired.Verified {
+		return nil
+	}
 
 	timer := time.NewTimer(c.setupSleep)
 	defer timer.Stop()
@@ -204,22 +211,23 @@ func (c *CustomDomainIngress) ReconcileCustomDomain(ctx context.Context, args Re
 	if err := provisioner.Get(ctx, result.ResourceName); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "verify custom domain resource exists").LogError(ctx, c.logger)
 	}
-	if _, err := c.domains.UpdateCustomDomain(ctx, customdomainsRepo.UpdateCustomDomainParams{
+	// Activation re-checks verification at write time: a health auto-disable
+	// during the convergence wait revokes verified, and this pass's stale
+	// snapshot must not resurrect the domain.
+	rows, err := c.domains.ActivateVerifiedCustomDomain(ctx, customdomainsRepo.ActivateVerifiedCustomDomainParams{
 		ID:              desired.ID,
-		Verified:        true,
-		Activated:       true,
 		IngressName:     conv.ToPGText(result.ResourceName),
 		CertSecretName:  conv.PtrToPGText(conv.PtrEmpty(result.SecretName)),
 		ProvisionerKind: string(kind),
-	}); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			c.logger.InfoContext(ctx, "custom domain deletion won during resource convergence; skipping activation",
-				attr.SlogCustomDomainProvisionerKind(string(kind)),
-				attr.SlogURLDomain(desired.Domain),
-			)
-			return nil
-		}
+	})
+	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "reconcile custom domain").LogError(ctx, c.logger)
+	}
+	if rows == 0 {
+		c.logger.InfoContext(ctx, "custom domain deleted or verification revoked during resource convergence; skipping activation",
+			attr.SlogCustomDomainProvisionerKind(string(kind)),
+			attr.SlogURLDomain(desired.Domain),
+		)
 	}
 	return nil
 }

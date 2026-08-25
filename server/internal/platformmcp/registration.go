@@ -38,7 +38,6 @@ const (
 	registrationStatusPending    = "pending"
 	registrationStatusRegistered = "registered"
 	receiptLifetime              = 24 * time.Hour
-	platformMCPIssuerLifetime    = 14 * 24 * time.Hour
 	maxMCPEndpointSlugLength     = 128
 )
 
@@ -500,7 +499,7 @@ func (s *RegistrationStore) CompleteRegistration(ctx context.Context, principal 
 	if s == nil || s.db == nil {
 		return OperationReceipt{}, ErrUnavailable
 	}
-	if err := validateCatalogRegistrationRequest(principal, project, request); err != nil || receipt.ID == uuid.Nil || !receipt.RegistrationID.Valid || !validRegistrationRemoteURL(configuration.remoteURL) {
+	if err := validateCatalogRegistrationRequest(principal, project, request); err != nil || receipt.ID == uuid.Nil || !receipt.RegistrationID.Valid || !validRegistrationRemoteURL(configuration.remoteURL) || (request.SourceKind == directRemoteSourceKind && !validDirectRemoteRegistrationURL(configuration.remoteURL)) {
 		return OperationReceipt{}, ErrRegistrationInvalid
 	}
 	connectionID, generation, err := principalConnection(principal)
@@ -707,10 +706,6 @@ func (s *RegistrationStore) createPrivateRegistrationComponents(ctx context.Cont
 	if err != nil {
 		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("generate platform mcp remote source id: %w", err)
 	}
-	serverID, err := uuid.NewV7()
-	if err != nil {
-		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("generate platform mcp server id: %w", err)
-	}
 	suffix, err := newRegistrationComponentSuffix()
 	if err != nil {
 		return platformrepo.PlatformMcpCatalogRegistration{}, err
@@ -720,7 +715,6 @@ func (s *RegistrationStore) createPrivateRegistrationComponents(ctx context.Cont
 		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("load platform mcp component organization: %w", err)
 	}
 	remoteSlug := "platform-mcp-remote-" + suffix
-	serverSlug := "platform-mcp-" + suffix
 	displayName := configuration.displayName
 	if displayName == "" {
 		displayName = "MCP Catalogue server"
@@ -767,13 +761,18 @@ func (s *RegistrationStore) createPrivateRegistrationComponents(ctx context.Cont
 		Slug:               "platform-mcp-issuer-" + suffix,
 		AuthnChallengeMode: "interactive",
 		SessionDuration: pgtype.Interval{
-			Microseconds: platformMCPIssuerLifetime.Microseconds(),
+			Microseconds: 14 * 24 * time.Hour.Microseconds(),
 			Valid:        true,
 		},
 	})
 	if err != nil {
 		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("create platform mcp session issuer: %w", err)
 	}
+	serverID, err := uuid.NewV7()
+	if err != nil {
+		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("generate platform mcp server id: %w", err)
+	}
+	serverSlug := "platform-mcp-" + suffix
 	server, err := mcpserversrepo.New(tx).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID:                  serverID,
 		ProjectID:           project.ID,

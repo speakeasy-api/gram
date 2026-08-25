@@ -9,8 +9,8 @@ import (
 
 type GetMCPReadinessToolInput struct {
 	ProjectSlug    string `json:"project_slug" jsonschema:"explicit AICP project slug that owns the reviewed MCP registration"`
-	RegistrationID string `json:"registration_id" jsonschema:"Platform MCP registration ID returned by register_platform_mcp_for_project; get_platform_mcp_onboarding_status also resolves the workflow-bound registration and returns its ID"`
-	Force          bool   `json:"force,omitempty" jsonschema:"force one authenticated provider readiness probe; limited to three probes per minute for this registration"`
+	RegistrationID string `json:"registration_id" jsonschema:"Platform MCP registration ID returned by register_catalog_mcp or register_remote_mcp"`
+	Force          bool   `json:"force,omitempty" jsonschema:"force one authenticated provider readiness probe; limited to three probes per minute for this registration; unavailable to managed project assistants"`
 }
 
 type GetMCPReadinessToolOutput struct {
@@ -26,7 +26,7 @@ type GetMCPReadinessToolOutput struct {
 
 type GetMCPRepairPlanToolInput struct {
 	ProjectSlug    string `json:"project_slug" jsonschema:"explicit AICP project slug that owns the reviewed MCP registration"`
-	RegistrationID string `json:"registration_id" jsonschema:"Platform MCP registration ID returned by register_platform_mcp_for_project; get_platform_mcp_onboarding_status also resolves the workflow-bound registration and returns its ID"`
+	RegistrationID string `json:"registration_id" jsonschema:"Platform MCP registration ID returned by register_catalog_mcp or register_remote_mcp"`
 }
 
 type GetMCPRepairPlanToolOutput struct {
@@ -41,17 +41,28 @@ func registerReadinessTools(reg *Registrar, readiness *ReadinessService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_mcp_readiness",
 		Title:       "Get MCP Readiness",
-		Description: "Return normalized authenticated readiness for one reviewed MCP registration when its registration ID is known. For guided onboarding, use get_platform_mcp_onboarding_status, which resolves the workflow-bound registration. A forced probe is limited to three per minute for that registration.",
+		Description: "Return normalized persisted readiness for one reviewed MCP registration when its registration ID is known. A forced authenticated probe is limited to three per minute for that registration and is unavailable to managed project assistants.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{
-		// External-only: readiness probes are connection-scoped, which a
-		// connection-less surface cannot satisfy.
-		Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMCPReadinessToolInput) (*mcp.CallToolResult, GetMCPReadinessToolOutput, error) {
+		// Assistants only read their own persisted, actor-scoped evidence. A
+		// forced provider probe stays external because it requires a connection.
+		Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMCPReadinessToolInput) (*mcp.CallToolResult, GetMCPReadinessToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, GetMCPReadinessToolOutput{}, err
 		}
-		project, result, found, err := readiness.GetReadiness(ctx, principal, input.ProjectSlug, input.RegistrationID, input.Force)
+		if principal.surface() == SurfaceProjectAssistant && input.Force {
+			result, _ := operationBudgetToolResult(ErrReadinessInvalid)
+			return result, GetMCPReadinessToolOutput{}, nil
+		}
+		var project ResolvedProject
+		var result Readiness
+		var found bool
+		if principal.surface() == SurfaceProjectAssistant {
+			project, result, found, err = readiness.CurrentReadiness(ctx, principal, input.ProjectSlug, input.RegistrationID)
+		} else {
+			project, result, found, err = readiness.GetReadiness(ctx, principal, input.ProjectSlug, input.RegistrationID, input.Force)
+		}
 		if err != nil {
 			if budgetResult, ok := operationBudgetToolResult(err); ok {
 				return budgetResult, GetMCPReadinessToolOutput{}, nil
@@ -64,17 +75,24 @@ func registerReadinessTools(reg *Registrar, readiness *ReadinessService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_mcp_repair_plan",
 		Title:       "Get MCP Repair Plan",
-		Description: "Return safe, bounded next actions for one reviewed MCP registration when its registration ID is known. For guided onboarding, use get_platform_mcp_onboarding_status to resolve the workflow-bound registration.",
+		Description: "Return safe, bounded next actions from persisted readiness for one reviewed MCP registration when its registration ID is known. Managed project assistants read only their own actor-scoped evidence.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{
-		// External-only: repair plans read connection-scoped readiness, which a
-		// connection-less surface cannot satisfy.
-		Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMCPRepairPlanToolInput) (*mcp.CallToolResult, GetMCPRepairPlanToolOutput, error) {
+		// Assistants receive a repair projection from their persisted,
+		// actor-scoped evidence; no provider probe or OAuth connection is used.
+		Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMCPRepairPlanToolInput) (*mcp.CallToolResult, GetMCPRepairPlanToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, GetMCPRepairPlanToolOutput{}, err
 		}
-		project, result, found, err := readiness.GetRepairPlan(ctx, principal, input.ProjectSlug, input.RegistrationID)
+		var project ResolvedProject
+		var result Readiness
+		var found bool
+		if principal.surface() == SurfaceProjectAssistant {
+			project, result, found, err = readiness.CurrentReadiness(ctx, principal, input.ProjectSlug, input.RegistrationID)
+		} else {
+			project, result, found, err = readiness.GetRepairPlan(ctx, principal, input.ProjectSlug, input.RegistrationID)
+		}
 		if err != nil {
 			if budgetResult, ok := operationBudgetToolResult(err); ok {
 				return budgetResult, GetMCPRepairPlanToolOutput{}, nil

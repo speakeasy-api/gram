@@ -3,15 +3,21 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import { CustomDomain, CustomDomain$inboundSchema } from "./customdomain.js";
+import {
+  DomainDNSConfig,
+  DomainDNSConfig$inboundSchema,
+} from "./domaindnsconfig.js";
 
 /**
  * Result of listing an organization's custom domains.
  */
 export type ListCustomDomainsResult = {
+  dnsConfig: DomainDNSConfig;
   domains: Array<CustomDomain>;
 };
 
@@ -19,9 +25,17 @@ export type ListCustomDomainsResult = {
 export const ListCustomDomainsResult$inboundSchema: z.ZodMiniType<
   ListCustomDomainsResult,
   unknown
-> = z.object({
-  domains: z.array(CustomDomain$inboundSchema),
-});
+> = z.pipe(
+  z.object({
+    dns_config: DomainDNSConfig$inboundSchema,
+    domains: z.array(CustomDomain$inboundSchema),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      "dns_config": "dnsConfig",
+    });
+  }),
+);
 
 export function listCustomDomainsResultFromJSON(
   jsonString: string,

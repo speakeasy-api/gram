@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/email"
@@ -1554,9 +1555,9 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 
 	//nolint:exhaustruct // only desired fields — avoid unexpected zero-value behavior
 	http.SetCookie(w, &http.Cookie{
-		Name:     "gram_session",
+		Name:     constants.SessionCookie,
 		Value:    sessionID,
-		MaxAge:   2592000,
+		MaxAge:   constants.SessionCookieMaxAgeSeconds,
 		Path:     "/",
 		Secure:   true,
 		HttpOnly: true,

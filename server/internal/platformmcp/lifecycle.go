@@ -356,7 +356,12 @@ func (s *RegistrationStore) ProbeProviderReadiness(ctx context.Context, principa
 		Generation:          generation,
 	}
 	var result ProviderReadinessProbeResult
-	if isBrowserCatalogProviderKey(registration.CatalogProvider) {
+	// Browser catalogue and direct remote registrations both persist a Remote
+	// MCP source plus user-session issuer. Their readiness is therefore probed
+	// through that source instead of a reviewed fixture adapter. The provider
+	// key selects only the registration workflow; it must not make the same
+	// persisted source unreachable after direct registration joins onboarding.
+	if isBrowserCatalogProviderKey(registration.CatalogProvider) || registration.CatalogProvider == directRemoteProviderKey {
 		if len(generic) == 0 || generic[0] == nil {
 			return Readiness{}, ErrProviderAdapterUnavailable
 		}
@@ -392,7 +397,7 @@ func (s *RegistrationStore) GetProviderReadiness(ctx context.Context, principal 
 	if s == nil || s.db == nil {
 		return Readiness{}, false, ErrUnavailable
 	}
-	connectionID, generation, err := parseConnection(principal)
+	connectionID, generation, err := principalConnection(principal)
 	if err != nil {
 		return Readiness{}, false, err
 	}
@@ -401,8 +406,10 @@ func (s *RegistrationStore) GetProviderReadiness(ctx context.Context, principal 
 		OrganizationID:       principal.OrganizationID,
 		ProjectID:            projectID,
 		RegistrationID:       registrationID,
-		ConnectionID:         uuid.NullUUID{UUID: connectionID, Valid: true},
-		ConnectionGeneration: uuid.NullUUID{UUID: generation, Valid: true},
+		ConnectionID:         connectionID,
+		ConnectionGeneration: generation,
+		UserID:               conv.ToPGText(principal.UserID),
+		ActingSurface:        conv.ToPGText(string(principal.surface())),
 	}); err != nil {
 		return Readiness{}, false, fmt.Errorf("delete expired platform mcp readiness: %w", err)
 	}
@@ -410,8 +417,10 @@ func (s *RegistrationStore) GetProviderReadiness(ctx context.Context, principal 
 		OrganizationID:       principal.OrganizationID,
 		ProjectID:            projectID,
 		RegistrationID:       registrationID,
-		ConnectionID:         uuid.NullUUID{UUID: connectionID, Valid: true},
-		ConnectionGeneration: uuid.NullUUID{UUID: generation, Valid: true},
+		ConnectionID:         connectionID,
+		ConnectionGeneration: generation,
+		UserID:               conv.ToPGText(principal.UserID),
+		ActingSurface:        conv.ToPGText(string(principal.surface())),
 		SubjectUrn:           userSubjectURN(principal.UserID),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -430,7 +439,12 @@ func (s *RegistrationStore) RecordReadiness(ctx context.Context, principal Princ
 	if s == nil || s.db == nil {
 		return Readiness{}, ErrUnavailable
 	}
-	connectionID, generation, err := parseConnection(principal)
+	// Only the managed project assistant can persist readiness without an OAuth
+	// connection. External and dashboard setup probes remain connection-bound.
+	if !principal.HasConnection() && principal.surface() != SurfaceProjectAssistant {
+		return Readiness{}, ErrReadinessInvalid
+	}
+	connectionID, generation, err := principalConnection(principal)
 	if err != nil {
 		return Readiness{}, err
 	}
@@ -452,26 +466,46 @@ func (s *RegistrationStore) RecordReadiness(ctx context.Context, principal Princ
 		return Readiness{}, fmt.Errorf("load platform mcp readiness registration lifecycle: %w", err)
 	}
 
-	row, err := q.UpsertPlatformMCPReadiness(ctx, platformrepo.UpsertPlatformMCPReadinessParams{
+	fingerprint := binding.ProviderAuthorizationFingerprint
+	if !principal.HasConnection() {
+		// The retained legacy NULLS-NOT-DISTINCT binding index cannot distinguish
+		// connectionless actors. Scope its persisted key to this user and trusted
+		// surface as well as the provider's authorization state, so two assistants
+		// cannot collide before the assistant partial-index arbiter applies.
+		fingerprint = assistantReadinessFingerprint(fingerprint, principal.UserID, principal.surface())
+	}
+	readinessParams := platformrepo.UpsertPlatformMCPReadinessAssistantParams{
 		OrganizationID:                   principal.OrganizationID,
 		ProjectID:                        binding.ProjectID,
 		RegistrationID:                   binding.RegistrationID,
-		ConnectionID:                     uuid.NullUUID{UUID: connectionID, Valid: true},
-		ConnectionGeneration:             uuid.NullUUID{UUID: generation, Valid: true},
-		ProviderAuthorizationFingerprint: binding.ProviderAuthorizationFingerprint,
+		ConnectionID:                     connectionID,
+		ConnectionGeneration:             generation,
+		UserID:                           conv.ToPGText(principal.UserID),
+		ActingSurface:                    conv.ToPGText(string(principal.surface())),
+		ProviderAuthorizationFingerprint: fingerprint,
 		State:                            string(state),
 		EvidenceCode:                     optionalText(evidenceCode),
 		CheckedAt:                        timestamp(checkedAt),
 		ExpiresAt:                        optionalLifecycleTimestamp(expiresAt),
-	})
+	}
+	var row platformrepo.PlatformMcpReadiness
+	if principal.HasConnection() {
+		// Both generated query params deliberately share this exact persistence
+		// shape; conversion keeps the external write synchronized with it.
+		row, err = q.UpsertPlatformMCPReadinessExternal(ctx, platformrepo.UpsertPlatformMCPReadinessExternalParams(readinessParams))
+	} else {
+		row, err = q.UpsertPlatformMCPReadinessAssistant(ctx, readinessParams)
+	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		current, loadErr := q.GetPlatformMCPReadiness(ctx, platformrepo.GetPlatformMCPReadinessParams{
 			OrganizationID:                   principal.OrganizationID,
 			ProjectID:                        binding.ProjectID,
 			RegistrationID:                   binding.RegistrationID,
-			ConnectionID:                     uuid.NullUUID{UUID: connectionID, Valid: true},
-			ConnectionGeneration:             uuid.NullUUID{UUID: generation, Valid: true},
-			ProviderAuthorizationFingerprint: binding.ProviderAuthorizationFingerprint,
+			ConnectionID:                     connectionID,
+			ConnectionGeneration:             generation,
+			UserID:                           conv.ToPGText(principal.UserID),
+			ActingSurface:                    conv.ToPGText(string(principal.surface())),
+			ProviderAuthorizationFingerprint: fingerprint,
 		})
 		if loadErr == nil {
 			if err := tx.Commit(ctx); err != nil {
@@ -492,8 +526,8 @@ func (s *RegistrationStore) RecordReadiness(ctx context.Context, principal Princ
 			OrganizationID:       principal.OrganizationID,
 			ProjectID:            binding.ProjectID,
 			RegistrationID:       binding.RegistrationID,
-			ConnectionID:         uuid.NullUUID{UUID: connectionID, Valid: true},
-			ConnectionGeneration: uuid.NullUUID{UUID: generation, Valid: true},
+			ConnectionID:         connectionID,
+			ConnectionGeneration: generation,
 			SubjectUrn:           userSubjectURN(principal.UserID),
 		})
 		switch {

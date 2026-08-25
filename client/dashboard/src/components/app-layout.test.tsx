@@ -6,6 +6,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -26,7 +27,7 @@ vi.mock("@/contexts/Sdk.tsx", () => ({
   }),
 }));
 
-import { ImpersonationBanner } from "./app-layout";
+import { ImpersonationBanner, LoginCheck } from "./app-layout";
 import { useShowsImpersonationBanner } from "./impersonation-banner-state";
 
 let originalLocation: Location | undefined;
@@ -156,3 +157,35 @@ describe("trusted support banner", () => {
     ).toBeTruthy();
   });
 });
+
+describe("LoginCheck", () => {
+  it("sends authenticated zero-org sessions to sign-up with their destination", () => {
+    mocks.useSession.mockReturnValue({
+      ...baseSession,
+      session: "<SESSION>",
+      activeOrganizationId: "",
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/projects?tab=overview"]}>
+        <Routes>
+          <Route element={<LoginCheck />}>
+            <Route path="/projects" element={<div>projects</div>} />
+          </Route>
+          <Route path="/sign-up" element={<CurrentLocation />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId("location").textContent).toBe(
+      "/sign-up?redirect=%2Fprojects%3Ftab%3Doverview",
+    );
+  });
+});
+
+function CurrentLocation(): JSX.Element {
+  const location = useLocation();
+  return (
+    <div data-testid="location">{location.pathname + location.search}</div>
+  );
+}

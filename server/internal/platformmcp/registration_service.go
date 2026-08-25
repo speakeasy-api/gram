@@ -8,14 +8,18 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/google/uuid"
 )
 
 var ErrRegistrationUnavailable = errors.New("platform mcp catalog registration unavailable")
 
+const directRemoteDisplayNameMaxBytes = 256
+
 type CatalogRegistrationGateChecker interface {
 	Enabled(ctx context.Context, organizationID, projectSlug string) (bool, error)
+	EnabledOrganization(ctx context.Context, organizationID string) (bool, error)
 }
 
 type RegistrationPersistence interface {
@@ -74,6 +78,9 @@ type RegistrationService struct {
 	readiness                  *ReadinessService
 	dashboardURL               *url.URL
 	identityProviderAttachment CatalogIdentityProviderAttachment
+	directRemoteInspector      DirectRemoteInspector
+	lifecycleMetadata          *LifecycleMetadataService
+	lifecycleVisibility        *LifecycleVisibilityService
 	budgets                    OperationBudgets
 	telemetry                  LifecycleTelemetry
 }
@@ -87,11 +94,12 @@ func NewRegistrationService(catalog Catalog, gate CatalogRegistrationGateChecker
 		readiness: nil,
 		telemetry: noopLifecycleTelemetry{},
 		budgets: OperationBudgets{
-			Catalog:      OperationBudget{Connection: nil, Organization: nil},
-			Registration: OperationBudget{Connection: nil, Organization: nil},
-			Handoff:      OperationBudget{Connection: nil, Organization: nil},
-			SetupStart:   OperationBudget{Connection: nil, Organization: nil},
-			Repair:       OperationBudget{Connection: nil, Organization: nil},
+			Catalog:           OperationBudget{Connection: nil, Organization: nil},
+			Registration:      OperationBudget{Connection: nil, Organization: nil},
+			Handoff:           OperationBudget{Connection: nil, Organization: nil},
+			SetupStart:        OperationBudget{Connection: nil, Organization: nil},
+			Repair:            OperationBudget{Connection: nil, Organization: nil},
+			LifecycleMetadata: OperationBudget{Connection: nil, Organization: nil},
 		},
 	}
 }
@@ -126,6 +134,63 @@ func (s *RegistrationService) WithIdentityProviderAttachment(attachment CatalogI
 	return s
 }
 
+// WithDirectRemoteInspector enables direct user-supplied remote MCP admission.
+// The inspector is server-composed because it owns Guardian-backed egress.
+func (s *RegistrationService) WithDirectRemoteInspector(inspector DirectRemoteInspector) *RegistrationService {
+	if s != nil {
+		s.directRemoteInspector = inspector
+	}
+	return s
+}
+
+// WithLifecycleMetadata enables narrow, Platform-owned MCP display-name updates.
+// The command is injected from server composition to share the dashboard domain
+// implementation without importing mcpservers into Platform MCP.
+func (s *RegistrationService) WithLifecycleMetadata(metadata *LifecycleMetadataService) *RegistrationService {
+	if s != nil {
+		s.lifecycleMetadata = metadata
+	}
+	return s
+}
+
+func (s *RegistrationService) UpdateMCPMetadata(ctx context.Context, principal Principal, input UpdateMCPMetadataInput) (UpdateMCPMetadataResult, error) {
+	if s == nil || s.gate == nil || s.lifecycleMetadata == nil || !s.budgets.LifecycleMetadata.valid() {
+		return UpdateMCPMetadataResult{}, ErrRegistrationUnavailable
+	}
+	if err := s.budgets.LifecycleMetadata.Allow(ctx, principal); err != nil {
+		return UpdateMCPMetadataResult{}, err
+	}
+	enabled, err := s.gate.Enabled(ctx, principal.OrganizationID, input.ProjectSlug)
+	if err != nil {
+		return UpdateMCPMetadataResult{}, fmt.Errorf("check metadata update gate: %w", err)
+	}
+	if !enabled {
+		return UpdateMCPMetadataResult{}, ErrRegistrationUnavailable
+	}
+	return s.lifecycleMetadata.Update(ctx, principal, input)
+}
+
+func (s *RegistrationService) WithLifecycleVisibility(visibility *LifecycleVisibilityService) *RegistrationService {
+	if s != nil {
+		s.lifecycleVisibility = visibility
+	}
+	return s
+}
+
+func (s *RegistrationService) DisableMCP(ctx context.Context, principal Principal, input UpdateMCPVisibilityInput) (UpdateMCPVisibilityResult, error) {
+	if s == nil || s.lifecycleVisibility == nil {
+		return UpdateMCPVisibilityResult{}, ErrRegistrationUnavailable
+	}
+	return s.lifecycleVisibility.Disable(ctx, principal, input)
+}
+
+func (s *RegistrationService) EnableMCP(ctx context.Context, principal Principal, input UpdateMCPVisibilityInput) (UpdateMCPVisibilityResult, error) {
+	if s == nil || s.lifecycleVisibility == nil {
+		return UpdateMCPVisibilityResult{}, ErrRegistrationUnavailable
+	}
+	return s.lifecycleVisibility.Enable(ctx, principal, input)
+}
+
 // WithDashboardURL supplies the configured dashboard origin used only to build
 // trusted same-origin setup links for persisted registrations.
 func (s *RegistrationService) WithDashboardURL(dashboardURL *url.URL) *RegistrationService {
@@ -151,10 +216,10 @@ func (s *RegistrationService) RegistrationCatalogIdentity(ctx context.Context, p
 // fallback for provider attachment; callers cannot provide an endpoint, source,
 // or credential.
 func (s *RegistrationService) DashboardSetupURL(ctx context.Context, principal Principal, input IssueSetupHandoffInput) (string, error) {
-	if s == nil || s.catalog == nil || s.gate == nil || s.store == nil || s.dashboardURL == nil || input.ProjectSlug == "" || input.RegistrationID == "" || input.ProviderKey == "" || input.CatalogRef == "" {
+	if s == nil || s.gate == nil || s.store == nil || s.dashboardURL == nil || input.ProjectSlug == "" || input.RegistrationID == "" || input.ProviderKey == "" || input.CatalogRef == "" {
 		return "", ErrRegistrationUnavailable
 	}
-	if !isBrowserCatalogProviderKey(input.ProviderKey) {
+	if !isBrowserCatalogProviderKey(input.ProviderKey) && input.ProviderKey != directRemoteProviderKey {
 		return "", ErrCatalogRejected
 	}
 	enabled, err := s.gate.Enabled(ctx, principal.OrganizationID, input.ProjectSlug)
@@ -163,13 +228,6 @@ func (s *RegistrationService) DashboardSetupURL(ctx context.Context, principal P
 	}
 	if !enabled {
 		return "", ErrRegistrationUnavailable
-	}
-	catalog, err := s.catalog.Inspect(ctx, input.ProviderKey, input.CatalogRef)
-	if err != nil {
-		return "", fmt.Errorf("inspect dashboard setup catalog candidate: %w", err)
-	}
-	if catalog.ProviderKey != input.ProviderKey || catalog.CatalogRef != input.CatalogRef || catalog.SetupIntent == "" || catalog.Transport != "streamable-http" {
-		return "", ErrCatalogRejected
 	}
 	registrationID, err := uuid.Parse(input.RegistrationID)
 	if err != nil {
@@ -186,8 +244,27 @@ func (s *RegistrationService) DashboardSetupURL(ctx context.Context, principal P
 	if err != nil {
 		return "", err
 	}
-	if persisted.ProviderKey != catalog.ProviderKey || persisted.CatalogRef != catalog.CatalogRef {
+	if persisted.ProviderKey != input.ProviderKey || persisted.CatalogRef != input.CatalogRef {
 		return "", ErrCatalogRejected
+	}
+	if isBrowserCatalogProviderKey(input.ProviderKey) {
+		if s.catalog == nil {
+			return "", ErrRegistrationUnavailable
+		}
+		catalog, err := s.catalog.Inspect(ctx, input.ProviderKey, input.CatalogRef)
+		if err != nil {
+			return "", fmt.Errorf("inspect dashboard setup catalog candidate: %w", err)
+		}
+		if catalog.ProviderKey != persisted.ProviderKey || catalog.CatalogRef != persisted.CatalogRef || catalog.SetupIntent == "" || catalog.Transport != "streamable-http" {
+			return "", ErrCatalogRejected
+		}
+	}
+	return s.dashboardSettingsURL(ctx, principal, project, registrationID)
+}
+
+func (s *RegistrationService) dashboardSettingsURL(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (string, error) {
+	if s == nil || s.store == nil || s.dashboardURL == nil || registrationID == uuid.Nil {
+		return "", ErrRegistrationUnavailable
 	}
 	setup, err := s.store.ResolveRegistrationDashboardSetup(ctx, principal, project, registrationID)
 	if err != nil {
@@ -255,14 +332,14 @@ func (s *RegistrationService) AttachDefaultIdentityProvider(ctx context.Context,
 	if err != nil {
 		return CatalogIdentityProviderAttachmentResult{}, err
 	}
-	if !isBrowserCatalogProviderKey(candidate.ProviderKey) {
+	if !isBrowserCatalogProviderKey(candidate.ProviderKey) && candidate.ProviderKey != directRemoteProviderKey {
 		return CatalogIdentityProviderAttachmentResult{}, ErrIdentityProviderAttachmentUnsupported
 	}
 	return s.identityProviderAttachment.Attach(ctx, principal, project, parsedID)
 }
 
 func (s *RegistrationService) IssueSetupHandoff(ctx context.Context, principal Principal, input IssueSetupHandoffInput) (IssuedSetupHandoff, error) {
-	if s == nil || s.catalog == nil || s.gate == nil || s.store == nil || !s.budgets.Handoff.valid() || input.ProjectSlug == "" || input.RegistrationID == "" || input.ProviderKey == "" || input.CatalogRef == "" {
+	if s == nil || s.gate == nil || s.store == nil || !s.budgets.Handoff.valid() || input.ProjectSlug == "" || input.RegistrationID == "" || input.ProviderKey == "" || input.CatalogRef == "" {
 		return IssuedSetupHandoff{}, ErrRegistrationUnavailable
 	}
 	registrationID, err := uuid.Parse(input.RegistrationID)
@@ -279,13 +356,6 @@ func (s *RegistrationService) IssueSetupHandoff(ctx context.Context, principal P
 	if !enabled {
 		return IssuedSetupHandoff{}, ErrRegistrationUnavailable
 	}
-	catalog, err := s.catalog.Inspect(ctx, input.ProviderKey, input.CatalogRef)
-	if err != nil {
-		return IssuedSetupHandoff{}, fmt.Errorf("inspect setup handoff catalog candidate: %w", err)
-	}
-	if catalog.ProviderKey != input.ProviderKey || catalog.CatalogRef != input.CatalogRef || catalog.SetupIntent == "" || catalog.Transport != "streamable-http" {
-		return IssuedSetupHandoff{}, ErrCatalogRejected
-	}
 	project, err := s.store.ResolveProject(ctx, principal.OrganizationID, input.ProjectSlug)
 	if err != nil {
 		return IssuedSetupHandoff{}, fmt.Errorf("resolve setup handoff project: %w", err)
@@ -293,12 +363,35 @@ func (s *RegistrationService) IssueSetupHandoff(ctx context.Context, principal P
 	if err := s.requireEligibleTarget(ctx, principal.OrganizationID, project); err != nil {
 		return IssuedSetupHandoff{}, err
 	}
+	candidate, err := s.store.ResolveRegistrationCatalogIdentity(ctx, principal, project, registrationID)
+	if err != nil {
+		return IssuedSetupHandoff{}, fmt.Errorf("resolve setup handoff registration identity: %w", err)
+	}
+	if candidate.ProviderKey != input.ProviderKey || candidate.CatalogRef != input.CatalogRef {
+		return IssuedSetupHandoff{}, ErrCatalogRejected
+	}
+	intent := ""
+	if candidate.ProviderKey == directRemoteProviderKey {
+		intent = "dashboard_source_settings"
+	} else {
+		if s.catalog == nil {
+			return IssuedSetupHandoff{}, ErrRegistrationUnavailable
+		}
+		catalog, err := s.catalog.Inspect(ctx, candidate.ProviderKey, candidate.CatalogRef)
+		if err != nil {
+			return IssuedSetupHandoff{}, fmt.Errorf("inspect setup handoff catalog candidate: %w", err)
+		}
+		if catalog.ProviderKey != candidate.ProviderKey || catalog.CatalogRef != candidate.CatalogRef || catalog.SetupIntent == "" || catalog.Transport != "streamable-http" {
+			return IssuedSetupHandoff{}, ErrCatalogRejected
+		}
+		intent = catalog.SetupIntent
+	}
 	issued, err := s.store.IssueSetupHandoff(ctx, principal, SetupHandoffBinding{
 		ProjectID:        project.ID,
 		RegistrationID:   registrationID,
-		ProviderKey:      catalog.ProviderKey,
-		CatalogReference: catalog.CatalogRef,
-		Intent:           catalog.SetupIntent,
+		ProviderKey:      candidate.ProviderKey,
+		CatalogReference: candidate.CatalogRef,
+		Intent:           intent,
 	}, s.now())
 	if err != nil {
 		s.telemetry.Record(ctx, LifecycleEvent{Operation: "provider_setup", Phase: "handoff", Outcome: lifecycleOutcome(err), State: ""})
@@ -333,6 +426,108 @@ func (s *RegistrationService) IssueSetupHandoffForRegistration(ctx context.Conte
 		ProviderKey:    candidate.ProviderKey,
 		CatalogRef:     candidate.CatalogRef,
 	})
+}
+
+type RegisterRemoteMCPInput struct {
+	ProjectSlug    string
+	RemoteURL      string
+	DisplayName    string
+	IdempotencyKey string
+}
+
+type RegisterRemoteMCPResult struct {
+	Project           ResolvedProject
+	RemoteURL         string
+	Receipt           OperationReceipt
+	Registration      string
+	NextAction        string
+	DashboardSetupURL string
+}
+
+// RegisterRemoteMCP re-inspects the exact URL before persistence. An inspection
+// result from an earlier MCP call is deliberately not trusted as admission
+// evidence, and no caller can supply credentials or headers.
+func (s *RegistrationService) RegisterRemoteMCP(ctx context.Context, principal Principal, input RegisterRemoteMCPInput) (RegisterRemoteMCPResult, error) {
+	if s == nil || s.gate == nil || s.store == nil || s.directRemoteInspector == nil || !s.budgets.Registration.valid() || input.ProjectSlug == "" || input.RemoteURL == "" || input.IdempotencyKey == "" {
+		return RegisterRemoteMCPResult{}, ErrRegistrationUnavailable
+	}
+	if err := s.budgets.Registration.Allow(ctx, principal); err != nil {
+		return RegisterRemoteMCPResult{}, err
+	}
+	enabled, err := s.gate.Enabled(ctx, principal.OrganizationID, input.ProjectSlug)
+	if err != nil {
+		return RegisterRemoteMCPResult{}, fmt.Errorf("check direct remote registration gate: %w", err)
+	}
+	if !enabled {
+		return RegisterRemoteMCPResult{}, ErrRegistrationUnavailable
+	}
+	inspection, err := s.directRemoteInspector.Inspect(ctx, input.RemoteURL)
+	if err != nil {
+		return RegisterRemoteMCPResult{}, err
+	}
+	if inspection.CanonicalURL == "" || inspection.Transport != "streamable-http" || inspection.Trust != "user_supplied_unreviewed" {
+		return RegisterRemoteMCPResult{}, ErrDirectRemoteRejected
+	}
+	displayName := strings.TrimSpace(input.DisplayName)
+	if len(displayName) > directRemoteDisplayNameMaxBytes || strings.IndexFunc(displayName, isDirectRemoteDisplayNameBreak) >= 0 {
+		return RegisterRemoteMCPResult{}, ErrRegistrationInvalid
+	}
+	project, err := s.store.ResolveProject(ctx, principal.OrganizationID, input.ProjectSlug)
+	if err != nil {
+		return RegisterRemoteMCPResult{}, fmt.Errorf("resolve direct remote registration project: %w", err)
+	}
+	if err := s.requireEligibleTarget(ctx, principal.OrganizationID, project); err != nil {
+		return RegisterRemoteMCPResult{}, err
+	}
+	if displayName == "" {
+		displayName = inspection.CanonicalURL
+	}
+	if len(displayName) > directRemoteDisplayNameMaxBytes || strings.IndexFunc(displayName, isDirectRemoteDisplayNameBreak) >= 0 {
+		return RegisterRemoteMCPResult{}, ErrRegistrationInvalid
+	}
+	configurationHash := catalogConfigurationHash(CatalogConfigurationValues{"name": displayName})
+	request := CatalogRegistrationRequest{
+		ProjectSlug:       project.Slug,
+		SourceKind:        directRemoteSourceKind,
+		CatalogProvider:   directRemoteProviderKey,
+		CatalogReference:  inspection.CanonicalURL,
+		ConfigurationHash: configurationHash,
+		IdempotencyKey:    input.IdempotencyKey,
+		InputHash:         catalogRegistrationInputHash(project.Slug, directRemoteSourceKind, directRemoteProviderKey, inspection.CanonicalURL, configurationHash),
+	}
+	receipt, err := s.store.BeginReceipt(ctx, principal, project, request, s.now())
+	if err != nil {
+		return RegisterRemoteMCPResult{}, fmt.Errorf("begin direct remote registration receipt: %w", err)
+	}
+	if !receipt.Replayed || receipt.Status == receiptStatusPending {
+		receipt, err = s.store.ConvergeRegistration(ctx, principal, project, request, receipt)
+		if err != nil {
+			return RegisterRemoteMCPResult{}, fmt.Errorf("converge direct remote registration: %w", err)
+		}
+	}
+	if receipt.ResultCode == receiptResultActiveCap {
+		return RegisterRemoteMCPResult{}, ErrRegistrationCap
+	}
+	if !receipt.RegistrationID.Valid {
+		return RegisterRemoteMCPResult{}, ErrRegistrationUnavailable
+	}
+	if receipt.Status == receiptStatusPending {
+		receipt, err = s.store.CompleteRegistration(ctx, principal, project, request, receipt, resolvedCatalogConfiguration{remoteURL: inspection.CanonicalURL, displayName: displayName})
+		if err != nil {
+			return RegisterRemoteMCPResult{}, fmt.Errorf("complete direct remote registration: %w", err)
+		}
+	}
+	setupURL := ""
+	nextAction := "ready"
+	if inspection.RequiresDashboardSetup {
+		setupURL, err = s.dashboardSettingsURL(ctx, principal, project, receipt.RegistrationID.UUID)
+		if err != nil {
+			return RegisterRemoteMCPResult{}, fmt.Errorf("resolve direct remote dashboard setup: %w", err)
+		}
+		nextAction = "secure_dashboard_setup_required"
+	}
+	s.telemetry.Record(ctx, LifecycleEvent{Operation: "direct_remote_registration", Phase: "complete", Outcome: "succeeded", State: ""})
+	return RegisterRemoteMCPResult{Project: project, RemoteURL: inspection.CanonicalURL, Receipt: receipt, Registration: receipt.RegistrationID.UUID.String(), NextAction: nextAction, DashboardSetupURL: setupURL}, nil
 }
 
 func (s *RegistrationService) RegisterCatalogMCP(ctx context.Context, principal Principal, input RegisterCatalogMCPInput) (RegisterCatalogMCPResult, error) {
@@ -425,6 +620,13 @@ func (s *RegistrationService) RegisterCatalogMCP(ctx context.Context, principal 
 		Registration:        receipt.RegistrationID.UUID.String(),
 		SecretFieldsPending: append([]CatalogConfigurationField(nil), pendingSecretFields...),
 	}, nil
+}
+
+// isDirectRemoteDisplayNameBreak rejects values that change the structure of a
+// rendered line or terminal message. A remote display name crosses dashboard,
+// plugin, audit, and MCP surfaces, so accepting only CR/LF is insufficient.
+func isDirectRemoteDisplayNameBreak(value rune) bool {
+	return unicode.IsControl(value) || value == '\u2028' || value == '\u2029'
 }
 
 func catalogDisplayName(catalog CatalogDetails) string {

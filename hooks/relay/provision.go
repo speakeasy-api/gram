@@ -41,11 +41,14 @@ const configFileName = "speakeasy.json"
 
 // WritePlugin renders a provider hook package under dir that drives the
 // speakeasy-hooks binary. provider is the agenthooks slug (claude-code,
-// cursor, codex, opencode). For claude-code and cursor, dir is a plugin
-// directory; for codex, which has no plugin layout for hooks, dir is the
-// Codex home the config installs into; for opencode, dir receives an
+// cursor, codex, opencode, openclaw). For claude-code and cursor, dir is a
+// plugin directory; for codex, which has no plugin layout for hooks, dir is
+// the Codex home the config installs into; for opencode, dir receives an
 // .opencode/plugin shim usable either as a project directory or referenced
-// from an OpenCode config's plugin list.
+// from an OpenCode config's plugin list; for openclaw, dir is a native
+// OpenClaw plugin package installed with `openclaw plugins install <dir>`
+// (plus a Gateway restart, and plugins.entries.<id>.hooks
+// .allowConversationAccess: true for the prompt/stop/llm events).
 func WritePlugin(ctx context.Context, provider, dir string, cfg PluginConfig) error {
 	var target install.Target
 	switch provider {
@@ -57,6 +60,8 @@ func WritePlugin(ctx context.Context, provider, dir string, cfg PluginConfig) er
 		target = install.Target{Provider: agenthooks.ProviderCodex, Scope: install.ScopeUser, Dir: dir}
 	case "opencode":
 		target = install.Target{Provider: agenthooks.ProviderOpenCode, Scope: install.ScopeProject, Dir: dir}
+	case "openclaw":
+		target = install.Target{Provider: agenthooks.ProviderOpenClaw, Scope: install.ScopeProject, Dir: dir}
 	default:
 		return fmt.Errorf("unknown provider %q", provider)
 	}

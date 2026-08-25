@@ -24,6 +24,8 @@ const (
 	DocsOrganizationLimitName         = "platform-mcp-docs-organization"
 	SkillsConnectionLimitName         = "platform-mcp-skills-connection"
 	SkillsOrganizationLimitName       = "platform-mcp-skills-organization"
+	LifecycleConnectionLimitName      = "platform-mcp-lifecycle-connection"
+	LifecycleOrganizationLimitName    = "platform-mcp-lifecycle-organization"
 )
 
 const (
@@ -93,26 +95,16 @@ func (b OperationBudget) Allow(ctx context.Context, principal Principal) error {
 	if !b.valid() || principal.OrganizationID == "" {
 		return ErrOperationBudgetUnavailable
 	}
-	// A surface acting under assistant identity holds no OAuth connection, so
-	// there is no connection bucket to charge and the organization bucket meters
-	// it alone. Refusing the operation instead would deny every connection-less
-	// caller, and keying the connection bucket on the empty string would pool
-	// every such caller across every organization into one bucket.
-	if principal.HasConnection() {
-		// HasConnection is an OR, so a principal claiming a connection through its
-		// generation alone lands here rather than being metered as connection-less.
-		// It has no key to charge, and charging the empty string would pool every
-		// such caller into one bucket, so the budget is unavailable to it.
-		if principal.ConnectionID == "" {
-			return ErrOperationBudgetUnavailable
-		}
-		connection, err := b.Connection.Allow(ctx, principal.ConnectionID)
-		if err != nil {
-			return fmt.Errorf("limit platform mcp connection operation: %w: %w", ErrOperationBudgetUnavailable, err)
-		}
-		if !connection.Allowed {
-			return ErrOperationRateLimited
-		}
+	actorKey, err := operationBudgetActorKey(principal)
+	if err != nil {
+		return err
+	}
+	connection, err := b.Connection.Allow(ctx, actorKey)
+	if err != nil {
+		return fmt.Errorf("limit platform mcp actor operation: %w: %w", ErrOperationBudgetUnavailable, err)
+	}
+	if !connection.Allowed {
+		return ErrOperationRateLimited
 	}
 	organization, err := b.Organization.Allow(ctx, principal.OrganizationID)
 	if err != nil {
@@ -122,6 +114,35 @@ func (b OperationBudget) Allow(ctx context.Context, principal Principal) error {
 		return ErrOperationRateLimited
 	}
 	return nil
+}
+
+// operationBudgetActorKey is the actor bucket for remote egress and mutations.
+// External Platform MCP calls are isolated by their OAuth connection. A managed
+// assistant has no connection, so it is isolated by its fixed client identity
+// and the real user that authorized the action; it never pools all assistants
+// into one empty-key bucket. A dashboard setup handoff has no OAuth connection
+// either, so it receives its own user-scoped bucket.
+func operationBudgetActorKey(principal Principal) (string, error) {
+	if principal.HasConnection() {
+		if principal.ConnectionID == "" {
+			return "", ErrOperationBudgetUnavailable
+		}
+		return principal.ConnectionID, nil
+	}
+	if principal.UserID == "" {
+		return "", ErrOperationBudgetUnavailable
+	}
+	switch principal.surface() {
+	case SurfaceProjectAssistant:
+		if principal.ClientID == "" {
+			return "", ErrOperationBudgetUnavailable
+		}
+		return "assistant:" + principal.ClientID + ":" + principal.UserID, nil
+	case SurfaceDashboard:
+		return "dashboard:" + principal.UserID, nil
+	default:
+		return "", ErrOperationBudgetUnavailable
+	}
 }
 
 // OperationBudgets groups the independently metered public Platform MCP
@@ -139,7 +160,13 @@ type OperationBudgets struct {
 	// obtain the version token its next write needs, and metering the read
 	// separately would only let a loop spend twice as much reaching the same
 	// write.
-	Skills OperationBudget
+	Skills            OperationBudget
+	LifecycleMetadata OperationBudget
+	// Plugins meters the plugin inventory reads. They are bounded PostgreSQL
+	// reads of a project's own plugins, metered separately from diagnostics so
+	// an administrator walking the inventory does not spend the allowance the
+	// failure diagnosis it leads to will need.
+	Plugins OperationBudget
 	// Diagnostics meters the observability reads. They are bounded aggregate
 	// queries over Gram-owned telemetry, so the cost being metered is the
 	// ClickHouse scan, not an external egress.
@@ -203,5 +230,5 @@ func (b DrilldownVolumeBudget) allow(ctx context.Context, principal Principal, l
 }
 
 func (b OperationBudgets) Valid() bool {
-	return b.Catalog.valid() && b.Registration.valid() && b.Handoff.valid() && b.SetupStart.valid() && b.Repair.valid() && b.Docs.valid() && b.Skills.valid() && b.Diagnostics.valid() && b.SensitiveDiagnostics.valid() && b.DrilldownVolume.valid()
+	return b.Catalog.valid() && b.Registration.valid() && b.Handoff.valid() && b.SetupStart.valid() && b.Repair.valid() && b.Docs.valid() && b.Skills.valid() && b.LifecycleMetadata.valid() && b.Diagnostics.valid() && b.SensitiveDiagnostics.valid() && b.DrilldownVolume.valid()
 }

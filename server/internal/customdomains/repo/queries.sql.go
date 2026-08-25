@@ -12,6 +12,43 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const activateVerifiedCustomDomain = `-- name: ActivateVerifiedCustomDomain :execrows
+UPDATE custom_domains
+SET
+    activated = TRUE,
+    ingress_name = $1,
+    cert_secret_name = $2,
+    provisioner_kind = $3,
+    updated_at = clock_timestamp()
+WHERE id = $4
+  AND deleted IS FALSE
+  AND verified IS TRUE
+`
+
+type ActivateVerifiedCustomDomainParams struct {
+	IngressName     pgtype.Text
+	CertSecretName  pgtype.Text
+	ProvisionerKind string
+	ID              uuid.UUID
+}
+
+// Activation re-checks verification at write time: a health auto-disable
+// during the reconciler's convergence wait revokes verified, and the stale
+// snapshot the reconciler holds must not resurrect the domain. Never writes
+// verified — ownership verification is its sole writer.
+func (q *Queries) ActivateVerifiedCustomDomain(ctx context.Context, arg ActivateVerifiedCustomDomainParams) (int64, error) {
+	result, err := q.db.Exec(ctx, activateVerifiedCustomDomain,
+		arg.IngressName,
+		arg.CertSecretName,
+		arg.ProvisionerKind,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const clearDeletedCustomDomainResourceNames = `-- name: ClearDeletedCustomDomainResourceNames :exec
 UPDATE custom_domains
 SET
@@ -442,6 +479,87 @@ func (q *Queries) GetEligibleRootMcpEndpoint(ctx context.Context, arg GetEligibl
 	return i, err
 }
 
+const getEligibleRootMcpServerForOrganization = `-- name: GetEligibleRootMcpServerForOrganization :one
+SELECT s.id, s.project_id, s.name, s.slug, s.environment_id, s.user_session_issuer_id, s.remote_session_issuer_id, s.remote_mcp_server_id, s.tunneled_mcp_server_id, s.toolset_id, s.unproxied_mcp_server_id, s.tool_variations_group_id, s.visibility, s.created_at, s.updated_at, s.deleted_at, s.deleted
+FROM mcp_servers AS s
+JOIN projects AS p
+  ON p.id = s.project_id
+ AND p.deleted IS FALSE
+WHERE s.id = $1::uuid
+  AND p.organization_id = $2
+  AND s.deleted IS FALSE
+  AND s.visibility <> 'disabled'
+FOR SHARE OF s
+`
+
+type GetEligibleRootMcpServerForOrganizationParams struct {
+	McpServerID    uuid.UUID
+	OrganizationID string
+}
+
+// Org-scoped eligibility check for mapping a server to a domain root when no
+// endpoint exists yet; mirrors GetEligibleRootMcpEndpoint's server conditions.
+func (q *Queries) GetEligibleRootMcpServerForOrganization(ctx context.Context, arg GetEligibleRootMcpServerForOrganizationParams) (McpServer, error) {
+	row := q.db.QueryRow(ctx, getEligibleRootMcpServerForOrganization, arg.McpServerID, arg.OrganizationID)
+	var i McpServer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.EnvironmentID,
+		&i.UserSessionIssuerID,
+		&i.RemoteSessionIssuerID,
+		&i.RemoteMcpServerID,
+		&i.TunneledMcpServerID,
+		&i.ToolsetID,
+		&i.UnproxiedMcpServerID,
+		&i.ToolVariationsGroupID,
+		&i.Visibility,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getMcpEndpointByCustomDomainAndServer = `-- name: GetMcpEndpointByCustomDomainAndServer :one
+SELECT id, project_id, custom_domain_id, mcp_server_id, meta_mcp_server_id, slug, is_domain_root, created_at, updated_at, deleted_at, deleted
+FROM mcp_endpoints
+WHERE custom_domain_id = $1::uuid
+  AND mcp_server_id = $2::uuid
+  AND deleted IS FALSE
+ORDER BY (is_domain_root IS TRUE) DESC, id
+LIMIT 1
+`
+
+type GetMcpEndpointByCustomDomainAndServerParams struct {
+	CustomDomainID uuid.UUID
+	McpServerID    uuid.UUID
+}
+
+// A server can carry several endpoints on one domain; reuse deterministically:
+// the current root endpoint when there is one, otherwise the oldest.
+func (q *Queries) GetMcpEndpointByCustomDomainAndServer(ctx context.Context, arg GetMcpEndpointByCustomDomainAndServerParams) (McpEndpoint, error) {
+	row := q.db.QueryRow(ctx, getMcpEndpointByCustomDomainAndServer, arg.CustomDomainID, arg.McpServerID)
+	var i McpEndpoint
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.CustomDomainID,
+		&i.McpServerID,
+		&i.MetaMcpServerID,
+		&i.Slug,
+		&i.IsDomainRoot,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getOrganizationSlugForHealthNotification = `-- name: GetOrganizationSlugForHealthNotification :one
 SELECT slug
 FROM organization_metadata
@@ -597,6 +715,87 @@ func (q *Queries) ListActivatedCustomDomainsForHealthCheck(ctx context.Context, 
 	return items, nil
 }
 
+const listEligibleRootMcpServersForOrganization = `-- name: ListEligibleRootMcpServersForOrganization :many
+SELECT
+    s.id,
+    s.name,
+    s.slug,
+    p.id AS project_id,
+    p.name AS project_name,
+    COALESCE(e.id, '00000000-0000-0000-0000-000000000000'::uuid) AS attached_endpoint_id,
+    COALESCE(e.is_domain_root, FALSE)::boolean AS is_domain_root,
+    COALESCE(e.slug, '')::text AS endpoint_slug
+FROM mcp_servers AS s
+JOIN projects AS p
+  ON p.id = s.project_id
+ AND p.deleted IS FALSE
+LEFT JOIN LATERAL (
+    SELECT e.id, e.slug, e.is_domain_root
+    FROM mcp_endpoints AS e
+    WHERE e.mcp_server_id = s.id
+      AND e.custom_domain_id = $1::uuid
+      AND e.deleted IS FALSE
+    ORDER BY (e.is_domain_root IS TRUE) DESC, e.id
+    LIMIT 1
+) AS e ON TRUE
+WHERE p.organization_id = $2
+  AND s.deleted IS FALSE
+  AND s.visibility <> 'disabled'
+  AND (COALESCE(s.slug, '') <> '' OR e.id IS NOT NULL)
+ORDER BY p.name, s.name NULLS LAST, s.id
+`
+
+type ListEligibleRootMcpServersForOrganizationParams struct {
+	CustomDomainID uuid.UUID
+	OrganizationID string
+}
+
+type ListEligibleRootMcpServersForOrganizationRow struct {
+	ID                 uuid.UUID
+	Name               pgtype.Text
+	Slug               pgtype.Text
+	ProjectID          uuid.UUID
+	ProjectName        string
+	AttachedEndpointID uuid.UUID
+	IsDomainRoot       bool
+	EndpointSlug       string
+}
+
+// Servers an org admin may map to a custom domain root, across every project
+// in the organization, with one deterministic endpoint per server (a server
+// can carry several endpoints on a domain: prefer the root one, then the
+// oldest) so callers can distinguish attach-and-set from set. Slugless
+// servers are omitted unless already attached: the by-server path needs a
+// slug to name the endpoint it creates.
+func (q *Queries) ListEligibleRootMcpServersForOrganization(ctx context.Context, arg ListEligibleRootMcpServersForOrganizationParams) ([]ListEligibleRootMcpServersForOrganizationRow, error) {
+	rows, err := q.db.Query(ctx, listEligibleRootMcpServersForOrganization, arg.CustomDomainID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListEligibleRootMcpServersForOrganizationRow
+	for rows.Next() {
+		var i ListEligibleRootMcpServersForOrganizationRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.ProjectID,
+			&i.ProjectName,
+			&i.AttachedEndpointID,
+			&i.IsDomainRoot,
+			&i.EndpointSlug,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockCustomDomainByID = `-- name: LockCustomDomainByID :one
 SELECT id
 FROM custom_domains
@@ -733,6 +932,46 @@ func (q *Queries) LockRootMcpEndpointSelection(ctx context.Context, arg LockRoot
 		return nil, err
 	}
 	return items, nil
+}
+
+const setCustomDomainVerified = `-- name: SetCustomDomainVerified :one
+UPDATE custom_domains
+SET
+    verified = TRUE,
+    updated_at = clock_timestamp()
+WHERE id = $1
+  AND deleted IS FALSE
+RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
+`
+
+// Ownership verification is the sole writer of verified=true (the _gram TXT
+// check in the verification activity). Reconciliation only manages activation.
+func (q *Queries) SetCustomDomainVerified(ctx context.Context, id uuid.UUID) (CustomDomain, error) {
+	row := q.db.QueryRow(ctx, setCustomDomainVerified, id)
+	var i CustomDomain
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Domain,
+		&i.Verified,
+		&i.Activated,
+		&i.IngressName,
+		&i.CertSecretName,
+		&i.ProvisionerKind,
+		&i.IpAllowlist,
+		&i.OpenaiAppsChallengeToken,
+		&i.HealthStatus,
+		&i.HealthIssue,
+		&i.HealthCheckedAt,
+		&i.UnhealthySince,
+		&i.CertificateExpiresAt,
+		&i.ConsecutiveFailures,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const setRootMcpEndpoint = `-- name: SetRootMcpEndpoint :exec

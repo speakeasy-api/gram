@@ -620,7 +620,7 @@ const lockUserSessionIssuerForMetaMCP = `-- name: LockUserSessionIssuerForMetaMC
 SELECT id
 FROM user_session_issuers
 WHERE id = $1
-  AND project_id = $2
+  AND project_id = $2::uuid
   AND deleted IS FALSE
 FOR UPDATE
 `

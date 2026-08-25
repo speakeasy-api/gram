@@ -85,11 +85,11 @@ export default function Plugins(): JSX.Element {
   const [isObservabilityDownloadMenuOpen, setIsObservabilityDownloadMenuOpen] =
     useState(false);
   const [isDownloadingObservability, setIsDownloadingObservability] = useState<
-    "claude" | "cursor" | "codex" | "opencode" | null
+    "claude" | "cursor" | "codex" | "opencode" | "openclaw" | null
   >(null);
 
   const handleObservabilityDownload = async (
-    platform: "claude" | "cursor" | "codex" | "opencode",
+    platform: "claude" | "cursor" | "codex" | "opencode" | "openclaw",
   ) => {
     setIsObservabilityDownloadMenuOpen(false);
     setIsDownloadingObservability(platform);
@@ -531,7 +531,9 @@ function ObservabilityPluginCard({
   isDownloadMenuOpen: boolean;
   onDownloadMenuOpenChange: (open: boolean) => void;
   isDownloading: boolean;
-  onDownload: (platform: "claude" | "cursor" | "codex" | "opencode") => void;
+  onDownload: (
+    platform: "claude" | "cursor" | "codex" | "opencode" | "openclaw",
+  ) => void;
 }) {
   const [isInstallSheetOpen, setIsInstallSheetOpen] = useState(false);
   const isConnected = !!publishStatus?.connected;
@@ -632,6 +634,14 @@ function ObservabilityPluginCard({
               }}
             >
               Download as zip — OpenCode
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={isDownloading}
+              onClick={() => {
+                onDownload("openclaw");
+              }}
+            >
+              Download as zip — OpenClaw
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

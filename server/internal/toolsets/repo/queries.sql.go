@@ -1403,6 +1403,52 @@ func (q *Queries) SetToolsetMCPPublicBySlug(ctx context.Context, arg SetToolsetM
 	return err
 }
 
+const toolsetHasExternalMCPProxy = `-- name: ToolsetHasExternalMCPProxy :one
+WITH latest_toolset_version AS (
+  SELECT tv.tool_urns
+  FROM toolsets t
+  JOIN toolset_versions tv ON tv.toolset_id = t.id
+  WHERE t.id = $1
+    AND t.project_id = $2
+    AND t.deleted IS FALSE
+    AND tv.deleted IS FALSE
+  ORDER BY tv.version DESC
+  LIMIT 1
+),
+active_deployment AS (
+  SELECT d.id
+  FROM deployments d
+  JOIN deployment_statuses ds ON ds.deployment_id = d.id
+  WHERE d.project_id = $2
+    AND ds.status = 'completed'
+  ORDER BY d.id DESC
+  LIMIT 1
+)
+SELECT EXISTS (
+  SELECT 1
+  FROM latest_toolset_version tv
+  CROSS JOIN LATERAL unnest(tv.tool_urns) AS tool_urn(value)
+  JOIN external_mcp_tool_definitions etd ON etd.tool_urn = tool_urn.value
+  JOIN external_mcp_attachments ea ON ea.id = etd.external_mcp_attachment_id
+  WHERE ea.deployment_id = (SELECT id FROM active_deployment)
+    AND etd.type = 'proxy'
+    AND etd.deleted IS FALSE
+    AND ea.deleted IS FALSE
+)
+`
+
+type ToolsetHasExternalMCPProxyParams struct {
+	ToolsetID uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) ToolsetHasExternalMCPProxy(ctx context.Context, arg ToolsetHasExternalMCPProxyParams) (bool, error) {
+	row := q.db.QueryRow(ctx, toolsetHasExternalMCPProxy, arg.ToolsetID, arg.ProjectID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const updateToolset = `-- name: UpdateToolset :one
 UPDATE toolsets
 SET

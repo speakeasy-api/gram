@@ -108,12 +108,11 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 	if !s.consentToolFilteringEnabled(ctx, logger, endpoint.OrganizationID) {
 		return oops.E(oops.CodeNotFound, nil, "not found").LogWarn(ctx, logger)
 	}
-	// Meta-MCP-backed endpoints have no per-tool picker: their member tool
-	// catalogs land with the meta-server runtime (AGE-3291), and the consent
-	// page never renders the picker island for them (their
-	// endpointToolSelectionResource is empty). Fail closed like the
-	// filtering-off case, where the surface does not exist.
-	if endpoint.MetaMcpServerID.Valid {
+	eligible, err := s.consentToolPickerEligible(ctx, endpoint)
+	if err != nil {
+		return oops.E(oops.CodeUnavailable, err, "service temporarily unavailable").LogError(ctx, logger)
+	}
+	if !eligible {
 		return oops.E(oops.CodeNotFound, nil, "not found").LogWarn(ctx, logger)
 	}
 	// Mixed credentials are a confusion smell: the consent transport never
@@ -318,15 +317,20 @@ func (s *Service) serveConsentProxiedMCP(
 	if serverRow.Visibility == mcpservers.VisibilityPrivate && subject.Kind == urn.SessionSubjectKindAnonymous {
 		return oops.E(oops.CodeUnauthorized, nil, "anonymous subject cannot enumerate a private MCP server").LogWarn(ctx, logger)
 	}
-	tokens, err := s.remoteChallengeMgr.ResolveAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, endpoint.UpstreamResource)
+	tokens, err := s.remoteChallengeMgr.ResolveAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
 	if err != nil {
 		if errors.Is(err, remotesessions.ErrNoValidToken) {
 			return oops.E(oops.CodeConflict, err, "connect the upstream service before choosing tools").LogWarn(ctx, logger)
 		}
 		return oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for consent transport").LogError(ctx, logger)
 	}
-	upstreamToken, err := singleUpstreamToken(tokens)
-	if err != nil {
+	upstreamToken, err := routeUpstreamToken(ctx, logger, tokens, endpoint.UpstreamResource)
+	var routeErr *upstreamRoutingError
+	switch {
+	case errors.As(err, &routeErr):
+		// routeUpstreamToken already logged the structured detail.
+		return oops.E(oops.CodeFailedPrecondition, err, "this MCP server's upstream credentials are not configured unambiguously")
+	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "resolve upstream token for consent transport").LogError(ctx, logger)
 	}
 
@@ -483,6 +487,26 @@ func (i *consentInventoryCaptureInterceptor) InterceptToolsListResponse(ctx cont
 		return fmt.Errorf("capture consent tool inventory page: %w", err)
 	}
 	*i.draft = updated
+
+	var sanitized []*mcp.Tool
+	for idx, tool := range list.Result.Tools {
+		if tool == nil || tool.OutputSchema == nil {
+			continue
+		}
+		if sanitized == nil {
+			sanitized = append([]*mcp.Tool(nil), list.Result.Tools...)
+		}
+		clone := *tool
+		clone.OutputSchema = nil
+		sanitized[idx] = &clone
+	}
+	if sanitized != nil {
+		// The browser SDK eagerly compiles output schemas with eval, which the
+		// consent page's CSP intentionally forbids.
+		if err := list.SetTools(sanitized); err != nil {
+			return fmt.Errorf("strip output schemas from consent tool inventory: %w", err)
+		}
+	}
 	return nil
 }
 
