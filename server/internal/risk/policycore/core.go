@@ -21,12 +21,17 @@ var ErrLoadPolicy = errors.New("load risk policy")
 // Core provides transport-neutral policy reads and projections. Authorization
 // remains the responsibility of the calling service.
 type Core struct {
-	db      repo.DBTX
-	queries *repo.Queries
+	db        repo.DBTX
+	queries   *repo.Queries
+	mutations *MutationDependencies
 }
 
-func New(db repo.DBTX) *Core {
-	return &Core{db: db, queries: repo.New(db)}
+func New(db repo.DBTX, mutations ...MutationDependencies) *Core {
+	core := &Core{db: db, queries: repo.New(db), mutations: nil}
+	if len(mutations) > 0 {
+		core.mutations = &mutations[0]
+	}
+	return core
 }
 
 // List returns all policies for a project with their audiences. Progress is
