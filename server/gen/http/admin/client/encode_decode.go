@@ -5512,23 +5512,21 @@ func unmarshalAdminProjectResponseBodyToAdminAdminProject(v *AdminProjectRespons
 // *AdminOrganizationResponseBody.
 func unmarshalAdminOrganizationResponseBodyToAdminAdminOrganization(v *AdminOrganizationResponseBody) *admin.AdminOrganization {
 	res := &admin.AdminOrganization{
-		ID:                 *v.ID,
-		Name:               *v.Name,
-		Slug:               *v.Slug,
-		AccountType:        *v.AccountType,
-		WorkosID:           v.WorkosID,
-		Whitelisted:        *v.Whitelisted,
-		DisabledAt:         v.DisabledAt,
-		FreeTrialStartedAt: v.FreeTrialStartedAt,
-		FreeTrialEndsAt:    v.FreeTrialEndsAt,
-		TrialState:         v.TrialState,
-		TrialTier:          v.TrialTier,
-		TrialEndsAt:        v.TrialEndsAt,
-		TrialConvertedAt:   v.TrialConvertedAt,
-		TrialDemotedAt:     v.TrialDemotedAt,
-		MemberCount:        *v.MemberCount,
-		CreatedAt:          *v.CreatedAt,
-		UpdatedAt:          *v.UpdatedAt,
+		ID:               *v.ID,
+		Name:             *v.Name,
+		Slug:             *v.Slug,
+		AccountType:      *v.AccountType,
+		WorkosID:         v.WorkosID,
+		Whitelisted:      *v.Whitelisted,
+		DisabledAt:       v.DisabledAt,
+		TrialState:       v.TrialState,
+		TrialTier:        v.TrialTier,
+		TrialEndsAt:      v.TrialEndsAt,
+		TrialConvertedAt: v.TrialConvertedAt,
+		TrialDemotedAt:   v.TrialDemotedAt,
+		MemberCount:      *v.MemberCount,
+		CreatedAt:        *v.CreatedAt,
+		UpdatedAt:        *v.UpdatedAt,
 	}
 
 	return res

@@ -693,10 +693,6 @@ func TestAdminListOrganizations_TrialState(t *testing.T) {
 		require.NoError(t, err, "parsing trial end date for %s", c.orgID)
 		require.WithinDuration(t, c.trial.endsAt, got, time.Second, "trial end date for %s", c.orgID)
 	}
-
-	// Expand only: the old free trial fields stay on the API.
-	require.NotNil(t, byID["org_trial_none"].FreeTrialStartedAt)
-	require.NotNil(t, byID["org_trial_none"].FreeTrialEndsAt)
 }
 
 type searchByIDCase struct {

@@ -42,11 +42,6 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
 const ORG = anOrganization({
   account_type: "pro",
   whitelisted: true,
-  // The stale pair, dated apart from the real trial on purpose. A page back on
-  // `free_trial_ends_at` then shows the wrong date rather than the right one
-  // by coincidence.
-  free_trial_started_at: "2026-02-01T00:00:00Z",
-  free_trial_ends_at: "2026-11-12T00:00:00Z",
   trial_state: "running",
   trial_ends_at: "2099-05-06T00:00:00Z",
   trial_tier: "enterprise",
@@ -191,9 +186,6 @@ describe("Overview", () => {
     });
 
     await screen.findByText("Trial");
-    // `free_trial_ends_at` still dates this record, which is the whole reason
-    // the page was moved off it.
-    expect(ORG.free_trial_ends_at).toBeTruthy();
     expect(valueBeside("Trial").textContent).toBe("No trial");
   });
 
