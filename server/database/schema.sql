@@ -4064,6 +4064,64 @@ CREATE UNIQUE INDEX IF NOT EXISTS otel_forwarding_configs_org_project_key
   ON otel_forwarding_configs (organization_id, project_id)
   WHERE project_id IS NOT NULL AND deleted IS FALSE;
 
+-- Reusable customer-owned OTLP collector connections. endpoint_url is an OTLP
+-- base URL; signal-specific paths are appended by the forwarding relays.
+CREATE TABLE IF NOT EXISTS otel_destinations (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  endpoint_url TEXT NOT NULL,
+  headers_encrypted TEXT,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT otel_destinations_pkey PRIMARY KEY (id),
+  CONSTRAINT otel_destinations_project_tenant_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE
+);
+
+-- Supports tenant-pinned references from export routes. This cannot be a
+-- partial index because PostgreSQL requires a non-partial unique key as the
+-- target of a foreign key.
+CREATE UNIQUE INDEX IF NOT EXISTS otel_destinations_tenant_id_key
+  ON otel_destinations (organization_id, project_id, id);
+
+CREATE INDEX IF NOT EXISTS otel_destinations_project_id_idx
+  ON otel_destinations (project_id)
+  WHERE deleted IS FALSE;
+
+CREATE TYPE data_export_sensitive_data AS ENUM ('exclude', 'include');
+
+-- Declarative routes from a class of project data to an OTLP destination.
+-- data_source values are intentionally validated in the application so adding
+-- a new source does not require a migration.
+CREATE TABLE IF NOT EXISTS data_export_routes (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  data_source TEXT NOT NULL,
+  enabled boolean NOT NULL DEFAULT true,
+  otel_destination_id uuid,
+  sensitive_data data_export_sensitive_data DEFAULT 'exclude',
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT data_export_routes_pkey PRIMARY KEY (id),
+  CONSTRAINT data_export_routes_project_tenant_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT data_export_routes_destination_tenant_fkey FOREIGN KEY (organization_id, project_id, otel_destination_id) REFERENCES otel_destinations (organization_id, project_id, id) ON DELETE RESTRICT
+);
+
+-- A project can have at most one non-deleted forwarding rule per source. An
+-- enabled flag controls delivery without allowing a second competing route.
+CREATE UNIQUE INDEX IF NOT EXISTS data_export_routes_project_source_key
+  ON data_export_routes (project_id, data_source)
+  WHERE deleted IS FALSE;
+
 -- AI integration configs: encrypted provider credentials and activation
 -- metadata. Provider-specific sync state lives in ai_integration_syncs.
 CREATE TABLE IF NOT EXISTS ai_integration_configs (
