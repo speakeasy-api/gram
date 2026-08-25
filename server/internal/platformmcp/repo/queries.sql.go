@@ -2869,7 +2869,6 @@ JOIN projects AS project
    ON plugin.id = COALESCE(distribution.plugin_id, distribution.default_plugin_id)
   AND plugin.organization_id = distribution.organization_id
   AND plugin.project_id = distribution.project_id
-  AND plugin.is_default IS TRUE
   AND plugin.deleted IS FALSE
  JOIN plugin_servers AS plugin_server
   ON plugin_server.id = distribution.plugin_server_id
@@ -2925,8 +2924,8 @@ type GetPlatformMCPSelectedUseTargetRow struct {
 	ConnectionGeneration uuid.NullUUID
 }
 
-// Resolve a target only through the literal Default plugin during the
-// compatibility rollout. Named-plugin rows remain excluded from selected use.
+// Resolve the target through the plugin the distribution names, which is the
+// default plugin only when that is what the caller asked for.
 func (q *Queries) GetPlatformMCPSelectedUseTarget(ctx context.Context, arg GetPlatformMCPSelectedUseTargetParams) (GetPlatformMCPSelectedUseTargetRow, error) {
 	row := q.db.QueryRow(ctx, getPlatformMCPSelectedUseTarget,
 		arg.InitiatingSubjectUrn,
@@ -3356,7 +3355,6 @@ SELECT EXISTS (
        ON plugin.id = COALESCE(distribution.plugin_id, distribution.default_plugin_id)
       AND plugin.organization_id = distribution.organization_id
       AND plugin.project_id = distribution.project_id
-      AND plugin.is_default IS TRUE
       AND plugin.deleted IS FALSE
      WHERE distribution.organization_id = $1
        AND distribution.project_id = $2
@@ -3371,8 +3369,8 @@ type HasAttachedPlatformMCPOnboardingDistributionForProjectParams struct {
 	ProjectID      uuid.UUID
 }
 
-// This is intentionally Default-only during the compatibility rollout; named
-// rows added by a later release must not satisfy onboarding distribution.
+// An attached distribution to any live plugin in the project satisfies
+// onboarding distribution; the plugin must still exist.
 func (q *Queries) HasAttachedPlatformMCPOnboardingDistributionForProject(ctx context.Context, arg HasAttachedPlatformMCPOnboardingDistributionForProjectParams) (bool, error) {
 	row := q.db.QueryRow(ctx, hasAttachedPlatformMCPOnboardingDistributionForProject, arg.OrganizationID, arg.ProjectID)
 	var exists bool
@@ -3598,15 +3596,14 @@ SELECT EXISTS (
        ON plugin.id = COALESCE(distribution.plugin_id, distribution.default_plugin_id)
       AND plugin.organization_id = distribution.organization_id
       AND plugin.project_id = distribution.project_id
-      AND plugin.is_default IS TRUE
       AND plugin.deleted IS FALSE
      WHERE distribution.organization_id = $1
        AND distribution.state = 'attached'
 ) AS setup_complete
 `
 
-// Default-only setup completion must not be satisfied by a future named-plugin
-// row. A missing or no-longer-Default plugin therefore correctly does not count.
+// Setup completion counts an attached distribution to any live plugin. A
+// distribution whose plugin has since been deleted correctly does not count.
 func (q *Queries) HasPlatformMCPOrganizationSetupComplete(ctx context.Context, organizationID string) (bool, error) {
 	row := q.db.QueryRow(ctx, hasPlatformMCPOrganizationSetupComplete, organizationID)
 	var setup_complete bool
@@ -3632,7 +3629,6 @@ SELECT EXISTS (
        ON plugin.id = COALESCE(distribution.plugin_id, distribution.default_plugin_id)
       AND plugin.organization_id = distribution.organization_id
       AND plugin.project_id = distribution.project_id
-      AND plugin.is_default IS TRUE
       AND plugin.deleted IS FALSE
      JOIN platform_mcp_connections AS connection
       ON connection.id = distribution.connection_id
@@ -3653,8 +3649,10 @@ type HasPlatformMCPSelectedUseEvidenceParams struct {
 	InitiatingSubjectUrn string
 }
 
-// Selected-use credit remains Default-only until the exact-plugin contract is
-// live, so a future named distribution cannot produce onboarding evidence.
+// Selected-use credit follows the plugin the distribution actually targets. The
+// plugin join stays so evidence from a deleted plugin does not count; the
+// Default-only restriction it carried during the compatibility rollout is gone
+// now that named-plugin distribution is live.
 func (q *Queries) HasPlatformMCPSelectedUseEvidence(ctx context.Context, arg HasPlatformMCPSelectedUseEvidenceParams) (bool, error) {
 	row := q.db.QueryRow(ctx, hasPlatformMCPSelectedUseEvidence,
 		arg.OrganizationID,
