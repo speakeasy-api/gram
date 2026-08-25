@@ -180,10 +180,6 @@ func canManageStripeSubscriptionLifecycle(status string) bool {
 }
 
 func (s *Service) getStripeBillingState(ctx context.Context, organizationID string) (repo.BillingMetadatum, *stripeclient.SubscriptionState, error) {
-	if s.stripeClient == nil {
-		return repo.BillingMetadatum{}, nil, oops.E(oops.CodeUnavailable, nil, "self-serve billing is temporarily unavailable").LogWarn(ctx, s.logger)
-	}
-
 	metadata, err := repo.New(s.db).GetBillingMetadata(ctx, organizationID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -192,6 +188,9 @@ func (s *Service) getStripeBillingState(ctx context.Context, organizationID stri
 		return repo.BillingMetadatum{}, nil, oops.E(oops.CodeUnexpected, err, "failed to get billing metadata").LogError(ctx, s.logger)
 	case !metadata.StripeCustomerID.Valid || !metadata.StripeSubscriptionID.Valid:
 		return repo.BillingMetadatum{}, nil, oops.E(oops.CodeNotFound, nil, "the organization does not have a Stripe subscription").LogWarn(ctx, s.logger)
+	}
+	if s.stripeClient == nil {
+		return repo.BillingMetadatum{}, nil, oops.E(oops.CodeUnavailable, nil, "self-serve billing is temporarily unavailable").LogWarn(ctx, s.logger)
 	}
 
 	state, err := s.stripeClient.GetSubscription(ctx, metadata.StripeSubscriptionID.String)
