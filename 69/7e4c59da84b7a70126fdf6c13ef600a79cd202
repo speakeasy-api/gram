@@ -126,6 +126,7 @@ docs/pubsub-topology.md
   s_6640015607fdd4::t_ae6e7f7a960a32 77-88,118-119,178,203
   s_6640015607fdd4::t_eb353c61d0942b 36-37,56,110-111,179
   s_b390d6ce53b276::t_984d89e81e11e3 120-123
+  s_b390d6ce53b276::t_78f3ed336a47fc 124-153
 server/internal/scanners/gitleaks/enforce_metrics.go
   s_6640015607fdd4::t_cf2d5bb32f2ff8 1-9,11-33
   s_6640015607fdd4::t_514f532a847ad3 10
