@@ -815,7 +815,7 @@ INSERT INTO platform_mcp_oauth_clients (
     $4,
     $5
 )
-RETURNING id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, revoked_at, created_at, updated_at
+RETURNING id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, revoked_at, client_id_metadata_uri, client_id_metadata_fetched_at, client_id_metadata_cache_expires_at, client_id_metadata_etag, created_at, updated_at
 `
 
 type CreatePlatformMCPOAuthClientParams struct {
@@ -847,6 +847,10 @@ func (q *Queries) CreatePlatformMCPOAuthClient(ctx context.Context, arg CreatePl
 		&i.ClientIDIssuedAt,
 		&i.ClientSecretExpiresAt,
 		&i.RevokedAt,
+		&i.ClientIDMetadataUri,
+		&i.ClientIDMetadataFetchedAt,
+		&i.ClientIDMetadataCacheExpiresAt,
+		&i.ClientIDMetadataEtag,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -1564,7 +1568,7 @@ func (q *Queries) GetActivePlatformMCPConnectionForFeedbackForUpdate(ctx context
 }
 
 const getActivePlatformMCPOAuthClientByClientID = `-- name: GetActivePlatformMCPOAuthClientByClientID :one
-SELECT id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, revoked_at, created_at, updated_at
+SELECT id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, revoked_at, client_id_metadata_uri, client_id_metadata_fetched_at, client_id_metadata_cache_expires_at, client_id_metadata_etag, created_at, updated_at
 FROM platform_mcp_oauth_clients
 WHERE client_id = $1
   AND revoked_at IS NULL
@@ -1582,6 +1586,10 @@ func (q *Queries) GetActivePlatformMCPOAuthClientByClientID(ctx context.Context,
 		&i.ClientIDIssuedAt,
 		&i.ClientSecretExpiresAt,
 		&i.RevokedAt,
+		&i.ClientIDMetadataUri,
+		&i.ClientIDMetadataFetchedAt,
+		&i.ClientIDMetadataCacheExpiresAt,
+		&i.ClientIDMetadataEtag,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -2486,7 +2494,7 @@ func (q *Queries) GetPlatformMCPLifecycle(ctx context.Context, organizationID st
 }
 
 const getPlatformMCPOAuthClientForUpdate = `-- name: GetPlatformMCPOAuthClientForUpdate :one
-SELECT id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, revoked_at, created_at, updated_at
+SELECT id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, revoked_at, client_id_metadata_uri, client_id_metadata_fetched_at, client_id_metadata_cache_expires_at, client_id_metadata_etag, created_at, updated_at
 FROM platform_mcp_oauth_clients
 WHERE client_id = $1
 FOR UPDATE
@@ -2504,6 +2512,10 @@ func (q *Queries) GetPlatformMCPOAuthClientForUpdate(ctx context.Context, client
 		&i.ClientIDIssuedAt,
 		&i.ClientSecretExpiresAt,
 		&i.RevokedAt,
+		&i.ClientIDMetadataUri,
+		&i.ClientIDMetadataFetchedAt,
+		&i.ClientIDMetadataCacheExpiresAt,
+		&i.ClientIDMetadataEtag,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
