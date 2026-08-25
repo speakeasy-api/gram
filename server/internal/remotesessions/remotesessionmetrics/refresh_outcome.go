@@ -40,7 +40,9 @@ const (
 	// RefreshOutcomeInvalidGrant: the upstream definitively rejected the grant
 	// (RFC 6749 §5.2 invalid_grant, including the vendor bodies the oautherr
 	// package recognizes) and the dead grant was cleared. Subsequent attempts
-	// on the same session record no_grant.
+	// on the same session record no_grant. Recorded on any HTTP status,
+	// because the grant is cleared on any status: the outcome describes what
+	// Gram did, not the response class.
 	RefreshOutcomeInvalidGrant RefreshOutcome = "invalid_grant"
 
 	// RefreshOutcomeRejected: a non-5xx response whose body parsed to an RFC
@@ -55,25 +57,26 @@ const (
 	// the oautherr package does not yet recognize.
 	RefreshOutcomeRejectedUnparsed RefreshOutcome = "rejected_unparsed"
 
-	// RefreshOutcomeUpstreamError: any 5xx, regardless of body. Status wins
-	// over a parsed server_error or temporarily_unavailable body because the
-	// signal is the same either way: the upstream, not Gram's configuration,
-	// is at fault.
+	// RefreshOutcomeUpstreamError: a 5xx that did not carry invalid_grant. A
+	// parsed server_error or temporarily_unavailable body lands here too, as
+	// the signal is the same either way: the upstream, not Gram's
+	// configuration, is at fault.
 	RefreshOutcomeUpstreamError RefreshOutcome = "upstream_error"
 
-	// RefreshOutcomeRateLimited: the upstream returned HTTP 429. The scheduled
-	// sweep stops contacting that provider for the rest of its pass.
+	// RefreshOutcomeRateLimited: the upstream returned HTTP 429 without
+	// invalid_grant. The scheduled sweep stops contacting that provider for
+	// the rest of its pass.
 	RefreshOutcomeRateLimited RefreshOutcome = "rate_limited"
 
 	// RefreshOutcomeUnreachable: the request never produced an answer (DNS,
 	// TLS, connection refused, or the refresh POST's own timeout).
 	RefreshOutcomeUnreachable RefreshOutcome = "unreachable"
 
-	// RefreshOutcomeCanceled: the caller's context was canceled while the
-	// attempt was in flight, most often an MCP client disconnecting mid-refresh
-	// or a worker shutting down. Its own outcome so that neither unreachable
-	// (upstream health) nor internal_error (Gram faults) absorbs routine
-	// client disconnects.
+	// RefreshOutcomeCanceled: the caller's context was canceled or hit its
+	// own deadline while the attempt was in flight, most often an MCP client
+	// disconnecting mid-refresh or a worker activity timing out. Its own
+	// outcome so that neither unreachable (upstream health) nor
+	// internal_error (Gram faults) absorbs routine client disconnects.
 	RefreshOutcomeCanceled RefreshOutcome = "canceled"
 
 	// RefreshOutcomeInternalError: Gram could not build or persist the request.

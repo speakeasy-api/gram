@@ -457,10 +457,11 @@ func (m *ChallengeManager) validateAndRefresh(
 // endpoint and persists the new token pair on success, returning the updated
 // remote_session row and the new plaintext access token.
 //
-// RefreshService.RefreshNow is its only caller and supplies the session's
-// client + issuer row it already loaded. The upstream token POST is an
-// external call, so q must be a pool-bound querier, never a transaction-bound
-// one — the POST must not run inside an open database transaction.
+// RefreshService is its only caller and supplies the session's client +
+// issuer row, read after the single-flight lock so the POST runs on current
+// configuration. The upstream token POST is an external call, so q must be a
+// pool-bound querier, never a transaction-bound one — the POST must not run
+// inside an open database transaction.
 //
 // Operator-actionable failures (unreadable stored token, missing token
 // endpoint, an upstream rejection, no access token returned) come back as a

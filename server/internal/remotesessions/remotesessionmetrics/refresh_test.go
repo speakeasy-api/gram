@@ -12,8 +12,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-// Pins the wiring a noop meter cannot see: the instrument name and the three
-// attribute keys the dashboard and the AIS-618 monitors query by.
+// Pins the wiring a noop meter cannot see: the instrument name, the three
+// attribute keys the dashboard and the AIS-618 monitors query by, and that
+// one Record is exactly one count.
 func TestRefreshRecord_PinsInstrumentAndDimensions(t *testing.T) {
 	t.Parallel()
 
@@ -35,6 +36,11 @@ func TestRefreshRecord_PinsInstrumentAndDimensions(t *testing.T) {
 		attr.OAuthRefreshTrigger(RefreshTriggerScheduled),
 		attr.Outcome(RefreshOutcomeInvalidGrant),
 	)
+
+	sum, ok := got.Data.(metricdata.Sum[int64])
+	require.True(t, ok, "upstream refresh instrument must be an int64 counter")
+	require.Len(t, sum.DataPoints, 1)
+	require.Equal(t, int64(1), sum.DataPoints[0].Value)
 }
 
 // A nil receiver and a nil instrument both degrade to no-ops rather than

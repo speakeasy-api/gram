@@ -150,21 +150,24 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 	var zero RefreshResult
 	q := remotesessions_repo.New(s.db)
 
-	// Loaded ahead of the lock so every outcome, including the concurrent-loser
-	// and inactive early exits below, carries the issuer URL. An active session
-	// whose client or issuer row was soft-deleted fails here and records
-	// internal_error; the refresh would fail on the same lookup either way.
+	// Loaded ahead of the lock purely to label the outcome: every return,
+	// including the concurrent-loser and inactive early exits below, carries
+	// the issuer URL. The POST itself re-reads the row after the lock so it
+	// never runs on configuration that changed while this caller waited. An
+	// active session whose client or issuer row was soft-deleted fails here
+	// and records internal_error; the refresh would fail on the same lookup
+	// either way.
 	client, err := q.GetRemoteSessionClientWithIssuerByID(ctx, sess.RemoteSessionClientID)
 	if err != nil {
 		err = fmt.Errorf("load remote_session_client for refresh: %w", err)
-		outcome := refreshOutcomeForError(err)
+		outcome := refreshOutcomeForError(ctx, err)
 		s.metrics.Record(ctx, "", trigger, outcome)
 		return zero, &RefreshError{IssuerURL: "", Outcome: outcome, err: err}
 	}
 
-	result, err := s.refresh(ctx, q, client, sess, callerResource)
+	result, err := s.refresh(ctx, q, sess, callerResource)
 	if err != nil {
-		outcome := refreshOutcomeForError(err)
+		outcome := refreshOutcomeForError(ctx, err)
 		s.metrics.Record(ctx, client.IssuerUrl, trigger, outcome)
 		return zero, &RefreshError{IssuerURL: client.IssuerUrl, Outcome: outcome, err: err}
 	}
@@ -174,15 +177,23 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 }
 
 // refreshOutcomeForError maps a failed refresh onto the metric outcome set.
-// Context cancellation is checked before the transport marker because a
-// canceled POST surfaces as a transport error too, and a caller going away is
-// neither the upstream's fault nor Gram's.
-func refreshOutcomeForError(err error) remotesessionmetrics.RefreshOutcome {
+//
+// The caller going away is checked before the transport marker because an
+// aborted POST surfaces as a transport error too, and it is neither the
+// upstream's fault nor Gram's. A deadline is the caller's own only when ctx
+// itself has expired; otherwise it was the POST's internal timeout, which is
+// the upstream not answering.
+//
+// invalid_grant is checked before the status-based buckets because refresh
+// clears the grant on a definitive invalid_grant regardless of status, and
+// the metric describes what Gram did: a 429 or 5xx that also carried
+// invalid_grant left the session without a refresh grant.
+func refreshOutcomeForError(ctx context.Context, err error) remotesessionmetrics.RefreshOutcome {
 	var tokenErr *TokenRefreshError
 	switch {
 	case errors.Is(err, ErrNoValidToken):
 		return remotesessionmetrics.RefreshOutcomeNoGrant
-	case errors.Is(err, context.Canceled):
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded) && ctx.Err() != nil:
 		return remotesessionmetrics.RefreshOutcomeCanceled
 	case errors.Is(err, errRefreshUpstreamUnreachable):
 		return remotesessionmetrics.RefreshOutcomeUnreachable
@@ -191,12 +202,12 @@ func refreshOutcomeForError(err error) remotesessionmetrics.RefreshOutcome {
 		// after the POST (no token endpoint, unreadable stored values, an empty
 		// upstream response, a lost compare-and-swap) rather than by it.
 		return remotesessionmetrics.RefreshOutcomeInternalError
+	case tokenErr.invalidGrant():
+		return remotesessionmetrics.RefreshOutcomeInvalidGrant
 	case tokenErr.statusCode == http.StatusTooManyRequests:
 		return remotesessionmetrics.RefreshOutcomeRateLimited
 	case tokenErr.statusCode >= http.StatusInternalServerError:
 		return remotesessionmetrics.RefreshOutcomeUpstreamError
-	case tokenErr.invalidGrant():
-		return remotesessionmetrics.RefreshOutcomeInvalidGrant
 	case tokenErr.code == "":
 		return remotesessionmetrics.RefreshOutcomeRejectedUnparsed
 	default:
@@ -211,7 +222,6 @@ func refreshOutcomeForError(err error) remotesessionmetrics.RefreshOutcome {
 func (s *RefreshService) refresh(
 	ctx context.Context,
 	q *remotesessions_repo.Queries,
-	client remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow,
 	sess remotesessions_repo.RemoteSession,
 	callerResource string,
 ) (RefreshResult, error) {
@@ -315,6 +325,13 @@ func (s *RefreshService) refresh(
 		if err != nil {
 			return zero, fmt.Errorf("derive fallback resource: %w", err)
 		}
+	}
+
+	// Read after the lock: this caller may have waited on it for seconds, and
+	// a client secret or token endpoint rotated meanwhile must reach the POST.
+	client, err := q.GetRemoteSessionClientWithIssuerByID(ctx, sess.RemoteSessionClientID)
+	if err != nil {
+		return zero, fmt.Errorf("load remote_session_client for refresh: %w", err)
 	}
 
 	updated, accessToken, refreshErr := refreshSessionTokens(ctx, q, s.enc, s.policy, client, sess, resource)

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -13,16 +14,24 @@ import (
 )
 
 // Pins the mapping from every failure shape RefreshNow can produce onto the
-// upstream-refresh metric's outcome set. The ordering matters at two points:
-// a canceled POST also carries the transport marker, and a 429 or 5xx must win
-// over whatever the body parsed to.
+// upstream-refresh metric's outcome set. The ordering matters at three
+// points: an aborted POST also carries the transport marker, a deadline is
+// the caller's own only when the caller's context has expired, and
+// invalid_grant wins over the 429 and 5xx buckets because the grant is
+// cleared on any status.
 func TestRefreshOutcomeForError(t *testing.T) {
 	t.Parallel()
 
+	expired, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+	defer cancel()
+
 	cases := []struct {
 		name string
-		err  error
-		want remotesessionmetrics.RefreshOutcome
+		// callerGone runs the case against a context whose own deadline has
+		// already passed, standing in for a caller that stopped waiting.
+		callerGone bool
+		err        error
+		want       remotesessionmetrics.RefreshOutcome
 	}{
 		{
 			name: "no refresh grant",
@@ -35,7 +44,13 @@ func TestRefreshOutcomeForError(t *testing.T) {
 			want: remotesessionmetrics.RefreshOutcomeCanceled,
 		},
 		{
-			name: "POST timed out",
+			name:       "caller's own deadline expired mid-POST",
+			callerGone: true,
+			err:        fmt.Errorf("post refresh: %w: %w", errRefreshUpstreamUnreachable, context.DeadlineExceeded),
+			want:       remotesessionmetrics.RefreshOutcomeCanceled,
+		},
+		{
+			name: "POST's internal timeout with a live caller",
 			err:  fmt.Errorf("post refresh: %w: %w", errRefreshUpstreamUnreachable, context.DeadlineExceeded),
 			want: remotesessionmetrics.RefreshOutcomeUnreachable,
 		},
@@ -61,11 +76,16 @@ func TestRefreshOutcomeForError(t *testing.T) {
 		},
 		{
 			name: "rate limited",
-			err:  newTokenRefreshErrorFromHTTP(http.StatusTooManyRequests, "429 Too Many Requests", []byte(`{"error":"invalid_grant"}`)),
+			err:  newTokenRefreshErrorFromHTTP(http.StatusTooManyRequests, "429 Too Many Requests", []byte(`{"error":"temporarily_unavailable"}`)),
 			want: remotesessionmetrics.RefreshOutcomeRateLimited,
 		},
 		{
-			name: "5xx wins over a parsed body",
+			name: "rate limited with no body",
+			err:  newTokenRefreshErrorFromHTTP(http.StatusTooManyRequests, "429 Too Many Requests", nil),
+			want: remotesessionmetrics.RefreshOutcomeRateLimited,
+		},
+		{
+			name: "5xx with a parsed non-invalid_grant body",
 			err:  newTokenRefreshErrorFromHTTP(http.StatusServiceUnavailable, "503 Service Unavailable", []byte(`{"error":"temporarily_unavailable"}`)),
 			want: remotesessionmetrics.RefreshOutcomeUpstreamError,
 		},
@@ -82,6 +102,16 @@ func TestRefreshOutcomeForError(t *testing.T) {
 		{
 			name: "vendor-shaped invalid_grant",
 			err:  newTokenRefreshErrorFromHTTP(http.StatusBadRequest, "400 Bad Request", []byte(`{"errors": ["invalid_grant - Invalid or expired refresh token or code verifier."]}`)),
+			want: remotesessionmetrics.RefreshOutcomeInvalidGrant,
+		},
+		{
+			name: "invalid_grant on a 429 still cleared the grant",
+			err:  newTokenRefreshErrorFromHTTP(http.StatusTooManyRequests, "429 Too Many Requests", []byte(`{"error":"invalid_grant"}`)),
+			want: remotesessionmetrics.RefreshOutcomeInvalidGrant,
+		},
+		{
+			name: "invalid_grant on a 5xx still cleared the grant",
+			err:  newTokenRefreshErrorFromHTTP(http.StatusInternalServerError, "500 Internal Server Error", []byte(`{"error":"invalid_grant"}`)),
 			want: remotesessionmetrics.RefreshOutcomeInvalidGrant,
 		},
 		{
@@ -102,6 +132,10 @@ func TestRefreshOutcomeForError(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		require.Equal(t, tc.want, refreshOutcomeForError(tc.err), tc.name)
+		ctx := t.Context()
+		if tc.callerGone {
+			ctx = expired
+		}
+		require.Equal(t, tc.want, refreshOutcomeForError(ctx, tc.err), tc.name)
 	}
 }

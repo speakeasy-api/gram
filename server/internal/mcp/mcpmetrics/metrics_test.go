@@ -252,11 +252,17 @@ func TestRecordMCPRequestRejected_PinsInstrumentAndDimensions(t *testing.T) {
 	m := NewMetrics(meter, testenv.NewLogger(t))
 	m.RecordMCPRequestRejected(t.Context(), "invalid_remote_session", "mcp.example.com/mcp/demo", SurfaceMeta)
 
-	metricdatatest.AssertHasAttributes(t, collectMetric(t, reader, InstrumentMCPRequestRejected),
+	got := collectMetric(t, reader, InstrumentMCPRequestRejected)
+	metricdatatest.AssertHasAttributes(t, got,
 		attr.OAuthFailureReason("invalid_remote_session"),
 		attr.McpURL("mcp.example.com/mcp/demo"),
 		attr.McpSurface(string(SurfaceMeta)),
 	)
+
+	sum, ok := got.Data.(metricdata.Sum[int64])
+	require.True(t, ok, "rejected instrument must be an int64 counter")
+	require.Len(t, sum.DataPoints, 1)
+	require.Equal(t, int64(1), sum.DataPoints[0].Value)
 }
 
 // TestRecordMCPRequestRejected_NilSafe pins the documented contract that a
