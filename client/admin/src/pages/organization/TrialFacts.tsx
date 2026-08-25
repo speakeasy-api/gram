@@ -1,6 +1,5 @@
 import { useCallback, useRef, useState, type JSX } from "react";
 
-import { Trial } from "@/components/Trial";
 import { useOnUnmount } from "@/hooks/useOnUnmount";
 import type { AdminOrganization } from "@/lib/gramAdminApi";
 import { formatTrialTimeRemaining } from "@/lib/trialDates";
@@ -10,6 +9,25 @@ const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
 const MAX_TIMEOUT_MS = 2_147_483_647;
+
+function stateLabel(state: unknown): string {
+  switch (state) {
+    case "running":
+    case "ending_soon":
+      return "Live";
+    case "converted":
+      return "Converted";
+    case "demoted":
+      return "Demoted";
+    case "expired":
+      return "Expired";
+    case undefined:
+    case null:
+      return "No trial";
+    default:
+      return "Unknown";
+  }
+}
 
 function nextRemainingChange(remaining: number): number {
   if (remaining > 72 * HOUR_MS) {
@@ -88,13 +106,31 @@ export function TrialFacts({ org }: { org: AdminOrganization }): JSX.Element {
 
   const expired = live && !Number.isNaN(endTime) && endTime <= now.getTime();
 
-  // Completed states retain their existing compact presentation. Their stored
-  // conversion and demotion dates are intentionally not presented yet.
-  if (!live) return <Trial org={org} />;
+  if (!live || expired) {
+    // Keep each lifecycle date beside its state branch. Conversion and demotion
+    // timestamps are both present on the wire, so selecting one generically
+    // would make it too easy to silently show the other event.
+    const lifecycleFact =
+      org.trial_state === "converted"
+        ? { label: "Conversion date", date: org.trial_converted_at }
+        : org.trial_state === "demoted"
+          ? { label: "Demotion date", date: org.trial_demoted_at }
+          : undefined;
+    const label = expired ? TRIAL_LABELS.expired : stateLabel(org.trial_state);
 
-  // A live server state can become locally elapsed before the next refresh.
-  // Keep its presentation consistent and detach the countdown immediately.
-  if (expired) return <Trial org={{ ...org, trial_state: "expired" }} />;
+    return (
+      <div className="space-y-1 text-sm">
+        <Fact label="State">{label}</Fact>
+        <Fact label="Tier">{tierLabel(org.trial_tier)}</Fact>
+        {lifecycleFact && (
+          <Fact label={lifecycleFact.label}>
+            {dateLabel(lifecycleFact.date)}
+          </Fact>
+        )}
+        <Fact label="Original end">{dateLabel(org.trial_ends_at)}</Fact>
+      </div>
+    );
+  }
 
   const remaining = formatTrialTimeRemaining(org.trial_ends_at, now);
 
