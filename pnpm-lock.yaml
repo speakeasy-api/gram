@@ -100,6 +100,9 @@ importers:
       '@tailwindcss/vite':
         specifier: 'catalog:'
         version: 4.3.3(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.5)(yaml@2.9.0))
+      '@tanstack/react-form':
+        specifier: ^1.33.5
+        version: 1.33.5(@tanstack/react-start@1.168.46(react@19.2.8)(react-dom@19.2.8(react@19.2.8))(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.5)(yaml@2.9.0)))(react@19.2.8)
       '@tanstack/react-query':
         specifier: 'catalog:'
         version: 5.101.4(react@19.2.8)
