@@ -7084,6 +7084,9 @@ CREATE TABLE IF NOT EXISTS platform_mcp_operation_receipts (
   input_hash TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending',
   result_code TEXT,
+  -- Safe, operation-specific result projection used to replay completed
+  -- idempotent writes without re-reading mutable domain state.
+  result_payload JSONB,
   expires_at timestamptz NOT NULL,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
