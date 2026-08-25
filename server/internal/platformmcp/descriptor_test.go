@@ -130,6 +130,7 @@ func TestAddToolExplicitInputSchemaIsAuthoritative(t *testing.T) {
 	accepted, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: "explicit_schema", Arguments: map[string]any{}})
 	require.NoError(t, err)
 	require.False(t, accepted.IsError)
+	require.Equal(t, map[string]any{"mode": "safe"}, accepted.StructuredContent)
 	require.EqualValues(t, 3, calls.Load())
 }
 
