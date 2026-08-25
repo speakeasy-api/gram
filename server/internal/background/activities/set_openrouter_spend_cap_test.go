@@ -152,6 +152,8 @@ func TestSetOpenRouterSpendCapTargetsSecurityInferenceKey(t *testing.T) {
 	entry, err := audittest.LatestAuditLogByAction(t.Context(), db, audit.ActionOpenRouterAPIKeySetSpendCap)
 	require.NoError(t, err)
 	require.Equal(t, "Security inference cap", entry.SubjectDisplay)
+	require.NotNil(t, entry.ActingSurface)
+	require.Equal(t, string(audit.SurfaceUnknown), *entry.ActingSurface)
 	var generation spendCapAlertGenerationFixture
 	require.NoError(t, cacheAdapter.Get(
 		t.Context(),
@@ -247,6 +249,11 @@ func TestSetOpenRouterSpendCapAdminBypassesBillingAndTrialPolicy(t *testing.T) {
 	_, err := env.ExecuteActivity(setter.Do, args)
 	require.NoError(t, err)
 	provisioner.AssertExpectations(t)
+
+	entry, err := audittest.LatestAuditLogByAction(t.Context(), db, audit.ActionOpenRouterAPIKeySetSpendCap)
+	require.NoError(t, err)
+	require.NotNil(t, entry.ActingSurface)
+	require.Equal(t, string(audit.SurfaceAdmin), *entry.ActingSurface)
 }
 
 func TestSetOpenRouterSpendCapRetryPreservesOriginalAuditSnapshot(t *testing.T) {

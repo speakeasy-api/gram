@@ -783,7 +783,9 @@ func TestRearmTrial_WritesAnAuditEntry(t *testing.T) {
 	require.Equal(t, "org_rearm_audit Name", entry.SubjectDisplay)
 	require.Equal(t, "org_rearm_audit-slug", entry.SubjectSlug)
 	require.NotNil(t, entry.ActorDisplayName, "the entry must name who re-armed the trial")
-	require.Equal(t, audit.SpeakeasyTeamActorLabel, *entry.ActorDisplayName)
+	require.Equal(t, "Test Operator", *entry.ActorDisplayName)
+	require.NotNil(t, entry.ActingSurface)
+	require.Equal(t, string(audit.SurfaceAdmin), *entry.ActingSurface)
 
 	// Comparing this with the demotion's entry shows whether the tier came back.
 	var metadata struct {
@@ -804,7 +806,7 @@ func TestRearmTrial_WritesAnAuditEntry(t *testing.T) {
 	require.NoError(t, err, "a re-arm must enqueue an outbox entry on the enterprise trial event")
 }
 
-func TestRearmTrial_AuditEntryNamesTheTeamAndNotTheOperator(t *testing.T) {
+func TestRearmTrial_AuditEntryNamesTheOperator(t *testing.T) {
 	t.Parallel()
 
 	ctx, svc, conn, _ := newRearmService(t)
@@ -825,11 +827,10 @@ func TestRearmTrial_AuditEntryNamesTheTeamAndNotTheOperator(t *testing.T) {
 	entry, err := audittest.LatestAuditLogByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialRearmed)
 	require.NoError(t, err)
 
-	// The customer reads this feed, so a Speakeasy action carries the collective
-	// label. The read-side mask cannot reach this entry: it matches an actor id
-	// against a Gram user, and an admin session has an OIDC subject instead.
 	require.NotNil(t, entry.ActorDisplayName)
-	require.Equal(t, audit.SpeakeasyTeamActorLabel, *entry.ActorDisplayName)
+	require.Equal(t, "Test Operator", *entry.ActorDisplayName)
+	require.NotNil(t, entry.ActingSurface)
+	require.Equal(t, string(audit.SurfaceAdmin), *entry.ActingSurface)
 
 	// Without this, an entry naming nobody at all would satisfy the one above.
 	require.Equal(t, "oidc-subject-rearm-actor", entry.ActorID,

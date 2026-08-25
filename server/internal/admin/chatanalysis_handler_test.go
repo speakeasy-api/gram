@@ -107,7 +107,9 @@ func TestChatAnalysisSettingsDefaultsUpdatesAndAudits(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "sub-admin", entry.ActorID)
 	require.NotNil(t, entry.ActorDisplayName)
-	require.Equal(t, audit.SpeakeasyTeamActorLabel, *entry.ActorDisplayName)
+	require.Equal(t, "Test Operator", *entry.ActorDisplayName)
+	require.NotNil(t, entry.ActingSurface)
+	require.Equal(t, string(audit.SurfaceAdmin), *entry.ActingSurface)
 	for name, field := range map[string]string{
 		"actor display name": *entry.ActorDisplayName,
 		"actor slug":         entry.ActorSlug,
