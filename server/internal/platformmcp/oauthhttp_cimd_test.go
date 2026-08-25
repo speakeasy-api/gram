@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 )
 
 type cimdDocServer struct {
@@ -244,6 +245,24 @@ func TestCIMDAuthorize_DocumentFetchFailureIsRetryable(t *testing.T) {
 	require.Equal(t, http.StatusServiceUnavailable, response.Code)
 	require.Contains(t, response.Body.String(), `"temporarily_unavailable"`)
 	require.NotContains(t, response.Body.String(), ds.srv.URL, "the wire response must not echo transport detail")
+
+	// Retryable means the next attempt actually works: the failure left no
+	// negative cache behind, so a recovered host resolves normally.
+	ds.set(t, func(ds *cimdDocServer) { ds.status = 0 })
+	require.Equal(t, http.StatusFound, doCIMDAuthorize(t, service, ds.clientID, "http://127.0.0.1:33418/callback").Code)
+	require.Equal(t, int64(2), ds.requests.Load())
+}
+
+func TestCIMDAuthorize_OversizedClientIDDeniedBeforeAnyLookup(t *testing.T) {
+	t.Parallel()
+
+	service, ds := newTestCIMDOAuthHTTP(t)
+	oversized := ds.srv.URL + "/oauth/" + strings.Repeat("x", admission.MaxClientIDLength) + ".json"
+
+	response := doCIMDAuthorize(t, service, oversized, "http://127.0.0.1:33418/callback")
+	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Contains(t, response.Body.String(), `"invalid_client"`)
+	require.Zero(t, ds.requests.Load(), "an oversized client_id must not reach the document host")
 }
 
 func TestCIMDAuthorize_DocumentClientIDMismatchRejected(t *testing.T) {
@@ -313,11 +332,16 @@ func authorizationServerMetadataFlag(t *testing.T, service *OAuthHTTP) bool {
 	service.AuthorizationServerHandler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server/platform-mcp", nil))
 	require.Equal(t, http.StatusOK, response.Code)
 
+	// Absence is how RFC 8414 metadata says "unsupported", so the member is
+	// decoded as a pointer: a literal false would be a different answer.
 	var metadata struct {
-		Supported bool `json:"client_id_metadata_document_supported"`
+		Supported *bool `json:"client_id_metadata_document_supported"`
 	}
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &metadata))
-	return metadata.Supported
+	if metadata.Supported == nil {
+		return false
+	}
+	return *metadata.Supported
 }
 
 // notModifiedResolver stands in for the document fetcher on the one branch

@@ -236,7 +236,7 @@ func (s *OAuthHTTP) ProtectedResourceHandler() http.Handler {
 
 func (s *OAuthHTTP) AuthorizationServerHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]any{
+		metadata := map[string]any{
 			"issuer":                                s.issuer,
 			"authorization_endpoint":                s.url("authorize"),
 			"token_endpoint":                        s.url("token"),
@@ -246,13 +246,18 @@ func (s *OAuthHTTP) AuthorizationServerHandler() http.Handler {
 			"grant_types_supported":                 usersessions.SupportedGrantTypes,
 			"token_endpoint_auth_methods_supported": usersessions.SupportedAuthMethods,
 			"code_challenge_methods_supported":      usersessions.SupportedCodeChallengeMethods,
-			// Advertised only when a document can actually be resolved and
-			// the admission mode admits something. Advertising support while
-			// admitting nothing would route spec-compliant clients into a
-			// guaranteed-failure flow instead of letting them fall back to
-			// dynamic client registration.
-			"client_id_metadata_document_supported": s.cimd != nil && platformCIMDAdmissionMode != admission.ModeDisabled,
-		})
+		}
+		// Advertised only when a document can actually be resolved and the
+		// admission mode admits something, and omitted rather than sent as
+		// false otherwise: an absent member is how RFC 8414 metadata says
+		// "unsupported", and it is what the hosted authorization server
+		// emits. Advertising support while admitting nothing would route
+		// spec-compliant clients into a guaranteed-failure flow instead of
+		// letting them fall back to dynamic client registration.
+		if s.cimd != nil && platformCIMDAdmissionMode != admission.ModeDisabled {
+			metadata["client_id_metadata_document_supported"] = true
+		}
+		writeJSON(w, http.StatusOK, metadata)
 	})
 }
 

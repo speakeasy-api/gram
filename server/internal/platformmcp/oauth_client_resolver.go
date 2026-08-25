@@ -115,8 +115,16 @@ func (s *OAuthHTTP) resolveClient(ctx context.Context, clientID string, mode cli
 	cached, err := s.store.GetClient(ctx, clientID)
 	switch {
 	case err == nil:
-		if cached.IsCIMD() && cached.CacheExpiresAt != nil {
-			cache = cimd.CacheState{ExpiresAt: *cached.CacheExpiresAt, ETag: cached.ETag}
+		if cached.IsCIMD() {
+			// The two columns are independent: a host may serve an ETag with
+			// no freshness directives at all, and clearing only the expiry
+			// is a request to revalidate now, not to discard what
+			// revalidation needs. Dropping the validator here would turn
+			// every such refresh into an unconditional fetch.
+			cache.ETag = cached.ETag
+			if cached.CacheExpiresAt != nil {
+				cache.ExpiresAt = *cached.CacheExpiresAt
+			}
 		}
 	case errors.Is(err, platformoauth.ErrNotFound):
 	default:
@@ -171,6 +179,16 @@ func (s *OAuthHTTP) resolveClient(ctx context.Context, clientID string, mode cli
 // client is admitted and a *admission.DenialError when policy denies it.
 func (s *OAuthHTTP) admitCIMDClient(ctx context.Context, clientID string) error {
 	decision := admission.Evaluate(platformCIMDAdmissionMode, clientID)
+	if len(clientID) > admission.MaxClientIDLength {
+		// Evaluate applies this bound itself in the modes that consult the
+		// catalog, but not in the open mode this server runs, where every
+		// URL-shaped value is admitted. Applying it here regardless keeps an
+		// unbounded, attacker-chosen string from becoming the parameter of
+		// an indexed store lookup on an unauthenticated endpoint — the same
+		// reason the bound exists in the admission package at all. The
+		// resolver would reject it too, but only after the read.
+		decision = admission.Decision{Outcome: admission.OutcomeDeny, Admit: "", Denial: admission.DenialOversized}
+	}
 	if decision.Outcome == admission.OutcomeCheckCustom {
 		// The branch that asks the caller to consult an issuer's own URL
 		// rows. Platform MCP has no such table — it is a single first-party
