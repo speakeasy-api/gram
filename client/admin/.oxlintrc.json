@@ -38,6 +38,27 @@
     "typescript/switch-exhaustiveness-check": "error",
     "typescript/strict-void-return": "error",
 
+    "no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "react",
+            "importNames": ["useEffect"],
+            "message": "useEffect is banned in the admin app. Match the intent to a replacement: URL/query-string state -> TanStack Router typed search params; route data -> Router loaders; server/async state -> TanStack Query; forms, validation, or Query-backed drafts -> TanStack Form; mutation completion -> mutation callbacks; derived state -> calculate during render; user actions and debouncing -> event handlers; external stores -> useSyncExternalStore; global shortcuts -> TanStack Hotkeys; focus/scroll on DOM attachment -> callback refs; unmount-only cleanup -> useOnUnmount."
+          }
+        ]
+      }
+    ],
+    "no-restricted-properties": [
+      "error",
+      {
+        "object": "React",
+        "property": "useEffect",
+        "message": "useEffect is banned in the admin app. Match the intent to a replacement: URL/query-string state -> TanStack Router typed search params; route data -> Router loaders; server/async state -> TanStack Query; forms, validation, or Query-backed drafts -> TanStack Form; mutation completion -> mutation callbacks; derived state -> calculate during render; user actions and debouncing -> event handlers; external stores -> useSyncExternalStore; global shortcuts -> TanStack Hotkeys; focus/scroll on DOM attachment -> callback refs; unmount-only cleanup -> useOnUnmount."
+      }
+    ],
+
     "react/exhaustive-deps": "error",
     "react/rules-of-hooks": "error",
     "react/only-export-components": ["error", { "allowConstantExport": true }],
@@ -58,14 +79,21 @@
       }
     },
     {
-      "files": ["src/components/ui/**/*.{ts,tsx}", "src/hooks/use-mobile.ts"],
+      "files": [
+        "src/components/data-table.tsx",
+        "src/components/ui/**/*.{ts,tsx}",
+        "src/hooks/use-mobile.ts"
+      ],
       // Vendored stock shadcn/ui primitives, written by `pnpm dlx shadcn add`.
       // They are kept byte-for-byte so a future shadcn update is a straight
       // overwrite, and stock shadcn neither annotates component return types
       // nor splits its cva variant exports into separate files.
       "rules": {
         "typescript/explicit-module-boundary-types": "off",
-        "react/only-export-components": "off"
+        "react/only-export-components": "off",
+        // Namespace React imports expose every export to no-restricted-imports.
+        // no-restricted-properties still bans React.useEffect in these files.
+        "no-restricted-imports": "off"
       }
     }
   ]

@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type JSX, type ReactNode } from "react";
+import { useRef, type JSX, type ReactNode } from "react";
+import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 
@@ -114,14 +115,6 @@ function InferenceKeyLimitEditor({
 }): JSX.Element {
   const qc = useQueryClient();
   const { announce, showFailure } = useWriteReport();
-  const [value, setValue] = useState(String(inferenceKey.monthly_credits));
-  const [edited, setEdited] = useState(false);
-  const parsed = Number(value);
-  const invalid =
-    value.trim() === "" ||
-    !Number.isInteger(parsed) ||
-    parsed < MIN_MONTHLY_LIMIT ||
-    parsed > MAX_MONTHLY_LIMIT;
   const mutation = useMutation({
     mutationFn: (monthlyCredits: number) =>
       setInferenceKeyMonthlyLimit({
@@ -143,13 +136,21 @@ function InferenceKeyLimitEditor({
     },
   });
 
-  useEffect(() => {
-    setValue(String(inferenceKey.monthly_credits));
-    setEdited(false);
-  }, [inferenceKey.monthly_credits]);
-
   const inputID = `inference-key-limit-${inferenceKey.key_type}`;
   const errorID = `${inputID}-error`;
+
+  const form = useForm({
+    defaultValues: { monthlyCredits: String(inferenceKey.monthly_credits) },
+    onSubmit: async ({ value }) => {
+      if (inferenceKey.disabled) return;
+      showFailure(null);
+      try {
+        await mutation.mutateAsync(Number(value.monthlyCredits));
+      } catch {
+        // The mutation reports the failure through the page's shared live region.
+      }
+    },
+  });
 
   return (
     <Row label="Monthly limit">
@@ -157,62 +158,93 @@ function InferenceKeyLimitEditor({
         className="flex max-w-sm items-start gap-2"
         onSubmit={(event) => {
           event.preventDefault();
-          if (!invalid && !inferenceKey.disabled) {
-            showFailure(null);
-            mutation.mutate(parsed);
-          }
+          void form.handleSubmit();
         }}
       >
-        <div className="flex-1">
-          <label className="sr-only" htmlFor={inputID}>
-            {inferenceKey.key_type} monthly limit in USD
-          </label>
-          <Input
-            id={inputID}
-            type="number"
-            min={MIN_MONTHLY_LIMIT}
-            max={MAX_MONTHLY_LIMIT}
-            step={1}
-            value={value}
-            disabled={inferenceKey.disabled || mutation.isPending}
-            aria-invalid={!inferenceKey.disabled && edited && invalid}
-            aria-describedby={
-              !inferenceKey.disabled && edited && invalid ? errorID : undefined
-            }
-            onChange={(event) => {
-              mutation.reset();
-              setValue(event.target.value);
-              setEdited(true);
-            }}
-          />
-          {!inferenceKey.disabled && edited && invalid && (
-            <p id={errorID} className="text-destructive mt-1 text-xs">
-              Enter a whole-dollar limit from $1 to $10,000.
-            </p>
-          )}
-          {mutation.isError && (
-            <p role="alert" className="text-destructive mt-1 text-xs">
-              {errorMessage(mutation.error)}
-            </p>
-          )}
-          {inferenceKey.disabled && (
-            <p className="text-muted-foreground mt-1 text-xs">
-              Enable this key before changing its limit.
-            </p>
-          )}
-        </div>
-        <Button
-          type="submit"
-          size="sm"
-          disabled={
-            inferenceKey.disabled ||
-            invalid ||
-            mutation.isPending ||
-            parsed === inferenceKey.monthly_credits
+        <form.Field
+          name="monthlyCredits"
+          validators={{
+            onChange: ({ value }) => {
+              const parsed = Number(value);
+              return value.trim() === "" ||
+                !Number.isInteger(parsed) ||
+                parsed < MIN_MONTHLY_LIMIT ||
+                parsed > MAX_MONTHLY_LIMIT
+                ? "Enter a whole-dollar limit from $1 to $10,000."
+                : undefined;
+            },
+          }}
+        >
+          {(field) => {
+            const invalid = !field.state.meta.isValid;
+            const showValidation =
+              !inferenceKey.disabled && field.state.meta.isDirty && invalid;
+            return (
+              <div className="flex-1">
+                <label className="sr-only" htmlFor={inputID}>
+                  {inferenceKey.key_type} monthly limit in USD
+                </label>
+                <Input
+                  id={inputID}
+                  type="number"
+                  min={MIN_MONTHLY_LIMIT}
+                  max={MAX_MONTHLY_LIMIT}
+                  step={1}
+                  name={field.name}
+                  value={field.state.value}
+                  disabled={inferenceKey.disabled || mutation.isPending}
+                  aria-invalid={showValidation}
+                  aria-describedby={showValidation ? errorID : undefined}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => {
+                    mutation.reset();
+                    field.handleChange(event.target.value);
+                  }}
+                />
+                {showValidation && (
+                  <p id={errorID} className="text-destructive mt-1 text-xs">
+                    {field.state.meta.errors[0]}
+                  </p>
+                )}
+                {mutation.isError && (
+                  <p role="alert" className="text-destructive mt-1 text-xs">
+                    {errorMessage(mutation.error)}
+                  </p>
+                )}
+                {inferenceKey.disabled && (
+                  <p className="text-muted-foreground mt-1 text-xs">
+                    Enable this key before changing its limit.
+                  </p>
+                )}
+              </div>
+            );
+          }}
+        </form.Field>
+        <form.Subscribe
+          selector={(state) =>
+            [
+              state.values.monthlyCredits,
+              state.canSubmit,
+              state.isSubmitting,
+            ] as const
           }
         >
-          {mutation.isPending ? "Saving…" : "Save limit"}
-        </Button>
+          {([value, canSubmit, isSubmitting]) => (
+            <Button
+              type="submit"
+              size="sm"
+              disabled={
+                inferenceKey.disabled ||
+                !canSubmit ||
+                mutation.isPending ||
+                isSubmitting ||
+                Number(value) === inferenceKey.monthly_credits
+              }
+            >
+              {mutation.isPending || isSubmitting ? "Saving…" : "Save limit"}
+            </Button>
+          )}
+        </form.Subscribe>
       </form>
     </Row>
   );
@@ -253,6 +285,7 @@ function InferenceKeys({
           <Row label="State">{key.disabled ? "Disabled" : "Enabled"}</Row>
           {isWritableInferenceKey(key) && (
             <InferenceKeyLimitEditor
+              key={`${key.key_type}:${key.monthly_credits}`}
               organizationID={organizationID}
               inferenceKey={key}
             />
@@ -445,7 +478,6 @@ export function Billing({ org }: { org: AdminOrganization }): JSX.Element {
   const [confirm, confirmDialog] = useConfirmDialog();
   const { announce, showFailure } = useWriteReport();
   const control = useRef<HTMLButtonElement>(null);
-  const restoreFocus = useRef(false);
 
   const inferenceKeysResult = useQuery(inferenceKeysQuery(org.id));
   const inferenceSpendHistoryResult = useQuery(
@@ -472,12 +504,6 @@ export function Billing({ org }: { org: AdminOrganization }): JSX.Element {
     },
   });
 
-  useEffect(() => {
-    if (mutation.isPending || !restoreFocus.current) return;
-    restoreFocus.current = false;
-    control.current?.focus();
-  }, [mutation.isPending, mutation.status, mutation.variables]);
-
   const changeCancellation = async (cancel: boolean): Promise<void> => {
     const confirmed = await confirm({
       title: `${cancel ? "Cancel" : "Resume"} pay as you go for ${org.name}?`,
@@ -493,7 +519,6 @@ export function Billing({ org }: { org: AdminOrganization }): JSX.Element {
     }
 
     showFailure(null);
-    restoreFocus.current = true;
     mutation.mutate(cancel, {
       onSuccess: () =>
         announce(
@@ -503,6 +528,17 @@ export function Billing({ org }: { org: AdminOrganization }): JSX.Element {
         const text = `Could not update billing for ${org.name}: ${errorMessage(error)}`;
         announce(text);
         showFailure(text);
+      },
+      onSettled: () => {
+        setTimeout(function restoreControlFocus() {
+          const target = control.current;
+          if (!target?.isConnected) return;
+          if (target.disabled) {
+            setTimeout(restoreControlFocus);
+            return;
+          }
+          target.focus();
+        });
       },
     });
   };

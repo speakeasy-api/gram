@@ -1,11 +1,5 @@
 import { XIcon } from "lucide-react";
-import {
-  useEffect,
-  useRef,
-  type JSX,
-  type ReactNode,
-  type RefObject,
-} from "react";
+import { useCallback, useRef, type JSX, type ReactNode, type Ref } from "react";
 
 import { CopyValue } from "@/components/CopyValue";
 import { Trial } from "@/components/Trial";
@@ -49,18 +43,22 @@ export function PeekPanel({
   // The caller's, where it has one. The list handles keys above both the table
   // and this panel, and it has to tell the panel apart from the controls the
   // panel contains.
-  ref?: RefObject<HTMLElement | null>;
+  ref?: Ref<HTMLElement>;
 }): JSX.Element {
   const own = useRef<HTMLElement>(null);
-  const root = ref ?? own;
-
-  useEffect(() => {
-    root.current?.focus();
-  }, [root]);
+  const mountRoot = useCallback(
+    (node: HTMLElement | null): void => {
+      own.current = node;
+      if (typeof ref === "function") ref(node);
+      else if (ref) ref.current = node;
+      node?.focus();
+    },
+    [ref],
+  );
 
   return (
     <aside
-      ref={root}
+      ref={mountRoot}
       id={PEEK_PANEL_ID}
       // In the tab order, not just focusable. This node is the one place in the
       // subtree where the arrow keys walk the peek from record to record, and
