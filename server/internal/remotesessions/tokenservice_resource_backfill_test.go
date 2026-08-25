@@ -301,6 +301,81 @@ func seedRemoteMCPServerForIssuer(t *testing.T, ctx context.Context, ti *testIns
 	require.NoError(t, err)
 }
 
+// attachClientUpstream gives one client a private user session issuer carrying
+// a single remote MCP server, so the client derives mcpURL and its siblings on
+// the shared issuer derive nothing from it.
+func attachClientUpstream(t *testing.T, ctx context.Context, ti *testInstance, clientID uuid.UUID, slug, mcpURL string) {
+	t.Helper()
+
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-"+slug)
+	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: clientID,
+		UserSessionIssuerID:   issuerID,
+	}))
+	seedRemoteMCPServerForIssuer(t, ctx, ti, issuerID, slug+"-mcp", mcpURL)
+}
+
+// Two clients bound to one issuer, each fronting a different upstream: the
+// backfill must stamp the refreshed client's own derived resource. Before the
+// derivation was per-client one endpoint-level resource reached every client,
+// so refreshing one could stamp a sibling's upstream onto its row — a
+// permanent wrong-audience binding that then routes every later request.
+func TestResolveAccessTokens_BackfillStampsTheRefreshedClientsOwnResource(t *testing.T) {
+	t.Parallel()
+
+	var spy upstreamSpy
+	ctx, mgr, ti, clientID, subject := setupRefreshFixtureWithHandler(t, "backfill-wrong-client", pgtype.Text{String: "", Valid: false}, spyRefreshHandler(&spy))
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	row := getRemoteSessionRow(t, ctx, ti, clientID, subject)
+	require.False(t, row.Resource.Valid, "fixture must seed a legacy NULL-resource row")
+
+	q := repo.New(ti.conn)
+	refreshedClient, err := q.GetRemoteSessionClientWithIssuerByID(ctx, clientID)
+	require.NoError(t, err)
+
+	// The sibling holds a still-valid token minted for its own upstream, so
+	// nothing but a misattribution can put its resource on the refreshed row.
+	const siblingResource = "https://sibling.example.com/mcp"
+	enc := testenv.NewEncryptionClient(t)
+	siblingClient, siblingIssuer := seedActiveClient(t, ctx, ti.conn, *authCtx.ProjectID, row.UserSessionIssuerID, authCtx.ActiveOrganizationID, "rsi-backfill-wrong-client")
+	siblingAccess, err := enc.Encrypt([]byte("sibling-token"))
+	require.NoError(t, err)
+	_, err = q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+		SubjectUrn:            subject,
+		UserSessionIssuerID:   row.UserSessionIssuerID,
+		RemoteSessionClientID: siblingClient,
+		AccessTokenEncrypted:  siblingAccess,
+		AccessExpiresAt:       conv.ToPGTimestamptz(time.Now().Add(time.Hour)),
+		Scopes:                []string{},
+		Resource:              conv.ToPGText(siblingResource),
+	})
+	require.NoError(t, err)
+
+	// Each client reaches its upstream through its own issuer, so the two
+	// derivations differ and the shared issuer derives nothing: any resource
+	// that is not the refreshed client's own is visibly the wrong one.
+	const derived = "https://own.example.com/mcp"
+	attachClientUpstream(t, ctx, ti, clientID, "backfill-wrong-client-own", derived)
+	attachClientUpstream(t, ctx, ti, siblingClient, "backfill-wrong-client-sibling", siblingResource)
+
+	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, row.UserSessionIssuerID, subject)
+	require.NoError(t, err)
+	require.NoError(t, spy.handlerErr)
+	require.Equal(t, derived, spy.form.Get("resource"), "the refresh grant must carry the refreshed client's own derived resource")
+
+	sess := getRemoteSessionRow(t, ctx, ti, clientID, subject)
+	require.Equal(t, derived, conv.FromPGTextOrEmpty[string](sess.Resource), "the backfill must stamp the refreshed client's own resource, never a sibling's")
+
+	require.Equal(t, remotesessions.UpstreamToken{Token: "refreshed-access", Resource: derived, RemoteSessionClientID: clientID}, tokens[refreshedClient.RemoteSessionIssuerID])
+	require.Equal(t, remotesessions.UpstreamToken{Token: "sibling-token", Resource: siblingResource, RemoteSessionClientID: siblingClient}, tokens[siblingIssuer])
+
+	siblingSess := getRemoteSessionRow(t, ctx, ti, siblingClient, subject)
+	require.Equal(t, siblingResource, conv.FromPGTextOrEmpty[string](siblingSess.Resource), "the sibling's own binding must survive a neighbour's backfill")
+}
+
 // The scheduled sweep converges through the same CAS write: refreshing a
 // NULL-resource row stamps the client-derived fallback it sent upstream.
 func TestRemoteSessionRefreshActivity_SweepBackfillsNullResource(t *testing.T) {
