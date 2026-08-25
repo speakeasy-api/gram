@@ -348,17 +348,20 @@ WHERE project_id = $1
   AND enabled IS TRUE
   AND deleted IS FALSE
   AND risk_policy_id IS NOT DISTINCT FROM $2
+  AND ($3::uuid IS NULL OR id <> $3)
 `
 
 type CountEnabledRegexExclusionsInScopeParams struct {
 	ProjectID    uuid.UUID
 	RiskPolicyID uuid.NullUUID
+	ExcludeID    uuid.NullUUID
 }
 
 // Enforces the per-scope regex cap. Counts enabled regex exclusions sharing the
-// same scope (same risk_policy_id, treating NULL/global as its own bucket).
+// same scope (same risk_policy_id, treating NULL/global as its own bucket),
+// optionally excluding the row currently being updated.
 func (q *Queries) CountEnabledRegexExclusionsInScope(ctx context.Context, arg CountEnabledRegexExclusionsInScopeParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countEnabledRegexExclusionsInScope, arg.ProjectID, arg.RiskPolicyID)
+	row := q.db.QueryRow(ctx, countEnabledRegexExclusionsInScope, arg.ProjectID, arg.RiskPolicyID, arg.ExcludeID)
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
@@ -2004,6 +2007,41 @@ type GetRiskExclusionForReconcileParams struct {
 // bounded to a tenant) even though the caller is an internal activity.
 func (q *Queries) GetRiskExclusionForReconcile(ctx context.Context, arg GetRiskExclusionForReconcileParams) (RiskExclusion, error) {
 	row := q.db.QueryRow(ctx, getRiskExclusionForReconcile, arg.ID, arg.ProjectID)
+	var i RiskExclusion
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.RiskPolicyID,
+		&i.MatchType,
+		&i.MatchValue,
+		&i.RuleIDFilter,
+		&i.SourceFilter,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getRiskExclusionForUpdate = `-- name: GetRiskExclusionForUpdate :one
+SELECT id, project_id, organization_id, risk_policy_id, match_type, match_value, rule_id_filter, source_filter, enabled, created_at, updated_at, deleted_at, deleted
+FROM risk_exclusions
+WHERE id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+type GetRiskExclusionForUpdateParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) GetRiskExclusionForUpdate(ctx context.Context, arg GetRiskExclusionForUpdateParams) (RiskExclusion, error) {
+	row := q.db.QueryRow(ctx, getRiskExclusionForUpdate, arg.ID, arg.ProjectID)
 	var i RiskExclusion
 	err := row.Scan(
 		&i.ID,
@@ -4445,6 +4483,17 @@ func (q *Queries) ListUserEmailsByIDs(ctx context.Context, arg ListUserEmailsByI
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockRiskExclusionMutations = `-- name: LockRiskExclusionMutations :exec
+SELECT pg_advisory_xact_lock(hashtextextended('risk-exclusion:' || $1::text, 0))
+`
+
+// Serialize exclusion writes per project. Regex limits span rows and include the
+// empty global scope, so row locks alone cannot protect the count-and-write.
+func (q *Queries) LockRiskExclusionMutations(ctx context.Context, projectID string) error {
+	_, err := q.db.Exec(ctx, lockRiskExclusionMutations, projectID)
+	return err
 }
 
 const lockRiskPolicyMutations = `-- name: LockRiskPolicyMutations :exec

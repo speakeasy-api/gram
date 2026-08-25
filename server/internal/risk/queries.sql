@@ -1529,6 +1529,19 @@ WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
+-- name: GetRiskExclusionForUpdate :one
+SELECT *
+FROM risk_exclusions
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+FOR UPDATE;
+
+-- name: LockRiskExclusionMutations :exec
+-- Serialize exclusion writes per project. Regex limits span rows and include the
+-- empty global scope, so row locks alone cannot protect the count-and-write.
+SELECT pg_advisory_xact_lock(hashtextextended('risk-exclusion:' || @project_id::text, 0));
+
 -- name: GetRiskExclusionForReconcile :one
 -- Fetches an exclusion regardless of deleted/enabled state so the reconcile
 -- sweep can decide whether to apply (enabled) or only reverse (deleted/disabled).
@@ -1562,14 +1575,16 @@ ORDER BY created_at;
 
 -- name: CountEnabledRegexExclusionsInScope :one
 -- Enforces the per-scope regex cap. Counts enabled regex exclusions sharing the
--- same scope (same risk_policy_id, treating NULL/global as its own bucket).
+-- same scope (same risk_policy_id, treating NULL/global as its own bucket),
+-- optionally excluding the row currently being updated.
 SELECT COUNT(*)::BIGINT
 FROM risk_exclusions
 WHERE project_id = @project_id
   AND match_type = 'regex'
   AND enabled IS TRUE
   AND deleted IS FALSE
-  AND risk_policy_id IS NOT DISTINCT FROM sqlc.narg(risk_policy_id);
+  AND risk_policy_id IS NOT DISTINCT FROM sqlc.narg(risk_policy_id)
+  AND (sqlc.narg(exclude_id)::uuid IS NULL OR id <> sqlc.narg(exclude_id));
 
 -- name: UpdateRiskExclusion :one
 UPDATE risk_exclusions
