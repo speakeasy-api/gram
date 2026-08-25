@@ -47,7 +47,7 @@ func TestExclusionViewRedactsOnlyFreeTextMatchValues(t *testing.T) {
 
 			if tt.redacted {
 				require.NotContains(t, view.MatchValue, secret)
-				require.Contains(t, view.MatchValue, "redacted:sha256:")
+				require.Equal(t, "<redacted>", view.MatchValue)
 			} else {
 				require.Equal(t, secret, view.MatchValue)
 			}

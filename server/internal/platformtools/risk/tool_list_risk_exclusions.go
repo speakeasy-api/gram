@@ -2,8 +2,6 @@ package risk
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"io"
 
@@ -15,8 +13,8 @@ import (
 
 // exclusionView is the model-facing shape of an exclusion. For the free-text
 // match types, match_value is the literal string the author wanted suppressed —
-// often the very secret or email that triggered the finding — so it is
-// fingerprinted here for the same reason the risk service redacts it in audit
+// often the very secret or email that triggered the finding — so it is replaced
+// with a fixed marker for the same reason the risk service redacts it in audit
 // snapshots, and the same reason listRiskResultsForAgent exists at all. The
 // remaining match types and both filters are rule/source identifiers, not
 // captured content, so they stay readable: without them the model cannot tell
@@ -37,8 +35,8 @@ type listRiskExclusionsResult struct {
 	Exclusions []exclusionView `json:"exclusions"`
 }
 
-// redactMatchValue mirrors the risk service's audit-snapshot fingerprint so the
-// same exclusion reads identically in both places.
+// redactMatchValue mirrors the risk service's fixed audit redaction so low-
+// entropy values cannot be recovered with an offline dictionary.
 func redactMatchValue(matchType, matchValue string) string {
 	if matchType != "exact" && matchType != "regex" {
 		return matchValue
@@ -46,8 +44,7 @@ func redactMatchValue(matchType, matchValue string) string {
 	if matchValue == "" {
 		return ""
 	}
-	sum := sha256.Sum256([]byte(matchValue))
-	return "redacted:sha256:" + hex.EncodeToString(sum[:])[:12]
+	return "<redacted>"
 }
 
 func toExclusionView(exclusion *types.RiskExclusion) exclusionView {
@@ -81,7 +78,7 @@ func (s *ListRiskExclusions) Descriptor() core.ToolDescriptor {
 		SourceSlug:  "risk",
 		HandlerName: "list_risk_exclusions",
 		Name:        "platform_list_risk_exclusions",
-		Description: "List the risk exclusions configured for the current project. Call this before creating an exclusion to check whether an equivalent one already exists. For exact and regex exclusions the match_value is a stable sha256 fingerprint rather than the literal pattern, so suppressed secret content never enters the model context.",
+		Description: "List the risk exclusions configured for the current project. Call this before creating an exclusion to check whether an equivalent one already exists. For exact and regex exclusions the match_value is replaced with a fixed redaction marker so suppressed secret content never enters the model context.",
 		InputSchema: core.BuildInputSchema[listRiskExclusionsInput](
 			core.WithPropertyFormat("risk_policy_id", "uuid"),
 		),

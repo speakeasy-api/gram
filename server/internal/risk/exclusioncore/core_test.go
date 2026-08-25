@@ -17,6 +17,7 @@ func TestValidateMatchValue(t *testing.T) {
 
 	require.NoError(t, ValidateMatchValue("exact", "value"))
 	require.NoError(t, ValidateMatchValue("regex", `^value$`))
+	require.NoError(t, ValidateMatchValue("regex", strings.Repeat("é", RegexMaxLength)))
 
 	var validationErr *ValidationError
 	err := ValidateMatchValue("exact", "")
@@ -52,15 +53,44 @@ func TestAuditSnapshotRedactsSensitiveFields(t *testing.T) {
 	}
 
 	snapshot := AuditSnapshot(exclusion)
-	require.Equal(t, RedactValue("sensitive-value"), snapshot.MatchValue)
-	require.Equal(t, RedactValue("sensitive-rule"), snapshot.RuleIDFilter)
-	require.Equal(t, RedactValue("sensitive-source"), snapshot.SourceFilter)
-	require.NotContains(t, DisplayName(exclusion), exclusion.MatchValue)
+	require.Equal(t, "<redacted>", snapshot.MatchValue)
+	require.Equal(t, "<redacted>", snapshot.RuleIDFilter)
+	require.Equal(t, "<redacted>", snapshot.SourceFilter)
+	require.NotEqual(t, exclusion.MatchValue, snapshot.MatchValue)
+	require.NotEqual(t, exclusion.RuleIDFilter, snapshot.RuleIDFilter)
+	require.NotEqual(t, exclusion.SourceFilter, snapshot.SourceFilter)
+	require.Equal(t, "exact:<redacted>", DisplayName(exclusion))
 
 	// Redaction returns a copy; the caller's response projection stays intact.
 	require.Equal(t, "sensitive-value", exclusion.MatchValue)
 	require.Equal(t, "sensitive-rule", exclusion.RuleIDFilter)
 	require.Equal(t, "sensitive-source", exclusion.SourceFilter)
+}
+
+func TestToggleUpdateParamsPreservesDefinition(t *testing.T) {
+	t.Parallel()
+
+	before := repo.RiskExclusion{
+		ID:             uuid.New(),
+		ProjectID:      uuid.New(),
+		OrganizationID: "<ORG_ID>",
+		RiskPolicyID:   uuid.NullUUID{UUID: uuid.New(), Valid: true},
+		MatchType:      "regex",
+		MatchValue:     "^value$",
+		RuleIDFilter:   pgtype.Text{String: "rule", Valid: true},
+		SourceFilter:   pgtype.Text{String: "source", Valid: true},
+		Enabled:        false,
+	}
+
+	params := toggleUpdateParams(before, true)
+	require.Equal(t, before.ID, params.ID)
+	require.Equal(t, before.ProjectID, params.ProjectID)
+	require.Equal(t, before.RiskPolicyID, params.RiskPolicyID)
+	require.Equal(t, before.MatchType, params.MatchType)
+	require.Equal(t, before.MatchValue, params.MatchValue)
+	require.Equal(t, before.RuleIDFilter, params.RuleIDFilter)
+	require.Equal(t, before.SourceFilter, params.SourceFilter)
+	require.True(t, params.Enabled)
 }
 
 func TestProjectPreservesReadShape(t *testing.T) {

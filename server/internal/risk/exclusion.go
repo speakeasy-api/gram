@@ -44,6 +44,8 @@ func validateExclusionMatchValue(matchType, matchValue string) error {
 		if errors.As(err, &validation) {
 			return oops.E(oops.CodeInvalid, validation.Cause, "%s", validation.Message)
 		}
+		// Keep a valid Goa error if shared validation gains another typed error
+		// instead of assuming this adapter will only ever see ValidationError.
 		return oops.E(oops.CodeInvalid, err, "%s", err)
 	}
 	return nil

@@ -2,12 +2,11 @@ package exclusioncore
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"regexp"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -21,6 +20,7 @@ const (
 	RegexMaxLength      = 512
 	MaxRegexPerScope    = 50
 	displayNameMaxRunes = 80
+	redactedValue       = "<redacted>"
 )
 
 var (
@@ -134,7 +134,7 @@ func ValidateMatchValue(matchType, matchValue string) error {
 	if matchType != "regex" {
 		return nil
 	}
-	if len(matchValue) > RegexMaxLength {
+	if utf8.RuneCountInString(matchValue) > RegexMaxLength {
 		return &ValidationError{Message: fmt.Sprintf("regex pattern too long (max %d characters)", RegexMaxLength), Cause: nil}
 	}
 	if _, err := regexp.Compile(matchValue); err != nil {
@@ -147,8 +147,7 @@ func RedactValue(value string) string {
 	if value == "" {
 		return ""
 	}
-	sum := sha256.Sum256([]byte(value))
-	return "redacted:sha256:" + hex.EncodeToString(sum[:])[:12]
+	return redactedValue
 }
 
 func DisplayName(exclusion Exclusion) string {
@@ -188,8 +187,17 @@ type CreateMutation struct {
 	Actor  Actor
 }
 
+// ToggleMutation changes only an exclusion's enabled state. It is the mutation
+// contract for transports that do not permit editing exclusion definitions.
+type ToggleMutation struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	Enabled   bool
+	Actor     Actor
+}
+
 // UpdateMutation is a fully parsed exclusion replacement. Nil Enabled preserves
-// the authoritative locked row's current value.
+// the authoritative locked row's current value for Goa compatibility.
 type UpdateMutation struct {
 	ID           uuid.UUID
 	ProjectID    uuid.UUID
@@ -278,6 +286,69 @@ func (c *Core) Create(ctx context.Context, input CreateMutation) (Exclusion, err
 		deps.AfterCommit(ctx, row.ProjectID, row.ID)
 	}
 	return exclusion, nil
+}
+
+func (c *Core) Toggle(ctx context.Context, input ToggleMutation) (Exclusion, error) {
+	deps, err := c.requireMutationDependencies()
+	if err != nil {
+		return Exclusion{}, err
+	}
+	tx, err := deps.Transactor.Begin(ctx)
+	if err != nil {
+		return Exclusion{}, mutationError("begin transaction", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	queries := repo.New(tx)
+	if err := queries.LockRiskExclusionMutations(ctx, input.ProjectID.String()); err != nil {
+		return Exclusion{}, mutationError("lock risk exclusion mutations", err)
+	}
+	before, err := queries.GetRiskExclusionForUpdate(ctx, repo.GetRiskExclusionForUpdateParams{ID: input.ID, ProjectID: input.ProjectID})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Exclusion{}, fmt.Errorf("%w: %w", ErrExclusionNotFound, err)
+		}
+		return Exclusion{}, mutationError("lock risk exclusion", err)
+	}
+	if err := enforceRegexLimit(ctx, queries, input.ProjectID, before.RiskPolicyID, uuid.NullUUID{UUID: input.ID, Valid: true}, before.MatchType, input.Enabled); err != nil {
+		return Exclusion{}, err
+	}
+	row, err := queries.UpdateRiskExclusion(ctx, toggleUpdateParams(before, input.Enabled))
+	if err != nil {
+		return Exclusion{}, mutationError("toggle risk exclusion", err)
+	}
+	beforeExclusion := Project(before)
+	afterExclusion := Project(row)
+	if err := deps.Auditor.LogExclusionUpdate(ctx, tx, UpdateAuditEvent{
+		OrganizationID: row.OrganizationID,
+		ProjectID:      row.ProjectID,
+		Actor:          input.Actor,
+		Before:         AuditSnapshot(beforeExclusion),
+		After:          AuditSnapshot(afterExclusion),
+		DisplayName:    DisplayName(afterExclusion),
+	}); err != nil {
+		return Exclusion{}, mutationError("log risk exclusion toggle", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Exclusion{}, mutationError("commit risk exclusion toggle", err)
+	}
+	if deps.AfterCommit != nil {
+		deps.AfterCommit(ctx, row.ProjectID, row.ID)
+	}
+	return afterExclusion, nil
+}
+
+func toggleUpdateParams(before repo.RiskExclusion, enabled bool) repo.UpdateRiskExclusionParams {
+	return repo.UpdateRiskExclusionParams{
+		ID:           before.ID,
+		ProjectID:    before.ProjectID,
+		RiskPolicyID: before.RiskPolicyID,
+		MatchType:    before.MatchType,
+		MatchValue:   before.MatchValue,
+		RuleIDFilter: before.RuleIDFilter,
+		SourceFilter: before.SourceFilter,
+		Enabled:      enabled,
+	}
 }
 
 func (c *Core) Update(ctx context.Context, input UpdateMutation) (Exclusion, error) {
