@@ -407,17 +407,7 @@ func (m *ChallengeManager) RefreshRemoteSession(
 		return zero, ErrRemoteSessionNotRefreshable
 	}
 
-	// Only legacy NULL-resource rows need the derived fallback, matching
-	// validateAndRefresh: a valid-but-empty binding keeps omitting resource.
-	fallbackResource := ""
-	if !session.Resource.Valid {
-		fallbackResource, err = m.refresher.FallbackResourceForClient(ctx, clientID)
-		if err != nil {
-			return zero, fmt.Errorf("derive fallback resource: %w", err)
-		}
-	}
-
-	return m.refresher.RefreshNow(ctx, session, fallbackResource)
+	return m.refresher.RefreshNow(ctx, session, "")
 }
 
 // FallbackResourceForClient derives one client's RFC 8707 resource from its

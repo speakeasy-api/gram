@@ -376,7 +376,7 @@ func (m *ChallengeManager) ResolveAccessTokens(
 		// between two reads can never pair an old token with a new row's
 		// resource.
 		// No endpoint-level fallback: a refresh of a legacy NULL-resource row
-		// derives the client's own resource in validateAndRefresh.
+		// derives the client's own resource in RefreshNow.
 		resolved, err := m.resolveUpstreamToken(ctx, c.ClientID, subject, "")
 		if err != nil {
 			return nil, fmt.Errorf("resolve access token: %w", err)
@@ -422,16 +422,6 @@ func (m *ChallengeManager) validateAndRefresh(
 
 	if !hasRefresh {
 		return "", ErrNoValidToken
-	}
-
-	// Legacy NULL-resource row with no caller fallback: derive the client's
-	// own resource so the grant is never replayed against another upstream's.
-	if resource == "" && !sess.Resource.Valid {
-		derived, err := m.refresher.FallbackResourceForClient(ctx, sess.RemoteSessionClientID)
-		if err != nil {
-			return "", fmt.Errorf("derive fallback resource: %w", err)
-		}
-		resource = derived
 	}
 
 	res, err := m.refresher.RefreshNow(ctx, sess, resource)

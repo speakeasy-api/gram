@@ -1647,6 +1647,9 @@ RETURNING c.*;
 -- MCP servers attached to a client through its user_session_issuer(s). Callers
 -- establish the client belongs to the org upstream
 -- (GetOrganizationRemoteSessionClientByID).
+--
+-- A soft-deleted upstream must not contribute its URL: the derived RFC 8707
+-- resource is sent to the authorization server and recorded on new grants.
 SELECT DISTINCT
     m.id,
     m.project_id,
@@ -1656,7 +1659,7 @@ SELECT DISTINCT
     COALESCE(rms.url, '')::text AS url
 FROM mcp_servers AS m
 JOIN projects AS p ON p.id = m.project_id
-LEFT JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id
+LEFT JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id AND rms.deleted IS FALSE
 WHERE m.deleted IS FALSE
   AND m.user_session_issuer_id IN (
       SELECT link.user_session_issuer_id
