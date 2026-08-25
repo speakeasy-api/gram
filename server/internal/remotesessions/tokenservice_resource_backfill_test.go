@@ -255,6 +255,10 @@ func TestResolveAccessTokens_RefreshingRequestCarriesBackfilledResource(t *testi
 	require.NoError(t, err)
 
 	const derived = "https://mcp.example.com/mcp"
+	// Attach the upstream the resource names, so the value under test is one
+	// the client derivation resolves rather than only a caller-supplied string.
+	seedRemoteMCPServerForIssuer(t, ctx, ti, row.UserSessionIssuerID, "backfill-same-request-mcp", derived)
+
 	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, row.UserSessionIssuerID, subject, derived)
 	require.NoError(t, err)
 	require.NoError(t, spy.handlerErr)

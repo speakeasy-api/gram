@@ -18,7 +18,7 @@ func TestResolveAccessToken_RefreshIncludesResource(t *testing.T) {
 	t.Parallel()
 
 	var spy upstreamSpy
-	ctx, mgr, _, clientID, subject := setupRefreshFixtureWithAudience(t, pgtype.Text{String: "", Valid: false}, &spy)
+	ctx, mgr, clientID, subject := setupRefreshFixtureWithAudience(t, pgtype.Text{String: "", Valid: false}, &spy)
 
 	tok, err := mgr.ResolveAccessToken(ctx, clientID, subject, "https://mcp.example.com/mcp")
 	require.NoError(t, err)
@@ -32,7 +32,7 @@ func TestResolveAccessToken_RefreshOmitsResourceWhenEmpty(t *testing.T) {
 	t.Parallel()
 
 	var spy upstreamSpy
-	ctx, mgr, _, clientID, subject := setupRefreshFixtureWithAudience(t, conv.ToPGText("https://api.example.com"), &spy)
+	ctx, mgr, clientID, subject := setupRefreshFixtureWithAudience(t, conv.ToPGText("https://api.example.com"), &spy)
 
 	tok, err := mgr.ResolveAccessToken(ctx, clientID, subject, "")
 	require.NoError(t, err)

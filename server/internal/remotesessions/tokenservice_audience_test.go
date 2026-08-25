@@ -30,6 +30,8 @@ import (
 
 // spyRefreshHandler is the standard success token endpoint: it captures the
 // inbound form + Authorization header into spy and returns a rotated pair.
+// Handler errors can't fail the test directly (testifylint go-require), so
+// they land in spy.handlerErr for the test goroutine to assert.
 func spyRefreshHandler(spy *upstreamSpy) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
@@ -52,14 +54,15 @@ func spyRefreshHandler(spy *upstreamSpy) http.HandlerFunc {
 	}
 }
 
-func setupRefreshFixtureWithAudience(t *testing.T, audience pgtype.Text, spy *upstreamSpy) (context.Context, *remotesessions.ChallengeManager, *testInstance, uuid.UUID, urn.SessionSubject) {
+func setupRefreshFixtureWithAudience(t *testing.T, audience pgtype.Text, spy *upstreamSpy) (context.Context, *remotesessions.ChallengeManager, uuid.UUID, urn.SessionSubject) {
 	t.Helper()
 
 	slugSuffix := "aud-set"
 	if !audience.Valid {
 		slugSuffix = "aud-unset"
 	}
-	return setupRefreshFixtureWithHandler(t, slugSuffix, audience, spyRefreshHandler(spy))
+	ctx, mgr, _, clientID, subject := setupRefreshFixtureWithHandler(t, slugSuffix, audience, spyRefreshHandler(spy))
+	return ctx, mgr, clientID, subject
 }
 
 // setupRefreshFixtureWithHandler seeds issuer + client + expired NULL-resource
@@ -143,7 +146,7 @@ func TestResolveAccessToken_RefreshIncludesAudience(t *testing.T) {
 	t.Parallel()
 
 	var spy upstreamSpy
-	ctx, mgr, _, clientID, subject := setupRefreshFixtureWithAudience(t, conv.ToPGText("https://api.example.com"), &spy)
+	ctx, mgr, clientID, subject := setupRefreshFixtureWithAudience(t, conv.ToPGText("https://api.example.com"), &spy)
 
 	tok, err := mgr.ResolveAccessToken(ctx, clientID, subject, "")
 	require.NoError(t, err)
@@ -157,7 +160,7 @@ func TestResolveAccessToken_RefreshOmitsAudienceWhenUnset(t *testing.T) {
 	t.Parallel()
 
 	var spy upstreamSpy
-	ctx, mgr, _, clientID, subject := setupRefreshFixtureWithAudience(t, pgtype.Text{String: "", Valid: false}, &spy)
+	ctx, mgr, clientID, subject := setupRefreshFixtureWithAudience(t, pgtype.Text{String: "", Valid: false}, &spy)
 
 	tok, err := mgr.ResolveAccessToken(ctx, clientID, subject, "")
 	require.NoError(t, err)
