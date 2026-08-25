@@ -2146,6 +2146,10 @@ func TestGenerateOpenClawObservabilityPluginPackage(t *testing.T) {
 	} {
 		require.Contains(t, string(shim), want)
 	}
+	// History-sized fields the daemon never reads are stripped pre-pipe.
+	if !strings.Contains(string(shim), "const event = slimEvent(hook, rawEvent)") {
+		t.Error("every hook payload must pass through slimEvent")
+	}
 	// Package installs reject TypeScript entries; the shim must stay plain JS.
 	require.NotContains(t, string(shim), ": ChildProcess")
 
