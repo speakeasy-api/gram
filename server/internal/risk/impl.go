@@ -56,6 +56,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/customrules"
 	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
+	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/risk/recommendedscopes"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
@@ -97,6 +98,7 @@ type Service struct {
 	logger                       *slog.Logger
 	db                           *pgxpool.Pool
 	repo                         *repo.Queries
+	policies                     *policycore.Core
 	auth                         *auth.Auth
 	authz                        *authz.Engine
 	signaler                     RiskAnalysisSignaler
@@ -169,6 +171,7 @@ func NewObserver(
 		logger:                       logger.With(attr.SlogComponent("risk")),
 		db:                           db,
 		repo:                         repo.New(db),
+		policies:                     policycore.New(db),
 		auth:                         nil,
 		authz:                        nil,
 		signaler:                     signaler,
@@ -229,6 +232,7 @@ func NewService(
 		logger:                       logger,
 		db:                           db,
 		repo:                         repo.New(db),
+		policies:                     policycore.New(db),
 		auth:                         auth.New(logger, db, sessions, authzEngine),
 		authz:                        authzEngine,
 		signaler:                     signaler,
@@ -600,34 +604,16 @@ func (s *Service) ListRiskPolicies(ctx context.Context, payload *gen.ListRiskPol
 		return nil, err
 	}
 
-	rows, err := s.repo.ListRiskPolicies(ctx, *authCtx.ProjectID)
+	policies, err := s.policies.List(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list risk policies").LogError(ctx, s.logger)
 	}
 
-	if len(rows) == 0 {
-		return &gen.ListRiskPoliciesResult{Policies: []*types.RiskPolicy{}}, nil
+	result := make([]*types.RiskPolicy, 0, len(policies))
+	for _, policy := range policies {
+		result = append(result, policyToGoa(policy))
 	}
-
-	policyIDs := make([]string, 0, len(rows))
-	for _, row := range rows {
-		policyIDs = append(policyIDs, row.ID.String())
-	}
-	audienceByPolicy, err := riskPolicyAudienceURNsByPolicy(ctx, s.db, authCtx.ActiveOrganizationID, policyIDs)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "load risk policy audiences").LogError(ctx, s.logger)
-	}
-
-	// Message counts are intentionally omitted here: no list consumer reads
-	// them, and computing them re-aggregates every risk_results row for the
-	// project on each call. Progress lives on the single-policy paths
-	// (riskPoliciesStatus, getRiskPolicy).
-	policies := make([]*types.RiskPolicy, 0, len(rows))
-	for _, row := range rows {
-		policies = append(policies, buildRiskPolicyType(row, nil, nil, audienceByPolicy[row.ID.String()]))
-	}
-
-	return &gen.ListRiskPoliciesResult{Policies: policies}, nil
+	return &gen.ListRiskPoliciesResult{Policies: result}, nil
 }
 
 func (s *Service) ListSessionQuarantines(ctx context.Context, _ *gen.ListSessionQuarantinesPayload) (*gen.ListSessionQuarantinesResult, error) {
@@ -797,15 +783,15 @@ func (s *Service) GetRiskPolicy(ctx context.Context, payload *gen.GetRiskPolicyP
 		return nil, oops.C(oops.CodeInvalid)
 	}
 
-	row, err := s.repo.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
-		ID:        id,
-		ProjectID: *authCtx.ProjectID,
-	})
+	policy, err := s.policies.Get(ctx, *authCtx.ProjectID, id)
 	if err != nil {
-		return nil, oops.E(oops.CodeNotFound, err, "risk policy not found").LogError(ctx, s.logger)
+		if errors.Is(err, policycore.ErrLoadPolicy) {
+			return nil, oops.E(oops.CodeNotFound, err, "risk policy not found").LogError(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "load risk policy").LogError(ctx, s.logger)
 	}
 
-	return s.policyToType(ctx, row)
+	return policyToGoa(policy), nil
 }
 
 func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskPolicyPayload) (*types.RiskPolicy, error) {
@@ -2774,78 +2760,43 @@ var customRuleSeverityAllow = map[string]bool{
 var customRuleIDPattern = regexp.MustCompile(`^custom\.[a-z0-9_]+$`)
 
 func validateCustomRuleIDs(ids []string) error {
-	for _, id := range ids {
-		if !strings.HasPrefix(id, "custom.") {
-			return oops.E(oops.CodeInvalid, nil, "custom rule id %q must start with custom.", id)
-		}
+	if err := policycore.ValidateCustomRuleIDs(ids); err != nil {
+		return oops.E(oops.CodeInvalid, err, "%s", err)
 	}
 	return nil
 }
 
 func validateMessageTypes(messageTypes []string) error {
-	for _, messageType := range messageTypes {
-		if message.IsTypeValid(messageType) {
-			continue
-		}
-		return oops.E(
-			oops.CodeInvalid,
-			nil,
-			"message_type %q must be one of: %s",
-			messageType,
-			strings.Join(message.AllTypes(), ", "),
-		)
+	if err := policycore.ValidateMessageTypes(messageTypes); err != nil {
+		return oops.E(oops.CodeInvalid, err, "%s", err)
 	}
 	return nil
 }
 
-// validateDetectionScopes checks each specified scope's category (must be a
-// registry category whose message scoping applies) and CEL predicates, and
-// converts to the analyzer_config representation.
+// validateDetectionScopes adapts generated Goa values to the transport-neutral
+// policy core while retaining the existing API error shape.
 func validateDetectionScopes(eng *celenv.Engine, specs []*types.RiskDetectionScope) ([]ra.DetectionScopeConfig, error) {
-	out := make([]ra.DetectionScopeConfig, 0, len(specs))
-	seen := make(map[categories.Category]bool, len(specs))
+	inputs := make([]*policycore.DetectionScopeInput, 0, len(specs))
 	for _, spec := range specs {
 		if spec == nil {
-			return nil, oops.E(oops.CodeInvalid, nil, "detection scope must not be null")
+			inputs = append(inputs, nil)
+			continue
 		}
-		cat := categories.Category(spec.Category)
-		rec, ok := recommendedscopes.For(cat)
-		if !ok {
-			return nil, oops.E(oops.CodeInvalid, nil, "detection scope category %q is not recognized", spec.Category)
-		}
-		if !rec.Applicable {
-			return nil, oops.E(oops.CodeInvalid, nil, "category %q is session-scoped; message detection scopes do not apply", spec.Category)
-		}
-		if seen[cat] {
-			return nil, oops.E(oops.CodeInvalid, nil, "detection scope category %q specified more than once", spec.Category)
-		}
-		seen[cat] = true
-		include := strings.TrimSpace(conv.PtrValOr(spec.ScopeInclude, ""))
-		exempt := strings.TrimSpace(conv.PtrValOr(spec.ScopeExempt, ""))
-		if _, err := ra.CompileScope(eng, include, exempt); err != nil {
-			return nil, oops.E(oops.CodeInvalid, err, "detection scope for %q does not compile", spec.Category)
-		}
-		out = append(out, ra.DetectionScopeConfig{Category: string(cat), ScopeInclude: include, ScopeExempt: exempt})
-	}
-	return out, nil
-}
-
-// detectionScopesToAPI maps the analyzer_config detection scopes into the API
-// representation.
-func detectionScopesToAPI(analyzerConfig []byte) []*types.RiskDetectionScope {
-	specs := ra.DetectionScopesFromConfig(analyzerConfig)
-	if len(specs) == 0 {
-		return nil
-	}
-	out := make([]*types.RiskDetectionScope, 0, len(specs))
-	for _, spec := range specs {
-		out = append(out, &types.RiskDetectionScope{
+		inputs = append(inputs, &policycore.DetectionScopeInput{
 			Category:     spec.Category,
-			ScopeInclude: conv.PtrEmpty(spec.ScopeInclude),
-			ScopeExempt:  conv.PtrEmpty(spec.ScopeExempt),
+			ScopeInclude: spec.ScopeInclude,
+			ScopeExempt:  spec.ScopeExempt,
 		})
 	}
-	return out
+	out, err := policycore.ValidateDetectionScopes(eng, inputs)
+	if err != nil {
+		var validationErr *policycore.ValidationError
+		if errors.As(err, &validationErr) {
+			return nil, oops.E(oops.CodeInvalid, validationErr.Cause, "%s", validationErr.Message)
+		}
+		return nil, oops.E(oops.CodeInvalid, err, "%s", err)
+	}
+	return out, nil
 }
 
 func validateCustomDetectionRule(eng *celenv.Engine, ruleID, title, detectionExpr, severity string) error {
@@ -3728,72 +3679,14 @@ func findingToMatch(f scanners.Finding) *gen.TestDetectionRuleMatch {
 	}
 }
 
-// policyToType converts a database row to the API type, enriching it with
-// message counts.
+// policyToType converts an already-loaded database row to the API type,
+// enriching it through the shared transport-neutral policy core.
 func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types.RiskPolicy, error) {
-	totalMessages, err := s.repo.CountTotalMessages(ctx, uuid.NullUUID{UUID: row.ProjectID, Valid: true})
+	policy, err := s.policies.ProjectWithProgress(ctx, row)
 	if err != nil {
-		totalMessages = 0
+		return nil, fmt.Errorf("project risk policy: %w", err)
 	}
-
-	analyzedMessages, err := s.repo.CountAnalyzedMessages(ctx, repo.CountAnalyzedMessagesParams{
-		ProjectID:         row.ProjectID,
-		RiskPolicyID:      row.ID,
-		RiskPolicyVersion: row.Version,
-	})
-	if err != nil {
-		analyzedMessages = 0
-	}
-
-	audiencePrincipalURNs, err := riskPolicyAudiencePrincipalURNs(ctx, s.db, row.OrganizationID, row.ID.String())
-	if err != nil {
-		return nil, fmt.Errorf("load risk policy audience: %w", err)
-	}
-
-	return buildRiskPolicyType(row, &totalMessages, &analyzedMessages, audiencePrincipalURNs), nil
-}
-
-// buildRiskPolicyType assembles the API type from a policy row and its already
-// resolved message counts and audience. Counts are optional enrichment: nil
-// (the list path) omits them from the response rather than reporting zeros.
-func buildRiskPolicyType(row repo.RiskPolicy, totalMessages, analyzedMessages *int64, audiencePrincipalURNs []string) *types.RiskPolicy {
-	var pendingMessages *int64
-	if totalMessages != nil && analyzedMessages != nil {
-		pendingMessages = new(max(*totalMessages-*analyzedMessages, 0))
-	}
-
-	return &types.RiskPolicy{
-		ID:                     row.ID.String(),
-		ProjectID:              row.ProjectID.String(),
-		Name:                   row.Name,
-		PolicyType:             row.PolicyType,
-		Sources:                row.Sources,
-		PresidioEntities:       row.PresidioEntities,
-		PresidioScoreThreshold: ra.PresidioScoreThresholdPtr(row.AnalyzerConfig),
-		ApprovedEmailDomains:   ra.ApprovedEmailDomainsFromConfig(row.AnalyzerConfig),
-		DetectionScopes:        detectionScopesToAPI(row.AnalyzerConfig),
-		PromptInjectionRules:   row.PromptInjectionRules,
-		DisabledRules:          row.DisabledRules,
-		CustomRuleIds:          row.CustomRuleIds,
-		MessageTypes:           row.MessageTypes,
-		ScopeInclude:           conv.FromPGText[string](row.ScopeInclude),
-		ScopeExempt:            conv.FromPGText[string](row.ScopeExempt),
-		Enabled:                row.Enabled,
-		Action:                 row.Action,
-		AudienceType:           row.AudienceType,
-		AudiencePrincipalUrns:  audiencePrincipalURNs,
-		ShadowMcpDisposition:   conv.PtrEmpty(effectiveShadowMCPDisposition(row.ShadowMcpDisposition, row.Sources, row.Action)),
-		AutoName:               row.AutoName,
-		UserMessage:            conv.FromPGText[string](row.UserMessage),
-		Prompt:                 conv.FromPGText[string](row.Prompt),
-		ModelConfig:            unmarshalModelConfig(row.ModelConfig),
-		Score:                  row.Score,
-		Version:                row.Version,
-		CreatedAt:              row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:              row.UpdatedAt.Time.Format(time.RFC3339),
-		PendingMessages:        pendingMessages,
-		TotalMessages:          totalMessages,
-	}
+	return policyToGoa(policy), nil
 }
 
 func buildSessionQuarantine(row repo.SessionQuarantine) *gen.SessionQuarantine {
@@ -3821,41 +3714,7 @@ func buildSessionQuarantine(row repo.SessionQuarantine) *gen.SessionQuarantine {
 }
 
 func policyRowSnapshotWithAudience(row repo.RiskPolicy, audiencePrincipalURNs []string) *types.RiskPolicy {
-	if audiencePrincipalURNs == nil {
-		audiencePrincipalURNs = []string{}
-	}
-	return &types.RiskPolicy{
-		ID:                     row.ID.String(),
-		ProjectID:              row.ProjectID.String(),
-		Name:                   row.Name,
-		PolicyType:             row.PolicyType,
-		Sources:                row.Sources,
-		PresidioEntities:       row.PresidioEntities,
-		PresidioScoreThreshold: ra.PresidioScoreThresholdPtr(row.AnalyzerConfig),
-		ApprovedEmailDomains:   ra.ApprovedEmailDomainsFromConfig(row.AnalyzerConfig),
-		DetectionScopes:        detectionScopesToAPI(row.AnalyzerConfig),
-		PromptInjectionRules:   row.PromptInjectionRules,
-		DisabledRules:          row.DisabledRules,
-		CustomRuleIds:          row.CustomRuleIds,
-		MessageTypes:           row.MessageTypes,
-		ScopeInclude:           conv.FromPGText[string](row.ScopeInclude),
-		ScopeExempt:            conv.FromPGText[string](row.ScopeExempt),
-		Enabled:                row.Enabled,
-		Action:                 row.Action,
-		AudienceType:           row.AudienceType,
-		AudiencePrincipalUrns:  audiencePrincipalURNs,
-		ShadowMcpDisposition:   conv.PtrEmpty(effectiveShadowMCPDisposition(row.ShadowMcpDisposition, row.Sources, row.Action)),
-		AutoName:               row.AutoName,
-		UserMessage:            conv.FromPGText[string](row.UserMessage),
-		Prompt:                 conv.FromPGText[string](row.Prompt),
-		ModelConfig:            unmarshalModelConfig(row.ModelConfig),
-		Score:                  row.Score,
-		Version:                row.Version,
-		CreatedAt:              row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:              row.UpdatedAt.Time.Format(time.RFC3339),
-		PendingMessages:        nil,
-		TotalMessages:          nil,
-	}
+	return policyToGoa(policycore.Project(row, audiencePrincipalURNs, nil))
 }
 
 func customDetectionRuleToType(row repo.RiskCustomDetectionRule) *types.RiskCustomDetectionRule {
@@ -4101,84 +3960,46 @@ func (s *Service) generatePromptPolicyName(ctx context.Context, orgID, projectID
 }
 
 func validateAction(action string) error {
-	switch action {
-	case "flag", "block", "warn", "quarantine":
-		return nil
-	default:
-		return oops.E(oops.CodeInvalid, nil, "action must be one of: flag, warn, block, quarantine")
+	if err := policycore.ValidateAction(action); err != nil {
+		return oops.E(oops.CodeInvalid, err, "%s", err)
 	}
+	return nil
 }
 
 func validateSources(sources []string) error {
-	for _, src := range sources {
-		switch src {
-		case ra.SourceGitleaks, ra.SourcePresidio, shadowmcp.SourceShadowMCP, shadowmcp.SourceDestructiveTool, ra.SourceCLIDestructive, ra.SourcePromptInjection, ra.SourceAccountIdentity:
-		default:
-			return oops.E(oops.CodeInvalid, nil, "source %q is not a recognized policy source", src)
-		}
+	if err := policycore.ValidateSources(sources); err != nil {
+		return oops.E(oops.CodeInvalid, err, "%s", err)
 	}
 	return nil
 }
 
 func validateSourceAction(sources []string, action string) error {
-	// warn (challenge) can end in a block, so it is subject to the same
-	// flag-only-source constraint as block: only "flag" is unconstrained.
-	if action == "flag" {
-		return nil
-	}
-	for _, src := range []string{shadowmcp.SourceDestructiveTool, ra.SourceCLIDestructive, ra.SourceAccountIdentity} {
-		if slices.Contains(sources, src) {
-			return oops.E(oops.CodeInvalid, nil, "source %q supports flagging only", src)
-		}
+	if err := policycore.ValidateSourceAction(sources, action); err != nil {
+		return oops.E(oops.CodeInvalid, err, "%s", err)
 	}
 	return nil
 }
 
-// approvedDomainFormat matches a plausible DNS domain: LDH (letters, digits,
-// hyphen) labels joined by dots, at least two labels.
-var approvedDomainFormat = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$`)
-
-// validateApprovedEmailDomains normalizes the account_identity domain
-// allowlist (lowercase, trimmed, optional leading "@" stripped, deduped) and
-// rejects entries that are not plausible domains.
 func validateApprovedEmailDomains(domains []string) ([]string, error) {
-	out := make([]string, 0, len(domains))
-	seen := make(map[string]struct{}, len(domains))
-	for _, raw := range domains {
-		domain := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(raw)), "@")
-		if domain == "" {
-			continue
-		}
-		if !approvedDomainFormat.MatchString(domain) {
-			return nil, oops.E(oops.CodeInvalid, nil, "approved email domain %q is not a valid domain", raw)
-		}
-		if _, ok := seen[domain]; ok {
-			continue
-		}
-		seen[domain] = struct{}{}
-		out = append(out, domain)
+	out, err := policycore.NormalizeApprovedEmailDomains(domains)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "%s", err)
 	}
 	return out, nil
 }
 
 func validatePolicyName(name string) error {
-	if name == "" {
-		return oops.E(oops.CodeInvalid, nil, "name must not be empty")
-	}
-	if len([]rune(name)) > 100 {
-		return oops.E(oops.CodeInvalid, nil, "name must be at most 100 characters")
+	if err := policycore.ValidateName(name); err != nil {
+		return oops.E(oops.CodeInvalid, err, "%s", err)
 	}
 	return nil
 }
 
-// validatePolicyType ensures policy_type is one of the supported discriminators.
 func validatePolicyType(policyType string) error {
-	switch policyType {
-	case ra.PolicyTypeStandard, ra.PolicyTypePromptBased:
-		return nil
-	default:
-		return oops.E(oops.CodeInvalid, nil, "policy_type must be one of: standard, prompt_based")
+	if err := policycore.ValidatePolicyType(policyType); err != nil {
+		return oops.E(oops.CodeInvalid, err, "%s", err)
 	}
+	return nil
 }
 
 func payloadHasPromptPolicyDetectionConfig(payload *gen.UpdateRiskPolicyPayload) bool {
@@ -4260,24 +4081,6 @@ func marshalModelConfig(mc *types.RiskPolicyModelConfig) ([]byte, error) {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid model_config")
 	}
 	return raw, nil
-}
-
-// unmarshalModelConfig decodes the JSONB column value into the API model config.
-// Returns nil for NULL/empty or unparseable values so a malformed row never
-// breaks policy reads.
-func unmarshalModelConfig(raw []byte) *types.RiskPolicyModelConfig {
-	if len(raw) == 0 {
-		return nil
-	}
-	var mc promptModelConfig
-	if err := json.Unmarshal(raw, &mc); err != nil {
-		return nil
-	}
-	return &types.RiskPolicyModelConfig{
-		Model:       mc.Model,
-		Temperature: mc.Temperature,
-		FailOpen:    mc.FailOpen,
-	}
 }
 
 // fallbackPromptPolicyName is used when the LLM naming call is unavailable
