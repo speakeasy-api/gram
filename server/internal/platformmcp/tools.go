@@ -90,6 +90,7 @@ type MCP struct {
 	ProjectSlug      string            `json:"project_slug,omitempty"`
 	Name             string            `json:"name,omitempty"`
 	Slug             string            `json:"slug,omitempty"`
+	Version          string            `json:"version,omitempty"`
 	Visibility       string            `json:"visibility"`
 	EffectiveEnabled bool              `json:"effective_enabled"`
 	Model            string            `json:"model"`
@@ -159,6 +160,9 @@ func newServer(reader Reader, catalog Catalog, registrations *RegistrationServic
 	if registrations == nil || !registrations.budgets.Catalog.valid() {
 		registerUnavailableCatalogTools(reg)
 		registerUnavailableCandidateInspectionTool(reg)
+	} else if catalog == nil && (registrations.directRemoteInspector == nil || registrations.gate == nil) {
+		registerUnavailableCatalogTools(reg)
+		registerUnavailableCandidateInspectionTool(reg)
 	} else {
 		registerCandidateInspectionTool(reg, catalog, registrations.directRemoteInspector, registrations.gate, registrations.budgets.Catalog)
 		if catalog == nil {
@@ -179,6 +183,11 @@ func newServer(reader Reader, catalog Catalog, registrations *RegistrationServic
 		} else {
 			registerRemoteRegistrationTool(reg, registrations)
 		}
+	}
+	if registrations == nil || registrations.lifecycleMetadata == nil {
+		registerUnavailableLifecycleMetadataTool(reg)
+	} else {
+		registerLifecycleMetadataTool(reg, registrations)
 	}
 	if registrations == nil || registrations.store == nil || !registrations.budgets.Handoff.valid() {
 		registerUnavailableSetupHandoffTool(reg)
@@ -273,6 +282,14 @@ func registerUnavailableRemoteRegistrationTool(reg *Registrar) {
 	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("direct_remote_registration"))
 }
 
+func registerUnavailableLifecycleMetadataTool(reg *Registrar) {
+	addTool(reg, &mcp.Tool{
+		Name:        "update_mcp_metadata",
+		Title:       "Update MCP Metadata",
+		Description: "Rename one Platform-managed MCP. Metadata updates are not available in the current preview.",
+	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("mcp_lifecycle_metadata"))
+}
+
 func registerUnavailableSetupHandoffTool(reg *Registrar) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_setup_handoff",
@@ -323,7 +340,7 @@ func operationBudgetToolResult(err error) (*mcp.CallToolResult, bool) {
 	switch {
 	case errors.Is(err, ErrReadinessRegistrationNotFound):
 		result = operationBudgetResult{Code: "registration_not_found", Message: "This registration ID is not available for the selected project and authenticated connection. Use the ID returned by register_platform_mcp_for_project or get_platform_mcp_onboarding_status."}
-	case errors.Is(err, ErrRegistrationInvalid), errors.Is(err, ErrReadinessInvalid), errors.Is(err, ErrCatalogConfigurationRejected), errors.Is(err, ErrCatalogRejected), errors.Is(err, ErrCatalogCursorInvalid):
+	case errors.Is(err, ErrRegistrationInvalid), errors.Is(err, ErrLifecycleMetadataInvalid), errors.Is(err, ErrReadinessInvalid), errors.Is(err, ErrCatalogConfigurationRejected), errors.Is(err, ErrCatalogRejected), errors.Is(err, ErrCatalogCursorInvalid):
 		result = operationBudgetResult{Code: "invalid_request", Message: "The requested Platform MCP operation is invalid or no longer matches the reviewed catalogue. Re-read the supported tool result and do not retry unchanged input."}
 	case errors.Is(err, ErrOperationRateLimited), errors.Is(err, ErrReadinessRateLimited):
 		result = operationBudgetResult{Code: "rate_limited", Message: "This Platform MCP operation is temporarily rate limited. Retry after a short delay."}

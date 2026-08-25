@@ -24,6 +24,8 @@ const (
 	DocsOrganizationLimitName         = "platform-mcp-docs-organization"
 	SkillsConnectionLimitName         = "platform-mcp-skills-connection"
 	SkillsOrganizationLimitName       = "platform-mcp-skills-organization"
+	LifecycleConnectionLimitName      = "platform-mcp-lifecycle-connection"
+	LifecycleOrganizationLimitName    = "platform-mcp-lifecycle-organization"
 )
 
 const (
@@ -118,7 +120,8 @@ func (b OperationBudget) Allow(ctx context.Context, principal Principal) error {
 // External Platform MCP calls are isolated by their OAuth connection. A managed
 // assistant has no connection, so it is isolated by its fixed client identity
 // and the real user that authorized the action; it never pools all assistants
-// into one empty-key bucket.
+// into one empty-key bucket. A dashboard setup handoff has no OAuth connection
+// either, so it receives its own user-scoped bucket.
 func operationBudgetActorKey(principal Principal) (string, error) {
 	if principal.HasConnection() {
 		if principal.ConnectionID == "" {
@@ -126,10 +129,20 @@ func operationBudgetActorKey(principal Principal) (string, error) {
 		}
 		return principal.ConnectionID, nil
 	}
-	if principal.surface() != SurfaceProjectAssistant || principal.ClientID == "" || principal.UserID == "" {
+	if principal.UserID == "" {
 		return "", ErrOperationBudgetUnavailable
 	}
-	return "assistant:" + principal.ClientID + ":" + principal.UserID, nil
+	switch principal.surface() {
+	case SurfaceProjectAssistant:
+		if principal.ClientID == "" {
+			return "", ErrOperationBudgetUnavailable
+		}
+		return "assistant:" + principal.ClientID + ":" + principal.UserID, nil
+	case SurfaceDashboard:
+		return "dashboard:" + principal.UserID, nil
+	default:
+		return "", ErrOperationBudgetUnavailable
+	}
 }
 
 // OperationBudgets groups the independently metered public Platform MCP
@@ -147,7 +160,8 @@ type OperationBudgets struct {
 	// obtain the version token its next write needs, and metering the read
 	// separately would only let a loop spend twice as much reaching the same
 	// write.
-	Skills OperationBudget
+	Skills            OperationBudget
+	LifecycleMetadata OperationBudget
 	// Diagnostics meters the observability reads. They are bounded aggregate
 	// queries over Gram-owned telemetry, so the cost being metered is the
 	// ClickHouse scan, not an external egress.
@@ -211,5 +225,5 @@ func (b DrilldownVolumeBudget) allow(ctx context.Context, principal Principal, l
 }
 
 func (b OperationBudgets) Valid() bool {
-	return b.Catalog.valid() && b.Registration.valid() && b.Handoff.valid() && b.SetupStart.valid() && b.Repair.valid() && b.Docs.valid() && b.Skills.valid() && b.Diagnostics.valid() && b.SensitiveDiagnostics.valid() && b.DrilldownVolume.valid()
+	return b.Catalog.valid() && b.Registration.valid() && b.Handoff.valid() && b.SetupStart.valid() && b.Repair.valid() && b.Docs.valid() && b.Skills.valid() && b.LifecycleMetadata.valid() && b.Diagnostics.valid() && b.SensitiveDiagnostics.valid() && b.DrilldownVolume.valid()
 }

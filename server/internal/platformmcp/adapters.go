@@ -285,18 +285,20 @@ func (r *PostgresReadinessRecorder) RecordReady(ctx context.Context, principal P
 }
 
 type PostgresReader struct {
-	logger          *slog.Logger
-	reader          *readmodel.Reader
-	inventory       *platformrepo.Queries
-	inventoryCursor *inventoryCursorCodec
+	logger             *slog.Logger
+	reader             *readmodel.Reader
+	inventory          *platformrepo.Queries
+	inventoryCursor    *inventoryCursorCodec
+	metadataVersionKey []byte
 }
 
 func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 	return &PostgresReader{
-		logger:          logger.With(attr.SlogComponent("platformmcp")),
-		reader:          readmodel.New(db),
-		inventory:       platformrepo.New(db),
-		inventoryCursor: nil,
+		logger:             logger.With(attr.SlogComponent("platformmcp")),
+		reader:             readmodel.New(db),
+		inventory:          platformrepo.New(db),
+		inventoryCursor:    nil,
+		metadataVersionKey: nil,
 	}
 }
 
@@ -304,6 +306,7 @@ func (r *PostgresReader) setInventoryCursorKey(keyMaterial string) {
 	codec, err := newInventoryCursorCodec(keyMaterial)
 	if err == nil {
 		r.inventoryCursor = codec
+		r.metadataVersionKey = lifecycleMetadataVersionKey(keyMaterial)
 	}
 }
 
@@ -392,7 +395,9 @@ func (r *PostgresReader) FindMCP(ctx context.Context, principal Principal, input
 	}
 	mcps := make([]MCP, 0, len(rows))
 	for _, row := range rows {
-		mcps = append(mcps, mcpFromInventoryRow(row, byRegistration))
+		mcp := mcpFromInventoryRow(row, byRegistration)
+		r.setInventoryVersion(&mcp)
+		mcps = append(mcps, mcp)
 	}
 	if query != "" {
 		return FindMCPOutput{MCPs: inventoryQueryResult(mcps, query, limit), NextCursor: ""}, nil
@@ -455,7 +460,29 @@ func (r *PostgresReader) GetMCP(ctx context.Context, principal Principal, input 
 		}
 		byRegistration = inventoryDistributions(distributions)
 	}
-	return mcpFromInventoryItem(row, byRegistration), nil
+	mcp := mcpFromInventoryItem(row, byRegistration)
+	r.setInventoryVersion(&mcp)
+	return mcp, nil
+}
+
+func (r *PostgresReader) setInventoryVersion(mcp *MCP) {
+	if r == nil || mcp == nil || mcp.Registration == nil || len(r.metadataVersionKey) == 0 {
+		return
+	}
+	mcp.Version = lifecycleMetadataVersion(r.metadataVersionKey, mcp.ID, mcp.ProjectID, inventoryMCPDisplayName(mcp), mcp.Slug, mcp.Visibility)
+}
+
+func inventoryMCPDisplayName(mcp *MCP) string {
+	if mcp == nil {
+		return ""
+	}
+	if mcp.Name != "" {
+		return mcp.Name
+	}
+	if mcp.Slug != "" {
+		return mcp.Slug
+	}
+	return mcp.ID
 }
 
 func (r *PostgresReader) resolveInventoryProject(ctx context.Context, organizationID string, input FindMCPInput) (ResolvedProject, error) {

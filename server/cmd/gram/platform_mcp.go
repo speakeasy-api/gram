@@ -28,6 +28,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/localfixture"
@@ -193,7 +195,8 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 			Connection:   ratelimit.New(limitStore, platformmcp.DocsConnectionLimitName, ratelimit.PerMinute(platformmcp.DocsQueriesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 			Organization: ratelimit.New(limitStore, platformmcp.DocsOrganizationLimitName, ratelimit.PerMinute(platformmcp.DocsQueriesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		},
-		Skills: newBudget(platformmcp.SkillsConnectionLimitName, platformmcp.SkillsOrganizationLimitName),
+		Skills:            newBudget(platformmcp.SkillsConnectionLimitName, platformmcp.SkillsOrganizationLimitName),
+		LifecycleMetadata: newBudget(platformmcp.LifecycleConnectionLimitName, platformmcp.LifecycleOrganizationLimitName),
 		// Diagnostics are read-only aggregate queries an administrator runs
 		// while investigating, so they are metered well above the shared
 		// five-per-minute mutation budget.
@@ -237,8 +240,13 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		budgets.Repair,
 		platformmcp.NewRemoteMCPReadinessProber(config.Logger, config.DB, config.Encryption, config.GuardianPolicy, config.RemoteChallengeManager),
 	).WithTelemetry(telemetry)
+	lifecycleMetadata, err := newPlatformMCPLifecycleMetadataService(config)
+	if err != nil {
+		return AssistantSurface{}, fmt.Errorf("create Platform MCP lifecycle metadata service: %w", err)
+	}
 	registrations := platformmcp.NewRegistrationService(catalog, registrationGate, store).
 		WithDirectRemoteInspector(platformmcp.NewGuardianDirectRemoteInspector(config.GuardianPolicy)).
+		WithLifecycleMetadata(lifecycleMetadata).
 		WithOperationBudgets(budgets).
 		WithReadiness(readiness).
 		WithDashboardURL(config.DashboardURL).
@@ -308,6 +316,28 @@ func platformMCPSetupResources(config platformMCPConfig) ([]platformmcp.SetupRes
 		return nil, fmt.Errorf("build platform mcp setup corpus: %w", err)
 	}
 	return resources, nil
+}
+
+func newPlatformMCPLifecycleMetadataService(config platformMCPConfig) (*platformmcp.LifecycleMetadataService, error) {
+	return platformmcp.NewLifecycleMetadataService(config.DB, func(ctx context.Context, tx pgx.Tx, existing mcpserversrepo.McpServer, input platformmcp.LifecycleMetadataUpdate) (mcpserversrepo.McpServer, error) {
+		name := input.Name
+		return mcpservers.UpdateMCPServerLifecycleInTransaction(ctx, tx, config.AuditLogger, existing, mcpservers.LifecycleUpdateInput{
+			OrganizationID:        input.OrganizationID,
+			ProjectID:             input.ProjectID,
+			ActorUserID:           input.ActorUserID,
+			ActorEmail:            nil,
+			ServerID:              input.ServerID,
+			Name:                  &name,
+			Visibility:            existing.Visibility,
+			EnvironmentID:         existing.EnvironmentID,
+			UserSessionIssuerID:   existing.UserSessionIssuerID,
+			RemoteMcpServerID:     existing.RemoteMcpServerID,
+			TunneledMcpServerID:   existing.TunneledMcpServerID,
+			ToolsetID:             existing.ToolsetID,
+			UnproxiedMcpServerID:  existing.UnproxiedMcpServerID,
+			ToolVariationsGroupID: existing.ToolVariationsGroupID,
+		})
+	}, config.JWTSigningKey)
 }
 
 func newPlatformMCPDistributionService(config platformMCPConfig) *platformmcp.DistributionService {
@@ -419,7 +449,8 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 			Connection:   ratelimit.New(limitStore, platformmcp.DocsConnectionLimitName, ratelimit.PerMinute(platformmcp.DocsQueriesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 			Organization: ratelimit.New(limitStore, platformmcp.DocsOrganizationLimitName, ratelimit.PerMinute(platformmcp.DocsQueriesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		},
-		Skills: newBudget(platformmcp.SkillsConnectionLimitName, platformmcp.SkillsOrganizationLimitName),
+		Skills:            newBudget(platformmcp.SkillsConnectionLimitName, platformmcp.SkillsOrganizationLimitName),
+		LifecycleMetadata: newBudget(platformmcp.LifecycleConnectionLimitName, platformmcp.LifecycleOrganizationLimitName),
 		// Diagnostics are read-only aggregate queries an administrator runs
 		// while investigating, so they are metered well above the shared
 		// five-per-minute mutation budget.
@@ -463,8 +494,13 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		budgets.Repair,
 		platformmcp.NewRemoteMCPReadinessProber(config.Logger, config.DB, config.Encryption, config.GuardianPolicy, config.RemoteChallengeManager),
 	).WithTelemetry(telemetry)
+	lifecycleMetadata, err := newPlatformMCPLifecycleMetadataService(config)
+	if err != nil {
+		return AssistantSurface{}, fmt.Errorf("create local Platform MCP lifecycle metadata service: %w", err)
+	}
 	registrations := platformmcp.NewRegistrationService(catalog, registrationGate, store).
 		WithDirectRemoteInspector(platformmcp.NewGuardianDirectRemoteInspector(config.GuardianPolicy)).
+		WithLifecycleMetadata(lifecycleMetadata).
 		WithOperationBudgets(budgets).
 		WithReadiness(readiness).
 		WithDashboardURL(config.DashboardURL).

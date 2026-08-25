@@ -126,6 +126,7 @@ func mcpFromInventory(id, projectID uuid.UUID, projectName, projectSlug, name, s
 		ProjectSlug:      projectSlug,
 		Name:             name,
 		Slug:             slug,
+		Version:          "",
 		Visibility:       visibility,
 		EffectiveEnabled: visibility != "disabled",
 		Model:            "",
