@@ -157,9 +157,11 @@ export function ModeSwitcher({ mode }: { mode: Mode }): JSX.Element | null {
           aria-hidden="true"
           className={cn(
             "absolute inset-y-0.5 left-0.5 rounded-full transition-colors duration-500",
+            // Off the ink the pill follows the theme — a fixed-dark pill is
+            // invisible on a dark-mode bar.
             onInk
               ? "bg-surface-primary-fixed-light"
-              : "bg-surface-primary-fixed-dark",
+              : "bg-surface-primary-inverse",
           )}
           style={{
             width: `${SEGMENT_WIDTH_REM}rem`,
