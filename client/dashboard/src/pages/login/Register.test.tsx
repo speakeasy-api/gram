@@ -1,5 +1,4 @@
 import { cleanup, render, screen } from "@testing-library/react";
-import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import Register from "./Register";
@@ -16,13 +15,6 @@ vi.mock("react-router", () => ({
   ),
   useSearchParams: mocks.useSearchParams,
 }));
-vi.mock("./components/auth-shell", () => ({
-  AuthShell: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-}));
-vi.mock("./components/register-panel", () => ({
-  RegisterPanel: () => <div data-testid="register-panel" />,
-}));
-
 function renderAt(path: string) {
   const [, search = ""] = path.split("?");
   mocks.useSearchParams.mockReturnValue([new URLSearchParams(search), vi.fn()]);
