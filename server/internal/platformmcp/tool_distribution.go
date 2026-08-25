@@ -141,6 +141,8 @@ func distributionToolError(err error) (*mcp.CallToolResult, bool) {
 		result = distributionErrorResult{Code: "distribution_target_unavailable", Message: "The selected project or its Platform MCP setup is no longer available. Check onboarding status and choose the supported next action."}
 	case errors.Is(err, ErrDistributionConflict):
 		result = distributionErrorResult{Code: "conflict", Message: "The project distribution changed. Check onboarding status and retry the supported next action."}
+	case errors.Is(err, ErrDistributionBlockedPendingApproval):
+		result = distributionErrorResult{Code: "conflict", Message: "This MCP is awaiting Shadow MCP approval, so it cannot be distributed yet. Ask an administrator to approve it in the AI Control Plane dashboard, then retry."}
 	default:
 		return nil, false
 	}
