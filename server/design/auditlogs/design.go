@@ -36,6 +36,7 @@ var _ = Service("auditlogs", func() {
 			Param("action")
 			Param("subject_type")
 			Param("subject_id")
+			Param("subject_ids")
 			Param("acting_surface")
 		})
 
@@ -127,6 +128,10 @@ var ListAuditLogsForm = Type("ListAuditLogsForm", func() {
 	})
 	Attribute("subject_id", String, func() {
 		Description("Subject ID to filter audit logs to a specific subject (e.g. a single assistant).")
+	})
+	Attribute("subject_ids", ArrayOf(String), func() {
+		Description("Subject IDs to filter audit logs to a set of subjects at once, e.g. a resource together with the child resources whose events name the child as the subject. Matches any listed subject of any subject type, except that assistant activity events stay excluded unless subject_type is 'assistant'; combine with subject_type to pin the kind. Blank entries are ignored.")
+		MaxLength(200)
 	})
 	Attribute("acting_surface", String, func() {
 		Description("Acting surface to filter audit logs to changes made through one surface, e.g. 'platform_mcp' to review agent-driven activity alone.")

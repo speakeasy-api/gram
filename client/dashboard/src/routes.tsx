@@ -83,6 +83,10 @@ import {
   ExternalServicesRoot,
 } from "./pages/org/external-services/ExternalServices";
 import ExternalKeyDetail from "./pages/org/encryption-keys/ExternalKeyDetail";
+import JsonWebKeySetDetail, {
+  SigningKeySetsIndex,
+  SigningKeySetsRoot,
+} from "./pages/org/encryption-keys/jwks/JsonWebKeySetDetail";
 import {
   EncryptionKeysPage,
   EncryptionKeysRoot,
@@ -1101,6 +1105,32 @@ const ORG_ROUTE_STRUCTURE = {
         component: ExternalKeyDetail,
         subPages: {
           overview: { title: "Overview", url: "overview" },
+          signingKeys: { title: "Signing Keys", url: "signing-keys" },
+          settings: { title: "Settings", url: "settings" },
+        },
+      },
+    },
+  },
+  // Signing key sets are listed on the Encryption Keys page (a set is the
+  // published face of the KMS key that backs it), but their detail pages get
+  // their own top-level path so a set id can never be mistaken for the
+  // :provider/:keyId segments of an encryption key. The index redirects to
+  // that list, which keeps the breadcrumb and command palette entry landing
+  // somewhere real. Not in the sidebar.
+  signingKeySets: {
+    title: "Signing Key Sets",
+    url: "signing-keys",
+    icon: "key-round",
+    component: SigningKeySetsRoot,
+    indexComponent: SigningKeySetsIndex,
+    subPages: {
+      setDetail: {
+        title: "Signing Key Set",
+        url: ":setId",
+        component: JsonWebKeySetDetail,
+        subPages: {
+          overview: { title: "Overview", url: "overview" },
+          keys: { title: "Keys", url: "keys" },
           settings: { title: "Settings", url: "settings" },
         },
       },
