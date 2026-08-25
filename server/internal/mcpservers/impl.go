@@ -1168,8 +1168,9 @@ func verifyTunneledPublicConsent(ctx context.Context, dbtx pgx.Tx, projectID uui
 
 // verifyMetaMcpBackendUniqueness rejects repointing a server onto a backend a
 // co-member of one of its meta MCP servers already fronts, the state
-// metamcp.AddMetaMcpMember refuses at attach time. The two paths share no
-// lock, so a simultaneous attach of the colliding member can still slip past.
+// metamcp.AddMetaMcpMember refuses at attach time. Running after the server
+// lock leaves nowhere to also take the meta lock without inverting that path's
+// meta-then-server order, so a simultaneous attach can still slip past.
 func verifyMetaMcpBackendUniqueness(
 	ctx context.Context,
 	dbtx pgx.Tx,

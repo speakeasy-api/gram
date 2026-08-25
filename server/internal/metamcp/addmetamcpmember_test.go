@@ -191,7 +191,7 @@ func TestAddMetaMcpMember_AllowsDistinctBackends(t *testing.T) {
 
 	meta := seedMetaMcpServer(t, ctx, ti, "distinct backend host")
 
-	// One server per backend kind: every member leaves two of the three
+	// One server per backend kind: every member leaves three of the four
 	// backend columns null, so a null-matching guard would reject these.
 	servers := []uuid.UUID{
 		seedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID),
@@ -201,6 +201,9 @@ func TestAddMetaMcpMember_AllowsDistinctBackends(t *testing.T) {
 		}),
 		seedMcpServerFronting(t, ctx, ti.conn, *authCtx.ProjectID, mcpserversrepo.CreateMCPServerParams{
 			ToolsetID: conv.ToNullUUID(seedToolsetBackend(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID)),
+		}),
+		seedMcpServerFronting(t, ctx, ti.conn, *authCtx.ProjectID, mcpserversrepo.CreateMCPServerParams{
+			UnproxiedMcpServerID: conv.ToNullUUID(seedUnproxiedBackend(t, ctx, ti.conn, *authCtx.ProjectID)),
 		}),
 	}
 
