@@ -423,7 +423,7 @@ func (q *Queries) ForceSoftDeleteUserAccountsByEmail(ctx context.Context, arg Fo
 const forceSoftDeleteUserSessionIssuer = `-- name: ForceSoftDeleteUserSessionIssuer :exec
 UPDATE user_session_issuers
 SET deleted_at = clock_timestamp()
-WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
+WHERE id = $1 AND project_id = $2::uuid AND deleted IS FALSE
 `
 
 type ForceSoftDeleteUserSessionIssuerParams struct {
@@ -1593,7 +1593,7 @@ func (q *Queries) SetRemoteSessionResourceFixture(ctx context.Context, arg SetRe
 const setUserSessionIssuerCIMDAdmissionMode = `-- name: SetUserSessionIssuerCIMDAdmissionMode :exec
 UPDATE user_session_issuers
 SET client_id_metadata_admission_mode = $1
-WHERE id = $2 AND project_id = $3 AND deleted IS FALSE
+WHERE id = $2 AND project_id = $3::uuid AND deleted IS FALSE
 `
 
 type SetUserSessionIssuerCIMDAdmissionModeParams struct {

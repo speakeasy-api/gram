@@ -286,7 +286,7 @@ func TestRefreshUserSessionClientCIMD_AuthMethodDowngradeRefused(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeInvalid)
 	require.ErrorContains(t, err, "Revoke the client")
 
-	after, err := repo.New(ti.conn).GetUserSessionClientByID(ctx, repo.GetUserSessionClientByIDParams{ID: committed.ID, ProjectID: committed.ProjectID})
+	after, err := repo.New(ti.conn).GetUserSessionClientByID(ctx, repo.GetUserSessionClientByIDParams{ID: committed.ID, ProjectID: committed.ProjectID.UUID})
 	require.NoError(t, err)
 	require.Equal(t, "private_key_jwt", after.TokenEndpointAuthMethod.String)
 	require.JSONEq(t, publishedKeys, string(after.ClientJwks))
@@ -312,7 +312,7 @@ func TestRefreshUserSessionClientCIMD_LegacyNullMethodRowRefreshes(t *testing.T)
 	require.NoError(t, err)
 	require.Equal(t, "Refreshed Legacy Client", got.ClientName)
 
-	after, err := repo.New(ti.conn).GetUserSessionClientByID(ctx, repo.GetUserSessionClientByIDParams{ID: legacy.ID, ProjectID: legacy.ProjectID})
+	after, err := repo.New(ti.conn).GetUserSessionClientByID(ctx, repo.GetUserSessionClientByIDParams{ID: legacy.ID, ProjectID: legacy.ProjectID.UUID})
 	require.NoError(t, err)
 	require.Equal(t, "none", after.TokenEndpointAuthMethod.String)
 }

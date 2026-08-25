@@ -393,7 +393,7 @@ func userSessionIssuerView(row repo.UserSessionIssuer) *types.UserSessionIssuer 
 	mode, _ := admission.ResolveMode(row.ClientIDMetadataAdmissionMode.String, row.ClientIDMetadataAdmissionMode.Valid)
 	return &types.UserSessionIssuer{
 		ID:                            row.ID.String(),
-		ProjectID:                     row.ProjectID.String(),
+		ProjectID:                     row.ProjectID.UUID.String(),
 		Slug:                          row.Slug,
 		AuthnChallengeMode:            row.AuthnChallengeMode,
 		SessionDurationHours:          int(dur / time.Hour),
