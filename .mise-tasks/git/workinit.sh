@@ -61,16 +61,19 @@ suffix=$(LC_ALL=C tr -dc 'a-z0-9' < /dev/urandom | head -c 4)
 compose_project="gram-infra-${suffix}"
 mise set --file mise.local.toml "COMPOSE_PROJECT_NAME=${compose_project}"
 
+# Temporal runs once for the whole machine. A namespace per Compose project
+# isolates workflow IDs, schedules, and task queues across worktrees.
+mise set --file mise.local.toml "TEMPORAL_NAMESPACE=${compose_project}"
+
 # Pub/Sub resource paths include the project ID. Giving each worktree its
 # Compose project ID keeps identical topic and subscription IDs isolated when
 # every worktree connects to one shared emulator.
 mise set --file mise.local.toml "GRAM_GCP_PROJECT_ID=${compose_project}"
 
-# The LGTM stack is shared across every worktree (compose.shared.yml), so all of
-# their traces and metrics land in one Tempo/Prometheus. Tagging each worktree's
-# telemetry with its compose project is what keeps those signals apart — without
-# it, two worktrees on the same commit emit identical Prometheus series. The
-# OTel SDK reads this env var directly, so nothing in the Go code has to know.
+# Temporal, Pub/Sub, and LGTM are shared across every worktree
+# (compose.shared.yml). The namespace and project ID above isolate state; this
+# label keeps traces and metrics separate too. The OTel SDK reads it directly,
+# so nothing in the Go code has to know.
 mise set --file mise.local.toml "OTEL_RESOURCE_ATTRIBUTES=worktree=${compose_project}"
 
 remap=$(mise run zero:remap-ports --format flat --file -)
