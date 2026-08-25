@@ -65,6 +65,17 @@ func NewRemoteSource(jwksURI string) (Source, error) {
 	return Source{kind: sourceRemote, inline: nil, uri: jwksURI, origin: parsed.Host}, nil
 }
 
+// ValidateURI reports whether a jwks_uri satisfies the syntax every remote
+// key source must satisfy, without building a Source from it.
+//
+// The rules are NewRemoteSource's, and stay the same on purpose: no
+// specification narrows jwks_uri beyond the https scheme, so registration
+// applies no extra policy of its own.
+func ValidateURI(jwksURI string) error {
+	_, err := parseJWKSURI(jwksURI)
+	return err
+}
+
 // CacheKey is the storage key for this source's resolved key set: the
 // jwks_uri itself. Keying by URL rather than by consumer row is deliberate —
 // OpenAI publishes one jwks_uri shared by every per-connector client_id, so
