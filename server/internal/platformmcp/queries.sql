@@ -24,6 +24,80 @@ FROM platform_mcp_oauth_clients
 WHERE client_id = @client_id
   AND revoked_at IS NULL;
 
+-- name: UpsertPlatformMCPOAuthClientFromCIMD :one
+-- Lazy upsert for a client resolved from a Client ID Metadata Document at
+-- authorize time. For CIMD rows the document URL IS the client_id, so the
+-- conflict target is the same unique index that serves DCR lookups. On
+-- refresh the mutable metadata (client_name, redirect_uris) and every cache
+-- column are replaced wholesale, including the ETag, which is set to NULL
+-- when the response carried no usable validator so the next refresh is
+-- unconditional rather than replaying a stale one.
+--
+-- The cache expiry is derived from the database clock rather than the
+-- application's, so it can never land before the client_id_metadata_fetched_at
+-- written in the same statement.
+--
+-- The DO UPDATE is guarded so it can never touch a secret-bearing DCR row
+-- that happens to share the client_id, nor resurrect a revoked one:
+-- rewriting the former would trip the client_id_metadata_uri CHECK
+-- constraints with an opaque 500, and the latter would undo an operator's
+-- revocation. Either collision surfaces as no-rows, which the resolver maps
+-- to invalid_client.
+INSERT INTO platform_mcp_oauth_clients (
+    client_id,
+    client_secret_hash,
+    client_name,
+    redirect_uris,
+    client_secret_expires_at,
+    client_id_metadata_uri,
+    client_id_metadata_fetched_at,
+    client_id_metadata_cache_expires_at,
+    client_id_metadata_etag
+) VALUES (
+    @client_id,
+    NULL,
+    @client_name,
+    @redirect_uris,
+    NULL,
+    @client_id,
+    clock_timestamp(),
+    clock_timestamp() + make_interval(secs => @cache_ttl_seconds::double precision),
+    sqlc.narg('client_id_metadata_etag')
+)
+ON CONFLICT (client_id)
+DO UPDATE SET
+    client_name = EXCLUDED.client_name,
+    redirect_uris = EXCLUDED.redirect_uris,
+    client_id_metadata_uri = EXCLUDED.client_id_metadata_uri,
+    client_id_metadata_fetched_at = EXCLUDED.client_id_metadata_fetched_at,
+    client_id_metadata_cache_expires_at = EXCLUDED.client_id_metadata_cache_expires_at,
+    client_id_metadata_etag = EXCLUDED.client_id_metadata_etag,
+    updated_at = clock_timestamp()
+WHERE platform_mcp_oauth_clients.client_secret_hash IS NULL
+  AND platform_mcp_oauth_clients.revoked_at IS NULL
+RETURNING *;
+
+-- name: UpdatePlatformMCPOAuthClientCIMDCache :one
+-- Refreshes the cache bookkeeping on a CIMD-resolved client whose document
+-- host answered 304 Not Modified. The stored client_name and redirect_uris
+-- are current by definition of the 304, so they are deliberately untouched;
+-- only the fetch stamp, the expiry, and the validator move.
+--
+-- The guards mirror UpsertPlatformMCPOAuthClientFromCIMD's, so this statement
+-- can never push a row into violating the client_id_metadata_uri CHECK
+-- constraints; such a collision surfaces as no-rows, which the resolver maps
+-- to invalid_client.
+UPDATE platform_mcp_oauth_clients
+SET client_id_metadata_fetched_at = clock_timestamp(),
+    client_id_metadata_cache_expires_at = clock_timestamp() + make_interval(secs => @cache_ttl_seconds::double precision),
+    client_id_metadata_etag = sqlc.narg('client_id_metadata_etag'),
+    updated_at = clock_timestamp()
+WHERE client_id = @client_id
+  AND client_id_metadata_uri IS NOT NULL
+  AND client_secret_hash IS NULL
+  AND revoked_at IS NULL
+RETURNING *;
+
 -- name: GetPlatformMCPOAuthClientForUpdate :one
 SELECT *
 FROM platform_mcp_oauth_clients
