@@ -105,6 +105,26 @@ function OpencodeIcon({ className }: { className?: string }): JSX.Element {
   );
 }
 
+// OpenClaw mark — a simple pincer drawn in-house until official brand art is
+// vendored. Uses currentColor like the sibling icons.
+function OpenClawIcon({ className }: { className?: string }): JSX.Element {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path d="M12 3a9 9 0 1 0 9 9h-4a5 5 0 1 1-5-5V3Z" fill="currentColor" />
+      <path
+        d="M14 3a9 9 0 0 1 7.94 7h-4.1A5 5 0 0 0 14 7.1V3Z"
+        fill="currentColor"
+        fillOpacity="0.4"
+      />
+    </svg>
+  );
+}
+
 // Devin (Cognition) logo. Geometry from the LobeHub icon set; uses currentColor
 // so it picks up text color like the sibling icons.
 function DevinIcon({ className }: { className?: string }): JSX.Element {
@@ -338,6 +358,8 @@ export function AgentProviderIcon({
       return <CodexIcon className={className} />;
     case "opencode":
       return <OpencodeIcon className={className} />;
+    case "openclaw":
+      return <OpenClawIcon className={className} />;
     case "litellm":
       return (
         <img src="/icons/platforms/litellm.png" alt="" className={className} />
