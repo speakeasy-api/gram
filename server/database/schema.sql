@@ -6112,6 +6112,11 @@ CREATE TABLE IF NOT EXISTS gcp_iam_credentials (
   wif_pool_id TEXT,
   wif_provider_id TEXT,
   wif_project_number TEXT,
+  -- Exempts this credential from the validation that refuses an impersonation
+  -- target in the server's own GCP project. Recorded on the row because the
+  -- same validation runs on the outbound path, where there is no request actor
+  -- to consult.
+  skip_project_verification boolean NOT NULL DEFAULT FALSE,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   CONSTRAINT gcp_iam_credentials_pkey PRIMARY KEY (external_credential_id),
