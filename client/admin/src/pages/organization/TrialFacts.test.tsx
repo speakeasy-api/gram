@@ -145,9 +145,16 @@ describe("TrialFacts", () => {
       vi.advanceTimersByTime(75_000);
     });
 
-    expect(screen.getByText("Expired")).toBeTruthy();
+    expect(screen.getByText("State").nextElementSibling?.textContent).toBe(
+      "Expired",
+    );
     expect(screen.queryByText("Remaining")).toBeNull();
-    expect(screen.queryByText("Running")).toBeNull();
+    expect(
+      screen.getByText("Original end").nextElementSibling?.textContent,
+    ).toBe(new Date(end).toLocaleDateString());
+    expect(screen.getByText("Tier").nextElementSibling?.textContent).toBe(
+      "Enterprise",
+    );
     expect(vi.getTimerCount()).toBe(0);
   });
 
@@ -203,35 +210,77 @@ describe("TrialFacts", () => {
       />,
     );
 
-    expect(screen.getByText("Trial state not recognised")).toBeTruthy();
+    expect(screen.getByText("State").nextElementSibling?.textContent).toBe(
+      "Unknown",
+    );
   });
 
-  it.each(["converted", "demoted", "expired"] as const)(
-    "does not show completed lifecycle dates for %s trials",
-    (trialState) => {
-      const converted = "2026-05-01T00:00:00Z";
-      const demoted = "2026-05-02T00:00:00Z";
+  it.each([
+    ["converted", "Converted", "Conversion date"],
+    ["demoted", "Demoted", "Demotion date"],
+    ["expired", "Expired", undefined],
+  ] as const)(
+    "shows completed %s trial history without a countdown",
+    (trialState, stateLabel, lifecycleLabel) => {
+      const end = "2026-04-30T23:00:00Z";
+      const converted = "2026-05-01T23:00:00Z";
+      const demoted = "2026-05-02T23:00:00Z";
       render(
         <TrialFacts
           org={anOrganization({
             trial_state: trialState,
+            trial_tier: "enterprise",
+            trial_ends_at: end,
             trial_converted_at: converted,
             trial_demoted_at: demoted,
           })}
         />,
       );
 
+      expect(screen.getByText("State").nextElementSibling?.textContent).toBe(
+        stateLabel,
+      );
+      expect(screen.getByText("Tier").nextElementSibling?.textContent).toBe(
+        "Enterprise",
+      );
       expect(
-        screen.getByText(
-          trialState === "converted"
-            ? "Converted"
-            : trialState === "demoted"
-              ? "Demoted"
-              : "Expired",
-        ),
-      ).toBeTruthy();
-      expect(screen.queryByText(converted)).toBeNull();
-      expect(screen.queryByText(demoted)).toBeNull();
+        screen.getByText("Original end").nextElementSibling?.textContent,
+      ).toBe(new Date(end).toLocaleDateString());
+
+      if (lifecycleLabel) {
+        const lifecycleDate = trialState === "converted" ? converted : demoted;
+        expect(
+          screen.getByText(lifecycleLabel).nextElementSibling?.textContent,
+        ).toBe(new Date(lifecycleDate).toLocaleDateString());
+      }
+      expect(screen.queryByText("Remaining")).toBeNull();
+      expect(screen.queryByText("Conversion date") !== null).toBe(
+        trialState === "converted",
+      );
+      expect(screen.queryByText("Demotion date") !== null).toBe(
+        trialState === "demoted",
+      );
+    },
+  );
+
+  it.each(["converted", "demoted", "expired"] as const)(
+    "shows missing %s history as unknown",
+    (trialState) => {
+      render(<TrialFacts org={anOrganization({ trial_state: trialState })} />);
+
+      expect(screen.getByText("Tier").nextElementSibling?.textContent).toBe(
+        "Unknown",
+      );
+      expect(
+        screen.getByText("Original end").nextElementSibling?.textContent,
+      ).toBe("Unknown");
+      if (trialState !== "expired") {
+        expect(
+          screen.getByText(
+            trialState === "converted" ? "Conversion date" : "Demotion date",
+          ).nextElementSibling?.textContent,
+        ).toBe("Unknown");
+      }
     },
   );
 });
