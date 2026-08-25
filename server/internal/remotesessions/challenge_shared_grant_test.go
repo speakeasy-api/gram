@@ -203,7 +203,9 @@ func TestSoftDeleteSubjectSessions_FindsGrantMintedByDifferentIssuer(t *testing.
 
 	ctx, fx := seedSharedGrantAcrossIssuers(t)
 
-	creds, err := newTestUpstreamRevoker(t, fx.ti).SoftDeleteSubjectSessions(ctx, fx.ti.conn, fx.subject, fx.session.UserSessionIssuerID, fx.projectID, fx.organizationID)
+	require.Equal(t, fx.issuerA, fx.session.UserSessionIssuerID)
+
+	creds, err := newTestUpstreamRevoker(t, fx.ti).SoftDeleteSubjectSessions(ctx, fx.ti.conn, fx.subject, fx.issuerB, fx.projectID, fx.organizationID)
 	require.NoError(t, err)
 	require.Len(t, creds, 1)
 	require.Equal(t, fx.clientID, creds[0].RemoteSessionClientID)
@@ -363,7 +365,38 @@ func TestSoftDeleteSubjectSessions_FindsGrantAfterMintingIssuerSoftDeleted(t *te
 
 	ctx, fx := seedSharedGrantThenSoftDeleteMintingIssuer(t)
 
-	creds, err := newTestUpstreamRevoker(t, fx.ti).SoftDeleteSubjectSessions(ctx, fx.ti.conn, fx.subject, fx.session.UserSessionIssuerID, fx.projectID, fx.organizationID)
+	// The revoke runs through the live sibling issuer: the minting issuer is
+	// gone, so it is never the one a Gram session revoke arrives on.
+	creds, err := newTestUpstreamRevoker(t, fx.ti).SoftDeleteSubjectSessions(ctx, fx.ti.conn, fx.subject, fx.issuerB, fx.projectID, fx.organizationID)
+	require.NoError(t, err)
+	require.Len(t, creds, 1)
+	require.Equal(t, fx.clientID, creds[0].RemoteSessionClientID)
+
+	_, err = repo.New(fx.ti.conn).GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
+		SubjectUrn:            fx.subject,
+		RemoteSessionClientID: fx.clientID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
+func TestSoftDeleteSubjectSessions_RevokesGrantOnDetachedClient(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx := seedSharedGrantAcrossIssuers(t)
+
+	// Detaching the minting issuer leaves a live sibling binding, so no orphan
+	// cascade fires and the upstream tokens stay alive. A revoke arriving on
+	// the detached issuer must still destroy the grant it minted, or it
+	// reports success while the upstream credential survives.
+	detached, err := repo.New(fx.ti.conn).DetachRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachRemoteSessionClientFromUserSessionIssuerParams{
+		RemoteSessionClientID: fx.clientID,
+		UserSessionIssuerID:   fx.issuerA,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), detached)
+	requireUnboundClient(t, listBoundClientIDs(t, ctx, fx, fx.issuerA), fx.clientID)
+
+	creds, err := newTestUpstreamRevoker(t, fx.ti).SoftDeleteSubjectSessions(ctx, fx.ti.conn, fx.subject, fx.issuerA, fx.projectID, fx.organizationID)
 	require.NoError(t, err)
 	require.Len(t, creds, 1)
 	require.Equal(t, fx.clientID, creds[0].RemoteSessionClientID)

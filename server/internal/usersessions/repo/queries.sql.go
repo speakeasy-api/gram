@@ -909,7 +909,7 @@ func (q *Queries) IssuerAdmitsCimdClientURI(ctx context.Context, arg IssuerAdmit
 const listRemoteSessionUpstreamsForSubjects = `-- name: ListRemoteSessionUpstreamsForSubjects :many
 SELECT rs.id,
        rs.subject_urn,
-       blink.user_session_issuer_id,
+       usi.id AS user_session_issuer_id,
        rs.remote_session_client_id,
        rc.remote_session_issuer_id,
        ri.slug AS issuer_slug,
@@ -923,19 +923,25 @@ SELECT rs.id,
        rs.last_used_at,
        rs.scopes
 FROM remote_sessions AS rs
-JOIN remote_session_client_user_session_issuers AS blink
-  ON blink.remote_session_client_id = rs.remote_session_client_id
 JOIN (
        SELECT unnest($1::text[]) AS subject_urn,
               unnest($2::uuid[]) AS issuer_id
      ) AS pair
   ON rs.subject_urn = pair.subject_urn
-  AND blink.user_session_issuer_id = pair.issuer_id
-JOIN user_session_issuers AS usi ON usi.id = blink.user_session_issuer_id
+JOIN user_session_issuers AS usi ON usi.id = pair.issuer_id
 JOIN remote_session_clients AS rc ON rc.id = rs.remote_session_client_id
 JOIN remote_session_issuers AS ri ON ri.id = rc.remote_session_issuer_id
 WHERE usi.project_id = $3
   AND (rc.project_id = $3 OR (rc.project_id IS NULL AND (rc.organization_id IS NULL OR rc.organization_id = $4)))
+  AND (
+    EXISTS (
+      SELECT 1
+      FROM remote_session_client_user_session_issuers AS blink
+      WHERE blink.remote_session_client_id = rs.remote_session_client_id
+        AND blink.user_session_issuer_id = pair.issuer_id
+    )
+    OR rs.user_session_issuer_id = pair.issuer_id
+  )
   AND rs.deleted IS FALSE
   AND rc.deleted IS FALSE
   AND ri.deleted IS FALSE
@@ -968,11 +974,15 @@ type ListRemoteSessionUpstreamsForSubjectsRow struct {
 // The outbound leg of the brokered connections on one page of user_sessions.
 // A remote_session is one shared upstream grant per (subject_urn,
 // remote_session_client_id); its own user_session_issuer_id is provenance
-// only. The join therefore goes through the issuer's client bindings: a
+// only. The match therefore goes through the issuer's client bindings: a
 // user_session under issuer B lists every upstream grant the subject holds on
 // a client bound to B, including grants first minted through a sibling
-// issuer. The projected user_session_issuer_id is the binding's (requesting)
-// issuer, which is the key the caller indexes by.
+// issuer. It also keeps listing a grant minted through the page's issuer whose
+// client was since detached from it: those tokens are still live upstream and
+// SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuer still destroys them,
+// so hiding them would show an empty page for a revoke that is not a no-op.
+// The projected user_session_issuer_id is the requesting issuer, which is the
+// key the caller indexes by.
 // Takes the page's pairs as parallel arrays rather than two independent IN
 // lists: filtering on subjects and issuers separately would return the cross
 // product, attributing one subject's upstream session to another subject who

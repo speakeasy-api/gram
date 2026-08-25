@@ -36,20 +36,22 @@ func TestRouteUpstreamToken_SingleEntryReturnsToken(t *testing.T) {
 	require.Equal(t, "upstream-token", token)
 }
 
-func TestRouteUpstreamToken_SingleEntryResourceMismatchLogsDebug(t *testing.T) {
+func TestRouteUpstreamToken_SingleEntryResourceMismatchLogsWarn(t *testing.T) {
 	t.Parallel()
 
 	// A lone credential is forwarded even when its recorded resource disagrees
-	// with the backend's, but the disagreement must leave a debug-level trace
-	// so a future strict-matching tightening can be sized from logs.
+	// with the backend's, but the disagreement must leave a production-visible
+	// trace so a future strict-matching tightening can be sized from logs. The
+	// handler is pinned at warn so a downgrade to debug fails the test.
 	var buf bytes.Buffer
-	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn}))
 
 	token, err := routeUpstreamToken(t.Context(), logger, map[uuid.UUID]remotesessions.UpstreamToken{
 		uuid.New(): {Token: "upstream-token", Resource: "https://other.example.com/mcp", RemoteSessionClientID: uuid.New()},
 	}, "https://upstream.example.com/mcp")
 	require.NoError(t, err)
 	require.Equal(t, "upstream-token", token, "the lone credential must still be forwarded")
+	require.Contains(t, buf.String(), "level=WARN")
 	require.Contains(t, buf.String(), "recorded resource does not match")
 
 	// A matching resource (modulo trailing slash) must stay silent.
@@ -57,6 +59,16 @@ func TestRouteUpstreamToken_SingleEntryResourceMismatchLogsDebug(t *testing.T) {
 	token, err = routeUpstreamToken(t.Context(), logger, map[uuid.UUID]remotesessions.UpstreamToken{
 		uuid.New(): {Token: "upstream-token", Resource: "https://upstream.example.com/mcp/", RemoteSessionClientID: uuid.New()},
 	}, "https://upstream.example.com/mcp")
+	require.NoError(t, err)
+	require.Equal(t, "upstream-token", token)
+	require.Empty(t, buf.String())
+
+	// A backend with no resource of its own — every tunneled server — has
+	// nothing to disagree with, so it must not warn on every request.
+	buf.Reset()
+	token, err = routeUpstreamToken(t.Context(), logger, map[uuid.UUID]remotesessions.UpstreamToken{
+		uuid.New(): {Token: "upstream-token", Resource: "https://other.example.com/mcp", RemoteSessionClientID: uuid.New()},
+	}, "")
 	require.NoError(t, err)
 	require.Equal(t, "upstream-token", token)
 	require.Empty(t, buf.String())
@@ -93,7 +105,7 @@ func TestRouteUpstreamToken_MultipleEntriesNoResourceFailsClosed(t *testing.T) {
 		uuid.New(): {Token: "token-a", Resource: "https://a.example.com/mcp", RemoteSessionClientID: uuid.New()},
 		uuid.New(): {Token: "token-b", Resource: "https://b.example.com/mcp", RemoteSessionClientID: uuid.New()},
 	}, "")
-	require.Error(t, err)
+	requireRoutingError(t, err, "backend_no_resource")
 	require.Empty(t, token)
 }
 
@@ -104,7 +116,7 @@ func TestRouteUpstreamToken_MultipleEntriesNoMatchFailsClosed(t *testing.T) {
 		uuid.New(): {Token: "token-a", Resource: "https://a.example.com/mcp", RemoteSessionClientID: uuid.New()},
 		uuid.New(): {Token: "token-b", Resource: "https://b.example.com/mcp", RemoteSessionClientID: uuid.New()},
 	}, "https://c.example.com/mcp")
-	require.Error(t, err)
+	requireRoutingError(t, err, "no_match")
 	require.Empty(t, token)
 }
 
@@ -115,8 +127,19 @@ func TestRouteUpstreamToken_DuplicateResourceFailsClosed(t *testing.T) {
 		uuid.New(): {Token: "token-a", Resource: "https://a.example.com/mcp", RemoteSessionClientID: uuid.New()},
 		uuid.New(): {Token: "token-b", Resource: "https://a.example.com/mcp", RemoteSessionClientID: uuid.New()},
 	}, "https://a.example.com/mcp")
-	require.Error(t, err)
+	requireRoutingError(t, err, "duplicate_resource")
 	require.Empty(t, token)
+}
+
+// A fail-closed routing outcome must surface as the typed error, because that
+// is what the call sites key on to return a precondition failure instead of a
+// 500 for what is a configuration state.
+func requireRoutingError(t *testing.T, err error, reason string) {
+	t.Helper()
+
+	var routeErr *upstreamRoutingError
+	require.ErrorAs(t, err, &routeErr)
+	require.Equal(t, reason, routeErr.reason)
 }
 
 func TestTunnelGatewayURL_NormalizesAcceptedAddrs(t *testing.T) {

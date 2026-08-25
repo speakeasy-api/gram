@@ -318,7 +318,12 @@ func (s *Service) serveConsentProxiedMCP(
 		return oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for consent transport").LogError(ctx, logger)
 	}
 	upstreamToken, err := routeUpstreamToken(ctx, logger, tokens, endpoint.UpstreamResource)
-	if err != nil {
+	var routeErr *upstreamRoutingError
+	switch {
+	case errors.As(err, &routeErr):
+		// routeUpstreamToken already logged the structured detail.
+		return oops.E(oops.CodeFailedPrecondition, err, "this MCP server's upstream credentials are not configured unambiguously")
+	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "resolve upstream token for consent transport").LogError(ctx, logger)
 	}
 

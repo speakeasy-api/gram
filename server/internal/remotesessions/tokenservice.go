@@ -326,18 +326,15 @@ type UpstreamToken struct {
 //     "any attached remote session missing or invalid" rule from AIS-136.
 //
 // Current intent (all-or-nothing): resolution fails if ANY attached upstream
-// is missing or invalid, even when the tool the caller is about to invoke
-// only needs a different upstream. This is the safe default — the runtime
-// never dispatches a half-authorized request — and matches AIS-136's wording.
-// The cost is that one expired upstream blocks every tool on the issuer until
-// it is re-linked.
-//
-// Future intent (AIS-152): once dispatch knows which remote_session_issuer a
-// given tool requires, this can soften to challenging only when the upstream a
-// tool actually needs is missing, so an expired Slack link doesn't 401 a
-// Google-only tool call. Changing that behavior here without the per-tool
-// linkage in place would let requests through unauthorized, so it is
-// deliberately deferred to AIS-152.
+// is missing or invalid, even when the request only needs a different one.
+// Toolset dispatch is what still requires this — it has no per-tool
+// remote_session_issuer mapping (AIS-152), so a partial map would silently
+// dispatch a tool with no credential instead of challenging. Proxied backends
+// no longer need it: routeUpstreamToken picks by the backend's own resource.
+// One resolver serves both, so it stays all-or-nothing here; relaxing it for
+// the proxied path is a follow-up, not a behavior change this PR makes.
+// The cost is that one expired upstream blocks every tool on the issuer, and
+// a proxied request to a still-linked upstream, until it is re-linked.
 //
 // A runtime invariant asserts that no two bound clients target the same
 // remote_session_issuer. This is the application-level counterpart to the

@@ -318,3 +318,56 @@ func TestListUserSessionsReturnsUpstreamsMintedThroughSiblingIssuer(t *testing.T
 		"a credential minted through a sibling issuer on the same client belongs to this session's upstreams")
 	require.Equal(t, "mcp.shared.example", res.Items[0].Upstreams[0].IssuerSlug)
 }
+
+// A client detached from the issuer that minted the grant keeps live upstream
+// tokens, and revoking the Gram session still destroys them. The page has to
+// keep listing them or an admin reads an empty page as "nothing to revoke".
+func TestListUserSessionsReturnsUpstreamsOnDetachedClient(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuer, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "detached-upstream-issuer",
+		AuthnChallengeMode:   "chain",
+		SessionDurationHours: 24,
+	})
+	require.NoError(t, err)
+
+	issuerID := uuid.MustParse(issuer.ID)
+	subject := urn.NewUserSubject("detached-upstream-subject")
+	_, err = seedUserSession(t, ctx, ti.conn, issuerID, subject)
+	require.NoError(t, err)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	clientID := seedUpstream(t, ctx, ti.conn, conv.ToNullUUID(*authCtx.ProjectID), issuerID, subject, "mcp.detached.example")
+	detached, err := remotesessions_repo.New(ti.conn).DetachRemoteSessionClientFromUserSessionIssuer(ctx, remotesessions_repo.DetachRemoteSessionClientFromUserSessionIssuerParams{
+		RemoteSessionClientID: clientID,
+		UserSessionIssuerID:   issuerID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), detached)
+
+	res, err := ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		SubjectUrn:          nil,
+		UserSessionIssuerID: nil,
+		Status:              nil,
+		ClientID:            nil,
+		Cursor:              nil,
+		Limit:               nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, res.Items, 1)
+	require.Len(t, res.Items[0].Upstreams, 1,
+		"a grant minted through this issuer stays listed after its client is detached")
+	require.Equal(t, "mcp.detached.example", res.Items[0].Upstreams[0].IssuerSlug)
+}

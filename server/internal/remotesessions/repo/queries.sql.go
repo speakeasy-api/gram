@@ -3809,13 +3809,12 @@ type ListRemoteSessionStatusesForSubjectRow struct {
 // the result doubles as a per-client map without DISTINCT. A soft-deleted row
 // is absent here entirely (truly disconnected).
 //
-// Scope is the client IDs the caller already resolved (ListClients / posted
-// client_id). Project scoping is intentionally NOT applied: re-joining
-// user_session_issuers would only repeat that check, and that table is
-// soft-deleted — ON DELETE CASCADE never fires, so a live grant minted by a
-// now-deleted issuer would disappear from consent while GetActiveRemoteSession
-// still finds it. user_session_issuer_id on the row is provenance from INSERT,
-// not a lookup key.
+// Scope is the requesting issuer's bound clients; the joins below are what
+// bound the result, so no caller-supplied client id list is needed. The
+// user_session_issuers join constrains the *requesting* issuer, never the
+// grant's provenance issuer, so a live grant minted through a since-deleted
+// issuer still reports here rather than showing "never connected" while
+// GetActiveRemoteSession serves its token.
 //
 // The 'active' predicate mirrors validateAndRefresh in tokenservice.go: a
 // session is usable while the upstream authorization remains valid and its
@@ -4444,11 +4443,10 @@ type SoftDeleteRemoteSessionBySubjectAndClientRow struct {
 // credential globally (the caller then attempts upstream revocation).
 //
 // Returns the stored credentials it tombstones; the partial unique index on
-// (subject_urn, remote_session_client_id) caps that at one row. Project
-// scoping is intentionally NOT applied: the acted-on client is already
-// re-resolved through the endpoint's current bindings, and re-joining
-// user_session_issuers would hide a live grant minted by a now-soft-deleted
-// issuer, skipping RFC 7009.
+// (subject_urn, remote_session_client_id) caps that at one row. The
+// user_session_issuers join constrains the *requesting* issuer, never the
+// grant's provenance issuer, so a grant minted through a now-soft-deleted
+// issuer stays reachable — and still RFC 7009'd — from any live bound surface.
 func (q *Queries) SoftDeleteRemoteSessionBySubjectAndClient(ctx context.Context, arg SoftDeleteRemoteSessionBySubjectAndClientParams) ([]SoftDeleteRemoteSessionBySubjectAndClientRow, error) {
 	rows, err := q.db.Query(ctx, softDeleteRemoteSessionBySubjectAndClient,
 		arg.SubjectUrn,
@@ -4512,18 +4510,24 @@ func (q *Queries) SoftDeleteRemoteSessionsByClientID(ctx context.Context, remote
 const softDeleteRemoteSessionsBySubjectAndUserSessionIssuer = `-- name: SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuer :many
 UPDATE remote_sessions AS s
 SET deleted_at = clock_timestamp()
-FROM remote_session_client_user_session_issuers AS link
-JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
-JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
+FROM remote_session_clients AS c,
+     user_session_issuers AS usi
 WHERE s.subject_urn = $1
-  AND link.remote_session_client_id = s.remote_session_client_id
-  AND link.user_session_issuer_id = $2
+  AND c.id = s.remote_session_client_id
+  -- No liveness predicate on usi: a revoke must never fail open.
+  AND usi.id = $2
   AND usi.project_id = $3
   AND (c.project_id = $3 OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $4::text)))
   AND c.deleted IS FALSE
-  -- The revoking issuer may itself be soft-deleted: a Gram-session revoke must
-  -- still destroy upstream credentials, so only tenancy is checked here, not
-  -- the requesting issuer's liveness.
+  AND (
+    EXISTS (
+      SELECT 1
+      FROM remote_session_client_user_session_issuers AS link
+      WHERE link.remote_session_client_id = s.remote_session_client_id
+        AND link.user_session_issuer_id = usi.id
+    )
+    OR s.user_session_issuer_id = usi.id
+  )
   AND s.deleted IS FALSE
 RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_encrypted
 `
@@ -4542,21 +4546,22 @@ type SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerRow struct {
 }
 
 // Cascade for a revoked user session: tombstones every upstream grant the
-// subject holds on a client bound to the revoking user session issuer and
-// returns their stored credentials. Scoped through the revoking issuer's
-// tenant-scoped client binding (binding row, the issuer's project, and the
-// client's own project/org tenancy, mirroring
-// CheckRemoteSessionClientBindingForUserSessionIssuer) so the write cannot
-// cross tenants; the session's own user_session_issuer_id is provenance only,
-// so a grant first created through a sibling issuer on the same client is
-// destroyed too.
+// subject holds that the revoking user session issuer can reach, and returns
+// their stored credentials. Reachable is either arm of the disjunction below:
+// the grant's client is currently bound to that issuer, or the grant was
+// minted through it. The second arm matters because a client detached from
+// the issuer after minting keeps no binding row, and without it the revoke
+// would report success while leaving those upstream tokens live. Both arms
+// name the requesting issuer, so neither crosses a tenant, and the client's
+// own project/org tenancy is checked either way (mirroring
+// CheckRemoteSessionClientBindingForUserSessionIssuer).
 //
 // A subject's grant is shared by every MCP client it authenticates, because
 // remote_sessions is keyed on (subject_urn, remote_session_client_id) with no
 // user-session-client column. The stored user_session_issuer_id is provenance
-// from INSERT, not a lookup key, so a revoke through one issuer in the
-// project must still tombstone a row minted by another. A revoke that left
-// the upstream tokens alive would not be a revoke.
+// from INSERT, not a lookup key, so a revoke through one bound issuer must
+// still tombstone a row minted by another. A revoke that left the upstream
+// tokens alive would not be a revoke.
 func (q *Queries) SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuer(ctx context.Context, arg SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerParams) ([]SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerRow, error) {
 	rows, err := q.db.Query(ctx, softDeleteRemoteSessionsBySubjectAndUserSessionIssuer,
 		arg.SubjectUrn,
