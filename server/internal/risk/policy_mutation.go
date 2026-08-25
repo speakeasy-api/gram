@@ -40,8 +40,8 @@ func (a policyMutationAuditor) LogPolicyUpdate(ctx context.Context, db repo.DBTX
 		ActorSlug:        event.Actor.Slug,
 		RiskPolicyID:     event.After.ID,
 		RiskPolicyName:   event.After.Name,
-		SnapshotBefore:   policyToGoa(event.Before),
-		SnapshotAfter:    policyToGoa(event.After),
+		SnapshotBefore:   policyToGoa(policycore.AuditSnapshot(event.Before)),
+		SnapshotAfter:    policyToGoa(policycore.AuditSnapshot(event.After)),
 	}); err != nil {
 		return fmt.Errorf("log policy update audit: %w", err)
 	}

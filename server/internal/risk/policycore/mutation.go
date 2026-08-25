@@ -219,7 +219,7 @@ func (c *Core) CreatePolicy(ctx context.Context, input CreateMutation) (Mutation
 		OrganizationID: row.OrganizationID,
 		ProjectID:      row.ProjectID,
 		Actor:          input.Actor,
-		Policy:         Project(row, audience, nil),
+		Policy:         AuditSnapshot(Project(row, audience, nil)),
 	}); err != nil {
 		return MutationResult{}, mutationError("log risk policy create", err)
 	}
@@ -350,8 +350,8 @@ func (c *Core) UpdatePolicy(ctx context.Context, input UpdateMutation) (Mutation
 		OrganizationID: row.OrganizationID,
 		ProjectID:      row.ProjectID,
 		Actor:          input.Actor,
-		Before:         Project(locked, currentAudience, nil),
-		After:          Project(row, audience, nil),
+		Before:         AuditSnapshot(Project(locked, currentAudience, nil)),
+		After:          AuditSnapshot(Project(row, audience, nil)),
 	}); err != nil {
 		return MutationResult{}, mutationError("log risk policy update", err)
 	}
