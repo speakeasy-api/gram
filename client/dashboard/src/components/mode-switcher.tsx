@@ -1,12 +1,11 @@
 import {
   MODES,
   useModeSwitch,
+  useModeSwitcherEnabled,
   type Mode,
-} from "@/components/mode-switch-stage";
+} from "@/components/mode-switch-context";
 import { Icon } from "@/components/ui/Icon";
 import type { IconName } from "@/components/ui/Icon/names";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useOrgRoutes } from "@/routes";
 import { useEffect } from "react";
 import { useLocation } from "react-router";
@@ -31,22 +30,6 @@ function rememberedCanvasPath(): string | null {
     return null;
   }
 }
-
-/**
- * Whether the chrome shows the mode switcher. The layouts need this too: with
- * the strip hidden they must not reserve its height in the offsets below.
- */
-export function useModeSwitcherEnabled(): boolean {
-  return (
-    useFeatureFlag(FEATURE_FLAGS.headlessModeSwitcher).status === "enabled"
-  );
-}
-
-// The sidebar is fixed-positioned from --header-offset, and pages size
-// themselves against --banner-offset, so the strip's height has to be a known
-// constant both layouts can add into those offsets. Kept in sync with
-// STRIP_HEIGHT_PX in mode-switch-stage.tsx.
-export const MODE_SWITCHER_HEIGHT = "3rem";
 
 // Fixed segment width so the sliding indicator can be positioned by index
 // instead of measured from the DOM.

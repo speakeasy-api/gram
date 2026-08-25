@@ -22,9 +22,9 @@ import { useShowsImpersonationBanner } from "./impersonation-banner-state";
 import { ModeSurface } from "./mode-switch-stage.tsx";
 import {
   MODE_SWITCHER_HEIGHT,
-  ModeSwitcher,
   useModeSwitcherEnabled,
-} from "./mode-switcher.tsx";
+} from "./mode-switch-context.ts";
+import { ModeSwitcher } from "./mode-switcher.tsx";
 
 // Height of the fixed chrome above the panes: the mode strip, plus the
 // impersonation banner when it is showing (h-9 / 2.25rem).
