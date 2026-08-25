@@ -174,7 +174,7 @@ export function PublishKeyDialog({
 
   // Every KMS key with a kid in the set, revoked included, is refused by the
   // server as a duplicate, so the picker lists them but does not offer them.
-  const { data: keysData, isPending: keysPending } = useListJsonWebKeys(
+  const { data: keysData, isFetching: keysFetching } = useListJsonWebKeys(
     { setId: set.id, includeRevoked: true },
     undefined,
     { throwOnError: false },
@@ -276,10 +276,10 @@ export function PublishKeyDialog({
           <Button
             variant="primary"
             onClick={() => void handlePublish()}
-            // Publishing before the published-key list has settled could send
-            // a key the server refuses as a duplicate; a failed list still
-            // lets the server be the judge.
-            disabled={pending || keysPending || externalKeyId === ""}
+            // Publishing while the published-key list is still being read
+            // (first load or a refetch) could send a key the server refuses as
+            // a duplicate; a failed list still lets the server be the judge.
+            disabled={pending || keysFetching || externalKeyId === ""}
           >
             <Button.Text>{publishButtonLabel(pending, phase)}</Button.Text>
           </Button>

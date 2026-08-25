@@ -31,7 +31,7 @@ import { useState } from "react";
 import { Outlet } from "react-router";
 import { toast } from "sonner";
 import { CreateExternalKeySheet } from "./CreateExternalKeySheet";
-import { CustomerManagedKeysGate } from "./CustomerManagedKeysGate";
+import { CustomerManagedKeysGate } from "@/components/customer-managed-keys-gate";
 import { SigningKeysSection } from "./jwks/SigningKeysSection";
 import { ListSection } from "./ListSection";
 import { providerLabel, providerSlug } from "./providers";

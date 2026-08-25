@@ -5,11 +5,16 @@ import { useProductFeatures } from "@gram/client/react-query/productFeatures.js"
 import type { ReactNode } from "react";
 
 // CustomerManagedKeysGate is the product-feature (entitlement) gate for every
-// page under Encryption Keys and Signing Key Sets, mounted after the RBAC scope
-// gate so no protected request fires for a visitor lacking the page scope. The
-// sidebar entry is already hidden without the entitlement; this covers direct
-// URLs, including deep links to a key or key set detail page. A gated but
-// authorized organization sees only the framed refusal.
+// page under External Services, Encryption Keys and Signing Key Sets, mounted
+// after the RBAC scope gate so no protected request fires for a visitor
+// lacking the page scope. The sidebar entries are already hidden without the
+// entitlement; this covers direct URLs, including deep links to a credential,
+// key or key set detail page. A gated but authorized organization sees only
+// the framed refusal.
+//
+// A failed entitlement read is treated as not-yet-known rather than as a
+// refusal, so an entitled organization never flashes the gate; the server
+// enforces the entitlement on every endpoint regardless.
 export function CustomerManagedKeysGate({
   children,
 }: {

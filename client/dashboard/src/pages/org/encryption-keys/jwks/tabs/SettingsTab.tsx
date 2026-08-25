@@ -88,7 +88,9 @@ export function SettingsTab({ set }: { set: JSONWebKeySet }): JSX.Element {
           <SettingsSection.Body>
             <div className="flex flex-col gap-1.5">
               <Label>Name</Label>
-              <Input value={name} onChange={setName} />
+              {/* Held while saving so an edit typed mid-request cannot be
+                  overwritten when the saved name is mirrored back. */}
+              <Input value={name} onChange={setName} disabled={saving} />
             </div>
             {saveError && (
               <Alert variant="error" dismissible={false}>

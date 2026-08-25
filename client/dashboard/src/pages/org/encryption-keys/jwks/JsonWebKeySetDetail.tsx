@@ -15,7 +15,7 @@ import { useOrgRoutes } from "@/routes";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { useGetJsonWebKeySet } from "@gram/client/react-query/getJsonWebKeySet";
 import { isNotNotFound } from "@/lib/query-errors";
-import { CustomerManagedKeysGate } from "../CustomerManagedKeysGate";
+import { CustomerManagedKeysGate } from "@/components/customer-managed-keys-gate";
 import { Link, Navigate, Outlet, useLocation, useParams } from "react-router";
 import { JSON_WEB_KEY_SET_TABS, type JsonWebKeySetTab } from "./tabs";
 import { KeysTab } from "./tabs/KeysTab";

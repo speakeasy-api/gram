@@ -914,9 +914,25 @@ func TestAuditService_List_FilterBySubjectIDs(t *testing.T) {
 		require.Equal(t, "json_web_key", log.SubjectType)
 	}
 
-	// An empty list is no filter rather than a filter that matches nothing, and
-	// blank entries do not turn it into one.
+	// An empty list is no filter rather than a filter that matches nothing.
 	unfiltered, err := ti.service.List(ctx, &gen.ListPayload{
+		ApikeyToken:   nil,
+		SessionToken:  nil,
+		Cursor:        nil,
+		ProjectSlug:   nil,
+		ActorID:       nil,
+		Action:        nil,
+		SubjectType:   nil,
+		SubjectID:     nil,
+		SubjectIds:    []string{},
+		ActingSurface: nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, unfiltered.Logs, 4)
+
+	// Blank entries are dropped, so a list of nothing but blanks is no filter
+	// either, and a blank alongside real ids does not narrow them.
+	blanksOnly, err := ti.service.List(ctx, &gen.ListPayload{
 		ApikeyToken:   nil,
 		SessionToken:  nil,
 		Cursor:        nil,
@@ -929,5 +945,21 @@ func TestAuditService_List_FilterBySubjectIDs(t *testing.T) {
 		ActingSurface: nil,
 	})
 	require.NoError(t, err)
-	require.Len(t, unfiltered.Logs, 4)
+	require.Len(t, blanksOnly.Logs, 4)
+
+	padded, err := ti.service.List(ctx, &gen.ListPayload{
+		ApikeyToken:   nil,
+		SessionToken:  nil,
+		Cursor:        nil,
+		ProjectSlug:   nil,
+		ActorID:       nil,
+		Action:        nil,
+		SubjectType:   nil,
+		SubjectID:     nil,
+		SubjectIds:    []string{" " + setID + " ", ""},
+		ActingSurface: nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, padded.Logs, 1)
+	require.Equal(t, setCreated.String(), padded.Logs[0].ID)
 }
