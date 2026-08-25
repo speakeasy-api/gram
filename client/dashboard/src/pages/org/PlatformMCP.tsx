@@ -907,7 +907,7 @@ function PlatformMCPManagement({
               "register_platform_mcp_for_project",
               "get_platform_mcp_onboarding_status",
               "attach_platform_mcp_identity_provider",
-              "add_platform_mcp_to_default_plugin",
+              "distribute_mcp_to_plugin",
             ].map((tool) => (
               <code
                 key={tool}
@@ -919,8 +919,8 @@ function PlatformMCPManagement({
           </div>
           <Text muted small className="mt-2">
             These tools discover reviewed options, guide secure setup and
-            readiness, and add a ready MCP only to the chosen project&apos;s
-            existing Default plugin.
+            readiness, and add a ready MCP to one exact existing plugin in the
+            chosen project.
           </Text>
         </div>
       </div>

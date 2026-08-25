@@ -134,13 +134,13 @@ type operationBudgetResult struct {
 // registrar alongside the server so another admitted audience — the project
 // assistant — can be composed from the same registration pass rather than from
 // a second list that would drift.
-func newServer(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, candidate CatalogDescriptor) (*mcp.Server, *Registrar) {
+func newServer(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, plugins *PluginsService, candidate CatalogDescriptor) (*mcp.Server, *Registrar) {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "platform-mcp",
 		Title:   "Platform MCP",
 		Version: "0.1.0",
 	}, &mcp.ServerOptions{
-		Instructions: "Use this server to inspect the selected organization and manage reviewed MCP servers in an explicit project. List reviewed catalogue options and eligible projects, then ask the user to choose one of each before mutating. Inspect the chosen candidate and collect only its declared non-secret configuration values. Normal non-secret URLs may be discussed and returned. Register it privately. Use get_mcp_readiness with the returned registration ID to inspect persisted readiness. If readiness says an upstream identity provider is missing, ask the user to explicitly confirm and then call attach_platform_mcp_identity_provider; the server derives the provider from the persisted reviewed MCP source and returns its non-secret provider_url plus an Inspect authorization_url for the user to use Connect or Authorize. Immediately present authorization_url as the exact clickable link—never say a link is above or ask the user to confirm an unspecified authorization action. Never request or accept OAuth codes, tokens, client secrets, passwords, API keys, or secret headers in chat. The registration dashboard_setup_url is the Authentication settings fallback, not the authorization page. Force a fresh readiness check after user authorization. Registration never distributes an MCP; named-plugin distribution is separately rollout-gated.",
+		Instructions: "Use this server to inspect the selected organization and manage reviewed MCP servers in an explicit project. List reviewed catalogue options and eligible projects, then ask the user to choose one of each before mutating. Inspect the chosen candidate and collect only its declared non-secret configuration values. Normal non-secret URLs may be discussed and returned. Register it privately. Use get_mcp_readiness with the returned registration ID to inspect persisted readiness. If readiness says an upstream identity provider is missing, ask the user to explicitly confirm and then call attach_platform_mcp_identity_provider; the server derives the provider from the persisted reviewed MCP source and returns its non-secret provider_url plus an Inspect authorization_url for the user to use Connect or Authorize. Immediately present authorization_url as the exact clickable link—never say a link is above or ask the user to confirm an unspecified authorization action. Never request or accept OAuth codes, tokens, client secrets, passwords, API keys, or secret headers in chat. The registration dashboard_setup_url is the Authentication settings fallback, not the authorization page. Force a fresh readiness check after user authorization. Registration never distributes an MCP: use list_plugins to show the project's plugins, ask the user which one should carry it, then call distribute_mcp_to_plugin naming that plugin exactly. There is no implicit default.",
 		PageSize:     32,
 	})
 
@@ -206,9 +206,14 @@ func newServer(reader Reader, catalog Catalog, registrations *RegistrationServic
 	} else {
 		registerReadinessTools(reg, registrations.readiness)
 	}
-	// Exact-plugin distribution stays unavailable until the compatibility-reader
-	// release is deployed. Its canonical descriptors remain visible as stubs.
-	registerUnavailableTools(reg)
+	// Exact-plugin distribution is live once the workflow services it writes
+	// through are composed; without them the canonical descriptors stay visible
+	// as stubs rather than disappearing from the manifest.
+	if onboarding == nil || distributions == nil {
+		registerUnavailableTools(reg)
+	} else {
+		registerDistributionTools(reg, onboarding, distributions)
+	}
 	if !diagnostics.valid() {
 		registerUnavailableDiagnosticsTools(reg)
 	} else {
@@ -223,6 +228,16 @@ func newServer(reader Reader, catalog Catalog, registrations *RegistrationServic
 		registerUnavailableSkillsTools(reg)
 	} else {
 		registerSkillsTools(reg, skills)
+	}
+	if !plugins.valid() {
+		registerUnavailablePluginTools(reg)
+	} else {
+		registerPluginTools(reg, plugins)
+	}
+	if !plugins.valid() {
+		registerUnavailablePluginTools(reg)
+	} else {
+		registerPluginTools(reg, plugins)
 	}
 	if feedback == nil {
 		addTool(reg, &mcp.Tool{
@@ -311,8 +326,8 @@ func registerUnavailableTools(reg *Registrar) {
 		feature     string
 	}{
 
-		{"distribute_mcp_to_plugin", "Distribute MCP to Plugin", "Distribute a configured MCP to one exact existing plugin. Named-plugin distribution is not available until the compatibility release is deployed.", "plugin_distribution"},
-		{"remove_mcp_from_plugin", "Remove MCP from Plugin", "Remove an MCP from one exact existing plugin. Named-plugin distribution is not available until the compatibility release is deployed.", "plugin_distribution"},
+		{"distribute_mcp_to_plugin", "Distribute MCP to Plugin", "Distribute a configured MCP to one exact existing plugin. Distribution is not available in the current preview.", "plugin_distribution"},
+		{"remove_mcp_from_plugin", "Remove MCP from Plugin", "Remove an MCP from one exact existing plugin. Distribution changes are not available in the current preview.", "plugin_distribution"},
 	} {
 		addTool(reg, &mcp.Tool{
 			Name:        tool.name,

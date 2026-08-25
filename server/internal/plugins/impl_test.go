@@ -2549,7 +2549,7 @@ func TestPluginsService_PublishProject_PlatformMCPAdmissionTransitions(t *testin
 		OrganizationID:       authCtx.ActiveOrganizationID,
 		ProjectID:            *authCtx.ProjectID,
 		RegistrationID:       registration.ID,
-		DefaultPluginID:      defaultPlugin.ID,
+		PluginID:             defaultPlugin.ID,
 		PluginServerID:       uuid.NullUUID{},
 		State:                "attached",
 		Version:              1,
