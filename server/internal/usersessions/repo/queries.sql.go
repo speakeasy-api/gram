@@ -403,24 +403,6 @@ func (q *Queries) CreateUserSessionIssuerCimdClient(ctx context.Context, arg Cre
 	return i, err
 }
 
-const deleteRemoteSessionClientAttachmentsForUserSessionIssuer = `-- name: DeleteRemoteSessionClientAttachmentsForUserSessionIssuer :exec
-DELETE FROM remote_session_client_user_session_issuers AS link
-USING user_session_issuers AS usi
-WHERE link.user_session_issuer_id = usi.id
-  AND usi.id = $1
-  AND usi.project_id = $2
-`
-
-type DeleteRemoteSessionClientAttachmentsForUserSessionIssuerParams struct {
-	UserSessionIssuerID uuid.UUID
-	ProjectID           uuid.UUID
-}
-
-func (q *Queries) DeleteRemoteSessionClientAttachmentsForUserSessionIssuer(ctx context.Context, arg DeleteRemoteSessionClientAttachmentsForUserSessionIssuerParams) error {
-	_, err := q.db.Exec(ctx, deleteRemoteSessionClientAttachmentsForUserSessionIssuer, arg.UserSessionIssuerID, arg.ProjectID)
-	return err
-}
-
 const deleteUserSessionIssuer = `-- name: DeleteUserSessionIssuer :one
 UPDATE user_session_issuers AS issuer
 SET deleted_at = clock_timestamp()
@@ -1586,7 +1568,7 @@ FROM user_session_issuers
 WHERE id = $1
   AND project_id = $2
   AND deleted IS FALSE
-FOR UPDATE
+FOR NO KEY UPDATE
 `
 
 type LockUserSessionIssuerParams struct {
@@ -1599,6 +1581,12 @@ type LockUserSessionIssuerParams struct {
 // same row lock while writing their reference, so acquiring it first
 // guarantees the follow-up ownership statements read a snapshot that
 // includes any reference committed by a concurrent attach.
+//
+// FOR NO KEY UPDATE, not FOR UPDATE: it still conflicts with the meta MCP
+// attach lock, but not with the FOR KEY SHARE a foreign key check takes. A
+// remote-login callback inserting a remote_sessions row holds the client row
+// this deletion's orphan cascade wants and then hits that foreign key, so the
+// stronger mode would deadlock the two against each other.
 func (q *Queries) LockUserSessionIssuer(ctx context.Context, arg LockUserSessionIssuerParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, lockUserSessionIssuer, arg.ID, arg.ProjectID)
 	var id uuid.UUID

@@ -344,23 +344,12 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 		return oops.E(oops.CodeUnexpected, err, "delete user session issuer").LogError(ctx, logger)
 	}
 
-	// Must run before the binding delete below removes the rows it reads.
-	orphanCreds, err := s.revoker.SoftDeleteOrphanedClientSessions(ctx, dbtx, deleted.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
+	orphanCreds, err := s.revoker.DetachUserSessionIssuerFromClients(ctx, dbtx, deleted.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "delete remote sessions orphaned by user session issuer").LogError(ctx, logger)
-	}
-
-	if err = txRepo.DeleteRemoteSessionClientAttachmentsForUserSessionIssuer(
-		ctx,
-		repo.DeleteRemoteSessionClientAttachmentsForUserSessionIssuerParams{
-			UserSessionIssuerID: deleted.ID,
-			ProjectID:           *authCtx.ProjectID,
-		},
-	); err != nil {
 		return oops.E(
 			oops.CodeUnexpected,
 			err,
-			"failed to delete remote session client attachments for user session issuer %s",
+			"failed to detach remote session clients from user session issuer %s",
 			deleted.ID,
 		).LogError(ctx, logger)
 	}

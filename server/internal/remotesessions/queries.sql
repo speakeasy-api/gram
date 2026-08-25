@@ -495,10 +495,17 @@ SELECT EXISTS (
 -- Serializes concurrent deletes of sibling issuers sharing a client, which
 -- could otherwise each see the other's binding as live and both skip the
 -- orphan cascade. Ordered so overlapping lock sets acquire deadlock-free.
+-- Tenancy and liveness mirror
+-- ListRemoteSessionClientsOrphanedByUserSessionIssuer: locking a row that scan
+-- can never return would block writers for nothing.
 SELECT c.id
 FROM remote_session_clients AS c
 JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id
+JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
 WHERE link.user_session_issuer_id = @user_session_issuer_id
+  AND usi.project_id = @project_id
+  AND (c.project_id = @project_id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)))
+  AND c.deleted IS FALSE
 ORDER BY c.id
 FOR UPDATE OF c;
 
@@ -535,6 +542,16 @@ WHERE link.user_session_issuer_id = @user_session_issuer_id
       AND sibling.user_session_issuer_id <> link.user_session_issuer_id
       AND sibling_usi.deleted IS FALSE
   );
+
+-- name: DeleteRemoteSessionClientAttachmentsForUserSessionIssuer :exec
+-- Drops every client binding an issuer holds. Runs only from the orphan
+-- cascade, which must tombstone the sessions these rows still make reachable
+-- before they go.
+DELETE FROM remote_session_client_user_session_issuers AS link
+USING user_session_issuers AS usi
+WHERE link.user_session_issuer_id = usi.id
+  AND usi.id = @user_session_issuer_id
+  AND usi.project_id = @project_id;
 
 -- name: DeleteUserSessionIssuerAttachmentsForRemoteSessionClient :exec
 DELETE FROM remote_session_client_user_session_issuers AS link
@@ -687,6 +704,15 @@ RETURNING *;
 UPDATE remote_sessions
 SET deleted_at = clock_timestamp()
 WHERE remote_session_client_id = @remote_session_client_id AND deleted IS FALSE
+RETURNING remote_session_client_id, access_token_encrypted, refresh_token_encrypted;
+
+-- name: SoftDeleteRemoteSessionsByClientIDs :many
+-- Bulk form of SoftDeleteRemoteSessionsByClientID: the orphan cascade sweeps
+-- every client one issuer deletion stranded, so it sweeps them in a single
+-- statement rather than a round trip per client while holding their locks.
+UPDATE remote_sessions
+SET deleted_at = clock_timestamp()
+WHERE remote_session_client_id = ANY(@remote_session_client_ids::uuid[]) AND deleted IS FALSE
 RETURNING remote_session_client_id, access_token_encrypted, refresh_token_encrypted;
 
 -- name: CountActiveRemoteSessionsByClientID :one

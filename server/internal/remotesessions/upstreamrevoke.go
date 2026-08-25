@@ -187,18 +187,29 @@ func (r *UpstreamRevoker) SoftDeleteSubjectSessions(ctx context.Context, tx repo
 	return creds, nil
 }
 
-// SoftDeleteOrphanedClientSessions tombstones the remote_sessions of every
-// client whose only live binding belongs to userSessionIssuerID, inside the
-// caller's transaction, and returns the credentials to hand to
+// DetachUserSessionIssuerFromClients drops every client binding
+// userSessionIssuerID holds, tombstoning first the remote_sessions of any
+// client the removal leaves with no live binding at all, inside the caller's
+// transaction. It returns the credentials to hand to
 // [UpstreamRevoker.RevokeAllDetached] once that transaction commits. Call it
-// after the issuer is tombstoned but while its binding rows still exist. The
-// client-row locks serialize concurrent deletes of sibling issuers sharing a
-// client, which could otherwise both see the other's binding as live and both
-// skip the cascade.
-func (r *UpstreamRevoker) SoftDeleteOrphanedClientSessions(ctx context.Context, tx repo.DBTX, userSessionIssuerID uuid.UUID, projectID uuid.UUID, organizationID string) ([]RevokedCredentials, error) {
+// after the issuer itself is tombstoned.
+//
+// The two steps live together because the second destroys the rows the first
+// reads: sole-binding detection is only possible while the bindings still
+// exist. Leaving the ordering to each deletion site would make it a comment
+// the next caller can miss.
+//
+// The client-row locks serialize concurrent deletes of sibling issuers sharing
+// a client, which could otherwise both see the other's binding as live and
+// both skip the cascade.
+func (r *UpstreamRevoker) DetachUserSessionIssuerFromClients(ctx context.Context, tx repo.DBTX, userSessionIssuerID uuid.UUID, projectID uuid.UUID, organizationID string) ([]RevokedCredentials, error) {
 	q := repo.New(tx)
 
-	if _, err := q.LockRemoteSessionClientsBoundToUserSessionIssuer(ctx, userSessionIssuerID); err != nil {
+	if _, err := q.LockRemoteSessionClientsBoundToUserSessionIssuer(ctx, repo.LockRemoteSessionClientsBoundToUserSessionIssuerParams{
+		UserSessionIssuerID: userSessionIssuerID,
+		ProjectID:           projectID,
+		OrganizationID:      organizationID,
+	}); err != nil {
 		return nil, fmt.Errorf("lock remote session clients bound to user session issuer: %w", err)
 	}
 
@@ -212,13 +223,28 @@ func (r *UpstreamRevoker) SoftDeleteOrphanedClientSessions(ctx context.Context, 
 	}
 
 	var creds []RevokedCredentials
-	for _, clientID := range clientIDs {
-		rows, err := q.SoftDeleteRemoteSessionsByClientID(ctx, clientID)
+	if len(clientIDs) > 0 {
+		rows, err := q.SoftDeleteRemoteSessionsByClientIDs(ctx, clientIDs)
 		if err != nil {
-			return nil, fmt.Errorf("soft delete remote sessions for orphaned client %s: %w", clientID, err)
+			return nil, fmt.Errorf("soft delete remote sessions for orphaned clients: %w", err)
 		}
-		creds = append(creds, revokedCredentials(rows)...)
+		creds = make([]RevokedCredentials, 0, len(rows))
+		for _, row := range rows {
+			creds = append(creds, RevokedCredentials{
+				RemoteSessionClientID: row.RemoteSessionClientID,
+				AccessTokenEncrypted:  row.AccessTokenEncrypted,
+				RefreshTokenEncrypted: row.RefreshTokenEncrypted,
+			})
+		}
 	}
+
+	if err := q.DeleteRemoteSessionClientAttachmentsForUserSessionIssuer(ctx, repo.DeleteRemoteSessionClientAttachmentsForUserSessionIssuerParams{
+		UserSessionIssuerID: userSessionIssuerID,
+		ProjectID:           projectID,
+	}); err != nil {
+		return nil, fmt.Errorf("delete remote session client attachments for user session issuer: %w", err)
+	}
+
 	return creds, nil
 }
 

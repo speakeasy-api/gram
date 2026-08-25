@@ -516,7 +516,11 @@ func TestDeleteUserSessionIssuer_ConcurrentSiblingDeleteStillRevokes(t *testing.
 
 	// Hold the client-row lock before the service delete starts, so it cannot
 	// scan for orphans until the sibling's delete below has committed.
-	_, err = remotesessionsrepo.New(tx).LockRemoteSessionClientsBoundToUserSessionIssuer(ctx, siblingID)
+	_, err = remotesessionsrepo.New(tx).LockRemoteSessionClientsBoundToUserSessionIssuer(ctx, remotesessionsrepo.LockRemoteSessionClientsBoundToUserSessionIssuerParams{
+		UserSessionIssuerID: siblingID,
+		ProjectID:           *authCtx.ProjectID,
+		OrganizationID:      authCtx.ActiveOrganizationID,
+	})
 	require.NoError(t, err)
 
 	deleteErr := make(chan error, 1)
@@ -537,7 +541,7 @@ func TestDeleteUserSessionIssuer_ConcurrentSiblingDeleteStillRevokes(t *testing.
 		ProjectID: *authCtx.ProjectID,
 	})
 	require.NoError(t, err)
-	require.NoError(t, txIssuers.DeleteRemoteSessionClientAttachmentsForUserSessionIssuer(ctx, usersessionsrepo.DeleteRemoteSessionClientAttachmentsForUserSessionIssuerParams{
+	require.NoError(t, remotesessionsrepo.New(tx).DeleteRemoteSessionClientAttachmentsForUserSessionIssuer(ctx, remotesessionsrepo.DeleteRemoteSessionClientAttachmentsForUserSessionIssuerParams{
 		UserSessionIssuerID: siblingID,
 		ProjectID:           *authCtx.ProjectID,
 	}))

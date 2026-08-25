@@ -53,12 +53,18 @@ RETURNING *;
 -- same row lock while writing their reference, so acquiring it first
 -- guarantees the follow-up ownership statements read a snapshot that
 -- includes any reference committed by a concurrent attach.
+--
+-- FOR NO KEY UPDATE, not FOR UPDATE: it still conflicts with the meta MCP
+-- attach lock, but not with the FOR KEY SHARE a foreign key check takes. A
+-- remote-login callback inserting a remote_sessions row holds the client row
+-- this deletion's orphan cascade wants and then hits that foreign key, so the
+-- stronger mode would deadlock the two against each other.
 SELECT id
 FROM user_session_issuers
 WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE
-FOR UPDATE;
+FOR NO KEY UPDATE;
 
 -- name: DeleteUserSessionIssuer :one
 -- Recheck active owners in the write so an owner added after the handler's
@@ -119,13 +125,6 @@ SELECT EXISTS (
       AND meta_mcp_server.user_session_issuer_id = sqlc.arg('user_session_issuer_id')::uuid
       AND meta_mcp_server.deleted IS FALSE
 );
-
--- name: DeleteRemoteSessionClientAttachmentsForUserSessionIssuer :exec
-DELETE FROM remote_session_client_user_session_issuers AS link
-USING user_session_issuers AS usi
-WHERE link.user_session_issuer_id = usi.id
-  AND usi.id = @user_session_issuer_id
-  AND usi.project_id = @project_id;
 
 -- name: SoftDeleteUserSessionsByIssuerID :many
 -- Cascading soft-delete of user_sessions for an issuer being soft-deleted.

@@ -17,7 +17,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -36,9 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
-	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/management/readmodel"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -83,7 +80,6 @@ var _ gen.Auther = (*Service)(nil)
 func NewService(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
-	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
@@ -92,8 +88,7 @@ func NewService(
 	dispositionCache *ToolDispositionCache,
 	pluginsGitHubEnabled bool,
 	assetsService *assets.Service,
-	enc *encryption.Client,
-	guardianPolicy *guardian.Policy,
+	revoker *remotesessions.UpstreamRevoker,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("mcpservers"))
 
@@ -108,7 +103,7 @@ func NewService(
 		dispositionCache:     dispositionCache,
 		pluginsGitHubEnabled: pluginsGitHubEnabled,
 		assets:               assetsService,
-		revoker:              remotesessions.NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, guardianPolicy),
+		revoker:              revoker,
 	}
 }
 
@@ -977,17 +972,9 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 			case err != nil:
 				return oops.E(oops.CodeUnexpected, err, "delete mcp server issuer").LogError(ctx, logger)
 			default:
-				// Must run before the binding delete below removes the rows it reads.
-				orphanCreds, err = s.revoker.SoftDeleteOrphanedClientSessions(ctx, dbtx, deletedIssuer.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
+				orphanCreds, err = s.revoker.DetachUserSessionIssuerFromClients(ctx, dbtx, deletedIssuer.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
 				if err != nil {
-					return oops.E(oops.CodeUnexpected, err, "delete remote sessions orphaned by mcp server issuer").LogError(ctx, logger)
-				}
-
-				if err := userSessionsRepo.DeleteRemoteSessionClientAttachmentsForUserSessionIssuer(ctx, usersessionsrepo.DeleteRemoteSessionClientAttachmentsForUserSessionIssuerParams{
-					UserSessionIssuerID: deletedIssuer.ID,
-					ProjectID:           *authCtx.ProjectID,
-				}); err != nil {
-					return oops.E(oops.CodeUnexpected, err, "delete mcp server issuer client attachments").LogError(ctx, logger)
+					return oops.E(oops.CodeUnexpected, err, "detach remote session clients from mcp server issuer").LogError(ctx, logger)
 				}
 
 				if _, err := userSessionsRepo.SoftDeleteUserSessionsByIssuerID(ctx, deletedIssuer.ID); err != nil {
