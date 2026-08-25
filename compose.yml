@@ -1,9 +1,9 @@
-# Per-worktree infra. `git:workinit` sets a unique COMPOSE_PROJECT_NAME (and
-# `zero:remap-ports` remaps the host ports) so each worktree gets its own stack
-# — postgres, clickhouse, temporal, etc. — without colliding.
+# Per-worktree infra. `git:workinit` sets a unique COMPOSE_PROJECT_NAME and
+# `zero:remap-ports` remaps the host ports, so each worktree gets its own
+# Postgres, Redis, and ClickHouse without colliding.
 # Services shared safely through explicit worktree namespaces live in
-# compose.shared.yml and run once for the whole machine: Pub/Sub, Presidio, and
-# the LGTM observability stack.
+# compose.shared.yml and run once for the whole machine: Temporal, Pub/Sub,
+# Presidio, and the LGTM observability stack.
 name: ${COMPOSE_PROJECT_NAME:-gram}
 
 services:
@@ -35,66 +35,6 @@ services:
     ports:
       - "${GRAM_REDIS_CACHE_PORT}:35299"
     command: redis-server --port 35299 --requirepass xi9XILbY
-
-  gram-temporal:
-    # The CLI image, not temporalio/server: as of 1.31 the server image no
-    # longer bundles the `temporal` binary that `server start-dev` needs.
-    # CLI 1.8.1 embeds Server 1.31.2 and UI 2.50.1.
-    image: temporalio/temporal:1.8.1
-    restart: unless-stopped
-    ports:
-      - "${TEMPORAL_PORT}:7233"
-      - "${TEMPORAL_WEB_PORT}:8233"
-    environment:
-      # The dev server is a single Go process, so its footprint is governed by
-      # the Go runtime rather than by cgroup limits. GOMEMLIMIT is a soft heap
-      # ceiling the GC actively works to stay under, which is what caps memory
-      # in sandboxes where `deploy.resources.limits` cannot be applied.
-      GOMEMLIMIT: 256MiB
-      # Per-P allocator caches and GC workers scale with core count; the dev
-      # server never needs the whole host.
-      GOMAXPROCS: 4
-    entrypoint: ["temporal"]
-    command: [
-        "server",
-        "start-dev",
-        "--ip",
-        "${TEMPORAL_IP:-0.0.0.0}",
-        "--ui-ip",
-        "${TEMPORAL_IP:-0.0.0.0}",
-        "--namespace",
-        "default",
-        "--db-filename",
-        "/home/temporal/dev.db",
-        # Temporal's history cache is count-bounded by default (128k mutable
-        # state entries host-wide), which puts no ceiling on bytes. Switch it to
-        # a size-based limit so the live heap stays bounded and GOMEMLIMIT does
-        # not turn into GC thrash. 1.31 dropped the shard-level cache, so
-        # hostLevelCacheMaxSizeBytes is the only size knob left.
-        "--dynamic-config-value",
-        "history.cacheSizeBasedLimit=true",
-        "--dynamic-config-value",
-        "history.hostLevelCacheMaxSizeBytes=67108864",
-        "--dynamic-config-value",
-        "history.eventsCacheMaxSizeBytes=2097152",
-        "--dynamic-config-value",
-        'history.cacheTTL="5m"',
-        "--dynamic-config-value",
-        'history.eventsCacheTTL="5m"',
-        # A single local worker does not need the default 4 task queue
-        # partitions, each of which carries its own manager and buffers.
-        "--dynamic-config-value",
-        "matching.numTaskqueueReadPartitions=1",
-        "--dynamic-config-value",
-        "matching.numTaskqueueWritePartitions=1",
-      ]
-    volumes:
-      - temporal_data:/home/temporal
-    healthcheck:
-      test: ["CMD", "temporal", "operator", "cluster", "health"]
-      interval: 5s
-      timeout: 30s
-      retries: 5
 
   litellm:
     profiles: [litellm]
@@ -196,8 +136,6 @@ volumes:
   postgres_data:
     driver: local
   cache_data:
-    driver: local
-  temporal_data:
     driver: local
   clickhouse_data:
     driver: local
