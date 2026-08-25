@@ -19,6 +19,22 @@ import {
 } from "./side-panel/SidePanel.tsx";
 import { SidebarInset, SidebarProvider } from "@/components/ui/Sidebar";
 import { useShowsImpersonationBanner } from "./impersonation-banner-state";
+import { ModeSurface } from "./mode-switch-stage.tsx";
+import {
+  MODE_SWITCHER_HEIGHT,
+  useModeSwitcherEnabled,
+} from "./mode-switch-context.ts";
+import { ModeSwitcher } from "./mode-switcher.tsx";
+
+// Height of the fixed chrome above the panes: the mode strip, plus the
+// impersonation banner when it is showing (h-9 / 2.25rem).
+const chromeTopOffset = (
+  isImpersonating: boolean,
+  hasModeSwitcher: boolean,
+): string => {
+  const strip = hasModeSwitcher ? MODE_SWITCHER_HEIGHT : "0px";
+  return isImpersonating ? `calc(${strip} + 2.25rem)` : strip;
+};
 
 // Layout to handle unauthenticated landing pages and the authenticated webapp experience
 export const LoginCheck = (): JSX.Element => {
@@ -40,14 +56,21 @@ export const LoginCheck = (): JSX.Element => {
 
 export const AppLayout = (): JSX.Element => {
   const isImpersonating = useShowsImpersonationBanner();
+  const chromeOffset = chromeTopOffset(
+    isImpersonating,
+    useModeSwitcherEnabled(),
+  );
 
   return (
     <SidebarProvider
       style={
         {
           "--sidebar-width": "16rem",
-          "--header-offset": isImpersonating ? "2.25rem" : "0px",
-          ...(isImpersonating ? { "--banner-offset": "2.25rem" } : undefined),
+          // The mode strip and the impersonation banner both sit above the
+          // panes, so the fixed sidebar starts below their combined height and
+          // pages size themselves against it.
+          "--header-offset": chromeOffset,
+          "--banner-offset": chromeOffset,
         } as React.CSSProperties
       }
     >
@@ -146,7 +169,8 @@ const AppLayoutContent = ({
   return (
     <div className="flex h-screen w-full flex-col">
       {isImpersonating && <ImpersonationBanner />}
-      <div className="flex w-full flex-1 overflow-hidden">
+      <ModeSwitcher mode="canvas" />
+      <ModeSurface mode="canvas" className="flex w-full flex-1 overflow-hidden">
         {/* Default (non-inset) variant: flat panes divided by a hairline
             instead of a floating bordered card. */}
         <AppSidebar />
@@ -160,7 +184,7 @@ const AppLayoutContent = ({
         {/* Sibling of the content, not an overlay: the page reflows into the
             remaining width so nothing sits behind the panel. */}
         <SidePanelSurface />
-      </div>
+      </ModeSurface>
       {/* Above the outlet so the suggestion → chat bubble morph survives the
           navigation into the chat route. */}
       <ChatLaunchOverlay />
@@ -233,27 +257,38 @@ const MembershipSyncGuard = ({ children }: { children: React.ReactNode }) => {
 
 export const OrgLayout = (): JSX.Element => {
   const isImpersonating = useShowsImpersonationBanner();
+  const chromeOffset = chromeTopOffset(
+    isImpersonating,
+    useModeSwitcherEnabled(),
+  );
 
   return (
     <SidebarProvider
       style={
         {
           "--sidebar-width": "16rem",
-          "--header-offset": isImpersonating ? "2.25rem" : "0px",
-          ...(isImpersonating ? { "--banner-offset": "2.25rem" } : undefined),
+          // The mode strip and the impersonation banner both sit above the
+          // panes, so the fixed sidebar starts below their combined height and
+          // pages size themselves against it.
+          "--header-offset": chromeOffset,
+          "--banner-offset": chromeOffset,
         } as React.CSSProperties
       }
     >
       <div className="flex h-screen w-full flex-col">
         {isImpersonating && <ImpersonationBanner />}
-        <div className="flex w-full flex-1 overflow-hidden">
+        <ModeSwitcher mode="canvas" />
+        <ModeSurface
+          mode="canvas"
+          className="flex w-full flex-1 overflow-hidden"
+        >
           <OrgSidebar />
           <SidebarInset>
             <MembershipSyncGuard>
               <Outlet />
             </MembershipSyncGuard>
           </SidebarInset>
-        </div>
+        </ModeSurface>
       </div>
     </SidebarProvider>
   );

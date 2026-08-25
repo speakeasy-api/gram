@@ -75,6 +75,7 @@ import OrgIdentity from "./pages/org/OrgIdentity";
 import OrgAIIntegrations from "./pages/org/OrgAIIntegrations";
 import OrgLogs from "./pages/org/OrgLogs";
 import PlatformMCP from "./pages/org/PlatformMCP";
+import HeadlessMode from "./pages/org/HeadlessMode";
 import OrgSkills from "./pages/org/OrgSkills";
 import ExternalCredentialDetail from "./pages/org/external-services/ExternalCredentialDetail";
 import {
@@ -1290,6 +1291,14 @@ const ORG_ROUTE_STRUCTURE = {
     url: "setup",
     icon: "settings",
     component: SetupWizard,
+    outsideMainLayout: true,
+  },
+  // Headless mode renders its own chrome (mode tabs only, no sidebar or
+  // workspace header), so it sits outside OrgLayout.
+  headless: {
+    title: "Headless",
+    url: "headless",
+    component: HeadlessMode,
     outsideMainLayout: true,
   },
 } satisfies Record<string, RouteEntry>;
