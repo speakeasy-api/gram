@@ -217,11 +217,11 @@ func addResource(r *Registrar, resource *mcp.Resource, meta ResourceMeta, read f
 // serve every tool there regardless of what it declared — an audience list
 // that reads as a restriction while restricting nothing.
 func addTool[In, Out any](r *Registrar, tool *mcp.Tool, meta ToolMeta, handler mcp.ToolHandlerFor[In, Out]) {
+	inputSchema, resolved := prepareInputSchema[In](tool)
+
 	if meta.servesAudience(AudienceExternal) {
 		mcp.AddTool(r.server, tool, handler)
 	}
-
-	resolved := resolveInputSchema[In](tool.Name)
 
 	r.descriptors = append(r.descriptors, Descriptor{
 		Name:        tool.Name,
@@ -229,7 +229,7 @@ func addTool[In, Out any](r *Registrar, tool *mcp.Tool, meta ToolMeta, handler m
 		Description: tool.Description,
 		Annotations: tool.Annotations,
 		Meta:        meta,
-		InputSchema: inferInputSchema[In](tool.Name),
+		InputSchema: inputSchema,
 		invoke: func(ctx context.Context, arguments json.RawMessage) (any, error) {
 			// The MCP transport validates arguments against the tool's schema
 			// before a handler sees them. A direct call has no transport, so
@@ -281,18 +281,33 @@ func refusalFromResult(result *mcp.CallToolResult) (*ToolRefusalError, bool) {
 	return &ToolRefusalError{Payload: `{"code":"` + unavailableCode + `"}`}, true
 }
 
-// resolveInputSchema compiles the tool's schema once, so a direct call can
-// validate arguments the way the MCP transport does.
-func resolveInputSchema[In any](name string) *jsonschema.Resolved {
-	schema, err := jsonschema.For[In](nil)
-	if err != nil {
-		panic(fmt.Sprintf("platformmcp: infer input schema for %q: %v", name, err))
+// prepareInputSchema returns one schema for all three consumers: MCP transport
+// validation, direct invocation validation, and the descriptor advertised to a
+// non-MCP audience. A tool-provided schema is authoritative; otherwise the
+// schema is inferred from the typed input exactly as before.
+func prepareInputSchema[In any](tool *mcp.Tool) ([]byte, *jsonschema.Resolved) {
+	source := tool.InputSchema
+	if source == nil {
+		inferred, err := jsonschema.For[In](nil)
+		if err != nil {
+			panic(fmt.Sprintf("platformmcp: infer input schema for %q: %v", tool.Name, err))
+		}
+		source = inferred
 	}
-	resolved, err := schema.Resolve(nil)
+
+	encoded, err := json.Marshal(source)
 	if err != nil {
-		panic(fmt.Sprintf("platformmcp: resolve input schema for %q: %v", name, err))
+		panic(fmt.Sprintf("platformmcp: encode input schema for %q: %v", tool.Name, err))
 	}
-	return resolved
+	var schema jsonschema.Schema
+	if err := json.Unmarshal(encoded, &schema); err != nil {
+		panic(fmt.Sprintf("platformmcp: decode input schema for %q: %v", tool.Name, err))
+	}
+	resolved, err := schema.Resolve(&jsonschema.ResolveOptions{BaseURI: "", Loader: nil, ValidateDefaults: true})
+	if err != nil {
+		panic(fmt.Sprintf("platformmcp: resolve input schema for %q: %v", tool.Name, err))
+	}
+	return encoded, resolved
 }
 
 // validateAgainstSchema applies the tool's declared contract to a direct call.
@@ -313,20 +328,6 @@ func validateAgainstSchema(resolved *jsonschema.Resolved, arguments json.RawMess
 		return fmt.Errorf("arguments do not match the tool schema: %w", err)
 	}
 	return nil
-}
-
-// inferInputSchema derives the JSON Schema a non-MCP surface advertises. The
-// MCP server infers its own from the same type, so the two always agree.
-func inferInputSchema[In any](name string) []byte {
-	schema, err := jsonschema.For[In](nil)
-	if err != nil {
-		panic(fmt.Sprintf("platformmcp: infer input schema for %q: %v", name, err))
-	}
-	encoded, err := json.Marshal(schema)
-	if err != nil {
-		panic(fmt.Sprintf("platformmcp: encode input schema for %q: %v", name, err))
-	}
-	return encoded
 }
 
 // ErrToolNotFound reports a tool that is not admitted to the requested audience.
