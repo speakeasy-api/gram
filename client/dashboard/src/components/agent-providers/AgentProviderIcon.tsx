@@ -1,4 +1,5 @@
 import { GlobeIcon } from "lucide-react";
+import { useId } from "react";
 import { agentProviderIconKind } from "./agent-provider-icon-kind";
 
 // Claude Code logo - official Anthropic Claude icon
@@ -106,8 +107,10 @@ function OpencodeIcon({ className }: { className?: string }): JSX.Element {
 }
 
 // OpenClaw lobster mark. Geometry from homarr-labs/dashboard-icons
-// (openclaw-dark); gradient id namespaced to avoid document-global collisions.
+// (openclaw-dark); the gradient id comes from useId so the many icon
+// instances a page can render never emit duplicate DOM ids.
 function OpenClawIcon({ className }: { className?: string }): JSX.Element {
+  const gradientId = useId();
   return (
     <svg
       className={className}
@@ -116,28 +119,22 @@ function OpenClawIcon({ className }: { className?: string }): JSX.Element {
       xmlns="http://www.w3.org/2000/svg"
     >
       <defs>
-        <linearGradient
-          id="openclaw-lobster-gradient"
-          x1="0%"
-          y1="0%"
-          x2="100%"
-          y2="100%"
-        >
+        <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stopColor="#ff4d4d" />
           <stop offset="100%" stopColor="#991b1b" />
         </linearGradient>
       </defs>
       <path
         d="M60 10 C30 10 15 35 15 55 C15 75 30 95 45 100 L45 110 L55 110 L55 100 C55 100 60 102 65 100 L65 110 L75 110 L75 100 C90 95 105 75 105 55 C105 35 90 10 60 10Z"
-        fill="url(#openclaw-lobster-gradient)"
+        fill={`url(#${gradientId})`}
       />
       <path
         d="M20 45 C5 40 0 50 5 60 C10 70 20 65 25 55 C28 48 25 45 20 45Z"
-        fill="url(#openclaw-lobster-gradient)"
+        fill={`url(#${gradientId})`}
       />
       <path
         d="M100 45 C115 40 120 50 115 60 C110 70 100 65 95 55 C92 48 95 45 100 45Z"
-        fill="url(#openclaw-lobster-gradient)"
+        fill={`url(#${gradientId})`}
       />
       <path
         d="M45 15 Q35 5 30 8"
