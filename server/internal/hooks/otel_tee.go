@@ -100,7 +100,8 @@ func (s *Service) teeOTELLogsToEventFeed(ctx context.Context, payload *gen.LogsP
 // edge applies in decodeOTLPLogExport: a fresh record id per record, observed
 // time stamped when the producer sent none, and resource, scope, and
 // provenance attached to every record. The hooks payload models no schema
-// URLs, severity, or flags, so those stay unset.
+// URLs, severity, or flags, so those stay unset; the event name is promoted
+// from the event.name log attribute when present.
 func inboundLogRecordsFromHooksExport(payload *gen.LogsPayload, provenance *otelv1.InboundLogRecord_Provenance, now time.Time) []*otelv1.InboundLogRecord {
 	records := make([]*otelv1.InboundLogRecord, 0)
 
@@ -174,6 +175,15 @@ func inboundLogRecordFromHooksRecord(
 		body = (&otelv1.InboundLogRecord_AnyValue_builder{StringValue: record.Body.StringValue}).Build()
 	}
 
+	// The hooks payload does not model the OTLP eventName field, but
+	// producers carry the name as the event.name log attribute (e.g. Codex's
+	// codex.conversation_starts). Promote it — keeping the attribute — so the
+	// event feed can label teed records.
+	var eventName *string
+	if name := extractAttributeString(record.Attributes, "event.name"); name != "" {
+		eventName = &name
+	}
+
 	return (&otelv1.InboundLogRecord_builder{
 		RecordId:               new(uuid.NewString()),
 		TimeUnixNano:           timeNano,
@@ -186,7 +196,7 @@ func inboundLogRecordFromHooksRecord(
 		SeverityNumber:         nil,
 		SeverityText:           nil,
 		Flags:                  nil,
-		EventName:              nil,
+		EventName:              eventName,
 		Resource:               resource,
 		ResourceSchemaUrl:      nil,
 		Scope:                  scope,

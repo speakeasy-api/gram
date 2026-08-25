@@ -78,6 +78,8 @@ func TestInboundLogRecordsFromHooksExportMapsFields(t *testing.T) {
 	require.Equal(t, "api request", record.GetBody().GetStringValue())
 	require.Equal(t, uint32(3), record.GetDroppedAttributesCount())
 	require.Equal(t, "session-1", teeAttrByKey(t, record.GetAttributes(), "session.id").GetStringValue())
+	// The event name is promoted onto the record while the attribute stays.
+	require.Equal(t, "api_request", record.GetEventName())
 	require.Equal(t, "api_request", teeAttrByKey(t, record.GetAttributes(), "event.name").GetStringValue())
 	require.Equal(t, "claude-code", teeAttrByKey(t, record.GetResource().GetAttributes(), "service.name").GetStringValue())
 	require.Equal(t, "devbox.local", teeAttrByKey(t, record.GetResource().GetAttributes(), "host.name").GetStringValue())
@@ -105,6 +107,7 @@ func TestInboundLogRecordsFromHooksExportStampsObservedTime(t *testing.T) {
 	require.Len(t, records, 1)
 	require.Zero(t, records[0].GetTimeUnixNano())
 	require.Equal(t, uint64(now.UnixNano()), records[0].GetObservedTimeUnixNano())
+	require.Empty(t, records[0].GetEventName())
 }
 
 func TestInboundLogRecordsFromHooksExportDropsMalformedIDs(t *testing.T) {
@@ -260,6 +263,7 @@ func TestLogsTeesExportIntoEventFeedPipeline(t *testing.T) {
 			Body:         &gen.OTELLogBody{StringValue: new("teed request")},
 			Attributes: []*gen.OTELAttribute{
 				strAttr("session.id", "tee-session-1"),
+				strAttr("event.name", "codex.conversation_starts"),
 			},
 		},
 	))
@@ -273,5 +277,6 @@ func TestLogsTeesExportIntoEventFeedPipeline(t *testing.T) {
 	require.Equal(t, authCtx.ActiveOrganizationID, record.GetProvenance().GetOrganizationId())
 	require.Equal(t, authCtx.ProjectID.String(), record.GetProvenance().GetProjectId())
 	require.Equal(t, uint64(timestamp.UnixNano()), record.GetTimeUnixNano())
+	require.Equal(t, "codex.conversation_starts", record.GetEventName())
 	require.Equal(t, "claude-code", teeAttrByKey(t, record.GetResource().GetAttributes(), "service.name").GetStringValue())
 }
