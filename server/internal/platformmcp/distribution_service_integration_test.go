@@ -385,36 +385,37 @@ func testPluginTargets(conn *pgxpool.Pool) *PluginsService {
 }
 
 // Distribution resolves its target only from the caller's onboarding workflow,
-// so every registration surface must run the same post-commit bind. This guards
-// the catalogue path, which once registered without ever binding and left every
-// later distribute_mcp_to_plugin call refused as an invalid target.
-func TestRegistrationOnboardingBindMakesTheRegistrationDistributable(t *testing.T) {
+// so every registration surface must run the same post-commit bind. The
+// registration here goes through the register_catalog_mcp handler rather than
+// the store, because the defect this guards was the handler never binding at
+// all: a catalogue registration succeeded and then could never be distributed.
+func TestCatalogRegistrationToolBindsOnboardingSoTheMCPCanBeDistributed(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_registration_onboarding_bind")
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_catalog_registration_bind")
 	require.NoError(t, err)
 
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	store, err := NewRegistrationStore(conn, RegistrationStoreConfig{ActiveRegistrationCap: 5})
 	require.NoError(t, err)
-	request := registrationRequest(project, "catalog-bind-fixture", "catalog-bind-registration")
-	receipt, err := store.BeginReceipt(ctx, principal, project, request, time.Now().UTC())
-	require.NoError(t, err)
-	receipt, err = store.ConvergeRegistration(ctx, principal, project, request, receipt)
-	require.NoError(t, err)
-	_, err = store.CompleteRegistrationWithRemoteURL(ctx, principal, project, request, receipt, "https://fixture.invalid/mcp")
-	require.NoError(t, err)
+	onboarding := NewOnboardingService(conn)
+	registrations := newRegistrationService(testCatalog{details: CatalogDetails{
+		CatalogCandidate: CatalogCandidate{Name: "Reviewed MCP", ProviderKey: "provider", CatalogRef: "reviewed/mcp", SetupIntent: "authorize"},
+		Transport:        "streamable-http",
+		remoteURL:        "https://reviewed.example.test/mcp",
+	}}, &testRegistrationGate{enabled: true}, store)
 
-	registration, err := platformrepo.New(conn).GetActivePlatformMCPCatalogRegistration(ctx, platformrepo.GetActivePlatformMCPCatalogRegistrationParams{
-		OrganizationID:   principal.OrganizationID,
-		ProjectID:        project.ID,
-		SourceKind:       request.SourceKind,
-		CatalogProvider:  request.CatalogProvider,
-		CatalogReference: request.CatalogReference,
-	})
+	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
+	registerCatalogRegistrationTool(reg, registrations, onboarding)
+	register := descriptorByName(t, reg, "register_catalog_mcp")
+
+	output, err := register.Invoke(ContextWithPrincipal(ctx, principal), json.RawMessage(`{"project_slug":"`+project.Slug+`","provider_key":"provider","catalog_ref":"reviewed/mcp","idempotency_key":"catalog-bind-key"}`))
 	require.NoError(t, err)
-	require.True(t, registration.McpServerID.Valid)
+	registered, ok := output.(RegisterCatalogMCPToolOutput)
+	require.True(t, ok)
+	registrationID, err := uuid.Parse(registered.RegistrationID)
+	require.NoError(t, err)
 
 	_, err = pluginsrepo.New(conn).CreateDefaultPlugin(ctx, pluginsrepo.CreateDefaultPluginParams{
 		OrganizationID: principal.OrganizationID,
@@ -423,7 +424,7 @@ func TestRegistrationOnboardingBindMakesTheRegistrationDistributable(t *testing.
 	require.NoError(t, err)
 	_, err = store.RecordReadiness(ctx, principal, ReadinessBinding{
 		ProjectID:                        project.ID,
-		RegistrationID:                   registration.ID,
+		RegistrationID:                   registrationID,
 		ProviderAuthorizationFingerprint: "fixture-readiness",
 	}, ReadinessReady, "fixture", time.Now().UTC(), time.Now().UTC().Add(time.Hour))
 	require.NoError(t, err)
@@ -431,15 +432,21 @@ func TestRegistrationOnboardingBindMakesTheRegistrationDistributable(t *testing.
 	service := NewDistributionService(conn, nil, testExistingPluginAttacher(), func(_ context.Context, _ uuid.UUID, _ string, _ string) error {
 		return nil
 	}, testPluginTargets(conn))
-	_, err = service.Distribute(ctx, principal, DistributionInput{ProjectSlug: project.Slug, ExpectedVersion: 0})
-	require.ErrorIs(t, err, ErrDistributionInvalid, "an unbound registration has no distribution target")
-
-	onboarding := NewOnboardingService(conn)
-	require.NoError(t, recordRegistrationOnboarding(ctx, onboarding, principal, project.ID, registration.ID.String()))
-
 	attached, err := service.Distribute(ctx, principal, DistributionInput{ProjectSlug: project.Slug, ExpectedVersion: 0})
-	require.NoError(t, err)
+	require.NoError(t, err, "a registration made through the catalog tool must be distributable")
 	require.True(t, attached.AttachmentLive)
+}
+
+func descriptorByName(t *testing.T, reg *Registrar, name string) Descriptor {
+	t.Helper()
+
+	for _, descriptor := range reg.Descriptors() {
+		if descriptor.Name == name {
+			return descriptor
+		}
+	}
+	t.Fatalf("tool %q was not registered", name)
+	return Descriptor{}
 }
 
 func TestDistributionToolErrorClassifiesAnInvalidTarget(t *testing.T) {
