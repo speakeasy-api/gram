@@ -1843,13 +1843,19 @@ export default {
           return
         }
         if (hook === "agent_end") {
-          // Consume whichever cache entry served the splice: llm_output keys
-          // by runId when it has one and sessionId otherwise, so deleting
-          // only the runId entry would retain sessionId-keyed data and
-          // splice it into a later turn's agent_end.
-          const cached = llmByRun.get(event?.runId ?? "") ?? llmByRun.get(ctx?.sessionId ?? "")
-          llmByRun.delete(event?.runId ?? "")
-          llmByRun.delete(ctx?.sessionId ?? "")
+          // Consume exactly the cache entry that serves the splice: llm_output
+          // keys by runId when it has one and sessionId otherwise. Deleting
+          // any other key could destroy a concurrent turn's pending entry;
+          // leaving the consumed one would splice it into a later agent_end.
+          const runKey = event?.runId ?? ""
+          let cached = llmByRun.get(runKey)
+          if (cached !== undefined) {
+            llmByRun.delete(runKey)
+          } else {
+            const sessionKey = ctx?.sessionId ?? ""
+            cached = llmByRun.get(sessionKey)
+            if (cached !== undefined) llmByRun.delete(sessionKey)
+          }
           const spliced = cached ? { ...event, finalMessage: cached.finalMessage, usage: cached.usage } : event
           void call(hook, spliced, sanitizeCtx(hook, ctx))
           return
