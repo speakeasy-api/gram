@@ -88,3 +88,25 @@ func TestSubjectCount_ReportedValueRoundTrips(t *testing.T) {
 	require.False(t, decoded.Suppressed())
 	require.Equal(t, int64(42), decoded.value)
 }
+
+// The bug this guards: the advertised output schema is inferred from the Go
+// type, which is a struct, while the value on the wire is a number or the
+// suppression label. A client that validates results against the declared
+// schema rejected the entire result.
+func TestSubjectCountOutputSchemaMatchesTheWireForm(t *testing.T) {
+	t.Parallel()
+
+	schema := inferOutputSchema[GetProjectOverviewOutput]("get_project_overview")
+	require.NotNil(t, schema)
+	resolved, err := schema.Resolve(nil)
+	require.NoError(t, err)
+
+	for _, count := range []SubjectCount{NewSubjectCount(0), NewSubjectCount(3), NewSubjectCount(25)} {
+		encoded, err := json.Marshal(GetProjectOverviewOutput{ActiveUsers: count})
+		require.NoError(t, err)
+
+		var decoded any
+		require.NoError(t, json.Unmarshal(encoded, &decoded))
+		require.NoError(t, resolved.Validate(decoded), "output %s", encoded)
+	}
+}

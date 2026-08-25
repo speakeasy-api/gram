@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+
+	"github.com/google/jsonschema-go/jsonschema"
 )
 
 // SubjectSuppressionThreshold is the smallest subject count a diagnostic will
@@ -72,4 +74,14 @@ func (c *SubjectCount) UnmarshalJSON(data []byte) error {
 	}
 	c.value = SubjectSuppressionThreshold - 1
 	return nil
+}
+
+// subjectCountSchema describes SubjectCount as it serializes rather than as it
+// is shaped in Go. Schema inference reflects on the type — a struct — while
+// MarshalJSON emits a number or the suppression label, so without this
+// override a tool would advertise an object, and a client that validates
+// results against the declared schema rejects the entire result.
+var subjectCountSchema = &jsonschema.Schema{
+	Types:       []string{"integer", "string"},
+	Description: `count of people: a number, or "` + subjectSuppressedLabel + `" when the exact count is withheld`,
 }
