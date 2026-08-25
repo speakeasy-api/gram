@@ -442,6 +442,7 @@ func TestCreateCheckoutSessionBuildsMeteredSubscription(t *testing.T) {
 	require.Equal(t, "cus_test", stripesdk.StringValue(params.Customer))
 	require.Equal(t, expiresAt.Unix(), stripesdk.Int64Value(params.ExpiresAt))
 	require.Equal(t, "<ORG_ID>", stripesdk.StringValue(params.ClientReferenceID))
+	require.True(t, stripesdk.BoolValue(params.AllowPromotionCodes))
 	require.Equal(t, "subscription", stripesdk.StringValue(params.Mode))
 	require.Equal(t, "always", stripesdk.StringValue(params.PaymentMethodCollection))
 	require.Equal(t, "https://app.example.test/the-customer/billing", stripesdk.StringValue(params.SuccessURL))
