@@ -45,6 +45,12 @@ services:
         "start",
         "--host-port=0.0.0.0:8085",
       ]
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8085"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+      start_period: 2s
 
   gram-presidio:
     image: mcr.microsoft.com/presidio-analyzer:2.2.362

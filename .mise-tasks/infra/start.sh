@@ -111,9 +111,10 @@ docker ps -a --filter "label=com.docker.compose.service=pubsub-emulator" --filte
   | awk '$1 != "gram-shared" { print $2 }' \
   | xargs -r docker rm -f > /dev/null 2>&1 || true
 
-# Pub/Sub is required by the local streams processes. Start its shared singleton
-# first and fail infra startup if it cannot bind or launch.
-docker compose -f compose.shared.yml -p gram-shared up -d pubsub-emulator || exit 1
+# Pub/Sub is required by the local streams processes. Wait for its TCP
+# healthcheck so a container that starts and immediately exits cannot let
+# infrastructure startup report success.
+docker compose -f compose.shared.yml -p gram-shared up -d --wait --wait-timeout 30 pubsub-emulator || exit 1
 
 # Presidio and LGTM are shared too, but neither is a synchronous startup
 # dependency. A transient image pull or cold model must not take down this
