@@ -32,7 +32,6 @@ import UserSessions from "./pages/org/UserSessions";
 import EventFeed from "./pages/data/EventFeed";
 import DeviceAgent, { DeviceAgentRoot } from "./pages/device-agent/DeviceAgent";
 import MdmIntegrationDetail from "./pages/org/device-integrations/MdmIntegrationDetail";
-import Elements from "./pages/elements/Elements";
 import EnvironmentPage from "./pages/environments/Environment";
 import Environments, {
   EnvironmentsRoot,
@@ -259,12 +258,6 @@ const ROUTE_STRUCTURE = {
     url: "playground",
     icon: "message-circle",
     component: Playground,
-  },
-  elements: {
-    title: "Chat Elements",
-    url: "elements",
-    icon: "message-circle",
-    component: Elements,
   },
   integrations: {
     title: "Integrations",

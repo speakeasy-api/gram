@@ -1,8 +1,5 @@
 // oxlint-disable react/only-export-components -- compound component (Object.assign) pattern
-import { useTelemetry } from "@/contexts/Telemetry.tsx";
 import { cn } from "@/lib/utils.ts";
-import { useIsProjectEmpty } from "@/pages/onboarding/upload-openapi-utils";
-import { InitialChoiceStep } from "@/components/onboarding-choice-step.tsx";
 import { useRoutes } from "@/routes.tsx";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
@@ -234,40 +231,12 @@ export function EmptyState({
   graphicClassName?: string;
 }): React.JSX.Element {
   const routes = useRoutes();
-  const telemetry = useTelemetry();
-  const { isEmpty, isLoading } = useIsProjectEmpty();
 
-  const isFunctionsEnabled =
-    telemetry.isFeatureEnabled("gram-functions") ?? false;
-
-  // For empty projects, show the onboarding choice cards
-  if (isEmpty && !isLoading) {
-    return (
-      <Stack gap={8} className="m-8 w-full max-w-xl">
-        <InitialChoiceStep
-          routes={routes}
-          isFunctionsEnabled={isFunctionsEnabled}
-        />
-      </Stack>
-    );
-  }
-
-  // For non-empty projects or loading state, show the standard empty state
-  let CTA: React.ReactNode = (
-    <routes.sources.Link>
-      <Button size="sm">Get started</Button>
-    </routes.sources.Link>
+  const CTA: React.ReactNode = nonEmptyProjectCTA ?? (
+    <routes.catalog.Link>
+      <Button size="sm">Browse catalog</Button>
+    </routes.catalog.Link>
   );
-
-  if (isLoading) {
-    CTA = (
-      <Button disabled size="sm">
-        Checking project…
-      </Button>
-    );
-  } else if (!isEmpty && nonEmptyProjectCTA) {
-    CTA = nonEmptyProjectCTA;
-  }
 
   return (
     <div className="bg-background flex h-[600px] w-full items-center justify-center border">

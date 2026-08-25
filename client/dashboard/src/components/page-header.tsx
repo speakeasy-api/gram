@@ -91,7 +91,6 @@ const breadcrumbSubstitutions = {
   "platform-mcp": "Platform MCP",
   "shadow-mcp": "Shadow MCP",
   sdks: "SDKs",
-  elements: "Chat Elements",
   "add-openapi": "Add OpenAPI",
   "add-from-catalog": "Add from Catalog",
   "ai-integrations": "AI Integrations",
