@@ -1,22 +1,20 @@
-import { EmptyState } from "@/components/page-layout";
+import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Button } from "@/components/ui/Button";
 import { useRoutes } from "@/routes";
-import { ToolsetsGraphic } from "../toolsets/ToolsetsEmptyState";
 
 export function DeploymentsEmptyState(): JSX.Element {
   const routes = useRoutes();
 
   return (
-    <EmptyState
+    <InlineEmptyState
+      icon="history"
       heading="No deployments yet"
-      description="Browse the catalog to connect an MCP server. Adding a source creates a deployment and generates tools for your project."
-      nonEmptyProjectCTA={
+      description="Connect an MCP server from the catalog to create your first deployment and generate tools."
+      action={
         <routes.catalog.Link>
           <Button size="sm">Browse catalog</Button>
         </routes.catalog.Link>
       }
-      graphic={<ToolsetsGraphic />}
-      graphicClassName="scale-90"
     />
   );
 }
