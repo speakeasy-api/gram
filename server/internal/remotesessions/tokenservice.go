@@ -168,7 +168,9 @@ func (m *ChallengeManager) resolveUpstreamToken(
 		return zero, fmt.Errorf("get active remote_session: %w", err)
 	}
 
-	tok, err := m.validateAndRefresh(ctx, sess, resource)
+	// Rebinds sess to the row the token came from, so a refresh that backfilled
+	// a legacy NULL resource routes on this same request.
+	tok, sess, err := m.validateAndRefresh(ctx, sess, resource)
 	if err != nil {
 		// A known-expired access token with no usable refresh grant is the
 		// ordinary reconnect path. The downstream 401 carries the challenge;
@@ -393,6 +395,12 @@ func (m *ChallengeManager) ResolveAccessTokens(
 // via the upstream /token endpoint when the token is past its usable window
 // and a refresh_token is present.
 //
+// The returned row is the one the token came from — sess when the stored token
+// was served as-is, and the post-refresh row otherwise (the CAS write's
+// RETURNING row, or the concurrent winner's re-read row when this caller lost
+// the race) — so the caller reads grant-time metadata, notably the possibly
+// just-backfilled RFC 8707 resource, from the same row as the token.
+//
 // The usable window depends on what the upstream told us:
 //   - access_expires_at set: the upstream-stated expiry governs.
 //   - access_expires_at NULL: no expiry was reported, so the stored access
@@ -404,10 +412,10 @@ func (m *ChallengeManager) validateAndRefresh(
 	ctx context.Context,
 	sess remotesessions_repo.RemoteSession,
 	resource string,
-) (string, error) {
+) (string, remotesessions_repo.RemoteSession, error) {
 	now := time.Now()
 	if sess.AuthorizationExpiresAt.Valid && !sess.AuthorizationExpiresAt.Time.After(now) {
-		return "", ErrNoValidToken
+		return "", sess, ErrNoValidToken
 	}
 
 	hasRefresh := sess.RefreshTokenEncrypted.Valid && sess.RefreshTokenEncrypted.String != ""
@@ -415,22 +423,22 @@ func (m *ChallengeManager) validateAndRefresh(
 	if !sess.AccessExpiresAt.Valid || sess.AccessExpiresAt.Time.After(now) {
 		plain, err := m.enc.Decrypt(sess.AccessTokenEncrypted)
 		if err != nil {
-			return "", fmt.Errorf("decrypt access token: %w", err)
+			return "", sess, fmt.Errorf("decrypt access token: %w", err)
 		}
-		return plain, nil
+		return plain, sess, nil
 	}
 
 	if !hasRefresh {
-		return "", ErrNoValidToken
+		return "", sess, ErrNoValidToken
 	}
 
 	res, err := m.refresher.RefreshNow(ctx, sess, resource)
 	if err != nil {
-		return "", err
+		return "", sess, err
 	}
 	// RefreshOutcomeSessionInactive lands here as an empty token, which the
 	// caller treats the same as "never linked".
-	return res.AccessToken, nil
+	return res.AccessToken, res.Session, nil
 }
 
 // refreshSessionTokens POSTs grant_type=refresh_token to the upstream token
@@ -573,6 +581,7 @@ func refreshSessionTokens(
 		AuthorizationExpiresAt: authorizationExpires,
 		RefreshExpiresAt:       refreshExpires,
 		Scopes:                 scopes,
+		BackfillResource:       conv.ToPGTextEmpty(resource), // the query's COALESCE/NULLIF keeps a stored binding and rejects an empty stamp
 		ExpectedUpdatedAt:      sess.UpdatedAt,
 	})
 	if err != nil {

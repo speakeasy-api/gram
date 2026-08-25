@@ -771,6 +771,8 @@ RETURNING *;
 -- another writer won or the session was revoked; both end in a re-auth challenge.
 -- Keyed by (subject, client) + CAS only: the session's user_session_issuer_id
 -- is provenance, never part of the credential's identity.
+-- backfill_resource stamps the refresh's RFC 8707 resource onto legacy NULL rows;
+-- COALESCE never overwrites a stored binding and NULLIF keeps an empty backfill NULL.
 UPDATE remote_sessions
 SET
     access_token_encrypted = @access_token_encrypted,
@@ -779,6 +781,7 @@ SET
     authorization_expires_at = @authorization_expires_at,
     refresh_expires_at = @refresh_expires_at,
     scopes = @scopes,
+    resource = COALESCE(resource, NULLIF(sqlc.narg('backfill_resource')::text, '')),
     updated_at = clock_timestamp()
 WHERE subject_urn = @subject_urn
   AND remote_session_client_id = @remote_session_client_id

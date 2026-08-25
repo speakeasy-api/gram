@@ -232,6 +232,15 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 
 	updated, accessToken, refreshErr := refreshSessionTokens(ctx, q, s.enc, s.policy, sess, resource)
 	if refreshErr == nil {
+		// The stamp is permanent, so record which rows the backfill wrote and
+		// what it wrote — the only way to find them again if a value is wrong.
+		if !sess.Resource.Valid && updated.Resource.Valid {
+			s.logger.InfoContext(ctx, "backfilled the remote session resource binding during refresh",
+				attr.SlogRemoteSessionClientID(sess.RemoteSessionClientID.String()),
+				attr.SlogUserSessionIssuerID(sess.UserSessionIssuerID.String()),
+				attr.SlogOAuthResource(updated.Resource.String),
+			)
+		}
 		return RefreshResult{Session: updated, AccessToken: accessToken, Outcome: RefreshOutcomeRefreshed}, nil
 	}
 
