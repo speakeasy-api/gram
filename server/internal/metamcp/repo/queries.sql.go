@@ -485,6 +485,62 @@ func (q *Queries) ListMetaMCPServers(ctx context.Context, arg ListMetaMCPServers
 	return items, nil
 }
 
+const listServableMetaMCPMemberUpstreams = `-- name: ListServableMetaMCPMemberUpstreams :many
+SELECT
+    m.mcp_server_id,
+    r.url AS upstream_url
+FROM meta_mcp_server_members m
+JOIN mcp_servers s
+  ON s.id = m.mcp_server_id
+ AND s.project_id = m.project_id
+ AND s.deleted IS FALSE
+ AND s.visibility <> 'disabled'
+ AND s.slug IS NOT NULL
+JOIN remote_mcp_servers r
+  ON r.id = s.remote_mcp_server_id
+ AND r.project_id = m.project_id
+ AND r.deleted IS FALSE
+WHERE m.meta_mcp_server_id = $1
+  AND m.project_id = $2
+  AND m.deleted IS FALSE
+ORDER BY m.sort_order, m.created_at, m.id
+`
+
+type ListServableMetaMCPMemberUpstreamsParams struct {
+	MetaMcpServerID uuid.UUID
+	ProjectID       uuid.UUID
+}
+
+type ListServableMetaMCPMemberUpstreamsRow struct {
+	McpServerID uuid.UUID
+	UpstreamUrl string
+}
+
+// Consent-time credential selection: the upstream URL of every servable
+// remote-backed member of a gateway, filtered exactly as
+// ListServableMetaMCPMembers is. Tunneled, hosted, and unproxied members are
+// excluded by the join — they advertise no RFC 9728 metadata document, so
+// they cannot be matched to a connecting client's authorization server.
+func (q *Queries) ListServableMetaMCPMemberUpstreams(ctx context.Context, arg ListServableMetaMCPMemberUpstreamsParams) ([]ListServableMetaMCPMemberUpstreamsRow, error) {
+	rows, err := q.db.Query(ctx, listServableMetaMCPMemberUpstreams, arg.MetaMcpServerID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListServableMetaMCPMemberUpstreamsRow
+	for rows.Next() {
+		var i ListServableMetaMCPMemberUpstreamsRow
+		if err := rows.Scan(&i.McpServerID, &i.UpstreamUrl); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listServableMetaMCPMembers = `-- name: ListServableMetaMCPMembers :many
 SELECT
     m.id,

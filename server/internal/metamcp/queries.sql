@@ -192,6 +192,31 @@ WHERE m.meta_mcp_server_id = @meta_mcp_server_id
   AND m.deleted IS FALSE
 ORDER BY m.sort_order, m.created_at, m.id;
 
+-- name: ListServableMetaMCPMemberUpstreams :many
+-- Consent-time credential selection: the upstream URL of every servable
+-- remote-backed member of a gateway, filtered exactly as
+-- ListServableMetaMCPMembers is. Tunneled, hosted, and unproxied members are
+-- excluded by the join — they advertise no RFC 9728 metadata document, so
+-- they cannot be matched to a connecting client's authorization server.
+SELECT
+    m.mcp_server_id,
+    r.url AS upstream_url
+FROM meta_mcp_server_members m
+JOIN mcp_servers s
+  ON s.id = m.mcp_server_id
+ AND s.project_id = m.project_id
+ AND s.deleted IS FALSE
+ AND s.visibility <> 'disabled'
+ AND s.slug IS NOT NULL
+JOIN remote_mcp_servers r
+  ON r.id = s.remote_mcp_server_id
+ AND r.project_id = m.project_id
+ AND r.deleted IS FALSE
+WHERE m.meta_mcp_server_id = @meta_mcp_server_id
+  AND m.project_id = @project_id
+  AND m.deleted IS FALSE
+ORDER BY m.sort_order, m.created_at, m.id;
+
 -- name: UpdateMetaMCPMemberSortOrder :one
 UPDATE meta_mcp_server_members
 SET sort_order = @sort_order,

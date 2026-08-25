@@ -125,7 +125,16 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		}
 		// Not endpoint.UpstreamResource: under multi-binding that may belong
 		// to a different client's upstream; ambiguity derives "" (no resource).
-		clientResource, rerr := s.remoteChallengeMgr.FallbackResourceForClient(ctx, client.ID)
+		// A gateway's members carry their own issuers while the client is bound
+		// to the gateway's, so the stored derivation finds nothing there and
+		// consent-time discovery resolves the member instead.
+		var clientResource string
+		var rerr error
+		if endpoint.MetaMcpServerID.Valid {
+			clientResource, rerr = s.resolveGatewayMemberResource(ctx, logger, endpoint, client.IssuerURL)
+		} else {
+			clientResource, rerr = s.remoteChallengeMgr.FallbackResourceForClient(ctx, client.ID)
+		}
 		if rerr != nil {
 			return oops.E(oops.CodeUnexpected, rerr, "derive client upstream resource").LogError(ctx, logger)
 		}
