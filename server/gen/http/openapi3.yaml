@@ -10679,6 +10679,16 @@ paths:
                     description: Subject ID to filter audit logs to a specific subject (e.g. a single assistant).
                     type: string
                 - allowEmptyValue: true
+                  description: Subject IDs to filter audit logs to a set of subjects at once, e.g. a resource together with the child resources whose events name the child as the subject. Matches any listed subject of any subject type, except that assistant activity events stay excluded unless subject_type is 'assistant'; combine with subject_type to pin the kind. Blank entries are ignored.
+                  in: query
+                  name: subject_ids
+                  schema:
+                    description: Subject IDs to filter audit logs to a set of subjects at once, e.g. a resource together with the child resources whose events name the child as the subject. Matches any listed subject of any subject type, except that assistant activity events stay excluded unless subject_type is 'assistant'; combine with subject_type to pin the kind. Blank entries are ignored.
+                    items:
+                        type: string
+                    maxItems: 200
+                    type: array
+                - allowEmptyValue: true
                   description: Acting surface to filter audit logs to changes made through one surface, e.g. 'platform_mcp' to review agent-driven activity alone.
                   in: query
                   name: acting_surface
@@ -16602,6 +16612,88 @@ paths:
             x-speakeasy-name-override: listMcpEndpoints
             x-speakeasy-react-hook:
                 name: CustomDomainMcpEndpoints
+    /rpc/domain.listRootMcpServers:
+        get:
+            description: List the organization's MCP servers that can be mapped to the custom domain root, including servers not yet attached to the domain
+            operationId: listRootMcpServers
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListRootMcpServersResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listRootMcpServers domains
+            tags:
+                - domains
+            x-speakeasy-name-override: listRootMcpServers
+            x-speakeasy-react-hook:
+                name: RootMcpServers
+                type: query
     /rpc/domain.register:
         post:
             description: Create a custom domain for an organization
@@ -16622,6 +16714,10 @@ paths:
                 required: true
             responses:
                 "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CustomDomain'
                     description: OK response.
                 "400":
                     content:
@@ -16687,7 +16783,7 @@ paths:
                 name: registerDomain
     /rpc/domain.setRootMcpEndpoint:
         post:
-            description: Set or clear the MCP endpoint mapped to a custom domain's root
+            description: Set or clear the MCP endpoint mapped to a custom domain's root. Pass mcp_endpoint_id for an endpoint already attached to the domain, or mcp_server_id to attach a server (creating its domain endpoint if needed) and map it in one call — usable while the domain is still pending verification, so a migration can be staged before DNS cuts over.
             operationId: setRootMcpEndpoint
             parameters:
                 - allowEmptyValue: true
@@ -34333,6 +34429,7 @@ paths:
                         - cursor
                         - codex
                         - opencode
+                        - openclaw
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -62185,14 +62282,6 @@ components:
                     type: string
                     description: The time at which the organization was disabled, if any.
                     format: date-time
-                free_trial_ends_at:
-                    type: string
-                    description: The time at which the free trial ends.
-                    format: date-time
-                free_trial_started_at:
-                    type: string
-                    description: The time at which the free trial started.
-                    format: date-time
                 id:
                     type: string
                     description: The ID of the organization
@@ -62206,6 +62295,14 @@ components:
                 slug:
                     type: string
                     description: The slug of the organization
+                trial_converted_at:
+                    type: string
+                    description: The time at which the trial converted to a paid plan, if any.
+                    format: date-time
+                trial_demoted_at:
+                    type: string
+                    description: The time at which the organization was demoted after its trial, if any.
+                    format: date-time
                 trial_ends_at:
                     type: string
                     description: The time at which the enterprise trial ends. Absent when the organization never trialled.
@@ -62220,6 +62317,9 @@ components:
                         - expired
                         - demoted
                         - converted
+                trial_tier:
+                    type: string
+                    description: The trial tier. Absent when the organization never trialled.
                 updated_at:
                     type: string
                     description: The last update date of the organization.
@@ -66493,6 +66593,12 @@ components:
                     type: string
                     description: The MCP endpoint currently mapped to the domain root, if any
                     format: uuid
+                suggested_record_type:
+                    type: string
+                    description: The suggested DNS record type for this domain. A suggestion only — delegated subzones can make an apex-looking domain CNAME-capable.
+                    enum:
+                        - cname
+                        - a
                 unhealthy_since:
                     type: string
                     description: When the current unhealthy period began.
@@ -66514,6 +66620,7 @@ components:
                 - updated_at
                 - is_updating
                 - ip_allowlist
+                - suggested_record_type
         CustomDomainMcpEndpoint:
             type: object
             properties:
@@ -67211,6 +67318,19 @@ components:
                 plugin_id: 550e8400-e29b-41d4-a716-446655440001
             required:
                 - id
+        DomainDNSConfig:
+            type: object
+            properties:
+                a_records:
+                    type: array
+                    items:
+                        type: string
+                    description: The static IP addresses apex custom domains should point A records at
+                cname_target:
+                    type: string
+                    description: The CNAME target subdomain custom domains should point at, if configured
+            required:
+                - a_records
         EmployeeDataFlowEdge:
             type: object
             properties:
@@ -71194,6 +71314,12 @@ components:
                 subject_id:
                     type: string
                     description: Subject ID to filter audit logs to a specific subject (e.g. a single assistant).
+                subject_ids:
+                    type: array
+                    items:
+                        type: string
+                    description: Subject IDs to filter audit logs to a set of subjects at once, e.g. a resource together with the child resources whose events name the child as the subject. Matches any listed subject of any subject type, except that assistant activity events stay excluded unless subject_type is 'assistant'; combine with subject_type to pin the kind. Blank entries are ignored.
+                    maxItems: 200
                 subject_type:
                     type: string
                     description: Subject type to filter audit logs to a specific kind of subject. When omitted, assistant activity events are excluded; pass 'assistant' to list them.
@@ -71341,6 +71467,8 @@ components:
         ListCustomDomainsResult:
             type: object
             properties:
+                dns_config:
+                    $ref: '#/components/schemas/DomainDNSConfig'
                 domains:
                     type: array
                     items:
@@ -71348,6 +71476,7 @@ components:
             description: Result of listing an organization's custom domains.
             required:
                 - domains
+                - dns_config
         ListDeploymentForm:
             type: object
             properties:
@@ -72123,6 +72252,15 @@ components:
                     description: The roles in your organization.
             required:
                 - roles
+        ListRootMcpServersResponseBody:
+            type: object
+            properties:
+                mcp_servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RootMcpServerOption'
+            required:
+                - mcp_servers
         ListScopesResult:
             type: object
             properties:
@@ -78521,6 +78659,41 @@ components:
                 - total_output_tokens
                 - total_tokens
                 - total_chats
+        RootMcpServerOption:
+            type: object
+            properties:
+                attached_endpoint_id:
+                    type: string
+                    description: The server's endpoint on this custom domain, when one exists
+                    format: uuid
+                attached_endpoint_slug:
+                    type: string
+                    description: The attached endpoint's slug (its /mcp/<slug> path on the domain), when one exists
+                is_domain_root:
+                    type: boolean
+                    description: Whether this server currently serves the domain root
+                mcp_server_id:
+                    type: string
+                    description: The MCP server
+                    format: uuid
+                name:
+                    type: string
+                    description: The MCP server's display name, if set
+                project_id:
+                    type: string
+                    description: The project the server belongs to
+                    format: uuid
+                project_name:
+                    type: string
+                    description: The project's display name
+                slug:
+                    type: string
+                    description: The MCP server's slug, if set
+            required:
+                - mcp_server_id
+                - project_id
+                - project_name
+                - is_domain_root
         RotateTunneledMcpServerKeyForm:
             type: object
             properties:
@@ -79761,7 +79934,11 @@ components:
                     format: uuid
                 mcp_endpoint_id:
                     type: string
-                    description: The MCP endpoint to map to the domain root. Omit to clear the mapping.
+                    description: The MCP endpoint to map to the domain root. Omit both ids to clear the mapping.
+                    format: uuid
+                mcp_server_id:
+                    type: string
+                    description: An MCP server to map to the domain root; its domain endpoint is created when missing. Mutually exclusive with mcp_endpoint_id.
                     format: uuid
             required:
                 - custom_domain_id

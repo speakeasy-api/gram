@@ -76,6 +76,7 @@ type RemoteSessionIssuer struct {
 	Name                              pgtype.Text
 	LogoAssetID                       uuid.NullUUID
 	ClientSetupDocumentationUrl       pgtype.Text
+	Metadata                          []byte
 	CreatedAt                         pgtype.Timestamptz
 	UpdatedAt                         pgtype.Timestamptz
 	DeletedAt                         pgtype.Timestamptz

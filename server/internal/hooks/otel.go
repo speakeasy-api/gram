@@ -45,6 +45,10 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		attr.SlogProjectID(projectID),
 	)
 
+	// Tee the export into the OTel event feed pipeline before the per-client
+	// split below, so every client's records in the batch are mirrored.
+	s.teeOTELLogsToEventFeed(ctx, payload, orgID, projectID)
+
 	// Codex resources persist as a raw log stream like Claude's; they carry no
 	// Claude session to seed, so they skip the attribution path below. Split
 	// per resource rather than routing the whole payload: a collector can

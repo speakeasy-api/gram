@@ -32,7 +32,6 @@ import UserSessions from "./pages/org/UserSessions";
 import EventFeed from "./pages/data/EventFeed";
 import DeviceAgent, { DeviceAgentRoot } from "./pages/device-agent/DeviceAgent";
 import MdmIntegrationDetail from "./pages/org/device-integrations/MdmIntegrationDetail";
-import Elements from "./pages/elements/Elements";
 import EnvironmentPage from "./pages/environments/Environment";
 import Environments, {
   EnvironmentsRoot,
@@ -75,6 +74,7 @@ import OrgIdentity from "./pages/org/OrgIdentity";
 import OrgAIIntegrations from "./pages/org/OrgAIIntegrations";
 import OrgLogs from "./pages/org/OrgLogs";
 import PlatformMCP from "./pages/org/PlatformMCP";
+import HeadlessMode from "./pages/org/HeadlessMode";
 import OrgSkills from "./pages/org/OrgSkills";
 import ExternalCredentialDetail from "./pages/org/external-services/ExternalCredentialDetail";
 import {
@@ -82,6 +82,10 @@ import {
   ExternalServicesRoot,
 } from "./pages/org/external-services/ExternalServices";
 import ExternalKeyDetail from "./pages/org/encryption-keys/ExternalKeyDetail";
+import JsonWebKeySetDetail, {
+  SigningKeySetsIndex,
+  SigningKeySetsRoot,
+} from "./pages/org/encryption-keys/jwks/JsonWebKeySetDetail";
 import {
   EncryptionKeysPage,
   EncryptionKeysRoot,
@@ -258,12 +262,6 @@ const ROUTE_STRUCTURE = {
     url: "playground",
     icon: "message-circle",
     component: Playground,
-  },
-  elements: {
-    title: "Chat Elements",
-    url: "elements",
-    icon: "message-circle",
-    component: Elements,
   },
   integrations: {
     title: "Integrations",
@@ -1100,6 +1098,32 @@ const ORG_ROUTE_STRUCTURE = {
         component: ExternalKeyDetail,
         subPages: {
           overview: { title: "Overview", url: "overview" },
+          signingKeys: { title: "Signing Keys", url: "signing-keys" },
+          settings: { title: "Settings", url: "settings" },
+        },
+      },
+    },
+  },
+  // Signing key sets are listed on the Encryption Keys page (a set is the
+  // published face of the KMS key that backs it), but their detail pages get
+  // their own top-level path so a set id can never be mistaken for the
+  // :provider/:keyId segments of an encryption key. The index redirects to
+  // that list, which keeps the breadcrumb and command palette entry landing
+  // somewhere real. Not in the sidebar.
+  signingKeySets: {
+    title: "Signing Key Sets",
+    url: "signing-keys",
+    icon: "key-round",
+    component: SigningKeySetsRoot,
+    indexComponent: SigningKeySetsIndex,
+    subPages: {
+      setDetail: {
+        title: "Signing Key Set",
+        url: ":setId",
+        component: JsonWebKeySetDetail,
+        subPages: {
+          overview: { title: "Overview", url: "overview" },
+          keys: { title: "Keys", url: "keys" },
           settings: { title: "Settings", url: "settings" },
         },
       },
@@ -1290,6 +1314,14 @@ const ORG_ROUTE_STRUCTURE = {
     url: "setup",
     icon: "settings",
     component: SetupWizard,
+    outsideMainLayout: true,
+  },
+  // Headless mode renders its own chrome (mode tabs only, no sidebar or
+  // workspace header), so it sits outside OrgLayout.
+  headless: {
+    title: "Headless",
+    url: "headless",
+    component: HeadlessMode,
     outsideMainLayout: true,
   },
 } satisfies Record<string, RouteEntry>;

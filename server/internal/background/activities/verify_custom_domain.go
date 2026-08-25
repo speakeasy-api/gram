@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
-	"regexp"
+	"net/netip"
 	"slices"
-	"strings"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.temporal.io/sdk/temporal"
@@ -26,36 +26,57 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// ErrTypeDNSNotFound tags the non-retryable Temporal application error emitted
-// when DNS records required for custom domain verification do not exist
-// (NXDOMAIN). The workflow terminates immediately instead of burning retries
-// on a customer-side configuration gap; the user re-triggers verification via
-// the dashboard's "Reverify" button once DNS is configured.
+// ErrTypeDNSNotFound is retained for its historical value: older workflow
+// histories carry non-retryable application errors with this type. New code
+// reports missing DNS as a dns_pending result instead so the registration
+// workflow can wait out slow propagation.
 const ErrTypeDNSNotFound = "CustomDomainDNSNotFound"
 
-func newDNSNotFoundError(cause error, missingHost string) error {
-	return temporal.NewNonRetryableApplicationError(
-		fmt.Sprintf("DNS record not found for %s", missingHost),
-		ErrTypeDNSNotFound,
-		cause,
-	)
+// ErrTypeCustomDomainInvalid tags non-retryable failures: malformed or
+// prohibited domains, and rows that vanished or changed hands while the
+// long-lived verification workflow was pending.
+const ErrTypeCustomDomainInvalid = "CustomDomainInvalid"
+
+func newCustomDomainInvalidError(ctx context.Context, logger *slog.Logger, cause error, message string) error {
+	return temporal.NewNonRetryableApplicationError(message, ErrTypeCustomDomainInvalid,
+		oops.E(oops.CodeBadRequest, cause, "%s", message).LogError(ctx, logger))
+}
+
+// VerifyCustomDomainStatus is the structured outcome of one verification pass.
+type VerifyCustomDomainStatus string
+
+const (
+	// VerifyStatusVerified means ownership was proven and persisted.
+	VerifyStatusVerified VerifyCustomDomainStatus = "verified"
+	// VerifyStatusDNSPending means the required records were missing or wrong
+	// in a way indistinguishable from in-flight propagation; the workflow
+	// should re-check later rather than fail.
+	VerifyStatusDNSPending VerifyCustomDomainStatus = "dns_pending"
+)
+
+type VerifyCustomDomainResult struct {
+	Status VerifyCustomDomainStatus
+	// Reason is a short operator-facing note on why verification is pending.
+	Reason string
 }
 
 type VerifyCustomDomain struct {
 	db                  *pgxpool.Pool
 	logger              *slog.Logger
 	expectedTargetCNAME string
+	expectedARecords    []netip.Addr
 	audit               *audit.Logger
 	resolver            dns.Resolver
 }
 
-func NewVerifyCustomDomain(logger *slog.Logger, db *pgxpool.Pool, auditLogger *audit.Logger, expectedTargetCNAME string) *VerifyCustomDomain {
+func NewVerifyCustomDomain(logger *slog.Logger, db *pgxpool.Pool, auditLogger *audit.Logger, expectedTargetCNAME string, expectedARecords []netip.Addr) *VerifyCustomDomain {
 	return &VerifyCustomDomain{
 		db:                  db,
 		logger:              logger,
 		expectedTargetCNAME: expectedTargetCNAME,
-		resolver:            dns.NewNetResolver(),
+		expectedARecords:    expectedARecords,
 		audit:               auditLogger,
+		resolver:            dns.NewNetResolver(),
 	}
 }
 
@@ -65,95 +86,119 @@ func (d *VerifyCustomDomain) SetResolver(r dns.Resolver) {
 }
 
 type VerifyCustomDomainArgs struct {
-	OrgID           string
-	Domain          string
-	CreatedBy       urn.Principal
-	CreatedByName   *string
+	OrgID  string
+	Domain string
+	// CustomDomainID pins verification to the row created by CreateDomain.
+	// Zero for workflows scheduled before IDs were threaded through; those
+	// fall back to a hostname lookup.
+	CustomDomainID uuid.UUID
+	CreatedBy      urn.Principal
+	CreatedByName  *string
+	// ProvisionerKind and IPAllowlist are unused since row creation moved to
+	// the registration API; retained for Temporal argument compatibility.
 	ProvisionerKind k8s.ProvisionerKind
 	IPAllowlist     []string
 }
 
-var prohibitedDomainRoots = []string{"getgram.ai", "speakeasy.com", "speakeasyapi.dev"}
-var specialTestDomains = []string{"chat.speakeasy.com", "chat.dev.speakeasy.com"}
-var domainRegex = regexp.MustCompile(`^(?i)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z]{2,})+$`)
-
-func (d *VerifyCustomDomain) Do(ctx context.Context, args VerifyCustomDomainArgs) error {
-	if !domainRegex.MatchString(args.Domain) {
-		return oops.E(oops.CodeBadRequest, errors.New("domain is invalid"), "domain is invalid %s", args.Domain).LogError(ctx, d.logger)
-	}
-
-	for _, root := range prohibitedDomainRoots {
-		if strings.Contains(args.Domain, root) && !slices.Contains(specialTestDomains, args.Domain) { // Temporarily allowed test domain
-			return oops.E(oops.CodeBadRequest, errors.New("domain is prohibited"), "domain %s is prohibited", args.Domain).LogError(ctx, d.logger)
-		}
-	}
-
+// createLegacyDomainRow preserves the pre-v2 contract for workflows started
+// by the old registration API, which never created the row itself.
+func (d *VerifyCustomDomain) createLegacyDomainRow(ctx context.Context, args VerifyCustomDomainArgs) (customdomainsRepo.CustomDomain, error) {
+	var noRow customdomainsRepo.CustomDomain
 	dbtx, err := d.db.Begin(ctx)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to access custom domains").LogError(ctx, d.logger)
+		return noRow, fmt.Errorf("begin legacy custom domain creation: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	kind := args.ProvisionerKind
+	if kind == "" {
+		kind = k8s.ProvisionerKindIngress
+	}
+	ipAllowlist := args.IPAllowlist
+	if ipAllowlist == nil {
+		ipAllowlist = []string{}
+	}
 	cdr := customdomainsRepo.New(dbtx)
-
-	domain, err := cdr.GetCustomDomainByDomain(ctx, args.Domain)
-	switch {
-	case err == nil:
-		// Domain already exists, continue
-	case errors.Is(err, pgx.ErrNoRows):
-		// Soft-deleted rows do not reserve the hostname. A replacement can
-		// therefore race cleanup by the previous row's UUID-scoped reconciler;
-		// closing that pre-existing hostname-reuse window is a follow-up.
-		// Create a new unverified domain entry
-		kind := args.ProvisionerKind
-		if kind == "" {
-			kind = k8s.ProvisionerKindIngress
-		}
-		ipAllowlist := args.IPAllowlist
-		if ipAllowlist == nil {
-			ipAllowlist = []string{}
-		}
-		domain, err = cdr.CreateCustomDomain(ctx, customdomainsRepo.CreateCustomDomainParams{
-			OrganizationID:  args.OrgID,
-			Domain:          args.Domain,
-			IngressName:     conv.PtrToPGText(nil),
-			CertSecretName:  conv.PtrToPGText(nil),
-			ProvisionerKind: string(kind),
-			IpAllowlist:     ipAllowlist,
-		})
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "error creating custom domain").LogError(ctx, d.logger)
-		}
-
-		if err := d.audit.LogCustomDomainCreate(ctx, dbtx, audit.LogCustomDomainCreateEvent{
-			OrganizationID:   args.OrgID,
-			Actor:            args.CreatedBy,
-			ActorDisplayName: args.CreatedByName,
-			ActorSlug:        nil,
-			CustomDomainURN:  urn.NewCustomDomain(domain.ID),
-			DomainName:       domain.Domain,
-		}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to create custom domain creation audit log").LogError(ctx, d.logger)
-		}
-	default:
-		return oops.E(oops.CodeUnexpected, err, "failed to get custom domain").LogError(ctx, d.logger)
-	}
-
-	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to save custom domain creation").LogError(ctx, d.logger)
-	}
-
-	if domain.OrganizationID != args.OrgID {
-		return oops.E(oops.CodeUnauthorized, errors.New("custom domain does not belong to organization"), "custom domain does not belong to organization").LogError(ctx, d.logger)
-	}
-
-	routingIssue, err := checkCustomDomainRouting(ctx, d.resolver, domain.Domain, d.expectedTargetCNAME)
+	domain, err := cdr.CreateCustomDomain(ctx, customdomainsRepo.CreateCustomDomainParams{
+		OrganizationID:  args.OrgID,
+		Domain:          args.Domain,
+		IngressName:     conv.PtrToPGText(nil),
+		CertSecretName:  conv.PtrToPGText(nil),
+		ProvisionerKind: string(kind),
+		IpAllowlist:     ipAllowlist,
+	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to find custom domain mapping for %s", domain.Domain).LogError(ctx, d.logger)
+		return noRow, fmt.Errorf("create legacy custom domain: %w", err)
+	}
+	if err := d.audit.LogCustomDomainCreate(ctx, dbtx, audit.LogCustomDomainCreateEvent{
+		OrganizationID:   args.OrgID,
+		Actor:            args.CreatedBy,
+		ActorDisplayName: args.CreatedByName,
+		ActorSlug:        nil,
+		CustomDomainURN:  urn.NewCustomDomain(domain.ID),
+		DomainName:       domain.Domain,
+	}); err != nil {
+		return noRow, fmt.Errorf("log legacy custom domain creation: %w", err)
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return noRow, fmt.Errorf("commit legacy custom domain creation: %w", err)
+	}
+	return domain, nil
+}
+
+// Do runs one verification pass. The registration API creates the pending row
+// before the workflow starts; this activity only reads it, proves ownership
+// via the _gram TXT record, and is the sole writer of verified=true. A row
+// that is missing, deleted, or bound to another organization or hostname
+// terminates the workflow instead of retrying: the identity this workflow was
+// started for no longer exists — except legacy zero-ID workflows, whose row
+// this activity still creates.
+func (d *VerifyCustomDomain) Do(ctx context.Context, args VerifyCustomDomainArgs) (VerifyCustomDomainResult, error) {
+	var noResult VerifyCustomDomainResult
+
+	if err := customdomains.ValidateDomainName(args.Domain); err != nil {
+		return noResult, newCustomDomainInvalidError(ctx, d.logger, err, err.Error())
+	}
+
+	repo := customdomainsRepo.New(d.db)
+
+	var domain customdomainsRepo.CustomDomain
+	var err error
+	if args.CustomDomainID != uuid.Nil {
+		domain, err = repo.GetCustomDomainByID(ctx, args.CustomDomainID)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return noResult, newCustomDomainInvalidError(ctx, d.logger, err, "custom domain no longer exists")
+		case err != nil:
+			return noResult, oops.E(oops.CodeUnexpected, err, "failed to get custom domain").LogError(ctx, d.logger)
+		}
+	} else {
+		// Legacy workflows scheduled before CreateDomain owned row creation:
+		// the old API relied on this activity to create the row, so a missing
+		// row here means creation, not termination. Deletable once pre-v2
+		// registrations have drained.
+		domain, err = repo.GetCustomDomainByDomain(ctx, args.Domain)
+		if errors.Is(err, pgx.ErrNoRows) {
+			domain, err = d.createLegacyDomainRow(ctx, args)
+		}
+		if err != nil {
+			return noResult, oops.E(oops.CodeUnexpected, err, "failed to get custom domain").LogError(ctx, d.logger)
+		}
+	}
+
+	if domain.OrganizationID != args.OrgID || domain.Domain != args.Domain {
+		return noResult, newCustomDomainInvalidError(ctx, d.logger, errors.New("custom domain identity mismatch"), "custom domain does not match this registration")
+	}
+
+	routingIssue, err := checkCustomDomainRouting(ctx, d.resolver, domain.Domain, d.expectedTargetCNAME, d.expectedARecords)
+	if err != nil {
+		return noResult, oops.E(oops.CodeUnexpected, err, "failed to find custom domain mapping for %s", domain.Domain).LogError(ctx, d.logger)
 	}
 	switch routingIssue {
 	case customdomains.HealthIssueDNSNotFound:
-		return newDNSNotFoundError(errors.New("custom domain DNS not found"), domain.Domain)
+		// Indistinguishable from in-flight propagation, which can take hours
+		// with some providers.
+		return VerifyCustomDomainResult{Status: VerifyStatusDNSPending, Reason: "domain DNS records not found"}, nil
 	default:
 		// Routing shape is advisory at registration time: proxied/CDN domains
 		// and forwarding setups legitimately resolve elsewhere. Ownership is
@@ -169,16 +214,24 @@ func (d *VerifyCustomDomain) Do(ctx context.Context, args VerifyCustomDomainArgs
 	if err != nil {
 		var dnsErr *net.DNSError
 		if errors.As(err, &dnsErr) && dnsErr.IsNotFound {
-			d.logger.InfoContext(ctx, "custom domain verification TXT record not found, terminating non-retryable", attr.SlogURLDomain(domain.Domain), attr.SlogError(err))
-			return newDNSNotFoundError(err, txtName)
+			d.logger.InfoContext(ctx, "custom domain verification TXT record not found, waiting for propagation", attr.SlogURLDomain(domain.Domain), attr.SlogError(err))
+			return VerifyCustomDomainResult{Status: VerifyStatusDNSPending, Reason: fmt.Sprintf("TXT record %s not found", txtName)}, nil
 		}
-		return oops.E(oops.CodeUnexpected, err, "failed to find TXT record for %s", txtName).LogError(ctx, d.logger)
+		return noResult, oops.E(oops.CodeUnexpected, err, "failed to find TXT record for %s", txtName).LogError(ctx, d.logger)
 	}
 	expectedTXT := fmt.Sprintf("gram-domain-verify=%s,%s", domain.Domain, args.OrgID)
-	found := slices.Contains(txts, expectedTXT)
-	if !found {
-		return oops.E(oops.CodeUnexpected, errors.New("TXT record does not match expected value"), "TXT record for %s does not match expected value", txtName).LogError(ctx, d.logger)
+	if !slices.Contains(txts, expectedTXT) {
+		// A present-but-wrong value usually means a stale record still cached
+		// somewhere on the propagation path, so it is pending, not fatal.
+		d.logger.InfoContext(ctx, "custom domain verification TXT record does not match expected value", attr.SlogURLDomain(domain.Domain))
+		return VerifyCustomDomainResult{Status: VerifyStatusDNSPending, Reason: fmt.Sprintf("TXT record %s does not match the expected value", txtName)}, nil
 	}
 
-	return nil
+	// The only code path allowed to set verified=true; reconciliation
+	// consumes it and manages activation only.
+	if _, err := repo.SetCustomDomainVerified(ctx, domain.ID); err != nil {
+		return noResult, oops.E(oops.CodeUnexpected, err, "failed to mark custom domain verified").LogError(ctx, d.logger)
+	}
+
+	return VerifyCustomDomainResult{Status: VerifyStatusVerified, Reason: ""}, nil
 }

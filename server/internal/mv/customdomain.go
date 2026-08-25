@@ -42,6 +42,7 @@ func BuildCustomDomainView(domain customdomainsrepo.CustomDomain, isUpdating boo
 		ConsecutiveFailures:      consecutiveFailures,
 		RootMcpEndpointID:        rootMcpEndpointIDString,
 		OpenaiAppsChallengeToken: conv.FromPGText[string](domain.OpenaiAppsChallengeToken),
+		SuggestedRecordType:      "cname",
 	}
 }
 

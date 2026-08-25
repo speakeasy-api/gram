@@ -26,6 +26,7 @@ import {
   useSearchParams,
 } from "react-router";
 import { orgRoutePaths } from "@/routes";
+import { isPortablePath, resolvePortablePath } from "@/lib/portable-path";
 import { safeRedirectPath, UNAUTHENTICATED_PATHS } from "@/lib/session-expired";
 import { useSlugs } from "./Sdk";
 import {
@@ -117,7 +118,18 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     return <AppLoadingShell />;
   }
 
+  // A portable "/~" path (an external link that cannot know the viewer's
+  // slugs) matches no route, so the gates below must resolve it before route
+  // matching gets a say. Logged out it bounces through login carrying the
+  // full destination — the same shape LoginCheck produces for slugged paths.
+  const portableRedirect = isPortablePath(location.pathname)
+    ? encodeURIComponent(location.pathname + location.search + location.hash)
+    : undefined;
+
   if (error || !session || !session.session) {
+    if (portableRedirect) {
+      return <Navigate to={`/login?redirect=${portableRedirect}`} replace />;
+    }
     return (
       <SessionContext.Provider value={emptySession}>
         {children}
@@ -153,11 +165,27 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   }
 
   if (!session.activeOrganizationId) {
+    if (portableRedirect) {
+      return <Navigate to={`/sign-up?redirect=${portableRedirect}`} replace />;
+    }
     return (
       <SessionContext.Provider value={session}>
         {children}
       </SessionContext.Provider>
     );
+  }
+
+  // Fully authenticated: expand "/~" into the active org and the project the
+  // user last visited, keeping the destination's own query and hash.
+  if (session.organization) {
+    const resolved = resolvePortablePath(
+      location,
+      session.organization,
+      localStorage.getItem(PREFERRED_PROJECT_KEY),
+    );
+    if (resolved) {
+      return <Navigate to={resolved} replace />;
+    }
   }
 
   // Skip all slug-based redirect logic for exempt paths

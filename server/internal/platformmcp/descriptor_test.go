@@ -17,7 +17,7 @@ import (
 func TestEveryRegisteredToolDeclaresAnAudience(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	descriptors := registrar.Descriptors()
 	require.NotEmpty(t, descriptors, "the deployment registers tools even when every dependency is absent")
 
@@ -170,7 +170,7 @@ func names(descriptors []Descriptor) []string {
 func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 
 	admitted := map[string]bool{}
 	for _, descriptor := range registrar.For(AudienceAssistant) {
@@ -183,6 +183,8 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		"attach_platform_mcp_identity_provider",
 		"distribute_mcp_to_plugin",
 		"remove_mcp_from_plugin",
+		"list_plugins",
+		"get_plugin",
 	} {
 		require.False(t, admitted[name], "tool %q needs a connection or is rollout-gated and must not be admitted to the assistant", name)
 	}
@@ -218,7 +220,7 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 func TestExternalEndpointServesOnlyExternallyAdmittedTools(t *testing.T) {
 	t.Parallel()
 
-	server, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	server, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 
 	admitted := make(map[string]bool)
 	for _, descriptor := range registrar.For(AudienceExternal) {
@@ -251,4 +253,58 @@ func TestExternalEndpointServesOnlyExternallyAdmittedTools(t *testing.T) {
 		}
 	}
 	require.Positive(t, withheld, "the catalogue withholds at least one tool from the external endpoint, so this test can fail")
+}
+
+// A tool whose result carries a SubjectCount must advertise that field as it
+// serializes — a number or the suppression label — not as the Go struct it is
+// reflected from. Asserted against a real session's tools/list rather than the
+// inference helper, so dropping the schema in addTool fails here too.
+func TestAdvertisedOutputSchemaMatchesTheSubjectCountWireForm(t *testing.T) {
+	t.Parallel()
+
+	// Registered directly rather than through newServer: with no dependencies
+	// the deployment substitutes the "diagnostics are not enabled" stubs, whose
+	// results carry no subject count. The handler is never called here — only
+	// the schema the registration advertises is under test.
+	server := newTestMCPServer()
+	registerDiagnosticsTools(newRegistrar(server), nil)
+
+	clientTransport, serverTransport := mcp.NewInMemoryTransports()
+	serverSession, err := server.Connect(t.Context(), serverTransport, nil)
+	require.NoError(t, err)
+	defer func() { _ = serverSession.Close() }()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "subject-count-test", Version: "0.0.1"}, nil)
+	session, err := client.Connect(t.Context(), clientTransport, nil)
+	require.NoError(t, err)
+	defer func() { _ = session.Close() }()
+
+	tools, err := session.ListTools(t.Context(), nil)
+	require.NoError(t, err)
+
+	var advertised any
+	for _, tool := range tools.Tools {
+		if tool.Name == "get_project_overview" {
+			advertised = tool.OutputSchema
+		}
+	}
+	require.NotNil(t, advertised, "the external endpoint advertises an output schema for get_project_overview")
+
+	encodedSchema, err := json.Marshal(advertised)
+	require.NoError(t, err)
+	var schema jsonschema.Schema
+	require.NoError(t, json.Unmarshal(encodedSchema, &schema))
+	resolved, err := schema.Resolve(nil)
+	require.NoError(t, err)
+
+	// Zero is reported exactly, three is suppressed, and twenty-five is
+	// reported exactly: the three shapes active_users takes on the wire.
+	for _, count := range []SubjectCount{NewSubjectCount(0), NewSubjectCount(3), NewSubjectCount(25)} {
+		encoded, err := json.Marshal(GetProjectOverviewOutput{ActiveUsers: count})
+		require.NoError(t, err)
+
+		var decoded any
+		require.NoError(t, json.Unmarshal(encoded, &decoded))
+		require.NoError(t, resolved.Validate(decoded), "output %s", encoded)
+	}
 }

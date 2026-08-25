@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@tailwindcss/vite": "catalog:",
+    "@tanstack/react-form": "^1.33.5",
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-router": "1.170.27",
     "@tanstack/react-table": "9.1.2",

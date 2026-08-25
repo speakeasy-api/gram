@@ -116,6 +116,7 @@ func TestGeneratePluginPackagesIncludesPlatformMCPOnlyWhenEnabled(t *testing.T) 
 	require.Contains(t, string(claudeSkill), "add-mcp-from-remote-url", "the catalogue skill routes raw URLs to the remote URL workflow")
 	require.Contains(t, string(claudeSkill), "get_mcp_readiness")
 	require.Contains(t, string(claudeSkill), "attach_platform_mcp_identity_provider")
+	require.Contains(t, string(claudeSkill), "distribute_mcp_to_plugin")
 	require.Contains(t, string(claudeSkill), "send_platform_mcp_feedback")
 	require.NotContains(t, string(claudeSkill), "register_platform_mcp_for_project", "the shipped skill must name only canonical tools")
 	require.NotContains(t, string(claudeSkill), "add_platform_mcp_to_default_plugin", "exact-plugin distribution remains rollout-gated")
@@ -1882,6 +1883,30 @@ func TestCarryHooksSubtreeIsLayoutIndependent(t *testing.T) {
 	require.False(t, carried)
 }
 
+func TestCarryHooksSubtreeTreatsLaterPlatformsAsOptional(t *testing.T) {
+	t.Parallel()
+	required := hooksSubtreePrefixes("Acme")
+	optional := hooksOptionalSubtreePrefixes("Acme")
+	require.NotEmpty(t, optional)
+	published := map[string][]byte{}
+	for i, prefix := range required {
+		published[prefix+"hooks/hook.sh"] = fmt.Appendf(nil, "v14 %d", i)
+	}
+
+	// A repo published before the platform existed carries without it.
+	dst := map[string][]byte{}
+	_, carried := carryHooksSubtree(dst, published, []byte(`{"org_name":"Acme"}`), "Acme")
+	require.True(t, carried)
+	require.Len(t, dst, len(required))
+
+	// Once published, the platform's subtree is carried verbatim.
+	published[optional[0]+"index.js"] = []byte("v15 openclaw")
+	dst = map[string][]byte{}
+	_, carried = carryHooksSubtree(dst, published, []byte(`{"org_name":"Acme"}`), "Acme")
+	require.True(t, carried)
+	require.Equal(t, []byte("v15 openclaw"), dst[optional[0]+"index.js"])
+}
+
 func TestHooksBootstrapConcurrentColdInvocationsDownloadOnce(t *testing.T) {
 	t.Parallel()
 	target := currentHooksBootstrapTarget(t)
@@ -2026,7 +2051,7 @@ func TestGeneratedHookScriptsAreValidBash(t *testing.T) {
 		ServerURL:   "https://app.getgram.ai",
 		HooksAPIKey: "gram_local_secret_xyz",
 	}
-	for _, platform := range []string{"claude", "cursor", "codex", "opencode"} {
+	for _, platform := range []string{"claude", "cursor", "codex", "opencode", "openclaw"} {
 		files, err := GenerateObservabilityPluginPackage(cfg, platform)
 		require.NoError(t, err)
 		for name, content := range files {
@@ -2066,6 +2091,73 @@ func TestGenerateOpenCodeObservabilityPluginPackage(t *testing.T) {
 	require.True(t, ok, "opencode package must ship speakeasy.json alongside the shim")
 	_, ok = files["hooks/bootstrap.sh"]
 	require.True(t, ok, "opencode package must ship the hooks bootstrapper the shim spawns")
+}
+
+// The whole OpenClaw hook registration is the index.js shim and plugin
+// detection keys on package.json, so regressions are silent until a customer
+// install fails — pin the layout and the shim's serve-mode wiring.
+func TestGenerateOpenClawObservabilityPluginPackage(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	files, err := GenerateObservabilityPluginPackage(cfg, "openclaw")
+	require.NoError(t, err)
+
+	var manifest struct {
+		ID         string `json:"id"`
+		Activation struct {
+			OnStartup bool `json:"onStartup"`
+		} `json:"activation"`
+	}
+	require.NoError(t, json.Unmarshal(files["openclaw.plugin.json"], &manifest))
+	require.Equal(t, "speakeasy-observability", manifest.ID)
+	require.True(t, manifest.Activation.OnStartup)
+
+	var pkg struct {
+		OpenClaw struct {
+			Extensions []string `json:"extensions"`
+		} `json:"openclaw"`
+	}
+	require.NoError(t, json.Unmarshal(files["package.json"], &pkg))
+	require.Equal(t, []string{"./index.js"}, pkg.OpenClaw.Extensions)
+
+	shim, ok := files["index.js"]
+	require.True(t, ok, "openclaw package must ship the index.js shim")
+	for _, want := range []string{
+		"--provider=openclaw",
+		"speakeasy.json",
+		"bootstrap.sh",
+		"bootstrap.ps1",
+		// gate deadline on the frame + fail-closed blocks reported to the daemon
+		"frame.timeoutMs = timeoutMs",
+		`call("gate_timeout"`,
+		// gateway ctx reduced to the allowlist (raw carries auth secrets)
+		"{ port: ctx?.port, workspaceDir: ctx?.workspaceDir }",
+		// daemon-reported errors fail closed; output-less replies stay allows
+		"(reply?.timedOut || reply?.error) && FAIL_CLOSED",
+	} {
+		require.Contains(t, string(shim), want)
+	}
+	// Package installs reject TypeScript entries; the shim must stay plain JS.
+	require.NotContains(t, string(shim), ": ChildProcess")
+
+	_, ok = files["speakeasy.json"]
+	require.True(t, ok, "openclaw package must ship speakeasy.json alongside the shim")
+	_, ok = files["hooks/bootstrap.sh"]
+	require.True(t, ok, "openclaw package must ship the hooks bootstrapper the shim spawns")
+	_, ok = files["hooks/bootstrap.ps1"]
+	require.True(t, ok, "openclaw package must ship the PowerShell bootstrapper (the shim picks it on Windows)")
+
+	// Syntax-check the shim when a node binary is available.
+	if nodePath, err := exec.LookPath("node"); err == nil {
+		path := filepath.Join(t.TempDir(), "index.js")
+		require.NoError(t, os.WriteFile(path, shim, 0o644))
+		out, err := exec.Command(nodePath, "--check", path).CombinedOutput()
+		require.NoError(t, err, "index.js failed node --check: %s", out)
+	}
 }
 
 // An upgraded install already carries [hooks.state] entries whose trusted_hash

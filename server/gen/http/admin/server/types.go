@@ -141,15 +141,17 @@ type UpdateOrganizationResponseBody struct {
 	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	// The time at which the organization was disabled, if any.
 	DisabledAt *string `form:"disabled_at,omitempty" json:"disabled_at,omitempty" xml:"disabled_at,omitempty"`
-	// The time at which the free trial started.
-	FreeTrialStartedAt *string `form:"free_trial_started_at,omitempty" json:"free_trial_started_at,omitempty" xml:"free_trial_started_at,omitempty"`
-	// The time at which the free trial ends.
-	FreeTrialEndsAt *string `form:"free_trial_ends_at,omitempty" json:"free_trial_ends_at,omitempty" xml:"free_trial_ends_at,omitempty"`
 	// Lifecycle state of the organization's enterprise trial.
 	TrialState *string `form:"trial_state,omitempty" json:"trial_state,omitempty" xml:"trial_state,omitempty"`
+	// The trial tier. Absent when the organization never trialled.
+	TrialTier *string `form:"trial_tier,omitempty" json:"trial_tier,omitempty" xml:"trial_tier,omitempty"`
 	// The time at which the enterprise trial ends. Absent when the organization
 	// never trialled.
 	TrialEndsAt *string `form:"trial_ends_at,omitempty" json:"trial_ends_at,omitempty" xml:"trial_ends_at,omitempty"`
+	// The time at which the trial converted to a paid plan, if any.
+	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
+	// The time at which the organization was demoted after its trial, if any.
+	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
 	// Number of active members in the organization.
 	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
 	// The creation date of the organization.
@@ -186,15 +188,17 @@ type DisableOrganizationResponseBody struct {
 	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	// The time at which the organization was disabled, if any.
 	DisabledAt *string `form:"disabled_at,omitempty" json:"disabled_at,omitempty" xml:"disabled_at,omitempty"`
-	// The time at which the free trial started.
-	FreeTrialStartedAt *string `form:"free_trial_started_at,omitempty" json:"free_trial_started_at,omitempty" xml:"free_trial_started_at,omitempty"`
-	// The time at which the free trial ends.
-	FreeTrialEndsAt *string `form:"free_trial_ends_at,omitempty" json:"free_trial_ends_at,omitempty" xml:"free_trial_ends_at,omitempty"`
 	// Lifecycle state of the organization's enterprise trial.
 	TrialState *string `form:"trial_state,omitempty" json:"trial_state,omitempty" xml:"trial_state,omitempty"`
+	// The trial tier. Absent when the organization never trialled.
+	TrialTier *string `form:"trial_tier,omitempty" json:"trial_tier,omitempty" xml:"trial_tier,omitempty"`
 	// The time at which the enterprise trial ends. Absent when the organization
 	// never trialled.
 	TrialEndsAt *string `form:"trial_ends_at,omitempty" json:"trial_ends_at,omitempty" xml:"trial_ends_at,omitempty"`
+	// The time at which the trial converted to a paid plan, if any.
+	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
+	// The time at which the organization was demoted after its trial, if any.
+	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
 	// Number of active members in the organization.
 	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
 	// The creation date of the organization.
@@ -220,15 +224,17 @@ type EnableOrganizationResponseBody struct {
 	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	// The time at which the organization was disabled, if any.
 	DisabledAt *string `form:"disabled_at,omitempty" json:"disabled_at,omitempty" xml:"disabled_at,omitempty"`
-	// The time at which the free trial started.
-	FreeTrialStartedAt *string `form:"free_trial_started_at,omitempty" json:"free_trial_started_at,omitempty" xml:"free_trial_started_at,omitempty"`
-	// The time at which the free trial ends.
-	FreeTrialEndsAt *string `form:"free_trial_ends_at,omitempty" json:"free_trial_ends_at,omitempty" xml:"free_trial_ends_at,omitempty"`
 	// Lifecycle state of the organization's enterprise trial.
 	TrialState *string `form:"trial_state,omitempty" json:"trial_state,omitempty" xml:"trial_state,omitempty"`
+	// The trial tier. Absent when the organization never trialled.
+	TrialTier *string `form:"trial_tier,omitempty" json:"trial_tier,omitempty" xml:"trial_tier,omitempty"`
 	// The time at which the enterprise trial ends. Absent when the organization
 	// never trialled.
 	TrialEndsAt *string `form:"trial_ends_at,omitempty" json:"trial_ends_at,omitempty" xml:"trial_ends_at,omitempty"`
+	// The time at which the trial converted to a paid plan, if any.
+	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
+	// The time at which the organization was demoted after its trial, if any.
+	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
 	// Number of active members in the organization.
 	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
 	// The creation date of the organization.
@@ -254,15 +260,17 @@ type GetOrganizationResponseBody struct {
 	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	// The time at which the organization was disabled, if any.
 	DisabledAt *string `form:"disabled_at,omitempty" json:"disabled_at,omitempty" xml:"disabled_at,omitempty"`
-	// The time at which the free trial started.
-	FreeTrialStartedAt *string `form:"free_trial_started_at,omitempty" json:"free_trial_started_at,omitempty" xml:"free_trial_started_at,omitempty"`
-	// The time at which the free trial ends.
-	FreeTrialEndsAt *string `form:"free_trial_ends_at,omitempty" json:"free_trial_ends_at,omitempty" xml:"free_trial_ends_at,omitempty"`
 	// Lifecycle state of the organization's enterprise trial.
 	TrialState *string `form:"trial_state,omitempty" json:"trial_state,omitempty" xml:"trial_state,omitempty"`
+	// The trial tier. Absent when the organization never trialled.
+	TrialTier *string `form:"trial_tier,omitempty" json:"trial_tier,omitempty" xml:"trial_tier,omitempty"`
 	// The time at which the enterprise trial ends. Absent when the organization
 	// never trialled.
 	TrialEndsAt *string `form:"trial_ends_at,omitempty" json:"trial_ends_at,omitempty" xml:"trial_ends_at,omitempty"`
+	// The time at which the trial converted to a paid plan, if any.
+	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
+	// The time at which the organization was demoted after its trial, if any.
+	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
 	// Number of active members in the organization.
 	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
 	// The creation date of the organization.
@@ -313,15 +321,17 @@ type ExtendTrialResponseBody struct {
 	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	// The time at which the organization was disabled, if any.
 	DisabledAt *string `form:"disabled_at,omitempty" json:"disabled_at,omitempty" xml:"disabled_at,omitempty"`
-	// The time at which the free trial started.
-	FreeTrialStartedAt *string `form:"free_trial_started_at,omitempty" json:"free_trial_started_at,omitempty" xml:"free_trial_started_at,omitempty"`
-	// The time at which the free trial ends.
-	FreeTrialEndsAt *string `form:"free_trial_ends_at,omitempty" json:"free_trial_ends_at,omitempty" xml:"free_trial_ends_at,omitempty"`
 	// Lifecycle state of the organization's enterprise trial.
 	TrialState *string `form:"trial_state,omitempty" json:"trial_state,omitempty" xml:"trial_state,omitempty"`
+	// The trial tier. Absent when the organization never trialled.
+	TrialTier *string `form:"trial_tier,omitempty" json:"trial_tier,omitempty" xml:"trial_tier,omitempty"`
 	// The time at which the enterprise trial ends. Absent when the organization
 	// never trialled.
 	TrialEndsAt *string `form:"trial_ends_at,omitempty" json:"trial_ends_at,omitempty" xml:"trial_ends_at,omitempty"`
+	// The time at which the trial converted to a paid plan, if any.
+	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
+	// The time at which the organization was demoted after its trial, if any.
+	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
 	// Number of active members in the organization.
 	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
 	// The creation date of the organization.
@@ -347,15 +357,17 @@ type CreateOrganizationResponseBody struct {
 	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	// The time at which the organization was disabled, if any.
 	DisabledAt *string `form:"disabled_at,omitempty" json:"disabled_at,omitempty" xml:"disabled_at,omitempty"`
-	// The time at which the free trial started.
-	FreeTrialStartedAt *string `form:"free_trial_started_at,omitempty" json:"free_trial_started_at,omitempty" xml:"free_trial_started_at,omitempty"`
-	// The time at which the free trial ends.
-	FreeTrialEndsAt *string `form:"free_trial_ends_at,omitempty" json:"free_trial_ends_at,omitempty" xml:"free_trial_ends_at,omitempty"`
 	// Lifecycle state of the organization's enterprise trial.
 	TrialState *string `form:"trial_state,omitempty" json:"trial_state,omitempty" xml:"trial_state,omitempty"`
+	// The trial tier. Absent when the organization never trialled.
+	TrialTier *string `form:"trial_tier,omitempty" json:"trial_tier,omitempty" xml:"trial_tier,omitempty"`
 	// The time at which the enterprise trial ends. Absent when the organization
 	// never trialled.
 	TrialEndsAt *string `form:"trial_ends_at,omitempty" json:"trial_ends_at,omitempty" xml:"trial_ends_at,omitempty"`
+	// The time at which the trial converted to a paid plan, if any.
+	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
+	// The time at which the organization was demoted after its trial, if any.
+	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
 	// Number of active members in the organization.
 	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
 	// The creation date of the organization.
@@ -381,15 +393,17 @@ type RearmTrialResponseBody struct {
 	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	// The time at which the organization was disabled, if any.
 	DisabledAt *string `form:"disabled_at,omitempty" json:"disabled_at,omitempty" xml:"disabled_at,omitempty"`
-	// The time at which the free trial started.
-	FreeTrialStartedAt *string `form:"free_trial_started_at,omitempty" json:"free_trial_started_at,omitempty" xml:"free_trial_started_at,omitempty"`
-	// The time at which the free trial ends.
-	FreeTrialEndsAt *string `form:"free_trial_ends_at,omitempty" json:"free_trial_ends_at,omitempty" xml:"free_trial_ends_at,omitempty"`
 	// Lifecycle state of the organization's enterprise trial.
 	TrialState *string `form:"trial_state,omitempty" json:"trial_state,omitempty" xml:"trial_state,omitempty"`
+	// The trial tier. Absent when the organization never trialled.
+	TrialTier *string `form:"trial_tier,omitempty" json:"trial_tier,omitempty" xml:"trial_tier,omitempty"`
 	// The time at which the enterprise trial ends. Absent when the organization
 	// never trialled.
 	TrialEndsAt *string `form:"trial_ends_at,omitempty" json:"trial_ends_at,omitempty" xml:"trial_ends_at,omitempty"`
+	// The time at which the trial converted to a paid plan, if any.
+	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
+	// The time at which the organization was demoted after its trial, if any.
+	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
 	// Number of active members in the organization.
 	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
 	// The creation date of the organization.
@@ -4792,15 +4806,17 @@ type AdminOrganizationResponseBody struct {
 	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	// The time at which the organization was disabled, if any.
 	DisabledAt *string `form:"disabled_at,omitempty" json:"disabled_at,omitempty" xml:"disabled_at,omitempty"`
-	// The time at which the free trial started.
-	FreeTrialStartedAt *string `form:"free_trial_started_at,omitempty" json:"free_trial_started_at,omitempty" xml:"free_trial_started_at,omitempty"`
-	// The time at which the free trial ends.
-	FreeTrialEndsAt *string `form:"free_trial_ends_at,omitempty" json:"free_trial_ends_at,omitempty" xml:"free_trial_ends_at,omitempty"`
 	// Lifecycle state of the organization's enterprise trial.
 	TrialState *string `form:"trial_state,omitempty" json:"trial_state,omitempty" xml:"trial_state,omitempty"`
+	// The trial tier. Absent when the organization never trialled.
+	TrialTier *string `form:"trial_tier,omitempty" json:"trial_tier,omitempty" xml:"trial_tier,omitempty"`
 	// The time at which the enterprise trial ends. Absent when the organization
 	// never trialled.
 	TrialEndsAt *string `form:"trial_ends_at,omitempty" json:"trial_ends_at,omitempty" xml:"trial_ends_at,omitempty"`
+	// The time at which the trial converted to a paid plan, if any.
+	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
+	// The time at which the organization was demoted after its trial, if any.
+	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
 	// Number of active members in the organization.
 	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
 	// The creation date of the organization.
@@ -4853,20 +4869,21 @@ func NewGetProjectResponseBody(res *admin.AdminProjectDetail) *GetProjectRespons
 // result of the "updateOrganization" endpoint of the "admin" service.
 func NewUpdateOrganizationResponseBody(res *admin.AdminOrganization) *UpdateOrganizationResponseBody {
 	body := &UpdateOrganizationResponseBody{
-		ID:                 res.ID,
-		Name:               res.Name,
-		Slug:               res.Slug,
-		AccountType:        res.AccountType,
-		WorkosID:           res.WorkosID,
-		Whitelisted:        res.Whitelisted,
-		DisabledAt:         res.DisabledAt,
-		FreeTrialStartedAt: res.FreeTrialStartedAt,
-		FreeTrialEndsAt:    res.FreeTrialEndsAt,
-		TrialState:         res.TrialState,
-		TrialEndsAt:        res.TrialEndsAt,
-		MemberCount:        res.MemberCount,
-		CreatedAt:          res.CreatedAt,
-		UpdatedAt:          res.UpdatedAt,
+		ID:               res.ID,
+		Name:             res.Name,
+		Slug:             res.Slug,
+		AccountType:      res.AccountType,
+		WorkosID:         res.WorkosID,
+		Whitelisted:      res.Whitelisted,
+		DisabledAt:       res.DisabledAt,
+		TrialState:       res.TrialState,
+		TrialTier:        res.TrialTier,
+		TrialEndsAt:      res.TrialEndsAt,
+		TrialConvertedAt: res.TrialConvertedAt,
+		TrialDemotedAt:   res.TrialDemotedAt,
+		MemberCount:      res.MemberCount,
+		CreatedAt:        res.CreatedAt,
+		UpdatedAt:        res.UpdatedAt,
 	}
 	return body
 }
@@ -4898,20 +4915,21 @@ func NewBulkUpdateAccountTypeResponseBody(res *admin.AdminBulkUpdateAccountTypeR
 // result of the "disableOrganization" endpoint of the "admin" service.
 func NewDisableOrganizationResponseBody(res *admin.AdminOrganization) *DisableOrganizationResponseBody {
 	body := &DisableOrganizationResponseBody{
-		ID:                 res.ID,
-		Name:               res.Name,
-		Slug:               res.Slug,
-		AccountType:        res.AccountType,
-		WorkosID:           res.WorkosID,
-		Whitelisted:        res.Whitelisted,
-		DisabledAt:         res.DisabledAt,
-		FreeTrialStartedAt: res.FreeTrialStartedAt,
-		FreeTrialEndsAt:    res.FreeTrialEndsAt,
-		TrialState:         res.TrialState,
-		TrialEndsAt:        res.TrialEndsAt,
-		MemberCount:        res.MemberCount,
-		CreatedAt:          res.CreatedAt,
-		UpdatedAt:          res.UpdatedAt,
+		ID:               res.ID,
+		Name:             res.Name,
+		Slug:             res.Slug,
+		AccountType:      res.AccountType,
+		WorkosID:         res.WorkosID,
+		Whitelisted:      res.Whitelisted,
+		DisabledAt:       res.DisabledAt,
+		TrialState:       res.TrialState,
+		TrialTier:        res.TrialTier,
+		TrialEndsAt:      res.TrialEndsAt,
+		TrialConvertedAt: res.TrialConvertedAt,
+		TrialDemotedAt:   res.TrialDemotedAt,
+		MemberCount:      res.MemberCount,
+		CreatedAt:        res.CreatedAt,
+		UpdatedAt:        res.UpdatedAt,
 	}
 	return body
 }
@@ -4920,20 +4938,21 @@ func NewDisableOrganizationResponseBody(res *admin.AdminOrganization) *DisableOr
 // result of the "enableOrganization" endpoint of the "admin" service.
 func NewEnableOrganizationResponseBody(res *admin.AdminOrganization) *EnableOrganizationResponseBody {
 	body := &EnableOrganizationResponseBody{
-		ID:                 res.ID,
-		Name:               res.Name,
-		Slug:               res.Slug,
-		AccountType:        res.AccountType,
-		WorkosID:           res.WorkosID,
-		Whitelisted:        res.Whitelisted,
-		DisabledAt:         res.DisabledAt,
-		FreeTrialStartedAt: res.FreeTrialStartedAt,
-		FreeTrialEndsAt:    res.FreeTrialEndsAt,
-		TrialState:         res.TrialState,
-		TrialEndsAt:        res.TrialEndsAt,
-		MemberCount:        res.MemberCount,
-		CreatedAt:          res.CreatedAt,
-		UpdatedAt:          res.UpdatedAt,
+		ID:               res.ID,
+		Name:             res.Name,
+		Slug:             res.Slug,
+		AccountType:      res.AccountType,
+		WorkosID:         res.WorkosID,
+		Whitelisted:      res.Whitelisted,
+		DisabledAt:       res.DisabledAt,
+		TrialState:       res.TrialState,
+		TrialTier:        res.TrialTier,
+		TrialEndsAt:      res.TrialEndsAt,
+		TrialConvertedAt: res.TrialConvertedAt,
+		TrialDemotedAt:   res.TrialDemotedAt,
+		MemberCount:      res.MemberCount,
+		CreatedAt:        res.CreatedAt,
+		UpdatedAt:        res.UpdatedAt,
 	}
 	return body
 }
@@ -4942,20 +4961,21 @@ func NewEnableOrganizationResponseBody(res *admin.AdminOrganization) *EnableOrga
 // of the "getOrganization" endpoint of the "admin" service.
 func NewGetOrganizationResponseBody(res *admin.AdminOrganization) *GetOrganizationResponseBody {
 	body := &GetOrganizationResponseBody{
-		ID:                 res.ID,
-		Name:               res.Name,
-		Slug:               res.Slug,
-		AccountType:        res.AccountType,
-		WorkosID:           res.WorkosID,
-		Whitelisted:        res.Whitelisted,
-		DisabledAt:         res.DisabledAt,
-		FreeTrialStartedAt: res.FreeTrialStartedAt,
-		FreeTrialEndsAt:    res.FreeTrialEndsAt,
-		TrialState:         res.TrialState,
-		TrialEndsAt:        res.TrialEndsAt,
-		MemberCount:        res.MemberCount,
-		CreatedAt:          res.CreatedAt,
-		UpdatedAt:          res.UpdatedAt,
+		ID:               res.ID,
+		Name:             res.Name,
+		Slug:             res.Slug,
+		AccountType:      res.AccountType,
+		WorkosID:         res.WorkosID,
+		Whitelisted:      res.Whitelisted,
+		DisabledAt:       res.DisabledAt,
+		TrialState:       res.TrialState,
+		TrialTier:        res.TrialTier,
+		TrialEndsAt:      res.TrialEndsAt,
+		TrialConvertedAt: res.TrialConvertedAt,
+		TrialDemotedAt:   res.TrialDemotedAt,
+		MemberCount:      res.MemberCount,
+		CreatedAt:        res.CreatedAt,
+		UpdatedAt:        res.UpdatedAt,
 	}
 	return body
 }
@@ -5024,20 +5044,21 @@ func NewListOrganizationsResponseBody(res *admin.AdminListOrganizationsResult) *
 // the "extendTrial" endpoint of the "admin" service.
 func NewExtendTrialResponseBody(res *admin.AdminOrganization) *ExtendTrialResponseBody {
 	body := &ExtendTrialResponseBody{
-		ID:                 res.ID,
-		Name:               res.Name,
-		Slug:               res.Slug,
-		AccountType:        res.AccountType,
-		WorkosID:           res.WorkosID,
-		Whitelisted:        res.Whitelisted,
-		DisabledAt:         res.DisabledAt,
-		FreeTrialStartedAt: res.FreeTrialStartedAt,
-		FreeTrialEndsAt:    res.FreeTrialEndsAt,
-		TrialState:         res.TrialState,
-		TrialEndsAt:        res.TrialEndsAt,
-		MemberCount:        res.MemberCount,
-		CreatedAt:          res.CreatedAt,
-		UpdatedAt:          res.UpdatedAt,
+		ID:               res.ID,
+		Name:             res.Name,
+		Slug:             res.Slug,
+		AccountType:      res.AccountType,
+		WorkosID:         res.WorkosID,
+		Whitelisted:      res.Whitelisted,
+		DisabledAt:       res.DisabledAt,
+		TrialState:       res.TrialState,
+		TrialTier:        res.TrialTier,
+		TrialEndsAt:      res.TrialEndsAt,
+		TrialConvertedAt: res.TrialConvertedAt,
+		TrialDemotedAt:   res.TrialDemotedAt,
+		MemberCount:      res.MemberCount,
+		CreatedAt:        res.CreatedAt,
+		UpdatedAt:        res.UpdatedAt,
 	}
 	return body
 }
@@ -5046,20 +5067,21 @@ func NewExtendTrialResponseBody(res *admin.AdminOrganization) *ExtendTrialRespon
 // result of the "createOrganization" endpoint of the "admin" service.
 func NewCreateOrganizationResponseBody(res *admin.AdminOrganization) *CreateOrganizationResponseBody {
 	body := &CreateOrganizationResponseBody{
-		ID:                 res.ID,
-		Name:               res.Name,
-		Slug:               res.Slug,
-		AccountType:        res.AccountType,
-		WorkosID:           res.WorkosID,
-		Whitelisted:        res.Whitelisted,
-		DisabledAt:         res.DisabledAt,
-		FreeTrialStartedAt: res.FreeTrialStartedAt,
-		FreeTrialEndsAt:    res.FreeTrialEndsAt,
-		TrialState:         res.TrialState,
-		TrialEndsAt:        res.TrialEndsAt,
-		MemberCount:        res.MemberCount,
-		CreatedAt:          res.CreatedAt,
-		UpdatedAt:          res.UpdatedAt,
+		ID:               res.ID,
+		Name:             res.Name,
+		Slug:             res.Slug,
+		AccountType:      res.AccountType,
+		WorkosID:         res.WorkosID,
+		Whitelisted:      res.Whitelisted,
+		DisabledAt:       res.DisabledAt,
+		TrialState:       res.TrialState,
+		TrialTier:        res.TrialTier,
+		TrialEndsAt:      res.TrialEndsAt,
+		TrialConvertedAt: res.TrialConvertedAt,
+		TrialDemotedAt:   res.TrialDemotedAt,
+		MemberCount:      res.MemberCount,
+		CreatedAt:        res.CreatedAt,
+		UpdatedAt:        res.UpdatedAt,
 	}
 	return body
 }
@@ -5068,20 +5090,21 @@ func NewCreateOrganizationResponseBody(res *admin.AdminOrganization) *CreateOrga
 // the "rearmTrial" endpoint of the "admin" service.
 func NewRearmTrialResponseBody(res *admin.AdminOrganization) *RearmTrialResponseBody {
 	body := &RearmTrialResponseBody{
-		ID:                 res.ID,
-		Name:               res.Name,
-		Slug:               res.Slug,
-		AccountType:        res.AccountType,
-		WorkosID:           res.WorkosID,
-		Whitelisted:        res.Whitelisted,
-		DisabledAt:         res.DisabledAt,
-		FreeTrialStartedAt: res.FreeTrialStartedAt,
-		FreeTrialEndsAt:    res.FreeTrialEndsAt,
-		TrialState:         res.TrialState,
-		TrialEndsAt:        res.TrialEndsAt,
-		MemberCount:        res.MemberCount,
-		CreatedAt:          res.CreatedAt,
-		UpdatedAt:          res.UpdatedAt,
+		ID:               res.ID,
+		Name:             res.Name,
+		Slug:             res.Slug,
+		AccountType:      res.AccountType,
+		WorkosID:         res.WorkosID,
+		Whitelisted:      res.Whitelisted,
+		DisabledAt:       res.DisabledAt,
+		TrialState:       res.TrialState,
+		TrialTier:        res.TrialTier,
+		TrialEndsAt:      res.TrialEndsAt,
+		TrialConvertedAt: res.TrialConvertedAt,
+		TrialDemotedAt:   res.TrialDemotedAt,
+		MemberCount:      res.MemberCount,
+		CreatedAt:        res.CreatedAt,
+		UpdatedAt:        res.UpdatedAt,
 	}
 	return body
 }

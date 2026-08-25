@@ -119,18 +119,18 @@ func NewRuntime(logger *slog.Logger, authenticator Authenticator, gate Gate, aut
 }
 
 func NewRuntimeWithFeedback(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL, cursorKeyMaterial string, reader Reader, catalog Catalog, registrations *RegistrationService, readiness ReadinessRecorder, setupResources []SetupResource, feedback *FeedbackService) *Runtime {
-	return NewRuntimeWithLifecycle(logger, authenticator, gate, authorizer, protectedResourceURL, cursorKeyMaterial, reader, catalog, registrations, readiness, setupResources, feedback, nil, nil, nil, nil, CatalogDescriptor{})
+	return NewRuntimeWithLifecycle(logger, authenticator, gate, authorizer, protectedResourceURL, cursorKeyMaterial, reader, catalog, registrations, readiness, setupResources, feedback, nil, nil, nil, nil, nil, CatalogDescriptor{})
 }
 
 // NewRuntimeWithLifecycle wires the Platform MCP onboarding lifecycle. Catalogue
 // selection remains server-validated: callers receive only search/inspect
 // identities and declared configuration fields, never an arbitrary endpoint or
 // provider credential.
-func NewRuntimeWithLifecycle(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL, cursorKeyMaterial string, reader Reader, catalog Catalog, registrations *RegistrationService, readiness ReadinessRecorder, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, candidate CatalogDescriptor) *Runtime {
+func NewRuntimeWithLifecycle(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL, cursorKeyMaterial string, reader Reader, catalog Catalog, registrations *RegistrationService, readiness ReadinessRecorder, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, plugins *PluginsService, candidate CatalogDescriptor) *Runtime {
 	if postgresReader, ok := reader.(*PostgresReader); ok {
 		postgresReader.setInventoryCursorKey(cursorKeyMaterial)
 	}
-	server, registrar := newServer(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, skills, diagnostics, candidate)
+	server, registrar := newServer(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, skills, diagnostics, plugins, candidate)
 	runtime := &Runtime{
 		authenticator:        authenticator,
 		gate:                 gate,

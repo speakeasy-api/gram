@@ -11,23 +11,29 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"log/slog"
 	"mime"
 	"net/http"
 	"net/url"
-	"slices"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/metric/noop"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
@@ -44,12 +50,34 @@ var oauthPageHTML string
 var (
 	oauthPageTemplate      = template.Must(template.New("platform-mcp-oauth-page").Parse(oauthPageHTML))
 	errPlatformMCPDisabled = fmt.Errorf("platform mcp disabled: %w", ErrForbidden)
+
+	// supportedAuthMethods is the token_endpoint_auth_method set this
+	// authorization server accepts, advertised in its RFC 8414 metadata and
+	// enforced by RegisterHandler. Declared here rather than borrowed from
+	// usersessions, whose list belongs to the separate user-session
+	// authorization server: the two share RegistrationRequest but not a
+	// client store, a token endpoint, or a set of supported methods, so a
+	// method added there must be an explicit decision here.
+	//
+	// Every entry is either symmetric or public, which is what makes
+	// RegisterHandler's "mint a secret unless the method is none" rule
+	// correct. An asymmetric method would need a key source instead, and
+	// this endpoint has nowhere to record one.
+	supportedAuthMethods = []string{oauthwire.AuthMethodClientSecretBasic, oauthwire.AuthMethodClientSecretPost, oauthwire.AuthMethodNone}
 )
 
 type oauthPageData struct {
-	Title            string
-	Kind             string
+	Title string
+	Kind  string
+	// ClientName is attacker-chosen for any CIMD-resolved client: it comes
+	// from a document served at a URL the client picked. ClientIDOrigin is
+	// the trust anchor that name lacks — the host the document was fetched
+	// from, which the client cannot fake without controlling it — so the
+	// consent page shows both whenever a client arrived by CIMD. It is
+	// empty for dynamically registered clients, which have no origin to
+	// vouch for them at all.
 	ClientName       string
+	ClientIDOrigin   string
 	OrganizationName string
 	Organizations    []OrganizationOption
 	RedirectURI      string
@@ -110,6 +138,13 @@ type OAuthHTTP struct {
 	audience      string
 	telemetry     OAuthTelemetry
 	now           func() time.Time
+	logger        *slog.Logger
+	// cimd resolves URL-shaped client_ids against their Client ID Metadata
+	// Documents. Nil disables inbound CIMD entirely: such a client_id then
+	// falls through to an ordinary registry lookup and is rejected as
+	// unknown, and the AS metadata stops advertising support.
+	cimd          clientMetadataResolver
+	cimdAdmission *admission.Metrics
 }
 
 type OAuthHTTPConfig struct {
@@ -124,6 +159,11 @@ type OAuthHTTPConfig struct {
 	Signer        *sessiontokens.Signer
 	Encryption    *encryption.Client
 	Telemetry     OAuthTelemetry
+	Logger        *slog.Logger
+	// GuardianPolicy backs the CIMD document fetcher's SSRF protection.
+	// Nil leaves inbound CIMD disabled.
+	GuardianPolicy *guardian.Policy
+	MeterProvider  metric.MeterProvider
 }
 
 func NewOAuthHTTP(config OAuthHTTPConfig) (*OAuthHTTP, error) {
@@ -133,6 +173,20 @@ func NewOAuthHTTP(config OAuthHTTPConfig) (*OAuthHTTP, error) {
 	credentials, err := NewCredentialCodec(config.Encryption)
 	if err != nil {
 		return nil, err
+	}
+	logger := config.Logger
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
+	meterProvider := config.MeterProvider
+	if meterProvider == nil {
+		meterProvider = noop.NewMeterProvider()
+	}
+	// A nil guardian policy leaves resolver nil, which disables inbound
+	// CIMD rather than fetching documents through an unguarded client.
+	var resolver clientMetadataResolver
+	if config.GuardianPolicy != nil {
+		resolver = cimd.NewResolver(config.GuardianPolicy, meterProvider, logger)
 	}
 	baseURL := *config.BaseURL
 	issuer, err := url.JoinPath(baseURL.String(), "platform-mcp")
@@ -154,6 +208,9 @@ func NewOAuthHTTP(config OAuthHTTPConfig) (*OAuthHTTP, error) {
 		audience:      issuer,
 		telemetry:     config.Telemetry,
 		now:           time.Now,
+		logger:        logger,
+		cimd:          resolver,
+		cimdAdmission: admission.NewMetrics(meterProvider, logger),
 	}, nil
 }
 
@@ -193,7 +250,7 @@ func (s *OAuthHTTP) ProtectedResourceHandler() http.Handler {
 
 func (s *OAuthHTTP) AuthorizationServerHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]any{
+		metadata := map[string]any{
 			"issuer":                                s.issuer,
 			"authorization_endpoint":                s.url("authorize"),
 			"token_endpoint":                        s.url("token"),
@@ -201,9 +258,20 @@ func (s *OAuthHTTP) AuthorizationServerHandler() http.Handler {
 			"revocation_endpoint":                   s.url("revoke"),
 			"response_types_supported":              usersessions.SupportedResponseTypes,
 			"grant_types_supported":                 usersessions.SupportedGrantTypes,
-			"token_endpoint_auth_methods_supported": usersessions.SupportedAuthMethods,
+			"token_endpoint_auth_methods_supported": supportedAuthMethods,
 			"code_challenge_methods_supported":      usersessions.SupportedCodeChallengeMethods,
-		})
+		}
+		// Advertised only when a document can actually be resolved and the
+		// admission mode admits something, and omitted rather than sent as
+		// false otherwise: an absent member is how RFC 8414 metadata says
+		// "unsupported", and it is what the hosted authorization server
+		// emits. Advertising support while admitting nothing would route
+		// spec-compliant clients into a guaranteed-failure flow instead of
+		// letting them fall back to dynamic client registration.
+		if s.cimd != nil && platformCIMDAdmissionMode != admission.ModeDisabled {
+			metadata["client_id_metadata_document_supported"] = true
+		}
+		writeJSON(w, http.StatusOK, metadata)
 	})
 }
 
@@ -218,13 +286,13 @@ func (s *OAuthHTTP) RegisterHandler() http.Handler {
 			return
 		}
 		request.SetDefaults()
-		if err := request.Validate(); err != nil {
+		if err := request.Validate(supportedAuthMethods); err != nil {
 			writeRequestOAuthError(w, http.StatusBadRequest, err)
 			return
 		}
 		clientID := "client_" + uuid.NewString()
 		var secret, secretHash string
-		if request.TokenEndpointAuthMethod != "none" {
+		if request.TokenEndpointAuthMethod != oauthwire.AuthMethodNone {
 			var err error
 			secret, err = opaqueToken()
 			if err != nil {
@@ -263,8 +331,18 @@ func (s *OAuthHTTP) AuthorizeHandler() http.Handler {
 			writeRequestOAuthError(w, http.StatusBadRequest, err)
 			return
 		}
-		client, err := s.store.GetClient(r.Context(), request.ClientID)
-		if err != nil || !s.clientRedirectAllowed(client, request.RedirectURI) {
+		// URL-shaped client_ids resolve via CIMD here (admission-gated,
+		// inside the resolver). Every resolution failure renders inline per
+		// RFC 6749 §4.1.2.1 — the redirect_uri of an unresolved client
+		// cannot be trusted — and a document fetch failure aborts the
+		// request per draft-ietf-oauth-client-id-metadata-document-02 §5.1
+		// (fail closed, no stale fallback).
+		client, err := s.resolveClient(r.Context(), request.ClientID, resolveClientCIMD)
+		if err != nil {
+			s.writeClientResolutionError(w, r.Context(), request.ClientID, err)
+			return
+		}
+		if !clientRedirectAllowed(client, request.RedirectURI) {
 			writeOAuthError(w, http.StatusUnauthorized, "invalid_client", "unknown client_id or redirect_uri")
 			return
 		}
@@ -364,7 +442,10 @@ func (s *OAuthHTTP) organizationSelectionGet(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	client, err := s.store.GetClient(r.Context(), challenge.ClientID)
+	// Lookup only: authorize already resolved and persisted any CIMD row,
+	// and a mid-flow leg must keep working even if the document host has
+	// since become unreachable.
+	client, err := s.resolveClient(r.Context(), challenge.ClientID, lookupClientOnly)
 	if err != nil {
 		writeOAuthError(w, http.StatusUnauthorized, "invalid_client", "authorization client is unavailable")
 		return
@@ -470,7 +551,10 @@ func (s *OAuthHTTP) connectGet(w http.ResponseWriter, r *http.Request) {
 		writeOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization state is invalid or incomplete")
 		return
 	}
-	client, err := s.store.GetClient(r.Context(), challenge.ClientID)
+	// Lookup only: authorize already resolved and persisted any CIMD row,
+	// and a mid-flow leg must keep working even if the document host has
+	// since become unreachable.
+	client, err := s.resolveClient(r.Context(), challenge.ClientID, lookupClientOnly)
 	if err != nil {
 		writeOAuthError(w, http.StatusUnauthorized, "invalid_client", "authorization client is unavailable")
 		return
@@ -484,6 +568,7 @@ func (s *OAuthHTTP) connectGet(w http.ResponseWriter, r *http.Request) {
 		Title:            "Connect Platform MCP",
 		Kind:             "connect",
 		ClientName:       client.Name,
+		ClientIDOrigin:   clientIDOrigin(client),
 		OrganizationName: organization.Name,
 		RedirectURI:      challenge.RedirectURI,
 		State:            challenge.ID,
@@ -942,8 +1027,34 @@ func (s *OAuthHTTP) url(segment string) string {
 	return s.issuer + "/" + segment
 }
 
-func (s *OAuthHTTP) clientRedirectAllowed(client platformoauth.Client, redirectURI string) bool {
-	return slices.Contains(client.RedirectURIs, redirectURI)
+// writeClientResolutionError maps the resolveClient error contract onto the
+// wire. Called before any redirect_uri is trusted, so every case renders
+// inline rather than redirecting (RFC 6749 §4.1.2.1).
+func (s *OAuthHTTP) writeClientResolutionError(w http.ResponseWriter, ctx context.Context, clientID string, err error) {
+	if admissionErr, ok := errors.AsType[*admission.DenialError](err); ok {
+		// Policy, not a spec violation, and it carries its own actionable
+		// description. Already logged inside admitCIMDClient.
+		writeOAuthError(w, http.StatusUnauthorized, "invalid_client", admissionErr.Description())
+		return
+	}
+	if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
+		writeOAuthError(w, http.StatusBadRequest, oauthErr.Code, oauthErr.Description)
+		return
+	}
+	if errors.Is(err, errCIMDFetchFailed) {
+		// The cause may name internal network conditions (SSRF denials, DNS
+		// failures); log it and keep the wire response generic. A fetch
+		// failure is transient from the client's perspective, so signal
+		// retry-later rather than a permanent invalid_client that would make
+		// SDKs stop retrying.
+		s.logger.InfoContext(ctx, "cimd document fetch failed",
+			attr.SlogOAuthClientID(truncateClientIDForLog(clientID)),
+			attr.SlogError(err),
+		)
+		writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "failed to fetch client metadata document")
+		return
+	}
+	writeOAuthError(w, http.StatusUnauthorized, "invalid_client", "unknown client_id")
 }
 
 func clientCredentials(r *http.Request) (string, string) {

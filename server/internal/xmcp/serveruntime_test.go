@@ -532,10 +532,11 @@ func TestServeMCP_IssuerGatedRemoteBackend_HappyPath(t *testing.T) {
 	clientID := "test-client-" + uuid.NewString()
 	redirectURI := "http://localhost:3000/callback"
 	_, err = usersessionsrepo.New(ti.conn).CreateUserSessionClient(ctx, usersessionsrepo.CreateUserSessionClientParams{
-		UserSessionIssuerID: issuerID,
-		ClientID:            clientID,
-		ClientName:          "happy-path test client",
-		RedirectUris:        []string{redirectURI},
+		UserSessionIssuerID:     issuerID,
+		ClientID:                clientID,
+		ClientName:              "happy-path test client",
+		RedirectUris:            []string{redirectURI},
+		TokenEndpointAuthMethod: "none",
 	})
 	require.NoError(t, err)
 
@@ -651,10 +652,11 @@ func mintIssuerGatedAccessToken(
 	clientID := "test-client-" + uuid.NewString()
 	redirectURI := "http://localhost:3000/callback"
 	_, err := usersessionsrepo.New(ti.conn).CreateUserSessionClient(ctx, usersessionsrepo.CreateUserSessionClientParams{
-		UserSessionIssuerID: issuerID,
-		ClientID:            clientID,
-		ClientName:          "issuer-gated test client",
-		RedirectUris:        []string{redirectURI},
+		UserSessionIssuerID:     issuerID,
+		ClientID:                clientID,
+		ClientName:              "issuer-gated test client",
+		RedirectUris:            []string{redirectURI},
+		TokenEndpointAuthMethod: "none",
 	})
 	require.NoError(t, err)
 
@@ -898,10 +900,11 @@ func TestAttach_OAuthAuthorizeRoute_RedirectsToConsent(t *testing.T) {
 	clientID := "test-client-" + uuid.NewString()
 	redirectURI := "http://localhost:3000/callback"
 	_, err := usersessionsrepo.New(ti.conn).CreateUserSessionClient(ctx, usersessionsrepo.CreateUserSessionClientParams{
-		UserSessionIssuerID: issuerID,
-		ClientID:            clientID,
-		ClientName:          "authorize-smoke",
-		RedirectUris:        []string{redirectURI},
+		UserSessionIssuerID:     issuerID,
+		ClientID:                clientID,
+		ClientName:              "authorize-smoke",
+		RedirectUris:            []string{redirectURI},
+		TokenEndpointAuthMethod: "none",
 	})
 	require.NoError(t, err)
 
@@ -947,10 +950,11 @@ func TestAttach_OAuthConsentRoute_RendersForm(t *testing.T) {
 	clientID := "test-client-" + uuid.NewString()
 	redirectURI := "http://localhost:3000/callback"
 	_, err := usersessionsrepo.New(ti.conn).CreateUserSessionClient(ctx, usersessionsrepo.CreateUserSessionClientParams{
-		UserSessionIssuerID: issuerID,
-		ClientID:            clientID,
-		ClientName:          "consent-smoke",
-		RedirectUris:        []string{redirectURI},
+		UserSessionIssuerID:     issuerID,
+		ClientID:                clientID,
+		ClientName:              "consent-smoke",
+		RedirectUris:            []string{redirectURI},
+		TokenEndpointAuthMethod: "none",
 	})
 	require.NoError(t, err)
 
@@ -1005,10 +1009,11 @@ func TestAttach_OAuthTokenRoute_MintsAccessToken(t *testing.T) {
 	clientID := "test-client-" + uuid.NewString()
 	redirectURI := "http://localhost:3000/callback"
 	_, err := usersessionsrepo.New(ti.conn).CreateUserSessionClient(ctx, usersessionsrepo.CreateUserSessionClientParams{
-		UserSessionIssuerID: issuerID,
-		ClientID:            clientID,
-		ClientName:          "token-smoke",
-		RedirectUris:        []string{redirectURI},
+		UserSessionIssuerID:     issuerID,
+		ClientID:                clientID,
+		ClientName:              "token-smoke",
+		RedirectUris:            []string{redirectURI},
+		TokenEndpointAuthMethod: "none",
 	})
 	require.NoError(t, err)
 
@@ -1074,10 +1079,11 @@ func TestAttach_OAuthRevokeRoute_HandlesUnknownTokenAsSuccess(t *testing.T) {
 	// public client (token_endpoint_auth_method=none).
 	clientID := "test-client-" + uuid.NewString()
 	_, err := usersessionsrepo.New(ti.conn).CreateUserSessionClient(ctx, usersessionsrepo.CreateUserSessionClientParams{
-		UserSessionIssuerID: issuerID,
-		ClientID:            clientID,
-		ClientName:          "revoke-smoke",
-		RedirectUris:        []string{"http://localhost:3000/callback"},
+		UserSessionIssuerID:     issuerID,
+		ClientID:                clientID,
+		ClientName:              "revoke-smoke",
+		RedirectUris:            []string{"http://localhost:3000/callback"},
+		TokenEndpointAuthMethod: "none",
 	})
 	require.NoError(t, err)
 

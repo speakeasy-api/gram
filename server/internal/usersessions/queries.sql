@@ -6,7 +6,7 @@ INSERT INTO user_session_issuers (
     session_duration
 )
 VALUES (
-    @project_id,
+    @project_id::uuid,
     @slug,
     @authn_challenge_mode,
     @session_duration
@@ -16,17 +16,17 @@ RETURNING *;
 -- name: GetUserSessionIssuerByID :one
 SELECT *
 FROM user_session_issuers
-WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
+WHERE id = @id AND project_id = @project_id::uuid AND deleted IS FALSE;
 
 -- name: GetUserSessionIssuerBySlug :one
 SELECT *
 FROM user_session_issuers
-WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE;
+WHERE slug = @slug AND project_id = @project_id::uuid AND deleted IS FALSE;
 
 -- name: ListUserSessionIssuersByProjectID :many
 SELECT *
 FROM user_session_issuers
-WHERE project_id = @project_id
+WHERE project_id = @project_id::uuid
   AND deleted IS FALSE
   AND (sqlc.narg('cursor')::uuid IS NULL OR id < sqlc.narg('cursor')::uuid)
 ORDER BY id DESC
@@ -44,7 +44,7 @@ SET
     -- reports the resolved effective mode either way.
     client_id_metadata_admission_mode = COALESCE(sqlc.narg('client_id_metadata_admission_mode')::text, client_id_metadata_admission_mode),
     updated_at = clock_timestamp()
-WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
+WHERE id = @id AND project_id = @project_id::uuid AND deleted IS FALSE
 RETURNING *;
 
 -- name: LockUserSessionIssuer :one
@@ -53,12 +53,18 @@ RETURNING *;
 -- same row lock while writing their reference, so acquiring it first
 -- guarantees the follow-up ownership statements read a snapshot that
 -- includes any reference committed by a concurrent attach.
+--
+-- FOR NO KEY UPDATE, not FOR UPDATE: it still conflicts with the meta MCP
+-- attach lock, but not with the FOR KEY SHARE a foreign key check takes. A
+-- remote-login callback inserting a remote_sessions row holds the client row
+-- this deletion's orphan cascade wants and then hits that foreign key, so the
+-- stronger mode would deadlock the two against each other.
 SELECT id
 FROM user_session_issuers
 WHERE id = @id
-  AND project_id = @project_id
+  AND project_id = @project_id::uuid
   AND deleted IS FALSE
-FOR UPDATE;
+FOR NO KEY UPDATE;
 
 -- name: DeleteUserSessionIssuer :one
 -- Recheck active owners in the write so an owner added after the handler's
@@ -66,12 +72,12 @@ FOR UPDATE;
 UPDATE user_session_issuers AS issuer
 SET deleted_at = clock_timestamp()
 WHERE issuer.id = @id
-  AND issuer.project_id = @project_id
+  AND issuer.project_id = @project_id::uuid
   AND issuer.deleted IS FALSE
   AND NOT EXISTS (
     SELECT 1
     FROM mcp_servers AS server
-    WHERE server.project_id = @project_id
+    WHERE server.project_id = @project_id::uuid
       AND server.user_session_issuer_id = issuer.id
       AND server.deleted IS FALSE
 
@@ -79,7 +85,7 @@ WHERE issuer.id = @id
 
     SELECT 1
     FROM toolsets AS toolset
-    WHERE toolset.project_id = @project_id
+    WHERE toolset.project_id = @project_id::uuid
       AND toolset.user_session_issuer_id = issuer.id
       AND toolset.deleted IS FALSE
 
@@ -87,7 +93,7 @@ WHERE issuer.id = @id
 
     SELECT 1
     FROM meta_mcp_servers AS meta_mcp_server
-    WHERE meta_mcp_server.project_id = @project_id
+    WHERE meta_mcp_server.project_id = @project_id::uuid
       AND meta_mcp_server.user_session_issuer_id = issuer.id
       AND meta_mcp_server.deleted IS FALSE
   )
@@ -120,13 +126,6 @@ SELECT EXISTS (
       AND meta_mcp_server.deleted IS FALSE
 );
 
--- name: DeleteRemoteSessionClientAttachmentsForUserSessionIssuer :exec
-DELETE FROM remote_session_client_user_session_issuers AS link
-USING user_session_issuers AS usi
-WHERE link.user_session_issuer_id = usi.id
-  AND usi.id = @user_session_issuer_id
-  AND usi.project_id = @project_id;
-
 -- name: SoftDeleteUserSessionsByIssuerID :many
 -- Cascading soft-delete of user_sessions for an issuer being soft-deleted.
 -- Returns the affected rows so the handler can emit per-row audit events.
@@ -152,7 +151,7 @@ RETURNING c.*;
 SELECT cli.*
 FROM user_session_clients AS cli
 JOIN user_session_issuers AS iss ON iss.id = cli.user_session_issuer_id
-WHERE cli.id = @id AND iss.project_id = @project_id AND cli.deleted IS FALSE;
+WHERE cli.id = @id AND iss.project_id = @project_id::uuid AND cli.deleted IS FALSE;
 
 -- name: GetUserSessionClientByClientID :one
 -- Lookup a registered DCR client by its issuer-scoped client_id. Used by the
@@ -172,7 +171,7 @@ WHERE cli.user_session_issuer_id = @user_session_issuer_id
 SELECT cli.*
 FROM user_session_clients AS cli
 JOIN user_session_issuers AS iss ON iss.id = cli.user_session_issuer_id
-WHERE iss.project_id = @project_id
+WHERE iss.project_id = @project_id::uuid
   AND cli.deleted IS FALSE
   AND iss.deleted IS FALSE
   AND (sqlc.narg('user_session_issuer_id')::uuid IS NULL OR cli.user_session_issuer_id = sqlc.narg('user_session_issuer_id')::uuid)
@@ -208,7 +207,7 @@ SET deleted_at = clock_timestamp()
 FROM user_session_issuers AS iss
 WHERE cli.id = @id
   AND iss.id = cli.user_session_issuer_id
-  AND iss.project_id = @project_id
+  AND iss.project_id = @project_id::uuid
   AND cli.deleted IS FALSE
 RETURNING cli.*;
 
@@ -253,10 +252,10 @@ SELECT EXISTS (
 -- yield the row. `xmax = 0` is the standard test for "this row came from
 -- the INSERT rather than the UPDATE".
 INSERT INTO user_session_issuer_cimd_clients (project_id, user_session_issuer_id, client_id_metadata_uri)
-SELECT @project_id, iss.id, @client_id_metadata_uri
+SELECT @project_id::uuid, iss.id, @client_id_metadata_uri
 FROM user_session_issuers AS iss
 WHERE iss.id = @user_session_issuer_id
-  AND iss.project_id = @project_id
+  AND iss.project_id = @project_id::uuid
   AND iss.deleted IS FALSE
 ON CONFLICT (user_session_issuer_id, client_id_metadata_uri) WHERE deleted IS FALSE
 DO UPDATE SET updated_at = user_session_issuer_cimd_clients.updated_at
@@ -267,7 +266,7 @@ SELECT cimd.*
 FROM user_session_issuer_cimd_clients AS cimd
 JOIN user_session_issuers AS iss ON iss.id = cimd.user_session_issuer_id
 WHERE cimd.id = @id
-  AND iss.project_id = @project_id
+  AND iss.project_id = @project_id::uuid
   AND cimd.deleted IS FALSE
   AND iss.deleted IS FALSE;
 
@@ -277,7 +276,7 @@ WHERE cimd.id = @id
 SELECT cimd.*
 FROM user_session_issuer_cimd_clients AS cimd
 JOIN user_session_issuers AS iss ON iss.id = cimd.user_session_issuer_id
-WHERE iss.project_id = @project_id
+WHERE iss.project_id = @project_id::uuid
   AND cimd.user_session_issuer_id = @user_session_issuer_id
   AND cimd.deleted IS FALSE
   AND iss.deleted IS FALSE
@@ -297,7 +296,7 @@ SET deleted_at = clock_timestamp()
 FROM user_session_issuers AS iss
 WHERE cimd.id = @id
   AND iss.id = cimd.user_session_issuer_id
-  AND iss.project_id = @project_id
+  AND iss.project_id = @project_id::uuid
   AND cimd.deleted IS FALSE
   AND iss.deleted IS FALSE
 RETURNING cimd.*;
@@ -307,14 +306,14 @@ SELECT c.*, cli.user_session_issuer_id AS user_session_issuer_id
 FROM user_session_consents AS c
 JOIN user_session_clients AS cli ON cli.id = c.user_session_client_id
 JOIN user_session_issuers AS iss ON iss.id = cli.user_session_issuer_id
-WHERE c.id = @id AND iss.project_id = @project_id AND c.deleted IS FALSE;
+WHERE c.id = @id AND iss.project_id = @project_id::uuid AND c.deleted IS FALSE;
 
 -- name: ListUserSessionConsentsByProjectID :many
 SELECT c.*, cli.user_session_issuer_id AS user_session_issuer_id
 FROM user_session_consents AS c
 JOIN user_session_clients AS cli ON cli.id = c.user_session_client_id
 JOIN user_session_issuers AS iss ON iss.id = cli.user_session_issuer_id
-WHERE iss.project_id = @project_id
+WHERE iss.project_id = @project_id::uuid
   AND c.deleted IS FALSE
   AND cli.deleted IS FALSE
   AND iss.deleted IS FALSE
@@ -332,7 +331,7 @@ FROM user_session_clients AS cli, user_session_issuers AS iss
 WHERE c.id = @id
   AND cli.id = c.user_session_client_id
   AND iss.id = cli.user_session_issuer_id
-  AND iss.project_id = @project_id
+  AND iss.project_id = @project_id::uuid
   AND c.deleted IS FALSE
 RETURNING c.*, cli.user_session_issuer_id AS user_session_issuer_id;
 
@@ -342,7 +341,7 @@ RETURNING c.*, cli.user_session_issuer_id AS user_session_issuer_id;
 SELECT s.*
 FROM user_sessions AS s
 JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
-WHERE s.id = @id AND iss.project_id = @project_id AND s.deleted IS FALSE;
+WHERE s.id = @id AND iss.project_id = @project_id::uuid AND s.deleted IS FALSE;
 
 -- name: ListUserSessionsByProjectID :many
 -- refresh_token_hash is excluded from the projection so the management API
@@ -368,7 +367,7 @@ LEFT JOIN api_keys AS k
              WHEN s.subject_urn::text LIKE 'apikey:%'
              THEN split_part(s.subject_urn::text, ':', 2)::uuid
            END
-WHERE iss.project_id = @project_id
+WHERE iss.project_id = @project_id::uuid
   AND iss.deleted IS FALSE
   -- "active"/"expired" are keyed off refresh_expires_at (the authorization
   -- deadline), NOT expires_at (the ~1h access-token lifetime). An active MCP
@@ -401,7 +400,7 @@ SET deleted_at = clock_timestamp()
 FROM user_session_issuers AS iss
 WHERE s.id = @id
   AND iss.id = s.user_session_issuer_id
-  AND iss.project_id = @project_id
+  AND iss.project_id = @project_id::uuid
   AND s.deleted IS FALSE
 RETURNING s.*;
 
@@ -438,7 +437,7 @@ WHERE user_session_issuer_id = @user_session_issuer_id
 -- mints a fresh random subject).
 SELECT tool_selection
 FROM user_sessions
-WHERE project_id = @project_id
+WHERE project_id = @project_id::uuid
   AND user_session_issuer_id = @user_session_issuer_id
   AND user_session_client_id = @user_session_client_id
   AND subject_urn = @subject_urn
@@ -476,6 +475,7 @@ WHERE user_session_issuer_id = @user_session_issuer_id
 -- consent). They have no exposure on the management API.
 
 -- name: CreateUserSessionClient :one
+-- Registers a client from an RFC 7591 request.
 INSERT INTO user_session_clients (
     project_id,
     user_session_issuer_id,
@@ -483,7 +483,10 @@ INSERT INTO user_session_clients (
     client_secret_hash,
     client_name,
     redirect_uris,
-    client_secret_expires_at
+    client_secret_expires_at,
+    token_endpoint_auth_method,
+    client_jwks,
+    client_jwks_uri
 )
 VALUES (
     (SELECT project_id FROM user_session_issuers WHERE id = @user_session_issuer_id),
@@ -492,7 +495,10 @@ VALUES (
     @client_secret_hash,
     @client_name,
     @redirect_uris,
-    @client_secret_expires_at
+    @client_secret_expires_at,
+    @token_endpoint_auth_method::text,
+    sqlc.narg('client_jwks')::jsonb,
+    sqlc.narg('client_jwks_uri')::text
 )
 RETURNING *;
 
@@ -500,10 +506,11 @@ RETURNING *;
 -- Lazy upsert for a client resolved from a Client ID Metadata Document at
 -- authorize time. For CIMD rows the document URL IS the client_id, so the
 -- conflict target is the same partial unique index that serves DCR lookups.
--- On refresh the mutable metadata (client_name, redirect_uris) and every
--- cache column are replaced wholesale, including the ETag, which is set to
--- NULL when the response carried no usable validator so the next refresh is
--- unconditional rather than replaying a stale one.
+-- On refresh the mutable metadata (client_name, redirect_uris,
+-- token_endpoint_auth_method) and every cache column are replaced wholesale,
+-- including the ETag, which is set to NULL when the response carried no usable
+-- validator so the next refresh is unconditional rather than replaying a stale
+-- one.
 --
 -- The cache expiry is derived from the database clock rather than the
 -- application's, so it can never land before the client_id_metadata_fetched_at
@@ -530,7 +537,10 @@ INSERT INTO user_session_clients (
     client_id_metadata_uri,
     client_id_metadata_fetched_at,
     client_id_metadata_cache_expires_at,
-    client_id_metadata_etag
+    client_id_metadata_etag,
+    token_endpoint_auth_method,
+    client_jwks,
+    client_jwks_uri
 )
 VALUES (
     (SELECT project_id FROM user_session_issuers WHERE id = @user_session_issuer_id),
@@ -543,7 +553,10 @@ VALUES (
     @client_id,
     clock_timestamp(),
     clock_timestamp() + make_interval(secs => @cache_ttl_seconds::double precision),
-    sqlc.narg('client_id_metadata_etag')
+    sqlc.narg('client_id_metadata_etag'),
+    @token_endpoint_auth_method::text,
+    sqlc.narg('client_jwks')::jsonb,
+    sqlc.narg('client_jwks_uri')::text
 )
 ON CONFLICT (user_session_issuer_id, client_id) WHERE deleted IS FALSE
 DO UPDATE SET
@@ -553,14 +566,26 @@ DO UPDATE SET
     client_id_metadata_fetched_at = EXCLUDED.client_id_metadata_fetched_at,
     client_id_metadata_cache_expires_at = EXCLUDED.client_id_metadata_cache_expires_at,
     client_id_metadata_etag = EXCLUDED.client_id_metadata_etag,
+    token_endpoint_auth_method = EXCLUDED.token_endpoint_auth_method,
+    client_jwks = EXCLUDED.client_jwks,
+    client_jwks_uri = EXCLUDED.client_jwks_uri,
     updated_at = clock_timestamp()
 WHERE user_session_clients.client_secret_hash IS NULL
+  -- COALESCE, not a bare comparison: a NULL method (a row that predates the
+  -- column) must read as "not committed to private_key_jwt". A NULL here
+  -- would make the whole predicate NULL, the write would match nothing, and
+  -- every pre-existing client would surface as unknown on its first refresh.
+  AND NOT (
+    COALESCE(user_session_clients.token_endpoint_auth_method, '') = 'private_key_jwt'
+    AND EXCLUDED.token_endpoint_auth_method IS DISTINCT FROM 'private_key_jwt'
+  )
 RETURNING *;
 
 -- name: UpdateUserSessionClientCIMDCache :one
 -- Refreshes the cache bookkeeping on a CIMD-resolved client whose document
--- host answered 304 Not Modified. The stored client_name and redirect_uris
--- are current by definition of the 304, so they are deliberately untouched;
+-- host answered 304 Not Modified. The stored client_name, redirect_uris, and
+-- token_endpoint_auth_method are current by definition of the 304 — the host
+-- asserted the document has not changed — so they are deliberately untouched;
 -- only the fetch stamp, the expiry, and the validator move.
 --
 -- The guards mirror UpsertUserSessionClientFromCIMD's. A secret-bearing DCR
@@ -608,7 +633,7 @@ SET client_id_metadata_cache_expires_at = NULL,
     client_id_metadata_etag = NULL,
     updated_at = clock_timestamp()
 WHERE id = @id
-  AND project_id = @project_id
+  AND project_id = @project_id::uuid
   AND client_id_metadata_uri IS NOT NULL
   AND deleted IS FALSE
 RETURNING *;
@@ -626,14 +651,23 @@ RETURNING *;
 UPDATE user_session_clients
 SET client_name = @client_name,
     redirect_uris = @redirect_uris,
+    token_endpoint_auth_method = @token_endpoint_auth_method::text,
+    client_jwks = sqlc.narg('client_jwks')::jsonb,
+    client_jwks_uri = sqlc.narg('client_jwks_uri')::text,
     client_id_metadata_fetched_at = clock_timestamp(),
     client_id_metadata_cache_expires_at = clock_timestamp() + make_interval(secs => @cache_ttl_seconds::double precision),
     client_id_metadata_etag = sqlc.narg('client_id_metadata_etag'),
     updated_at = clock_timestamp()
 WHERE id = @id
-  AND project_id = @project_id
+  AND project_id = @project_id::uuid
   AND client_id_metadata_uri IS NOT NULL
   AND client_secret_hash IS NULL
+  -- COALESCE for the same reason as the upsert: a NULL method is a legacy
+  -- row, not a committed one, and must stay writable.
+  AND NOT (
+    COALESCE(token_endpoint_auth_method, '') = 'private_key_jwt'
+    AND @token_endpoint_auth_method::text <> 'private_key_jwt'
+  )
   AND deleted IS FALSE
 RETURNING *;
 
@@ -698,7 +732,7 @@ RETURNING *;
 SELECT s.user_session_issuer_id::text AS value, iss.slug AS display_name, COUNT(*)::bigint AS count
 FROM user_sessions AS s
 JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
-WHERE iss.project_id = @project_id AND iss.deleted IS FALSE AND s.deleted IS FALSE
+WHERE iss.project_id = @project_id::uuid AND iss.deleted IS FALSE AND s.deleted IS FALSE
 GROUP BY s.user_session_issuer_id, iss.slug
 ORDER BY count DESC, iss.slug ASC;
 
@@ -707,7 +741,7 @@ SELECT c.id::text AS value, c.client_name AS display_name, COUNT(*)::bigint AS c
 FROM user_sessions AS s
 JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
 JOIN user_session_clients AS c ON c.id = s.user_session_client_id
-WHERE iss.project_id = @project_id AND iss.deleted IS FALSE AND c.deleted IS FALSE AND s.deleted IS FALSE
+WHERE iss.project_id = @project_id::uuid AND iss.deleted IS FALSE AND c.deleted IS FALSE AND s.deleted IS FALSE
 GROUP BY c.id, c.client_name
 ORDER BY count DESC, c.client_name ASC;
 
@@ -718,7 +752,7 @@ SELECT s.subject_urn::text AS value,
 FROM user_sessions AS s
 JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
 LEFT JOIN users AS u ON u.id = split_part(s.subject_urn::text, ':', 2)
-WHERE iss.project_id = @project_id AND iss.deleted IS FALSE AND s.deleted IS FALSE
+WHERE iss.project_id = @project_id::uuid AND iss.deleted IS FALSE AND s.deleted IS FALSE
   AND s.subject_urn::text LIKE 'user:%'
 GROUP BY s.subject_urn, u.display_name, u.email
 ORDER BY count DESC, display_name ASC;
@@ -732,7 +766,7 @@ ORDER BY count DESC, display_name ASC;
 -- used by the remote_sessions keepalive sweep.
 UPDATE user_sessions
 SET last_used_at = @now_ts::timestamptz
-WHERE project_id = @project_id
+WHERE project_id = @project_id::uuid
   AND user_session_issuer_id = @user_session_issuer_id
   AND jti = @jti
   AND deleted IS FALSE
@@ -740,26 +774,33 @@ WHERE project_id = @project_id
 
 -- name: ListRemoteSessionUpstreamsForSubjects :many
 -- The outbound leg of the brokered connections on one page of user_sessions.
--- user_sessions and remote_sessions both carry (subject_urn,
--- user_session_issuer_id), so that pair is the join between "an agent can reach
--- Gram" and "Gram can reach an upstream on this subject's behalf".
+-- A remote_session is one shared upstream grant per (subject_urn,
+-- remote_session_client_id); its own user_session_issuer_id is provenance
+-- only. The match therefore goes through the issuer's client bindings: a
+-- user_session under issuer B lists every upstream grant the subject holds on
+-- a client bound to B, including grants first minted through a sibling
+-- issuer. It also keeps listing a grant minted through the page's issuer whose
+-- client was since detached from it: those tokens are still live upstream and
+-- SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuer still destroys them,
+-- so hiding them would show an empty page for a revoke that is not a no-op.
+-- The projected user_session_issuer_id is the requesting issuer, which is the
+-- key the caller indexes by.
 -- Takes the page's pairs as parallel arrays rather than two independent IN
 -- lists: filtering on subjects and issuers separately would return the cross
 -- product, attributing one subject's upstream session to another subject who
 -- happens to share an issuer.
 -- Token material is never projected — only expiry metadata and a boolean for
 -- whether a refresh grant exists.
--- Scoped by the session's user_session_issuer project, not the client's project
--- (see remotesessions.ListRemoteSessionsByProjectID): an upstream established
--- through an organization-level or global client, whose project_id is NULL,
--- still belongs to the project whose user_session_issuer minted it. Filtering
+-- Scoped by the binding issuer's project: an upstream established through an
+-- organization-level or global client, whose project_id is NULL, still belongs
+-- to the project whose user_session_issuer the client is bound to. Filtering
 -- on the client's project would silently drop those upstreams and report a
 -- brokered session as having none. A client that does carry a project must
 -- still match, so a row that somehow paired one project's client with another
 -- project's issuer stays invisible rather than being read as a shared one.
 SELECT rs.id,
        rs.subject_urn,
-       rs.user_session_issuer_id,
+       usi.id AS user_session_issuer_id,
        rs.remote_session_client_id,
        rc.remote_session_issuer_id,
        ri.slug AS issuer_slug,
@@ -778,13 +819,31 @@ JOIN (
               unnest(@issuer_ids::uuid[]) AS issuer_id
      ) AS pair
   ON rs.subject_urn = pair.subject_urn
-  AND rs.user_session_issuer_id = pair.issuer_id
-JOIN user_session_issuers AS usi ON usi.id = rs.user_session_issuer_id
+JOIN user_session_issuers AS usi ON usi.id = pair.issuer_id
 JOIN remote_session_clients AS rc ON rc.id = rs.remote_session_client_id
 JOIN remote_session_issuers AS ri ON ri.id = rc.remote_session_issuer_id
-WHERE usi.project_id = @project_id
-  AND (rc.project_id IS NULL OR rc.project_id = @project_id)
+WHERE usi.project_id = @project_id::uuid
+  AND (rc.project_id = @project_id::uuid OR (rc.project_id IS NULL AND (rc.organization_id IS NULL OR rc.organization_id = @organization_id)))
+  AND (
+    EXISTS (
+      SELECT 1
+      FROM remote_session_client_user_session_issuers AS blink
+      WHERE blink.remote_session_client_id = rs.remote_session_client_id
+        AND blink.user_session_issuer_id = pair.issuer_id
+    )
+    OR rs.user_session_issuer_id = pair.issuer_id
+  )
   AND rs.deleted IS FALSE
   AND rc.deleted IS FALSE
   AND ri.deleted IS FALSE
 ORDER BY ri.slug ASC, rs.id ASC;
+
+-- name: ClearUserSessionClientAuthMethod :one
+-- TEST FIXTURE ONLY. Never call this from application code: it un-sets the
+-- security control the token endpoint branches on. It returns a client row
+-- to the shape it had before token_endpoint_auth_method existed, so the
+-- legacy NULL derivation and the NULL-safe refresh guards can be exercised.
+UPDATE user_session_clients
+SET token_endpoint_auth_method = NULL
+WHERE id = @id
+RETURNING *;

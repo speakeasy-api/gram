@@ -344,17 +344,12 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 		return oops.E(oops.CodeUnexpected, err, "delete user session issuer").LogError(ctx, logger)
 	}
 
-	if err = txRepo.DeleteRemoteSessionClientAttachmentsForUserSessionIssuer(
-		ctx,
-		repo.DeleteRemoteSessionClientAttachmentsForUserSessionIssuerParams{
-			UserSessionIssuerID: deleted.ID,
-			ProjectID:           *authCtx.ProjectID,
-		},
-	); err != nil {
+	orphanCreds, err := s.revoker.DetachUserSessionIssuerFromClients(ctx, dbtx, deleted.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
+	if err != nil {
 		return oops.E(
 			oops.CodeUnexpected,
 			err,
-			"failed to delete remote session client attachments for user session issuer %s",
+			"failed to detach remote session clients from user session issuer %s",
 			deleted.ID,
 		).LogError(ctx, logger)
 	}
@@ -383,6 +378,9 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
+	// Post-commit, best-effort: RFC 7009 for the orphaned grants.
+	s.revoker.RevokeAllDetached(ctx, orphanCreds)
+
 	return nil
 }
 
@@ -393,9 +391,14 @@ func userSessionIssuerView(row repo.UserSessionIssuer) *types.UserSessionIssuer 
 	// API — including the audit snapshots built from this view — should never
 	// have to know the unset state exists.
 	mode, _ := admission.ResolveMode(row.ClientIDMetadataAdmissionMode.String, row.ClientIDMetadataAdmissionMode.Valid)
+	projectID := ""
+	if row.ProjectID.Valid {
+		projectID = row.ProjectID.UUID.String()
+	}
+
 	return &types.UserSessionIssuer{
 		ID:                            row.ID.String(),
-		ProjectID:                     row.ProjectID.String(),
+		ProjectID:                     projectID,
 		Slug:                          row.Slug,
 		AuthnChallengeMode:            row.AuthnChallengeMode,
 		SessionDurationHours:          int(dur / time.Hour),

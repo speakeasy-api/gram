@@ -326,18 +326,30 @@ func (s *Service) RefreshUserSessionClientCIMD(ctx context.Context, payload *gen
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("cimd resolver reported %q outcome for an uncached resolve", result.Outcome), "refresh client metadata").LogError(ctx, logger)
 	}
 
+	// A document that drops private_key_jwt after committing to it is
+	// indistinguishable from a domain takeover. The stored method stands, and
+	// the operator is told how to reset it deliberately: revoking the client
+	// lets the next authorize register it afresh from whatever the document
+	// then says.
+	if CIMDDocumentDowngradesAuthMethod(&row, result.Document) {
+		return nil, oops.E(oops.CodeInvalid, nil, "metadata document now declares token_endpoint_auth_method %q but the client committed to private_key_jwt; the stored method was kept. Revoke the client to let it re-register under the new method", result.Document.DeclaredAuthMethod()).LogError(ctx, logger)
+	}
+
 	// Persisted through an id-scoped update rather than the authorize path's
 	// (issuer, client_id) upsert: the upsert's conflict target is a partial
 	// unique index over live rows, so against a row revoked during the fetch
 	// it would take the INSERT branch and silently resurrect the client the
 	// operator just watched someone revoke.
 	fresh, err := queries.UpdateUserSessionClientFromCIMD(ctx, repo.UpdateUserSessionClientFromCIMDParams{
-		ID:                   row.ID,
-		ProjectID:            *authCtx.ProjectID,
-		ClientName:           result.Document.ClientName,
-		RedirectUris:         result.Document.RedirectURIs,
-		CacheTtlSeconds:      result.TTL.Seconds(),
-		ClientIDMetadataEtag: conv.ToPGTextEmpty(result.ETag),
+		ID:                      row.ID,
+		ProjectID:               *authCtx.ProjectID,
+		ClientName:              result.Document.ClientName,
+		RedirectUris:            result.Document.RedirectURIs,
+		CacheTtlSeconds:         result.TTL.Seconds(),
+		ClientIDMetadataEtag:    conv.ToPGTextEmpty(result.ETag),
+		TokenEndpointAuthMethod: result.Document.DeclaredAuthMethod(),
+		ClientJwks:              result.Document.JWKS,
+		ClientJwksUri:           conv.ToPGTextEmpty(result.Document.JWKSURI),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -450,7 +462,7 @@ func (s *Service) RevokeUserSessionClient(ctx context.Context, payload *gen.Revo
 		}
 		seenSubjects[key] = struct{}{}
 
-		creds, err := s.revoker.SoftDeleteSubjectSessions(ctx, dbtx, session.SubjectUrn, *authCtx.ProjectID)
+		creds, err := s.revoker.SoftDeleteSubjectSessions(ctx, dbtx, session.SubjectUrn, session.UserSessionIssuerID, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "revoke upstream remote sessions").LogError(ctx, logger)
 		}

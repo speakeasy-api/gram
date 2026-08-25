@@ -532,6 +532,24 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 		return nil, oops.E(oops.CodeUnexpected, err, "lock mcp server").LogError(ctx, logger)
 	}
 
+	// The meta lock above serializes concurrent adds, so this sees every
+	// committed member.
+	sharing, err := txRepo.CountMetaMCPMembersSharingBackend(ctx, repo.CountMetaMCPMembersSharingBackendParams{
+		MetaMcpServerID:      metaID,
+		ProjectID:            *authCtx.ProjectID,
+		McpServerID:          mcpServerID,
+		RemoteMcpServerID:    server.RemoteMcpServerID,
+		TunneledMcpServerID:  server.TunneledMcpServerID,
+		ToolsetID:            server.ToolsetID,
+		UnproxiedMcpServerID: server.UnproxiedMcpServerID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "count meta mcp members sharing a backend").LogError(ctx, logger)
+	}
+	if sharing > 0 {
+		return nil, oops.E(oops.CodeConflict, nil, "another member of this meta mcp server already fronts the same backend").LogError(ctx, logger)
+	}
+
 	member, err := txRepo.CreateMetaMCPMember(ctx, repo.CreateMetaMCPMemberParams{
 		ProjectID:       *authCtx.ProjectID,
 		MetaMcpServerID: metaID,

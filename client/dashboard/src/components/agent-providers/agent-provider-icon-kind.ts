@@ -3,6 +3,7 @@ export type AgentProviderIconKind =
   | "cursor"
   | "codex"
   | "opencode"
+  | "openclaw"
   | "litellm"
   | "devin"
   | "mistral"
@@ -34,6 +35,7 @@ export function agentProviderIconKind(source?: string): AgentProviderIconKind {
     return "codex";
   }
   if (normalizedSource?.includes("opencode")) return "opencode";
+  if (normalizedSource?.includes("openclaw")) return "openclaw";
   if (normalizedSource?.includes("litellm")) return "litellm";
   if (normalizedSource?.includes("devin")) return "devin";
   if (normalizedSource?.includes("mistral")) return "mistral";

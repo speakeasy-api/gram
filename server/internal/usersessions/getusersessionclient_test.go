@@ -102,12 +102,13 @@ func TestGetUserSessionClient_CIMDCacheFields(t *testing.T) {
 
 	documentURL := "https://client.example.com/oauth/client.json"
 	seeded, err := repo.New(ti.conn).UpsertUserSessionClientFromCIMD(ctx, repo.UpsertUserSessionClientFromCIMDParams{
-		UserSessionIssuerID:  uuid.MustParse(issuer.ID),
-		ClientID:             documentURL,
-		ClientName:           "cimd-cache-fields-client",
-		RedirectUris:         []string{"https://client.example.com/cb"},
-		CacheTtlSeconds:      3600,
-		ClientIDMetadataEtag: pgtype.Text{String: `"v1"`, Valid: true},
+		UserSessionIssuerID:     uuid.MustParse(issuer.ID),
+		ClientID:                documentURL,
+		ClientName:              "cimd-cache-fields-client",
+		RedirectUris:            []string{"https://client.example.com/cb"},
+		CacheTtlSeconds:         3600,
+		ClientIDMetadataEtag:    pgtype.Text{String: `"v1"`, Valid: true},
+		TokenEndpointAuthMethod: "none",
 	})
 	require.NoError(t, err)
 

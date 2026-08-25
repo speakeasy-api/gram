@@ -29,6 +29,11 @@ export const AGENT_PROVIDERS = {
     description: "Open-source terminal coding agent",
     iconSource: "opencode",
   },
+  openclaw: {
+    name: "OpenClaw",
+    description: "Open-source personal AI agent gateway",
+    iconSource: "openclaw",
+  },
   copilot: {
     name: "GitHub Copilot",
     description: "Microsoft / GitHub AI pair programmer",
@@ -83,8 +88,15 @@ export const COMING_SOON_AGENT_PROVIDER_IDS = [
 
 export const ACTIVE_AGENT_PROVIDER_IDS = {
   hooks: ["claude", "cursor", "codex"],
-  plugins: ["claude", "claude-cowork", "cursor", "codex", "opencode"],
-  setup: ["claude", "claude-cowork", "codex", "cursor", "opencode"],
+  plugins: [
+    "claude",
+    "claude-cowork",
+    "cursor",
+    "codex",
+    "opencode",
+    "openclaw",
+  ],
+  setup: ["claude", "claude-cowork", "codex", "cursor", "opencode", "openclaw"],
 } as const satisfies Record<string, readonly AgentProviderId[]>;
 
 export function agentProvidersForSurface(
