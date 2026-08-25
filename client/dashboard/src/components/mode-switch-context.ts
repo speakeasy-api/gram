@@ -1,4 +1,5 @@
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { useRBAC } from "@/hooks/useRBAC";
 import type { IconName } from "@/components/ui/Icon/names";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { createContext, useContext } from "react";
@@ -123,7 +124,9 @@ export const MODE_SWITCHER_HEIGHT = "3.5rem";
  * the strip hidden they must not reserve its height in the offsets above.
  */
 export function useModeSwitcherEnabled(): boolean {
-  return (
-    useFeatureFlag(FEATURE_FLAGS.headlessModeSwitcher).status === "enabled"
-  );
+  const rollout = useFeatureFlag(FEATURE_FLAGS.headlessModeSwitcher);
+  // Headless mode is an organization-admin surface (its content carries the
+  // same gate), so members get neither the entry point nor its reserved height.
+  const { hasScope } = useRBAC();
+  return rollout.status === "enabled" && hasScope("org:admin");
 }
