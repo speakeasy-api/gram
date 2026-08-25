@@ -54,6 +54,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
 const (
@@ -168,6 +169,22 @@ type Document struct {
 	// apply because §4.1 bans every shared-symmetric-secret method for CIMD.
 	// Several real clients (OpenAI's among them) omit it.
 	TokenEndpointAuthMethod string `json:"token_endpoint_auth_method"`
+}
+
+// DeclaredAuthMethod is the client authentication method this document
+// commits its client to, with an absent member resolved to "none".
+//
+// Resolving absence here rather than at each call site is what keeps the
+// persisted method honest: a NULL in user_session_clients means "this row
+// predates the column", a distinct claim from "this document declined to
+// name a method", and every document accepted by validateDocument has made
+// the latter claim. Callers persisting a freshly read document should store
+// this value, never the raw member.
+func (d *Document) DeclaredAuthMethod() string {
+	if d.TokenEndpointAuthMethod == "" {
+		return oauthwire.AuthMethodNone
+	}
+	return d.TokenEndpointAuthMethod
 }
 
 // IsClientIDURL reports whether a presented client_id should be treated as a

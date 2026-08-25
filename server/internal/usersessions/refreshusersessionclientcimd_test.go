@@ -176,12 +176,13 @@ func newRefreshTestSetup(t *testing.T, issuerSlug string) (context.Context, *tes
 	require.NoError(t, err)
 
 	row, err := repo.New(ti.conn).UpsertUserSessionClientFromCIMD(ctx, repo.UpsertUserSessionClientFromCIMDParams{
-		UserSessionIssuerID:  uuid.MustParse(issuer.ID),
-		ClientID:             ds.clientID,
-		ClientName:           "Stale Cached Name",
-		RedirectUris:         []string{"http://127.0.0.1:33418/callback"},
-		CacheTtlSeconds:      3600,
-		ClientIDMetadataEtag: pgtype.Text{String: `"v1"`, Valid: true},
+		UserSessionIssuerID:     uuid.MustParse(issuer.ID),
+		ClientID:                ds.clientID,
+		ClientName:              "Stale Cached Name",
+		RedirectUris:            []string{"http://127.0.0.1:33418/callback"},
+		CacheTtlSeconds:         3600,
+		ClientIDMetadataEtag:    pgtype.Text{String: `"v1"`, Valid: true},
+		TokenEndpointAuthMethod: "none",
 	})
 	require.NoError(t, err)
 	require.True(t, row.ClientIDMetadataEtag.Valid)

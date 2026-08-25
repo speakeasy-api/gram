@@ -476,6 +476,7 @@ WHERE user_session_issuer_id = @user_session_issuer_id
 -- consent). They have no exposure on the management API.
 
 -- name: CreateUserSessionClient :one
+-- Registers a client from an RFC 7591 request.
 INSERT INTO user_session_clients (
     project_id,
     user_session_issuer_id,
@@ -483,7 +484,8 @@ INSERT INTO user_session_clients (
     client_secret_hash,
     client_name,
     redirect_uris,
-    client_secret_expires_at
+    client_secret_expires_at,
+    token_endpoint_auth_method
 )
 VALUES (
     (SELECT project_id FROM user_session_issuers WHERE id = @user_session_issuer_id),
@@ -492,7 +494,8 @@ VALUES (
     @client_secret_hash,
     @client_name,
     @redirect_uris,
-    @client_secret_expires_at
+    @client_secret_expires_at,
+    @token_endpoint_auth_method::text
 )
 RETURNING *;
 
@@ -500,10 +503,11 @@ RETURNING *;
 -- Lazy upsert for a client resolved from a Client ID Metadata Document at
 -- authorize time. For CIMD rows the document URL IS the client_id, so the
 -- conflict target is the same partial unique index that serves DCR lookups.
--- On refresh the mutable metadata (client_name, redirect_uris) and every
--- cache column are replaced wholesale, including the ETag, which is set to
--- NULL when the response carried no usable validator so the next refresh is
--- unconditional rather than replaying a stale one.
+-- On refresh the mutable metadata (client_name, redirect_uris,
+-- token_endpoint_auth_method) and every cache column are replaced wholesale,
+-- including the ETag, which is set to NULL when the response carried no usable
+-- validator so the next refresh is unconditional rather than replaying a stale
+-- one.
 --
 -- The cache expiry is derived from the database clock rather than the
 -- application's, so it can never land before the client_id_metadata_fetched_at
@@ -530,7 +534,8 @@ INSERT INTO user_session_clients (
     client_id_metadata_uri,
     client_id_metadata_fetched_at,
     client_id_metadata_cache_expires_at,
-    client_id_metadata_etag
+    client_id_metadata_etag,
+    token_endpoint_auth_method
 )
 VALUES (
     (SELECT project_id FROM user_session_issuers WHERE id = @user_session_issuer_id),
@@ -543,7 +548,8 @@ VALUES (
     @client_id,
     clock_timestamp(),
     clock_timestamp() + make_interval(secs => @cache_ttl_seconds::double precision),
-    sqlc.narg('client_id_metadata_etag')
+    sqlc.narg('client_id_metadata_etag'),
+    @token_endpoint_auth_method::text
 )
 ON CONFLICT (user_session_issuer_id, client_id) WHERE deleted IS FALSE
 DO UPDATE SET
@@ -553,14 +559,16 @@ DO UPDATE SET
     client_id_metadata_fetched_at = EXCLUDED.client_id_metadata_fetched_at,
     client_id_metadata_cache_expires_at = EXCLUDED.client_id_metadata_cache_expires_at,
     client_id_metadata_etag = EXCLUDED.client_id_metadata_etag,
+    token_endpoint_auth_method = EXCLUDED.token_endpoint_auth_method,
     updated_at = clock_timestamp()
 WHERE user_session_clients.client_secret_hash IS NULL
 RETURNING *;
 
 -- name: UpdateUserSessionClientCIMDCache :one
 -- Refreshes the cache bookkeeping on a CIMD-resolved client whose document
--- host answered 304 Not Modified. The stored client_name and redirect_uris
--- are current by definition of the 304, so they are deliberately untouched;
+-- host answered 304 Not Modified. The stored client_name, redirect_uris, and
+-- token_endpoint_auth_method are current by definition of the 304 — the host
+-- asserted the document has not changed — so they are deliberately untouched;
 -- only the fetch stamp, the expiry, and the validator move.
 --
 -- The guards mirror UpsertUserSessionClientFromCIMD's. A secret-bearing DCR
@@ -626,6 +634,7 @@ RETURNING *;
 UPDATE user_session_clients
 SET client_name = @client_name,
     redirect_uris = @redirect_uris,
+    token_endpoint_auth_method = @token_endpoint_auth_method::text,
     client_id_metadata_fetched_at = clock_timestamp(),
     client_id_metadata_cache_expires_at = clock_timestamp() + make_interval(secs => @cache_ttl_seconds::double precision),
     client_id_metadata_etag = sqlc.narg('client_id_metadata_etag'),

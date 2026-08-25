@@ -142,7 +142,8 @@ INSERT INTO user_session_clients (
     client_secret_hash,
     client_name,
     redirect_uris,
-    client_secret_expires_at
+    client_secret_expires_at,
+    token_endpoint_auth_method
 )
 VALUES (
     (SELECT project_id FROM user_session_issuers WHERE id = $1),
@@ -151,23 +152,26 @@ VALUES (
     $3,
     $4,
     $5,
-    $6
+    $6,
+    $7::text
 )
 RETURNING id, project_id, user_session_issuer_id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, client_id_metadata_uri, client_id_metadata_fetched_at, client_id_metadata_cache_expires_at, client_id_metadata_etag, token_endpoint_auth_method, client_jwks, client_jwks_uri, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateUserSessionClientParams struct {
-	UserSessionIssuerID   uuid.UUID
-	ClientID              string
-	ClientSecretHash      pgtype.Text
-	ClientName            string
-	RedirectUris          []string
-	ClientSecretExpiresAt pgtype.Timestamptz
+	UserSessionIssuerID     uuid.UUID
+	ClientID                string
+	ClientSecretHash        pgtype.Text
+	ClientName              string
+	RedirectUris            []string
+	ClientSecretExpiresAt   pgtype.Timestamptz
+	TokenEndpointAuthMethod string
 }
 
 // The Create* queries below are exercised by tests and by the OAuth surface
 // that lands in milestone #2 (DCR registration, /token exchange, /authorize
 // consent). They have no exposure on the management API.
+// Registers a client from an RFC 7591 request.
 func (q *Queries) CreateUserSessionClient(ctx context.Context, arg CreateUserSessionClientParams) (UserSessionClient, error) {
 	row := q.db.QueryRow(ctx, createUserSessionClient,
 		arg.UserSessionIssuerID,
@@ -176,6 +180,7 @@ func (q *Queries) CreateUserSessionClient(ctx context.Context, arg CreateUserSes
 		arg.ClientName,
 		arg.RedirectUris,
 		arg.ClientSecretExpiresAt,
+		arg.TokenEndpointAuthMethod,
 	)
 	var i UserSessionClient
 	err := row.Scan(
@@ -2014,8 +2019,9 @@ type UpdateUserSessionClientCIMDCacheParams struct {
 }
 
 // Refreshes the cache bookkeeping on a CIMD-resolved client whose document
-// host answered 304 Not Modified. The stored client_name and redirect_uris
-// are current by definition of the 304, so they are deliberately untouched;
+// host answered 304 Not Modified. The stored client_name, redirect_uris, and
+// token_endpoint_auth_method are current by definition of the 304 — the host
+// asserted the document has not changed — so they are deliberately untouched;
 // only the fetch stamp, the expiry, and the validator move.
 //
 // The guards mirror UpsertUserSessionClientFromCIMD's. A secret-bearing DCR
@@ -2058,12 +2064,13 @@ const updateUserSessionClientFromCIMD = `-- name: UpdateUserSessionClientFromCIM
 UPDATE user_session_clients
 SET client_name = $1,
     redirect_uris = $2,
+    token_endpoint_auth_method = $3::text,
     client_id_metadata_fetched_at = clock_timestamp(),
-    client_id_metadata_cache_expires_at = clock_timestamp() + make_interval(secs => $3::double precision),
-    client_id_metadata_etag = $4,
+    client_id_metadata_cache_expires_at = clock_timestamp() + make_interval(secs => $4::double precision),
+    client_id_metadata_etag = $5,
     updated_at = clock_timestamp()
-WHERE id = $5
-  AND project_id = $6
+WHERE id = $6
+  AND project_id = $7
   AND client_id_metadata_uri IS NOT NULL
   AND client_secret_hash IS NULL
   AND deleted IS FALSE
@@ -2071,12 +2078,13 @@ RETURNING id, project_id, user_session_issuer_id, client_id, client_secret_hash,
 `
 
 type UpdateUserSessionClientFromCIMDParams struct {
-	ClientName           string
-	RedirectUris         []string
-	CacheTtlSeconds      float64
-	ClientIDMetadataEtag pgtype.Text
-	ID                   uuid.UUID
-	ProjectID            uuid.UUID
+	ClientName              string
+	RedirectUris            []string
+	TokenEndpointAuthMethod string
+	CacheTtlSeconds         float64
+	ClientIDMetadataEtag    pgtype.Text
+	ID                      uuid.UUID
+	ProjectID               uuid.UUID
 }
 
 // Persists a freshly re-read metadata document onto an EXISTING CIMD row,
@@ -2092,6 +2100,7 @@ func (q *Queries) UpdateUserSessionClientFromCIMD(ctx context.Context, arg Updat
 	row := q.db.QueryRow(ctx, updateUserSessionClientFromCIMD,
 		arg.ClientName,
 		arg.RedirectUris,
+		arg.TokenEndpointAuthMethod,
 		arg.CacheTtlSeconds,
 		arg.ClientIDMetadataEtag,
 		arg.ID,
@@ -2186,7 +2195,8 @@ INSERT INTO user_session_clients (
     client_id_metadata_uri,
     client_id_metadata_fetched_at,
     client_id_metadata_cache_expires_at,
-    client_id_metadata_etag
+    client_id_metadata_etag,
+    token_endpoint_auth_method
 )
 VALUES (
     (SELECT project_id FROM user_session_issuers WHERE id = $1),
@@ -2199,7 +2209,8 @@ VALUES (
     $2,
     clock_timestamp(),
     clock_timestamp() + make_interval(secs => $5::double precision),
-    $6
+    $6,
+    $7::text
 )
 ON CONFLICT (user_session_issuer_id, client_id) WHERE deleted IS FALSE
 DO UPDATE SET
@@ -2209,27 +2220,30 @@ DO UPDATE SET
     client_id_metadata_fetched_at = EXCLUDED.client_id_metadata_fetched_at,
     client_id_metadata_cache_expires_at = EXCLUDED.client_id_metadata_cache_expires_at,
     client_id_metadata_etag = EXCLUDED.client_id_metadata_etag,
+    token_endpoint_auth_method = EXCLUDED.token_endpoint_auth_method,
     updated_at = clock_timestamp()
 WHERE user_session_clients.client_secret_hash IS NULL
 RETURNING id, project_id, user_session_issuer_id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, client_id_metadata_uri, client_id_metadata_fetched_at, client_id_metadata_cache_expires_at, client_id_metadata_etag, token_endpoint_auth_method, client_jwks, client_jwks_uri, created_at, updated_at, deleted_at, deleted
 `
 
 type UpsertUserSessionClientFromCIMDParams struct {
-	UserSessionIssuerID  uuid.UUID
-	ClientID             string
-	ClientName           string
-	RedirectUris         []string
-	CacheTtlSeconds      float64
-	ClientIDMetadataEtag pgtype.Text
+	UserSessionIssuerID     uuid.UUID
+	ClientID                string
+	ClientName              string
+	RedirectUris            []string
+	CacheTtlSeconds         float64
+	ClientIDMetadataEtag    pgtype.Text
+	TokenEndpointAuthMethod string
 }
 
 // Lazy upsert for a client resolved from a Client ID Metadata Document at
 // authorize time. For CIMD rows the document URL IS the client_id, so the
 // conflict target is the same partial unique index that serves DCR lookups.
-// On refresh the mutable metadata (client_name, redirect_uris) and every
-// cache column are replaced wholesale, including the ETag, which is set to
-// NULL when the response carried no usable validator so the next refresh is
-// unconditional rather than replaying a stale one.
+// On refresh the mutable metadata (client_name, redirect_uris,
+// token_endpoint_auth_method) and every cache column are replaced wholesale,
+// including the ETag, which is set to NULL when the response carried no usable
+// validator so the next refresh is unconditional rather than replaying a stale
+// one.
 //
 // The cache expiry is derived from the database clock rather than the
 // application's, so it can never land before the client_id_metadata_fetched_at
@@ -2253,6 +2267,7 @@ func (q *Queries) UpsertUserSessionClientFromCIMD(ctx context.Context, arg Upser
 		arg.RedirectUris,
 		arg.CacheTtlSeconds,
 		arg.ClientIDMetadataEtag,
+		arg.TokenEndpointAuthMethod,
 	)
 	var i UserSessionClient
 	err := row.Scan(

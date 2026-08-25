@@ -158,12 +158,13 @@ func (s *Service) resolveUserSessionClient(ctx context.Context, logger *slog.Log
 			return &row, nil
 		case cimd.CacheOutcomeRefreshed:
 			row, err := queries.UpsertUserSessionClientFromCIMD(ctx, usersessions_repo.UpsertUserSessionClientFromCIMDParams{
-				UserSessionIssuerID:  endpoint.UserSessionIssuerID,
-				ClientID:             clientID,
-				ClientName:           result.Document.ClientName,
-				RedirectUris:         result.Document.RedirectURIs,
-				CacheTtlSeconds:      result.TTL.Seconds(),
-				ClientIDMetadataEtag: conv.ToPGTextEmpty(result.ETag),
+				UserSessionIssuerID:     endpoint.UserSessionIssuerID,
+				ClientID:                clientID,
+				ClientName:              result.Document.ClientName,
+				RedirectUris:            result.Document.RedirectURIs,
+				CacheTtlSeconds:         result.TTL.Seconds(),
+				ClientIDMetadataEtag:    conv.ToPGTextEmpty(result.ETag),
+				TokenEndpointAuthMethod: result.Document.DeclaredAuthMethod(),
 			})
 			if err != nil {
 				// No-rows here means the DO UPDATE guard refused to rewrite a

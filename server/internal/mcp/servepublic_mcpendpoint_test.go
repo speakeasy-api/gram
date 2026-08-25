@@ -297,10 +297,11 @@ func mintIssuerBearerForEndpoint(
 	clientID := "test-client-" + uuid.NewString()
 	redirectURI := "http://localhost:3000/callback"
 	_, err = usersessionsrepo.New(ti.conn).CreateUserSessionClient(ctx, usersessionsrepo.CreateUserSessionClientParams{
-		UserSessionIssuerID: mcpServer.UserSessionIssuerID.UUID,
-		ClientID:            clientID,
-		ClientName:          "servepublic test client",
-		RedirectUris:        []string{redirectURI},
+		UserSessionIssuerID:     mcpServer.UserSessionIssuerID.UUID,
+		ClientID:                clientID,
+		ClientName:              "servepublic test client",
+		RedirectUris:            []string{redirectURI},
+		TokenEndpointAuthMethod: "none",
 	})
 	require.NoError(t, err)
 

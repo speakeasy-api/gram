@@ -332,12 +332,13 @@ func (s *Service) RefreshUserSessionClientCIMD(ctx context.Context, payload *gen
 	// it would take the INSERT branch and silently resurrect the client the
 	// operator just watched someone revoke.
 	fresh, err := queries.UpdateUserSessionClientFromCIMD(ctx, repo.UpdateUserSessionClientFromCIMDParams{
-		ID:                   row.ID,
-		ProjectID:            *authCtx.ProjectID,
-		ClientName:           result.Document.ClientName,
-		RedirectUris:         result.Document.RedirectURIs,
-		CacheTtlSeconds:      result.TTL.Seconds(),
-		ClientIDMetadataEtag: conv.ToPGTextEmpty(result.ETag),
+		ID:                      row.ID,
+		ProjectID:               *authCtx.ProjectID,
+		ClientName:              result.Document.ClientName,
+		RedirectUris:            result.Document.RedirectURIs,
+		CacheTtlSeconds:         result.TTL.Seconds(),
+		ClientIDMetadataEtag:    conv.ToPGTextEmpty(result.ETag),
+		TokenEndpointAuthMethod: result.Document.DeclaredAuthMethod(),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

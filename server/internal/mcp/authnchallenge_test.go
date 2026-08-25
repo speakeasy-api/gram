@@ -109,10 +109,11 @@ func seedPrivateToolsetWithIssuer(
 	require.NoError(t, err)
 
 	client, err := usersessions_repo.New(ti.conn).CreateUserSessionClient(ctx, usersessions_repo.CreateUserSessionClientParams{
-		UserSessionIssuerID: issuer.ID,
-		ClientID:            "test-client-" + uuid.New().String()[:8],
-		ClientName:          "test client",
-		RedirectUris:        []string{"http://localhost:3000/callback"},
+		UserSessionIssuerID:     issuer.ID,
+		ClientID:                "test-client-" + uuid.New().String()[:8],
+		ClientName:              "test client",
+		RedirectUris:            []string{"http://localhost:3000/callback"},
+		TokenEndpointAuthMethod: "none",
 	})
 	require.NoError(t, err)
 

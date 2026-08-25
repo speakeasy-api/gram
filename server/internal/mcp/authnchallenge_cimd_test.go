@@ -750,12 +750,13 @@ func TestOAuthCIMD_SecretBearingCollisionRejected(t *testing.T) {
 	ctx, ti, ds, toolset := newTestCIMDService(t)
 
 	_, err := usersessions_repo.New(ti.conn).CreateUserSessionClient(ctx, usersessions_repo.CreateUserSessionClientParams{
-		UserSessionIssuerID:   toolset.UserSessionIssuerID.UUID,
-		ClientID:              ds.clientID,
-		ClientSecretHash:      conv.ToPGText("bcrypt-hash-placeholder"),
-		ClientName:            "Confidential DCR Client",
-		RedirectUris:          []string{"http://127.0.0.1:33418/callback"},
-		ClientSecretExpiresAt: pgtype.Timestamptz{},
+		UserSessionIssuerID:     toolset.UserSessionIssuerID.UUID,
+		ClientID:                ds.clientID,
+		ClientSecretHash:        conv.ToPGText("bcrypt-hash-placeholder"),
+		ClientName:              "Confidential DCR Client",
+		RedirectUris:            []string{"http://127.0.0.1:33418/callback"},
+		ClientSecretExpiresAt:   pgtype.Timestamptz{},
+		TokenEndpointAuthMethod: "client_secret_basic",
 	})
 	require.NoError(t, err)
 
