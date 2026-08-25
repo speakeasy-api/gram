@@ -50,6 +50,41 @@ func (q *Queries) AcceptInvitation(ctx context.Context, arg AcceptInvitationPara
 	return i, err
 }
 
+const claimEmaRedeemedJag = `-- name: ClaimEmaRedeemedJag :one
+INSERT INTO ema_redeemed_jags (issuer, jti, resource_id, expires_at)
+VALUES (?1, ?2, ?3, ?4)
+ON CONFLICT (issuer, jti) DO NOTHING
+RETURNING issuer, jti, resource_id, expires_at, redeemed_at
+`
+
+type ClaimEmaRedeemedJagParams struct {
+	Issuer     string
+	Jti        string
+	ResourceID uuid.UUID
+	ExpiresAt  time.Time
+}
+
+// ClaimEmaRedeemedJag enforces single use. The insert conflicts when this
+// (issuer, jti) pair was already redeemed, and DO NOTHING makes RETURNING
+// yield no row -- so ErrNoRows from this query IS the replay signal.
+func (q *Queries) ClaimEmaRedeemedJag(ctx context.Context, arg ClaimEmaRedeemedJagParams) (EmaRedeemedJag, error) {
+	row := q.db.QueryRowContext(ctx, claimEmaRedeemedJag,
+		arg.Issuer,
+		arg.Jti,
+		arg.ResourceID,
+		arg.ExpiresAt,
+	)
+	var i EmaRedeemedJag
+	err := row.Scan(
+		&i.Issuer,
+		&i.Jti,
+		&i.ResourceID,
+		&i.ExpiresAt,
+		&i.RedeemedAt,
+	)
+	return i, err
+}
+
 const clearOrganizationWorkosID = `-- name: ClearOrganizationWorkosID :one
 UPDATE organizations
 SET workos_id = NULL, updated_at = ?1
@@ -83,26 +118,23 @@ func (q *Queries) ClearOrganizationWorkosID(ctx context.Context, arg ClearOrgani
 const consumeAuthCode = `-- name: ConsumeAuthCode :one
 DELETE FROM auth_codes
 WHERE code = ?1
-  AND mode = ?2
-  AND expires_at > ?3
-RETURNING code, mode, user_id, client_id, redirect_uri, code_challenge, code_challenge_method, scope, expires_at, created_at
+  AND expires_at > ?2
+RETURNING code, user_id, client_id, redirect_uri, code_challenge, code_challenge_method, scope, expires_at, created_at
 `
 
 type ConsumeAuthCodeParams struct {
 	Code string
-	Mode string
 	Ts   time.Time
 }
 
 // ConsumeAuthCode atomically reads-and-deletes an auth code, enforcing
-// single-use. Returns ErrNoRows when the code is unknown for that mode,
+// single-use. Returns ErrNoRows when the code is unknown,
 // already consumed, or expired.
 func (q *Queries) ConsumeAuthCode(ctx context.Context, arg ConsumeAuthCodeParams) (AuthCode, error) {
-	row := q.db.QueryRowContext(ctx, consumeAuthCode, arg.Code, arg.Mode, arg.Ts)
+	row := q.db.QueryRowContext(ctx, consumeAuthCode, arg.Code, arg.Ts)
 	var i AuthCode
 	err := row.Scan(
 		&i.Code,
-		&i.Mode,
 		&i.UserID,
 		&i.ClientID,
 		&i.RedirectUri,
@@ -118,20 +150,19 @@ func (q *Queries) ConsumeAuthCode(ctx context.Context, arg ConsumeAuthCodeParams
 const createAuthCode = `-- name: CreateAuthCode :one
 
 INSERT INTO auth_codes (
-  code, mode, user_id, client_id, redirect_uri,
+  code, user_id, client_id, redirect_uri,
   code_challenge, code_challenge_method, scope, expires_at
 )
 VALUES (
-  ?1, ?2, ?3, ?4, ?5,
-  ?6, ?7,
-  ?8, ?9
+  ?1, ?2, ?3, ?4,
+  ?5, ?6,
+  ?7, ?8
 )
-RETURNING code, mode, user_id, client_id, redirect_uri, code_challenge, code_challenge_method, scope, expires_at, created_at
+RETURNING code, user_id, client_id, redirect_uri, code_challenge, code_challenge_method, scope, expires_at, created_at
 `
 
 type CreateAuthCodeParams struct {
 	Code                string
-	Mode                string
 	UserID              uuid.UUID
 	ClientID            string
 	RedirectUri         string
@@ -142,12 +173,11 @@ type CreateAuthCodeParams struct {
 }
 
 // =============================================================================
-// auth_codes / tokens (shared by every OAuth-shaped mode)
+// auth_codes / tokens
 // =============================================================================
 func (q *Queries) CreateAuthCode(ctx context.Context, arg CreateAuthCodeParams) (AuthCode, error) {
 	row := q.db.QueryRowContext(ctx, createAuthCode,
 		arg.Code,
-		arg.Mode,
 		arg.UserID,
 		arg.ClientID,
 		arg.RedirectUri,
@@ -159,7 +189,6 @@ func (q *Queries) CreateAuthCode(ctx context.Context, arg CreateAuthCodeParams) 
 	var i AuthCode
 	err := row.Scan(
 		&i.Code,
-		&i.Mode,
 		&i.UserID,
 		&i.ClientID,
 		&i.RedirectUri,
@@ -168,6 +197,278 @@ func (q *Queries) CreateAuthCode(ctx context.Context, arg CreateAuthCodeParams) 
 		&i.Scope,
 		&i.ExpiresAt,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createEmaApp = `-- name: CreateEmaApp :one
+
+INSERT INTO ema_apps (id, client_id, client_secret, jwks, name, enabled)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+ON CONFLICT (client_id) DO UPDATE SET client_id = excluded.client_id
+RETURNING id, client_id, client_secret, jwks, name, enabled, created_at, updated_at
+`
+
+type CreateEmaAppParams struct {
+	ID           uuid.UUID
+	ClientID     string
+	ClientSecret string
+	Jwks         string
+	Name         string
+	Enabled      bool
+}
+
+// =============================================================================
+// ema_apps
+// =============================================================================
+// CreateEmaApp is find-or-create on client_id, matching the idiom used by
+// CreateOrganization: the no-op DO UPDATE makes RETURNING fire on the
+// existing row so callers always get a usable record back.
+func (q *Queries) CreateEmaApp(ctx context.Context, arg CreateEmaAppParams) (EmaApp, error) {
+	row := q.db.QueryRowContext(ctx, createEmaApp,
+		arg.ID,
+		arg.ClientID,
+		arg.ClientSecret,
+		arg.Jwks,
+		arg.Name,
+		arg.Enabled,
+	)
+	var i EmaApp
+	err := row.Scan(
+		&i.ID,
+		&i.ClientID,
+		&i.ClientSecret,
+		&i.Jwks,
+		&i.Name,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createEmaAppAssignment = `-- name: CreateEmaAppAssignment :one
+
+INSERT INTO ema_app_assignments (id, app_id, user_id, resource_id, granted_scopes)
+VALUES (?1, ?2, ?3, ?4, ?5)
+ON CONFLICT (app_id, user_id, resource_id) DO UPDATE SET
+  granted_scopes = excluded.granted_scopes
+RETURNING id, app_id, user_id, resource_id, granted_scopes, created_at, updated_at
+`
+
+type CreateEmaAppAssignmentParams struct {
+	ID            uuid.UUID
+	AppID         uuid.UUID
+	UserID        uuid.UUID
+	ResourceID    uuid.UUID
+	GrantedScopes string
+}
+
+// =============================================================================
+// ema_app_assignments
+// =============================================================================
+// CreateEmaAppAssignment is idempotent on the (app, user, resource) triple.
+// Re-assigning with different scopes overwrites them, because an assignment
+// carries no other state worth preserving.
+func (q *Queries) CreateEmaAppAssignment(ctx context.Context, arg CreateEmaAppAssignmentParams) (EmaAppAssignment, error) {
+	row := q.db.QueryRowContext(ctx, createEmaAppAssignment,
+		arg.ID,
+		arg.AppID,
+		arg.UserID,
+		arg.ResourceID,
+		arg.GrantedScopes,
+	)
+	var i EmaAppAssignment
+	err := row.Scan(
+		&i.ID,
+		&i.AppID,
+		&i.UserID,
+		&i.ResourceID,
+		&i.GrantedScopes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createEmaIssuedJag = `-- name: CreateEmaIssuedJag :one
+
+INSERT INTO ema_issued_jags (jti, app_id, user_id, resource_id, scope, expires_at)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+RETURNING jti, app_id, user_id, resource_id, scope, expires_at, created_at
+`
+
+type CreateEmaIssuedJagParams struct {
+	Jti        string
+	AppID      uuid.UUID
+	UserID     uuid.UUID
+	ResourceID uuid.UUID
+	Scope      string
+	ExpiresAt  time.Time
+}
+
+// =============================================================================
+// ema_issued_jags / ema_redeemed_jags
+// =============================================================================
+func (q *Queries) CreateEmaIssuedJag(ctx context.Context, arg CreateEmaIssuedJagParams) (EmaIssuedJag, error) {
+	row := q.db.QueryRowContext(ctx, createEmaIssuedJag,
+		arg.Jti,
+		arg.AppID,
+		arg.UserID,
+		arg.ResourceID,
+		arg.Scope,
+		arg.ExpiresAt,
+	)
+	var i EmaIssuedJag
+	err := row.Scan(
+		&i.Jti,
+		&i.AppID,
+		&i.UserID,
+		&i.ResourceID,
+		&i.Scope,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createEmaResource = `-- name: CreateEmaResource :one
+
+INSERT INTO ema_resources (id, slug, name, resource_identifier)
+VALUES (?1, ?2, ?3, ?4)
+ON CONFLICT (slug) DO UPDATE SET slug = excluded.slug
+RETURNING id, slug, name, resource_identifier, created_at, updated_at
+`
+
+type CreateEmaResourceParams struct {
+	ID                 uuid.UUID
+	Slug               string
+	Name               string
+	ResourceIdentifier string
+}
+
+// =============================================================================
+// ema_resources
+// =============================================================================
+func (q *Queries) CreateEmaResource(ctx context.Context, arg CreateEmaResourceParams) (EmaResource, error) {
+	row := q.db.QueryRowContext(ctx, createEmaResource,
+		arg.ID,
+		arg.Slug,
+		arg.Name,
+		arg.ResourceIdentifier,
+	)
+	var i EmaResource
+	err := row.Scan(
+		&i.ID,
+		&i.Slug,
+		&i.Name,
+		&i.ResourceIdentifier,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createEmaResourceToken = `-- name: CreateEmaResourceToken :one
+
+INSERT INTO ema_resource_tokens (
+  jti, resource_id, user_id, client_id, audience, scope, expires_at
+)
+VALUES (
+  ?1, ?2, ?3, ?4, ?5, ?6, ?7
+)
+RETURNING jti, resource_id, user_id, client_id, audience, scope, expires_at, revoked_at, created_at
+`
+
+type CreateEmaResourceTokenParams struct {
+	Jti        string
+	ResourceID uuid.UUID
+	UserID     uuid.UUID
+	ClientID   string
+	Audience   string
+	Scope      string
+	ExpiresAt  time.Time
+}
+
+// =============================================================================
+// ema_resource_tokens
+// =============================================================================
+func (q *Queries) CreateEmaResourceToken(ctx context.Context, arg CreateEmaResourceTokenParams) (EmaResourceToken, error) {
+	row := q.db.QueryRowContext(ctx, createEmaResourceToken,
+		arg.Jti,
+		arg.ResourceID,
+		arg.UserID,
+		arg.ClientID,
+		arg.Audience,
+		arg.Scope,
+		arg.ExpiresAt,
+	)
+	var i EmaResourceToken
+	err := row.Scan(
+		&i.Jti,
+		&i.ResourceID,
+		&i.UserID,
+		&i.ClientID,
+		&i.Audience,
+		&i.Scope,
+		&i.ExpiresAt,
+		&i.RevokedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createEmaTrustRule = `-- name: CreateEmaTrustRule :one
+
+INSERT INTO ema_trust_rules (
+  id, resource_id, trusted_issuer, allowed_client_ids, allowed_scopes, enabled
+)
+VALUES (
+  ?1,
+  ?2,
+  ?3,
+  ?4,
+  ?5,
+  ?6
+)
+ON CONFLICT (resource_id, trusted_issuer) DO UPDATE SET
+  allowed_client_ids = excluded.allowed_client_ids,
+  allowed_scopes = excluded.allowed_scopes,
+  enabled = excluded.enabled
+RETURNING id, resource_id, trusted_issuer, allowed_client_ids, allowed_scopes, enabled, created_at, updated_at
+`
+
+type CreateEmaTrustRuleParams struct {
+	ID               uuid.UUID
+	ResourceID       uuid.UUID
+	TrustedIssuer    string
+	AllowedClientIds string
+	AllowedScopes    string
+	Enabled          bool
+}
+
+// =============================================================================
+// ema_trust_rules
+// =============================================================================
+func (q *Queries) CreateEmaTrustRule(ctx context.Context, arg CreateEmaTrustRuleParams) (EmaTrustRule, error) {
+	row := q.db.QueryRowContext(ctx, createEmaTrustRule,
+		arg.ID,
+		arg.ResourceID,
+		arg.TrustedIssuer,
+		arg.AllowedClientIds,
+		arg.AllowedScopes,
+		arg.Enabled,
+	)
+	var i EmaTrustRule
+	err := row.Scan(
+		&i.ID,
+		&i.ResourceID,
+		&i.TrustedIssuer,
+		&i.AllowedClientIds,
+		&i.AllowedScopes,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -263,19 +564,19 @@ func (q *Queries) CreateMembership(ctx context.Context, arg CreateMembershipPara
 const createOAuthClient = `-- name: CreateOAuthClient :one
 
 INSERT INTO oauth_clients (
-  client_id, mode, client_secret, redirect_uris
+  client_id, client_secret, redirect_uris, rotate_refresh_tokens
 )
 VALUES (
   ?1, ?2, ?3, ?4
 )
-RETURNING client_id, mode, client_secret, redirect_uris, created_at
+RETURNING client_id, client_secret, redirect_uris, rotate_refresh_tokens, created_at
 `
 
 type CreateOAuthClientParams struct {
-	ClientID     string
-	Mode         string
-	ClientSecret string
-	RedirectUris string
+	ClientID            string
+	ClientSecret        string
+	RedirectUris        string
+	RotateRefreshTokens bool
 }
 
 // =============================================================================
@@ -284,16 +585,16 @@ type CreateOAuthClientParams struct {
 func (q *Queries) CreateOAuthClient(ctx context.Context, arg CreateOAuthClientParams) (OauthClient, error) {
 	row := q.db.QueryRowContext(ctx, createOAuthClient,
 		arg.ClientID,
-		arg.Mode,
 		arg.ClientSecret,
 		arg.RedirectUris,
+		arg.RotateRefreshTokens,
 	)
 	var i OauthClient
 	err := row.Scan(
 		&i.ClientID,
-		&i.Mode,
 		&i.ClientSecret,
 		&i.RedirectUris,
+		&i.RotateRefreshTokens,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -396,17 +697,16 @@ func (q *Queries) CreateOrganizationRole(ctx context.Context, arg CreateOrganiza
 
 const createToken = `-- name: CreateToken :one
 INSERT INTO tokens (
-  token, mode, user_id, client_id, kind, scope, expires_at
+  token, user_id, client_id, kind, scope, expires_at
 )
 VALUES (
-  ?1, ?2, ?3, ?4, ?5, ?6, ?7
+  ?1, ?2, ?3, ?4, ?5, ?6
 )
-RETURNING token, mode, user_id, client_id, kind, scope, expires_at, revoked_at, created_at
+RETURNING token, user_id, client_id, kind, scope, expires_at, revoked_at, created_at
 `
 
 type CreateTokenParams struct {
 	Token     string
-	Mode      string
 	UserID    uuid.UUID
 	ClientID  string
 	Kind      string
@@ -417,7 +717,6 @@ type CreateTokenParams struct {
 func (q *Queries) CreateToken(ctx context.Context, arg CreateTokenParams) (Token, error) {
 	row := q.db.QueryRowContext(ctx, createToken,
 		arg.Token,
-		arg.Mode,
 		arg.UserID,
 		arg.ClientID,
 		arg.Kind,
@@ -427,7 +726,6 @@ func (q *Queries) CreateToken(ctx context.Context, arg CreateTokenParams) (Token
 	var i Token
 	err := row.Scan(
 		&i.Token,
-		&i.Mode,
 		&i.UserID,
 		&i.ClientID,
 		&i.Kind,
@@ -521,6 +819,42 @@ func (q *Queries) DeleteCurrentUsersBySubjectRef(ctx context.Context, subjectRef
 	return err
 }
 
+const deleteEmaApp = `-- name: DeleteEmaApp :exec
+DELETE FROM ema_apps WHERE id = ?1
+`
+
+func (q *Queries) DeleteEmaApp(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, deleteEmaApp, id)
+	return err
+}
+
+const deleteEmaAppAssignment = `-- name: DeleteEmaAppAssignment :exec
+DELETE FROM ema_app_assignments WHERE id = ?1
+`
+
+func (q *Queries) DeleteEmaAppAssignment(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, deleteEmaAppAssignment, id)
+	return err
+}
+
+const deleteEmaResource = `-- name: DeleteEmaResource :exec
+DELETE FROM ema_resources WHERE id = ?1
+`
+
+func (q *Queries) DeleteEmaResource(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, deleteEmaResource, id)
+	return err
+}
+
+const deleteEmaTrustRule = `-- name: DeleteEmaTrustRule :exec
+DELETE FROM ema_trust_rules WHERE id = ?1
+`
+
+func (q *Queries) DeleteEmaTrustRule(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, deleteEmaTrustRule, id)
+	return err
+}
+
 const deleteMembership = `-- name: DeleteMembership :exec
 DELETE FROM memberships WHERE id = ?1
 `
@@ -563,26 +897,58 @@ func (q *Queries) DeleteUser(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
-const getActiveToken = `-- name: GetActiveToken :one
-SELECT token, mode, user_id, client_id, kind, scope, expires_at, revoked_at, created_at FROM tokens
-WHERE token = ?1
-  AND mode = ?2
+const getActiveEmaResourceToken = `-- name: GetActiveEmaResourceToken :one
+SELECT jti, resource_id, user_id, client_id, audience, scope, expires_at, revoked_at, created_at FROM ema_resource_tokens
+WHERE jti = ?1
+  AND resource_id = ?2
   AND revoked_at IS NULL
   AND expires_at > ?3
 `
 
+type GetActiveEmaResourceTokenParams struct {
+	Jti        string
+	ResourceID uuid.UUID
+	Ts         time.Time
+}
+
+// GetActiveEmaResourceToken resolves the ledger row for a verified access
+// token's jti. The JWT signature and expiry are checked before this runs, so
+// what the row adds is revocation state. Scoped by resource_id so a token
+// minted by one resource cannot be introspected at another.
+func (q *Queries) GetActiveEmaResourceToken(ctx context.Context, arg GetActiveEmaResourceTokenParams) (EmaResourceToken, error) {
+	row := q.db.QueryRowContext(ctx, getActiveEmaResourceToken, arg.Jti, arg.ResourceID, arg.Ts)
+	var i EmaResourceToken
+	err := row.Scan(
+		&i.Jti,
+		&i.ResourceID,
+		&i.UserID,
+		&i.ClientID,
+		&i.Audience,
+		&i.Scope,
+		&i.ExpiresAt,
+		&i.RevokedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getActiveToken = `-- name: GetActiveToken :one
+SELECT token, user_id, client_id, kind, scope, expires_at, revoked_at, created_at FROM tokens
+WHERE token = ?1
+  AND revoked_at IS NULL
+  AND expires_at > ?2
+`
+
 type GetActiveTokenParams struct {
 	Token string
-	Mode  string
 	Ts    time.Time
 }
 
 func (q *Queries) GetActiveToken(ctx context.Context, arg GetActiveTokenParams) (Token, error) {
-	row := q.db.QueryRowContext(ctx, getActiveToken, arg.Token, arg.Mode, arg.Ts)
+	row := q.db.QueryRowContext(ctx, getActiveToken, arg.Token, arg.Ts)
 	var i Token
 	err := row.Scan(
 		&i.Token,
-		&i.Mode,
 		&i.UserID,
 		&i.ClientID,
 		&i.Kind,
@@ -606,6 +972,182 @@ func (q *Queries) GetCurrentUser(ctx context.Context, mode string) (CurrentUser,
 	row := q.db.QueryRowContext(ctx, getCurrentUser, mode)
 	var i CurrentUser
 	err := row.Scan(&i.Mode, &i.SubjectRef, &i.UpdatedAt)
+	return i, err
+}
+
+const getEmaApp = `-- name: GetEmaApp :one
+SELECT id, client_id, client_secret, jwks, name, enabled, created_at, updated_at FROM ema_apps WHERE id = ?1
+`
+
+func (q *Queries) GetEmaApp(ctx context.Context, id uuid.UUID) (EmaApp, error) {
+	row := q.db.QueryRowContext(ctx, getEmaApp, id)
+	var i EmaApp
+	err := row.Scan(
+		&i.ID,
+		&i.ClientID,
+		&i.ClientSecret,
+		&i.Jwks,
+		&i.Name,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getEmaAppAssignment = `-- name: GetEmaAppAssignment :one
+SELECT id, app_id, user_id, resource_id, granted_scopes, created_at, updated_at FROM ema_app_assignments WHERE id = ?1
+`
+
+func (q *Queries) GetEmaAppAssignment(ctx context.Context, id uuid.UUID) (EmaAppAssignment, error) {
+	row := q.db.QueryRowContext(ctx, getEmaAppAssignment, id)
+	var i EmaAppAssignment
+	err := row.Scan(
+		&i.ID,
+		&i.AppID,
+		&i.UserID,
+		&i.ResourceID,
+		&i.GrantedScopes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getEmaAppAssignmentForMint = `-- name: GetEmaAppAssignmentForMint :one
+SELECT id, app_id, user_id, resource_id, granted_scopes, created_at, updated_at FROM ema_app_assignments
+WHERE app_id = ?1 AND user_id = ?2 AND resource_id = ?3
+`
+
+type GetEmaAppAssignmentForMintParams struct {
+	AppID      uuid.UUID
+	UserID     uuid.UUID
+	ResourceID uuid.UUID
+}
+
+// GetEmaAppAssignmentForMint is the mint leg's policy lookup. ErrNoRows here
+// is the denial: either the user was never assigned the app, or the app was
+// never pointed at this resource.
+func (q *Queries) GetEmaAppAssignmentForMint(ctx context.Context, arg GetEmaAppAssignmentForMintParams) (EmaAppAssignment, error) {
+	row := q.db.QueryRowContext(ctx, getEmaAppAssignmentForMint, arg.AppID, arg.UserID, arg.ResourceID)
+	var i EmaAppAssignment
+	err := row.Scan(
+		&i.ID,
+		&i.AppID,
+		&i.UserID,
+		&i.ResourceID,
+		&i.GrantedScopes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getEmaAppByClientID = `-- name: GetEmaAppByClientID :one
+SELECT id, client_id, client_secret, jwks, name, enabled, created_at, updated_at FROM ema_apps WHERE client_id = ?1
+`
+
+func (q *Queries) GetEmaAppByClientID(ctx context.Context, clientID string) (EmaApp, error) {
+	row := q.db.QueryRowContext(ctx, getEmaAppByClientID, clientID)
+	var i EmaApp
+	err := row.Scan(
+		&i.ID,
+		&i.ClientID,
+		&i.ClientSecret,
+		&i.Jwks,
+		&i.Name,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getEmaResource = `-- name: GetEmaResource :one
+SELECT id, slug, name, resource_identifier, created_at, updated_at FROM ema_resources WHERE id = ?1
+`
+
+func (q *Queries) GetEmaResource(ctx context.Context, id uuid.UUID) (EmaResource, error) {
+	row := q.db.QueryRowContext(ctx, getEmaResource, id)
+	var i EmaResource
+	err := row.Scan(
+		&i.ID,
+		&i.Slug,
+		&i.Name,
+		&i.ResourceIdentifier,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getEmaResourceBySlug = `-- name: GetEmaResourceBySlug :one
+SELECT id, slug, name, resource_identifier, created_at, updated_at FROM ema_resources WHERE slug = ?1
+`
+
+// GetEmaResourceBySlug backs both the mint leg (resolving the `audience`
+// parameter's issuer URL to a row) and every request to a resource
+// authorization server (resolving the {slug} path wildcard).
+func (q *Queries) GetEmaResourceBySlug(ctx context.Context, slug string) (EmaResource, error) {
+	row := q.db.QueryRowContext(ctx, getEmaResourceBySlug, slug)
+	var i EmaResource
+	err := row.Scan(
+		&i.ID,
+		&i.Slug,
+		&i.Name,
+		&i.ResourceIdentifier,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getEmaTrustRule = `-- name: GetEmaTrustRule :one
+SELECT id, resource_id, trusted_issuer, allowed_client_ids, allowed_scopes, enabled, created_at, updated_at FROM ema_trust_rules WHERE id = ?1
+`
+
+func (q *Queries) GetEmaTrustRule(ctx context.Context, id uuid.UUID) (EmaTrustRule, error) {
+	row := q.db.QueryRowContext(ctx, getEmaTrustRule, id)
+	var i EmaTrustRule
+	err := row.Scan(
+		&i.ID,
+		&i.ResourceID,
+		&i.TrustedIssuer,
+		&i.AllowedClientIds,
+		&i.AllowedScopes,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getEmaTrustRuleForIssuer = `-- name: GetEmaTrustRuleForIssuer :one
+SELECT id, resource_id, trusted_issuer, allowed_client_ids, allowed_scopes, enabled, created_at, updated_at FROM ema_trust_rules
+WHERE resource_id = ?1 AND trusted_issuer = ?2
+`
+
+type GetEmaTrustRuleForIssuerParams struct {
+	ResourceID    uuid.UUID
+	TrustedIssuer string
+}
+
+// GetEmaTrustRuleForIssuer is the redeem leg's trust lookup. ErrNoRows means
+// this resource has no rule for the ID-JAG's `iss` at all, which is the
+// deny-by-default path.
+func (q *Queries) GetEmaTrustRuleForIssuer(ctx context.Context, arg GetEmaTrustRuleForIssuerParams) (EmaTrustRule, error) {
+	row := q.db.QueryRowContext(ctx, getEmaTrustRuleForIssuer, arg.ResourceID, arg.TrustedIssuer)
+	var i EmaTrustRule
+	err := row.Scan(
+		&i.ID,
+		&i.ResourceID,
+		&i.TrustedIssuer,
+		&i.AllowedClientIds,
+		&i.AllowedScopes,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
 	return i, err
 }
 
@@ -718,22 +1260,17 @@ func (q *Queries) GetMembershipWithOrgName(ctx context.Context, id uuid.UUID) (G
 }
 
 const getOAuthClient = `-- name: GetOAuthClient :one
-SELECT client_id, mode, client_secret, redirect_uris, created_at FROM oauth_clients WHERE client_id = ?1 AND mode = ?2
+SELECT client_id, client_secret, redirect_uris, rotate_refresh_tokens, created_at FROM oauth_clients WHERE client_id = ?1
 `
 
-type GetOAuthClientParams struct {
-	ClientID string
-	Mode     string
-}
-
-func (q *Queries) GetOAuthClient(ctx context.Context, arg GetOAuthClientParams) (OauthClient, error) {
-	row := q.db.QueryRowContext(ctx, getOAuthClient, arg.ClientID, arg.Mode)
+func (q *Queries) GetOAuthClient(ctx context.Context, clientID string) (OauthClient, error) {
+	row := q.db.QueryRowContext(ctx, getOAuthClient, clientID)
 	var i OauthClient
 	err := row.Scan(
 		&i.ClientID,
-		&i.Mode,
 		&i.ClientSecret,
 		&i.RedirectUris,
+		&i.RotateRefreshTokens,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -826,6 +1363,243 @@ func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const listEmaAppAssignments = `-- name: ListEmaAppAssignments :many
+SELECT id, app_id, user_id, resource_id, granted_scopes, created_at, updated_at FROM ema_app_assignments
+WHERE id > ?1
+  AND (?2 IS NULL OR app_id = ?2)
+  AND (?3 IS NULL OR user_id = ?3)
+  AND (?4 IS NULL OR resource_id = ?4)
+ORDER BY id ASC
+LIMIT ?5
+`
+
+type ListEmaAppAssignmentsParams struct {
+	After      uuid.UUID
+	AppID      interface{}
+	UserID     interface{}
+	ResourceID interface{}
+	MaxRows    int64
+}
+
+// ListEmaAppAssignments keyset-paginates by id with optional exact-match
+// filters. Any narg may be NULL, in which case that filter is not applied.
+func (q *Queries) ListEmaAppAssignments(ctx context.Context, arg ListEmaAppAssignmentsParams) ([]EmaAppAssignment, error) {
+	rows, err := q.db.QueryContext(ctx, listEmaAppAssignments,
+		arg.After,
+		arg.AppID,
+		arg.UserID,
+		arg.ResourceID,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []EmaAppAssignment
+	for rows.Next() {
+		var i EmaAppAssignment
+		if err := rows.Scan(
+			&i.ID,
+			&i.AppID,
+			&i.UserID,
+			&i.ResourceID,
+			&i.GrantedScopes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEmaApps = `-- name: ListEmaApps :many
+SELECT id, client_id, client_secret, jwks, name, enabled, created_at, updated_at FROM ema_apps
+WHERE id > ?1
+ORDER BY id ASC
+LIMIT ?2
+`
+
+type ListEmaAppsParams struct {
+	After   uuid.UUID
+	MaxRows int64
+}
+
+func (q *Queries) ListEmaApps(ctx context.Context, arg ListEmaAppsParams) ([]EmaApp, error) {
+	rows, err := q.db.QueryContext(ctx, listEmaApps, arg.After, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []EmaApp
+	for rows.Next() {
+		var i EmaApp
+		if err := rows.Scan(
+			&i.ID,
+			&i.ClientID,
+			&i.ClientSecret,
+			&i.Jwks,
+			&i.Name,
+			&i.Enabled,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEmaIssuedJags = `-- name: ListEmaIssuedJags :many
+SELECT jti, app_id, user_id, resource_id, scope, expires_at, created_at FROM ema_issued_jags
+WHERE (?1 IS NULL OR user_id = ?1)
+  AND (?2 IS NULL OR resource_id = ?2)
+ORDER BY created_at DESC, jti DESC
+LIMIT ?3
+`
+
+type ListEmaIssuedJagsParams struct {
+	UserID     interface{}
+	ResourceID interface{}
+	MaxRows    int64
+}
+
+// ListEmaIssuedJags is newest-first for the dashboard rather than keyset
+// paginated: it is a debugging view over a short-lived ledger, and reading it
+// in mint order is the whole point.
+func (q *Queries) ListEmaIssuedJags(ctx context.Context, arg ListEmaIssuedJagsParams) ([]EmaIssuedJag, error) {
+	rows, err := q.db.QueryContext(ctx, listEmaIssuedJags, arg.UserID, arg.ResourceID, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []EmaIssuedJag
+	for rows.Next() {
+		var i EmaIssuedJag
+		if err := rows.Scan(
+			&i.Jti,
+			&i.AppID,
+			&i.UserID,
+			&i.ResourceID,
+			&i.Scope,
+			&i.ExpiresAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEmaResources = `-- name: ListEmaResources :many
+SELECT id, slug, name, resource_identifier, created_at, updated_at FROM ema_resources
+WHERE id > ?1
+ORDER BY id ASC
+LIMIT ?2
+`
+
+type ListEmaResourcesParams struct {
+	After   uuid.UUID
+	MaxRows int64
+}
+
+func (q *Queries) ListEmaResources(ctx context.Context, arg ListEmaResourcesParams) ([]EmaResource, error) {
+	rows, err := q.db.QueryContext(ctx, listEmaResources, arg.After, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []EmaResource
+	for rows.Next() {
+		var i EmaResource
+		if err := rows.Scan(
+			&i.ID,
+			&i.Slug,
+			&i.Name,
+			&i.ResourceIdentifier,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEmaTrustRules = `-- name: ListEmaTrustRules :many
+SELECT id, resource_id, trusted_issuer, allowed_client_ids, allowed_scopes, enabled, created_at, updated_at FROM ema_trust_rules
+WHERE id > ?1
+  AND (?2 IS NULL OR resource_id = ?2)
+ORDER BY id ASC
+LIMIT ?3
+`
+
+type ListEmaTrustRulesParams struct {
+	After      uuid.UUID
+	ResourceID interface{}
+	MaxRows    int64
+}
+
+func (q *Queries) ListEmaTrustRules(ctx context.Context, arg ListEmaTrustRulesParams) ([]EmaTrustRule, error) {
+	rows, err := q.db.QueryContext(ctx, listEmaTrustRules, arg.After, arg.ResourceID, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []EmaTrustRule
+	for rows.Next() {
+		var i EmaTrustRule
+		if err := rows.Scan(
+			&i.ID,
+			&i.ResourceID,
+			&i.TrustedIssuer,
+			&i.AllowedClientIds,
+			&i.AllowedScopes,
+			&i.Enabled,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listInvitationsByOrg = `-- name: ListInvitationsByOrg :many
@@ -1287,17 +2061,16 @@ func (q *Queries) RevokeInvitation(ctx context.Context, arg RevokeInvitationPara
 const revokeToken = `-- name: RevokeToken :exec
 UPDATE tokens
 SET revoked_at = ?1
-WHERE token = ?2 AND mode = ?3 AND revoked_at IS NULL
+WHERE token = ?2 AND revoked_at IS NULL
 `
 
 type RevokeTokenParams struct {
 	Ts    sql.NullTime
 	Token string
-	Mode  string
 }
 
 func (q *Queries) RevokeToken(ctx context.Context, arg RevokeTokenParams) error {
-	_, err := q.db.ExecContext(ctx, revokeToken, arg.Ts, arg.Token, arg.Mode)
+	_, err := q.db.ExecContext(ctx, revokeToken, arg.Ts, arg.Token)
 	return err
 }
 
@@ -1362,6 +2135,166 @@ func (q *Queries) TouchInvitation(ctx context.Context, arg TouchInvitationParams
 		&i.AcceptedAt,
 		&i.RevokedAt,
 		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateEmaApp = `-- name: UpdateEmaApp :one
+UPDATE ema_apps
+SET
+  client_id = COALESCE(?1, client_id),
+  client_secret = COALESCE(?2, client_secret),
+  jwks = COALESCE(?3, jwks),
+  name = COALESCE(?4, name),
+  enabled = ?5,
+  updated_at = ?6
+WHERE id = ?7
+RETURNING id, client_id, client_secret, jwks, name, enabled, created_at, updated_at
+`
+
+type UpdateEmaAppParams struct {
+	ClientID     sql.NullString
+	ClientSecret sql.NullString
+	Jwks         sql.NullString
+	Name         sql.NullString
+	Enabled      bool
+	Ts           time.Time
+	ID           uuid.UUID
+}
+
+func (q *Queries) UpdateEmaApp(ctx context.Context, arg UpdateEmaAppParams) (EmaApp, error) {
+	row := q.db.QueryRowContext(ctx, updateEmaApp,
+		arg.ClientID,
+		arg.ClientSecret,
+		arg.Jwks,
+		arg.Name,
+		arg.Enabled,
+		arg.Ts,
+		arg.ID,
+	)
+	var i EmaApp
+	err := row.Scan(
+		&i.ID,
+		&i.ClientID,
+		&i.ClientSecret,
+		&i.Jwks,
+		&i.Name,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateEmaAppAssignment = `-- name: UpdateEmaAppAssignment :one
+UPDATE ema_app_assignments
+SET
+  granted_scopes = ?1,
+  updated_at = ?2
+WHERE id = ?3
+RETURNING id, app_id, user_id, resource_id, granted_scopes, created_at, updated_at
+`
+
+type UpdateEmaAppAssignmentParams struct {
+	GrantedScopes string
+	Ts            time.Time
+	ID            uuid.UUID
+}
+
+func (q *Queries) UpdateEmaAppAssignment(ctx context.Context, arg UpdateEmaAppAssignmentParams) (EmaAppAssignment, error) {
+	row := q.db.QueryRowContext(ctx, updateEmaAppAssignment, arg.GrantedScopes, arg.Ts, arg.ID)
+	var i EmaAppAssignment
+	err := row.Scan(
+		&i.ID,
+		&i.AppID,
+		&i.UserID,
+		&i.ResourceID,
+		&i.GrantedScopes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateEmaResource = `-- name: UpdateEmaResource :one
+UPDATE ema_resources
+SET
+  slug = COALESCE(?1, slug),
+  name = COALESCE(?2, name),
+  resource_identifier = COALESCE(?3, resource_identifier),
+  updated_at = ?4
+WHERE id = ?5
+RETURNING id, slug, name, resource_identifier, created_at, updated_at
+`
+
+type UpdateEmaResourceParams struct {
+	Slug               sql.NullString
+	Name               sql.NullString
+	ResourceIdentifier sql.NullString
+	Ts                 time.Time
+	ID                 uuid.UUID
+}
+
+func (q *Queries) UpdateEmaResource(ctx context.Context, arg UpdateEmaResourceParams) (EmaResource, error) {
+	row := q.db.QueryRowContext(ctx, updateEmaResource,
+		arg.Slug,
+		arg.Name,
+		arg.ResourceIdentifier,
+		arg.Ts,
+		arg.ID,
+	)
+	var i EmaResource
+	err := row.Scan(
+		&i.ID,
+		&i.Slug,
+		&i.Name,
+		&i.ResourceIdentifier,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateEmaTrustRule = `-- name: UpdateEmaTrustRule :one
+UPDATE ema_trust_rules
+SET
+  trusted_issuer = COALESCE(?1, trusted_issuer),
+  allowed_client_ids = COALESCE(?2, allowed_client_ids),
+  allowed_scopes = COALESCE(?3, allowed_scopes),
+  enabled = ?4,
+  updated_at = ?5
+WHERE id = ?6
+RETURNING id, resource_id, trusted_issuer, allowed_client_ids, allowed_scopes, enabled, created_at, updated_at
+`
+
+type UpdateEmaTrustRuleParams struct {
+	TrustedIssuer    sql.NullString
+	AllowedClientIds sql.NullString
+	AllowedScopes    sql.NullString
+	Enabled          bool
+	Ts               time.Time
+	ID               uuid.UUID
+}
+
+func (q *Queries) UpdateEmaTrustRule(ctx context.Context, arg UpdateEmaTrustRuleParams) (EmaTrustRule, error) {
+	row := q.db.QueryRowContext(ctx, updateEmaTrustRule,
+		arg.TrustedIssuer,
+		arg.AllowedClientIds,
+		arg.AllowedScopes,
+		arg.Enabled,
+		arg.Ts,
+		arg.ID,
+	)
+	var i EmaTrustRule
+	err := row.Scan(
+		&i.ID,
+		&i.ResourceID,
+		&i.TrustedIssuer,
+		&i.AllowedClientIds,
+		&i.AllowedScopes,
+		&i.Enabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

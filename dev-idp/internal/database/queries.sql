@@ -375,65 +375,292 @@ DELETE FROM current_users WHERE mode = @mode;
 
 -- name: CreateOAuthClient :one
 INSERT INTO oauth_clients (
-  client_id, mode, client_secret, redirect_uris
+  client_id, client_secret, redirect_uris, rotate_refresh_tokens
 )
 VALUES (
-  @client_id, @mode, @client_secret, @redirect_uris
+  @client_id, @client_secret, @redirect_uris, @rotate_refresh_tokens
 )
 RETURNING *;
 
 -- name: GetOAuthClient :one
-SELECT * FROM oauth_clients WHERE client_id = @client_id AND mode = @mode;
+SELECT * FROM oauth_clients WHERE client_id = @client_id;
 
 -- =============================================================================
--- auth_codes / tokens (shared by every OAuth-shaped mode)
+-- auth_codes / tokens
 -- =============================================================================
 
 -- name: CreateAuthCode :one
 INSERT INTO auth_codes (
-  code, mode, user_id, client_id, redirect_uri,
+  code, user_id, client_id, redirect_uri,
   code_challenge, code_challenge_method, scope, expires_at
 )
 VALUES (
-  @code, @mode, @user_id, @client_id, @redirect_uri,
+  @code, @user_id, @client_id, @redirect_uri,
   sqlc.narg('code_challenge'), sqlc.narg('code_challenge_method'),
   sqlc.narg('scope'), @expires_at
 )
 RETURNING *;
 
 -- ConsumeAuthCode atomically reads-and-deletes an auth code, enforcing
--- single-use. Returns ErrNoRows when the code is unknown for that mode,
+-- single-use. Returns ErrNoRows when the code is unknown,
 -- already consumed, or expired.
 -- name: ConsumeAuthCode :one
 DELETE FROM auth_codes
 WHERE code = @code
-  AND mode = @mode
   AND expires_at > @ts
 RETURNING *;
 
 -- name: CreateToken :one
 INSERT INTO tokens (
-  token, mode, user_id, client_id, kind, scope, expires_at
+  token, user_id, client_id, kind, scope, expires_at
 )
 VALUES (
-  @token, @mode, @user_id, @client_id, @kind, sqlc.narg('scope'), @expires_at
+  @token, @user_id, @client_id, @kind, sqlc.narg('scope'), @expires_at
 )
 RETURNING *;
 
 -- name: GetActiveToken :one
 SELECT * FROM tokens
 WHERE token = @token
-  AND mode = @mode
   AND revoked_at IS NULL
   AND expires_at > @ts;
 
 -- name: RevokeToken :exec
 UPDATE tokens
 SET revoked_at = @ts
-WHERE token = @token AND mode = @mode AND revoked_at IS NULL;
+WHERE token = @token AND revoked_at IS NULL;
 
 -- name: ListOrganizationsForUser :many
 SELECT o.* FROM organizations o
 JOIN memberships m ON m.organization_id = o.id
 WHERE m.user_id = @user_id
 ORDER BY o.name ASC;
+
+-- =============================================================================
+-- ema_apps
+-- =============================================================================
+
+-- CreateEmaApp is find-or-create on client_id, matching the idiom used by
+-- CreateOrganization: the no-op DO UPDATE makes RETURNING fire on the
+-- existing row so callers always get a usable record back.
+-- name: CreateEmaApp :one
+INSERT INTO ema_apps (id, client_id, client_secret, jwks, name, enabled)
+VALUES (@id, @client_id, @client_secret, @jwks, @name, @enabled)
+ON CONFLICT (client_id) DO UPDATE SET client_id = excluded.client_id
+RETURNING *;
+
+-- name: UpdateEmaApp :one
+UPDATE ema_apps
+SET
+  client_id = COALESCE(sqlc.narg('client_id'), client_id),
+  client_secret = COALESCE(sqlc.narg('client_secret'), client_secret),
+  jwks = COALESCE(sqlc.narg('jwks'), jwks),
+  name = COALESCE(sqlc.narg('name'), name),
+  enabled = @enabled,
+  updated_at = @ts
+WHERE id = @id
+RETURNING *;
+
+-- name: GetEmaApp :one
+SELECT * FROM ema_apps WHERE id = @id;
+
+-- name: GetEmaAppByClientID :one
+SELECT * FROM ema_apps WHERE client_id = @client_id;
+
+-- name: ListEmaApps :many
+SELECT * FROM ema_apps
+WHERE id > @after
+ORDER BY id ASC
+LIMIT @max_rows;
+
+-- name: DeleteEmaApp :exec
+DELETE FROM ema_apps WHERE id = @id;
+
+-- =============================================================================
+-- ema_resources
+-- =============================================================================
+
+-- name: CreateEmaResource :one
+INSERT INTO ema_resources (id, slug, name, resource_identifier)
+VALUES (@id, @slug, @name, @resource_identifier)
+ON CONFLICT (slug) DO UPDATE SET slug = excluded.slug
+RETURNING *;
+
+-- name: UpdateEmaResource :one
+UPDATE ema_resources
+SET
+  slug = COALESCE(sqlc.narg('slug'), slug),
+  name = COALESCE(sqlc.narg('name'), name),
+  resource_identifier = COALESCE(sqlc.narg('resource_identifier'), resource_identifier),
+  updated_at = @ts
+WHERE id = @id
+RETURNING *;
+
+-- name: GetEmaResource :one
+SELECT * FROM ema_resources WHERE id = @id;
+
+-- GetEmaResourceBySlug backs both the mint leg (resolving the `audience`
+-- parameter's issuer URL to a row) and every request to a resource
+-- authorization server (resolving the {slug} path wildcard).
+-- name: GetEmaResourceBySlug :one
+SELECT * FROM ema_resources WHERE slug = @slug;
+
+-- name: ListEmaResources :many
+SELECT * FROM ema_resources
+WHERE id > @after
+ORDER BY id ASC
+LIMIT @max_rows;
+
+-- name: DeleteEmaResource :exec
+DELETE FROM ema_resources WHERE id = @id;
+
+-- =============================================================================
+-- ema_app_assignments
+-- =============================================================================
+
+-- CreateEmaAppAssignment is idempotent on the (app, user, resource) triple.
+-- Re-assigning with different scopes overwrites them, because an assignment
+-- carries no other state worth preserving.
+-- name: CreateEmaAppAssignment :one
+INSERT INTO ema_app_assignments (id, app_id, user_id, resource_id, granted_scopes)
+VALUES (@id, @app_id, @user_id, @resource_id, @granted_scopes)
+ON CONFLICT (app_id, user_id, resource_id) DO UPDATE SET
+  granted_scopes = excluded.granted_scopes
+RETURNING *;
+
+-- name: UpdateEmaAppAssignment :one
+UPDATE ema_app_assignments
+SET
+  granted_scopes = @granted_scopes,
+  updated_at = @ts
+WHERE id = @id
+RETURNING *;
+
+-- name: GetEmaAppAssignment :one
+SELECT * FROM ema_app_assignments WHERE id = @id;
+
+-- GetEmaAppAssignmentForMint is the mint leg's policy lookup. ErrNoRows here
+-- is the denial: either the user was never assigned the app, or the app was
+-- never pointed at this resource.
+-- name: GetEmaAppAssignmentForMint :one
+SELECT * FROM ema_app_assignments
+WHERE app_id = @app_id AND user_id = @user_id AND resource_id = @resource_id;
+
+-- ListEmaAppAssignments keyset-paginates by id with optional exact-match
+-- filters. Any narg may be NULL, in which case that filter is not applied.
+-- name: ListEmaAppAssignments :many
+SELECT * FROM ema_app_assignments
+WHERE id > @after
+  AND (sqlc.narg('app_id') IS NULL OR app_id = sqlc.narg('app_id'))
+  AND (sqlc.narg('user_id') IS NULL OR user_id = sqlc.narg('user_id'))
+  AND (sqlc.narg('resource_id') IS NULL OR resource_id = sqlc.narg('resource_id'))
+ORDER BY id ASC
+LIMIT @max_rows;
+
+-- name: DeleteEmaAppAssignment :exec
+DELETE FROM ema_app_assignments WHERE id = @id;
+
+-- =============================================================================
+-- ema_trust_rules
+-- =============================================================================
+
+-- name: CreateEmaTrustRule :one
+INSERT INTO ema_trust_rules (
+  id, resource_id, trusted_issuer, allowed_client_ids, allowed_scopes, enabled
+)
+VALUES (
+  @id,
+  @resource_id,
+  @trusted_issuer,
+  @allowed_client_ids,
+  @allowed_scopes,
+  @enabled
+)
+ON CONFLICT (resource_id, trusted_issuer) DO UPDATE SET
+  allowed_client_ids = excluded.allowed_client_ids,
+  allowed_scopes = excluded.allowed_scopes,
+  enabled = excluded.enabled
+RETURNING *;
+
+-- name: UpdateEmaTrustRule :one
+UPDATE ema_trust_rules
+SET
+  trusted_issuer = COALESCE(sqlc.narg('trusted_issuer'), trusted_issuer),
+  allowed_client_ids = COALESCE(sqlc.narg('allowed_client_ids'), allowed_client_ids),
+  allowed_scopes = COALESCE(sqlc.narg('allowed_scopes'), allowed_scopes),
+  enabled = @enabled,
+  updated_at = @ts
+WHERE id = @id
+RETURNING *;
+
+-- name: GetEmaTrustRule :one
+SELECT * FROM ema_trust_rules WHERE id = @id;
+
+-- GetEmaTrustRuleForIssuer is the redeem leg's trust lookup. ErrNoRows means
+-- this resource has no rule for the ID-JAG's `iss` at all, which is the
+-- deny-by-default path.
+-- name: GetEmaTrustRuleForIssuer :one
+SELECT * FROM ema_trust_rules
+WHERE resource_id = @resource_id AND trusted_issuer = @trusted_issuer;
+
+-- name: ListEmaTrustRules :many
+SELECT * FROM ema_trust_rules
+WHERE id > @after
+  AND (sqlc.narg('resource_id') IS NULL OR resource_id = sqlc.narg('resource_id'))
+ORDER BY id ASC
+LIMIT @max_rows;
+
+-- name: DeleteEmaTrustRule :exec
+DELETE FROM ema_trust_rules WHERE id = @id;
+
+-- =============================================================================
+-- ema_issued_jags / ema_redeemed_jags
+-- =============================================================================
+
+-- name: CreateEmaIssuedJag :one
+INSERT INTO ema_issued_jags (jti, app_id, user_id, resource_id, scope, expires_at)
+VALUES (@jti, @app_id, @user_id, @resource_id, @scope, @expires_at)
+RETURNING *;
+
+-- ListEmaIssuedJags is newest-first for the dashboard rather than keyset
+-- paginated: it is a debugging view over a short-lived ledger, and reading it
+-- in mint order is the whole point.
+-- name: ListEmaIssuedJags :many
+SELECT * FROM ema_issued_jags
+WHERE (sqlc.narg('user_id') IS NULL OR user_id = sqlc.narg('user_id'))
+  AND (sqlc.narg('resource_id') IS NULL OR resource_id = sqlc.narg('resource_id'))
+ORDER BY created_at DESC, jti DESC
+LIMIT @max_rows;
+
+-- ClaimEmaRedeemedJag enforces single use. The insert conflicts when this
+-- (issuer, jti) pair was already redeemed, and DO NOTHING makes RETURNING
+-- yield no row -- so ErrNoRows from this query IS the replay signal.
+-- name: ClaimEmaRedeemedJag :one
+INSERT INTO ema_redeemed_jags (issuer, jti, resource_id, expires_at)
+VALUES (@issuer, @jti, @resource_id, @expires_at)
+ON CONFLICT (issuer, jti) DO NOTHING
+RETURNING *;
+
+-- =============================================================================
+-- ema_resource_tokens
+-- =============================================================================
+
+-- name: CreateEmaResourceToken :one
+INSERT INTO ema_resource_tokens (
+  jti, resource_id, user_id, client_id, audience, scope, expires_at
+)
+VALUES (
+  @jti, @resource_id, @user_id, @client_id, @audience, @scope, @expires_at
+)
+RETURNING *;
+
+-- GetActiveEmaResourceToken resolves the ledger row for a verified access
+-- token's jti. The JWT signature and expiry are checked before this runs, so
+-- what the row adds is revocation state. Scoped by resource_id so a token
+-- minted by one resource cannot be introspected at another.
+-- name: GetActiveEmaResourceToken :one
+SELECT * FROM ema_resource_tokens
+WHERE jti = @jti
+  AND resource_id = @resource_id
+  AND revoked_at IS NULL
+  AND expires_at > @ts;

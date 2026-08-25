@@ -18,18 +18,17 @@ import (
 	"github.com/speakeasy-api/gram/dev-idp/internal/oops"
 )
 
-// Per-mode currentUser values. Mirrors the design's enum
-// (idp-design.md §3): the three "local" modes resolve subject_ref as a UUID
-// into the local users table; workos resolves it as an external WorkOS sub.
+// currentUser slots. Mirrors the design's enum: the oauth2-1 slot resolves
+// subject_ref as a UUID into the local users table; the workos slot resolves
+// it as an external WorkOS sub. Which one is authoritative follows
+// GRAM_DEVIDP_BACKEND.
 const (
-	modeMockWorkos = "mock-workos"
-	modeOAuth21    = "oauth2-1"
-	modeOAuth2     = "oauth2"
-	modeWorkos     = "workos"
+	modeOAuth21 = "oauth2-1"
+	modeWorkos  = "workos"
 )
 
 func isLocalMode(mode string) bool {
-	return mode == modeMockWorkos || mode == modeOAuth21 || mode == modeOAuth2
+	return mode == modeOAuth21
 }
 
 // DevIdpService is the dev-idp /rpc/devIdp.* implementation.
@@ -124,7 +123,7 @@ func (s *DevIdpService) subjectRefForSet(ctx context.Context, p *gen.SetCurrentU
 	}
 
 	// Pre-validate the user exists. Without this, a typo would silently set a
-	// stale currentUser that the mock-workos mode would later refuse.
+	// stale currentUser that the OAuth handler would later refuse.
 	if _, err := repo.New(s.db).GetUser(ctx, id); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return "", oops.E(oops.CodeNotFound, nil, "user %s not found", id)

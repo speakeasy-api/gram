@@ -593,7 +593,7 @@ func newStripeClient(
 // workosClientOpts builds the ClientOpts threaded into every workos.NewClient
 // call site below. Pulls the optional --workos-endpoint override (env:
 // WORKOS_API_URL) so local dev can point both real-WorkOS callers at
-// the dev-idp's mock-workos emulator without changing any wiring.
+// the dev-idp's WorkOS emulator without changing any wiring.
 func workosClientOpts(c *cli.Context) workos.ClientOpts {
 	return workos.ClientOpts{
 		Endpoint: c.String("workos-endpoint"),
@@ -604,9 +604,9 @@ func workosClientOpts(c *cli.Context) workos.ClientOpts {
 func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, c *cli.Context) (access.RoleProvider, error) {
 	apiKey := c.String("idp-client-secret")
 
-	// Local dev: when a real GRAM_IDP_CLIENT_SECRET is configured (GRAM_IDP_MODE=workos),
-	// use it so the access role provider proxies through dev-idp to real WorkOS.
-	// Otherwise fall back to the mock-workos emulator or a stub.
+	// Local dev: when a real GRAM_IDP_CLIENT_SECRET is configured
+	// (GRAM_DEVIDP_BACKEND=workos), use it so the access role provider reaches
+	// real WorkOS through dev-idp. Otherwise fall back to the emulator or a stub.
 	if c.String("environment") == "local" {
 		haveRealKey := apiKey != "" && apiKey != "unset"
 		opts := workosClientOpts(c)
@@ -616,7 +616,7 @@ func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, guardianPol
 			return workos.NewClient(guardianPolicy, apiKey, opts), nil
 		}
 		if opts.Endpoint != "" {
-			logger.InfoContext(ctx, "using dev-idp mock-workos as access role provider")
+			logger.InfoContext(ctx, "using dev-idp WorkOS emulator as access role provider")
 			return workos.NewClient(guardianPolicy, "dev-idp-mock", opts), nil
 		}
 		logger.WarnContext(ctx, "using stub access role provider: WorkOS not configured")
@@ -721,7 +721,7 @@ func newWorkOSClient(guardianPolicy *guardian.Policy, c *cli.Context) (client *w
 
 // newIDPUserManagementClient creates a WorkOS user-management SDK client
 // scoped to the IDP application key. Returns nil only when the key is empty.
-// In mock-workos mode the key can be any non-empty string (e.g. "unset") —
+// Under the local backend the key can be any non-empty string (e.g. "unset") —
 // the mock endpoint accepts it.
 func newIDPUserManagementClient(guardianPolicy *guardian.Policy, apiKey string, c *cli.Context) *usermanagement.Client {
 	if apiKey == "" {

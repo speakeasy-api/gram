@@ -1,8 +1,8 @@
-// WorkOS-shaped REST surface served by the mock-workos mode. Wire
+// WorkOS-shaped REST surface backing the local identity backend. Wire
 // shapes match workos-go/v6 SDK types (see workos_types.go) so Gram-side's
 // `*workos.Client` decodes our responses identically to api.workos.com.
 //
-// Endpoint inventory (idp-design.md §7.1, "WorkOS emulation" block):
+// Endpoint inventory:
 //
 //	GET  /user_management/users/{id}
 //	GET  /user_management/users                                              (?email, ?organization_id, ?after, ?limit)
@@ -48,6 +48,7 @@ import (
 
 	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
 	"github.com/speakeasy-api/gram/dev-idp/internal/defaultuser"
+	workosmode "github.com/speakeasy-api/gram/dev-idp/internal/modes/workos"
 )
 
 // invitationLifetime is how long an emulated invitation stays in the
@@ -111,8 +112,8 @@ func (h *Handler) registerWorkosRoutes(mux *http.ServeMux) {
 // =============================================================================
 
 // handleWorkosAuthenticate implements the WorkOS SDK's AuthenticateWithCode
-// endpoint. Consumes an auth code issued by the oauth2 mode's /authorize
-// and returns a response matching the workos-go AuthenticateResponse shape.
+// endpoint. Consumes an auth code issued by /oauth2-1/authorize and returns a
+// response matching the workos-go AuthenticateResponse shape.
 func (h *Handler) handleWorkosAuthenticate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var body struct {
@@ -132,10 +133,13 @@ func (h *Handler) handleWorkosAuthenticate(w http.ResponseWriter, r *http.Reques
 
 	queries := repo.New(h.db)
 
-	// Consume the auth code — issued by oauth2 mode's /authorize handler.
+	// Consume the auth code — issued by the OAuth 2.1 /authorize handler.
+	// This is the second leg of non-interactive login: the Gram server sends
+	// the browser to /oauth2-1/authorize, then exchanges the returned code
+	// here rather than at the OAuth token endpoint, because it drives login
+	// through the WorkOS user-management SDK.
 	stored, err := queries.ConsumeAuthCode(ctx, repo.ConsumeAuthCodeParams{
 		Code: body.Code,
-		Mode: "oauth2",
 		Ts:   time.Now(),
 	})
 	if err != nil {
@@ -255,7 +259,7 @@ func (h *Handler) handlePasswordlessCreateSession(w http.ResponseWriter, r *http
 		scheme = "https"
 	}
 	link := fmt.Sprintf("%s://%s%s/passwordless/sessions/%s/authorize",
-		scheme, r.Host, Prefix, sessionID)
+		scheme, r.Host, workosmode.Prefix, sessionID)
 
 	writeJSON(w, http.StatusCreated, map[string]any{
 		"id":         sessionID,
@@ -378,7 +382,6 @@ func (h *Handler) handleSSOToken(w http.ResponseWriter, r *http.Request) {
 	queries := repo.New(h.db)
 	stored, err := queries.ConsumeAuthCode(ctx, repo.ConsumeAuthCodeParams{
 		Code: code,
-		Mode: "oauth2",
 		Ts:   time.Now(),
 	})
 	if err != nil {
@@ -1279,7 +1282,12 @@ func (h *Handler) handleWorkosGeneratePortalLink(w http.ResponseWriter, r *http.
 	// Return a mock portal URL. In production WorkOS returns a short-lived
 	// link to their hosted admin portal; locally we just point back at the
 	// dev-idp so the dashboard has something to open.
-	link := fmt.Sprintf("http://localhost:35291/mock-workos/portal?intent=%s&organization=%s", body.Intent, body.Organization)
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	link := fmt.Sprintf("%s://%s%s/portal?intent=%s&organization=%s",
+		scheme, r.Host, workosmode.Prefix, body.Intent, body.Organization)
 	if body.SuccessURL != "" {
 		link += "&success_url=" + url.QueryEscape(body.SuccessURL)
 	}
