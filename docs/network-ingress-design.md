@@ -27,9 +27,9 @@ flowchart LR
     D --> F["Tailnet CR"]
     D --> G["ProxyGroup\n(replicas = HA)"]
     D --> H["Ingress\nclass: tailscale"]
-    F -.credentials.-> E
-    G -.spec.tailnet.-> F
-    H -.proxy-group.-> G
+    F -.->|"credentials"| E
+    G -.->|"spec.tailnet"| F
+    H -.->|"proxy-group"| G
     I[Tailscale k8s operator] ==>|"joins customer tailnet,\nMagicDNS + TLS cert,\nruns proxy pods"| G
 ```
 
