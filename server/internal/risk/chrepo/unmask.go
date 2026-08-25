@@ -76,7 +76,7 @@ func (q *Queries) GetRiskFindingForUnmask(ctx context.Context, p GetRiskFindingF
 		Where("organization_id = ?", p.OrganizationID).
 		Where("project_id = ?", p.ProjectID).
 		Where("id = ?", p.ID).
-		OrderBy("inserted_at DESC").
+		OrderBy(latestCopyOrderSQL).
 		Limit(1)
 
 	sb := sq.Select(

@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/google/uuid"
@@ -15,17 +17,38 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
+// batchScanRequestID derives the correlation id stamped on the batch's async
+// scan requests, deterministic over the batch identity (policy, version and
+// the exact message/content-part sets, which Temporal replays verbatim) plus
+// a discriminator separating the standard-policy dispatch from the
+// prompt-policy one. Determinism is a delivery-guarantee requirement, not a
+// convenience: the request id feeds each analyzer's deterministic finding
+// ids, so a retried activity republishes identical requests and the resulting
+// ClickHouse rows converge — a random per-attempt id would mint new rows the
+// read-time dedup could never collapse.
+func batchScanRequestID(args AnalyzeBatchArgs, discriminator string) uuid.UUID {
+	parts := []string{
+		discriminator,
+		args.ProjectID.String(),
+		args.RiskPolicyID.String(),
+		strconv.FormatInt(args.PolicyVersion, 10),
+	}
+	for _, id := range args.MessageIDs {
+		parts = append(parts, id.String())
+	}
+	for _, id := range args.ContentPartIDs {
+		parts = append(parts, id.String())
+	}
+	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("gram:risk:scanrequest:"+strings.Join(parts, "\x00")))
+}
+
 func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, customRuleIDs []string, exclusions ExclusionSet, masks CategoryScopeMasks) ([][]scanners.Finding, error) {
 	ctx, scanSpan := a.tracer.Start(ctx, "risk.scanMessages")
 	defer scanSpan.End()
 	activity.RecordHeartbeat(ctx, 0)
 
 	contents := messageContents(messages)
-	requestID, err := uuid.NewV7()
-	if err != nil {
-		scanSpan.SetStatus(codes.Error, err.Error())
-		return nil, fmt.Errorf("generate scan request id: %w", err)
-	}
+	requestID := batchScanRequestID(args, "standard")
 
 	sources := newSourceSet(args.Sources)
 	n := len(messages)
@@ -39,7 +62,9 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 
 	var wg sync.WaitGroup
 	var gitleaksErr error
+	var presidioPublishErr error
 	var presidioErr error
+	var promptInjectionErr error
 	var customErr error
 
 	if sources.Has(SourceGitleaks) {
@@ -57,7 +82,15 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 		wg.Go(func() {
 			subMessages, subContents, indices := masks.Subset(messages, contents, sourceCategories[SourcePresidio])
 			a.metrics.RecordRecommendedScopePrefiltered(ctx, args.OrganizationID, SourcePresidio, masks.RecommendedPrefilteredCount(sourceCategories[SourcePresidio]))
-			findings, err := a.scanPresidio(ctx, args, requestID, subMessages, subContents)
+			// The publish must succeed for the activity to succeed (the async
+			// analyzer feeds the ClickHouse findings store), while the inline
+			// scan below tolerates partial results.
+			scoreThreshold := resolvePresidioScoreThreshold(args.PresidioScoreThreshold)
+			if err := a.publishPresidioScanRequests(ctx, args, requestID, subMessages, scoreThreshold); err != nil {
+				presidioPublishErr = err
+				return
+			}
+			findings, err := a.scanPresidio(ctx, args, scoreThreshold, subMessages, subContents)
 			presidioFindings = scatterFindings(n, indices, findings)
 			if err != nil {
 				presidioErr = err
@@ -69,7 +102,11 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 		wg.Go(func() {
 			subMessages, subContents, indices := masks.Subset(messages, contents, sourceCategories[SourcePromptInjection])
 			a.metrics.RecordRecommendedScopePrefiltered(ctx, args.OrganizationID, SourcePromptInjection, masks.RecommendedPrefilteredCount(sourceCategories[SourcePromptInjection]))
-			findings := a.scanPromptInjection(ctx, args, requestID, subMessages, subContents)
+			findings, err := a.scanPromptInjection(ctx, args, requestID, subMessages, subContents)
+			if err != nil {
+				promptInjectionErr = err
+				return
+			}
 			promptInjectionFindings = scatterFindings(n, indices, findings)
 		})
 	}
@@ -90,6 +127,14 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 	if gitleaksErr != nil {
 		scanSpan.SetStatus(codes.Error, gitleaksErr.Error())
 		return nil, fmt.Errorf("gitleaks scan batch: %w", gitleaksErr)
+	}
+	if presidioPublishErr != nil {
+		scanSpan.SetStatus(codes.Error, presidioPublishErr.Error())
+		return nil, fmt.Errorf("presidio scan dispatch: %w", presidioPublishErr)
+	}
+	if promptInjectionErr != nil {
+		scanSpan.SetStatus(codes.Error, promptInjectionErr.Error())
+		return nil, fmt.Errorf("prompt injection scan dispatch: %w", promptInjectionErr)
 	}
 	if customErr != nil {
 		scanSpan.SetStatus(codes.Error, customErr.Error())
