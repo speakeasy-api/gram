@@ -4,7 +4,7 @@ import { useParams } from "@tanstack/react-router";
 
 import { useConfirmDialog } from "@/components/ConfirmDialog";
 import { CopyValue } from "@/components/CopyValue";
-import { Trial } from "@/components/Trial";
+import { TrialFacts } from "@/pages/organization/TrialFacts";
 import {
   Select,
   SelectContent,
@@ -222,7 +222,7 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
           </Select>
         </Row>
         <Row label="Trial">
-          <Trial org={org} />
+          <TrialFacts org={org} />
         </Row>
       </Group>
 
