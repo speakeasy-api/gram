@@ -27,6 +27,17 @@
 --                per-chat owner comes from demo.chat_owner_idx(n), mirrored
 --                in the ClickHouse seed's arrayElement calls)
 
+-- ensure_demo_org() does the whole delete-and-reinsert as ONE statement, and
+-- the shared pool caps statements at 60s (newDBClient) — which the prod-sized
+-- demo org now exceeds, failing the daily run with SQLSTATE 57014. 3x that
+-- ceiling is enough headroom for the current seed to grow into while still
+-- failing the daily run fast if it ever wedges. SET LOCAL, not
+-- SET: the script is applied as a single multi-statement simple query, so it
+-- runs in one implicit transaction and the setting reverts when that ends —
+-- including on failure, so a raised timeout can never escape onto a pooled
+-- connection.
+SET LOCAL statement_timeout = '180s';
+
 CREATE SCHEMA IF NOT EXISTS demo;
 
 -- Deterministic RFC-compliant UUID from a name. Plain md5(...)::uuid leaves
