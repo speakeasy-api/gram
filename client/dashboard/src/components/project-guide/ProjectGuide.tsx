@@ -426,12 +426,17 @@ function primaryActionFor(
           label: "I've connected it",
           disabled:
             !mcpOperations.connectionPrompts ||
-            !mcpOperations.connectionPromptCopied,
-          onClick: () =>
-            send({
-              type: "USER_CHECKPOINT_COMPLETE",
-              result: "Client connected to the governed endpoint",
-            }),
+            !mcpOperations.connectionPromptCopied ||
+            mcpOperations.activityBaselinePending,
+          onClick: () => {
+            void (async () => {
+              if (!(await mcpOperations.prepareActivityBaseline())) return;
+              send({
+                type: "USER_CHECKPOINT_COMPLETE",
+                result: "Client connected to the governed endpoint",
+              });
+            })();
+          },
         };
       }
       if (journey.id === "third-party-mcp" && currentStep === 2) {
@@ -440,12 +445,18 @@ function primaryActionFor(
       if (journey.id === "secret-block" && currentStep === 2) {
         return {
           label: "I've installed and restarted it",
-          disabled: !secretOperations.installCommand,
-          onClick: () =>
-            send({
-              type: "USER_CHECKPOINT_COMPLETE",
-              result: "Observability plugin installed and agent restarted",
-            }),
+          disabled:
+            !secretOperations.installCommand ||
+            secretOperations.baselinePending,
+          onClick: () => {
+            void (async () => {
+              if (!(await secretOperations.prepareTelemetryBaseline())) return;
+              send({
+                type: "USER_CHECKPOINT_COMPLETE",
+                result: "Observability plugin installed and agent restarted",
+              });
+            })();
+          },
         };
       }
       if (journey.id === "secret-block" && currentStep === 1) {
@@ -1212,11 +1223,17 @@ function guideStepError(
     if (step === 0 && mcpOperations.catalogError) {
       return "Could not load the automatic catalog servers.";
     }
+    if (step === 1 && mcpOperations.activityBaselineError) {
+      return "Could not capture the governed-call baseline. Retry before opening the prompt.";
+    }
     return null;
   }
 
   if (step === 0 && secretOperations.policyError) {
     return "Could not read this project's risk policies.";
+  }
+  if (step === 2 && secretOperations.baselineError) {
+    return "Could not capture the hook and risk-event baseline. Retry before opening the prompt.";
   }
   return null;
 }

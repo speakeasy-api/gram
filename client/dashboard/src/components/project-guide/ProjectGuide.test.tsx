@@ -112,6 +112,17 @@ async function advanceGuideDelay(count = 1): Promise<void> {
   );
 }
 
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+} {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
+}
+
 const catalogServer = {
   description: "Read-only test server",
   registryId: "registry",
@@ -132,6 +143,8 @@ const catalogServer = {
 
 function resetMcpOperations(): void {
   mcpOperations.current = {
+    activityBaselineError: false,
+    activityBaselinePending: false,
     catalogError: false,
     catalogPending: false,
     catalogServers: [catalogServer],
@@ -152,6 +165,7 @@ function resetMcpOperations(): void {
     prompt:
       "Using the Linear_Governed MCP server at this exact URL, https://api.example/mcp/linear-endpoint, first list the available tools. If multiple servers have the same name, use only the one at this URL. Then choose one tool marked read-only and call it with a harmless request. Do not create, update, or delete anything.",
     retryCatalog: vi.fn(),
+    prepareActivityBaseline: vi.fn(() => Promise.resolve(true)),
     selectServer: vi.fn(),
     selectedServer: catalogServer,
     setClient: vi.fn(),
@@ -169,6 +183,8 @@ function resetMcpOperations(): void {
 
 function resetSecretOperations(): void {
   secretOperations.current = {
+    baselineError: false,
+    baselinePending: false,
     client: "claude",
     clientSelected: true,
     downloadedFilename: "gram-observability.zip",
@@ -179,6 +195,7 @@ function resetSecretOperations(): void {
     prompt:
       'Run this exact command in your shell:\n\necho "GITHUB_TOKEN=ghp_R2D2C3POLuk3Skywalker1234567890ab"',
     retryPolicy: vi.fn(),
+    prepareTelemetryBaseline: vi.fn(() => Promise.resolve(true)),
     riskEventsHref: "/projects/request-project/security/events",
     setClient: vi.fn((client: "claude" | "cursor" | "codex") => {
       secretOperations.current.client = client;
@@ -512,6 +529,102 @@ describe("ProjectGuide", () => {
     ).toContain("linear.tools/list");
     expect(document.querySelectorAll('[aria-current="step"]')).toHaveLength(1);
     expect(screen.getByText("linear.tools/list")).toBeTruthy();
+  });
+
+  it("awaits the governed-call baseline before exposing the MCP prompt", async () => {
+    vi.useFakeTimers();
+    const baseline = deferred<boolean>();
+    mcpOperations.current.prepareActivityBaseline = vi.fn(
+      () => baseline.promise,
+    );
+    mcpOperations.current.handleSignal = vi.fn(
+      (
+        signal: ProjectGuideOperationSignal,
+        report: (report: ProjectGuideOperationReport) => void,
+      ) => {
+        if (signal.type === "start" && signal.scope.step === 0) {
+          report({
+            type: "success",
+            scope: signal.scope,
+            result: "Governed endpoint and Default plugin verified",
+          });
+        }
+      },
+    );
+
+    render(<ProjectGuide />);
+    fireEvent.click(
+      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
+    await advanceGuideDelay();
+    fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
+
+    expect(
+      mcpOperations.current.prepareActivityBaseline,
+    ).toHaveBeenCalledOnce();
+    expect(screen.queryByText(/first list the available tools/)).toBeNull();
+
+    await act(async () => baseline.resolve(true));
+
+    expect(screen.getByText(/first list the available tools/)).toBeTruthy();
+  });
+
+  it("awaits the hook and risk baseline before exposing the secret prompt", async () => {
+    vi.useFakeTimers();
+    const baseline = deferred<boolean>();
+    secretOperations.current.prepareTelemetryBaseline = vi.fn(
+      () => baseline.promise,
+    );
+    secretOperations.current.handleSignal = vi.fn(
+      (
+        signal: ProjectGuideOperationSignal,
+        report: (report: ProjectGuideOperationReport) => void,
+      ) => {
+        if (signal.type === "start" && signal.scope.step === 0) {
+          report({
+            type: "success",
+            scope: signal.scope,
+            result: "Secrets policy verified",
+          });
+        }
+        if (signal.type === "start" && signal.scope.step === 1) {
+          report({
+            type: "success",
+            scope: signal.scope,
+            result: "Observability plugin downloaded",
+          });
+        }
+      },
+    );
+
+    render(<ProjectGuide />);
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Block a leaked credential mid-prompt/,
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
+    await advanceGuideDelay();
+    fireEvent.click(screen.getByRole("button", { name: "Claude Code" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
+    await advanceGuideDelay();
+    fireEvent.click(
+      screen.getByRole("button", { name: "I've installed and restarted it" }),
+    );
+
+    expect(
+      secretOperations.current.prepareTelemetryBaseline,
+    ).toHaveBeenCalledOnce();
+    expect(
+      screen.queryByText(/Run this exact command in your shell/),
+    ).toBeNull();
+
+    await act(async () => baseline.resolve(true));
+
+    expect(
+      screen.getByText(/Run this exact command in your shell/),
+    ).toBeTruthy();
   });
 
   it("shows MCP listening guidance only in Activity", async () => {

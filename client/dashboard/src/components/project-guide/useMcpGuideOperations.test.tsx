@@ -1,26 +1,26 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PulseMCPServer } from "@/pages/catalog/hooks";
-import type { McpServerActivity } from "@gram/client/models/components/mcpserveractivity.js";
+import type { ToolUsageTraceSummary } from "@gram/client/models/components/toolusagetracesummary.js";
 import type { ProjectGuideOperationReport } from "./projectGuideMachine";
 
 const queryHooks = vi.hoisted(() => ({
-  activity: vi.fn(),
   catalog: vi.fn(),
   endpoints: vi.fn(),
   plugins: vi.fn(),
   remoteServers: vi.fn(),
   servers: vi.fn(),
+  toolTraces: vi.fn(),
 }));
 const workflowHook = vi.hoisted(() => vi.fn());
 const requestProject = vi.hoisted(() => ({ slug: "request-project" }));
-const refetchActivity = vi.hoisted(() =>
+const refetchTraces = vi.hoisted(() =>
   vi.fn<
     () => Promise<{
-      data: { activity: McpServerActivity[] } | undefined;
+      data: { traces: ToolUsageTraceSummary[] } | undefined;
       isError: boolean;
     }>
-  >(() => Promise.resolve({ data: { activity: [] }, isError: false })),
+  >(() => Promise.resolve({ data: { traces: [] }, isError: false })),
 );
 const startInstall = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 const resetInstall = vi.hoisted(() => vi.fn());
@@ -34,9 +34,6 @@ vi.mock("@/pages/catalog/hooks", () => ({
 vi.mock("@/pages/catalog/useRemoteMcpInstallWorkflow", () => ({
   useRemoteMcpInstallWorkflow: workflowHook,
 }));
-vi.mock("@gram/client/react-query/getMcpServerActivity.js", () => ({
-  useGetMcpServerActivity: queryHooks.activity,
-}));
 vi.mock("@gram/client/react-query/mcpEndpoints.js", () => ({
   useMcpEndpoints: queryHooks.endpoints,
 }));
@@ -48,6 +45,9 @@ vi.mock("@gram/client/react-query/plugins.js", () => ({
 }));
 vi.mock("@gram/client/react-query/remoteMcpServers.js", () => ({
   useRemoteMcpServers: queryHooks.remoteServers,
+}));
+vi.mock("@gram/client/react-query/listToolUsageTraces.js", () => ({
+  useListToolUsageTraces: queryHooks.toolTraces,
 }));
 vi.mock("@/routes", () => ({
   useRoutes: () => ({
@@ -111,8 +111,8 @@ function queryResult<T>(data: T) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  refetchActivity.mockResolvedValue({
-    data: { activity: [] },
+  refetchTraces.mockResolvedValue({
+    data: { traces: [] },
     isError: false,
   });
   requestProject.slug = "request-project";
@@ -151,9 +151,9 @@ beforeEach(() => {
   );
   queryHooks.endpoints.mockReturnValue(queryResult({ mcpEndpoints: [] }));
   queryHooks.plugins.mockReturnValue(queryResult({ plugins: [] }));
-  queryHooks.activity.mockReturnValue({
-    ...queryResult({ activity: [] }),
-    refetch: refetchActivity,
+  queryHooks.toolTraces.mockReturnValue({
+    ...queryResult({ traces: [] }),
+    refetch: refetchTraces,
   });
   workflowHook.mockReturnValue({
     phase: "configure",
@@ -165,7 +165,13 @@ beforeEach(() => {
   });
 });
 
-function setExistingServer({ calls = 0 }: { calls?: number } = {}): void {
+function setExistingServer({
+  endpoint = true,
+  defaultPlugin = true,
+}: {
+  endpoint?: boolean;
+  defaultPlugin?: boolean;
+} = {}): void {
   queryHooks.servers.mockReturnValue(
     queryResult({
       mcpServers: [
@@ -190,13 +196,15 @@ function setExistingServer({ calls = 0 }: { calls?: number } = {}): void {
   );
   queryHooks.endpoints.mockReturnValue(
     queryResult({
-      mcpEndpoints: [
-        {
-          id: "endpoint-id",
-          slug: "linear-endpoint",
-          mcpServerId: "mcp-server-id",
-        },
-      ],
+      mcpEndpoints: endpoint
+        ? [
+            {
+              id: "endpoint-id",
+              slug: "linear-endpoint",
+              mcpServerId: "mcp-server-id",
+            },
+          ]
+        : [],
     }),
   );
   queryHooks.plugins.mockReturnValue(
@@ -205,29 +213,35 @@ function setExistingServer({ calls = 0 }: { calls?: number } = {}): void {
         {
           id: "default-plugin",
           isDefault: true,
-          servers: [{ mcpServerId: "mcp-server-id" }],
+          servers: defaultPlugin ? [{ mcpServerId: "mcp-server-id" }] : [],
         },
       ],
     }),
   );
-  queryHooks.activity.mockReturnValue({
-    ...queryResult({
-      activity:
-        calls === 0
-          ? []
-          : [
-              {
-                lastToolCallAt: new Date("2026-08-19T12:00:00Z"),
-                recentToolCalls: calls,
-                targetId: "linear-governed",
-                targetLabel: "Linear",
-                targetType: "hosted_mcp_server",
-                totalToolCalls: calls,
-              },
-            ],
-    }),
-    refetch: refetchActivity,
-  });
+}
+
+function toolTrace(
+  overrides: Partial<ToolUsageTraceSummary> = {},
+): ToolUsageTraceSummary {
+  return {
+    eventSource: "mcp-proxy",
+    gramUrn: "tools:linear-governed:list_issues",
+    httpStatusCode: 200,
+    id: "trace-row-id",
+    logCount: 2,
+    logGroup: { kind: "trace_id", value: "trace-id" },
+    startTimeUnixNano: "1787140800000000000",
+    targetId: "linear-governed",
+    targetKind: "server",
+    targetLabel: "Linear",
+    targetType: "hosted_mcp_server",
+    toolName: "linear.list_issues",
+    traceId: "trace-id",
+    userKey: "user-id",
+    userKind: "user_id",
+    userLabel: "Agent user",
+    ...overrides,
+  };
 }
 
 describe("useMcpGuideOperations", () => {
@@ -421,6 +435,99 @@ describe("useMcpGuideOperations", () => {
       autoSelectRemotes: true,
       serverNameSuffix: "_Governed",
     });
+    expect(queryHooks.toolTraces).toHaveBeenCalledWith(
+      {
+        gramProject: "request-project",
+        listToolUsageTracesPayload: expect.objectContaining({
+          hostedToolsetSlugs: ["linear-governed"],
+          targetTypes: ["hosted_mcp_server"],
+        }),
+      },
+      undefined,
+      expect.objectContaining({ enabled: true, throwOnError: false }),
+    );
+  });
+
+  it.each([
+    { endpoint: false, defaultPlugin: true },
+    { endpoint: true, defaultPlugin: false },
+  ])(
+    "does not advance an existing server until endpoint and Default membership are readable: %o",
+    async (readiness) => {
+      setExistingServer(readiness);
+      const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
+      const { result } = renderHook(() => useMcpGuideOperations());
+
+      act(() => result.current.selectServer(SERVER));
+      act(() =>
+        result.current.handleSignal(
+          { type: "start", scope: SERVER_SCOPE },
+          report,
+        ),
+      );
+
+      await waitFor(() =>
+        expect(report).toHaveBeenCalledWith({
+          type: "error",
+          scope: SERVER_SCOPE,
+          message:
+            "The governed endpoint or Default plugin is not ready yet. Retry the readiness check.",
+        }),
+      );
+      expect(report).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: "success" }),
+      );
+    },
+  );
+
+  it("refetches project readiness and does not advance a completed install until it is ready", async () => {
+    const servers = queryResult({ mcpServers: [] });
+    const remoteServers = queryResult({ remoteMcpServers: [] });
+    const endpoints = queryResult({ mcpEndpoints: [] });
+    const plugins = queryResult({ plugins: [] });
+    queryHooks.servers.mockReturnValue(servers);
+    queryHooks.remoteServers.mockReturnValue(remoteServers);
+    queryHooks.endpoints.mockReturnValue(endpoints);
+    queryHooks.plugins.mockReturnValue(plugins);
+    workflowHook.mockReturnValue({
+      phase: "complete",
+      statuses: [
+        {
+          key: "linear",
+          name: "Linear",
+          status: "completed",
+          mcpServerId: "mcp-server-id",
+        },
+      ],
+      reset: resetInstall,
+      isServerAlreadyInstalled: () => false,
+    });
+    const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
+    const { result } = renderHook(() => useMcpGuideOperations());
+
+    act(() => result.current.selectServer(SERVER));
+    act(() =>
+      result.current.handleSignal(
+        { type: "start", scope: SERVER_SCOPE },
+        report,
+      ),
+    );
+
+    await waitFor(() =>
+      expect(report).toHaveBeenCalledWith({
+        type: "error",
+        scope: SERVER_SCOPE,
+        message:
+          "The governed endpoint or Default plugin is not ready yet. Retry the readiness check.",
+      }),
+    );
+    expect(report).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "success" }),
+    );
+    expect(servers.refetch).toHaveBeenCalledOnce();
+    expect(remoteServers.refetch).toHaveBeenCalledOnce();
+    expect(endpoints.refetch).toHaveBeenCalledOnce();
+    expect(plugins.refetch).toHaveBeenCalledOnce();
   });
 
   it("returns namespaced client commands and a list-plus-read-only-call prompt", () => {
@@ -458,22 +565,27 @@ describe("useMcpGuideOperations", () => {
     expect(result.current.connectionPromptCopied).toBe(true);
   });
 
-  it("awaits a fresh selected-server baseline before exposing prompt readiness", async () => {
-    setExistingServer({ calls: 4 });
+  it("captures the selected-server baseline once before prompt interaction", async () => {
+    const now = Date.now();
+    setExistingServer();
+    refetchTraces.mockResolvedValueOnce({
+      data: {
+        traces: [
+          toolTrace({
+            id: "baseline-trace",
+            startTimeUnixNano: String(BigInt(now - 1_000) * 1_000_000n),
+          }),
+        ],
+      },
+      isError: false,
+    });
     const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
-    const { result, rerender } = renderHook(() => useMcpGuideOperations());
+    const { result } = renderHook(() => useMcpGuideOperations());
     const promptScope = { ...SERVER_SCOPE, step: 2, runId: 2 };
-    const listenScope = { ...SERVER_SCOPE, step: 3, runId: 3 };
-    let resolveFreshRead!: (value: {
-      data: { activity: McpServerActivity[] };
-      isError: boolean;
-    }) => void;
-    refetchActivity.mockReturnValueOnce(
-      new Promise((resolve) => {
-        resolveFreshRead = resolve;
-      }),
-    );
 
+    await act(async () => {
+      expect(await result.current.prepareActivityBaseline()).toBe(true);
+    });
     act(() => {
       result.current.handleSignal(
         { type: "checkpoint", scope: promptScope },
@@ -481,40 +593,66 @@ describe("useMcpGuideOperations", () => {
       );
     });
 
-    expect(refetchActivity).toHaveBeenCalledOnce();
+    expect(refetchTraces).toHaveBeenCalledOnce();
+    expect(result.current.activityBaselineError).toBe(false);
+  });
+
+  it("completes from the first new selected-server trace and renders its real details", async () => {
+    const now = Date.now();
+    const traceData = {
+      current: {
+        traces: [
+          toolTrace({
+            id: "old-trace",
+            startTimeUnixNano: String(BigInt(now - 1_000) * 1_000_000n),
+          }),
+        ],
+      },
+    };
+    const refetchTraces = vi.fn(() =>
+      Promise.resolve({ data: traceData.current, isError: false }),
+    );
+    queryHooks.toolTraces.mockImplementation(() => ({
+      ...queryResult(traceData.current),
+      refetch: refetchTraces,
+    }));
+    setExistingServer();
+    const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
+    const view = renderHook(() => useMcpGuideOperations());
+    const listenScope = { ...SERVER_SCOPE, step: 3, runId: 3 };
 
     await act(async () => {
-      resolveFreshRead({
-        data: {
-          activity: [
-            {
-              lastToolCallAt: new Date("2026-08-19T12:01:00Z"),
-              recentToolCalls: 5,
-              targetId: "linear-governed",
-              targetLabel: "Linear",
-              targetType: "hosted_mcp_server",
-              totalToolCalls: 5,
-            },
-          ],
-        },
-        isError: false,
-      });
+      expect(await view.result.current.prepareActivityBaseline()).toBe(true);
     });
-
-    setExistingServer({ calls: 5 });
-    rerender();
-    act(() => {
-      result.current.handleSignal(
+    await waitFor(() => expect(refetchTraces).toHaveBeenCalledOnce());
+    act(() =>
+      view.result.current.handleSignal(
         { type: "start", scope: listenScope },
         report,
-      );
-    });
-    expect(report).not.toHaveBeenCalledWith(
-      expect.objectContaining({ type: "event" }),
+      ),
     );
 
-    setExistingServer({ calls: 6 });
-    rerender();
+    traceData.current = {
+      traces: [
+        toolTrace({
+          id: "unrelated-trace",
+          startTimeUnixNano: String(BigInt(now + 1_000) * 1_000_000n),
+          targetId: "another-server",
+          targetLabel: "Another server",
+          toolName: "other.unrelated_call",
+        }),
+        toolTrace({
+          id: "later-trace",
+          startTimeUnixNano: String(BigInt(now + 3_000) * 1_000_000n),
+          toolName: "linear.get_issue",
+        }),
+        toolTrace({
+          id: "first-trace",
+          startTimeUnixNano: String(BigInt(now + 2_000) * 1_000_000n),
+        }),
+      ],
+    };
+    view.rerender();
 
     await waitFor(() =>
       expect(report).toHaveBeenCalledWith({
@@ -523,30 +661,30 @@ describe("useMcpGuideOperations", () => {
         event: {
           kind: "Governed call",
           tone: "allow",
-          title: "Linear",
+          title: "linear.list_issues",
           rows: [
             { key: "server", value: "Linear" },
-            { key: "calls", value: "6 recorded" },
+            {
+              key: "endpoint",
+              value: "https://api.example/mcp/linear-endpoint",
+            },
+            { key: "result", value: "HTTP 200" },
           ],
-          note: "The new call is recorded in Tool Logs.",
+          note: "The first new call is recorded in Tool Logs.",
         },
       }),
     );
   });
 
   it("keeps listening while the activity baseline is unresolved", async () => {
-    setExistingServer({ calls: 4 });
+    setExistingServer();
     const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
     const { result } = renderHook(() => useMcpGuideOperations());
-    const promptScope = { ...SERVER_SCOPE, step: 2, runId: 2 };
     const listenScope = { ...SERVER_SCOPE, step: 3, runId: 3 };
-    refetchActivity.mockReturnValueOnce(new Promise(() => undefined));
+    refetchTraces.mockReturnValueOnce(new Promise(() => undefined));
 
     act(() => {
-      result.current.handleSignal(
-        { type: "checkpoint", scope: promptScope },
-        report,
-      );
+      void result.current.prepareActivityBaseline();
       result.current.handleSignal(
         { type: "start", scope: listenScope },
         report,
@@ -565,32 +703,17 @@ describe("useMcpGuideOperations", () => {
   });
 
   it("reports a real activity query failure after the baseline is ready", async () => {
-    setExistingServer({ calls: 4 });
+    setExistingServer();
     const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
     const { result, rerender } = renderHook(() => useMcpGuideOperations());
-    const promptScope = { ...SERVER_SCOPE, step: 2, runId: 2 };
     const listenScope = { ...SERVER_SCOPE, step: 3, runId: 3 };
-    refetchActivity.mockResolvedValueOnce({
-      data: {
-        activity: [
-          {
-            lastToolCallAt: new Date("2026-08-19T12:01:00Z"),
-            recentToolCalls: 4,
-            targetId: "linear-governed",
-            targetLabel: "Linear",
-            targetType: "hosted_mcp_server",
-            totalToolCalls: 4,
-          },
-        ],
-      },
+    refetchTraces.mockResolvedValueOnce({
+      data: { traces: [] },
       isError: false,
     });
 
-    act(() => {
-      result.current.handleSignal(
-        { type: "checkpoint", scope: promptScope },
-        report,
-      );
+    await act(async () => {
+      expect(await result.current.prepareActivityBaseline()).toBe(true);
     });
 
     act(() => {
@@ -599,12 +722,12 @@ describe("useMcpGuideOperations", () => {
         report,
       );
     });
-    queryHooks.activity.mockReturnValue({
+    queryHooks.toolTraces.mockReturnValue({
       data: undefined,
       isError: true,
       isFetching: false,
       isPending: false,
-      refetch: refetchActivity,
+      refetch: refetchTraces,
     });
     rerender();
 
@@ -619,36 +742,23 @@ describe("useMcpGuideOperations", () => {
   });
 
   it("captures a fresh baseline after a failed baseline read is retried", async () => {
-    setExistingServer({ calls: 2 });
+    setExistingServer();
     const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
     const { result } = renderHook(() => useMcpGuideOperations());
-    const promptScope = { ...SERVER_SCOPE, step: 2, runId: 2 };
-    refetchActivity.mockResolvedValueOnce({
+    refetchTraces.mockResolvedValueOnce({
       data: undefined,
       isError: true,
     });
 
-    act(() => {
-      result.current.handleSignal(
-        { type: "checkpoint", scope: promptScope },
-        report,
-      );
+    await act(async () => {
+      expect(await result.current.prepareActivityBaseline()).toBe(false);
     });
 
-    await waitFor(() => expect(refetchActivity).toHaveBeenCalledOnce());
+    await waitFor(() => expect(refetchTraces).toHaveBeenCalledOnce());
 
-    refetchActivity.mockResolvedValueOnce({
+    refetchTraces.mockResolvedValueOnce({
       data: {
-        activity: [
-          {
-            lastToolCallAt: new Date("2026-08-19T12:02:00Z"),
-            recentToolCalls: 3,
-            targetId: "linear-governed",
-            targetLabel: "Linear",
-            targetType: "hosted_mcp_server",
-            totalToolCalls: 3,
-          },
-        ],
+        traces: [toolTrace({ id: "retry-baseline-trace" })],
       },
       isError: false,
     });
@@ -661,7 +771,7 @@ describe("useMcpGuideOperations", () => {
     );
 
     await waitFor(() => {
-      expect(refetchActivity).toHaveBeenCalledTimes(2);
+      expect(refetchTraces).toHaveBeenCalledTimes(2);
     });
   });
 

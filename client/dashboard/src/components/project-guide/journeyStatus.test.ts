@@ -164,15 +164,15 @@ describe("hasBlockingSecretsPolicy", () => {
     ).toBe(true);
   });
 
-  it("matches an omitted message type list as all message types", () => {
+  it("rejects an omitted message type list", () => {
     expect(
       hasBlockingSecretsPolicy([
         policy({ action: "block", sources: ["gitleaks"] }),
       ]),
-    ).toBe(true);
+    ).toBe(false);
   });
 
-  it("matches an empty message type list as all message types", () => {
+  it("rejects an empty message type list", () => {
     expect(
       hasBlockingSecretsPolicy([
         policy({
@@ -181,7 +181,57 @@ describe("hasBlockingSecretsPolicy", () => {
           messageTypes: [],
         }),
       ]),
-    ).toBe(true);
+    ).toBe(false);
+  });
+
+  it("rejects a targeted secrets policy", () => {
+    expect(
+      hasBlockingSecretsPolicy([
+        policy({
+          action: "block",
+          audienceType: "targeted",
+          sources: ["gitleaks"],
+          messageTypes: ["tool_request", "tool_response"],
+        }),
+      ]),
+    ).toBe(false);
+  });
+
+  it("rejects a prompt-based secrets policy", () => {
+    expect(
+      hasBlockingSecretsPolicy([
+        policy({
+          action: "block",
+          policyType: "prompt_based",
+          sources: ["gitleaks"],
+          messageTypes: ["tool_request", "tool_response"],
+        }),
+      ]),
+    ).toBe(false);
+  });
+
+  it("rejects extra message types outside the standard tool surfaces", () => {
+    expect(
+      hasBlockingSecretsPolicy([
+        policy({
+          action: "block",
+          sources: ["gitleaks"],
+          messageTypes: ["tool_request", "tool_response", "user_message"],
+        }),
+      ]),
+    ).toBe(false);
+  });
+
+  it("rejects a policy that combines secrets with another source", () => {
+    expect(
+      hasBlockingSecretsPolicy([
+        policy({
+          action: "block",
+          sources: ["gitleaks", "prompt_injection"],
+          messageTypes: ["tool_request", "tool_response"],
+        }),
+      ]),
+    ).toBe(false);
   });
 
   it("rejects a secrets policy that does not scan tool requests and responses", () => {

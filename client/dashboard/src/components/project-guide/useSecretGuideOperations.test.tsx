@@ -176,6 +176,32 @@ describe("useSecretGuideOperations", () => {
     });
   });
 
+  it.each([
+    { audienceType: "targeted" as const },
+    { policyType: "prompt_based" as const },
+    { messageTypes: undefined },
+    { messageTypes: [] },
+    { sources: ["gitleaks", "prompt_injection"] },
+  ])(
+    "creates the exact policy when the existing policy is a near-miss: %o",
+    async (override) => {
+      queryHooks.policies.mockReturnValue(
+        queryResult({ policies: [policy(override)] }),
+      );
+      const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
+      const { result: hook } = renderHook(() => useSecretGuideOperations());
+
+      act(() =>
+        hook.current.handleSignal(
+          { type: "start", scope: POLICY_SCOPE },
+          report,
+        ),
+      );
+
+      await waitFor(() => expect(mutateAsync).toHaveBeenCalledOnce());
+    },
+  );
+
   it("creates the standard blocking policy", async () => {
     queryHooks.policies.mockReturnValue(queryResult({ policies: [] }));
     const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
@@ -333,7 +359,8 @@ describe("useSecretGuideOperations", () => {
     {
       client: "codex" as const,
       filename: "observability-codex.zip",
-      command: "unzip -oq observability-codex.zip -d ~/.codex/plugins/",
+      command:
+        "unzip -oq observability-codex.zip -d ~/gram-observability\nbash ~/gram-observability/install.sh",
     },
   ])(
     "activates the generated $client archive through its existing install contract",
@@ -364,28 +391,35 @@ describe("useSecretGuideOperations", () => {
     },
   );
 
-  it("captures the hook and risk baselines only after the prompt is copied", async () => {
+  it("captures the hook and risk baselines once before prompt interaction", async () => {
     const hooks = queryResult({ traces: [trace()] });
     const results = queryResult({ results: [result()] });
     queryHooks.hooks.mockReturnValue(hooks);
     queryHooks.results.mockReturnValue(results);
     const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
     const { result: hook } = renderHook(() => useSecretGuideOperations());
-    const scope = { ...POLICY_SCOPE, step: 3, runId: 2 };
+    const promptScope = { ...POLICY_SCOPE, step: 3, runId: 2 };
 
     expect(hooks.refetch).not.toHaveBeenCalled();
     expect(results.refetch).not.toHaveBeenCalled();
     act(() =>
       hook.current.handleSignal(
-        { type: "checkpoint", scope: { ...POLICY_SCOPE, step: 2, runId: 2 } },
+        { type: "checkpoint", scope: promptScope },
         report,
       ),
     );
     expect(hooks.refetch).not.toHaveBeenCalled();
     expect(results.refetch).not.toHaveBeenCalled();
-    act(() => hook.current.handleSignal({ type: "checkpoint", scope }, report));
+    await act(async () => {
+      expect(await hook.current.prepareTelemetryBaseline()).toBe(true);
+    });
+    act(() =>
+      hook.current.handleSignal(
+        { type: "checkpoint", scope: promptScope },
+        report,
+      ),
+    );
 
-    await waitFor(() => expect(hooks.refetch).toHaveBeenCalledOnce());
     expect(hooks.refetch).toHaveBeenCalledOnce();
     expect(results.refetch).toHaveBeenCalledOnce();
     expect(report).not.toHaveBeenCalledWith(
@@ -417,13 +451,9 @@ describe("useSecretGuideOperations", () => {
     const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
     const { result: hook } = renderHook(() => useSecretGuideOperations());
 
-    act(() =>
-      hook.current.handleSignal(
-        { type: "checkpoint", scope: { ...POLICY_SCOPE, step: 3, runId: 2 } },
-        report,
-      ),
-    );
-    await waitFor(() => expect(hooks.refetch).toHaveBeenCalledOnce());
+    await act(async () => {
+      expect(await hook.current.prepareTelemetryBaseline()).toBe(true);
+    });
 
     const listenScope = { ...POLICY_SCOPE, step: 4, runId: 3 };
     act(() =>
@@ -462,13 +492,9 @@ describe("useSecretGuideOperations", () => {
     const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
     const { result: hook } = renderHook(() => useSecretGuideOperations());
 
-    act(() =>
-      hook.current.handleSignal(
-        { type: "checkpoint", scope: { ...POLICY_SCOPE, step: 3, runId: 2 } },
-        report,
-      ),
-    );
-    await waitFor(() => expect(hooks.refetch).toHaveBeenCalledOnce());
+    await act(async () => {
+      expect(await hook.current.prepareTelemetryBaseline()).toBe(false);
+    });
 
     const listenScope = { ...POLICY_SCOPE, step: 4, runId: 3 };
     act(() =>
@@ -510,12 +536,9 @@ describe("useSecretGuideOperations", () => {
     const view = renderHook(() => useSecretGuideOperations());
 
     act(() => view.result.current.setClient("claude"));
-    act(() =>
-      view.result.current.handleSignal(
-        { type: "checkpoint", scope: { ...POLICY_SCOPE, step: 3, runId: 2 } },
-        report,
-      ),
-    );
+    await act(async () => {
+      expect(await view.result.current.prepareTelemetryBaseline()).toBe(true);
+    });
     await waitFor(() => expect(refetchHooks).toHaveBeenCalledOnce());
 
     const listenScope = { ...POLICY_SCOPE, step: 4, runId: 3 };
@@ -587,13 +610,9 @@ describe("useSecretGuideOperations", () => {
     const view = renderHook(() => useSecretGuideOperations());
 
     act(() => view.result.current.setClient("claude"));
-    act(() =>
-      view.result.current.handleSignal(
-        { type: "checkpoint", scope: { ...POLICY_SCOPE, step: 3, runId: 2 } },
-        report,
-      ),
-    );
-    await waitFor(() => expect(queryHooks.hooks).toHaveBeenCalled());
+    await act(async () => {
+      expect(await view.result.current.prepareTelemetryBaseline()).toBe(true);
+    });
     act(() =>
       view.result.current.handleSignal(
         { type: "start", scope: { ...POLICY_SCOPE, step: 4, runId: 3 } },
@@ -653,13 +672,9 @@ describe("useSecretGuideOperations", () => {
     const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
     const view = renderHook(() => useSecretGuideOperations());
 
-    act(() =>
-      view.result.current.handleSignal(
-        { type: "checkpoint", scope: { ...POLICY_SCOPE, step: 3, runId: 2 } },
-        report,
-      ),
-    );
-    await waitFor(() => expect(queryHooks.hooks).toHaveBeenCalled());
+    await act(async () => {
+      expect(await view.result.current.prepareTelemetryBaseline()).toBe(true);
+    });
     act(() =>
       view.result.current.handleSignal(
         { type: "start", scope: { ...POLICY_SCOPE, step: 4, runId: 3 } },
@@ -712,13 +727,9 @@ describe("useSecretGuideOperations", () => {
     const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
     const view = renderHook(() => useSecretGuideOperations());
 
-    act(() =>
-      view.result.current.handleSignal(
-        { type: "checkpoint", scope: { ...POLICY_SCOPE, step: 3, runId: 2 } },
-        report,
-      ),
-    );
-    await waitFor(() => expect(queryHooks.hooks).toHaveBeenCalled());
+    await act(async () => {
+      expect(await view.result.current.prepareTelemetryBaseline()).toBe(true);
+    });
     act(() =>
       view.result.current.handleSignal(
         { type: "start", scope: { ...POLICY_SCOPE, step: 4, runId: 3 } },
@@ -762,13 +773,9 @@ describe("useSecretGuideOperations", () => {
     expect(hook.current.prompt).toBe(
       'Run this exact command in your shell:\n\necho "GITHUB_TOKEN=ghp_R2D2C3POLuk3Skywalker1234567890ab"',
     );
-    act(() =>
-      hook.current.handleSignal(
-        { type: "checkpoint", scope: { ...POLICY_SCOPE, step: 3, runId: 2 } },
-        report,
-      ),
-    );
-    await waitFor(() => expect(hooks.refetch).toHaveBeenCalledOnce());
+    await act(async () => {
+      expect(await hook.current.prepareTelemetryBaseline()).toBe(true);
+    });
     act(() =>
       hook.current.handleSignal(
         {
@@ -799,13 +806,9 @@ describe("useSecretGuideOperations", () => {
     const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
     const { result: hook } = renderHook(() => useSecretGuideOperations());
 
-    act(() =>
-      hook.current.handleSignal(
-        { type: "checkpoint", scope: { ...POLICY_SCOPE, step: 3, runId: 2 } },
-        report,
-      ),
-    );
-    await waitFor(() => expect(hooks.refetch).toHaveBeenCalledOnce());
+    await act(async () => {
+      expect(await hook.current.prepareTelemetryBaseline()).toBe(false);
+    });
 
     act(() =>
       hook.current.handleSignal(

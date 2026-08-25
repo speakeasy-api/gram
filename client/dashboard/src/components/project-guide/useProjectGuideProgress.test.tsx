@@ -120,6 +120,8 @@ describe("useProjectGuideProgress", () => {
             id: "policy-1",
             enabled: true,
             action: "block",
+            audienceType: "everyone",
+            policyType: "standard",
             sources: ["gitleaks"],
             messageTypes: ["tool_request", "tool_response"],
           },
@@ -134,6 +136,29 @@ describe("useProjectGuideProgress", () => {
       "third-party-mcp": "in-progress",
       "secret-block": "in-progress",
     });
+  });
+
+  it("does not persist progress from a near-miss secrets policy", () => {
+    queryHooks.policies.mockReturnValue({
+      data: {
+        policies: [
+          {
+            id: "policy-1",
+            enabled: true,
+            action: "block",
+            audienceType: "everyone",
+            policyType: "standard",
+            sources: ["gitleaks", "prompt_injection"],
+            messageTypes: ["tool_request", "tool_response"],
+          },
+        ],
+      },
+      isPending: false,
+    });
+
+    const { result } = renderHook(() => useProjectGuideProgress());
+
+    expect(result.current.statusByJourney["secret-block"]).toBe("not-started");
   });
 
   it("marks governed MCP activity and a secrets finding done", () => {
@@ -185,6 +210,8 @@ describe("useProjectGuideProgress", () => {
             id: "policy-1",
             enabled: true,
             action: "block",
+            audienceType: "everyone",
+            policyType: "standard",
             sources: ["gitleaks"],
             messageTypes: ["tool_request", "tool_response"],
           },
@@ -223,6 +250,8 @@ describe("useProjectGuideProgress", () => {
             id: "policy-1",
             enabled: true,
             action: "block",
+            audienceType: "everyone",
+            policyType: "standard",
             sources: ["gitleaks"],
             messageTypes: ["tool_request", "tool_response"],
           },

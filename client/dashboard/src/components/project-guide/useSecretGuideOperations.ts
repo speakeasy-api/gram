@@ -72,10 +72,7 @@ type TelemetryBaseline = {
 function matchingSecretsPolicy(
   policies: RiskPolicy[] | undefined,
 ): RiskPolicy | undefined {
-  return policies?.find(
-    (policy) =>
-      policy.policyType === "standard" && hasBlockingSecretsPolicy([policy]),
-  );
+  return policies?.find((policy) => hasBlockingSecretsPolicy([policy]));
 }
 
 function responseFilename(response: Response, fallback: string): string {
@@ -96,6 +93,11 @@ function installDetails(
   filename: string | undefined,
 ): { command: string } | undefined {
   if (!filename) return undefined;
+  if (client === "codex") {
+    return {
+      command: `unzip -oq ${shellFilename(filename)} -d ~/gram-observability\nbash ~/gram-observability/install.sh`,
+    };
+  }
   const { installDirectory } = SECRET_GUIDE_CLIENTS[client];
   return {
     command: `unzip -oq ${shellFilename(filename)} -d ${installDirectory}`,
@@ -188,6 +190,8 @@ function telemetryEvidence(
 }
 
 export function useSecretGuideOperations(): {
+  baselineError: boolean;
+  baselinePending: boolean;
   client: SecretGuideClient;
   clientSelected: boolean;
   downloadedFilename: string | undefined;
@@ -198,6 +202,7 @@ export function useSecretGuideOperations(): {
   installCommand: string | undefined;
   policyError: boolean;
   policyPending: boolean;
+  prepareTelemetryBaseline: () => Promise<boolean>;
   prompt: string;
   retryPolicy: () => void;
   riskEventsHref: string;
@@ -216,6 +221,7 @@ export function useSecretGuideOperations(): {
   const [, setBaseline] = useState<TelemetryBaseline>();
   const baselineRef = useRef<TelemetryBaseline | undefined>(undefined);
   const [baselineError, setBaselineError] = useState(false);
+  const [baselinePending, setBaselinePending] = useState(false);
   const [suppressTelemetryError, setSuppressTelemetryError] = useState(false);
   const startedFor = useRef(new Set<string>());
 
@@ -276,11 +282,11 @@ export function useSecretGuideOperations(): {
     [],
   );
 
-  const captureBaseline = useCallback(async (): Promise<void> => {
-    const capturedAtMs = Date.now();
+  const captureBaseline = useCallback(async (): Promise<boolean> => {
     baselineRef.current = undefined;
     setBaseline(undefined);
     setBaselineError(false);
+    setBaselinePending(true);
     setSuppressTelemetryError(true);
     tracesRequest.listHooksTracesPayload.to = new Date();
     try {
@@ -291,8 +297,9 @@ export function useSecretGuideOperations(): {
       ]);
       if (traces.isError || results.isError || !traces.data || !results.data) {
         setBaselineError(true);
-        return;
+        return false;
       }
+      const capturedAtMs = Date.now();
       const baselineClient = client ?? "claude";
       const nextBaseline = {
         capturedAtMs,
@@ -305,9 +312,12 @@ export function useSecretGuideOperations(): {
       setBaseline(nextBaseline);
       tracesRequest.listHooksTracesPayload.from = new Date(capturedAtMs);
       tracesRequest.listHooksTracesPayload.to = new Date();
+      return true;
     } catch {
       setBaselineError(true);
+      return false;
     } finally {
+      setBaselinePending(false);
       setSuppressTelemetryError(false);
     }
   }, [client, organization.id, resultsQuery, tracesQuery, tracesRequest]);
@@ -343,10 +353,7 @@ export function useSecretGuideOperations(): {
         }
         return;
       }
-      if (signal.type === "checkpoint") {
-        if (signal.scope.step === 3) void captureBaseline();
-        return;
-      }
+      if (signal.type === "checkpoint") return;
       updateActiveOperation({ scope: signal.scope, report, paused: false });
       if (signal.type === "start" && signal.scope.step === 4) {
         report({
@@ -576,6 +583,8 @@ export function useSecretGuideOperations(): {
   const install = installDetails(resolvedClient, downloadedFilename);
 
   return {
+    baselineError,
+    baselinePending,
     client: resolvedClient,
     clientSelected: client !== undefined,
     downloadedFilename,
@@ -583,6 +592,7 @@ export function useSecretGuideOperations(): {
     installCommand: install?.command,
     policyError,
     policyPending,
+    prepareTelemetryBaseline: captureBaseline,
     prompt: SECRET_GUIDE_PROMPT,
     retryPolicy: () => {
       void policiesQuery.refetch();
