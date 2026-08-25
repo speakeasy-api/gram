@@ -1,41 +1,51 @@
 # Shared infra — one copy across ALL git worktrees.
 #
-# The Presidio analyzer is a stateless /analyze HTTP service: it holds no
-# per-worktree state and loads a ~1 GB spaCy model, so running one copy per
-# worktree wasted the most memory of anything in the stack. It lives here under
-# a FIXED project name instead of the per-worktree `COMPOSE_PROJECT_NAME` used
-# by compose.yml.
+# Pub/Sub is stateful, but its fully-qualified resource paths include a project
+# ID. `git:workinit` gives every worktree a unique GRAM_GCP_PROJECT_ID, so one
+# emulator can safely host identical topic and subscription IDs for all trees.
 #
-# The LGTM observability stack lives here for the same reason. It used to be
-# per-worktree, on the grounds that same-commit worktrees emit identical
-# Prometheus series and intermixed traces. That is true only while the signals
-# are indistinguishable — so instead of paying ~560 MB per worktree for a second
-# copy (the single most expensive container in the stack, and the main reason
-# several concurrent worktrees exhausted host memory), every worktree now tags
-# its telemetry with OTEL_RESOURCE_ATTRIBUTES=worktree=$COMPOSE_PROJECT_NAME.
-# `git:workinit` writes that; `mise.toml` holds the main tree's default. Filter
-# by the `worktree` label in Grafana to get one worktree's signals back.
+# Presidio is stateless and expensive to duplicate. LGTM separates intermixed
+# telemetry with OTEL_RESOURCE_ATTRIBUTES=worktree=$COMPOSE_PROJECT_NAME.
+# `git:workinit` writes both worktree dimensions; `mise.toml` holds the main
+# tree defaults.
 #
-# Always manage this file with an explicit fixed project so a worktree's
-# COMPOSE_PROJECT_NAME cannot fork it into a second copy:
+# Always manage this file under its fixed project:
 #
 #   docker compose -f compose.shared.yml -p gram-shared up -d
 #   docker compose -f compose.shared.yml -p gram-shared down
 #
-# The host port is a hardcoded literal, NOT ${PRESIDIO_PORT}. As a single
-# shared singleton it must land on the same fixed host port no matter which
-# worktree starts it — interpolating per-worktree env would let a worktree that
-# still carries a stale PRESIDIO_PORT remap (not yet cleaned by git:worksync)
-# recreate this container republished on a different port, fragmenting the
-# shared stack for everyone else. Keep this literal in sync with PRESIDIO_PORT's
-# default in mise.toml (5050), which is what every worktree's app connects to.
+# Host ports are hardcoded literals, not interpolated per-worktree variables.
+# This prevents a worktree carrying stale remapped ports from republishing a
+# shared container elsewhere and fragmenting the stack. Keep the literals in
+# sync with mise.toml: Pub/Sub 8088, Presidio 5050, LGTM 13000/13200/13100/9099,
+# and OTLP 4317/4318.
 #
-# Bound to 127.0.0.1: Presidio is an unauthenticated PII-analysis service and
-# only ever called by local host processes, so it must not be reachable on the
-# host's external interfaces.
+# Every port is bound to 127.0.0.1. These unauthenticated local development
+# services are consumed only by host processes and must not be externally
+# reachable.
 name: gram-shared
 
 services:
+  pubsub-emulator:
+    image: gcr.io/google.com/cloudsdktool/google-cloud-cli:573.0.0-emulators@sha256:1b083a6a9647024a98d4f38c2b51906a0f61ca36adcba11672b8933544962efe
+    restart: unless-stopped
+    environment:
+      # The emulator is a JVM app launched without -Xmx, so its default maximum
+      # heap is one quarter of the whole Docker VM. This shared local instance
+      # does not need an unbounded multi-gigabyte ceiling.
+      JAVA_TOOL_OPTIONS: -Xmx128m
+    ports:
+      - "127.0.0.1:8088:8085"
+    command:
+      [
+        "gcloud",
+        "beta",
+        "emulators",
+        "pubsub",
+        "start",
+        "--host-port=0.0.0.0:8085",
+      ]
+
   gram-presidio:
     image: mcr.microsoft.com/presidio-analyzer:2.2.362
     restart: unless-stopped

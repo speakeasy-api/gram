@@ -40,6 +40,7 @@ import { checkPort } from "get-port-please";
  */
 const SHARED_PORT_ENV_VARS = new Set([
   "PRESIDIO_PORT",
+  "PUBSUB_EMULATOR_PORT",
   // The LGTM stack is shared too, so every worktree must reach Grafana, Tempo,
   // Loki, Prometheus and the OTLP receivers on the same default host port.
   // OTEL_EXPORTER_OTLP_ENDPOINT is derived from OTLP_GRPC_PORT and is skipped

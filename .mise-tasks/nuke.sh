@@ -4,8 +4,8 @@
 
 set -e
 
-# --keep-shared: leave the shared stack (compose.shared.yml: Presidio) running.
-# Worktree removal passes this — other worktrees depend on the shared services.
+# --keep-shared: leave compose.shared.yml services running. Worktree removal
+# passes this because other worktrees depend on those singletons.
 keep_shared=0
 for arg in "$@"; do
     case "$arg" in
@@ -23,10 +23,9 @@ fi
 
 docker compose --profile "*" down --volumes --remove-orphans
 
-# The shared Presidio analyzer lives under a fixed project (compose.shared.yml).
-# nuke means "destroy all infra", so tear it down too — `./zero` recreates it.
-# Note this affects every worktree that shares it, hence --keep-shared for
-# worktree removal.
+# Shared services live under a fixed project. Nuke means "destroy all infra", so
+# tear them down too; `./zero` recreates them. This affects every worktree,
+# hence --keep-shared for worktree removal.
 if [ "$keep_shared" -eq 0 ]; then
     docker compose -f compose.shared.yml -p gram-shared down --volumes --remove-orphans
 fi
