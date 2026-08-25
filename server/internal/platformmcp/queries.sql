@@ -1284,6 +1284,9 @@ SELECT pg_advisory_xact_lock(
 );
 
 -- name: GetPlatformMCPDistribution :one
+-- This is a neutral desired-state lookup used by inventory and write paths.
+-- Default-only mutations revalidate plugins.is_default in their write queries;
+-- inventory intentionally projects COALESCE(plugin_id, default_plugin_id).
 SELECT distribution.*
 FROM platform_mcp_distributions AS distribution
 JOIN projects AS project
@@ -1301,6 +1304,7 @@ INSERT INTO platform_mcp_distributions (
     project_id,
     registration_id,
     default_plugin_id,
+    plugin_id,
     plugin_server_id,
     state,
     version,
@@ -1312,6 +1316,7 @@ SELECT
     @organization_id,
     @project_id,
     @registration_id,
+    @default_plugin_id,
     @default_plugin_id,
     @plugin_server_id,
     @state,
@@ -1346,7 +1351,8 @@ RETURNING *;
 
 -- name: UpdatePlatformMCPDistribution :one
 UPDATE platform_mcp_distributions
-SET plugin_server_id = @plugin_server_id,
+SET plugin_id = @default_plugin_id,
+    plugin_server_id = @plugin_server_id,
     state = @state,
     version = @version,
     attachment_was_created = @attachment_was_created,
@@ -1422,6 +1428,8 @@ WHERE platform_mcp_distributions.id = @id
 RETURNING *;
 
 -- name: HasPlatformMCPSelectedUseEvidence :one
+-- Selected-use credit remains Default-only until the exact-plugin contract is
+-- live, so a future named distribution cannot produce onboarding evidence.
 SELECT EXISTS (
     SELECT 1
     FROM platform_mcp_selected_use_evidence AS evidence
@@ -1431,11 +1439,17 @@ SELECT EXISTS (
      AND distribution.registration_id = evidence.registration_id
      AND distribution.version = evidence.distribution_version
      AND distribution.state = 'attached'
-    JOIN projects AS project
-      ON project.id = distribution.project_id
-     AND project.organization_id = distribution.organization_id
-     AND project.deleted IS FALSE
-    JOIN platform_mcp_connections AS connection
+     JOIN projects AS project
+       ON project.id = distribution.project_id
+      AND project.organization_id = distribution.organization_id
+      AND project.deleted IS FALSE
+     JOIN plugins AS plugin
+       ON plugin.id = COALESCE(distribution.plugin_id, distribution.default_plugin_id)
+      AND plugin.organization_id = distribution.organization_id
+      AND plugin.project_id = distribution.project_id
+      AND plugin.is_default IS TRUE
+      AND plugin.deleted IS FALSE
+     JOIN platform_mcp_connections AS connection
       ON connection.id = distribution.connection_id
      AND connection.organization_id = distribution.organization_id
      AND connection.active_generation = distribution.connection_generation
@@ -1447,6 +1461,8 @@ SELECT EXISTS (
 );
 
 -- name: GetPlatformMCPSelectedUseTarget :one
+-- Resolve a target only through the literal Default plugin during the
+-- compatibility rollout. Named-plugin rows remain excluded from selected use.
 SELECT
     distribution.id AS distribution_id,
     distribution.version AS distribution_version,
@@ -1461,12 +1477,18 @@ JOIN projects AS project
   ON project.id = distribution.project_id
  AND project.organization_id = distribution.organization_id
  AND project.deleted IS FALSE
-JOIN platform_mcp_catalog_registrations AS registration
-  ON registration.id = distribution.registration_id
- AND registration.project_id = distribution.project_id
- AND registration.organization_id = distribution.organization_id
- AND registration.deleted IS FALSE
-JOIN plugin_servers AS plugin_server
+ JOIN platform_mcp_catalog_registrations AS registration
+   ON registration.id = distribution.registration_id
+  AND registration.project_id = distribution.project_id
+  AND registration.organization_id = distribution.organization_id
+  AND registration.deleted IS FALSE
+ JOIN plugins AS plugin
+   ON plugin.id = COALESCE(distribution.plugin_id, distribution.default_plugin_id)
+  AND plugin.organization_id = distribution.organization_id
+  AND plugin.project_id = distribution.project_id
+  AND plugin.is_default IS TRUE
+  AND plugin.deleted IS FALSE
+ JOIN plugin_servers AS plugin_server
   ON plugin_server.id = distribution.plugin_server_id
   AND plugin_server.plugin_id = distribution.default_plugin_id
   AND plugin_server.deleted IS FALSE
@@ -1665,6 +1687,8 @@ WHERE workflow.organization_id = @organization_id
   AND registration.mcp_server_id IS NOT NULL;
 
 -- name: HasPlatformMCPOrganizationSetupComplete :one
+-- Default-only setup completion must not be satisfied by a future named-plugin
+-- row. A missing or no-longer-Default plugin therefore correctly does not count.
 SELECT EXISTS (
     SELECT 1
     FROM platform_mcp_onboarding_milestones AS milestone
@@ -1673,16 +1697,24 @@ SELECT EXISTS (
     UNION ALL
     SELECT 1
     FROM platform_mcp_distributions AS distribution
-    JOIN platform_mcp_catalog_registrations AS registration
-      ON registration.id = distribution.registration_id
-     AND registration.organization_id = distribution.organization_id
-     AND registration.project_id = distribution.project_id
-     AND registration.deleted IS FALSE
-    WHERE distribution.organization_id = @organization_id
-      AND distribution.state = 'attached'
+     JOIN platform_mcp_catalog_registrations AS registration
+       ON registration.id = distribution.registration_id
+      AND registration.organization_id = distribution.organization_id
+      AND registration.project_id = distribution.project_id
+      AND registration.deleted IS FALSE
+     JOIN plugins AS plugin
+       ON plugin.id = COALESCE(distribution.plugin_id, distribution.default_plugin_id)
+      AND plugin.organization_id = distribution.organization_id
+      AND plugin.project_id = distribution.project_id
+      AND plugin.is_default IS TRUE
+      AND plugin.deleted IS FALSE
+     WHERE distribution.organization_id = @organization_id
+       AND distribution.state = 'attached'
 ) AS setup_complete;
 
 -- name: HasAttachedPlatformMCPOnboardingDistributionForProject :one
+-- This is intentionally Default-only during the compatibility rollout; named
+-- rows added by a later release must not satisfy onboarding distribution.
 SELECT EXISTS (
     SELECT 1
     FROM platform_mcp_distributions AS distribution
@@ -1691,13 +1723,19 @@ SELECT EXISTS (
      AND registration.organization_id = distribution.organization_id
      AND registration.project_id = distribution.project_id
      AND registration.deleted IS FALSE
-    JOIN projects AS project
-      ON project.id = distribution.project_id
-     AND project.organization_id = distribution.organization_id
-     AND project.deleted IS FALSE
-    WHERE distribution.organization_id = @organization_id
-      AND distribution.project_id = @project_id
-      AND distribution.state = 'attached'
+     JOIN projects AS project
+       ON project.id = distribution.project_id
+      AND project.organization_id = distribution.organization_id
+      AND project.deleted IS FALSE
+     JOIN plugins AS plugin
+       ON plugin.id = COALESCE(distribution.plugin_id, distribution.default_plugin_id)
+      AND plugin.organization_id = distribution.organization_id
+      AND plugin.project_id = distribution.project_id
+      AND plugin.is_default IS TRUE
+      AND plugin.deleted IS FALSE
+     WHERE distribution.organization_id = @organization_id
+       AND distribution.project_id = @project_id
+       AND distribution.state = 'attached'
       AND registration.status = 'registered'
       AND registration.mcp_server_id IS NOT NULL
 );

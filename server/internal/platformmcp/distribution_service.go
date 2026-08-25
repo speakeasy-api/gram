@@ -521,7 +521,7 @@ func persistDistribution(ctx context.Context, q *repo.Queries, existing repo.Pla
 		OrganizationID:       input.organizationID,
 		ProjectID:            input.projectID,
 		RegistrationID:       input.registrationID,
-		DefaultPluginID:      input.defaultPluginID,
+		DefaultPluginID:      uuid.NullUUID{UUID: input.defaultPluginID, Valid: true},
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return repo.PlatformMcpDistribution{}, ErrDistributionTargetUnavailable
