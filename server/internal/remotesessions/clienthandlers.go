@@ -31,11 +31,9 @@ import (
 // active remote_session_client is bound to a given (user_session_issuer,
 // remote_session_issuer) pair through the join table. It scopes the
 // constraint per remote_session_issuer, so a user_session_issuer can bind
-// distinct clients across distinct remote issuers; the
-// remote_session_client_user_session_issuers one_per_issuer index applies a
-// stricter cap (one client per user_session_issuer regardless of remote
-// issuer) until AIS-137 removes it, after which this guard is the sole
-// attach-time enforcement.
+// distinct clients across distinct remote issuers. The old one_per_issuer
+// index (one client per user_session_issuer regardless of remote issuer) was
+// dropped by AIS-137; this guard is the sole attach-time enforcement.
 //
 // excludeClientID skips a row so an update of the same client passes; pass
 // uuid.Nil to exclude nothing (the create paths). Must run inside the attach

@@ -634,6 +634,179 @@ func seedRefreshableSharedGrant(t *testing.T, slug string, handler http.HandlerF
 	}
 }
 
+// A session with no persisted resource must refresh with the client's own
+// derived RFC 8707 resource, never an endpoint-level one.
+func TestRefreshRemoteSession_DerivesPerClientFallbackResource(t *testing.T) {
+	t.Parallel()
+
+	var refreshCount atomic.Int64
+	var captured atomic.Value
+	ctx, fx := seedRefreshableSharedGrant(t, "age-3328-refresh-res", newResourceCapturingRefreshHandler(&refreshCount, &captured, "rotated-with-resource"))
+
+	// The client's sole attached MCP server pins its derived resource.
+	attachRemoteMcpServerToIssuer(t, ctx, fx.ti.conn, fx.projectID, fx.issuerA, "age-3328-refresh-res", "https://upstream-refresh.example.com/")
+
+	result, err := fx.mgr.RefreshRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID)
+	require.NoError(t, err)
+	require.Equal(t, remotesessions.RefreshOutcomeRefreshed, result.Outcome)
+	require.Equal(t, int64(1), refreshCount.Load())
+	require.Equal(t, tokenPostCapture{HasResource: true, Resource: "https://upstream-refresh.example.com"}, captured.Load())
+}
+
+// The lazy request-time path must also derive per client, never an
+// endpoint-level fallback (AGE-3328): a NULL-resource row refreshed via
+// ResolveAccessTokens sends the client's own derived resource upstream.
+func TestResolveAccessTokens_DerivesPerClientFallbackResource(t *testing.T) {
+	t.Parallel()
+
+	var refreshCount atomic.Int64
+	var captured atomic.Value
+	ctx, fx := seedRefreshableSharedGrant(t, "age-3328-lazy-res", newResourceCapturingRefreshHandler(&refreshCount, &captured, "rotated-lazy-resource"))
+
+	attachRemoteMcpServerToIssuer(t, ctx, fx.ti.conn, fx.projectID, fx.issuerA, "age-3328-lazy-res", "https://upstream-lazy.example.com/")
+	require.NoError(t, testrepo.New(fx.ti.conn).ExpireRemoteSessionAccessTokenFixture(ctx, fx.session.ID))
+
+	tokens, err := fx.mgr.ResolveAccessTokens(ctx, fx.projectID, fx.organizationID, fx.issuerB, fx.subject)
+	require.NoError(t, err)
+	require.Len(t, tokens, 1)
+	require.Equal(t, int64(1), refreshCount.Load())
+	require.Equal(t, tokenPostCapture{HasResource: true, Resource: "https://upstream-lazy.example.com"}, captured.Load())
+}
+
+// tokenPostCapture is the resource param of the last refresh POST; presence
+// matters separately from value (RFC 8707 omits the param when absent).
+type tokenPostCapture struct {
+	HasResource bool
+	Resource    string
+}
+
+// newResourceCapturingRefreshHandler wraps newSharedGrantRefreshHandler and
+// records whether/what `resource` the refresh POST carried.
+func newResourceCapturingRefreshHandler(refreshCount *atomic.Int64, captured *atomic.Value, accessToken string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && r.URL.Path == "/token" && r.ParseForm() == nil {
+			_, has := r.PostForm["resource"]
+			captured.Store(tokenPostCapture{HasResource: has, Resource: r.PostForm.Get("resource")})
+		}
+		newSharedGrantRefreshHandler(refreshCount, accessToken)(w, r)
+	}
+}
+
+// setStoredSessionResource stamps a persisted RFC 8707 resource onto the
+// fixture's session via the same upsert the code-exchange callback uses.
+func setStoredSessionResource(t *testing.T, ctx context.Context, fx sharedGrantFixture, resource string) {
+	t.Helper()
+	_, err := repo.New(fx.ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+		SubjectUrn:             fx.subject,
+		UserSessionIssuerID:    fx.session.UserSessionIssuerID,
+		RemoteSessionClientID:  fx.clientID,
+		AccessTokenEncrypted:   fx.session.AccessTokenEncrypted,
+		AccessExpiresAt:        fx.session.AccessExpiresAt,
+		RefreshTokenEncrypted:  fx.session.RefreshTokenEncrypted,
+		AuthorizationExpiresAt: fx.session.AuthorizationExpiresAt,
+		RefreshExpiresAt:       fx.session.RefreshExpiresAt,
+		Scopes:                 fx.session.Scopes,
+		Resource:               conv.ToPGText(resource),
+		AutoRefresh:            fx.session.AutoRefresh,
+	})
+	require.NoError(t, err)
+}
+
+// A persisted resource wins on explicit refresh: no derivation replaces it,
+// even when the client's attached MCP server would derive something else.
+func TestRefreshRemoteSession_StoredResourceWinsOverDerivation(t *testing.T) {
+	t.Parallel()
+
+	var refreshCount atomic.Int64
+	var captured atomic.Value
+	ctx, fx := seedRefreshableSharedGrant(t, "age-3328-stored-res", newResourceCapturingRefreshHandler(&refreshCount, &captured, "rotated-stored"))
+
+	attachRemoteMcpServerToIssuer(t, ctx, fx.ti.conn, fx.projectID, fx.issuerA, "age-3328-stored-res", "https://derived-loser.example.com/")
+	setStoredSessionResource(t, ctx, fx, "https://stored-winner.example.com")
+
+	result, err := fx.mgr.RefreshRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID)
+	require.NoError(t, err)
+	require.Equal(t, remotesessions.RefreshOutcomeRefreshed, result.Outcome)
+	require.Equal(t, tokenPostCapture{HasResource: true, Resource: "https://stored-winner.example.com"}, captured.Load())
+}
+
+// NULL stored resource + ambiguous derivation (two attached upstreams with
+// distinct URLs) must POST no resource param at all on explicit refresh.
+func TestRefreshRemoteSession_AmbiguousDerivationSendsNoResource(t *testing.T) {
+	t.Parallel()
+
+	var refreshCount atomic.Int64
+	var captured atomic.Value
+	ctx, fx := seedRefreshableSharedGrant(t, "age-3328-amb-refresh", newResourceCapturingRefreshHandler(&refreshCount, &captured, "rotated-ambiguous"))
+
+	attachRemoteMcpServerToIssuer(t, ctx, fx.ti.conn, fx.projectID, fx.issuerA, "age-3328-amb-refresh-1", "https://amb-one.example.com")
+	attachRemoteMcpServerToIssuer(t, ctx, fx.ti.conn, fx.projectID, fx.issuerB, "age-3328-amb-refresh-2", "https://amb-two.example.com")
+
+	result, err := fx.mgr.RefreshRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID)
+	require.NoError(t, err)
+	require.Equal(t, remotesessions.RefreshOutcomeRefreshed, result.Outcome)
+	require.Equal(t, tokenPostCapture{HasResource: false, Resource: ""}, captured.Load())
+}
+
+// The lazy request-time path uses a persisted resource as-is: derivation
+// never overrides it and the resolved entry reports the stored value.
+func TestResolveAccessTokens_StoredResourceWinsOverDerivation(t *testing.T) {
+	t.Parallel()
+
+	var refreshCount atomic.Int64
+	var captured atomic.Value
+	ctx, fx := seedRefreshableSharedGrant(t, "age-3328-lazy-stored", newResourceCapturingRefreshHandler(&refreshCount, &captured, "rotated-lazy-stored"))
+
+	attachRemoteMcpServerToIssuer(t, ctx, fx.ti.conn, fx.projectID, fx.issuerA, "age-3328-lazy-stored", "https://derived-loser.example.com/")
+	setStoredSessionResource(t, ctx, fx, "https://stored-lazy.example.com")
+	require.NoError(t, testrepo.New(fx.ti.conn).ExpireRemoteSessionAccessTokenFixture(ctx, fx.session.ID))
+
+	tokens, err := fx.mgr.ResolveAccessTokens(ctx, fx.projectID, fx.organizationID, fx.issuerB, fx.subject)
+	require.NoError(t, err)
+	require.Len(t, tokens, 1)
+	require.Equal(t, tokenPostCapture{HasResource: true, Resource: "https://stored-lazy.example.com"}, captured.Load())
+	for _, tok := range tokens {
+		require.Equal(t, "https://stored-lazy.example.com", tok.Resource)
+	}
+}
+
+// Lazy path, NULL stored resource, ambiguous derivation: the refresh POST
+// must carry no resource param.
+func TestResolveAccessTokens_AmbiguousDerivationSendsNoResource(t *testing.T) {
+	t.Parallel()
+
+	var refreshCount atomic.Int64
+	var captured atomic.Value
+	ctx, fx := seedRefreshableSharedGrant(t, "age-3328-lazy-amb", newResourceCapturingRefreshHandler(&refreshCount, &captured, "rotated-lazy-ambiguous"))
+
+	attachRemoteMcpServerToIssuer(t, ctx, fx.ti.conn, fx.projectID, fx.issuerA, "age-3328-lazy-amb-1", "https://amb-one.example.com")
+	attachRemoteMcpServerToIssuer(t, ctx, fx.ti.conn, fx.projectID, fx.issuerB, "age-3328-lazy-amb-2", "https://amb-two.example.com")
+	require.NoError(t, testrepo.New(fx.ti.conn).ExpireRemoteSessionAccessTokenFixture(ctx, fx.session.ID))
+
+	tokens, err := fx.mgr.ResolveAccessTokens(ctx, fx.projectID, fx.organizationID, fx.issuerB, fx.subject)
+	require.NoError(t, err)
+	require.Len(t, tokens, 1)
+	require.Equal(t, tokenPostCapture{HasResource: false, Resource: ""}, captured.Load())
+}
+
+// A caller-supplied non-empty fallback (the platform ResolveAccessToken /
+// ResolveAuthorization path) wins over derivation on a NULL-resource row.
+func TestResolveAccessToken_ExplicitFallbackSkipsDerivation(t *testing.T) {
+	t.Parallel()
+
+	var refreshCount atomic.Int64
+	var captured atomic.Value
+	ctx, fx := seedRefreshableSharedGrant(t, "age-3328-explicit-fb", newResourceCapturingRefreshHandler(&refreshCount, &captured, "rotated-explicit-fb"))
+
+	attachRemoteMcpServerToIssuer(t, ctx, fx.ti.conn, fx.projectID, fx.issuerA, "age-3328-explicit-fb", "https://derived-unused.example.com/")
+	require.NoError(t, testrepo.New(fx.ti.conn).ExpireRemoteSessionAccessTokenFixture(ctx, fx.session.ID))
+
+	token, err := fx.mgr.ResolveAccessToken(ctx, fx.clientID, fx.subject, "https://caller-fallback.example.com")
+	require.NoError(t, err)
+	require.Equal(t, "rotated-explicit-fb", token)
+	require.Equal(t, tokenPostCapture{HasResource: true, Resource: "https://caller-fallback.example.com"}, captured.Load())
+}
+
 func TestRefreshRemoteSession_FindsGrantMintedByDifferentIssuer(t *testing.T) {
 	t.Parallel()
 
@@ -643,7 +816,7 @@ func TestRefreshRemoteSession_FindsGrantMintedByDifferentIssuer(t *testing.T) {
 	bound := listBoundClientIDs(t, ctx, fx, fx.issuerB)
 	requireBoundClient(t, bound, fx.clientID)
 
-	result, err := fx.mgr.RefreshRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID, "")
+	result, err := fx.mgr.RefreshRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID)
 	require.NoError(t, err)
 	require.Equal(t, remotesessions.RefreshOutcomeRefreshed, result.Outcome)
 	require.Equal(t, "rotated-access", result.AccessToken)
@@ -665,7 +838,7 @@ func TestRefreshRemoteSession_FindsGrantAfterMintingIssuerSoftDeleted(t *testing
 	bound := listBoundClientIDs(t, ctx, fx, fx.issuerB)
 	requireBoundClient(t, bound, fx.clientID)
 
-	result, err := fx.mgr.RefreshRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID, "")
+	result, err := fx.mgr.RefreshRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID)
 	require.NoError(t, err)
 	require.Equal(t, remotesessions.RefreshOutcomeRefreshed, result.Outcome)
 	require.Equal(t, "rotated-after-delete", result.AccessToken)

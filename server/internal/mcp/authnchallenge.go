@@ -494,7 +494,7 @@ func (s *Service) ApplyIssuerGate(
 	// user resolves by re-linking via {routeBase}/{slug}/connect.
 	var upstreamTokens map[uuid.UUID]remotesessions.UpstreamToken
 	if subject != nil {
-		tokens, rerr := s.remoteChallengeMgr.ResolveAccessTokens(newCtx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, *subject, endpoint.UpstreamResource)
+		tokens, rerr := s.remoteChallengeMgr.ResolveAccessTokens(newCtx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, *subject)
 		switch {
 		case errors.Is(rerr, remotesessions.ErrNoValidToken):
 			// The Gram user-session token is valid, but a required upstream

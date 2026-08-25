@@ -131,7 +131,7 @@ func TestMigrateToGlobalIssuer_PreservesRemoteSessionWithoutReauth(t *testing.T)
 	})
 	require.NoError(t, err)
 
-	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject, "")
+	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
 	require.NoError(t, err)
 	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{sourceUUID: {Token: "upstream-access-token", Resource: "", RemoteSessionClientID: clientUUID}}, tokens)
 
@@ -143,7 +143,7 @@ func TestMigrateToGlobalIssuer_PreservesRemoteSessionWithoutReauth(t *testing.T)
 
 	// The same token value resolves, now keyed by the platform issuer. Only the
 	// client's foreign key moved.
-	tokens, err = mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject, "")
+	tokens, err = mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
 	require.NoError(t, err)
 	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{targetID: {Token: "upstream-access-token", Resource: "", RemoteSessionClientID: clientUUID}}, tokens)
 

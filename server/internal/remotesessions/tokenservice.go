@@ -345,7 +345,6 @@ func (m *ChallengeManager) ResolveAccessTokens(
 	organizationID string,
 	userSessionIssuerID uuid.UUID,
 	subject urn.SessionSubject,
-	resource string,
 ) (map[uuid.UUID]UpstreamToken, error) {
 	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID)
 	if err != nil {
@@ -376,7 +375,9 @@ func (m *ChallengeManager) ResolveAccessTokens(
 		// the same row load that produced the token, so a disconnect+reconnect
 		// between two reads can never pair an old token with a new row's
 		// resource.
-		resolved, err := m.resolveUpstreamToken(ctx, c.ClientID, subject, resource)
+		// No endpoint-level fallback: a refresh of a legacy NULL-resource row
+		// derives the client's own resource in RefreshNow.
+		resolved, err := m.resolveUpstreamToken(ctx, c.ClientID, subject, "")
 		if err != nil {
 			return nil, fmt.Errorf("resolve access token: %w", err)
 		}
