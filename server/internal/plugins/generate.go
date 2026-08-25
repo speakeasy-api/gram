@@ -633,6 +633,9 @@ func generateHooksFiles(cfg GenerateConfig) (map[string][]byte, error) {
 	if err := generateOpenCodeObservabilityPlugin(files, cfg); err != nil {
 		return nil, fmt.Errorf("generate opencode observability plugin: %w", err)
 	}
+	if err := generateOpenClawObservabilityPlugin(files, cfg); err != nil {
+		return nil, fmt.Errorf("generate openclaw observability plugin: %w", err)
+	}
 	return files, nil
 }
 
@@ -1190,6 +1193,9 @@ func CodexObservabilitySlug(cfg GenerateConfig) string {
 func OpenCodeObservabilitySlug(cfg GenerateConfig) string {
 	return conv.ToSlug(conv.Default(cfg.HooksOrgName, cfg.OrgName)) + "-observability-opencode"
 }
+func OpenClawObservabilitySlug(cfg GenerateConfig) string {
+	return conv.ToSlug(conv.Default(cfg.HooksOrgName, cfg.OrgName)) + "-observability-openclaw"
+}
 
 // hooksSubtreePrefixes returns the repo directory prefixes the hooks
 // (observability) subtree occupies for a given org name — every hooks
@@ -1204,6 +1210,17 @@ func hooksSubtreePrefixes(orgName string) []string {
 		cursorPluginRoot + "/" + conv.ToSlug(orgName) + "-observability-cursor/",
 		conv.ToSlug(orgName) + "-observability-codex/",
 		conv.ToSlug(orgName) + "-observability-opencode/",
+	}
+}
+
+// hooksOptionalSubtreePrefixes lists hooks subtrees added after repos were
+// first published: a published repo that predates the platform legitimately
+// lacks its directory, so the carry copies these when present but must not
+// fail (and force a regeneration past the rollout gate) when absent. The
+// platform reaches such orgs with their next hooks version bump.
+func hooksOptionalSubtreePrefixes(orgName string) []string {
+	return []string{
+		conv.ToSlug(orgName) + "-observability-openclaw/",
 	}
 }
 
@@ -1650,6 +1667,209 @@ export const SpeakeasyObservability = async (ctx: any) => {
 export default SpeakeasyObservability
 `
 
+// generateOpenClawObservabilityPlugin renders the native OpenClaw plugin
+// package: openclaw.plugin.json + package.json (whose openclaw.extensions
+// entry is what `openclaw plugins install` keys plugin detection on) + a
+// plain-JS index.js shim (package installs reject TypeScript entries). The
+// customer installs the directory with `openclaw plugins install <dir>`,
+// restarts the Gateway, and sets
+// plugins.entries.speakeasy-observability.hooks.allowConversationAccess: true
+// so the conversation-scope hooks (before_agent_run, llm_output, agent_end)
+// fire.
+func generateOpenClawObservabilityPlugin(files map[string][]byte, cfg GenerateConfig) error {
+	return generateOpenClawObservabilityPluginInDir(files, OpenClawObservabilitySlug(cfg), cfg)
+}
+
+func generateOpenClawObservabilityPluginFlat(files map[string][]byte, cfg GenerateConfig) error {
+	return generateOpenClawObservabilityPluginInDir(files, "", cfg)
+}
+
+func generateOpenClawObservabilityPluginInDir(files map[string][]byte, subdir string, cfg GenerateConfig) error {
+	manifest, err := json.MarshalIndent(map[string]any{
+		"id":          "speakeasy-observability",
+		"name":        "Speakeasy Observability",
+		"description": "Speakeasy observability hooks for OpenClaw.",
+		"version":     "0.0.0",
+		"configSchema": map[string]any{
+			"type":                 "object",
+			"additionalProperties": false,
+			"properties":           map[string]any{},
+		},
+		"activation": map[string]any{"onStartup": true},
+	}, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal openclaw plugin manifest: %w", err)
+	}
+	pkg, err := json.MarshalIndent(map[string]any{
+		"name":     "openclaw-plugin-speakeasy-observability",
+		"version":  "0.0.0",
+		"type":     "module",
+		"private":  true,
+		"openclaw": map[string]any{"extensions": []string{"./index.js"}},
+	}, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal openclaw package.json: %w", err)
+	}
+	files[path.Join(subdir, "openclaw.plugin.json")] = append(manifest, '\n')
+	files[path.Join(subdir, "package.json")] = append(pkg, '\n')
+	files[path.Join(subdir, "index.js")] = []byte(openclawObservabilityShim)
+	if err := writeHooksRuntimeFiles(files, subdir, cfg); err != nil {
+		return err
+	}
+	// The shim picks the PowerShell bootstrapper on Windows (the spawn
+	// decision lives in the shim, as with OpenCode).
+	files[path.Join(subdir, "hooks/bootstrap.ps1")] = renderHooksPowerShellBootstrap(cfg)
+	return nil
+}
+
+// openclawObservabilityShim is the OpenClaw plugin module. It carries no
+// org-specific values — deployment identity rides in the sibling
+// speakeasy.json — and resolves every path relative to its own location. The
+// body mirrors agenthooks' canonical OpenClaw shim (install/render_openclaw.go):
+// frames {seq, hook, event, ctx} -> {seq, output?}, where output is returned
+// verbatim as the hook handler's return value ({block, blockReason} on
+// before_tool_call, the {outcome: "block"} gate decision on
+// before_agent_run). Gating hooks await the reply under shim-owned deadlines
+// (OpenClaw applies no default hook timeout — agenthooks quirk #36); gate
+// frames carry timeoutMs so the daemon stops working when the shim gives up;
+// a fail-closed local block is reported back via a gate_timeout frame so the
+// denied call's after_tool_call still decodes as blocked (quirk #37); the
+// cached llm_output is spliced into agent_end (which natively carries no
+// final message or usage); and gateway_* contexts are sanitized because the
+// raw ones include the full Gateway config with auth secrets.
+const openclawObservabilityShim = `// Generated by Speakeasy. Proxies OpenClaw typed plugin hooks to the
+// Speakeasy hooks binary over NDJSON stdio (agenthooks serve
+// --provider=openclaw). Plain JavaScript: OpenClaw package installs reject
+// TypeScript entry modules.
+import { spawn } from "node:child_process"
+import { createInterface } from "node:readline"
+import { fileURLToPath } from "node:url"
+import { dirname, join } from "node:path"
+
+const ROOT = dirname(fileURLToPath(import.meta.url))
+const SERVE_ARGS = ["agenthooks", "serve", "--provider=openclaw", "--timeout=60s", "--config=" + join(ROOT, "speakeasy.json")]
+const COMMAND =
+  process.platform === "win32"
+    ? ["powershell.exe", "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", join(ROOT, "hooks", "bootstrap.ps1"), ...SERVE_ARGS]
+    : ["bash", join(ROOT, "hooks", "bootstrap.sh"), ...SERVE_ARGS]
+const HOOKS = ["before_tool_call", "after_tool_call", "before_agent_run", "session_start", "session_end", "agent_end", "llm_output", "gateway_start", "gateway_stop"]
+const GATE_TIMEOUT_MS = { before_tool_call: 60000, before_agent_run: 60000 }
+const DEFAULT_TIMEOUT_MS = 30000
+// The relay resolves the org's fail-open posture in-process; shim-level
+// fail-closed covers the binary being unavailable (mirrors cursor failClosed).
+const FAIL_CLOSED = true
+
+export default {
+  id: "speakeasy-observability",
+  name: "Speakeasy Observability",
+  description: "Speakeasy observability hooks for OpenClaw.",
+  register(api) {
+    const child = spawn(COMMAND[0], [...COMMAND.slice(1)], {
+      stdio: ["pipe", "pipe", "inherit"],
+    })
+    let seq = 0
+    const pending = new Map()
+    // agent_end carries no final message or usage; cache the turn's
+    // llm_output and splice it into the agent_end frame.
+    const llmByRun = new Map()
+
+    createInterface({ input: child.stdout }).on("line", (line) => {
+      if (!line.trim()) return
+      let reply
+      try {
+        reply = JSON.parse(line)
+      } catch {
+        return
+      }
+      const resolve = pending.get(reply.seq)
+      if (!resolve) return
+      pending.delete(reply.seq)
+      resolve(reply)
+    })
+    child.on("exit", () => {
+      // An exited consumer cannot evaluate gates: resolve as timed out so
+      // FAIL_CLOSED applies instead of silently allowing.
+      for (const [, resolve] of pending) resolve({ timedOut: true })
+      pending.clear()
+    })
+
+    const call = (hook, event, ctx, timeoutMs) => {
+      if (child.exitCode !== null || !child.stdin?.writable) {
+        return Promise.resolve({ timedOut: true })
+      }
+      const id = ++seq
+      // Gate frames carry the shim deadline so the daemon can stop working
+      // as soon as the shim gives up (observe frames omit it).
+      const frame = { seq: id, hook, event, ctx }
+      if (timeoutMs !== undefined) frame.timeoutMs = timeoutMs
+      child.stdin.write(JSON.stringify(frame) + "\n")
+      return new Promise((resolve) => {
+        pending.set(id, resolve)
+        const timer = setTimeout(() => {
+          if (pending.delete(id)) resolve({ timedOut: true })
+        }, timeoutMs ?? DEFAULT_TIMEOUT_MS)
+        if (typeof timer.unref === "function") timer.unref()
+      })
+    }
+
+    const sanitizeCtx = (hook, ctx) => {
+      if (hook !== "gateway_start" && hook !== "gateway_stop") return ctx
+      // Gateway hooks hand plugins the full config including auth secrets;
+      // never forward it.
+      return { port: ctx?.port, workspaceDir: ctx?.workspaceDir }
+    }
+
+    const failClosedResult = (hook, event) => {
+      const reason = "Speakeasy hooks are unavailable (fail-closed)"
+      if (hook === "before_agent_run") {
+        return { outcome: "block", reason }
+      }
+      // Tell the daemon this call was blocked locally so its after_tool_call
+      // sibling still decodes as blocked rather than a successful completion.
+      if (event?.toolCallId) {
+        void call("gate_timeout", { toolCallId: event.toolCallId, reason }, null)
+      }
+      return { block: true, blockReason: reason }
+    }
+
+    for (const hook of HOOKS) {
+      const gateTimeoutMs = GATE_TIMEOUT_MS[hook]
+      api.on(hook, (event, ctx) => {
+        if (hook === "llm_output") {
+          const texts = Array.isArray(event?.assistantTexts) ? event.assistantTexts : []
+          const key = event?.runId ?? event?.sessionId ?? ""
+          llmByRun.set(key, { finalMessage: texts.join("\n") || undefined, usage: event?.usage })
+          void call(hook, event, sanitizeCtx(hook, ctx))
+          return
+        }
+        if (hook === "agent_end") {
+          const cached = llmByRun.get(event?.runId ?? "") ?? llmByRun.get(ctx?.sessionId ?? "")
+          if (event?.runId) llmByRun.delete(event.runId)
+          const spliced = cached ? { ...event, finalMessage: cached.finalMessage, usage: cached.usage } : event
+          void call(hook, spliced, sanitizeCtx(hook, ctx))
+          return
+        }
+        if (gateTimeoutMs === undefined) {
+          void call(hook, event, sanitizeCtx(hook, ctx))
+          return
+        }
+        return call(hook, event, sanitizeCtx(hook, ctx), gateTimeoutMs).then((reply) => {
+          if (reply?.timedOut && FAIL_CLOSED) return failClosedResult(hook, event)
+          return reply?.output
+        })
+      })
+    }
+
+    api.on("gateway_stop", () => {
+      try {
+        child.stdin.end()
+        child.kill()
+      } catch {}
+    })
+  },
+}
+`
+
 // GenerateObservabilityPluginPackage produces the file map for a single
 // observability plugin for direct ZIP installation (no <org>-observability/
 // subdir). Minting a fresh hooks key is the caller's responsibility — this
@@ -1672,6 +1892,10 @@ func GenerateObservabilityPluginPackage(cfg GenerateConfig, platform string) (ma
 	case "opencode":
 		if err := generateOpenCodeObservabilityPluginFlat(files, cfg); err != nil {
 			return nil, fmt.Errorf("generate opencode observability plugin: %w", err)
+		}
+	case "openclaw":
+		if err := generateOpenClawObservabilityPluginFlat(files, cfg); err != nil {
+			return nil, fmt.Errorf("generate openclaw observability plugin: %w", err)
 		}
 	default:
 		return nil, fmt.Errorf("unsupported platform: %s", platform)

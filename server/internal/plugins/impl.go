@@ -1457,6 +1457,8 @@ func (s *Service) DownloadObservabilityPlugin(ctx context.Context, payload *gen.
 		filename = "observability-codex"
 	case "opencode":
 		filename = "observability-opencode"
+	case "openclaw":
+		filename = "observability-openclaw"
 	}
 	return &gen.DownloadObservabilityPluginResult{
 		ContentType:        "application/zip",
@@ -2837,6 +2839,16 @@ func carryHooksSubtree(dst, existing map[string][]byte, publishedConfig []byte, 
 		}
 		if !found {
 			return "", false
+		}
+	}
+	// Platforms added after the repo was published are carried when present
+	// but never fail the carry: their absence is the published version's
+	// legitimate state, not a broken subtree.
+	for _, prefix := range hooksOptionalSubtreePrefixes(orgName) {
+		for p, content := range existing {
+			if strings.HasPrefix(p, prefix) {
+				staged[p] = content
+			}
 		}
 	}
 	maps.Copy(dst, staged)
