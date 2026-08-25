@@ -345,6 +345,9 @@ const (
 	// OAuthAssertionExpiresAtKey records a verified client assertion's expiry.
 	OAuthAssertionExpiresAtKey = attribute.Key("gram.oauth.assertion_expires_at")
 
+	// OAuthDeclaredAuthMethodKey records the token_endpoint_auth_method a client metadata document declares.
+	OAuthDeclaredAuthMethodKey = attribute.Key("gram.oauth.declared_auth_method")
+
 	OAuthPresentedAuthMethodKey = attribute.Key("gram.oauth.presented_auth_method")
 	// OAuthResourceKey is the RFC 8707 resource indicator sent to an
 	// upstream authorization server during the remote-session dance.
@@ -1428,6 +1431,9 @@ func OAuthPresentedAuthMethod(v string) attribute.KeyValue {
 }
 func SlogOAuthPresentedAuthMethod(v string) slog.Attr {
 	return slog.String(string(OAuthPresentedAuthMethodKey), v)
+}
+func SlogOAuthDeclaredAuthMethod(v string) slog.Attr {
+	return slog.String(string(OAuthDeclaredAuthMethodKey), v)
 }
 func SlogOAuthAssertionAudience(v string) slog.Attr {
 	return slog.String(string(OAuthAssertionAudienceKey), v)

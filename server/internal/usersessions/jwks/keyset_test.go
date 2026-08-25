@@ -19,6 +19,57 @@ func TestValidatePublicOnly_PublicKeysAccepted(t *testing.T) {
 	require.NoError(t, ValidatePublicOnly(keySetJSON(t, testKey(t, "a"), testKey(t, "b"))))
 }
 
+// A NUL escape is legal JSON to Go and refused by Postgres inside jsonb, so a
+// key set carrying one would pass every parser and then fail at the write.
+// It is rejected up front, as the invalid document it is.
+func TestValidatePublicOnly_NULEscapeRejected(t *testing.T) {
+	t.Parallel()
+
+	// Spelled in two pieces so the escape never appears in this source.
+	nul := `\u` + `0000`
+
+	err := ValidatePublicOnly(json.RawMessage(`{"keys":[{"kty":"RSA","kid":"` + nul + `"}]}`))
+	require.ErrorIs(t, err, ErrKeySetInvalid)
+
+	// A NUL embedded mid-string trips the screen just the same.
+	err = ValidatePublicOnly(json.RawMessage(`{"keys":[{"kty":"RSA","kid":"abc` + nul + `def"}]}`))
+	require.ErrorIs(t, err, ErrKeySetInvalid)
+
+	// An escaped backslash before the u is literal text, not an escape:
+	// backslash-backslash-u-0000 decodes to a backslash and "u0000", which
+	// Postgres stores happily. The screen must not refuse it.
+	escapedBackslash := `\\` + `u0000`
+	require.NoError(t, ValidatePublicOnly(json.RawMessage(`{"keys":[{"kty":"RSA","kid":"`+escapedBackslash+`"}]}`)))
+
+	// Three backslashes: an escaped backslash followed by a real escape.
+	threeBackslashes := `\\\` + `u0000`
+	require.ErrorIs(t, ValidatePublicOnly(json.RawMessage(`{"keys":[{"kty":"RSA","kid":"`+threeBackslashes+`"}]}`)), ErrKeySetInvalid)
+}
+
+// UsableSigningKeys counts what the resolver would actually be able to
+// select, which is what a registration surface needs to refuse a set that
+// parses but can never verify anything.
+func TestUsableSigningKeys(t *testing.T) {
+	t.Parallel()
+
+	n, err := UsableSigningKeys(keySetJSON(t, testKey(t, "a"), testKey(t, "b")))
+	require.NoError(t, err)
+	require.Equal(t, 2, n)
+
+	n, err = UsableSigningKeys(json.RawMessage(`{"keys":[]}`))
+	require.NoError(t, err)
+	require.Equal(t, 0, n)
+
+	enc := testKey(t, "enc")
+	enc.Use = "enc"
+	n, err = UsableSigningKeys(keySetJSON(t, enc))
+	require.NoError(t, err)
+	require.Equal(t, 0, n, "an encryption-only key cannot sign an assertion")
+
+	_, err = UsableSigningKeys(json.RawMessage(`{}`))
+	require.ErrorIs(t, err, ErrKeySetInvalid)
+}
+
 func TestValidatePublicOnly_PrivateKeyRejected(t *testing.T) {
 	t.Parallel()
 
@@ -38,6 +89,30 @@ func TestValidatePublicOnly_MalformedRejected(t *testing.T) {
 
 	require.ErrorIs(t, ValidatePublicOnly(json.RawMessage(`not json`)), ErrKeySetInvalid)
 	require.ErrorIs(t, ValidatePublicOnly(json.RawMessage(`{"keys": 42}`)), ErrKeySetInvalid)
+}
+
+// A document with no "keys" array is not a key set, and accepting one at
+// registration would persist a client that parseKeySet refuses at every
+// verification. The same three shapes parseKeySet rejects are rejected here.
+func TestValidatePublicOnly_MissingKeysArrayRejected(t *testing.T) {
+	t.Parallel()
+
+	for _, raw := range []string{`null`, `{}`, `{"keys":null}`} {
+		require.ErrorIs(t, ValidatePublicOnly(json.RawMessage(raw)), ErrKeySetInvalid, "document %s should be rejected", raw)
+	}
+	require.NoError(t, ValidatePublicOnly(json.RawMessage(`{"keys":[]}`)), "an empty array is a valid, empty set")
+}
+
+// An explicit JSON null decodes into a non-nil RawMessage, so callers applying
+// an exactly-one rule must ask rather than test the slice for nil.
+func TestIsNull(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, IsNull(json.RawMessage(`null`)))
+	require.True(t, IsNull(json.RawMessage(` null `)))
+	require.False(t, IsNull(nil))
+	require.False(t, IsNull(json.RawMessage(`{}`)))
+	require.False(t, IsNull(json.RawMessage(`"null"`)))
 }
 
 func TestValidatePublicOnly_RSAPrivateCRTParamsRejected(t *testing.T) {

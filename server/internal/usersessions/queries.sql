@@ -572,6 +572,14 @@ DO UPDATE SET
     client_jwks_uri = EXCLUDED.client_jwks_uri,
     updated_at = clock_timestamp()
 WHERE user_session_clients.client_secret_hash IS NULL
+  -- COALESCE, not a bare comparison: a NULL method (a row that predates the
+  -- column) must read as "not committed to private_key_jwt". A NULL here
+  -- would make the whole predicate NULL, the write would match nothing, and
+  -- every pre-existing client would surface as unknown on its first refresh.
+  AND NOT (
+    COALESCE(user_session_clients.token_endpoint_auth_method, '') = 'private_key_jwt'
+    AND EXCLUDED.token_endpoint_auth_method IS DISTINCT FROM 'private_key_jwt'
+  )
 RETURNING *;
 
 -- name: UpdateUserSessionClientCIMDCache :one
@@ -655,6 +663,12 @@ WHERE id = @id
   AND project_id = @project_id
   AND client_id_metadata_uri IS NOT NULL
   AND client_secret_hash IS NULL
+  -- COALESCE for the same reason as the upsert: a NULL method is a legacy
+  -- row, not a committed one, and must stay writable.
+  AND NOT (
+    COALESCE(token_endpoint_auth_method, '') = 'private_key_jwt'
+    AND @token_endpoint_auth_method::text <> 'private_key_jwt'
+  )
   AND deleted IS FALSE
 RETURNING *;
 

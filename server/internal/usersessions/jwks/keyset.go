@@ -1,6 +1,7 @@
 package jwks
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -47,19 +48,81 @@ func ValidatePublicOnly(raw json.RawMessage) error {
 	if raw == nil {
 		return nil
 	}
+	if containsNULEscape(raw) {
+		return fmt.Errorf("key set contains a NUL escape: %w", ErrKeySetInvalid)
+	}
 
+	// The pointer distinguishes an absent or null "keys" member from an
+	// empty array. RFC 7517 §5 makes "keys" the set's one required member,
+	// and parseKeySet applies the same rule at resolve time: a document
+	// accepted here that parseKeySet would refuse would register a client
+	// that can never authenticate.
 	var keySet struct {
-		Keys []map[string]json.RawMessage `json:"keys"`
+		Keys *[]map[string]json.RawMessage `json:"keys"`
 	}
 	if err := json.Unmarshal(raw, &keySet); err != nil {
 		return fmt.Errorf("parse key set: %w", ErrKeySetInvalid)
 	}
-	for _, key := range keySet.Keys {
+	if keySet.Keys == nil {
+		return fmt.Errorf(`key set missing "keys" array: %w`, ErrKeySetInvalid)
+	}
+	for _, key := range *keySet.Keys {
 		if err := screenKeyMaterial(key); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// IsNull reports whether a raw JSON member is the literal null. Go's decoder
+// stores an explicit `"jwks": null` into a json.RawMessage as the four bytes
+// "null" rather than as a nil slice, so a presence check on the slice alone
+// would count it as a supplied key set. Callers applying an exactly-one rule
+// to jwks and jwks_uri treat it as absent.
+func IsNull(raw json.RawMessage) bool {
+	return len(raw) > 0 && string(bytes.TrimSpace(raw)) == "null"
+}
+
+// containsNULEscape reports whether a JSON document spells a NUL character as
+// the six-character escape backslash-u-0000. Go's decoder accepts it, but Postgres
+// refuses it inside a jsonb value, so a key set carrying one would pass every
+// parser here and then fail at the write, as a 500 on an unauthenticated
+// endpoint. No legitimate key set has a NUL in any member, so the document is
+// simply invalid.
+func containsNULEscape(raw json.RawMessage) bool {
+	for i := 0; i+6 <= len(raw); i++ {
+		if raw[i] != '\\' || raw[i+1] != 'u' {
+			continue
+		}
+		// A backslash that is itself escaped starts no escape: the text
+		// backslash-backslash-u-0000 decodes to a literal backslash
+		// followed by "u0000", which Postgres stores happily. Only an odd
+		// run of backslashes ending here introduces one.
+		backslashes := 0
+		for j := i; j >= 0 && raw[j] == '\\'; j-- {
+			backslashes++
+		}
+		if backslashes%2 == 0 {
+			continue
+		}
+		if raw[i+2] == '0' && raw[i+3] == '0' && raw[i+4] == '0' && raw[i+5] == '0' {
+			return true
+		}
+	}
+	return false
+}
+
+// UsableSigningKeys reports how many keys in a JWK Set document could ever
+// verify an assertion: parseable, public, usable for signing, and on the
+// algorithm allowlist. Registration surfaces require at least one for a
+// private_key_jwt client, since a set the resolver would parse to nothing
+// registers a client that can never authenticate.
+func UsableSigningKeys(raw json.RawMessage) (int, error) {
+	set, err := parseKeySet(raw)
+	if err != nil {
+		return 0, err
+	}
+	return len(set.Keys), nil
 }
 
 // privateKeyMembers are the JWK members that only appear on a private key:

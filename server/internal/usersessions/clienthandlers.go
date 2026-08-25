@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	gen "github.com/speakeasy-api/gram/server/gen/user_session_clients"
@@ -327,6 +326,15 @@ func (s *Service) RefreshUserSessionClientCIMD(ctx context.Context, payload *gen
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("cimd resolver reported %q outcome for an uncached resolve", result.Outcome), "refresh client metadata").LogError(ctx, logger)
 	}
 
+	// A document that drops private_key_jwt after committing to it is
+	// indistinguishable from a domain takeover. The stored method stands, and
+	// the operator is told how to reset it deliberately: revoking the client
+	// lets the next authorize register it afresh from whatever the document
+	// then says.
+	if CIMDDocumentDowngradesAuthMethod(&row, result.Document) {
+		return nil, oops.E(oops.CodeInvalid, nil, "metadata document now declares token_endpoint_auth_method %q but the client committed to private_key_jwt; the stored method was kept. Revoke the client to let it re-register under the new method", result.Document.DeclaredAuthMethod()).LogError(ctx, logger)
+	}
+
 	// Persisted through an id-scoped update rather than the authorize path's
 	// (issuer, client_id) upsert: the upsert's conflict target is a partial
 	// unique index over live rows, so against a row revoked during the fetch
@@ -340,8 +348,8 @@ func (s *Service) RefreshUserSessionClientCIMD(ctx context.Context, payload *gen
 		CacheTtlSeconds:         result.TTL.Seconds(),
 		ClientIDMetadataEtag:    conv.ToPGTextEmpty(result.ETag),
 		TokenEndpointAuthMethod: result.Document.DeclaredAuthMethod(),
-		ClientJwks:              nil,
-		ClientJwksUri:           pgtype.Text{String: "", Valid: false},
+		ClientJwks:              result.Document.JWKS,
+		ClientJwksUri:           conv.ToPGTextEmpty(result.Document.JWKSURI),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
