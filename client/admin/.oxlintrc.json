@@ -91,10 +91,7 @@
       // nor splits its cva variant exports into separate files.
       "rules": {
         "typescript/explicit-module-boundary-types": "off",
-        "react/only-export-components": "off",
-        // Namespace React imports expose every export to no-restricted-imports.
-        // no-restricted-properties still bans React.useEffect in these files.
-        "no-restricted-imports": "off"
+        "react/only-export-components": "off"
       }
     }
   ]

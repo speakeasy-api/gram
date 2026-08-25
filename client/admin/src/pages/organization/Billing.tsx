@@ -145,7 +145,10 @@ function InferenceKeyLimitEditor({
       if (inferenceKey.disabled) return;
       showFailure(null);
       try {
-        await mutation.mutateAsync(Number(value.monthlyCredits));
+        const updated = await mutation.mutateAsync(
+          Number(value.monthlyCredits),
+        );
+        form.reset({ monthlyCredits: String(updated.monthly_credits) });
       } catch {
         // The mutation reports the failure through the page's shared live region.
       }
@@ -285,7 +288,6 @@ function InferenceKeys({
           <Row label="State">{key.disabled ? "Disabled" : "Enabled"}</Row>
           {isWritableInferenceKey(key) && (
             <InferenceKeyLimitEditor
-              key={`${key.key_type}:${key.monthly_credits}`}
               organizationID={organizationID}
               inferenceKey={key}
             />

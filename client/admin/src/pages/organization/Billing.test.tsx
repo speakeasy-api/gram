@@ -233,6 +233,23 @@ describe("Billing", () => {
   });
 
   it("updates one materialized key with the canonical organization id and refreshes the keys", async () => {
+    mocks.getInferenceKeys
+      .mockResolvedValueOnce([
+        {
+          key_type: "chat",
+          credits_used: 42.75,
+          monthly_credits: 100,
+          disabled: false,
+        },
+      ])
+      .mockResolvedValue([
+        {
+          key_type: "chat",
+          credits_used: 42.75,
+          monthly_credits: 750,
+          disabled: false,
+        },
+      ]);
     await renderBilling();
     const input = await screen.findByRole("spinbutton", {
       name: "chat monthly limit in USD",
@@ -247,6 +264,12 @@ describe("Billing", () => {
         monthlyCredits: 750,
       });
       expect(mocks.getInferenceKeys).toHaveBeenCalledTimes(2);
+      expect(
+        screen.getByRole("spinbutton", {
+          name: "chat monthly limit in USD",
+        }),
+      ).toBe(input);
+      expect((input as HTMLInputElement).value).toBe("750");
     });
   });
 

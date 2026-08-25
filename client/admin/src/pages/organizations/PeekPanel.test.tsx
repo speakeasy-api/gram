@@ -235,6 +235,20 @@ describe("PeekPanel", () => {
     );
   });
 
+  it("forwards callback ref cleanup when it unmounts", async () => {
+    const refCleanup = vi.fn((): void => {});
+    const ref = vi.fn((node: HTMLElement | null) =>
+      node ? refCleanup : undefined,
+    );
+    const view = await renderWithApp(
+      <PeekPanel org={ORG} onClose={noop} ref={ref} />,
+    );
+
+    view.unmount();
+
+    expect(refCleanup).toHaveBeenCalledOnce();
+  });
+
   it("closes from its own control", async () => {
     const onClose = vi.fn<() => void>();
     await renderWithApp(<PeekPanel org={ORG} onClose={onClose} />);

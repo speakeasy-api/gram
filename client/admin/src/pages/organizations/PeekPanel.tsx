@@ -47,11 +47,20 @@ export function PeekPanel({
 }): JSX.Element {
   const own = useRef<HTMLElement>(null);
   const mountRoot = useCallback(
-    (node: HTMLElement | null): void => {
+    (node: HTMLElement | null) => {
       own.current = node;
-      if (typeof ref === "function") ref(node);
-      else if (ref) ref.current = node;
+      const forwardedCleanup =
+        typeof ref === "function" ? ref(node) : undefined;
+      if (ref && typeof ref !== "function") ref.current = node;
       node?.focus();
+
+      if (!node) return;
+      return () => {
+        own.current = null;
+        if (typeof forwardedCleanup === "function") forwardedCleanup();
+        else if (typeof ref === "function") ref(null);
+        else if (ref) ref.current = null;
+      };
     },
     [ref],
   );
