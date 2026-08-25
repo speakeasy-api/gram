@@ -22,6 +22,7 @@ export const Platform = {
   Cursor: "cursor",
   Codex: "codex",
   Opencode: "opencode",
+  Openclaw: "openclaw",
 } as const;
 /**
  * Target platform.
