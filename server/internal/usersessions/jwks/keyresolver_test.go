@@ -23,7 +23,7 @@ func newTestKeyResolver(t *testing.T, server *keySetServer, rate ratelimit.Rate)
 	t.Helper()
 
 	cache := NewMemoryCache()
-	kr, err := NewKeyResolver(resolverFor(t, server), cache, newTestLimiter(t, rate), testenv.NewLogger(t))
+	kr, err := NewKeyResolver(resolverFor(t, server), cache, newTestLimiter(t, rate), nil, testenv.NewLogger(t))
 	require.NoError(t, err)
 	return kr, cache
 }
@@ -129,6 +129,212 @@ func TestVerificationKey_RefreshRateLimited(t *testing.T) {
 	require.Equal(t, 1, server.Fetches())
 }
 
+// The scope budget bounds fetches across every source a scope names. Two
+// never-seen sources in one scope with a budget of one: the first cold fetch
+// spends it and the second is refused before any request leaves. A different
+// scope naming the same second source is unaffected, and the source's cached
+// entry is then shared back with the first scope, since the cache is keyed
+// by URL and the scope plays no part in it.
+func TestVerificationKey_FetchScopeBudget(t *testing.T) {
+	t.Parallel()
+
+	server := newKeySetServer(t, keySetJSON(t, testKey(t, "a")))
+	cache := NewMemoryCache()
+	kr, err := NewKeyResolver(
+		resolverFor(t, server),
+		cache,
+		newTestLimiter(t, generousRate()),
+		newTestLimiter(t, ratelimit.PerMinute(1)),
+		testenv.NewLogger(t),
+	)
+	require.NoError(t, err)
+
+	// Two sources on one host (the host serves the same set at any path),
+	// so both are reachable and only the budget can refuse the second.
+	sourceA := remoteSourceFor(t, server).WithFetchScope("tenant-1")
+	sourceB, err := NewRemoteSource(server.server.URL + "/second.json")
+	require.NoError(t, err)
+
+	key, err := kr.VerificationKey(t.Context(), sourceA, "a")
+	require.NoError(t, err)
+	require.Equal(t, "a", key.KeyID)
+	require.Equal(t, 1, server.Fetches())
+
+	_, err = kr.VerificationKey(t.Context(), sourceB.WithFetchScope("tenant-1"), "a")
+	require.ErrorIs(t, err, ErrFetchRateLimited)
+	require.Equal(t, 1, server.Fetches(), "a scope out of budget must not reach the upstream")
+
+	// A different scope has its own budget, so the same source resolves.
+	_, err = kr.VerificationKey(t.Context(), sourceB.WithFetchScope("tenant-2"), "a")
+	require.NoError(t, err)
+	require.Equal(t, 2, server.Fetches())
+
+	// The entry that fetch stored is keyed by URL, so the first scope now
+	// reads it warm: no fetch, no charge, and no budget to be refused by.
+	_, err = kr.VerificationKey(t.Context(), sourceB.WithFetchScope("tenant-1"), "a")
+	require.NoError(t, err)
+	for range 3 {
+		_, err = kr.VerificationKey(t.Context(), sourceA, "a")
+		require.NoError(t, err)
+	}
+	require.Equal(t, 2, server.Fetches())
+}
+
+// A stored document that no longer passes screening is refetched, and that
+// refetch is charged to the scope like any other upstream request: the charge
+// follows the request, not the cache condition that caused it.
+func TestVerificationKey_FetchScopeBudgetCoversRescreenFailure(t *testing.T) {
+	t.Parallel()
+
+	server := newKeySetServer(t, keySetJSON(t, testKey(t, "a")))
+	cache := NewMemoryCache()
+	kr, err := NewKeyResolver(
+		resolverFor(t, server),
+		cache,
+		newTestLimiter(t, generousRate()),
+		newTestLimiter(t, ratelimit.PerMinute(1)),
+		testenv.NewLogger(t),
+	)
+	require.NoError(t, err)
+
+	// Spend the scope's budget on an unrelated cold fetch.
+	other, err := NewRemoteSource(server.server.URL + "/other.json")
+	require.NoError(t, err)
+	_, err = kr.VerificationKey(t.Context(), other.WithFetchScope("tenant-3"), "a")
+	require.NoError(t, err)
+	require.Equal(t, 1, server.Fetches())
+
+	// A fresh-looking entry whose document is unusable: the resolver must
+	// consult the upstream, and the scope has nothing left to pay for it.
+	source := remoteSourceFor(t, server).WithFetchScope("tenant-3")
+	require.NoError(t, cache.Put(t.Context(), source.CacheKey(), CacheState{
+		Document:    []byte(`{"keys":`),
+		ETag:        "",
+		ExpiresAt:   time.Now().Add(time.Hour),
+		RefreshedAt: time.Now(),
+	}))
+	_, err = kr.VerificationKey(t.Context(), source, "a")
+	require.ErrorIs(t, err, ErrFetchRateLimited)
+	require.Equal(t, 1, server.Fetches(), "an uncharged refetch would be a budget bypass")
+}
+
+// A forced refresh the scope's budget refuses never reached the origin, so
+// it must not stamp the refresh cooldown: the source's stored state stays
+// exactly as it was, and a legitimate refresh a moment later (once the scope
+// has budget again) is not suppressed for the whole window.
+func TestVerificationKey_ScopeDenialDoesNotStampCooldown(t *testing.T) {
+	t.Parallel()
+
+	server := newKeySetServer(t, keySetJSON(t, testKey(t, "a"), testKey(t, "b")))
+	cache := NewMemoryCache()
+	kr, err := NewKeyResolver(
+		resolverFor(t, server),
+		cache,
+		newTestLimiter(t, generousRate()),
+		newTestLimiter(t, ratelimit.PerMinute(1)),
+		testenv.NewLogger(t),
+	)
+	require.NoError(t, err)
+
+	// Spend the scope's budget on an unrelated cold fetch.
+	other, err := NewRemoteSource(server.server.URL + "/other.json")
+	require.NoError(t, err)
+	_, err = kr.VerificationKey(t.Context(), other.WithFetchScope("tenant-6"), "a")
+	require.NoError(t, err)
+
+	source := remoteSourceFor(t, server).WithFetchScope("tenant-6")
+	primeRotatable(t, cache, source, keySetJSON(t, testKey(t, "a")))
+	before, err := cache.Get(t.Context(), source.CacheKey())
+	require.NoError(t, err)
+
+	_, err = kr.VerificationKey(t.Context(), source, "b")
+	require.ErrorIs(t, err, ErrFetchRateLimited)
+
+	after, err := cache.Get(t.Context(), source.CacheKey())
+	require.NoError(t, err)
+	require.Equal(t, before.RefreshedAt, after.RefreshedAt, "a denial at admission is not a consult and must not enter the cooldown")
+	require.Equal(t, before.Document, after.Document)
+}
+
+// A forced refresh the source's own budget refuses costs the scope nothing:
+// unknown-kid probes against an exhausted source must not drain the budget
+// that source's neighbours share. Proven by spending the source's budget,
+// probing it again, and then showing the scope still has the token a
+// neighbouring cold fetch needs.
+func TestVerificationKey_RefusedRefreshDoesNotChargeScope(t *testing.T) {
+	t.Parallel()
+
+	server := newKeySetServer(t, keySetJSON(t, testKey(t, "a"), testKey(t, "b")))
+	cache := NewMemoryCache()
+	kr, err := NewKeyResolver(
+		resolverFor(t, server),
+		cache,
+		newTestLimiter(t, ratelimit.PerMinute(1)),
+		newTestLimiter(t, ratelimit.PerMinute(2)),
+		testenv.NewLogger(t),
+	)
+	require.NoError(t, err)
+
+	// One forced refresh spends the source's whole budget and one of the
+	// scope's two tokens.
+	probed := remoteSourceFor(t, server).WithFetchScope("tenant-4")
+	primeRotatable(t, cache, probed, keySetJSON(t, testKey(t, "a")))
+	_, err = kr.VerificationKey(t.Context(), probed, "b")
+	require.NoError(t, err)
+	require.Equal(t, 1, server.Fetches())
+
+	// Age it past the cooldown and probe an unknown kid again: the source's
+	// budget refuses before any request is issued.
+	primeRotatable(t, cache, probed, keySetJSON(t, testKey(t, "a")))
+	_, err = kr.VerificationKey(t.Context(), probed, "c")
+	require.ErrorIs(t, err, ErrRefreshRateLimited)
+	require.Equal(t, 1, server.Fetches())
+
+	// The scope's second token must still be there for a neighbour's cold
+	// fetch. Had the refused refresh charged the scope, this would be
+	// ErrFetchRateLimited.
+	neighbour, err := NewRemoteSource(server.server.URL + "/neighbour.json")
+	require.NoError(t, err)
+	_, err = kr.VerificationKey(t.Context(), neighbour.WithFetchScope("tenant-4"), "a")
+	require.NoError(t, err, "a refused refresh must not have spent the scope's remaining token")
+	require.Equal(t, 2, server.Fetches())
+}
+
+// The scope budget is charged on the forced unknown-kid refresh as well as
+// on cold fetches, and before the per-source refresh budget, so a scope that
+// has spent its budget on one source cannot force a refresh of another.
+func TestVerificationKey_FetchScopeBudgetCoversRefresh(t *testing.T) {
+	t.Parallel()
+
+	server := newKeySetServer(t, keySetJSON(t, testKey(t, "a"), testKey(t, "b")))
+	cache := NewMemoryCache()
+	kr, err := NewKeyResolver(
+		resolverFor(t, server),
+		cache,
+		newTestLimiter(t, generousRate()),
+		newTestLimiter(t, ratelimit.PerMinute(1)),
+		testenv.NewLogger(t),
+	)
+	require.NoError(t, err)
+
+	// One cold fetch spends the scope's whole budget.
+	cold := remoteSourceFor(t, server).WithFetchScope("tenant-2")
+	_, err = kr.VerificationKey(t.Context(), cold, "a")
+	require.NoError(t, err)
+	require.Equal(t, 1, server.Fetches())
+
+	// A second source on the same host, primed so only a forced refresh
+	// could learn its new kid, is refused before the upstream is asked.
+	rotating, err := NewRemoteSource(server.server.URL + "/rotating.json")
+	require.NoError(t, err)
+	rotating = rotating.WithFetchScope("tenant-2")
+	primeRotatable(t, cache, rotating, keySetJSON(t, testKey(t, "a")))
+
+	_, err = kr.VerificationKey(t.Context(), rotating, "b")
+	require.ErrorIs(t, err, ErrFetchRateLimited)
+	require.Equal(t, 1, server.Fetches(), "the refused refresh must not reach the upstream")
+}
+
 func TestVerificationKey_FailedConsultEntersCooldown(t *testing.T) {
 	t.Parallel()
 
@@ -219,6 +425,7 @@ func TestVerificationKey_InlineUnknownKidTerminal(t *testing.T) {
 		newResolver(nil, testenv.NewMeterProvider(t), testenv.NewLogger(t)),
 		NewMemoryCache(),
 		newTestLimiter(t, generousRate()),
+		nil,
 		testenv.NewLogger(t),
 	)
 	require.NoError(t, err)
@@ -270,6 +477,7 @@ func TestVerificationKey_CacheReadErrorFailsClosed(t *testing.T) {
 		resolverFor(t, server),
 		&failingCache{getErr: errors.New("store down"), putErr: nil, inner: nil},
 		newTestLimiter(t, generousRate()),
+		nil,
 		testenv.NewLogger(t),
 	)
 	require.NoError(t, err)
@@ -287,6 +495,7 @@ func TestVerificationKey_CacheWriteFailureDoesNotFailResolution(t *testing.T) {
 		resolverFor(t, server),
 		&failingCache{getErr: nil, putErr: errors.New("store down"), inner: NewMemoryCache()},
 		newTestLimiter(t, generousRate()),
+		nil,
 		testenv.NewLogger(t),
 	)
 	require.NoError(t, err)
@@ -304,7 +513,7 @@ func TestVerificationKey_LimiterErrorFailsClosed(t *testing.T) {
 	// for a limiter store outage.
 	broken := ratelimit.New(nil, t.Name(), ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0})
 	cache := NewMemoryCache()
-	kr, err := NewKeyResolver(resolverFor(t, server), cache, broken, testenv.NewLogger(t))
+	kr, err := NewKeyResolver(resolverFor(t, server), cache, broken, nil, testenv.NewLogger(t))
 	require.NoError(t, err)
 	source := remoteSourceFor(t, server)
 	primeRotatable(t, cache, source, keySetJSON(t, testKey(t, "a")))
@@ -321,12 +530,12 @@ func TestNewKeyResolver_RequiresDependencies(t *testing.T) {
 	limiter := newTestLimiter(t, generousRate())
 	logger := testenv.NewLogger(t)
 
-	_, err := NewKeyResolver(nil, NewMemoryCache(), limiter, logger)
+	_, err := NewKeyResolver(nil, NewMemoryCache(), limiter, nil, logger)
 	require.Error(t, err)
-	_, err = NewKeyResolver(resolver, nil, limiter, logger)
+	_, err = NewKeyResolver(resolver, nil, limiter, nil, logger)
 	require.Error(t, err)
-	_, err = NewKeyResolver(resolver, NewMemoryCache(), nil, logger)
+	_, err = NewKeyResolver(resolver, NewMemoryCache(), nil, nil, logger)
 	require.Error(t, err)
-	_, err = NewKeyResolver(resolver, NewMemoryCache(), limiter, nil)
+	_, err = NewKeyResolver(resolver, NewMemoryCache(), limiter, nil, nil)
 	require.Error(t, err)
 }

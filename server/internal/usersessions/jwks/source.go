@@ -30,6 +30,20 @@ type Source struct {
 	inline json.RawMessage
 	uri    string
 	origin string
+
+	// fetchScope names the party whose fetch budget an upstream consult of
+	// this source is charged to, when the KeyResolver has a fetch limiter.
+	// Empty means the shared unscoped budget.
+	fetchScope string
+}
+
+// WithFetchScope returns a copy of the source whose upstream consults are
+// charged to scope's fetch budget rather than the shared one. The scope
+// plays no part in caching; the key set is still shared across every scope
+// that names the same URL.
+func (s Source) WithFetchScope(scope string) Source {
+	s.fetchScope = scope
+	return s
 }
 
 // NewInlineSource returns a Source backed by an inline JWK Set document, such
@@ -38,9 +52,9 @@ type Source struct {
 // The document is parsed and screened at resolve time, not here.
 func NewInlineSource(keySet json.RawMessage) (Source, error) {
 	if len(keySet) == 0 {
-		return Source{kind: "", inline: nil, uri: "", origin: ""}, errors.New("inline key set is empty")
+		return Source{kind: "", inline: nil, uri: "", origin: "", fetchScope: ""}, errors.New("inline key set is empty")
 	}
-	return Source{kind: sourceInline, inline: keySet, uri: "", origin: ""}, nil
+	return Source{kind: sourceInline, inline: keySet, uri: "", origin: "", fetchScope: ""}, nil
 }
 
 // NewRemoteSource returns a Source for a jwks_uri, whether it came from a
@@ -60,9 +74,9 @@ func NewInlineSource(keySet json.RawMessage) (Source, error) {
 func NewRemoteSource(jwksURI string) (Source, error) {
 	parsed, err := parseJWKSURI(jwksURI)
 	if err != nil {
-		return Source{kind: "", inline: nil, uri: "", origin: ""}, err
+		return Source{kind: "", inline: nil, uri: "", origin: "", fetchScope: ""}, err
 	}
-	return Source{kind: sourceRemote, inline: nil, uri: jwksURI, origin: parsed.Host}, nil
+	return Source{kind: sourceRemote, inline: nil, uri: jwksURI, origin: parsed.Host, fetchScope: ""}, nil
 }
 
 // ValidateURI reports whether a jwks_uri satisfies the syntax every remote
