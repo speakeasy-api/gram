@@ -9,9 +9,6 @@ vi.mock("@/components/project-guide/projectGuideStores", () => ({
 vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({ guide: { href: () => "/org/projects/project/guide" } }),
-}));
 vi.mock("react-router", () => ({
   Link: ({ to, children }: { to: string; children: React.ReactNode }) => (
     <a href={to}>{children}</a>
@@ -32,7 +29,7 @@ describe("ProjectGuideSidebarCta", () => {
 
     expect(
       screen.getByRole("link", { name: /project guide/i }).getAttribute("href"),
-    ).toBe("/org/projects/project/guide");
+    ).toBe("/guide");
   });
 
   it("stays hidden until a journey has started", () => {

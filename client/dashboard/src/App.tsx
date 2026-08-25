@@ -17,6 +17,7 @@ import {
 import { AppLayout, LoginCheck, OrgLayout } from "./components/app-layout.tsx";
 import { ModeSwitchProvider } from "./components/mode-switch-stage.tsx";
 import { CommandPalette } from "./components/command-palette";
+import { GuideEntryRedirect } from "./components/project-guide/GuideEntryRedirect";
 import {
   getRecentLabelOverride,
   pageLabel,
@@ -363,6 +364,7 @@ const RouteProvider = () => {
           element={<SharedSkillPage />}
         />
         <Route path="/" element={<LoginCheck />}>
+          <Route path="guide" element={<GuideEntryRedirect />} />
           <Route path=":orgSlug/projects/:projectSlug">
             {routesWithSubroutes(outsideStructureRoutes)}
           </Route>

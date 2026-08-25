@@ -68,7 +68,7 @@ describe("OrgWelcomeBanner", () => {
     render(<OrgWelcomeBanner />);
 
     expect(hrefFor("Enter demo org")).toBe("/explore-demo");
-    expect(hrefFor("Start using Speakeasy")).toBe("/acme/projects/alpha/guide");
+    expect(hrefFor("Start using Speakeasy")).toBe("/guide");
     expect(hrefFor("Begin rollout")).toBe("/acme/setup");
   });
 
@@ -112,13 +112,11 @@ describe("OrgWelcomeBanner", () => {
     ];
 
     render(<OrgWelcomeBanner />);
-    expect(hrefFor("Start using Speakeasy")).toBe(
-      "/acme/projects/default/guide",
-    );
+    expect(hrefFor("Start using Speakeasy")).toBe("/guide");
 
     cleanup();
     localStorage.setItem("preferredProject", "alpha");
     render(<OrgWelcomeBanner />);
-    expect(hrefFor("Start using Speakeasy")).toBe("/acme/projects/alpha/guide");
+    expect(hrefFor("Start using Speakeasy")).toBe("/guide");
   });
 });
