@@ -43,11 +43,11 @@ func registerLifecycleVisibilityTools(reg *Registrar, registrations *Registratio
 		{
 			name:        "enable_mcp",
 			title:       "Enable MCP",
-			description: "Re-enable one disabled Platform-managed MCP. The MCP is not attached to any plugin; existing attachments are republished and a fresh readiness probe runs. On an idempotent retry, the result reports current persisted visibility while readiness and publication remain best-effort observations.",
+			description: "Re-enable one disabled Platform-managed MCP. The MCP is not attached to any plugin; existing attachments are republished. Connected external callers perform a fresh readiness probe; the managed assistant returns its own persisted readiness evidence because it has no OAuth connection. On an idempotent retry, the result reports current persisted visibility while readiness and publication remain best-effort observations.",
 			call:        registrations.EnableMCP,
 		},
 	} {
-		addTool(reg, &mcp.Tool{Name: tool.name, Title: tool.title, Description: tool.description}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input UpdateMCPVisibilityToolInput) (*mcp.CallToolResult, UpdateMCPVisibilityToolOutput, error) {
+		addTool(reg, &mcp.Tool{Name: tool.name, Title: tool.title, Description: tool.description}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input UpdateMCPVisibilityToolInput) (*mcp.CallToolResult, UpdateMCPVisibilityToolOutput, error) {
 			principal, err := principalFromToolContext(ctx)
 			if err != nil {
 				return nil, UpdateMCPVisibilityToolOutput{}, err
@@ -73,6 +73,6 @@ func registerUnavailableLifecycleVisibilityTools(reg *Registrar) {
 		{"disable_mcp", "Disable MCP", "Disable one Platform-managed MCP. Visibility controls are not available in the current preview."},
 		{"enable_mcp", "Enable MCP", "Enable one Platform-managed MCP. Visibility controls are not available in the current preview."},
 	} {
-		addTool(reg, &mcp.Tool{Name: tool.name, Title: tool.title, Description: tool.description}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableTool("mcp_lifecycle_visibility"))
+		addTool(reg, &mcp.Tool{Name: tool.name, Title: tool.title, Description: tool.description}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("mcp_lifecycle_visibility"))
 	}
 }

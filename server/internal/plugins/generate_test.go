@@ -112,10 +112,25 @@ func TestGeneratePluginPackagesIncludesPlatformMCPOnlyWhenEnabled(t *testing.T) 
 	}
 
 	claudeSkill := files["platform-mcp/skills/add-mcp-from-catalog/SKILL.md"]
-	require.Contains(t, string(claudeSkill), "register_platform_mcp_for_project")
+	require.Contains(t, string(claudeSkill), "register_catalog_mcp")
+	require.Contains(t, string(claudeSkill), "add-mcp-from-remote-url", "the catalogue skill routes raw URLs to the remote URL workflow")
+	require.Contains(t, string(claudeSkill), "get_mcp_readiness")
 	require.Contains(t, string(claudeSkill), "attach_platform_mcp_identity_provider")
-	require.Contains(t, string(claudeSkill), "add_platform_mcp_to_default_plugin")
 	require.Contains(t, string(claudeSkill), "send_platform_mcp_feedback")
+	require.NotContains(t, string(claudeSkill), "register_platform_mcp_for_project", "the shipped skill must name only canonical tools")
+	require.NotContains(t, string(claudeSkill), "add_platform_mcp_to_default_plugin", "exact-plugin distribution remains rollout-gated")
+	require.Contains(t, string(claudeSkill), "For a managed project assistant, call `get_mcp_readiness` without `force`", "assistants must not be instructed to force connection-bound readiness probes")
+
+	remoteURLSkill := files["platform-mcp/skills/add-mcp-from-remote-url/SKILL.md"]
+	require.Contains(t, string(remoteURLSkill), "inspect_mcp_candidate")
+	require.Contains(t, string(remoteURLSkill), "register_remote_mcp")
+	require.Contains(t, string(remoteURLSkill), "get_mcp_readiness")
+	require.Contains(t, string(remoteURLSkill), "attach_platform_mcp_identity_provider")
+	require.NotContains(t, string(remoteURLSkill), "get_platform_mcp_onboarding_status", "the shipped skill must name only canonical tools")
+	require.NotContains(t, string(remoteURLSkill), "add_platform_mcp_to_default_plugin", "exact-plugin distribution remains rollout-gated")
+	require.Contains(t, string(remoteURLSkill), "For an external Platform MCP client, call `get_mcp_readiness`", "managed assistants must stop after their dashboard handoff")
+	require.NotContains(t, string(remoteURLSkill), "probe_remote_mcp", "the shipped skill must name only our registered tools")
+	require.NotContains(t, string(remoteURLSkill), "register_remote_mcp_for_project", "the shipped skill must name only our registered tools")
 
 	var agentManifest agentPluginManifest
 	require.NoError(t, json.Unmarshal(files[platformMCPAgentPluginRoot+"/plugin.json"], &agentManifest))
@@ -125,6 +140,7 @@ func TestGeneratePluginPackagesIncludesPlatformMCPOnlyWhenEnabled(t *testing.T) 
 	require.NoError(t, json.Unmarshal(files[platformMCPAgentPluginRoot+"/mcp.json"], &agentMCP))
 	require.Equal(t, "https://app.getgram.ai/platform-mcp", agentMCP.MCPServers[platformMCPServerName].URL)
 	require.Equal(t, claudeSkill, files[platformMCPAgentPluginRoot+"/skills/add-mcp-from-catalog/SKILL.md"])
+	require.Equal(t, remoteURLSkill, files[platformMCPAgentPluginRoot+"/skills/add-mcp-from-remote-url/SKILL.md"])
 
 	platformPrefixes := []string{
 		"platform-mcp/",

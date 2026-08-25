@@ -140,7 +140,7 @@ func newServer(reader Reader, catalog Catalog, registrations *RegistrationServic
 		Title:   "Platform MCP",
 		Version: "0.1.0",
 	}, &mcp.ServerOptions{
-		Instructions: "Use this server to inspect the selected organization and help distribute reviewed MCP servers to an explicit project. List reviewed catalogue options and eligible projects, then ask the user to choose one of each before mutating. Inspect the chosen candidate and collect only its declared non-secret configuration values. Normal non-secret URLs may be discussed and returned. Register it privately. If readiness says an upstream identity provider is missing, ask the user to explicitly confirm and then call attach_platform_mcp_identity_provider; the server derives the provider from the persisted reviewed MCP source and returns its non-secret provider_url plus an Inspect authorization_url for the user to use Connect or Authorize. Immediately present authorization_url as the exact clickable link—never say a link is above or ask the user to confirm an unspecified authorization action. Never request or accept OAuth codes, tokens, client secrets, passwords, API keys, or secret headers in chat. The registration dashboard_setup_url is the Authentication settings fallback, not the authorization page. Force a fresh readiness check after user authorization and add the ready server to the project's existing Default plugin. For the guided flow, use register_platform_mcp_for_project, get_platform_mcp_onboarding_status, attach_platform_mcp_identity_provider when confirmed, and add_platform_mcp_to_default_plugin.",
+		Instructions: "Use this server to inspect the selected organization and manage reviewed MCP servers in an explicit project. List reviewed catalogue options and eligible projects, then ask the user to choose one of each before mutating. Inspect the chosen candidate and collect only its declared non-secret configuration values. Normal non-secret URLs may be discussed and returned. Register it privately. Use get_mcp_readiness with the returned registration ID to inspect persisted readiness. If readiness says an upstream identity provider is missing, ask the user to explicitly confirm and then call attach_platform_mcp_identity_provider; the server derives the provider from the persisted reviewed MCP source and returns its non-secret provider_url plus an Inspect authorization_url for the user to use Connect or Authorize. Immediately present authorization_url as the exact clickable link—never say a link is above or ask the user to confirm an unspecified authorization action. Never request or accept OAuth codes, tokens, client secrets, passwords, API keys, or secret headers in chat. The registration dashboard_setup_url is the Authentication settings fallback, not the authorization page. Force a fresh readiness check after user authorization. Registration never distributes an MCP; named-plugin distribution is separately rollout-gated.",
 		PageSize:     32,
 	})
 
@@ -176,13 +176,15 @@ func newServer(reader Reader, catalog Catalog, registrations *RegistrationServic
 	if registrations == nil || registrations.store == nil || !registrations.budgets.Registration.valid() {
 		registerUnavailableCatalogRegistrationTool(reg)
 		registerUnavailableRemoteRegistrationTool(reg)
+		registerUnavailableIdentityProviderTool(reg)
 	} else {
 		registerCatalogRegistrationTool(reg, registrations)
 		if registrations.directRemoteInspector == nil {
 			registerUnavailableRemoteRegistrationTool(reg)
 		} else {
-			registerRemoteRegistrationTool(reg, registrations)
+			registerRemoteRegistrationTool(reg, registrations, onboarding)
 		}
+		registerIdentityProviderTool(reg, registrations)
 	}
 	if registrations == nil || registrations.lifecycleMetadata == nil {
 		registerUnavailableLifecycleMetadataTool(reg)
@@ -204,11 +206,9 @@ func newServer(reader Reader, catalog Catalog, registrations *RegistrationServic
 	} else {
 		registerReadinessTools(reg, registrations.readiness)
 	}
-	if onboarding == nil || distributions == nil || catalog == nil || registrations == nil || registrations.store == nil {
-		registerUnavailableTools(reg)
-	} else {
-		registerOnboardingLifecycleTools(reg, onboarding, registrations, distributions)
-	}
+	// Exact-plugin distribution stays unavailable until the compatibility-reader
+	// release is deployed. Its canonical descriptors remain visible as stubs.
+	registerUnavailableTools(reg)
 	if !diagnostics.valid() {
 		registerUnavailableDiagnosticsTools(reg)
 	} else {
@@ -311,14 +311,14 @@ func registerUnavailableTools(reg *Registrar) {
 		feature     string
 	}{
 
-		{"distribute_mcp_to_default_plugin", "Distribute MCP to Default Plugin", "Distribute a configured MCP to the default plugin. Distribution is not available in the current preview.", "plugin_distribution"},
-		{"remove_mcp_from_default_plugin", "Remove MCP from Default Plugin", "Remove an MCP from the default plugin. Distribution changes are not available in the current preview.", "plugin_distribution"},
+		{"distribute_mcp_to_plugin", "Distribute MCP to Plugin", "Distribute a configured MCP to one exact existing plugin. Named-plugin distribution is not available until the compatibility release is deployed.", "plugin_distribution"},
+		{"remove_mcp_from_plugin", "Remove MCP from Plugin", "Remove an MCP from one exact existing plugin. Named-plugin distribution is not available until the compatibility release is deployed.", "plugin_distribution"},
 	} {
 		addTool(reg, &mcp.Tool{
 			Name:        tool.name,
 			Title:       tool.title,
 			Description: tool.description,
-		}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool(tool.feature))
+		}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableTool(tool.feature))
 	}
 }
 
@@ -336,7 +336,7 @@ func registerUnavailableReadinessTools(reg *Registrar) {
 			Title:       tool.title,
 			Description: tool.description,
 			Annotations: readOnlyAnnotations(),
-		}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableTool("mcp_readiness"))
+		}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("mcp_readiness"))
 	}
 }
 
@@ -344,7 +344,7 @@ func operationBudgetToolResult(err error) (*mcp.CallToolResult, bool) {
 	var result operationBudgetResult
 	switch {
 	case errors.Is(err, ErrReadinessRegistrationNotFound):
-		result = operationBudgetResult{Code: "registration_not_found", Message: "This registration ID is not available for the selected project and authenticated connection. Use the ID returned by register_platform_mcp_for_project or get_platform_mcp_onboarding_status."}
+		result = operationBudgetResult{Code: "registration_not_found", Message: "This registration ID is not available for the selected project and caller. Use the ID returned by register_catalog_mcp or register_remote_mcp."}
 	case errors.Is(err, ErrRegistrationInvalid), errors.Is(err, ErrLifecycleMetadataInvalid), errors.Is(err, ErrLifecycleVisibilityInvalid), errors.Is(err, ErrReadinessInvalid), errors.Is(err, ErrCatalogConfigurationRejected), errors.Is(err, ErrCatalogRejected), errors.Is(err, ErrCatalogCursorInvalid):
 		result = operationBudgetResult{Code: "invalid_request", Message: "The requested Platform MCP operation is invalid or no longer matches the reviewed catalogue. Re-read the supported tool result and do not retry unchanged input."}
 	case errors.Is(err, ErrOperationRateLimited), errors.Is(err, ErrReadinessRateLimited):

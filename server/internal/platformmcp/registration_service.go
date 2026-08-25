@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/google/uuid"
 )
@@ -215,10 +216,10 @@ func (s *RegistrationService) RegistrationCatalogIdentity(ctx context.Context, p
 // fallback for provider attachment; callers cannot provide an endpoint, source,
 // or credential.
 func (s *RegistrationService) DashboardSetupURL(ctx context.Context, principal Principal, input IssueSetupHandoffInput) (string, error) {
-	if s == nil || s.catalog == nil || s.gate == nil || s.store == nil || s.dashboardURL == nil || input.ProjectSlug == "" || input.RegistrationID == "" || input.ProviderKey == "" || input.CatalogRef == "" {
+	if s == nil || s.gate == nil || s.store == nil || s.dashboardURL == nil || input.ProjectSlug == "" || input.RegistrationID == "" || input.ProviderKey == "" || input.CatalogRef == "" {
 		return "", ErrRegistrationUnavailable
 	}
-	if !isBrowserCatalogProviderKey(input.ProviderKey) {
+	if !isBrowserCatalogProviderKey(input.ProviderKey) && input.ProviderKey != directRemoteProviderKey {
 		return "", ErrCatalogRejected
 	}
 	enabled, err := s.gate.Enabled(ctx, principal.OrganizationID, input.ProjectSlug)
@@ -227,13 +228,6 @@ func (s *RegistrationService) DashboardSetupURL(ctx context.Context, principal P
 	}
 	if !enabled {
 		return "", ErrRegistrationUnavailable
-	}
-	catalog, err := s.catalog.Inspect(ctx, input.ProviderKey, input.CatalogRef)
-	if err != nil {
-		return "", fmt.Errorf("inspect dashboard setup catalog candidate: %w", err)
-	}
-	if catalog.ProviderKey != input.ProviderKey || catalog.CatalogRef != input.CatalogRef || catalog.SetupIntent == "" || catalog.Transport != "streamable-http" {
-		return "", ErrCatalogRejected
 	}
 	registrationID, err := uuid.Parse(input.RegistrationID)
 	if err != nil {
@@ -250,8 +244,20 @@ func (s *RegistrationService) DashboardSetupURL(ctx context.Context, principal P
 	if err != nil {
 		return "", err
 	}
-	if persisted.ProviderKey != catalog.ProviderKey || persisted.CatalogRef != catalog.CatalogRef {
+	if persisted.ProviderKey != input.ProviderKey || persisted.CatalogRef != input.CatalogRef {
 		return "", ErrCatalogRejected
+	}
+	if isBrowserCatalogProviderKey(input.ProviderKey) {
+		if s.catalog == nil {
+			return "", ErrRegistrationUnavailable
+		}
+		catalog, err := s.catalog.Inspect(ctx, input.ProviderKey, input.CatalogRef)
+		if err != nil {
+			return "", fmt.Errorf("inspect dashboard setup catalog candidate: %w", err)
+		}
+		if catalog.ProviderKey != persisted.ProviderKey || catalog.CatalogRef != persisted.CatalogRef || catalog.SetupIntent == "" || catalog.Transport != "streamable-http" {
+			return "", ErrCatalogRejected
+		}
 	}
 	return s.dashboardSettingsURL(ctx, principal, project, registrationID)
 }
@@ -326,14 +332,14 @@ func (s *RegistrationService) AttachDefaultIdentityProvider(ctx context.Context,
 	if err != nil {
 		return CatalogIdentityProviderAttachmentResult{}, err
 	}
-	if !isBrowserCatalogProviderKey(candidate.ProviderKey) {
+	if !isBrowserCatalogProviderKey(candidate.ProviderKey) && candidate.ProviderKey != directRemoteProviderKey {
 		return CatalogIdentityProviderAttachmentResult{}, ErrIdentityProviderAttachmentUnsupported
 	}
 	return s.identityProviderAttachment.Attach(ctx, principal, project, parsedID)
 }
 
 func (s *RegistrationService) IssueSetupHandoff(ctx context.Context, principal Principal, input IssueSetupHandoffInput) (IssuedSetupHandoff, error) {
-	if s == nil || s.catalog == nil || s.gate == nil || s.store == nil || !s.budgets.Handoff.valid() || input.ProjectSlug == "" || input.RegistrationID == "" || input.ProviderKey == "" || input.CatalogRef == "" {
+	if s == nil || s.gate == nil || s.store == nil || !s.budgets.Handoff.valid() || input.ProjectSlug == "" || input.RegistrationID == "" || input.ProviderKey == "" || input.CatalogRef == "" {
 		return IssuedSetupHandoff{}, ErrRegistrationUnavailable
 	}
 	registrationID, err := uuid.Parse(input.RegistrationID)
@@ -350,13 +356,6 @@ func (s *RegistrationService) IssueSetupHandoff(ctx context.Context, principal P
 	if !enabled {
 		return IssuedSetupHandoff{}, ErrRegistrationUnavailable
 	}
-	catalog, err := s.catalog.Inspect(ctx, input.ProviderKey, input.CatalogRef)
-	if err != nil {
-		return IssuedSetupHandoff{}, fmt.Errorf("inspect setup handoff catalog candidate: %w", err)
-	}
-	if catalog.ProviderKey != input.ProviderKey || catalog.CatalogRef != input.CatalogRef || catalog.SetupIntent == "" || catalog.Transport != "streamable-http" {
-		return IssuedSetupHandoff{}, ErrCatalogRejected
-	}
 	project, err := s.store.ResolveProject(ctx, principal.OrganizationID, input.ProjectSlug)
 	if err != nil {
 		return IssuedSetupHandoff{}, fmt.Errorf("resolve setup handoff project: %w", err)
@@ -364,12 +363,35 @@ func (s *RegistrationService) IssueSetupHandoff(ctx context.Context, principal P
 	if err := s.requireEligibleTarget(ctx, principal.OrganizationID, project); err != nil {
 		return IssuedSetupHandoff{}, err
 	}
+	candidate, err := s.store.ResolveRegistrationCatalogIdentity(ctx, principal, project, registrationID)
+	if err != nil {
+		return IssuedSetupHandoff{}, fmt.Errorf("resolve setup handoff registration identity: %w", err)
+	}
+	if candidate.ProviderKey != input.ProviderKey || candidate.CatalogRef != input.CatalogRef {
+		return IssuedSetupHandoff{}, ErrCatalogRejected
+	}
+	intent := ""
+	if candidate.ProviderKey == directRemoteProviderKey {
+		intent = "dashboard_source_settings"
+	} else {
+		if s.catalog == nil {
+			return IssuedSetupHandoff{}, ErrRegistrationUnavailable
+		}
+		catalog, err := s.catalog.Inspect(ctx, candidate.ProviderKey, candidate.CatalogRef)
+		if err != nil {
+			return IssuedSetupHandoff{}, fmt.Errorf("inspect setup handoff catalog candidate: %w", err)
+		}
+		if catalog.ProviderKey != candidate.ProviderKey || catalog.CatalogRef != candidate.CatalogRef || catalog.SetupIntent == "" || catalog.Transport != "streamable-http" {
+			return IssuedSetupHandoff{}, ErrCatalogRejected
+		}
+		intent = catalog.SetupIntent
+	}
 	issued, err := s.store.IssueSetupHandoff(ctx, principal, SetupHandoffBinding{
 		ProjectID:        project.ID,
 		RegistrationID:   registrationID,
-		ProviderKey:      catalog.ProviderKey,
-		CatalogReference: catalog.CatalogRef,
-		Intent:           catalog.SetupIntent,
+		ProviderKey:      candidate.ProviderKey,
+		CatalogReference: candidate.CatalogRef,
+		Intent:           intent,
 	}, s.now())
 	if err != nil {
 		s.telemetry.Record(ctx, LifecycleEvent{Operation: "provider_setup", Phase: "handoff", Outcome: lifecycleOutcome(err), State: ""})
@@ -447,7 +469,7 @@ func (s *RegistrationService) RegisterRemoteMCP(ctx context.Context, principal P
 		return RegisterRemoteMCPResult{}, ErrDirectRemoteRejected
 	}
 	displayName := strings.TrimSpace(input.DisplayName)
-	if len(displayName) > directRemoteDisplayNameMaxBytes || strings.ContainsAny(displayName, "\r\n") {
+	if len(displayName) > directRemoteDisplayNameMaxBytes || strings.IndexFunc(displayName, isDirectRemoteDisplayNameBreak) >= 0 {
 		return RegisterRemoteMCPResult{}, ErrRegistrationInvalid
 	}
 	project, err := s.store.ResolveProject(ctx, principal.OrganizationID, input.ProjectSlug)
@@ -460,7 +482,7 @@ func (s *RegistrationService) RegisterRemoteMCP(ctx context.Context, principal P
 	if displayName == "" {
 		displayName = inspection.CanonicalURL
 	}
-	if len(displayName) > directRemoteDisplayNameMaxBytes || strings.ContainsAny(displayName, "\r\n") {
+	if len(displayName) > directRemoteDisplayNameMaxBytes || strings.IndexFunc(displayName, isDirectRemoteDisplayNameBreak) >= 0 {
 		return RegisterRemoteMCPResult{}, ErrRegistrationInvalid
 	}
 	configurationHash := catalogConfigurationHash(CatalogConfigurationValues{"name": displayName})
@@ -598,6 +620,13 @@ func (s *RegistrationService) RegisterCatalogMCP(ctx context.Context, principal 
 		Registration:        receipt.RegistrationID.UUID.String(),
 		SecretFieldsPending: append([]CatalogConfigurationField(nil), pendingSecretFields...),
 	}, nil
+}
+
+// isDirectRemoteDisplayNameBreak rejects values that change the structure of a
+// rendered line or terminal message. A remote display name crosses dashboard,
+// plugin, audit, and MCP surfaces, so accepting only CR/LF is insufficient.
+func isDirectRemoteDisplayNameBreak(value rune) bool {
+	return unicode.IsControl(value) || value == '\u2028' || value == '\u2029'
 }
 
 func catalogDisplayName(catalog CatalogDetails) string {

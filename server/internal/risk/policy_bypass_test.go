@@ -295,7 +295,7 @@ func TestPolicyBypassEvaluator_LegacyCombinedGrantMatchesCanonicalURLTarget(t *t
 	require.NotNil(t, authCtx)
 
 	policyID := "policy_legacy_combined_target"
-	serverURL := "https://mcp.example.com/legacy"
+	serverURL := "HTTPS://MCP.EXAMPLE.COM:443/legacy?stale=1"
 	selector := authz.NewSelector(authz.ScopeRiskPolicyBypass, policyID)
 	selector[authz.SelectorKeyServerURL] = serverURL
 	selector[authz.SelectorKeyServerIdentity] = "legacy-alias"
@@ -310,7 +310,7 @@ func TestPolicyBypassEvaluator_LegacyCombinedGrantMatchesCanonicalURLTarget(t *t
 	}))
 
 	target := risk.ShadowMCPPolicyBypassTarget(shadowmcp.AccessEvidence{
-		FullURL:        serverURL,
+		FullURL:        "https://user:pass@mcp.example.com/legacy?current=1",
 		URLHost:        "",
 		ServerIdentity: "",
 	}, "list_events")

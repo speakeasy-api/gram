@@ -4,6 +4,7 @@ package platformmcp
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -96,7 +97,11 @@ func registerCatalogRegistrationTool(reg *Registrar, registrations *Registration
 	})
 }
 
-func registerRemoteRegistrationTool(reg *Registrar, registrations *RegistrationService) {
+// registerRemoteRegistrationTool registers the existing direct-URL workflow in
+// the caller's onboarding projection after the registration itself succeeds.
+// Assistant calls remain registration-only: their connectionless surface cannot
+// authoritatively record connection-generation onboarding milestones.
+func registerRemoteRegistrationTool(reg *Registrar, registrations *RegistrationService, onboarding *OnboardingService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "register_remote_mcp",
 		Title:       "Register Remote MCP",
@@ -113,6 +118,17 @@ func registerRemoteRegistrationTool(reg *Registrar, registrations *RegistrationS
 			}
 			return nil, RegisterRemoteMCPToolOutput{}, err
 		}
+		if onboarding != nil && principal.HasConnection() {
+			// Registration has committed before this projection work begins. A
+			// bookkeeping failure must not tell the caller that the durable
+			// registration failed and encourage a duplicate retry; returning the
+			// receipt lets the user recover through the dashboard if needed.
+			if err := recordRemoteRegistrationOnboarding(ctx, onboarding, principal, result); err != nil {
+				// Onboarding is a post-commit projection. Keep the successful receipt
+				// but classify the failed projection with the bounded lifecycle taxonomy.
+				registrations.telemetry.Record(ctx, LifecycleEvent{Operation: "registration", Phase: "complete", Outcome: lifecycleOutcome(err), State: ""})
+			}
+		}
 		return nil, RegisterRemoteMCPToolOutput{
 			ProjectSlug:       result.Project.Slug,
 			CanonicalURL:      result.RemoteURL,
@@ -123,4 +139,18 @@ func registerRemoteRegistrationTool(reg *Registrar, registrations *RegistrationS
 			DashboardSetupURL: result.DashboardSetupURL,
 		}, nil
 	})
+}
+
+func recordRemoteRegistrationOnboarding(ctx context.Context, onboarding *OnboardingService, principal Principal, result RegisterRemoteMCPResult) error {
+	if _, err := onboarding.Start(ctx, principal.OrganizationID, principal.UserID); err != nil {
+		return err
+	}
+	registrationID, err := uuid.Parse(result.Registration)
+	if err != nil {
+		return ErrUnavailable
+	}
+	if _, err := onboarding.BindRegistrationForPrincipal(ctx, principal, result.Project.ID, registrationID); err != nil {
+		return err
+	}
+	return onboarding.RecordRegistrationSucceeded(ctx, principal, result.Project.ID, registrationID)
 }

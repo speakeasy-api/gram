@@ -79,22 +79,17 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		admitted[descriptor.Name] = true
 	}
 
-	// Each of these still reaches state keyed by a connection. Remove a name
-	// here in the same change that makes its path connection-less.
+	// Provider attachment still mutates connection-scoped state. Named-plugin
+	// distribution is intentionally unavailable until compatibility deployment.
 	for _, name := range []string{
-		"get_mcp_readiness",
-		"get_mcp_repair_plan",
-		"register_platform_mcp_for_project",
-		"get_platform_mcp_onboarding_status",
 		"attach_platform_mcp_identity_provider",
-		"add_platform_mcp_to_default_plugin",
-		"disable_mcp",
-		"enable_mcp",
+		"distribute_mcp_to_plugin",
+		"remove_mcp_from_plugin",
 	} {
-		require.False(t, admitted[name], "tool %q needs a connection and must not be admitted to the assistant", name)
+		require.False(t, admitted[name], "tool %q needs a connection or is rollout-gated and must not be admitted to the assistant", name)
 	}
 
-	// The reads, the registration path, and the catalogue-to-setup path are
+	// The reads, registration paths, and persisted readiness projections are
 	// connection-less end to end. get_setup_handoff is admitted because the
 	// handoff only carries the caller to the dashboard, which completes setup
 	// under its own session.
@@ -110,6 +105,10 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		"inspect_mcp_candidate",
 		"send_platform_mcp_feedback",
 		"get_setup_handoff",
+		"get_mcp_readiness",
+		"get_mcp_repair_plan",
+		"disable_mcp",
+		"enable_mcp",
 	} {
 		require.True(t, admitted[name], "tool %q works without a connection and should serve the assistant", name)
 	}
