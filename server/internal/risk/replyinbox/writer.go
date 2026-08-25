@@ -58,7 +58,7 @@ func ParseReplyURN(value string) (string, string, error) {
 		return "", "", fmt.Errorf("invalid enforcement reply urn %q", value)
 	}
 	replicaID, scanID, ok := strings.Cut(strings.TrimPrefix(value, replyURNPrefix), ":")
-	if !ok || replicaID == "" || scanID == "" || strings.Contains(scanID, ":") {
+	if !ok || !validReplicaID(replicaID) || scanID == "" || strings.Contains(scanID, ":") {
 		return "", "", fmt.Errorf("invalid enforcement reply urn %q", value)
 	}
 	return replicaID, scanID, nil

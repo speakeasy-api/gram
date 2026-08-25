@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -126,8 +127,10 @@ type Inbox struct {
 	drainerAlive    atomic.Bool
 	drainerErrors   atomic.Uint64
 
-	cancel context.CancelFunc
-	done   chan struct{}
+	cancel    context.CancelFunc
+	done      chan struct{}
+	shutdown  chan struct{}
+	closeOnce sync.Once
 
 	mu      sync.Mutex
 	waiters map[string]*waiter
@@ -185,7 +188,7 @@ func New(
 		return nil, err
 	}
 
-	drainCtx, cancel := context.WithCancel(ctx)
+	drainCtx, cancel := context.WithCancel(ctx) //nolint:gosec // cancel is retained on the Inbox and called in Close
 	inbox := &Inbox{
 		logger:          logger.With(attr.SlogComponent("enforcement-reply-inbox")),
 		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk/replyinbox"),
@@ -204,6 +207,8 @@ func New(
 		drainerErrors:   atomic.Uint64{},
 		cancel:          cancel,
 		done:            make(chan struct{}),
+		shutdown:        make(chan struct{}),
+		closeOnce:       sync.Once{},
 		clientMu:        sync.Mutex{},
 		mu:              sync.Mutex{},
 		waiters:         make(map[string]*waiter),
@@ -392,6 +397,13 @@ func (i *Inbox) awaitRegistered(ctx context.Context, scanID string, w *waiter, s
 				return outcome, nil
 			}
 			return outcome, fmt.Errorf("await enforcement replies: %w", ctxErr)
+		case <-i.shutdown:
+			w.mu.Lock()
+			w.closed = true
+			outcome := waiterOutcome(w, false, false)
+			w.mu.Unlock()
+			span.SetStatus(codes.Error, "reply inbox closed")
+			return outcome, fmt.Errorf("await enforcement replies: reply inbox closed")
 		case <-w.notify:
 		}
 	}
@@ -399,9 +411,7 @@ func (i *Inbox) awaitRegistered(ctx context.Context, scanID string, w *waiter, s
 
 func waiterOutcome(w *waiter, complete, deadline bool) Outcome {
 	byLane := make(map[Lane]*riskv1.EnforcementReply, len(w.replies))
-	for lane, reply := range w.replies {
-		byLane[lane] = reply
-	}
+	maps.Copy(byLane, w.replies)
 	return Outcome{ByLane: byLane, Complete: complete, Deadline: deadline}
 }
 
@@ -587,8 +597,10 @@ func statusLabel(status riskv1.EnforcementStatus) string {
 	return strings.ToLower(strings.TrimPrefix(status.String(), "ENFORCEMENT_STATUS_"))
 }
 
-// Close stops the drainer and closes its dedicated Redis client.
+// Close stops the drainer, releases any blocked waiters, and closes the
+// dedicated Redis client.
 func (i *Inbox) Close() error {
+	i.closeOnce.Do(func() { close(i.shutdown) })
 	i.cancel()
 	i.clientMu.Lock()
 	err := i.client.Close()

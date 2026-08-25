@@ -225,6 +225,15 @@ func parseConfig() (config, error) {
 	if *findings < 0 {
 		return config{}, fmt.Errorf("findings cannot be negative")
 	}
+	if *scanLatency < 0 {
+		return config{}, fmt.Errorf("scan latency cannot be negative")
+	}
+	if *pauseBacklog < 0 {
+		return config{}, fmt.Errorf("pause backlog cannot be negative")
+	}
+	if *pauseDuration <= 0 {
+		return config{}, fmt.Errorf("pause duration must be positive")
+	}
 	if *timeout <= 0 || *sampleInterval <= 0 || *redisPoolSize <= 0 {
 		return config{}, fmt.Errorf("timeout, sample interval, and Redis pool size must be positive")
 	}

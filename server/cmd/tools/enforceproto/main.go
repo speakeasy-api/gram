@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -101,14 +102,21 @@ func run() error {
 		return fmt.Errorf("create enforcement subscriber: %w", err)
 	}
 	receiveCtx, stopReceive := context.WithCancel(ctx)
+	defer stopReceive()
 	receiveDone := make(chan error, 1)
 	go func() {
 		receiveDone <- subscriber.Receive(receiveCtx, handler.Handle)
 	}()
+	// Every exit path stops the subscriber and waits for in-flight handlers
+	// before shared clients are closed by the deferred cleanups.
+	stopAndWait := func() error {
+		stopReceive()
+		return <-receiveDone
+	}
 
 	dispatcher, err := replyinbox.NewDispatcher(ctx, broker, inbox, replyinbox.DispatcherConfig{WaitTimeout: replyinbox.DefaultWaitTimeout})
 	if err != nil {
-		stopReceive()
+		_ = stopAndWait()
 		return fmt.Errorf("create enforcement dispatcher: %w", err)
 	}
 	defer func() {
@@ -127,23 +135,22 @@ func run() error {
 		Lanes:          []replyinbox.Lane{lane},
 	})
 	if err != nil {
-		stopReceive()
+		_ = stopAndWait()
 		return fmt.Errorf("dispatch enforcement scan: %w", err)
 	}
 	reply := outcome.ByLane[lane]
 	if !outcome.Complete || outcome.Deadline || reply == nil || reply.GetStatus() != riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK || len(reply.GetFindings()) == 0 {
-		stopReceive()
+		_ = stopAndWait()
 		return fmt.Errorf("unexpected enforcement outcome: complete=%t deadline=%t replies=%d", outcome.Complete, outcome.Deadline, len(outcome.ByLane))
 	}
 	for _, finding := range reply.GetFindings() {
-		if finding.GetMaskedPreview() == fakeSecret || finding.GetFingerprint() == "" {
-			stopReceive()
+		if strings.Contains(finding.GetMaskedPreview(), fakeSecret) || finding.GetFingerprint() == "" {
+			_ = stopAndWait()
 			return fmt.Errorf("unsafe enforcement finding")
 		}
 	}
 
-	stopReceive()
-	if receiveErr := <-receiveDone; receiveErr != nil && !errors.Is(receiveErr, context.Canceled) {
+	if receiveErr := stopAndWait(); receiveErr != nil && !errors.Is(receiveErr, context.Canceled) {
 		return fmt.Errorf("receive enforcement request: %w", receiveErr)
 	}
 	logger.InfoContext(ctx, "enforcement prototype passed", attr.SlogValueInt(len(reply.GetFindings())))
