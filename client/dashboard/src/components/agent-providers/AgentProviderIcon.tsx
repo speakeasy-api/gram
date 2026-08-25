@@ -105,22 +105,56 @@ function OpencodeIcon({ className }: { className?: string }): JSX.Element {
   );
 }
 
-// OpenClaw mark — a simple pincer drawn in-house until official brand art is
-// vendored. Uses currentColor like the sibling icons.
+// OpenClaw lobster mark. Geometry from homarr-labs/dashboard-icons
+// (openclaw-dark); gradient id namespaced to avoid document-global collisions.
 function OpenClawIcon({ className }: { className?: string }): JSX.Element {
   return (
     <svg
       className={className}
-      viewBox="0 0 24 24"
+      viewBox="0 0 120 120"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
     >
-      <path d="M12 3a9 9 0 1 0 9 9h-4a5 5 0 1 1-5-5V3Z" fill="currentColor" />
+      <defs>
+        <linearGradient
+          id="openclaw-lobster-gradient"
+          x1="0%"
+          y1="0%"
+          x2="100%"
+          y2="100%"
+        >
+          <stop offset="0%" stopColor="#ff4d4d" />
+          <stop offset="100%" stopColor="#991b1b" />
+        </linearGradient>
+      </defs>
       <path
-        d="M14 3a9 9 0 0 1 7.94 7h-4.1A5 5 0 0 0 14 7.1V3Z"
-        fill="currentColor"
-        fillOpacity="0.4"
+        d="M60 10 C30 10 15 35 15 55 C15 75 30 95 45 100 L45 110 L55 110 L55 100 C55 100 60 102 65 100 L65 110 L75 110 L75 100 C90 95 105 75 105 55 C105 35 90 10 60 10Z"
+        fill="url(#openclaw-lobster-gradient)"
       />
+      <path
+        d="M20 45 C5 40 0 50 5 60 C10 70 20 65 25 55 C28 48 25 45 20 45Z"
+        fill="url(#openclaw-lobster-gradient)"
+      />
+      <path
+        d="M100 45 C115 40 120 50 115 60 C110 70 100 65 95 55 C92 48 95 45 100 45Z"
+        fill="url(#openclaw-lobster-gradient)"
+      />
+      <path
+        d="M45 15 Q35 5 30 8"
+        stroke="#ff4d4d"
+        strokeWidth="3"
+        strokeLinecap="round"
+      />
+      <path
+        d="M75 15 Q85 5 90 8"
+        stroke="#ff4d4d"
+        strokeWidth="3"
+        strokeLinecap="round"
+      />
+      <circle cx="45" cy="35" r="6" fill="#050810" />
+      <circle cx="75" cy="35" r="6" fill="#050810" />
+      <circle cx="46" cy="34" r="2.5" fill="#00e5cc" />
+      <circle cx="76" cy="34" r="2.5" fill="#00e5cc" />
     </svg>
   );
 }
