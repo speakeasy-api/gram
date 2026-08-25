@@ -47,7 +47,9 @@ function HeadlessHero(): JSX.Element {
       <ModeSwitchStarfield direction={1} className="absolute" />
       {/* One centered column: the hero and the agent list read as a single
           block on the mesh rather than two things pushed to opposite edges. */}
-      <div className="flex w-full max-w-xl flex-col items-center gap-8 text-center">
+      {/* z-10: the starfield canvas is positioned, so unpositioned content
+          would paint beneath it and get crossed by the streaks. */}
+      <div className="relative z-10 flex w-full max-w-xl flex-col items-center gap-8 text-center">
         {/* The eyebrow labels the headline, so it sits tight against it
             rather than on the column's own rhythm. */}
         <div className="flex flex-col items-center gap-3">

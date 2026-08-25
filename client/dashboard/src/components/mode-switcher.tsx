@@ -166,7 +166,10 @@ export function ModeSwitcher({ mode }: { mode: Mode }): JSX.Element | null {
             transform: `translateX(${activeIndex * SEGMENT_WIDTH_REM}rem)`,
             // Slow enough to read as the pill travelling between segments, on
             // the same curve the pane animation uses.
-            transition: "transform 620ms cubic-bezier(0.32, 0.72, 0, 1)",
+            // The shorthand replaces the class-level transition-colors, so the
+            // ink/light swap has to be listed here too or it snaps.
+            transition:
+              "transform 620ms cubic-bezier(0.32, 0.72, 0, 1), background-color 500ms ease",
           }}
         />
         {MODES.map((entry) => (
