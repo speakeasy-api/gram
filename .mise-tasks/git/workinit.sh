@@ -61,6 +61,11 @@ suffix=$(LC_ALL=C tr -dc 'a-z0-9' < /dev/urandom | head -c 4)
 compose_project="gram-infra-${suffix}"
 mise set --file mise.local.toml "COMPOSE_PROJECT_NAME=${compose_project}"
 
+# Pub/Sub resource paths include the project ID. Giving each worktree its
+# Compose project ID keeps identical topic and subscription IDs isolated when
+# every worktree connects to one shared emulator.
+mise set --file mise.local.toml "GRAM_GCP_PROJECT_ID=${compose_project}"
+
 # The LGTM stack is shared across every worktree (compose.shared.yml), so all of
 # their traces and metrics land in one Tempo/Prometheus. Tagging each worktree's
 # telemetry with its compose project is what keeps those signals apart — without

@@ -61,6 +61,20 @@ else
   echo "✅ Added ${added} env var declaration(s) to mise.local.toml."
 fi
 
+# Pub/Sub now uses one emulator on its default port. A generated host declaration
+# contains the port template copied from mise.toml, which proves the host and
+# port were emitted together by zero:remap-ports. Reset only that generated pair;
+# explicit endpoints remain untouched.
+if grep -E '^PUBSUB_EMULATOR_HOST[[:space:]]*=' mise.local.toml \
+     | grep -qF '{{env.PUBSUB_EMULATOR_PORT}}'; then
+  for key in PUBSUB_EMULATOR_HOST PUBSUB_EMULATOR_PORT; do
+    if grep -qE "^${key}[[:space:]]*=" mise.local.toml; then
+      mise unset --file mise.local.toml "$key"
+    fi
+  done
+  echo "✅ Reset auto-generated Pub/Sub emulator endpoint to the shared default."
+fi
+
 # Presidio moved to the shared stack (compose.shared.yml) and must use the
 # default port so every worktree reaches the single shared copy. A pre-existing
 # worktree may still carry the old auto-generated remap for it, which we reset
@@ -107,15 +121,22 @@ if grep -E '^OTEL_EXPORTER_OTLP_ENDPOINT[[:space:]]*=' mise.local.toml \
   echo "✅ Reset auto-generated LGTM ports to the shared defaults."
 fi
 
-# With one LGTM serving every worktree, a worktree that does not tag its
-# telemetry is indistinguishable from every other worktree on the same commit.
-# `git:workinit` writes this for new worktrees; add it here for the ones created
-# before the stack was shared. Only ever filled in when absent, so a
-# hand-customised value survives.
-if ! grep -qE '^OTEL_RESOURCE_ATTRIBUTES[[:space:]]*=' mise.local.toml; then
-  worktree_project=$(mise set --file mise.local.toml 2>/dev/null \
-    | awk '$1 == "COMPOSE_PROJECT_NAME" { print $2 }')
-  if [ -n "$worktree_project" ]; then
+# Shared singleton services need a worktree dimension. `git:workinit` writes
+# both values for new worktrees; add them here for older worktrees. Only fill
+# absent values so hand-customised configuration survives.
+worktree_project=$(mise set --file mise.local.toml 2>/dev/null \
+  | awk '$1 == "COMPOSE_PROJECT_NAME" { print $2 }')
+if [ -n "$worktree_project" ]; then
+  # Pub/Sub resource paths include the project ID, so this isolates identical
+  # topic and subscription IDs inside the shared emulator.
+  if ! grep -qE '^GRAM_GCP_PROJECT_ID[[:space:]]*=' mise.local.toml; then
+    mise set --file mise.local.toml "GRAM_GCP_PROJECT_ID=${worktree_project}"
+    echo "✅ Namespaced this worktree's Pub/Sub resources under ${worktree_project}."
+  fi
+
+  # Without this label, telemetry from same-commit worktrees is
+  # indistinguishable in the shared LGTM stack.
+  if ! grep -qE '^OTEL_RESOURCE_ATTRIBUTES[[:space:]]*=' mise.local.toml; then
     mise set --file mise.local.toml \
       "OTEL_RESOURCE_ATTRIBUTES=worktree=${worktree_project}"
     echo "✅ Tagged this worktree's telemetry as worktree=${worktree_project}."

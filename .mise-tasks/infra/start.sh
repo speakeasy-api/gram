@@ -45,7 +45,7 @@ if [ -n "$host_arch" ]; then
         if grep -qxF "$key" <<< "$local_tags"$'\n'"$local_digests"; then
             cached_imgs+=("$img")
         fi
-    done < <(docker compose config --images 2>/dev/null | sort -u)
+    done < <({ docker compose config --images; docker compose -f compose.shared.yml -p gram-shared config --images; } 2>/dev/null | sort -u)
     # `docker pull` honors an exported DOCKER_DEFAULT_PLATFORM, so while it is
     # set the pull just re-fetches the same foreign-arch variant and the
     # warning would never clear — tell the user to unset it first.
@@ -80,14 +80,12 @@ if [ -n "$host_arch" ]; then
     fi
 fi
 
-# This worktree's own stack, first — with --remove-orphans. A pre-existing
-# worktree (and the main tree) still runs a gram-presidio container under its own
-# project that compose.yml no longer declares; removing it here, BEFORE asserting
-# the shared analyzer below, frees the old host port (5050 on the main tree,
-# which never remapped it) so the shared `up` can bind it in this same run
-# instead of losing the port to the stale container and only converging next
-# time. Profile-gated services (litellm, tunnel, local-registry) stay declared in
-# compose.yml and are not treated as orphans.
+# This worktree's own stack, first — with --remove-orphans. Pre-existing
+# worktrees can still run Pub/Sub or Presidio containers that compose.yml no
+# longer declares. Removing this worktree's copies before asserting the shared
+# services frees fixed ports in the main tree and removes obsolete remapped
+# copies elsewhere. Profile-gated services (litellm, tunnel, local-registry)
+# remain declared in compose.yml and are not treated as orphans.
 docker compose up -d --remove-orphans || exit 1
 
 # One-time migration: free host port 5050 for the shared analyzer. Before the
@@ -104,13 +102,25 @@ docker ps -a --filter "label=com.docker.compose.service=gram-presidio" --filter 
   | awk '$1 != "gram-shared" { print $2 }' \
   | xargs -r docker rm -f > /dev/null 2>&1 || true
 
-# Presidio analyzer, shared across all worktrees under a fixed project name so a
-# worktree's COMPOSE_PROJECT_NAME cannot fork it into a second copy. Bringing it
-# up is idempotent, so every worktree can safely (re)assert it here. A failure
-# here (e.g. a transient pull of the ~1 GB image) must NOT take down this
-# worktree's own databases, so warn and continue rather than aborting.
-docker compose -f compose.shared.yml -p gram-shared up -d \
-  || echo "⚠️  Shared Presidio analyzer failed to start; continuing. PII scanning stays degraded until it is up." >&2
+# One-time migration: the main tree previously bound its per-worktree Pub/Sub
+# emulator to the shared port. Remove only a non-shared emulator actually
+# publishing 8088. Sibling worktrees on remapped ports keep running until their
+# next git:worksync/infra:start migration.
+docker ps -a --filter "label=com.docker.compose.service=pubsub-emulator" --filter "publish=8088" \
+  --format '{{.Label "com.docker.compose.project"}} {{.ID}}' 2>/dev/null \
+  | awk '$1 != "gram-shared" { print $2 }' \
+  | xargs -r docker rm -f > /dev/null 2>&1 || true
+
+# Pub/Sub is required by the local streams processes. Wait for its TCP
+# healthcheck so a container that starts and immediately exits cannot let
+# infrastructure startup report success.
+docker compose -f compose.shared.yml -p gram-shared up -d --wait --wait-timeout 30 pubsub-emulator || exit 1
+
+# Presidio and LGTM are shared too, but neither is a synchronous startup
+# dependency. A transient image pull or cold model must not take down this
+# worktree's databases, so warn and continue.
+docker compose -f compose.shared.yml -p gram-shared up -d gram-presidio lgtm \
+  || echo "⚠️  Optional shared Presidio/LGTM services failed to start; continuing with degraded PII scanning or observability." >&2
 
 # Best-effort readiness for the shared analyzer. `up -d` returns once the
 # container is created, not once its ~1 GB spaCy model has loaded, so poll the
