@@ -1575,7 +1575,7 @@ func TestHandleConsentMCP_RemoteToolsListStripsOutputSchema(t *testing.T) {
 		t,
 		ctx,
 		ti.conn,
-		issuer.ProjectID,
+		issuer.ProjectID.UUID,
 		upstream.URL,
 		endpointSlug,
 		"public",

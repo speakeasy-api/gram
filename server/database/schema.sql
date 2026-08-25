@@ -1669,7 +1669,8 @@ WHERE deleted IS FALSE;
 -- See: https://datatracker.ietf.org/doc/html/rfc8414
 CREATE TABLE IF NOT EXISTS user_session_issuers (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  project_id uuid NOT NULL,
+  project_id uuid,
+  organization_id TEXT,
 
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 100),
   authn_challenge_mode TEXT NOT NULL, -- One of ('chain', 'interactive'). chain exists for backwards compatibility and should be phased out. interactive will be the main mode going forward
@@ -1685,8 +1686,12 @@ CREATE TABLE IF NOT EXISTS user_session_issuers (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT user_session_issuers_pkey PRIMARY KEY (id),
-  CONSTRAINT user_session_issuers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+  CONSTRAINT user_session_issuers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT user_session_issuers_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
+
+CREATE INDEX IF NOT EXISTS user_session_issuers_organization_id_idx
+ON user_session_issuers (organization_id);
 
 CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuers_project_slug_key
 ON user_session_issuers (project_id, slug)
@@ -1705,7 +1710,8 @@ WHERE classification = 'project_default_idp' AND deleted IS FALSE;
 -- See: https://datatracker.ietf.org/doc/html/rfc6749#section-1.1
 CREATE TABLE IF NOT EXISTS user_session_clients (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  project_id uuid NOT NULL,
+  project_id uuid,
+  organization_id TEXT,
   user_session_issuer_id uuid NOT NULL,
 
   client_id TEXT NOT NULL,
@@ -1758,6 +1764,7 @@ CREATE TABLE IF NOT EXISTS user_session_clients (
 
   CONSTRAINT user_session_clients_pkey PRIMARY KEY (id),
   CONSTRAINT user_session_clients_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT user_session_clients_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT user_session_clients_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE,
   -- CIMD forbids symmetric client secrets (no client_secret_basic,
   -- client_secret_post, or client_secret_jwt), so a CIMD-resolved row must
@@ -1783,6 +1790,9 @@ CREATE TABLE IF NOT EXISTS user_session_clients (
   )
 );
 
+CREATE INDEX IF NOT EXISTS user_session_clients_organization_id_idx
+ON user_session_clients (organization_id);
+
 -- Serves lookups for both DCR and CIMD rows. For CIMD the metadata document
 -- URL is what lands in client_id, so no separate index is needed. Note the
 -- btree entry limit of roughly 2704 bytes caps CIMD URL length in practice;
@@ -1795,7 +1805,8 @@ WHERE deleted IS FALSE;
 -- admission mode.
 CREATE TABLE IF NOT EXISTS user_session_issuer_cimd_clients (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  project_id uuid NOT NULL,
+  project_id uuid,
+  organization_id TEXT,
   user_session_issuer_id uuid NOT NULL,
 
   client_id_metadata_uri TEXT NOT NULL,
@@ -1808,6 +1819,8 @@ CREATE TABLE IF NOT EXISTS user_session_issuer_cimd_clients (
   CONSTRAINT user_session_issuer_cimd_clients_pkey PRIMARY KEY (id),
   CONSTRAINT user_session_issuer_cimd_clients_project_id_fkey
     FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT user_session_issuer_cimd_clients_organization_id_fkey
+    FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT user_session_issuer_cimd_clients_user_session_issuer_id_fkey
     FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE
 );
@@ -1828,11 +1841,15 @@ ON user_session_issuer_cimd_clients (project_id);
 CREATE INDEX IF NOT EXISTS user_session_issuer_cimd_clients_user_session_issuer_id_idx
 ON user_session_issuer_cimd_clients (user_session_issuer_id);
 
+CREATE INDEX IF NOT EXISTS user_session_issuer_cimd_clients_organization_id_idx
+ON user_session_issuer_cimd_clients (organization_id);
+
 -- User Session Consents track records of consent between Clients and Issuers
 -- Consents are scoped to given sets of underlying credentials so they can be reused between login events
 CREATE TABLE IF NOT EXISTS user_session_consents (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  project_id uuid NOT NULL,
+  project_id uuid,
+  organization_id TEXT,
 
   subject_urn TEXT NOT NULL,
   user_session_client_id uuid NOT NULL,
@@ -1846,8 +1863,12 @@ CREATE TABLE IF NOT EXISTS user_session_consents (
 
   CONSTRAINT user_session_consents_pkey PRIMARY KEY (id),
   CONSTRAINT user_session_consents_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT user_session_consents_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT user_session_consents_user_session_client_id_fkey FOREIGN KEY (user_session_client_id) REFERENCES user_session_clients (id) ON DELETE CASCADE
 );
+
+CREATE INDEX IF NOT EXISTS user_session_consents_organization_id_idx
+ON user_session_consents (organization_id);
 
 CREATE UNIQUE INDEX IF NOT EXISTS user_session_consents_subject_client_set_key
 ON user_session_consents (subject_urn, user_session_client_id, remote_set_hash)
@@ -1857,7 +1878,8 @@ WHERE deleted IS FALSE;
 -- They contain token grant information to allow for validating and exchanging tokens
 CREATE TABLE IF NOT EXISTS user_sessions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  project_id uuid NOT NULL,
+  project_id uuid,
+  organization_id TEXT,
   user_session_issuer_id uuid NOT NULL,
   user_session_client_id uuid,
   subject_urn TEXT NOT NULL,
@@ -1882,9 +1904,13 @@ CREATE TABLE IF NOT EXISTS user_sessions (
 
   CONSTRAINT user_sessions_pkey PRIMARY KEY (id),
   CONSTRAINT user_sessions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT user_sessions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT user_sessions_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE,
   CONSTRAINT user_sessions_user_session_client_id_fkey FOREIGN KEY (user_session_client_id) REFERENCES user_session_clients (id) ON DELETE SET NULL
 );
+
+CREATE INDEX IF NOT EXISTS user_sessions_organization_id_idx
+ON user_sessions (organization_id);
 
 CREATE INDEX IF NOT EXISTS user_sessions_user_session_client_id_idx
 ON user_sessions (user_session_client_id)

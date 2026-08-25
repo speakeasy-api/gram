@@ -42,8 +42,8 @@ SELECT EXISTS (
   JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
   WHERE link.remote_session_client_id = $1
     AND link.user_session_issuer_id = $2
-    AND usi.project_id = $3
-    AND (c.project_id = $3 OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $4::text)))
+    AND usi.project_id = $3::uuid
+    AND (c.project_id = $3::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $4::text)))
     AND c.deleted IS FALSE
     AND usi.deleted IS FALSE
 )::boolean AS bound
@@ -1016,7 +1016,7 @@ DELETE FROM remote_session_client_user_session_issuers AS link
 USING user_session_issuers AS usi
 WHERE link.user_session_issuer_id = usi.id
   AND usi.id = $1
-  AND usi.project_id = $2
+  AND usi.project_id = $2::uuid
 `
 
 type DeleteRemoteSessionClientAttachmentsForUserSessionIssuerParams struct {
@@ -1828,7 +1828,7 @@ SELECT s.id, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id
 FROM remote_sessions AS s
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id
-WHERE s.id = $1 AND usi.project_id = $2 AND s.deleted IS FALSE AND c.deleted IS FALSE
+WHERE s.id = $1 AND usi.project_id = $2::uuid AND s.deleted IS FALSE AND c.deleted IS FALSE
 `
 
 type GetRemoteSessionByIDParams struct {
@@ -1873,11 +1873,11 @@ SELECT
         FROM remote_session_client_user_session_issuers AS link
         JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
         WHERE link.remote_session_client_id = c.id
-          AND usi.project_id = $1
+          AND usi.project_id = $1::uuid
     )::uuid[] AS user_session_issuer_ids
 FROM remote_session_clients AS c
 WHERE c.id = $2
-  AND (c.project_id = $1 OR (c.project_id IS NULL AND c.organization_id = $3))
+  AND (c.project_id = $1::uuid OR (c.project_id IS NULL AND c.organization_id = $3))
   AND c.deleted IS FALSE
 `
 
@@ -2428,7 +2428,7 @@ func (q *Queries) GetTenantRemoteSessionIssuerByIDForUpdate(ctx context.Context,
 const getUserSessionIssuerForProject = `-- name: GetUserSessionIssuerForProject :one
 SELECT id
 FROM user_session_issuers
-WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
+WHERE id = $1 AND project_id = $2::uuid AND deleted IS FALSE
 `
 
 type GetUserSessionIssuerForProjectParams struct {
@@ -3330,10 +3330,10 @@ SELECT
         FROM remote_session_client_user_session_issuers AS link
         JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
         WHERE link.remote_session_client_id = c.id
-          AND usi.project_id = $1
+          AND usi.project_id = $1::uuid
     )::uuid[] AS user_session_issuer_ids
 FROM remote_session_clients AS c
-WHERE (c.project_id = $1 OR (c.project_id IS NULL AND c.organization_id = $2))
+WHERE (c.project_id = $1::uuid OR (c.project_id IS NULL AND c.organization_id = $2))
   AND c.deleted IS FALSE
   AND ($3::uuid IS NULL OR c.remote_session_issuer_id = $3::uuid)
   AND ($4::uuid IS NULL OR c.id < $4::uuid)
@@ -3407,15 +3407,15 @@ SELECT
         FROM remote_session_client_user_session_issuers AS all_link
         JOIN user_session_issuers AS all_usi ON all_usi.id = all_link.user_session_issuer_id
         WHERE all_link.remote_session_client_id = c.id
-          AND all_usi.project_id = $1
+          AND all_usi.project_id = $1::uuid
     )::uuid[] AS user_session_issuer_ids
 FROM remote_session_client_user_session_issuers AS link
 JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
 JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
 WHERE link.user_session_issuer_id = $2
-  AND usi.project_id = $1
+  AND usi.project_id = $1::uuid
   AND usi.deleted IS FALSE
-  AND (c.project_id = $1 OR (c.project_id IS NULL AND c.organization_id = $3))
+  AND (c.project_id = $1::uuid OR (c.project_id IS NULL AND c.organization_id = $3))
   AND c.deleted IS FALSE
   AND ($4::uuid IS NULL OR c.remote_session_issuer_id = $4::uuid)
   AND ($5::uuid IS NULL OR c.id < $5::uuid)
@@ -3599,8 +3599,8 @@ FROM remote_session_client_user_session_issuers AS link
 JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
 JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
 WHERE link.user_session_issuer_id = $1
-  AND usi.project_id = $2
-  AND (c.project_id = $2 OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $3::text)))
+  AND usi.project_id = $2::uuid
+  AND (c.project_id = $2::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $3::text)))
   AND c.deleted IS FALSE
   AND NOT EXISTS (
     SELECT 1
@@ -3864,8 +3864,8 @@ JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
 JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
 WHERE s.subject_urn = $1
   AND link.user_session_issuer_id = $2
-  AND usi.project_id = $3
-  AND (c.project_id = $3 OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $4::text)))
+  AND usi.project_id = $3::uuid
+  AND (c.project_id = $3::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $4::text)))
   AND c.deleted IS FALSE
   AND usi.deleted IS FALSE
   AND s.deleted IS FALSE
@@ -3962,7 +3962,7 @@ FROM remote_sessions AS s
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id
 LEFT JOIN users AS u ON s.subject_urn = 'user:' || u.id AND u.deleted_at IS NULL
-WHERE usi.project_id = $1
+WHERE usi.project_id = $1::uuid
   AND s.deleted IS FALSE
   AND c.deleted IS FALSE
   AND ($2::text IS NULL OR s.subject_urn = $2::text)
@@ -4180,8 +4180,8 @@ FROM remote_session_clients AS c
 JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id
 JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
 WHERE link.user_session_issuer_id = $1
-  AND usi.project_id = $2
-  AND (c.project_id = $2 OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $3::text)))
+  AND usi.project_id = $2::uuid
+  AND (c.project_id = $2::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $3::text)))
   AND c.deleted IS FALSE
 ORDER BY c.id
 FOR UPDATE OF c
@@ -4318,7 +4318,7 @@ FROM remote_session_clients AS c, user_session_issuers AS usi
 WHERE s.id = $1
   AND s.remote_session_client_id = c.id
   AND usi.id = s.user_session_issuer_id
-  AND usi.project_id = $2
+  AND usi.project_id = $2::uuid
   AND s.deleted IS FALSE
   AND c.deleted IS FALSE
 RETURNING s.id, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.created_at, s.updated_at, s.deleted_at, s.deleted
@@ -4497,8 +4497,8 @@ WHERE s.subject_urn = $2
   AND s.remote_session_client_id = $3
   AND link.remote_session_client_id = s.remote_session_client_id
   AND link.user_session_issuer_id = $4
-  AND usi.project_id = $5
-  AND (c.project_id = $5 OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $6::text)))
+  AND usi.project_id = $5::uuid
+  AND (c.project_id = $5::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $6::text)))
   AND c.deleted IS FALSE
   AND usi.deleted IS FALSE
   AND s.deleted IS FALSE
@@ -4572,8 +4572,8 @@ WHERE s.subject_urn = $1
   AND s.remote_session_client_id = $2
   AND link.remote_session_client_id = s.remote_session_client_id
   AND link.user_session_issuer_id = $3
-  AND usi.project_id = $4
-  AND (c.project_id = $4 OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $5::text)))
+  AND usi.project_id = $4::uuid
+  AND (c.project_id = $4::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $5::text)))
   AND c.deleted IS FALSE
   AND usi.deleted IS FALSE
   AND s.deleted IS FALSE
@@ -4714,8 +4714,8 @@ WHERE s.subject_urn = $1
   AND c.id = s.remote_session_client_id
   -- No liveness predicate on usi: a revoke must never fail open.
   AND usi.id = $2
-  AND usi.project_id = $3
-  AND (c.project_id = $3 OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $4::text)))
+  AND usi.project_id = $3::uuid
+  AND (c.project_id = $3::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $4::text)))
   AND c.deleted IS FALSE
   AND (
     EXISTS (
