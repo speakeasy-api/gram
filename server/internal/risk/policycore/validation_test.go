@@ -22,10 +22,12 @@ func TestValidateActionAndSourceCompatibility(t *testing.T) {
 	require.NoError(t, ValidateSources([]string{ra.SourceGitleaks, ra.SourcePresidio, shadowmcp.SourceShadowMCP}))
 	require.EqualError(t, ValidateSources([]string{"unknown"}), `source "unknown" is not a recognized policy source`)
 
+	flagOnlySources := []string{shadowmcp.SourceDestructiveTool, ra.SourceCLIDestructive, ra.SourceAccountIdentity}
+	require.NoError(t, ValidateSourceAction(flagOnlySources, "flag"))
 	for _, action := range []string{"warn", "block", "quarantine"} {
-		require.Error(t, ValidateSourceAction([]string{shadowmcp.SourceDestructiveTool}, action))
-		require.Error(t, ValidateSourceAction([]string{ra.SourceCLIDestructive}, action))
-		require.Error(t, ValidateSourceAction([]string{ra.SourceAccountIdentity}, action))
+		for _, source := range flagOnlySources {
+			require.Error(t, ValidateSourceAction([]string{source}, action))
+		}
 		require.NoError(t, ValidateSourceAction([]string{ra.SourceGitleaks}, action))
 	}
 }
@@ -52,8 +54,10 @@ func TestValidatePolicyFields(t *testing.T) {
 	require.NoError(t, ValidatePolicyType(ra.PolicyTypePromptBased))
 	require.EqualError(t, ValidatePolicyType("other"), "policy_type must be one of: standard, prompt_based")
 
-	require.NoError(t, ValidateCustomRuleIDs([]string{"custom.rule"}))
-	require.Error(t, ValidateCustomRuleIDs([]string{"builtin.rule"}))
+	require.NoError(t, ValidateCustomRuleIDs([]string{"custom.rule_1"}))
+	for _, id := range []string{"builtin.rule", "custom.", "custom.Bad", "custom.bad-rule"} {
+		require.Error(t, ValidateCustomRuleIDs([]string{id}))
+	}
 	require.NoError(t, ValidateMessageTypes(nil))
 	require.Error(t, ValidateMessageTypes([]string{"unknown"}))
 }

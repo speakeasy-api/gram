@@ -75,6 +75,18 @@ func TestProjectPreservesPolicyReadSemantics(t *testing.T) {
 	require.Equal(t, "model", *got.ModelConfig.Model)
 }
 
+func TestAuditSnapshotRemovesPrompt(t *testing.T) {
+	t.Parallel()
+
+	prompt := "sensitive policy prompt"
+	policy := Policy{Name: "policy", Prompt: &prompt}
+
+	snapshot := AuditSnapshot(policy)
+	require.Nil(t, snapshot.Prompt)
+	require.Equal(t, "policy", snapshot.Name)
+	require.Equal(t, &prompt, policy.Prompt)
+}
+
 func TestProjectToleratesMalformedConfigAndOmitsListProgress(t *testing.T) {
 	t.Parallel()
 

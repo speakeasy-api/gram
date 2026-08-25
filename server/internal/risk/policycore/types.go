@@ -68,6 +68,13 @@ type Progress struct {
 	Analyzed int64
 }
 
+// AuditSnapshot strips policy content that must not enter audit or outbox
+// telemetry while preserving the administrative fields needed for change logs.
+func AuditSnapshot(policy Policy) Policy {
+	policy.Prompt = nil
+	return policy
+}
+
 // Project maps a database policy row into its canonical transport-neutral form.
 func Project(row repo.RiskPolicy, audiencePrincipalURNs []string, progress *Progress) Policy {
 	var pendingMessages, totalMessages *int64
@@ -104,7 +111,7 @@ func Project(row repo.RiskPolicy, audiencePrincipalURNs []string, progress *Prog
 		Action:                 row.Action,
 		AudienceType:           row.AudienceType,
 		AudiencePrincipalURNs:  audience,
-		ShadowMCPDisposition:   effectiveShadowMCPDisposition(row),
+		ShadowMCPDisposition:   shadowMCPDisposition(row),
 		AutoName:               row.AutoName,
 		UserMessage:            conv.FromPGText[string](row.UserMessage),
 		Prompt:                 conv.FromPGText[string](row.Prompt),
@@ -134,14 +141,12 @@ func projectDetectionScopes(analyzerConfig []byte) []DetectionScope {
 	return out
 }
 
-func effectiveShadowMCPDisposition(row repo.RiskPolicy) *string {
-	if row.Action != "block" || !slices.Contains(row.Sources, shadowmcp.SourceShadowMCP) {
+func shadowMCPDisposition(row repo.RiskPolicy) *string {
+	disposition := shadowmcp.EffectiveDisposition(row.ShadowMcpDisposition, row.Sources, row.Action)
+	if disposition == "" {
 		return nil
 	}
-	if row.ShadowMcpDisposition.Valid && row.ShadowMcpDisposition.String != "" {
-		return new(row.ShadowMcpDisposition.String)
-	}
-	return new(shadowmcp.DispositionBlockAll)
+	return &disposition
 }
 
 func unmarshalModelConfig(raw []byte) *ModelConfig {

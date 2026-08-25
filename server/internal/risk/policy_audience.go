@@ -3,8 +3,6 @@ package risk
 import (
 	"context"
 	"fmt"
-	"maps"
-	"slices"
 
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -106,27 +104,4 @@ func clearRiskPolicyAudienceGrants(ctx context.Context, db repo.DBTX, organizati
 	}
 
 	return nil
-}
-
-func riskPolicyAudiencePrincipalURNs(ctx context.Context, db repo.DBTX, organizationID string, policyID string) ([]string, error) {
-	grants, err := authz.ListGrantsForResource(ctx, db, authz.Resource{
-		OrganizationID: organizationID,
-		Scope:          authz.ScopeRiskPolicyEvaluate,
-		ResourceID:     policyID,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("list risk policy audience grants: %w", err)
-	}
-
-	principalURNs := make([]string, 0, len(grants))
-	for _, grant := range grants {
-		if !maps.Equal(grant.Selector, authz.NewSelector(authz.ScopeRiskPolicyEvaluate, policyID)) {
-			continue
-		}
-		principalURNs = append(principalURNs, grant.PrincipalUrn)
-	}
-	slices.Sort(principalURNs)
-	principalURNs = slices.Compact(principalURNs)
-
-	return principalURNs, nil
 }

@@ -947,7 +947,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 
 	audiencePrincipalURNs := payload.AudiencePrincipalUrns
 	if audienceType == riskPolicyAudienceTargeted && audiencePrincipalURNs == nil {
-		audiencePrincipalURNs, err = riskPolicyAudiencePrincipalURNs(ctx, s.db, authCtx.ActiveOrganizationID, current.ID.String())
+		audiencePrincipalURNs, err = s.policies.AudiencePrincipalURNs(ctx, authCtx.ActiveOrganizationID, current.ID.String())
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "load risk policy audience").LogError(ctx, s.logger)
 		}
@@ -970,7 +970,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	// stored disposition also cannot morph away from being a blocking shadow
 	// MCP policy via a sources/action change — that would silently drop the
 	// posture and orphan the blocked-URL list.
-	effectiveDisposition := effectiveShadowMCPDisposition(current.ShadowMcpDisposition, sources, action)
+	effectiveDisposition := shadowmcp.EffectiveDisposition(current.ShadowMcpDisposition, sources, action)
 	if current.ShadowMcpDisposition.Valid && current.ShadowMcpDisposition.String != "" && effectiveDisposition == "" {
 		return nil, oops.E(oops.CodeInvalid, nil, "cannot change the sources or action of a shadow mcp policy with a disposition; delete and recreate the policy instead")
 	}
@@ -1067,7 +1067,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		return nil, err
 	}
 
-	currentAudiencePrincipalURNs, err := riskPolicyAudiencePrincipalURNs(ctx, s.db, authCtx.ActiveOrganizationID, current.ID.String())
+	currentAudiencePrincipalURNs, err := s.policies.AudiencePrincipalURNs(ctx, authCtx.ActiveOrganizationID, current.ID.String())
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load risk policy audience snapshot").LogError(ctx, s.logger)
 	}
@@ -3714,7 +3714,7 @@ func buildSessionQuarantine(row repo.SessionQuarantine) *gen.SessionQuarantine {
 }
 
 func policyRowSnapshotWithAudience(row repo.RiskPolicy, audiencePrincipalURNs []string) *types.RiskPolicy {
-	return policyToGoa(policycore.Project(row, audiencePrincipalURNs, nil))
+	return policyToGoa(policycore.AuditSnapshot(policycore.Project(row, audiencePrincipalURNs, nil)))
 }
 
 func customDetectionRuleToType(row repo.RiskCustomDetectionRule) *types.RiskCustomDetectionRule {

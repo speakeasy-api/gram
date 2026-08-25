@@ -14,7 +14,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
-var approvedDomainFormat = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$`)
+var (
+	approvedDomainFormat = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$`)
+	customRuleIDFormat   = regexp.MustCompile(`^custom\.[a-z0-9_]+$`)
+)
 
 // ValidationError separates a stable client-facing validation message from an
 // underlying technical cause retained for logs and diagnostics.
@@ -73,8 +76,8 @@ func ValidateSourceAction(sources []string, action string) error {
 
 func ValidateCustomRuleIDs(ids []string) error {
 	for _, id := range ids {
-		if !strings.HasPrefix(id, "custom.") {
-			return fmt.Errorf("custom rule id %q must start with custom%s", id, ".")
+		if !customRuleIDFormat.MatchString(id) {
+			return fmt.Errorf("custom rule id %q must match custom.[a-z0-9_]+", id)
 		}
 	}
 	return nil

@@ -80,14 +80,16 @@ func (c *Core) ProjectWithProgress(ctx context.Context, row repo.RiskPolicy) (Po
 	if err != nil {
 		analyzed = 0
 	}
-	audience, err := c.audiencePrincipalURNs(ctx, row.OrganizationID, row.ID.String())
+	audience, err := c.AudiencePrincipalURNs(ctx, row.OrganizationID, row.ID.String())
 	if err != nil {
 		return Policy{}, fmt.Errorf("load risk policy audience: %w", err)
 	}
 	return Project(row, audience, &Progress{Total: total, Analyzed: analyzed}), nil
 }
 
-func (c *Core) audiencePrincipalURNs(ctx context.Context, organizationID, policyID string) ([]string, error) {
+// AudiencePrincipalURNs returns the exact-selector audience for one policy,
+// sorted and deduplicated.
+func (c *Core) AudiencePrincipalURNs(ctx context.Context, organizationID, policyID string) ([]string, error) {
 	grants, err := authz.ListGrantsForResource(ctx, c.db, authz.Resource{
 		OrganizationID: organizationID,
 		Scope:          authz.ScopeRiskPolicyEvaluate,
