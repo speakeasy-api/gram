@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
 const (
@@ -60,8 +61,7 @@ func (s *Service) resolveGatewayMemberResource(
 	endpoint *ResolvedMcpEndpoint,
 	issuerURL string,
 ) (string, error) {
-	want := strings.TrimRight(issuerURL, "/")
-	if want == "" {
+	if strings.TrimSpace(issuerURL) == "" {
 		return "", nil
 	}
 
@@ -107,7 +107,13 @@ func (s *Service) resolveGatewayMemberResource(
 				return nil
 			}
 			for _, authorizationServer := range doc.AuthorizationServers {
-				if strings.TrimRight(authorizationServer, "/") == want {
+				// Canonical, not literal: the entry is written by the upstream
+				// while the issuer URL is Gram's stored spelling, so the two
+				// disagree on trailing slash, default port, and host case for
+				// one authorization server. A literal compare both misses real
+				// members and lets two members behind one authorization server
+				// slip past the ambiguity guard on a spelling difference.
+				if remotesessions.IssuerURLsCanonicallyEqual(authorizationServer, issuerURL) {
 					matches[i] = strings.TrimRight(row.UpstreamUrl, "/")
 					break
 				}

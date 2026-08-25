@@ -171,7 +171,7 @@ func validateMigrationScope(source, target repo.RemoteSessionIssuer) error {
 func endpointMismatches(source, target repo.RemoteSessionIssuer) []string {
 	var mismatches []string
 
-	if !issuerURLsCanonicallyEqual(source.Issuer, target.Issuer) {
+	if !IssuerURLsCanonicallyEqual(source.Issuer, target.Issuer) {
 		mismatches = append(mismatches, "issuer")
 	}
 	if !pgTextEqual(source.TokenEndpoint, target.TokenEndpoint) {
@@ -189,31 +189,6 @@ func pgTextEqual(a, b pgtype.Text) bool {
 		return false
 	}
 	return !a.Valid || a.String == b.String
-}
-
-// issuerURLsCanonicallyEqual reports whether two issuer identifiers name the
-// same upstream authorization server, collapsing the trailing-slash and
-// default-port spellings that parseCanonicalIssuerURL treats as equivalent.
-//
-// A value that does not parse as an issuer identifier is only ever equal to an
-// identical string. Migration must not widen an identity comparison on input it
-// could not understand, and rows predating validation can hold anything.
-func issuerURLsCanonicallyEqual(a, b string) bool {
-	if a == b {
-		return true
-	}
-
-	canonicalA, err := parseCanonicalIssuerURL(a)
-	if err != nil {
-		return false
-	}
-
-	canonicalB, err := parseCanonicalIssuerURL(b)
-	if err != nil {
-		return false
-	}
-
-	return canonicalA.String() == canonicalB.String()
 }
 
 // migrationWarnings names issuer fields that diverge without blocking the

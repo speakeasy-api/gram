@@ -55,6 +55,35 @@ type canonicalIssuerURL struct {
 	path string
 }
 
+// IssuerURLsCanonicallyEqual reports whether two issuer identifiers name the
+// same upstream authorization server, collapsing the trailing-slash,
+// default-port, and host-case spellings that parseCanonicalIssuerURL treats as
+// equivalent. It is the one comparison to use whenever an issuer URL Gram
+// stored is matched against an issuer URL some other party wrote — a discovery
+// document's authorization_servers entry, an admin's form input — so those
+// comparisons cannot drift apart.
+//
+// A value that does not parse as an issuer identifier is only ever equal to an
+// identical string. Widening an identity comparison on input that could not be
+// understood is never right, and rows predating validation can hold anything.
+func IssuerURLsCanonicallyEqual(a, b string) bool {
+	if a == b {
+		return true
+	}
+
+	canonicalA, err := parseCanonicalIssuerURL(a)
+	if err != nil {
+		return false
+	}
+
+	canonicalB, err := parseCanonicalIssuerURL(b)
+	if err != nil {
+		return false
+	}
+
+	return canonicalA.String() == canonicalB.String()
+}
+
 // parseCanonicalIssuerURL validates raw as an issuer identifier and reduces it
 // to its canonical parts.
 func parseCanonicalIssuerURL(raw string) (canonicalIssuerURL, error) {

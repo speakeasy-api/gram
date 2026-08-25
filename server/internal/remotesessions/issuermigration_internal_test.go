@@ -229,10 +229,10 @@ func TestMigratePreflight_CanMigrate(t *testing.T) {
 func TestIssuerURLsCanonicallyEqual_CollapsesEquivalentSpellings(t *testing.T) {
 	t.Parallel()
 
-	require.True(t, issuerURLsCanonicallyEqual("https://idp.example.com", "https://idp.example.com/"))
-	require.True(t, issuerURLsCanonicallyEqual("https://idp.example.com", "https://idp.example.com:443"))
-	require.True(t, issuerURLsCanonicallyEqual("https://IDP.example.com", "https://idp.example.com"))
-	require.True(t, issuerURLsCanonicallyEqual("http://idp.example.com:80/x", "http://idp.example.com/x"))
+	require.True(t, IssuerURLsCanonicallyEqual("https://idp.example.com", "https://idp.example.com/"))
+	require.True(t, IssuerURLsCanonicallyEqual("https://idp.example.com", "https://idp.example.com:443"))
+	require.True(t, IssuerURLsCanonicallyEqual("https://IDP.example.com", "https://idp.example.com"))
+	require.True(t, IssuerURLsCanonicallyEqual("http://idp.example.com:80/x", "http://idp.example.com/x"))
 }
 
 // TestIssuerURLsCanonicallyEqual_KeepsDistinctUpstreamsApart pins the axes that
@@ -241,10 +241,10 @@ func TestIssuerURLsCanonicallyEqual_CollapsesEquivalentSpellings(t *testing.T) {
 func TestIssuerURLsCanonicallyEqual_KeepsDistinctUpstreamsApart(t *testing.T) {
 	t.Parallel()
 
-	require.False(t, issuerURLsCanonicallyEqual("https://idp.example.com", "http://idp.example.com"))
-	require.False(t, issuerURLsCanonicallyEqual("https://idp.example.com", "https://other.example.com"))
-	require.False(t, issuerURLsCanonicallyEqual("https://idp.example.com/a", "https://idp.example.com/A"))
-	require.False(t, issuerURLsCanonicallyEqual("https://idp.example.com", "https://idp.example.com:8443"))
+	require.False(t, IssuerURLsCanonicallyEqual("https://idp.example.com", "http://idp.example.com"))
+	require.False(t, IssuerURLsCanonicallyEqual("https://idp.example.com", "https://other.example.com"))
+	require.False(t, IssuerURLsCanonicallyEqual("https://idp.example.com/a", "https://idp.example.com/A"))
+	require.False(t, IssuerURLsCanonicallyEqual("https://idp.example.com", "https://idp.example.com:8443"))
 }
 
 // TestIssuerURLsCanonicallyEqual_UnparseableIsOnlyEqualToItself proves a stored
@@ -254,8 +254,8 @@ func TestIssuerURLsCanonicallyEqual_KeepsDistinctUpstreamsApart(t *testing.T) {
 func TestIssuerURLsCanonicallyEqual_UnparseableIsOnlyEqualToItself(t *testing.T) {
 	t.Parallel()
 
-	require.True(t, issuerURLsCanonicallyEqual("not a url", "not a url"))
-	require.False(t, issuerURLsCanonicallyEqual("not a url", "not a url/"))
-	require.False(t, issuerURLsCanonicallyEqual("not a url", "https://idp.example.com"))
-	require.False(t, issuerURLsCanonicallyEqual("", "https://idp.example.com"))
+	require.True(t, IssuerURLsCanonicallyEqual("not a url", "not a url"))
+	require.False(t, IssuerURLsCanonicallyEqual("not a url", "not a url/"))
+	require.False(t, IssuerURLsCanonicallyEqual("not a url", "https://idp.example.com"))
+	require.False(t, IssuerURLsCanonicallyEqual("", "https://idp.example.com"))
 }
