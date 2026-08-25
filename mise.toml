@@ -375,7 +375,8 @@ GRAM_SVIX_API_KEY = { default = "unset" }
 ################
 ## GCP config ##
 ################
-## Typically this variable is omitted and the GCP SDK will detect project ID
-## from the environment. However, for local development, it can be set to a
-## static value.
+## The Pub/Sub emulator namespaces resources by project ID. The main tree keeps
+## this stable default; git:workinit overrides it with the worktree's unique
+## Compose project so one shared emulator can isolate identical topic and
+## subscription IDs from concurrent worktrees.
 GRAM_GCP_PROJECT_ID = "local-dev-project"

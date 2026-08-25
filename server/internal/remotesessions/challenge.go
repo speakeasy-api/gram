@@ -306,27 +306,28 @@ type RemoteSessionState struct {
 }
 
 // RemoteSessionStatuses returns, per remote_session_client_id, the state of
-// `subject`'s remote_session among clientIDs. Clients with no non-deleted
-// session are omitted (disconnected). Single round-trip; the caller
-// (consent renderer) then does O(1) lookups per card. Returns an empty map
-// for a zero subject or an empty client list so anonymous-pre-stamp
-// renders are no-ops.
-//
-// Scope is the client IDs the caller already resolved (ListClients). The
-// stored user_session_issuer_id is provenance from INSERT, not a lookup
-// key, so a grant minted by a different issuer — including one that has
-// since been soft-deleted — is still returned.
+// `subject`'s remote_session on every client bound to the requesting
+// `userSessionIssuerID`. Clients with no non-deleted session are omitted
+// (disconnected). Single round-trip; the caller (consent renderer) then does
+// O(1) lookups per card. Returns an empty map for zero subjects so
+// anonymous-pre-stamp renders are no-ops. The stored user_session_issuer_id
+// is provenance from INSERT, not a lookup key, so a grant minted by a
+// different issuer — including one since soft-deleted — is still returned.
 func (m *ChallengeManager) RemoteSessionStatuses(
 	ctx context.Context,
 	subject urn.SessionSubject,
-	clientIDs []uuid.UUID,
+	projectID uuid.UUID,
+	organizationID string,
+	userSessionIssuerID uuid.UUID,
 ) (map[uuid.UUID]RemoteSessionState, error) {
-	if subject.IsZero() || len(clientIDs) == 0 {
+	if subject.IsZero() {
 		return map[uuid.UUID]RemoteSessionState{}, nil
 	}
 	rows, err := remotesessions_repo.New(m.db).ListRemoteSessionStatusesForSubject(ctx, remotesessions_repo.ListRemoteSessionStatusesForSubjectParams{
-		SubjectUrn:             subject,
-		RemoteSessionClientIds: clientIDs,
+		SubjectUrn:          subject,
+		UserSessionIssuerID: userSessionIssuerID,
+		ProjectID:           projectID,
+		OrganizationID:      organizationID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list remote session statuses: %w", err)
@@ -363,13 +364,34 @@ var ErrRemoteSessionNotRefreshable = errors.New("remote session has no usable re
 
 // RefreshRemoteSession performs an explicit consent-screen refresh through the
 // same best-effort single-flight path as lazy and scheduled refreshes.
+//
+// The credential is shared by every user_session_issuer bound to its client;
+// its stored user_session_issuer_id is provenance only. Authorization is
+// therefore the requesting issuer's tenant-scoped client binding, not a match
+// against the surface that happened to mint the row — any bound surface may
+// refresh, and an unbound one fails closed with ErrRemoteSessionNotRefreshable.
 func (m *ChallengeManager) RefreshRemoteSession(
 	ctx context.Context,
 	subject urn.SessionSubject,
+	projectID uuid.UUID,
+	organizationID string,
+	userSessionIssuerID uuid.UUID,
 	clientID uuid.UUID,
-	fallbackResource string,
 ) (RefreshResult, error) {
 	var zero RefreshResult
+
+	bound, err := remotesessions_repo.New(m.db).CheckRemoteSessionClientBindingForUserSessionIssuer(ctx, remotesessions_repo.CheckRemoteSessionClientBindingForUserSessionIssuerParams{
+		RemoteSessionClientID: clientID,
+		UserSessionIssuerID:   userSessionIssuerID,
+		ProjectID:             projectID,
+		OrganizationID:        organizationID,
+	})
+	if err != nil {
+		return zero, fmt.Errorf("check remote session client binding: %w", err)
+	}
+	if !bound {
+		return zero, ErrRemoteSessionNotRefreshable
+	}
 
 	session, err := remotesessions_repo.New(m.db).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{
 		SubjectUrn:            subject,
@@ -381,12 +403,17 @@ func (m *ChallengeManager) RefreshRemoteSession(
 	if err != nil {
 		return zero, fmt.Errorf("get consent remote session: %w", err)
 	}
-	if !session.RefreshTokenEncrypted.Valid ||
-		session.RefreshTokenEncrypted.String == "" {
+	if !session.RefreshTokenEncrypted.Valid || session.RefreshTokenEncrypted.String == "" {
 		return zero, ErrRemoteSessionNotRefreshable
 	}
 
-	return m.refresher.RefreshNow(ctx, session, fallbackResource)
+	return m.refresher.RefreshNow(ctx, session, "")
+}
+
+// FallbackResourceForClient derives one client's RFC 8707 resource from its
+// attached MCP servers; ambiguous or absent upstreams derive "".
+func (m *ChallengeManager) FallbackResourceForClient(ctx context.Context, clientID uuid.UUID) (string, error) {
+	return m.refresher.FallbackResourceForClient(ctx, clientID)
 }
 
 // DisconnectRemoteSession soft-deletes the subject's remote_session for one
@@ -402,10 +429,13 @@ func (m *ChallengeManager) RefreshRemoteSession(
 //
 // Returns the number of rows affected; zero means there was nothing to
 // disconnect and nothing is sent upstream.
-func (m *ChallengeManager) DisconnectRemoteSession(ctx context.Context, subject urn.SessionSubject, clientID uuid.UUID) (int64, error) {
+func (m *ChallengeManager) DisconnectRemoteSession(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID, clientID uuid.UUID) (int64, error) {
 	disconnected, err := remotesessions_repo.New(m.db).SoftDeleteRemoteSessionBySubjectAndClient(ctx, remotesessions_repo.SoftDeleteRemoteSessionBySubjectAndClientParams{
 		SubjectUrn:            subject,
 		RemoteSessionClientID: clientID,
+		UserSessionIssuerID:   userSessionIssuerID,
+		ProjectID:             projectID,
+		OrganizationID:        organizationID,
 	})
 	if err != nil {
 		return 0, fmt.Errorf("disconnect remote session: %w", err)
@@ -425,11 +455,14 @@ func (m *ChallengeManager) DisconnectRemoteSession(ctx context.Context, subject 
 // SetRemoteSessionAutoRefresh records the subject's consent-screen
 // auto-refresh choice for one client. Returns rows affected; zero means no
 // active session exists for the binding (e.g. disconnected in another tab).
-func (m *ChallengeManager) SetRemoteSessionAutoRefresh(ctx context.Context, subject urn.SessionSubject, clientID uuid.UUID, enabled bool) (int64, error) {
+func (m *ChallengeManager) SetRemoteSessionAutoRefresh(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID, clientID uuid.UUID, enabled bool) (int64, error) {
 	n, err := remotesessions_repo.New(m.db).SetRemoteSessionAutoRefresh(ctx, remotesessions_repo.SetRemoteSessionAutoRefreshParams{
 		AutoRefresh:           enabled,
 		SubjectUrn:            subject,
 		RemoteSessionClientID: clientID,
+		UserSessionIssuerID:   userSessionIssuerID,
+		ProjectID:             projectID,
+		OrganizationID:        organizationID,
 	})
 	if err != nil {
 		return 0, fmt.Errorf("set remote session auto refresh: %w", err)

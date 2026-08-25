@@ -109,6 +109,7 @@ export const Replay = ({
       plugins,
       mcpTools: undefined,
       mcpToolsLoading: false,
+      mcpToolsError: null,
     }),
     [config, plugins],
   );

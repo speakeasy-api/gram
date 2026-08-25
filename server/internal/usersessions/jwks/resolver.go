@@ -90,6 +90,13 @@ func newFetchClientFrom(base *guardian.HTTPClient) *guardian.HTTPClient {
 // state it is handed demands one. The unknown-kid refresh limit lives in
 // KeyResolver, which is what unauthenticated request paths must go through.
 func (r *Resolver) Resolve(ctx context.Context, source Source, cache CacheState) (*Result, error) {
+	return r.ResolveWithFetchHook(ctx, source, cache, nil)
+}
+
+// ResolveWithFetchHook is Resolve with a FetchHook consulted immediately
+// before any upstream request. Callers that meter fetches use it so the
+// charge falls on exactly the resolutions that issue one.
+func (r *Resolver) ResolveWithFetchHook(ctx context.Context, source Source, cache CacheState, beforeFetch FetchHook) (*Result, error) {
 	switch source.kind {
 	case sourceInline:
 		keys, err := parseKeySet(source.inline)
@@ -126,13 +133,20 @@ func (r *Resolver) Resolve(ctx context.Context, source Source, cache CacheState)
 			TTL:      0,
 		}, nil
 	case sourceRemote:
-		return r.resolveRemote(ctx, source, cache)
+		return r.resolveRemote(ctx, source, cache, beforeFetch)
 	default:
 		return nil, errors.New("zero Source: construct one with NewInlineSource or NewRemoteSource")
 	}
 }
 
-func (r *Resolver) resolveRemote(ctx context.Context, source Source, cache CacheState) (*Result, error) {
+// FetchHook runs immediately before an upstream request is issued, and only
+// then. Returning an error abandons the resolution without a request. It is
+// how a caller charges a fetch budget on exactly the resolutions that cost
+// an outbound request, whatever the cache policy decided: a cache hit never
+// invokes it, and a stored document that fails re-screening does.
+type FetchHook func(ctx context.Context) error
+
+func (r *Resolver) resolveRemote(ctx context.Context, source Source, cache CacheState, beforeFetch FetchHook) (*Result, error) {
 	// The stored document is re-parsed and re-screened under the rules
 	// compiled into this build before it is served or revalidated. A stored
 	// document that no longer passes is treated as absent — the fetch below
@@ -175,6 +189,26 @@ func (r *Resolver) resolveRemote(ctx context.Context, source Source, cache Cache
 	etag := ""
 	if storedUsable {
 		etag = httpcache.SanitizeETag(cache.ETag, maxETagLength)
+	}
+
+	if beforeFetch != nil {
+		if err := beforeFetch(ctx); err != nil {
+			// Observed like every other attempt, under its own outcome: a
+			// budget denial that vanished from jwks.fetch.attempts would
+			// make an exhausted scope look like a quiet one.
+			r.observe(ctx, resolveObservation{
+				uri:           source.uri,
+				origin:        source.origin,
+				result:        fetchResultFetchDenied,
+				reason:        "",
+				status:        0,
+				duration:      0,
+				fetched:       false,
+				responseBytes: 0,
+				err:           err,
+			})
+			return nil, err
+		}
 	}
 
 	start := time.Now()

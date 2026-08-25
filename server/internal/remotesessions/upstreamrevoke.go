@@ -62,10 +62,9 @@ const (
 	// when it expires are counted and logged rather than silently dropped.
 	bulkRevokeTimeout = 30 * time.Second
 
-	// bulkRevokeConcurrency caps in-flight POSTs within one batch. Every session
-	// on a client shares that client's issuer, so the whole batch lands on a
-	// single upstream host and an unbounded fan-out would read as a burst from
-	// Gram against one customer's identity provider.
+	// bulkRevokeConcurrency caps in-flight POSTs within one batch. A batch can
+	// span several clients' upstream hosts, but an unbounded fan-out would
+	// still read as a burst from Gram against a customer's identity provider.
 	bulkRevokeConcurrency = 8
 )
 
@@ -83,11 +82,12 @@ type UpstreamRevoker struct {
 
 	// client is built once and shared by every revocation. Guardian's pooled
 	// transport is meant for exactly this — a long-lived client making repeated
-	// requests to the same hosts — and a bulk revoke is the case it pays off on,
-	// since every session in a batch shares one issuer. Constructing one per
-	// call instead would open a connection per session and hold each idle until
-	// it timed out, which is the file-descriptor leak PooledClient's own
-	// documentation warns against.
+	// requests to the same hosts — and a bulk revoke is the case it pays off
+	// on: even a batch spanning several clients' issuers repeats each host, and
+	// the pool amortizes every repeat. Constructing one per call instead would
+	// open a connection per session and hold each idle until it timed out,
+	// which is the file-descriptor leak PooledClient's own documentation warns
+	// against.
 	client *guardian.HTTPClient
 
 	metrics *remotesessionmetrics.Revoke
@@ -144,14 +144,17 @@ func revokedCredentials(rows []repo.SoftDeleteRemoteSessionsByClientIDRow) []Rev
 	return creds
 }
 
-// SoftDeleteSubjectSessions tombstones every upstream grant a subject holds
-// in the given project, inside the caller's transaction, and returns the
-// credentials to hand to [UpstreamRevoker.RevokeAllDetached] once that
-// transaction commits.
+// SoftDeleteSubjectSessions tombstones every upstream grant the subject holds
+// on clients bound to the revoking session's issuer, inside the caller's
+// transaction, and returns the credentials to hand to
+// [UpstreamRevoker.RevokeAllDetached] once that transaction commits.
 //
 // The stored user_session_issuer_id is provenance from INSERT, not a lookup
-// key, so a grant minted by a different issuer in the same project is still
-// tombstoned, including when that issuer has since been soft-deleted.
+// key: scope comes from the requesting issuer's tenant-scoped client
+// bindings, so a grant minted through a different (even since-soft-deleted)
+// issuer on a bound client is still tombstoned. Grants on clients bound only
+// to sibling issuers are deliberately left alone — those issuers' Gram
+// sessions are still live and revoke through their own bindings.
 //
 // Split in two on purpose. The tombstone belongs in the caller's transaction so
 // it commits or rolls back with the revocation that triggered it; the upstream
@@ -162,10 +165,12 @@ func revokedCredentials(rows []repo.SoftDeleteRemoteSessionsByClientIDRow) []Rev
 //
 // Takes a DBTX rather than a transaction type so callers in other packages can
 // pass whichever handle their own transaction gave them.
-func (r *UpstreamRevoker) SoftDeleteSubjectSessions(ctx context.Context, tx repo.DBTX, subject urn.SessionSubject, projectID uuid.UUID) ([]RevokedCredentials, error) {
+func (r *UpstreamRevoker) SoftDeleteSubjectSessions(ctx context.Context, tx repo.DBTX, subject urn.SessionSubject, userSessionIssuerID uuid.UUID, projectID uuid.UUID, organizationID string) ([]RevokedCredentials, error) {
 	rows, err := repo.New(tx).SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuer(ctx, repo.SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerParams{
-		SubjectUrn: subject,
-		ProjectID:  projectID,
+		SubjectUrn:          subject,
+		UserSessionIssuerID: userSessionIssuerID,
+		ProjectID:           projectID,
+		OrganizationID:      organizationID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("soft delete remote sessions for subject: %w", err)
@@ -217,8 +222,8 @@ func (r *UpstreamRevoker) RevokeDetached(ctx context.Context, cred RevokedCreden
 // RevokeDetached. Two bounds on top of that, because a batch is unbounded in a
 // way a single revoke is not:
 //
-//   - bulkRevokeConcurrency in flight at once. The batch shares one issuer, so
-//     the fan-out is aimed at a single upstream host.
+//   - bulkRevokeConcurrency in flight at once. A batch can span multiple
+//     clients' hosts, so the cap bounds the total fan-out, not one host's.
 //   - bulkRevokeTimeout across the whole batch, with each session still holding
 //     its own upstreamRevokeTimeout inside it. Without the per-session bound one
 //     unresponsive upstream would hold a concurrency slot for the entire batch
@@ -273,6 +278,7 @@ func (r *UpstreamRevoker) RevokeAllDetached(ctx context.Context, creds []Revoked
 		return
 	}
 
+	// Attribution is best-effort: a batch can span clients, log the first.
 	r.logger.WarnContext(ctx, "upstream revoke: batch budget exhausted before every session was attempted",
 		attr.SlogRemoteSessionClientID(creds[0].RemoteSessionClientID.String()),
 		attr.SlogRemoteSessionRevokeDroppedCount(dropped),

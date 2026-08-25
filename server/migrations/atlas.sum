@@ -1,4 +1,4 @@
-h1:/Spjx2Q9GRxZDhQwSWGkJbOC6EaggiOlNyIph32//ic=
+h1:BuiAwSCHyJvHjNldMK66c+aiHP9YCQNRjPOOjv/1pqk=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -362,3 +362,5 @@ h1:/Spjx2Q9GRxZDhQwSWGkJbOC6EaggiOlNyIph32//ic=
 20260820223741_add-meta-mcp-servers.sql h1:IeASYht+IS0A2fUpejqgmnveRLsI/toU3TXQkk0eR0U=
 20260824101637_session-quarantines.sql h1:u9OuwdWdmTtmMQAKi87E16bPyf37dcYtyD8eVl8i+Ps=
 20260824205231_add-meta-mcp-visibility.sql h1:sNzUickcYBYZhyuODqZl5gQkHRg20UNRtul3fKxd+oE=
+20260825013503_platform-mcp-operation-receipt-result-payload.sql h1:WjXtdhOf4ZTjor8hkwXynhj2TI2Gv5iO4z/EzFaK0lQ=
+20260825101109_platform-mcp-cimd-storage.sql h1:+lWTYrX8sO91BWLyAP+4Z1gDOtXvlowQuZTSfCezwDE=

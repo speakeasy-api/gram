@@ -72,17 +72,6 @@ vi.mock("@/hooks/useProjectFavorites", () => ({
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => true }),
 }));
-vi.mock("@/hooks/usePlatformMcpCta", () => ({
-  usePlatformMcpCta: () => ({
-    dismiss: vi.fn(),
-    href: "/acme/platform-mcp",
-    label: "Set up Platform MCP",
-    recordImpression: vi.fn(),
-    recordSelected: vi.fn(),
-    visible: false,
-  }),
-  usePlatformMcpCtaImpression: () => vi.fn(),
-}));
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({
     access: {

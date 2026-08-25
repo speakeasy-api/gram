@@ -45,7 +45,7 @@ if [ -n "$host_arch" ]; then
         if grep -qxF "$key" <<< "$local_tags"$'\n'"$local_digests"; then
             cached_imgs+=("$img")
         fi
-    done < <(docker compose config --images 2>/dev/null | sort -u)
+    done < <({ docker compose config --images; docker compose -f compose.shared.yml -p gram-shared config --images; } 2>/dev/null | sort -u)
     # `docker pull` honors an exported DOCKER_DEFAULT_PLATFORM, so while it is
     # set the pull just re-fetches the same foreign-arch variant and the
     # warning would never clear — tell the user to unset it first.
@@ -80,14 +80,12 @@ if [ -n "$host_arch" ]; then
     fi
 fi
 
-# This worktree's own stack, first — with --remove-orphans. A pre-existing
-# worktree (and the main tree) still runs a gram-presidio container under its own
-# project that compose.yml no longer declares; removing it here, BEFORE asserting
-# the shared analyzer below, frees the old host port (5050 on the main tree,
-# which never remapped it) so the shared `up` can bind it in this same run
-# instead of losing the port to the stale container and only converging next
-# time. Profile-gated services (litellm, tunnel, local-registry) stay declared in
-# compose.yml and are not treated as orphans.
+# This worktree's own stack, first — with --remove-orphans. Pre-existing
+# worktrees can still run Temporal, Pub/Sub, or Presidio containers that
+# compose.yml no longer declares. Removing this worktree's copies before
+# asserting the shared services frees fixed ports in the main tree and removes
+# obsolete remapped copies elsewhere. Profile-gated services (litellm, tunnel,
+# local-registry) remain declared in compose.yml and are not treated as orphans.
 docker compose up -d --remove-orphans || exit 1
 
 # One-time migration: free host port 5050 for the shared analyzer. Before the
@@ -104,13 +102,50 @@ docker ps -a --filter "label=com.docker.compose.service=gram-presidio" --filter 
   | awk '$1 != "gram-shared" { print $2 }' \
   | xargs -r docker rm -f > /dev/null 2>&1 || true
 
-# Presidio analyzer, shared across all worktrees under a fixed project name so a
-# worktree's COMPOSE_PROJECT_NAME cannot fork it into a second copy. Bringing it
-# up is idempotent, so every worktree can safely (re)assert it here. A failure
-# here (e.g. a transient pull of the ~1 GB image) must NOT take down this
-# worktree's own databases, so warn and continue rather than aborting.
-docker compose -f compose.shared.yml -p gram-shared up -d \
-  || echo "⚠️  Shared Presidio analyzer failed to start; continuing. PII scanning stays degraded until it is up." >&2
+# One-time migration: the main tree previously bound its per-worktree Pub/Sub
+# emulator to the shared port. Remove only a non-shared emulator actually
+# publishing 8088. Sibling worktrees on remapped ports keep running until their
+# next git:worksync/infra:start migration.
+docker ps -a --filter "label=com.docker.compose.service=pubsub-emulator" --filter "publish=8088" \
+  --format '{{.Label "com.docker.compose.project"}} {{.ID}}' 2>/dev/null \
+  | awk '$1 != "gram-shared" { print $2 }' \
+  | xargs -r docker rm -f > /dev/null 2>&1 || true
+
+# One-time migration: Temporal now runs under the shared project too. Remove
+# only a non-shared Temporal container publishing the fixed gRPC port. Sibling
+# worktrees on remapped ports keep running until their next
+# git:worksync/infra:start migration.
+docker ps -a --filter "label=com.docker.compose.service=gram-temporal" --filter "publish=7233" \
+  --format '{{.Label "com.docker.compose.project"}} {{.ID}}' 2>/dev/null \
+  | awk '$1 != "gram-shared" { print $2 }' \
+  | xargs -r docker rm -f > /dev/null 2>&1 || true
+
+# Pub/Sub is required by the local streams processes, and Temporal is required
+# by seeding and every background worker. Wait for both healthchecks so a
+# container that starts and immediately exits cannot let infrastructure startup
+# report success.
+docker compose -f compose.shared.yml -p gram-shared up -d --wait --wait-timeout 30 \
+  pubsub-emulator gram-temporal || exit 1
+
+# The shared Temporal server starts with the main tree's `default` namespace.
+# Every worktree gets a distinct TEMPORAL_NAMESPACE from git:workinit; create it
+# idempotently before any seed or daemon can submit workflows. The second
+# describe handles two concurrent starts racing to create the same namespace.
+if ! docker compose -f compose.shared.yml -p gram-shared exec -T gram-temporal \
+     temporal operator namespace describe --namespace "$TEMPORAL_NAMESPACE" > /dev/null 2>&1; then
+  echo "Creating Temporal namespace ${TEMPORAL_NAMESPACE}..."
+  docker compose -f compose.shared.yml -p gram-shared exec -T gram-temporal \
+    temporal operator namespace create --namespace "$TEMPORAL_NAMESPACE" > /dev/null 2>&1 \
+    || docker compose -f compose.shared.yml -p gram-shared exec -T gram-temporal \
+      temporal operator namespace describe --namespace "$TEMPORAL_NAMESPACE" > /dev/null \
+    || exit 1
+fi
+
+# Presidio and LGTM are shared too, but neither is a synchronous startup
+# dependency. A transient image pull or cold model must not take down this
+# worktree's databases, so warn and continue.
+docker compose -f compose.shared.yml -p gram-shared up -d gram-presidio lgtm \
+  || echo "⚠️  Optional shared Presidio/LGTM services failed to start; continuing with degraded PII scanning or observability." >&2
 
 # Best-effort readiness for the shared analyzer. `up -d` returns once the
 # container is created, not once its ~1 GB spaCy model has loaded, so poll the
@@ -239,13 +274,3 @@ wait_for "Postgres" gram-db \
 wait_for "ClickHouse" clickhouse \
     docker compose exec -T clickhouse clickhouse-client --user "$CLICKHOUSE_USERNAME" --password "$CLICKHOUSE_PASSWORD" -q "SELECT 1"
 
-# Temporal is the last of the three to become usable, and the first thing that
-# needs it is `mise run seed`, whose deployment step starts a workflow. Without
-# this probe seed fails with `error starting deployment: context deadline
-# exceeded` — a 10s timeout on a Temporal that isn't serving yet — which on a
-# cold worktree leaves the stack up but only partially seeded.
-#
-# `cluster health` hangs rather than erroring when the dev-server's SQLite
-# persistence is wedged, so it relies on run_bounded to cap each attempt.
-wait_for "Temporal" gram-temporal \
-    docker compose exec -T gram-temporal temporal operator cluster health

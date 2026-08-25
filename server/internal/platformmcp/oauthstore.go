@@ -69,7 +69,56 @@ func (s *PostgresOAuthStore) GetClient(ctx context.Context, clientID string) (pl
 	if err != nil {
 		return platformoauth.Client{}, mapOAuthReadError(err)
 	}
-	return platformoauth.Client{ID: row.ClientID, SecretHash: row.ClientSecretHash.String, Name: row.ClientName, RedirectURIs: row.RedirectUris, SecretExpiresAt: timePointer(row.ClientSecretExpiresAt)}, nil
+	return oauthClientFromRow(row), nil
+}
+
+func (s *PostgresOAuthStore) UpsertClientFromCIMD(ctx context.Context, input platformoauth.UpsertCIMDClientInput) (platformoauth.Client, error) {
+	if s == nil || s.db == nil || input.ClientID == "" || input.Name == "" || len(input.RedirectURIs) == 0 {
+		return platformoauth.Client{}, platformoauth.ErrNotFound
+	}
+	row, err := platformrepo.New(s.db).UpsertPlatformMCPOAuthClientFromCIMD(ctx, platformrepo.UpsertPlatformMCPOAuthClientFromCIMDParams{
+		ClientID:             input.ClientID,
+		ClientName:           input.Name,
+		RedirectUris:         input.RedirectURIs,
+		CacheTtlSeconds:      input.CacheTTL.Seconds(),
+		ClientIDMetadataEtag: text(input.ETag),
+	})
+	if err != nil {
+		// No rows means the guarded DO UPDATE refused the write: the
+		// client_id is held by a secret-bearing registration or a revoked
+		// row. Both are "no such CIMD client" to the caller.
+		return platformoauth.Client{}, mapOAuthReadError(err)
+	}
+	return oauthClientFromRow(row), nil
+}
+
+func (s *PostgresOAuthStore) TouchClientCIMDCache(ctx context.Context, input platformoauth.TouchCIMDCacheInput) (platformoauth.Client, error) {
+	if s == nil || s.db == nil || input.ClientID == "" {
+		return platformoauth.Client{}, platformoauth.ErrNotFound
+	}
+	row, err := platformrepo.New(s.db).UpdatePlatformMCPOAuthClientCIMDCache(ctx, platformrepo.UpdatePlatformMCPOAuthClientCIMDCacheParams{
+		ClientID:             input.ClientID,
+		CacheTtlSeconds:      input.CacheTTL.Seconds(),
+		ClientIDMetadataEtag: text(input.ETag),
+	})
+	if err != nil {
+		return platformoauth.Client{}, mapOAuthReadError(err)
+	}
+	return oauthClientFromRow(row), nil
+}
+
+func oauthClientFromRow(row platformrepo.PlatformMcpOauthClient) platformoauth.Client {
+	return platformoauth.Client{
+		ID:              row.ClientID,
+		SecretHash:      row.ClientSecretHash.String,
+		Name:            row.ClientName,
+		RedirectURIs:    row.RedirectUris,
+		SecretExpiresAt: timePointer(row.ClientSecretExpiresAt),
+		RevokedAt:       timePointer(row.RevokedAt),
+		MetadataURI:     row.ClientIDMetadataUri.String,
+		CacheExpiresAt:  timePointer(row.ClientIDMetadataCacheExpiresAt),
+		ETag:            row.ClientIDMetadataEtag.String,
+	}
 }
 
 func (s *PostgresOAuthStore) RevokeClient(ctx context.Context, clientID string, now time.Time) error {

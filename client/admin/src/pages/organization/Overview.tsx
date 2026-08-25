@@ -1,4 +1,4 @@
-import { useEffect, useRef, type JSX } from "react";
+import { useRef, type JSX } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 
@@ -95,7 +95,6 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
   // `DialogTrigger`, so Radix's own restore drops focus on `document.body`.
   const accountTypeControl = useRef<HTMLButtonElement>(null);
   const whitelistedControl = useRef<HTMLButtonElement>(null);
-  const openedFrom = useRef<HTMLButtonElement | null>(null);
 
   const mut = useMutation({
     mutationFn: (change: FactChange) =>
@@ -111,22 +110,6 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
     onError: () => invalidateOrganizationStats(qc),
   });
 
-  // The confirmed path cannot restore focus itself: it disables the control it
-  // would focus, and a browser drops focus to the body when that happens.
-  // Re-enabling does not bring it back, so the restore waits for the write to
-  // settle and runs from here, after React has taken `disabled` off again.
-  // Asked for at `mutate` rather than read off a pending render, because a write
-  // that settles fast never commits one. `variables` is a dep for the same
-  // reason: without it a fast write after another goes `success` to `success`
-  // and nothing here changes.
-  const restoreWanted = useRef(false);
-  useEffect(() => {
-    if (mut.isPending || !restoreWanted.current) return;
-    restoreWanted.current = false;
-    // A control that has left the page is not somewhere to put the keyboard.
-    if (openedFrom.current?.isConnected) openedFrom.current.focus();
-  }, [mut.status, mut.isPending, mut.variables]);
-
   const commit = async (
     change: FactChange,
     // Old → new, in the operator's words. The dialog asks it and the
@@ -134,7 +117,6 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
     describe: string,
     control: React.RefObject<HTMLButtonElement | null>,
   ): Promise<void> => {
-    openedFrom.current = control.current;
     const confirmed = await confirm({
       title: `Update ${org.name}?`,
       description: `${describe}.`,
@@ -148,13 +130,23 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
 
     // A new write does not run under the last one's failure.
     showFailure(null);
-    restoreWanted.current = true;
     mut.mutate(change, {
       onSuccess: () => announce(`${org.name} updated. ${describe}.`),
       onError: (error) => {
         const text = `Could not update ${org.name}: ${errorMessage(error)}`;
         announce(text);
         showFailure(text);
+      },
+      onSettled: () => {
+        setTimeout(function restoreControlFocus() {
+          const target = control.current;
+          if (!target?.isConnected) return;
+          if (target.disabled) {
+            setTimeout(restoreControlFocus);
+            return;
+          }
+          target.focus();
+        });
       },
     });
   };

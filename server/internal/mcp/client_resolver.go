@@ -20,6 +20,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
@@ -157,18 +158,36 @@ func (s *Service) resolveUserSessionClient(ctx context.Context, logger *slog.Log
 			}
 			return &row, nil
 		case cimd.CacheOutcomeRefreshed:
+			if cachedRow != nil && usersessions.CIMDDocumentDowngradesAuthMethod(cachedRow, result.Document) {
+				// A document that drops private_key_jwt after committing to
+				// it is indistinguishable from a domain takeover, and no
+				// legitimate client has been observed doing it. The stored
+				// method stands; the operator's reset is to revoke the
+				// client, after which the next authorize registers afresh.
+				logger.WarnContext(ctx, "cimd document downgrades token_endpoint_auth_method, refusing refresh",
+					attr.SlogOAuthClientID(clientID),
+					attr.SlogOAuthRegisteredAuthMethod(cachedRow.TokenEndpointAuthMethod.String),
+					attr.SlogOAuthDeclaredAuthMethod(result.Document.DeclaredAuthMethod()),
+				)
+				return nil, fmt.Errorf("resolve cimd client: %w", &oauthwire.Error{Code: "invalid_client_metadata", Description: "document may not downgrade token_endpoint_auth_method from private_key_jwt"})
+			}
 			row, err := queries.UpsertUserSessionClientFromCIMD(ctx, usersessions_repo.UpsertUserSessionClientFromCIMDParams{
-				UserSessionIssuerID:  endpoint.UserSessionIssuerID,
-				ClientID:             clientID,
-				ClientName:           result.Document.ClientName,
-				RedirectUris:         result.Document.RedirectURIs,
-				CacheTtlSeconds:      result.TTL.Seconds(),
-				ClientIDMetadataEtag: conv.ToPGTextEmpty(result.ETag),
+				UserSessionIssuerID:     endpoint.UserSessionIssuerID,
+				ClientID:                clientID,
+				ClientName:              result.Document.ClientName,
+				RedirectUris:            result.Document.RedirectURIs,
+				CacheTtlSeconds:         result.TTL.Seconds(),
+				ClientIDMetadataEtag:    conv.ToPGTextEmpty(result.ETag),
+				TokenEndpointAuthMethod: result.Document.DeclaredAuthMethod(),
+				ClientJwks:              result.Document.JWKS,
+				ClientJwksUri:           conv.ToPGTextEmpty(result.Document.JWKSURI),
 			})
 			if err != nil {
-				// No-rows here means the DO UPDATE guard refused to rewrite a
-				// secret-bearing row sharing this client_id; surface it as an
-				// unknown client rather than a 500.
+				// No-rows here means a DO UPDATE guard refused the write:
+				// the row is a secret-bearing registration sharing this
+				// client_id, or a concurrent refresh raced the downgrade
+				// check above. Either surfaces as an unknown client rather
+				// than a 500.
 				if errors.Is(err, pgx.ErrNoRows) {
 					return nil, pgx.ErrNoRows
 				}

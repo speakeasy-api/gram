@@ -45,6 +45,13 @@ func TestMCPFromInventoryLabelsOwnershipAndNeverProbesLegacy(t *testing.T) {
 	require.Equal(t, "ready", platform.Readiness.State)
 	require.Len(t, platform.Distributions, 1)
 	require.True(t, platform.Registration.ComponentsComplete)
+	require.Equal(t, []string{"read", "dashboard_setup", "update_mcp_metadata", "disable_mcp"}, platform.Operations)
+
+	disabled := mcpFromInventory(mcpID, projectID, "Project", "project", "Reviewed", "reviewed", "disabled", "dashboard_managed", registrationID, "catalog", "registry", "reviewed/server", "registered", complete, complete, complete, complete, "ready", "checked", "expires", nil)
+	require.False(t, disabled.EffectiveEnabled)
+	require.Equal(t, "unknown", disabled.Readiness.State, "disabled Platform-managed MCPs do not expose stale readiness as effective")
+	require.Empty(t, disabled.Readiness.CheckedAt)
+	require.Equal(t, []string{"read", "dashboard_setup", "update_mcp_metadata", "enable_mcp"}, disabled.Operations)
 
 	incomplete := mcpFromInventory(mcpID, projectID, "Project", "project", "Incomplete", "incomplete", "private", "dashboard_managed", registrationID, "catalog", "registry", "reviewed/incomplete", "pending", uuid.NullUUID{UUID: uuid.Nil, Valid: true}, complete, complete, complete, "", "", "", nil)
 	require.False(t, incomplete.Registration.ComponentsComplete, "zero UUID sentinels represent missing persisted components")
@@ -61,6 +68,18 @@ func TestMCPFromInventoryLabelsOwnershipAndNeverProbesLegacy(t *testing.T) {
 	require.Equal(t, "legacy", legacy.Model)
 	require.Equal(t, "unsupported", legacy.Readiness.State, "legacy rows never use readiness evidence or trigger egress")
 	require.False(t, legacy.EffectiveEnabled)
+}
+
+func TestLifecycleMetadataVersionChangesOnlyWithMutableInventoryState(t *testing.T) {
+	t.Parallel()
+
+	key := lifecycleMetadataVersionKey("test-key")
+	baseline := lifecycleMetadataVersion(key, "mcp", "project", "Example", "example", "private")
+	require.NotEmpty(t, baseline)
+	require.Equal(t, baseline, lifecycleMetadataVersion(key, "mcp", "project", "Example", "example", "private"))
+	require.NotEqual(t, baseline, lifecycleMetadataVersion(key, "mcp", "project", "Renamed", "example", "private"))
+	require.NotEqual(t, baseline, lifecycleMetadataVersion(key, "mcp", "project", "Example", "example", "disabled"))
+	require.NotEqual(t, baseline, lifecycleMetadataVersion(lifecycleMetadataVersionKey("other-key"), "mcp", "project", "Example", "example", "private"))
 }
 
 func TestInventoryModelRecognizesEveryDashboardBackend(t *testing.T) {

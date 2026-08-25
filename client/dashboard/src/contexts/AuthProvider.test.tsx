@@ -1,5 +1,5 @@
 import { cleanup, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -7,10 +7,24 @@ const mocks = vi.hoisted(() => ({
   group: vi.fn(),
 }));
 
-vi.mock("@/contexts/Sdk", () => ({
-  useSlugs: () => ({ orgSlug: undefined, projectSlug: undefined }),
-  useIsPlatformAdminRef: () => ({ current: false }),
-}));
+// Slugs derived from the live router location, as the real hook derives them
+// from the URL: the portable-path tests below navigate mid-render, and a
+// frozen orgSlug would send the post-navigation render down the wrong gate.
+vi.mock("@/contexts/Sdk", async () => {
+  const { useLocation } = await import("react-router");
+  return {
+    useSlugs: () => {
+      const parts = useLocation().pathname.split("/").filter(Boolean) as Array<
+        string | undefined
+      >;
+      return {
+        orgSlug: parts[0],
+        projectSlug: parts[1] === "projects" ? parts[2] : undefined,
+      };
+    },
+    useIsPlatformAdminRef: () => ({ current: false }),
+  };
+});
 
 // The route table pulls in every page; the provider only reads the org-level
 // path list from it.
@@ -60,13 +74,25 @@ function gatedSession(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function renderGate() {
+// Renders outside AuthProvider so it stays visible whichever gate wins,
+// exposing where the provider's redirects finally settled.
+const LocationProbe = () => {
+  const location = useLocation();
+  return (
+    <div data-testid="location">
+      {location.pathname + location.search + location.hash}
+    </div>
+  );
+};
+
+function renderGate(initialPath = "/") {
   return render(
     <TelemetryStateProvider
       telemetry={telemetry}
       featureFlagsInitiallyAvailable
     >
-      <MemoryRouter initialEntries={["/"]}>
+      <MemoryRouter initialEntries={[initialPath]}>
+        <LocationProbe />
         <AuthProvider>
           <div data-testid="app" />
         </AuthProvider>
@@ -136,5 +162,96 @@ describe("AuthProvider organization telemetry group", () => {
     renderGate();
 
     expect(registeredOrgGroups()).toEqual([]);
+  });
+});
+
+// Portable "/~" paths let external links (marketing CTAs, docs) deep-link
+// into the app without knowing the visitor's org or project slugs. They match
+// no route, so AuthProvider must resolve them before route matching runs.
+describe("AuthProvider portable paths", () => {
+  const PROJECT_ORG = {
+    id: "org-3",
+    name: "Acme",
+    slug: "acme",
+    projects: [{ slug: "proj-a" }, { slug: "proj-b" }],
+  };
+
+  function portableSession(overrides: Record<string, unknown> = {}) {
+    return gatedSession({
+      organizations: [PROJECT_ORG],
+      organization: PROJECT_ORG,
+      activeOrganizationId: PROJECT_ORG.id,
+      whitelisted: true,
+      ...overrides,
+    });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+  });
+
+  afterEach(() => {
+    cleanup();
+    localStorage.clear();
+  });
+
+  it("bounces a logged-out visitor through login with the destination", () => {
+    mocks.sessionData.mockReturnValue({
+      session: null,
+      error: new Error("unauthorized"),
+      status: "error",
+    });
+
+    renderGate("/~/toolsets?tab=all");
+
+    expect(screen.getByTestId("location").textContent).toBe(
+      "/login?redirect=%2F~%2Ftoolsets%3Ftab%3Dall",
+    );
+  });
+
+  it("sends a session with no organization to sign-up with the destination", () => {
+    mocks.sessionData.mockReturnValue(
+      portableSession({ activeOrganizationId: "" }),
+    );
+
+    renderGate("/~/toolsets");
+
+    expect(screen.getByTestId("location").textContent).toBe(
+      "/sign-up?redirect=%2F~%2Ftoolsets",
+    );
+  });
+
+  it("expands into the active org and first project", () => {
+    mocks.sessionData.mockReturnValue(portableSession());
+
+    renderGate("/~/toolsets?tab=all");
+
+    expect(screen.getByTestId("location").textContent).toBe(
+      "/acme/projects/proj-a/toolsets?tab=all",
+    );
+    expect(screen.getByTestId("app")).toBeTruthy();
+  });
+
+  it("prefers the last-visited project", () => {
+    localStorage.setItem("preferredProject", "proj-b");
+    mocks.sessionData.mockReturnValue(portableSession());
+
+    renderGate("/~/toolsets");
+
+    expect(screen.getByTestId("location").textContent).toBe(
+      "/acme/projects/proj-b/toolsets",
+    );
+  });
+
+  it("leaves ordinary paths alone", () => {
+    mocks.sessionData.mockReturnValue(portableSession());
+
+    renderGate("/acme/projects/proj-a/toolsets");
+
+    expect(screen.getByTestId("location").textContent).toBe(
+      "/acme/projects/proj-a/toolsets",
+    );
+    expect(screen.getByTestId("app")).toBeTruthy();
   });
 });

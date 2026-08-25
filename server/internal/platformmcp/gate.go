@@ -99,10 +99,19 @@ func NewCatalogRegistrationGate(platform Gate) *CatalogRegistrationGate {
 }
 
 func (g *CatalogRegistrationGate) Enabled(ctx context.Context, organizationID, projectSlug string) (bool, error) {
-	if g == nil || g.platform == nil || organizationID == "" || projectSlug == "" {
+	if projectSlug == "" {
 		return false, ErrUnavailable
 	}
+	return g.EnabledOrganization(ctx, organizationID)
+}
 
+// EnabledOrganization checks the same rollout and durable entitlement as a
+// mutation without accepting a project selector. Read-only direct inspection
+// needs this gate before it can perform user-directed egress.
+func (g *CatalogRegistrationGate) EnabledOrganization(ctx context.Context, organizationID string) (bool, error) {
+	if g == nil || g.platform == nil || organizationID == "" {
+		return false, ErrUnavailable
+	}
 	enabled, err := g.platform.Enabled(ctx, organizationID)
 	if err != nil {
 		return false, fmt.Errorf("check platform mcp gate: %w", err)

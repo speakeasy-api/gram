@@ -90,6 +90,7 @@ type MCP struct {
 	ProjectSlug      string            `json:"project_slug,omitempty"`
 	Name             string            `json:"name,omitempty"`
 	Slug             string            `json:"slug,omitempty"`
+	Version          string            `json:"version,omitempty"`
 	Visibility       string            `json:"visibility"`
 	EffectiveEnabled bool              `json:"effective_enabled"`
 	Model            string            `json:"model"`
@@ -133,13 +134,13 @@ type operationBudgetResult struct {
 // registrar alongside the server so another admitted audience — the project
 // assistant — can be composed from the same registration pass rather than from
 // a second list that would drift.
-func newServer(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, candidate CatalogDescriptor) (*mcp.Server, *Registrar) {
+func newServer(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, plugins *PluginsService, candidate CatalogDescriptor) (*mcp.Server, *Registrar) {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "platform-mcp",
 		Title:   "Platform MCP",
 		Version: "0.1.0",
 	}, &mcp.ServerOptions{
-		Instructions: "Use this server to inspect the selected organization and help distribute reviewed MCP servers to an explicit project. List reviewed catalogue options and eligible projects, then ask the user to choose one of each before mutating. Inspect the chosen candidate and collect only its declared non-secret configuration values. Normal non-secret URLs may be discussed and returned. Register it privately. If readiness says an upstream identity provider is missing, ask the user to explicitly confirm and then call attach_platform_mcp_identity_provider; the server derives the provider from the persisted reviewed MCP source and returns its non-secret provider_url plus an Inspect authorization_url for the user to use Connect or Authorize. Immediately present authorization_url as the exact clickable link—never say a link is above or ask the user to confirm an unspecified authorization action. Never request or accept OAuth codes, tokens, client secrets, passwords, API keys, or secret headers in chat. The registration dashboard_setup_url is the Authentication settings fallback, not the authorization page. Force a fresh readiness check after user authorization and add the ready server to the project's existing Default plugin. For the guided flow, use register_platform_mcp_for_project, get_platform_mcp_onboarding_status, attach_platform_mcp_identity_provider when confirmed, and add_platform_mcp_to_default_plugin.",
+		Instructions: "Use this server to inspect the selected organization and manage reviewed MCP servers in an explicit project. List reviewed catalogue options and eligible projects, then ask the user to choose one of each before mutating. Inspect the chosen candidate and collect only its declared non-secret configuration values. Normal non-secret URLs may be discussed and returned. Register it privately. Use get_mcp_readiness with the returned registration ID to inspect persisted readiness. If readiness says an upstream identity provider is missing, ask the user to explicitly confirm and then call attach_platform_mcp_identity_provider; the server derives the provider from the persisted reviewed MCP source and returns its non-secret provider_url plus an Inspect authorization_url for the user to use Connect or Authorize. Immediately present authorization_url as the exact clickable link—never say a link is above or ask the user to confirm an unspecified authorization action. Never request or accept OAuth codes, tokens, client secrets, passwords, API keys, or secret headers in chat. The registration dashboard_setup_url is the Authentication settings fallback, not the authorization page. Force a fresh readiness check after user authorization. Registration never distributes an MCP: use list_plugins to show the project's plugins, ask the user which one should carry it, then call distribute_mcp_to_plugin naming that plugin exactly. There is no implicit default.",
 		PageSize:     32,
 	})
 
@@ -156,17 +157,44 @@ func newServer(reader Reader, catalog Catalog, registrations *RegistrationServic
 		registerSearchDocsTool(reg, NewMemoryDocsIndex(setupResources, time.Now), registrations.budgets.Docs)
 	}
 	registerReadDocTool(reg)
-	if catalog == nil || registrations == nil || !registrations.budgets.Catalog.valid() {
+	if registrations == nil || !registrations.budgets.Catalog.valid() {
 		registerUnavailableCatalogTools(reg)
-	} else if cursorCodec, err := newCatalogCursorCodec(cursorKeyMaterial); err != nil {
+		registerUnavailableCandidateInspectionTool(reg)
+	} else if catalog == nil && (registrations.directRemoteInspector == nil || registrations.gate == nil) {
 		registerUnavailableCatalogTools(reg)
+		registerUnavailableCandidateInspectionTool(reg)
 	} else {
-		registerCatalogTools(reg, catalog, registrations.budgets.Catalog, cursorCodec, onboarding)
+		registerCandidateInspectionTool(reg, catalog, registrations.directRemoteInspector, registrations.gate, registrations.budgets.Catalog)
+		if catalog == nil {
+			registerUnavailableCatalogTools(reg)
+		} else if cursorCodec, err := newCatalogCursorCodec(cursorKeyMaterial); err != nil {
+			registerUnavailableCatalogTools(reg)
+		} else {
+			registerCatalogTools(reg, catalog, registrations.budgets.Catalog, cursorCodec, onboarding)
+		}
 	}
 	if registrations == nil || registrations.store == nil || !registrations.budgets.Registration.valid() {
 		registerUnavailableCatalogRegistrationTool(reg)
+		registerUnavailableRemoteRegistrationTool(reg)
+		registerUnavailableIdentityProviderTool(reg)
 	} else {
-		registerCatalogRegistrationTool(reg, registrations)
+		registerCatalogRegistrationTool(reg, registrations, onboarding)
+		if registrations.directRemoteInspector == nil {
+			registerUnavailableRemoteRegistrationTool(reg)
+		} else {
+			registerRemoteRegistrationTool(reg, registrations, onboarding)
+		}
+		registerIdentityProviderTool(reg, registrations)
+	}
+	if registrations == nil || registrations.lifecycleMetadata == nil {
+		registerUnavailableLifecycleMetadataTool(reg)
+	} else {
+		registerLifecycleMetadataTool(reg, registrations)
+	}
+	if registrations == nil || registrations.lifecycleVisibility == nil {
+		registerUnavailableLifecycleVisibilityTools(reg)
+	} else {
+		registerLifecycleVisibilityTools(reg, registrations)
 	}
 	if registrations == nil || registrations.store == nil || !registrations.budgets.Handoff.valid() {
 		registerUnavailableSetupHandoffTool(reg)
@@ -178,10 +206,13 @@ func newServer(reader Reader, catalog Catalog, registrations *RegistrationServic
 	} else {
 		registerReadinessTools(reg, registrations.readiness)
 	}
-	if onboarding == nil || distributions == nil || catalog == nil || registrations == nil || registrations.store == nil {
+	// Exact-plugin distribution is live once the workflow services it writes
+	// through are composed; without them the canonical descriptors stay visible
+	// as stubs rather than disappearing from the manifest.
+	if onboarding == nil || distributions == nil {
 		registerUnavailableTools(reg)
 	} else {
-		registerOnboardingLifecycleTools(reg, onboarding, registrations, distributions)
+		registerDistributionTools(reg, onboarding, distributions)
 	}
 	if !diagnostics.valid() {
 		registerUnavailableDiagnosticsTools(reg)
@@ -197,6 +228,16 @@ func newServer(reader Reader, catalog Catalog, registrations *RegistrationServic
 		registerUnavailableSkillsTools(reg)
 	} else {
 		registerSkillsTools(reg, skills)
+	}
+	if !plugins.valid() {
+		registerUnavailablePluginTools(reg)
+	} else {
+		registerPluginTools(reg, plugins)
+	}
+	if !plugins.valid() {
+		registerUnavailablePluginTools(reg)
+	} else {
+		registerPluginTools(reg, plugins)
 	}
 	if feedback == nil {
 		addTool(reg, &mcp.Tool{
@@ -226,7 +267,6 @@ func registerUnavailableCatalogTools(reg *Registrar) {
 		description string
 	}{
 		{"search_mcp_catalog", "Search MCP Catalog", "Search reviewed catalog MCP candidates. Catalog access is not enabled in the current rollout."},
-		{"inspect_mcp_candidate", "Inspect MCP Candidate", "Inspect one reviewed catalog MCP candidate. Catalog access is not enabled in the current rollout."},
 	} {
 		addTool(reg, &mcp.Tool{
 			Name:        tool.name,
@@ -237,12 +277,37 @@ func registerUnavailableCatalogTools(reg *Registrar) {
 	}
 }
 
+func registerUnavailableCandidateInspectionTool(reg *Registrar) {
+	addTool(reg, &mcp.Tool{
+		Name:        "inspect_mcp_candidate",
+		Title:       "Inspect MCP Candidate",
+		Description: "Inspect one reviewed catalog MCP candidate or user-supplied HTTPS MCP URL. Candidate inspection is not available in the current rollout.",
+		Annotations: readOnlyAnnotations(),
+	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, unavailableTool("candidate_inspection"))
+}
+
 func registerUnavailableCatalogRegistrationTool(reg *Registrar) {
 	addTool(reg, &mcp.Tool{
 		Name:        "register_catalog_mcp",
 		Title:       "Register Catalog MCP",
 		Description: "Register an approved catalog MCP in a project. Registration is not available in the current preview.",
 	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("catalog_registration"))
+}
+
+func registerUnavailableRemoteRegistrationTool(reg *Registrar) {
+	addTool(reg, &mcp.Tool{
+		Name:        "register_remote_mcp",
+		Title:       "Register Remote MCP",
+		Description: "Register a user-supplied HTTPS MCP in a project. Direct remote registration is not available in the current preview.",
+	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("direct_remote_registration"))
+}
+
+func registerUnavailableLifecycleMetadataTool(reg *Registrar) {
+	addTool(reg, &mcp.Tool{
+		Name:        "update_mcp_metadata",
+		Title:       "Update MCP Metadata",
+		Description: "Rename one Platform-managed MCP. Metadata updates are not available in the current preview.",
+	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("mcp_lifecycle_metadata"))
 }
 
 func registerUnavailableSetupHandoffTool(reg *Registrar) {
@@ -261,14 +326,14 @@ func registerUnavailableTools(reg *Registrar) {
 		feature     string
 	}{
 
-		{"distribute_mcp_to_default_plugin", "Distribute MCP to Default Plugin", "Distribute a configured MCP to the default plugin. Distribution is not available in the current preview.", "plugin_distribution"},
-		{"remove_mcp_from_default_plugin", "Remove MCP from Default Plugin", "Remove an MCP from the default plugin. Distribution changes are not available in the current preview.", "plugin_distribution"},
+		{"distribute_mcp_to_plugin", "Distribute MCP to Plugin", "Distribute a configured MCP to one exact existing plugin. Distribution is not available in the current preview.", "plugin_distribution"},
+		{"remove_mcp_from_plugin", "Remove MCP from Plugin", "Remove an MCP from one exact existing plugin. Distribution changes are not available in the current preview.", "plugin_distribution"},
 	} {
 		addTool(reg, &mcp.Tool{
 			Name:        tool.name,
 			Title:       tool.title,
 			Description: tool.description,
-		}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool(tool.feature))
+		}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableTool(tool.feature))
 	}
 }
 
@@ -286,7 +351,7 @@ func registerUnavailableReadinessTools(reg *Registrar) {
 			Title:       tool.title,
 			Description: tool.description,
 			Annotations: readOnlyAnnotations(),
-		}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableTool("mcp_readiness"))
+		}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("mcp_readiness"))
 	}
 }
 
@@ -294,13 +359,19 @@ func operationBudgetToolResult(err error) (*mcp.CallToolResult, bool) {
 	var result operationBudgetResult
 	switch {
 	case errors.Is(err, ErrReadinessRegistrationNotFound):
-		result = operationBudgetResult{Code: "registration_not_found", Message: "This registration ID is not available for the selected project and authenticated connection. Use the ID returned by register_platform_mcp_for_project or get_platform_mcp_onboarding_status."}
-	case errors.Is(err, ErrRegistrationInvalid), errors.Is(err, ErrReadinessInvalid), errors.Is(err, ErrCatalogConfigurationRejected), errors.Is(err, ErrCatalogRejected), errors.Is(err, ErrCatalogCursorInvalid):
+		result = operationBudgetResult{Code: "registration_not_found", Message: "This registration ID is not available for the selected project and caller. Use the ID returned by register_catalog_mcp or register_remote_mcp."}
+	case errors.Is(err, ErrRegistrationInvalid), errors.Is(err, ErrLifecycleMetadataInvalid), errors.Is(err, ErrLifecycleVisibilityInvalid), errors.Is(err, ErrReadinessInvalid), errors.Is(err, ErrCatalogConfigurationRejected), errors.Is(err, ErrCatalogRejected), errors.Is(err, ErrCatalogCursorInvalid):
 		result = operationBudgetResult{Code: "invalid_request", Message: "The requested Platform MCP operation is invalid or no longer matches the reviewed catalogue. Re-read the supported tool result and do not retry unchanged input."}
 	case errors.Is(err, ErrOperationRateLimited), errors.Is(err, ErrReadinessRateLimited):
 		result = operationBudgetResult{Code: "rate_limited", Message: "This Platform MCP operation is temporarily rate limited. Retry after a short delay."}
 	case errors.Is(err, ErrCatalogUnavailable):
 		result = operationBudgetResult{Code: unavailableCode, Reason: "catalog_unavailable", Message: "The reviewed MCP Catalogue is temporarily unavailable. Retry the catalogue search after a short delay; other Platform MCP tools may remain available."}
+	case errors.Is(err, ErrDirectRemoteRejected):
+		result = operationBudgetResult{Code: "invalid_request", Reason: "remote_url_rejected", Message: "The remote MCP URL is unsafe, unsupported, or did not complete the required Streamable HTTP inspection. Use an HTTPS URL without credentials, query parameters, or fragments."}
+	case errors.Is(err, ErrDirectRemoteUnavailable):
+		result = operationBudgetResult{Code: unavailableCode, Reason: "remote_inspection_unavailable", Message: "The remote MCP could not be inspected safely right now. Retry after a short delay."}
+	case errors.Is(err, ErrLifecycleVisibilityUnavailable):
+		result = operationBudgetResult{Code: unavailableCode, Reason: "unsupported_lifecycle_target", Message: "This MCP is not Platform-managed, so lifecycle visibility changes are unavailable. Use its supported dashboard management path."}
 	case errors.Is(err, ErrOperationBudgetUnavailable), errors.Is(err, ErrRegistrationUnavailable):
 		result = operationBudgetResult{Code: unavailableCode, Message: "This Platform MCP operation is temporarily unavailable."}
 	case errors.Is(err, ErrRegistrationCap):

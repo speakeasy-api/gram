@@ -25,17 +25,6 @@ vi.mock("@/hooks/useRBAC", () => ({
 vi.mock("@/hooks/useOrgWelcomeBanner", () => ({
   useOrgWelcomeBanner: () => ({ visible: true }),
 }));
-vi.mock("@/hooks/usePlatformMcpCta", () => ({
-  usePlatformMcpCta: () => ({
-    dismiss: vi.fn(),
-    href: "/acme/platform-mcp",
-    label: "Set up Platform MCP",
-    recordImpression: vi.fn(),
-    recordSelected: vi.fn(),
-    visible: false,
-  }),
-  usePlatformMcpCtaImpression: () => vi.fn(),
-}));
 // Resolves the same paths the real hooks build for org "acme".
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({

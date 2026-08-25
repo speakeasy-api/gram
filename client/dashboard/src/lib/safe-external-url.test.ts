@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   openSafeExternalUrl,
   safeExternalHttpUrl,
+  safeSameOriginPath,
   safeSameOriginUrl,
 } from "./safe-external-url";
 
@@ -99,6 +100,15 @@ describe("safeSameOriginUrl", () => {
   it("accepts same-origin absolute URLs", () => {
     const absolute = new URL("/plugins?installed=true", window.location.origin);
     expect(safeSameOriginUrl(absolute.href)).toBe(absolute.href);
+  });
+
+  it("converts same-origin URLs to router locations", () => {
+    expect(
+      safeSameOriginPath(
+        new URL("/projects/default?tab=tools#details", window.location.origin)
+          .href,
+      ),
+    ).toBe("/projects/default?tab=tools#details");
   });
 
   it.each([

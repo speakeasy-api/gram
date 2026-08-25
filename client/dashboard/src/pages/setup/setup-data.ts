@@ -220,6 +220,42 @@ speakeasy-hooks install --provider=opencode --dir=. --project=<your-project-slug
       },
     ],
   },
+  {
+    id: "openclaw",
+    setupSteps: [
+      {
+        title: "Install the speakeasy-hooks binary",
+        description:
+          "The observability plugin is rendered as a native OpenClaw plugin package by the speakeasy-hooks CLI. Install the binary first.",
+        code: `curl -fsSL https://raw.githubusercontent.com/speakeasy-api/gram/main/hooks/install.sh | sh`,
+        language: "bash",
+      },
+      {
+        title: "Render the plugin package",
+        description:
+          "Writes a native OpenClaw plugin (openclaw.plugin.json, index.js, speakeasy.json) that maps OpenClaw's hook events to Speakeasy's dashboard.",
+        code: `GRAM_HOOKS_ORG_KEY="{{GRAM_API_KEY}}" \\
+speakeasy-hooks install --provider=openclaw --dir=./speakeasy-observability --project=<your-project-slug>`,
+        language: "bash",
+        requiresApiKey: true,
+      },
+      {
+        title: "Install the plugin into OpenClaw",
+        description:
+          "Registers the plugin with the Gateway. Conversation-scope events (prompts, replies, usage) additionally require allowConversationAccess in your OpenClaw config.",
+        code: `openclaw plugins install ./speakeasy-observability
+openclaw config set plugins.entries.speakeasy-observability.hooks.allowConversationAccess true`,
+        language: "bash",
+      },
+      {
+        title: "Restart the Gateway",
+        description:
+          "OpenClaw loads plugins at startup; restart to activate the hooks.",
+        code: `openclaw gateway restart`,
+        language: "bash",
+      },
+    ],
+  },
 ];
 
 function toAgentPlatform(

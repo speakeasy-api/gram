@@ -16,10 +16,10 @@ afterEach(() => {
   telemetryCapture.mockReset();
 });
 
-function renderPanel(initialEntry = "/sign-up") {
+function renderPanel(initialEntry = "/sign-up", redirectTo?: string | null) {
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
-      <SignUpPanel />
+      <SignUpPanel redirectTo={redirectTo} />
     </MemoryRouter>,
   );
 }
@@ -158,6 +158,26 @@ describe("SignUpPanel", () => {
     expect(target).toContain("/rpc/auth.login");
     expect(target).toContain("org_name=Acme+Inc");
     expect(target).toContain("email=someone%40example.com");
+
+    assign.mockRestore();
+  });
+
+  it("preserves the requested destination in the login handoff", async () => {
+    const assign = vi
+      .spyOn(window.location, "assign")
+      .mockImplementation(() => {});
+
+    const user = userEvent.setup();
+    renderPanel("/sign-up", "https://app.example/cli/callback");
+
+    await user.type(screen.getByLabelText("Work email"), "someone@example.com");
+    await user.type(screen.getByLabelText("Company name"), "Acme Inc");
+    await user.click(screen.getByRole("button", { name: /start trial/i }));
+
+    const target = assign.mock.calls[0]?.[0] as string;
+    expect(new URL(target).searchParams.get("redirect")).toBe(
+      "https://app.example/cli/callback",
+    );
 
     assign.mockRestore();
   });

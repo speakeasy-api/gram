@@ -129,7 +129,9 @@ func TestRemoteLoginCallback_StandardRefreshExpirationFields(t *testing.T) {
 	states, err := env.mgr.RemoteSessionStatuses(
 		t.Context(),
 		env.subject,
-		[]uuid.UUID{env.clientID},
+		env.projectID,
+		env.organizationID,
+		env.session.UserSessionIssuerID,
 	)
 	require.NoError(t, err)
 	state := states[env.clientID]
@@ -145,13 +147,14 @@ type syntheticExpiryEnv struct {
 	mgr *remotesessions.ChallengeManager
 	// refresher shares the manager's database, encryption key, and Redis lock
 	// cache, standing in for the scheduled sweep's caller in concurrency tests.
-	refresher    *remotesessions.RefreshService
-	newRefresher func(cache.Cache) *remotesessions.RefreshService
-	q            *repo.Queries
-	projectID    uuid.UUID
-	clientID     uuid.UUID
-	subject      urn.SessionSubject
-	session      repo.RemoteSession
+	refresher      *remotesessions.RefreshService
+	newRefresher   func(cache.Cache) *remotesessions.RefreshService
+	q              *repo.Queries
+	projectID      uuid.UUID
+	organizationID string
+	clientID       uuid.UUID
+	subject        urn.SessionSubject
+	session        repo.RemoteSession
 }
 
 // newSyntheticExpiryEnv wires a ChallengeManager to a mock upstream token
@@ -277,10 +280,11 @@ func newSyntheticExpiryEnv(t *testing.T, slugSuffix string, tokenHandler http.Ha
 		newRefresher: func(locks cache.Cache) *remotesessions.RefreshService {
 			return remotesessions.NewRefreshService(logger, ti.conn, enc, policy, locks)
 		},
-		q:         q,
-		projectID: *authCtx.ProjectID,
-		clientID:  client.ID,
-		subject:   subject,
-		session:   session,
+		q:              q,
+		projectID:      *authCtx.ProjectID,
+		organizationID: authCtx.ActiveOrganizationID,
+		clientID:       client.ID,
+		subject:        subject,
+		session:        session,
 	}
 }

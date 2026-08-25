@@ -316,7 +316,8 @@ function PlatformMCPOnboardingContentInner({
         onOpenChange={(open) => {
           if (!open) onSetupOpenChange?.(false);
         }}
-        title="Loading Platform MCP setup"
+        eyebrow="Platform MCP"
+        title="Loading setup"
         description="Loading your organization’s current setup progress."
       >
         <PlatformMCPLoading />
@@ -348,7 +349,8 @@ function PlatformMCPOnboardingContentInner({
         onOpenChange={(open) => {
           if (!open) onSetupOpenChange?.(false);
         }}
-        title="Platform MCP setup unavailable"
+        eyebrow="Platform MCP"
+        title="Setup unavailable"
         description="The setup state could not be loaded."
       >
         {unavailable}
@@ -374,8 +376,9 @@ function PlatformMCPOnboardingContentInner({
         onOpenChange={(open) => {
           if (!open) onSetupOpenChange?.(false);
         }}
-        title="Platform MCP is not enabled"
-        description="Organization access must be enabled before setup can begin."
+        eyebrow="Organization access"
+        title="Turn on Platform MCP"
+        description="Existing connections and project distributions are kept — they stay unavailable until an organization administrator enables access."
       >
         {unavailable}
       </PlatformMCPStateSheet>
@@ -674,27 +677,51 @@ function PlatformMCPOnboardingContentInner({
 function PlatformMCPStateSheet({
   open,
   onOpenChange,
+  eyebrow,
   title,
   description,
+  footer,
   children,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  eyebrow: string;
   title: string;
   description: string;
-  children: React.ReactNode;
+  footer?: React.ReactNode;
+  children?: React.ReactNode;
 }): JSX.Element {
+  // Same frame as the setup wizard's instrumentation sheet: the accessible
+  // header is visually hidden, the heading block lives in the body as
+  // eyebrow → heading → one line of context, and actions sit in a footer bar
+  // divided by a hairline.
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
         className="flex w-full flex-col overflow-hidden sm:max-w-[662px]"
       >
-        <SheetHeader>
+        <SheetHeader className="sr-only">
           <SheetTitle>{title}</SheetTitle>
           <SheetDescription>{description}</SheetDescription>
         </SheetHeader>
-        <div className="flex-1 overflow-y-auto px-6 pb-6">{children}</div>
+        <div className="w-full min-w-0 flex-1 space-y-4 overflow-y-auto px-6 pt-6 pr-14 pb-6">
+          <div>
+            <p className="text-muted-foreground text-[11px] font-medium tracking-wider uppercase">
+              {eyebrow}
+            </p>
+            <h3 className="text-foreground mt-1 text-lg font-semibold">
+              {title}
+            </h3>
+            <p className="text-muted-foreground mt-1 text-sm">{description}</p>
+          </div>
+          {children}
+        </div>
+        {footer && (
+          <div className="border-border flex items-center justify-end border-t px-6 py-4">
+            {footer}
+          </div>
+        )}
       </SheetContent>
     </Sheet>
   );
@@ -712,30 +739,14 @@ function PlatformMCPUnavailable({
   onEnable: () => void;
 }): JSX.Element {
   return (
-    <div className="mx-auto mt-8 max-w-2xl">
-      <Alert variant="warning">
-        <div>
-          <AlertTitle>
-            Platform MCP is not enabled for this organization
-          </AlertTitle>
-          <AlertDescription>
-            No one in this organization can currently connect to or use Platform
-            MCP. Existing connections and project distributions are retained but
-            remain unavailable until an organization administrator enables
-            access.
-          </AlertDescription>
-        </div>
-      </Alert>
+    <div className="space-y-4">
       {state.repairAction === "enable_platform_mcp" && (
-        <div className="mt-4 flex flex-col gap-3 rounded-xl border bg-card p-5">
-          <div>
-            <Text variant="subheading">Organization-wide access is off</Text>
-            <Text muted small className="mt-1 max-w-2xl">
-              Enable access to allow organization administrators to connect
-              agents and use the Platform MCP workflow again. This does not
-              create or restore any connection automatically.
-            </Text>
-          </div>
+        <div className="border-border bg-card flex flex-col gap-3 border p-4">
+          <Text muted small>
+            Enabling lets organization administrators connect agents and use the
+            Platform MCP workflow again. No connection is created or restored
+            automatically.
+          </Text>
           <Button
             className="self-start"
             disabled={isMutating}
@@ -745,13 +756,10 @@ function PlatformMCPUnavailable({
               {isMutating ? "Enabling…" : "Enable Platform MCP"}
             </Button.Text>
           </Button>
-          {accessError && (
-            <ErrorAlert
-              title="Could not enable Platform MCP"
-              error={accessError}
-            />
-          )}
         </div>
+      )}
+      {accessError && (
+        <ErrorAlert title="Could not enable Platform MCP" error={accessError} />
       )}
     </div>
   );
@@ -907,7 +915,7 @@ function PlatformMCPManagement({
               "register_platform_mcp_for_project",
               "get_platform_mcp_onboarding_status",
               "attach_platform_mcp_identity_provider",
-              "add_platform_mcp_to_default_plugin",
+              "distribute_mcp_to_plugin",
             ].map((tool) => (
               <code
                 key={tool}
@@ -919,8 +927,8 @@ function PlatformMCPManagement({
           </div>
           <Text muted small className="mt-2">
             These tools discover reviewed options, guide secure setup and
-            readiness, and add a ready MCP only to the chosen project&apos;s
-            existing Default plugin.
+            readiness, and add a ready MCP to one exact existing plugin in the
+            chosen project.
           </Text>
         </div>
       </div>

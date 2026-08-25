@@ -97,16 +97,6 @@ func newWorkerCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_ENVIRONMENT"},
 		},
 		&cli.StringFlag{
-			Name:    "custom-domain-k8s-namespace",
-			Usage:   "Kubernetes namespace for custom domain ingresses (defaults to gram-<environment>)",
-			EnvVars: []string{"GRAM_CUSTOM_DOMAIN_K8S_NAMESPACE"},
-		},
-		&cli.StringFlag{
-			Name:    "custom-domain-backend-service",
-			Usage:   "Kubernetes service that custom domain ingresses route to (defaults to gram-server)",
-			EnvVars: []string{"GRAM_CUSTOM_DOMAIN_BACKEND_SERVICE"},
-		},
-		&cli.StringFlag{
 			Name:    "temporal-address",
 			Usage:   "The address of the temporal server",
 			EnvVars: []string{"TEMPORAL_ADDRESS"},
@@ -296,11 +286,6 @@ func newWorkerCommand() *cli.Command {
 			Required: false,
 		},
 		&cli.StringFlag{
-			Name:    "custom-domain-cname",
-			Usage:   "The expected CNAME target for custom domain verification (e.g., cname.getgram.ai.)",
-			EnvVars: []string{"GRAM_CUSTOM_DOMAIN_CNAME"},
-		},
-		&cli.StringFlag{
 			Name:    "site-url",
 			Usage:   "The URL of the dashboard site, used to link from notification emails",
 			EnvVars: []string{"GRAM_SITE_URL"},
@@ -365,6 +350,7 @@ func newWorkerCommand() *cli.Command {
 		},
 	}
 
+	flags = append(flags, customDomainFlags()...)
 	flags = append(flags, redisFlags()...)
 	flags = append(flags, clickHouseFlags()...)
 	flags = append(flags, functionsFlags()...)
@@ -381,6 +367,11 @@ func newWorkerCommand() *cli.Command {
 		Usage: "Start the temporal worker",
 		Flags: flags,
 		Action: func(c *cli.Context) error {
+			customDomainARecords, err := customDomainARecordsFromCLI(c)
+			if err != nil {
+				return err
+			}
+
 			serviceName := "gram-worker"
 			serviceEnv := c.String("environment")
 			appinfo := o11y.PullAppInfo(c.Context)
@@ -917,6 +908,7 @@ func newWorkerCommand() *cli.Command {
 				OpenRouterSpend:           openRouter,
 				K8sClient:                 k8sClient,
 				ExpectedTargetCNAME:       c.String("custom-domain-cname"),
+				ExpectedARecords:          customDomainARecords,
 				GitHubEvidenceToken:       c.String("github-evidence-token"),
 				SiteURL:                   siteURL,
 				BillingTracker:            billingTracker,

@@ -50,6 +50,15 @@ func seedMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projec
 func seedMcpServerWithVisibility(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, visibility string) uuid.UUID {
 	t.Helper()
 
+	return seedNamedMcpServer(t, ctx, conn, projectID, "", visibility)
+}
+
+// seedNamedMcpServer creates an mcp_server carrying a slug, which the
+// by-server root-selection path needs to name the endpoint it creates. An
+// empty slug leaves name/slug unset.
+func seedNamedMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, slug string, visibility string) uuid.UUID {
+	t.Helper()
+
 	remote := remotemcptest.SeedServer(t, ctx, conn, remotemcprepo.CreateServerParams{
 		ProjectID:     projectID,
 		TransportType: "streamable-http",
@@ -69,6 +78,8 @@ func seedMcpServerWithVisibility(t *testing.T, ctx context.Context, conn *pgxpoo
 	row, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID:                  mcpServerID,
 		ProjectID:           projectID,
+		Name:                conv.ToPGTextEmpty(slug),
+		Slug:                conv.ToPGTextEmpty(slug),
 		EnvironmentID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
 		RemoteMcpServerID:   uuid.NullUUID{UUID: remote.ID, Valid: true},

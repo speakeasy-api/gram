@@ -184,6 +184,7 @@ await pokeDockerService(
   "gram-temporal",
   "Temporal",
   `http://localhost:${temporalWebPort}`,
+  true,
 );
 
 const grafanaPort = process.env["GRAFANA_PORT"] ?? "13000";
