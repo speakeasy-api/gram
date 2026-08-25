@@ -69632,8 +69632,8 @@ components:
         endpoint_mismatches:
           type: array
           items:
-            type: string
-          description: Names of the authorization-server metadata fields (issuer, token_endpoint, authorization_endpoint) that differ from the target. Non-empty blocks the migration.
+            $ref: '#/components/schemas/IssuerFieldMismatch'
+          description: The authorization-server metadata fields (issuer, token_endpoint, authorization_endpoint) that differ from the target, with both sides' values. Non-empty blocks the migration.
         issuer:
           $ref: '#/components/schemas/RemoteSessionIssuer'
         organization_id:
@@ -69645,8 +69645,8 @@ components:
         warnings:
           type: array
           items:
-            type: string
-          description: Non-blocking divergences (oidc, passthrough, scopes_supported). The target issuer's values become authoritative for the migrated clients.
+            $ref: '#/components/schemas/IssuerFieldMismatch'
+          description: Non-blocking divergences (oidc, passthrough, scopes_supported), with both sides' values. The target issuer's values become authoritative for the migrated clients.
       description: An organization- or project-level remote_session_issuer that names the same upstream authorization server as a global issuer, and so could be consolidated onto it.
       required:
         - issuer
@@ -69655,6 +69655,31 @@ components:
         - client_count
         - endpoint_mismatches
         - warnings
+    IssuerFieldMismatch:
+      type: object
+      properties:
+        field:
+          type: string
+          description: 'The differing field''s name: issuer, token_endpoint, authorization_endpoint, oidc, passthrough, or scopes_supported.'
+        source_value:
+          type: string
+          description: The source issuer's value for a scalar field, rendered as a string. Null when the source leaves the field unset, and null for a list-valued field.
+        source_values:
+          type: array
+          items:
+            type: string
+          description: The source issuer's entries for a list-valued field. Absent for a scalar field, and absent when the source's list is empty.
+        target_value:
+          type: string
+          description: The target issuer's value for a scalar field, rendered as a string. Null when the target leaves the field unset, and null for a list-valued field.
+        target_values:
+          type: array
+          items:
+            type: string
+          description: The target issuer's entries for a list-valued field. Absent for a scalar field, and absent when the target's list is empty.
+      description: One remote_session_issuer field whose value differs between the source and target of a consolidation, with both sides' values.
+      required:
+        - field
     IssuerMigratePreflight:
       type: object
       properties:
@@ -69673,8 +69698,8 @@ components:
         endpoint_mismatches:
           type: array
           items:
-            type: string
-          description: Names of the authorization-server metadata fields (issuer, token_endpoint, authorization_endpoint) that differ between source and target. Non-empty blocks the migration.
+            $ref: '#/components/schemas/IssuerFieldMismatch'
+          description: The authorization-server metadata fields (issuer, token_endpoint, authorization_endpoint) that differ between source and target, with both sides' values. Non-empty blocks the migration.
         mcp_server_names:
           type: array
           items:
@@ -69687,8 +69712,8 @@ components:
         warnings:
           type: array
           items:
-            type: string
-          description: Non-blocking divergences (oidc, passthrough, scopes_supported). The target issuer's values become authoritative for the migrated clients.
+            $ref: '#/components/schemas/IssuerFieldMismatch'
+          description: Non-blocking divergences (oidc, passthrough, scopes_supported), with both sides' values. The target issuer's values become authoritative for the migrated clients.
       description: 'Authoritative impact summary for consolidating a tenant remote_session_issuer onto a global one: how many clients move, which MCP servers are affected, every blocker that would make the migration fail, and how many tenant-owned clients the target already carries.'
       required:
         - client_count
@@ -73202,8 +73227,8 @@ components:
         endpoint_mismatches:
           type: array
           items:
-            type: string
-          description: Names of the authorization-server metadata fields (issuer, token_endpoint, authorization_endpoint) that differ between source and target. Non-empty blocks the migration.
+            $ref: '#/components/schemas/IssuerFieldMismatch'
+          description: The authorization-server metadata fields (issuer, token_endpoint, authorization_endpoint) that differ between source and target, with both sides' values. Non-empty blocks the migration.
         mcp_server_names:
           type: array
           items:
@@ -73212,8 +73237,8 @@ components:
         warnings:
           type: array
           items:
-            type: string
-          description: Non-blocking divergences (oidc, passthrough, scopes_supported). The target issuer's values become authoritative for the migrated clients.
+            $ref: '#/components/schemas/IssuerFieldMismatch'
+          description: Non-blocking divergences (oidc, passthrough, scopes_supported), with both sides' values. The target issuer's values become authoritative for the migrated clients.
       description: 'Authoritative impact summary for migrating a remote_session_issuer''s clients onto another issuer: how many clients move, which MCP servers are affected, and every blocker that would make the migration fail.'
       required:
         - client_count

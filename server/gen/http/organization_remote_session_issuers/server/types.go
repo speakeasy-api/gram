@@ -443,17 +443,18 @@ type GetIssuerMigratePreflightResponseBody struct {
 	ClientCount int `form:"client_count" json:"client_count" xml:"client_count"`
 	// Display names of MCP servers attached to the source issuer's clients.
 	McpServerNames []string `form:"mcp_server_names" json:"mcp_server_names" xml:"mcp_server_names"`
-	// Names of the authorization-server metadata fields (issuer, token_endpoint,
-	// authorization_endpoint) that differ between source and target. Non-empty
-	// blocks the migration.
-	EndpointMismatches []string `form:"endpoint_mismatches" json:"endpoint_mismatches" xml:"endpoint_mismatches"`
+	// The authorization-server metadata fields (issuer, token_endpoint,
+	// authorization_endpoint) that differ between source and target, with both
+	// sides' values. Non-empty blocks the migration.
+	EndpointMismatches []*IssuerFieldMismatchResponseBody `form:"endpoint_mismatches" json:"endpoint_mismatches" xml:"endpoint_mismatches"`
 	// Display names of MCP servers where both the source and the target issuer
 	// already have a client bound. Non-empty blocks the migration; detach one
 	// client per listed server and retry.
 	ConflictingMcpServerNames []string `form:"conflicting_mcp_server_names" json:"conflicting_mcp_server_names" xml:"conflicting_mcp_server_names"`
-	// Non-blocking divergences (oidc, passthrough, scopes_supported). The target
-	// issuer's values become authoritative for the migrated clients.
-	Warnings []string `form:"warnings" json:"warnings" xml:"warnings"`
+	// Non-blocking divergences (oidc, passthrough, scopes_supported), with both
+	// sides' values. The target issuer's values become authoritative for the
+	// migrated clients.
+	Warnings []*IssuerFieldMismatchResponseBody `form:"warnings" json:"warnings" xml:"warnings"`
 	// TRUE when the migration would succeed: no endpoint mismatches and no
 	// conflicting MCP-server bindings.
 	CanMigrate bool `form:"can_migrate" json:"can_migrate" xml:"can_migrate"`
@@ -2903,6 +2904,26 @@ type RemoteSessionIssuerDuplicateMatchResponseBody struct {
 	ProjectName string `form:"project_name" json:"project_name" xml:"project_name"`
 }
 
+// IssuerFieldMismatchResponseBody is used to define fields on response body
+// types.
+type IssuerFieldMismatchResponseBody struct {
+	// The differing field's name: issuer, token_endpoint, authorization_endpoint,
+	// oidc, passthrough, or scopes_supported.
+	Field string `form:"field" json:"field" xml:"field"`
+	// The source issuer's value for a scalar field, rendered as a string. Null
+	// when the source leaves the field unset, and null for a list-valued field.
+	SourceValue *string `form:"source_value,omitempty" json:"source_value,omitempty" xml:"source_value,omitempty"`
+	// The target issuer's value for a scalar field, rendered as a string. Null
+	// when the target leaves the field unset, and null for a list-valued field.
+	TargetValue *string `form:"target_value,omitempty" json:"target_value,omitempty" xml:"target_value,omitempty"`
+	// The source issuer's entries for a list-valued field. Absent for a scalar
+	// field, and absent when the source's list is empty.
+	SourceValues []string `form:"source_values,omitempty" json:"source_values,omitempty" xml:"source_values,omitempty"`
+	// The target issuer's entries for a list-valued field. Absent for a scalar
+	// field, and absent when the target's list is empty.
+	TargetValues []string `form:"target_values,omitempty" json:"target_values,omitempty" xml:"target_values,omitempty"`
+}
+
 // NewCreateIssuerResponseBody builds the HTTP response body from the result of
 // the "createIssuer" endpoint of the "organizationRemoteSessionIssuers"
 // service.
@@ -3217,12 +3238,16 @@ func NewGetIssuerMigratePreflightResponseBody(res *organizationremotesessionissu
 		body.McpServerNames = []string{}
 	}
 	if res.EndpointMismatches != nil {
-		body.EndpointMismatches = make([]string, len(res.EndpointMismatches))
+		body.EndpointMismatches = make([]*IssuerFieldMismatchResponseBody, len(res.EndpointMismatches))
 		for i, val := range res.EndpointMismatches {
-			body.EndpointMismatches[i] = val
+			if val == nil {
+				body.EndpointMismatches[i] = nil
+				continue
+			}
+			body.EndpointMismatches[i] = marshalTypesIssuerFieldMismatchToIssuerFieldMismatchResponseBody(val)
 		}
 	} else {
-		body.EndpointMismatches = []string{}
+		body.EndpointMismatches = []*IssuerFieldMismatchResponseBody{}
 	}
 	if res.ConflictingMcpServerNames != nil {
 		body.ConflictingMcpServerNames = make([]string, len(res.ConflictingMcpServerNames))
@@ -3233,12 +3258,16 @@ func NewGetIssuerMigratePreflightResponseBody(res *organizationremotesessionissu
 		body.ConflictingMcpServerNames = []string{}
 	}
 	if res.Warnings != nil {
-		body.Warnings = make([]string, len(res.Warnings))
+		body.Warnings = make([]*IssuerFieldMismatchResponseBody, len(res.Warnings))
 		for i, val := range res.Warnings {
-			body.Warnings[i] = val
+			if val == nil {
+				body.Warnings[i] = nil
+				continue
+			}
+			body.Warnings[i] = marshalTypesIssuerFieldMismatchToIssuerFieldMismatchResponseBody(val)
 		}
 	} else {
-		body.Warnings = []string{}
+		body.Warnings = []*IssuerFieldMismatchResponseBody{}
 	}
 	return body
 }

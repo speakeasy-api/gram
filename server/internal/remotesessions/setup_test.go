@@ -17,6 +17,7 @@ import (
 
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	issuersgen "github.com/speakeasy-api/gram/server/gen/remote_session_issuers"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	assetsrepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -157,6 +158,18 @@ func withExactAccessGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 	require.NoError(t, err)
 
 	return authz.GrantsToContext(ctx, loadedGrants)
+}
+
+// mismatchedFields reduces a preflight's or candidate's mismatch set to the
+// field names alone, for assertions about which fields disagree rather than
+// about what their values are.
+func mismatchedFields(mismatches []*types.IssuerFieldMismatch) []string {
+	fields := make([]string, 0, len(mismatches))
+	for _, mismatch := range mismatches {
+		fields = append(fields, mismatch.Field)
+	}
+
+	return fields
 }
 
 func requireOopsCode(t *testing.T, err error, code oops.Code) {

@@ -1,10 +1,19 @@
 import type { IssuerConvergenceCandidate } from "@gram/client/models/components/issuerconvergencecandidate.js";
+import type { IssuerFieldMismatch } from "@gram/client/models/components/issuerfieldmismatch.js";
 import { describe, expect, it } from "vitest";
 import {
   candidateBlockerSummary,
   candidateIsBlocked,
   candidateOwnerLabel,
 } from "./convergenceBlockers";
+
+function scalarMismatch(
+  field: string,
+  sourceValue: string,
+  targetValue: string,
+): IssuerFieldMismatch {
+  return { field, sourceValue, targetValue };
+}
 
 function candidate(
   overrides: Partial<IssuerConvergenceCandidate> = {},
@@ -33,18 +42,58 @@ describe("candidateBlockerSummary", () => {
   // admin has to learn which field disagrees, not just that something does.
   it("names the fields that disagree", () => {
     const summary = candidateBlockerSummary(
-      candidate({ endpointMismatches: ["token_endpoint"] }),
+      candidate({
+        endpointMismatches: [
+          scalarMismatch(
+            "token_endpoint",
+            "https://a.example.com/token",
+            "https://b.example.com/token",
+          ),
+        ],
+      }),
     );
     expect(summary).toContain("token_endpoint");
     expect(summary).toContain("Different authorization server");
   });
 
+  // The status column has room for a field name and not for two URLs. The
+  // dialog is where the values belong, so a summary that started quoting them
+  // would be the regression, not the improvement.
+  it("leaves the values to the dialog", () => {
+    const summary = candidateBlockerSummary(
+      candidate({
+        endpointMismatches: [
+          scalarMismatch(
+            "token_endpoint",
+            "https://a.example.com/token",
+            "https://b.example.com/token",
+          ),
+        ],
+      }),
+    );
+    expect(summary).not.toContain("https://a.example.com/token");
+  });
+
   it("surfaces warnings when nothing blocks", () => {
     expect(
       candidateBlockerSummary(
-        candidate({ warnings: ["oidc changes from true to false"] }),
+        candidate({ warnings: [scalarMismatch("oidc", "true", "false")] }),
       ),
-    ).toBe("oidc changes from true to false");
+    ).toBe("oidc differs; the platform provider's values become authoritative");
+  });
+
+  it("names every warning field", () => {
+    const summary = candidateBlockerSummary(
+      candidate({
+        warnings: [
+          scalarMismatch("oidc", "true", "false"),
+          { field: "scopes_supported", sourceValues: ["openid"] },
+        ],
+      }),
+    );
+    expect(summary).toBe(
+      "oidc, scopes_supported differ; the platform provider's values become authoritative",
+    );
   });
 
   // A mismatch outranks a warning: one refuses the migration, the other only
@@ -53,8 +102,14 @@ describe("candidateBlockerSummary", () => {
     expect(
       candidateBlockerSummary(
         candidate({
-          endpointMismatches: ["issuer"],
-          warnings: ["scopes_supported differs"],
+          endpointMismatches: [
+            scalarMismatch(
+              "issuer",
+              "https://a.example.com",
+              "https://b.example.com",
+            ),
+          ],
+          warnings: [{ field: "scopes_supported", sourceValues: ["openid"] }],
         }),
       ),
     ).toContain("issuer");
@@ -64,13 +119,27 @@ describe("candidateBlockerSummary", () => {
 describe("candidateIsBlocked", () => {
   it("treats an endpoint mismatch as blocking", () => {
     expect(
-      candidateIsBlocked(candidate({ endpointMismatches: ["issuer"] })),
+      candidateIsBlocked(
+        candidate({
+          endpointMismatches: [
+            scalarMismatch(
+              "issuer",
+              "https://a.example.com",
+              "https://b.example.com",
+            ),
+          ],
+        }),
+      ),
     ).toBe(true);
   });
 
   it("does not treat a warning as blocking", () => {
     expect(
-      candidateIsBlocked(candidate({ warnings: ["scopes_supported differs"] })),
+      candidateIsBlocked(
+        candidate({
+          warnings: [{ field: "scopes_supported", sourceValues: ["openid"] }],
+        }),
+      ),
     ).toBe(false);
   });
 });
