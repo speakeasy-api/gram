@@ -99,7 +99,8 @@
     "vega-interpreter": "^2.3.1",
     "xstate": "^5.32.4",
     "zod": "^4",
-    "zustand": "^5.0.14"
+    "zustand": "^5.0.14",
+    "@cfworker/json-schema": "catalog:"
   },
   "devDependencies": {
     "@storybook/addon-docs": "^10.5.7",

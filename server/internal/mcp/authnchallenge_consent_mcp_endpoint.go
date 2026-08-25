@@ -108,12 +108,11 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 	if !s.consentToolFilteringEnabled(ctx, logger, endpoint.OrganizationID) {
 		return oops.E(oops.CodeNotFound, nil, "not found").LogWarn(ctx, logger)
 	}
-	// Meta-MCP-backed endpoints have no per-tool picker: their member tool
-	// catalogs land with the meta-server runtime (AGE-3291), and the consent
-	// page never renders the picker island for them (their
-	// endpointToolSelectionResource is empty). Fail closed like the
-	// filtering-off case, where the surface does not exist.
-	if endpoint.MetaMcpServerID.Valid {
+	eligible, err := s.consentToolPickerEligible(ctx, endpoint)
+	if err != nil {
+		return oops.E(oops.CodeUnavailable, err, "service temporarily unavailable").LogError(ctx, logger)
+	}
+	if !eligible {
 		return oops.E(oops.CodeNotFound, nil, "not found").LogWarn(ctx, logger)
 	}
 	// Mixed credentials are a confusion smell: the consent transport never
@@ -483,6 +482,26 @@ func (i *consentInventoryCaptureInterceptor) InterceptToolsListResponse(ctx cont
 		return fmt.Errorf("capture consent tool inventory page: %w", err)
 	}
 	*i.draft = updated
+
+	var sanitized []*mcp.Tool
+	for idx, tool := range list.Result.Tools {
+		if tool == nil || tool.OutputSchema == nil {
+			continue
+		}
+		if sanitized == nil {
+			sanitized = append([]*mcp.Tool(nil), list.Result.Tools...)
+		}
+		clone := *tool
+		clone.OutputSchema = nil
+		sanitized[idx] = &clone
+	}
+	if sanitized != nil {
+		// The browser SDK eagerly compiles output schemas with eval, which the
+		// consent page's CSP intentionally forbids.
+		if err := list.SetTools(sanitized); err != nil {
+			return fmt.Errorf("strip output schemas from consent tool inventory: %w", err)
+		}
+	}
 	return nil
 }
 

@@ -557,7 +557,7 @@ func TestServePublic_PlatformDomain_DoesNotResolveCustomDomainEndpoint(t *testin
 // MCP client handshake — mirroring the dumb upstream used by
 // TestServePublic_McpEndpoint_RemoteBacked_Proxies. The single tool is named
 // toolName.
-func newStatelessRemoteMCPUpstream(t *testing.T, toolName string) *httptest.Server {
+func newStatelessRemoteMCPUpstream(t *testing.T, toolName string, outputSchema map[string]any) *httptest.Server {
 	t.Helper()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -577,11 +577,15 @@ func newStatelessRemoteMCPUpstream(t *testing.T, toolName string) *httptest.Serv
 				"serverInfo":      map[string]any{"name": "upstream", "version": "1.0"},
 			}
 		case "tools/list":
-			result = map[string]any{"tools": []map[string]any{{
+			tool := map[string]any{
 				"name":        toolName,
 				"description": "Returns pong",
 				"inputSchema": map[string]any{"type": "object", "properties": map[string]any{}},
-			}}}
+			}
+			if outputSchema != nil {
+				tool["outputSchema"] = outputSchema
+			}
+			result = map[string]any{"tools": []map[string]any{tool}}
 		case "tools/call":
 			result = map[string]any{"content": []map[string]any{{"type": "text", "text": "pong"}}, "isError": false}
 		default:
@@ -656,7 +660,7 @@ func TestServePublic_McpEndpoint_IssuerGatedPrivateRemote_RBACEnforced_ResolvesG
 	require.NotNil(t, authCtx.ProjectID)
 
 	const toolName = "ping"
-	upstream := newStatelessRemoteMCPUpstream(t, toolName)
+	upstream := newStatelessRemoteMCPUpstream(t, toolName, nil)
 
 	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
 	endpointSlug := "endpoint-" + uuid.NewString()
