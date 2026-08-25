@@ -4,6 +4,7 @@ import { useRoutes } from "@/routes.tsx";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
 import React, { ReactElement } from "react";
+import { Link } from "react-router";
 import { ContentErrorBoundary } from "./content-error-boundary.tsx";
 import { PageHeader } from "./page-header.tsx";
 import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge.tsx";
@@ -233,9 +234,9 @@ export function EmptyState({
   const routes = useRoutes();
 
   const CTA: React.ReactNode = nonEmptyProjectCTA ?? (
-    <routes.catalog.Link>
-      <Button size="sm">Browse catalog</Button>
-    </routes.catalog.Link>
+    <Button asChild size="sm">
+      <Link to={routes.catalog.href()}>Browse catalog</Link>
+    </Button>
   );
 
   return (

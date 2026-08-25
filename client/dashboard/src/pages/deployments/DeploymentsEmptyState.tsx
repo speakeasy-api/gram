@@ -1,6 +1,7 @@
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Button } from "@/components/ui/Button";
 import { useRoutes } from "@/routes";
+import { Link } from "react-router";
 
 export function DeploymentsEmptyState(): JSX.Element {
   const routes = useRoutes();
@@ -11,9 +12,9 @@ export function DeploymentsEmptyState(): JSX.Element {
       heading="No deployments yet"
       description="Connect an MCP server from the catalog to create your first deployment and generate tools."
       action={
-        <routes.catalog.Link>
-          <Button size="sm">Browse catalog</Button>
-        </routes.catalog.Link>
+        <Button asChild size="sm">
+          <Link to={routes.catalog.href()}>Browse catalog</Link>
+        </Button>
       }
     />
   );
