@@ -223,9 +223,9 @@ func SnapshotClickHouse(ctx context.Context, ch driver.Conn, orgID string, proje
 }
 
 // TamperDemoRows plants stray rows inside the demo scope — a duplicated chat
-// in Postgres and a duplicated telemetry row in ClickHouse — so a subsequent
-// seed run can be shown to clean up unexpected demo-org data, not merely
-// re-assert its own rows.
+// and a visitor-minted API key in Postgres, a duplicated telemetry row in
+// ClickHouse — so a subsequent seed run can be shown to clean up unexpected
+// demo-org data, not merely re-assert its own rows.
 func TamperDemoRows(ctx context.Context, db *pgxpool.Pool, ch driver.Conn, orgID string, projectID string) error {
 	// Generated columns (e.g. chats.deleted) cannot be written, so the
 	// duplicated row is built column by column from the non-generated set.
@@ -261,6 +261,19 @@ func TamperDemoRows(ctx context.Context, db *pgxpool.Pool, ch driver.Conn, orgID
 	}
 	if tag.RowsAffected() != 1 {
 		return fmt.Errorf("tamper postgres chat: expected 1 row inserted, got %d", tag.RowsAffected())
+	}
+
+	// The seed itself never inserts an API key, so this row cannot be cloned
+	// from an existing one: it stands in for a key a demo visitor minted with
+	// the org:admin grants every demo session holds. Nothing in the demo
+	// project's FK cascade reaches api_keys, so only an explicit scoped delete
+	// removes it.
+	if _, err := db.Exec(ctx, `
+		INSERT INTO api_keys (organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes)
+		VALUES ($1, $2::uuid, 'user_demo_tamper', 'tampered visitor key', 'gram_demo', 'DEMO-TAMPER-HASH', ARRAY['producer'])`,
+		orgID, projectID,
+	); err != nil {
+		return fmt.Errorf("tamper postgres api key: %w", err)
 	}
 
 	err = ch.Exec(ctx, fmt.Sprintf(`

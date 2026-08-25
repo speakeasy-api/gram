@@ -341,6 +341,13 @@ BEGIN
   DELETE FROM deployment_logs WHERE project_id = proj_a;
   DELETE FROM deployments WHERE organization_id = demo_org;
   DELETE FROM assets WHERE project_id = proj_a;
+  -- api_keys does not reference projects, so the projects delete below does
+  -- not cascade to it. Demo visitors hold org:admin (authz.DemoScopeGrants)
+  -- and can mint keys; without this delete those keys outlive every reseed and
+  -- keep working long after the session that created them is gone. The local
+  -- tenant's own key is reinserted by RunLocalFixtures immediately after this
+  -- script runs.
+  DELETE FROM api_keys WHERE organization_id = demo_org;
   DELETE FROM projects WHERE organization_id = demo_org;
 
   -- Single project: the demo org intentionally has exactly one project so
@@ -1344,6 +1351,13 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   ) x;
   IF stray > 0 THEN
     RAISE EXCEPTION 'demo seed postflight: % demo-org rows reference non-demo users', stray;
+  END IF;
+
+  -- The seed never creates API keys: any row left here was minted by a demo
+  -- visitor and would grant programmatic access that survives the reseed.
+  SELECT count(*) INTO stray FROM api_keys WHERE organization_id = demo_org;
+  IF stray > 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: % api keys survived the reseed', stray;
   END IF;
 
   RAISE NOTICE 'demo seed ok: % chats, % findings, % members, % tools',
