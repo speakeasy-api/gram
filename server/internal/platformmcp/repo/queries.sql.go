@@ -5992,7 +5992,6 @@ RETURNING id, organization_id, project_id, registration_id, default_plugin_id, p
 `
 
 type UpdatePlatformMCPDistributionParams struct {
-	DefaultPluginID      uuid.NullUUID
 	PluginServerID       uuid.NullUUID
 	PluginID             uuid.NullUUID
 	State                string
@@ -6008,7 +6007,6 @@ type UpdatePlatformMCPDistributionParams struct {
 
 func (q *Queries) UpdatePlatformMCPDistribution(ctx context.Context, arg UpdatePlatformMCPDistributionParams) (PlatformMcpDistribution, error) {
 	row := q.db.QueryRow(ctx, updatePlatformMCPDistribution,
-		arg.DefaultPluginID,
 		arg.PluginServerID,
 		arg.PluginID,
 		arg.State,
