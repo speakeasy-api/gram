@@ -50,7 +50,7 @@ Or with a collaborator:
 
 6. **Store connection.** The `plugin_github_connections` row is upserted with `(project_id, installation_id, repo_owner, repo_name)`.
 
-7. **Add collaborator.** If a GitHub username was provided, `AddCollaborator()` grants `push` permission to the repo.
+7. **Add collaborator.** If a GitHub username was provided, `AddCollaborator()` grants `pull` permission to the repo.
 
 > **Keys are minted before the GitHub push.** If the push fails, the keys are discarded and not persisted to the database. On retry the flow starts over.
 
