@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   mcpToolsAvailability,
+  mcpToolsSendBlocked,
   mcpToolsSendTooltip,
   mcpToolsWelcomeSubtitle,
   NO_MCP_TOOLS_MESSAGE,
@@ -45,6 +46,15 @@ describe("mcpToolsAvailability", () => {
     expect(mcpToolsSendTooltip("loading")).toBe("Loading tools…");
     expect(mcpToolsSendTooltip("unavailable")).toBe(NO_MCP_TOOLS_MESSAGE);
     expect(mcpToolsSendTooltip("ready")).toBe("Send message");
+  });
+
+  it("blocks send only when the host requires tools and they are not ready", () => {
+    expect(mcpToolsSendBlocked(undefined, false, {}, null)).toBe(false);
+    expect(mcpToolsSendBlocked(true, true, undefined, null)).toBe(true);
+    expect(mcpToolsSendBlocked(true, false, {}, new Error("401"))).toBe(true);
+    expect(mcpToolsSendBlocked(true, false, { list_issues: {} }, null)).toBe(
+      false,
+    );
   });
 });
 

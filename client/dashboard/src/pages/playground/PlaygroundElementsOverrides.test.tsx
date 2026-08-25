@@ -97,6 +97,18 @@ describe("PlaygroundNoToolsBanner", () => {
     const html = renderToStaticMarkup(<PlaygroundNoToolsBanner />);
 
     expect(html).toContain(NO_MCP_TOOLS_MESSAGE);
+    expect(html).toContain('role="alert"');
+  });
+
+  it("renders the honest warning when tools/list errors", () => {
+    mocks.ctx.mcpToolsLoading = false;
+    mocks.ctx.mcpTools = { leftover: {} };
+    mocks.ctx.mcpToolsError = new Error("401 Unauthorized");
+
+    const html = renderToStaticMarkup(<PlaygroundNoToolsBanner />);
+
+    expect(html).toContain(NO_MCP_TOOLS_MESSAGE);
+    expect(html).toContain('role="alert"');
   });
 
   it("stays hidden when tools resolve", () => {

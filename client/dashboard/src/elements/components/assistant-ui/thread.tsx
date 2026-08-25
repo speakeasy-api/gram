@@ -94,6 +94,7 @@ import { getApiUrl } from "@/elements/lib/api";
 import { dictationAdapter } from "@/elements/lib/dictation";
 import {
   mcpToolsAvailability,
+  mcpToolsSendBlocked,
   mcpToolsSendTooltip,
 } from "@/elements/lib/mcpToolsAvailability";
 import { EASE_OUT_QUINT } from "@/elements/lib/easing";
@@ -397,11 +398,22 @@ const ThreadWelcome: FC = () => {
 };
 
 const ThreadSuggestions: FC = () => {
-  const { config } = useElements();
+  const { config, mcpTools, mcpToolsLoading, mcpToolsError } = useElements();
   const r = useRadius();
   const d = useDensity();
   const suggestions = config.welcome?.suggestions ?? [];
   const isStandalone = config.variant === "standalone";
+
+  if (
+    mcpToolsSendBlocked(
+      config.composer?.requireMcpTools,
+      mcpToolsLoading,
+      mcpTools,
+      mcpToolsError,
+    )
+  ) {
+    return null;
+  }
 
   if (suggestions.length === 0) return null;
 
@@ -731,8 +743,12 @@ export const Composer: FC<ComposerProps> = ({
     mcpTools,
     mcpToolsError,
   );
-  const sendBlocked =
-    composerConfig.requireMcpTools === true && toolsAvailability !== "ready";
+  const sendBlocked = mcpToolsSendBlocked(
+    composerConfig.requireMcpTools,
+    mcpToolsLoading,
+    mcpTools,
+    mcpToolsError,
+  );
   const sendTooltip = sendBlocked
     ? mcpToolsSendTooltip(toolsAvailability)
     : "Send message";

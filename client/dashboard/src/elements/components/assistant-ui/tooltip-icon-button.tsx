@@ -35,16 +35,18 @@ export const TooltipIconButton = forwardRef<
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            {...rest}
-            className={cn("aui-button-icon size-6 p-1", className)}
-            ref={ref}
-          >
-            <Slottable>{children}</Slottable>
-            <span className="aui-sr-only sr-only">{tooltip}</span>
-          </Button>
+          <span className="inline-flex">
+            <Button
+              variant="ghost"
+              size="icon"
+              {...rest}
+              className={cn("aui-button-icon size-6 p-1", className)}
+              ref={ref}
+            >
+              <Slottable>{children}</Slottable>
+              <span className="aui-sr-only sr-only">{tooltip}</span>
+            </Button>
+          </span>
         </TooltipTrigger>
         <TooltipContent side={side} align={align}>
           {tooltip}

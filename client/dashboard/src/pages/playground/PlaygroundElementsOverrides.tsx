@@ -70,7 +70,10 @@ export function PlaygroundNoToolsBanner(): JSX.Element | null {
   }
 
   return (
-    <div className="bg-warning/15 border-warning/30 text-warning-foreground flex items-center gap-2 border-b px-4 py-2.5 text-sm font-medium">
+    <div
+      role="alert"
+      className="bg-warning/15 border-warning/30 text-warning-foreground flex items-center gap-2 border-b px-4 py-2.5 text-sm font-medium"
+    >
       <AlertCircle className="size-4 shrink-0" />
       <span>{NO_MCP_TOOLS_MESSAGE}</span>
     </div>

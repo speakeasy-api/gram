@@ -20,6 +20,19 @@ export function mcpToolsAvailability(
   return "ready";
 }
 
+/** True when a host opted into `requireMcpTools` and tools are not ready. */
+export function mcpToolsSendBlocked(
+  requireMcpTools: boolean | undefined,
+  loading: boolean,
+  tools: Record<string, unknown> | undefined,
+  error: unknown,
+): boolean {
+  return (
+    requireMcpTools === true &&
+    mcpToolsAvailability(loading, tools, error) !== "ready"
+  );
+}
+
 export function mcpToolsSendTooltip(
   availability: McpToolsAvailability,
 ): string {
