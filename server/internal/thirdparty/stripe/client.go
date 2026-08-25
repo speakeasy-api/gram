@@ -516,6 +516,7 @@ func (c *client) CreateCheckoutSession(ctx context.Context, input CreateCheckout
 	}
 
 	params := new(stripesdk.CheckoutSessionCreateParams)
+	params.AllowPromotionCodes = new(true)
 	params.CancelURL = stripesdk.String(input.CancelURL)
 	params.ClientReferenceID = stripesdk.String(input.OrganizationID)
 	params.Customer = stripesdk.String(input.CustomerID)
