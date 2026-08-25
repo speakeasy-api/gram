@@ -150,12 +150,12 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 	var zero RefreshResult
 	q := remotesessions_repo.New(s.db)
 
-	// Loaded ahead of the lock purely to label the outcome: every return,
-	// including the concurrent-loser and inactive early exits below, carries
-	// the issuer URL. The POST itself re-reads the row after the lock so it
-	// never runs on configuration that changed while this caller waited. An
-	// active session whose client or issuer row was soft-deleted fails here
-	// and records internal_error; the refresh would fail on the same lookup
+	// Loaded ahead of the lock so the returns that never reach the POST, the
+	// concurrent-loser and inactive early exits below, still carry an issuer
+	// URL. The POST path re-reads the row after the lock and reports the
+	// issuer it actually spoke to, which wins over this label. An active
+	// session whose client or issuer row was soft-deleted fails here and
+	// records internal_error; the refresh would fail on the same lookup
 	// either way.
 	client, err := q.GetRemoteSessionClientWithIssuerByID(ctx, sess.RemoteSessionClientID)
 	if err != nil {
@@ -165,14 +165,15 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 		return zero, &RefreshError{IssuerURL: "", Outcome: outcome, err: err}
 	}
 
-	result, err := s.refresh(ctx, q, sess, callerResource)
+	result, postLockIssuerURL, err := s.refresh(ctx, q, sess, callerResource)
+	issuerURL := conv.Default(postLockIssuerURL, client.IssuerUrl)
 	if err != nil {
 		outcome := refreshOutcomeForError(ctx, err)
-		s.metrics.Record(ctx, client.IssuerUrl, trigger, outcome)
-		return zero, &RefreshError{IssuerURL: client.IssuerUrl, Outcome: outcome, err: err}
+		s.metrics.Record(ctx, issuerURL, trigger, outcome)
+		return zero, &RefreshError{IssuerURL: issuerURL, Outcome: outcome, err: err}
 	}
-	result.IssuerURL = client.IssuerUrl
-	s.metrics.Record(ctx, client.IssuerUrl, trigger, result.Outcome)
+	result.IssuerURL = issuerURL
+	s.metrics.Record(ctx, issuerURL, trigger, result.Outcome)
 	return result, nil
 }
 
@@ -219,12 +220,16 @@ func refreshOutcomeForError(ctx context.Context, err error) remotesessionmetrics
 // side of the upstream POST, and the invalid_grant clearing. RefreshNow wraps
 // it so the metric sample and the RefreshError are produced in exactly one
 // place regardless of which of the many return paths below is taken.
+//
+// The string is the issuer URL of the client row re-read after the lock,
+// the one the POST was sent to; it is empty on every return that happens
+// before that read, and RefreshNow falls back to its pre-lock label there.
 func (s *RefreshService) refresh(
 	ctx context.Context,
 	q *remotesessions_repo.Queries,
 	sess remotesessions_repo.RemoteSession,
 	callerResource string,
-) (RefreshResult, error) {
+) (RefreshResult, string, error) {
 	var zero RefreshResult
 
 	lockKey := refreshLockKey(sess.SubjectUrn, sess.RemoteSessionClientID)
@@ -242,7 +247,7 @@ func (s *RefreshService) refresh(
 		)
 	case !held:
 		if winner, ok := s.awaitRefreshedSession(ctx, q, sess); ok {
-			return winner, nil
+			return winner, "", nil
 		}
 		// A duplicate POST beats a guaranteed reconnect prompt.
 		s.logger.WarnContext(ctx, "timed out waiting on a concurrent remote session refresh; refreshing directly",
@@ -284,11 +289,11 @@ func (s *RefreshService) refresh(
 		// Revoked while we were acquiring. Refreshing anyway would rotate
 		// tokens upstream that nothing will ever hold.
 		var inactive remotesessions_repo.RemoteSession
-		return RefreshResult{Session: inactive, AccessToken: "", Outcome: remotesessionmetrics.RefreshOutcomeSessionInactive, IssuerURL: ""}, nil
+		return RefreshResult{Session: inactive, AccessToken: "", Outcome: remotesessionmetrics.RefreshOutcomeSessionInactive, IssuerURL: ""}, "", nil
 	case currentErr != nil:
 		// Whatever broke this read breaks the write below too, and a refresh we
 		// cannot persist leaves the stored token dead upstream.
-		return zero, fmt.Errorf("re-read active remote_session: %w", currentErr)
+		return zero, "", fmt.Errorf("re-read active remote_session: %w", currentErr)
 	}
 
 	sess = current
@@ -297,16 +302,16 @@ func (s *RefreshService) refresh(
 		if accessTokenUsable(current, time.Now()) {
 			plain, err := s.enc.Decrypt(current.AccessTokenEncrypted)
 			if err != nil {
-				return zero, fmt.Errorf("decrypt concurrently refreshed access token: %w", err)
+				return zero, "", fmt.Errorf("decrypt concurrently refreshed access token: %w", err)
 			}
-			return RefreshResult{Session: current, AccessToken: plain, Outcome: remotesessionmetrics.RefreshOutcomeAdoptedConcurrentWinner, IssuerURL: ""}, nil
+			return RefreshResult{Session: current, AccessToken: plain, Outcome: remotesessionmetrics.RefreshOutcomeAdoptedConcurrentWinner, IssuerURL: ""}, "", nil
 		}
 	}
 	if !current.RefreshTokenEncrypted.Valid || current.RefreshTokenEncrypted.String == "" {
-		return zero, ErrNoValidToken
+		return zero, "", ErrNoValidToken
 	}
 	if !refreshTokenUsable(current, time.Now()) {
-		return zero, ErrNoValidToken
+		return zero, "", ErrNoValidToken
 	}
 
 	// The persisted binding wins over the caller-derived fallback: the token
@@ -323,7 +328,7 @@ func (s *RefreshService) refresh(
 		var err error
 		resource, err = s.FallbackResourceForClient(ctx, sess.RemoteSessionClientID)
 		if err != nil {
-			return zero, fmt.Errorf("derive fallback resource: %w", err)
+			return zero, "", fmt.Errorf("derive fallback resource: %w", err)
 		}
 	}
 
@@ -331,7 +336,7 @@ func (s *RefreshService) refresh(
 	// a client secret or token endpoint rotated meanwhile must reach the POST.
 	client, err := q.GetRemoteSessionClientWithIssuerByID(ctx, sess.RemoteSessionClientID)
 	if err != nil {
-		return zero, fmt.Errorf("load remote_session_client for refresh: %w", err)
+		return zero, "", fmt.Errorf("load remote_session_client for refresh: %w", err)
 	}
 
 	updated, accessToken, refreshErr := refreshSessionTokens(ctx, q, s.enc, s.policy, client, sess, resource)
@@ -345,7 +350,7 @@ func (s *RefreshService) refresh(
 				attr.SlogOAuthResource(updated.Resource.String),
 			)
 		}
-		return RefreshResult{Session: updated, AccessToken: accessToken, Outcome: remotesessionmetrics.RefreshOutcomeRefreshed, IssuerURL: ""}, nil
+		return RefreshResult{Session: updated, AccessToken: accessToken, Outcome: remotesessionmetrics.RefreshOutcomeRefreshed, IssuerURL: ""}, client.IssuerUrl, nil
 	}
 
 	var tokenRefreshErr *TokenRefreshError
@@ -358,9 +363,9 @@ func (s *RefreshService) refresh(
 		})
 		switch {
 		case err == nil:
-			return zero, refreshErr
+			return zero, client.IssuerUrl, refreshErr
 		case !errors.Is(err, pgx.ErrNoRows):
-			return zero, fmt.Errorf("clear remote session refresh token after invalid_grant: %w", err)
+			return zero, client.IssuerUrl, fmt.Errorf("clear remote session refresh token after invalid_grant: %w", err)
 		}
 		// A row that moved after our refresh attempt belongs to a concurrent
 		// winner. Re-read it below and adopt that token instead of clearing it.
@@ -371,24 +376,24 @@ func (s *RefreshService) refresh(
 		RemoteSessionClientID: sess.RemoteSessionClientID,
 	})
 	if err != nil {
-		return zero, refreshErr
+		return zero, client.IssuerUrl, refreshErr
 	}
 
 	// Nothing else moved the row, so our failure is the real state of the
 	// session rather than the losing half of a race.
 	if !latest.UpdatedAt.Time.After(sess.UpdatedAt.Time) {
-		return zero, refreshErr
+		return zero, client.IssuerUrl, refreshErr
 	}
 
 	if !accessTokenUsable(latest, time.Now()) {
-		return zero, refreshErr
+		return zero, client.IssuerUrl, refreshErr
 	}
 	plain, err := s.enc.Decrypt(latest.AccessTokenEncrypted)
 	if err != nil {
-		return zero, refreshErr
+		return zero, client.IssuerUrl, refreshErr
 	}
 
-	return RefreshResult{Session: latest, AccessToken: plain, Outcome: remotesessionmetrics.RefreshOutcomeAdoptedConcurrentWinner, IssuerURL: ""}, nil
+	return RefreshResult{Session: latest, AccessToken: plain, Outcome: remotesessionmetrics.RefreshOutcomeAdoptedConcurrentWinner, IssuerURL: ""}, client.IssuerUrl, nil
 }
 
 func accessTokenUsable(sess remotesessions_repo.RemoteSession, now time.Time) bool {
