@@ -5,25 +5,18 @@
          auto ratio (90% of visible RAM) or a compose cgroup limit: cgroup limits are not
          enforced in every environment, in which case ClickHouse sees the whole host's RAM.
 
-         Sized for N concurrent worktrees, not one: each worktree runs its own ClickHouse, so
-         this budget is multiplied by however many stacks are up. 1 GiB is ample for the
-         local dataset (dev seed plus whatever a test run writes) and keeps six worktrees
-         under 6 GiB of ClickHouse headroom instead of 12 GiB. It is also the floor that
-         boots: 512 MiB fails startup with BAD_ARGUMENTS on the background-pool constraint
-         described below, which the <background_pool_size> setting does not rescue — that
-         override is a no-op here (system.settings reports 20 while 8 is enforced), so the
-         effective pool tracks this cap rather than the value written below. -->
+         This singleton serves every worktree. Their queries, caches, and background work
+         share this 1 GiB budget. A 512 MiB cap does not boot because it violates the
+         background-pool constraint described below. -->
     <max_server_memory_usage>1073741824</max_server_memory_usage> <!-- 1 GiB -->
 
     <!-- Reduce cache sizes relative to available RAM -->
     <cache_size_to_ram_max_ratio>0.20</cache_size_to_ram_max_ratio>
 
-    <!-- Reduce background thread pools so ClickHouse doesn't spawn too many workers.
-         The constraint that bounds this: startup fails with BAD_ARGUMENTS unless
-         background_pool_size * background_merges_mutations_concurrency_ratio is at least
-         number_of_free_entries_in_pool_to_execute_mutation (default 20). Note that
-         background_pool_size is not actually honoured from this file (see above), so raising
-         it is not a way to buy room under a smaller memory cap. -->
+    <!-- Keep the merge/mutation pool large enough to satisfy ClickHouse's startup check:
+         background_pool_size * background_merges_mutations_concurrency_ratio must be at
+         least number_of_free_entries_in_pool_to_execute_mutation (default 20). Reduce the
+         scheduling pool separately to limit idle development workers. -->
     <background_pool_size>20</background_pool_size>
     <background_schedule_pool_size>2</background_schedule_pool_size>
 </clickhouse>

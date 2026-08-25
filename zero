@@ -206,6 +206,9 @@ mise clickhouse:migrate
 
 mise run zero:devidp
 
+echo -e "\n⏳ Seeding the worktree databases"
+mise run seed
+
 echo -e "\n✅ All set up!"
 
 # Use local:start if it's defined, otherwise fall back to the default start task.
@@ -235,7 +238,6 @@ if $started; then
     wait "$server_cache_pid" || true
 
     mise run "$start_task"
-    mise run seed
 else
     # Nothing will consume the cache, so stop paying for it: without this the
     # build runs to completion in the background of a `./zero` the user

@@ -44,6 +44,61 @@ if grep -E '^GRAM_ADMIN_SERVER_URL[[:space:]]*=' mise.local.toml \
   echo "✅ Cleared the stale admin origin declaration(s); re-mapped below."
 fi
 
+# ClickHouse moved from per-worktree ports to a shared server. A generated URL
+# contains mise's CLICKHOUSE_* interpolation marker; that is the evidence needed
+# to remove the paired generated ports without touching manually pinned
+# endpoints. The old volume is intentionally retained by infra:start.
+generated_clickhouse_urls=0
+for key in GRAM_CLICKHOUSE_URL GRAM_CLICKHOUSE_GOMIGRATE_URL; do
+  if grep -E "^${key}[[:space:]]*=" mise.local.toml \
+       | grep -qF '{{env.CLICKHOUSE_'; then
+    mise unset --file mise.local.toml "$key"
+    generated_clickhouse_urls=1
+  fi
+done
+if [ "$generated_clickhouse_urls" -eq 1 ]; then
+  for key in CLICKHOUSE_HTTP_PORT CLICKHOUSE_NATIVE_PORT; do
+    if grep -qE "^${key}[[:space:]]*=" mise.local.toml; then
+      mise unset --file mise.local.toml "$key"
+    fi
+  done
+  echo "✅ Reset auto-generated ClickHouse ports and URLs to shared defaults."
+fi
+
+# Preserve an explicit non-default database override. Otherwise derive the
+# namespace from COMPOSE_PROJECT_NAME.
+clickhouse_database=$(mise set --file mise.local.toml 2>/dev/null \
+  | awk '$1 == "CLICKHOUSE_DATABASE" { print $2 }')
+if [ "$clickhouse_database" = "default" ]; then
+  clickhouse_database=
+fi
+if [ -z "$clickhouse_database" ]; then
+  worktree_project=$(mise set --file mise.local.toml 2>/dev/null \
+    | awk '$1 == "COMPOSE_PROJECT_NAME" { print $2 }')
+  clickhouse_database=$(printf '%s' "$worktree_project" \
+    | tr '[:upper:]-' '[:lower:]_' \
+    | tr -c 'a-z0-9_' '_')
+fi
+if [[ ! "$clickhouse_database" =~ ^[a-z][a-z0-9_]*$ ]]; then
+  echo "Error: generated ClickHouse database '$clickhouse_database' is not a safe identifier." >&2
+  exit 1
+fi
+mise unset --file mise.local.toml CLICKHOUSE_DATABASE >/dev/null 2>&1 || true
+mise set --file mise.local.toml "CLICKHOUSE_DATABASE=${clickhouse_database}"
+
+for key in GRAM_CLICKHOUSE_URL GRAM_CLICKHOUSE_GOMIGRATE_URL; do
+  if grep -qE "^${key}[[:space:]]*=" mise.local.toml; then
+    continue
+  fi
+  if [ "$key" = "GRAM_CLICKHOUSE_URL" ]; then
+    mise set --file mise.local.toml \
+      'GRAM_CLICKHOUSE_URL=clickhouse://{{env.CLICKHOUSE_USERNAME}}:{{env.CLICKHOUSE_PASSWORD}}@{{env.CLICKHOUSE_HOST}}:{{env.CLICKHOUSE_NATIVE_PORT}}/{{env.CLICKHOUSE_DATABASE}}?secure=true&skip_verify=true'
+  else
+    mise set --file mise.local.toml \
+      'GRAM_CLICKHOUSE_GOMIGRATE_URL=clickhouse://{{env.CLICKHOUSE_HOST}}:{{env.CLICKHOUSE_NATIVE_PORT}}?database={{env.CLICKHOUSE_DATABASE}}&username={{env.CLICKHOUSE_USERNAME}}&password={{env.CLICKHOUSE_PASSWORD}}&secure=true&skip_verify=true&x-multi-statement=true'
+  fi
+done
+
 echo "⏳ Syncing port mappings..."
 added=0
 remap=$(mise run zero:remap-ports --preserve --format flat --file -)

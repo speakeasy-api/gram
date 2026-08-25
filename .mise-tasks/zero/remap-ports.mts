@@ -39,6 +39,8 @@ import { checkPort } from "get-port-please";
  * keep their mise.toml defaults too.
  */
 const SHARED_PORT_ENV_VARS = new Set([
+  "CLICKHOUSE_HTTP_PORT",
+  "CLICKHOUSE_NATIVE_PORT",
   "PRESIDIO_PORT",
   "PUBSUB_EMULATOR_PORT",
   "TEMPORAL_PORT",

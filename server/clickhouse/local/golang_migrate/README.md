@@ -41,6 +41,6 @@ The script will automatically use the configured migration engine.
 Note that golang-migrate requires a different URL format than Atlas:
 
 - **Atlas**: `clickhouse://user:password@host:port/database?params`
-- **golang-migrate**: `clickhouse://host:port/database?username=user&password=pass&params`
+- **golang-migrate**: `clickhouse://host:port?database=database&username=user&password=pass&params`
 
 This is handled automatically by using the `GRAM_CLICKHOUSE_GOMIGRATE_URL` environment variable for golang-migrate.

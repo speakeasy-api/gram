@@ -57,6 +57,11 @@ if ! mise run install:aube --offline; then
   mise run install:aube
 fi
 
+copied_compose_project=$(mise set --file mise.local.toml 2>/dev/null \
+  | awk '$1 == "COMPOSE_PROJECT_NAME" { print $2 }')
+copied_clickhouse_database=$(mise set --file mise.local.toml 2>/dev/null \
+  | awk '$1 == "CLICKHOUSE_DATABASE" { print $2 }')
+
 suffix=$(LC_ALL=C tr -dc 'a-z0-9' < /dev/urandom | head -c 4)
 compose_project="gram-infra-${suffix}"
 mise set --file mise.local.toml "COMPOSE_PROJECT_NAME=${compose_project}"
@@ -69,6 +74,54 @@ mise set --file mise.local.toml "TEMPORAL_NAMESPACE=${compose_project}"
 # Compose project ID keeps identical topic and subscription IDs isolated when
 # every worktree connects to one shared emulator.
 mise set --file mise.local.toml "GRAM_GCP_PROJECT_ID=${compose_project}"
+# Shared ClickHouse isolates worktrees by database. Preserve a copied explicit
+# override, but replace legacy `default` and source-derived namespaces with this
+# worktree's namespace.
+source_clickhouse_database=$(printf '%s' "$copied_compose_project" \
+  | tr '[:upper:]-' '[:lower:]_' \
+  | tr -c 'a-z0-9_' '_')
+clickhouse_database="$copied_clickhouse_database"
+if [ "$clickhouse_database" = "$source_clickhouse_database" ] || [ "$clickhouse_database" = "default" ]; then
+  clickhouse_database=
+fi
+if [ -z "$clickhouse_database" ]; then
+  clickhouse_database=$(printf '%s' "$compose_project" \
+    | tr '[:upper:]-' '[:lower:]_' \
+    | tr -c 'a-z0-9_' '_')
+fi
+if [[ ! "$clickhouse_database" =~ ^[a-z][a-z0-9_]*$ ]]; then
+  echo "Error: generated ClickHouse database '$clickhouse_database' is not a safe identifier." >&2
+  exit 1
+fi
+
+# Move the declaration after copied base config, then redeclare both dependent
+# URLs after it. mise interpolation is precedence- and order-sensitive.
+mise unset --file mise.local.toml CLICKHOUSE_DATABASE >/dev/null 2>&1 || true
+mise set --file mise.local.toml "CLICKHOUSE_DATABASE=${clickhouse_database}"
+generated_clickhouse_urls=0
+for key in GRAM_CLICKHOUSE_URL GRAM_CLICKHOUSE_GOMIGRATE_URL; do
+  value=$(mise set --file mise.local.toml 2>/dev/null \
+    | awk -v key="$key" '$1 == key { print $2 }')
+  case "$value" in
+    *'{{env.CLICKHOUSE_'*)
+      mise unset --file mise.local.toml "$key" >/dev/null 2>&1 || true
+      generated_clickhouse_urls=1
+      ;;
+    "") ;;
+    *) continue ;;
+  esac
+  if [ "$key" = "GRAM_CLICKHOUSE_URL" ]; then
+    mise set --file mise.local.toml \
+      'GRAM_CLICKHOUSE_URL=clickhouse://{{env.CLICKHOUSE_USERNAME}}:{{env.CLICKHOUSE_PASSWORD}}@{{env.CLICKHOUSE_HOST}}:{{env.CLICKHOUSE_NATIVE_PORT}}/{{env.CLICKHOUSE_DATABASE}}?secure=true&skip_verify=true'
+  else
+    mise set --file mise.local.toml \
+      'GRAM_CLICKHOUSE_GOMIGRATE_URL=clickhouse://{{env.CLICKHOUSE_HOST}}:{{env.CLICKHOUSE_NATIVE_PORT}}?database={{env.CLICKHOUSE_DATABASE}}&username={{env.CLICKHOUSE_USERNAME}}&password={{env.CLICKHOUSE_PASSWORD}}&secure=true&skip_verify=true&x-multi-statement=true'
+  fi
+done
+if [ "$generated_clickhouse_urls" -eq 1 ]; then
+  mise unset --file mise.local.toml CLICKHOUSE_HTTP_PORT >/dev/null 2>&1 || true
+  mise unset --file mise.local.toml CLICKHOUSE_NATIVE_PORT >/dev/null 2>&1 || true
+fi
 
 # Temporal, Pub/Sub, and LGTM are shared across every worktree
 # (compose.shared.yml). The namespace and project ID above isolate state; this
