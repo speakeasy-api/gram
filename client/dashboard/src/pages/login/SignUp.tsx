@@ -1,5 +1,5 @@
 import { useSession } from "@/contexts/Auth";
-import { safeSameOriginUrl } from "@/lib/safe-external-url";
+import { safeSameOriginPath, safeSameOriginUrl } from "@/lib/safe-external-url";
 import { AuthShell } from "./components/auth-shell";
 import { RegisterPanel } from "./components/register-panel";
 import { SignUpPanel } from "./components/signup-panel";
@@ -8,10 +8,11 @@ import { Navigate, useSearchParams } from "react-router";
 export default function SignUp(): JSX.Element {
   const session = useSession();
   const [searchParams] = useSearchParams();
-  const redirectTo = safeSameOriginUrl(searchParams.get("redirect"));
+  const redirect = searchParams.get("redirect");
+  const redirectTo = safeSameOriginUrl(redirect);
 
   if (session.session !== "" && session.activeOrganizationId !== "") {
-    return <Navigate to={redirectTo ?? "/"} replace />;
+    return <Navigate to={safeSameOriginPath(redirect) ?? "/"} replace />;
   }
 
   const panel =

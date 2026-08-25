@@ -1,5 +1,5 @@
 import { useSession } from "@/contexts/Auth";
-import { safeSameOriginUrl } from "@/lib/safe-external-url";
+import { safeSameOriginPath, safeSameOriginUrl } from "@/lib/safe-external-url";
 import { Navigate, useSearchParams } from "react-router";
 
 export default function Register(): JSX.Element {
@@ -16,7 +16,8 @@ export default function Register(): JSX.Element {
     );
   }
 
-  const redirect = safeSameOriginUrl(searchParams.get("redirect"));
+  const rawRedirect = searchParams.get("redirect");
+  const redirect = safeSameOriginUrl(rawRedirect);
   const signUpTarget = redirect
     ? "/sign-up?redirect=" + encodeURIComponent(redirect)
     : "/sign-up";
@@ -25,5 +26,5 @@ export default function Register(): JSX.Element {
     return <Navigate to={signUpTarget} replace />;
   }
 
-  return <Navigate to={redirect ?? "/"} replace />;
+  return <Navigate to={safeSameOriginPath(rawRedirect) ?? "/"} replace />;
 }

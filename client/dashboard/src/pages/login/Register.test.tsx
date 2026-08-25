@@ -86,4 +86,19 @@ describe("Register", () => {
     expect(screen.getByTestId("navigate").getAttribute("data-to")).toBe("/");
     expect(screen.queryByTestId("register-panel")).toBeNull();
   });
+
+  it("preserves the path, search, and hash for an authenticated redirect", () => {
+    mocks.useSession.mockReturnValue({
+      session: "<SESSION>",
+      activeOrganizationId: "<ORG_ID>",
+    });
+
+    renderAt(
+      "/register?redirect=https%3A%2F%2Fapp.example%2Fprojects%2Fdefault%3Ftab%3Dtools%23details",
+    );
+
+    expect(screen.getByTestId("navigate").getAttribute("data-to")).toBe(
+      "/projects/default?tab=tools#details",
+    );
+  });
 });

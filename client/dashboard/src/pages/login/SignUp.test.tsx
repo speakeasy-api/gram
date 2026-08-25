@@ -107,7 +107,25 @@ describe("SignUp", () => {
     render(<SignUp />);
 
     expect(screen.getByTestId("navigate").getAttribute("data-to")).toBe(
-      "https://app.example/projects/default",
+      "/projects/default",
+    );
+  });
+
+  it("preserves search and hash in the requested destination", () => {
+    mocks.useSession.mockReturnValue({
+      session: "<SESSION>",
+      activeOrganizationId: "<ORG_ID>",
+    });
+    mocks.useSearchParams.mockReturnValue([
+      new URLSearchParams(
+        "redirect=https%3A%2F%2Fapp.example%2Fprojects%2Fdefault%3Ftab%3Dtools%23details",
+      ),
+    ]);
+
+    render(<SignUp />);
+
+    expect(screen.getByTestId("navigate").getAttribute("data-to")).toBe(
+      "/projects/default?tab=tools#details",
     );
   });
 
