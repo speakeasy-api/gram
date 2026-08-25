@@ -25,14 +25,6 @@ var AdminOrganization = Type("AdminOrganization", func() {
 		Description("The time at which the organization was disabled, if any.")
 		Format(FormatDateTime)
 	})
-	Attribute("free_trial_started_at", String, func() {
-		Description("The time at which the free trial started.")
-		Format(FormatDateTime)
-	})
-	Attribute("free_trial_ends_at", String, func() {
-		Description("The time at which the free trial ends.")
-		Format(FormatDateTime)
-	})
 	Attribute("trial_state", String, func() {
 		Description("Lifecycle state of the organization's enterprise trial.")
 		Enum("none", "running", "ending_soon", "expired", "demoted", "converted")

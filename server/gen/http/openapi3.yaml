@@ -62282,14 +62282,6 @@ components:
                     type: string
                     description: The time at which the organization was disabled, if any.
                     format: date-time
-                free_trial_ends_at:
-                    type: string
-                    description: The time at which the free trial ends.
-                    format: date-time
-                free_trial_started_at:
-                    type: string
-                    description: The time at which the free trial started.
-                    format: date-time
                 id:
                     type: string
                     description: The ID of the organization
