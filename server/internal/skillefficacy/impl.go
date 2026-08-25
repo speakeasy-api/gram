@@ -276,7 +276,7 @@ func (s *Service) querySkillInsights(ctx context.Context, spanName string, param
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		return nil, err
+		return nil, fmt.Errorf("query skill insights: %w", err)
 	}
 
 	span.SetAttributes(attribute.Int("skill.insights.bucket_count", len(rows)))
