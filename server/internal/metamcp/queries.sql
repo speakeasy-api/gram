@@ -129,6 +129,58 @@ VALUES (
 )
 RETURNING *;
 
+-- name: CountMetaMCPMembersSharingBackend :one
+-- Count live members of @meta_mcp_server_id, other than @mcp_server_id, that
+-- front one of the given backends. Two mcp_servers rows may name the same
+-- backend, and a meta MCP server holding both would serve identical tools
+-- under two slugs with nothing to route between them.
+--
+-- A null argument never matches: `column = NULL` evaluates to NULL, so an
+-- unset backend kind cannot pair with a member's null column.
+SELECT count(*)
+FROM meta_mcp_server_members m
+JOIN mcp_servers s
+  ON s.id = m.mcp_server_id
+ AND s.project_id = m.project_id
+ AND s.deleted IS FALSE
+WHERE m.meta_mcp_server_id = @meta_mcp_server_id
+  AND m.project_id = @project_id
+  AND m.deleted IS FALSE
+  AND m.mcp_server_id <> @mcp_server_id
+  AND (s.remote_mcp_server_id = sqlc.narg('remote_mcp_server_id')
+    OR s.tunneled_mcp_server_id = sqlc.narg('tunneled_mcp_server_id')
+    OR s.toolset_id = sqlc.narg('toolset_id')
+    OR s.unproxied_mcp_server_id = sqlc.narg('unproxied_mcp_server_id'));
+
+-- name: FindMetaMCPSiblingSharingBackend :one
+-- Same rule as CountMetaMCPMembersSharingBackend, asked from the member
+-- server's side: name a meta MCP server where @mcp_server_id already sits
+-- alongside a live co-member fronting one of the given backends. Guards a
+-- backend repoint on an already-attached server.
+SELECT meta.name
+FROM meta_mcp_server_members mine
+JOIN meta_mcp_server_members sibling
+  ON sibling.meta_mcp_server_id = mine.meta_mcp_server_id
+ AND sibling.project_id = mine.project_id
+ AND sibling.deleted IS FALSE
+ AND sibling.mcp_server_id <> mine.mcp_server_id
+JOIN mcp_servers s
+  ON s.id = sibling.mcp_server_id
+ AND s.project_id = sibling.project_id
+ AND s.deleted IS FALSE
+JOIN meta_mcp_servers meta
+  ON meta.id = mine.meta_mcp_server_id
+ AND meta.project_id = mine.project_id
+ AND meta.deleted IS FALSE
+WHERE mine.mcp_server_id = @mcp_server_id
+  AND mine.project_id = @project_id
+  AND mine.deleted IS FALSE
+  AND (s.remote_mcp_server_id = sqlc.narg('remote_mcp_server_id')
+    OR s.tunneled_mcp_server_id = sqlc.narg('tunneled_mcp_server_id')
+    OR s.toolset_id = sqlc.narg('toolset_id')
+    OR s.unproxied_mcp_server_id = sqlc.narg('unproxied_mcp_server_id'))
+LIMIT 1;
+
 -- name: GetMetaMCPMember :one
 SELECT *
 FROM meta_mcp_server_members
