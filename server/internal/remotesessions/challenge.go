@@ -664,6 +664,20 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 		return oops.E(oops.CodeUnauthorized, err, "upstream token exchange failed").LogError(ctx, logger)
 	}
 
+	// The pair is live upstream from this line on, and every path out of here
+	// that does not store it strands it: unreachable through Gram, and outside
+	// the reach of every revoke path since no row points at it. So arm the
+	// revocation on the exchange rather than on the first thing done with the
+	// result — encrypting it can fail too — and disarm it once the row is
+	// committed.
+	stranded := true
+	defer func() {
+		if !stranded {
+			return
+		}
+		m.revoker.RevokeUnstoredDetached(ctx, state.RemoteSessionClientID, tok.AccessToken, tok.RefreshToken)
+	}()
+
 	accessEnc, err := m.enc.Encrypt([]byte(tok.AccessToken))
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "encrypt access token").LogError(ctx, logger)
@@ -709,24 +723,8 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	// cascade, which locks the same row before sweeping the client's
 	// sessions: a callback that acquires the lock after that cascade
 	// committed re-reads the binding as dead and is rejected here, instead
-	// of resurrecting a grant no live issuer can reach or revoke.
-	//
-	// Every path out of here that does not store the pair strands it: live
-	// upstream, unreachable through Gram, and outside the reach of every
-	// revoke path since no row points at it. So arm the revocation now and
-	// disarm it once the row is committed.
-	stranded := true
-	defer func() {
-		if !stranded {
-			return
-		}
-		m.revoker.RevokeDetached(ctx, RevokedCredentials{
-			RemoteSessionClientID: state.RemoteSessionClientID,
-			AccessTokenEncrypted:  accessEnc,
-			RefreshTokenEncrypted: conv.PtrToPGText(refreshEnc),
-		})
-	}()
-
+	// of resurrecting a grant no live issuer can reach or revoke. A rejected
+	// callback leaves the revocation armed above still standing.
 	dbtx, err := m.db.Begin(ctx)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "begin remote session transaction").LogError(ctx, logger)

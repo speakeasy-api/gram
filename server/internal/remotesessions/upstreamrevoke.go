@@ -130,6 +130,31 @@ type RevokedCredentials struct {
 	RefreshTokenEncrypted pgtype.Text
 }
 
+// revocationTokens is the token material one revocation can draw on, in the two
+// forms it arrives in.
+//
+// Every path that revokes a tombstoned session reads the ciphertext back out of
+// the row it just tombstoned. The remote-login callback has no row: it holds a
+// pair it exchanged upstream and could not store, and must be able to hand that
+// pair over before — or instead of — encrypting it.
+type revocationTokens struct {
+	access  string
+	refresh string
+
+	// encrypted reports whether access and refresh hold ciphertext that has to
+	// be decrypted before it can be sent.
+	encrypted bool
+}
+
+// tokens adapts stored credentials to the form the revocation reads.
+func (c RevokedCredentials) tokens() revocationTokens {
+	refresh := ""
+	if c.RefreshTokenEncrypted.Valid {
+		refresh = c.RefreshTokenEncrypted.String
+	}
+	return revocationTokens{access: c.AccessTokenEncrypted, refresh: refresh, encrypted: true}
+}
+
 // revokedCredentials adapts the rows returned by a bulk soft-delete into the
 // shape the revoker consumes.
 func revokedCredentials(rows []repo.SoftDeleteRemoteSessionsByClientIDRow) []RevokedCredentials {
@@ -272,7 +297,24 @@ func (r *UpstreamRevoker) RevokeDetached(ctx context.Context, cred RevokedCreden
 	revokeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), upstreamRevokeTimeout)
 	defer cancel()
 
-	r.revoke(revokeCtx, cred)
+	r.revoke(revokeCtx, cred.RemoteSessionClientID, cred.tokens())
+}
+
+// RevokeUnstoredDetached is RevokeDetached for a pair Gram exchanged upstream
+// and never stored, so it is handed the plaintext directly rather than reading
+// ciphertext back out of a row.
+//
+// The remote-login callback's only defense against stranding a live grant. From
+// the moment the code is exchanged the pair exists upstream, and any path out
+// that does not commit a row leaves it live and addressable by nobody: no local
+// row means no revoke path can ever find it again. That includes failing to
+// encrypt it, which is why this takes the tokens in the clear — at that point
+// the ciphertext the stored form wants does not exist.
+func (r *UpstreamRevoker) RevokeUnstoredDetached(ctx context.Context, clientID uuid.UUID, accessToken string, refreshToken string) {
+	revokeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), upstreamRevokeTimeout)
+	defer cancel()
+
+	r.revoke(revokeCtx, clientID, revocationTokens{access: accessToken, refresh: refreshToken, encrypted: false})
 }
 
 // RevokeAllDetached runs upstream revocations for a batch of sessions that have
@@ -329,7 +371,7 @@ func (r *UpstreamRevoker) RevokeAllDetached(ctx context.Context, creds []Revoked
 			revokeCtx, cancelOne := context.WithTimeout(batchCtx, upstreamRevokeTimeout)
 			defer cancelOne()
 
-			r.revoke(revokeCtx, cred)
+			r.revoke(revokeCtx, cred.RemoteSessionClientID, cred.tokens())
 			return nil
 		})
 	}
@@ -354,11 +396,11 @@ func (r *UpstreamRevoker) RevokeAllDetached(ctx context.Context, creds []Revoked
 // revoke performs the whole sequence for one session and reports exactly one
 // outcome, on both a span and the metric. Split from RevokeDetached so the bulk
 // path can drive it directly under the batch's own budget and concurrency limit.
-func (r *UpstreamRevoker) revoke(ctx context.Context, cred RevokedCredentials) {
+func (r *UpstreamRevoker) revoke(ctx context.Context, clientID uuid.UUID, tokens revocationTokens) {
 	ctx, span := r.tracer.Start(ctx, "remote_session.upstream_revoke")
 	defer span.End()
 
-	issuerURL, outcome := r.revokeOnce(ctx, cred)
+	issuerURL, outcome := r.revokeOnce(ctx, clientID, tokens)
 
 	// Reported in one place so the span and the metric can never disagree about
 	// how a revocation ended. Without a span the revocation is only visible in a
@@ -371,12 +413,12 @@ func (r *UpstreamRevoker) revoke(ctx context.Context, cred RevokedCredentials) {
 // revokeOnce runs the sequence and reports where it stopped. The returned
 // issuer URL attributes the outcome, and is empty when the revocation failed
 // before any issuer could be identified.
-func (r *UpstreamRevoker) revokeOnce(ctx context.Context, cred RevokedCredentials) (issuerURL string, outcome remotesessionmetrics.RevokeOutcome) {
+func (r *UpstreamRevoker) revokeOnce(ctx context.Context, clientID uuid.UUID, tokens revocationTokens) (issuerURL string, outcome remotesessionmetrics.RevokeOutcome) {
 	logger := r.logger.With(
-		attr.SlogRemoteSessionClientID(cred.RemoteSessionClientID.String()),
+		attr.SlogRemoteSessionClientID(clientID.String()),
 	)
 
-	client, err := repo.New(r.db).GetRemoteSessionClientRevocationTargetByID(ctx, cred.RemoteSessionClientID)
+	client, err := repo.New(r.db).GetRemoteSessionClientRevocationTargetByID(ctx, clientID)
 	if err != nil {
 		// The lookup tolerates soft-deleted clients and issuers, so no rows means
 		// the row is gone outright — a hard delete racing the revoke. Nothing is
@@ -415,10 +457,10 @@ func (r *UpstreamRevoker) revokeOnce(ctx context.Context, cred RevokedCredential
 		return client.IssuerUrl, remotesessionmetrics.RevokeOutcomeInternal
 	}
 
-	token, hint, ok := r.tokenToRevoke(ctx, cred)
+	token, hint, ok := r.tokenToRevoke(ctx, tokens)
 	if !ok {
-		// Either the session stored no token at all, or what it stored could not
-		// be decrypted. Neither is recoverable and neither is the upstream's
+		// Either there was no token at all, or a stored one could not be
+		// decrypted. Neither is recoverable and neither is the upstream's
 		// fault; tokenToRevoke has already logged a decryption failure.
 		return client.IssuerUrl, remotesessionmetrics.RevokeOutcomeSkipped
 	}
@@ -491,10 +533,10 @@ func (r *UpstreamRevoker) revokeOnce(ctx context.Context, cred RevokedCredential
 	return client.IssuerUrl, remotesessionmetrics.RevokeOutcomeSuccess
 }
 
-// tokenToRevoke picks which of the session's two credentials to send, returning
+// tokenToRevoke picks which of the grant's two credentials to send, returning
 // the plaintext token and its RFC 7009 token_type_hint.
 //
-// The refresh token wins whenever one is stored. RFC 7009 §2.1 says revoking a
+// The refresh token wins whenever one is present. RFC 7009 §2.1 says revoking a
 // refresh token SHOULD also invalidate the access tokens derived from it, while
 // revoking an access token carries no such implication — so the refresh token is
 // the one credential whose revocation can plausibly kill the whole grant, and
@@ -504,16 +546,19 @@ func (r *UpstreamRevoker) revokeOnce(ctx context.Context, cred RevokedCredential
 // call for the access token would cover upstreams that ignore the SHOULD, at the
 // cost of doubling the fan-out on every bulk revoke; the spec-conforming single
 // call is the deliberate choice here.
-func (r *UpstreamRevoker) tokenToRevoke(ctx context.Context, cred RevokedCredentials) (token string, hint string, ok bool) {
-	encrypted, hint := cred.AccessTokenEncrypted, "access_token"
-	if cred.RefreshTokenEncrypted.Valid && cred.RefreshTokenEncrypted.String != "" {
-		encrypted, hint = cred.RefreshTokenEncrypted.String, "refresh_token"
+func (r *UpstreamRevoker) tokenToRevoke(ctx context.Context, tokens revocationTokens) (token string, hint string, ok bool) {
+	selected, hint := tokens.access, "access_token"
+	if tokens.refresh != "" {
+		selected, hint = tokens.refresh, "refresh_token"
 	}
-	if encrypted == "" {
+	if selected == "" {
 		return "", "", false
 	}
+	if !tokens.encrypted {
+		return selected, hint, true
+	}
 
-	plain, err := r.enc.Decrypt(encrypted)
+	plain, err := r.enc.Decrypt(selected)
 	if err != nil {
 		// Logged without the session id's token material and without retry: an
 		// undecryptable token cannot be sent to anyone, so there is nothing to

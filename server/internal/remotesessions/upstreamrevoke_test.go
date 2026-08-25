@@ -425,6 +425,29 @@ func TestRevokeRemoteSession_RevokesAccessTokenWhenNoRefreshToken(t *testing.T) 
 	requireSessionRevoked(t, ctx, ti, fx)
 }
 
+// The remote-login callback can hold a pair it exchanged upstream and never
+// stored — including when encrypting it failed, which leaves no ciphertext to
+// hand over. That pair is unreachable through every row-driven revoke path, so
+// it has to be revocable from the plaintext alone.
+func TestRevokeUnstoredDetached_RevokesPairThatWasNeverStored(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	spy := &revocationSpy{}
+	upstream := newRevocationUpstream(t, spy)
+
+	fx := seedRevocableSession(t, ctx, ti, "revoke-unstored", upstream.URL+"/revoke", "s3cret", true)
+
+	newTestUpstreamRevoker(t, ti).RevokeUnstoredDetached(ctx, fx.clientID, "unstored-access", "unstored-refresh")
+
+	calls, form, _ := spy.snapshot()
+	require.Equal(t, 1, calls, "exactly one RFC 7009 request")
+	require.Equal(t, "unstored-refresh", form.Get("token"), "sent as given, never run through decrypt")
+	require.Equal(t, "refresh_token", form.Get("token_type_hint"))
+	require.Equal(t, fx.externalCID, form.Get("client_id"))
+	require.Equal(t, "s3cret", form.Get("client_secret"))
+}
+
 // Most upstreams advertise no revocation_endpoint. That must be a silent no-op,
 // not an error and not a request to some fallback URL.
 func TestRevokeRemoteSession_NoRevocationEndpointSkipsUpstream(t *testing.T) {
