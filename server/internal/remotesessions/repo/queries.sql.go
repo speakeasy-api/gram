@@ -1007,6 +1007,27 @@ func (q *Queries) DeleteRemoteSessionClient(ctx context.Context, arg DeleteRemot
 	return i, err
 }
 
+const deleteRemoteSessionClientAttachmentsForUserSessionIssuer = `-- name: DeleteRemoteSessionClientAttachmentsForUserSessionIssuer :exec
+DELETE FROM remote_session_client_user_session_issuers AS link
+USING user_session_issuers AS usi
+WHERE link.user_session_issuer_id = usi.id
+  AND usi.id = $1
+  AND usi.project_id = $2
+`
+
+type DeleteRemoteSessionClientAttachmentsForUserSessionIssuerParams struct {
+	UserSessionIssuerID uuid.UUID
+	ProjectID           uuid.UUID
+}
+
+// Drops every client binding an issuer holds. Runs only from the orphan
+// cascade, which must tombstone the sessions these rows still make reachable
+// before they go.
+func (q *Queries) DeleteRemoteSessionClientAttachmentsForUserSessionIssuer(ctx context.Context, arg DeleteRemoteSessionClientAttachmentsForUserSessionIssuerParams) error {
+	_, err := q.db.Exec(ctx, deleteRemoteSessionClientAttachmentsForUserSessionIssuer, arg.UserSessionIssuerID, arg.ProjectID)
+	return err
+}
+
 const deleteRemoteSessionIssuer = `-- name: DeleteRemoteSessionIssuer :one
 UPDATE remote_session_issuers
 SET deleted_at = clock_timestamp()
@@ -3552,6 +3573,56 @@ func (q *Queries) ListRemoteSessionClientsForUserSessionIssuer(ctx context.Conte
 	return items, nil
 }
 
+const listRemoteSessionClientsOrphanedByUserSessionIssuer = `-- name: ListRemoteSessionClientsOrphanedByUserSessionIssuer :many
+SELECT link.remote_session_client_id
+FROM remote_session_client_user_session_issuers AS link
+JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
+JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
+WHERE link.user_session_issuer_id = $1
+  AND usi.project_id = $2
+  AND (c.project_id = $2 OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $3::text)))
+  AND c.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1
+    FROM remote_session_client_user_session_issuers AS sibling
+    JOIN user_session_issuers AS sibling_usi ON sibling_usi.id = sibling.user_session_issuer_id
+    WHERE sibling.remote_session_client_id = link.remote_session_client_id
+      AND sibling.user_session_issuer_id <> link.user_session_issuer_id
+      AND sibling_usi.deleted IS FALSE
+  )
+`
+
+type ListRemoteSessionClientsOrphanedByUserSessionIssuerParams struct {
+	UserSessionIssuerID uuid.UUID
+	ProjectID           uuid.UUID
+	OrganizationID      string
+}
+
+// Clients whose only live binding belongs to this issuer: once its bindings
+// go, no live issuer can reach their sessions. Tenancy mirrors
+// CheckRemoteSessionClientBindingForUserSessionIssuer. The target issuer's own
+// deleted flag is ignored (tombstoned first, same tx); sibling bindings count
+// only while their issuer is live.
+func (q *Queries) ListRemoteSessionClientsOrphanedByUserSessionIssuer(ctx context.Context, arg ListRemoteSessionClientsOrphanedByUserSessionIssuerParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listRemoteSessionClientsOrphanedByUserSessionIssuer, arg.UserSessionIssuerID, arg.ProjectID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var remote_session_client_id uuid.UUID
+		if err := rows.Scan(&remote_session_client_id); err != nil {
+			return nil, err
+		}
+		items = append(items, remote_session_client_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRemoteSessionIssuersByIssuerURL = `-- name: ListRemoteSessionIssuersByIssuerURL :many
 SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, oidc, passthrough, name, logo_asset_id, client_setup_documentation_url, created_at, updated_at, deleted_at, deleted
 FROM remote_session_issuers
@@ -4061,6 +4132,70 @@ func (q *Queries) ListTenantRemoteSessionIssuersByIssuerURL(ctx context.Context,
 	return items, nil
 }
 
+const lockRemoteSessionClientForSessionWrite = `-- name: LockRemoteSessionClientForSessionWrite :one
+SELECT id
+FROM remote_session_clients
+WHERE id = $1 AND deleted IS FALSE
+FOR UPDATE
+`
+
+// Serializes a remote-login callback's session write against the issuer-delete
+// orphan cascade, which locks the same client row before sweeping the client's
+// sessions. A callback that acquires the lock after that cascade committed
+// re-reads the (issuer, client) binding as dead and rejects the write instead
+// of resurrecting an orphaned grant. No rows means the client itself is gone.
+func (q *Queries) LockRemoteSessionClientForSessionWrite(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockRemoteSessionClientForSessionWrite, id)
+	var id_2 uuid.UUID
+	err := row.Scan(&id_2)
+	return id_2, err
+}
+
+const lockRemoteSessionClientsBoundToUserSessionIssuer = `-- name: LockRemoteSessionClientsBoundToUserSessionIssuer :many
+SELECT c.id
+FROM remote_session_clients AS c
+JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id
+JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
+WHERE link.user_session_issuer_id = $1
+  AND usi.project_id = $2
+  AND (c.project_id = $2 OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $3::text)))
+  AND c.deleted IS FALSE
+ORDER BY c.id
+FOR UPDATE OF c
+`
+
+type LockRemoteSessionClientsBoundToUserSessionIssuerParams struct {
+	UserSessionIssuerID uuid.UUID
+	ProjectID           uuid.UUID
+	OrganizationID      string
+}
+
+// Serializes concurrent deletes of sibling issuers sharing a client, which
+// could otherwise each see the other's binding as live and both skip the
+// orphan cascade. Ordered so overlapping lock sets acquire deadlock-free.
+// Tenancy and liveness mirror
+// ListRemoteSessionClientsOrphanedByUserSessionIssuer: locking a row that scan
+// can never return would block writers for nothing.
+func (q *Queries) LockRemoteSessionClientsBoundToUserSessionIssuer(ctx context.Context, arg LockRemoteSessionClientsBoundToUserSessionIssuerParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, lockRemoteSessionClientsBoundToUserSessionIssuer, arg.UserSessionIssuerID, arg.ProjectID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockRemoteSessionIssuerForClientBinding = `-- name: LockRemoteSessionIssuerForClientBinding :exec
 SELECT pg_advisory_xact_lock(hashtextextended(($1::uuid)::text, 0))
 `
@@ -4499,6 +4634,42 @@ func (q *Queries) SoftDeleteRemoteSessionsByClientID(ctx context.Context, remote
 	var items []SoftDeleteRemoteSessionsByClientIDRow
 	for rows.Next() {
 		var i SoftDeleteRemoteSessionsByClientIDRow
+		if err := rows.Scan(&i.RemoteSessionClientID, &i.AccessTokenEncrypted, &i.RefreshTokenEncrypted); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const softDeleteRemoteSessionsByClientIDs = `-- name: SoftDeleteRemoteSessionsByClientIDs :many
+UPDATE remote_sessions
+SET deleted_at = clock_timestamp()
+WHERE remote_session_client_id = ANY($1::uuid[]) AND deleted IS FALSE
+RETURNING remote_session_client_id, access_token_encrypted, refresh_token_encrypted
+`
+
+type SoftDeleteRemoteSessionsByClientIDsRow struct {
+	RemoteSessionClientID uuid.UUID
+	AccessTokenEncrypted  string
+	RefreshTokenEncrypted pgtype.Text
+}
+
+// Bulk form of SoftDeleteRemoteSessionsByClientID: the orphan cascade sweeps
+// every client one issuer deletion stranded, so it sweeps them in a single
+// statement rather than a round trip per client while holding their locks.
+func (q *Queries) SoftDeleteRemoteSessionsByClientIDs(ctx context.Context, remoteSessionClientIds []uuid.UUID) ([]SoftDeleteRemoteSessionsByClientIDsRow, error) {
+	rows, err := q.db.Query(ctx, softDeleteRemoteSessionsByClientIDs, remoteSessionClientIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SoftDeleteRemoteSessionsByClientIDsRow
+	for rows.Next() {
+		var i SoftDeleteRemoteSessionsByClientIDsRow
 		if err := rows.Scan(&i.RemoteSessionClientID, &i.AccessTokenEncrypted, &i.RefreshTokenEncrypted); err != nil {
 			return nil, err
 		}
