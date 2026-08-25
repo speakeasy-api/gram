@@ -80,7 +80,11 @@ export function ResourceAuditFeed({
     );
   }
 
-  if (error) {
+  // A failure with nothing loaded yet replaces the feed. A failure while
+  // loading a later page keeps every page already loaded (they are still in
+  // `data`) and reports the failure inline instead, so a flaky "load more"
+  // never wipes out the rows the reader was looking at.
+  if (error && logs.length === 0) {
     return (
       <div className="flex flex-col items-start gap-2 py-6">
         <Text muted>Failed to load activity.</Text>
@@ -111,6 +115,21 @@ export function ResourceAuditFeed({
           </React.Fragment>
         ))}
       </div>
+      {error && (
+        <div className="flex items-center justify-between gap-4 border-t px-4 py-3">
+          <Text small muted>
+            The next page of activity could not be loaded.
+          </Text>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => void fetchNextPage()}
+            disabled={isFetchingNextPage}
+          >
+            <Button.Text>Retry</Button.Text>
+          </Button>
+        </div>
+      )}
       <AuditFeedFooter
         count={logs.length}
         noun={noun}
