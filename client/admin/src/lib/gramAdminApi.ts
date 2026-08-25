@@ -229,6 +229,9 @@ export type AdminOrganization = {
   free_trial_ends_at?: string;
   trial_state?: TrialState;
   trial_ends_at?: string;
+  trial_tier?: string;
+  trial_converted_at?: string;
+  trial_demoted_at?: string;
   member_count: number;
   created_at: string;
   updated_at: string;
