@@ -25,12 +25,12 @@ export const EASE_OUT = "cubic-bezier(0.32, 0.72, 0, 1)";
 
 // Height of the mode strip above the panes — the grid is laid out underneath
 // it. MODE_SWITCHER_HEIGHT below is the same value in rem, for the layouts.
-export const STRIP_HEIGHT_PX = 48;
+const STRIP_HEIGHT_PX = 48;
 const CARD_GAP_PX = 24;
 const GRID_MAX_WIDTH_PX = 1200;
 const GRID_INSET_PX = 96;
 
-export type CardGeometry = {
+type CardGeometry = {
   transform: string;
   left: number;
   top: number;
@@ -52,14 +52,20 @@ export type Grid = {
  * is read, and a measured rect would already include the transform.
  */
 export function computeGrid(): Grid {
+  // Measured, not assumed: an impersonation banner sits above the strip, so the
+  // panes start lower than the strip height alone would suggest.
+  const strip = document.querySelector<HTMLElement>("[data-mode-switcher]");
+  const chromeHeight = strip
+    ? strip.getBoundingClientRect().bottom
+    : STRIP_HEIGHT_PX;
   const paneWidth = window.innerWidth;
-  const paneHeight = window.innerHeight - STRIP_HEIGHT_PX;
+  const paneHeight = window.innerHeight - chromeHeight;
   const available = Math.min(paneWidth - GRID_INSET_PX, GRID_MAX_WIDTH_PX);
   const cardWidth = (available - CARD_GAP_PX) / 2;
   const scale = cardWidth / paneWidth;
   const cardHeight = paneHeight * scale;
   const originLeft = (paneWidth - (cardWidth * 2 + CARD_GAP_PX)) / 2;
-  const top = STRIP_HEIGHT_PX + (paneHeight - cardHeight) / 2;
+  const top = chromeHeight + (paneHeight - cardHeight) / 2;
 
   const cards = [0, 1].map((index) => {
     const left = originLeft + index * (cardWidth + CARD_GAP_PX);
@@ -70,14 +76,14 @@ export function computeGrid(): Grid {
       height: cardHeight,
       // transform-origin is the pane's top-left corner, so the translate is the
       // plain delta between the pane origin and the card origin.
-      transform: `translate(${left}px, ${top - STRIP_HEIGHT_PX}px) scale(${scale})`,
+      transform: `translate(${left}px, ${top - chromeHeight}px) scale(${scale})`,
     };
   }) as [CardGeometry, CardGeometry];
 
   return { cards, paneWidth, paneHeight, scale };
 }
 
-export type Phase = "idle" | "shrinking" | "zooming";
+type Phase = "idle" | "shrinking" | "zooming";
 
 export type StageState = {
   phase: Phase;

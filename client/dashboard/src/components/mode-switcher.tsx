@@ -7,6 +7,7 @@ import {
 import { Icon } from "@/components/ui/Icon";
 import type { IconName } from "@/components/ui/Icon/names";
 import { useOrgRoutes } from "@/routes";
+import { useSlugs } from "@/contexts/Sdk";
 import { useEffect } from "react";
 import { useLocation } from "react-router";
 
@@ -23,9 +24,13 @@ function rememberCanvasPath(path: string): void {
   }
 }
 
-function rememberedCanvasPath(): string | null {
+function rememberedCanvasPath(orgSlug: string): string | null {
   try {
-    return sessionStorage.getItem(CANVAS_PATH_KEY);
+    const path = sessionStorage.getItem(CANVAS_PATH_KEY);
+    // The store is per tab, and the active organization can change within one:
+    // a path from the previous organization must not be restored.
+    if (!path || !path.startsWith(`/${orgSlug}`)) return null;
+    return path;
   } catch {
     return null;
   }
@@ -85,10 +90,11 @@ function ModeSegment({
  */
 export function ModeSwitcher({ mode }: { mode: Mode }): JSX.Element | null {
   const orgRoutes = useOrgRoutes();
+  const { orgSlug } = useSlugs();
   const location = useLocation();
   const { switchTo, phase } = useModeSwitch();
   const enabled = useModeSwitcherEnabled();
-  const path = location.pathname + location.search;
+  const path = location.pathname + location.search + location.hash;
 
   useEffect(() => {
     if (mode === "canvas") rememberCanvasPath(path);
@@ -102,7 +108,7 @@ export function ModeSwitcher({ mode }: { mode: Mode }): JSX.Element | null {
     canvas:
       mode === "canvas"
         ? path
-        : (rememberedCanvasPath() ?? orgRoutes.home.href()),
+        : (rememberedCanvasPath(orgSlug ?? "") ?? orgRoutes.home.href()),
     headless: orgRoutes.headless.href(),
   };
   const activeIndex = MODES.findIndex((entry) => entry.mode === mode);
@@ -110,6 +116,8 @@ export function ModeSwitcher({ mode }: { mode: Mode }): JSX.Element | null {
   return (
     <nav
       aria-label="Interface mode"
+      // Read by computeGrid to measure where the panes actually start.
+      data-mode-switcher=""
       // Transparent so the mesh behind the whole chrome shows through. The
       // hairline only earns its place against an opaque pane: in headless mode
       // and mid-switch the mesh runs on below the strip, and a rule across it

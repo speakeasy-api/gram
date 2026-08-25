@@ -79,7 +79,12 @@ export function ModeSwitchProvider({
           below the strip. */}
       <div
         aria-hidden="true"
-        className={cn(BRAND_MESH_SURFACE_CLASS, "fixed inset-0 z-0")}
+        className={cn(
+          BRAND_MESH_SURFACE_CLASS,
+          // Decoration only: positioned, so without this it would sit over the
+          // panes' non-positioned content and swallow every click.
+          "pointer-events-none fixed inset-0 z-0",
+        )}
       >
         <BrandMeshLayers />
       </div>
@@ -181,9 +186,28 @@ export function ModeSurface({
 
   const animating = isShrinking || isZooming;
   const parked = isShrinking || (isZooming && !zoomReleased);
+  const surfaceStyle: React.CSSProperties | undefined = animating
+    ? {
+        transform: parked ? card?.transform : "none",
+        transition: `transform ${isShrinking ? SHRINK_MS : ZOOM_MS}ms ${EASE_OUT}`,
+      }
+    : undefined;
 
   return (
     <div
+      // A transform makes this element the containing block for the fixed
+      // sidebar inside it, so --header-offset (which positions the sidebar
+      // below the chrome) would be measured from the pane top and push it down
+      // a second time. The pane already starts below the chrome, so zero it
+      // for the duration of the animation.
+      style={
+        animating
+          ? ({
+              ...surfaceStyle,
+              "--header-offset": "0px",
+            } as React.CSSProperties)
+          : surfaceStyle
+      }
       className={cn(
         className,
         animating &&
@@ -191,14 +215,6 @@ export function ModeSurface({
           // while it is scaled down.
           "bg-background relative z-20 origin-top-left overflow-hidden rounded-[14px] shadow-2xl will-change-transform",
       )}
-      style={
-        animating
-          ? {
-              transform: parked ? card?.transform : "none",
-              transition: `transform ${isShrinking ? SHRINK_MS : ZOOM_MS}ms ${EASE_OUT}`,
-            }
-          : undefined
-      }
     >
       {children}
     </div>

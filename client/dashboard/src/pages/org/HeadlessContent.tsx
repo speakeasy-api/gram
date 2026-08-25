@@ -1,5 +1,6 @@
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { agentProvidersForSurface } from "@/components/agent-providers/agent-providers";
+import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
 import { SourceSurface } from "@gram/client/models/components/startonboardingrequestbody.js";
@@ -26,6 +27,16 @@ const STEPS = [
  * paints no background of its own.
  */
 export function HeadlessContent(): JSX.Element {
+  // Same gate the standalone Platform MCP page applies: connecting an agent is
+  // an organization-admin action, so members never see the flow offered.
+  return (
+    <RequireScope scope="org:admin" level="page">
+      <HeadlessHero />
+    </RequireScope>
+  );
+}
+
+function HeadlessHero(): JSX.Element {
   const [setupOpen, setSetupOpen] = useState(false);
   const openSetup = () => setSetupOpen(true);
 

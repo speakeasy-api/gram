@@ -179,6 +179,18 @@ export function NavGroupProvider({
       top += node.offsetTop;
       left += node.offsetLeft;
     }
+    // offsetTop is measured from the offsetParent's padding box, which does
+    // not move when an ancestor scrolls — subtract the scroll so the highlight
+    // follows the row in a scrolled sidebar. The container itself is excluded:
+    // the highlight lives inside it and scrolls with it.
+    for (
+      let node: HTMLElement | null = el.parentElement;
+      node && node !== containerRef.current;
+      node = node.parentElement
+    ) {
+      top -= node.scrollTop;
+      left -= node.scrollLeft;
+    }
     setHighlightRect({
       top,
       left,
