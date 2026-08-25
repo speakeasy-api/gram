@@ -62293,6 +62293,14 @@ components:
                 slug:
                     type: string
                     description: The slug of the organization
+                trial_converted_at:
+                    type: string
+                    description: The time at which the trial converted to a paid plan, if any.
+                    format: date-time
+                trial_demoted_at:
+                    type: string
+                    description: The time at which the organization was demoted after its trial, if any.
+                    format: date-time
                 trial_ends_at:
                     type: string
                     description: The time at which the enterprise trial ends. Absent when the organization never trialled.
@@ -62307,6 +62315,9 @@ components:
                         - expired
                         - demoted
                         - converted
+                trial_tier:
+                    type: string
+                    description: The trial tier. Absent when the organization never trialled.
                 updated_at:
                     type: string
                     description: The last update date of the organization.

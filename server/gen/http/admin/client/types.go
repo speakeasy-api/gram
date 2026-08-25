@@ -145,9 +145,15 @@ type UpdateOrganizationResponseBody struct {
 	FreeTrialEndsAt *string `form:"free_trial_ends_at,omitempty" json:"free_trial_ends_at,omitempty" xml:"free_trial_ends_at,omitempty"`
 	// Lifecycle state of the organization's enterprise trial.
 	TrialState *string `form:"trial_state,omitempty" json:"trial_state,omitempty" xml:"trial_state,omitempty"`
+	// The trial tier. Absent when the organization never trialled.
+	TrialTier *string `form:"trial_tier,omitempty" json:"trial_tier,omitempty" xml:"trial_tier,omitempty"`
 	// The time at which the enterprise trial ends. Absent when the organization
 	// never trialled.
 	TrialEndsAt *string `form:"trial_ends_at,omitempty" json:"trial_ends_at,omitempty" xml:"trial_ends_at,omitempty"`
+	// The time at which the trial converted to a paid plan, if any.
+	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
+	// The time at which the organization was demoted after its trial, if any.
+	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
 	// Number of active members in the organization.
 	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
 	// The creation date of the organization.
@@ -190,9 +196,15 @@ type DisableOrganizationResponseBody struct {
 	FreeTrialEndsAt *string `form:"free_trial_ends_at,omitempty" json:"free_trial_ends_at,omitempty" xml:"free_trial_ends_at,omitempty"`
 	// Lifecycle state of the organization's enterprise trial.
 	TrialState *string `form:"trial_state,omitempty" json:"trial_state,omitempty" xml:"trial_state,omitempty"`
+	// The trial tier. Absent when the organization never trialled.
+	TrialTier *string `form:"trial_tier,omitempty" json:"trial_tier,omitempty" xml:"trial_tier,omitempty"`
 	// The time at which the enterprise trial ends. Absent when the organization
 	// never trialled.
 	TrialEndsAt *string `form:"trial_ends_at,omitempty" json:"trial_ends_at,omitempty" xml:"trial_ends_at,omitempty"`
+	// The time at which the trial converted to a paid plan, if any.
+	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
+	// The time at which the organization was demoted after its trial, if any.
+	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
 	// Number of active members in the organization.
 	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
 	// The creation date of the organization.
@@ -224,9 +236,15 @@ type EnableOrganizationResponseBody struct {
 	FreeTrialEndsAt *string `form:"free_trial_ends_at,omitempty" json:"free_trial_ends_at,omitempty" xml:"free_trial_ends_at,omitempty"`
 	// Lifecycle state of the organization's enterprise trial.
 	TrialState *string `form:"trial_state,omitempty" json:"trial_state,omitempty" xml:"trial_state,omitempty"`
+	// The trial tier. Absent when the organization never trialled.
+	TrialTier *string `form:"trial_tier,omitempty" json:"trial_tier,omitempty" xml:"trial_tier,omitempty"`
 	// The time at which the enterprise trial ends. Absent when the organization
 	// never trialled.
 	TrialEndsAt *string `form:"trial_ends_at,omitempty" json:"trial_ends_at,omitempty" xml:"trial_ends_at,omitempty"`
+	// The time at which the trial converted to a paid plan, if any.
+	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
+	// The time at which the organization was demoted after its trial, if any.
+	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
 	// Number of active members in the organization.
 	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
 	// The creation date of the organization.
@@ -258,9 +276,15 @@ type GetOrganizationResponseBody struct {
 	FreeTrialEndsAt *string `form:"free_trial_ends_at,omitempty" json:"free_trial_ends_at,omitempty" xml:"free_trial_ends_at,omitempty"`
 	// Lifecycle state of the organization's enterprise trial.
 	TrialState *string `form:"trial_state,omitempty" json:"trial_state,omitempty" xml:"trial_state,omitempty"`
+	// The trial tier. Absent when the organization never trialled.
+	TrialTier *string `form:"trial_tier,omitempty" json:"trial_tier,omitempty" xml:"trial_tier,omitempty"`
 	// The time at which the enterprise trial ends. Absent when the organization
 	// never trialled.
 	TrialEndsAt *string `form:"trial_ends_at,omitempty" json:"trial_ends_at,omitempty" xml:"trial_ends_at,omitempty"`
+	// The time at which the trial converted to a paid plan, if any.
+	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
+	// The time at which the organization was demoted after its trial, if any.
+	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
 	// Number of active members in the organization.
 	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
 	// The creation date of the organization.
@@ -317,9 +341,15 @@ type ExtendTrialResponseBody struct {
 	FreeTrialEndsAt *string `form:"free_trial_ends_at,omitempty" json:"free_trial_ends_at,omitempty" xml:"free_trial_ends_at,omitempty"`
 	// Lifecycle state of the organization's enterprise trial.
 	TrialState *string `form:"trial_state,omitempty" json:"trial_state,omitempty" xml:"trial_state,omitempty"`
+	// The trial tier. Absent when the organization never trialled.
+	TrialTier *string `form:"trial_tier,omitempty" json:"trial_tier,omitempty" xml:"trial_tier,omitempty"`
 	// The time at which the enterprise trial ends. Absent when the organization
 	// never trialled.
 	TrialEndsAt *string `form:"trial_ends_at,omitempty" json:"trial_ends_at,omitempty" xml:"trial_ends_at,omitempty"`
+	// The time at which the trial converted to a paid plan, if any.
+	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
+	// The time at which the organization was demoted after its trial, if any.
+	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
 	// Number of active members in the organization.
 	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
 	// The creation date of the organization.
@@ -351,9 +381,15 @@ type CreateOrganizationResponseBody struct {
 	FreeTrialEndsAt *string `form:"free_trial_ends_at,omitempty" json:"free_trial_ends_at,omitempty" xml:"free_trial_ends_at,omitempty"`
 	// Lifecycle state of the organization's enterprise trial.
 	TrialState *string `form:"trial_state,omitempty" json:"trial_state,omitempty" xml:"trial_state,omitempty"`
+	// The trial tier. Absent when the organization never trialled.
+	TrialTier *string `form:"trial_tier,omitempty" json:"trial_tier,omitempty" xml:"trial_tier,omitempty"`
 	// The time at which the enterprise trial ends. Absent when the organization
 	// never trialled.
 	TrialEndsAt *string `form:"trial_ends_at,omitempty" json:"trial_ends_at,omitempty" xml:"trial_ends_at,omitempty"`
+	// The time at which the trial converted to a paid plan, if any.
+	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
+	// The time at which the organization was demoted after its trial, if any.
+	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
 	// Number of active members in the organization.
 	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
 	// The creation date of the organization.
@@ -385,9 +421,15 @@ type RearmTrialResponseBody struct {
 	FreeTrialEndsAt *string `form:"free_trial_ends_at,omitempty" json:"free_trial_ends_at,omitempty" xml:"free_trial_ends_at,omitempty"`
 	// Lifecycle state of the organization's enterprise trial.
 	TrialState *string `form:"trial_state,omitempty" json:"trial_state,omitempty" xml:"trial_state,omitempty"`
+	// The trial tier. Absent when the organization never trialled.
+	TrialTier *string `form:"trial_tier,omitempty" json:"trial_tier,omitempty" xml:"trial_tier,omitempty"`
 	// The time at which the enterprise trial ends. Absent when the organization
 	// never trialled.
 	TrialEndsAt *string `form:"trial_ends_at,omitempty" json:"trial_ends_at,omitempty" xml:"trial_ends_at,omitempty"`
+	// The time at which the trial converted to a paid plan, if any.
+	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
+	// The time at which the organization was demoted after its trial, if any.
+	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
 	// Number of active members in the organization.
 	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
 	// The creation date of the organization.
@@ -4788,9 +4830,15 @@ type AdminOrganizationResponseBody struct {
 	FreeTrialEndsAt *string `form:"free_trial_ends_at,omitempty" json:"free_trial_ends_at,omitempty" xml:"free_trial_ends_at,omitempty"`
 	// Lifecycle state of the organization's enterprise trial.
 	TrialState *string `form:"trial_state,omitempty" json:"trial_state,omitempty" xml:"trial_state,omitempty"`
+	// The trial tier. Absent when the organization never trialled.
+	TrialTier *string `form:"trial_tier,omitempty" json:"trial_tier,omitempty" xml:"trial_tier,omitempty"`
 	// The time at which the enterprise trial ends. Absent when the organization
 	// never trialled.
 	TrialEndsAt *string `form:"trial_ends_at,omitempty" json:"trial_ends_at,omitempty" xml:"trial_ends_at,omitempty"`
+	// The time at which the trial converted to a paid plan, if any.
+	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
+	// The time at which the organization was demoted after its trial, if any.
+	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
 	// Number of active members in the organization.
 	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
 	// The creation date of the organization.
@@ -5564,7 +5612,10 @@ func NewUpdateOrganizationAdminOrganizationOK(body *UpdateOrganizationResponseBo
 		FreeTrialStartedAt: body.FreeTrialStartedAt,
 		FreeTrialEndsAt:    body.FreeTrialEndsAt,
 		TrialState:         body.TrialState,
+		TrialTier:          body.TrialTier,
 		TrialEndsAt:        body.TrialEndsAt,
+		TrialConvertedAt:   body.TrialConvertedAt,
+		TrialDemotedAt:     body.TrialDemotedAt,
 		MemberCount:        *body.MemberCount,
 		CreatedAt:          *body.CreatedAt,
 		UpdatedAt:          *body.UpdatedAt,
@@ -5903,7 +5954,10 @@ func NewDisableOrganizationAdminOrganizationOK(body *DisableOrganizationResponse
 		FreeTrialStartedAt: body.FreeTrialStartedAt,
 		FreeTrialEndsAt:    body.FreeTrialEndsAt,
 		TrialState:         body.TrialState,
+		TrialTier:          body.TrialTier,
 		TrialEndsAt:        body.TrialEndsAt,
+		TrialConvertedAt:   body.TrialConvertedAt,
+		TrialDemotedAt:     body.TrialDemotedAt,
 		MemberCount:        *body.MemberCount,
 		CreatedAt:          *body.CreatedAt,
 		UpdatedAt:          *body.UpdatedAt,
@@ -6076,7 +6130,10 @@ func NewEnableOrganizationAdminOrganizationOK(body *EnableOrganizationResponseBo
 		FreeTrialStartedAt: body.FreeTrialStartedAt,
 		FreeTrialEndsAt:    body.FreeTrialEndsAt,
 		TrialState:         body.TrialState,
+		TrialTier:          body.TrialTier,
 		TrialEndsAt:        body.TrialEndsAt,
+		TrialConvertedAt:   body.TrialConvertedAt,
+		TrialDemotedAt:     body.TrialDemotedAt,
 		MemberCount:        *body.MemberCount,
 		CreatedAt:          *body.CreatedAt,
 		UpdatedAt:          *body.UpdatedAt,
@@ -6249,7 +6306,10 @@ func NewGetOrganizationAdminOrganizationOK(body *GetOrganizationResponseBody) *a
 		FreeTrialStartedAt: body.FreeTrialStartedAt,
 		FreeTrialEndsAt:    body.FreeTrialEndsAt,
 		TrialState:         body.TrialState,
+		TrialTier:          body.TrialTier,
 		TrialEndsAt:        body.TrialEndsAt,
+		TrialConvertedAt:   body.TrialConvertedAt,
+		TrialDemotedAt:     body.TrialDemotedAt,
 		MemberCount:        *body.MemberCount,
 		CreatedAt:          *body.CreatedAt,
 		UpdatedAt:          *body.UpdatedAt,
@@ -6925,7 +6985,10 @@ func NewExtendTrialAdminOrganizationOK(body *ExtendTrialResponseBody) *admin.Adm
 		FreeTrialStartedAt: body.FreeTrialStartedAt,
 		FreeTrialEndsAt:    body.FreeTrialEndsAt,
 		TrialState:         body.TrialState,
+		TrialTier:          body.TrialTier,
 		TrialEndsAt:        body.TrialEndsAt,
+		TrialConvertedAt:   body.TrialConvertedAt,
+		TrialDemotedAt:     body.TrialDemotedAt,
 		MemberCount:        *body.MemberCount,
 		CreatedAt:          *body.CreatedAt,
 		UpdatedAt:          *body.UpdatedAt,
@@ -7098,7 +7161,10 @@ func NewCreateOrganizationAdminOrganizationOK(body *CreateOrganizationResponseBo
 		FreeTrialStartedAt: body.FreeTrialStartedAt,
 		FreeTrialEndsAt:    body.FreeTrialEndsAt,
 		TrialState:         body.TrialState,
+		TrialTier:          body.TrialTier,
 		TrialEndsAt:        body.TrialEndsAt,
+		TrialConvertedAt:   body.TrialConvertedAt,
+		TrialDemotedAt:     body.TrialDemotedAt,
 		MemberCount:        *body.MemberCount,
 		CreatedAt:          *body.CreatedAt,
 		UpdatedAt:          *body.UpdatedAt,
@@ -7271,7 +7337,10 @@ func NewRearmTrialAdminOrganizationOK(body *RearmTrialResponseBody) *admin.Admin
 		FreeTrialStartedAt: body.FreeTrialStartedAt,
 		FreeTrialEndsAt:    body.FreeTrialEndsAt,
 		TrialState:         body.TrialState,
+		TrialTier:          body.TrialTier,
 		TrialEndsAt:        body.TrialEndsAt,
+		TrialConvertedAt:   body.TrialConvertedAt,
+		TrialDemotedAt:     body.TrialDemotedAt,
 		MemberCount:        *body.MemberCount,
 		CreatedAt:          *body.CreatedAt,
 		UpdatedAt:          *body.UpdatedAt,
@@ -8851,6 +8920,12 @@ func ValidateUpdateOrganizationResponseBody(body *UpdateOrganizationResponseBody
 	if body.TrialEndsAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_ends_at", *body.TrialEndsAt, goa.FormatDateTime))
 	}
+	if body.TrialConvertedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_converted_at", *body.TrialConvertedAt, goa.FormatDateTime))
+	}
+	if body.TrialDemotedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_demoted_at", *body.TrialDemotedAt, goa.FormatDateTime))
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -8916,6 +8991,12 @@ func ValidateDisableOrganizationResponseBody(body *DisableOrganizationResponseBo
 	if body.TrialEndsAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_ends_at", *body.TrialEndsAt, goa.FormatDateTime))
 	}
+	if body.TrialConvertedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_converted_at", *body.TrialConvertedAt, goa.FormatDateTime))
+	}
+	if body.TrialDemotedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_demoted_at", *body.TrialDemotedAt, goa.FormatDateTime))
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -8969,6 +9050,12 @@ func ValidateEnableOrganizationResponseBody(body *EnableOrganizationResponseBody
 	if body.TrialEndsAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_ends_at", *body.TrialEndsAt, goa.FormatDateTime))
 	}
+	if body.TrialConvertedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_converted_at", *body.TrialConvertedAt, goa.FormatDateTime))
+	}
+	if body.TrialDemotedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_demoted_at", *body.TrialDemotedAt, goa.FormatDateTime))
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -9021,6 +9108,12 @@ func ValidateGetOrganizationResponseBody(body *GetOrganizationResponseBody) (err
 	}
 	if body.TrialEndsAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_ends_at", *body.TrialEndsAt, goa.FormatDateTime))
+	}
+	if body.TrialConvertedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_converted_at", *body.TrialConvertedAt, goa.FormatDateTime))
+	}
+	if body.TrialDemotedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_demoted_at", *body.TrialDemotedAt, goa.FormatDateTime))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -9126,6 +9219,12 @@ func ValidateExtendTrialResponseBody(body *ExtendTrialResponseBody) (err error) 
 	if body.TrialEndsAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_ends_at", *body.TrialEndsAt, goa.FormatDateTime))
 	}
+	if body.TrialConvertedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_converted_at", *body.TrialConvertedAt, goa.FormatDateTime))
+	}
+	if body.TrialDemotedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_demoted_at", *body.TrialDemotedAt, goa.FormatDateTime))
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -9179,6 +9278,12 @@ func ValidateCreateOrganizationResponseBody(body *CreateOrganizationResponseBody
 	if body.TrialEndsAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_ends_at", *body.TrialEndsAt, goa.FormatDateTime))
 	}
+	if body.TrialConvertedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_converted_at", *body.TrialConvertedAt, goa.FormatDateTime))
+	}
+	if body.TrialDemotedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_demoted_at", *body.TrialDemotedAt, goa.FormatDateTime))
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -9231,6 +9336,12 @@ func ValidateRearmTrialResponseBody(body *RearmTrialResponseBody) (err error) {
 	}
 	if body.TrialEndsAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_ends_at", *body.TrialEndsAt, goa.FormatDateTime))
+	}
+	if body.TrialConvertedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_converted_at", *body.TrialConvertedAt, goa.FormatDateTime))
+	}
+	if body.TrialDemotedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_demoted_at", *body.TrialDemotedAt, goa.FormatDateTime))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -15087,6 +15198,12 @@ func ValidateAdminOrganizationResponseBody(body *AdminOrganizationResponseBody) 
 	}
 	if body.TrialEndsAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_ends_at", *body.TrialEndsAt, goa.FormatDateTime))
+	}
+	if body.TrialConvertedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_converted_at", *body.TrialConvertedAt, goa.FormatDateTime))
+	}
+	if body.TrialDemotedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_demoted_at", *body.TrialDemotedAt, goa.FormatDateTime))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
