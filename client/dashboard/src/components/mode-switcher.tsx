@@ -24,13 +24,19 @@ function rememberCanvasPath(path: string): void {
   }
 }
 
-function rememberedCanvasPath(orgSlug: string): string | null {
+function rememberedCanvasPath(orgSlug: string | undefined): string | null {
+  if (!orgSlug) return null;
   try {
     const path = sessionStorage.getItem(CANVAS_PATH_KEY);
-    // The store is per tab, and the active organization can change within one:
-    // a path from the previous organization must not be restored.
-    if (!path || !path.startsWith(`/${orgSlug}`)) return null;
-    return path;
+    if (!path) return null;
+    // The store is per tab and the active organization can change within one, so
+    // a path belonging to another organization must not be restored. Match on a
+    // whole segment: a prefix test would accept "/acme-staging/..." for "acme".
+    const rest = path.slice(`/${orgSlug}`.length);
+    const sameOrg =
+      path.startsWith(`/${orgSlug}`) &&
+      (rest === "" || "/?#".includes(rest[0] ?? ""));
+    return sameOrg ? path : null;
   } catch {
     return null;
   }
@@ -108,7 +114,7 @@ export function ModeSwitcher({ mode }: { mode: Mode }): JSX.Element | null {
     canvas:
       mode === "canvas"
         ? path
-        : (rememberedCanvasPath(orgSlug ?? "") ?? orgRoutes.home.href()),
+        : (rememberedCanvasPath(orgSlug) ?? orgRoutes.home.href()),
     headless: orgRoutes.headless.href(),
   };
   const activeIndex = MODES.findIndex((entry) => entry.mode === mode);

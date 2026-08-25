@@ -212,6 +212,14 @@ export function NavGroupProvider({
     computeRect();
   }, [computeRect, openGroups]);
 
+  // Scrolling moves the row without changing any layout box, so neither the
+  // effect above nor the observer below fires. Capture-phase catches scrolls on
+  // descendant containers, which do not bubble.
+  React.useEffect(() => {
+    window.addEventListener("scroll", computeRect, true);
+    return () => window.removeEventListener("scroll", computeRect, true);
+  }, [computeRect]);
+
   // Recompute on layout changes, but skip during accordion
   React.useEffect(() => {
     if (!containerRef.current) return;
