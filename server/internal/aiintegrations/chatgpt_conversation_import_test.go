@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -107,7 +108,9 @@ func TestChatGPTConversationProcessPageWritesChatAndMessagesIdempotently(t *test
 	t.Cleanup(func() { _ = shutdown(context.Background()) })
 
 	heartbeats := 0
-	svc := NewChatGPTConversationImportService(testenv.NewLogger(t), store, conn, nil, writer, func(context.Context, int) { heartbeats++ })
+	capture := &captureOTELLogPublisher{}
+	mirror := NewChatOTELMirror(testenv.NewLogger(t), capture)
+	svc := NewChatGPTConversationImportService(testenv.NewLogger(t), store, conn, nil, writer, mirror, func(context.Context, int) { heartbeats++ })
 	file := chatgptFixtureFile(chatgptConversationFixture)
 	src := &chatgptConversationSource{
 		client: &stubCodexComplianceClient{
@@ -152,6 +155,17 @@ func TestChatGPTConversationProcessPageWritesChatAndMessagesIdempotently(t *test
 	require.Equal(t, "desktop_web", messages[0].UserAgent.String)
 	require.Equal(t, userRow.ID, messages[0].UserID.String)
 
+	// Every stored message is mirrored onto the OTEL inbound log topic with
+	// the actor email the rows themselves do not carry.
+	mirrored := capture.Sent()
+	require.Len(t, mirrored, 2)
+	require.Equal(t, "What is our refund policy?", mirrored[0].GetBody().GetStringValue())
+	require.Equal(t, orgID, mirrored[0].GetProvenance().GetOrganizationId())
+	require.Equal(t, project.ID.String(), mirrored[0].GetProvenance().GetProjectId())
+	email, ok := mirrorRecordAttr(mirrored[0], dialect.ComplianceLogUserEmailAttr)
+	require.True(t, ok)
+	require.Equal(t, "ada@example.com", email)
+
 	// Replaying the same file must not duplicate messages: the insert
 	// dedupes on (chat_id, external_message_id).
 	src.chatIDs = map[string]uuid.UUID{}
@@ -160,6 +174,8 @@ func TestChatGPTConversationProcessPageWritesChatAndMessagesIdempotently(t *test
 	messages, err = chatrepo.New(conn).ListChatMessages(ctx, chatrepo.ListChatMessagesParams{ChatID: chatID, ProjectID: project.ID})
 	require.NoError(t, err)
 	require.Len(t, messages, 2)
+	// The replay inserted nothing, so the mirror must not republish.
+	require.Len(t, capture.Sent(), 2)
 	// The replay re-upserts with the same newest title, never a stale one.
 	chatRow, err = chatrepo.New(conn).GetChat(ctx, chatrepo.GetChatParams{ID: chatID, ProjectID: project.ID})
 	require.NoError(t, err)
@@ -194,7 +210,7 @@ func chatgptConversationConfig() Config {
 func newChatGPTTestSource(cfg Config, client codexComplianceClient) *chatgptConversationSource {
 	return &chatgptConversationSource{
 		client:     client,
-		svc:        &ChatGPTConversationImportService{logger: nil, store: nil, guardianPolicy: nil, db: nil, writer: nil, heartbeat: func(context.Context, int) {}},
+		svc:        &ChatGPTConversationImportService{logger: nil, store: nil, guardianPolicy: nil, db: nil, writer: nil, mirror: nil, heartbeat: func(context.Context, int) {}},
 		cfg:        cfg,
 		pageLimit:  chatgptCompliancePageLimit,
 		users:      nil,

@@ -224,21 +224,26 @@ func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.
 }
 
 // WriteExternal inserts imported provider messages idempotently and notifies
-// observers when at least one new row is stored.
-func (w *ChatMessageWriter) WriteExternal(ctx context.Context, projectID uuid.UUID, params []repo.CreateExternalChatMessageParams) (int64, error) {
+// observers when at least one new row is stored. It returns the params that
+// actually inserted a row — conflicts with previously imported messages are
+// filtered out — so callers can mirror exactly the new messages elsewhere. On
+// a mid-batch failure the rows inserted so far are returned with the error.
+func (w *ChatMessageWriter) WriteExternal(ctx context.Context, projectID uuid.UUID, params []repo.CreateExternalChatMessageParams) ([]repo.CreateExternalChatMessageParams, error) {
 	q := repo.New(w.db)
-	var total int64
+	inserted := make([]repo.CreateExternalChatMessageParams, 0, len(params))
 	for _, param := range params {
 		n, err := q.CreateExternalChatMessage(ctx, param)
 		if err != nil {
-			return total, fmt.Errorf("create external chat message: %w", err)
+			return inserted, fmt.Errorf("create external chat message: %w", err)
 		}
-		total += n
+		if n > 0 {
+			inserted = append(inserted, param)
+		}
 	}
-	if total > 0 {
+	if len(inserted) > 0 {
 		w.notifyMessagesStored(ctx, projectID)
 	}
-	return total, nil
+	return inserted, nil
 }
 
 // WriteInTx inserts messages via a caller-provided transaction. Observers are

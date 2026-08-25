@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -11,6 +12,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -59,4 +62,37 @@ func newStoreTestDB(t *testing.T) (context.Context, *pgxpool.Pool, *Store, strin
 
 	store := NewStore(testenv.NewLogger(t), conn, testenv.NewEncryptionClient(t))
 	return ctx, conn, store, orgID
+}
+
+// newTestChatOTELMirror builds a mirror over a noop publisher for tests that
+// exercise imports without asserting on the OTEL dual-write.
+func newTestChatOTELMirror(t *testing.T) *ChatOTELMirror {
+	t.Helper()
+	return NewChatOTELMirror(testenv.NewLogger(t), gcp.NewNoopPublisher[*otelv1.InboundLogRecord]())
+}
+
+// captureOTELLogPublisher records every published record so tests can assert
+// on the mirror's exact output.
+type captureOTELLogPublisher struct {
+	mu   sync.Mutex
+	sent []*otelv1.InboundLogRecord
+}
+
+var _ gcp.Publisher[*otelv1.InboundLogRecord] = (*captureOTELLogPublisher)(nil)
+
+func (p *captureOTELLogPublisher) Publish(_ context.Context, msg *otelv1.InboundLogRecord) gcp.PublishResult {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.sent = append(p.sent, msg)
+	return gcp.NewSuccessPublishResult()
+}
+
+func (p *captureOTELLogPublisher) Stop(context.Context) error { return nil }
+
+func (p *captureOTELLogPublisher) Sent() []*otelv1.InboundLogRecord {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := make([]*otelv1.InboundLogRecord, len(p.sent))
+	copy(out, p.sent)
+	return out
 }

@@ -96,10 +96,11 @@ type ChatGPTConversationImportService struct {
 	guardianPolicy *guardian.Policy
 	db             *pgxpool.Pool
 	writer         *chat.ChatMessageWriter
+	mirror         *ChatOTELMirror
 	heartbeat      func(ctx context.Context, page int)
 }
 
-func NewChatGPTConversationImportService(logger *slog.Logger, store *Store, db *pgxpool.Pool, guardianPolicy *guardian.Policy, writer *chat.ChatMessageWriter, heartbeat func(ctx context.Context, page int)) *ChatGPTConversationImportService {
+func NewChatGPTConversationImportService(logger *slog.Logger, store *Store, db *pgxpool.Pool, guardianPolicy *guardian.Policy, writer *chat.ChatMessageWriter, mirror *ChatOTELMirror, heartbeat func(ctx context.Context, page int)) *ChatGPTConversationImportService {
 	if heartbeat == nil {
 		panic("chatgpt conversation import service requires heartbeat")
 	}
@@ -109,6 +110,7 @@ func NewChatGPTConversationImportService(logger *slog.Logger, store *Store, db *
 		guardianPolicy: guardianPolicy,
 		db:             db,
 		writer:         writer,
+		mirror:         mirror,
 		heartbeat:      heartbeat,
 	}
 }
@@ -366,6 +368,9 @@ func (src *chatgptConversationSource) writeFile(ctx context.Context, file codexa
 
 	fallbacksBefore := src.timestampFallbacks()
 	rows := make([]chatrepo.CreateExternalChatMessageParams, 0, len(events))
+	// The actor email rides beside the rows for the OTEL mirror; the rows
+	// themselves only store the provider user id.
+	emails := make(map[string]string, len(events))
 	for _, event := range events {
 		if event.Conversation.ID == "" || event.Message.ID == "" {
 			continue
@@ -379,6 +384,7 @@ func (src *chatgptConversationSource) writeFile(ctx context.Context, file codexa
 		if err != nil {
 			return err
 		}
+		emails[event.Message.ID] = event.Actor.UserEmail
 
 		createdAt := src.eventCreatedAt(event)
 
@@ -430,12 +436,14 @@ func (src *chatgptConversationSource) writeFile(ctx context.Context, file codexa
 	}
 
 	// WriteExternal inserts row by row, so a mid-batch failure still leaves
-	// the earlier rows durable — record the partial count before propagating
-	// the error so failure details describe the replay-safe work accurately.
-	written, err := src.svc.writer.WriteExternal(ctx, src.cfg.ProjectID, rows)
+	// the earlier rows durable — record the partial count and mirror the
+	// inserted rows before propagating the error, since a retry will neither
+	// re-count nor re-offer them.
+	inserted, err := src.svc.writer.WriteExternal(ctx, src.cfg.ProjectID, rows)
 	src.progressMu.Lock()
-	src.progress.MessagesWritten += written
+	src.progress.MessagesWritten += int64(len(inserted))
 	src.progressMu.Unlock()
+	src.svc.mirror.PublishMessages(ctx, src.cfg, inserted, emails)
 	if err != nil {
 		return fmt.Errorf("write chatgpt conversation messages: %w", err)
 	}

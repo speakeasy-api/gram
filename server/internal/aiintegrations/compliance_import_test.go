@@ -63,7 +63,7 @@ func complianceDiscoveryService(t *testing.T, serverURL string) (*ComplianceImpo
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
 	client := anthropicapi.New(policy, anthropicapi.WithBaseURL(serverURL), anthropicapi.WithAPIKey("anthropic-key"))
-	svc := NewComplianceImportService(testenv.NewLogger(t), nil, policy, nil, func(context.Context, string, int) {})
+	svc := NewComplianceImportService(testenv.NewLogger(t), nil, policy, nil, newTestChatOTELMirror(t), func(context.Context, string, int) {})
 	return svc, client
 }
 
@@ -255,7 +255,7 @@ func TestWriteMessagePagesAdvancesActivitiesCursor(t *testing.T) {
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
 	t.Cleanup(func() { _ = shutdown(context.Background()) })
 
-	svc := NewComplianceImportService(testenv.NewLogger(t), conn, nil, writer, func(context.Context, string, int) {})
+	svc := NewComplianceImportService(testenv.NewLogger(t), conn, nil, writer, newTestChatOTELMirror(t), func(context.Context, string, int) {})
 
 	in := make(chan messagePageBatch, 4)
 	in <- messagePageBatch{chatID: uuid.Nil, rows: nil, lastID: "", activitiesCursor: "", cursorOnly: false}

@@ -115,10 +115,11 @@ type CodexCloudImportService struct {
 	guardianPolicy *guardian.Policy
 	db             *pgxpool.Pool
 	writer         *chat.ChatMessageWriter
+	mirror         *ChatOTELMirror
 	heartbeat      func(ctx context.Context, page int)
 }
 
-func NewCodexCloudImportService(logger *slog.Logger, store *Store, db *pgxpool.Pool, guardianPolicy *guardian.Policy, writer *chat.ChatMessageWriter, heartbeat func(ctx context.Context, page int)) *CodexCloudImportService {
+func NewCodexCloudImportService(logger *slog.Logger, store *Store, db *pgxpool.Pool, guardianPolicy *guardian.Policy, writer *chat.ChatMessageWriter, mirror *ChatOTELMirror, heartbeat func(ctx context.Context, page int)) *CodexCloudImportService {
 	if heartbeat == nil {
 		panic("codex cloud import service requires heartbeat")
 	}
@@ -128,6 +129,7 @@ func NewCodexCloudImportService(logger *slog.Logger, store *Store, db *pgxpool.P
 		guardianPolicy: guardianPolicy,
 		db:             db,
 		writer:         writer,
+		mirror:         mirror,
 		heartbeat:      heartbeat,
 	}
 }
@@ -437,6 +439,9 @@ func (src *codexCloudSource) writeFile(ctx context.Context, file codexapi.LogFil
 	}
 
 	rows := make([]chatrepo.CreateExternalChatMessageParams, 0, len(admitted))
+	// The actor email rides beside the rows for the OTEL mirror; the rows
+	// themselves only store the provider user id.
+	emails := make(map[string]string, len(admitted))
 	for i, event := range admitted {
 		var role, content string
 		switch event.EventDetails.DetailType {
@@ -453,6 +458,7 @@ func (src *codexCloudSource) writeFile(ctx context.Context, file codexapi.LogFil
 		if err != nil {
 			return err
 		}
+		emails[event.EventID] = event.Actor.UserEmail
 
 		rows = append(rows, chatrepo.CreateExternalChatMessageParams{
 			ChatID:            src.chatIDs[event.EventDetails.SessionID],
@@ -492,12 +498,14 @@ func (src *codexCloudSource) writeFile(ctx context.Context, file codexapi.LogFil
 	}
 
 	// WriteExternal inserts row by row, so a mid-batch failure still leaves
-	// the earlier rows durable — record the partial count before propagating
-	// the error so failure details describe the replay-safe work accurately.
-	written, err := src.svc.writer.WriteExternal(ctx, src.cfg.ProjectID, rows)
+	// the earlier rows durable — record the partial count and mirror the
+	// inserted rows before propagating the error, since a retry will neither
+	// re-count nor re-offer them.
+	inserted, err := src.svc.writer.WriteExternal(ctx, src.cfg.ProjectID, rows)
 	src.progressMu.Lock()
-	src.progress.MessagesWritten += written
+	src.progress.MessagesWritten += int64(len(inserted))
 	src.progressMu.Unlock()
+	src.svc.mirror.PublishMessages(ctx, src.cfg, inserted, emails)
 	if err != nil {
 		return fmt.Errorf("write codex cloud messages: %w", err)
 	}

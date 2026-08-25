@@ -111,7 +111,7 @@ func TestCodexCloudProcessPageWritesChatAndMessagesIdempotently(t *testing.T) {
 	t.Cleanup(func() { _ = shutdown(context.Background()) })
 
 	heartbeats := 0
-	svc := NewCodexCloudImportService(testenv.NewLogger(t), store, conn, nil, writer, func(context.Context, int) { heartbeats++ })
+	svc := NewCodexCloudImportService(testenv.NewLogger(t), store, conn, nil, writer, newTestChatOTELMirror(t), func(context.Context, int) { heartbeats++ })
 	file := codexCloudFixtureFile(codexCloudFixture)
 	src := &codexCloudSource{
 		client: &stubCodexComplianceClient{
@@ -207,7 +207,7 @@ func TestCodexCloudProcessPageWritesChatAndMessagesIdempotently(t *testing.T) {
 func newCodexCloudTestSource(cfg Config, client codexComplianceClient) *codexCloudSource {
 	return &codexCloudSource{
 		client:         client,
-		svc:            &CodexCloudImportService{logger: nil, store: nil, guardianPolicy: nil, db: nil, writer: nil, heartbeat: func(context.Context, int) {}},
+		svc:            &CodexCloudImportService{logger: nil, store: nil, guardianPolicy: nil, db: nil, writer: nil, mirror: nil, heartbeat: func(context.Context, int) {}},
 		cfg:            cfg,
 		pageLimit:      codexCloudPageLimit,
 		users:          nil,
@@ -277,7 +277,7 @@ func TestCodexCloudTitleBackfillsWhenPromptArrivesInLaterFile(t *testing.T) {
 	fileB.ID = "eclf_backfill_b"
 	fileB.EndTime = fileA.EndTime.Add(time.Minute)
 
-	svc := NewCodexCloudImportService(testenv.NewLogger(t), store, conn, nil, writer, func(context.Context, int) {})
+	svc := NewCodexCloudImportService(testenv.NewLogger(t), store, conn, nil, writer, newTestChatOTELMirror(t), func(context.Context, int) {})
 	src := &codexCloudSource{
 		client: &stubCodexComplianceClient{
 			listPages:  nil,
@@ -357,7 +357,7 @@ func TestCodexCloudMalformedTimestampCountsOncePerEvent(t *testing.T) {
 	file := codexCloudFixtureFile(malformed)
 	file.ID = "eclf_bad_ts"
 
-	svc := NewCodexCloudImportService(testenv.NewLogger(t), store, conn, nil, writer, func(context.Context, int) {})
+	svc := NewCodexCloudImportService(testenv.NewLogger(t), store, conn, nil, writer, newTestChatOTELMirror(t), func(context.Context, int) {})
 	src := &codexCloudSource{
 		client: &stubCodexComplianceClient{
 			listPages:  nil,
@@ -398,7 +398,7 @@ func TestSyncCodexCloudSessionsRejectsMisconfiguredIntegrations(t *testing.T) {
 	ctx, conn, store, _ := newStoreTestDB(t)
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
 	t.Cleanup(func() { _ = shutdown(context.Background()) })
-	svc := NewCodexCloudImportService(testenv.NewLogger(t), store, conn, nil, writer, func(context.Context, int) {})
+	svc := NewCodexCloudImportService(testenv.NewLogger(t), store, conn, nil, writer, newTestChatOTELMirror(t), func(context.Context, int) {})
 
 	workspaceID := "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
 	now := time.Now().UTC()
@@ -481,7 +481,7 @@ func TestCodexCloudCountsEventsMissingIdentifiers(t *testing.T) {
 	file := codexCloudFixtureFile(body)
 	file.ID = "eclf_missing_ids"
 
-	svc := NewCodexCloudImportService(testenv.NewLogger(t), store, conn, nil, writer, func(context.Context, int) {})
+	svc := NewCodexCloudImportService(testenv.NewLogger(t), store, conn, nil, writer, newTestChatOTELMirror(t), func(context.Context, int) {})
 	src := &codexCloudSource{
 		client:         &stubCodexComplianceClient{downloads: map[string][]byte{file.ID: []byte(body)}},
 		svc:            svc,

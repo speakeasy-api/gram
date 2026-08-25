@@ -366,7 +366,7 @@ func NewActivities(
 		settleStripeInvoiceAllocations:  activities.NewSettleStripeInvoiceAllocations(logger, db, stripeClient),
 		collectPlatformUsageMetrics:     activities.NewCollectPlatformUsageMetrics(logger, db),
 		getAIIntegrationsCandidates:     activities.NewGetAIIntegrationsCandidates(logger, db, encryption),
-		pollAIData:                      activities.NewPollAIData(logger, db, encryption, telemetryLogger, guardianPolicy, chatWriter),
+		pollAIData:                      activities.NewPollAIData(logger, db, encryption, telemetryLogger, guardianPolicy, chatWriter, publishers.OTELLogs),
 		getDeviceIntegrationCandidates:  activities.NewGetDeviceIntegrationSyncCandidates(logger, meterProvider, db, encryption, guardianPolicy, features),
 		runDeviceIntegrationSync:        activities.NewRunDeviceIntegrationSync(logger, meterProvider, db, encryption, guardianPolicy, features),
 		customDomainIngress:             activities.NewCustomDomainIngress(logger, db, k8sClient),
