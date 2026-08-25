@@ -19,8 +19,11 @@ describe("mcpToolsAvailability", () => {
     );
   });
 
+  it("stays loading when the query has not run yet", () => {
+    expect(mcpToolsAvailability(false, undefined, null)).toBe("loading");
+  });
+
   it("is unavailable when settled with zero tools", () => {
-    expect(mcpToolsAvailability(false, undefined, null)).toBe("unavailable");
     expect(mcpToolsAvailability(false, {}, null)).toBe("unavailable");
   });
 

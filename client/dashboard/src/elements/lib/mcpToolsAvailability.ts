@@ -13,7 +13,10 @@ export function mcpToolsAvailability(
   tools: Record<string, unknown> | undefined,
   error: unknown,
 ): McpToolsAvailability {
-  if (loading) return "loading";
+  // Disabled/idle queries (auth settling, no server yet) report not-loading
+  // with undefined data. Treat that as in-flight so we don't flash the
+  // settled-empty warning before tools/list has run.
+  if (loading || (!error && tools === undefined)) return "loading";
   if (error || !tools || Object.keys(tools).length === 0) {
     return "unavailable";
   }
