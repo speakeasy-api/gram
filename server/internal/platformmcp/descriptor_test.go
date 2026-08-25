@@ -78,9 +78,8 @@ func TestAddToolExplicitInputSchemaIsAuthoritative(t *testing.T) {
 	schema := &jsonschema.Schema{
 		Type: "object",
 		Properties: map[string]*jsonschema.Schema{
-			"mode": {Type: "string", Enum: []any{"safe"}},
+			"mode": {Type: "string", Enum: []any{"safe"}, Default: json.RawMessage(`"safe"`)},
 		},
-		Required:             []string{"mode"},
 		AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
 	}
 	addTool(registrar, &mcp.Tool{Name: "explicit_schema", InputSchema: schema}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, func(_ context.Context, _ *mcp.CallToolRequest, input explicitSchemaInput) (*mcp.CallToolResult, explicitSchemaOutput, error) {
@@ -97,10 +96,15 @@ func TestAddToolExplicitInputSchemaIsAuthoritative(t *testing.T) {
 	require.ErrorContains(t, err, "arguments do not match the tool schema")
 	require.Zero(t, calls.Load())
 
-	out, err := descriptor.Invoke(t.Context(), json.RawMessage(`{"mode":"safe"}`))
+	out, err := descriptor.Invoke(t.Context(), nil)
 	require.NoError(t, err)
 	require.Equal(t, explicitSchemaOutput{Mode: "safe"}, out)
 	require.EqualValues(t, 1, calls.Load())
+
+	out, err = descriptor.Invoke(t.Context(), json.RawMessage(`{"mode":"safe"}`))
+	require.NoError(t, err)
+	require.Equal(t, explicitSchemaOutput{Mode: "safe"}, out)
+	require.EqualValues(t, 2, calls.Load())
 
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	serverSession, err := server.Connect(t.Context(), serverTransport, nil)
@@ -121,12 +125,12 @@ func TestAddToolExplicitInputSchemaIsAuthoritative(t *testing.T) {
 	refused, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: "explicit_schema", Arguments: map[string]any{"mode": "unsafe"}})
 	require.NoError(t, err)
 	require.True(t, refused.IsError)
-	require.EqualValues(t, 1, calls.Load())
+	require.EqualValues(t, 2, calls.Load())
 
-	accepted, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: "explicit_schema", Arguments: map[string]any{"mode": "safe"}})
+	accepted, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: "explicit_schema", Arguments: map[string]any{}})
 	require.NoError(t, err)
 	require.False(t, accepted.IsError)
-	require.EqualValues(t, 2, calls.Load())
+	require.EqualValues(t, 3, calls.Load())
 }
 
 func TestAddToolInfersInputSchemaWhenUnset(t *testing.T) {

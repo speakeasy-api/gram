@@ -8,9 +8,14 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/accountidentity"
+	"github.com/speakeasy-api/gram/server/internal/scanners/clidestructive"
+	"github.com/speakeasy-api/gram/server/internal/scanners/destructivetool"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
+	"github.com/speakeasy-api/gram/server/internal/scanners/shadowmcpscan"
 )
 
 func TestCatalogV1IsDeterministicAndClosed(t *testing.T) {
@@ -23,6 +28,7 @@ func TestCatalogV1IsDeterministicAndClosed(t *testing.T) {
 	require.Equal(t, []string{"assistant_message", "tool_request", "tool_response", "user_message"}, catalog.PolicyMessageTypes)
 	require.NotContains(t, catalog.PolicyMessageTypes, "prompt_attachment")
 	require.NotContains(t, catalog.DetectionScopeCategories, "account_identity")
+	require.Contains(t, catalog.DetectionScopeCategories, string(categories.CategoryPromptPolicy))
 	require.Empty(t, catalog.PromptInjectionRules)
 	require.NotNil(t, catalog.PromptInjectionRules)
 	require.NotContains(t, catalog.PresidioEntities, "PERSON")
@@ -30,6 +36,12 @@ func TestCatalogV1IsDeterministicAndClosed(t *testing.T) {
 	require.NotContains(t, catalog.DisabledRules, PresidioDeadLetterRule)
 	require.Contains(t, catalog.DisabledRules, accountidentity.RulePersonalAccount)
 	require.Contains(t, catalog.DisabledRules, accountidentity.RuleUnapprovedDomain)
+	require.Contains(t, catalog.DisabledRules, destructivetool.Rule)
+	require.Contains(t, catalog.DisabledRules, promptinjection.Rule)
+	require.Contains(t, catalog.DisabledRules, shadowmcpscan.Rule)
+	for _, ruleID := range clidestructive.ReportableRuleIDs() {
+		require.Contains(t, catalog.DisabledRules, ruleID)
+	}
 	require.Contains(t, catalog.DisabledRules, gitleaks.SecretAccessKeyRuleID)
 	require.NotContains(t, catalog.DisabledRules, gitleaks.AccessKeyIDRuleID)
 	for _, ruleID := range catalog.DisabledRules {
@@ -60,7 +72,7 @@ func TestCatalogV1IsDeterministicAndClosed(t *testing.T) {
 
 	fingerprint, err := Fingerprint(catalog)
 	require.NoError(t, err)
-	require.Equal(t, "sha256:97dd382b5bbd1f730186065f9948d0aedb86f2dcf272806b4260a504a03e74e2", fingerprint)
+	require.Equal(t, "sha256:49e932104737e18757048781237a47d12382f054112ea6ac612f0e1825721db9", fingerprint)
 	require.True(t, strings.HasPrefix(fingerprint, "sha256:"))
 	require.Len(t, fingerprint, len("sha256:")+64)
 
@@ -85,6 +97,8 @@ func TestPresidioEntityRuleRoundTrips(t *testing.T) {
 	}
 
 	_, ok := PresidioEntityForRuleID("pii.person")
+	require.False(t, ok)
+	_, ok = PresidioEntityForRuleID("pii.CREDIT_CARD")
 	require.False(t, ok)
 	_, ok = PresidioEntityForRuleID(PresidioDeadLetterRule)
 	require.False(t, ok)

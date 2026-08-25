@@ -231,16 +231,17 @@ func addTool[In, Out any](r *Registrar, tool *mcp.Tool, meta ToolMeta, handler m
 		Meta:        meta,
 		InputSchema: inputSchema,
 		invoke: func(ctx context.Context, arguments json.RawMessage) (any, error) {
-			// The MCP transport validates arguments against the tool's schema
-			// before a handler sees them. A direct call has no transport, so
-			// it validates here — otherwise the two audiences would enforce
-			// different contracts for the same tool.
-			if err := validateAgainstSchema(resolved, arguments); err != nil {
+			// The MCP transport applies defaults and validates arguments against
+			// the tool's schema before a handler sees them. A direct call has no
+			// transport, so it does both here — otherwise the two audiences would
+			// pass different inputs to the same handler.
+			normalized, err := normalizeAgainstSchema(resolved, arguments)
+			if err != nil {
 				return nil, fmt.Errorf("validate %s arguments: %w", tool.Name, err)
 			}
 			var input In
-			if len(arguments) > 0 {
-				if err := json.Unmarshal(arguments, &input); err != nil {
+			if len(normalized) > 0 {
+				if err := json.Unmarshal(normalized, &input); err != nil {
 					return nil, fmt.Errorf("decode %s arguments: %w", tool.Name, err)
 				}
 			}
@@ -310,24 +311,33 @@ func prepareInputSchema[In any](tool *mcp.Tool) ([]byte, *jsonschema.Resolved) {
 	return encoded, resolved
 }
 
-// validateAgainstSchema applies the tool's declared contract to a direct call.
-func validateAgainstSchema(resolved *jsonschema.Resolved, arguments json.RawMessage) error {
+// normalizeAgainstSchema applies defaults and validation from the tool's
+// declared contract to a direct call, then returns the normalized JSON that the
+// handler must decode.
+func normalizeAgainstSchema(resolved *jsonschema.Resolved, arguments json.RawMessage) (json.RawMessage, error) {
 	if resolved == nil {
-		return nil
+		return arguments, nil
 	}
 	var decoded any
 	if len(arguments) == 0 {
 		decoded = map[string]any{}
 	} else if err := json.Unmarshal(arguments, &decoded); err != nil {
-		return fmt.Errorf("decode arguments: %w", err)
+		return nil, fmt.Errorf("decode arguments: %w", err)
 	}
 	if decoded == nil {
 		decoded = map[string]any{}
 	}
-	if err := resolved.Validate(decoded); err != nil {
-		return fmt.Errorf("arguments do not match the tool schema: %w", err)
+	if err := resolved.ApplyDefaults(&decoded); err != nil {
+		return nil, fmt.Errorf("apply argument defaults: %w", err)
 	}
-	return nil
+	if err := resolved.Validate(decoded); err != nil {
+		return nil, fmt.Errorf("arguments do not match the tool schema: %w", err)
+	}
+	normalized, err := json.Marshal(decoded)
+	if err != nil {
+		return nil, fmt.Errorf("encode normalized arguments: %w", err)
+	}
+	return normalized, nil
 }
 
 // ErrToolNotFound reports a tool that is not admitted to the requested audience.

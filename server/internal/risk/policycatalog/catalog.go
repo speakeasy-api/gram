@@ -15,8 +15,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/scanners/accountidentity"
 	"github.com/speakeasy-api/gram/server/internal/scanners/clidestructive"
+	"github.com/speakeasy-api/gram/server/internal/scanners/destructivetool"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
+	"github.com/speakeasy-api/gram/server/internal/scanners/shadowmcpscan"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
@@ -41,7 +43,7 @@ func Build() (Catalog, error) {
 		return Catalog{}, fmt.Errorf("list reportable gitleaks rules: %w", err)
 	}
 
-	disabledRules := make([]string, 0, len(secretRules)+len(presidioEntities)+2)
+	disabledRules := make([]string, 0, len(secretRules)+len(presidioEntities)+5)
 	disabledRules = append(disabledRules, secretRules...)
 	for _, entity := range presidioEntities {
 		disabledRules = append(disabledRules, CanonicalPresidioRuleID(entity))
@@ -49,7 +51,11 @@ func Build() (Catalog, error) {
 	disabledRules = append(disabledRules,
 		accountidentity.RulePersonalAccount,
 		accountidentity.RuleUnapprovedDomain,
+		destructivetool.Rule,
+		promptinjection.Rule,
+		shadowmcpscan.Rule,
 	)
+	disabledRules = append(disabledRules, clidestructive.ReportableRuleIDs()...)
 
 	catalog := Catalog{
 		Schema:      SchemaV1,
@@ -83,6 +89,7 @@ func Build() (Catalog, error) {
 			string(categories.CategoryOffPolicy),
 			string(categories.CategoryPII),
 			string(categories.CategoryPromptInjection),
+			string(categories.CategoryPromptPolicy),
 			string(categories.CategorySecrets),
 			string(categories.CategoryShadowMCP),
 		},

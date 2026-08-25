@@ -55,7 +55,11 @@ func PresidioEntityForRuleID(ruleID string) (string, bool) {
 	if !strings.HasPrefix(ruleID, PresidioRulePrefix) {
 		return "", false
 	}
-	entity := strings.ToUpper(strings.TrimPrefix(ruleID, PresidioRulePrefix))
+	suffix := strings.TrimPrefix(ruleID, PresidioRulePrefix)
+	if suffix == "" || suffix != strings.ToLower(suffix) {
+		return "", false
+	}
+	entity := strings.ToUpper(suffix)
 	if slices.Contains(presidioEntities, entity) {
 		return entity, true
 	}
