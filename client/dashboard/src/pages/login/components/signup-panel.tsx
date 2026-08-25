@@ -1,4 +1,5 @@
 import { useTelemetry } from "@/contexts/Telemetry";
+import { authPageHref } from "@/lib/safe-external-url";
 import { buildLoginRedirectURL, cn } from "@/lib/utils";
 import { useForm } from "@tanstack/react-form";
 import { Link } from "react-router";
@@ -245,7 +246,7 @@ export function SignUpPanel({
       <p className="mt-2 text-[14px] text-(--muted-strong)">
         Already have an account?{" "}
         <Link
-          to="/login"
+          to={authPageHref("/login", redirectTo)}
           className="text-(--link) underline hover:text-(--focus)"
         >
           Log in
