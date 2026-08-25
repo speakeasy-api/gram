@@ -1,6 +1,9 @@
 import { Text } from "@/components/ui/Text";
+import { useOrganization } from "@/contexts/Auth";
 import { useOrgRoutes } from "@/routes";
-import { useListExternalKeys } from "@gram/client/react-query/listExternalKeys";
+import { useGramContext } from "@gram/client/react-query/_context.js";
+import { buildListExternalKeysQuery } from "@gram/client/react-query/listExternalKeys";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { providerSlug } from "../providers";
 
@@ -18,13 +21,17 @@ export function ExternalKeyLink({
   externalKeyId: string;
 }): JSX.Element {
   const orgRoutes = useOrgRoutes();
-  const { data, isLoading, isError } = useListExternalKeys(
-    { provider: "gcp_kms" },
-    undefined,
-    { throwOnError: false },
-  );
+  const client = useGramContext();
+  const organization = useOrganization();
+  // Keyed by organization so a switch never shows the previous one's keys.
+  const keysQuery = buildListExternalKeysQuery(client, { provider: "gcp_kms" });
+  const { data, isPending, isError } = useQuery({
+    ...keysQuery,
+    queryKey: [...keysQuery.queryKey, { organizationId: organization.id }],
+    throwOnError: false,
+  });
 
-  if (isLoading) {
+  if (isPending) {
     return (
       <Text small muted as="span">
         Loading…
@@ -42,7 +49,7 @@ export function ExternalKeyLink({
     );
   }
 
-  const externalKey = data?.keys.find((key) => key.id === externalKeyId);
+  const externalKey = data.keys.find((key) => key.id === externalKeyId);
   if (!externalKey) {
     return (
       <Text small muted as="span">

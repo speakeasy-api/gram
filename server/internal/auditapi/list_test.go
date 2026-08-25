@@ -914,7 +914,8 @@ func TestAuditService_List_FilterBySubjectIDs(t *testing.T) {
 		require.Equal(t, "json_web_key", log.SubjectType)
 	}
 
-	// An empty list is no filter rather than a filter that matches nothing.
+	// An empty list is no filter rather than a filter that matches nothing, and
+	// blank entries do not turn it into one.
 	unfiltered, err := ti.service.List(ctx, &gen.ListPayload{
 		ApikeyToken:   nil,
 		SessionToken:  nil,
@@ -924,7 +925,7 @@ func TestAuditService_List_FilterBySubjectIDs(t *testing.T) {
 		Action:        nil,
 		SubjectType:   nil,
 		SubjectID:     nil,
-		SubjectIds:    []string{},
+		SubjectIds:    []string{"", "  "},
 		ActingSurface: nil,
 	})
 	require.NoError(t, err)

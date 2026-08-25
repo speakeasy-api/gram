@@ -53,7 +53,7 @@ export function ResourceAuditFeed({
     hasNextPage,
     isFetching,
     isFetchingNextPage,
-    isLoading,
+    isPending,
     refetch,
   } = useAuditLogsInfinite({ subjectIds }, undefined, {
     enabled,
@@ -69,7 +69,7 @@ export function ResourceAuditFeed({
     [logs],
   );
 
-  if (!enabled || isLoading) {
+  if (!enabled || isPending) {
     return (
       <div className="text-muted-foreground flex items-center gap-2 py-6">
         <Icon name="loader-circle" className="size-4 animate-spin" />

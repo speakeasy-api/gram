@@ -104,7 +104,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 		Action:        conv.PtrToPGTextEmpty(payload.Action),
 		SubjectType:   conv.PtrToPGTextEmpty(payload.SubjectType),
 		SubjectID:     conv.PtrToPGTextEmpty(payload.SubjectID),
-		SubjectIds:    payload.SubjectIds,
+		SubjectIds:    normalizeSubjectIDs(payload.SubjectIds),
 		ActingSurface: conv.PtrToPGTextEmpty(payload.ActingSurface),
 	}
 
@@ -380,4 +380,17 @@ func toAuditActionFacetOptions(rows []repo.ListAuditActionFacetsRow) []*gen.Audi
 	return facetOptions(rows, func(row repo.ListAuditActionFacetsRow) (string, string, int64) {
 		return row.Value, row.DisplayName, row.Count
 	})
+}
+
+// normalizeSubjectIDs trims the subject id filter and drops blank entries so a
+// list that is empty once normalized reads as no filter rather than as a filter
+// nothing can match.
+func normalizeSubjectIDs(ids []string) []string {
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if trimmed := strings.TrimSpace(id); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
 }

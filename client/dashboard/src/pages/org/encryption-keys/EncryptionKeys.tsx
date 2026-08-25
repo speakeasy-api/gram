@@ -1,4 +1,3 @@
-import { Page } from "@/components/page-layout";
 import { useOrganization } from "@/contexts/Auth";
 import { ResourceListPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
@@ -25,7 +24,6 @@ import {
   invalidateAllListExternalKeys,
 } from "@gram/client/react-query/listExternalKeys";
 import { useGramContext } from "@gram/client/react-query/_context.js";
-import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useVerifyGcpKmsKeyMutation } from "@gram/client/react-query/verifyGcpKmsKey";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { MoreHorizontal, Plus } from "lucide-react";
@@ -33,58 +31,28 @@ import { useState } from "react";
 import { Outlet } from "react-router";
 import { toast } from "sonner";
 import { CreateExternalKeySheet } from "./CreateExternalKeySheet";
+import { CustomerManagedKeysGate } from "./CustomerManagedKeysGate";
 import { SigningKeysSection } from "./jwks/SigningKeysSection";
 import { ListSection } from "./ListSection";
 import { providerLabel, providerSlug } from "./providers";
 import { useIsCurrentOrganization } from "@/hooks/useIsCurrentOrganization";
 
+// The scope and entitlement gates sit on the route root so every page beneath
+// it (the list and each key's detail page) is covered, and so no protected
+// request fires for a visitor lacking the page scope.
 export function EncryptionKeysRoot(): JSX.Element {
-  return <Outlet />;
-}
-
-export function EncryptionKeysPage(): JSX.Element {
-  // Gate first so no protected request (product-feature read, key list) fires
-  // for a visitor lacking the page scope.
   return (
     <RequireScope scope={["org:read", "org:admin"]} level="page">
-      <EncryptionKeysGate />
+      <CustomerManagedKeysGate>
+        <Outlet />
+      </CustomerManagedKeysGate>
     </RequireScope>
   );
 }
 
-// Product-feature (entitlement) gate, mounted only after the RBAC scope gate
-// passes. A gated-but-authorized org sees only the framed refusal, with no
-// header or toolbar.
-function EncryptionKeysGate(): JSX.Element {
+export function EncryptionKeysPage(): JSX.Element {
   const organization = useOrganization();
   const isCurrentOrganization = useIsCurrentOrganization(organization.id);
-  const { data: features, isLoading: featuresLoading } = useProductFeatures(
-    { organizationId: organization.id },
-    undefined,
-    { staleTime: 30_000, throwOnError: false },
-  );
-
-  // The sidebar entry is already hidden without the entitlement; this covers a
-  // direct URL. Treat "still loading" and "the read failed" as not-yet-known so
-  // an entitled organization never flashes the gate.
-  const gated =
-    !featuresLoading &&
-    features?.customerManagedEncryptionKeysEnabled === false;
-
-  if (gated) {
-    return (
-      <Page>
-        <Page.Header>
-          <Page.Header.Breadcrumbs />
-        </Page.Header>
-        <Page.Body>
-          <Text muted className="py-8 text-center">
-            Customer-managed keys are not enabled for this organization.
-          </Text>
-        </Page.Body>
-      </Page>
-    );
-  }
 
   return (
     <EncryptionKeysOverview

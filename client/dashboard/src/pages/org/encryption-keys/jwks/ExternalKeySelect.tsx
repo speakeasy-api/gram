@@ -11,7 +11,9 @@ import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { useIsCurrentOrganization } from "@/hooks/useIsCurrentOrganization";
-import { useListExternalKeys } from "@gram/client/react-query/listExternalKeys";
+import { useGramContext } from "@gram/client/react-query/_context.js";
+import { buildListExternalKeysQuery } from "@gram/client/react-query/listExternalKeys";
+import { useQuery } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { CreateExternalKeySheet } from "../CreateExternalKeySheet";
@@ -48,8 +50,12 @@ export function ExternalKeySelect({
   const organization = useOrganization();
   const isCurrentOrganization = useIsCurrentOrganization(organization.id);
   const [createOpen, setCreateOpen] = useState(false);
-  const { data, isLoading, isError, refetch } = useListExternalKeys({
-    provider: "gcp_kms",
+  const client = useGramContext();
+  // Keyed by organization so a switch never offers the previous one's keys.
+  const keysQuery = buildListExternalKeysQuery(client, { provider: "gcp_kms" });
+  const { data, isPending, isError, refetch } = useQuery({
+    ...keysQuery,
+    queryKey: [...keysQuery.queryKey, { organizationId: organization.id }],
   });
   const keys = data?.keys ?? [];
 
@@ -59,11 +65,17 @@ export function ExternalKeySelect({
   // invisibly in the empty Select and be resubmitted, so clear it once the
   // live set is known. A failed request is not a live set, so a selection
   // survives a load error.
+  //
+  // The same applies to a value the caller has since marked unavailable: a key
+  // picked while the unavailable set was still loading must not stay selected
+  // once the picker says it cannot be used.
   const missing =
-    !isLoading && !isError && value !== "" && !keys.some((k) => k.id === value);
+    !isPending && !isError && value !== "" && !keys.some((k) => k.id === value);
+  const unavailableSelection =
+    value !== "" && (unavailableKeyIds?.has(value) ?? false);
   useEffect(() => {
-    if (missing) onChange("");
-  }, [missing, onChange]);
+    if (missing || unavailableSelection) onChange("");
+  }, [missing, unavailableSelection, onChange]);
 
   // Select what was just created. The list query is invalidated by the sheet,
   // so the option is there by the time this renders again.
@@ -92,7 +104,7 @@ export function ExternalKeySelect({
     );
   }
 
-  if (!isLoading && keys.length === 0) {
+  if (!isPending && keys.length === 0) {
     return (
       <div className="flex flex-col gap-1.5">
         <Label>{label}</Label>
@@ -126,11 +138,11 @@ export function ExternalKeySelect({
           <Select
             value={value}
             onValueChange={onChange}
-            disabled={isLoading || disabled}
+            disabled={isPending || disabled}
           >
             <SelectTrigger>
               <SelectValue
-                placeholder={isLoading ? "Loading…" : "Select a key"}
+                placeholder={isPending ? "Loading…" : "Select a key"}
               />
             </SelectTrigger>
             <SelectContent>
@@ -153,7 +165,7 @@ export function ExternalKeySelect({
         <Button
           size="sm"
           variant="secondary"
-          disabled={isLoading || disabled}
+          disabled={isPending || disabled}
           onClick={() => setCreateOpen(true)}
         >
           <Button.LeftIcon>

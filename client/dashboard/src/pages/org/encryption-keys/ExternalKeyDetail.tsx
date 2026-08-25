@@ -14,6 +14,7 @@ import { activeDetailTab } from "@/lib/detail-tabs";
 import { useOrgRoutes } from "@/routes";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { useGetGcpKmsKey } from "@gram/client/react-query/getGcpKmsKey";
+import { isNotNotFound } from "@/lib/query-errors";
 import { Link, Navigate, useLocation, useParams } from "react-router";
 import { providerFromSlug, providerLabel } from "./providers";
 import { EXTERNAL_KEY_TABS, type ExternalKeyTab } from "./tabs";
@@ -60,8 +61,9 @@ export default function ExternalKeyDetail(): JSX.Element {
   } = useGetGcpKmsKey({ id: keyId }, undefined, {
     enabled: isGcp && keyId !== "" && canRead,
     // A missing key is handled below by returning to the list; left to the
-    // default, the 404 would surface as a crash in the error boundary.
-    throwOnError: false,
+    // default, the 404 would surface as a crash in the error boundary. Every
+    // other failure still belongs to the boundary.
+    throwOnError: isNotNotFound,
   });
 
   const activeTab = activeDetailTab(location.pathname, EXTERNAL_KEY_TABS);

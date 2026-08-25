@@ -130,7 +130,7 @@ var ListAuditLogsForm = Type("ListAuditLogsForm", func() {
 		Description("Subject ID to filter audit logs to a specific subject (e.g. a single assistant).")
 	})
 	Attribute("subject_ids", ArrayOf(String), func() {
-		Description("Subject IDs to filter audit logs to a set of subjects at once, e.g. a resource together with the child resources whose events name the child as the subject. Matches any listed subject regardless of subject type; combine with subject_type to pin the kind.")
+		Description("Subject IDs to filter audit logs to a set of subjects at once, e.g. a resource together with the child resources whose events name the child as the subject. Matches any listed subject of any subject type, except that assistant activity events stay excluded unless subject_type is 'assistant'; combine with subject_type to pin the kind. Blank entries are ignored.")
 		MaxLength(200)
 	})
 	Attribute("acting_surface", String, func() {

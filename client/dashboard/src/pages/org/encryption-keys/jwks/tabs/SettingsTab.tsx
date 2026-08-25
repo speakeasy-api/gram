@@ -57,6 +57,9 @@ export function SettingsTab({ set }: { set: JSONWebKeySet }): JSX.Element {
       // The list, this set's detail (Overview + page title) and its history
       // all show the name.
       await invalidateSet(queryClient);
+      // The server stores the trimmed name; mirror it so the input agrees with
+      // the refreshed set instead of reporting phantom unsaved changes.
+      setName(trimmed);
       toast.success("Signing key set updated");
     } catch (caught: unknown) {
       console.error("Update signing key set failed", caught);

@@ -14,6 +14,8 @@ import { activeDetailTab } from "@/lib/detail-tabs";
 import { useOrgRoutes } from "@/routes";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { useGetJsonWebKeySet } from "@gram/client/react-query/getJsonWebKeySet";
+import { isNotNotFound } from "@/lib/query-errors";
+import { CustomerManagedKeysGate } from "../CustomerManagedKeysGate";
 import { Link, Navigate, Outlet, useLocation, useParams } from "react-router";
 import { JSON_WEB_KEY_SET_TABS, type JsonWebKeySetTab } from "./tabs";
 import { KeysTab } from "./tabs/KeysTab";
@@ -22,8 +24,16 @@ import { SettingsTab } from "./tabs/SettingsTab";
 
 const ORG_READ_SCOPES: Scope[] = ["org:read", "org:admin"];
 
+// Same scope and entitlement gates as the Encryption Keys route root, so a deep
+// link to a set is refused the same way a deep link to a key is.
 export function SigningKeySetsRoot(): JSX.Element {
-  return <Outlet />;
+  return (
+    <RequireScope scope={ORG_READ_SCOPES} level="page">
+      <CustomerManagedKeysGate>
+        <Outlet />
+      </CustomerManagedKeysGate>
+    </RequireScope>
+  );
 }
 
 // The sets are listed on the Encryption Keys page; the bare /signing-keys URL
@@ -52,8 +62,9 @@ export default function JsonWebKeySetDetail(): JSX.Element {
   } = useGetJsonWebKeySet({ id: setId }, undefined, {
     enabled: setId !== "" && canRead,
     // A missing set is handled below by returning to the list; left to the
-    // default, the 404 would surface as a crash in the error boundary.
-    throwOnError: false,
+    // default, the 404 would surface as a crash in the error boundary. Every
+    // other failure still belongs to the boundary.
+    throwOnError: isNotNotFound,
   });
 
   const activeTab = activeDetailTab(location.pathname, JSON_WEB_KEY_SET_TABS);

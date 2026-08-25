@@ -22,8 +22,14 @@ export function OverviewTab({ set }: { set: JSONWebKeySet }): JSX.Element {
     undefined,
     { throwOnError: false },
   );
+  // The audit filter accepts at most 200 subjects. Keys come back newest
+  // first, so a set with an implausible number of them keeps its newest
+  // 199 in the feed rather than failing the request outright.
   const subjectIds = useMemo(
-    () => [set.id, ...(keysData?.keys ?? []).map((key) => key.id)],
+    () => [
+      set.id,
+      ...(keysData?.keys ?? []).slice(0, 199).map((key) => key.id),
+    ],
     [set.id, keysData],
   );
 

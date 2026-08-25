@@ -34,7 +34,7 @@ export function SigningKeysSection({
   const client = useGramContext();
   const [createOpen, setCreateOpen] = useState(false);
   const setsQuery = buildListJsonWebKeySetsQuery(client);
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data, isPending, isError, refetch } = useQuery({
     ...setsQuery,
     queryKey: [...setsQuery.queryKey, { organizationId }],
   });
@@ -60,7 +60,7 @@ export function SigningKeysSection({
       >
         <SetTable
           sets={sets}
-          isLoading={isLoading}
+          isPending={isPending}
           isError={isError}
           onRetry={() => void refetch()}
           createButton={createButton}
@@ -78,13 +78,13 @@ export function SigningKeysSection({
 
 function SetTable({
   sets,
-  isLoading,
+  isPending,
   isError,
   onRetry,
   createButton,
 }: {
   sets: JSONWebKeySet[];
-  isLoading: boolean;
+  isPending: boolean;
   isError: boolean;
   onRetry: () => void;
   createButton: React.ReactNode;
@@ -102,7 +102,7 @@ function SetTable({
     );
   }
 
-  if (isLoading) {
+  if (isPending) {
     return (
       <Text muted className="py-8 text-center">
         Loading…

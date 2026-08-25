@@ -130,8 +130,9 @@ type ListPayload struct {
 	SubjectID *string
 	// Subject IDs to filter audit logs to a set of subjects at once, e.g. a
 	// resource together with the child resources whose events name the child as
-	// the subject. Matches any listed subject regardless of subject type; combine
-	// with subject_type to pin the kind.
+	// the subject. Matches any listed subject of any subject type, except that
+	// assistant activity events stay excluded unless subject_type is 'assistant';
+	// combine with subject_type to pin the kind. Blank entries are ignored.
 	SubjectIds []string
 	// Acting surface to filter audit logs to changes made through one surface,
 	// e.g. 'platform_mcp' to review agent-driven activity alone.

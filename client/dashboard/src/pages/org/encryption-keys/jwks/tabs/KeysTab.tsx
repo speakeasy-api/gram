@@ -38,7 +38,7 @@ export function KeysTab({ set }: { set: JSONWebKeySet }): JSX.Element {
     null,
   );
 
-  const { data, isLoading, isError, refetch } = useListJsonWebKeys(
+  const { data, isPending, isError, refetch } = useListJsonWebKeys(
     { setId: set.id, includeRevoked },
     undefined,
     // Flipping the revoked toggle changes the query key; keeping the previous
@@ -77,7 +77,7 @@ export function KeysTab({ set }: { set: JSONWebKeySet }): JSX.Element {
       <KeyTable
         keys={keys}
         includeRevoked={includeRevoked}
-        isLoading={isLoading}
+        isPending={isPending}
         isError={isError}
         onRetry={() => void refetch()}
         onAction={(action, key) => setPendingAction({ action, key })}
@@ -100,14 +100,14 @@ export function KeysTab({ set }: { set: JSONWebKeySet }): JSX.Element {
 function KeyTable({
   keys,
   includeRevoked,
-  isLoading,
+  isPending,
   isError,
   onRetry,
   onAction,
 }: {
   keys: JSONWebKey[];
   includeRevoked: boolean;
-  isLoading: boolean;
+  isPending: boolean;
   isError: boolean;
   onRetry: () => void;
   onAction: (action: KeyLifecycleAction, key: JSONWebKey) => void;
@@ -123,7 +123,7 @@ function KeyTable({
     );
   }
 
-  if (isLoading) {
+  if (isPending) {
     return (
       <Text muted className="py-8 text-center">
         Loading…

@@ -4,22 +4,43 @@ import { DotTable } from "@/components/ui/DotTable";
 import { Icon } from "@/components/ui/Icon";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
+import { useOrganization } from "@/contexts/Auth";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useOrgRoutes } from "@/routes";
+import type { JSONWebKeySet } from "@gram/client/models/components/jsonwebkeyset.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { buildListJsonWebKeysQuery } from "@gram/client/react-query/listJsonWebKeys";
-import { useListJsonWebKeySets } from "@gram/client/react-query/listJsonWebKeySets";
-import { useQueries } from "@tanstack/react-query";
+import { buildListJsonWebKeySetsQuery } from "@gram/client/react-query/listJsonWebKeySets";
+import { useQueries, useQuery } from "@tanstack/react-query";
 
-// SigningKeysTab lists the signing key sets that depend on this KMS key.
-// Deleting the key is refused while any of them does, so this is also where a
-// reader finds out what is holding a delete up.
-//
-// A set depends on the key in two ways, and both block deletion: the set
-// publishes new keys from it (the set's own external_key_id), or a key already
-// published in the set was minted from it and still signs with it even after
-// the set moved on to another KMS key. The second is why every set's keys are
-// read rather than only the sets currently pointed at this key.
+// How a signing key set relates to this KMS key. A set can publish new keys
+// from it, hold a key already published from it (which keeps signing with it
+// even after the set moves on to another KMS key), or only hold keys that were
+// published from it and since revoked. The first two block deleting the KMS
+// key; a revoked key is withdrawn and no longer needs it.
+type Dependent = {
+  set: JSONWebKeySet;
+  publishesFrom: boolean;
+  hasLiveKey: boolean;
+  hasRevokedKey: boolean;
+};
+
+function dependencyLabel(dependent: Dependent): string {
+  const parts: string[] = [];
+  if (dependent.publishesFrom) parts.push("Publishing key");
+  if (dependent.hasLiveKey) parts.push("Published keys");
+  if (dependent.hasRevokedKey) parts.push("Revoked keys");
+  return parts.join(", ");
+}
+
+function blocksDeletion(dependent: Dependent): boolean {
+  return dependent.publishesFrom || dependent.hasLiveKey;
+}
+
+// SigningKeysTab lists the signing key sets that have ever depended on this KMS
+// key, revoked keys included, and says which of them still block deleting it.
+// Every set's keys are read rather than only the sets currently pointed at this
+// key, because a published key pins the KMS key it was minted from.
 export function SigningKeysTab({
   externalKeyId,
 }: {
@@ -27,20 +48,33 @@ export function SigningKeysTab({
 }): JSX.Element {
   const client = useGramContext();
   const orgRoutes = useOrgRoutes();
+  const organization = useOrganization();
+  // Keyed by organization so a switch never shows the previous one's sets.
+  const setsQuery = buildListJsonWebKeySetsQuery(client);
   const {
     data: setsData,
-    isLoading: setsLoading,
+    isPending: setsPending,
     isError: setsError,
     refetch,
-  } = useListJsonWebKeySets();
+  } = useQuery({
+    ...setsQuery,
+    queryKey: [...setsQuery.queryKey, { organizationId: organization.id }],
+  });
   const sets = setsData?.sets ?? [];
 
   const keyQueries = useQueries({
-    queries: sets.map((set) =>
-      buildListJsonWebKeysQuery(client, { setId: set.id }),
-    ),
+    queries: sets.map((set) => {
+      const keysQuery = buildListJsonWebKeysQuery(client, {
+        setId: set.id,
+        includeRevoked: true,
+      });
+      return {
+        ...keysQuery,
+        queryKey: [...keysQuery.queryKey, { organizationId: organization.id }],
+      };
+    }),
   });
-  const keysLoading = keyQueries.some((query) => query.isLoading);
+  const keysPending = keyQueries.some((query) => query.isPending);
   const keysError = keyQueries.some((query) => query.isError);
 
   if (setsError || keysError) {
@@ -61,17 +95,25 @@ export function SigningKeysTab({
     );
   }
 
-  if (setsLoading || keysLoading) {
+  if (setsPending || keysPending) {
     return <Text muted>Loading…</Text>;
   }
 
-  const dependents = sets.flatMap((set, index) => {
-    const publishesFrom = set.externalKeyId === externalKeyId;
-    const hasPublishedKey = (keyQueries[index]?.data?.keys ?? []).some(
+  const dependents: Dependent[] = sets.flatMap((set, index) => {
+    const keys = (keyQueries[index]?.data?.keys ?? []).filter(
       (key) => key.externalKeyId === externalKeyId,
     );
-    if (!publishesFrom && !hasPublishedKey) return [];
-    return [{ set, publishesFrom, hasPublishedKey }];
+    const dependent: Dependent = {
+      set,
+      publishesFrom: set.externalKeyId === externalKeyId,
+      hasLiveKey: keys.some((key) => key.keyState !== "revoked"),
+      hasRevokedKey: keys.some((key) => key.keyState === "revoked"),
+    };
+    const related =
+      dependent.publishesFrom ||
+      dependent.hasLiveKey ||
+      dependent.hasRevokedKey;
+    return related ? [dependent] : [];
   });
 
   if (dependents.length === 0) {
@@ -89,27 +131,29 @@ export function SigningKeysTab({
   const headers = [
     { label: "Name" },
     { label: "Depends on this key as" },
+    { label: "Blocks deletion" },
     { label: "Created" },
   ];
 
   return (
     <div className="flex flex-col gap-4">
       <Text small muted>
-        Deleting this key is refused while any of these sets exists, because a
-        key published from it could no longer sign.
+        Deleting this key is refused while a set publishes from it or still has
+        a key published from it, because that key could no longer sign. A set
+        that only holds revoked keys from it does not block deletion.
       </Text>
       <DotTable headers={headers}>
-        {dependents.map(({ set, publishesFrom, hasPublishedKey }) => (
+        {dependents.map((dependent) => (
           <DotRow
-            key={set.id}
+            key={dependent.set.id}
             icon={
               <Icon
                 name="key-round"
                 className="text-muted-foreground h-5 w-5"
               />
             }
-            href={orgRoutes.signingKeySets.setDetail.href(set.id)}
-            ariaLabel={`View signing key set ${set.name}`}
+            href={orgRoutes.signingKeySets.setDetail.href(dependent.set.id)}
+            ariaLabel={`View signing key set ${dependent.set.name}`}
           >
             <td className="px-3 py-3">
               <Text
@@ -117,17 +161,22 @@ export function SigningKeysTab({
                 as="div"
                 className="group-hover:text-primary truncate text-sm transition-colors group-hover:underline"
               >
-                {set.name}
+                {dependent.set.name}
               </Text>
             </td>
             <td className="px-3 py-3">
               <Text small muted>
-                {dependencyLabel(publishesFrom, hasPublishedKey)}
+                {dependencyLabel(dependent)}
+              </Text>
+            </td>
+            <td className="px-3 py-3">
+              <Text small muted>
+                {blocksDeletion(dependent) ? "Yes" : "No"}
               </Text>
             </td>
             <td className="px-3 py-3">
               <Text small muted as="div">
-                <HumanizeDateTime date={set.createdAt} />
+                <HumanizeDateTime date={dependent.set.createdAt} />
               </Text>
             </td>
           </DotRow>
@@ -135,17 +184,4 @@ export function SigningKeysTab({
       </DotTable>
     </div>
   );
-}
-
-function dependencyLabel(
-  publishesFrom: boolean,
-  hasPublishedKey: boolean,
-): string {
-  if (publishesFrom && hasPublishedKey) {
-    return "Publishing key and published keys";
-  }
-  if (publishesFrom) {
-    return "Publishing key";
-  }
-  return "Published keys";
 }
