@@ -4,6 +4,7 @@ import {
   hasBlockingSecretsPolicy,
   hasDefaultPluginServer,
   hasMcpServerActivity,
+  isGuideMcpServer,
   latestSecretsFinding,
 } from "@/components/project-guide/journeyStatus";
 import type {
@@ -93,13 +94,14 @@ export function useProjectGuideProgress(): {
     remoteServers,
     catalogServers,
   );
+  const guideMcpServers = catalogMcpServers.filter(isGuideMcpServer);
 
   const statusByJourney: Record<JourneyId, JourneyStatus> = {
     "third-party-mcp":
       servers && remoteServers && catalogServers && plugins && activity
         ? deriveJourneyStatus({
             startSignal: catalogMcpServers.length > 0,
-            winSignal: catalogMcpServers.some(
+            winSignal: guideMcpServers.some(
               (server) =>
                 hasDefaultPluginServer(plugins, server.id) &&
                 hasMcpServerActivity(activity, server),

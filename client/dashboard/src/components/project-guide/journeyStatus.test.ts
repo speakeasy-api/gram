@@ -14,6 +14,7 @@ import {
   hasBlockingSecretsPolicy,
   hasDefaultPluginServer,
   hasMcpServerActivity,
+  isGuideMcpServer,
   latestSecretsFinding,
 } from "./journeyStatus";
 
@@ -148,6 +149,13 @@ describe("hasMcpServerActivity", () => {
         catalogMcpServer,
       ),
     ).toBe(false);
+  });
+});
+
+describe("isGuideMcpServer", () => {
+  it("requires the existing guide setup suffix", () => {
+    expect(isGuideMcpServer(server({ name: "Linear_Governed" }))).toBe(true);
+    expect(isGuideMcpServer(server({ name: "Linear" }))).toBe(false);
   });
 });
 

@@ -167,6 +167,7 @@ describe("useProjectGuideProgress", () => {
         mcpServers: [
           {
             id: "server-1",
+            name: "Catalog_Governed",
             slug: "server-slug",
             remoteMcpServerId: "remote-1",
           },
@@ -292,12 +293,22 @@ describe("useProjectGuideProgress", () => {
     );
   });
 
-  it("credits activity for any governed catalog server", () => {
+  it("credits activity for a guide-configured catalog server", () => {
     queryHooks.servers.mockReturnValue({
       data: {
         mcpServers: [
-          { id: "server-1", slug: "server-one", remoteMcpServerId: "remote-1" },
-          { id: "server-2", slug: "server-two", remoteMcpServerId: "remote-2" },
+          {
+            id: "server-1",
+            name: "Catalog",
+            slug: "server-one",
+            remoteMcpServerId: "remote-1",
+          },
+          {
+            id: "server-2",
+            name: "Catalog_Governed",
+            slug: "server-two",
+            remoteMcpServerId: "remote-2",
+          },
         ],
       },
       isPending: false,
@@ -305,7 +316,7 @@ describe("useProjectGuideProgress", () => {
     queryHooks.remoteServers.mockReturnValue({
       data: {
         remoteMcpServers: [
-          { id: "remote-1", url: "https://custom.example/mcp" },
+          { id: "remote-1", url: "https://catalog-one.example/mcp" },
           { id: "remote-2", url: "https://catalog.example/mcp" },
         ],
       },
@@ -333,6 +344,54 @@ describe("useProjectGuideProgress", () => {
     const { result } = renderHook(() => useProjectGuideProgress());
 
     expect(result.current.statusByJourney["third-party-mcp"]).toBe("done");
+  });
+
+  it("does not complete from activity on an unconfigured catalog server", () => {
+    queryHooks.servers.mockReturnValue({
+      data: {
+        mcpServers: [
+          {
+            id: "server-1",
+            name: "Catalog",
+            slug: "server-one",
+            remoteMcpServerId: "remote-1",
+          },
+        ],
+      },
+      isPending: false,
+    });
+    queryHooks.remoteServers.mockReturnValue({
+      data: {
+        remoteMcpServers: [
+          { id: "remote-1", url: "https://catalog.example/mcp" },
+        ],
+      },
+      isPending: false,
+    });
+    queryHooks.plugins.mockReturnValue({
+      data: {
+        plugins: [{ isDefault: true, servers: [{ mcpServerId: "server-1" }] }],
+      },
+      isPending: false,
+    });
+    queryHooks.activity.mockReturnValue({
+      data: {
+        activity: [
+          {
+            targetId: "server-one",
+            targetType: "hosted_mcp_server",
+            totalToolCalls: 1,
+          },
+        ],
+      },
+      isPending: false,
+    });
+
+    const { result } = renderHook(() => useProjectGuideProgress());
+
+    expect(result.current.statusByJourney["third-party-mcp"]).toBe(
+      "in-progress",
+    );
   });
 
   it("ignores custom, tunneled, and same-slug activity false positives", () => {

@@ -67,6 +67,10 @@ export function hasMcpServerActivity(
   );
 }
 
+export function isGuideMcpServer(server: McpServer): boolean {
+  return server.name?.endsWith("_Governed") === true;
+}
+
 export function latestSecretsFinding(
   results: RiskResult[] | undefined,
 ): RiskResult | undefined {
