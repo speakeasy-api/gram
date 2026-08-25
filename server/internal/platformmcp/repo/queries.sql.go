@@ -19,7 +19,7 @@ SET registration_id = $1,
 WHERE id = $2
   AND organization_id = $3
   AND status = 'pending'
-RETURNING id, organization_id, project_id, registration_id, connection_id, connection_generation, user_id, acting_surface, operation, idempotency_key, input_hash, status, result_code, expires_at, created_at, updated_at
+RETURNING id, organization_id, project_id, registration_id, connection_id, connection_generation, user_id, acting_surface, operation, idempotency_key, input_hash, status, result_code, result_payload, expires_at, created_at, updated_at
 `
 
 type AttachPlatformMCPOperationReceiptRegistrationParams struct {
@@ -45,6 +45,7 @@ func (q *Queries) AttachPlatformMCPOperationReceiptRegistration(ctx context.Cont
 		&i.InputHash,
 		&i.Status,
 		&i.ResultCode,
+		&i.ResultPayload,
 		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -171,7 +172,7 @@ SET registration_id = $1,
     updated_at = clock_timestamp()
 WHERE id = $4
   AND organization_id = $5
-RETURNING id, organization_id, project_id, registration_id, connection_id, connection_generation, user_id, acting_surface, operation, idempotency_key, input_hash, status, result_code, expires_at, created_at, updated_at
+RETURNING id, organization_id, project_id, registration_id, connection_id, connection_generation, user_id, acting_surface, operation, idempotency_key, input_hash, status, result_code, result_payload, expires_at, created_at, updated_at
 `
 
 type CompletePlatformMCPOperationReceiptParams struct {
@@ -205,6 +206,7 @@ func (q *Queries) CompletePlatformMCPOperationReceipt(ctx context.Context, arg C
 		&i.InputHash,
 		&i.Status,
 		&i.ResultCode,
+		&i.ResultPayload,
 		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -936,7 +938,7 @@ INSERT INTO platform_mcp_operation_receipts (
     $12,
     $13
 )
-RETURNING id, organization_id, project_id, registration_id, connection_id, connection_generation, user_id, acting_surface, operation, idempotency_key, input_hash, status, result_code, expires_at, created_at, updated_at
+RETURNING id, organization_id, project_id, registration_id, connection_id, connection_generation, user_id, acting_surface, operation, idempotency_key, input_hash, status, result_code, result_payload, expires_at, created_at, updated_at
 `
 
 type CreatePlatformMCPOperationReceiptParams struct {
@@ -986,6 +988,7 @@ func (q *Queries) CreatePlatformMCPOperationReceipt(ctx context.Context, arg Cre
 		&i.InputHash,
 		&i.Status,
 		&i.ResultCode,
+		&i.ResultPayload,
 		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -2595,7 +2598,7 @@ func (q *Queries) GetPlatformMCPOnboardingSelectedProject(ctx context.Context, a
 }
 
 const getPlatformMCPOperationReceipt = `-- name: GetPlatformMCPOperationReceipt :one
-SELECT receipt.id, receipt.organization_id, receipt.project_id, receipt.registration_id, receipt.connection_id, receipt.connection_generation, receipt.user_id, receipt.acting_surface, receipt.operation, receipt.idempotency_key, receipt.input_hash, receipt.status, receipt.result_code, receipt.expires_at, receipt.created_at, receipt.updated_at
+SELECT receipt.id, receipt.organization_id, receipt.project_id, receipt.registration_id, receipt.connection_id, receipt.connection_generation, receipt.user_id, receipt.acting_surface, receipt.operation, receipt.idempotency_key, receipt.input_hash, receipt.status, receipt.result_code, receipt.result_payload, receipt.expires_at, receipt.created_at, receipt.updated_at
 FROM platform_mcp_operation_receipts AS receipt
 LEFT JOIN platform_mcp_connections AS connection
   ON connection.id = receipt.connection_id
@@ -2649,6 +2652,7 @@ func (q *Queries) GetPlatformMCPOperationReceipt(ctx context.Context, arg GetPla
 		&i.InputHash,
 		&i.Status,
 		&i.ResultCode,
+		&i.ResultPayload,
 		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
