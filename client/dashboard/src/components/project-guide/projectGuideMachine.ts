@@ -64,6 +64,7 @@ export type ProjectGuideOperationReport =
 
 export type ProjectGuideOperationSignal =
   | { type: "start"; scope: ProjectGuideOperationScope }
+  | { type: "prepare"; scope: ProjectGuideOperationScope }
   | { type: "pause"; scope: ProjectGuideOperationScope }
   | { type: "resume"; scope: ProjectGuideOperationScope }
   | { type: "retry"; scope: ProjectGuideOperationScope }
@@ -286,7 +287,7 @@ function completedThrough(step: number, stepCount: number): number[] {
 
 function emitCurrentSignal(
   context: ProjectGuideMachineContext,
-  type: "start" | "pause" | "resume" | "checkpoint",
+  type: "start" | "prepare" | "pause" | "resume" | "checkpoint",
 ): void {
   const scope = currentOperationScope(context);
   if (!scope) return;
@@ -585,6 +586,11 @@ export const projectGuideMachine = setup({
       observedEvent: null,
     }),
     signalStart: ({ context }) => emitCurrentSignal(context, "start"),
+    signalPrepareMcp: ({ context }) => {
+      if (context.activePath === "third-party-mcp") {
+        emitCurrentSignal(context, "prepare");
+      }
+    },
     signalPause: ({ context }) => emitCurrentSignal(context, "pause"),
     signalResume: ({ context }) => emitCurrentSignal(context, "resume"),
     signalCheckpoint: ({ context }) => emitCurrentSignal(context, "checkpoint"),
@@ -706,7 +712,7 @@ export const projectGuideMachine = setup({
           {
             guard: "currentSuccessBeforeCheckpoint",
             target: "checkpoint",
-            actions: "recordSuccessAndAdvance",
+            actions: ["recordSuccessAndAdvance", "signalPrepareMcp"],
           },
           {
             guard: "currentSuccessReport",

@@ -195,7 +195,7 @@ describe("project guide coordinator contract", () => {
     });
   });
 
-  it("records success and advances to the next operation", () => {
+  it("records success and prepares the MCP activity baseline", () => {
     const { service, signals } = coordinator();
     openMcp(service);
     service.send({ type: "START" });
@@ -214,8 +214,8 @@ describe("project guide coordinator contract", () => {
       "next",
     ]);
     expect(signals.at(-1)).toEqual({
-      type: "start",
-      scope: { path: "third-party-mcp", step: 0, attempt: 0, runId: 1 },
+      type: "prepare",
+      scope: { path: "third-party-mcp", step: 1, attempt: 0, runId: 1 },
     });
   });
 

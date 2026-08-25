@@ -565,7 +565,7 @@ describe("useMcpGuideOperations", () => {
     expect(result.current.connectionPromptCopied).toBe(true);
   });
 
-  it("captures the selected-server baseline once before prompt interaction", async () => {
+  it("captures the selected-server baseline when setup completes", async () => {
     const now = Date.now();
     setExistingServer();
     refetchTraces.mockResolvedValueOnce({
@@ -581,19 +581,15 @@ describe("useMcpGuideOperations", () => {
     });
     const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
     const { result } = renderHook(() => useMcpGuideOperations());
-    const promptScope = { ...SERVER_SCOPE, step: 2, runId: 2 };
-
-    await act(async () => {
-      expect(await result.current.prepareActivityBaseline()).toBe(true);
-    });
+    const setupScope = { ...SERVER_SCOPE, step: 1 };
     act(() => {
       result.current.handleSignal(
-        { type: "checkpoint", scope: promptScope },
+        { type: "prepare", scope: setupScope },
         report,
       );
     });
 
-    expect(refetchTraces).toHaveBeenCalledOnce();
+    await waitFor(() => expect(refetchTraces).toHaveBeenCalledOnce());
     expect(result.current.activityBaselineError).toBe(false);
   });
 

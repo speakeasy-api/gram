@@ -531,7 +531,7 @@ describe("ProjectGuide", () => {
     expect(screen.getByText("linear.tools/list")).toBeTruthy();
   });
 
-  it("awaits the governed-call baseline before exposing the MCP prompt", async () => {
+  it("captures the governed-call baseline after MCP setup completes", async () => {
     vi.useFakeTimers();
     const baseline = deferred<boolean>();
     mcpOperations.current.prepareActivityBaseline = vi.fn(
@@ -542,6 +542,13 @@ describe("ProjectGuide", () => {
         signal: ProjectGuideOperationSignal,
         report: (report: ProjectGuideOperationReport) => void,
       ) => {
+        if (signal.type === "prepare") {
+          void (
+            mcpOperations.current
+              .prepareActivityBaseline as () => Promise<boolean>
+          )();
+          return;
+        }
         if (signal.type === "start" && signal.scope.step === 0) {
           report({
             type: "success",
@@ -558,16 +565,28 @@ describe("ProjectGuide", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
     await advanceGuideDelay();
-    fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
 
     expect(
       mcpOperations.current.prepareActivityBaseline,
     ).toHaveBeenCalledOnce();
+    expect(mcpOperations.current.handleSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "prepare",
+        scope: { path: "third-party-mcp", step: 1, attempt: 0, runId: 1 },
+      }),
+      expect.any(Function),
+    );
     expect(screen.queryByText(/first list the available tools/)).toBeNull();
 
     await act(async () => baseline.resolve(true));
 
-    expect(screen.getByText(/first list the available tools/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
+    expect(
+      screen.getByRole("heading", { name: "Ask the agent to list the tools" }),
+    ).toBeTruthy();
+    expect(
+      mcpOperations.current.prepareActivityBaseline,
+    ).toHaveBeenCalledOnce();
   });
 
   it("awaits the hook and risk baseline before exposing the secret prompt", async () => {

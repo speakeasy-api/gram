@@ -422,21 +422,20 @@ function primaryActionFor(
       };
     case "checkpoint":
       if (journey.id === "third-party-mcp" && currentStep === 1) {
+        const baselineFailed = mcpOperations.activityBaselineError;
         return {
-          label: "I've connected it",
+          label: baselineFailed ? "Try again" : "I've connected it",
           disabled:
             !mcpOperations.connectionPrompts ||
             !mcpOperations.connectionPromptCopied ||
             mcpOperations.activityBaselinePending,
-          onClick: () => {
-            void (async () => {
-              if (!(await mcpOperations.prepareActivityBaseline())) return;
-              send({
-                type: "USER_CHECKPOINT_COMPLETE",
-                result: "Client connected to the governed endpoint",
-              });
-            })();
-          },
+          onClick: baselineFailed
+            ? () => void mcpOperations.prepareActivityBaseline()
+            : () =>
+                send({
+                  type: "USER_CHECKPOINT_COMPLETE",
+                  result: "Client connected to the governed endpoint",
+                }),
         };
       }
       if (journey.id === "third-party-mcp" && currentStep === 2) {
@@ -1224,7 +1223,7 @@ function guideStepError(
       return "Could not load the automatic catalog servers.";
     }
     if (step === 1 && mcpOperations.activityBaselineError) {
-      return "Could not capture the governed-call baseline. Retry before opening the prompt.";
+      return "We couldn't prepare the connection yet. Try again.";
     }
     return null;
   }

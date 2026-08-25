@@ -249,6 +249,9 @@ export function useMcpGuideOperations(): {
   const activeOperationRef = useRef<ActiveOperation | undefined>(undefined);
   const [, setActivityBaseline] = useState<ActivityBaseline>();
   const activityBaselineRef = useRef<ActivityBaseline | undefined>(undefined);
+  const captureActivityBaselineRef = useRef<() => Promise<boolean>>(() =>
+    Promise.resolve(false),
+  );
   const installStartedFor = useRef<string | undefined>(undefined);
   const progressReportedFor = useRef(new Set<string>());
   const readinessCheckedFor = useRef(new Set<string>());
@@ -430,6 +433,7 @@ export function useMcpGuideOperations(): {
       setSuppressActivityError(false);
     }
   }, [activityQuery, tracesRequest]);
+  captureActivityBaselineRef.current = captureActivityBaseline;
 
   const refetchSelectedServerReadiness = useCallback(async (): Promise<
     "ready" | "not-ready" | "unreadable"
@@ -495,6 +499,10 @@ export function useMcpGuideOperations(): {
         updateActiveOperation(undefined);
         activityBaselineRef.current = undefined;
         setActivityBaseline(undefined);
+        return;
+      }
+      if (signal.type === "prepare") {
+        void captureActivityBaselineRef.current();
         return;
       }
       if (signal.type === "pause") {
