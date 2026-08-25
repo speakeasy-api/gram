@@ -233,6 +233,12 @@ func TestIssuerURLsCanonicallyEqual_CollapsesEquivalentSpellings(t *testing.T) {
 	require.True(t, IssuerURLsCanonicallyEqual("https://idp.example.com", "https://idp.example.com:443"))
 	require.True(t, IssuerURLsCanonicallyEqual("https://IDP.example.com", "https://idp.example.com"))
 	require.True(t, IssuerURLsCanonicallyEqual("http://idp.example.com:80/x", "http://idp.example.com/x"))
+	// RFC 3986 permits leading zeros in a port and net/url reports them
+	// verbatim, so the default-port collapse has to be numeric.
+	require.True(t, IssuerURLsCanonicallyEqual("https://idp.example.com:0443", "https://idp.example.com"))
+	require.True(t, IssuerURLsCanonicallyEqual("http://idp.example.com:080", "http://idp.example.com/"))
+	require.True(t, IssuerURLsCanonicallyEqual("https://idp.example.com:08443", "https://idp.example.com:8443"))
+	require.True(t, IssuerURLsCanonicallyEqual("https://idp.example.com:000", "https://idp.example.com:0"))
 }
 
 // TestIssuerURLsCanonicallyEqual_KeepsDistinctUpstreamsApart pins the axes that
@@ -245,6 +251,10 @@ func TestIssuerURLsCanonicallyEqual_KeepsDistinctUpstreamsApart(t *testing.T) {
 	require.False(t, IssuerURLsCanonicallyEqual("https://idp.example.com", "https://other.example.com"))
 	require.False(t, IssuerURLsCanonicallyEqual("https://idp.example.com/a", "https://idp.example.com/A"))
 	require.False(t, IssuerURLsCanonicallyEqual("https://idp.example.com", "https://idp.example.com:8443"))
+	// Port zero is a port, not the absence of one, however it is spelled.
+	require.False(t, IssuerURLsCanonicallyEqual("https://idp.example.com:0", "https://idp.example.com"))
+	require.False(t, IssuerURLsCanonicallyEqual("https://idp.example.com:000", "https://idp.example.com"))
+	require.False(t, IssuerURLsCanonicallyEqual("https://idp.example.com:0443", "https://idp.example.com:443443"))
 }
 
 // TestIssuerURLsCanonicallyEqual_UnparseableIsOnlyEqualToItself proves a stored

@@ -250,8 +250,11 @@ ORDER BY m.sort_order, m.created_at, m.id;
 -- ListServableMetaMCPMembers is. Tunneled, hosted, and unproxied members are
 -- excluded by the join — they advertise no RFC 9728 metadata document, so
 -- they cannot be matched to a connecting client's authorization server.
+-- Visibility comes back so the caller can apply the same per-member mcp:connect
+-- filter the serving path does.
 SELECT
     m.mcp_server_id,
+    s.visibility AS mcp_server_visibility,
     r.url AS upstream_url
 FROM meta_mcp_server_members m
 JOIN mcp_servers s

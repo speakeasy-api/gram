@@ -5753,7 +5753,7 @@ DO UPDATE SET
     authorization_expires_at = EXCLUDED.authorization_expires_at,
     refresh_expires_at = EXCLUDED.refresh_expires_at,
     scopes = EXCLUDED.scopes,
-    resource = EXCLUDED.resource,
+    resource = COALESCE(NULLIF(EXCLUDED.resource, ''), remote_sessions.resource),
     updated_at = clock_timestamp()
 RETURNING id, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, created_at, updated_at, deleted_at, deleted
 `
@@ -5778,6 +5778,10 @@ type UpsertRemoteSessionParams struct {
 // deleted IS FALSE; on conflict we overwrite every token field. A
 // soft-deleted row falls outside the partial index, so a re-auth after
 // revocation inserts a fresh active row alongside the tombstone.
+// resource is the exception: an empty incoming value means "could not derive",
+// not "no longer qualified", so it keeps the stored binding rather than
+// un-qualifying a correct grant on a transient discovery miss at reconnect —
+// same COALESCE/NULLIF semantics the refresh backfill uses.
 func (q *Queries) UpsertRemoteSession(ctx context.Context, arg UpsertRemoteSessionParams) (RemoteSession, error) {
 	row := q.db.QueryRow(ctx, upsertRemoteSession,
 		arg.SubjectUrn,

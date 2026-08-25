@@ -420,3 +420,51 @@ func TestRemoteSessionRefreshActivity_SweepBackfillsNullResource(t *testing.T) {
 	require.Equal(t, mcpURL, conv.FromPGTextOrEmpty[string](sess.Resource), "the sweep must stamp the client-derived fallback")
 	require.Equal(t, spy.form.Get("resource"), conv.FromPGTextOrEmpty[string](sess.Resource), "the stored binding must equal the form resource the grant used")
 }
+
+// The reconnect upsert follows the same rule the refresh backfill does: a
+// non-empty resource binds the credential, an empty one means "could not
+// derive" and must leave a correct binding standing. A gateway-bound client
+// has no way back — the backfill derives from the client's own issuer
+// bindings, which a gateway consent never creates — so an overwrite here is
+// permanent.
+func TestUpsertRemoteSession_EmptyResourceKeepsTheStoredBinding(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	q := repo.New(ti.conn)
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-upsert-resource")
+	clientID, _ := seedActiveClient(t, ctx, ti.conn, *authCtx.ProjectID, userIssuerID, authCtx.ActiveOrganizationID, "rsi-upsert-resource")
+	subject := urn.NewUserSubject("upsert-resource-subject")
+
+	const member = "https://member.example.com/mcp"
+	upsert := func(resource pgtype.Text) repo.RemoteSession {
+		t.Helper()
+		row, err := q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+			SubjectUrn:            subject,
+			UserSessionIssuerID:   userIssuerID,
+			RemoteSessionClientID: clientID,
+			AccessTokenEncrypted:  "ciphertext",
+			AccessExpiresAt:       pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+			Scopes:                []string{},
+			Resource:              resource,
+		})
+		require.NoError(t, err)
+		return row
+	}
+
+	first := upsert(conv.ToPGTextEmpty(member))
+	require.Equal(t, member, conv.FromPGTextOrEmpty[string](first.Resource))
+
+	// conv.ToPGTextEmpty turns an underivable resource into SQL NULL, and the
+	// empty string is the other spelling of the same thing.
+	require.Equal(t, member, conv.FromPGTextOrEmpty[string](upsert(conv.ToPGTextEmpty("")).Resource), "a NULL incoming resource keeps the stored binding")
+	require.Equal(t, member, conv.FromPGTextOrEmpty[string](upsert(conv.ToPGText("")).Resource), "an empty incoming resource keeps the stored binding")
+
+	const moved = "https://other-member.example.com/mcp"
+	require.Equal(t, moved, conv.FromPGTextOrEmpty[string](upsert(conv.ToPGTextEmpty(moved)).Resource), "a non-empty incoming resource still rebinds")
+	require.Equal(t, first.ID, getRemoteSessionRow(t, ctx, ti, clientID, subject).ID, "every write rotated the same row")
+}

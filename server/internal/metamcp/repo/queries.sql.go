@@ -590,6 +590,7 @@ func (q *Queries) ListMetaMCPServers(ctx context.Context, arg ListMetaMCPServers
 const listServableMetaMCPMemberUpstreams = `-- name: ListServableMetaMCPMemberUpstreams :many
 SELECT
     m.mcp_server_id,
+    s.visibility AS mcp_server_visibility,
     r.url AS upstream_url
 FROM meta_mcp_server_members m
 JOIN mcp_servers s
@@ -614,8 +615,9 @@ type ListServableMetaMCPMemberUpstreamsParams struct {
 }
 
 type ListServableMetaMCPMemberUpstreamsRow struct {
-	McpServerID uuid.UUID
-	UpstreamUrl string
+	McpServerID         uuid.UUID
+	McpServerVisibility string
+	UpstreamUrl         string
 }
 
 // Consent-time credential selection: the upstream URL of every servable
@@ -623,6 +625,8 @@ type ListServableMetaMCPMemberUpstreamsRow struct {
 // ListServableMetaMCPMembers is. Tunneled, hosted, and unproxied members are
 // excluded by the join — they advertise no RFC 9728 metadata document, so
 // they cannot be matched to a connecting client's authorization server.
+// Visibility comes back so the caller can apply the same per-member mcp:connect
+// filter the serving path does.
 func (q *Queries) ListServableMetaMCPMemberUpstreams(ctx context.Context, arg ListServableMetaMCPMemberUpstreamsParams) ([]ListServableMetaMCPMemberUpstreamsRow, error) {
 	rows, err := q.db.Query(ctx, listServableMetaMCPMemberUpstreams, arg.MetaMcpServerID, arg.ProjectID)
 	if err != nil {
@@ -632,7 +636,7 @@ func (q *Queries) ListServableMetaMCPMemberUpstreams(ctx context.Context, arg Li
 	var items []ListServableMetaMCPMemberUpstreamsRow
 	for rows.Next() {
 		var i ListServableMetaMCPMemberUpstreamsRow
-		if err := rows.Scan(&i.McpServerID, &i.UpstreamUrl); err != nil {
+		if err := rows.Scan(&i.McpServerID, &i.McpServerVisibility, &i.UpstreamUrl); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

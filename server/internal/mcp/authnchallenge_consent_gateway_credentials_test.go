@@ -232,6 +232,52 @@ func TestGatewayCredentials_DetachedMemberDoesNotContestAnother(t *testing.T) {
 	require.Equal(t, removed.accessToken, got, "the stale credential stays bound to the member it was minted for")
 }
 
+// A reconnect whose discovery misses must not un-qualify a grant that already
+// names its member. The resource column is the routing key, and nothing
+// re-derives it for a gateway-bound client afterwards — the refresh backfill
+// derives from the client's own issuer bindings, which a gateway consent does
+// not create — so an overwrite would be permanent.
+func TestGatewayCredentials_ReconnectDoesNotUnqualifyAStoredResource(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx, metaServerID := seedGatewayConsentEndpoint(t, "aim87-reconnect-gw")
+
+	var captured atomic.Value
+	as := newConsentExchangeAS(t, &captured, "token-reconnect")
+	advertising := &atomic.Bool{}
+	advertising.Store(true)
+	member := newToggleableGatewayMemberUpstream(t, advertising, as.URL).URL + "/mcp"
+	seeded := createGatewayMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-reconnect-member", member, 0)
+
+	client := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-reconnect", as.URL, []uuid.UUID{fx.shared})
+	require.Len(t, gatewayMemberUpstreamURLs(t, ctx, fx.ti.conn, fx.projectID, metaServerID), 1, "the member must be a probe candidate, or this asserts nothing")
+
+	mgr := newConsentCallbackManager(t, fx.ti)
+	gw := connectedGateway{fx: fx, metaServerID: metaServerID, mgr: mgr, members: nil}
+	completeRemoteLogin(t, mgr, postConnectAction(t, fx, client))
+	require.Equal(t, member, activeResource(t, ctx, gw, client), "the first connect qualifies the grant")
+
+	// The member stops advertising and the subject reconnects.
+	advertising.Store(false)
+	loc := postConnectAction(t, fx, client)
+	_, hasResource := loc.Query()["resource"]
+	require.False(t, hasResource, "the reconnect must derive nothing, or this asserts nothing")
+	completeRemoteLogin(t, mgr, loc)
+
+	require.Equal(t, member, activeResource(t, ctx, gw, client), "a transient discovery miss must not un-qualify a stored grant")
+
+	// And a resolvable reconnect still rebinds: preserving is not freezing.
+	advertising.Store(true)
+	other := newGatewayMemberUpstream(t, as.URL).URL + "/mcp"
+	createGatewayMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-reconnect-moved", other, 1)
+	_, err := metamcp_repo.New(fx.ti.conn).DeleteMetaMCPMember(ctx, metamcp_repo.DeleteMetaMCPMemberParams{ID: seeded.memberID, ProjectID: fx.projectID})
+	require.NoError(t, err)
+	require.Equal(t, []string{other}, gatewayMemberUpstreamURLs(t, ctx, fx.ti.conn, fx.projectID, metaServerID))
+
+	completeRemoteLogin(t, mgr, postConnectAction(t, fx, client))
+	require.Equal(t, other, activeResource(t, ctx, gw, client), "a non-empty resolution still rebinds the grant")
+}
+
 // Trailing-slash spellings must survive the round trip: consent trims the
 // member URL before recording it while the backend keeps its stored spelling,
 // so the two only meet because routing trims too. A second member is present

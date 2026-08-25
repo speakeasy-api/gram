@@ -126,13 +126,23 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		// Not endpoint.UpstreamResource: under multi-binding that may belong
 		// to a different client's upstream; ambiguity derives "" (no resource).
 		// A gateway's members carry their own issuers while the client is bound
-		// to the gateway's, so the stored derivation finds nothing there and
-		// consent-time discovery resolves the member instead.
+		// to the gateway's, so the stored derivation usually finds nothing there
+		// and consent-time discovery resolves the member instead.
 		var clientResource string
 		var rerr error
 		if endpoint.MetaMcpServerID.Valid {
-			clientResource, rerr = s.resolveGatewayMemberResource(ctx, logger, endpoint, client.IssuerURL)
-		} else {
+			// Member visibility is judged against the consent subject, exactly
+			// like the runtime request the minted session will make.
+			memberCtx, cerr := s.contextForSessionSubject(ctx, endpoint, subject, "consent:"+challengeState.ID, challengeState.ClientID)
+			if cerr != nil {
+				return oops.E(oops.CodeUnexpected, cerr, "stamp consent subject context").LogError(ctx, logger)
+			}
+			clientResource, rerr = s.resolveGatewayMemberResource(memberCtx, logger, endpoint, client.IssuerURL)
+		}
+		// Discovery wins wherever it resolves; the stored derivation still
+		// answers for a client bound to a member's own issuer, and returns ""
+		// itself whenever it is ambiguous, so it can never be worse than "".
+		if rerr == nil && clientResource == "" {
 			clientResource, rerr = s.remoteChallengeMgr.FallbackResourceForClient(ctx, client.ID)
 		}
 		if rerr != nil {

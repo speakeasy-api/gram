@@ -201,6 +201,15 @@ func seedMultiClientConsentEndpoint(t *testing.T) (context.Context, consentActio
 // upstream authorize redirect URL.
 func postConnectAction(t *testing.T, fx consentActionFixture, clientID uuid.UUID) *url.URL {
 	t.Helper()
+	return postConnectActionAs(t, nil, fx, clientID)
+}
+
+// postConnectActionAs is postConnectAction with the request context under test
+// control, so a consent can be driven with a specific grant set. A nil context
+// leaves the request on its own background context, which is what an
+// unauthenticated browser POST carries.
+func postConnectActionAs(t *testing.T, ctx context.Context, fx consentActionFixture, clientID uuid.UUID) *url.URL {
+	t.Helper()
 
 	form := url.Values{}
 	form.Set("state", fx.stateID)
@@ -209,6 +218,9 @@ func postConnectAction(t *testing.T, fx consentActionFixture, clientID uuid.UUID
 	form.Set("client_id", clientID.String())
 
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect/remote-session", strings.NewReader(form.Encode()))
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	require.NoError(t, fx.ti.service.ServeConsentAction(w, req, fx.endpoint))

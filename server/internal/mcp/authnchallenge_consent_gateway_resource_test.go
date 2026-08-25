@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -13,6 +14,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -35,12 +38,27 @@ func consentTestTenant(t *testing.T, ctx context.Context) (uuid.UUID, string) {
 
 // newGatewayMemberUpstream serves an RFC 9728 protected-resource document
 // naming authorizationServers, at every well-known candidate the discovery
-// helper probes.
+// helper probes. The document omits the optional `resource` field, which is
+// the shape a member that makes no claim about its own identity returns.
 func newGatewayMemberUpstream(t *testing.T, authorizationServers ...string) *httptest.Server {
+	t.Helper()
+	return newGatewayMemberUpstreamDeclaring(t, "", authorizationServers...)
+}
+
+// newGatewayMemberUpstreamDeclaring is newGatewayMemberUpstream with the
+// document's RFC 9728 `resource` field under test control, so a document that
+// names a resource other than the member serving it can be seeded. That is
+// what a shared multi-tenant host returns from its origin-style location when
+// the member's own path-style probe 404s.
+func newGatewayMemberUpstreamDeclaring(t *testing.T, declaredResource string, authorizationServers ...string) *httptest.Server {
 	t.Helper()
 	quoted := make([]string, 0, len(authorizationServers))
 	for _, as := range authorizationServers {
 		quoted = append(quoted, `"`+as+`"`)
+	}
+	resourceField := ""
+	if declaredResource != "" {
+		resourceField = `"resource":"` + declaredResource + `",`
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasPrefix(r.URL.Path, "/.well-known/oauth-protected-resource") {
@@ -48,8 +66,34 @@ func newGatewayMemberUpstream(t *testing.T, authorizationServers ...string) *htt
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"authorization_servers":[` + strings.Join(quoted, ",") + `]}`))
+		_, _ = w.Write([]byte(`{` + resourceField + `"authorization_servers":[` + strings.Join(quoted, ",") + `]}`))
 	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// newGatewayMemberUpstreamDeclaringSelf serves a document whose resource field
+// names this server's own URL plus path — the compliant shape. path may carry
+// a trailing slash the member's stored URL does not, so the positive case only
+// passes under the same canonicalisation the authorization-server match uses.
+func newGatewayMemberUpstreamDeclaringSelf(t *testing.T, path string, authorizationServers ...string) *httptest.Server {
+	t.Helper()
+	quoted := make([]string, 0, len(authorizationServers))
+	for _, as := range authorizationServers {
+		quoted = append(quoted, `"`+as+`"`)
+	}
+	var self atomic.Value
+	self.Store("")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/.well-known/oauth-protected-resource") {
+			http.NotFound(w, r)
+			return
+		}
+		declared, _ := self.Load().(string)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"resource":"` + declared + `","authorization_servers":[` + strings.Join(quoted, ",") + `]}`))
+	}))
+	self.Store(srv.URL + path)
 	t.Cleanup(srv.Close)
 	return srv
 }
@@ -60,6 +104,23 @@ func newHangingUpstream(t *testing.T) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		<-r.Context().Done()
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// newToggleableGatewayMemberUpstream advertises its authorization server only
+// while advertising is set, so one member can stop being discoverable between
+// a connect and a reconnect.
+func newToggleableGatewayMemberUpstream(t *testing.T, advertising *atomic.Bool, authorizationServer string) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !advertising.Load() || !strings.HasPrefix(r.URL.Path, "/.well-known/oauth-protected-resource") {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"authorization_servers":["` + authorizationServer + `"]}`))
 	}))
 	t.Cleanup(srv.Close)
 	return srv
@@ -354,27 +415,43 @@ func TestServeConsentAction_GatewayConnectAmbiguousMembersSendNoResource(t *test
 	require.Empty(t, mintedRemoteLoginState(t, ctx, fx, loc.Query().Get("state")).Resource)
 }
 
-// An unreachable member must not take the rest of the gateway down with it.
-func TestServeConsentAction_GatewayConnectProbeFailureLeavesOtherMembersResolvable(t *testing.T) {
+// A member Gram could not reach has not said it claims nothing — nobody could
+// ask it. A member that answers 404 has. Only the second may be treated as
+// making no claim, and the pair is what separates the two.
+func TestServeConsentAction_GatewayConnectUnreachableMemberPoisonsButA404DoesNot(t *testing.T) {
 	t.Parallel()
 
 	ctx, fx, metaServerID := seedGatewayConsentEndpoint(t, "aim87-gw-probefail")
 
 	as := "https://aim87-healthy-as.example.com"
 	healthy := newGatewayMemberUpstream(t, as)
-	createGatewayMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-broken-member", newUnreachableUpstreamURL(t)+"/mcp", 0)
+	unreachable := createGatewayMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-broken-member", newUnreachableUpstreamURL(t)+"/mcp", 0)
 	createGatewayMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-healthy-member", healthy.URL+"/mcp", 1)
 
 	client := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-probefail", as, []uuid.UUID{fx.shared})
 
+	require.Len(t, gatewayMemberUpstreamURLs(t, ctx, fx.ti.conn, fx.projectID, metaServerID), 2, "both members must be probe candidates, or this asserts nothing")
+
 	loc := postConnectAction(t, fx, client)
-	require.Equal(t, healthy.URL+"/mcp", loc.Query().Get("resource"))
+	_, hasResource := loc.Query()["resource"]
+	require.False(t, hasResource, "a member whose metadata could not be read leaves every other member's claim unproven")
+	require.Empty(t, mintedRemoteLoginState(t, ctx, fx, loc.Query().Get("state")).Resource)
+
+	// Same gateway, same healthy member: swap the silent member for one that
+	// answers 404 and the resolution goes through.
+	_, err := metamcp_repo.New(fx.ti.conn).DeleteMetaMCPMember(ctx, metamcp_repo.DeleteMetaMCPMemberParams{ID: unreachable.memberID, ProjectID: fx.projectID})
+	require.NoError(t, err)
+	createGatewayMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-quiet-member", newUpstreamWithoutMetadata(t).URL+"/mcp", 2)
+	require.Len(t, gatewayMemberUpstreamURLs(t, ctx, fx.ti.conn, fx.projectID, metaServerID), 2, "the 404 member must be a probe candidate, or this asserts nothing")
+
+	loc = postConnectAction(t, fx, client)
+	require.Equal(t, healthy.URL+"/mcp", loc.Query().Get("resource"), "a member without OAuth answers 404, and an answer is not an absence")
 	require.Equal(t, healthy.URL+"/mcp", mintedRemoteLoginState(t, ctx, fx, loc.Query().Get("state")).Resource)
 }
 
-// A member that never answers is bounded by the per-probe deadline, so consent
-// resolves on the healthy member well inside the fan-out budget.
-func TestServeConsentAction_GatewayConnectHangingMemberIsBounded(t *testing.T) {
+// A member that never answers is bounded by the per-probe deadline — and,
+// having never answered, leaves the healthy member's claim unproven.
+func TestServeConsentAction_GatewayConnectHangingMemberIsBoundedAndPoisons(t *testing.T) {
 	t.Parallel()
 
 	ctx, fx, metaServerID := seedGatewayConsentEndpoint(t, "aim87-gw-hang")
@@ -386,10 +463,137 @@ func TestServeConsentAction_GatewayConnectHangingMemberIsBounded(t *testing.T) {
 
 	client := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-hang", as, []uuid.UUID{fx.shared})
 
+	require.Len(t, gatewayMemberUpstreamURLs(t, ctx, fx.ti.conn, fx.projectID, metaServerID), 2, "both members must be probe candidates, or this asserts nothing")
+
 	started := time.Now()
 	loc := postConnectAction(t, fx, client)
-	require.Equal(t, healthy.URL+"/mcp", loc.Query().Get("resource"))
+	_, hasResource := loc.Query()["resource"]
+	require.False(t, hasResource, "a member that never answers is unknown, not absent")
 	require.Less(t, time.Since(started), 5*time.Second, "the per-probe deadline, not the discovery helper's own budget, must bound one hung member")
+}
+
+// The attack the inconclusive rule exists for. Any member may write any
+// authorization server into its own document, so a member that names one it
+// does not own becomes the unique match the moment the true owner cannot
+// answer — and the resolved URL is where the subject's upstream token goes.
+func TestServeConsentAction_GatewayConnectHostileMemberCannotClaimAnAbsentMembersIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx, metaServerID := seedGatewayConsentEndpoint(t, "aim87-gw-hostile")
+
+	as := "https://aim87-hostile-as.example.com"
+	// The authorization server's true owner, made unable to answer.
+	createGatewayMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-hostile-owner", newHangingUpstream(t).URL+"/mcp", 0)
+	claimant := newGatewayMemberUpstream(t, as)
+	createGatewayMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-hostile-claimant", claimant.URL+"/mcp", 1)
+
+	client := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-hostile", as, []uuid.UUID{fx.shared})
+
+	require.Len(t, gatewayMemberUpstreamURLs(t, ctx, fx.ti.conn, fx.projectID, metaServerID), 2, "both members must be probe candidates, or this asserts nothing")
+
+	loc := postConnectAction(t, fx, client)
+	require.NotEqual(t, claimant.URL+"/mcp", loc.Query().Get("resource"), "the claimant must not receive the subject's upstream token")
+	_, hasResource := loc.Query()["resource"]
+	require.False(t, hasResource, "an unanswered member makes the claimant's match non-unique")
+	require.Empty(t, mintedRemoteLoginState(t, ctx, fx, loc.Query().Get("state")).Resource)
+}
+
+// Starvation, which is the ambiguity guard's cheapest bypass: rows arrive in
+// member-controlled sort_order, so a claimant placed first answers inside the
+// first wave while enough silent members behind it exhaust the whole fan-out
+// budget before the authorization server's true owner is ever reached. The
+// budget must bound latency without ever turning "we ran out of time" into a
+// confident match.
+func TestServeConsentAction_GatewayConnectBudgetExhaustionSendsNoResource(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx, metaServerID := seedGatewayConsentEndpoint(t, "aim87-gw-budget")
+
+	as := "https://aim87-budget-as.example.com"
+	claimant := newGatewayMemberUpstream(t, as)
+	createGatewayMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-budget-claimant", claimant.URL+"/mcp", 0)
+	// Two full waves at the concurrency cap, each bounded by the per-probe
+	// deadline, is the whole budget.
+	for i := range 8 {
+		createGatewayMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-budget-hang-"+strconv.Itoa(i), newHangingUpstream(t).URL+"/mcp", int32(i+1))
+	}
+	owner := newGatewayMemberUpstream(t, as)
+	createGatewayMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-budget-owner", owner.URL+"/mcp", 9)
+
+	client := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-budget", as, []uuid.UUID{fx.shared})
+
+	require.Len(t, gatewayMemberUpstreamURLs(t, ctx, fx.ti.conn, fx.projectID, metaServerID), 10, "every member must be a probe candidate, or this asserts nothing")
+
+	started := time.Now()
+	loc := postConnectAction(t, fx, client)
+	require.NotEqual(t, claimant.URL+"/mcp", loc.Query().Get("resource"), "the claimant must not win by outlasting the owner's turn")
+	_, hasResource := loc.Query()["resource"]
+	require.False(t, hasResource, "a starved fan-out has not established that any claim is unique")
+	require.Less(t, time.Since(started), 10*time.Second, "the fan-out budget, not the member count, must bound consent latency")
+}
+
+// A shared multi-tenant host answers the origin-style location with its own
+// document. Honouring that document's authorization servers matches a member
+// on an issuer it never declared, so a document naming some other resource is
+// not the member's to speak with.
+func TestServeConsentAction_GatewayConnectSkipsDocumentNamingAnotherResource(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx, metaServerID := seedGatewayConsentEndpoint(t, "aim87-gw-declared")
+
+	as := "https://aim87-declared-as.example.com"
+	neighbour := newGatewayMemberUpstreamDeclaring(t, "https://aim87-declared-neighbour.example.com/mcp", as)
+	borrowed := createGatewayMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-declared-borrowed", neighbour.URL+"/mcp", 0)
+
+	client := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-declared", as, []uuid.UUID{fx.shared})
+
+	require.Len(t, gatewayMemberUpstreamURLs(t, ctx, fx.ti.conn, fx.projectID, metaServerID), 1, "the member must be a probe candidate, or this asserts nothing")
+
+	loc := postConnectAction(t, fx, client)
+	_, hasResource := loc.Query()["resource"]
+	require.False(t, hasResource, "a document naming another resource does not speak for this member")
+
+	// A member whose document names itself is honoured, spelling differences
+	// included — the comparison is the same canonical one the match uses.
+	_, err := metamcp_repo.New(fx.ti.conn).DeleteMetaMCPMember(ctx, metamcp_repo.DeleteMetaMCPMemberParams{ID: borrowed.memberID, ProjectID: fx.projectID})
+	require.NoError(t, err)
+	own := newGatewayMemberUpstreamDeclaringSelf(t, "/mcp/", as)
+	createGatewayMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-declared-own", own.URL+"/mcp", 1)
+	require.Len(t, gatewayMemberUpstreamURLs(t, ctx, fx.ti.conn, fx.projectID, metaServerID), 1, "the self-declaring member must be the only candidate")
+
+	loc = postConnectAction(t, fx, client)
+	require.Equal(t, own.URL+"/mcp", loc.Query().Get("resource"), "a member that names itself keeps its claim")
+	require.Equal(t, own.URL+"/mcp", mintedRemoteLoginState(t, ctx, fx, loc.Query().Get("state")).Resource)
+}
+
+// A private member the connecting subject holds no mcp:connect on must not be
+// probed, matched, or echoed back in the redirect's resource parameter — the
+// same visibility rule the serving path applies to the member list.
+func TestServeConsentAction_GatewayConnectExcludesMembersTheSubjectCannotConnectTo(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx, metaServerID := seedGatewayConsentEndpoint(t, "aim87-gw-rbac")
+
+	as := "https://aim87-rbac-as.example.com"
+	private := newGatewayMemberUpstream(t, as)
+	member := createGatewayMemberWithVisibility(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-rbac-private", private.URL+"/mcp", 0, "private")
+
+	client := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-rbac", as, []uuid.UUID{fx.shared})
+
+	require.Len(t, gatewayMemberUpstreamURLs(t, ctx, fx.ti.conn, fx.projectID, metaServerID), 1, "the member must be a probe candidate, or this asserts nothing")
+
+	loc := postConnectActionAs(t, authztest.WithExactGrants(t, ctx), fx, client)
+	_, hasResource := loc.Query()["resource"]
+	require.False(t, hasResource, "a member the subject cannot connect to must not claim their credential")
+
+	// The same member, the same probe, the same document: only the grant differs.
+	granted := authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeMCPConnect,
+		Selector: authz.NewSelector(authz.ScopeMCPConnect, member.mcpServerID.String()),
+	})
+	loc = postConnectActionAs(t, granted, fx, client)
+	require.Equal(t, private.URL+"/mcp", loc.Query().Get("resource"), "mcp:connect on the member is what makes it selectable")
+	require.Equal(t, private.URL+"/mcp", mintedRemoteLoginState(t, ctx, fx, loc.Query().Get("state")).Resource)
 }
 
 // The gateway path is additive: an endpoint that is not a gateway keeps
@@ -627,12 +831,13 @@ func TestServeConsentAction_GatewayConnectKeepsDistinctIssuersApart(t *testing.T
 	require.False(t, hasResource, "scheme and path case distinguish authorization servers")
 }
 
-// Flagged narrowing, pinned deliberately: on a gateway there is no fallback to
-// the stored per-client derivation. The same client, in the same project, with
-// the same bindings, derives a resource through a non-gateway endpoint and
-// none through the gateway when discovery misses. Widening this is a product
-// decision, not an accident — this test is what would notice it changing.
-func TestServeConsentAction_GatewayConnectDoesNotFallBackToStoredDerivation(t *testing.T) {
+// Precedence, pinned in both directions: on a gateway, consent-time discovery
+// answers where it can and the stored per-client derivation answers where it
+// cannot. A client bound to both the gateway's issuer and a member's own
+// issuer derives through either endpoint, so a discovery miss no longer costs
+// it the resource it had — and a discovery hit still overrides what the
+// derivation would have said.
+func TestServeConsentAction_GatewayConnectFallsBackToStoredDerivation(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -645,7 +850,7 @@ func TestServeConsentAction_GatewayConnectDoesNotFallBackToStoredDerivation(t *t
 	metaServerID := createGatewayMetaServer(t, ctx, ti.conn, projectID, orgID, "aim87-fallback-gw", shared)
 	// Live, servable, and simply not advertising OAuth — the "metadata
 	// unavailable at consent" case.
-	createGatewayMember(t, ctx, ti.conn, projectID, metaServerID, "aim87-fallback-member", newUpstreamWithoutMetadata(t).URL+"/mcp", 0)
+	quiet := createGatewayMember(t, ctx, ti.conn, projectID, metaServerID, "aim87-fallback-member", newUpstreamWithoutMetadata(t).URL+"/mcp", 0)
 
 	newFixture := func(slug string) consentActionFixture {
 		endpoint, stateID, subject := mintConsentEndpointState(t, ctx, ti, projectID, orgID, shared, slug)
@@ -671,10 +876,23 @@ func TestServeConsentAction_GatewayConnectDoesNotFallBackToStoredDerivation(t *t
 	direct := newFixture("aim87-fallback-direct")
 	require.Equal(t, consentUpstreamA, postConnectAction(t, direct, client).Query().Get("resource"), "the stored derivation does answer for this client")
 
+	require.Len(t, gatewayMemberUpstreamURLs(t, ctx, ti.conn, projectID, metaServerID), 1, "the member must be a probe candidate, or this asserts nothing")
+
 	gateway := newFixture("aim87-fallback-gateway")
 	gateway.endpoint.MetaMcpServerID = conv.ToNullUUID(metaServerID)
 	loc := postConnectAction(t, gateway, client)
-	_, hasResource := loc.Query()["resource"]
-	require.False(t, hasResource, "a gateway consent derives from discovery only; a missed probe sends no resource")
-	require.Empty(t, mintedRemoteLoginState(t, ctx, gateway, loc.Query().Get("state")).Resource)
+	require.Equal(t, consentUpstreamA, loc.Query().Get("resource"), "a discovery miss on a gateway must not cost the client the resource it derives everywhere else")
+	require.Equal(t, consentUpstreamA, mintedRemoteLoginState(t, ctx, gateway, loc.Query().Get("state")).Resource)
+
+	// Swap the silent member for one that claims the client's authorization
+	// server: the same client, the same bindings, now resolved by discovery.
+	_, err := metamcp_repo.New(ti.conn).DeleteMetaMCPMember(ctx, metamcp_repo.DeleteMetaMCPMemberParams{ID: quiet.memberID, ProjectID: projectID})
+	require.NoError(t, err)
+	claimed := newGatewayMemberUpstream(t, "https://aim87-fallback-as.example.com")
+	createGatewayMember(t, ctx, ti.conn, projectID, metaServerID, "aim87-fallback-claimed", claimed.URL+"/mcp", 1)
+	require.Equal(t, []string{claimed.URL + "/mcp"}, gatewayMemberUpstreamURLs(t, ctx, ti.conn, projectID, metaServerID))
+
+	loc = postConnectAction(t, gateway, client)
+	require.Equal(t, claimed.URL+"/mcp", loc.Query().Get("resource"), "discovery outranks the stored derivation wherever it resolves")
+	require.Equal(t, claimed.URL+"/mcp", mintedRemoteLoginState(t, ctx, gateway, loc.Query().Get("state")).Resource)
 }

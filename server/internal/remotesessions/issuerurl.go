@@ -129,8 +129,16 @@ func parseCanonicalIssuerURL(raw string) (canonicalIssuerURL, error) {
 	}
 
 	// An explicit default port is the same authority as no port at all, so drop
-	// it. Any other port is significant and stays.
+	// it. Any other port is significant and stays. RFC 3986 permits leading
+	// zeros and net/url reports the port verbatim, so the digits are reduced to
+	// their numeric form first: :0443 is the default port, :08443 is :8443, and
+	// an all-zeros port is :0 rather than no port at all.
 	port := u.Port()
+	if port != "" {
+		if port = strings.TrimLeft(port, "0"); port == "" {
+			port = "0"
+		}
+	}
 	if (scheme == "http" && port == "80") || (scheme == "https" && port == "443") {
 		port = ""
 	}
