@@ -2093,11 +2093,9 @@ func TestGenerateOpenCodeObservabilityPluginPackage(t *testing.T) {
 	require.True(t, ok, "opencode package must ship the hooks bootstrapper the shim spawns")
 }
 
-// OpenClaw's package is a native plugin whose whole hook registration is the
-// index.js shim: `openclaw plugins install` keys plugin detection on the
-// package.json openclaw.extensions entry and rejects TypeScript entry modules,
-// so a regression in any of the three files is silent until a customer
-// install fails. Pin the layout and the shim's serve-mode wiring.
+// The whole OpenClaw hook registration is the index.js shim and plugin
+// detection keys on package.json, so regressions are silent until a customer
+// install fails — pin the layout and the shim's serve-mode wiring.
 func TestGenerateOpenClawObservabilityPluginPackage(t *testing.T) {
 	t.Parallel()
 	cfg := GenerateConfig{
@@ -2133,15 +2131,12 @@ func TestGenerateOpenClawObservabilityPluginPackage(t *testing.T) {
 		"speakeasy.json",
 		"bootstrap.sh",
 		"bootstrap.ps1",
-		// Gate frames carry the shim deadline; a fail-closed local block is
-		// reported back so the after_tool_call sibling decodes as blocked.
+		// gate deadline on the frame + fail-closed blocks reported to the daemon
 		"frame.timeoutMs = timeoutMs",
 		`call("gate_timeout"`,
-		// Gateway hook contexts carry the full config incl. auth secrets and
-		// must be reduced to the allowlist before forwarding.
+		// gateway ctx reduced to the allowlist (raw carries auth secrets)
 		"{ port: ctx?.port, workspaceDir: ctx?.workspaceDir }",
-		// A daemon-reported error must fail closed like a timeout; an
-		// output-less reply stays the legitimate allow.
+		// daemon-reported errors fail closed; output-less replies stay allows
 		"(reply?.timedOut || reply?.error) && FAIL_CLOSED",
 	} {
 		require.Contains(t, string(shim), want)
@@ -2156,8 +2151,7 @@ func TestGenerateOpenClawObservabilityPluginPackage(t *testing.T) {
 	_, ok = files["hooks/bootstrap.ps1"]
 	require.True(t, ok, "openclaw package must ship the PowerShell bootstrapper (the shim picks it on Windows)")
 
-	// The shim is executable JavaScript, not just a string: syntax-check it
-	// when a node binary is available.
+	// Syntax-check the shim when a node binary is available.
 	if nodePath, err := exec.LookPath("node"); err == nil {
 		path := filepath.Join(t.TempDir(), "index.js")
 		require.NoError(t, os.WriteFile(path, shim, 0o644))

@@ -2841,9 +2841,8 @@ func carryHooksSubtree(dst, existing map[string][]byte, publishedConfig []byte, 
 			return "", false
 		}
 	}
-	// Platforms added after the repo was published are carried when present
-	// but never fail the carry: their absence is the published version's
-	// legitimate state, not a broken subtree.
+	// Platforms added after first publish are carried when present but never
+	// fail the carry: absence is the published version's legitimate state.
 	for _, prefix := range hooksOptionalSubtreePrefixes(orgName) {
 		for p, content := range existing {
 			if strings.HasPrefix(p, prefix) {
