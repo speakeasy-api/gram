@@ -53,6 +53,7 @@ export function ResourceAuditFeed({
     hasNextPage,
     isFetching,
     isFetchingNextPage,
+    isFetchNextPageError,
     isPending,
     refetch,
   } = useAuditLogsInfinite({ subjectIds }, undefined, {
@@ -117,14 +118,20 @@ export function ResourceAuditFeed({
       </div>
       {error && (
         <div className="flex items-center justify-between gap-4 border-t px-4 py-3">
+          {/* A failed "load more" and a failed refresh of the rows already on
+              screen are different failures with different retries. */}
           <Text small muted>
-            The next page of activity could not be loaded.
+            {isFetchNextPageError
+              ? "The next page of activity could not be loaded."
+              : "The activity could not be refreshed."}
           </Text>
           <Button
             size="sm"
             variant="secondary"
-            onClick={() => void fetchNextPage()}
-            disabled={isFetchingNextPage}
+            onClick={() =>
+              void (isFetchNextPageError ? fetchNextPage() : refetch())
+            }
+            disabled={isFetching}
           >
             <Button.Text>Retry</Button.Text>
           </Button>
