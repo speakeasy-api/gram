@@ -53,6 +53,52 @@ func TestUpsertUserSessionClientFromCIMD_RefreshesAuthMethod(t *testing.T) {
 	require.Equal(t, "private_key_jwt", refreshed.TokenEndpointAuthMethod.String)
 }
 
+// A refresh replaces both key-source columns wholesale, writing the unused
+// one as NULL. A client that moves from an inline key set to a jwks_uri must
+// not leave both set: the schema forbids that, and an upsert that only wrote
+// the column the new document supplied would trip the constraint on every
+// retry, wedging the client with a 500 on the authorize path.
+func TestUpsertUserSessionClientFromCIMD_ReplacesKeySourceWholesale(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	issuerID := seedIssuer(t, ctx, ti, "cimd-key-source-swap")
+
+	documentURL := "https://client.example.com/oauth/client.json"
+	queries := repo.New(ti.conn)
+
+	inline, err := queries.UpsertUserSessionClientFromCIMD(ctx, repo.UpsertUserSessionClientFromCIMDParams{
+		UserSessionIssuerID:     issuerID,
+		ClientID:                documentURL,
+		ClientName:              "Inline Keys",
+		RedirectUris:            []string{"https://client.example.com/cb"},
+		CacheTtlSeconds:         3600,
+		ClientIDMetadataEtag:    pgtype.Text{String: `"v1"`, Valid: true},
+		TokenEndpointAuthMethod: "private_key_jwt",
+		ClientJwks:              []byte(`{"keys":[]}`),
+		ClientJwksUri:           pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+	require.JSONEq(t, `{"keys":[]}`, string(inline.ClientJwks))
+	require.False(t, inline.ClientJwksUri.Valid)
+
+	remote, err := queries.UpsertUserSessionClientFromCIMD(ctx, repo.UpsertUserSessionClientFromCIMDParams{
+		UserSessionIssuerID:     issuerID,
+		ClientID:                documentURL,
+		ClientName:              "Remote Keys",
+		RedirectUris:            []string{"https://client.example.com/cb"},
+		CacheTtlSeconds:         3600,
+		ClientIDMetadataEtag:    pgtype.Text{String: `"v2"`, Valid: true},
+		TokenEndpointAuthMethod: "private_key_jwt",
+		ClientJwks:              nil,
+		ClientJwksUri:           pgtype.Text{String: "https://client.example.com/jwks.json", Valid: true},
+	})
+	require.NoError(t, err, "moving between key-source forms must not trip the mutual-exclusion constraint")
+	require.Equal(t, inline.ID, remote.ID)
+	require.Empty(t, remote.ClientJwks, "the inline set must be cleared when the document moves to a jwks_uri")
+	require.Equal(t, "https://client.example.com/jwks.json", remote.ClientJwksUri.String)
+}
+
 // A 304 revalidation deliberately leaves the authentication method alone: the
 // host asserted the document has not changed, and this is the one CIMD writer
 // that re-read no document to derive a method from.

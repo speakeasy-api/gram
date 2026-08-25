@@ -556,33 +556,6 @@ func (s *Service) RequireUserSessionIssuer(ctx context.Context, endpoint *Resolv
 	return nil
 }
 
-// extractClientCredentials returns the client_id + client_secret + presented
-// auth method + ok from either the Authorization header (client_secret_basic)
-// or the form body (client_secret_post / none). HTTP Basic still wins when
-// both are present; callers log the "multiple" presentation to surface client
-// misconfiguration without changing current compatibility behavior.
-func extractClientCredentials(r *http.Request) (string, string, string, bool) {
-	formID := r.PostForm.Get("client_id")
-	formSecret := r.PostForm.Get("client_secret")
-	hasFormCredentials := formID != "" || formSecret != ""
-
-	if id, secret, ok := r.BasicAuth(); ok && id != "" {
-		presentedMethod := "client_secret_basic"
-		if hasFormCredentials {
-			presentedMethod = "multiple"
-		}
-		return id, secret, presentedMethod, true
-	}
-	if formID == "" {
-		return "", "", "none", false
-	}
-	presentedMethod := "none"
-	if formSecret != "" {
-		presentedMethod = "client_secret_post"
-	}
-	return formID, formSecret, presentedMethod, true
-}
-
 func logOAuthClientCredentialEvent(ctx context.Context, logger *slog.Logger, r *http.Request, message, clientID, presentedMethod, grantType, failureReason string) {
 	args := []any{
 		attr.SlogURLOriginal(r.URL.Path),

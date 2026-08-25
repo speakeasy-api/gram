@@ -13,6 +13,45 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+const clearUserSessionClientAuthMethod = `-- name: ClearUserSessionClientAuthMethod :one
+UPDATE user_session_clients
+SET token_endpoint_auth_method = NULL
+WHERE id = $1
+RETURNING id, project_id, user_session_issuer_id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, client_id_metadata_uri, client_id_metadata_fetched_at, client_id_metadata_cache_expires_at, client_id_metadata_etag, token_endpoint_auth_method, client_jwks, client_jwks_uri, created_at, updated_at, deleted_at, deleted
+`
+
+// TEST FIXTURE ONLY. Never call this from application code: it un-sets the
+// security control the token endpoint branches on. It returns a client row
+// to the shape it had before token_endpoint_auth_method existed, so the
+// legacy NULL derivation and the NULL-safe refresh guards can be exercised.
+func (q *Queries) ClearUserSessionClientAuthMethod(ctx context.Context, id uuid.UUID) (UserSessionClient, error) {
+	row := q.db.QueryRow(ctx, clearUserSessionClientAuthMethod, id)
+	var i UserSessionClient
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.UserSessionIssuerID,
+		&i.ClientID,
+		&i.ClientSecretHash,
+		&i.ClientName,
+		&i.RedirectUris,
+		&i.ClientIDIssuedAt,
+		&i.ClientSecretExpiresAt,
+		&i.ClientIDMetadataUri,
+		&i.ClientIDMetadataFetchedAt,
+		&i.ClientIDMetadataCacheExpiresAt,
+		&i.ClientIDMetadataEtag,
+		&i.TokenEndpointAuthMethod,
+		&i.ClientJwks,
+		&i.ClientJwksUri,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const countActiveUserSessionsByClientIDs = `-- name: CountActiveUserSessionsByClientIDs :many
 SELECT s.user_session_client_id AS user_session_client_id, COUNT(*)::int AS active_count
 FROM user_sessions AS s
@@ -143,7 +182,9 @@ INSERT INTO user_session_clients (
     client_name,
     redirect_uris,
     client_secret_expires_at,
-    token_endpoint_auth_method
+    token_endpoint_auth_method,
+    client_jwks,
+    client_jwks_uri
 )
 VALUES (
     (SELECT project_id FROM user_session_issuers WHERE id = $1),
@@ -153,7 +194,9 @@ VALUES (
     $4,
     $5,
     $6,
-    $7::text
+    $7::text,
+    $8::jsonb,
+    $9::text
 )
 RETURNING id, project_id, user_session_issuer_id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, client_id_metadata_uri, client_id_metadata_fetched_at, client_id_metadata_cache_expires_at, client_id_metadata_etag, token_endpoint_auth_method, client_jwks, client_jwks_uri, created_at, updated_at, deleted_at, deleted
 `
@@ -166,6 +209,8 @@ type CreateUserSessionClientParams struct {
 	RedirectUris            []string
 	ClientSecretExpiresAt   pgtype.Timestamptz
 	TokenEndpointAuthMethod string
+	ClientJwks              []byte
+	ClientJwksUri           pgtype.Text
 }
 
 // The Create* queries below are exercised by tests and by the OAuth surface
@@ -181,6 +226,8 @@ func (q *Queries) CreateUserSessionClient(ctx context.Context, arg CreateUserSes
 		arg.RedirectUris,
 		arg.ClientSecretExpiresAt,
 		arg.TokenEndpointAuthMethod,
+		arg.ClientJwks,
+		arg.ClientJwksUri,
 	)
 	var i UserSessionClient
 	err := row.Scan(
@@ -2065,12 +2112,14 @@ UPDATE user_session_clients
 SET client_name = $1,
     redirect_uris = $2,
     token_endpoint_auth_method = $3::text,
+    client_jwks = $4::jsonb,
+    client_jwks_uri = $5::text,
     client_id_metadata_fetched_at = clock_timestamp(),
-    client_id_metadata_cache_expires_at = clock_timestamp() + make_interval(secs => $4::double precision),
-    client_id_metadata_etag = $5,
+    client_id_metadata_cache_expires_at = clock_timestamp() + make_interval(secs => $6::double precision),
+    client_id_metadata_etag = $7,
     updated_at = clock_timestamp()
-WHERE id = $6
-  AND project_id = $7
+WHERE id = $8
+  AND project_id = $9
   AND client_id_metadata_uri IS NOT NULL
   AND client_secret_hash IS NULL
   AND deleted IS FALSE
@@ -2081,6 +2130,8 @@ type UpdateUserSessionClientFromCIMDParams struct {
 	ClientName              string
 	RedirectUris            []string
 	TokenEndpointAuthMethod string
+	ClientJwks              []byte
+	ClientJwksUri           pgtype.Text
 	CacheTtlSeconds         float64
 	ClientIDMetadataEtag    pgtype.Text
 	ID                      uuid.UUID
@@ -2101,6 +2152,8 @@ func (q *Queries) UpdateUserSessionClientFromCIMD(ctx context.Context, arg Updat
 		arg.ClientName,
 		arg.RedirectUris,
 		arg.TokenEndpointAuthMethod,
+		arg.ClientJwks,
+		arg.ClientJwksUri,
 		arg.CacheTtlSeconds,
 		arg.ClientIDMetadataEtag,
 		arg.ID,
@@ -2196,7 +2249,9 @@ INSERT INTO user_session_clients (
     client_id_metadata_fetched_at,
     client_id_metadata_cache_expires_at,
     client_id_metadata_etag,
-    token_endpoint_auth_method
+    token_endpoint_auth_method,
+    client_jwks,
+    client_jwks_uri
 )
 VALUES (
     (SELECT project_id FROM user_session_issuers WHERE id = $1),
@@ -2210,7 +2265,9 @@ VALUES (
     clock_timestamp(),
     clock_timestamp() + make_interval(secs => $5::double precision),
     $6,
-    $7::text
+    $7::text,
+    $8::jsonb,
+    $9::text
 )
 ON CONFLICT (user_session_issuer_id, client_id) WHERE deleted IS FALSE
 DO UPDATE SET
@@ -2221,6 +2278,8 @@ DO UPDATE SET
     client_id_metadata_cache_expires_at = EXCLUDED.client_id_metadata_cache_expires_at,
     client_id_metadata_etag = EXCLUDED.client_id_metadata_etag,
     token_endpoint_auth_method = EXCLUDED.token_endpoint_auth_method,
+    client_jwks = EXCLUDED.client_jwks,
+    client_jwks_uri = EXCLUDED.client_jwks_uri,
     updated_at = clock_timestamp()
 WHERE user_session_clients.client_secret_hash IS NULL
 RETURNING id, project_id, user_session_issuer_id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, client_id_metadata_uri, client_id_metadata_fetched_at, client_id_metadata_cache_expires_at, client_id_metadata_etag, token_endpoint_auth_method, client_jwks, client_jwks_uri, created_at, updated_at, deleted_at, deleted
@@ -2234,6 +2293,8 @@ type UpsertUserSessionClientFromCIMDParams struct {
 	CacheTtlSeconds         float64
 	ClientIDMetadataEtag    pgtype.Text
 	TokenEndpointAuthMethod string
+	ClientJwks              []byte
+	ClientJwksUri           pgtype.Text
 }
 
 // Lazy upsert for a client resolved from a Client ID Metadata Document at
@@ -2268,6 +2329,8 @@ func (q *Queries) UpsertUserSessionClientFromCIMD(ctx context.Context, arg Upser
 		arg.CacheTtlSeconds,
 		arg.ClientIDMetadataEtag,
 		arg.TokenEndpointAuthMethod,
+		arg.ClientJwks,
+		arg.ClientJwksUri,
 	)
 	var i UserSessionClient
 	err := row.Scan(

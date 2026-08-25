@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -165,6 +166,8 @@ func (s *Service) resolveUserSessionClient(ctx context.Context, logger *slog.Log
 				CacheTtlSeconds:         result.TTL.Seconds(),
 				ClientIDMetadataEtag:    conv.ToPGTextEmpty(result.ETag),
 				TokenEndpointAuthMethod: result.Document.DeclaredAuthMethod(),
+				ClientJwks:              nil,
+				ClientJwksUri:           pgtype.Text{String: "", Valid: false},
 			})
 			if err != nil {
 				// No-rows here means the DO UPDATE guard refused to rewrite a

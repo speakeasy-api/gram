@@ -335,9 +335,16 @@ const (
 	// OAuthFlowStageKey is the coarse, low-cardinality stage at which an OAuth
 	// flow terminated (see the oauthFlowStage enum in the mcp package). Used
 	// as a metric dimension on oauth.flow.failed and in failure logs.
-	OAuthFlowStageKey           = attribute.Key("gram.oauth.flow_stage")
-	OAuthGrantKey               = attribute.Key("gram.oauth.grant")
-	OAuthIssuerKey              = attribute.Key("gram.oauth.issuer")
+	OAuthFlowStageKey = attribute.Key("gram.oauth.flow_stage")
+	OAuthGrantKey     = attribute.Key("gram.oauth.grant")
+	OAuthIssuerKey    = attribute.Key("gram.oauth.issuer")
+
+	// OAuthAssertionAudienceKey records which accepted audience form a verified client assertion carried.
+	OAuthAssertionAudienceKey = attribute.Key("gram.oauth.assertion_audience")
+
+	// OAuthAssertionExpiresAtKey records a verified client assertion's expiry.
+	OAuthAssertionExpiresAtKey = attribute.Key("gram.oauth.assertion_expires_at")
+
 	OAuthPresentedAuthMethodKey = attribute.Key("gram.oauth.presented_auth_method")
 	// OAuthResourceKey is the RFC 8707 resource indicator sent to an
 	// upstream authorization server during the remote-session dance.
@@ -1421,6 +1428,12 @@ func OAuthPresentedAuthMethod(v string) attribute.KeyValue {
 }
 func SlogOAuthPresentedAuthMethod(v string) slog.Attr {
 	return slog.String(string(OAuthPresentedAuthMethodKey), v)
+}
+func SlogOAuthAssertionAudience(v string) slog.Attr {
+	return slog.String(string(OAuthAssertionAudienceKey), v)
+}
+func SlogOAuthAssertionExpiresAt(v time.Time) slog.Attr {
+	return slog.Time(string(OAuthAssertionExpiresAtKey), v)
 }
 
 func Provider(v string) attribute.KeyValue { return ProviderKey.String(v) }

@@ -34,6 +34,12 @@ const (
 	// AuthMethodNone is a public client: no credential, with PKCE or
 	// refresh-token possession as the integrity proof.
 	AuthMethodNone = "none"
+
+	// AuthMethodPrivateKeyJWT authenticates with an RFC 7523 §2.2 assertion
+	// signed by a key the client publishes (RFC 7591 §2, OIDC Core §9). The
+	// only method here that proves possession of something never sent to
+	// the server.
+	AuthMethodPrivateKeyJWT = "private_key_jwt"
 )
 
 // Error carries an OAuth wire error: the shared shape used across the

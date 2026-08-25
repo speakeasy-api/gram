@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	gen "github.com/speakeasy-api/gram/server/gen/user_session_clients"
@@ -339,6 +340,8 @@ func (s *Service) RefreshUserSessionClientCIMD(ctx context.Context, payload *gen
 		CacheTtlSeconds:         result.TTL.Seconds(),
 		ClientIDMetadataEtag:    conv.ToPGTextEmpty(result.ETag),
 		TokenEndpointAuthMethod: result.Document.DeclaredAuthMethod(),
+		ClientJwks:              nil,
+		ClientJwksUri:           pgtype.Text{String: "", Valid: false},
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

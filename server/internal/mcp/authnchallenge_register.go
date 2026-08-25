@@ -138,6 +138,8 @@ func (s *Service) ServeRegister(w http.ResponseWriter, r *http.Request, endpoint
 		// RFC 7591 §3.2.1 expires_at=0 = non-expiring; we leave the Postgres column NULL.
 		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: 0, Valid: false},
 		TokenEndpointAuthMethod: req.TokenEndpointAuthMethod,
+		ClientJwks:              nil,
+		ClientJwksUri:           pgtype.Text{String: "", Valid: false},
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to create user session client").LogError(ctx, logger)

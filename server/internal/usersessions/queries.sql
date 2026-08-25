@@ -485,7 +485,9 @@ INSERT INTO user_session_clients (
     client_name,
     redirect_uris,
     client_secret_expires_at,
-    token_endpoint_auth_method
+    token_endpoint_auth_method,
+    client_jwks,
+    client_jwks_uri
 )
 VALUES (
     (SELECT project_id FROM user_session_issuers WHERE id = @user_session_issuer_id),
@@ -495,7 +497,9 @@ VALUES (
     @client_name,
     @redirect_uris,
     @client_secret_expires_at,
-    @token_endpoint_auth_method::text
+    @token_endpoint_auth_method::text,
+    sqlc.narg('client_jwks')::jsonb,
+    sqlc.narg('client_jwks_uri')::text
 )
 RETURNING *;
 
@@ -535,7 +539,9 @@ INSERT INTO user_session_clients (
     client_id_metadata_fetched_at,
     client_id_metadata_cache_expires_at,
     client_id_metadata_etag,
-    token_endpoint_auth_method
+    token_endpoint_auth_method,
+    client_jwks,
+    client_jwks_uri
 )
 VALUES (
     (SELECT project_id FROM user_session_issuers WHERE id = @user_session_issuer_id),
@@ -549,7 +555,9 @@ VALUES (
     clock_timestamp(),
     clock_timestamp() + make_interval(secs => @cache_ttl_seconds::double precision),
     sqlc.narg('client_id_metadata_etag'),
-    @token_endpoint_auth_method::text
+    @token_endpoint_auth_method::text,
+    sqlc.narg('client_jwks')::jsonb,
+    sqlc.narg('client_jwks_uri')::text
 )
 ON CONFLICT (user_session_issuer_id, client_id) WHERE deleted IS FALSE
 DO UPDATE SET
@@ -560,6 +568,8 @@ DO UPDATE SET
     client_id_metadata_cache_expires_at = EXCLUDED.client_id_metadata_cache_expires_at,
     client_id_metadata_etag = EXCLUDED.client_id_metadata_etag,
     token_endpoint_auth_method = EXCLUDED.token_endpoint_auth_method,
+    client_jwks = EXCLUDED.client_jwks,
+    client_jwks_uri = EXCLUDED.client_jwks_uri,
     updated_at = clock_timestamp()
 WHERE user_session_clients.client_secret_hash IS NULL
 RETURNING *;
@@ -635,6 +645,8 @@ UPDATE user_session_clients
 SET client_name = @client_name,
     redirect_uris = @redirect_uris,
     token_endpoint_auth_method = @token_endpoint_auth_method::text,
+    client_jwks = sqlc.narg('client_jwks')::jsonb,
+    client_jwks_uri = sqlc.narg('client_jwks_uri')::text,
     client_id_metadata_fetched_at = clock_timestamp(),
     client_id_metadata_cache_expires_at = clock_timestamp() + make_interval(secs => @cache_ttl_seconds::double precision),
     client_id_metadata_etag = sqlc.narg('client_id_metadata_etag'),
@@ -797,3 +809,13 @@ WHERE usi.project_id = @project_id
   AND rc.deleted IS FALSE
   AND ri.deleted IS FALSE
 ORDER BY ri.slug ASC, rs.id ASC;
+
+-- name: ClearUserSessionClientAuthMethod :one
+-- TEST FIXTURE ONLY. Never call this from application code: it un-sets the
+-- security control the token endpoint branches on. It returns a client row
+-- to the shape it had before token_endpoint_auth_method existed, so the
+-- legacy NULL derivation and the NULL-safe refresh guards can be exercised.
+UPDATE user_session_clients
+SET token_endpoint_auth_method = NULL
+WHERE id = @id
+RETURNING *;
