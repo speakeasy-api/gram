@@ -6,7 +6,12 @@
     "es2022": true,
     "node": true
   },
-  "ignorePatterns": ["dist", "node_modules", "src/routeTree.gen.ts"],
+  "ignorePatterns": [
+    "dist",
+    "node_modules",
+    "src/routeTree.gen.ts",
+    "src/components/ui/**"
+  ],
   "categories": {
     "correctness": "error"
   },
@@ -79,11 +84,7 @@
       }
     },
     {
-      "files": [
-        "src/components/data-table.tsx",
-        "src/components/ui/**/*.{ts,tsx}",
-        "src/hooks/use-mobile.ts"
-      ],
+      "files": ["src/components/data-table.tsx", "src/hooks/use-mobile.ts"],
       // Vendored stock shadcn/ui primitives, written by `pnpm dlx shadcn add`.
       // They are kept byte-for-byte so a future shadcn update is a straight
       // overwrite, and stock shadcn neither annotates component return types
