@@ -11,13 +11,12 @@ message MeterReadingCHWriter {
     topic: "gram.metering.v1.MeterReading"
     ack_deadline: {seconds: 60}
     retention: {
-      seconds: 604800 /* 7 days */
+      seconds: 2592000 /* 30 days */
     }
     retain_acked_messages: true
     retry_policy: {
       minimum_backoff: {seconds: 10}
       maximum_backoff: {seconds: 600}
     }
-    dead_letter: {max_delivery_attempts: 10}
   };
 }
