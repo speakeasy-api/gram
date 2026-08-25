@@ -8,6 +8,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { GramAdminError } from "@/lib/gramAdminApi";
 import { routeTree } from "@/routeTree.gen";
 import { anOrganization } from "@/test/fixtures";
 import { renderRouteTree } from "@/test/harness";
@@ -141,6 +142,20 @@ async function renderBilling(): Promise<QueryClient> {
 }
 
 describe("Billing", () => {
+  it("shows an empty state when the organization has no subscription", async () => {
+    mocks.getStripeSubscription.mockRejectedValue(
+      new GramAdminError(404, null, "gram admin 404"),
+    );
+
+    await renderBilling();
+
+    expect(
+      await screen.findByText("This organization has no Stripe subscription."),
+    ).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(mocks.getPaygBillingSummary).not.toHaveBeenCalled();
+  });
+
   it("renders exact current-cycle usage and payment state", async () => {
     await renderBilling();
 

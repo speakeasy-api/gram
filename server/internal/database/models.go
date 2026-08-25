@@ -1240,13 +1240,14 @@ type McpResearchReport struct {
 }
 
 type McpServer struct {
-	ID                  uuid.UUID
-	ProjectID           uuid.UUID
-	Name                pgtype.Text
-	Slug                pgtype.Text
-	EnvironmentID       uuid.NullUUID
-	UserSessionIssuerID uuid.NullUUID
-	RemoteMcpServerID   uuid.NullUUID
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	Name                  pgtype.Text
+	Slug                  pgtype.Text
+	EnvironmentID         uuid.NullUUID
+	UserSessionIssuerID   uuid.NullUUID
+	RemoteSessionIssuerID uuid.NullUUID
+	RemoteMcpServerID     uuid.NullUUID
 	// Optional backend reference to a tunneled MCP source. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be set.
 	TunneledMcpServerID   uuid.NullUUID
 	ToolsetID             uuid.NullUUID
@@ -2125,6 +2126,7 @@ type RemoteSessionIssuer struct {
 	Name                              pgtype.Text
 	LogoAssetID                       uuid.NullUUID
 	ClientSetupDocumentationUrl       pgtype.Text
+	Metadata                          []byte
 	CreatedAt                         pgtype.Timestamptz
 	UpdatedAt                         pgtype.Timestamptz
 	DeletedAt                         pgtype.Timestamptz
@@ -2948,7 +2950,8 @@ type UserOauthToken struct {
 
 type UserSession struct {
 	ID                  uuid.UUID
-	ProjectID           uuid.UUID
+	ProjectID           uuid.NullUUID
+	OrganizationID      pgtype.Text
 	UserSessionIssuerID uuid.UUID
 	UserSessionClientID uuid.NullUUID
 	SubjectUrn          urn.SessionSubject
@@ -2966,7 +2969,8 @@ type UserSession struct {
 
 type UserSessionClient struct {
 	ID                             uuid.UUID
-	ProjectID                      uuid.UUID
+	ProjectID                      uuid.NullUUID
+	OrganizationID                 pgtype.Text
 	UserSessionIssuerID            uuid.UUID
 	ClientID                       string
 	ClientSecretHash               pgtype.Text
@@ -2989,7 +2993,8 @@ type UserSessionClient struct {
 
 type UserSessionConsent struct {
 	ID                  uuid.UUID
-	ProjectID           uuid.UUID
+	ProjectID           uuid.NullUUID
+	OrganizationID      pgtype.Text
 	SubjectUrn          urn.SessionSubject
 	UserSessionClientID uuid.UUID
 	RemoteSetHash       string
@@ -3002,7 +3007,8 @@ type UserSessionConsent struct {
 
 type UserSessionIssuer struct {
 	ID                            uuid.UUID
-	ProjectID                     uuid.UUID
+	ProjectID                     uuid.NullUUID
+	OrganizationID                pgtype.Text
 	Slug                          string
 	AuthnChallengeMode            string
 	SessionDuration               pgtype.Interval
@@ -3016,7 +3022,8 @@ type UserSessionIssuer struct {
 
 type UserSessionIssuerCimdClient struct {
 	ID                  uuid.UUID
-	ProjectID           uuid.UUID
+	ProjectID           uuid.NullUUID
+	OrganizationID      pgtype.Text
 	UserSessionIssuerID uuid.UUID
 	ClientIDMetadataUri string
 	CreatedAt           pgtype.Timestamptz

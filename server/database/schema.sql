@@ -1669,7 +1669,8 @@ WHERE deleted IS FALSE;
 -- See: https://datatracker.ietf.org/doc/html/rfc8414
 CREATE TABLE IF NOT EXISTS user_session_issuers (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  project_id uuid NOT NULL,
+  project_id uuid,
+  organization_id TEXT,
 
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 100),
   authn_challenge_mode TEXT NOT NULL, -- One of ('chain', 'interactive'). chain exists for backwards compatibility and should be phased out. interactive will be the main mode going forward
@@ -1685,8 +1686,12 @@ CREATE TABLE IF NOT EXISTS user_session_issuers (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT user_session_issuers_pkey PRIMARY KEY (id),
-  CONSTRAINT user_session_issuers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+  CONSTRAINT user_session_issuers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT user_session_issuers_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
+
+CREATE INDEX IF NOT EXISTS user_session_issuers_organization_id_idx
+ON user_session_issuers (organization_id);
 
 CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuers_project_slug_key
 ON user_session_issuers (project_id, slug)
@@ -1705,7 +1710,8 @@ WHERE classification = 'project_default_idp' AND deleted IS FALSE;
 -- See: https://datatracker.ietf.org/doc/html/rfc6749#section-1.1
 CREATE TABLE IF NOT EXISTS user_session_clients (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  project_id uuid NOT NULL,
+  project_id uuid,
+  organization_id TEXT,
   user_session_issuer_id uuid NOT NULL,
 
   client_id TEXT NOT NULL,
@@ -1758,6 +1764,7 @@ CREATE TABLE IF NOT EXISTS user_session_clients (
 
   CONSTRAINT user_session_clients_pkey PRIMARY KEY (id),
   CONSTRAINT user_session_clients_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT user_session_clients_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT user_session_clients_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE,
   -- CIMD forbids symmetric client secrets (no client_secret_basic,
   -- client_secret_post, or client_secret_jwt), so a CIMD-resolved row must
@@ -1783,6 +1790,9 @@ CREATE TABLE IF NOT EXISTS user_session_clients (
   )
 );
 
+CREATE INDEX IF NOT EXISTS user_session_clients_organization_id_idx
+ON user_session_clients (organization_id);
+
 -- Serves lookups for both DCR and CIMD rows. For CIMD the metadata document
 -- URL is what lands in client_id, so no separate index is needed. Note the
 -- btree entry limit of roughly 2704 bytes caps CIMD URL length in practice;
@@ -1795,7 +1805,8 @@ WHERE deleted IS FALSE;
 -- admission mode.
 CREATE TABLE IF NOT EXISTS user_session_issuer_cimd_clients (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  project_id uuid NOT NULL,
+  project_id uuid,
+  organization_id TEXT,
   user_session_issuer_id uuid NOT NULL,
 
   client_id_metadata_uri TEXT NOT NULL,
@@ -1808,6 +1819,8 @@ CREATE TABLE IF NOT EXISTS user_session_issuer_cimd_clients (
   CONSTRAINT user_session_issuer_cimd_clients_pkey PRIMARY KEY (id),
   CONSTRAINT user_session_issuer_cimd_clients_project_id_fkey
     FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT user_session_issuer_cimd_clients_organization_id_fkey
+    FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT user_session_issuer_cimd_clients_user_session_issuer_id_fkey
     FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE
 );
@@ -1828,11 +1841,15 @@ ON user_session_issuer_cimd_clients (project_id);
 CREATE INDEX IF NOT EXISTS user_session_issuer_cimd_clients_user_session_issuer_id_idx
 ON user_session_issuer_cimd_clients (user_session_issuer_id);
 
+CREATE INDEX IF NOT EXISTS user_session_issuer_cimd_clients_organization_id_idx
+ON user_session_issuer_cimd_clients (organization_id);
+
 -- User Session Consents track records of consent between Clients and Issuers
 -- Consents are scoped to given sets of underlying credentials so they can be reused between login events
 CREATE TABLE IF NOT EXISTS user_session_consents (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  project_id uuid NOT NULL,
+  project_id uuid,
+  organization_id TEXT,
 
   subject_urn TEXT NOT NULL,
   user_session_client_id uuid NOT NULL,
@@ -1846,8 +1863,12 @@ CREATE TABLE IF NOT EXISTS user_session_consents (
 
   CONSTRAINT user_session_consents_pkey PRIMARY KEY (id),
   CONSTRAINT user_session_consents_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT user_session_consents_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT user_session_consents_user_session_client_id_fkey FOREIGN KEY (user_session_client_id) REFERENCES user_session_clients (id) ON DELETE CASCADE
 );
+
+CREATE INDEX IF NOT EXISTS user_session_consents_organization_id_idx
+ON user_session_consents (organization_id);
 
 CREATE UNIQUE INDEX IF NOT EXISTS user_session_consents_subject_client_set_key
 ON user_session_consents (subject_urn, user_session_client_id, remote_set_hash)
@@ -1857,7 +1878,8 @@ WHERE deleted IS FALSE;
 -- They contain token grant information to allow for validating and exchanging tokens
 CREATE TABLE IF NOT EXISTS user_sessions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  project_id uuid NOT NULL,
+  project_id uuid,
+  organization_id TEXT,
   user_session_issuer_id uuid NOT NULL,
   user_session_client_id uuid,
   subject_urn TEXT NOT NULL,
@@ -1882,9 +1904,13 @@ CREATE TABLE IF NOT EXISTS user_sessions (
 
   CONSTRAINT user_sessions_pkey PRIMARY KEY (id),
   CONSTRAINT user_sessions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT user_sessions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT user_sessions_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE,
   CONSTRAINT user_sessions_user_session_client_id_fkey FOREIGN KEY (user_session_client_id) REFERENCES user_session_clients (id) ON DELETE SET NULL
 );
+
+CREATE INDEX IF NOT EXISTS user_sessions_organization_id_idx
+ON user_sessions (organization_id);
 
 CREATE INDEX IF NOT EXISTS user_sessions_user_session_client_id_idx
 ON user_sessions (user_session_client_id)
@@ -1957,6 +1983,11 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
   -- Manually set (not RFC 8414) link to instructions for setting up an OAuth
   -- client with this issuer's provider, surfaced to customers.
   client_setup_documentation_url TEXT,
+
+  -- The last discovery document captured for this issuer, verbatim. The typed
+  -- columns above model only what Gram acts on, so re-serving from them would
+  -- drop the OIDC fields they omit.
+  metadata JSONB,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -4426,6 +4457,10 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
 
   environment_id uuid,
   user_session_issuer_id uuid,
+  -- Direct upstream authorization: the client authorizes at the upstream and
+  -- its bearer is forwarded verbatim, so Gram is not the authorization server.
+  -- The FK cannot qualify tenancy; writers must use the tenant-scoped lookup.
+  remote_session_issuer_id uuid,
   remote_mcp_server_id uuid,
   tunneled_mcp_server_id uuid,
   toolset_id uuid,
@@ -4450,13 +4485,11 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   CONSTRAINT mcp_servers_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE RESTRICT,
   CONSTRAINT mcp_servers_unproxied_mcp_server_id_fkey FOREIGN KEY (unproxied_mcp_server_id) REFERENCES unproxied_mcp_servers (id) ON DELETE RESTRICT,
   CONSTRAINT mcp_servers_tool_variations_group_id_fkey FOREIGN KEY (tool_variations_group_id) REFERENCES tool_variations_groups (id) ON DELETE SET NULL,
+  CONSTRAINT mcp_servers_remote_session_issuer_id_fkey FOREIGN KEY (remote_session_issuer_id) REFERENCES remote_session_issuers (id) ON DELETE SET NULL,
   -- Exactly one backend must be set.
   CONSTRAINT mcp_servers_backend_exclusivity_check CHECK (num_nonnulls(remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id) = 1),
-  -- Remote and tunneled servers carry a Gram-as-AS issuer attached at create
-  -- time for the server's lifetime, regardless of visibility. Toolset- and
-  -- unproxied-backed servers are exempt (unproxied servers are never
-  -- proxied, so there is no Gram-managed OAuth to attach).
-  CONSTRAINT mcp_servers_issuer_required_check CHECK (deleted OR (remote_mcp_server_id IS NULL AND tunneled_mcp_server_id IS NULL) OR user_session_issuer_id IS NOT NULL)
+  -- Gram-as-AS and direct upstream authorization are alternatives, never both.
+  CONSTRAINT mcp_servers_authorization_exclusivity_check CHECK (num_nonnulls(user_session_issuer_id, remote_session_issuer_id) <= 1)
 );
 
 CREATE INDEX IF NOT EXISTS mcp_servers_project_id_idx

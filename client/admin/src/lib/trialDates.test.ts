@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { calendarDate, dayISO, dayOf, trialEndDay } from "./trialDates";
+import {
+  calendarDate,
+  dayISO,
+  dayOf,
+  formatTrialTimeRemaining,
+  trialEndDay,
+} from "./trialDates";
 import { fmtDateShort } from "./utils";
 
 // The same device `utils.test.ts` uses, and for the same reason: CI runs in UTC,
@@ -133,5 +139,63 @@ describe("dayISO", () => {
         fmtDateShort("2026-05-20T12:00:00Z"),
       );
     });
+  });
+});
+
+const NOW = new Date("2026-01-01T00:00:00Z");
+
+function after(milliseconds: number): string {
+  return new Date(NOW.getTime() + milliseconds).toISOString();
+}
+
+describe("formatTrialTimeRemaining", () => {
+  it("uses ceiling days above 72 hours", () => {
+    expect(formatTrialTimeRemaining(after(72 * 60 * 60 * 1000 + 1), NOW)).toBe(
+      "4 days",
+    );
+    expect(formatTrialTimeRemaining(after(96 * 60 * 60 * 1000), NOW)).toBe(
+      "4 days",
+    );
+  });
+
+  it("uses ceiling hours from 24 through 72 hours, inclusive", () => {
+    expect(formatTrialTimeRemaining(after(24 * 60 * 60 * 1000), NOW)).toBe(
+      "24 hours",
+    );
+    expect(formatTrialTimeRemaining(after(24 * 60 * 60 * 1000 + 1), NOW)).toBe(
+      "25 hours",
+    );
+    expect(formatTrialTimeRemaining(after(72 * 60 * 60 * 1000), NOW)).toBe(
+      "72 hours",
+    );
+  });
+
+  it("uses ceiling total minutes below 24 hours", () => {
+    expect(formatTrialTimeRemaining(after((2 * 60 + 1) * 60 * 1000), NOW)).toBe(
+      "2 hours 1 minute",
+    );
+    expect(formatTrialTimeRemaining(after(60 * 1000), NOW)).toBe("1 minute");
+    expect(formatTrialTimeRemaining(after(1), NOW)).toBe("1 minute");
+  });
+
+  it("carries rounded minutes into hours", () => {
+    expect(formatTrialTimeRemaining(after(60 * 60 * 1000 - 1), NOW)).toBe(
+      "1 hour",
+    );
+    expect(formatTrialTimeRemaining(after(24 * 60 * 60 * 1000 - 1), NOW)).toBe(
+      "24 hours",
+    );
+  });
+
+  it("has no answer for invalid or elapsed ranges", () => {
+    expect(formatTrialTimeRemaining(undefined, NOW)).toBeUndefined();
+    expect(formatTrialTimeRemaining("not a date", NOW)).toBeUndefined();
+    expect(
+      formatTrialTimeRemaining(after(60_000), new Date("not a date")),
+    ).toBeUndefined();
+    expect(formatTrialTimeRemaining(NOW.toISOString(), NOW)).toBeUndefined();
+    expect(
+      formatTrialTimeRemaining("2025-12-31T23:59:59Z", NOW),
+    ).toBeUndefined();
   });
 });

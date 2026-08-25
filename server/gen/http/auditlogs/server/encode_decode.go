@@ -42,9 +42,11 @@ func DecodeListRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.De
 			action        *string
 			subjectType   *string
 			subjectID     *string
+			subjectIds    []string
 			actingSurface *string
 			apikeyToken   *string
 			sessionToken  *string
+			err           error
 		)
 		qp := r.URL.Query()
 		cursorRaw := qp.Get("cursor")
@@ -71,6 +73,10 @@ func DecodeListRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.De
 		if subjectIDRaw != "" {
 			subjectID = &subjectIDRaw
 		}
+		subjectIds = qp["subject_ids"]
+		if len(subjectIds) > 200 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("subject_ids", subjectIds, len(subjectIds), 200, false))
+		}
 		actingSurfaceRaw := qp.Get("acting_surface")
 		if actingSurfaceRaw != "" {
 			actingSurface = &actingSurfaceRaw
@@ -83,7 +89,10 @@ func DecodeListRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.De
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload = NewListPayload(cursor, projectSlug, actorID, action, subjectType, subjectID, actingSurface, apikeyToken, sessionToken)
+		if err != nil {
+			return payload, err
+		}
+		payload = NewListPayload(cursor, projectSlug, actorID, action, subjectType, subjectID, subjectIds, actingSurface, apikeyToken, sessionToken)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

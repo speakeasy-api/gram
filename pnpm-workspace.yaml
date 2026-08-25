@@ -71,6 +71,3 @@ allowBuilds:
   msw: false
   ssh2: false
   "@openrouter/sdk": false
-
-patchedDependencies:
-  svix@1.92.2: patches/svix@1.92.2.patch

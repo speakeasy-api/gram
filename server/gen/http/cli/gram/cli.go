@@ -658,6 +658,7 @@ func ParseEndpoint(
 		auditlogsListActionFlag        = auditlogsListFlags.String("action", "", "")
 		auditlogsListSubjectTypeFlag   = auditlogsListFlags.String("subject-type", "", "")
 		auditlogsListSubjectIDFlag     = auditlogsListFlags.String("subject-id", "", "")
+		auditlogsListSubjectIdsFlag    = auditlogsListFlags.String("subject-ids", "", "")
 		auditlogsListActingSurfaceFlag = auditlogsListFlags.String("acting-surface", "", "")
 		auditlogsListApikeyTokenFlag   = auditlogsListFlags.String("apikey-token", "", "")
 		auditlogsListSessionTokenFlag  = auditlogsListFlags.String("session-token", "", "")
@@ -7178,7 +7179,7 @@ func ParseEndpoint(
 			switch epn {
 			case "list":
 				endpoint = c.List()
-				data, err = auditlogsc.BuildListPayload(*auditlogsListCursorFlag, *auditlogsListProjectSlugFlag, *auditlogsListActorIDFlag, *auditlogsListActionFlag, *auditlogsListSubjectTypeFlag, *auditlogsListSubjectIDFlag, *auditlogsListActingSurfaceFlag, *auditlogsListApikeyTokenFlag, *auditlogsListSessionTokenFlag)
+				data, err = auditlogsc.BuildListPayload(*auditlogsListCursorFlag, *auditlogsListProjectSlugFlag, *auditlogsListActorIDFlag, *auditlogsListActionFlag, *auditlogsListSubjectTypeFlag, *auditlogsListSubjectIDFlag, *auditlogsListSubjectIdsFlag, *auditlogsListActingSurfaceFlag, *auditlogsListApikeyTokenFlag, *auditlogsListSessionTokenFlag)
 			case "list-facets":
 				endpoint = c.ListFacets()
 				data, err = auditlogsc.BuildListFacetsPayload(*auditlogsListFacetsProjectSlugFlag, *auditlogsListFacetsApikeyTokenFlag, *auditlogsListFacetsSessionTokenFlag)
@@ -11132,6 +11133,7 @@ func auditlogsListUsage() {
 	fmt.Fprint(os.Stderr, " -action STRING")
 	fmt.Fprint(os.Stderr, " -subject-type STRING")
 	fmt.Fprint(os.Stderr, " -subject-id STRING")
+	fmt.Fprint(os.Stderr, " -subject-ids JSON")
 	fmt.Fprint(os.Stderr, " -acting-surface STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
@@ -11148,13 +11150,14 @@ func auditlogsListUsage() {
 	fmt.Fprintln(os.Stderr, `    -action STRING: `)
 	fmt.Fprintln(os.Stderr, `    -subject-type STRING: `)
 	fmt.Fprintln(os.Stderr, `    -subject-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -subject-ids JSON: `)
 	fmt.Fprintln(os.Stderr, `    -acting-surface STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auditlogs list --cursor \"abc123\" --project-slug \"abc123\" --actor-id \"abc123\" --action \"abc123\" --subject-type \"abc123\" --subject-id \"abc123\" --acting-surface \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auditlogs list --cursor \"abc123\" --project-slug \"abc123\" --actor-id \"abc123\" --action \"abc123\" --subject-type \"abc123\" --subject-id \"abc123\" --subject-ids '[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]' --acting-surface \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 func auditlogsListFacetsUsage() {

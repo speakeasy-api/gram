@@ -19,6 +19,7 @@ import {
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import { useOrgRoutes } from "@/routes";
+import type { GcpKmsKey } from "@gram/client/models/components/gcpkmskey.js";
 import { useCreateGcpKmsKeyMutation } from "@gram/client/react-query/createGcpKmsKey";
 import { invalidateAllListExternalKeys } from "@gram/client/react-query/listExternalKeys";
 import { useQueryClient } from "@tanstack/react-query";
@@ -41,10 +42,15 @@ export function CreateExternalKeySheet({
   open,
   onOpenChange,
   isCurrentOrganization,
+  onCreated,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   isCurrentOrganization: () => boolean;
+  // Called with the new key instead of navigating to its detail page, for a
+  // caller that opened the sheet from inside another form and wants to keep
+  // that form.
+  onCreated?: (key: GcpKmsKey) => void;
 }): JSX.Element {
   const orgRoutes = useOrgRoutes();
   const queryClient = useQueryClient();
@@ -64,6 +70,10 @@ export function CreateExternalKeySheet({
       if (!isCurrentOrganization()) return;
       toast.success("Encryption key created");
       onOpenChange(false);
+      if (onCreated) {
+        onCreated(created);
+        return;
+      }
       orgRoutes.encryptionKeys.keyDetail.goTo(
         providerSlug(created.provider),
         created.id,

@@ -97,6 +97,12 @@ WHERE a.organization_id = @organization_id
     sqlc.narg(subject_id)::text IS NULL
     OR a.subject_id = sqlc.narg(subject_id)::text
   )
+  -- An empty or absent list is no filter, so a caller composing filters can
+  -- always send the parameter.
+  AND (
+    coalesce(cardinality(sqlc.narg(subject_ids)::text[]), 0) = 0
+    OR a.subject_id = ANY(sqlc.narg(subject_ids)::text[])
+  )
   -- A row written before attribution existed has no surface. Coalescing here
   -- means filtering for 'unknown' finds those rows too, instead of returning
   -- nothing and implying the organization has no unattributed history.

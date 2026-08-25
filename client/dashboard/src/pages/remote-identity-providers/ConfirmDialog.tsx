@@ -18,6 +18,7 @@ export function ConfirmDialog({
   isPending,
   impact,
   error,
+  confirmVariant = "destructive-primary",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -36,6 +37,10 @@ export function ConfirmDialog({
   // vanishes, and the dialog it describes is still open. Callers that only need
   // "something went wrong" should keep using a toast.
   error?: string | null;
+  // Confirmations of destructive actions are the common case, so that is the
+  // default; a lifecycle step that is safe but still worth a pause (activating
+  // a key) reads wrong in red.
+  confirmVariant?: "destructive-primary" | "primary";
 }): JSX.Element {
   return (
     <Dialog
@@ -93,7 +98,7 @@ export function ConfirmDialog({
             <Button.Text>Cancel</Button.Text>
           </Button>
           <Button
-            variant="destructive-primary"
+            variant={confirmVariant}
             onClick={onConfirm}
             disabled={isPending || impact?.isLoading}
           >

@@ -49,6 +49,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
@@ -69,6 +70,8 @@ type Service struct {
 	dispositionCache     *ToolDispositionCache
 	pluginsGitHubEnabled bool
 	assets               *assets.Service
+	// revoker handles grants orphaned by DeleteMcpServer's issuer cascade.
+	revoker *remotesessions.UpstreamRevoker
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -85,6 +88,7 @@ func NewService(
 	dispositionCache *ToolDispositionCache,
 	pluginsGitHubEnabled bool,
 	assetsService *assets.Service,
+	revoker *remotesessions.UpstreamRevoker,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("mcpservers"))
 
@@ -99,6 +103,7 @@ func NewService(
 		dispositionCache:     dispositionCache,
 		pluginsGitHubEnabled: pluginsGitHubEnabled,
 		assets:               assetsService,
+		revoker:              revoker,
 	}
 }
 
@@ -932,6 +937,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	// Remote- and tunneled-backed servers own the issuer minted with them.
 	// An issuer may also be referenced by another server or toolset, so only
 	// cascade once this deletion leaves it without an active owner.
+	var orphanCreds []remotesessions.RevokedCredentials
 	if deleted.UserSessionIssuerID.Valid {
 		userSessionsRepo := usersessionsrepo.New(dbtx)
 		// Lock the issuer row before the ownership check. A concurrent meta
@@ -966,11 +972,9 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 			case err != nil:
 				return oops.E(oops.CodeUnexpected, err, "delete mcp server issuer").LogError(ctx, logger)
 			default:
-				if err := userSessionsRepo.DeleteRemoteSessionClientAttachmentsForUserSessionIssuer(ctx, usersessionsrepo.DeleteRemoteSessionClientAttachmentsForUserSessionIssuerParams{
-					UserSessionIssuerID: deletedIssuer.ID,
-					ProjectID:           *authCtx.ProjectID,
-				}); err != nil {
-					return oops.E(oops.CodeUnexpected, err, "delete mcp server issuer client attachments").LogError(ctx, logger)
+				orphanCreds, err = s.revoker.DetachUserSessionIssuerFromClients(ctx, dbtx, deletedIssuer.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
+				if err != nil {
+					return oops.E(oops.CodeUnexpected, err, "detach remote session clients from mcp server issuer").LogError(ctx, logger)
 				}
 
 				if _, err := userSessionsRepo.SoftDeleteUserSessionsByIssuerID(ctx, deletedIssuer.ID); err != nil {
@@ -1012,6 +1016,9 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
+
+	// Post-commit, best-effort: RFC 7009 for the orphaned grants.
+	s.revoker.RevokeAllDetached(ctx, orphanCreds)
 
 	if err := s.reconcileMcpServerCustomDomains(ctx, rootDomainIDs(rootEndpoints)); err != nil {
 		return err

@@ -103,11 +103,6 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
 // Two rows, and every optional field set on one of them. One row forecloses
 // every ordering and keying fault by construction, and an unset optional field
 // renders the same dash whichever field the cell reads.
-//
-// Both rows carry the stale `free_trial_*` pair, and neither carries a date
-// there that the Trial cell should ever show. The second row is the one that
-// matters: it never trialled, and the stale pair still dates it, which is the
-// whole reason this column was rewritten.
 const ORGS: AdminOrganization[] = [
   {
     id: "org_placeholder_one",
@@ -117,8 +112,6 @@ const ORGS: AdminOrganization[] = [
     workos_id: "workosplaceholderone",
     whitelisted: true,
     disabled_at: "2026-03-04T00:00:00Z",
-    free_trial_started_at: "2026-02-01T00:00:00Z",
-    free_trial_ends_at: "2026-11-12T00:00:00Z",
     trial_state: "running",
     trial_ends_at: "2026-05-06T00:00:00Z",
     member_count: 3,
@@ -131,8 +124,6 @@ const ORGS: AdminOrganization[] = [
     slug: "placeholder-two",
     account_type: "free",
     whitelisted: false,
-    free_trial_started_at: "2026-06-08T00:00:00Z",
-    free_trial_ends_at: "2026-06-22T00:00:00Z",
     trial_state: "none",
     member_count: 7,
     created_at: "2026-06-08T00:00:00Z",
@@ -1078,10 +1069,7 @@ describe("organizations list", () => {
       // column's own constant would move this expectation along with it.
       `${workosID.substring(0, 12)}...`,
       shortDate(disabledAt),
-      // The state leads and the end date follows it, and the date says what it
-      // is: the header reads `Trial` and no longer does. The stale pair on this
-      // record carries a different date, so a cell back on the old field fails
-      // here on the date alone.
+      // The factual state leads and its end date follows it.
       `Running ends ${shortDate(trialEndsAt)}`,
       shortDate(FIRST_ORG.created_at),
       // Both controls carry an icon and their names are on the buttons.
@@ -1091,10 +1079,6 @@ describe("organizations list", () => {
 
   it("reads a dash in the trial cell of an organization that never trialled", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-
-    // The row is dated by `free_trial_ends_at` all the same, which is the
-    // defaulted column this cell was moved off.
-    expect(SECOND_ORG.free_trial_ends_at).toBeTruthy();
 
     const link = await screen.findByRole("link", { name: SECOND_ORG.name });
     const trialCell = cellUnder(rowFor(link), "Trial");

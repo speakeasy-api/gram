@@ -211,12 +211,6 @@ export type TrialState = (typeof TRIAL_STATES)[number];
 
 // Convenience method for the listOrganizations endpoint. Mirrors the backend
 // payload shape from server/gen/admin/service.go.
-//
-// `free_trial_started_at` and `free_trial_ends_at` are `NOT NULL` columns with
-// a signup-plus-fourteen-days default that no application code writes, so they
-// report a trial for every organization ever made. Nothing here reads them.
-// They stay declared only because the API still sends them; a follow-up takes
-// them off the wire.
 export type AdminOrganization = {
   id: string;
   name: string;
@@ -225,10 +219,11 @@ export type AdminOrganization = {
   workos_id?: string;
   whitelisted: boolean;
   disabled_at?: string;
-  free_trial_started_at?: string;
-  free_trial_ends_at?: string;
   trial_state?: TrialState;
   trial_ends_at?: string;
+  trial_tier?: string;
+  trial_converted_at?: string;
+  trial_demoted_at?: string;
   member_count: number;
   created_at: string;
   updated_at: string;
