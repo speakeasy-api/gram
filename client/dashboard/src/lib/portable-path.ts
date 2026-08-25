@@ -14,7 +14,7 @@
  * alphanumerics and dashes) and needs no escaping in a URL.
  */
 
-export const PORTABLE_PATH_PREFIX = "/~";
+const PORTABLE_PATH_PREFIX = "/~";
 
 export function isPortablePath(pathname: string): boolean {
   return (
