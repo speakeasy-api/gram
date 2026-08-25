@@ -352,12 +352,15 @@ BEGIN
   DELETE FROM deployment_logs WHERE project_id = proj_a;
   DELETE FROM deployments WHERE organization_id = demo_org;
   DELETE FROM assets WHERE project_id = proj_a;
-  -- api_keys does not reference projects, so the projects delete below does
-  -- not cascade to it. Demo visitors hold org:admin (authz.DemoScopeGrants)
-  -- and can mint keys; without this delete those keys outlive every reseed and
-  -- keep working long after the session that created them is gone. The local
-  -- tenant's own key is reinserted by RunLocalFixtures immediately after this
-  -- script runs.
+  -- api_keys.project_id is ON DELETE SET NULL, so the projects delete below
+  -- only orphans the row — the key keeps authenticating, scoped to the org.
+  -- Demo visitors hold org:admin (authz.DemoScopeGrants) and can mint keys, so
+  -- without this delete those keys outlive every reseed and keep working long
+  -- after the session that created them is gone. The local tenant's own key is
+  -- reinserted by RunLocalFixtures immediately after this script runs.
+  -- litellm_instances.api_key_id is ON DELETE RESTRICT, so an instance a
+  -- visitor created would abort the run here; it goes first.
+  DELETE FROM litellm_instances WHERE organization_id = demo_org;
   DELETE FROM api_keys WHERE organization_id = demo_org;
   DELETE FROM projects WHERE organization_id = demo_org;
 

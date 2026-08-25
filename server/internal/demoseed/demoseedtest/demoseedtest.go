@@ -263,14 +263,21 @@ func TamperDemoRows(ctx context.Context, db *pgxpool.Pool, ch driver.Conn, orgID
 		return fmt.Errorf("tamper postgres chat: expected 1 row inserted, got %d", tag.RowsAffected())
 	}
 
-	// The seed itself never inserts an API key, so this row cannot be cloned
-	// from an existing one: it stands in for a key a demo visitor minted with
-	// the org:admin grants every demo session holds. Nothing in the demo
-	// project's FK cascade reaches api_keys, so only an explicit scoped delete
-	// removes it.
+	// The seed itself never inserts an API key or a LiteLLM instance, so these
+	// rows cannot be cloned from existing ones: they stand in for what a demo
+	// visitor creates with the org:admin grants every demo session holds. The
+	// projects delete only SET NULLs api_keys.project_id, so the key needs an
+	// explicit scoped delete — and litellm_instances.api_key_id is ON DELETE
+	// RESTRICT, so the instance must be deleted before the key or the whole
+	// reseed aborts on the FK.
 	if _, err := db.Exec(ctx, `
-		INSERT INTO api_keys (organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes)
-		VALUES ($1, $2::uuid, 'user_demo_tamper', 'tampered visitor key', 'gram_demo', 'DEMO-TAMPER-HASH', ARRAY['producer'])`,
+		WITH key AS (
+			INSERT INTO api_keys (organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes)
+			VALUES ($1, $2::uuid, 'user_demo_tamper', 'tampered visitor key', 'gram_demo', 'DEMO-TAMPER-HASH', ARRAY['producer'])
+			RETURNING organization_id, project_id, id
+		)
+		INSERT INTO litellm_instances (organization_id, project_id, api_key_id, created_by_user_id, name)
+		SELECT organization_id, project_id, id, 'user_demo_tamper', 'tampered visitor instance' FROM key`,
 		orgID, projectID,
 	); err != nil {
 		return fmt.Errorf("tamper postgres api key: %w", err)
