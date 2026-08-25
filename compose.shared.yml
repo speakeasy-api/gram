@@ -33,12 +33,21 @@
 # Bound to 127.0.0.1: Presidio is an unauthenticated PII-analysis service and
 # only ever called by local host processes, so it must not be reachable on the
 # host's external interfaces.
+#
+# Both services carry a `mem_limit`. They are the two largest containers on the
+# machine (Presidio loads a ~1 GB spaCy model; the LGTM bundle runs Grafana,
+# Tempo, Loki and Prometheus in one image), and unlike the per-worktree stack
+# neither has a soft cap of its own to fall back on. Being shared singletons
+# they are not multiplied by worktree count, but they are also never torn down
+# by a worktree's teardown -- they simply accumulate retention until something
+# on the host gives. The cgroup limit makes that failure land on the container.
 name: gram-shared
 
 services:
   gram-presidio:
     image: mcr.microsoft.com/presidio-analyzer:2.2.362
     restart: unless-stopped
+    mem_limit: 2g
     ports:
       - "127.0.0.1:5050:3000"
     healthcheck:
@@ -58,6 +67,7 @@ services:
   lgtm:
     image: grafana/otel-lgtm:0.30.1@sha256:bb182ac3174a20923fa58f00d1790fa71eb06cc0150078c0b0e8feb9e6611492
     restart: unless-stopped
+    mem_limit: 2g
     # Bound to 127.0.0.1 for the same reason as Presidio: every one of these
     # APIs is unauthenticated, and this container now holds every worktree's
     # traces and metrics. All consumers are local host processes

@@ -1,11 +1,38 @@
 #!/usr/bin/env bash
 
-#MISE description="Stop all development processes with pitchfork"
+#MISE description="Stop this worktree's development processes and infra containers"
+#MISE dir="{{ config_root }}"
 #MISE raw=true
 
 set -e
 
+# --keep-infra: stop only the pitchfork daemons, leave the containers running.
+# For the case where you want to restart the app against a warm database.
+keep_infra=0
+for arg in "$@"; do
+    case "$arg" in
+        --keep-infra) keep_infra=1 ;;
+        *) echo "unknown argument: $arg" >&2; exit 1 ;;
+    esac
+done
+
 pitchfork stop --all-local
+
+# `stop`, not `down`: this is the pause, `mise nuke` is the destroy. Containers
+# and volumes survive, so `./zero` comes back up warm.
+#
+# Stopping them at all matters because compose.yml is instantiated once per
+# worktree. Leaving a stack up after you have stopped working in its worktree
+# costs ~1.5 GB and a Temporal server polling in the background, indefinitely
+# and per worktree -- the accumulation across several worktrees is what pushes
+# the host into swap. `--profile "*"` so the tunnel and litellm containers are
+# included; without it they are invisible to compose and stay up.
+#
+# The shared stack (compose.shared.yml: Presidio, LGTM) is deliberately left
+# alone -- other worktrees are using it.
+if [ "$keep_infra" -eq 0 ]; then
+    docker compose --profile "*" stop
+fi
 
 gum style \
   --foreground 9 --border-foreground 9 --border rounded \

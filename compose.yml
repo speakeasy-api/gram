@@ -6,10 +6,30 @@
 # LGTM observability stack.
 name: ${COMPOSE_PROJECT_NAME:-gram}
 
+# Memory ceilings (`mem_limit`) are deliberate and belong on EVERY service here.
+# Several services already carry a *soft* cap tuned to their runtime -- Temporal's
+# GOMEMLIMIT, the Pub/Sub emulator's -Xmx, ClickHouse's max_server_memory_usage.
+# Those are best-effort: the GC or the query planner aims to stay under them, and
+# a leak, a runaway merge or an oversized allocation sails straight past. Nothing
+# below them was an actual floor.
+#
+# That gap is only a nuisance with one stack running. This file is instantiated
+# once per worktree (see COMPOSE_PROJECT_NAME above), so with several worktrees
+# live the unbounded tail is multiplied by N, and the failure lands on the host:
+# macOS has no OOM killer worth the name, so it swaps instead, and the desktop
+# thrashes long before Docker notices anything is wrong.
+#
+# `mem_limit` is a cgroup limit, so the kernel kills the one offending container
+# and leaves the rest of the machine alone. Each value is the service's soft cap
+# plus headroom for allocator slack and off-heap memory -- set them ABOVE the
+# soft cap, never equal to it, or the OOM killer fires during normal operation
+# instead of the GC.
+
 services:
   gram-db:
     image: pgvector/pgvector:pg17
     restart: unless-stopped
+    mem_limit: 1g
     environment:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
@@ -30,6 +50,7 @@ services:
   gram-cache:
     image: redis:6.2-alpine
     restart: unless-stopped
+    mem_limit: 256m
     volumes:
       - cache_data:/var/lib/gram-cache/data
     ports:
@@ -42,6 +63,7 @@ services:
     # CLI 1.8.1 embeds Server 1.31.2 and UI 2.50.1.
     image: temporalio/temporal:1.8.1
     restart: unless-stopped
+    mem_limit: 768m
     ports:
       - "${TEMPORAL_PORT}:7233"
       - "${TEMPORAL_WEB_PORT}:8233"
@@ -100,6 +122,7 @@ services:
     profiles: [litellm]
     image: ghcr.io/berriai/litellm:v1.94.0@sha256:65d84a2282137b4dc73bbe184650a7c807177c533e4223b3bfbc87963fe3fabe
     restart: unless-stopped
+    mem_limit: 1g
     command: ["--config", "/app/config.yaml", "--port", "4000"]
     environment:
       OPENROUTER_API_KEY: ${OPENROUTER_DEV_KEY}
@@ -121,6 +144,7 @@ services:
     build:
       context: ./local/clickhouse
     restart: unless-stopped
+    mem_limit: 2g
     ports:
       - "${CLICKHOUSE_HTTP_PORT}:8123"
       - "${CLICKHOUSE_NATIVE_PORT}:9440"
@@ -139,6 +163,7 @@ services:
   pubsub-emulator:
     image: gcr.io/google.com/cloudsdktool/google-cloud-cli:573.0.0-emulators@sha256:1b083a6a9647024a98d4f38c2b51906a0f61ca36adcba11672b8933544962efe
     restart: unless-stopped
+    mem_limit: 512m
     environment:
       # The emulator is a JVM app (cloud-pubsub-emulator-all.jar) launched with
       # no -Xmx, so its default max heap is 1/4 of container-visible RAM -- the
@@ -163,6 +188,7 @@ services:
     profiles: [local-registry]
     image: postgres:17
     restart: unless-stopped
+    mem_limit: 512m
     environment:
       POSTGRES_USER: mcp_registry
       POSTGRES_PASSWORD: mcp_registry
@@ -181,6 +207,7 @@ services:
     build:
       context: https://github.com/crystaldba/postgres-mcp.git#07eb329c8c48e49640e0d1b5b35465d4d024c3ee
     restart: unless-stopped
+    mem_limit: 512m
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
@@ -198,8 +225,9 @@ services:
 
   tunnel-agent:
     profiles: [tunnel]
-    image: golang:1.26.4-bookworm
+    image: golang:1.26.5-bookworm
     restart: unless-stopped
+    mem_limit: 1g
     network_mode: "service:tunnel-postgres-mcp"
     working_dir: /workspace
     volumes:
