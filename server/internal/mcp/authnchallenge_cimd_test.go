@@ -64,6 +64,20 @@ type cimdDocServer struct {
 	// conditionalRequests counts the subset of requests that carried an
 	// If-None-Match header.
 	conditionalRequests atomic.Int64
+
+	// jwks, when non-empty, is served at /oauth/jwks.json so a document can
+	// name a jwks_uri on the same host and the token endpoint can resolve
+	// it over the same trusted TLS certificate.
+	jwks []byte
+
+	// jwksRequests counts key set fetches, so tests can assert that a
+	// warm key cache costs no request and a cold one costs exactly one.
+	jwksRequests atomic.Int64
+}
+
+// jwksURI is the URL a document names to publish keys from this host.
+func (ds *cimdDocServer) jwksURI() string {
+	return ds.srv.URL + "/oauth/jwks.json"
 }
 
 // set applies a mutation to the served response under the same lock the
@@ -89,6 +103,8 @@ func startCIMDDocServer(t *testing.T) *cimdDocServer {
 		status:              0,
 		requests:            atomic.Int64{},
 		conditionalRequests: atomic.Int64{},
+		jwks:                nil,
+		jwksRequests:        atomic.Int64{},
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/oauth/client.json", func(w http.ResponseWriter, r *http.Request) {
@@ -124,6 +140,19 @@ func startCIMDDocServer(t *testing.T) *cimdDocServer {
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(ds.doc); err != nil {
 			t.Errorf("encode cimd document: %v", err)
+		}
+	})
+	mux.HandleFunc("/oauth/jwks.json", func(w http.ResponseWriter, _ *http.Request) {
+		ds.jwksRequests.Add(1)
+		ds.mu.Lock()
+		defer ds.mu.Unlock()
+		if len(ds.jwks) == 0 {
+			http.NotFound(w, nil)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if _, err := w.Write(ds.jwks); err != nil {
+			t.Errorf("write key set: %v", err)
 		}
 	})
 	ds.srv = httptest.NewTLSServer(mux)
@@ -750,12 +779,13 @@ func TestOAuthCIMD_SecretBearingCollisionRejected(t *testing.T) {
 	ctx, ti, ds, toolset := newTestCIMDService(t)
 
 	_, err := usersessions_repo.New(ti.conn).CreateUserSessionClient(ctx, usersessions_repo.CreateUserSessionClientParams{
-		UserSessionIssuerID:   toolset.UserSessionIssuerID.UUID,
-		ClientID:              ds.clientID,
-		ClientSecretHash:      conv.ToPGText("bcrypt-hash-placeholder"),
-		ClientName:            "Confidential DCR Client",
-		RedirectUris:          []string{"http://127.0.0.1:33418/callback"},
-		ClientSecretExpiresAt: pgtype.Timestamptz{},
+		UserSessionIssuerID:     toolset.UserSessionIssuerID.UUID,
+		ClientID:                ds.clientID,
+		ClientSecretHash:        conv.ToPGText("bcrypt-hash-placeholder"),
+		ClientName:              "Confidential DCR Client",
+		RedirectUris:            []string{"http://127.0.0.1:33418/callback"},
+		ClientSecretExpiresAt:   pgtype.Timestamptz{},
+		TokenEndpointAuthMethod: "client_secret_basic",
 	})
 	require.NoError(t, err)
 

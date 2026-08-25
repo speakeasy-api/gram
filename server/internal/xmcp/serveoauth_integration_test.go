@@ -215,12 +215,13 @@ func TestHandleRemoteLoginCallback_AnonymousSubject(t *testing.T) {
 	}))
 
 	_, err := usersessions_repo.New(ti.conn).CreateUserSessionClient(ctx, usersessions_repo.CreateUserSessionClientParams{
-		UserSessionIssuerID:   result.UserSessionIssuer.ID,
-		ClientID:              "test-mcp-client",
-		ClientSecretHash:      pgtype.Text{Valid: false},
-		ClientName:            "test-mcp-client",
-		RedirectUris:          []string{"http://example.com/cb"},
-		ClientSecretExpiresAt: pgtype.Timestamptz{Valid: false},
+		UserSessionIssuerID:     result.UserSessionIssuer.ID,
+		ClientID:                "test-mcp-client",
+		ClientSecretHash:        pgtype.Text{Valid: false},
+		ClientName:              "test-mcp-client",
+		RedirectUris:            []string{"http://example.com/cb"},
+		ClientSecretExpiresAt:   pgtype.Timestamptz{Valid: false},
+		TokenEndpointAuthMethod: "none",
 	})
 	require.NoError(t, err)
 

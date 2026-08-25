@@ -303,12 +303,13 @@ func runRemoteLoginRoundTrip(
 func insertUserSessionClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, issuerID uuid.UUID, clientID string) {
 	t.Helper()
 	_, err := usersessions_repo.New(conn).CreateUserSessionClient(ctx, usersessions_repo.CreateUserSessionClientParams{
-		UserSessionIssuerID:   issuerID,
-		ClientID:              clientID,
-		ClientSecretHash:      pgtype.Text{Valid: false},
-		ClientName:            "test-mcp-client",
-		RedirectUris:          []string{"http://example.com/cb"},
-		ClientSecretExpiresAt: pgtype.Timestamptz{Valid: false},
+		UserSessionIssuerID:     issuerID,
+		ClientID:                clientID,
+		ClientSecretHash:        pgtype.Text{Valid: false},
+		ClientName:              "test-mcp-client",
+		RedirectUris:            []string{"http://example.com/cb"},
+		ClientSecretExpiresAt:   pgtype.Timestamptz{Valid: false},
+		TokenEndpointAuthMethod: "none",
 	})
 	require.NoError(t, err)
 }

@@ -28,6 +28,10 @@ func TestNewRemoteSource_NoOriginRule(t *testing.T) {
 	require.Equal(t, "https://www.googleapis.com/oauth2/v3/certs", source.CacheKey())
 }
 
+// NewRemoteSource and ValidateURI are checked against one list, so the
+// registration-time answer and the resolve-time answer cannot drift apart: a
+// jwks_uri that passes registration must not fail to resolve later for a
+// reason registration could have caught.
 func TestNewRemoteSource_InvalidURIRejected(t *testing.T) {
 	t.Parallel()
 
@@ -43,6 +47,17 @@ func TestNewRemoteSource_InvalidURIRejected(t *testing.T) {
 	} {
 		_, err := NewRemoteSource(uri)
 		require.Error(t, err, "jwks_uri %q should be rejected", uri)
+		require.Error(t, ValidateURI(uri), "ValidateURI must agree that %q is rejected", uri)
+	}
+
+	for _, uri := range []string{
+		"https://chatgpt.com/oauth/jwks.json",
+		"https://example.com/.well-known/jwks.json?v=2",
+		"https://example.com:8443/jwks.json",
+	} {
+		_, err := NewRemoteSource(uri)
+		require.NoError(t, err, "jwks_uri %q should be accepted", uri)
+		require.NoError(t, ValidateURI(uri), "ValidateURI must agree that %q is accepted", uri)
 	}
 }
 

@@ -82,6 +82,7 @@ import (
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/clientauth"
 	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
@@ -121,30 +122,34 @@ type Service struct {
 	// before the resolver runs, on their own cimd.admission.decisions
 	// instrument (a denial performs no fetch, so it has no place under
 	// cimd.fetch.attempts).
-	cimdAdmissionMetrics   *admission.Metrics
-	toolProxy              *gateway.ToolProxy
-	oauthRepo              *oauth_repo.Queries
-	billingTracker         billing.Tracker
-	billingRepository      billing.Repository
-	toolsetCache           cache.TypedCacheObject[mv.ToolsetBaseContents]
-	telemLogger            *tm.Logger
-	vectorToolStore        *rag.ToolsetVectorStore
-	temporal               *temporal.Environment
-	assistantTokens        *assistanttokens.Manager
-	sessions               *sessions.Manager
-	identityResolver       IdentityResolver
-	chatSessionsManager    *chatsessions.Manager
-	externalmcpRepo        *externalmcp_repo.Queries
-	deploymentsRepo        *deployments_repo.Queries
-	enc                    *encryption.Client
-	authz                  *authz.Engine
-	shadowMCPClient        *shadowmcp.Client
-	auditLogger            *audit.Logger
-	platformExtras         []platformtools.ExternalTool
-	platformFeatureChecker platformtools.FeatureChecker
-	platformToolsets       map[string]platformtools.Toolset
-	authnChallengeCache    cache.TypedCacheObject[AuthnChallengeState]
-	userSessionGrantCache  cache.TypedCacheObject[UserSessionGrant]
+	cimdAdmissionMetrics *admission.Metrics
+	// clientAssertionVerifier verifies private_key_jwt client assertions at
+	// the token and revocation endpoints. Nil without Redis, in which case
+	// assertion clients are refused rather than admitted unverified.
+	clientAssertionVerifier *clientauth.Verifier
+	toolProxy               *gateway.ToolProxy
+	oauthRepo               *oauth_repo.Queries
+	billingTracker          billing.Tracker
+	billingRepository       billing.Repository
+	toolsetCache            cache.TypedCacheObject[mv.ToolsetBaseContents]
+	telemLogger             *tm.Logger
+	vectorToolStore         *rag.ToolsetVectorStore
+	temporal                *temporal.Environment
+	assistantTokens         *assistanttokens.Manager
+	sessions                *sessions.Manager
+	identityResolver        IdentityResolver
+	chatSessionsManager     *chatsessions.Manager
+	externalmcpRepo         *externalmcp_repo.Queries
+	deploymentsRepo         *deployments_repo.Queries
+	enc                     *encryption.Client
+	authz                   *authz.Engine
+	shadowMCPClient         *shadowmcp.Client
+	auditLogger             *audit.Logger
+	platformExtras          []platformtools.ExternalTool
+	platformFeatureChecker  platformtools.FeatureChecker
+	platformToolsets        map[string]platformtools.Toolset
+	authnChallengeCache     cache.TypedCacheObject[AuthnChallengeState]
+	userSessionGrantCache   cache.TypedCacheObject[UserSessionGrant]
 	// userSessionRefreshReplayCache retains the encrypted rotation outcome.
 	userSessionRefreshReplayCache cache.TypedCacheObject[userSessionRefreshReplay]
 
@@ -333,25 +338,26 @@ func NewService(
 	)
 
 	return &Service{
-		logger:               logger,
-		tracer:               tracer,
-		metrics:              mcpmetrics.NewMetrics(meter, logger),
-		guardianPolicy:       guardianPolicy,
-		db:                   db,
-		authRepo:             auth_repo.New(db),
-		toolsetsRepo:         toolsets_repo.New(db),
-		mcpMetadataRepo:      metadata_repo.New(db),
-		orgsRepo:             organizations_repo.New(db),
-		deploymentsRepo:      deployments_repo.New(db),
-		externalmcpRepo:      externalmcp_repo.New(db),
-		auth:                 auth.New(logger, db, sessions, authzEngine),
-		env:                  env,
-		serverURL:            serverURL,
-		siteURL:              siteURL,
-		posthog:              posthog,
-		features:             features,
-		cimdResolver:         cimd.NewResolver(guardianPolicy, meterProvider, logger),
-		cimdAdmissionMetrics: admission.NewMetrics(meterProvider, logger),
+		logger:                  logger,
+		tracer:                  tracer,
+		metrics:                 mcpmetrics.NewMetrics(meter, logger),
+		guardianPolicy:          guardianPolicy,
+		db:                      db,
+		authRepo:                auth_repo.New(db),
+		toolsetsRepo:            toolsets_repo.New(db),
+		mcpMetadataRepo:         metadata_repo.New(db),
+		orgsRepo:                organizations_repo.New(db),
+		deploymentsRepo:         deployments_repo.New(db),
+		externalmcpRepo:         externalmcp_repo.New(db),
+		auth:                    auth.New(logger, db, sessions, authzEngine),
+		env:                     env,
+		serverURL:               serverURL,
+		siteURL:                 siteURL,
+		posthog:                 posthog,
+		features:                features,
+		cimdResolver:            cimd.NewResolver(guardianPolicy, meterProvider, logger),
+		cimdAdmissionMetrics:    admission.NewMetrics(meterProvider, logger),
+		clientAssertionVerifier: newClientAssertionVerifier(redisClient, guardianPolicy, meterProvider, logger),
 		toolProxy: gateway.NewToolProxy(
 			logger,
 			tracerProvider,
