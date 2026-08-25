@@ -163,13 +163,27 @@ export function NavGroupProvider({
       setHighlightRect(null);
       return;
     }
-    const containerRect = containerRef.current.getBoundingClientRect();
-    const elRect = el.getBoundingClientRect();
+    // Layout offsets, not client rects: the mode switch scales the whole pane
+    // into a tab card, and client rects are post-transform, so measuring
+    // through them parks the highlight on the wrong row at the wrong size (a
+    // transform never changes layout size, so the ResizeObserver below does
+    // not fire to correct it). offsetTop/offsetLeft/offsetWidth are pre-
+    // transform, so the highlight is right whatever the ancestor is doing.
+    let top = 0;
+    let left = 0;
+    for (
+      let node: HTMLElement | null = el;
+      node && node !== containerRef.current;
+      node = node.offsetParent as HTMLElement | null
+    ) {
+      top += node.offsetTop;
+      left += node.offsetLeft;
+    }
     setHighlightRect({
-      top: elRect.top - containerRect.top,
-      left: elRect.left - containerRect.left,
-      width: elRect.width,
-      height: elRect.height,
+      top,
+      left,
+      width: el.offsetWidth,
+      height: el.offsetHeight,
     });
   }, [target]);
 
