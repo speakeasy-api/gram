@@ -1690,9 +1690,6 @@ CREATE TABLE IF NOT EXISTS user_session_issuers (
   CONSTRAINT user_session_issuers_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
 
--- Non-partial index backing the ON DELETE CASCADE foreign key (see the note
--- on user_session_issuer_cimd_clients_project_id_idx); also serves
--- organization-scoped lookups.
 CREATE INDEX IF NOT EXISTS user_session_issuers_organization_id_idx
 ON user_session_issuers (organization_id);
 
@@ -1793,9 +1790,6 @@ CREATE TABLE IF NOT EXISTS user_session_clients (
   )
 );
 
--- Non-partial index backing the ON DELETE CASCADE foreign key (see the note
--- on user_session_issuer_cimd_clients_project_id_idx); also serves
--- organization-scoped lookups.
 CREATE INDEX IF NOT EXISTS user_session_clients_organization_id_idx
 ON user_session_clients (organization_id);
 
@@ -1873,9 +1867,6 @@ CREATE TABLE IF NOT EXISTS user_session_consents (
   CONSTRAINT user_session_consents_user_session_client_id_fkey FOREIGN KEY (user_session_client_id) REFERENCES user_session_clients (id) ON DELETE CASCADE
 );
 
--- Non-partial index backing the ON DELETE CASCADE foreign key (see the note
--- on user_session_issuer_cimd_clients_project_id_idx); also serves
--- organization-scoped lookups.
 CREATE INDEX IF NOT EXISTS user_session_consents_organization_id_idx
 ON user_session_consents (organization_id);
 
@@ -1918,9 +1909,6 @@ CREATE TABLE IF NOT EXISTS user_sessions (
   CONSTRAINT user_sessions_user_session_client_id_fkey FOREIGN KEY (user_session_client_id) REFERENCES user_session_clients (id) ON DELETE SET NULL
 );
 
--- Non-partial index backing the ON DELETE CASCADE foreign key (see the note
--- on user_session_issuer_cimd_clients_project_id_idx); also serves
--- organization-scoped lookups.
 CREATE INDEX IF NOT EXISTS user_sessions_organization_id_idx
 ON user_sessions (organization_id);
 

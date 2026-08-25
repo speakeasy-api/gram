@@ -391,9 +391,14 @@ func userSessionIssuerView(row repo.UserSessionIssuer) *types.UserSessionIssuer 
 	// API — including the audit snapshots built from this view — should never
 	// have to know the unset state exists.
 	mode, _ := admission.ResolveMode(row.ClientIDMetadataAdmissionMode.String, row.ClientIDMetadataAdmissionMode.Valid)
+	projectID := ""
+	if row.ProjectID.Valid {
+		projectID = row.ProjectID.UUID.String()
+	}
+
 	return &types.UserSessionIssuer{
 		ID:                            row.ID.String(),
-		ProjectID:                     row.ProjectID.UUID.String(),
+		ProjectID:                     projectID,
 		Slug:                          row.Slug,
 		AuthnChallengeMode:            row.AuthnChallengeMode,
 		SessionDurationHours:          int(dur / time.Hour),
