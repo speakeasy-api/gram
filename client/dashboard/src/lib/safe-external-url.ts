@@ -57,3 +57,14 @@ export function safeSameOriginUrl(
     return null;
   }
 }
+
+/** Return a validated same-origin redirect in React Router's location format. */
+export function safeSameOriginPath(
+  raw: string | null | undefined,
+): string | null {
+  const href = safeSameOriginUrl(raw);
+  if (!href) return null;
+
+  const url = new URL(href);
+  return `${url.pathname}${url.search}${url.hash}`;
+}

@@ -1,12 +1,8 @@
 import { useSession } from "@/contexts/Auth";
-import { safeSameOriginUrl } from "@/lib/safe-external-url";
-import { useRoutes } from "@/routes";
-import { AuthShell } from "./components/auth-shell";
-import { RegisterPanel } from "./components/register-panel";
+import { safeSameOriginPath, safeSameOriginUrl } from "@/lib/safe-external-url";
 import { Navigate, useSearchParams } from "react-router";
 
 export default function Register(): JSX.Element {
-  const routes = useRoutes();
   const session = useSession();
   const [searchParams] = useSearchParams();
 
@@ -20,18 +16,15 @@ export default function Register(): JSX.Element {
     );
   }
 
-  if (session.activeOrganizationId !== "") {
-    const redirect = safeSameOriginUrl(searchParams.get("redirect"));
-    if (redirect) {
-      window.location.href = redirect;
-    } else {
-      routes.mcp.goTo();
-    }
+  const rawRedirect = searchParams.get("redirect");
+  const redirect = safeSameOriginUrl(rawRedirect);
+  const signUpTarget = redirect
+    ? "/sign-up?redirect=" + encodeURIComponent(redirect)
+    : "/sign-up";
+
+  if (session.session === "" || session.activeOrganizationId === "") {
+    return <Navigate to={signUpTarget} replace />;
   }
 
-  return (
-    <AuthShell page="Register">
-      <RegisterPanel />
-    </AuthShell>
-  );
+  return <Navigate to={safeSameOriginPath(rawRedirect) ?? "/"} replace />;
 }

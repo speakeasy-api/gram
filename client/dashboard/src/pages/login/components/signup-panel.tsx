@@ -30,7 +30,11 @@ function firstError(errors: unknown[]): string | undefined {
   return typeof error === "string" ? error : undefined;
 }
 
-export function SignUpPanel(): JSX.Element {
+export function SignUpPanel({
+  redirectTo,
+}: {
+  redirectTo?: string | null;
+}): JSX.Element {
   const telemetry = useTelemetry();
   const form = useForm({
     defaultValues: { email: "", companyName: "" },
@@ -51,7 +55,7 @@ export function SignUpPanel(): JSX.Element {
       // arrives pre-filled, and is never stored at all.
       window.location.assign(
         buildLoginRedirectURL(
-          null,
+          redirectTo ?? null,
           normalizeOrgName(value.companyName),
           value.email.trim(),
         ),
