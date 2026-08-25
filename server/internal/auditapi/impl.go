@@ -104,6 +104,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 		Action:        conv.PtrToPGTextEmpty(payload.Action),
 		SubjectType:   conv.PtrToPGTextEmpty(payload.SubjectType),
 		SubjectID:     conv.PtrToPGTextEmpty(payload.SubjectID),
+		SubjectIds:    payload.SubjectIds,
 		ActingSurface: conv.PtrToPGTextEmpty(payload.ActingSurface),
 	}
 

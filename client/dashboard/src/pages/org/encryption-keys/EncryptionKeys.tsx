@@ -33,6 +33,8 @@ import { useState } from "react";
 import { Outlet } from "react-router";
 import { toast } from "sonner";
 import { CreateExternalKeySheet } from "./CreateExternalKeySheet";
+import { SigningKeysSection } from "./jwks/SigningKeysSection";
+import { ListSection } from "./ListSection";
 import { providerLabel, providerSlug } from "./providers";
 import { useIsCurrentOrganization } from "@/hooks/useIsCurrentOrganization";
 
@@ -131,19 +133,27 @@ function EncryptionKeysOverview({
           </RequireScope>
         }
       >
-        <KeyTable
-          keys={keys}
-          isLoading={isLoading}
-          isError={isError}
-          onRetry={() => void refetch()}
-          isCurrentOrganization={isCurrentOrganization}
-          detailHref={(key) =>
-            orgRoutes.encryptionKeys.keyDetail.href(
-              providerSlug(key.provider),
-              key.id,
-            )
-          }
-        />
+        <div className="flex flex-col gap-10">
+          <ListSection eyebrow="KMS Keys">
+            <KeyTable
+              keys={keys}
+              isLoading={isLoading}
+              isError={isError}
+              onRetry={() => void refetch()}
+              isCurrentOrganization={isCurrentOrganization}
+              detailHref={(key) =>
+                orgRoutes.encryptionKeys.keyDetail.href(
+                  providerSlug(key.provider),
+                  key.id,
+                )
+              }
+            />
+          </ListSection>
+          <SigningKeysSection
+            organizationId={organizationId}
+            isCurrentOrganization={isCurrentOrganization}
+          />
+        </div>
       </ResourceListPage>
 
       <CreateExternalKeySheet

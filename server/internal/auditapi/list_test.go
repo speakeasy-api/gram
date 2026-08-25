@@ -836,3 +836,97 @@ func deleteProject(t *testing.T, ctx context.Context, ti *testInstance, projectI
 func jsonNumber(value int) string {
 	return strconv.Itoa(value)
 }
+
+func TestAuditService_List_FilterBySubjectIDs(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAuditService(t)
+	authCtx := testAuthContext(t, ctx)
+
+	// A parent resource plus two children whose events name the child as the
+	// subject, alongside an unrelated sibling that must stay out of the result.
+	setID := uuid.NewString()
+	firstKeyID := uuid.NewString()
+	secondKeyID := uuid.NewString()
+	otherKeyID := uuid.NewString()
+
+	seed := func(action, subjectType, subjectID string) uuid.UUID {
+		return insertAuditLog(t, ctx, ti, auditLogSeed{
+			organizationID:     authCtx.ActiveOrganizationID,
+			projectID:          uuid.NullUUID{UUID: uuid.UUID{}, Valid: false},
+			actorID:            "user:first",
+			actorType:          "user",
+			actorDisplayName:   nil,
+			actorSlug:          nil,
+			action:             action,
+			subjectID:          subjectID,
+			subjectType:        subjectType,
+			subjectDisplayName: nil,
+			subjectSlug:        nil,
+			beforeSnapshot:     nil,
+			afterSnapshot:      nil,
+			metadata:           nil,
+		})
+	}
+
+	setCreated := seed("json_web_key_set:create", "json_web_key_set", setID)
+	firstPublished := seed("json_web_key:publish", "json_web_key", firstKeyID)
+	secondPublished := seed("json_web_key:publish", "json_web_key", secondKeyID)
+	seed("json_web_key:publish", "json_web_key", otherKeyID)
+
+	result, err := ti.service.List(ctx, &gen.ListPayload{
+		ApikeyToken:   nil,
+		SessionToken:  nil,
+		Cursor:        nil,
+		ProjectSlug:   nil,
+		ActorID:       nil,
+		Action:        nil,
+		SubjectType:   nil,
+		SubjectID:     nil,
+		SubjectIds:    []string{setID, firstKeyID, secondKeyID},
+		ActingSurface: nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Logs, 3)
+
+	ids := make([]string, 0, len(result.Logs))
+	for _, log := range result.Logs {
+		ids = append(ids, log.ID)
+	}
+	require.ElementsMatch(t, []string{setCreated.String(), firstPublished.String(), secondPublished.String()}, ids)
+
+	// subject_type still narrows the match: only the key rows survive.
+	keysOnly, err := ti.service.List(ctx, &gen.ListPayload{
+		ApikeyToken:   nil,
+		SessionToken:  nil,
+		Cursor:        nil,
+		ProjectSlug:   nil,
+		ActorID:       nil,
+		Action:        nil,
+		SubjectType:   new("json_web_key"),
+		SubjectID:     nil,
+		SubjectIds:    []string{setID, firstKeyID, secondKeyID},
+		ActingSurface: nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, keysOnly.Logs, 2)
+	for _, log := range keysOnly.Logs {
+		require.Equal(t, "json_web_key", log.SubjectType)
+	}
+
+	// An empty list is no filter rather than a filter that matches nothing.
+	unfiltered, err := ti.service.List(ctx, &gen.ListPayload{
+		ApikeyToken:   nil,
+		SessionToken:  nil,
+		Cursor:        nil,
+		ProjectSlug:   nil,
+		ActorID:       nil,
+		Action:        nil,
+		SubjectType:   nil,
+		SubjectID:     nil,
+		SubjectIds:    []string{},
+		ActingSurface: nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, unfiltered.Logs, 4)
+}

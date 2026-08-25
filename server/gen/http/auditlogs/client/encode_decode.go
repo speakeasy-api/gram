@@ -68,6 +68,9 @@ func EncodeListRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.R
 		if p.SubjectID != nil {
 			values.Add("subject_id", *p.SubjectID)
 		}
+		for _, value := range p.SubjectIds {
+			values.Add("subject_ids", value)
+		}
 		if p.ActingSurface != nil {
 			values.Add("acting_surface", *p.ActingSurface)
 		}
