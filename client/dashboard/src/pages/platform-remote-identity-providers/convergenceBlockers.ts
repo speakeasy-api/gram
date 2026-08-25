@@ -1,5 +1,8 @@
 import type { IssuerConvergenceCandidate } from "@gram/client/models/components/issuerconvergencecandidate.js";
-import { mismatchFieldNames } from "../remote-identity-providers/issuerMismatches";
+import {
+  mismatchFieldNames,
+  TARGET_AUTHORITATIVE,
+} from "../remote-identity-providers/issuerMismatches";
 
 // candidateBlockerSummary is the one-line status for a candidate row: why it
 // cannot be consolidated, what would change if it were, or that nothing is known
@@ -26,7 +29,7 @@ export function candidateBlockerSummary(
   if (candidate.warnings.length > 0) {
     const fields = mismatchFieldNames(candidate.warnings);
 
-    return `${fields.join(", ")} ${fields.length === 1 ? "differs" : "differ"}; the platform provider's values become authoritative`;
+    return `${fields.join(", ")} ${fields.length === 1 ? "differs" : "differ"}; ${TARGET_AUTHORITATIVE}`;
   }
 
   return "No blockers found";

@@ -79,7 +79,7 @@ describe("candidateBlockerSummary", () => {
       candidateBlockerSummary(
         candidate({ warnings: [scalarMismatch("oidc", "true", "false")] }),
       ),
-    ).toBe("oidc differs; the platform provider's values become authoritative");
+    ).toBe("oidc differs; the target provider's values become authoritative");
   });
 
   it("names every warning field", () => {
@@ -92,7 +92,7 @@ describe("candidateBlockerSummary", () => {
       }),
     );
     expect(summary).toBe(
-      "oidc, scopes_supported differ; the platform provider's values become authoritative",
+      "oidc, scopes_supported differ; the target provider's values become authoritative",
     );
   });
 

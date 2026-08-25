@@ -343,24 +343,26 @@ func migrationWarnings(source, target repo.RemoteSessionIssuer) []issuerFieldMis
 	return warnings
 }
 
-// stringSetsEqual reports whether two lists hold the same entries in any order,
-// counting duplicates.
+// stringSetsEqual reports whether two lists offer the same entries, ignoring
+// both their order and how many times each one appears.
 //
-// Order carries no meaning in the RFC 8414 metadata arrays this compares:
-// scopes_supported is a set, and an issuer that lists the same scopes in a
-// different order grants the migrated clients exactly what they had. Comparing
-// order-sensitively would warn about a difference the admin cannot act on, and
-// the preflight would render it as two visually identical scope lists.
+// scopes_supported is a set in RFC 8414, and neither position nor repetition
+// changes what it offers: an issuer that lists the same scopes in a different
+// order, or lists one of them twice, grants the migrated clients exactly what
+// they had. Warning on either would name a difference the admin cannot act on,
+// and one the preflight could not draw as a delta, because no scope has been
+// gained or lost.
 func stringSetsEqual(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
+	return slices.Equal(sortedUnique(a), sortedUnique(b))
+}
 
-	sortedA, sortedB := slices.Clone(a), slices.Clone(b)
-	slices.Sort(sortedA)
-	slices.Sort(sortedB)
+// sortedUnique returns the distinct entries of a list in order, leaving the
+// caller's slice untouched.
+func sortedUnique(values []string) []string {
+	unique := slices.Clone(values)
+	slices.Sort(unique)
 
-	return slices.Equal(sortedA, sortedB)
+	return slices.Compact(unique)
 }
 
 // migratePreflight is the impact summary shared by getIssuerMigratePreflight and

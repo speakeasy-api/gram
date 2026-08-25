@@ -47,11 +47,21 @@ export function mismatchValueLabel(value: string | undefined): string {
   return value;
 }
 
+// TARGET_AUTHORITATIVE is the clause every surface uses to say who wins a
+// non-blocking difference. Exported rather than repeated, so the consolidation
+// dialog and the convergence listing cannot drift into describing one warning
+// two ways for the same administrator.
+export const TARGET_AUTHORITATIVE =
+  "the target provider's values become authoritative";
+
 // listMismatchDelta splits a list-valued difference into what the migrated
-// clients gain and what they lose. Both sides can come back empty — two lists
-// that hold the same entries a different number of times differ without either
-// side holding an entry the other lacks — and the caller falls back to showing
-// the two lists whole.
+// clients gain and what they lose.
+//
+// Both sides can come back empty, for a difference that adds and removes
+// nothing. The server does not report one today, comparing the list fields as
+// sets, but it owns that comparison and the client cannot verify it: the caller
+// falls back to showing the two lists whole rather than rendering a difference
+// with no values, which is the state this whole surface exists to end.
 export function listMismatchDelta(mismatch: IssuerFieldMismatch): {
   added: string[];
   removed: string[];
@@ -69,7 +79,7 @@ export function listMismatchDelta(mismatch: IssuerFieldMismatch): {
 // overwrites for every client that moves.
 export function warningSentence(mismatch: IssuerFieldMismatch): string {
   if (isListMismatch(mismatch)) {
-    return `${mismatch.field} differs; the target provider's values become authoritative.`;
+    return `${mismatch.field} differs; ${TARGET_AUTHORITATIVE}.`;
   }
 
   return `${mismatch.field} changes from ${mismatchValueLabel(mismatch.sourceValue)} to ${mismatchValueLabel(mismatch.targetValue)} for migrated clients.`;

@@ -93,8 +93,9 @@ function ScalarMismatch({
 
 // WarningDetail describes one non-blocking difference and, for a list-valued
 // field, what the migrated clients actually gain and lose. A list difference
-// with no entry on either side alone — the same entries repeated a different
-// number of times — has no delta to draw, so both lists are shown whole.
+// that turns out to add and remove nothing has no delta to draw, so both lists
+// are shown whole rather than leaving the sentence standing alone with no
+// values under it.
 function WarningDetail({
   mismatch,
 }: {

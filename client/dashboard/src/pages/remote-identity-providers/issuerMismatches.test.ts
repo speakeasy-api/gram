@@ -82,13 +82,23 @@ describe("listMismatchDelta", () => {
     });
   });
 
-  // The server compares the two lists as multisets, so they can differ without
-  // either side holding an entry the other lacks. The caller falls back to
-  // showing both lists whole when this happens.
-  it("comes back empty when only the repeat count differs", () => {
+  // The server compares list fields as sets and so no longer reports a
+  // difference that adds and removes nothing. It owns that comparison, though,
+  // and this is what backs the caller's fallback to showing both lists whole.
+  it("comes back empty when neither side holds an entry the other lacks", () => {
     expect(
       listMismatchDelta(listMismatch(["openid", "openid"], ["openid"])),
     ).toEqual({ added: [], removed: [] });
+  });
+
+  // A repeat alongside a genuine change must not hide the change, and must not
+  // report the repeated entry as lost when both sides still offer it.
+  it("ignores a repeat when a real entry also changed", () => {
+    expect(
+      listMismatchDelta(
+        listMismatch(["openid", "openid", "email"], ["openid", "profile"]),
+      ),
+    ).toEqual({ added: ["profile"], removed: ["email"] });
   });
 });
 

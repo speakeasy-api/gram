@@ -255,10 +255,10 @@ func TestMigrationWarnings_ScopeOrderIsNotADivergence(t *testing.T) {
 	require.Empty(t, migrationWarnings(source, target))
 }
 
-// TestMigrationWarnings_RepeatedScopeIsADivergence pins the multiset half of the
-// comparison: dropping a repeat changes the list the target declares, so it is
-// still reported even though the distinct scopes match.
-func TestMigrationWarnings_RepeatedScopeIsADivergence(t *testing.T) {
+// TestMigrationWarnings_RepeatedScopeIsNotADivergence proves a repeat is as
+// meaningless as an ordering: both sides offer openid, so the migrated clients
+// gain and lose nothing and there is nothing to warn about.
+func TestMigrationWarnings_RepeatedScopeIsNotADivergence(t *testing.T) {
 	t.Parallel()
 
 	source := repo.RemoteSessionIssuer{
@@ -268,7 +268,25 @@ func TestMigrationWarnings_RepeatedScopeIsADivergence(t *testing.T) {
 		ScopesSupported: []string{"openid"},
 	}
 
-	require.Equal(t, []string{"scopes_supported"}, mismatchFieldNames(migrationWarnings(source, target)))
+	require.Empty(t, migrationWarnings(source, target))
+}
+
+// TestMigrationWarnings_RepeatDoesNotMaskARealChange covers the two together: a
+// list that both repeats an entry and drops another still diverges on the entry,
+// and the repeat must not distract from it.
+func TestMigrationWarnings_RepeatDoesNotMaskARealChange(t *testing.T) {
+	t.Parallel()
+
+	source := repo.RemoteSessionIssuer{
+		ScopesSupported: []string{"openid", "openid", "email"},
+	}
+	target := repo.RemoteSessionIssuer{
+		ScopesSupported: []string{"openid", "profile"},
+	}
+
+	warnings := migrationWarnings(source, target)
+	require.Equal(t, []string{"scopes_supported"}, mismatchFieldNames(warnings))
+	require.Equal(t, []string{"openid", "openid", "email"}, warnings[0].sourceValues, "the stored list is reported as stored")
 }
 
 func TestMigratePreflight_CanMigrate(t *testing.T) {
