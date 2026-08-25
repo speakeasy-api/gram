@@ -13,6 +13,7 @@ import (
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
@@ -21,14 +22,33 @@ import (
 
 const (
 	customDomainReconcileWorkflowRunTimeout            = 15 * time.Minute
-	customDomainRegistrationWorkflowRunTimeout         = 30 * time.Minute
 	signalCustomDomainReconcileStartToCloseTimeout     = 12 * time.Minute
 	signalCustomDomainReconcileActivityMaximumAttempts = 2
+
+	// DNS propagation for customer domains can take hours (some providers ship
+	// record changes through code review and staged rollouts). Verification
+	// polls until the deadline; the run timeout leaves room for reconciliation
+	// after a last-minute success.
+	customDomainVerificationDeadline           = 24 * time.Hour
+	customDomainRegistrationWorkflowRunTimeout = 26 * time.Hour
+
+	// Verification poll backoff bounds. A reverify signal (dashboard button or
+	// re-registration) wakes the loop immediately.
+	customDomainVerifyInitialInterval = 30 * time.Second
+	customDomainVerifyMaxInterval     = 5 * time.Minute
+
+	// CustomDomainReverifySignalName wakes a pending registration workflow for
+	// an immediate re-check instead of waiting out the current poll interval.
+	CustomDomainReverifySignalName = "reverify"
 )
 
 type CustomDomainRegistrationParams struct {
-	OrgID           string
-	Domain          string
+	OrgID  string
+	Domain string
+	// CustomDomainID pins the workflow to the row created at registration
+	// time, so a delete + re-register of the same hostname cannot be verified
+	// by a stale workflow. Zero on workflows started before this field.
+	CustomDomainID  uuid.UUID
 	CreatedBy       urn.Principal
 	CreatedByName   *string
 	ProvisionerKind k8s.ProvisionerKind
@@ -60,9 +80,25 @@ type CustomDomainRegistrationClient struct {
 	TemporalEnv *tenv.Environment
 }
 
-func (c *CustomDomainRegistrationClient) GetWorkflowInfo(ctx context.Context, orgID string, domain string) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
-	id := c.GetID(orgID, domain)
-	info, err := c.TemporalEnv.Client().DescribeWorkflowExecution(ctx, id, "")
+// GetWorkflowInfo reports the row-scoped registration workflow when one
+// exists, falling back to the legacy hostname-scoped identifier so runs
+// started before the v2 IDs still surface as in-progress.
+func (c *CustomDomainRegistrationClient) GetWorkflowInfo(ctx context.Context, orgID string, domain string, customDomainID uuid.UUID) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
+	if customDomainID != uuid.Nil {
+		info, err := c.TemporalEnv.Client().DescribeWorkflowExecution(ctx, c.GetRegistrationID(customDomainID), "")
+		if err == nil {
+			if info.GetWorkflowExecutionInfo().GetStatus() == enums.WORKFLOW_EXECUTION_STATUS_RUNNING {
+				return info, nil
+			}
+		} else {
+			var notFound *serviceerror.NotFound
+			if !errors.As(err, &notFound) {
+				return nil, fmt.Errorf("describe workflow execution: %w", err)
+			}
+		}
+	}
+
+	info, err := c.TemporalEnv.Client().DescribeWorkflowExecution(ctx, c.GetLegacyID(orgID, domain), "")
 	if err != nil {
 		return nil, fmt.Errorf("describe workflow execution: %w", err)
 	}
@@ -70,7 +106,16 @@ func (c *CustomDomainRegistrationClient) GetWorkflowInfo(ctx context.Context, or
 	return info, nil
 }
 
-func (c *CustomDomainRegistrationClient) GetID(orgID string, domain string) string {
+// GetRegistrationID scopes the registration workflow to the row it was
+// started for, so hostname reuse (delete + re-register) can never signal or
+// terminate a successor row's workflow.
+func (c *CustomDomainRegistrationClient) GetRegistrationID(customDomainID uuid.UUID) string {
+	return fmt.Sprintf("v2:custom-domain-registration:%s", customDomainID.String())
+}
+
+// GetLegacyID is the pre-v2, hostname-scoped registration workflow identifier;
+// retained to observe and stop runs started before the cutover.
+func (c *CustomDomainRegistrationClient) GetLegacyID(orgID string, domain string) string {
 	return fmt.Sprintf("v1:custom-domain-registration:%s:%s", orgID, domain)
 }
 
@@ -153,21 +198,63 @@ func (c *CustomDomainRegistrationClient) ExecuteCustomDomainDeletion(ctx context
 	})
 }
 
-func (c *CustomDomainRegistrationClient) ExecuteCustomDomainRegistration(ctx context.Context, orgID string, domain string, createdBy urn.Principal, createdByName *string, provisionerKind k8s.ProvisionerKind, ipAllowlist []string) (client.WorkflowRun, error) {
-	id := c.GetID(orgID, domain)
-	return c.TemporalEnv.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
-		ID:                    id,
-		TaskQueue:             string(c.TemporalEnv.Queue()),
-		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-		WorkflowRunTimeout:    customDomainRegistrationWorkflowRunTimeout,
+// ExecuteCustomDomainRegistration starts the row-scoped registration
+// workflow, or wakes the already-running one with a reverify signal so the
+// dashboard's "Reverify" re-checks immediately instead of erroring against the
+// stable workflow ID during a long DNS-propagation wait. The start is
+// decoupled from request cancellation: the caller has already committed the
+// row, and a client hangup must not strand it without a workflow.
+func (c *CustomDomainRegistrationClient) ExecuteCustomDomainRegistration(ctx context.Context, orgID string, domain string, customDomainID uuid.UUID, createdBy urn.Principal, createdByName *string, provisionerKind k8s.ProvisionerKind, ipAllowlist []string) (client.WorkflowRun, error) {
+	startCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+
+	id := c.GetRegistrationID(customDomainID)
+	run, err := c.TemporalEnv.Client().SignalWithStartWorkflow(startCtx, id, CustomDomainReverifySignalName, nil, client.StartWorkflowOptions{
+		ID:                       id,
+		TaskQueue:                string(c.TemporalEnv.Queue()),
+		WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
+		WorkflowRunTimeout:       customDomainRegistrationWorkflowRunTimeout,
 	}, CustomDomainRegistrationWorkflow, CustomDomainRegistrationParams{
 		OrgID:           orgID,
 		Domain:          domain,
+		CustomDomainID:  customDomainID,
 		CreatedBy:       createdBy,
 		CreatedByName:   createdByName,
 		ProvisionerKind: provisionerKind,
 		IPAllowlist:     ipAllowlist,
 	})
+	if err != nil {
+		return nil, fmt.Errorf("signal with start custom domain registration workflow: %w", err)
+	}
+	return run, nil
+}
+
+// TerminateCustomDomainRegistration best-effort stops the given row's pending
+// registration workflow along with any legacy hostname-scoped run. The row
+// scoping means a late terminate after delete can never hit a successor row's
+// workflow — that successor runs under its own row ID.
+func (c *CustomDomainRegistrationClient) TerminateCustomDomainRegistration(ctx context.Context, orgID string, domain string, customDomainID uuid.UUID, reason string) error {
+	terminateCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+
+	ids := make([]string, 0, 2)
+	if customDomainID != uuid.Nil {
+		ids = append(ids, c.GetRegistrationID(customDomainID))
+	}
+	ids = append(ids, c.GetLegacyID(orgID, domain))
+	var errs []error
+	for _, id := range ids {
+		err := c.TemporalEnv.Client().TerminateWorkflow(terminateCtx, id, "", reason)
+		if err != nil {
+			var notFound *serviceerror.NotFound
+			if errors.As(err, &notFound) {
+				continue
+			}
+			errs = append(errs, fmt.Errorf("terminate custom domain registration workflow %s: %w", id, err))
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func CustomDomainRegistrationWorkflow(ctx workflow.Context, params CustomDomainRegistrationParams) error {
@@ -180,23 +267,31 @@ func CustomDomainRegistrationWorkflow(ctx workflow.Context, params CustomDomainR
 	})
 
 	var a *Activities
-	err := workflow.ExecuteActivity(
-		ctx,
-		a.VerifyCustomDomain,
-		activities.VerifyCustomDomainArgs{
-			OrgID:           params.OrgID,
-			Domain:          params.Domain,
-			CreatedBy:       params.CreatedBy,
-			CreatedByName:   params.CreatedByName,
-			ProvisionerKind: params.ProvisionerKind,
-			IPAllowlist:     params.IPAllowlist,
-		},
-	).Get(ctx, nil)
-	if err != nil {
+	verifyArgs := activities.VerifyCustomDomainArgs{
+		OrgID:           params.OrgID,
+		Domain:          params.Domain,
+		CustomDomainID:  params.CustomDomainID,
+		CreatedBy:       params.CreatedBy,
+		CreatedByName:   params.CreatedByName,
+		ProvisionerKind: params.ProvisionerKind,
+		IPAllowlist:     params.IPAllowlist,
+	}
+
+	const verifyLoopVersion = 1
+	if workflow.GetVersion(ctx, "custom-domain-verify-loop", workflow.DefaultVersion, verifyLoopVersion) == workflow.DefaultVersion {
+		// Replay compatibility: single-shot verification for workflows started
+		// before slow DNS propagation was tolerated.
+		err := workflow.ExecuteActivity(ctx, a.VerifyCustomDomain, verifyArgs).Get(ctx, nil)
+		if err != nil {
+			logger.Error("failed to verify custom domain", "error", err.Error(), "org_id", params.OrgID, "domain", params.Domain)
+			return fmt.Errorf("failed to verify custom domain: %w", err)
+		}
+	} else if err := verifyCustomDomainUntilOwned(ctx, verifyArgs); err != nil {
 		logger.Error("failed to verify custom domain", "error", err.Error(), "org_id", params.OrgID, "domain", params.Domain)
 		return fmt.Errorf("failed to verify custom domain: %w", err)
 	}
 
+	var err error
 	const reconcileWorkflowVersion = 1
 	version := workflow.GetVersion(ctx, "custom-domain-reconcile-workflow", workflow.DefaultVersion, reconcileWorkflowVersion)
 	if version == workflow.DefaultVersion {
@@ -230,8 +325,9 @@ func CustomDomainRegistrationWorkflow(ctx workflow.Context, params CustomDomainR
 			},
 		})
 		err = workflow.ExecuteActivity(reconcileCtx, a.SignalCustomDomainReconcile, SignalCustomDomainReconcileArgs{
-			OrgID:  params.OrgID,
-			Domain: params.Domain,
+			OrgID:          params.OrgID,
+			Domain:         params.Domain,
+			CustomDomainID: params.CustomDomainID,
 		}).Get(reconcileCtx, nil)
 	}
 	if err != nil {
@@ -242,21 +338,105 @@ func CustomDomainRegistrationWorkflow(ctx workflow.Context, params CustomDomainR
 	return nil
 }
 
+// verifyCustomDomainUntilOwned polls ownership verification until it succeeds,
+// fails terminally, or the propagation deadline lapses. Between pending
+// results it sleeps with capped backoff; a reverify signal wakes it for an
+// immediate re-check. DNS record changes can take hours to ship at some
+// providers, so patience here is the product behavior, not a fallback: a
+// transient infrastructure failure that exhausts one pass's activity retries
+// counts as another pending tick rather than killing the day-long wait — only
+// non-retryable failures (invalid domain, vanished row) end the workflow.
+func verifyCustomDomainUntilOwned(ctx workflow.Context, verifyArgs activities.VerifyCustomDomainArgs) error {
+	logger := workflow.GetLogger(ctx)
+	var a *Activities
+	reverify := workflow.GetSignalChannel(ctx, CustomDomainReverifySignalName)
+	deadline := workflow.Now(ctx).Add(customDomainVerificationDeadline)
+	interval := customDomainVerifyInitialInterval
+
+	for {
+		// Collapse queued wake-ups so a burst causes one re-check.
+		for reverify.ReceiveAsync(nil) {
+		}
+
+		var result activities.VerifyCustomDomainResult
+		lastReason := ""
+		if err := workflow.ExecuteActivity(ctx, a.VerifyCustomDomainV2, verifyArgs).Get(ctx, &result); err != nil {
+			var appErr *temporal.ApplicationError
+			if errors.As(err, &appErr) && appErr.NonRetryable() {
+				return err
+			}
+			logger.Warn("custom domain verification pass failed, will retry", "error", err.Error(), "domain", verifyArgs.Domain)
+			lastReason = "verification check failed"
+		} else {
+			switch result.Status {
+			case activities.VerifyStatusVerified:
+				return nil
+			case activities.VerifyStatusDNSPending:
+				lastReason = result.Reason
+			default:
+				return temporal.NewNonRetryableApplicationError(
+					fmt.Sprintf("unexpected custom domain verification status %q", result.Status),
+					"CustomDomainVerificationContract",
+					nil,
+				)
+			}
+		}
+		remaining := deadline.Sub(workflow.Now(ctx))
+		if remaining <= 0 {
+			// A reverify that raced the deadline earns one more pass instead
+			// of being acknowledged and then dropped with the closing run.
+			if reverify.ReceiveAsync(nil) {
+				remaining = customDomainVerifyInitialInterval
+				deadline = workflow.Now(ctx).Add(remaining)
+			} else {
+				return temporal.NewNonRetryableApplicationError(
+					fmt.Sprintf("custom domain verification timed out waiting for DNS: %s", lastReason),
+					"CustomDomainVerificationTimeout",
+					nil,
+				)
+			}
+		}
+
+		timerCtx, cancelTimer := workflow.WithCancel(ctx)
+		selector := workflow.NewSelector(ctx)
+		selector.AddFuture(workflow.NewTimer(timerCtx, min(interval, remaining)), func(workflow.Future) {})
+		selector.AddReceive(reverify, func(c workflow.ReceiveChannel, _ bool) {
+			c.Receive(ctx, nil)
+		})
+		selector.Select(ctx)
+		cancelTimer()
+
+		interval = min(interval*2, customDomainVerifyMaxInterval)
+	}
+}
+
 type SignalCustomDomainReconcileArgs struct {
 	OrgID  string
 	Domain string
+	// CustomDomainID pins reconciliation to the row this registration was
+	// started for; zero on legacy workflows, which fall back to hostname
+	// lookup.
+	CustomDomainID uuid.UUID
 }
 
-// SignalCustomDomainReconcile bridges the registration workflow—whose stable
-// identifier predates the custom-domain row—to the UUID-scoped reconcile
-// workflow after verification has committed that row.
+// SignalCustomDomainReconcile bridges the registration workflow to the
+// UUID-scoped reconcile workflow after verification succeeds. It resolves the
+// row by the ID the registration was started for, so a delete + re-register
+// of the same hostname can never route a stale workflow's reconcile at the
+// successor row; legacy workflows without an ID fall back to hostname lookup.
 func (a *Activities) SignalCustomDomainReconcile(ctx context.Context, args SignalCustomDomainReconcileArgs) error {
-	domain, err := customdomainsrepo.New(a.db).GetCustomDomainByDomain(ctx, args.Domain)
+	var domain customdomainsrepo.CustomDomain
+	var err error
+	if args.CustomDomainID != uuid.Nil {
+		domain, err = customdomainsrepo.New(a.db).GetCustomDomainByID(ctx, args.CustomDomainID)
+	} else {
+		domain, err = customdomainsrepo.New(a.db).GetCustomDomainByDomain(ctx, args.Domain)
+	}
 	if err != nil {
 		return fmt.Errorf("load custom domain for reconciliation: %w", err)
 	}
-	if domain.OrganizationID != args.OrgID {
-		return fmt.Errorf("custom domain does not belong to organization")
+	if domain.OrganizationID != args.OrgID || domain.Domain != args.Domain {
+		return fmt.Errorf("custom domain does not match this registration")
 	}
 
 	run, err := (&CustomDomainRegistrationClient{TemporalEnv: a.temporalEnv}).ExecuteCustomDomainReconcile(ctx, domain.ID)

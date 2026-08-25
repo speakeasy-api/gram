@@ -46,6 +46,7 @@ func (stubTemporalRun) GetRunID() string { return "run" }
 
 type stubTemporalClient struct {
 	registrationCalls int
+	terminationCalls  int
 	deletionCalls     int
 	updateCalls       int
 	reconcileCalls    int
@@ -54,19 +55,26 @@ type stubTemporalClient struct {
 	lastOrganization  string
 	lastHealthCheckID uuid.UUID
 	lastReconcileID   uuid.UUID
+	lastRegisteredID  uuid.UUID
 	reconcileStartErr error
 	reconcileErr      error
 	reconcile         func(context.Context, uuid.UUID) error
 }
 
-func (s *stubTemporalClient) GetWorkflowInfo(ctx context.Context, orgID string, domain string) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
+func (s *stubTemporalClient) GetWorkflowInfo(ctx context.Context, orgID string, domain string, customDomainID uuid.UUID) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
 	return nil, nil
 }
 
-func (s *stubTemporalClient) ExecuteCustomDomainRegistration(ctx context.Context, orgID string, domain string, createdBy urn.Principal, createdByName *string, _ k8s.ProvisionerKind, _ []string) (client.WorkflowRun, error) {
+func (s *stubTemporalClient) ExecuteCustomDomainRegistration(ctx context.Context, orgID string, domain string, customDomainID uuid.UUID, createdBy urn.Principal, createdByName *string, _ k8s.ProvisionerKind, _ []string) (client.WorkflowRun, error) {
 	s.registrationCalls++
 	s.lastDomain = domain
+	s.lastRegisteredID = customDomainID
 	return stubTemporalRun{err: nil, onGet: nil}, nil
+}
+
+func (s *stubTemporalClient) TerminateCustomDomainRegistration(ctx context.Context, orgID string, domain string, customDomainID uuid.UUID, reason string) error {
+	s.terminationCalls++
+	return nil
 }
 
 func (s *stubTemporalClient) ExecuteCustomDomainDeletion(ctx context.Context, orgID, domain, ingressName, certSecretName string, _ k8s.ProvisionerKind) (client.WorkflowRun, error) {
@@ -132,7 +140,7 @@ func newTestCustomDomainsService(t *testing.T) (context.Context, *serviceTestIns
 	temporal := &stubTemporalClient{}
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	auditLogger := audit.NewLogger()
-	svc := customdomains.NewService(logger, tracerProvider, conn, sessionManager, temporal, authzEngine, auditLogger)
+	svc := customdomains.NewService(logger, tracerProvider, conn, sessionManager, temporal, authzEngine, auditLogger, "cname.example.net.", nil)
 
 	return ctx, &serviceTestInstance{service: svc, conn: conn, sessionManager: sessionManager, temporal: temporal, repo: cdrepo.New(conn)}
 }

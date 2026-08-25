@@ -26,7 +26,9 @@ import { HumanizeDateTime } from "@/lib/dates";
 import { cn, getCustomDomainCNAME } from "@/lib/utils";
 import type { CustomDomain } from "@gram/client/models/components/customdomain.js";
 import type { CustomDomainMcpEndpoint } from "@gram/client/models/components/customdomainmcpendpoint.js";
+import type { RootMcpServerOption } from "@gram/client/models/components/rootmcpserveroption.js";
 import { useCustomDomainMcpEndpoints } from "@gram/client/react-query/customDomainMcpEndpoints";
+import { useRootMcpServers } from "@gram/client/react-query/rootMcpServers";
 import { useCheckDomainHealthMutation } from "@gram/client/react-query/checkDomainHealth";
 import { useDeleteDomainMutation } from "@gram/client/react-query/deleteDomain";
 import { invalidateAllGetDomain } from "@gram/client/react-query/getDomain";
@@ -98,7 +100,7 @@ const healthIssueMessages: Record<string, string> = {
   dns_not_found:
     "We couldn't find DNS records for this domain. Set this record with your DNS provider:",
   dns_target_mismatch:
-    "This domain's DNS does not resolve to the expected CNAME target. If the domain sits behind a proxy or CDN, traffic may still work; otherwise set this DNS record:",
+    "This domain's DNS does not resolve to the expected target. If the domain sits behind a proxy or CDN, traffic may still work; otherwise set this DNS record:",
   resource_missing:
     "The routing configuration for this domain is missing. Run the check again to confirm the problem persists.",
   certificate_missing:
@@ -125,12 +127,19 @@ function customDomainHealthMessage(issue?: string): string {
 function CustomDomainHealthMessage({
   issue,
   domainName,
+  recordType,
+  aRecords,
+  cnameTarget,
 }: {
   issue?: string;
   domainName: string;
+  recordType?: string;
+  aRecords?: string[];
+  cnameTarget?: string;
 }) {
   const showsExpectedRecord =
     issue === "dns_not_found" || issue === "dns_target_mismatch";
+  const useARecord = recordType === "a" && (aRecords?.length ?? 0) > 0;
   return (
     <>
       {customDomainHealthMessage(issue)}
@@ -138,7 +147,9 @@ function CustomDomainHealthMessage({
         <>
           {" "}
           <code className="break-all">
-            {domainName} CNAME {getCustomDomainCNAME()}
+            {useARecord
+              ? `${domainName} A ${aRecords?.join(", ")}`
+              : `${domainName} CNAME ${cnameTarget || getCustomDomainCNAME()}`}
           </code>
         </>
       )}
@@ -290,76 +301,92 @@ function mcpServerLabel(endpoint: CustomDomainMcpEndpoint): string {
   );
 }
 
+function rootServerLabel(option: RootMcpServerOption): string {
+  return option.name ?? option.slug ?? option.mcpServerId;
+}
+
+function groupRootServerOptions(options: RootMcpServerOption[]): {
+  projectId: string;
+  projectName: string;
+  servers: RootMcpServerOption[];
+}[] {
+  const groups = new Map<
+    string,
+    { projectName: string; servers: RootMcpServerOption[] }
+  >();
+
+  for (const option of options) {
+    const group = groups.get(option.projectId);
+    if (group) {
+      group.servers.push(option);
+    } else {
+      groups.set(option.projectId, {
+        projectName: option.projectName,
+        servers: [option],
+      });
+    }
+  }
+
+  return Array.from(groups.entries())
+    .map(([projectId, group]) => ({
+      projectId,
+      projectName: group.projectName,
+      servers: [...group.servers].sort((a, b) =>
+        rootServerLabel(a).localeCompare(rootServerLabel(b)),
+      ),
+    }))
+    .sort((a, b) => a.projectName.localeCompare(b.projectName));
+}
+
 function DefaultMcpServerControl({
   domain,
-  endpoints,
-  isLoading,
   canManage,
 }: {
   domain: CustomDomain;
-  endpoints: CustomDomainMcpEndpoint[];
-  isLoading: boolean;
   canManage: boolean;
 }) {
   const rootMutation = useRootMcpEndpointMutation();
-  const endpointGroups = useMemo(() => {
-    const groups = new Map<
-      string,
-      { projectName: string; endpoints: CustomDomainMcpEndpoint[] }
-    >();
-
-    for (const endpoint of endpoints) {
-      const group = groups.get(endpoint.projectId);
-      if (group) {
-        group.endpoints.push(endpoint);
-      } else {
-        groups.set(endpoint.projectId, {
-          projectName: endpoint.projectName,
-          endpoints: [endpoint],
-        });
-      }
-    }
-
-    return Array.from(groups.entries())
-      .map(([projectId, group]) => ({
-        projectId,
-        projectName: group.projectName,
-        endpoints: [...group.endpoints].sort((a, b) =>
-          mcpServerLabel(a).localeCompare(mcpServerLabel(b)),
-        ),
-      }))
-      .sort((a, b) => a.projectName.localeCompare(b.projectName));
-  }, [endpoints]);
-  const currentEndpoint = endpoints.find(
-    (endpoint) => endpoint.id === domain.rootMcpEndpointId,
+  const serversQuery = useRootMcpServers(undefined, undefined, {
+    refetchOnWindowFocus: false,
+  });
+  const servers = useMemo(
+    () => serversQuery.data?.mcpServers ?? [],
+    [serversQuery.data],
   );
-  const selectedValue = currentEndpoint?.id ?? NO_ROOT_MCP_ENDPOINT;
+  const serverGroups = useMemo(
+    () => groupRootServerOptions(servers),
+    [servers],
+  );
+  const currentServer = servers.find((option) => option.isDomainRoot);
+  const selectedValue = currentServer?.mcpServerId ?? NO_ROOT_MCP_ENDPOINT;
 
   let content: React.ReactNode;
-  if (isLoading) {
+  if (serversQuery.isLoading) {
     content = (
       <Text variant="body" className="text-muted-foreground text-sm">
         Loading MCP servers…
       </Text>
     );
-  } else if (endpoints.length === 0) {
+  } else if (servers.length === 0) {
     content = (
       <div className="border-border border border-dashed p-4">
         <Text variant="body" className="font-medium">
-          No MCP endpoints on this domain
+          No MCP servers in this organization
         </Text>
         <Text
           variant="body"
           className="text-muted-foreground mt-1 max-w-[65ch] text-sm"
         >
-          Attach an MCP endpoint to this custom domain before choosing a default
-          MCP server.
+          Create an MCP server first, then choose it here to serve the domain
+          root.
         </Text>
       </div>
     );
   } else {
-    const selectedLabel = currentEndpoint
-      ? `${mcpServerLabel(currentEndpoint)} · /mcp/${currentEndpoint.slug}`
+    const selectedLabel = currentServer
+      ? currentServer.attachedEndpointSlug
+        ? `${rootServerLabel(currentServer)} · /mcp/${currentServer.attachedEndpointSlug}`
+        : rootServerLabel(currentServer)
       : "No root mapping";
 
     content = (
@@ -367,12 +394,13 @@ function DefaultMcpServerControl({
         <Select
           value={selectedValue}
           disabled={!canManage || rootMutation.isPending}
-          onValueChange={(value) =>
-            rootMutation.setRootMcpEndpoint(
-              domain.id,
-              value === NO_ROOT_MCP_ENDPOINT ? undefined : value,
-            )
-          }
+          onValueChange={(value) => {
+            if (value === NO_ROOT_MCP_ENDPOINT) {
+              rootMutation.setRootMcpEndpoint(domain.id, undefined);
+            } else {
+              rootMutation.setRootMcpServer(domain.id, value);
+            }
+          }}
         >
           <SelectTrigger className="w-full max-w-xl">
             <SelectValue>{selectedLabel}</SelectValue>
@@ -384,27 +412,31 @@ function DefaultMcpServerControl({
             >
               No root mapping
             </SelectItem>
-            {endpointGroups.map((group) => (
+            {serverGroups.map((group) => (
               <SelectGroup key={group.projectId}>
                 <SelectLabel>{group.projectName}</SelectLabel>
-                {group.endpoints.map((endpoint) => (
+                {group.servers.map((option) => (
                   <SelectItem
-                    key={endpoint.id}
-                    value={endpoint.id}
-                    description={`/mcp/${endpoint.slug}`}
+                    key={option.mcpServerId}
+                    value={option.mcpServerId}
+                    description={
+                      option.attachedEndpointSlug
+                        ? `/mcp/${option.attachedEndpointSlug}`
+                        : "Not attached to this domain yet"
+                    }
                   >
-                    {mcpServerLabel(endpoint)}
+                    {rootServerLabel(option)}
                   </SelectItem>
                 ))}
               </SelectGroup>
             ))}
           </SelectContent>
         </Select>
-        {currentEndpoint ? (
+        {currentServer?.attachedEndpointSlug ? (
           <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-sm">
             <code>{`https://${domain.domain}/`}</code>
             <span aria-hidden="true">→</span>
-            <code>{`/mcp/${currentEndpoint.slug}`}</code>
+            <code>{`/mcp/${currentServer.attachedEndpointSlug}`}</code>
           </div>
         ) : (
           <Text variant="body" className="text-muted-foreground text-sm">
@@ -585,15 +617,28 @@ function OrgDomainsInner() {
   const canManageDomains = hasScope("org:admin");
   const queryClient = useQueryClient();
   const [isAddDomainDialogOpen, setIsAddDomainDialogOpen] = useState(false);
-  const [isCnameCopied, setIsCnameCopied] = useState(false);
+  const [copiedRecordValue, setCopiedRecordValue] = useState<string | null>(
+    null,
+  );
+  const copyRecordResetTimer = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const [isTxtCopied, setIsTxtCopied] = useState(false);
+  const copyTxtResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isCustomDomainModalOpen, setIsCustomDomainUpgradeModalOpen] =
     useState(false);
   const [isDeleteDomainDialogOpen, setIsDeleteDomainDialogOpen] =
     useState(false);
   const [domainInput, setDomainInput] = useState("");
   const [domainError, setDomainError] = useState("");
-  const CNAME_VALUE = getCustomDomainCNAME();
+  // null = follow the suggestion; the user can override because apex
+  // detection is a heuristic (delegated subzones can take a CNAME).
+  const [recordTypeOverride, setRecordTypeOverride] = useState<
+    "cname" | "a" | null
+  >(null);
+  const [pendingRootServerId, setPendingRootServerId] = useState<string | null>(
+    null,
+  );
 
   // IP allowlist state for create dialog
   const [pendingIPs, setPendingIPs] = useState<string[]>([]);
@@ -616,9 +661,25 @@ function OrgDomainsInner() {
 
   const {
     domain,
+    dnsConfig,
     isLoading: domainIsLoading,
     refetch: domainRefetch,
   } = useCustomDomain();
+
+  const aRecords = dnsConfig?.aRecords ?? [];
+  const CNAME_VALUE = dnsConfig?.cnameTarget || getCustomDomainCNAME();
+
+  // Pre-registration the server has no domain to judge, so fall back to a
+  // label-count heuristic; after registration the server's publicsuffix-based
+  // suggestion wins. Both are defaults for a user-controllable toggle.
+  const suggestedRecordType: "cname" | "a" =
+    aRecords.length === 0
+      ? "cname"
+      : domain?.suggestedRecordType === "a" ||
+          (!domain && validDomain && subdomain.split(".").length === 2)
+        ? "a"
+        : "cname";
+  const recordType = recordTypeOverride ?? suggestedRecordType;
 
   useEffect(() => {
     if (domain?.domain && !domainInput) {
@@ -636,25 +697,59 @@ function OrgDomainsInner() {
     return "";
   };
 
-  const handleCopyCname = async () => {
-    await navigator.clipboard.writeText(CNAME_VALUE);
-    setIsCnameCopied(true);
-    setTimeout(() => setIsCnameCopied(false), 2000);
+  const handleCopyRecordValue = async (value: string) => {
+    if (!navigator.clipboard) return;
+    try {
+      await navigator.clipboard.writeText(value);
+    } catch {
+      return;
+    }
+    setCopiedRecordValue(value);
+    // A copy within the confirmation window supersedes the pending reset.
+    if (copyRecordResetTimer.current)
+      clearTimeout(copyRecordResetTimer.current);
+    copyRecordResetTimer.current = setTimeout(
+      () => setCopiedRecordValue(null),
+      2000,
+    );
   };
   const handleCopyTxt = async () => {
-    await navigator.clipboard.writeText(txtValue);
+    if (!navigator.clipboard) return;
+    try {
+      await navigator.clipboard.writeText(txtValue);
+    } catch {
+      return;
+    }
     setIsTxtCopied(true);
-    setTimeout(() => setIsTxtCopied(false), 2000);
+    if (copyTxtResetTimer.current) clearTimeout(copyTxtResetTimer.current);
+    copyTxtResetTimer.current = setTimeout(() => setIsTxtCopied(false), 2000);
   };
 
+  const rootMutation = useRootMcpEndpointMutation();
+  const rootServersQuery = useRootMcpServers(undefined, undefined, {
+    refetchOnWindowFocus: false,
+  });
+  const rootServerOptions = useMemo(
+    () => rootServersQuery.data?.mcpServers ?? [],
+    [rootServersQuery.data],
+  );
+  const rootServerGroups = useMemo(
+    () => groupRootServerOptions(rootServerOptions),
+    [rootServerOptions],
+  );
+
   const registerDomainMutation = useRegisterDomainMutation({
-    onSuccess: () => {
+    onSuccess: (created) => {
       setIsAddDomainDialogOpen(false);
       setDomainInput("");
       setDomainError("");
       setPendingIPs([]);
       setPendingIPsValid(true);
       setIsAllowlistExpanded(false);
+      if (pendingRootServerId) {
+        rootMutation.setRootMcpServer(created.id, pendingRootServerId);
+        setPendingRootServerId(null);
+      }
       setTimeout(() => {
         void domainRefetch();
       }, 2000);
@@ -760,7 +855,7 @@ function OrgDomainsInner() {
                   {domain.domain}
                 </Text>
                 {domain.isUpdating ? (
-                  <SimpleTooltip tooltip="Your domain is being verified. This may take a few minutes.">
+                  <SimpleTooltip tooltip="Waiting for your DNS records to propagate and verify. This can take several hours with some providers; we re-check every few minutes (at most every 5 minutes apart) for up to 24 hours.">
                     <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
                   </SimpleTooltip>
                 ) : showCustomDomainAutoDisabled(domain) ? (
@@ -825,10 +920,35 @@ function OrgDomainsInner() {
                   <Button
                     variant="secondary"
                     size="sm"
-                    onClick={() => setIsAddDomainDialogOpen(true)}
-                    disabled={domain.isUpdating}
+                    disabled={registerDomainMutation.isPending}
+                    onClick={() => {
+                      // While verification is pending, re-registering wakes
+                      // the polling workflow for an immediate DNS re-check —
+                      // no need to route through the setup dialog. Outside
+                      // that state (auto-disabled, timed out) the dialog is
+                      // the right entry point: it shows the records to fix.
+                      if (domain.isUpdating) {
+                        registerDomainMutation.mutate(
+                          {
+                            security: { sessionHeaderGramSession: "" },
+                            request: {
+                              createDomainRequestBody: {
+                                domain: domain.domain,
+                              },
+                            },
+                          },
+                          {
+                            onSuccess: () => {
+                              toast.success("Checking DNS records now");
+                            },
+                          },
+                        );
+                      } else {
+                        setIsAddDomainDialogOpen(true);
+                      }
+                    }}
                   >
-                    Reverify
+                    {domain.isUpdating ? "Check now" : "Reverify"}
                   </Button>
                 )}
                 <Button
@@ -859,6 +979,9 @@ function OrgDomainsInner() {
                     <CustomDomainHealthMessage
                       issue={domain.healthIssue}
                       domainName={domain.domain}
+                      recordType={domain.suggestedRecordType}
+                      aRecords={aRecords}
+                      cnameTarget={CNAME_VALUE}
                     />
                   </Text>
                   {domain.unhealthySince && (
@@ -895,6 +1018,9 @@ function OrgDomainsInner() {
                     <CustomDomainHealthMessage
                       issue={domain.healthIssue}
                       domainName={domain.domain}
+                      recordType={domain.suggestedRecordType}
+                      aRecords={aRecords}
+                      cnameTarget={CNAME_VALUE}
                     />
                   </Text>
                   {domain.healthCheckedAt && (
@@ -925,8 +1051,6 @@ function OrgDomainsInner() {
           )}
           <DefaultMcpServerControl
             domain={domain}
-            endpoints={impactedEndpoints}
-            isLoading={domainEndpointsQuery.isLoading}
             canManage={canManageDomains}
           />
           <ChatGPTAppVerificationControl
@@ -1049,6 +1173,8 @@ function OrgDomainsInner() {
             setPendingIPs([]);
             setPendingIPsValid(true);
             setIsAllowlistExpanded(false);
+            setPendingRootServerId(null);
+            setRecordTypeOverride(null);
           }
         }}
       >
@@ -1093,31 +1219,100 @@ function OrgDomainsInner() {
               >
                 Step 2
               </Text>
-              <Text variant="body" className="text-muted-foreground mb-2">
-                Create a CNAME record for{" "}
-                <span className="font-mono break-all">{subdomain}</span>{" "}
-                pointing to the following:
+              {aRecords.length > 0 && (
+                <div className="mb-2 flex gap-1">
+                  <Button
+                    variant={recordType === "cname" ? "secondary" : "tertiary"}
+                    size="sm"
+                    onClick={() => setRecordTypeOverride("cname")}
+                  >
+                    CNAME (subdomain)
+                  </Button>
+                  <Button
+                    variant={recordType === "a" ? "secondary" : "tertiary"}
+                    size="sm"
+                    onClick={() => setRecordTypeOverride("a")}
+                  >
+                    A record (apex domain)
+                  </Button>
+                </div>
+              )}
+              {recordType === "a" ? (
+                <>
+                  <Text variant="body" className="text-muted-foreground mb-2">
+                    Create an A record for{" "}
+                    <span className="font-mono break-all">{subdomain}</span>{" "}
+                    (the zone root, often written as{" "}
+                    <span className="font-mono">@</span>) pointing to:
+                  </Text>
+                  {aRecords.map((ip) => (
+                    <div
+                      key={ip}
+                      className="bg-muted mt-2 flex items-center space-x-2 p-3"
+                    >
+                      <code className="flex-1 break-all">{ip}</code>
+                      <Button
+                        aria-label={
+                          copiedRecordValue === ip
+                            ? "A record value copied"
+                            : "Copy A record value"
+                        }
+                        variant="tertiary"
+                        size="sm"
+                        onClick={() => void handleCopyRecordValue(ip)}
+                        className="shrink-0"
+                      >
+                        <Button.Icon>
+                          {copiedRecordValue === ip ? (
+                            <CheckCircle2 className="h-4 w-4 text-green-500" />
+                          ) : (
+                            <Copy className="h-4 w-4" />
+                          )}
+                        </Button.Icon>
+                      </Button>
+                    </div>
+                  ))}
+                </>
+              ) : (
+                <>
+                  <Text variant="body" className="text-muted-foreground mb-2">
+                    Create a CNAME record for{" "}
+                    <span className="font-mono break-all">{subdomain}</span>{" "}
+                    pointing to the following:
+                  </Text>
+                  <div className="bg-muted mt-2 flex items-center space-x-2 p-3">
+                    <code className="flex-1 break-all">{CNAME_VALUE}</code>
+                    <Button
+                      aria-label={
+                        copiedRecordValue === CNAME_VALUE
+                          ? "CNAME value copied"
+                          : "Copy CNAME value"
+                      }
+                      variant="tertiary"
+                      size="sm"
+                      onClick={() => void handleCopyRecordValue(CNAME_VALUE)}
+                      className="shrink-0"
+                    >
+                      <Button.Icon>
+                        {copiedRecordValue === CNAME_VALUE ? (
+                          <CheckCircle2 className="h-4 w-4 text-green-500" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
+                      </Button.Icon>
+                    </Button>
+                  </div>
+                </>
+              )}
+              <Text
+                variant="body"
+                className="text-muted-foreground mt-2 text-sm"
+              >
+                DNS changes can take a while to propagate — with some providers
+                several hours. We re-check every few minutes (at most every 5
+                minutes apart) for up to 24 hours, and you can trigger a check
+                any time with “Check now”.
               </Text>
-              <div className="bg-muted mt-2 flex items-center space-x-2 p-3">
-                <code className="flex-1 break-all">{CNAME_VALUE}</code>
-                <Button
-                  aria-label={
-                    isCnameCopied ? "CNAME value copied" : "Copy CNAME value"
-                  }
-                  variant="tertiary"
-                  size="sm"
-                  onClick={() => void handleCopyCname()}
-                  className="shrink-0"
-                >
-                  <Button.Icon>
-                    {isCnameCopied ? (
-                      <CheckCircle2 className="h-4 w-4 text-green-500" />
-                    ) : (
-                      <Copy className="h-4 w-4" />
-                    )}
-                  </Button.Icon>
-                </Button>
-              </div>
             </div>
             <div>
               <Text
@@ -1152,6 +1347,61 @@ function OrgDomainsInner() {
                 </Button>
               </div>
             </div>
+            {!domain?.domain && rootServerOptions.length > 0 && (
+              <div>
+                <Text
+                  variant="body"
+                  className="mb-2 block text-lg font-extrabold"
+                >
+                  Step 4 (optional)
+                </Text>
+                <Text variant="body" className="text-muted-foreground mb-2">
+                  Serve an MCP server at the domain root. It's applied the
+                  moment the domain registers, so traffic routes as soon as DNS
+                  cuts over — no follow-up step.
+                </Text>
+                <Select
+                  value={pendingRootServerId ?? NO_ROOT_MCP_ENDPOINT}
+                  onValueChange={(value) =>
+                    setPendingRootServerId(
+                      value === NO_ROOT_MCP_ENDPOINT ? null : value,
+                    )
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue>
+                      {pendingRootServerId
+                        ? (rootServerOptions.find(
+                            (option) =>
+                              option.mcpServerId === pendingRootServerId,
+                          )?.name ?? pendingRootServerId)
+                        : "No root mapping"}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem
+                      value={NO_ROOT_MCP_ENDPOINT}
+                      description="Do not route the custom-domain root to an MCP server."
+                    >
+                      No root mapping
+                    </SelectItem>
+                    {rootServerGroups.map((group) => (
+                      <SelectGroup key={group.projectId}>
+                        <SelectLabel>{group.projectName}</SelectLabel>
+                        {group.servers.map((option) => (
+                          <SelectItem
+                            key={option.mcpServerId}
+                            value={option.mcpServerId}
+                          >
+                            {rootServerLabel(option)}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div>
               <button
                 type="button"
