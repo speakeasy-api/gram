@@ -1,0 +1,19 @@
+docs/plugins/publishing.md
+  s_664ae7d369889a::t_808fe6a3cfb863 53
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "b01542cc4d1d7c9f7ee1c0b67d5873337e8a6612",
+  "prompts": {},
+  "sessions": {
+    "s_664ae7d369889a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0237f-0bfe-7680-a351-49299ea5f43e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
