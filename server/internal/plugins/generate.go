@@ -1843,8 +1843,13 @@ export default {
           return
         }
         if (hook === "agent_end") {
+          // Consume whichever cache entry served the splice: llm_output keys
+          // by runId when it has one and sessionId otherwise, so deleting
+          // only the runId entry would retain sessionId-keyed data and
+          // splice it into a later turn's agent_end.
           const cached = llmByRun.get(event?.runId ?? "") ?? llmByRun.get(ctx?.sessionId ?? "")
-          if (event?.runId) llmByRun.delete(event.runId)
+          llmByRun.delete(event?.runId ?? "")
+          llmByRun.delete(ctx?.sessionId ?? "")
           const spliced = cached ? { ...event, finalMessage: cached.finalMessage, usage: cached.usage } : event
           void call(hook, spliced, sanitizeCtx(hook, ctx))
           return
@@ -1854,7 +1859,10 @@ export default {
           return
         }
         return call(hook, event, sanitizeCtx(hook, ctx), gateTimeoutMs).then((reply) => {
-          if (reply?.timedOut && FAIL_CLOSED) return failClosedResult(hook, event)
+          // A reply without output is the daemon's legitimate "no decision"
+          // (the relay runs its own fail-closed auth ratchet in-process);
+          // only a shim timeout or a daemon-reported error may fail closed.
+          if ((reply?.timedOut || reply?.error) && FAIL_CLOSED) return failClosedResult(hook, event)
           return reply?.output
         })
       })

@@ -2140,6 +2140,9 @@ func TestGenerateOpenClawObservabilityPluginPackage(t *testing.T) {
 		// Gateway hook contexts carry the full config incl. auth secrets and
 		// must be reduced to the allowlist before forwarding.
 		"{ port: ctx?.port, workspaceDir: ctx?.workspaceDir }",
+		// A daemon-reported error must fail closed like a timeout; an
+		// output-less reply stays the legitimate allow.
+		"(reply?.timedOut || reply?.error) && FAIL_CLOSED",
 	} {
 		require.Contains(t, string(shim), want)
 	}
