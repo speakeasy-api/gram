@@ -601,6 +601,10 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
 	}
 
+	if err := verifyMetaMcpBackendUniqueness(ctx, dbtx, *authCtx.ProjectID, serverID, existing, ids, logger); err != nil {
+		return nil, err
+	}
+
 	// Resolve name: nil = leave existing; non-nil = trim and require non-empty.
 	name := existing.Name
 	if payload.Name != nil {
@@ -1160,6 +1164,44 @@ func verifyTunneledPublicConsent(ctx context.Context, dbtx pgx.Tx, projectID uui
 		return fmt.Errorf("tunneled MCP servers cannot be public until the tunnel source enables public serving")
 	}
 	return nil
+}
+
+// verifyMetaMcpBackendUniqueness rejects repointing a server onto a backend a
+// co-member of one of its meta MCP servers already fronts, the state
+// metamcp.AddMetaMcpMember refuses at attach time. The two paths share no
+// lock, so a simultaneous attach of the colliding member can still slip past.
+func verifyMetaMcpBackendUniqueness(
+	ctx context.Context,
+	dbtx pgx.Tx,
+	projectID uuid.UUID,
+	serverID uuid.UUID,
+	existing repo.McpServer,
+	ids serverIDs,
+	logger *slog.Logger,
+) error {
+	if ids.RemoteMcpServerID == existing.RemoteMcpServerID &&
+		ids.TunneledMcpServerID == existing.TunneledMcpServerID &&
+		ids.ToolsetID == existing.ToolsetID &&
+		ids.UnproxiedMcpServerID == existing.UnproxiedMcpServerID {
+		return nil
+	}
+
+	metaName, err := metamcprepo.New(dbtx).FindMetaMCPSiblingSharingBackend(ctx, metamcprepo.FindMetaMCPSiblingSharingBackendParams{
+		McpServerID:          serverID,
+		ProjectID:            projectID,
+		RemoteMcpServerID:    ids.RemoteMcpServerID,
+		TunneledMcpServerID:  ids.TunneledMcpServerID,
+		ToolsetID:            ids.ToolsetID,
+		UnproxiedMcpServerID: ids.UnproxiedMcpServerID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "check meta mcp members sharing a backend").LogError(ctx, logger)
+	default:
+		return oops.E(oops.CodeInvalid, nil, "another member of meta mcp server %q already fronts this backend", metaName).LogError(ctx, logger)
+	}
 }
 
 func backendFilterCount(ids ...uuid.NullUUID) int {

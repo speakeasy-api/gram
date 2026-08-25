@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 )
@@ -858,4 +859,81 @@ func TestUpdateMcpServer_AlreadyUnproxiedAllowsNonStaffRename(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, updated.Name)
 	require.Equal(t, newName, *updated.Name)
+}
+
+func TestUpdateMcpServer_RejectsBackendSharedWithMetaMcpSibling(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	sharedBackend := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	ownBackend := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+
+	sibling := seedMcpServerForBackend(t, ctx, ti, "sibling server", sharedBackend)
+	subject := seedMcpServerForBackend(t, ctx, ti, "subject server", ownBackend)
+
+	meta, err := metamcprepo.New(ti.conn).CreateMetaMCPServer(ctx, metamcprepo.CreateMetaMCPServerParams{
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		ProjectID:           *authCtx.ProjectID,
+		Name:                "collision holder",
+		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	require.NoError(t, err)
+
+	for _, memberID := range []string{sibling, subject} {
+		_, err = metamcprepo.New(ti.conn).CreateMetaMCPMember(ctx, metamcprepo.CreateMetaMCPMemberParams{
+			ProjectID:       *authCtx.ProjectID,
+			MetaMcpServerID: meta.ID,
+			McpServerID:     uuid.MustParse(memberID),
+			SortOrder:       0,
+		})
+		require.NoError(t, err)
+	}
+
+	_, err = ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		ID:                subject,
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &sharedBackend,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("disabled"),
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+
+	// A backend no sibling fronts is still free to move to.
+	freeBackend := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	_, err = ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		ID:                subject,
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &freeBackend,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+}
+
+func seedMcpServerForBackend(t *testing.T, ctx context.Context, ti *testInstance, name, remoteMcpServerID string) string {
+	t.Helper()
+
+	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		Name:              name,
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &remoteMcpServerID,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+
+	return created.ID
 }
