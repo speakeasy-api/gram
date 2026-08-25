@@ -6,6 +6,7 @@ import {
 } from "@/components/mode-switch-context";
 import { Icon } from "@/components/ui/Icon";
 import type { IconName } from "@/components/ui/Icon/names";
+import { cn } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
 import { useSlugs } from "@/contexts/Sdk";
 import { useEffect } from "react";
@@ -50,20 +51,27 @@ function ModeSegment({
   label,
   icon,
   active,
+  onInk,
   href,
   onSelect,
 }: {
   label: string;
   icon: IconName;
   active: boolean;
+  onInk: boolean;
   href: string;
   onSelect: (href: string) => void;
 }) {
   // Plain concatenation, not cn(): tailwind-merge reads text-eyebrow and the
   // text-* tone as conflicting text utilities and drops the eyebrow.
-  const tone = active
-    ? "text-default-fixed-light"
-    : "text-muted-foreground hover:text-foreground";
+  // The pill is always the inverse of the bar, so the type flips with it.
+  const tone = onInk
+    ? active
+      ? "text-default-fixed-dark"
+      : "text-muted-fixed-light hover:text-default-fixed-light"
+    : active
+      ? "text-default-inverse"
+      : "text-muted hover:text-default";
 
   return (
     // An anchor, not a button: each mode is a real URL, so it stays
@@ -80,7 +88,7 @@ function ModeSegment({
         event.preventDefault();
         if (!active) onSelect(href);
       }}
-      className={`text-eyebrow relative z-10 flex h-7 items-center justify-center gap-1.5 rounded-full transition-colors duration-200 ${tone}`}
+      className={`text-eyebrow relative z-10 flex h-7 items-center justify-center gap-1.5 rounded-full transition-colors duration-500 ${tone}`}
       style={{ width: `${SEGMENT_WIDTH_REM}rem` }}
     >
       <Icon name={icon} className="h-3 w-3" />
@@ -118,29 +126,47 @@ export function ModeSwitcher({ mode }: { mode: Mode }): JSX.Element | null {
     headless: orgRoutes.headless.href(),
   };
   const activeIndex = MODES.findIndex((entry) => entry.mode === mode);
+  // Ink while a switch is in flight (the tab grid is behind it) and while
+  // headless mode is mounted; light over the dashboard at rest.
+  const onInk = mode === "headless" || phase !== "idle";
 
   return (
     <nav
       aria-label="Interface mode"
       // Read by computeGrid to measure where the panes actually start.
       data-mode-switcher=""
-      // Transparent so the mesh behind the whole chrome shows through. The
-      // hairline only earns its place against an opaque pane: in headless mode
-      // and mid-switch the mesh runs on below the strip, and a rule across it
-      // reads as a seam.
-      className={`relative z-30 flex h-12 shrink-0 items-center justify-center ${
-        mode === "canvas" && phase === "idle" ? "border-border border-b" : ""
-      }`}
+      // The bar matches whatever sits under it: light over the dashboard, ink
+      // once the tab grid or headless mode is showing, so the chrome and the
+      // starfield read as one dark surface.
+      className={cn(
+        "relative z-30 flex h-14 shrink-0 items-center justify-center transition-colors duration-500",
+        onInk
+          ? "bg-surface-tertiary-fixed-dark"
+          : "bg-background border-border border-b",
+      )}
     >
-      <div className="border-border bg-card/80 relative flex items-center rounded-full border p-0.5 backdrop-blur-sm">
+      <div
+        className={cn(
+          "relative flex items-center rounded-full border p-0.5 transition-colors duration-500",
+          onInk ? "border-neutral-softest" : "border-border",
+        )}
+      >
         {/* Solid ink pill that slides between segments — the one moving part,
             so the swap reads as a physical toggle rather than a repaint. */}
         <span
           aria-hidden="true"
-          className="bg-surface-primary-fixed-dark absolute inset-y-0.5 left-0.5 rounded-full transition-transform duration-300 ease-out"
+          className={cn(
+            "absolute inset-y-0.5 left-0.5 rounded-full transition-colors duration-500",
+            onInk
+              ? "bg-surface-primary-fixed-light"
+              : "bg-surface-primary-fixed-dark",
+          )}
           style={{
             width: `${SEGMENT_WIDTH_REM}rem`,
             transform: `translateX(${activeIndex * SEGMENT_WIDTH_REM}rem)`,
+            // Slow enough to read as the pill travelling between segments, on
+            // the same curve the pane animation uses.
+            transition: "transform 620ms cubic-bezier(0.32, 0.72, 0, 1)",
           }}
         />
         {MODES.map((entry) => (
@@ -149,6 +175,7 @@ export function ModeSwitcher({ mode }: { mode: Mode }): JSX.Element | null {
             label={entry.label}
             icon={entry.icon}
             active={entry.mode === mode}
+            onInk={onInk}
             href={hrefs[entry.mode]}
             onSelect={(href) => switchTo(mode, entry.mode, href)}
           />

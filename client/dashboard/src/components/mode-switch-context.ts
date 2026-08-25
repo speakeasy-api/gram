@@ -18,14 +18,14 @@ export const slotOf = (mode: Mode): number =>
 // Chrome-for-iOS tab switching, in three beats: the live pane shrinks into its
 // card slot, both cards sit side by side for a moment, then the chosen card
 // zooms back up to fill the pane.
-export const SHRINK_MS = 520;
-export const HOLD_MS = 380;
-export const ZOOM_MS = 560;
+export const SHRINK_MS = 760;
+export const HOLD_MS = 540;
+export const ZOOM_MS = 760;
 export const EASE_OUT = "cubic-bezier(0.32, 0.72, 0, 1)";
 
 // Height of the mode strip above the panes — the grid is laid out underneath
 // it. MODE_SWITCHER_HEIGHT below is the same value in rem, for the layouts.
-const STRIP_HEIGHT_PX = 48;
+const STRIP_HEIGHT_PX = 56;
 const CARD_GAP_PX = 24;
 const GRID_MAX_WIDTH_PX = 1200;
 const GRID_INSET_PX = 96;
@@ -116,7 +116,7 @@ export function useModeSwitch(): StageValue {
 // themselves against --banner-offset, so the strip's height has to be a known
 // constant both layouts can add into those offsets. Kept in sync with
 // STRIP_HEIGHT_PX above.
-export const MODE_SWITCHER_HEIGHT = "3rem";
+export const MODE_SWITCHER_HEIGHT = "3.5rem";
 
 /**
  * Whether the chrome shows the mode switcher. The layouts need this too: with

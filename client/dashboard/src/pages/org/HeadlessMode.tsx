@@ -8,10 +8,10 @@ import { HeadlessContent } from "./HeadlessContent";
  */
 export default function HeadlessMode(): JSX.Element {
   return (
-    <div className="flex h-screen w-full flex-col">
+    <div className="bg-surface-tertiary-fixed-dark flex h-screen w-full flex-col">
       <ModeSwitcher mode="headless" />
-      {/* No background of its own: the chrome-wide mesh shows through, so the
-          strip and the hero read as one surface. */}
+      {/* The pane paints the ink itself so the strip and the hero read as one
+          dark surface; the starfield lives inside the content. */}
       <ModeSurface mode="headless" className="flex-1 overflow-auto">
         <HeadlessContent />
       </ModeSurface>

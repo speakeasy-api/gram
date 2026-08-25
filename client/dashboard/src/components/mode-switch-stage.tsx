@@ -1,7 +1,4 @@
-import {
-  BRAND_MESH_SURFACE_CLASS,
-  BrandMeshLayers,
-} from "@/components/brand-mesh";
+import { ModeSwitchStarfield } from "@/components/mode-switch-starfield";
 import { Icon } from "@/components/ui/Icon";
 import { cn } from "@/lib/utils";
 import { HeadlessContent } from "@/pages/org/HeadlessContent";
@@ -73,21 +70,22 @@ export function ModeSwitchProvider({
 
   return (
     <ModeSwitchContext.Provider value={{ ...state, switchTo }}>
-      {/* One mesh for the whole chrome, always mounted and always full-bleed:
-          the strip is transparent and the panes are opaque, so the mesh reads
-          as a single continuous surface behind both instead of restarting
-          below the strip. */}
+      {/* Ink behind the whole chrome: the panes are opaque, so this only shows
+          during a switch — the dark screen the tab cards and the starfield sit
+          on. pointer-events-none because it is positioned and would otherwise
+          swallow clicks on the panes' non-positioned content. */}
       <div
         aria-hidden="true"
-        className={cn(
-          BRAND_MESH_SURFACE_CLASS,
-          // Decoration only: positioned, so without this it would sit over the
-          // panes' non-positioned content and swallow every click.
-          "pointer-events-none fixed inset-0 z-0",
-        )}
-      >
-        <BrandMeshLayers />
-      </div>
+        className="bg-surface-tertiary-fixed-dark pointer-events-none fixed inset-0 z-0"
+      />
+      {/* Win95 screensaver behind the grid: only while a switch is in flight,
+          raked toward whichever card is being opened. */}
+      {state.phase !== "idle" && state.from && state.to && (
+        <ModeSwitchStarfield
+          direction={slotOf(state.to) > slotOf(state.from) ? 1 : -1}
+          fading={state.phase === "zooming"}
+        />
+      )}
       {ghostMode && state.grid && (
         <ModeGhostCard
           mode={ghostMode}
@@ -122,7 +120,9 @@ function ModeGhostCard({
     <div
       aria-hidden="true"
       className={cn(
-        "bg-card border-border fixed z-20 overflow-hidden rounded-[14px] border shadow-2xl transition-opacity",
+        // ring, not border: a pale hairline that separates the card from the
+        // ink behind it without the theme border disappearing into it.
+        "bg-card fixed z-20 overflow-hidden rounded-[14px] shadow-2xl ring-1 ring-white/25 transition-opacity",
         fading ? "opacity-0" : "opacity-100",
       )}
       style={{
@@ -211,9 +211,15 @@ export function ModeSurface({
       className={cn(
         className,
         animating &&
-          // bg-background so the mesh never shows through the pane's own gaps
-          // while it is scaled down.
-          "bg-background relative z-20 origin-top-left overflow-hidden rounded-[14px] shadow-2xl will-change-transform",
+          // bg-background so the backdrop never shows through the pane's own
+          // gaps while it is scaled down. Descendant transitions are frozen for
+          // the duration: the fixed sidebar re-anchors when the transform is
+          // added and removed (a transform makes this element its containing
+          // block), and its own left/width transition would animate that
+          // re-anchor as a visible slide.
+          // ring rather than border so the edge costs no layout while the pane
+          // is scaled into its card.
+          "bg-background relative z-20 origin-top-left overflow-hidden rounded-[14px] shadow-2xl ring-1 ring-white/25 will-change-transform [&_*]:!transition-none",
       )}
     >
       {children}
