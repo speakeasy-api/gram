@@ -219,14 +219,7 @@ function DeploymentsTable() {
   const { data: activeDeployment } = useActiveDeployment();
 
   if (deployments.length === 0) {
-    // Keep the "what creates a deployment" copy visible for first-time users;
-    // it explains the empty state rather than only annotating a populated list.
-    return (
-      <>
-        <DeploymentsExplainer />
-        <DeploymentsEmptyState />
-      </>
-    );
+    return <DeploymentsEmptyState />;
   }
 
   const columnsWithData: TableProps<DeploymentSummary>["columns"] = [

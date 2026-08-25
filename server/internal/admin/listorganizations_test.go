@@ -536,6 +536,97 @@ type trialStateCase struct {
 	trial *trialFixture
 }
 
+func TestGetOrganization_TrialDetails(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newTestAdminService(t)
+
+	endsAt := time.Date(2035, time.March, 4, 5, 6, 7, 0, time.UTC)
+	convertedAt := time.Date(2025, time.April, 5, 6, 7, 8, 0, time.UTC)
+	demotedAt := time.Date(2025, time.May, 6, 7, 8, 9, 0, time.UTC)
+	tier := "enterprise"
+	endsISO := endsAt.In(time.Local).Format(time.RFC3339)
+	convertedISO := convertedAt.In(time.Local).Format(time.RFC3339)
+	demotedISO := demotedAt.In(time.Local).Format(time.RFC3339)
+
+	cases := []struct {
+		name        string
+		orgID       string
+		trial       *trialFixture
+		wantTier    *string
+		wantEnds    *string
+		wantConvert *string
+		wantDemote  *string
+	}{
+		{
+			name:     "live",
+			orgID:    "org_trial_detail_live",
+			trial:    &trialFixture{tier: "enterprise", endsAt: endsAt},
+			wantTier: &tier,
+			wantEnds: &endsISO,
+		},
+		{
+			name:        "converted",
+			orgID:       "org_trial_detail_converted",
+			trial:       &trialFixture{tier: "enterprise", endsAt: endsAt, convertedAt: &convertedAt},
+			wantTier:    &tier,
+			wantEnds:    &endsISO,
+			wantConvert: &convertedISO,
+		},
+		{
+			name:       "demoted",
+			orgID:      "org_trial_detail_demoted",
+			trial:      &trialFixture{tier: "enterprise", endsAt: endsAt, demotedAt: &demotedAt},
+			wantTier:   &tier,
+			wantEnds:   &endsISO,
+			wantDemote: &demotedISO,
+		},
+		{name: "no trial", orgID: "org_trial_detail_none"},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+
+			seedOrg(t, ctx, conn, orgFixture{id: c.orgID, name: c.name, slug: c.orgID, whitelisted: true})
+			if c.trial != nil {
+				f := *c.trial
+				f.orgID = c.orgID
+				seedTrial(t, ctx, conn, f)
+			}
+
+			got, err := svc.GetOrganization(ctx, &gen.GetOrganizationPayload{IDOrSlug: c.orgID})
+			require.NoError(t, err)
+			fields := []struct {
+				name string
+				want *string
+				got  *string
+			}{
+				{name: "trial tier", want: c.wantTier, got: got.TrialTier},
+				{name: "trial end", want: c.wantEnds, got: got.TrialEndsAt},
+				{name: "trial conversion", want: c.wantConvert, got: got.TrialConvertedAt},
+				{name: "trial demotion", want: c.wantDemote, got: got.TrialDemotedAt},
+			}
+			for _, field := range fields {
+				if field.want == nil {
+					require.Nil(t, field.got, field.name)
+					continue
+				}
+				require.NotNil(t, field.got, field.name)
+				if field.name == "trial tier" {
+					require.Equal(t, *field.want, *field.got, field.name)
+					continue
+				}
+				wantTime, err := time.Parse(time.RFC3339, *field.want)
+				require.NoError(t, err, field.name)
+				gotTime, err := time.Parse(time.RFC3339, *field.got)
+				require.NoError(t, err, field.name)
+				require.True(t, wantTime.Equal(gotTime), field.name)
+			}
+		})
+	}
+}
+
 func TestAdminListOrganizations_TrialState(t *testing.T) {
 	t.Parallel()
 
@@ -602,10 +693,6 @@ func TestAdminListOrganizations_TrialState(t *testing.T) {
 		require.NoError(t, err, "parsing trial end date for %s", c.orgID)
 		require.WithinDuration(t, c.trial.endsAt, got, time.Second, "trial end date for %s", c.orgID)
 	}
-
-	// Expand only: the old free trial fields stay on the API.
-	require.NotNil(t, byID["org_trial_none"].FreeTrialStartedAt)
-	require.NotNil(t, byID["org_trial_none"].FreeTrialEndsAt)
 }
 
 type searchByIDCase struct {

@@ -52,9 +52,6 @@ overrides:
   fast-uri@<3.1.5: 3.1.5
   glob@>=10.0 <10.5.0: 10.5.0
 
-patchedDependencies:
-  svix@1.92.2: 77208f035e49ee60ffce4534d12d46b62e1da64bc4c49ff97afb18a6ffc42791
-
 importers:
 
   .:
@@ -100,6 +97,9 @@ importers:
       '@tailwindcss/vite':
         specifier: 'catalog:'
         version: 4.3.3(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.5)(yaml@2.9.0))
+      '@tanstack/react-form':
+        specifier: ^1.33.5
+        version: 1.33.5(@tanstack/react-start@1.168.46(react@19.2.8)(react-dom@19.2.8(react@19.2.8))(vite@8.2.0(@types/node@24.13.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.5)(yaml@2.9.0)))(react@19.2.8)
       '@tanstack/react-query':
         specifier: 'catalog:'
         version: 5.101.4(react@19.2.8)
@@ -472,11 +472,11 @@ importers:
         specifier: ^10.5.7
         version: 10.5.7(@types/react@19.2.18)(prettier@3.9.6)
       svix:
-        specifier: 1.92.2
-        version: 1.92.2(patch_hash=77208f035e49ee60ffce4534d12d46b62e1da64bc4c49ff97afb18a6ffc42791)
+        specifier: 1.99.1
+        version: 1.99.1
       svix-react:
         specifier: ^1.13.9
-        version: 1.13.9(react@19.2.8)(react-dom@19.2.8(react@19.2.8))(svix@1.92.2)
+        version: 1.13.9(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(svix@1.99.1)
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -597,7 +597,7 @@ importers:
     devDependencies:
       '@gram-ai/functions':
         specifier: workspace:^
-        version: 0.18.1
+        version: link:../functions
       '@modelcontextprotocol/sdk':
         specifier: 'catalog:'
         version: 1.30.0(zod@4.4.3)
@@ -6873,8 +6873,8 @@ packages:
       react-dom: '>=16'
       svix: '>=1.26.0'
 
-  svix@1.92.2:
-    resolution: {integrity: sha512-ZmuA3UVvlnF9EgxlzmPtF7CKjQb64Z6OFlyfdDfU0sdcC7dJa+3aOYX5B9mA+RS6ch1AxBa4UP/l6KmqfGtWBQ==}
+  svix@1.99.1:
+    resolution: {integrity: sha512-JfpvbAg5iT5NagDAfOq3e6Ci6NbOMbMm6C3DnfDBB60m2JDK+Z2hXPE9XNAmutb53DCdPoih1V70IbklZnX09A==}
 
   swr@2.5.0:
     resolution: {integrity: sha512-W0GomadRJe9OfzIoRX0kZHhDSaRRfdiOUeH6uazgR05SibBhDNwfdTbhAxmFtObvkf59fFymo22mooKukosvNA==}
@@ -14004,13 +14004,13 @@ snapshots:
 
   supports-preserve-symlinks-flag@1.0.0: {}
 
-  svix-react@1.13.9(react@19.2.8)(react-dom@19.2.8(react@19.2.8))(svix@1.92.2):
+  svix-react@1.13.9(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(svix@1.99.1):
     dependencies:
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
-      svix: 1.92.2(patch_hash=77208f035e49ee60ffce4534d12d46b62e1da64bc4c49ff97afb18a6ffc42791)
+      svix: 1.99.1
 
-  svix@1.92.2(patch_hash=77208f035e49ee60ffce4534d12d46b62e1da64bc4c49ff97afb18a6ffc42791):
+  svix@1.99.1:
     dependencies:
       standardwebhooks: 1.0.0
 

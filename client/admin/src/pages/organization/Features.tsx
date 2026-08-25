@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
-import { useEffect, useState, type JSX } from "react";
+import { useState, type JSX } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -276,28 +276,12 @@ function ChatAnalysis({ org }: { org: AdminOrganization }): JSX.Element {
     ...query,
     enabled: !!org.id,
   });
-  const [caps, setCaps] = useState<Record<AdminChatAnalysisJudge, string>>({
-    work_units: "",
-    business_memory: "",
-  });
-  const [dirtyCaps, setDirtyCaps] = useState<
-    Record<AdminChatAnalysisJudge, boolean>
+  const [capOverrides, setCapOverrides] = useState<
+    Record<AdminChatAnalysisJudge, string | null>
   >({
-    work_units: false,
-    business_memory: false,
+    work_units: null,
+    business_memory: null,
   });
-
-  useEffect(() => {
-    if (!data) return;
-    setCaps((current) => ({
-      work_units: dirtyCaps.work_units
-        ? current.work_units
-        : String(data.work_units_daily_cap),
-      business_memory: dirtyCaps.business_memory
-        ? current.business_memory
-        : String(data.business_memory_daily_cap),
-    }));
-  }, [data, dirtyCaps.work_units, dirtyCaps.business_memory]);
 
   const mutation = useMutation({
     mutationFn: ({
@@ -320,9 +304,9 @@ function ChatAnalysis({ org }: { org: AdminOrganization }): JSX.Element {
         query.queryKey,
         updated,
       );
-      setDirtyCaps((current) => ({
+      setCapOverrides((current) => ({
         ...current,
-        [variables.judge]: false,
+        [variables.judge]: null,
       }));
     },
   });
@@ -367,7 +351,9 @@ function ChatAnalysis({ org }: { org: AdminOrganization }): JSX.Element {
         <div className="divide-border divide-y">
           {CHAT_ANALYSIS_CONTROLS.map((control) => {
             const enabled = data[control.enabledKey];
-            const cap = validDailyCap(caps[control.judge]);
+            const capValue =
+              capOverrides[control.judge] ?? String(data[control.capKey]);
+            const cap = validDailyCap(capValue);
             const capDirty = cap !== undefined && cap !== data[control.capKey];
             const actionLabel = !enabled
               ? "Enable"
@@ -408,16 +394,12 @@ function ChatAnalysis({ org }: { org: AdminOrganization }): JSX.Element {
                       max={10_000}
                       step={1}
                       aria-label={control.capLabel}
-                      value={caps[control.judge]}
+                      value={capValue}
                       disabled={mutation.isPending}
                       onChange={(event) => {
-                        setCaps((current) => ({
+                        setCapOverrides((current) => ({
                           ...current,
                           [control.judge]: event.target.value,
-                        }));
-                        setDirtyCaps((current) => ({
-                          ...current,
-                          [control.judge]: true,
                         }));
                       }}
                     />
@@ -429,7 +411,7 @@ function ChatAnalysis({ org }: { org: AdminOrganization }): JSX.Element {
                         if (cap === undefined) return;
                         const dailyCap = !enabled && cap === 0 ? 100 : cap;
                         if (dailyCap !== cap) {
-                          setCaps((current) => ({
+                          setCapOverrides((current) => ({
                             ...current,
                             [control.judge]: String(dailyCap),
                           }));

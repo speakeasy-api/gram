@@ -54,6 +54,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
 const (
@@ -143,9 +144,16 @@ type Document struct {
 	// an interop bug.
 	GrantTypes []string `json:"grant_types"`
 
-	// JWKS is inspected for private key material (-02 §4.1 bans it) and
-	// otherwise ignored (no private_key_jwt support).
+	// JWKS is the client's inline public key set, the keys a private_key_jwt
+	// client signs its assertions with. Screened for private or symmetric
+	// material (-02 §4.1 bans it) whatever method the document declares,
+	// and required, in exactly one of this and JWKSURI, when the method is
+	// private_key_jwt.
 	JWKS json.RawMessage `json:"jwks"`
+
+	// JWKSURI is the https location of the client's public key set, the
+	// remote alternative to JWKS. RFC 7591 §2 forbids supplying both.
+	JWKSURI string `json:"jwks_uri"`
 
 	// LogoURI is the client's logo URL. Optional and deliberately not
 	// rendered: like ClientName it is attacker-controllable, and an image
@@ -162,12 +170,28 @@ type Document struct {
 	// GrantTypes — the AS only supports response type "code".
 	ResponseTypes []string `json:"response_types"`
 
-	// TokenEndpointAuthMethod must be "none" or absent — only public
-	// clients are accepted. Absence is NOT a rejection: -02 does not
-	// require the field, and RFC 7591's client_secret_basic default cannot
-	// apply because §4.1 bans every shared-symmetric-secret method for CIMD.
-	// Several real clients (OpenAI's among them) omit it.
+	// TokenEndpointAuthMethod is "none", "private_key_jwt", or absent.
+	// Absence is NOT a rejection: -02 does not require the field, and RFC
+	// 7591's client_secret_basic default cannot apply because §4.1 bans
+	// every shared-symmetric-secret method for CIMD. Several real clients
+	// (OpenAI's among them) omit it.
 	TokenEndpointAuthMethod string `json:"token_endpoint_auth_method"`
+}
+
+// DeclaredAuthMethod is the client authentication method this document
+// commits its client to, with an absent member resolved to "none".
+//
+// Resolving absence here rather than at each call site is what keeps the
+// persisted method honest: a NULL in user_session_clients means "this row
+// predates the column", a distinct claim from "this document declined to
+// name a method", and every document accepted by validateDocument has made
+// the latter claim. Callers persisting a freshly read document should store
+// this value, never the raw member.
+func (d *Document) DeclaredAuthMethod() string {
+	if d.TokenEndpointAuthMethod == "" {
+		return oauthwire.AuthMethodNone
+	}
+	return d.TokenEndpointAuthMethod
 }
 
 // IsClientIDURL reports whether a presented client_id should be treated as a

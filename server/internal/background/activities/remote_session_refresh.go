@@ -123,15 +123,7 @@ func (r *RemoteSessionRefresh) Do(ctx context.Context, input RefreshRemoteSessio
 	}
 	sess := candidate.RemoteSession
 
-	var fallbackResource string
-	if !sess.Resource.Valid || sess.Resource.String == "" {
-		fallbackResource, err = r.refresher.FallbackResourceForClient(ctx, sess.RemoteSessionClientID)
-		if err != nil {
-			return RefreshRemoteSessionResult{}, fmt.Errorf("derive fallback resource: %w", err)
-		}
-	}
-
-	result, err := r.refresher.RefreshNow(ctx, sess, fallbackResource)
+	result, err := r.refresher.RefreshNow(ctx, sess, "")
 	if err != nil {
 		if remotesessions.IsTokenRefreshRateLimited(err) {
 			logger.WarnContext(ctx, "scheduled remote session refresh rate limited",

@@ -443,8 +443,9 @@ func TestCIMDAdmission_ChatGPTDocumentShapeAccepted(t *testing.T) {
 }
 
 // TestCIMDAdmission_ExplicitConfidentialAuthMethodStillRejected: accepting
-// an ABSENT auth method must not have opened the door to confidential
-// clients declaring one explicitly.
+// an ABSENT auth method must not have opened the door to shared-secret
+// clients declaring one explicitly. -02 §4.1 bans every symmetric method
+// from a metadata document, since the document is public.
 func TestCIMDAdmission_ExplicitConfidentialAuthMethodStillRejected(t *testing.T) {
 	t.Parallel()
 
@@ -452,7 +453,7 @@ func TestCIMDAdmission_ExplicitConfidentialAuthMethodStillRejected(t *testing.T)
 	setIssuerAdmissionMode(t, ctx, ti, toolset, admission.ModePresets)
 	allowCustomCimdURL(t, ctx, ti, toolset, ds.clientID)
 
-	ds.doc["token_endpoint_auth_method"] = "private_key_jwt"
+	ds.doc["token_endpoint_auth_method"] = "client_secret_basic"
 
 	verifier := pkceVerifier(t)
 	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(verifier))

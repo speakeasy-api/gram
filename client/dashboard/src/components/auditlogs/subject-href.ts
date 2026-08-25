@@ -58,6 +58,16 @@ export function subjectHref(log: AuditLog, orgSlug: string): string | null {
         : null;
     case "api_key":
       return `/${orgSlug}/api-keys`;
+    case "json_web_key_set":
+      return `/${orgSlug}/signing-keys/${log.subjectId}/overview`;
+    case "json_web_key": {
+      // A key event names the key as its subject; the set it belongs to rides
+      // along in metadata, and the Keys tab is where the key is listed.
+      const setId = log.metadata?.["json_web_key_set_id"];
+      return typeof setId === "string" && setId !== ""
+        ? `/${orgSlug}/signing-keys/${setId}/keys`
+        : null;
+    }
     default:
       return null;
   }

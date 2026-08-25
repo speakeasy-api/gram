@@ -16,6 +16,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
+	issuersgen "github.com/speakeasy-api/gram/server/gen/user_session_issuers"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
@@ -244,12 +245,13 @@ func seedUserSessionClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 
 	r := repo.New(conn)
 	row, err := r.CreateUserSessionClient(ctx, repo.CreateUserSessionClientParams{
-		UserSessionIssuerID:   issuerID,
-		ClientID:              clientID,
-		ClientSecretHash:      pgtype.Text{String: "", Valid: false},
-		ClientName:            "test-" + clientID,
-		RedirectUris:          []string{"https://example.com/cb"},
-		ClientSecretExpiresAt: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: 0, Valid: false},
+		UserSessionIssuerID:     issuerID,
+		ClientID:                clientID,
+		ClientSecretHash:        pgtype.Text{String: "", Valid: false},
+		ClientName:              "test-" + clientID,
+		RedirectUris:            []string{"https://example.com/cb"},
+		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: 0, Valid: false},
+		TokenEndpointAuthMethod: "none",
 	})
 	if err != nil {
 		return repo.UserSessionClient{}, fmt.Errorf("seed user session client: %w", err)
@@ -268,10 +270,11 @@ func seedCimdUserSessionClient(t *testing.T, ctx context.Context, conn *pgxpool.
 
 	r := repo.New(conn)
 	row, err := r.UpsertUserSessionClientFromCIMD(ctx, repo.UpsertUserSessionClientFromCIMDParams{
-		UserSessionIssuerID: issuerID,
-		ClientID:            documentURL,
-		ClientName:          "test-cimd-" + documentURL,
-		RedirectUris:        []string{"https://example.com/cb"},
+		UserSessionIssuerID:     issuerID,
+		ClientID:                documentURL,
+		ClientName:              "test-cimd-" + documentURL,
+		RedirectUris:            []string{"https://example.com/cb"},
+		TokenEndpointAuthMethod: "none",
 	})
 	if err != nil {
 		return repo.UserSessionClient{}, fmt.Errorf("seed cimd user session client: %w", err)
@@ -344,4 +347,20 @@ func seedUserSessionConsent(t *testing.T, ctx context.Context, conn *pgxpool.Poo
 		return repo.UserSessionConsent{}, fmt.Errorf("seed user session consent: %w", err)
 	}
 	return row, nil
+}
+
+// seedIssuer creates an issuer with the given slug and returns its id.
+func seedIssuer(t *testing.T, ctx context.Context, ti *testInstance, slug string) uuid.UUID {
+	t.Helper()
+
+	issuer, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 slug,
+		AuthnChallengeMode:   "chain",
+		SessionDurationHours: 24,
+	})
+	require.NoError(t, err)
+	return uuid.MustParse(issuer.ID)
 }

@@ -344,17 +344,12 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 		return oops.E(oops.CodeUnexpected, err, "delete user session issuer").LogError(ctx, logger)
 	}
 
-	if err = txRepo.DeleteRemoteSessionClientAttachmentsForUserSessionIssuer(
-		ctx,
-		repo.DeleteRemoteSessionClientAttachmentsForUserSessionIssuerParams{
-			UserSessionIssuerID: deleted.ID,
-			ProjectID:           *authCtx.ProjectID,
-		},
-	); err != nil {
+	orphanCreds, err := s.revoker.DetachUserSessionIssuerFromClients(ctx, dbtx, deleted.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
+	if err != nil {
 		return oops.E(
 			oops.CodeUnexpected,
 			err,
-			"failed to delete remote session client attachments for user session issuer %s",
+			"failed to detach remote session clients from user session issuer %s",
 			deleted.ID,
 		).LogError(ctx, logger)
 	}
@@ -382,6 +377,9 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
+
+	// Post-commit, best-effort: RFC 7009 for the orphaned grants.
+	s.revoker.RevokeAllDetached(ctx, orphanCreds)
 
 	return nil
 }

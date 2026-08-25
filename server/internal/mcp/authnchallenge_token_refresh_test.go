@@ -114,10 +114,11 @@ func TestHandleToken_ConcurrentRefreshReplayReturnsWinnerResponse(t *testing.T) 
 	require.Equal(t, activeSessions[0].Jti, claims.ID)
 
 	otherClient, err := usersessions_repo.New(ti.conn).CreateUserSessionClient(ctx, usersessions_repo.CreateUserSessionClientParams{
-		UserSessionIssuerID: issuer.ID,
-		ClientID:            "other-client-" + uuid.NewString(),
-		ClientName:          "other client",
-		RedirectUris:        []string{"http://localhost:3001/callback"},
+		UserSessionIssuerID:     issuer.ID,
+		ClientID:                "other-client-" + uuid.NewString(),
+		ClientName:              "other client",
+		RedirectUris:            []string{"http://localhost:3001/callback"},
+		TokenEndpointAuthMethod: "none",
 	})
 	require.NoError(t, err)
 
