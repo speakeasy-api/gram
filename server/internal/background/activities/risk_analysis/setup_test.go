@@ -115,13 +115,18 @@ func seedTestData(t *testing.T, conn *pgxpool.Pool, enabled bool) testData {
 
 func seedMessages(t *testing.T, conn *pgxpool.Pool, td testData, count int) []uuid.UUID {
 	t.Helper()
+	return seedMessagesInChat(t, conn, td, td.chatID, count)
+}
+
+func seedMessagesInChat(t *testing.T, conn *pgxpool.Pool, td testData, chatID uuid.UUID, count int) []uuid.UUID {
+	t.Helper()
 	ctx := t.Context()
 
 	testQueries := testrepo.New(conn)
 	var ids []uuid.UUID
 	for range count {
 		msgID, err := testQueries.InsertChatMessage(ctx, testrepo.InsertChatMessageParams{
-			ChatID:    td.chatID,
+			ChatID:    chatID,
 			ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
 			Role:      "user",
 			Content:   "test message",
@@ -130,4 +135,71 @@ func seedMessages(t *testing.T, conn *pgxpool.Pool, td testData, count int) []uu
 		ids = append(ids, msgID)
 	}
 	return ids
+}
+
+func seedAssistantLinkedChat(t *testing.T, conn *pgxpool.Pool, td testData, sourceKind string) uuid.UUID {
+	t.Helper()
+	ctx := t.Context()
+	queries := riskrepo.New(conn)
+
+	chatID, err := queries.CreateChatForTest(ctx, riskrepo.CreateChatForTestParams{
+		ProjectID:      td.projectID,
+		OrganizationID: td.orgID,
+		UserID:         pgtype.Text{},
+		ExternalUserID: pgtype.Text{},
+	})
+	require.NoError(t, err)
+
+	assistantID, err := queries.CreateAssistantForTest(ctx, riskrepo.CreateAssistantForTestParams{
+		ProjectID:      td.projectID,
+		OrganizationID: td.orgID,
+		Name:           "assistant-" + sourceKind + "-" + uuid.NewString()[:8],
+	})
+	require.NoError(t, err)
+
+	_, err = queries.CreateAssistantThreadForTest(ctx, riskrepo.CreateAssistantThreadForTestParams{
+		AssistantID:   assistantID,
+		ProjectID:     td.projectID,
+		CorrelationID: "corr-" + uuid.NewString()[:8],
+		ChatID:        chatID,
+		SourceKind:    sourceKind,
+	})
+	require.NoError(t, err)
+
+	return chatID
+}
+
+func seedAssistantThreadOnChat(t *testing.T, conn *pgxpool.Pool, td testData, chatID uuid.UUID, sourceKind string) {
+	t.Helper()
+	ctx := t.Context()
+	queries := riskrepo.New(conn)
+
+	assistantID, err := queries.CreateAssistantForTest(ctx, riskrepo.CreateAssistantForTestParams{
+		ProjectID:      td.projectID,
+		OrganizationID: td.orgID,
+		Name:           "assistant-" + sourceKind + "-" + uuid.NewString()[:8],
+	})
+	require.NoError(t, err)
+
+	_, err = queries.CreateAssistantThreadForTest(ctx, riskrepo.CreateAssistantThreadForTestParams{
+		AssistantID:   assistantID,
+		ProjectID:     td.projectID,
+		CorrelationID: "corr-" + uuid.NewString()[:8],
+		ChatID:        chatID,
+		SourceKind:    sourceKind,
+	})
+	require.NoError(t, err)
+}
+
+func seedContentPartInChat(t *testing.T, conn *pgxpool.Pool, td testData, chatID uuid.UUID) uuid.UUID {
+	t.Helper()
+	partID, err := riskrepo.New(conn).CreateChatContentPartForTest(t.Context(), riskrepo.CreateChatContentPartForTestParams{
+		ChatID:              chatID,
+		ProjectID:           uuid.NullUUID{UUID: td.projectID, Valid: true},
+		Kind:                "user",
+		ContentAssetUrl:     "asset://test",
+		ParentChatMessageID: uuid.NullUUID{},
+	})
+	require.NoError(t, err)
+	return partID
 }

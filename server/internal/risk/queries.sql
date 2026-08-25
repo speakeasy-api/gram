@@ -851,19 +851,66 @@ CROSS JOIN categories
 LEFT JOIN findings_by_bucket ON findings_by_bucket.bucket_start = buckets.bucket_start AND findings_by_bucket.category = categories.category
 ORDER BY buckets.bucket_start ASC, categories.category ASC;
 
+-- name: ListDashboardAssistantChatIDs :many
+-- Chats whose current assistant thread is the in-dashboard project assistant.
+-- One project-scoped scan of live assistant_threads (project_id is the leading
+-- column of assistant_threads_project_id_assistant_id_correlation_id_key).
+-- DISTINCT ON keeps the latest live thread per chat so an older dashboard
+-- link cannot hide a later Slack/Teams thread, matching GetChatMessageAttribution.
+WITH latest_thread AS (
+  SELECT DISTINCT ON (at.chat_id)
+    at.chat_id,
+    at.source_kind
+  FROM assistant_threads at
+  WHERE at.project_id = @project_id
+    AND at.deleted IS FALSE
+  ORDER BY at.chat_id, at.created_at DESC, at.id DESC
+)
+SELECT chat_id
+FROM latest_thread
+WHERE source_kind = @dashboard_source_kind;
+
 -- name: FetchUnanalyzedMessageIDs :many
 -- Scans the partial index chat_messages_risk_analyzed_at_null_idx
 -- (project_id, id WHERE risk_analyzed_at IS NULL), which shrinks toward
 -- zero at steady state. The id >= @id_lower_bound bound (a UUIDv7 lower
 -- bound computed from the configured lookback) further limits the scan to
 -- recent messages, reusing the same partial index ordering.
+--
+-- @dashboard_chat_ids are chats whose latest live assistant thread has
+-- source_kind dashboard. Those conversations are out of scope: the project
+-- assistant is core dashboard functionality, not a sold artifact, and
+-- scanning it produces meta-findings when it is used to investigate other
+-- risk results. Sold surfaces (Slack, Teams, ...) stay in the sweep.
 SELECT cm.id
 FROM chat_messages cm
 WHERE cm.project_id = @project_id
   AND cm.risk_analyzed_at IS NULL
   AND cm.id >= @id_lower_bound
+  AND (
+    COALESCE(cardinality(@dashboard_chat_ids::uuid[]), 0) = 0
+    OR cm.chat_id <> ALL(@dashboard_chat_ids::uuid[])
+  )
 ORDER BY cm.id DESC
 LIMIT @batch_limit;
+
+-- name: MarkDashboardAssistantMessagesRiskAnalyzed :execrows
+-- Stamp risk_analyzed_at on in-dashboard assistant messages so they leave
+-- the unanalyzed partial index without being scanned. Bounded by the same
+-- lookback and batch limit as FetchUnanalyzedMessageIDs.
+UPDATE chat_messages
+SET risk_analyzed_at = clock_timestamp()
+WHERE chat_messages.project_id = @project_id
+  AND chat_messages.id IN (
+    SELECT cm.id
+    FROM chat_messages cm
+    WHERE cm.project_id = @project_id
+      AND cm.risk_analyzed_at IS NULL
+      AND cm.id >= @id_lower_bound
+      AND cm.chat_id = ANY(@dashboard_chat_ids::uuid[])
+    ORDER BY cm.id DESC
+    LIMIT @batch_limit
+  );
 
 -- name: MarkMessagesRiskAnalyzed :exec
 UPDATE chat_messages
@@ -874,14 +921,35 @@ WHERE id = ANY(@message_ids::uuid[])
 -- name: FetchUnanalyzedContentPartIDs :many
 -- Scans the partial index chat_content_parts_risk_analyzed_at_null_idx
 -- (project_id, id WHERE risk_analyzed_at IS NULL), mirroring the chat_messages
--- unanalyzed sweep for non-turn content.
+-- unanalyzed sweep for non-turn content. @dashboard_chat_ids are chats whose
+-- latest live assistant thread has source_kind dashboard, which is out of
+-- scope: core dashboard functionality, not a sold artifact.
 SELECT ccp.id
 FROM chat_content_parts ccp
 WHERE ccp.project_id = @project_id
   AND ccp.risk_analyzed_at IS NULL
   AND ccp.id >= @id_lower_bound
+  AND (
+    COALESCE(cardinality(@dashboard_chat_ids::uuid[]), 0) = 0
+    OR ccp.chat_id <> ALL(@dashboard_chat_ids::uuid[])
+  )
 ORDER BY ccp.id DESC
 LIMIT @batch_limit;
+
+-- name: MarkDashboardAssistantContentPartsRiskAnalyzed :execrows
+UPDATE chat_content_parts
+SET risk_analyzed_at = clock_timestamp()
+WHERE chat_content_parts.project_id = @project_id
+  AND chat_content_parts.id IN (
+    SELECT ccp.id
+    FROM chat_content_parts ccp
+    WHERE ccp.project_id = @project_id
+      AND ccp.risk_analyzed_at IS NULL
+      AND ccp.id >= @id_lower_bound
+      AND ccp.chat_id = ANY(@dashboard_chat_ids::uuid[])
+    ORDER BY ccp.id DESC
+    LIMIT @batch_limit
+  );
 
 -- name: MarkContentPartsRiskAnalyzed :exec
 UPDATE chat_content_parts
@@ -2072,7 +2140,7 @@ RETURNING id;
 
 -- name: CreateAssistantThreadForTest :one
 INSERT INTO assistant_threads (assistant_id, project_id, correlation_id, chat_id, source_kind)
-VALUES (@assistant_id, @project_id, @correlation_id, @chat_id, 'test')
+VALUES (@assistant_id, @project_id, @correlation_id, @chat_id, @source_kind)
 RETURNING id;
 
 -- name: CreateChatMessageForTest :one
@@ -2109,3 +2177,15 @@ WHERE id = @id;
 UPDATE risk_results
 SET false_positive_at = clock_timestamp()
 WHERE id = @id;
+
+-- name: GetChatMessageRiskAnalyzedAtForTest :one
+SELECT risk_analyzed_at
+FROM chat_messages
+WHERE id = @id
+  AND project_id = @project_id;
+
+-- name: GetContentPartRiskAnalyzedAtForTest :one
+SELECT risk_analyzed_at
+FROM chat_content_parts
+WHERE id = @id
+  AND project_id = @project_id;
