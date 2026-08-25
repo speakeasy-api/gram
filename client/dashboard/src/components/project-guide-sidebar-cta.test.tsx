@@ -9,6 +9,9 @@ vi.mock("@/components/project-guide/projectGuideStores", () => ({
 vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
+vi.mock("@/routes", () => ({
+  useRoutes: () => ({ guide: { href: () => "/org/projects/project/guide" } }),
+}));
 vi.mock("react-router", () => ({
   Link: ({ to, children }: { to: string; children: React.ReactNode }) => (
     <a href={to}>{children}</a>
@@ -23,13 +26,13 @@ afterEach(() => {
 });
 
 describe("ProjectGuideSidebarCta", () => {
-  it("links back to the guide after a journey has started", () => {
+  it("returns to the same project guide that made the CTA visible", () => {
     started.current = true;
     render(<ProjectGuideSidebarCta />);
 
     expect(
       screen.getByRole("link", { name: /project guide/i }).getAttribute("href"),
-    ).toBe("/guide");
+    ).toBe("/org/projects/project/guide");
   });
 
   it("stays hidden until a journey has started", () => {
