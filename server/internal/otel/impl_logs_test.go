@@ -95,7 +95,7 @@ func TestLogsPublishesFlattenedRecordsWithAuthenticatedProvenance(t *testing.T) 
 	require.Equal(t, "resource-schema", published.GetResourceSchemaUrl())
 	require.Equal(t, "producer.scope", published.GetScope().GetName())
 	require.Equal(t, "scope-schema", published.GetScopeSchemaUrl())
-	require.Equal(t, otelProvenanceSource, published.GetProvenance().GetSource())
+	require.Equal(t, ProvenanceSource, published.GetProvenance().GetSource())
 	require.Equal(t, testLogOrganizationID, published.GetProvenance().GetOrganizationId())
 	require.Equal(t, projectID.String(), published.GetProvenance().GetProjectId())
 	_, err = uuid.Parse(published.GetRecordId())
@@ -237,7 +237,7 @@ func TestValidateLogRecordAcceptsRecordBelowMaximumSize(t *testing.T) {
 	}).Build()
 
 	require.LessOrEqual(t, proto.Size(record), maxOTLPLogRecordBytes)
-	require.NoError(t, validateLogRecord(record))
+	require.NoError(t, ValidateInboundLogRecord(record))
 }
 
 func testOTELAuthContext(projectID uuid.UUID) *contextvalues.AuthContext {
