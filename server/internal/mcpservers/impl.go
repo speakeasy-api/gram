@@ -1201,7 +1201,7 @@ func verifyMetaMcpBackendUniqueness(
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "check meta mcp members sharing a backend").LogError(ctx, logger)
 	default:
-		return oops.E(oops.CodeInvalid, nil, "another member of meta mcp server %q already fronts this backend", metaName).LogError(ctx, logger)
+		return oops.E(oops.CodeConflict, nil, "another member of meta mcp server %q already fronts this backend", metaName).LogError(ctx, logger)
 	}
 }
 

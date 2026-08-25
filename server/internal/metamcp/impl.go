@@ -547,7 +547,7 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 		return nil, oops.E(oops.CodeUnexpected, err, "count meta mcp members sharing a backend").LogError(ctx, logger)
 	}
 	if sharing > 0 {
-		return nil, oops.E(oops.CodeInvalid, nil, "another member of this meta mcp server already fronts the same backend").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeConflict, nil, "another member of this meta mcp server already fronts the same backend").LogError(ctx, logger)
 	}
 
 	member, err := txRepo.CreateMetaMCPMember(ctx, repo.CreateMetaMCPMemberParams{

@@ -903,7 +903,7 @@ func TestUpdateMcpServer_RejectsBackendSharedWithMetaMcpSibling(t *testing.T) {
 		ToolsetID:         nil,
 		Visibility:        types.McpServerVisibility("disabled"),
 	})
-	requireOopsCode(t, err, oops.CodeInvalid)
+	requireOopsCode(t, err, oops.CodeConflict)
 
 	// A backend no sibling fronts is still free to move to.
 	freeBackend := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()

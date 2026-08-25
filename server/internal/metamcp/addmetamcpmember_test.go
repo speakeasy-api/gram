@@ -176,7 +176,7 @@ func TestAddMetaMcpMember_RejectsSecondServerOnSameBackend(t *testing.T) {
 				McpServerID:      second.String(),
 				SortOrder:        nil,
 			})
-			requireOopsCode(t, err, oops.CodeInvalid)
+			requireOopsCode(t, err, oops.CodeConflict)
 		})
 	}
 }
