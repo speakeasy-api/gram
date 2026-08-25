@@ -55,6 +55,14 @@ export const AUDIT_ACTIONS = [
   "gcp_kms_key:create",
   "gcp_kms_key:delete",
   "gcp_kms_key:update",
+  "json_web_key:activate",
+  "json_web_key:delete",
+  "json_web_key:publish",
+  "json_web_key:retire",
+  "json_web_key:revoke",
+  "json_web_key_set:create",
+  "json_web_key_set:delete",
+  "json_web_key_set:update",
   "litellm_instance:create",
   "litellm_instance:revoke",
   "litellm_instance:rotate_key",
@@ -70,12 +78,19 @@ export const AUDIT_ACTIONS = [
   "mcp_approval_request:deny",
   "mcp_approval_request:evidence_changed",
   "mcp_approval_request:research_start",
+  "mcp_approval_request:supersede",
   "mcp_collection:attach_server",
   "mcp_collection:create",
   "mcp_collection:delete",
   "mcp_collection:detach_server",
   "mcp_collection:update",
   "mcp_metadata:update",
+  "meta-mcp:add_member",
+  "meta-mcp:create",
+  "meta-mcp:delete",
+  "meta-mcp:remove_member",
+  "meta-mcp:update",
+  "meta-mcp:update_member",
   "model_provider_key:delete",
   "model_provider_key:upsert",
   "openrouter-key:disable",
@@ -97,6 +112,7 @@ export const AUDIT_ACTIONS = [
   "organization_invitation:update_role",
   "otel_forwarding:delete",
   "otel_forwarding:upsert",
+  "platform-mcp-diagnostics:user_status_read",
   "platform-mcp-registration:create",
   "platform-mcp-registration:handoff_issue",
   "platform-mcp-registration:handoff_redeem",
@@ -147,6 +163,8 @@ export const AUDIT_ACTIONS = [
   "risk_result:dismiss",
   "risk_result:restore",
   "risk_result:unmask",
+  "session_quarantine:open",
+  "session_quarantine:release",
   "skill:add_version",
   "skill:archive",
   "skill:create",
@@ -274,6 +292,22 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated GCP KMS key";
     case "gcp_kms_key:delete":
       return "removed GCP KMS key";
+    case "json_web_key_set:create":
+      return "created JSON Web Key Set";
+    case "json_web_key_set:update":
+      return "updated JSON Web Key Set";
+    case "json_web_key_set:delete":
+      return "deleted JSON Web Key Set";
+    case "json_web_key:publish":
+      return "published JSON Web Key";
+    case "json_web_key:activate":
+      return "activated JSON Web Key";
+    case "json_web_key:retire":
+      return "retired JSON Web Key";
+    case "json_web_key:revoke":
+      return "revoked JSON Web Key";
+    case "json_web_key:delete":
+      return "withdrew JSON Web Key";
 
     case "billing_metadata:create_stripe_checkout":
       return "started Stripe checkout for";
@@ -338,6 +372,19 @@ export function staticActionPhrase(action: AuditAction): string {
     case "mcp-endpoint:delete":
       return "deleted MCP endpoint";
 
+    case "meta-mcp:create":
+      return "created meta MCP server";
+    case "meta-mcp:update":
+      return "updated meta MCP server";
+    case "meta-mcp:delete":
+      return "deleted meta MCP server";
+    case "meta-mcp:add_member":
+      return "added meta MCP member";
+    case "meta-mcp:update_member":
+      return "updated meta MCP member";
+    case "meta-mcp:remove_member":
+      return "removed meta MCP member";
+
     case "mcp-server:create":
       return "created MCP server";
     case "mcp-server:update":
@@ -357,6 +404,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "detected changed evidence for approved MCP server";
     case "mcp_approval_request:research_start":
       return "started research on";
+    case "mcp_approval_request:supersede":
+      return "superseded the access decision for";
 
     case "mcp_collection:create":
       return "created collection";
@@ -418,6 +467,9 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated OpenTelemetry forwarding configuration";
     case "otel_forwarding:delete":
       return "removed OpenTelemetry forwarding configuration";
+
+    case "platform-mcp-diagnostics:user_status_read":
+      return "read a user's status on";
 
     case "platform-mcp-registration:create":
       return "registered platform MCP server";
@@ -526,6 +578,11 @@ export function staticActionPhrase(action: AuditAction): string {
       return "restored risk finding";
     case "risk_result:unmask":
       return "unmasked risk finding";
+
+    case "session_quarantine:open":
+      return "quarantined agent session";
+    case "session_quarantine:release":
+      return "released quarantined agent session";
 
     case "skill:create":
       return "created skill";

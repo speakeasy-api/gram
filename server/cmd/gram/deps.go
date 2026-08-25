@@ -35,7 +35,7 @@ import (
 	"github.com/workos/workos-go/v6/pkg/webhooks"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
-	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.41.0"
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/contrib/opentelemetry"
@@ -46,6 +46,7 @@ import (
 
 	jose "github.com/go-jose/go-jose/v4"
 	"github.com/speakeasy-api/gram/infra/gen"
+	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
@@ -361,8 +362,8 @@ func newRedisClient(ctx context.Context, opts redisClientOptions) (*redis.Client
 
 	if opts.enableTracing {
 		attrs := redisotel.WithAttributes(
-			semconv.DBSystemRedis,
-			semconv.DBRedisDBIndex(db),
+			semconv.DBSystemNameRedis,
+			semconv.DBNamespace(fmt.Sprintf("%d", db)),
 		)
 		if err := redisotel.InstrumentTracing(redisClient, redisotel.WithDBStatement(false), attrs); err != nil {
 			return nil, fmt.Errorf("failed to instrument redis client: %w", err)
@@ -1196,6 +1197,31 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	}
 	pubs = append(pubs, labelledStop{label: "telemetryLogs", pub: telemetryLogs})
 
+	// OTLP ingest publishes on the request path and waits for the result before
+	// answering the exporter. Bound buffering so Pub/Sub stalls reject exports
+	// that clients can retry instead of holding requests open indefinitely.
+	otelPublishSettings := pubsub.DefaultPublishSettings
+	otelPublishSettings.Timeout = 10 * time.Second
+	otelPublishSettings.FlowControlSettings.MaxOutstandingMessages = 10_000
+	otelPublishSettings.FlowControlSettings.MaxOutstandingBytes = 128 * 1024 * 1024
+	otelPublishSettings.FlowControlSettings.LimitExceededBehavior = pubsub.FlowControlSignalError
+
+	otelLogs, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &otelv1.InboundLogRecord{},
+		gcp.WithPubSubPublishSettings(&otelPublishSettings),
+	)
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for otel logs: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "otelLogs", pub: otelLogs})
+
+	otelSpans, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &otelv1.InboundSpan{},
+		gcp.WithPubSubPublishSettings(&otelPublishSettings),
+	)
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for otel spans: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "otelSpans", pub: otelSpans})
+
 	// The outbox drain runs inside a Temporal activity, so a Pub/Sub stall must
 	// surface as a failed batch rather than as unbounded buffering behind an
 	// activity that has already claimed its rows.
@@ -1237,6 +1263,8 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 		CustomRulesAnalysis:     customRulesAnalysis,
 		RiskFindings:            riskFindings,
 		TelemetryLogs:           telemetryLogs,
+		OTELLogs:                otelLogs,
+		OTELSpans:               otelSpans,
 	}, shutdown, nil
 }
 

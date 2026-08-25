@@ -231,8 +231,8 @@ type CreateRolePayload struct {
 	SessionToken *string
 	// Display name for the role.
 	Name string
-	// Description of what this role can do.
-	Description string
+	// Optional description of what this role can do.
+	Description *string
 	// Scope grants to assign.
 	Grants []*RoleGrant
 	// Optional member IDs to additionally assign to this role on creation.
@@ -561,12 +561,56 @@ type Selector struct {
 	ServerURL *string
 }
 
+// The enforcement verdict for a shadow MCP server, computed server-side from
+// policies, grants, and the recorded decision. state is the canonical
+// compression of who may call the server; the remaining fields name the
+// mechanisms so a client renders wording without re-deriving enforcement.
+type ShadowMCPAccessSummary struct {
+	// The shape of the user-to-access function: allowed and blocked are uniform,
+	// restricted varies by user, unenforced means no blocking policy applies.
+	State string
+	// Reach of explicit allow grants: everyone when every deny-by-default policy's
+	// audience is covered (an all-users grant, or grants naming the policy's whole
+	// audience), selected when grants free only part of an audience, none without
+	// grants. A role grant whose membership happens to span the organization still
+	// reads selected — reach compares principal sets, not expanded memberships.
+	AllowedFor string
+	// Reach of explicit block mechanisms: an everyone-audience block rule, a
+	// targeted rule or targeted deny-by-default policy, or none.
+	BlockedFor string
+	// What happens to a user no rule names: deny under an everyone-audience
+	// deny-by-default policy, allow when blocking exists without one, none when no
+	// blocking policy is enabled.
+	BlockingDefault string
+	// The recorded review decision, when one exists.
+	Decision *string
+	// How much of the recorded decision enforcement delivers. full: the decision's
+	// own writes are intact — an approval's grants survive unoverridden (a scoped
+	// blast radius is the decision as recorded, not a shortfall), or a denial
+	// lands as a project-wide block. partial: something carries the decision but
+	// not all of it, such as a denial only a targeted policy enforces, or an
+	// approval whose grants were later removed or overridden. none: nothing
+	// carries it — no blocking policy exists, the target is a local command (stdio
+	// decisions are recorded without writing enforcement), or no decision is
+	// recorded at all.
+	DecisionCoverage string
+}
+
 // The MCP approval request tracking review status for a server. Status records
 // the review outcome, which may cover only selected principals; the server's
 // access field reports enforcement state.
 type ShadowMCPInventoryApprovalRequest struct {
-	ID     string
+	ID string
+	// superseded means the latest decision was explicitly displaced by a policy
+	// URL-list edit: the history is preserved but no enforcement derives from it
+	// until someone re-decides.
 	Status string
+	// The latest recorded decision still standing for this server, independent of
+	// the request's lifecycle status — a reopened request's prior decision keeps
+	// enforcing until re-decided, and clients checking an edit against standing
+	// intent must read this rather than status. Absent when nothing was ever
+	// decided or the decision was superseded.
+	StandingDecision *string
 	// How many distinct people have asked for this server.
 	RequesterCount int
 	// When the daily recheck first found the permission-relevant evidence
@@ -602,7 +646,17 @@ type ShadowMCPInventoryServer struct {
 	ObservedUseCount int
 	UserCount        int
 	TopUsers         []string
-	Access           string
+	// Deprecated: read access_summary.state. Kept one release so older clients
+	// keep rendering, then removed together with making access_summary required.
+	// Note the values themselves are corrected in this release: URLs whose bypass
+	// grants cover only part of a policy's audience now read restricted where they
+	// previously read allowed.
+	Access string
+	// The server-computed enforcement verdict. Optional for one release only so a
+	// client deployed ahead of a rolled-back server degrades to the legacy access
+	// field instead of failing to parse; the server always sends it. Becomes
+	// required when access is removed.
+	AccessSummary    *ShadowMCPAccessSummary
 	RequestCount     int
 	LatestRequest    *ShadowMCPInventoryRequestSummary
 	ApprovalRequest  *ShadowMCPInventoryApprovalRequest
@@ -615,7 +669,17 @@ type ShadowMCPInventoryServer struct {
 // ShadowMCPInventoryURLState is the result type of the access service
 // resolveShadowMCPInventoryRequest method.
 type ShadowMCPInventoryURLState struct {
-	Access           string
+	// Deprecated: read access_summary.state. Kept one release so older clients
+	// keep rendering, then removed together with making access_summary required.
+	// Note the values themselves are corrected in this release: URLs whose bypass
+	// grants cover only part of a policy's audience now read restricted where they
+	// previously read allowed.
+	Access string
+	// The server-computed enforcement verdict. Optional for one release only so a
+	// client deployed ahead of a rolled-back server degrades to the legacy access
+	// field instead of failing to parse; the server always sends it. Becomes
+	// required when access is removed.
+	AccessSummary    *ShadowMCPAccessSummary
 	RequestCount     int
 	LatestRequest    *ShadowMCPInventoryRequestSummary
 	ApprovalRequest  *ShadowMCPInventoryApprovalRequest

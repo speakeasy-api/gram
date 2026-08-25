@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -253,4 +254,56 @@ func TestDeleteUserSessionIssuer_CascadesToSessionsAndConsents(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, beforeSessions, afterSessions, "issuer cascade must not emit user_session revoke audit events")
 	require.Equal(t, beforeConsents, afterConsents, "issuer cascade must not emit user_session_consent revoke audit events")
+}
+
+func TestDeleteUserSessionIssuer_ConflictWithLiveMetaMcpServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	created, err := ti.service.CreateUserSessionIssuer(ctx, &gen.CreateUserSessionIssuerPayload{
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "meta-referenced",
+		AuthnChallengeMode:   "chain",
+		SessionDurationHours: 24,
+	})
+	require.NoError(t, err)
+	issuerID := uuid.MustParse(created.ID)
+
+	meta, err := metamcprepo.New(ti.conn).CreateMetaMCPServer(ctx, metamcprepo.CreateMetaMCPServerParams{
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		ProjectID:           *authCtx.ProjectID,
+		Name:                "issuer-holding meta",
+		UserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	err = ti.service.DeleteUserSessionIssuer(ctx, &gen.DeleteUserSessionIssuerPayload{
+		ID:               created.ID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	// Once the referencing meta MCP is gone, the issuer becomes deletable.
+	_, err = metamcprepo.New(ti.conn).DeleteMetaMCPServer(ctx, metamcprepo.DeleteMetaMCPServerParams{
+		ID:             meta.ID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+
+	err = ti.service.DeleteUserSessionIssuer(ctx, &gen.DeleteUserSessionIssuerPayload{
+		ID:               created.ID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
 }

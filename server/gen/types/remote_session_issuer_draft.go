@@ -36,6 +36,9 @@ type RemoteSessionIssuerDraft struct {
 	GrantTypesSupported               []string
 	ResponseTypesSupported            []string
 	TokenEndpointAuthMethodsSupported []string
+	// PKCE code challenge methods advertised in the discovery document (RFC 8414
+	// code_challenge_methods_supported). Null when the document omits the field.
+	CodeChallengeMethodsSupported []string `json:"code_challenge_methods_supported"`
 	// When true, may unlock OIDC-aware behaviour.
 	Oidc bool
 	// When true, the MCP client registers and transacts directly with this issuer.

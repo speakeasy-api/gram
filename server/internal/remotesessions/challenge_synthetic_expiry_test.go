@@ -129,8 +129,7 @@ func TestRemoteLoginCallback_StandardRefreshExpirationFields(t *testing.T) {
 	states, err := env.mgr.RemoteSessionStatuses(
 		t.Context(),
 		env.subject,
-		env.projectID,
-		env.session.UserSessionIssuerID,
+		[]uuid.UUID{env.clientID},
 	)
 	require.NoError(t, err)
 	state := states[env.clientID]

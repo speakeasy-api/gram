@@ -22,6 +22,10 @@ export type ReportSessionMovedRequestBody = {
    * Harness the session was moved to (e.g. cursor, codex, claude-code).
    */
   targetHarness: string;
+  /**
+   * Native session id minted for the continuation, when the daemon knows it at launch time (claude-code targets today; Cursor mints ids server-side so moves there omit it). Lets Gram link the original session and its continuation.
+   */
+  targetSessionId?: string | undefined;
 };
 
 /** @internal */
@@ -30,6 +34,7 @@ export type ReportSessionMovedRequestBody$Outbound = {
   session_id: string;
   source_surface?: string | undefined;
   target_harness: string;
+  target_session_id?: string | undefined;
 };
 
 /** @internal */
@@ -42,12 +47,14 @@ export const ReportSessionMovedRequestBody$outboundSchema: z.ZodMiniType<
     sessionId: z.string(),
     sourceSurface: z.optional(z.string()),
     targetHarness: z.string(),
+    targetSessionId: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       sessionId: "session_id",
       sourceSurface: "source_surface",
       targetHarness: "target_harness",
+      targetSessionId: "target_session_id",
     });
   }),
 );

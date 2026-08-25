@@ -38,6 +38,7 @@ import {
 } from "./risk-ui";
 import {
   isJudgeSource,
+  isShadowMcpSource,
   scoreToRating,
   SEVERITY_RATING_LABEL,
   type SeverityRating,
@@ -413,11 +414,11 @@ export default function RiskEvents(): JSX.Element {
               selectedCount={selection.selectedCount}
               actions={[
                 {
-                  label: "Mark as false positive",
+                  label: "Suppress Once",
                   onClick: handleDismissSelected,
                 },
                 {
-                  label: "Set up exclusion rule",
+                  label: "Create Rule",
                   onClick: handleSetupExclusionSelected,
                 },
               ]}
@@ -659,7 +660,7 @@ function RiskEventsRow({
   onDismiss: (result: RiskResult) => void;
   onSetupExclusion: (result: RiskResult) => void;
 }) {
-  const isShadowMCP = result.source === "shadow_mcp";
+  const isShadowMCP = isShadowMcpSource(result.source);
   const isEventSource = isJudgeSource(result.source);
   // The 2px left edge carries the severity band color; rows whose policy
   // hasn't loaded a score keep a transparent edge so the grid stays aligned.
@@ -689,8 +690,8 @@ function RiskEventsRow({
     ...(result.chatId
       ? [{ label: "Copy link", onClick: () => void handleShare() }]
       : []),
-    { label: "Mark as false positive", onClick: () => onDismiss(result) },
-    { label: "Set up exclusion rule", onClick: () => onSetupExclusion(result) },
+    { label: "Suppress Once", onClick: () => onDismiss(result) },
+    { label: "Create Rule", onClick: () => onSetupExclusion(result) },
   ];
 
   return (

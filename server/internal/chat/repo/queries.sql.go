@@ -1984,6 +1984,112 @@ func (q *Queries) ListChatMessagesForMatch(ctx context.Context, arg ListChatMess
 	return items, nil
 }
 
+const listChatSessionLinks = `-- name: ListChatSessionLinks :many
+SELECT
+  l.parent_chat_id,
+  l.child_chat_id,
+  l.child_session_id,
+  l.kind,
+  l.target_harness,
+  l.source_surface,
+  l.actor_email,
+  l.device_hostname,
+  l.created_at,
+  pc.title AS parent_title,
+  (pc.id IS NOT NULL)::boolean AS parent_captured,
+  cc.title AS child_title,
+  (cc.id IS NOT NULL)::boolean AS child_captured
+FROM chat_session_links l
+LEFT JOIN chats pc ON pc.id = l.parent_chat_id AND pc.project_id = l.project_id AND pc.deleted IS FALSE
+  AND ($1::text = '' OR pc.external_user_id = $1::text)
+  AND ($2::text = '' OR pc.user_id = $2::text)
+LEFT JOIN chats cc ON l.child_chat_id IS NOT NULL AND cc.id = l.child_chat_id AND cc.project_id = l.project_id AND cc.deleted IS FALSE
+  AND ($1::text = '' OR cc.external_user_id = $1::text)
+  AND ($2::text = '' OR cc.user_id = $2::text)
+WHERE l.project_id = $3
+  AND (l.parent_chat_id = ANY ($4::uuid[]) OR l.child_chat_id = ANY ($4::uuid[]))
+  AND (
+    ($1::text = '' AND $2::text = '')
+    OR pc.id IS NOT NULL
+    OR cc.id IS NOT NULL
+  )
+ORDER BY l.created_at DESC
+`
+
+type ListChatSessionLinksParams struct {
+	ExternalUserID string
+	UserID         string
+	ProjectID      uuid.UUID
+	ChatIds        []uuid.UUID
+}
+
+type ListChatSessionLinksRow struct {
+	ParentChatID   uuid.UUID
+	ChildChatID    uuid.NullUUID
+	ChildSessionID pgtype.Text
+	Kind           string
+	TargetHarness  string
+	SourceSurface  pgtype.Text
+	ActorEmail     pgtype.Text
+	DeviceHostname pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	ParentTitle    pgtype.Text
+	ParentCaptured bool
+	ChildTitle     pgtype.Text
+	ChildCaptured  bool
+}
+
+// Session-lineage edges touching any of the requested chats, either as the
+// parent (the session that was moved) or the child (the continuation).
+// Titles resolve through LEFT JOINs because either end may not be captured
+// yet — a dangling edge still renders as "moved to <harness>". Visibility
+// mirrors ListChats: an unrestricted caller (both scope params empty) sees
+// every edge; a restricted caller sees only edges with at least one end on a
+// chat their scope can read. Each end's title and captured flag are
+// additionally masked by that end's own visibility, so owning one end of an
+// edge never reveals the other end's title to a restricted caller.
+// The caller's visibility predicate lives in the JOIN conditions, so an end
+// the caller cannot read joins as NULL — masking its title and reading as
+// not-captured — indistinguishable from a not-yet-captured end by design.
+func (q *Queries) ListChatSessionLinks(ctx context.Context, arg ListChatSessionLinksParams) ([]ListChatSessionLinksRow, error) {
+	rows, err := q.db.Query(ctx, listChatSessionLinks,
+		arg.ExternalUserID,
+		arg.UserID,
+		arg.ProjectID,
+		arg.ChatIds,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChatSessionLinksRow
+	for rows.Next() {
+		var i ListChatSessionLinksRow
+		if err := rows.Scan(
+			&i.ParentChatID,
+			&i.ChildChatID,
+			&i.ChildSessionID,
+			&i.Kind,
+			&i.TargetHarness,
+			&i.SourceSurface,
+			&i.ActorEmail,
+			&i.DeviceHostname,
+			&i.CreatedAt,
+			&i.ParentTitle,
+			&i.ParentCaptured,
+			&i.ChildTitle,
+			&i.ChildCaptured,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChatSources = `-- name: ListChatSources :many
 SELECT DISTINCT latest.source
 FROM chats c

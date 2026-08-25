@@ -4,6 +4,7 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { MetricCard, type MetricCardProps } from "@/components/ui/MetricCard";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { type Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
@@ -16,20 +17,21 @@ import {
   DecideAccessSheet,
 } from "@/components/mcp-approvals/DecideAccessSheet";
 import {
+  MoreToggle,
+  useCollapsedPreview,
+} from "@/components/ui/collapsible-preview";
+import {
   eligibleShadowMCPAllowRulePolicies,
   shadowMCPBlockingPolicyDisposition,
   shadowMCPInventoryStatus,
-  shadowMCPInventoryStatusBadgeVariant,
   shadowMCPInventoryStatusDescription,
   shadowMCPInventoryStatusLabel,
-  shadowMCPPolicyState,
+  type ShadowMCPInventoryStatus,
   type ShadowMCPPolicy,
-  type ShadowMCPPolicyDisposition,
-  type ShadowMCPPolicyState,
 } from "@/components/shadow-mcp/shadowMCPInventoryStatus";
 import { useProject } from "@/contexts/Auth";
 import { formatPlatform } from "@/lib/formatPlatform";
-import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
+import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { useRoutes } from "@/routes";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import type { ShadowMCPInventoryUser } from "@gram/client/models/components/shadowmcpinventoryuser.js";
@@ -46,12 +48,17 @@ import {
 import { useUpdateShadowMCPInventoryServerNameMutation } from "@gram/client/react-query/updateShadowMCPInventoryServerName.js";
 import { useShadowMCPInventoryUsers } from "@gram/client/react-query/shadowMCPInventoryUsers.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 
 const USERS_PAGE_LIMIT = 50;
 const FIRST_PAGE_CURSOR = "";
+
+// How many users the table shows before the rest collapses behind a toggle.
+// A busy server's roster runs long, and it sits beside the evidence rather
+// than owning the page, so it previews a handful and expands on demand.
+const USERS_PREVIEW_COUNT = 5;
 
 type UsersPage = {
   cursor: string;
@@ -81,61 +88,129 @@ function UserSources({
     return sourceLabel(left.source).localeCompare(sourceLabel(right.source));
   });
 
+  // With one source, its count is the user's whole call count — already the
+  // next column over. The split is only worth showing when there is a split.
+  const showCounts = orderedSources.length > 1;
+
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
       {orderedSources.map((source) => (
         <div className="flex items-center gap-1.5" key={source.source}>
-          <HookSourceIcon source={source.source} className="size-4 shrink-0" />
+          <AgentProviderIcon
+            source={source.source}
+            className="size-4 shrink-0"
+          />
           <span className="whitespace-nowrap font-medium">
             {sourceLabel(source.source)}
           </span>
-          <Badge variant="neutral">
-            <Badge.Text>{source.observedUseCount}</Badge.Text>
-          </Badge>
+          {showCounts && (
+            <Badge variant="neutral">
+              <Badge.Text>{source.observedUseCount}</Badge.Text>
+            </Badge>
+          )}
         </div>
       ))}
     </div>
   );
 }
 
-function ServerStatus({
-  disposition,
-  policyState,
-  server,
-}: {
-  disposition: ShadowMCPPolicyDisposition | null;
-  policyState: ShadowMCPPolicyState;
-  server: ShadowMCPInventoryServer;
-}) {
-  const status = shadowMCPInventoryStatus(server, policyState);
+// MetricCard defaults to the roomier p-6/gap-4 the deployment page uses. This
+// strip shares a row with the review header and sits above dense hairline
+// tables, so it matches their rhythm, and px-3 puts its labels on the same left
+// rail as the fact lists below.
+const SUMMARY_TILE_CLASS = "gap-2 px-3 py-3";
 
-  return (
-    <div className="space-y-1">
-      <Badge variant={shadowMCPInventoryStatusBadgeVariant(status)}>
-        <Badge.Text>{shadowMCPInventoryStatusLabel(status)}</Badge.Text>
-      </Badge>
-      <Text muted small>
-        {shadowMCPInventoryStatusDescription(server, policyState, disposition)}
-      </Text>
-    </div>
-  );
+/** Day without the time, for a figure that has to read at a glance. */
+const summaryDayFormatter = new Intl.DateTimeFormat(undefined, {
+  month: "short",
+  day: "numeric",
+});
+
+/** The clock time, demoted to the qualifier line under the day. */
+const summaryTimeFormatter = new Intl.DateTimeFormat(undefined, {
+  hour: "numeric",
+  minute: "2-digit",
+});
+
+/**
+ * How the status colors its figure. The badge variants and the metric tones
+ * are the same vocabulary, but they are separate types — mapping them here
+ * keeps the strip honest if either list grows.
+ */
+function statusTone(status: ShadowMCPInventoryStatus): MetricCardProps["tone"] {
+  switch (status) {
+    case "allowed":
+      return "success";
+    case "blocked":
+      return "destructive";
+    case "restricted":
+      return "warning";
+    case "pending":
+      // Blue like the inventory badge and the review's own awaiting-decision
+      // vocabulary; orange stays reserved for the partial-access family.
+      return "information";
+    case "observed":
+      return "neutral";
+  }
 }
 
-function ServerSummary({
-  disposition,
-  policyState,
-  server,
-}: {
-  disposition: ShadowMCPPolicyDisposition | null;
-  policyState: ShadowMCPPolicyState;
-  server: ShadowMCPInventoryServer;
-}) {
+/**
+ * The server at a glance: status, traffic, and recency as one bordered strip.
+ *
+ * Handed to the review as its `summary` so the two share a row. It replaced a
+ * badge and two lines of prose in a full-width block, where the status sat
+ * alone on the left and the figures had nowhere to go that did not read as an
+ * island — giving every figure the same shape and its own column fills the
+ * width by construction instead.
+ */
+function ServerSummary({ server }: { server: ShadowMCPInventoryServer }) {
+  const status = shadowMCPInventoryStatus(server);
+
   return (
-    <ServerStatus
-      disposition={disposition}
-      policyState={policyState}
-      server={server}
-    />
+    <MetricCard.Group className="flex-wrap">
+      <MetricCard
+        label="Status"
+        value={shadowMCPInventoryStatusLabel(status)}
+        tone={statusTone(status)}
+        size="xs"
+        className={SUMMARY_TILE_CLASS}
+        description={shadowMCPInventoryStatusDescription(server)}
+      />
+      {/* First-seen rides under the call count rather than taking a tile of
+          its own: it is the span those calls happened over, not a figure
+          anyone reads on its own. */}
+      <MetricCard
+        label="Calls"
+        value={server.observedUseCount}
+        tone="neutral"
+        size="xs"
+        className={SUMMARY_TILE_CLASS}
+        description={`since ${summaryDayFormatter.format(server.firstSeen)}`}
+      />
+      <MetricCard
+        label="People"
+        value={server.userCount}
+        tone="neutral"
+        size="xs"
+        className={SUMMARY_TILE_CLASS}
+      />
+      <MetricCard
+        label="Last called"
+        value={
+          server.lastCalled
+            ? summaryDayFormatter.format(server.lastCalled)
+            : "Never"
+        }
+        tone="neutral"
+        size="xs"
+        className={SUMMARY_TILE_CLASS}
+        description={
+          server.lastCalled
+            ? summaryTimeFormatter.format(server.lastCalled)
+            : undefined
+        }
+      />
+    </MetricCard.Group>
   );
 }
 
@@ -186,6 +261,12 @@ function TopUsersTable({
     },
   ];
 
+  const { collapsible, expanded, toggle, visible } = useCollapsedPreview(
+    users,
+    USERS_PREVIEW_COUNT,
+  );
+  const tableId = useId();
+
   if (users.length === 0) {
     return (
       <div className="bg-muted/20 flex min-h-32 flex-col items-center justify-center border border-dashed px-6 py-8 text-center">
@@ -199,31 +280,54 @@ function TopUsersTable({
     );
   }
 
+  const collapsed = collapsible && !expanded;
+
   return (
-    <Table columns={columns}>
-      <Table.Header columns={columns} />
-      <Table.Body
-        columns={columns}
-        data={users}
-        handleLoadMore={onLoadMore}
-        hasMore={hasMore}
-        isLoading={isLoading}
-        isRowClickable={(user) => Boolean(user.email)}
-        onRowClick={onOpenUser}
-        rowKey={(row) => row.userKey}
-      />
-    </Table>
+    <div className="space-y-2">
+      <div id={tableId}>
+        <Table columns={columns}>
+          <Table.Header columns={columns} />
+          <Table.Body
+            columns={columns}
+            data={visible}
+            handleLoadMore={onLoadMore}
+            // While collapsed, don't auto-fetch the next page — expanding is the
+            // signal that the reader wants the whole roster.
+            hasMore={!collapsed && hasMore}
+            isLoading={isLoading}
+            isRowClickable={(user) => Boolean(user.email)}
+            onRowClick={onOpenUser}
+            rowKey={(row) => row.userKey}
+          />
+        </Table>
+      </div>
+      {collapsible && (
+        <MoreToggle
+          expanded={expanded}
+          onToggle={toggle}
+          collapsedLabel={`Show all ${users.length}${hasMore ? "+" : ""} users`}
+          controlId={tableId}
+        />
+      )}
+    </div>
   );
 }
 
 function DetailActionButtons({
   disabled,
   onOpenDecide,
+  policiesUnavailable,
   server,
   projectSlug,
 }: {
   disabled: boolean;
   onOpenDecide: () => void;
+  /**
+   * The policy list failed to load. Deciding writes grants against the
+   * policies the sheet can see, so with none loaded an approval would record
+   * a decision that enforces nothing — the button waits instead.
+   */
+  policiesUnavailable: boolean;
   server: ShadowMCPInventoryServer;
   projectSlug: string;
 }) {
@@ -239,10 +343,15 @@ function DetailActionButtons({
         />
       )}
       <Button
-        disabled={disabled}
+        disabled={disabled || policiesUnavailable}
         onClick={onOpenDecide}
         variant={pendingReview ? "primary" : "secondary"}
         size="sm"
+        title={
+          policiesUnavailable
+            ? "Policy data could not be loaded — deciding now would not be enforced"
+            : undefined
+        }
       >
         <Button.Text>
           {pendingReview ? "Review Request" : "Decide Access"}
@@ -353,9 +462,6 @@ export default function ShadowMCPServerDetail(): JSX.Element {
   const policiesQuery = useRiskListPolicies();
   const membersQuery = useMembers();
   const rolesQuery = useRoles();
-  const policyState = policiesQuery.isError
-    ? "unavailable"
-    : shadowMCPPolicyState(policiesQuery.data?.policies);
   let shadowMCPPolicies: ShadowMCPPolicy[] = [];
   if (!policiesQuery.isError) {
     shadowMCPPolicies = eligibleShadowMCPAllowRulePolicies(
@@ -492,6 +598,11 @@ export default function ShadowMCPServerDetail(): JSX.Element {
       </div>
     ) : (
       <TopUsersTable
+        // Remount per project+server: the collapse state lives in the table,
+        // and this route stays mounted when navigating between servers or
+        // switching projects, so without a key the next roster opens already
+        // expanded.
+        key={`${project.id}/${serverSlug}`}
         hasMore={Boolean(nextUsersCursor)}
         isLoading={isLoadingMoreUsers}
         onLoadMore={loadMoreUsers}
@@ -577,6 +688,7 @@ export default function ShadowMCPServerDetail(): JSX.Element {
                 <DetailActionButtons
                   disabled={decideTarget !== null}
                   onOpenDecide={openDecide}
+                  policiesUnavailable={policiesQuery.isError}
                   server={server}
                   projectSlug={project.slug}
                 />
@@ -611,11 +723,6 @@ export default function ShadowMCPServerDetail(): JSX.Element {
                     members={membersQuery.data?.members ?? []}
                     roles={rolesQuery.data?.roles ?? []}
                   />
-                  <ServerSummary
-                    disposition={disposition}
-                    policyState={policyState}
-                    server={server}
-                  />
                   <section className="min-h-0 space-y-3">
                     {/* The review owns its own heading: the request's status
                         shares that row, and only the review has it. Observed
@@ -626,18 +733,15 @@ export default function ShadowMCPServerDetail(): JSX.Element {
                       <ApprovalReview
                         requestId={server.approvalRequest.id}
                         title="Access review"
-                        description="Evidence, requesters, and decision history. Decisions here allow or block this server."
                         usage={usersPanel}
+                        summary={<ServerSummary server={server} />}
                       />
                     ) : (
                       <>
-                        <div>
-                          <Text variant="subheading">Access review</Text>
-                          <Text muted small>
-                            Evidence, requesters, and decision history.
-                            Decisions here allow or block this server.
-                          </Text>
-                        </div>
+                        {/* No dossier yet, so the review has no header to
+                            share a row with — the strip stands alone until
+                            the gather lands and the two-column row appears. */}
+                        <ServerSummary server={server} />
                         <EnsureServerReview
                           canonicalServerUrl={server.canonicalServerUrl}
                         />

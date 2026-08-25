@@ -101,9 +101,6 @@ type testInstance struct {
 	shadowMCPClient *shadowmcp.Client
 	cacheAdapter    cache.Cache
 	serverURL       *url.URL
-	// features is the injectable flag provider wired into the wrapped mcp
-	// service; tests enable flag-gated behavior with SetFlag.
-	features *feature.InMemory
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -159,8 +156,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	userSessionSigner := usersessions.NewSigner("test-jwt-secret")
 	remoteChallengeMgr := remotesessions.NewChallengeManager(logger, tracerProvider, meterProvider, conn, enc, guardianPolicy, cacheAdapter, serverURL)
 	remoteProxyManager := remotemcp.NewProxyManager(logger, tracerProvider, meterProvider, guardianPolicy, authzEngine, posthogClient, telemLogger, billingClient, billingClient, mcpservers.NewToolDispositionCache(logger, conn, cacheAdapter), toolcallobserver.NoopSuccessRecorder{}, toolfilter.NewSessionToolWitnessStore(testenv.NewLogger(t), testenv.NewMemoryCache()))
-	features := &feature.InMemory{}
-	mcpService := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthogClient, features, serverURL, serverURL, enc, cacheAdapter, guardianPolicy, funcs, billingClient, billingClient, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, nil, nil, nil, userSessionSigner, remoteChallengeMgr, remoteProxyManager, route.NewRouteTable(), "", nil, nil, mcp.TunnelPublicConfig{
+	mcpService := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthogClient, &feature.InMemory{}, serverURL, serverURL, enc, cacheAdapter, guardianPolicy, funcs, billingClient, billingClient, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, nil, nil, nil, userSessionSigner, remoteChallengeMgr, remoteProxyManager, route.NewRouteTable(), "", nil, nil, mcp.TunnelPublicConfig{
 		SessionTTL:         0,
 		LiveSessionCap:     0,
 		InitializeRate:     ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
@@ -182,7 +178,6 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		shadowMCPClient: shadowMCPClient,
 		cacheAdapter:    cacheAdapter,
 		serverURL:       serverURL,
-		features:        features,
 	}
 }
 
@@ -284,7 +279,7 @@ func seedRemoteMCPEndpoint(t *testing.T, ctx context.Context, ti *testInstance, 
 	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:      projectID,
 		CustomDomainID: uuid.NullUUID{},
-		McpServerID:    mcpServer.ID,
+		McpServerID:    uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
 		Slug:           slug,
 	})
 	require.NoError(t, err)
@@ -328,7 +323,7 @@ func seedToolsetMCPEndpointOnDomain(t *testing.T, ctx context.Context, ti *testI
 	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:      projectID,
 		CustomDomainID: customDomainID,
-		McpServerID:    mcpServer.ID,
+		McpServerID:    uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
 		Slug:           slug,
 	})
 	require.NoError(t, err)
@@ -473,7 +468,7 @@ func seedIssuerGatedToolsetMCPEndpoint(
 	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:      projectID,
 		CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		McpServerID:    mcpServer.ID,
+		McpServerID:    uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
 		Slug:           slug,
 	})
 	require.NoError(t, err)
@@ -532,7 +527,7 @@ func seedIssuerGatedRemoteMCPEndpointOnDomain(
 	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:      projectID,
 		CustomDomainID: customDomainID,
-		McpServerID:    mcpServer.ID,
+		McpServerID:    uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
 		Slug:           slug,
 	})
 	require.NoError(t, err)

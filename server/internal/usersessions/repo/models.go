@@ -42,6 +42,9 @@ type UserSessionClient struct {
 	ClientIDMetadataFetchedAt      pgtype.Timestamptz
 	ClientIDMetadataCacheExpiresAt pgtype.Timestamptz
 	ClientIDMetadataEtag           pgtype.Text
+	TokenEndpointAuthMethod        pgtype.Text
+	ClientJwks                     []byte
+	ClientJwksUri                  pgtype.Text
 	CreatedAt                      pgtype.Timestamptz
 	UpdatedAt                      pgtype.Timestamptz
 	DeletedAt                      pgtype.Timestamptz

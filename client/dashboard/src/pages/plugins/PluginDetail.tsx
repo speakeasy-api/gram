@@ -37,6 +37,7 @@ import { useRemovePluginServerMutation } from "@gram/client/react-query/removePl
 import { useListToolsets } from "@gram/client/react-query/listToolsets";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers";
+import { useAudiences } from "@gram/client/react-query/audiences";
 import { useMembers } from "@gram/client/react-query/members";
 import { useRoles } from "@gram/client/react-query/roles";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
@@ -84,6 +85,7 @@ import { PluginSkillsSection } from "./PluginSkillsSection";
 import { PluginAssignmentsList } from "./PluginAssignmentsList";
 import {
   activePluginSection,
+  pluginSectionHref,
   PLUGIN_ASSIGNMENTS_SECTION_ID,
   PLUGIN_OVERVIEW_SECTION_ID,
   PLUGIN_SERVERS_SECTION_ID,
@@ -91,7 +93,12 @@ import {
   PLUGIN_SKILLS_SECTION_ID,
 } from "./plugin-detail-sections";
 import { countPluginInstalls } from "./plugin-reach";
-import { describePrincipal, memberMapByUrn, roleMapByUrn } from "./principals";
+import {
+  audienceMapByUrn,
+  describePrincipal,
+  memberMapByUrn,
+  roleMapByUrn,
+} from "./principals";
 import { PublishDialog } from "./PublishDialog";
 import { SectionEmptyState } from "./SectionEmptyState";
 import { usePluginAssignmentsVisible } from "./use-plugin-assignments-visible";
@@ -206,6 +213,7 @@ export default function PluginDetail(): JSX.Element | null {
   // Query dedupes these with the sheet's own calls.
   const { data: rolesData } = useRoles();
   const { data: membersData } = useMembers();
+  const { data: audiencesData } = useAudiences();
   const roleByUrn = useMemo(
     () => roleMapByUrn(rolesData?.roles ?? []),
     [rolesData?.roles],
@@ -213,6 +221,10 @@ export default function PluginDetail(): JSX.Element | null {
   const memberByUrn = useMemo(
     () => memberMapByUrn(membersData?.members ?? []),
     [membersData?.members],
+  );
+  const audienceByUrn = useMemo(
+    () => audienceMapByUrn(audiencesData?.audiences ?? []),
+    [audiencesData?.audiences],
   );
 
   const showAssignments = usePluginAssignmentsVisible();
@@ -506,6 +518,7 @@ export default function PluginDetail(): JSX.Element | null {
           a.principalUrn,
           roleByUrn,
           memberByUrn,
+          audienceByUrn,
         );
         const email = memberByUrn.get(a.principalUrn)?.email ?? "";
         return (
@@ -533,6 +546,7 @@ export default function PluginDetail(): JSX.Element | null {
         assignments={filteredAssignments}
         roleByUrn={roleByUrn}
         memberByUrn={memberByUrn}
+        audienceByUrn={audienceByUrn}
       />
     );
   }
@@ -591,6 +605,11 @@ export default function PluginDetail(): JSX.Element | null {
                   tone="information"
                   format="number"
                   icon="network"
+                  link={pluginSectionHref(
+                    routes,
+                    pluginId!,
+                    PLUGIN_SERVERS_SECTION_ID,
+                  )}
                 />
                 <StatTile
                   title="Skills"
@@ -598,6 +617,11 @@ export default function PluginDetail(): JSX.Element | null {
                   tone="information"
                   format="number"
                   icon="sparkles"
+                  link={pluginSectionHref(
+                    routes,
+                    pluginId!,
+                    PLUGIN_SKILLS_SECTION_ID,
+                  )}
                 />
                 {showAssignments && (
                   <>
@@ -608,6 +632,11 @@ export default function PluginDetail(): JSX.Element | null {
                       format="number"
                       icon="users"
                       subtext="Roles, users, and emails"
+                      link={pluginSectionHref(
+                        routes,
+                        pluginId!,
+                        PLUGIN_ASSIGNMENTS_SECTION_ID,
+                      )}
                     />
                     <StatTile
                       title="Installs"

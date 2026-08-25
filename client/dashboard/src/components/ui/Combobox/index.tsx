@@ -22,6 +22,7 @@ export type DropdownItem = {
   value: string;
   label: string;
   icon?: ReactNode;
+  keywords?: string[];
   onClick?: () => void;
 };
 
@@ -36,6 +37,9 @@ export function Combobox<T extends DropdownItem>({
   label,
   disabledMessage,
   tooltip,
+  searchable = false,
+  searchPlaceholder = "Search...",
+  contentClassName,
 }: {
   items: T[];
   selected: T | string | undefined;
@@ -47,6 +51,9 @@ export function Combobox<T extends DropdownItem>({
   label?: string;
   disabledMessage?: string;
   tooltip?: string;
+  searchable?: boolean;
+  searchPlaceholder?: string;
+  contentClassName?: string;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
 
@@ -91,10 +98,10 @@ export function Combobox<T extends DropdownItem>({
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
       {trigger}
-      <PopoverContent className="w-[200px] p-0">
-        <Command>
-          {items.length > 4 && (
-            <CommandInput placeholder="Search..." className="h-9" />
+      <PopoverContent className={cn("w-[200px] p-0", contentClassName)}>
+        <Command label={searchPlaceholder}>
+          {(searchable || items.length > 4) && (
+            <CommandInput placeholder={searchPlaceholder} className="h-9" />
           )}
           <CommandList>
             <CommandEmpty>No items found.</CommandEmpty>
@@ -103,6 +110,7 @@ export function Combobox<T extends DropdownItem>({
                 <CommandItem
                   key={item.value}
                   value={item.value}
+                  keywords={[item.label, ...(item.keywords ?? [])]}
                   className="cursor-pointer truncate"
                   onSelect={(v) => {
                     onSelectionChange(items.find((item) => item.value === v)!);

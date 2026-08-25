@@ -19,7 +19,7 @@ SET registration_id = $1,
 WHERE id = $2
   AND organization_id = $3
   AND status = 'pending'
-RETURNING id, organization_id, project_id, registration_id, connection_id, connection_generation, user_id, acting_surface, operation, idempotency_key, input_hash, status, result_code, expires_at, created_at, updated_at
+RETURNING id, organization_id, project_id, registration_id, connection_id, connection_generation, user_id, acting_surface, operation, idempotency_key, input_hash, status, result_code, result_payload, expires_at, created_at, updated_at
 `
 
 type AttachPlatformMCPOperationReceiptRegistrationParams struct {
@@ -45,6 +45,7 @@ func (q *Queries) AttachPlatformMCPOperationReceiptRegistration(ctx context.Cont
 		&i.InputHash,
 		&i.Status,
 		&i.ResultCode,
+		&i.ResultPayload,
 		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -171,7 +172,7 @@ SET registration_id = $1,
     updated_at = clock_timestamp()
 WHERE id = $4
   AND organization_id = $5
-RETURNING id, organization_id, project_id, registration_id, connection_id, connection_generation, user_id, acting_surface, operation, idempotency_key, input_hash, status, result_code, expires_at, created_at, updated_at
+RETURNING id, organization_id, project_id, registration_id, connection_id, connection_generation, user_id, acting_surface, operation, idempotency_key, input_hash, status, result_code, result_payload, expires_at, created_at, updated_at
 `
 
 type CompletePlatformMCPOperationReceiptParams struct {
@@ -205,6 +206,7 @@ func (q *Queries) CompletePlatformMCPOperationReceipt(ctx context.Context, arg C
 		&i.InputHash,
 		&i.Status,
 		&i.ResultCode,
+		&i.ResultPayload,
 		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -614,7 +616,11 @@ INSERT INTO platform_mcp_distributions (
     organization_id,
     project_id,
     registration_id,
+    -- Dual-written during expand: default_plugin_id is the legacy column name
+    -- and no longer implies the project's default plugin, plugin_id is the
+    -- column exact-plugin readers move to. Both carry the exact target.
     default_plugin_id,
+    plugin_id,
     plugin_server_id,
     state,
     version,
@@ -626,6 +632,7 @@ SELECT
     $1,
     $2,
     $3,
+    $4,
     $4,
     $5,
     $6,
@@ -645,7 +652,6 @@ WHERE EXISTS (
       ON plugin.id = $4
      AND plugin.organization_id = project.organization_id
      AND plugin.project_id = project.id
-     AND plugin.is_default IS TRUE
      AND plugin.deleted IS FALSE
     JOIN platform_mcp_connections AS connection
       ON connection.id = $9
@@ -656,14 +662,14 @@ WHERE EXISTS (
       AND project.organization_id = $1
       AND project.deleted IS FALSE
 )
-RETURNING id, organization_id, project_id, registration_id, default_plugin_id, plugin_server_id, state, version, attachment_was_created, publication_state, publication_updated_at, connection_id, connection_generation, user_id, acting_surface, created_at, updated_at
+RETURNING id, organization_id, project_id, registration_id, default_plugin_id, plugin_id, plugin_server_id, state, version, attachment_was_created, publication_state, publication_updated_at, connection_id, connection_generation, user_id, acting_surface, created_at, updated_at
 `
 
 type CreatePlatformMCPDistributionParams struct {
 	OrganizationID       string
 	ProjectID            uuid.UUID
 	RegistrationID       uuid.UUID
-	DefaultPluginID      uuid.UUID
+	PluginID             uuid.UUID
 	PluginServerID       uuid.NullUUID
 	State                string
 	Version              int64
@@ -677,7 +683,7 @@ func (q *Queries) CreatePlatformMCPDistribution(ctx context.Context, arg CreateP
 		arg.OrganizationID,
 		arg.ProjectID,
 		arg.RegistrationID,
-		arg.DefaultPluginID,
+		arg.PluginID,
 		arg.PluginServerID,
 		arg.State,
 		arg.Version,
@@ -692,6 +698,7 @@ func (q *Queries) CreatePlatformMCPDistribution(ctx context.Context, arg CreateP
 		&i.ProjectID,
 		&i.RegistrationID,
 		&i.DefaultPluginID,
+		&i.PluginID,
 		&i.PluginServerID,
 		&i.State,
 		&i.Version,
@@ -810,7 +817,7 @@ INSERT INTO platform_mcp_oauth_clients (
     $4,
     $5
 )
-RETURNING id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, revoked_at, created_at, updated_at
+RETURNING id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, revoked_at, client_id_metadata_uri, client_id_metadata_fetched_at, client_id_metadata_cache_expires_at, client_id_metadata_etag, created_at, updated_at
 `
 
 type CreatePlatformMCPOAuthClientParams struct {
@@ -842,6 +849,10 @@ func (q *Queries) CreatePlatformMCPOAuthClient(ctx context.Context, arg CreatePl
 		&i.ClientIDIssuedAt,
 		&i.ClientSecretExpiresAt,
 		&i.RevokedAt,
+		&i.ClientIDMetadataUri,
+		&i.ClientIDMetadataFetchedAt,
+		&i.ClientIDMetadataCacheExpiresAt,
+		&i.ClientIDMetadataEtag,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -933,7 +944,7 @@ INSERT INTO platform_mcp_operation_receipts (
     $12,
     $13
 )
-RETURNING id, organization_id, project_id, registration_id, connection_id, connection_generation, user_id, acting_surface, operation, idempotency_key, input_hash, status, result_code, expires_at, created_at, updated_at
+RETURNING id, organization_id, project_id, registration_id, connection_id, connection_generation, user_id, acting_surface, operation, idempotency_key, input_hash, status, result_code, result_payload, expires_at, created_at, updated_at
 `
 
 type CreatePlatformMCPOperationReceiptParams struct {
@@ -983,6 +994,7 @@ func (q *Queries) CreatePlatformMCPOperationReceipt(ctx context.Context, arg Cre
 		&i.InputHash,
 		&i.Status,
 		&i.ResultCode,
+		&i.ResultPayload,
 		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -1270,8 +1282,16 @@ DELETE FROM platform_mcp_readiness AS stale
 WHERE stale.organization_id = $1
   AND stale.project_id = $2
   AND stale.registration_id = $3
-  AND stale.connection_id = $4
-  AND stale.connection_generation = $5
+  AND (
+      ($4::uuid IS NOT NULL
+          AND stale.connection_id = $4::uuid
+          AND stale.connection_generation = $5::uuid)
+      OR
+      ($4::uuid IS NULL
+          AND stale.connection_id IS NULL
+          AND stale.user_id = $6
+          AND stale.acting_surface = $7)
+  )
   AND stale.expires_at <= clock_timestamp()
   AND EXISTS (
       SELECT 1
@@ -1279,8 +1299,16 @@ WHERE stale.organization_id = $1
       WHERE newer.organization_id = stale.organization_id
         AND newer.project_id = stale.project_id
         AND newer.registration_id = stale.registration_id
-        AND newer.connection_id = stale.connection_id
-        AND newer.connection_generation = stale.connection_generation
+        AND (
+            (stale.connection_id IS NOT NULL
+                AND newer.connection_id = stale.connection_id
+                AND newer.connection_generation = stale.connection_generation)
+            OR
+            (stale.connection_id IS NULL
+                AND newer.connection_id IS NULL
+                AND newer.user_id = stale.user_id
+                AND newer.acting_surface = stale.acting_surface)
+        )
         AND (newer.checked_at, newer.id) > (stale.checked_at, stale.id)
   )
 `
@@ -1291,10 +1319,13 @@ type DeleteExpiredPlatformMCPReadinessParams struct {
 	RegistrationID       uuid.UUID
 	ConnectionID         uuid.NullUUID
 	ConnectionGeneration uuid.NullUUID
+	UserID               pgtype.Text
+	ActingSurface        pgtype.Text
 }
 
 // Retain the newest expired projection as stale repair evidence. Only an older
 // expired row that has been superseded by later evidence is safe to remove.
+// A connectionless assistant projection is keyed by its real user and surface.
 func (q *Queries) DeleteExpiredPlatformMCPReadiness(ctx context.Context, arg DeleteExpiredPlatformMCPReadinessParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteExpiredPlatformMCPReadiness,
 		arg.OrganizationID,
@@ -1302,6 +1333,8 @@ func (q *Queries) DeleteExpiredPlatformMCPReadiness(ctx context.Context, arg Del
 		arg.RegistrationID,
 		arg.ConnectionID,
 		arg.ConnectionGeneration,
+		arg.UserID,
+		arg.ActingSurface,
 	)
 	if err != nil {
 		return 0, err
@@ -1537,7 +1570,7 @@ func (q *Queries) GetActivePlatformMCPConnectionForFeedbackForUpdate(ctx context
 }
 
 const getActivePlatformMCPOAuthClientByClientID = `-- name: GetActivePlatformMCPOAuthClientByClientID :one
-SELECT id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, revoked_at, created_at, updated_at
+SELECT id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, revoked_at, client_id_metadata_uri, client_id_metadata_fetched_at, client_id_metadata_cache_expires_at, client_id_metadata_etag, created_at, updated_at
 FROM platform_mcp_oauth_clients
 WHERE client_id = $1
   AND revoked_at IS NULL
@@ -1555,6 +1588,10 @@ func (q *Queries) GetActivePlatformMCPOAuthClientByClientID(ctx context.Context,
 		&i.ClientIDIssuedAt,
 		&i.ClientSecretExpiresAt,
 		&i.RevokedAt,
+		&i.ClientIDMetadataUri,
+		&i.ClientIDMetadataFetchedAt,
+		&i.ClientIDMetadataCacheExpiresAt,
+		&i.ClientIDMetadataEtag,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -1664,21 +1701,29 @@ JOIN platform_mcp_catalog_registrations AS registration
  AND registration.organization_id = readiness.organization_id
  AND registration.project_id = readiness.project_id
  AND registration.deleted IS FALSE
- JOIN projects AS project
-   ON project.id = readiness.project_id
-  AND project.organization_id = readiness.organization_id
-  AND project.deleted IS FALSE
- JOIN platform_mcp_connections AS connection
-   ON connection.id = readiness.connection_id
+JOIN projects AS project
+  ON project.id = readiness.project_id
+ AND project.organization_id = readiness.organization_id
+ AND project.deleted IS FALSE
+LEFT JOIN platform_mcp_connections AS connection
+  ON connection.id = readiness.connection_id
  AND connection.organization_id = readiness.organization_id
 WHERE readiness.organization_id = $1
   AND readiness.project_id = $2
   AND readiness.registration_id = $3
-  AND readiness.connection_id = $4
-  AND readiness.connection_generation = $5
-  AND connection.subject_urn = $6
-  AND connection.active_generation = readiness.connection_generation
-  AND connection.revoked_at IS NULL
+  AND (
+      ($4::uuid IS NOT NULL
+          AND readiness.connection_id = $4::uuid
+          AND readiness.connection_generation = $5::uuid
+          AND connection.subject_urn = $6
+          AND connection.active_generation = readiness.connection_generation
+          AND connection.revoked_at IS NULL)
+      OR
+      ($4::uuid IS NULL
+          AND readiness.connection_id IS NULL
+          AND readiness.user_id = $7
+          AND readiness.acting_surface = $8)
+  )
 ORDER BY readiness.checked_at DESC, readiness.id DESC
 LIMIT 1
 `
@@ -1690,8 +1735,12 @@ type GetLatestPlatformMCPReadinessForLifecycleParams struct {
 	ConnectionID         uuid.NullUUID
 	ConnectionGeneration uuid.NullUUID
 	SubjectUrn           string
+	UserID               pgtype.Text
+	ActingSurface        pgtype.Text
 }
 
+// External callers retain live connection/generation checks. A connectionless
+// caller may only read evidence attributed to that same real user and surface.
 func (q *Queries) GetLatestPlatformMCPReadinessForLifecycle(ctx context.Context, arg GetLatestPlatformMCPReadinessForLifecycleParams) (PlatformMcpReadiness, error) {
 	row := q.db.QueryRow(ctx, getLatestPlatformMCPReadinessForLifecycle,
 		arg.OrganizationID,
@@ -1700,6 +1749,8 @@ func (q *Queries) GetLatestPlatformMCPReadinessForLifecycle(ctx context.Context,
 		arg.ConnectionID,
 		arg.ConnectionGeneration,
 		arg.SubjectUrn,
+		arg.UserID,
+		arg.ActingSurface,
 	)
 	var i PlatformMcpReadiness
 	err := row.Scan(
@@ -2132,8 +2183,59 @@ func (q *Queries) GetPlatformMCPConnectionForUpdate(ctx context.Context, arg Get
 	return i, err
 }
 
+const getPlatformMCPDiagnosticsTarget = `-- name: GetPlatformMCPDiagnosticsTarget :one
+SELECT
+    m.id AS mcp_server_id,
+    m.project_id,
+    COALESCE(m.slug, '') AS mcp_slug,
+    COALESCE(toolset.slug, '') AS toolset_slug
+FROM mcp_servers AS m
+JOIN projects AS project
+  ON project.id = m.project_id
+ AND project.organization_id = $1
+ AND project.deleted IS FALSE
+LEFT JOIN toolsets AS toolset
+  ON toolset.id = m.toolset_id
+ AND toolset.project_id = m.project_id
+ AND toolset.organization_id = $1
+ AND toolset.deleted IS FALSE
+WHERE m.id = $2
+  AND m.project_id = $3
+  AND m.deleted IS FALSE
+`
+
+type GetPlatformMCPDiagnosticsTargetParams struct {
+	OrganizationID string
+	McpServerID    uuid.UUID
+	ProjectID      uuid.UUID
+}
+
+type GetPlatformMCPDiagnosticsTargetRow struct {
+	McpServerID uuid.UUID
+	ProjectID   uuid.UUID
+	McpSlug     string
+	ToolsetSlug string
+}
+
+// Resolves one configured MCP to the identities its telemetry is recorded
+// under: the toolset slug that calls arriving directly at Gram carry, and the
+// MCP slug that appears in the URL an agent-hook-observed client called.
+// Scoped to the organization's own project, so a caller cannot diagnose an MCP
+// it cannot already see through the inventory.
+func (q *Queries) GetPlatformMCPDiagnosticsTarget(ctx context.Context, arg GetPlatformMCPDiagnosticsTargetParams) (GetPlatformMCPDiagnosticsTargetRow, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPDiagnosticsTarget, arg.OrganizationID, arg.McpServerID, arg.ProjectID)
+	var i GetPlatformMCPDiagnosticsTargetRow
+	err := row.Scan(
+		&i.McpServerID,
+		&i.ProjectID,
+		&i.McpSlug,
+		&i.ToolsetSlug,
+	)
+	return i, err
+}
+
 const getPlatformMCPDistribution = `-- name: GetPlatformMCPDistribution :one
-SELECT distribution.id, distribution.organization_id, distribution.project_id, distribution.registration_id, distribution.default_plugin_id, distribution.plugin_server_id, distribution.state, distribution.version, distribution.attachment_was_created, distribution.publication_state, distribution.publication_updated_at, distribution.connection_id, distribution.connection_generation, distribution.user_id, distribution.acting_surface, distribution.created_at, distribution.updated_at
+SELECT distribution.id, distribution.organization_id, distribution.project_id, distribution.registration_id, distribution.default_plugin_id, distribution.plugin_id, distribution.plugin_server_id, distribution.state, distribution.version, distribution.attachment_was_created, distribution.publication_state, distribution.publication_updated_at, distribution.connection_id, distribution.connection_generation, distribution.user_id, distribution.acting_surface, distribution.created_at, distribution.updated_at
 FROM platform_mcp_distributions AS distribution
 JOIN projects AS project
   ON project.id = distribution.project_id
@@ -2146,18 +2248,21 @@ WHERE distribution.organization_id = $1
 `
 
 type GetPlatformMCPDistributionParams struct {
-	OrganizationID  string
-	ProjectID       uuid.UUID
-	RegistrationID  uuid.UUID
-	DefaultPluginID uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	RegistrationID uuid.UUID
+	PluginID       uuid.UUID
 }
 
+// This is a neutral desired-state lookup used by inventory and write paths.
+// Default-only mutations revalidate plugins.is_default in their write queries;
+// inventory intentionally projects COALESCE(plugin_id, default_plugin_id).
 func (q *Queries) GetPlatformMCPDistribution(ctx context.Context, arg GetPlatformMCPDistributionParams) (PlatformMcpDistribution, error) {
 	row := q.db.QueryRow(ctx, getPlatformMCPDistribution,
 		arg.OrganizationID,
 		arg.ProjectID,
 		arg.RegistrationID,
-		arg.DefaultPluginID,
+		arg.PluginID,
 	)
 	var i PlatformMcpDistribution
 	err := row.Scan(
@@ -2166,6 +2271,7 @@ func (q *Queries) GetPlatformMCPDistribution(ctx context.Context, arg GetPlatfor
 		&i.ProjectID,
 		&i.RegistrationID,
 		&i.DefaultPluginID,
+		&i.PluginID,
 		&i.PluginServerID,
 		&i.State,
 		&i.Version,
@@ -2215,6 +2321,148 @@ func (q *Queries) GetPlatformMCPFeedbackByIdempotencyKey(ctx context.Context, ar
 	return i, err
 }
 
+const getPlatformMCPInventoryItem = `-- name: GetPlatformMCPInventoryItem :one
+SELECT mcp_server_id, project_id, project_name, project_slug, mcp_name, mcp_slug, visibility, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, registration_id, source_kind, catalog_provider, catalog_reference, registration_status, registration_remote_mcp_server_id, registration_user_session_issuer_id, registration_mcp_server_id, registration_mcp_endpoint_id, readiness_state, readiness_checked_at, readiness_expires_at
+FROM (
+    SELECT
+        m.id AS mcp_server_id,
+        m.project_id,
+        project.name AS project_name,
+        project.slug AS project_slug,
+        m.name AS mcp_name,
+        m.slug AS mcp_slug,
+        m.visibility,
+        m.remote_mcp_server_id,
+        m.tunneled_mcp_server_id,
+        m.toolset_id,
+        m.unproxied_mcp_server_id,
+        COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
+        COALESCE(registration.source_kind, '') AS source_kind,
+        COALESCE(registration.catalog_provider, '') AS catalog_provider,
+        COALESCE(registration.catalog_reference, '') AS catalog_reference,
+        COALESCE(registration.status, '') AS registration_status,
+        COALESCE(registration.remote_mcp_server_id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_remote_mcp_server_id,
+        COALESCE(registration.user_session_issuer_id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_user_session_issuer_id,
+        COALESCE(registration.mcp_server_id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_mcp_server_id,
+        COALESCE(registration.mcp_endpoint_id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_mcp_endpoint_id,
+        COALESCE(readiness.state, '') AS readiness_state,
+        readiness.checked_at AS readiness_checked_at,
+        readiness.expires_at AS readiness_expires_at
+    FROM mcp_servers AS m
+    JOIN projects AS project
+      ON project.id = m.project_id
+     AND project.organization_id = $1
+     AND project.deleted IS FALSE
+    LEFT JOIN LATERAL (
+        SELECT registration.id, registration.organization_id, registration.project_id, registration.source_kind, registration.catalog_provider, registration.catalog_reference, registration.status, registration.remote_mcp_server_id, registration.remote_mcp_server_owned, registration.user_session_issuer_id, registration.user_session_issuer_owned, registration.mcp_server_id, registration.mcp_server_owned, registration.mcp_endpoint_id, registration.mcp_endpoint_owned, registration.connection_id, registration.connection_generation, registration.user_id, registration.acting_surface, registration.created_at, registration.updated_at, registration.deleted_at, registration.deleted
+        FROM platform_mcp_catalog_registrations AS registration
+        WHERE registration.organization_id = $1
+          AND registration.project_id = m.project_id
+          AND registration.mcp_server_id = m.id
+          AND registration.deleted IS FALSE
+        ORDER BY registration.created_at DESC, registration.id DESC
+        LIMIT 1
+    ) AS registration ON TRUE
+    LEFT JOIN LATERAL (
+        SELECT readiness.id, readiness.organization_id, readiness.project_id, readiness.registration_id, readiness.connection_id, readiness.connection_generation, readiness.user_id, readiness.acting_surface, readiness.provider_authorization_fingerprint, readiness.state, readiness.evidence_code, readiness.checked_at, readiness.expires_at, readiness.created_at, readiness.updated_at
+        FROM platform_mcp_readiness AS readiness
+        WHERE readiness.organization_id = $1
+          AND readiness.project_id = m.project_id
+          AND readiness.registration_id = registration.id
+          AND (
+              ($2::uuid IS NOT NULL
+                  AND readiness.connection_id = $2::uuid
+                  AND readiness.connection_generation = $3::uuid)
+              OR
+              ($2::uuid IS NULL
+                  AND readiness.connection_id IS NULL
+                  AND readiness.user_id = $4
+                  AND readiness.acting_surface = $5)
+          )
+        ORDER BY readiness.checked_at DESC, readiness.id DESC
+        LIMIT 1
+    ) AS readiness ON TRUE
+    WHERE m.id = $6
+      AND m.project_id = $7
+      AND m.deleted IS FALSE
+) AS inventory
+`
+
+type GetPlatformMCPInventoryItemParams struct {
+	OrganizationID       string
+	ConnectionID         uuid.NullUUID
+	ConnectionGeneration uuid.NullUUID
+	UserID               pgtype.Text
+	ActingSurface        pgtype.Text
+	McpServerID          uuid.UUID
+	ProjectID            uuid.UUID
+}
+
+type GetPlatformMCPInventoryItemRow struct {
+	McpServerID                     uuid.UUID
+	ProjectID                       uuid.UUID
+	ProjectName                     string
+	ProjectSlug                     string
+	McpName                         pgtype.Text
+	McpSlug                         pgtype.Text
+	Visibility                      string
+	RemoteMcpServerID               uuid.NullUUID
+	TunneledMcpServerID             uuid.NullUUID
+	ToolsetID                       uuid.NullUUID
+	UnproxiedMcpServerID            uuid.NullUUID
+	RegistrationID                  uuid.UUID
+	SourceKind                      string
+	CatalogProvider                 string
+	CatalogReference                string
+	RegistrationStatus              string
+	RegistrationRemoteMcpServerID   uuid.NullUUID
+	RegistrationUserSessionIssuerID uuid.NullUUID
+	RegistrationMcpServerID         uuid.NullUUID
+	RegistrationMcpEndpointID       uuid.NullUUID
+	ReadinessState                  string
+	ReadinessCheckedAt              pgtype.Timestamptz
+	ReadinessExpiresAt              pgtype.Timestamptz
+}
+
+func (q *Queries) GetPlatformMCPInventoryItem(ctx context.Context, arg GetPlatformMCPInventoryItemParams) (GetPlatformMCPInventoryItemRow, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPInventoryItem,
+		arg.OrganizationID,
+		arg.ConnectionID,
+		arg.ConnectionGeneration,
+		arg.UserID,
+		arg.ActingSurface,
+		arg.McpServerID,
+		arg.ProjectID,
+	)
+	var i GetPlatformMCPInventoryItemRow
+	err := row.Scan(
+		&i.McpServerID,
+		&i.ProjectID,
+		&i.ProjectName,
+		&i.ProjectSlug,
+		&i.McpName,
+		&i.McpSlug,
+		&i.Visibility,
+		&i.RemoteMcpServerID,
+		&i.TunneledMcpServerID,
+		&i.ToolsetID,
+		&i.UnproxiedMcpServerID,
+		&i.RegistrationID,
+		&i.SourceKind,
+		&i.CatalogProvider,
+		&i.CatalogReference,
+		&i.RegistrationStatus,
+		&i.RegistrationRemoteMcpServerID,
+		&i.RegistrationUserSessionIssuerID,
+		&i.RegistrationMcpServerID,
+		&i.RegistrationMcpEndpointID,
+		&i.ReadinessState,
+		&i.ReadinessCheckedAt,
+		&i.ReadinessExpiresAt,
+	)
+	return i, err
+}
+
 const getPlatformMCPLifecycle = `-- name: GetPlatformMCPLifecycle :one
 WITH default_project AS (
     SELECT id
@@ -2248,7 +2496,7 @@ func (q *Queries) GetPlatformMCPLifecycle(ctx context.Context, organizationID st
 }
 
 const getPlatformMCPOAuthClientForUpdate = `-- name: GetPlatformMCPOAuthClientForUpdate :one
-SELECT id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, revoked_at, created_at, updated_at
+SELECT id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, revoked_at, client_id_metadata_uri, client_id_metadata_fetched_at, client_id_metadata_cache_expires_at, client_id_metadata_etag, created_at, updated_at
 FROM platform_mcp_oauth_clients
 WHERE client_id = $1
 FOR UPDATE
@@ -2266,6 +2514,10 @@ func (q *Queries) GetPlatformMCPOAuthClientForUpdate(ctx context.Context, client
 		&i.ClientIDIssuedAt,
 		&i.ClientSecretExpiresAt,
 		&i.RevokedAt,
+		&i.ClientIDMetadataUri,
+		&i.ClientIDMetadataFetchedAt,
+		&i.ClientIDMetadataCacheExpiresAt,
+		&i.ClientIDMetadataEtag,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -2360,7 +2612,7 @@ func (q *Queries) GetPlatformMCPOnboardingSelectedProject(ctx context.Context, a
 }
 
 const getPlatformMCPOperationReceipt = `-- name: GetPlatformMCPOperationReceipt :one
-SELECT receipt.id, receipt.organization_id, receipt.project_id, receipt.registration_id, receipt.connection_id, receipt.connection_generation, receipt.user_id, receipt.acting_surface, receipt.operation, receipt.idempotency_key, receipt.input_hash, receipt.status, receipt.result_code, receipt.expires_at, receipt.created_at, receipt.updated_at
+SELECT receipt.id, receipt.organization_id, receipt.project_id, receipt.registration_id, receipt.connection_id, receipt.connection_generation, receipt.user_id, receipt.acting_surface, receipt.operation, receipt.idempotency_key, receipt.input_hash, receipt.status, receipt.result_code, receipt.result_payload, receipt.expires_at, receipt.created_at, receipt.updated_at
 FROM platform_mcp_operation_receipts AS receipt
 LEFT JOIN platform_mcp_connections AS connection
   ON connection.id = receipt.connection_id
@@ -2414,6 +2666,7 @@ func (q *Queries) GetPlatformMCPOperationReceipt(ctx context.Context, arg GetPla
 		&i.InputHash,
 		&i.Status,
 		&i.ResultCode,
+		&i.ResultPayload,
 		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -2421,33 +2674,155 @@ func (q *Queries) GetPlatformMCPOperationReceipt(ctx context.Context, arg GetPla
 	return i, err
 }
 
+const getPlatformMCPPluginForUpdate = `-- name: GetPlatformMCPPluginForUpdate :one
+SELECT p.id, p.name, p.slug
+FROM plugins p
+WHERE p.id = $1
+  AND p.project_id = $2
+  AND p.organization_id = $3
+  AND p.deleted IS FALSE
+FOR UPDATE
+`
+
+type GetPlatformMCPPluginForUpdateParams struct {
+	PluginID       uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+type GetPlatformMCPPluginForUpdateRow struct {
+	ID   uuid.UUID
+	Name string
+	Slug string
+}
+
+// Serializes an MCP distribution write against concurrent deletion of the
+// exact plugin the caller named. A deleted plugin deliberately returns no row,
+// which the caller reports as not_found rather than retargeting the default.
+func (q *Queries) GetPlatformMCPPluginForUpdate(ctx context.Context, arg GetPlatformMCPPluginForUpdateParams) (GetPlatformMCPPluginForUpdateRow, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPPluginForUpdate, arg.PluginID, arg.ProjectID, arg.OrganizationID)
+	var i GetPlatformMCPPluginForUpdateRow
+	err := row.Scan(&i.ID, &i.Name, &i.Slug)
+	return i, err
+}
+
+const getPlatformMCPPluginInventoryItem = `-- name: GetPlatformMCPPluginInventoryItem :one
+SELECT
+    p.id,
+    p.name,
+    p.slug,
+    p.description,
+    COALESCE(p.is_default, FALSE) AS is_default,
+    (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
+    (
+      SELECT count(*)
+      FROM skill_distributions sd
+      JOIN skills sk
+        ON sk.id = sd.skill_id
+        AND sk.project_id = sd.project_id
+        AND sk.archived_at IS NULL
+      WHERE sd.plugin_id = p.id
+        AND sd.project_id = p.project_id
+        AND sd.channel = 'plugin'
+        AND sd.assistant_id IS NULL
+        AND sd.revoked_at IS NULL
+    ) AS skill_count,
+    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.principal_urn = '*') AS wildcard_assignment_count,
+    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.principal_urn LIKE 'role:%') AS role_assignment_count,
+    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.principal_urn LIKE 'user:%') AS user_assignment_count,
+    (gc.id IS NOT NULL)::boolean AS repository_connected,
+    (COALESCE(gc.published_mcp_fingerprints ->> p.slug, '') <> '')::boolean AS published
+FROM plugins p
+JOIN projects
+  ON projects.id = p.project_id
+LEFT JOIN plugin_github_connections gc
+  ON gc.project_id = p.project_id
+WHERE p.id = $1
+  AND p.project_id = $2
+  AND p.organization_id = $3
+  AND projects.organization_id = $3
+  AND projects.deleted IS FALSE
+  AND p.deleted IS FALSE
+`
+
+type GetPlatformMCPPluginInventoryItemParams struct {
+	PluginID       uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+type GetPlatformMCPPluginInventoryItemRow struct {
+	ID                      uuid.UUID
+	Name                    string
+	Slug                    string
+	Description             pgtype.Text
+	IsDefault               bool
+	ServerCount             int64
+	SkillCount              int64
+	WildcardAssignmentCount int64
+	RoleAssignmentCount     int64
+	UserAssignmentCount     int64
+	RepositoryConnected     bool
+	Published               bool
+}
+
+func (q *Queries) GetPlatformMCPPluginInventoryItem(ctx context.Context, arg GetPlatformMCPPluginInventoryItemParams) (GetPlatformMCPPluginInventoryItemRow, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPPluginInventoryItem, arg.PluginID, arg.ProjectID, arg.OrganizationID)
+	var i GetPlatformMCPPluginInventoryItemRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.IsDefault,
+		&i.ServerCount,
+		&i.SkillCount,
+		&i.WildcardAssignmentCount,
+		&i.RoleAssignmentCount,
+		&i.UserAssignmentCount,
+		&i.RepositoryConnected,
+		&i.Published,
+	)
+	return i, err
+}
+
 const getPlatformMCPReadiness = `-- name: GetPlatformMCPReadiness :one
 SELECT readiness.id, readiness.organization_id, readiness.project_id, readiness.registration_id, readiness.connection_id, readiness.connection_generation, readiness.user_id, readiness.acting_surface, readiness.provider_authorization_fingerprint, readiness.state, readiness.evidence_code, readiness.checked_at, readiness.expires_at, readiness.created_at, readiness.updated_at
 FROM platform_mcp_readiness AS readiness
- JOIN platform_mcp_catalog_registrations AS registration
-   ON registration.id = readiness.registration_id
-  AND registration.organization_id = readiness.organization_id
-  AND registration.project_id = readiness.project_id
-  AND registration.deleted IS FALSE
- JOIN projects AS project
-   ON project.id = readiness.project_id
-  AND project.organization_id = readiness.organization_id
-  AND project.deleted IS FALSE
- WHERE readiness.organization_id = $1
+JOIN platform_mcp_catalog_registrations AS registration
+  ON registration.id = readiness.registration_id
+ AND registration.organization_id = readiness.organization_id
+ AND registration.project_id = readiness.project_id
+ AND registration.deleted IS FALSE
+JOIN projects AS project
+  ON project.id = readiness.project_id
+ AND project.organization_id = readiness.organization_id
+ AND project.deleted IS FALSE
+WHERE readiness.organization_id = $1
   AND readiness.project_id = $2
   AND readiness.registration_id = $3
-  AND readiness.connection_id = $4
-  AND readiness.connection_generation = $5
-  AND readiness.provider_authorization_fingerprint = $6
+  AND readiness.provider_authorization_fingerprint = $4
+  AND (
+      ($5::uuid IS NOT NULL
+          AND readiness.connection_id = $5::uuid
+          AND readiness.connection_generation = $6::uuid)
+      OR
+      ($5::uuid IS NULL
+          AND readiness.connection_id IS NULL
+          AND readiness.user_id = $7
+          AND readiness.acting_surface = $8)
+  )
 `
 
 type GetPlatformMCPReadinessParams struct {
 	OrganizationID                   string
 	ProjectID                        uuid.UUID
 	RegistrationID                   uuid.UUID
+	ProviderAuthorizationFingerprint string
 	ConnectionID                     uuid.NullUUID
 	ConnectionGeneration             uuid.NullUUID
-	ProviderAuthorizationFingerprint string
+	UserID                           pgtype.Text
+	ActingSurface                    pgtype.Text
 }
 
 func (q *Queries) GetPlatformMCPReadiness(ctx context.Context, arg GetPlatformMCPReadinessParams) (PlatformMcpReadiness, error) {
@@ -2455,9 +2830,11 @@ func (q *Queries) GetPlatformMCPReadiness(ctx context.Context, arg GetPlatformMC
 		arg.OrganizationID,
 		arg.ProjectID,
 		arg.RegistrationID,
+		arg.ProviderAuthorizationFingerprint,
 		arg.ConnectionID,
 		arg.ConnectionGeneration,
-		arg.ProviderAuthorizationFingerprint,
+		arg.UserID,
+		arg.ActingSurface,
 	)
 	var i PlatformMcpReadiness
 	err := row.Scan(
@@ -2495,12 +2872,17 @@ JOIN projects AS project
   ON project.id = distribution.project_id
  AND project.organization_id = distribution.organization_id
  AND project.deleted IS FALSE
-JOIN platform_mcp_catalog_registrations AS registration
-  ON registration.id = distribution.registration_id
- AND registration.project_id = distribution.project_id
- AND registration.organization_id = distribution.organization_id
- AND registration.deleted IS FALSE
-JOIN plugin_servers AS plugin_server
+ JOIN platform_mcp_catalog_registrations AS registration
+   ON registration.id = distribution.registration_id
+  AND registration.project_id = distribution.project_id
+  AND registration.organization_id = distribution.organization_id
+  AND registration.deleted IS FALSE
+ JOIN plugins AS plugin
+   ON plugin.id = COALESCE(distribution.plugin_id, distribution.default_plugin_id)
+  AND plugin.organization_id = distribution.organization_id
+  AND plugin.project_id = distribution.project_id
+  AND plugin.deleted IS FALSE
+ JOIN plugin_servers AS plugin_server
   ON plugin_server.id = distribution.plugin_server_id
   AND plugin_server.plugin_id = distribution.default_plugin_id
   AND plugin_server.deleted IS FALSE
@@ -2554,6 +2936,8 @@ type GetPlatformMCPSelectedUseTargetRow struct {
 	ConnectionGeneration uuid.NullUUID
 }
 
+// Resolve the target through the plugin the distribution names, which is the
+// default plugin only when that is what the caller asked for.
 func (q *Queries) GetPlatformMCPSelectedUseTarget(ctx context.Context, arg GetPlatformMCPSelectedUseTargetParams) (GetPlatformMCPSelectedUseTargetRow, error) {
 	row := q.db.QueryRow(ctx, getPlatformMCPSelectedUseTarget,
 		arg.InitiatingSubjectUrn,
@@ -2975,13 +3359,18 @@ SELECT EXISTS (
      AND registration.organization_id = distribution.organization_id
      AND registration.project_id = distribution.project_id
      AND registration.deleted IS FALSE
-    JOIN projects AS project
-      ON project.id = distribution.project_id
-     AND project.organization_id = distribution.organization_id
-     AND project.deleted IS FALSE
-    WHERE distribution.organization_id = $1
-      AND distribution.project_id = $2
-      AND distribution.state = 'attached'
+     JOIN projects AS project
+       ON project.id = distribution.project_id
+      AND project.organization_id = distribution.organization_id
+      AND project.deleted IS FALSE
+     JOIN plugins AS plugin
+       ON plugin.id = COALESCE(distribution.plugin_id, distribution.default_plugin_id)
+      AND plugin.organization_id = distribution.organization_id
+      AND plugin.project_id = distribution.project_id
+      AND plugin.deleted IS FALSE
+     WHERE distribution.organization_id = $1
+       AND distribution.project_id = $2
+       AND distribution.state = 'attached'
       AND registration.status = 'registered'
       AND registration.mcp_server_id IS NOT NULL
 )
@@ -2992,6 +3381,8 @@ type HasAttachedPlatformMCPOnboardingDistributionForProjectParams struct {
 	ProjectID      uuid.UUID
 }
 
+// An attached distribution to any live plugin in the project satisfies
+// onboarding distribution; the plugin must still exist.
 func (q *Queries) HasAttachedPlatformMCPOnboardingDistributionForProject(ctx context.Context, arg HasAttachedPlatformMCPOnboardingDistributionForProjectParams) (bool, error) {
 	row := q.db.QueryRow(ctx, hasAttachedPlatformMCPOnboardingDistributionForProject, arg.OrganizationID, arg.ProjectID)
 	var exists bool
@@ -3208,16 +3599,23 @@ SELECT EXISTS (
     UNION ALL
     SELECT 1
     FROM platform_mcp_distributions AS distribution
-    JOIN platform_mcp_catalog_registrations AS registration
-      ON registration.id = distribution.registration_id
-     AND registration.organization_id = distribution.organization_id
-     AND registration.project_id = distribution.project_id
-     AND registration.deleted IS FALSE
-    WHERE distribution.organization_id = $1
-      AND distribution.state = 'attached'
+     JOIN platform_mcp_catalog_registrations AS registration
+       ON registration.id = distribution.registration_id
+      AND registration.organization_id = distribution.organization_id
+      AND registration.project_id = distribution.project_id
+      AND registration.deleted IS FALSE
+     JOIN plugins AS plugin
+       ON plugin.id = COALESCE(distribution.plugin_id, distribution.default_plugin_id)
+      AND plugin.organization_id = distribution.organization_id
+      AND plugin.project_id = distribution.project_id
+      AND plugin.deleted IS FALSE
+     WHERE distribution.organization_id = $1
+       AND distribution.state = 'attached'
 ) AS setup_complete
 `
 
+// Setup completion counts an attached distribution to any live plugin. A
+// distribution whose plugin has since been deleted correctly does not count.
 func (q *Queries) HasPlatformMCPOrganizationSetupComplete(ctx context.Context, organizationID string) (bool, error) {
 	row := q.db.QueryRow(ctx, hasPlatformMCPOrganizationSetupComplete, organizationID)
 	var setup_complete bool
@@ -3235,11 +3633,16 @@ SELECT EXISTS (
      AND distribution.registration_id = evidence.registration_id
      AND distribution.version = evidence.distribution_version
      AND distribution.state = 'attached'
-    JOIN projects AS project
-      ON project.id = distribution.project_id
-     AND project.organization_id = distribution.organization_id
-     AND project.deleted IS FALSE
-    JOIN platform_mcp_connections AS connection
+     JOIN projects AS project
+       ON project.id = distribution.project_id
+      AND project.organization_id = distribution.organization_id
+      AND project.deleted IS FALSE
+     JOIN plugins AS plugin
+       ON plugin.id = COALESCE(distribution.plugin_id, distribution.default_plugin_id)
+      AND plugin.organization_id = distribution.organization_id
+      AND plugin.project_id = distribution.project_id
+      AND plugin.deleted IS FALSE
+     JOIN platform_mcp_connections AS connection
       ON connection.id = distribution.connection_id
      AND connection.organization_id = distribution.organization_id
      AND connection.active_generation = distribution.connection_generation
@@ -3258,6 +3661,10 @@ type HasPlatformMCPSelectedUseEvidenceParams struct {
 	InitiatingSubjectUrn string
 }
 
+// Selected-use credit follows the plugin the distribution actually targets. The
+// plugin join stays so evidence from a deleted plugin does not count; the
+// Default-only restriction it carried during the compatibility rollout is gone
+// now that named-plugin distribution is live.
 func (q *Queries) HasPlatformMCPSelectedUseEvidence(ctx context.Context, arg HasPlatformMCPSelectedUseEvidenceParams) (bool, error) {
 	row := q.db.QueryRow(ctx, hasPlatformMCPSelectedUseEvidence,
 		arg.OrganizationID,
@@ -3467,6 +3874,630 @@ func (q *Queries) ListPlatformMCPConnections(ctx context.Context, organizationID
 			&i.AuthorizedAt,
 			&i.ReauthorizedAt,
 			&i.Ready,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPlatformMCPInventory = `-- name: ListPlatformMCPInventory :many
+SELECT
+    m.id AS mcp_server_id,
+    m.project_id,
+    project.name AS project_name,
+    project.slug AS project_slug,
+    m.name AS mcp_name,
+    m.slug AS mcp_slug,
+    m.visibility,
+    m.remote_mcp_server_id,
+    m.tunneled_mcp_server_id,
+    m.toolset_id,
+    m.unproxied_mcp_server_id,
+    COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
+    COALESCE(registration.source_kind, '') AS source_kind,
+    COALESCE(registration.catalog_provider, '') AS catalog_provider,
+    COALESCE(registration.catalog_reference, '') AS catalog_reference,
+    COALESCE(registration.status, '') AS registration_status,
+    COALESCE(registration.remote_mcp_server_id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_remote_mcp_server_id,
+    COALESCE(registration.user_session_issuer_id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_user_session_issuer_id,
+    COALESCE(registration.mcp_server_id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_mcp_server_id,
+    COALESCE(registration.mcp_endpoint_id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_mcp_endpoint_id,
+    COALESCE(readiness.state, '') AS readiness_state,
+    readiness.checked_at AS readiness_checked_at,
+    readiness.expires_at AS readiness_expires_at
+FROM mcp_servers AS m
+JOIN projects AS project
+  ON project.id = m.project_id
+ AND project.organization_id = $1
+ AND project.deleted IS FALSE
+LEFT JOIN LATERAL (
+    SELECT registration.id, registration.organization_id, registration.project_id, registration.source_kind, registration.catalog_provider, registration.catalog_reference, registration.status, registration.remote_mcp_server_id, registration.remote_mcp_server_owned, registration.user_session_issuer_id, registration.user_session_issuer_owned, registration.mcp_server_id, registration.mcp_server_owned, registration.mcp_endpoint_id, registration.mcp_endpoint_owned, registration.connection_id, registration.connection_generation, registration.user_id, registration.acting_surface, registration.created_at, registration.updated_at, registration.deleted_at, registration.deleted
+    FROM platform_mcp_catalog_registrations AS registration
+    WHERE registration.organization_id = $1
+      AND registration.project_id = m.project_id
+      AND registration.mcp_server_id = m.id
+      AND registration.deleted IS FALSE
+    ORDER BY registration.created_at DESC, registration.id DESC
+    LIMIT 1
+) AS registration ON TRUE
+LEFT JOIN LATERAL (
+    SELECT readiness.id, readiness.organization_id, readiness.project_id, readiness.registration_id, readiness.connection_id, readiness.connection_generation, readiness.user_id, readiness.acting_surface, readiness.provider_authorization_fingerprint, readiness.state, readiness.evidence_code, readiness.checked_at, readiness.expires_at, readiness.created_at, readiness.updated_at
+    FROM platform_mcp_readiness AS readiness
+    WHERE readiness.organization_id = $1
+      AND readiness.project_id = m.project_id
+      AND readiness.registration_id = registration.id
+      AND (
+          ($2::uuid IS NOT NULL
+              AND readiness.connection_id = $2::uuid
+              AND readiness.connection_generation = $3::uuid)
+          OR
+          ($2::uuid IS NULL
+              AND readiness.connection_id IS NULL
+              AND readiness.user_id = $4
+              AND readiness.acting_surface = $5)
+      )
+    ORDER BY readiness.checked_at DESC, readiness.id DESC
+    LIMIT 1
+) AS readiness ON TRUE
+WHERE m.deleted IS FALSE
+  AND ($6::uuid IS NULL OR m.project_id = $6::uuid)
+  AND ($7::uuid IS NULL OR m.id > $7::uuid)
+  AND (
+      $8::text = ''
+      OR m.id::text ILIKE '%' || $8::text || '%'
+      OR COALESCE(m.name, '') ILIKE '%' || $8::text || '%'
+      OR COALESCE(m.slug, '') ILIKE '%' || $8::text || '%'
+  )
+  AND (
+      $9::text IS NULL
+      OR COALESCE(
+          NULLIF(readiness.state, ''),
+          CASE
+              WHEN registration.id IS NOT NULL THEN 'unknown'
+              ELSE 'unsupported'
+          END
+      ) = $9::text
+  )
+ORDER BY
+    CASE
+        WHEN $8::text <> ''
+         AND (m.id::text = $8::text OR LOWER(COALESCE(m.name, '')) = LOWER($8::text) OR LOWER(COALESCE(m.slug, '')) = LOWER($8::text))
+        THEN 0
+        ELSE 1
+    END,
+    m.id ASC
+LIMIT $10
+`
+
+type ListPlatformMCPInventoryParams struct {
+	OrganizationID       string
+	ConnectionID         uuid.NullUUID
+	ConnectionGeneration uuid.NullUUID
+	UserID               pgtype.Text
+	ActingSurface        pgtype.Text
+	ProjectID            uuid.NullUUID
+	AfterMcpID           uuid.NullUUID
+	QueryText            string
+	ReadinessState       pgtype.Text
+	LimitValue           int32
+}
+
+type ListPlatformMCPInventoryRow struct {
+	McpServerID                     uuid.UUID
+	ProjectID                       uuid.UUID
+	ProjectName                     string
+	ProjectSlug                     string
+	McpName                         pgtype.Text
+	McpSlug                         pgtype.Text
+	Visibility                      string
+	RemoteMcpServerID               uuid.NullUUID
+	TunneledMcpServerID             uuid.NullUUID
+	ToolsetID                       uuid.NullUUID
+	UnproxiedMcpServerID            uuid.NullUUID
+	RegistrationID                  uuid.UUID
+	SourceKind                      string
+	CatalogProvider                 string
+	CatalogReference                string
+	RegistrationStatus              string
+	RegistrationRemoteMcpServerID   uuid.NullUUID
+	RegistrationUserSessionIssuerID uuid.NullUUID
+	RegistrationMcpServerID         uuid.NullUUID
+	RegistrationMcpEndpointID       uuid.NullUUID
+	ReadinessState                  string
+	ReadinessCheckedAt              pgtype.Timestamptz
+	ReadinessExpiresAt              pgtype.Timestamptz
+}
+
+// One bounded, tenant-qualified inventory projection for every Platform MCP
+// read surface. It reads persisted readiness/distribution state only; it never
+// contacts a remote MCP or provider.
+func (q *Queries) ListPlatformMCPInventory(ctx context.Context, arg ListPlatformMCPInventoryParams) ([]ListPlatformMCPInventoryRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPInventory,
+		arg.OrganizationID,
+		arg.ConnectionID,
+		arg.ConnectionGeneration,
+		arg.UserID,
+		arg.ActingSurface,
+		arg.ProjectID,
+		arg.AfterMcpID,
+		arg.QueryText,
+		arg.ReadinessState,
+		arg.LimitValue,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPInventoryRow
+	for rows.Next() {
+		var i ListPlatformMCPInventoryRow
+		if err := rows.Scan(
+			&i.McpServerID,
+			&i.ProjectID,
+			&i.ProjectName,
+			&i.ProjectSlug,
+			&i.McpName,
+			&i.McpSlug,
+			&i.Visibility,
+			&i.RemoteMcpServerID,
+			&i.TunneledMcpServerID,
+			&i.ToolsetID,
+			&i.UnproxiedMcpServerID,
+			&i.RegistrationID,
+			&i.SourceKind,
+			&i.CatalogProvider,
+			&i.CatalogReference,
+			&i.RegistrationStatus,
+			&i.RegistrationRemoteMcpServerID,
+			&i.RegistrationUserSessionIssuerID,
+			&i.RegistrationMcpServerID,
+			&i.RegistrationMcpEndpointID,
+			&i.ReadinessState,
+			&i.ReadinessCheckedAt,
+			&i.ReadinessExpiresAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPlatformMCPInventoryDistributions = `-- name: ListPlatformMCPInventoryDistributions :many
+SELECT
+    distribution.registration_id,
+    COALESCE(distribution.plugin_id, distribution.default_plugin_id) AS plugin_id,
+    distribution.state,
+    distribution.publication_state
+FROM platform_mcp_distributions AS distribution
+JOIN projects AS project
+  ON project.id = distribution.project_id
+ AND project.organization_id = distribution.organization_id
+ AND project.deleted IS FALSE
+JOIN platform_mcp_catalog_registrations AS registration
+  ON registration.id = distribution.registration_id
+ AND registration.organization_id = distribution.organization_id
+ AND registration.project_id = distribution.project_id
+ AND registration.deleted IS FALSE
+WHERE distribution.organization_id = $1
+  AND ($2::uuid IS NULL OR distribution.project_id = $2::uuid)
+  AND distribution.registration_id = ANY($3::uuid[])
+ORDER BY distribution.registration_id, distribution.id ASC
+`
+
+type ListPlatformMCPInventoryDistributionsParams struct {
+	OrganizationID  string
+	ProjectID       uuid.NullUUID
+	RegistrationIds []uuid.UUID
+}
+
+type ListPlatformMCPInventoryDistributionsRow struct {
+	RegistrationID   uuid.UUID
+	PluginID         uuid.UUID
+	State            string
+	PublicationState string
+}
+
+func (q *Queries) ListPlatformMCPInventoryDistributions(ctx context.Context, arg ListPlatformMCPInventoryDistributionsParams) ([]ListPlatformMCPInventoryDistributionsRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPInventoryDistributions, arg.OrganizationID, arg.ProjectID, arg.RegistrationIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPInventoryDistributionsRow
+	for rows.Next() {
+		var i ListPlatformMCPInventoryDistributionsRow
+		if err := rows.Scan(
+			&i.RegistrationID,
+			&i.PluginID,
+			&i.State,
+			&i.PublicationState,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPlatformMCPPluginInventory = `-- name: ListPlatformMCPPluginInventory :many
+
+SELECT
+    p.id,
+    p.name,
+    p.slug,
+    p.description,
+    COALESCE(p.is_default, FALSE) AS is_default,
+    (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
+    (
+      SELECT count(*)
+      FROM skill_distributions sd
+      JOIN skills sk
+        ON sk.id = sd.skill_id
+        AND sk.project_id = sd.project_id
+        AND sk.archived_at IS NULL
+      WHERE sd.plugin_id = p.id
+        AND sd.project_id = p.project_id
+        AND sd.channel = 'plugin'
+        AND sd.assistant_id IS NULL
+        AND sd.revoked_at IS NULL
+    ) AS skill_count,
+    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.principal_urn = '*') AS wildcard_assignment_count,
+    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.principal_urn LIKE 'role:%') AS role_assignment_count,
+    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.principal_urn LIKE 'user:%') AS user_assignment_count,
+    (gc.id IS NOT NULL)::boolean AS repository_connected,
+    (COALESCE(gc.published_mcp_fingerprints ->> p.slug, '') <> '')::boolean AS published
+FROM plugins p
+JOIN projects
+  ON projects.id = p.project_id
+LEFT JOIN plugin_github_connections gc
+  ON gc.project_id = p.project_id
+WHERE p.project_id = $1
+  AND p.organization_id = $2
+  AND projects.organization_id = $2
+  AND projects.deleted IS FALSE
+  AND p.deleted IS FALSE
+  AND (NOT $3::boolean OR p.id > $4)
+ORDER BY p.id ASC
+LIMIT $5
+`
+
+type ListPlatformMCPPluginInventoryParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	UseAfter       bool
+	AfterID        uuid.UUID
+	ResultLimit    int32
+}
+
+type ListPlatformMCPPluginInventoryRow struct {
+	ID                      uuid.UUID
+	Name                    string
+	Slug                    string
+	Description             pgtype.Text
+	IsDefault               bool
+	ServerCount             int64
+	SkillCount              int64
+	WildcardAssignmentCount int64
+	RoleAssignmentCount     int64
+	UserAssignmentCount     int64
+	RepositoryConnected     bool
+	Published               bool
+}
+
+// Plugin inventory. Plugins are the unit an administrator installs and reasons
+// about, so this surface reads them directly rather than inferring them from
+// distribution targets. Membership is derived from plugin_servers and
+// skill_distributions, which are the attachment authority; nothing here is a
+// stored projection that could drift from them.
+// Keyset page over a project's plugins. Assignment principals are counted by
+// kind and never projected: a principal URN embeds a user id, which this
+// surface must not carry.
+func (q *Queries) ListPlatformMCPPluginInventory(ctx context.Context, arg ListPlatformMCPPluginInventoryParams) ([]ListPlatformMCPPluginInventoryRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPPluginInventory,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.UseAfter,
+		arg.AfterID,
+		arg.ResultLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPPluginInventoryRow
+	for rows.Next() {
+		var i ListPlatformMCPPluginInventoryRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.IsDefault,
+			&i.ServerCount,
+			&i.SkillCount,
+			&i.WildcardAssignmentCount,
+			&i.RoleAssignmentCount,
+			&i.UserAssignmentCount,
+			&i.RepositoryConnected,
+			&i.Published,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPlatformMCPPluginServers = `-- name: ListPlatformMCPPluginServers :many
+SELECT
+    ps.id,
+    ps.display_name,
+    ps.policy,
+    ps.sort_order,
+    (ps.toolset_id IS NOT NULL)::boolean AS toolset_backed,
+    COALESCE(t.mcp_slug, ep.slug, '')::text AS mcp_slug,
+    COALESCE(t.mcp_enabled, s.visibility <> 'disabled', FALSE)::boolean AS enabled
+FROM plugin_servers ps
+JOIN plugins p
+  ON p.id = ps.plugin_id
+  AND p.deleted IS FALSE
+LEFT JOIN toolsets t
+  ON t.id = ps.toolset_id
+  AND t.project_id = p.project_id
+  AND t.deleted IS FALSE
+LEFT JOIN mcp_servers s
+  ON s.id = ps.mcp_server_id
+  AND s.project_id = p.project_id
+  AND s.deleted IS FALSE
+LEFT JOIN LATERAL (
+  SELECT e.slug
+  FROM mcp_endpoints e
+  WHERE e.mcp_server_id = s.id
+    AND e.project_id = p.project_id
+    AND e.deleted IS FALSE
+  ORDER BY e.created_at ASC
+  LIMIT 1
+) ep ON TRUE
+WHERE ps.plugin_id = $1
+  AND p.project_id = $2
+  AND p.organization_id = $3
+  AND ps.deleted IS FALSE
+ORDER BY ps.sort_order ASC, ps.display_name ASC
+LIMIT $4
+`
+
+type ListPlatformMCPPluginServersParams struct {
+	PluginID       uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	ResultLimit    int32
+}
+
+type ListPlatformMCPPluginServersRow struct {
+	ID            uuid.UUID
+	DisplayName   string
+	Policy        string
+	SortOrder     int32
+	ToolsetBacked bool
+	McpSlug       string
+	Enabled       bool
+}
+
+// One plugin's MCP server membership. A plugin server is backed by exactly one
+// of a toolset or an mcp_server (plugin_servers_backend_exclusivity_check), so
+// the slug and enabled state are resolved from whichever backend is set. No URL
+// is constructed here: this surface names servers, it does not hand out
+// endpoints.
+func (q *Queries) ListPlatformMCPPluginServers(ctx context.Context, arg ListPlatformMCPPluginServersParams) ([]ListPlatformMCPPluginServersRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPPluginServers,
+		arg.PluginID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.ResultLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPPluginServersRow
+	for rows.Next() {
+		var i ListPlatformMCPPluginServersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DisplayName,
+			&i.Policy,
+			&i.SortOrder,
+			&i.ToolsetBacked,
+			&i.McpSlug,
+			&i.Enabled,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPlatformMCPPluginSkills = `-- name: ListPlatformMCPPluginSkills :many
+SELECT
+    sk.id AS skill_id,
+    sk.name AS skill_name,
+    sd.pinned_version_id
+FROM skill_distributions sd
+JOIN plugins p
+  ON p.id = sd.plugin_id
+  AND p.deleted IS FALSE
+JOIN skills sk
+  ON sk.id = sd.skill_id
+  AND sk.project_id = sd.project_id
+  AND sk.archived_at IS NULL
+WHERE sd.plugin_id = $1
+  AND sd.project_id = $2
+  AND p.organization_id = $3
+  AND sd.channel = 'plugin'
+  AND sd.assistant_id IS NULL
+  AND sd.revoked_at IS NULL
+ORDER BY sk.name ASC
+LIMIT $4
+`
+
+type ListPlatformMCPPluginSkillsParams struct {
+	PluginID       uuid.NullUUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	ResultLimit    int32
+}
+
+type ListPlatformMCPPluginSkillsRow struct {
+	SkillID         uuid.UUID
+	SkillName       string
+	PinnedVersionID uuid.NullUUID
+}
+
+// One plugin's skill membership. pinned_version_id is null when the
+// distribution follows the skill's latest valid version, which is the
+// difference between a plugin that moves with authoring and one that does not.
+func (q *Queries) ListPlatformMCPPluginSkills(ctx context.Context, arg ListPlatformMCPPluginSkillsParams) ([]ListPlatformMCPPluginSkillsRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPPluginSkills,
+		arg.PluginID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.ResultLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPPluginSkillsRow
+	for rows.Next() {
+		var i ListPlatformMCPPluginSkillsRow
+		if err := rows.Scan(&i.SkillID, &i.SkillName, &i.PinnedVersionID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPlatformMCPProjectAssistants = `-- name: ListPlatformMCPProjectAssistants :many
+SELECT
+    assistants.id,
+    assistants.name
+FROM assistants
+JOIN projects
+  ON projects.id = assistants.project_id
+WHERE assistants.project_id = $1
+  AND assistants.organization_id = $2
+  AND projects.organization_id = $2
+  AND projects.deleted IS FALSE
+  AND assistants.deleted IS FALSE
+  AND assistants.status = 'active'
+ORDER BY assistants.name ASC
+LIMIT $3
+`
+
+type ListPlatformMCPProjectAssistantsParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	ResultLimit    int32
+}
+
+type ListPlatformMCPProjectAssistantsRow struct {
+	ID   uuid.UUID
+	Name string
+}
+
+func (q *Queries) ListPlatformMCPProjectAssistants(ctx context.Context, arg ListPlatformMCPProjectAssistantsParams) ([]ListPlatformMCPProjectAssistantsRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPProjectAssistants, arg.ProjectID, arg.OrganizationID, arg.ResultLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPProjectAssistantsRow
+	for rows.Next() {
+		var i ListPlatformMCPProjectAssistantsRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPlatformMCPProjectPlugins = `-- name: ListPlatformMCPProjectPlugins :many
+
+SELECT
+    plugins.id,
+    plugins.name,
+    plugins.slug,
+    COALESCE(plugins.is_default, FALSE) AS is_default
+FROM plugins
+JOIN projects
+  ON projects.id = plugins.project_id
+WHERE plugins.project_id = $1
+  AND plugins.organization_id = $2
+  AND projects.organization_id = $2
+  AND projects.deleted IS FALSE
+  AND plugins.deleted IS FALSE
+ORDER BY plugins.is_default DESC NULLS LAST, plugins.name ASC
+LIMIT $3
+`
+
+type ListPlatformMCPProjectPluginsParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	ResultLimit    int32
+}
+
+type ListPlatformMCPProjectPluginsRow struct {
+	ID        uuid.UUID
+	Name      string
+	Slug      string
+	IsDefault bool
+}
+
+// Skill distribution targets. A skill is distributed to an exact existing
+// plugin or assistant in one project; these reads name what exists so the
+// resolver can refuse a target that does not, rather than falling back to the
+// default plugin.
+func (q *Queries) ListPlatformMCPProjectPlugins(ctx context.Context, arg ListPlatformMCPProjectPluginsParams) ([]ListPlatformMCPProjectPluginsRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPProjectPlugins, arg.ProjectID, arg.OrganizationID, arg.ResultLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPProjectPluginsRow
+	for rows.Next() {
+		var i ListPlatformMCPProjectPluginsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.IsDefault,
 		); err != nil {
 			return nil, err
 		}
@@ -3730,10 +4761,10 @@ SELECT pg_advisory_xact_lock(
 `
 
 type LockPlatformMCPDistributionParams struct {
-	OrganizationID  string
-	ProjectID       string
-	RegistrationID  string
-	DefaultPluginID string
+	OrganizationID string
+	ProjectID      string
+	RegistrationID string
+	PluginID       string
 }
 
 func (q *Queries) LockPlatformMCPDistribution(ctx context.Context, arg LockPlatformMCPDistributionParams) error {
@@ -3741,7 +4772,7 @@ func (q *Queries) LockPlatformMCPDistribution(ctx context.Context, arg LockPlatf
 		arg.OrganizationID,
 		arg.ProjectID,
 		arg.RegistrationID,
-		arg.DefaultPluginID,
+		arg.PluginID,
 	)
 	return err
 }
@@ -4440,6 +5471,98 @@ func (q *Queries) RecordPlatformMCPSetupMilestone(ctx context.Context, arg Recor
 	return err
 }
 
+const resolvePlatformMCPPluginTarget = `-- name: ResolvePlatformMCPPluginTarget :many
+SELECT
+    p.id,
+    p.name,
+    p.slug,
+    COALESCE(p.is_default, FALSE) AS is_default
+FROM plugins p
+JOIN projects
+  ON projects.id = p.project_id
+WHERE p.project_id = $1
+  AND p.organization_id = $2
+  AND projects.organization_id = $2
+  AND projects.deleted IS FALSE
+  AND p.deleted IS FALSE
+  AND (
+    p.id::text = $3::text
+    OR lower(p.slug) = lower($3::text)
+    OR lower(p.name) = lower($3::text)
+  )
+ORDER BY p.id ASC
+LIMIT 2
+`
+
+type ResolvePlatformMCPPluginTargetParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	Target         string
+}
+
+type ResolvePlatformMCPPluginTargetRow struct {
+	ID        uuid.UUID
+	Name      string
+	Slug      string
+	IsDefault bool
+}
+
+// Matches one plugin by id, slug, or whole name over the project's entire
+// plugin set. Matching in SQL rather than over a bounded page is what keeps a
+// plugin that exists from being refused as not_found, and an ambiguous name
+// from resolving to whichever match a page happened to include. Two rows are
+// enough to know a name is ambiguous.
+func (q *Queries) ResolvePlatformMCPPluginTarget(ctx context.Context, arg ResolvePlatformMCPPluginTargetParams) ([]ResolvePlatformMCPPluginTargetRow, error) {
+	rows, err := q.db.Query(ctx, resolvePlatformMCPPluginTarget, arg.ProjectID, arg.OrganizationID, arg.Target)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ResolvePlatformMCPPluginTargetRow
+	for rows.Next() {
+		var i ResolvePlatformMCPPluginTargetRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.IsDefault,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const resolvePlatformMCPProjectByID = `-- name: ResolvePlatformMCPProjectByID :one
+SELECT id, name, slug
+FROM projects
+WHERE organization_id = $1
+  AND id = $2
+  AND deleted IS FALSE
+`
+
+type ResolvePlatformMCPProjectByIDParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+type ResolvePlatformMCPProjectByIDRow struct {
+	ID   uuid.UUID
+	Name string
+	Slug string
+}
+
+func (q *Queries) ResolvePlatformMCPProjectByID(ctx context.Context, arg ResolvePlatformMCPProjectByIDParams) (ResolvePlatformMCPProjectByIDRow, error) {
+	row := q.db.QueryRow(ctx, resolvePlatformMCPProjectByID, arg.OrganizationID, arg.ProjectID)
+	var i ResolvePlatformMCPProjectByIDRow
+	err := row.Scan(&i.ID, &i.Name, &i.Slug)
+	return i, err
+}
+
 const resolvePlatformMCPProjectBySlug = `-- name: ResolvePlatformMCPProjectBySlug :one
 
 SELECT id, name, slug
@@ -4839,19 +5962,20 @@ func (q *Queries) UpdatePlatformMCPCatalogRegistrationComponents(ctx context.Con
 const updatePlatformMCPDistribution = `-- name: UpdatePlatformMCPDistribution :one
 UPDATE platform_mcp_distributions
 SET plugin_server_id = $1,
-    state = $2,
-    version = $3,
-    attachment_was_created = $4,
+    plugin_id = $2,
+    state = $3,
+    version = $4,
+    attachment_was_created = $5,
     publication_state = 'pending',
     publication_updated_at = NULL,
-    connection_id = $5,
-    connection_generation = $6,
+    connection_id = $6,
+    connection_generation = $7,
     updated_at = clock_timestamp()
-WHERE platform_mcp_distributions.id = $7
-  AND platform_mcp_distributions.organization_id = $8
-  AND platform_mcp_distributions.project_id = $9
-  AND platform_mcp_distributions.registration_id = $10
-  AND platform_mcp_distributions.default_plugin_id = $11
+WHERE platform_mcp_distributions.id = $8
+  AND platform_mcp_distributions.organization_id = $9
+  AND platform_mcp_distributions.project_id = $10
+  AND platform_mcp_distributions.registration_id = $11
+  AND platform_mcp_distributions.default_plugin_id = $2
   AND EXISTS (
       SELECT 1
       FROM projects AS project
@@ -4864,22 +5988,22 @@ WHERE platform_mcp_distributions.id = $7
         ON plugin.id = platform_mcp_distributions.default_plugin_id
        AND plugin.organization_id = project.organization_id
        AND plugin.project_id = project.id
-       AND plugin.is_default IS TRUE
        AND plugin.deleted IS FALSE
       JOIN platform_mcp_connections AS connection
-        ON connection.id = $5
+        ON connection.id = $6
        AND connection.organization_id = project.organization_id
-       AND connection.active_generation = $6
+       AND connection.active_generation = $7
        AND connection.revoked_at IS NULL
       WHERE project.id = platform_mcp_distributions.project_id
         AND project.organization_id = platform_mcp_distributions.organization_id
         AND project.deleted IS FALSE
   )
-RETURNING id, organization_id, project_id, registration_id, default_plugin_id, plugin_server_id, state, version, attachment_was_created, publication_state, publication_updated_at, connection_id, connection_generation, user_id, acting_surface, created_at, updated_at
+RETURNING id, organization_id, project_id, registration_id, default_plugin_id, plugin_id, plugin_server_id, state, version, attachment_was_created, publication_state, publication_updated_at, connection_id, connection_generation, user_id, acting_surface, created_at, updated_at
 `
 
 type UpdatePlatformMCPDistributionParams struct {
 	PluginServerID       uuid.NullUUID
+	PluginID             uuid.NullUUID
 	State                string
 	Version              int64
 	AttachmentWasCreated bool
@@ -4889,12 +6013,12 @@ type UpdatePlatformMCPDistributionParams struct {
 	OrganizationID       string
 	ProjectID            uuid.UUID
 	RegistrationID       uuid.UUID
-	DefaultPluginID      uuid.UUID
 }
 
 func (q *Queries) UpdatePlatformMCPDistribution(ctx context.Context, arg UpdatePlatformMCPDistributionParams) (PlatformMcpDistribution, error) {
 	row := q.db.QueryRow(ctx, updatePlatformMCPDistribution,
 		arg.PluginServerID,
+		arg.PluginID,
 		arg.State,
 		arg.Version,
 		arg.AttachmentWasCreated,
@@ -4904,7 +6028,6 @@ func (q *Queries) UpdatePlatformMCPDistribution(ctx context.Context, arg UpdateP
 		arg.OrganizationID,
 		arg.ProjectID,
 		arg.RegistrationID,
-		arg.DefaultPluginID,
 	)
 	var i PlatformMcpDistribution
 	err := row.Scan(
@@ -4913,6 +6036,7 @@ func (q *Queries) UpdatePlatformMCPDistribution(ctx context.Context, arg UpdateP
 		&i.ProjectID,
 		&i.RegistrationID,
 		&i.DefaultPluginID,
+		&i.PluginID,
 		&i.PluginServerID,
 		&i.State,
 		&i.Version,
@@ -4952,7 +6076,6 @@ WHERE platform_mcp_distributions.id = $2
         ON plugin.id = platform_mcp_distributions.default_plugin_id
        AND plugin.organization_id = project.organization_id
        AND plugin.project_id = project.id
-       AND plugin.is_default IS TRUE
        AND plugin.deleted IS FALSE
       JOIN platform_mcp_connections AS connection
         ON connection.id = platform_mcp_distributions.connection_id
@@ -4963,7 +6086,7 @@ WHERE platform_mcp_distributions.id = $2
         AND project.organization_id = platform_mcp_distributions.organization_id
         AND project.deleted IS FALSE
   )
-RETURNING id, organization_id, project_id, registration_id, default_plugin_id, plugin_server_id, state, version, attachment_was_created, publication_state, publication_updated_at, connection_id, connection_generation, user_id, acting_surface, created_at, updated_at
+RETURNING id, organization_id, project_id, registration_id, default_plugin_id, plugin_id, plugin_server_id, state, version, attachment_was_created, publication_state, publication_updated_at, connection_id, connection_generation, user_id, acting_surface, created_at, updated_at
 `
 
 type UpdatePlatformMCPDistributionPublicationParams struct {
@@ -4972,7 +6095,7 @@ type UpdatePlatformMCPDistributionPublicationParams struct {
 	OrganizationID   string
 	ProjectID        uuid.UUID
 	RegistrationID   uuid.UUID
-	DefaultPluginID  uuid.UUID
+	PluginID         uuid.UUID
 	Version          int64
 }
 
@@ -4983,7 +6106,7 @@ func (q *Queries) UpdatePlatformMCPDistributionPublication(ctx context.Context, 
 		arg.OrganizationID,
 		arg.ProjectID,
 		arg.RegistrationID,
-		arg.DefaultPluginID,
+		arg.PluginID,
 		arg.Version,
 	)
 	var i PlatformMcpDistribution
@@ -4993,6 +6116,7 @@ func (q *Queries) UpdatePlatformMCPDistributionPublication(ctx context.Context, 
 		&i.ProjectID,
 		&i.RegistrationID,
 		&i.DefaultPluginID,
+		&i.PluginID,
 		&i.PluginServerID,
 		&i.State,
 		&i.Version,
@@ -5009,13 +6133,155 @@ func (q *Queries) UpdatePlatformMCPDistributionPublication(ctx context.Context, 
 	return i, err
 }
 
-const upsertPlatformMCPReadiness = `-- name: UpsertPlatformMCPReadiness :one
+const updatePlatformMCPOAuthClientCIMDCache = `-- name: UpdatePlatformMCPOAuthClientCIMDCache :one
+UPDATE platform_mcp_oauth_clients
+SET client_id_metadata_fetched_at = clock_timestamp(),
+    client_id_metadata_cache_expires_at = clock_timestamp() + make_interval(secs => $1::double precision),
+    client_id_metadata_etag = $2,
+    updated_at = clock_timestamp()
+WHERE client_id = $3
+  AND client_id_metadata_uri IS NOT NULL
+  AND client_secret_hash IS NULL
+  AND revoked_at IS NULL
+RETURNING id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, revoked_at, client_id_metadata_uri, client_id_metadata_fetched_at, client_id_metadata_cache_expires_at, client_id_metadata_etag, created_at, updated_at
+`
+
+type UpdatePlatformMCPOAuthClientCIMDCacheParams struct {
+	CacheTtlSeconds      float64
+	ClientIDMetadataEtag pgtype.Text
+	ClientID             string
+}
+
+// Refreshes the cache bookkeeping on a CIMD-resolved client whose document
+// host answered 304 Not Modified. The stored client_name and redirect_uris
+// are current by definition of the 304, so they are deliberately untouched;
+// only the fetch stamp, the expiry, and the validator move.
+//
+// The guards mirror UpsertPlatformMCPOAuthClientFromCIMD's, so this statement
+// can never push a row into violating the client_id_metadata_uri CHECK
+// constraints; such a collision surfaces as no-rows, which the resolver maps
+// to invalid_client.
+func (q *Queries) UpdatePlatformMCPOAuthClientCIMDCache(ctx context.Context, arg UpdatePlatformMCPOAuthClientCIMDCacheParams) (PlatformMcpOauthClient, error) {
+	row := q.db.QueryRow(ctx, updatePlatformMCPOAuthClientCIMDCache, arg.CacheTtlSeconds, arg.ClientIDMetadataEtag, arg.ClientID)
+	var i PlatformMcpOauthClient
+	err := row.Scan(
+		&i.ID,
+		&i.ClientID,
+		&i.ClientSecretHash,
+		&i.ClientName,
+		&i.RedirectUris,
+		&i.ClientIDIssuedAt,
+		&i.ClientSecretExpiresAt,
+		&i.RevokedAt,
+		&i.ClientIDMetadataUri,
+		&i.ClientIDMetadataFetchedAt,
+		&i.ClientIDMetadataCacheExpiresAt,
+		&i.ClientIDMetadataEtag,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertPlatformMCPOAuthClientFromCIMD = `-- name: UpsertPlatformMCPOAuthClientFromCIMD :one
+INSERT INTO platform_mcp_oauth_clients (
+    client_id,
+    client_secret_hash,
+    client_name,
+    redirect_uris,
+    client_secret_expires_at,
+    client_id_metadata_uri,
+    client_id_metadata_fetched_at,
+    client_id_metadata_cache_expires_at,
+    client_id_metadata_etag
+) VALUES (
+    $1,
+    NULL,
+    $2,
+    $3,
+    NULL,
+    $1,
+    clock_timestamp(),
+    clock_timestamp() + make_interval(secs => $4::double precision),
+    $5
+)
+ON CONFLICT (client_id)
+DO UPDATE SET
+    client_name = EXCLUDED.client_name,
+    redirect_uris = EXCLUDED.redirect_uris,
+    client_id_metadata_uri = EXCLUDED.client_id_metadata_uri,
+    client_id_metadata_fetched_at = EXCLUDED.client_id_metadata_fetched_at,
+    client_id_metadata_cache_expires_at = EXCLUDED.client_id_metadata_cache_expires_at,
+    client_id_metadata_etag = EXCLUDED.client_id_metadata_etag,
+    updated_at = clock_timestamp()
+WHERE platform_mcp_oauth_clients.client_secret_hash IS NULL
+  AND platform_mcp_oauth_clients.revoked_at IS NULL
+RETURNING id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, revoked_at, client_id_metadata_uri, client_id_metadata_fetched_at, client_id_metadata_cache_expires_at, client_id_metadata_etag, created_at, updated_at
+`
+
+type UpsertPlatformMCPOAuthClientFromCIMDParams struct {
+	ClientID             string
+	ClientName           string
+	RedirectUris         []string
+	CacheTtlSeconds      float64
+	ClientIDMetadataEtag pgtype.Text
+}
+
+// Lazy upsert for a client resolved from a Client ID Metadata Document at
+// authorize time. For CIMD rows the document URL IS the client_id, so the
+// conflict target is the same unique index that serves DCR lookups. On
+// refresh the mutable metadata (client_name, redirect_uris) and every cache
+// column are replaced wholesale, including the ETag, which is set to NULL
+// when the response carried no usable validator so the next refresh is
+// unconditional rather than replaying a stale one.
+//
+// The cache expiry is derived from the database clock rather than the
+// application's, so it can never land before the client_id_metadata_fetched_at
+// written in the same statement.
+//
+// The DO UPDATE is guarded so it can never touch a secret-bearing DCR row
+// that happens to share the client_id, nor resurrect a revoked one:
+// rewriting the former would trip the client_id_metadata_uri CHECK
+// constraints with an opaque 500, and the latter would undo an operator's
+// revocation. Either collision surfaces as no-rows, which the resolver maps
+// to invalid_client.
+func (q *Queries) UpsertPlatformMCPOAuthClientFromCIMD(ctx context.Context, arg UpsertPlatformMCPOAuthClientFromCIMDParams) (PlatformMcpOauthClient, error) {
+	row := q.db.QueryRow(ctx, upsertPlatformMCPOAuthClientFromCIMD,
+		arg.ClientID,
+		arg.ClientName,
+		arg.RedirectUris,
+		arg.CacheTtlSeconds,
+		arg.ClientIDMetadataEtag,
+	)
+	var i PlatformMcpOauthClient
+	err := row.Scan(
+		&i.ID,
+		&i.ClientID,
+		&i.ClientSecretHash,
+		&i.ClientName,
+		&i.RedirectUris,
+		&i.ClientIDIssuedAt,
+		&i.ClientSecretExpiresAt,
+		&i.RevokedAt,
+		&i.ClientIDMetadataUri,
+		&i.ClientIDMetadataFetchedAt,
+		&i.ClientIDMetadataCacheExpiresAt,
+		&i.ClientIDMetadataEtag,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertPlatformMCPReadinessAssistant = `-- name: UpsertPlatformMCPReadinessAssistant :one
 INSERT INTO platform_mcp_readiness (
     organization_id,
     project_id,
     registration_id,
     connection_id,
     connection_generation,
+    user_id,
+    acting_surface,
     provider_authorization_fingerprint,
     state,
     evidence_code,
@@ -5032,7 +6298,117 @@ SELECT
     $7,
     $8,
     $9,
-    $10
+    $10,
+    $11,
+    $12
+WHERE EXISTS (
+    SELECT 1
+     FROM platform_mcp_catalog_registrations AS registration
+     JOIN projects AS project
+       ON project.id = registration.project_id
+      AND project.organization_id = registration.organization_id
+      AND project.deleted IS FALSE
+     WHERE registration.id = $3
+       AND registration.organization_id = $1
+       AND registration.project_id = $2
+       AND registration.deleted IS FALSE
+)
+ON CONFLICT (registration_id, user_id, acting_surface, provider_authorization_fingerprint)
+WHERE connection_id IS NULL
+DO UPDATE SET
+    user_id = EXCLUDED.user_id,
+    acting_surface = EXCLUDED.acting_surface,
+    state = EXCLUDED.state,
+    evidence_code = EXCLUDED.evidence_code,
+    checked_at = EXCLUDED.checked_at,
+    expires_at = EXCLUDED.expires_at,
+    updated_at = clock_timestamp()
+WHERE platform_mcp_readiness.checked_at <= EXCLUDED.checked_at
+RETURNING id, organization_id, project_id, registration_id, connection_id, connection_generation, user_id, acting_surface, provider_authorization_fingerprint, state, evidence_code, checked_at, expires_at, created_at, updated_at
+`
+
+type UpsertPlatformMCPReadinessAssistantParams struct {
+	OrganizationID                   string
+	ProjectID                        uuid.UUID
+	RegistrationID                   uuid.UUID
+	ConnectionID                     uuid.NullUUID
+	ConnectionGeneration             uuid.NullUUID
+	UserID                           pgtype.Text
+	ActingSurface                    pgtype.Text
+	ProviderAuthorizationFingerprint string
+	State                            string
+	EvidenceCode                     pgtype.Text
+	CheckedAt                        pgtype.Timestamptz
+	ExpiresAt                        pgtype.Timestamptz
+}
+
+// A connectionless assistant is an actor, not an empty connection. Its unique
+// binding includes the real user and trusted surface, preventing different
+// assistants from overwriting or hiding each other's evidence.
+func (q *Queries) UpsertPlatformMCPReadinessAssistant(ctx context.Context, arg UpsertPlatformMCPReadinessAssistantParams) (PlatformMcpReadiness, error) {
+	row := q.db.QueryRow(ctx, upsertPlatformMCPReadinessAssistant,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.RegistrationID,
+		arg.ConnectionID,
+		arg.ConnectionGeneration,
+		arg.UserID,
+		arg.ActingSurface,
+		arg.ProviderAuthorizationFingerprint,
+		arg.State,
+		arg.EvidenceCode,
+		arg.CheckedAt,
+		arg.ExpiresAt,
+	)
+	var i PlatformMcpReadiness
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.RegistrationID,
+		&i.ConnectionID,
+		&i.ConnectionGeneration,
+		&i.UserID,
+		&i.ActingSurface,
+		&i.ProviderAuthorizationFingerprint,
+		&i.State,
+		&i.EvidenceCode,
+		&i.CheckedAt,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertPlatformMCPReadinessExternal = `-- name: UpsertPlatformMCPReadinessExternal :one
+INSERT INTO platform_mcp_readiness (
+    organization_id,
+    project_id,
+    registration_id,
+    connection_id,
+    connection_generation,
+    user_id,
+    acting_surface,
+    provider_authorization_fingerprint,
+    state,
+    evidence_code,
+    checked_at,
+    expires_at
+)
+SELECT
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7,
+    $8,
+    $9,
+    $10,
+    $11,
+    $12
 WHERE EXISTS (
     SELECT 1
      FROM platform_mcp_catalog_registrations AS registration
@@ -5046,6 +6422,7 @@ WHERE EXISTS (
        AND registration.deleted IS FALSE
 )
 ON CONFLICT (registration_id, connection_id, connection_generation, provider_authorization_fingerprint)
+WHERE connection_id IS NOT NULL
 DO UPDATE SET
     state = EXCLUDED.state,
     evidence_code = EXCLUDED.evidence_code,
@@ -5056,12 +6433,14 @@ WHERE platform_mcp_readiness.checked_at <= EXCLUDED.checked_at
 RETURNING id, organization_id, project_id, registration_id, connection_id, connection_generation, user_id, acting_surface, provider_authorization_fingerprint, state, evidence_code, checked_at, expires_at, created_at, updated_at
 `
 
-type UpsertPlatformMCPReadinessParams struct {
+type UpsertPlatformMCPReadinessExternalParams struct {
 	OrganizationID                   string
 	ProjectID                        uuid.UUID
 	RegistrationID                   uuid.UUID
 	ConnectionID                     uuid.NullUUID
 	ConnectionGeneration             uuid.NullUUID
+	UserID                           pgtype.Text
+	ActingSurface                    pgtype.Text
 	ProviderAuthorizationFingerprint string
 	State                            string
 	EvidenceCode                     pgtype.Text
@@ -5069,13 +6448,18 @@ type UpsertPlatformMCPReadinessParams struct {
 	ExpiresAt                        pgtype.Timestamptz
 }
 
-func (q *Queries) UpsertPlatformMCPReadiness(ctx context.Context, arg UpsertPlatformMCPReadinessParams) (PlatformMcpReadiness, error) {
-	row := q.db.QueryRow(ctx, upsertPlatformMCPReadiness,
+// External evidence remains connection/generation scoped. The predicate names
+// the expand-phase external partial index explicitly, so it never races with
+// connectionless assistant evidence on the legacy full binding index.
+func (q *Queries) UpsertPlatformMCPReadinessExternal(ctx context.Context, arg UpsertPlatformMCPReadinessExternalParams) (PlatformMcpReadiness, error) {
+	row := q.db.QueryRow(ctx, upsertPlatformMCPReadinessExternal,
 		arg.OrganizationID,
 		arg.ProjectID,
 		arg.RegistrationID,
 		arg.ConnectionID,
 		arg.ConnectionGeneration,
+		arg.UserID,
+		arg.ActingSurface,
 		arg.ProviderAuthorizationFingerprint,
 		arg.State,
 		arg.EvidenceCode,

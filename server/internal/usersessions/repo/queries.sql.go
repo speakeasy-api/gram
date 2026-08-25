@@ -153,7 +153,7 @@ VALUES (
     $5,
     $6
 )
-RETURNING id, project_id, user_session_issuer_id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, client_id_metadata_uri, client_id_metadata_fetched_at, client_id_metadata_cache_expires_at, client_id_metadata_etag, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, user_session_issuer_id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, client_id_metadata_uri, client_id_metadata_fetched_at, client_id_metadata_cache_expires_at, client_id_metadata_etag, token_endpoint_auth_method, client_jwks, client_jwks_uri, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateUserSessionClientParams struct {
@@ -192,6 +192,9 @@ func (q *Queries) CreateUserSessionClient(ctx context.Context, arg CreateUserSes
 		&i.ClientIDMetadataFetchedAt,
 		&i.ClientIDMetadataCacheExpiresAt,
 		&i.ClientIDMetadataEtag,
+		&i.TokenEndpointAuthMethod,
+		&i.ClientJwks,
+		&i.ClientJwksUri,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -386,6 +389,14 @@ WHERE issuer.id = $1
     WHERE toolset.project_id = $2
       AND toolset.user_session_issuer_id = issuer.id
       AND toolset.deleted IS FALSE
+
+    UNION ALL
+
+    SELECT 1
+    FROM meta_mcp_servers AS meta_mcp_server
+    WHERE meta_mcp_server.project_id = $2
+      AND meta_mcp_server.user_session_issuer_id = issuer.id
+      AND meta_mcp_server.deleted IS FALSE
   )
 RETURNING issuer.id, issuer.project_id, issuer.slug, issuer.authn_challenge_mode, issuer.session_duration, issuer.classification, issuer.client_id_metadata_admission_mode, issuer.created_at, issuer.updated_at, issuer.deleted_at, issuer.deleted
 `
@@ -614,7 +625,7 @@ func (q *Queries) GetUserSessionByRefreshTokenHash(ctx context.Context, arg GetU
 }
 
 const getUserSessionClientByClientID = `-- name: GetUserSessionClientByClientID :one
-SELECT cli.id, cli.project_id, cli.user_session_issuer_id, cli.client_id, cli.client_secret_hash, cli.client_name, cli.redirect_uris, cli.client_id_issued_at, cli.client_secret_expires_at, cli.client_id_metadata_uri, cli.client_id_metadata_fetched_at, cli.client_id_metadata_cache_expires_at, cli.client_id_metadata_etag, cli.created_at, cli.updated_at, cli.deleted_at, cli.deleted
+SELECT cli.id, cli.project_id, cli.user_session_issuer_id, cli.client_id, cli.client_secret_hash, cli.client_name, cli.redirect_uris, cli.client_id_issued_at, cli.client_secret_expires_at, cli.client_id_metadata_uri, cli.client_id_metadata_fetched_at, cli.client_id_metadata_cache_expires_at, cli.client_id_metadata_etag, cli.token_endpoint_auth_method, cli.client_jwks, cli.client_jwks_uri, cli.created_at, cli.updated_at, cli.deleted_at, cli.deleted
 FROM user_session_clients AS cli
 WHERE cli.user_session_issuer_id = $1
   AND cli.client_id = $2
@@ -647,6 +658,9 @@ func (q *Queries) GetUserSessionClientByClientID(ctx context.Context, arg GetUse
 		&i.ClientIDMetadataFetchedAt,
 		&i.ClientIDMetadataCacheExpiresAt,
 		&i.ClientIDMetadataEtag,
+		&i.TokenEndpointAuthMethod,
+		&i.ClientJwks,
+		&i.ClientJwksUri,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -656,7 +670,7 @@ func (q *Queries) GetUserSessionClientByClientID(ctx context.Context, arg GetUse
 }
 
 const getUserSessionClientByID = `-- name: GetUserSessionClientByID :one
-SELECT cli.id, cli.project_id, cli.user_session_issuer_id, cli.client_id, cli.client_secret_hash, cli.client_name, cli.redirect_uris, cli.client_id_issued_at, cli.client_secret_expires_at, cli.client_id_metadata_uri, cli.client_id_metadata_fetched_at, cli.client_id_metadata_cache_expires_at, cli.client_id_metadata_etag, cli.created_at, cli.updated_at, cli.deleted_at, cli.deleted
+SELECT cli.id, cli.project_id, cli.user_session_issuer_id, cli.client_id, cli.client_secret_hash, cli.client_name, cli.redirect_uris, cli.client_id_issued_at, cli.client_secret_expires_at, cli.client_id_metadata_uri, cli.client_id_metadata_fetched_at, cli.client_id_metadata_cache_expires_at, cli.client_id_metadata_etag, cli.token_endpoint_auth_method, cli.client_jwks, cli.client_jwks_uri, cli.created_at, cli.updated_at, cli.deleted_at, cli.deleted
 FROM user_session_clients AS cli
 JOIN user_session_issuers AS iss ON iss.id = cli.user_session_issuer_id
 WHERE cli.id = $1 AND iss.project_id = $2 AND cli.deleted IS FALSE
@@ -684,6 +698,9 @@ func (q *Queries) GetUserSessionClientByID(ctx context.Context, arg GetUserSessi
 		&i.ClientIDMetadataFetchedAt,
 		&i.ClientIDMetadataCacheExpiresAt,
 		&i.ClientIDMetadataEtag,
+		&i.TokenEndpointAuthMethod,
+		&i.ClientJwks,
+		&i.ClientJwksUri,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1034,7 +1051,7 @@ func (q *Queries) ListUserSessionClientFacets(ctx context.Context, projectID uui
 }
 
 const listUserSessionClientsByProjectID = `-- name: ListUserSessionClientsByProjectID :many
-SELECT cli.id, cli.project_id, cli.user_session_issuer_id, cli.client_id, cli.client_secret_hash, cli.client_name, cli.redirect_uris, cli.client_id_issued_at, cli.client_secret_expires_at, cli.client_id_metadata_uri, cli.client_id_metadata_fetched_at, cli.client_id_metadata_cache_expires_at, cli.client_id_metadata_etag, cli.created_at, cli.updated_at, cli.deleted_at, cli.deleted
+SELECT cli.id, cli.project_id, cli.user_session_issuer_id, cli.client_id, cli.client_secret_hash, cli.client_name, cli.redirect_uris, cli.client_id_issued_at, cli.client_secret_expires_at, cli.client_id_metadata_uri, cli.client_id_metadata_fetched_at, cli.client_id_metadata_cache_expires_at, cli.client_id_metadata_etag, cli.token_endpoint_auth_method, cli.client_jwks, cli.client_jwks_uri, cli.created_at, cli.updated_at, cli.deleted_at, cli.deleted
 FROM user_session_clients AS cli
 JOIN user_session_issuers AS iss ON iss.id = cli.user_session_issuer_id
 WHERE iss.project_id = $1
@@ -1084,6 +1101,9 @@ func (q *Queries) ListUserSessionClientsByProjectID(ctx context.Context, arg Lis
 			&i.ClientIDMetadataFetchedAt,
 			&i.ClientIDMetadataCacheExpiresAt,
 			&i.ClientIDMetadataEtag,
+			&i.TokenEndpointAuthMethod,
+			&i.ClientJwks,
+			&i.ClientJwksUri,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -1487,6 +1507,32 @@ func (q *Queries) ListUserSessionsByProjectID(ctx context.Context, arg ListUserS
 	return items, nil
 }
 
+const lockUserSessionIssuer = `-- name: LockUserSessionIssuer :one
+SELECT id
+FROM user_session_issuers
+WHERE id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+type LockUserSessionIssuerParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Lock a live issuer row before checking for active owners. Attach flows
+// that reference a pre-existing issuer (meta MCP create/update) hold this
+// same row lock while writing their reference, so acquiring it first
+// guarantees the follow-up ownership statements read a snapshot that
+// includes any reference committed by a concurrent attach.
+func (q *Queries) LockUserSessionIssuer(ctx context.Context, arg LockUserSessionIssuerParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockUserSessionIssuer, arg.ID, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const purgeUserSessionClientCIMDCache = `-- name: PurgeUserSessionClientCIMDCache :one
 UPDATE user_session_clients
 SET client_id_metadata_cache_expires_at = NULL,
@@ -1496,7 +1542,7 @@ WHERE id = $1
   AND project_id = $2
   AND client_id_metadata_uri IS NOT NULL
   AND deleted IS FALSE
-RETURNING id, project_id, user_session_issuer_id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, client_id_metadata_uri, client_id_metadata_fetched_at, client_id_metadata_cache_expires_at, client_id_metadata_etag, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, user_session_issuer_id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, client_id_metadata_uri, client_id_metadata_fetched_at, client_id_metadata_cache_expires_at, client_id_metadata_etag, token_endpoint_auth_method, client_jwks, client_jwks_uri, created_at, updated_at, deleted_at, deleted
 `
 
 type PurgeUserSessionClientCIMDCacheParams struct {
@@ -1541,6 +1587,9 @@ func (q *Queries) PurgeUserSessionClientCIMDCache(ctx context.Context, arg Purge
 		&i.ClientIDMetadataFetchedAt,
 		&i.ClientIDMetadataCacheExpiresAt,
 		&i.ClientIDMetadataEtag,
+		&i.TokenEndpointAuthMethod,
+		&i.ClientJwks,
+		&i.ClientJwksUri,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1641,7 +1690,7 @@ WHERE cli.id = $1
   AND iss.id = cli.user_session_issuer_id
   AND iss.project_id = $2
   AND cli.deleted IS FALSE
-RETURNING cli.id, cli.project_id, cli.user_session_issuer_id, cli.client_id, cli.client_secret_hash, cli.client_name, cli.redirect_uris, cli.client_id_issued_at, cli.client_secret_expires_at, cli.client_id_metadata_uri, cli.client_id_metadata_fetched_at, cli.client_id_metadata_cache_expires_at, cli.client_id_metadata_etag, cli.created_at, cli.updated_at, cli.deleted_at, cli.deleted
+RETURNING cli.id, cli.project_id, cli.user_session_issuer_id, cli.client_id, cli.client_secret_hash, cli.client_name, cli.redirect_uris, cli.client_id_issued_at, cli.client_secret_expires_at, cli.client_id_metadata_uri, cli.client_id_metadata_fetched_at, cli.client_id_metadata_cache_expires_at, cli.client_id_metadata_etag, cli.token_endpoint_auth_method, cli.client_jwks, cli.client_jwks_uri, cli.created_at, cli.updated_at, cli.deleted_at, cli.deleted
 `
 
 type RevokeUserSessionClientParams struct {
@@ -1666,6 +1715,9 @@ func (q *Queries) RevokeUserSessionClient(ctx context.Context, arg RevokeUserSes
 		&i.ClientIDMetadataFetchedAt,
 		&i.ClientIDMetadataCacheExpiresAt,
 		&i.ClientIDMetadataEtag,
+		&i.TokenEndpointAuthMethod,
+		&i.ClientJwks,
+		&i.ClientJwksUri,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1730,7 +1782,7 @@ SET client_id_metadata_fetched_at = $1
 WHERE id = $2
   AND client_id_metadata_uri IS NOT NULL
   AND deleted IS FALSE
-RETURNING id, project_id, user_session_issuer_id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, client_id_metadata_uri, client_id_metadata_fetched_at, client_id_metadata_cache_expires_at, client_id_metadata_etag, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, user_session_issuer_id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, client_id_metadata_uri, client_id_metadata_fetched_at, client_id_metadata_cache_expires_at, client_id_metadata_etag, token_endpoint_auth_method, client_jwks, client_jwks_uri, created_at, updated_at, deleted_at, deleted
 `
 
 type SetUserSessionClientCIMDFetchedAtParams struct {
@@ -1761,6 +1813,9 @@ func (q *Queries) SetUserSessionClientCIMDFetchedAt(ctx context.Context, arg Set
 		&i.ClientIDMetadataFetchedAt,
 		&i.ClientIDMetadataCacheExpiresAt,
 		&i.ClientIDMetadataEtag,
+		&i.TokenEndpointAuthMethod,
+		&i.ClientJwks,
+		&i.ClientJwksUri,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1949,7 +2004,7 @@ WHERE id = $3
   AND client_id_metadata_uri IS NOT NULL
   AND client_secret_hash IS NULL
   AND deleted IS FALSE
-RETURNING id, project_id, user_session_issuer_id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, client_id_metadata_uri, client_id_metadata_fetched_at, client_id_metadata_cache_expires_at, client_id_metadata_etag, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, user_session_issuer_id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, client_id_metadata_uri, client_id_metadata_fetched_at, client_id_metadata_cache_expires_at, client_id_metadata_etag, token_endpoint_auth_method, client_jwks, client_jwks_uri, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateUserSessionClientCIMDCacheParams struct {
@@ -1988,6 +2043,9 @@ func (q *Queries) UpdateUserSessionClientCIMDCache(ctx context.Context, arg Upda
 		&i.ClientIDMetadataFetchedAt,
 		&i.ClientIDMetadataCacheExpiresAt,
 		&i.ClientIDMetadataEtag,
+		&i.TokenEndpointAuthMethod,
+		&i.ClientJwks,
+		&i.ClientJwksUri,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -2009,7 +2067,7 @@ WHERE id = $5
   AND client_id_metadata_uri IS NOT NULL
   AND client_secret_hash IS NULL
   AND deleted IS FALSE
-RETURNING id, project_id, user_session_issuer_id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, client_id_metadata_uri, client_id_metadata_fetched_at, client_id_metadata_cache_expires_at, client_id_metadata_etag, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, user_session_issuer_id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, client_id_metadata_uri, client_id_metadata_fetched_at, client_id_metadata_cache_expires_at, client_id_metadata_etag, token_endpoint_auth_method, client_jwks, client_jwks_uri, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateUserSessionClientFromCIMDParams struct {
@@ -2054,6 +2112,9 @@ func (q *Queries) UpdateUserSessionClientFromCIMD(ctx context.Context, arg Updat
 		&i.ClientIDMetadataFetchedAt,
 		&i.ClientIDMetadataCacheExpiresAt,
 		&i.ClientIDMetadataEtag,
+		&i.TokenEndpointAuthMethod,
+		&i.ClientJwks,
+		&i.ClientJwksUri,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -2150,7 +2211,7 @@ DO UPDATE SET
     client_id_metadata_etag = EXCLUDED.client_id_metadata_etag,
     updated_at = clock_timestamp()
 WHERE user_session_clients.client_secret_hash IS NULL
-RETURNING id, project_id, user_session_issuer_id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, client_id_metadata_uri, client_id_metadata_fetched_at, client_id_metadata_cache_expires_at, client_id_metadata_etag, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, user_session_issuer_id, client_id, client_secret_hash, client_name, redirect_uris, client_id_issued_at, client_secret_expires_at, client_id_metadata_uri, client_id_metadata_fetched_at, client_id_metadata_cache_expires_at, client_id_metadata_etag, token_endpoint_auth_method, client_jwks, client_jwks_uri, created_at, updated_at, deleted_at, deleted
 `
 
 type UpsertUserSessionClientFromCIMDParams struct {
@@ -2208,6 +2269,9 @@ func (q *Queries) UpsertUserSessionClientFromCIMD(ctx context.Context, arg Upser
 		&i.ClientIDMetadataFetchedAt,
 		&i.ClientIDMetadataCacheExpiresAt,
 		&i.ClientIDMetadataEtag,
+		&i.TokenEndpointAuthMethod,
+		&i.ClientJwks,
+		&i.ClientJwksUri,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -2231,6 +2295,14 @@ SELECT EXISTS (
     WHERE toolset.project_id = $1
       AND toolset.user_session_issuer_id = $2::uuid
       AND toolset.deleted IS FALSE
+
+    UNION ALL
+
+    SELECT 1
+    FROM meta_mcp_servers AS meta_mcp_server
+    WHERE meta_mcp_server.project_id = $1
+      AND meta_mcp_server.user_session_issuer_id = $2::uuid
+      AND meta_mcp_server.deleted IS FALSE
 )
 `
 
@@ -2239,8 +2311,8 @@ type UserSessionIssuerHasActiveOwnerParams struct {
 	UserSessionIssuerID uuid.UUID
 }
 
-// An issuer can be referenced by an MCP server or toolset. Only delete it once
-// no active owner remains.
+// An issuer can be referenced by an MCP server, toolset, or meta MCP server.
+// Only delete it once no active owner remains.
 func (q *Queries) UserSessionIssuerHasActiveOwner(ctx context.Context, arg UserSessionIssuerHasActiveOwnerParams) (bool, error) {
 	row := q.db.QueryRow(ctx, userSessionIssuerHasActiveOwner, arg.ProjectID, arg.UserSessionIssuerID)
 	var exists bool

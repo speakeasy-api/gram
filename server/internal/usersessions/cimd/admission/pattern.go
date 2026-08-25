@@ -24,9 +24,9 @@ import (
 //   - The scheme and host must be entirely literal. A wildcard that could
 //     widen the host is the classic redirect-URI wildcard vulnerability:
 //     "https://claude.ai*" matches https://claude.ai.evil.example.com, and
-//     "https://*/x" matches anything at all. Host-literal also keeps Gram's
-//     same-origin redirect_uri binding meaningful, since the origin a
-//     pattern admits is fixed.
+//     "https://*/x" matches anything at all. Host-literal also keeps the
+//     origin a pattern admits fixed, so an entry is a statement about one
+//     vendor's host rather than an open set of hosts.
 //
 //   - A `*` stands for exactly one COMPLETE path segment and never matches
 //     across "/". So /oauth/*/client.json admits /oauth/abc/client.json but

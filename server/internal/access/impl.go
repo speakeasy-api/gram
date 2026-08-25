@@ -286,8 +286,8 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		{scope: authz.ScopeRiskPolicyEvaluate, description: "Evaluate risk policies.", resourceType: "risk_policy"},
 		{scope: authz.ScopeRiskPolicyBypass, description: "Bypass risk policies.", resourceType: "risk_policy"},
 		{scope: authz.ScopeRiskPolicyBlock, description: "Block specific shadow MCP servers under allow-by-default risk policies.", resourceType: "risk_policy"},
-		{scope: authz.ScopeChatRead, description: "Read every member's agent session transcripts and reveal the secret values flagged in Risk Events. Members can always read their own sessions, no one else's; this grant adds access to everyone else's sessions and to unmasking flagged secrets.", resourceType: "chat"},
-		{scope: authz.ScopeChatWrite, description: "Pin, rename, delete, and submit feedback on every member's agent sessions. Members can always do this to their own sessions; this grant adds it for everyone else's. Separate from chat:read so a session reviewer can read transcripts without being able to delete them.", resourceType: "chat"},
+		{scope: authz.ScopeChatRead, description: "Read every member's agent session transcripts, pin them, and reveal the secret values flagged in Risk Events. Members can always read and pin their own sessions, no one else's; this grant adds access to everyone else's sessions and to unmasking flagged secrets.", resourceType: "chat"},
+		{scope: authz.ScopeChatWrite, description: "Rename, delete, and submit feedback on every member's agent sessions. Members can always do this to their own sessions; this grant adds it for everyone else's. Separate from chat:read so a session reviewer can read and pin transcripts without being able to delete them.", resourceType: "chat"},
 	}
 	result := make([]*gen.ScopeDefinition, 0, len(scopes))
 	for _, scope := range scopes {
@@ -390,21 +390,18 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 	}
 	// Sessions in the shared demo org have no membership rows. Return the
 	// full user-visible scope set so every dashboard page is browsable in the
-	// demo (page gates like Costs require org:admin). This is display-only:
-	// enforcement still uses the fixed read-only DemoScopeGrants set, and the
-	// write-guard middleware rejects mutations, so any action the wider UI
-	// exposes fails server-side.
+	// demo (page gates like Costs require org:admin). This is the same set
+	// authz.DemoScopeGrants installs on the request context;
+	// TestDemoGrantsMatchEnforcedScopes holds the two together.
 	if acPre.ActiveOrganizationID == constants.DemoOrganizationID {
 		return &gen.ListUserGrantsResult{Grants: userVisibleScopeGrants()}, nil
 	}
-	if acPre.IsAdmin {
-		if _, hasOverride := contextvalues.GetAdminOverrideFromContext(ctx); hasOverride {
-			trace.SpanFromContext(ctx).SetAttributes(
-				attr.OrganizationID(acPre.ActiveOrganizationID),
-				attr.UserID(acPre.UserID),
-			)
-			return &gen.ListUserGrantsResult{Grants: userVisibleScopeGrants()}, nil
-		}
+	if contextvalues.IsSupportSession(ctx) {
+		trace.SpanFromContext(ctx).SetAttributes(
+			attr.OrganizationID(acPre.ActiveOrganizationID),
+			attr.UserID(acPre.UserID),
+		)
+		return &gen.ListUserGrantsResult{Grants: userVisibleScopeGrants()}, nil
 	}
 
 	ac, _, err := s.roleOrgContext(ctx)
@@ -500,10 +497,7 @@ func (s *Service) isImpersonatingUnlinkedOrg(ctx context.Context) bool {
 	if ac.ActiveOrganizationID == constants.DemoOrganizationID {
 		return true
 	}
-	if !ac.IsAdmin {
-		return false
-	}
-	if _, hasOverride := contextvalues.GetAdminOverrideFromContext(ctx); !hasOverride {
+	if !contextvalues.IsSupportSession(ctx) {
 		return false
 	}
 

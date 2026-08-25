@@ -1,6 +1,10 @@
 import { Link, useNavigate } from "react-router";
 import { useOrganization } from "@/contexts/Auth";
-import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
+import {
+  StatTile,
+  StatTileGroup,
+  StatTileSkeleton,
+} from "@/components/chart/stat-tile";
 import { RankedBarList } from "@/components/chart/RankedBarList";
 import { Page } from "@/components/page-layout";
 import { Avatar, AvatarFallback } from "@/components/ui/Avatar";
@@ -41,7 +45,6 @@ import {
   useDateRangeFilter,
 } from "@/components/observe/useDateRangeFilter";
 import { safeBase64Encode } from "@/components/observe/observeFilterUtils";
-import { PlatformMcpPromotion } from "@/components/platform-mcp-cta";
 import { ActivityTimelineCard } from "./ActivityTimelineCard";
 import { buildProjectOverviewQuery } from "./projectOverviewQuery";
 
@@ -491,7 +494,7 @@ export function ProjectDashboard(): JSX.Element {
               {/* Row 0: KPI Cards */}
               <StatTileGroup>
                 {isOverviewPending ? (
-                  <Skeleton className="h-[100px] flex-1" />
+                  <StatTileSkeleton />
                 ) : (
                   <StatTile
                     title="Active Servers"
@@ -503,7 +506,7 @@ export function ProjectDashboard(): JSX.Element {
                   />
                 )}
                 {isOverviewPending ? (
-                  <Skeleton className="h-[100px] flex-1" />
+                  <StatTileSkeleton />
                 ) : (
                   <StatTile
                     title="Tool Calls"
@@ -515,7 +518,7 @@ export function ProjectDashboard(): JSX.Element {
                   />
                 )}
                 {modePending || (!hasHookData && mcpUsersPending) ? (
-                  <Skeleton className="h-[100px] flex-1" />
+                  <StatTileSkeleton />
                 ) : hasHookData ? (
                   <StatTile
                     title="Total Spend"
@@ -535,7 +538,7 @@ export function ProjectDashboard(): JSX.Element {
                   />
                 )}
                 {modePending || isOverviewPending ? (
-                  <Skeleton className="h-[100px] flex-1" />
+                  <StatTileSkeleton />
                 ) : hasHookData ? (
                   <StatTile
                     title="Sessions"
@@ -559,13 +562,6 @@ export function ProjectDashboard(): JSX.Element {
                   />
                 )}
               </StatTileGroup>
-
-              {isProjectEmpty && (
-                <PlatformMcpPromotion
-                  surface="project_overview_zero_data"
-                  projectSlug={projectSlug}
-                />
-              )}
 
               {/* Row 1: Top Activity */}
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">

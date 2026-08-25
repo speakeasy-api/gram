@@ -180,7 +180,7 @@ func createMcpServerWithEndpoint(
 	endpoint, err := mcpendpoints_repo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpoints_repo.CreateMCPEndpointParams{
 		ProjectID:      *authCtx.ProjectID,
 		CustomDomainID: opts.customDomainID,
-		McpServerID:    server.ID,
+		McpServerID:    uuid.NullUUID{UUID: server.ID, Valid: true},
 		Slug:           opts.endpointSlug,
 	})
 	require.NoError(t, err)

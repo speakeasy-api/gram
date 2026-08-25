@@ -184,6 +184,14 @@ const (
 	// per-reason dimension on cimd.validation.failures.
 	CIMDValidationReasonKey = attribute.Key("gram.cimd.validation_reason")
 
+	// CIMDCrossOriginRedirectOriginsKey lists the origins of a validated
+	// Client ID Metadata Document's non-loopback redirect_uris that differ
+	// from the client_id URL's origin. Log-only: the origins are
+	// attacker-chosen on the unauthenticated OAuth surface, so they never
+	// become metric labels — the cimd.redirect_uris.cross_origin counter
+	// carries only the bounded client_id origin.
+	CIMDCrossOriginRedirectOriginsKey = attribute.Key("gram.cimd.cross_origin_redirect_origins")
+
 	// CIMDAdmissionModeKey is the effective per-issuer CIMD admission policy
 	// ("disabled", "presets", "open") — the low-cardinality dimension on
 	// cimd.admission.decisions. Operator-chosen, never attacker-influenced.
@@ -197,6 +205,16 @@ const (
 	// "denied_oversized", and "denied_unknown_mode". Chart the admitted_*
 	// values as a group; there is no single value meaning "admitted".
 	CIMDAdmissionOutcomeKey = attribute.Key("gram.cimd.admission_outcome")
+
+	// JWKSOriginKey is the host of a remote JWK Set URL — the per-key-host
+	// dimension on jwks.fetch.* metrics. Omitted for inline key sets, which
+	// have no fetch and no origin.
+	JWKSOriginKey = attribute.Key("gram.jwks.origin")
+
+	// JWKSValidationReasonKey is the machine-readable reason a fetched or
+	// stored JWK Set was rejected — the per-reason dimension on
+	// jwks.validation.failures.
+	JWKSValidationReasonKey = attribute.Key("gram.jwks.validation_reason")
 
 	ComponentKey                   = attribute.Key("gram.component")
 	DBDeletedRowsCountKey          = attribute.Key("gram.db.deleted_rows_count")
@@ -293,6 +311,7 @@ const (
 	McpToolsReturnedKey           = attribute.Key("gram.mcp.tools_returned")
 	McpToolsFilteredKey           = attribute.Key("gram.mcp.tools_filtered")
 	McpServerIDKey                = attribute.Key("gram.mcp_server.id")
+	MetaMcpServerIDKey            = attribute.Key("gram.meta_mcp_server.id")
 	McpURLKey                     = attribute.Key("gram.mcp.url")
 	ToolVariationsGroupIDKey      = attribute.Key("gram.tool_variations_group.id")
 	MetricNameKey                 = attribute.Key("gram.metric.name")
@@ -378,6 +397,7 @@ const (
 	PackageNameKey                    = attribute.Key("gram.package.name")
 	PackageVersionKey                 = attribute.Key("gram.package.version")
 	PKCEMethodKey                     = attribute.Key("gram.pkce.method")
+	PKCESupportKey                    = attribute.Key("gram.pkce.support")
 	ProductFeatureNameKey             = attribute.Key("gram.product.feature.name")
 	ProjectIDKey                      = attribute.Key("gram.project.id")
 	ProjectNameKey                    = attribute.Key("gram.project.name")
@@ -534,6 +554,8 @@ const (
 	TelemetryPublishFailedCountKey = attribute.Key("gram.telemetry.publish_failed_count")
 	TelemetryCHOperationKey        = attribute.Key("gram.telemetry.ch.operation")
 	TelemetryCHRowCountKey         = attribute.Key("gram.telemetry.ch.row_count")
+	OTELSpanEnricherNameKey        = attribute.Key("gram.otel.span_enricher_name")
+	OTELLogEnricherNameKey         = attribute.Key("gram.otel.log_enricher_name")
 
 	// GenAI semantic convention keys (OTel GenAI semconv - experimental)
 	// See: https://opentelemetry.io/docs/specs/semconv/gen-ai/
@@ -810,9 +832,15 @@ func SlogCodexCloudTimestampFallbacks(v int) slog.Attr {
 func TelemetryCHOperation(v string) attribute.KeyValue { return TelemetryCHOperationKey.String(v) }
 
 func TelemetryCHRowCount(v int) attribute.KeyValue { return TelemetryCHRowCountKey.Int(v) }
-
 func SlogTelemetryCHRowCount(v int) slog.Attr {
 	return slog.Int(string(TelemetryCHRowCountKey), v)
+}
+
+func OTELLogEnricherName(v string) attribute.KeyValue { return OTELLogEnricherNameKey.String(v) }
+
+func OTELSpanEnricherName(v string) attribute.KeyValue { return OTELSpanEnricherNameKey.String(v) }
+func SlogOTELSpanEnricherName(v string) slog.Attr {
+	return slog.String(string(OTELSpanEnricherNameKey), v)
 }
 
 func HookEvent(v string) attribute.KeyValue { return HookEventKey.String(v) }
@@ -1070,6 +1098,10 @@ func SlogCIMDValidationReason[V ~string](v V) slog.Attr {
 	return slog.String(string(CIMDValidationReasonKey), string(v))
 }
 
+func SlogCIMDCrossOriginRedirectOrigins(v []string) slog.Attr {
+	return slog.Any(string(CIMDCrossOriginRedirectOriginsKey), v)
+}
+
 func CIMDAdmissionMode[V ~string](v V) attribute.KeyValue {
 	return CIMDAdmissionModeKey.String(string(v))
 }
@@ -1084,6 +1116,17 @@ func CIMDAdmissionOutcome[V ~string](v V) attribute.KeyValue {
 
 func SlogCIMDAdmissionOutcome[V ~string](v V) slog.Attr {
 	return slog.String(string(CIMDAdmissionOutcomeKey), string(v))
+}
+
+func JWKSOrigin(v string) attribute.KeyValue { return JWKSOriginKey.String(v) }
+func SlogJWKSOrigin(v string) slog.Attr      { return slog.String(string(JWKSOriginKey), v) }
+
+func JWKSValidationReason[V ~string](v V) attribute.KeyValue {
+	return JWKSValidationReasonKey.String(string(v))
+}
+
+func SlogJWKSValidationReason[V ~string](v V) slog.Attr {
+	return slog.String(string(JWKSValidationReasonKey), string(v))
 }
 
 func Component(v string) attribute.KeyValue { return ComponentKey.String(v) }
@@ -1605,6 +1648,8 @@ func SlogPackageVersion(v string) slog.Attr      { return slog.String(string(Pac
 func PKCEMethod(v string) attribute.KeyValue { return PKCEMethodKey.String(v) }
 func SlogPKCEMethod(v string) slog.Attr      { return slog.String(string(PKCEMethodKey), v) }
 
+func PKCESupport[V ~string](v V) attribute.KeyValue { return PKCESupportKey.String(string(v)) }
+
 func ProductFeatureName(v string) attribute.KeyValue { return ProductFeatureNameKey.String(v) }
 func SlogProductFeatureName(v string) slog.Attr {
 	return slog.String(string(ProductFeatureNameKey), v)
@@ -1870,6 +1915,9 @@ func SlogResourceURI(v string) slog.Attr      { return slog.String(string(Resour
 
 func McpServerID(v string) attribute.KeyValue { return McpServerIDKey.String(v) }
 func SlogMcpServerID(v string) slog.Attr      { return slog.String(string(McpServerIDKey), v) }
+
+func MetaMcpServerID(v string) attribute.KeyValue { return MetaMcpServerIDKey.String(v) }
+func SlogMetaMcpServerID(v string) slog.Attr      { return slog.String(string(MetaMcpServerIDKey), v) }
 
 func ToolsetID(v string) attribute.KeyValue { return ToolsetIDKey.String(v) }
 func SlogToolsetID(v string) slog.Attr      { return slog.String(string(ToolsetIDKey), v) }

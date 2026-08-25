@@ -8,22 +8,33 @@ import {
   errorMessage,
   extendTrial,
   getInferenceKeys,
+  getInferenceSpendHistory,
   getPaygBillingSummary,
   getStripeSubscription,
   getProject,
   listOrganizations,
   logout,
+  organizationDashboardUrl,
   MAX_TRIAL_EXTENSION_DAYS,
   MAX_TRIAL_REARM_DAYS,
   MIN_TRIAL_EXTENSION_DAYS,
   MIN_TRIAL_REARM_DAYS,
   rearmTrial,
   resumeStripeSubscription,
+  setInferenceKeyMonthlyLimit,
   toSearchParams,
   type AdminOrganization,
 } from "@/lib/gramAdminApi";
 
 describe("toSearchParams", () => {
+  describe("organizationDashboardUrl", () => {
+    it("targets the same-origin handoff endpoint with an encoded organization id", () => {
+      expect(organizationDashboardUrl("org/id & value")).toBe(
+        "/admin/organization.open-dashboard?organization_id=org%2Fid+%26+value",
+      );
+    });
+  });
+
   it("repeats the key for each item of an array", () => {
     const qs = toSearchParams({ type: ["free", "pro"], q: "", page: 2 });
     expect(qs.toString()).toBe("type=free&type=pro&page=2");
@@ -154,6 +165,7 @@ describe("organization billing endpoints", () => {
     const fetch = stubFetch();
 
     await getInferenceKeys("org one");
+    await getInferenceSpendHistory("org one");
     await getPaygBillingSummary("org one");
     await getStripeSubscription("org one");
 
@@ -161,10 +173,35 @@ describe("organization billing endpoints", () => {
       "/admin/organization.inferenceKeys?organization_id=org+one",
     );
     expect(fetch.mock.calls[1]?.[0]).toBe(
-      "/admin/organization.paygBillingSummary?organization_id=org+one",
+      "/admin/organization.inferenceSpendHistory?organization_id=org+one",
     );
     expect(fetch.mock.calls[2]?.[0]).toBe(
+      "/admin/organization.paygBillingSummary?organization_id=org+one",
+    );
+    expect(fetch.mock.calls[3]?.[0]).toBe(
       "/admin/organization.stripeSubscription?organization_id=org+one",
+    );
+  });
+
+  it("posts the canonical organization and materialized key when setting a monthly limit", async () => {
+    const fetch = stubFetch();
+
+    await setInferenceKeyMonthlyLimit({
+      organizationID: "org_1",
+      keyType: "internal",
+      monthlyCredits: 750,
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/admin/organization.setInferenceKeyMonthlyLimit",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          organization_id: "org_1",
+          key_type: "internal",
+          monthly_credits: 750,
+        }),
+      }),
     );
   });
 

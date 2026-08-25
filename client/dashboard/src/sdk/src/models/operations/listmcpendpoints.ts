@@ -26,6 +26,10 @@ export type ListMcpEndpointsRequest = {
    */
   mcpServerId?: string | undefined;
   /**
+   * Optional filter: only return endpoints associated with this meta MCP server.
+   */
+  metaMcpServerId?: string | undefined;
+  /**
    * Session header
    */
   gramSession?: string | undefined;
@@ -143,6 +147,7 @@ export function listMcpEndpointsSecurityToJSON(
 /** @internal */
 export type ListMcpEndpointsRequest$Outbound = {
   mcp_server_id?: string | undefined;
+  meta_mcp_server_id?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
@@ -155,6 +160,7 @@ export const ListMcpEndpointsRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     mcpServerId: z.optional(z.string()),
+    metaMcpServerId: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
@@ -162,6 +168,7 @@ export const ListMcpEndpointsRequest$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       mcpServerId: "mcp_server_id",
+      metaMcpServerId: "meta_mcp_server_id",
       gramSession: "Gram-Session",
       gramKey: "Gram-Key",
       gramProject: "Gram-Project",

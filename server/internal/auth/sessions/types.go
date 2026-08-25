@@ -4,25 +4,27 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 )
 
-const (
-	sessionCacheExpiry  = 15 * 24 * time.Hour
-	userInfoCacheExpiry = 15 * time.Minute
-)
+const userInfoCacheExpiry = 15 * time.Minute
 
 var _ cache.CacheableObject[Session] = (*Session)(nil)
 
 type Session struct {
-	SessionID            string
-	ActiveOrganizationID string
-	UserID               string
-	WorkOSSessionID      string
-	ImpersonatorEmail    string
+	SessionID             string
+	ActiveOrganizationID  string
+	UserID                string
+	WorkOSSessionID       string
+	ImpersonatorEmail     string
+	SupportOrganizationID string
+	SupportExpiresAt      time.Time
 }
 
 func SessionCacheKey(sessionID string) string {
-	return "sessions:" + sessionID
+	// Version the namespace so sessions created under the previous, longer
+	// expiry policy cannot bypass the 72-hour idle timeout after rollout.
+	return "sessions:v2:" + sessionID
 }
 
 func (s Session) CacheKey() string {
@@ -30,7 +32,10 @@ func (s Session) CacheKey() string {
 }
 
 func (s Session) TTL() time.Duration {
-	return sessionCacheExpiry
+	if !s.SupportExpiresAt.IsZero() {
+		return time.Until(s.SupportExpiresAt)
+	}
+	return constants.SessionIdleTimeout
 }
 
 var _ cache.CacheableObject[CachedUserInfo] = (*CachedUserInfo)(nil)

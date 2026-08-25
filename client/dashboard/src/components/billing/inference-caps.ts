@@ -50,9 +50,10 @@ const CAP_COPY: Record<InferenceSpendCapKeyType, CapCopy> = {
     slug: "security",
     paused:
       "The automated analysis Gram runs over this organization's traffic, including security scanning, is paused for the rest of the month. Raise the cap to start it again.",
-    capReset: "This monthly cap resets on the first of the month.",
+    capReset:
+      "This monthly cap resets on the first of the month, so it doesn't line up with the organization's billing cycle and isn't an invoice estimate.",
     invoice:
-      "Gram funds this inference, so it never reaches your invoice and isn't part of the estimate above.",
+      "This inference is included in the inference spend on this organization's invoice.",
   },
   chat: {
     name: "Other inference",
@@ -60,17 +61,18 @@ const CAP_COPY: Record<InferenceSpendCapKeyType, CapCopy> = {
     paused:
       "Assistants and the other AI-powered dashboard experiences are paused for the rest of the month. Raise the cap to start them again.",
     capReset:
-      "This monthly cap resets on the first of the month, so it doesn't line up with the billing cycle above and isn't the figure in the estimate.",
+      "This monthly cap resets on the first of the month, so it doesn't line up with the organization's billing cycle and isn't an invoice estimate.",
     invoice:
-      "This inference is billed to this organization as its own line on the invoice.",
+      "This inference is included in the inference spend on this organization's invoice.",
   },
 };
 
 /**
  * The display order the caps are always rendered in.
  *
- * Invoiced inference first: it is the one an organization is paying for, so it
- * leads wherever both appear — the section, the usage meters, and the banners.
+ * Customer-facing inference first, followed by the platform-initiated inference.
+ * Both are billable on PAYG, but keeping this product order stable prevents a
+ * refetch from moving controls while an administrator is using them.
  */
 const CAP_ORDER: readonly InferenceSpendCapKeyType[] = ["chat", "internal"];
 
@@ -135,8 +137,7 @@ export function inferenceCapBillingNote(
  * The invoice half alone, for a key with no cap set.
  *
  * The cap-reset sentence would contradict the "No cap is set" line it renders
- * directly under, but where the spend lands is still worth saying — it is the
- * only thing that tells the invoiced key from the one Gram funds.
+ * directly under, but where the spend lands is still worth saying.
  */
 export function inferenceCapInvoiceNote(
   keyType: InferenceSpendCapKeyType,

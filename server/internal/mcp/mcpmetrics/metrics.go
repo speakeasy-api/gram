@@ -80,6 +80,10 @@ type Metrics struct {
 	oauthFlowCompletedCounter metric.Int64Counter
 	oauthFlowFailedCounter    metric.Int64Counter
 	oauthFlowDeclinedCounter  metric.Int64Counter
+
+	// oauthRefreshTokenReplayServedCounter counts refresh responses served from
+	// the encrypted replay cache rather than by rotating the database session.
+	oauthRefreshTokenReplayServedCounter metric.Int64Counter
 }
 
 // NewMetrics constructs every instrument the mcp service publishes. Each
@@ -151,15 +155,25 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		logger.ErrorContext(context.Background(), "failed to create oauth flow declined counter", attr.SlogError(err))
 	}
 
+	oauthRefreshTokenReplayServedCounter, err := meter.Int64Counter(
+		"oauth.refresh_token.replay.served",
+		metric.WithDescription("OAuth refresh-token responses served from the replay cache"),
+		metric.WithUnit("{response}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create oauth refresh token replay served counter", attr.SlogError(err))
+	}
+
 	return &Metrics{
-		mcpToolCallCounter:        mcpToolCallCounter,
-		mcpRequestDuration:        mcpRequestDuration,
-		mcpInitializeCounter:      mcpInitializeCounter,
-		requestCensus:             NewRequestCounter(meter, logger),
-		oauthFlowStartedCounter:   oauthFlowStartedCounter,
-		oauthFlowCompletedCounter: oauthFlowCompletedCounter,
-		oauthFlowFailedCounter:    oauthFlowFailedCounter,
-		oauthFlowDeclinedCounter:  oauthFlowDeclinedCounter,
+		mcpToolCallCounter:                   mcpToolCallCounter,
+		mcpRequestDuration:                   mcpRequestDuration,
+		mcpInitializeCounter:                 mcpInitializeCounter,
+		requestCensus:                        NewRequestCounter(meter, logger),
+		oauthFlowStartedCounter:              oauthFlowStartedCounter,
+		oauthFlowCompletedCounter:            oauthFlowCompletedCounter,
+		oauthFlowFailedCounter:               oauthFlowFailedCounter,
+		oauthFlowDeclinedCounter:             oauthFlowDeclinedCounter,
+		oauthRefreshTokenReplayServedCounter: oauthRefreshTokenReplayServedCounter,
 	}
 }
 
@@ -288,4 +302,13 @@ func (m *Metrics) RecordOAuthFlowDeclined(ctx context.Context, issuerID, mcpSlug
 	}
 	kv := append(oauthFlowDimensions(issuerID, mcpSlug), attr.OAuthFlowStage(string(stage)))
 	m.oauthFlowDeclinedCounter.Add(ctx, 1, metric.WithAttributes(kv...))
+}
+
+// RecordOAuthRefreshTokenReplayServed records a successful response from the
+// refresh replay cache, dimensioned by issuer and MCP endpoint.
+func (m *Metrics) RecordOAuthRefreshTokenReplayServed(ctx context.Context, issuerID, mcpSlug string) {
+	if m == nil || m.oauthRefreshTokenReplayServedCounter == nil {
+		return
+	}
+	m.oauthRefreshTokenReplayServedCounter.Add(ctx, 1, metric.WithAttributes(oauthFlowDimensions(issuerID, mcpSlug)...))
 }

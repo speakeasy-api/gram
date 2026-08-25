@@ -55,6 +55,20 @@ WHERE
   project_id = @project_id
   AND deployment_id = @deployment_id;
 
+-- name: CreateRemoteMCPServerMaterializationFailureFunctionFixture :exec
+-- Defines the trigger function used to force atomic remote-MCP provisioning to
+-- fail after it has created the remote source and session issuer.
+CREATE OR REPLACE FUNCTION fail_remote_mcp_server_materialization() RETURNS trigger AS $$
+BEGIN
+  RAISE EXCEPTION 'test materialization failure';
+END;
+$$ LANGUAGE plpgsql;
+
+-- name: CreateRemoteMCPServerMaterializationFailureTriggerFixture :exec
+CREATE TRIGGER fail_remote_mcp_server_materialization
+BEFORE INSERT ON mcp_servers
+FOR EACH ROW EXECUTE FUNCTION fail_remote_mcp_server_materialization();
+
 -- name: ListDeploymentFunctionsResources :many
 SELECT *
 FROM function_resource_definitions
@@ -235,6 +249,16 @@ WHERE organization_id = @organization_id;
 -- Test-only fixture for defensive paths that handle a dangling soft-delete FK.
 UPDATE user_session_issuers
 SET deleted_at = clock_timestamp()
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
+
+-- name: SetUserSessionIssuerCIMDAdmissionMode :exec
+-- Test-only fixture: writes an issuer's CIMD admission mode as a single-column
+-- update. The production UpdateUserSessionIssuer query COALESCEs every param,
+-- where a Valid-but-empty pgtype.Text silently clobbers the stored value;
+-- keeping that contract out of per-package test helpers is the point of this
+-- narrow query.
+UPDATE user_session_issuers
+SET client_id_metadata_admission_mode = @client_id_metadata_admission_mode
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 
 -- name: InsertPluginAssignmentFixture :exec
@@ -456,6 +480,31 @@ SELECT
     now()::timestamptz AS transaction_now,
     (now() - INTERVAL '7 days')::timestamptz AS seven_days_ago,
     (now() + INTERVAL '7 days')::timestamptz AS in_seven_days;
+
+-- name: SetOpenRouterAPIKeyCreatedAtFixture :exec
+-- Test-only fixture: places a platform-managed key before a historical spend
+-- range so completeness checks expect every day in that range.
+UPDATE openrouter_api_keys
+SET created_at = @created_at
+WHERE organization_id = @organization_id;
+
+-- name: SeedOpenRouterSpendRangeFixture :exec
+-- Test-only fixture: records one exact daily spend amount across an inclusive
+-- UTC date range.
+INSERT INTO openrouter_spend_daily (organization_id, key_type, day, spend_usd)
+SELECT
+    sqlc.arg(organization_id)::text
+  , sqlc.arg(key_type)::text
+  , day::date
+  , sqlc.arg(spend_usd)::text::numeric(14, 6)
+FROM GENERATE_SERIES(sqlc.arg(start_day)::date, sqlc.arg(end_day)::date, INTERVAL '1 day') AS day;
+
+-- name: DeleteOpenRouterSpendDayFixture :exec
+-- Test-only fixture: creates an incomplete historical month.
+DELETE FROM openrouter_spend_daily
+WHERE organization_id = @organization_id
+  AND key_type = @key_type
+  AND day = @day;
 
 -- name: GetSessionHandoffLinkFixture :one
 -- Test-only inspection of a minted session-handoff link, so tests can assert a

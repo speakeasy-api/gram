@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/contexts/Auth", () => ({
@@ -63,9 +69,18 @@ vi.mock("@/components/ui/ThemeSwitcher", () => ({
   ThemeSwitcher: () => <div data-testid="theme-switcher" />,
 }));
 
+import { isPylonChatOpen, togglePylonChat } from "@/lib/pylon";
+import { installMockPylon } from "@/lib/pylon-test-mock";
+
 import { SidebarUserMenu } from "./sidebar-user-menu";
 
-afterEach(cleanup);
+afterEach(() => {
+  if (isPylonChatOpen()) {
+    togglePylonChat();
+  }
+  cleanup();
+  Reflect.deleteProperty(window, "Pylon");
+});
 
 describe("SidebarUserMenu", () => {
   it("renders the inline theme switcher and the user name", () => {
@@ -89,5 +104,31 @@ describe("SidebarUserMenu", () => {
     expect(status?.getAttribute("href")).toBe("https://status.speakeasy.com/");
     expect(status?.getAttribute("target")).toBe("_blank");
     expect(status?.getAttribute("rel")).toBe("noopener noreferrer");
+  });
+
+  it("labels the support item Get Support, then Close Support while the chat is open", () => {
+    installMockPylon();
+    render(<SidebarUserMenu />);
+
+    expect(screen.getByText("Get Support")).toBeTruthy();
+
+    fireEvent.click(screen.getByText("Get Support"));
+    expect(screen.getByText("Close Support")).toBeTruthy();
+    expect(screen.queryByText("Get Support")).toBeNull();
+  });
+
+  it("returns the support item to Get Support when the chat window is hidden", () => {
+    const pylon = installMockPylon();
+    render(<SidebarUserMenu />);
+
+    fireEvent.click(screen.getByText("Get Support"));
+    expect(screen.getByText("Close Support")).toBeTruthy();
+
+    act(() => {
+      pylon.emitHide();
+    });
+
+    expect(screen.getByText("Get Support")).toBeTruthy();
+    expect(screen.queryByText("Close Support")).toBeNull();
   });
 });

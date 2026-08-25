@@ -43,6 +43,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/directory"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
@@ -56,7 +57,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
-	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -424,7 +424,7 @@ func (s *Service) GetPlugin(ctx context.Context, payload *gen.GetPluginPayload) 
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid plugin id").LogError(ctx, s.logger)
 	}
 
-	plugin, err := s.repo.GetPlugin(ctx, repo.GetPluginParams{
+	pluginRow, err := s.repo.GetPluginWithCounts(ctx, repo.GetPluginWithCountsParams{
 		ID:             pluginID,
 		OrganizationID: ac.ActiveOrganizationID,
 		ProjectID:      *ac.ProjectID,
@@ -450,7 +450,25 @@ func (s *Service) GetPlugin(ctx context.Context, payload *gen.GetPluginPayload) 
 	if err != nil {
 		return nil, err
 	}
-	return pluginToGen(plugin, servers, assignments, compatibility[plugin.Slug]), nil
+
+	plugin := repo.Plugin{
+		ID:             pluginRow.ID,
+		OrganizationID: pluginRow.OrganizationID,
+		ProjectID:      pluginRow.ProjectID,
+		Name:           pluginRow.Name,
+		Slug:           pluginRow.Slug,
+		Description:    pluginRow.Description,
+		IsDefault:      pluginRow.IsDefault,
+		CreatedAt:      pluginRow.CreatedAt,
+		UpdatedAt:      pluginRow.UpdatedAt,
+		DeletedAt:      pluginRow.DeletedAt,
+		Deleted:        pluginRow.Deleted,
+	}
+	result := pluginToGen(plugin, servers, assignments, compatibility[plugin.Slug])
+	result.ServerCount = &pluginRow.ServerCount
+	result.SkillCount = &pluginRow.SkillCount
+	result.AssignmentCount = &pluginRow.AssignmentCount
+	return result, nil
 }
 
 func (s *Service) CreatePlugin(ctx context.Context, payload *gen.CreatePluginPayload) (*gen.Plugin, error) {
@@ -1101,16 +1119,16 @@ func (s *Service) ListAudiences(ctx context.Context, payload *gen.ListAudiencesP
 		return nil, err
 	}
 
-	directoryRepo := workosrepo.New(s.db)
+	directoryService := directory.NewService(s.db)
 	roles, err := accessrepo.New(s.db).ListActiveOrganizationRoles(ctx, ac.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list roles for plugin assignments").LogError(ctx, s.logger)
 	}
-	groups, err := directoryRepo.ListActiveDirectoryGroups(ctx, ac.ActiveOrganizationID)
+	groups, err := directoryService.ListActiveGroups(ctx, ac.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list directory groups for plugin assignments").LogError(ctx, s.logger)
 	}
-	attributes, err := directoryRepo.ListActiveDirectoryAttributeValues(ctx, ac.ActiveOrganizationID)
+	attributes, err := directoryService.ListActiveAttributeValues(ctx, ac.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list directory attribute values for plugin assignments").LogError(ctx, s.logger)
 	}
@@ -1137,15 +1155,15 @@ func (s *Service) ListAudiences(ctx context.Context, payload *gen.ListAudiencesP
 			Kind:         "directory_group",
 			DisplayName:  group.Name,
 			MemberCount:  &group.MemberCount,
-			PrincipalUrn: DirectoryGroupPrincipal(group.ID),
+			PrincipalUrn: directory.GroupPrincipal(group.ID),
 		})
 	}
 	for _, attribute := range attributes {
 		result.Audiences = append(result.Audiences, &gen.PluginAudience{
 			Kind:         "directory_attribute",
-			DisplayName:  fmt.Sprintf("%s: %s", attribute.AttributeKey, attribute.AttributeValue),
+			DisplayName:  fmt.Sprintf("%s: %s", attribute.Key, attribute.Value),
 			MemberCount:  &attribute.MemberCount,
-			PrincipalUrn: DirectoryAttributePrincipal(attribute.AttributeKey, attribute.AttributeValue),
+			PrincipalUrn: directory.AttributePrincipal(attribute.Key, attribute.Value),
 		})
 	}
 
@@ -1184,10 +1202,10 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 			return nil, err
 		}
 
-		if _, ok := seenURNs[principal.String()]; ok {
+		if _, ok := seenURNs[principal.URN]; ok {
 			continue
 		}
-		seenURNs[principal.String()] = struct{}{}
+		seenURNs[principal.URN] = struct{}{}
 		principals = append(principals, principal)
 	}
 
@@ -1198,7 +1216,7 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	txRepo := s.repo.WithTx(tx)
-	directoryRepo := workosrepo.New(tx)
+	directoryService := directory.NewService(tx)
 	existingAssignments, err := txRepo.ListPluginAssignments(ctx, pluginID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list existing assignments").LogError(ctx, s.logger)
@@ -1206,8 +1224,8 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 	existingPrincipalURNs := make(map[string]struct{}, len(existingAssignments))
 	for _, assignment := range existingAssignments {
 		existingPrincipalURNs[assignment.PrincipalUrn] = struct{}{}
-		if attribute, err := parseDirectoryAttributePrincipal(assignment.PrincipalUrn); err == nil {
-			existingPrincipalURNs[DirectoryAttributePrincipal(attribute.Key, attribute.Value)] = struct{}{}
+		if attribute, err := directory.ParseAttributePrincipal(assignment.PrincipalUrn); err == nil {
+			existingPrincipalURNs[directory.AttributePrincipal(attribute.Key, attribute.Value)] = struct{}{}
 		}
 	}
 	for _, principal := range principals {
@@ -1215,34 +1233,34 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 		case pluginAssignmentPrincipalStandard:
 			continue
 		case pluginAssignmentPrincipalDirectoryGroup:
-			if _, alreadyAssigned := existingPrincipalURNs[principal.String()]; alreadyAssigned {
+			if _, alreadyAssigned := existingPrincipalURNs[principal.URN]; alreadyAssigned {
 				continue
 			}
-			groupID, err := uuid.Parse(principal.Identifier)
+			groupID, err := directory.ParseGroupPrincipal(principal.URN)
 			if err != nil {
-				return nil, oops.E(oops.CodeBadRequest, err, "invalid directory group assignment: %s", principal.String())
+				return nil, oops.E(oops.CodeBadRequest, err, "invalid directory group assignment: %s", principal.URN)
 			}
-			exists, err := directoryRepo.DirectoryGroupExists(ctx, workosrepo.DirectoryGroupExistsParams{ID: groupID, OrganizationID: ac.ActiveOrganizationID})
+			exists, err := directoryService.GroupExists(ctx, ac.ActiveOrganizationID, groupID)
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "validate directory group assignment").LogError(ctx, s.logger)
 			}
 			if !exists {
-				return nil, oops.E(oops.CodeBadRequest, nil, "invalid directory group assignment: %s", principal.String())
+				return nil, oops.E(oops.CodeBadRequest, nil, "invalid directory group assignment: %s", principal.URN)
 			}
 		case pluginAssignmentPrincipalDirectoryAttribute:
-			if _, alreadyAssigned := existingPrincipalURNs[principal.String()]; alreadyAssigned {
+			if _, alreadyAssigned := existingPrincipalURNs[principal.URN]; alreadyAssigned {
 				continue
 			}
-			attribute, err := parseDirectoryAttributePrincipal(principal.String())
+			attribute, err := directory.ParseAttributePrincipal(principal.URN)
 			if err != nil {
-				return nil, oops.E(oops.CodeBadRequest, err, "invalid directory attribute assignment: %s", principal.String())
+				return nil, oops.E(oops.CodeBadRequest, err, "invalid directory attribute assignment: %s", principal.URN)
 			}
-			exists, err := directoryRepo.DirectoryAttributeValueExists(ctx, workosrepo.DirectoryAttributeValueExistsParams{OrganizationID: ac.ActiveOrganizationID, AttributeKey: []byte(attribute.Key), AttributeValue: []byte(attribute.Value)})
+			exists, err := directoryService.AttributeValueExists(ctx, ac.ActiveOrganizationID, attribute)
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "validate directory attribute assignment").LogError(ctx, s.logger)
 			}
 			if !exists {
-				return nil, oops.E(oops.CodeBadRequest, nil, "invalid directory attribute assignment: %s", principal.String())
+				return nil, oops.E(oops.CodeBadRequest, nil, "invalid directory attribute assignment: %s", principal.URN)
 			}
 		}
 	}
@@ -1256,7 +1274,7 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 		row, err := txRepo.AddPluginAssignment(ctx, repo.AddPluginAssignmentParams{
 			PluginID:       pluginID,
 			OrganizationID: ac.ActiveOrganizationID,
-			PrincipalUrn:   principal.String(),
+			PrincipalUrn:   principal.URN,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "add plugin assignment").LogError(ctx, s.logger)
@@ -1265,7 +1283,7 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 	}
 	principalURNs := make([]string, 0, len(principals))
 	for _, principal := range principals {
-		principalURNs = append(principalURNs, principal.String())
+		principalURNs = append(principalURNs, principal.URN)
 	}
 
 	if err := s.audit.LogPluginAssignmentsSet(ctx, tx, audit.LogPluginAssignmentsSetEvent{
@@ -1388,7 +1406,7 @@ func (s *Service) DownloadPlatformMCPPlugin(ctx context.Context, payload *gen.Do
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "build Platform MCP plugin zip").LogError(ctx, s.logger)
 	}
 
-	filename := fmt.Sprintf("speakeasy-aicp-platform-mcp-%s.zip", payload.Platform)
+	filename := platformMCPPackageFilename(payload.Platform)
 	return &gen.DownloadPlatformMCPPluginResult{
 		ContentType:        "application/zip",
 		ContentDisposition: fmt.Sprintf(`attachment; filename="%s"`, filename),
@@ -1627,8 +1645,8 @@ func (s *Service) platformMCPPackageStatusWithProject(ctx context.Context, ac *c
 		Admission:               "indeterminate",
 		Available:               false,
 		PackageName:             platformMCPPluginName,
-		ClaudeFilename:          "speakeasy-aicp-platform-mcp-claude.zip",
-		AgentPluginFilename:     "speakeasy-aicp-platform-mcp-agent-plugin.zip",
+		ClaudeFilename:          platformMCPPackageFilename("claude"),
+		AgentPluginFilename:     platformMCPPackageFilename("agent-plugin"),
 		CanonicalProjectSlug:    nil,
 		MarketplaceName:         nil,
 		MarketplaceConnected:    false,
@@ -2690,11 +2708,10 @@ func platformMCPOnlyFingerprintChange(current, published map[string]string) bool
 	return maps.Equal(current, published)
 }
 
-// carryPlatformMCPSubtree preserves a complete currently-published Platform
-// package. B1 repositories contain Claude plus portable Agent Plugins; B2/B3
-// add Cursor, Codex, and OpenCode as one native-client set. During indeterminate
-// admission, preserving B1 is valid, but partial native sets are never copied or
-// advertised. The second result reports whether the complete B2/B3 set exists.
+// platformMCPFingerprintFromFiles hashes the Platform MCP files present in
+// files. It includes both the current Agent Plugin root and the identifier
+// still present in already-published repositories so a B1-only repair of
+// either layout records the bytes that were actually pushed.
 func platformMCPFingerprintFromFiles(files map[string][]byte) string {
 	platformRoots := []string{
 		platformMCPPluginRoot,
@@ -2702,6 +2719,7 @@ func platformMCPFingerprintFromFiles(files map[string][]byte) string {
 		platformMCPCodexPluginRoot,
 		platformMCPOpenCodePluginRoot,
 		platformMCPAgentPluginRoot,
+		platformMCPLegacyAgentPluginRoot,
 	}
 	platformFiles := make(map[string][]byte)
 	for filePath, content := range files {
@@ -2712,6 +2730,14 @@ func platformMCPFingerprintFromFiles(files map[string][]byte) string {
 	return hashFiles(platformMCPGeneratorVersion, platformFiles)
 }
 
+// carryPlatformMCPSubtree preserves a complete currently-published Platform
+// package. B1 repositories contain Claude plus portable Agent Plugins; B2/B3
+// add Cursor, Codex, and OpenCode as one native-client set. Carry accepts
+// either the current Agent Plugin/OpenCode identifier or the identifier still
+// present in already-published repositories, so an unavailable admission
+// decision cannot regenerate those bytes. During indeterminate admission,
+// preserving B1 is valid, but partial native sets are never copied or
+// advertised. The second result reports whether the complete B2/B3 set exists.
 func carryPlatformMCPSubtree(dst, existing map[string][]byte) (bool, bool) {
 	if len(existing) == 0 {
 		return false, false
@@ -2719,32 +2745,6 @@ func carryPlatformMCPSubtree(dst, existing map[string][]byte) (bool, bool) {
 	skills, err := loadPlatformMCPSkills()
 	if err != nil {
 		return false, false
-	}
-
-	b1Required := []string{
-		platformMCPPluginRoot + "/.claude-plugin/plugin.json",
-		platformMCPPluginRoot + "/.mcp.json",
-		platformMCPAgentPluginRoot + "/plugin.json",
-		platformMCPAgentPluginRoot + "/mcp.json",
-	}
-	nativeRequired := []string{
-		platformMCPCursorPluginRoot + "/.cursor-plugin/plugin.json",
-		platformMCPCursorPluginRoot + "/mcp.json",
-		platformMCPCodexPluginRoot + "/.codex-plugin/plugin.json",
-		platformMCPCodexPluginRoot + "/.mcp.json",
-		platformMCPOpenCodePluginRoot + "/plugin/" + platformMCPPluginName + ".ts",
-		platformMCPOpenCodePluginRoot + "/" + platformMCPPluginName + "/mcp.json",
-	}
-	for name := range skills {
-		b1Required = append(b1Required,
-			platformMCPPluginRoot+"/skills/"+name+"/SKILL.md",
-			platformMCPAgentPluginRoot+"/skills/"+name+"/SKILL.md",
-		)
-		nativeRequired = append(nativeRequired,
-			platformMCPCursorPluginRoot+"/skills/"+name+"/SKILL.md",
-			platformMCPCodexPluginRoot+"/skills/"+name+"/SKILL.md",
-			platformMCPOpenCodePluginRoot+"/"+platformMCPPluginName+"/skills/"+name+"/SKILL.md",
-		)
 	}
 
 	stageRoots := func(roots []string, required []string) (map[string][]byte, bool) {
@@ -2762,20 +2762,55 @@ func carryPlatformMCPSubtree(dst, existing map[string][]byte) (bool, bool) {
 		return staged, true
 	}
 
-	b1, ok := stageRoots([]string{platformMCPPluginRoot, platformMCPAgentPluginRoot}, b1Required)
-	if !ok {
-		return false, false
-	}
-	maps.Copy(dst, b1)
+	for _, layout := range []struct {
+		pluginName string
+		agentRoot  string
+	}{
+		{platformMCPPluginName, platformMCPAgentPluginRoot},
+		{platformMCPLegacyPluginName, platformMCPLegacyAgentPluginRoot},
+	} {
+		b1Required := []string{
+			platformMCPPluginRoot + "/.claude-plugin/plugin.json",
+			platformMCPPluginRoot + "/.mcp.json",
+			layout.agentRoot + "/plugin.json",
+			layout.agentRoot + "/mcp.json",
+		}
+		nativeRequired := []string{
+			platformMCPCursorPluginRoot + "/.cursor-plugin/plugin.json",
+			platformMCPCursorPluginRoot + "/mcp.json",
+			platformMCPCodexPluginRoot + "/.codex-plugin/plugin.json",
+			platformMCPCodexPluginRoot + "/.mcp.json",
+			platformMCPOpenCodePluginRoot + "/plugin/" + layout.pluginName + ".ts",
+			platformMCPOpenCodePluginRoot + "/" + layout.pluginName + "/mcp.json",
+		}
+		for name := range skills {
+			b1Required = append(b1Required,
+				platformMCPPluginRoot+"/skills/"+name+"/SKILL.md",
+				layout.agentRoot+"/skills/"+name+"/SKILL.md",
+			)
+			nativeRequired = append(nativeRequired,
+				platformMCPCursorPluginRoot+"/skills/"+name+"/SKILL.md",
+				platformMCPCodexPluginRoot+"/skills/"+name+"/SKILL.md",
+				platformMCPOpenCodePluginRoot+"/"+layout.pluginName+"/skills/"+name+"/SKILL.md",
+			)
+		}
 
-	native, nativeOK := stageRoots(
-		[]string{platformMCPCursorPluginRoot, platformMCPCodexPluginRoot, platformMCPOpenCodePluginRoot},
-		nativeRequired,
-	)
-	if nativeOK {
-		maps.Copy(dst, native)
+		b1, ok := stageRoots([]string{platformMCPPluginRoot, layout.agentRoot}, b1Required)
+		if !ok {
+			continue
+		}
+		maps.Copy(dst, b1)
+
+		native, nativeOK := stageRoots(
+			[]string{platformMCPCursorPluginRoot, platformMCPCodexPluginRoot, platformMCPOpenCodePluginRoot},
+			nativeRequired,
+		)
+		if nativeOK {
+			maps.Copy(dst, native)
+		}
+		return true, nativeOK
 	}
-	return true, nativeOK
+	return false, false
 }
 
 // carryHooksSubtree copies the published hooks (observability) subtree

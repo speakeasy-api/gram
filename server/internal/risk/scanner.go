@@ -302,21 +302,43 @@ func (s *Scanner) ScanForEnforcement(
 		return nil, err
 	}
 
+	view := realtimeMessageView(text, messageType, toolName)
+	inMessageScope := func(p repo.RiskPolicy) bool {
+		return len(p.MessageTypes) == 0 || slices.Contains(p.MessageTypes, messageType)
+	}
+	applicablePolicies := make([]repo.RiskPolicy, 0, len(policies))
+	for _, p := range policies {
+		policyApplication, err := authz.RiskPolicyApplies(p.ID.String(), authz.RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""}).Evaluate(grants)
+		if err != nil {
+			s.recordScan(ctx, projectID.String(), o11y.OutcomeFailure, time.Since(start))
+			return nil, fmt.Errorf("evaluate risk policy application: %w", err)
+		}
+		if !policyApplication.Satisfied || !inMessageScope(p) {
+			continue
+		}
+
+		app, err := ra.CompileScope(s.celEng, p.ScopeInclude.String, p.ScopeExempt.String)
+		if err != nil {
+			s.logger.WarnContext(ctx, "compile realtime policy scope",
+				attr.SlogError(err),
+				attr.SlogRiskPolicyID(p.ID.String()),
+			)
+			continue
+		}
+		if !app.Includes(view) || app.Exempts(view) {
+			continue
+		}
+		applicablePolicies = append(applicablePolicies, p)
+	}
+
 	// Resolve the prompt-policy flag once per scan (on the parent ctx, before
 	// fan-out) so prompt_based policies don't each repeat the slug lookup and
 	// so the lookup is never cancelled by a sibling match. Gated on the exact
-	// condition under which the fan-out would run the judge - a prompt_based
-	// policy whose message_types apply to this message - so the lookup is
-	// skipped entirely for scans that can never enforce one. message_types gates
-	// candidacy; scope_include narrows further per-message in scanPolicy.
-	inMessageScope := func(p repo.RiskPolicy) bool {
-		return len(p.MessageTypes) == 0 ||
-			slices.Contains(p.MessageTypes, messageType)
-	}
+	// condition under which the fan-out would run the judge.
 
 	promptPoliciesOn := false
-	if slices.ContainsFunc(policies, func(p repo.RiskPolicy) bool {
-		return p.PolicyType == ra.PolicyTypePromptBased && inMessageScope(p)
+	if slices.ContainsFunc(applicablePolicies, func(p repo.RiskPolicy) bool {
+		return p.PolicyType == ra.PolicyTypePromptBased
 	}) {
 		// All enforcing policies for a project belong to the same org.
 		promptPoliciesOn = s.projectFlagEnabled(ctx, policies[0].OrganizationID, projectID, feature.FlagPromptPolicies)
@@ -325,11 +347,12 @@ func (s *Scanner) ScanForEnforcement(
 	// Same once-per-scan resolution for the recommended-scopes flag: category
 	// detection scopes compose only when the project has opted in.
 	recommendedScopesOn := false
-	if slices.ContainsFunc(policies, func(p repo.RiskPolicy) bool {
-		return inMessageScope(p)
-	}) {
+	if len(applicablePolicies) > 0 {
 		recommendedScopesOn = s.projectFlagEnabled(ctx, policies[0].OrganizationID, projectID, feature.FlagRiskRecommendedScopes)
 	}
+	hasQuarantinePolicy := slices.ContainsFunc(applicablePolicies, func(p repo.RiskPolicy) bool {
+		return p.Action == "quarantine"
+	})
 
 	// Fan out across policies. The first goroutine that finds a match returns
 	// errMatchFound, which causes errgroup to cancel its context - sibling
@@ -337,24 +360,13 @@ func (s *Scanner) ScanForEnforcement(
 	// finishing uselessly. Gitleaks scans serialize inside s.gitleaks (the v8
 	// detector is not concurrent-safe); the real win is Presidio fan-out.
 	var (
-		blockWinner atomic.Pointer[ScanResult] // hard deny; short-circuits the fan-out
-		warnWinner  atomic.Pointer[ScanResult] // challenge; kept only if no block matches
-		matchErr    = errors.New("risk policy block")
+		quarantineWinner atomic.Pointer[ScanResult] // session circuit; highest precedence
+		blockWinner      atomic.Pointer[ScanResult] // hard deny; kept only if no quarantine matches
+		warnWinner       atomic.Pointer[ScanResult] // challenge; kept only if no hard deny matches
+		matchErr         = errors.New("risk policy enforcing match")
 	)
 	g, gctx := errgroup.WithContext(ctx)
-	for _, p := range policies {
-		policyApplication, err := authz.RiskPolicyApplies(p.ID.String(), authz.RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""}).Evaluate(grants)
-		if err != nil {
-			s.recordScan(ctx, projectID.String(), o11y.OutcomeFailure, time.Since(start))
-			return nil, fmt.Errorf("evaluate risk policy application: %w", err)
-		}
-		if !policyApplication.Satisfied {
-			continue
-		}
-		if !inMessageScope(p) {
-			continue
-		}
-
+	for _, p := range applicablePolicies {
 		g.Go(func() error {
 			result, scanErr := s.scanPolicy(gctx, p, userID, text, messageType, toolName, promptPoliciesOn, recommendedScopesOn)
 			if scanErr != nil {
@@ -370,13 +382,17 @@ func (s *Scanner) ScanForEnforcement(
 			if result == nil {
 				return nil
 			}
-			// Enforce block > warn precedence. A block match short-circuits the
-			// fan-out (cancels siblings) and always wins; a warn match is recorded
-			// but must NOT cancel siblings, so a still-running block policy can
-			// override it. Without this the first goroutine to finish wins, and a
-			// matching block could be silently downgraded to a challenge.
+			// Enforce quarantine > block > warn precedence. Only quarantine
+			// short-circuits the fan-out; block and warn matches must not cancel
+			// siblings, so a still-running quarantine policy can override them.
+			if result.Action == "quarantine" {
+				if quarantineWinner.CompareAndSwap(nil, result) {
+					return matchErr
+				}
+				return nil
+			}
 			if result.Action == "block" {
-				if blockWinner.CompareAndSwap(nil, result) {
+				if blockWinner.CompareAndSwap(nil, result) && !hasQuarantinePolicy {
 					return matchErr
 				}
 				return nil
@@ -400,6 +416,10 @@ func (s *Scanner) ScanForEnforcement(
 	if err := g.Wait(); err != nil && !errors.Is(err, matchErr) {
 		s.recordScan(ctx, projectID.String(), o11y.OutcomeFailure, time.Since(start))
 		return nil, fmt.Errorf("risk policy fan-out: %w", err)
+	}
+	if hit := quarantineWinner.Load(); hit != nil {
+		s.recordScan(ctx, projectID.String(), "quarantined", time.Since(start))
+		return hit, nil
 	}
 	if hit := blockWinner.Load(); hit != nil {
 		s.recordScan(ctx, projectID.String(), "blocked", time.Since(start))
@@ -523,16 +543,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 
 	// Build the structured view once; the application predicates and custom
 	// rules both evaluate against it.
-	view := ra.MessageView{Content: text, Type: messageType, Tools: []ra.ToolView{}}
-	if messageType == message.ToolRequest && toolName != "" {
-		// In realtime a tool-request's text carries the call arguments (the same
-		// body the judge sees), so it doubles as the tool_args source.
-		// Realtime receives one tool call at a time, unlike batch's multi-call
-		// transcript rows; recommended CEL over tool_calls therefore evaluates
-		// against this single call. That can scan more than batch for unusual
-		// mixed-call transcripts, which is the accepted fail-closed asymmetry.
-		view.Tools = []ra.ToolView{ra.NewToolView(toolName, text)}
-	}
+	view := realtimeMessageView(text, messageType, toolName)
 
 	// Policy application gates detection: include narrows scope (alongside
 	// message_types); exempt takes the message out of the policy.
@@ -733,6 +744,20 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, userID
 		return deadLetterResult, nil
 	}
 	return nil, nil
+}
+
+func realtimeMessageView(text string, messageType message.Type, toolName string) ra.MessageView {
+	view := ra.MessageView{Content: text, Type: messageType, Tools: []ra.ToolView{}}
+	if messageType == message.ToolRequest && toolName != "" {
+		// In realtime a tool-request's text carries the call arguments (the same
+		// body the judge sees), so it doubles as the tool_args source.
+		// Realtime receives one tool call at a time, unlike batch's multi-call
+		// transcript rows; recommended CEL over tool_calls therefore evaluates
+		// against this single call. That can scan more than batch for unusual
+		// mixed-call transcripts, which is the accepted fail-closed asymmetry.
+		view.Tools = []ra.ToolView{ra.NewToolView(toolName, text)}
+	}
+	return view
 }
 
 // scanPromptPolicy evaluates text against a prompt_based policy's guardrail

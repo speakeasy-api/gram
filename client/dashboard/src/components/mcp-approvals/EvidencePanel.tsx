@@ -4,10 +4,15 @@ import {
 } from "@/components/mcp-approvals/evidence";
 import { Badge } from "@/components/ui/Badge";
 import { Heading } from "@/components/ui/Heading";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Info } from "lucide-react";
+import { useId } from "react";
 import { HumanizeDateTime } from "@/lib/dates";
+import {
+  MoreToggle,
+  useCollapsedPreview,
+} from "@/components/ui/collapsible-preview";
 import { cn } from "@/lib/utils";
-import { ChevronDown, ChevronUp } from "lucide-react";
-import { useState } from "react";
 import type {
   EvidenceAdvisories,
   EvidenceAdvisoryItem,
@@ -34,11 +39,9 @@ import { gapLabel } from "./evidence";
  */
 export function EvidencePanel({
   document,
-  collectedAt,
   usage,
 }: {
   document: EvidenceDocument | null;
-  collectedAt: Date | undefined;
   /**
    * Who is calling the server today, supplied by the page that has the
    * traffic query. It reads as one more question about the server, and it
@@ -57,16 +60,18 @@ export function EvidencePanel({
     );
   }
 
+  // A gap whose own group already renders an unknown block is being reported
+  // twice: the banner said "the tool listing could not be read" directly above
+  // a box saying "No tool declarations gathered". The banner is for sources
+  // whose failure has nowhere else to surface — exposure, the code host, the
+  // domain registry — which leave no visible hole of their own.
+  const unshownGaps = document.gaps.filter(
+    (gap) => !GAPS_SHOWN_BY_THEIR_OWN_GROUP.has(gap),
+  );
+
   return (
     <div className="space-y-3">
-      {document.gaps.length > 0 && <GapsNotice gaps={document.gaps} />}
-      {collectedAt && (
-        <p className="text-muted-foreground text-xs">
-          Gathered <HumanizeDateTime date={collectedAt} />. Declared by the
-          server or its registry, or seen in this organization's traffic —
-          nothing is verified behavior.
-        </p>
-      )}
+      {unshownGaps.length > 0 && <GapsNotice gaps={unshownGaps} />}
       {/* Two columns on a wide screen. Each question is short enough that
           stacking them all made the page scroll for no reason; the reading
           order still runs left to right, identity first. */}
@@ -84,107 +89,263 @@ export function EvidencePanel({
               source={document.capabilitiesSource}
               fill
             />
-            <EvidenceGroup question={USAGE_QUESTION}>{usage}</EvidenceGroup>
+            {/* The traffic table answers "are we already exposed?" on its own —
+                names, counts and recency — so that question no longer has a
+                group of its own. What the table cannot say is what a denial
+                would cost, so that judgment rides here as the note. */}
+            <EvidenceGroup
+              question={USAGE_QUESTION}
+              note={
+                document.exposure?.inUse && (
+                  <span className="border-warning border px-2.5 py-1 text-xs">
+                    Already in use — a denial changes existing workflows.
+                  </span>
+                )
+              }
+            >
+              {usage}
+            </EvidenceGroup>
           </>
         ) : (
-          <div className="lg:col-span-2">
+          <>
             <DeclaredCapabilitySection
               capabilities={document.capabilities}
               source={document.capabilitiesSource}
             />
-          </div>
+            {/* Without a traffic table the exposure figures have nowhere else
+                to appear: the review sheet has no summary strip, and a frozen
+                decision snapshot is evidence as it stood, not traffic as it is
+                now. The detail page drops this group because its strip and
+                table already answer it. */}
+            <ExposureSection
+              exposure={document.exposure}
+              identity={document.identity}
+            />
+          </>
         )}
-        {/* Full width for the same reason as the tools: this group carries
-            the most facts, and a fact list laid out across the page is half
-            the rows it is in a column. */}
-        <div className="lg:col-span-2">
-          <MaturitySection
-            pkg={document.package}
-            notPublished={document.packageNotPublished}
-            packageName={document.identity.packageName}
-            provenance={document.provenance}
-            identityKind={document.identity.kind}
-            repository={document.repository}
-            repositoryNotFound={document.repositoryNotFound}
-          />
-        </div>
+        {/* Maturity and advisories share the last row. Maturity used to span
+            the full width so its fact list could run two columns, but with
+            the exposure group gone an odd number of groups left a hole beside
+            whichever one ran last — and three even rows read better than two
+            rows and two banners. Its list falls back to one column here via
+            its own container query. */}
+        <MaturitySection
+          pkg={document.package}
+          notPublished={document.packageNotPublished}
+          packageName={document.identity.packageName}
+          provenance={document.provenance}
+          identityKind={document.identity.kind}
+          repository={document.repository}
+          repositoryNotFound={document.repositoryNotFound}
+        />
         <AdvisoriesSection
           advisories={document.advisories}
           identityKind={document.identity.kind}
         />
-        <ExposureSection
-          exposure={document.exposure}
-          identity={document.identity}
-        />
       </div>
     </div>
+  );
+}
+
+/**
+ * Failed lookups whose group answers for them, so the banner does not repeat
+ * what the reader is already looking at. Each one maps to a group that renders
+ * its own unknown block when the data is missing: authority and capabilities
+ * to their questions, package and catalog to "is it real and maintained?",
+ * advisories to the vulnerability question.
+ *
+ * Deliberately not here: exposure, repository and domain failures. Those leave
+ * facts quietly absent from a list rather than an empty box, so the banner is
+ * the only place they are ever stated.
+ */
+const GAPS_SHOWN_BY_THEIR_OWN_GROUP = new Set([
+  "authority_probe_failed",
+  "tool_declarations_probe_failed",
+  "package_lookup_failed",
+  "catalog_lookup_failed",
+  "advisory_lookup_failed",
+]);
+
+/**
+ * What this project's own traffic says, for the surfaces that do not render a
+ * live traffic table beside it.
+ */
+function ExposureSection({
+  exposure,
+  identity,
+}: {
+  exposure: EvidenceExposure | undefined;
+  identity: EvidenceIdentity;
+}): JSX.Element {
+  if (!exposure) {
+    return (
+      <EvidenceGroup question="Are we already exposed?">
+        <UnknownBlock>
+          {identity.kind === "remote"
+            ? "Usage records could not be gathered."
+            : "No URL to look up in usage records — exposure here is unknowable from traffic."}
+        </UnknownBlock>
+      </EvidenceGroup>
+    );
+  }
+
+  if (exposure.status === "unseen") {
+    return (
+      <EvidenceGroup question="Are we already exposed?">
+        <AnswerBlock>
+          No one in this project has recorded traffic to this server. Denying it
+          costs nobody an existing workflow.
+        </AnswerBlock>
+      </EvidenceGroup>
+    );
+  }
+
+  const facts: Array<{ label: string; value: React.ReactNode }> = [
+    { label: "People who have called it", value: exposure.userCount ?? 0 },
+    { label: "Recorded calls", value: exposure.callCount ?? 0 },
+  ];
+  if (exposure.firstSeen) {
+    facts.push({
+      label: "First seen here",
+      value: (
+        <HumanizeDateTime
+          date={new Date(exposure.firstSeen)}
+          includeTime={false}
+        />
+      ),
+    });
+  }
+  if (exposure.lastCalled) {
+    facts.push({
+      label: "Last called",
+      value: <HumanizeDateTime date={new Date(exposure.lastCalled)} />,
+    });
+  }
+  if (exposure.serverName) {
+    // The name this project knew the server by when the evidence was taken —
+    // on a frozen snapshot nothing else carries it, and it can differ from
+    // the name the page shows today.
+    facts.push({ label: "Known here as", value: exposure.serverName });
+  }
+
+  return (
+    <EvidenceGroup
+      question="Are we already exposed?"
+      note={
+        exposure.inUse && (
+          <span className="border-warning border px-2.5 py-1 text-xs">
+            Already in use — a denial changes existing workflows.
+          </span>
+        )
+      }
+    >
+      <FactList facts={facts} />
+    </EvidenceGroup>
   );
 }
 
 export function EvidenceGroup({
   question,
   note,
-  fill = false,
+  hint,
   children,
 }: {
   question: string;
+  /**
+   * The caveat about where this group's data came from and what it does not
+   * prove, behind an icon beside the question. It reads as a footnote, not a
+   * finding, and as a paragraph under the heading it pushed this group's box
+   * down while the group beside it started at the heading — so no two columns
+   * lined up. In the tooltip the boxes share one top edge across the grid.
+   */
+  hint?: string;
   /**
    * The group's one-line headline, set beside the question rather than in a
    * band below it. For the finding a reader should not be able to miss —
    * everything else belongs in the body.
    */
   note?: React.ReactNode;
-  /**
-   * Give the body the full height of the grid row instead of its natural
-   * height, so a list inside it can size itself against whatever the group
-   * beside it turned out to be.
-   */
-  fill?: boolean;
   children: React.ReactNode;
 }): JSX.Element {
   // A container, so the fact lists inside decide their own column count from
   // the width this group actually got — two when it spans the page, one when
   // it is sharing a row — rather than from the viewport.
+  //
+  // Always full height, never just when a caller asks: the grid stretches the
+  // section to its row, so anything less left a short answer's box floating
+  // against a tall table beside it.
   return (
-    <section
-      className={cn(
-        "@container",
-        fill ? "flex h-full flex-col gap-1.5" : "space-y-1.5",
-      )}
-    >
+    <section className="@container flex h-full flex-col gap-1.5">
       {/* The questions are the page's real structure, so they keep the serif
           treatment content subsections use — sized down so a full gather fits
           on one screen without zooming. */}
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <Heading variant="h3" className="text-lg font-thin">
-          {question}
-        </Heading>
+        <div className="flex items-center gap-1.5">
+          <Heading variant="h3" className="text-lg font-thin">
+            {question}
+          </Heading>
+          {hint && (
+            <SimpleTooltip tooltip={hint}>
+              {/* A button, not the bare icon: an SVG cannot take focus, and
+                  the tooltip opens on focus as well as hover, so this is what
+                  makes the caveat reachable by keyboard at all. */}
+              <button
+                type="button"
+                aria-label="About this data"
+                className="text-muted-foreground hover:text-foreground inline-flex shrink-0"
+              >
+                <Info className="size-3.5" />
+              </button>
+            </SimpleTooltip>
+          )}
+        </div>
         {note}
       </div>
-      {fill ? (
-        <div className="flex min-h-0 flex-1 flex-col gap-1.5">{children}</div>
-      ) : (
-        children
-      )}
+      {/* The last block grows into whatever height the row settled on, so the
+          short answer and the long table in one row end on the same line
+          instead of one box stopping halfway up its column. */}
+      <div className="flex min-h-0 flex-1 flex-col gap-1.5 [&>*:last-child]:flex-1">
+        {children}
+      </div>
     </section>
   );
 }
 
 /**
- * The visual for "we know nothing about this": a dashed hairline frame that
- * looks conspicuously empty. Deliberately distinct from both an error state
- * and a populated card, and never green.
+ * A group whose whole answer is one sentence, framed in a hairline box with
+ * the sentence centred. Centred because these blocks stretch to their row's
+ * height: against a tall table beside them, a line pinned to the top-left
+ * corner reads as content that failed to load rather than as the answer.
  */
+function AnswerBlock({
+  children,
+  unknown = false,
+}: {
+  children: React.ReactNode;
+  /**
+   * Draw it dashed and muted — the panel's one visual for "we could not find
+   * out", deliberately distinct from a definite answer and never green.
+   */
+  unknown?: boolean;
+}): JSX.Element {
+  return (
+    <div
+      className={cn(
+        "border-border flex items-center justify-center border px-2.5 py-1.5 text-center text-xs",
+        unknown && "text-muted-foreground border-dashed",
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
 function UnknownBlock({
   children,
 }: {
   children: React.ReactNode;
 }): JSX.Element {
-  return (
-    <div className="border-border text-muted-foreground border border-dashed px-2.5 py-1.5 text-xs">
-      {children}
-    </div>
-  );
+  return <AnswerBlock unknown>{children}</AnswerBlock>;
 }
 
 function GapsNotice({ gaps }: { gaps: string[] }): JSX.Element {
@@ -342,7 +503,7 @@ function AuthoritySection({
     return (
       <EvidenceGroup question="What is it asking me to hand over?">
         <UnknownBlock>
-          Not gathered. Unknown — not "requires nothing".
+          Not exposed by the server. Unknown — not "requires nothing".
         </UnknownBlock>
       </EvidenceGroup>
     );
@@ -410,69 +571,6 @@ function AuthoritySection({
 const SCOPE_PREVIEW_COUNT = 4;
 
 /**
- * Hiding the tail of a list: the state, the slice, and what counts as
- * collapsible. Every list here that hides one shares this, so the rule that
- * a list at exactly the preview count shows no toggle is decided once.
- */
-function useCollapsedPreview<T>(
-  items: T[],
-  previewCount: number,
-): {
-  collapsible: boolean;
-  expanded: boolean;
-  toggle: () => void;
-  visible: T[];
-} {
-  const [expanded, setExpanded] = useState(false);
-  const collapsible = items.length > previewCount;
-
-  return {
-    collapsible,
-    expanded,
-    toggle: () => setExpanded((current) => !current),
-    visible: collapsible && !expanded ? items.slice(0, previewCount) : items,
-  };
-}
-
-/**
- * The control that reveals a hidden tail. The chrome around it differs — a
- * chip in a wrap of scopes, a footer row under a framed list — but the
- * accessible contract and the collapse wording are the same wherever it
- * appears, so they live here rather than in each caller.
- */
-function MoreToggle({
-  expanded,
-  onToggle,
-  collapsedLabel,
-  className,
-}: {
-  expanded: boolean;
-  onToggle: () => void;
-  /** What the control says while the tail is hidden. */
-  collapsedLabel: string;
-  className?: string;
-}): JSX.Element {
-  return (
-    <button
-      type="button"
-      aria-expanded={expanded}
-      onClick={onToggle}
-      className={cn(
-        "text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs",
-        className,
-      )}
-    >
-      {expanded ? "Show fewer" : collapsedLabel}
-      {expanded ? (
-        <ChevronUp className="size-3" />
-      ) : (
-        <ChevronDown className="size-3" />
-      )}
-    </button>
-  );
-}
-
-/**
  * The wrap of scope chips, with the tail collapsed behind a "+N more" toggle
  * chip once the list exceeds the preview count.
  */
@@ -481,9 +579,10 @@ function ScopeChips({ scopes }: { scopes: string[] }): JSX.Element {
     scopes,
     SCOPE_PREVIEW_COUNT,
   );
+  const listId = useId();
 
   return (
-    <div className="flex flex-wrap gap-1">
+    <div id={listId} className="flex flex-wrap gap-1">
       {visible.map((scope) => (
         <span
           key={scope}
@@ -497,6 +596,7 @@ function ScopeChips({ scopes }: { scopes: string[] }): JSX.Element {
           expanded={expanded}
           onToggle={toggle}
           collapsedLabel={`+${scopes.length - SCOPE_PREVIEW_COUNT} more`}
+          controlId={listId}
           className="px-1.5 py-px"
         />
       )}
@@ -548,13 +648,13 @@ function DeclaredCapabilitySection({
     if (source) {
       return (
         <EvidenceGroup question="What does it say it can do?">
-          <div className="border-border border px-2.5 py-1.5 text-xs">
+          <AnswerBlock>
             {source === "registry"
               ? "The registry catalog's copy declares no tools."
               : "The server answered the listing with zero tools."}{" "}
             The listing succeeded — this is a declared-empty toolset, not a
             failed check.
-          </div>
+          </AnswerBlock>
         </EvidenceGroup>
       );
     }
@@ -572,7 +672,11 @@ function DeclaredCapabilitySection({
   return (
     <EvidenceGroup
       question="What does it say it can do?"
-      fill={fill}
+      hint={`${capabilitySourceNote(source)} ${
+        capabilities.length === 1
+          ? "1 tool declared."
+          : `${capabilities.length} tools declared.`
+      }`}
       note={
         actingTools.length > 0 && (
           <span className="border-warning border px-2.5 py-1 text-xs">
@@ -584,12 +688,6 @@ function DeclaredCapabilitySection({
         )
       }
     >
-      <p className="text-muted-foreground text-xs">
-        {capabilitySourceNote(source)}{" "}
-        {capabilities.length === 1
-          ? "1 tool declared."
-          : `${capabilities.length} tools declared.`}
-      </p>
       <ToolList capabilities={capabilities} fill={fill} />
     </EvidenceGroup>
   );
@@ -622,10 +720,11 @@ function CollapsibleList<T>({
     items,
     previewCount,
   );
+  const listId = useId();
 
   return (
     <div className="border-border border">
-      <ul className="divide-border divide-y">
+      <ul id={listId} className="divide-border divide-y">
         {visible.map((item) => (
           <li key={itemKey(item)} className={itemClassName}>
             {renderItem(item)}
@@ -637,6 +736,7 @@ function CollapsibleList<T>({
           expanded={expanded}
           onToggle={toggle}
           collapsedLabel={`Show all ${items.length} ${noun}`}
+          controlId={listId}
           className="border-border w-full justify-center border-t px-3 py-1"
         />
       )}
@@ -770,16 +870,12 @@ function ProvenanceFacts({
     });
   }
 
-  return (
-    <>
-      <p className="text-muted-foreground text-xs">
-        The registry catalog's claims, not ours — a visitor count is a
-        popularity proxy, not evidence about behavior.
-      </p>
-      <FactList facts={facts} />
-    </>
-  );
+  return <FactList facts={facts} />;
 }
+
+/** The provenance caveat, moved to its group's hint. */
+const PROVENANCE_HINT =
+  "The registry catalog's claims, not ours — a visitor count is a popularity proxy, not evidence about behavior.";
 
 function MaturitySection({
   pkg,
@@ -802,15 +898,18 @@ function MaturitySection({
     if (!provenance.catalogued) {
       return (
         <EvidenceGroup question="Is it real and maintained?">
-          <div className="border-border border px-2.5 py-1.5 text-xs">
+          <AnswerBlock>
             No configured MCP registry catalogs this URL. The lookup ran cleanly
             — this is absence from the catalog, not a failed check.
-          </div>
+          </AnswerBlock>
         </EvidenceGroup>
       );
     }
     return (
-      <EvidenceGroup question="Is it real and maintained?">
+      <EvidenceGroup
+        question="Is it real and maintained?"
+        hint={PROVENANCE_HINT}
+      >
         <ProvenanceFacts provenance={provenance} />
       </EvidenceGroup>
     );
@@ -819,12 +918,12 @@ function MaturitySection({
   if (notPublished) {
     return (
       <EvidenceGroup question="Is it real and maintained?">
-        <div className="border-border border px-2.5 py-1.5 text-xs">
+        <AnswerBlock>
           The registry has no package named{" "}
           <code className="text-xs">{packageName ?? "this"}</code>. The lookup
           ran cleanly — this reference points at something its own registry does
           not know.
-        </div>
+        </AnswerBlock>
       </EvidenceGroup>
     );
   }
@@ -1010,10 +1109,10 @@ function AdvisoriesSection({
   if (advisories.knownCount === 0) {
     return (
       <EvidenceGroup question="Does anything published say it's vulnerable?">
-        <div className="border-border border px-2.5 py-1.5 text-xs">
+        <AnswerBlock>
           OSV lists no published advisories for this package. Checked today and
           clean — not a guarantee, and it says nothing about unreported issues.
-        </div>
+        </AnswerBlock>
       </EvidenceGroup>
     );
   }
@@ -1067,78 +1166,6 @@ function AdvisoryList({
   );
 }
 
-function ExposureSection({
-  exposure,
-  identity,
-}: {
-  exposure: EvidenceExposure | undefined;
-  identity: EvidenceIdentity;
-}): JSX.Element {
-  if (!exposure) {
-    const reason =
-      identity.kind === "remote"
-        ? "Usage records could not be gathered."
-        : "No URL to look up in usage records — exposure here is unknowable from traffic.";
-    return (
-      <EvidenceGroup question="Are we already exposed?">
-        <UnknownBlock>{reason}</UnknownBlock>
-      </EvidenceGroup>
-    );
-  }
-
-  if (exposure.status === "unseen") {
-    return (
-      <EvidenceGroup question="Are we already exposed?">
-        <div className="border-border border px-2.5 py-1.5 text-xs">
-          No one in this project has recorded traffic to this server. Denying it
-          costs nobody an existing workflow.
-        </div>
-      </EvidenceGroup>
-    );
-  }
-
-  const facts: Array<{ label: string; value: React.ReactNode }> = [
-    { label: "People who have called it", value: exposure.userCount ?? 0 },
-    { label: "Recorded calls", value: exposure.callCount ?? 0 },
-  ];
-  if (exposure.firstSeen) {
-    facts.push({
-      label: "First seen here",
-      value: (
-        <HumanizeDateTime
-          date={new Date(exposure.firstSeen)}
-          includeTime={false}
-        />
-      ),
-    });
-  }
-  if (exposure.lastCalled) {
-    facts.push({
-      label: "Last called",
-      value: <HumanizeDateTime date={new Date(exposure.lastCalled)} />,
-    });
-  }
-  if (exposure.serverName) {
-    facts.push({ label: "Known here as", value: exposure.serverName });
-  }
-
-  return (
-    <EvidenceGroup question="Are we already exposed?">
-      {exposure.inUse && (
-        <div className="border-warning border px-2.5 py-1.5 text-xs">
-          <span className="font-medium">
-            This server is already in use in this project.
-          </span>{" "}
-          <span className="text-muted-foreground">
-            A denial changes existing workflows, not just future ones.
-          </span>
-        </div>
-      )}
-      <FactList facts={facts} />
-    </EvidenceGroup>
-  );
-}
-
 export function StatusBadge({ status }: { status: string }): JSX.Element {
   switch (status) {
     case "approved":
@@ -1147,7 +1174,21 @@ export function StatusBadge({ status }: { status: string }): JSX.Element {
       return <Badge variant="destructive">Denied</Badge>;
     case "requested":
       return <Badge variant="information">Awaiting decision</Badge>;
+    case "superseded":
+      // Neutral, not destructive: the history stands, nothing is pending.
+      // The default (softest) neutral border washes out against the table
+      // backgrounds, hence the stronger theme-aware border.
+      return (
+        <Badge variant="neutral" className="border-neutral-default">
+          Superseded
+        </Badge>
+      );
     case "unreviewed":
+      // "Unreviewed", not "Review requested": this state means a dossier was
+      // gathered and nobody has asked for anything — the request states are
+      // "requested" (awaiting a decision) and the two decided ones. Labelling
+      // it as a request contradicted the very notice under it saying no one
+      // had asked.
       // The token palette has no yellow family; the stock yellow scale keeps
       // this state visually distinct from destructive-adjacent orange.
       return (
@@ -1155,7 +1196,7 @@ export function StatusBadge({ status }: { status: string }): JSX.Element {
           variant="warning"
           className="border-yellow-300 text-yellow-600 dark:border-yellow-800 dark:text-yellow-500"
         >
-          Review requested
+          Unreviewed
         </Badge>
       );
     default:

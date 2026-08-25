@@ -322,6 +322,44 @@ func BuildSendMessagePayload(assistantsSendMessageBody string, assistantsSendMes
 	return v, nil
 }
 
+// BuildInterruptTurnPayload builds the payload for the assistants
+// interruptTurn endpoint from CLI flags.
+func BuildInterruptTurnPayload(assistantsInterruptTurnBody string, assistantsInterruptTurnSessionToken string, assistantsInterruptTurnProjectSlugInput string) (*assistants.InterruptTurnPayload, error) {
+	var err error
+	var body InterruptTurnRequestBody
+	{
+		err = json.Unmarshal([]byte(assistantsInterruptTurnBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"assistant_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"chat_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.assistant_id", body.AssistantID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.chat_id", body.ChatID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if assistantsInterruptTurnSessionToken != "" {
+			sessionToken = &assistantsInterruptTurnSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if assistantsInterruptTurnProjectSlugInput != "" {
+			projectSlugInput = &assistantsInterruptTurnProjectSlugInput
+		}
+	}
+	v := &assistants.InterruptTurnPayload{
+		AssistantID: body.AssistantID,
+		ChatID:      body.ChatID,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildGetManagedAssistantPayload builds the payload for the assistants
 // getManagedAssistant endpoint from CLI flags.
 func BuildGetManagedAssistantPayload(assistantsGetManagedAssistantSessionToken string, assistantsGetManagedAssistantProjectSlugInput string) (*assistants.GetManagedAssistantPayload, error) {

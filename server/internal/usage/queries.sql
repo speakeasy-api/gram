@@ -15,17 +15,41 @@ WITH inputs AS (
   SELECT
       sqlc.arg(tum_tokens)::bigint AS tum_tokens
     , sqlc.arg(tum_unit_price_usd)::text::numeric(20, 8) AS tum_unit_price_usd
-), completed_spend AS (
-  SELECT
-      COALESCE(SUM(spend_usd), 0)::numeric(30, 6) AS other_inference_spend_usd
-    , MAX(day)::date AS recorded_through
+), applicable_keys AS (
+  SELECT key_type
+  FROM openrouter_api_keys
+  WHERE organization_id = sqlc.arg(organization_id)::text
+    AND key_type = ANY(sqlc.arg(billable_key_types)::text[])
+    AND created_at < LEAST(sqlc.arg(period_end)::timestamptz, sqlc.arg(completed_before)::timestamptz)
+    AND (deleted_at IS NULL OR deleted_at >= sqlc.arg(period_start)::timestamptz)
+), billable_spend AS (
+  SELECT key_type, day, spend_usd
   FROM openrouter_spend_daily
   WHERE organization_id = sqlc.arg(organization_id)::text
-    AND key_type = 'chat'
+    AND key_type = ANY(sqlc.arg(billable_key_types)::text[])
     AND day >= (sqlc.arg(period_start)::timestamptz AT TIME ZONE 'UTC')::date
     AND day < (sqlc.arg(period_end)::timestamptz AT TIME ZONE 'UTC')::date
     AND day < (sqlc.arg(completed_before)::timestamptz AT TIME ZONE 'UTC')::date
+), recorded_spend AS (
+  SELECT CASE
+    WHEN COUNT(*) FILTER (WHERE recorded_through IS NULL) > 0 THEN NULL
+    ELSE MIN(recorded_through)::date
+  END AS recorded_through
+  FROM (
+    SELECT applicable_keys.key_type, MAX(billable_spend.day)::date AS recorded_through
+    FROM applicable_keys
+    LEFT JOIN billable_spend USING (key_type)
+    GROUP BY applicable_keys.key_type
+  ) key_watermarks
+), completed_spend AS (
+  SELECT
+      COALESCE(SUM(spend_usd), 0)::numeric(30, 6) AS other_inference_spend_usd
+    , recorded_spend.recorded_through
+  FROM recorded_spend
+  LEFT JOIN billable_spend ON billable_spend.day <= recorded_spend.recorded_through
+  GROUP BY recorded_spend.recorded_through
 )
+
 SELECT
     inputs.tum_unit_price_usd::text AS tum_unit_price_usd
   , (inputs.tum_tokens::numeric * inputs.tum_unit_price_usd)::numeric(30, 8)::text AS tum_cost_usd
@@ -34,6 +58,59 @@ SELECT
   , (inputs.tum_tokens::numeric * inputs.tum_unit_price_usd + completed_spend.other_inference_spend_usd)::numeric(30, 8)::text AS estimated_total_usd
 FROM inputs
 CROSS JOIN completed_spend;
+
+-- name: ListOpenRouterInferenceSpendByMonth :many
+WITH candidate_months AS (
+  SELECT
+      DATE_TRUNC('month', day)::date AS period_start
+    , (DATE_TRUNC('month', day) + INTERVAL '1 month')::date AS period_end
+    , SUM(spend_usd)::numeric(30, 6) AS spend_usd
+  FROM openrouter_spend_daily
+  WHERE organization_id = sqlc.arg(organization_id)::text
+    AND key_type = ANY(sqlc.arg(billable_key_types)::text[])
+    AND day < DATE_TRUNC('month', sqlc.arg(completed_before)::timestamptz AT TIME ZONE 'UTC')::date
+  GROUP BY DATE_TRUNC('month', day)
+), complete_months AS (
+  SELECT candidate_months.*
+  FROM candidate_months
+  WHERE NOT EXISTS (
+    SELECT 1
+    FROM openrouter_api_keys AS inference_key
+    CROSS JOIN LATERAL GENERATE_SERIES(
+      GREATEST(candidate_months.period_start, (inference_key.created_at AT TIME ZONE 'UTC')::date),
+      LEAST(
+        candidate_months.period_end,
+        COALESCE((inference_key.deleted_at AT TIME ZONE 'UTC')::date, candidate_months.period_end)
+      ) - 1,
+      INTERVAL '1 day'
+    ) AS expected_day(day)
+    WHERE inference_key.organization_id = sqlc.arg(organization_id)::text
+      AND inference_key.key_type = ANY(sqlc.arg(billable_key_types)::text[])
+      AND (inference_key.created_at AT TIME ZONE 'UTC')::date < candidate_months.period_end
+      AND (
+        inference_key.deleted_at IS NULL
+        OR (inference_key.deleted_at AT TIME ZONE 'UTC')::date > candidate_months.period_start
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM openrouter_spend_daily AS daily_spend
+        WHERE daily_spend.organization_id = inference_key.organization_id
+          AND daily_spend.key_type = inference_key.key_type
+          AND daily_spend.day = expected_day.day::date
+      )
+  )
+), latest_months AS (
+  SELECT *
+  FROM complete_months
+  ORDER BY period_start DESC
+  LIMIT 12
+)
+SELECT
+    period_start::text AS period_start
+  , period_end::text AS period_end
+  , spend_usd::text AS spend_usd
+FROM latest_months
+ORDER BY period_start;
 
 -- name: ListMaterializedOpenRouterInferenceKeys :many
 SELECT key_type, monthly_credits, disabled
@@ -321,7 +398,7 @@ VALUES (@organization_id, @stripe_customer_id, @stripe_subscription_id);
 -- name: UpsertOpenRouterDailySpendFixture :exec
 -- Test-only fixture for billing-summary reads.
 INSERT INTO openrouter_spend_daily (organization_id, key_type, day, spend_usd)
-VALUES (@organization_id, 'chat', @day, @spend_usd)
+VALUES (@organization_id, @key_type, @day, @spend_usd)
 ON CONFLICT (organization_id, key_type, day) DO UPDATE
 SET spend_usd = EXCLUDED.spend_usd,
     updated_at = clock_timestamp();
@@ -748,3 +825,16 @@ SELECT *
 FROM stripe_invoices
 WHERE organization_id = @organization_id
 ORDER BY service_period_start, stripe_invoice_id;
+
+-- name: SetOpenRouterAPIKeyCreatedAtFixture :exec
+-- Test-only fixture for PAYG estimate completeness windows.
+UPDATE openrouter_api_keys
+SET created_at = @created_at
+WHERE organization_id = @organization_id
+  AND key_type = @key_type;
+
+-- name: SetOpenRouterAPIKeysCreatedAtFixture :exec
+-- Test-only fixture for PAYG estimate completeness windows.
+UPDATE openrouter_api_keys
+SET created_at = @created_at
+WHERE organization_id = @organization_id;

@@ -232,14 +232,17 @@ var CustomDomainMcpEndpoint = Type("CustomDomainMcpEndpoint", func() {
 	})
 	Attribute("project_name", String, "The display name of the project the endpoint belongs to")
 	Attribute("project_slug", String, "The url-friendly slug of the project the endpoint belongs to")
-	Attribute("mcp_server_id", String, "The ID of the parent MCP server", func() {
+	Attribute("mcp_server_id", String, "The ID of the parent MCP server. Null for meta-MCP-backed endpoints.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("mcp_server_name", String, "The display name of the parent MCP server. May be empty if the parent has no configured name.")
-	Attribute("mcp_server_slug", String, "The url-friendly slug of the parent MCP server. May be empty if the parent has no configured slug.")
+	Attribute("meta_mcp_server_id", String, "The ID of the parent meta MCP server. Null for MCP-server-backed endpoints.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("mcp_server_name", String, "The display name of the parent server. May be empty if the parent has no configured name.")
+	Attribute("mcp_server_slug", String, "The url-friendly slug of the parent MCP server. May be empty if the parent has no configured slug or is a meta MCP server.")
 	Attribute("is_domain_root", Boolean, "Whether this endpoint is mapped to the custom-domain root")
 
-	Required("id", "slug", "project_id", "project_name", "project_slug", "mcp_server_id", "is_domain_root")
+	Required("id", "slug", "project_id", "project_name", "project_slug", "is_domain_root")
 })
 
 var ListCustomDomainMcpEndpointsResult = Type("ListCustomDomainMcpEndpointsResult", func() {

@@ -1,7 +1,7 @@
 package mcpmetrics
 
 // Surface identifies which inbound MCP serving surface observed a request.
-// Two values only, matching the policy boundary mcpversions draws: arbitrary
+// The values match the policy boundaries mcpversions draws: arbitrary
 // third-party clients versus the assistant-token-only platform surface. The
 // /x/mcp backend fan-out (toolset-, remote-, and tunnel-backed) is
 // deliberately not distinguished — all of it faces third-party clients.
@@ -20,4 +20,9 @@ const (
 	// SurfacePlatform covers /platform/mcp/{toolsetSlug}, which accepts only
 	// the assistant token.
 	SurfacePlatform Surface = "platform"
+
+	// SurfaceMeta covers meta-MCP-backed /mcp/{slug} endpoints, which face
+	// arbitrary third-party clients but answer a newer protocol revision
+	// than the hosting surface.
+	SurfaceMeta Surface = "meta"
 )

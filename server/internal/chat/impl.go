@@ -708,6 +708,73 @@ func (s *Service) ListSources(ctx context.Context, payload *gen.ListSourcesPaylo
 	return &gen.ListSourcesResult{Sources: canonicalizeSources(raws)}, nil
 }
 
+// ListSessionLinks resolves session-lineage edges (session portability moves)
+// touching the requested chats, in either direction. Dangling edges — a
+// continuation whose session id was unknowable at move time — come back with
+// no child side, and render as "moved to <harness>" only.
+func (s *Service) ListSessionLinks(ctx context.Context, payload *gen.ListSessionLinksPayload) (*gen.ListSessionLinksResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	externalUserID, userID, err := s.chatVisibilityScope(ctx, authCtx, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	chatIDs := make([]uuid.UUID, 0, len(payload.ChatIds))
+	for _, raw := range payload.ChatIds {
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid chat id")
+		}
+		chatIDs = append(chatIDs, id)
+	}
+
+	rows, err := s.repo.ListChatSessionLinks(ctx, repo.ListChatSessionLinksParams{
+		ProjectID:      *authCtx.ProjectID,
+		ChatIds:        chatIDs,
+		ExternalUserID: externalUserID,
+		UserID:         userID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list session links").LogError(ctx, s.logger)
+	}
+
+	// A masked end must expose no identity: for restricted callers, an end's
+	// chat id is only revealed when that end is visible to them (captured and
+	// in scope), so a foreign continuation stays indistinguishable from a
+	// not-yet-captured one. Unrestricted callers see raw ids even pre-capture.
+	unrestricted := externalUserID == "" && userID == ""
+	links := make([]*gen.ChatSessionLink, 0, len(rows))
+	for _, row := range rows {
+		link := &gen.ChatSessionLink{
+			ParentChatID:   nil,
+			ChildChatID:    nil,
+			ParentTitle:    conv.FromPGText[string](row.ParentTitle),
+			ChildTitle:     conv.FromPGText[string](row.ChildTitle),
+			ParentCaptured: row.ParentCaptured,
+			ChildCaptured:  row.ChildCaptured,
+			Kind:           row.Kind,
+			TargetHarness:  row.TargetHarness,
+			SourceSurface:  conv.FromPGText[string](row.SourceSurface),
+			ActorEmail:     conv.FromPGText[string](row.ActorEmail),
+			DeviceHostname: conv.FromPGText[string](row.DeviceHostname),
+			CreatedAt:      row.CreatedAt.Time.Format(time.RFC3339),
+		}
+		if unrestricted || row.ParentCaptured {
+			link.ParentChatID = conv.PtrEmpty(row.ParentChatID.String())
+		}
+		if row.ChildChatID.Valid && (unrestricted || row.ChildCaptured) {
+			link.ChildChatID = conv.PtrEmpty(row.ChildChatID.UUID.String())
+		}
+		links = append(links, link)
+	}
+
+	return &gen.ListSessionLinksResult{Links: links}, nil
+}
+
 // parseSourceFilter splits the comma-separated `source` filter into the list of
 // source strings matched against each chat's inferred source. Selected values
 // are canonical (as returned by ListSources), so each is expanded back into its
@@ -793,10 +860,10 @@ func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalue
 }
 
 // chatAccess selects which scope a non-owner needs to reach a chat. Reads and
-// mutations are deliberately separate scopes: a session reviewer holding
-// chat:read can open every transcript in the project, but deleting or otherwise
-// mutating someone else's session is destructive and needs chat:write. Owners
-// bypass both.
+// destructive mutations are deliberately separate scopes: a session reviewer
+// holding chat:read can open every transcript in the project and pin one as a
+// shared bookmark, but deleting or otherwise mutating someone else's session
+// is destructive and needs chat:write. Owners bypass both.
 type chatAccess int
 
 const (
@@ -892,8 +959,7 @@ func (s *Service) loadAuthorizedChat(ctx context.Context, authCtx *contextvalues
 	// one rule for every endpoint avoids the per-endpoint bookkeeping that let
 	// the gate drift in the first place. The shared demo org is exempt: its
 	// transcripts are fabricated by seed/demo/ and exist to be read.
-	if _, impersonating := contextvalues.GetAdminOverrideFromContext(ctx); impersonating && authCtx.IsAdmin &&
-		authCtx.ActiveOrganizationID != constants.DemoOrganizationID {
+	if contextvalues.IsSupportSession(ctx) && authCtx.ActiveOrganizationID != constants.DemoOrganizationID {
 		return none, oops.E(oops.CodeForbidden, nil, "chat sessions cannot be accessed while impersonating an organization")
 	}
 
@@ -2079,7 +2145,10 @@ func (s *Service) SetPinned(ctx context.Context, payload *gen.SetPinnedPayload) 
 		return oops.E(oops.CodeBadRequest, err, "invalid chat id").LogError(ctx, s.logger)
 	}
 
-	if _, err := s.loadAuthorizedChat(ctx, authCtx, chatID, chatAccessWrite); err != nil {
+	// Pinning is a shared project bookmark, not a destructive mutation of the
+	// transcript, so anyone who can read the chat can pin it. Rename, feedback,
+	// and delete still require chat:write.
+	if _, err := s.loadAuthorizedChat(ctx, authCtx, chatID, chatAccessRead); err != nil {
 		return err
 	}
 

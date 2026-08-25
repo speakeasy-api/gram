@@ -30,10 +30,11 @@ type CollectOpenRouterDailySpendArgs struct {
 	EndDay time.Time
 }
 
-// CollectOpenRouterDailySpendResult identifies organizations whose chat spend
-// is fresh and gap-free for every known invoice source day.
+// CollectOpenRouterDailySpendResult identifies organizations whose billable
+// key spend is fresh and gap-free for every known invoice source day.
 type CollectOpenRouterDailySpendResult struct {
-	ReadyOrganizationIDs []string
+	ReadyOrganizationIDs         []string
+	BillableKeyPolicyFingerprint string
 }
 
 // CollectOpenRouterDailySpend stores billing-grade daily spend for every live
@@ -81,10 +82,17 @@ func (c *CollectOpenRouterDailySpend) DoWithResult(ctx context.Context, args Col
 	}
 
 	var failures []error
-	readyOrganizations := make(map[string]struct{})
+	billableTargets := make(map[string]int)
+	readyBillableTargets := make(map[string]int)
+	for _, target := range targets {
+		if openrouter.KeyType(target.KeyType).IsBillable() {
+			billableTargets[target.OrganizationID]++
+		}
+	}
 	for i, target := range targets {
-		keyType := openrouter.KeyType(target.KeyType)
-		isChat := keyType == openrouter.KeyTypeChat
+		keyType := openrouter.KeyType(target.KeyType).OrDefault()
+		canonicalKeyType := string(keyType)
+		isBillable := keyType.IsBillable()
 		if err := keyType.Validate(); err != nil {
 			failures = append(failures, fmt.Errorf("collect spend for organization %s: %w", target.OrganizationID, err))
 			c.recordHeartbeat(ctx, i+1, len(targets))
@@ -96,8 +104,9 @@ func (c *CollectOpenRouterDailySpend) DoWithResult(ctx context.Context, args Col
 		if createdDay.After(targetStart) {
 			targetStart = createdDay
 		}
-		if isChat {
+		if isBillable {
 			recoveryStart, err := queries.GetOpenRouterDailySpendRecoveryStartDay(ctx, repo.GetOpenRouterDailySpendRecoveryStartDayParams{
+				TargetKeyType:        canonicalKeyType,
 				TargetOrganizationID: pgtype.Text{String: target.OrganizationID, Valid: true},
 				TargetEarliestDay:    pgtype.Date{Time: createdDay, InfinityModifier: pgtype.Finite, Valid: true},
 				TargetEndDay:         pgtype.Date{Time: endDay, InfinityModifier: pgtype.Finite, Valid: true},
@@ -112,8 +121,8 @@ func (c *CollectOpenRouterDailySpend) DoWithResult(ctx context.Context, args Col
 			}
 		}
 		if !targetStart.Before(endDay) {
-			if isChat {
-				readyOrganizations[target.OrganizationID] = struct{}{}
+			if isBillable {
+				readyBillableTargets[target.OrganizationID]++
 			}
 			c.recordHeartbeat(ctx, i+1, len(targets))
 			continue
@@ -123,11 +132,11 @@ func (c *CollectOpenRouterDailySpend) DoWithResult(ctx context.Context, args Col
 		// A slow management API must not hold a database connection or locks.
 		result, err := c.spendClient.GetDailySpend(ctx, target.KeyHash, targetStart, endDay)
 		if err != nil {
-			wrapped := fmt.Errorf("collect spend for organization %s key type %s: %w", target.OrganizationID, target.KeyType, err)
+			wrapped := fmt.Errorf("collect spend for organization %s key type %s: %w", target.OrganizationID, canonicalKeyType, err)
 			failures = append(failures, wrapped)
 			c.logger.ErrorContext(ctx, "collect openrouter daily spend",
 				attr.SlogOrganizationID(target.OrganizationID),
-				attr.SlogOpenRouterKeyType(target.KeyType),
+				attr.SlogOpenRouterKeyType(canonicalKeyType),
 				attr.SlogError(err),
 			)
 			c.recordHeartbeat(ctx, i+1, len(targets))
@@ -136,24 +145,24 @@ func (c *CollectOpenRouterDailySpend) DoWithResult(ctx context.Context, args Col
 
 		spendByDay, err := validateDailySpendResult(result, targetStart, endDay)
 		if err != nil {
-			failures = append(failures, fmt.Errorf("validate spend for organization %s key type %s: %w", target.OrganizationID, target.KeyType, err))
+			failures = append(failures, fmt.Errorf("validate spend for organization %s key type %s: %w", target.OrganizationID, canonicalKeyType, err))
 			c.recordHeartbeat(ctx, i+1, len(targets))
 			continue
 		}
 
-		if err := c.storeTargetDays(ctx, target.OrganizationID, target.KeyType, targetStart, endDay, spendByDay); err != nil {
-			failures = append(failures, fmt.Errorf("store spend for organization %s key type %s: %w", target.OrganizationID, target.KeyType, err))
+		if err := c.storeTargetDays(ctx, target.OrganizationID, canonicalKeyType, targetStart, endDay, spendByDay); err != nil {
+			failures = append(failures, fmt.Errorf("store spend for organization %s key type %s: %w", target.OrganizationID, canonicalKeyType, err))
 			c.logger.ErrorContext(ctx, "store openrouter daily spend",
 				attr.SlogOrganizationID(target.OrganizationID),
-				attr.SlogOpenRouterKeyType(target.KeyType),
+				attr.SlogOpenRouterKeyType(canonicalKeyType),
 				attr.SlogError(err),
 			)
 			c.recordHeartbeat(ctx, i+1, len(targets))
 			continue
 		}
-		if isChat {
+		if isBillable {
 			missing, err := queries.CountOpenRouterInvoiceSpendGaps(ctx, repo.CountOpenRouterInvoiceSpendGapsParams{
-				TargetKeyType:        target.KeyType,
+				TargetKeyType:        canonicalKeyType,
 				TargetOrganizationID: pgtype.Text{String: target.OrganizationID, Valid: true},
 				TargetEarliestDay:    pgtype.Date{Time: createdDay, InfinityModifier: pgtype.Finite, Valid: true},
 				TargetEndDay:         pgtype.Date{Time: endDay, InfinityModifier: pgtype.Finite, Valid: true},
@@ -163,19 +172,21 @@ func (c *CollectOpenRouterDailySpend) DoWithResult(ctx context.Context, args Col
 			} else if missing > 0 {
 				failures = append(failures, fmt.Errorf("organization %s has %d unresolved invoice spend gaps", target.OrganizationID, missing))
 			} else {
-				readyOrganizations[target.OrganizationID] = struct{}{}
+				readyBillableTargets[target.OrganizationID]++
 			}
 		}
 		c.recordHeartbeat(ctx, i+1, len(targets))
 	}
 
 	result := CollectOpenRouterDailySpendResult{
-		ReadyOrganizationIDs: make([]string, 0, len(readyOrganizations)),
+		ReadyOrganizationIDs:         make([]string, 0, len(billableTargets)),
+		BillableKeyPolicyFingerprint: openrouter.BillableKeyPolicyFingerprint(),
 	}
 	for _, target := range targets {
-		if _, ready := readyOrganizations[target.OrganizationID]; ready {
+		required, seen := billableTargets[target.OrganizationID]
+		if seen && readyBillableTargets[target.OrganizationID] == required {
 			result.ReadyOrganizationIDs = append(result.ReadyOrganizationIDs, target.OrganizationID)
-			delete(readyOrganizations, target.OrganizationID)
+			delete(billableTargets, target.OrganizationID)
 		}
 	}
 

@@ -36,11 +36,11 @@ const (
 
 // probeOutcome values the handler produces itself, for the states that are
 // settled before any call leaves the process. Everything downstream of that is a
-// gcpkms.VerifyReason rendered verbatim, so the two sets share one namespace and
-// the design's enum lists both.
+// gcpkms.VerifyReason rendered verbatim, and the credential-screening outcomes
+// are gcpauth.StoredCredentialProblem values rendered verbatim, so the sets
+// share one namespace and the design's enum lists them all.
 const (
-	outcomeCredentialDeleted  = "credential_deleted"  //nolint:gosec // G101: a probe outcome, not a credential
-	outcomeCredentialUnusable = "credential_unusable" //nolint:gosec // G101: a probe outcome, not a credential
+	outcomeCredentialUnusable = string(gcpauth.StoredCredentialUnusable)
 	outcomeUnsupportedAlg     = string(gcpkms.ReasonUnsupportedAlgorithm)
 )
 
@@ -152,76 +152,27 @@ func (s *Service) VerifyGcpKmsKey(ctx context.Context, payload *gen.VerifyGcpKms
 }
 
 // resolveVerifyIdentity settles which identity the probe should authenticate as,
-// or reports why it cannot run at all.
+// or reports why it cannot run at all. The screening ladder itself lives in
+// gcpauth.Identity.ScreenStoredCredential, shared with every surface that
+// authenticates as a stored credential; this wrapper renders its problem codes
+// as probe outcomes. A screening the server cannot evaluate is an error rather
+// than an unverified result: reporting "not verified" would blame the
+// customer's configuration for a fault on Gram's side.
 //
 // A non-empty outcome means the caller returns that outcome unverified; a
 // non-nil error means the probe could not be evaluated and the request fails.
 // Only one of the three return paths is ever meaningful at a time.
 func (s *Service) resolveVerifyIdentity(ctx context.Context, logger *slog.Logger, row repo.GetGcpKmsKeyForVerifyRow) (credential gcpauth.Credential, outcome, detail string, err error) {
-	// external_credentials.deleted is a generated column, so soft-deleting a
-	// credential never fires the external_keys foreign key and leaves keys behind
-	// it pointing at a tombstone. Those keys still exist and still list, so this
-	// says what actually happened rather than reporting the key as missing.
-	if !row.CredentialID.Valid {
-		return noCredential(), outcomeCredentialDeleted, "the backing credential for this key was deleted; point the key at a live credential", nil
-	}
-
-	// Rows written before this tier became impersonation-only can name no target,
-	// or name one alongside Workload Identity Federation columns. Neither can be
-	// probed honestly: an empty target would authenticate as Gram's own ambient
-	// identity and report on a key Gram reaches by itself, and a WIF row's real
-	// resolution mode is WIF (which gcpauth reports as unsupported), so probing
-	// its impersonation hop in isolation would claim the credential works when
-	// nothing else can use it.
-	target := row.ImpersonateServiceAccount.String
-	switch {
-	case target == "":
-		return noCredential(), outcomeCredentialUnusable, "the backing credential names no service account to impersonate; edit it to set one", nil
-	case row.WifPoolID.Valid || row.WifProviderID.Valid || row.WifProjectNumber.Valid:
-		return noCredential(), outcomeCredentialUnusable, "the backing credential still uses Workload Identity Federation, which cannot be verified; save it again to convert it to impersonation", nil
-	}
-
-	// Re-screen the stored target. The write-time guard postdates the rows it
-	// screens, so a credential created earlier can still name a service account in
-	// Gram's own project — and this endpoint would then authenticate as it and
-	// probe a caller-supplied resource name, which is an inventory oracle for
-	// Gram's own KMS. A screening the server cannot evaluate is an error rather
-	// than an unverified result: reporting "not verified" would blame the
-	// customer's configuration for a fault on Gram's side.
-	reason, err := s.gcpIdentity.ImpersonationTargetProblem(ctx, logger, target)
+	credential, problem, detail, err := s.gcpIdentity.ScreenStoredCredential(ctx, logger, gcpauth.StoredCredential{
+		Present:                   row.CredentialID.Valid,
+		ImpersonateServiceAccount: row.ImpersonateServiceAccount.String,
+		HasWifConfig:              row.WifPoolID.Valid || row.WifProviderID.Valid || row.WifProjectNumber.Valid,
+	})
 	if err != nil {
-		return noCredential(), "", "", oops.E(oops.CodeUnexpected, err, "cannot verify this key right now, try again shortly").LogError(ctx, logger)
-	}
-	if reason != "" {
-		return noCredential(), outcomeCredentialUnusable, reason, nil
+		return credential, "", "", oops.E(oops.CodeUnexpected, err, "cannot verify this key right now, try again shortly").LogError(ctx, logger)
 	}
 
-	return impersonationCredential(target), "", "", nil
-}
-
-// noCredential is the credential the early returns carry: each reports an
-// outcome instead, so nothing reads it. It exists because exhaustruct requires
-// every field at each literal, which put five identical five-line literals in
-// the error paths and buried the outcome each one was actually returning.
-func noCredential() gcpauth.Credential {
-	return gcpauth.Credential{
-		ImpersonateServiceAccount: "",
-		WifPoolID:                 "",
-		WifProviderID:             "",
-		WifProjectNumber:          "",
-	}
-}
-
-// impersonationCredential names the service account to impersonate. The
-// organization tier is impersonation-only, so the Workload Identity Federation
-// fields are always empty here.
-func impersonationCredential(target string) gcpauth.Credential {
-	return gcpauth.Credential{
-		ImpersonateServiceAccount: target,
-		WifPoolID:                 "",
-		WifProviderID:             "",
-		WifProjectNumber:          "",
-	}
+	return credential, string(problem), detail, nil
 }
 
 func unverified(outcome, detail string) *gen.VerifyKmsKeyResult {

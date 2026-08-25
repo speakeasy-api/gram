@@ -140,10 +140,12 @@ var AdminListOrganizationsResult = Type("AdminListOrganizationsResult", func() {
 
 var AdminOrganizationStats = Type("AdminOrganizationStats", func() {
 	Description("Platform-wide organization counts surfaced above the admin organizations list.")
-	Required("total", "created_last_7_days", "trials_ending_soon", "disabled", "disabled_last_7_days")
+	Required("total", "created_last_7_days", "customers", "customers_created_last_7_days", "trials_ending_soon", "disabled", "disabled_last_7_days")
 
 	Attribute("total", Int64, "Every organization on the platform, disabled ones included.")
 	Attribute("created_last_7_days", Int64, "Organizations created in the last 7 days, whatever their current status.")
+	Attribute("customers", Int64, "Organizations on a paid account type (payg or enterprise), disabled ones included.")
+	Attribute("customers_created_last_7_days", Int64, "Customers created in the last 7 days, whatever their current status.")
 	Attribute("trials_ending_soon", Int64, "Organizations whose trial_state is ending_soon.")
 	Attribute("disabled", Int64, "Organizations with disabled_at set.")
 	Attribute("disabled_last_7_days", Int64, "Organizations disabled in the last 7 days.")
@@ -179,6 +181,20 @@ var AdminInferenceKey = Type("AdminInferenceKey", func() {
 	Attribute("monthly_credits", Int64)
 	Attribute("disabled", Boolean)
 	Required("key_type", "credits_used", "monthly_credits", "disabled")
+})
+
+var AdminInferenceKeyLimit = Type("AdminInferenceKeyLimit", func() {
+	Description("The configured monthly limit for one materialized platform-managed OpenRouter key.")
+	Attribute("key_type", String)
+	Attribute("monthly_credits", Int64)
+	Required("key_type", "monthly_credits")
+})
+
+var AdminInferenceSpendMonth = Type("AdminInferenceSpendMonth", func() {
+	Attribute("period_start", String, func() { Format(FormatDate) })
+	Attribute("period_end", String, "Exclusive end of the UTC calendar month.", func() { Format(FormatDate) })
+	Attribute("spend_usd", String)
+	Required("period_start", "period_end", "spend_usd")
 })
 
 var AdminPaygBillingSummary = Type("AdminPaygBillingSummary", func() {
@@ -648,6 +664,32 @@ var _ = Service("admin", func() {
 		Result(ArrayOf(AdminInferenceKey))
 		HTTP(func() { GET("/admin/organization.inferenceKeys"); Param("organization_id"); Response(StatusOK) })
 		Meta("openapi:operationId", "adminGetInferenceKeys")
+	})
+
+	Method("setInferenceKeyMonthlyLimit", func() {
+		Description("Sets the monthly limit for one materialized platform-managed OpenRouter key.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("organization_id", "key_type", "monthly_credits")
+			Attribute("organization_id", String)
+			Attribute("key_type", String, func() { Enum("chat", "internal") })
+			Attribute("monthly_credits", Int, func() {
+				Minimum(constants.MinimumPaygSpendCapUSD)
+				Maximum(constants.MaximumPaygSpendCapUSD)
+			})
+			Meta("openapi:typename", "SetInferenceKeyMonthlyLimitRequestBody")
+		})
+		Result(AdminInferenceKeyLimit)
+		HTTP(func() { POST("/admin/organization.setInferenceKeyMonthlyLimit"); Response(StatusOK) })
+		Meta("openapi:operationId", "adminSetInferenceKeyMonthlyLimit")
+	})
+
+	Method("getInferenceSpendHistory", func() {
+		Description("Returns up to twelve complete UTC calendar months of recorded inference spend for an organization.")
+		Payload(func() { security.AdminAuthPayload(); Required("organization_id"); Attribute("organization_id", String) })
+		Result(ArrayOf(AdminInferenceSpendMonth))
+		HTTP(func() { GET("/admin/organization.inferenceSpendHistory"); Param("organization_id"); Response(StatusOK) })
+		Meta("openapi:operationId", "adminGetInferenceSpendHistory")
 	})
 
 	Method("getPaygBillingSummary", func() {

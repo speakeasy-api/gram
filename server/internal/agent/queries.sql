@@ -257,3 +257,21 @@ FROM (
 ) claimed
 WHERE s.id = claimed.id
 RETURNING claimed.blob_url;
+
+-- name: InsertChatSessionLink :exec
+-- One lineage edge per reported session move. Both chat ids are DERIVED
+-- (chat.SessionIDToChatID), so the edge is recordable before either chat is
+-- captured; the composite (organization_id, project_id) foreign key pins
+-- tenancy at insert time. ON CONFLICT makes daemon retries of the same
+-- known-continuation move idempotent; NULL-child edges (unknowable
+-- continuations, e.g. Cursor) may repeat because each is a distinct move.
+INSERT INTO chat_session_links (
+  project_id, organization_id, parent_chat_id, child_chat_id,
+  parent_session_id, child_session_id, kind, target_harness, source_surface,
+  actor_email, device_serial, device_hostname
+) VALUES (
+  @project_id, @organization_id, @parent_chat_id, @child_chat_id,
+  @parent_session_id, @child_session_id, 'move', @target_harness, @source_surface,
+  @actor_email, @device_serial, @device_hostname
+)
+ON CONFLICT (project_id, parent_chat_id, child_chat_id) WHERE child_chat_id IS NOT NULL DO NOTHING;

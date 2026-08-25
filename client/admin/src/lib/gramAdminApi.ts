@@ -174,6 +174,11 @@ export function getSession(): Promise<AdminSessionInfo> {
   return gramAdminFetch<AdminSessionInfo>("/admin/session.get");
 }
 
+export function organizationDashboardUrl(organizationId: string): string {
+  const query = new URLSearchParams({ organization_id: organizationId });
+  return `/admin/organization.open-dashboard?${query.toString()}`;
+}
+
 // Ends the admin session, then sends the browser into the OIDC flow.
 //
 // The endpoint deletes only the server-side record and leaves the `gram_admin`
@@ -263,6 +268,9 @@ export function listOrganizations(
 export type AdminOrganizationStats = {
   total: number;
   created_last_7_days: number;
+  /** Organizations on a paid account type, payg or enterprise. */
+  customers: number;
+  customers_created_last_7_days: number;
   trials_ending_soon: number;
   disabled: number;
   disabled_last_7_days: number;
@@ -495,12 +503,160 @@ export type AdminInferenceKey = {
   disabled: boolean;
 };
 
+export type AdminOrganizationFeatures = {
+  authz_challenge_logging_enabled: boolean;
+  customer_managed_encryption_keys_enabled: boolean;
+  custom_model_keys_enabled: boolean;
+  platform_mcp_enabled: boolean;
+  remote_session_auto_refresh_enabled: boolean;
+  session_portability_enabled: boolean;
+  sso_enabled: boolean;
+  scim_enabled: boolean;
+};
+
+export type AdminOrganizationFeatureName =
+  | "authz_challenge_logging"
+  | "customer_managed_encryption_keys"
+  | "custom_model_keys"
+  | "platform_mcp"
+  | "remote_session_auto_refresh"
+  | "session_portability"
+  | "sso"
+  | "scim";
+
+export function getOrganizationFeatures(
+  organizationID: string,
+): Promise<AdminOrganizationFeatures> {
+  const qs = toSearchParams({ organization_id: organizationID });
+  return gramAdminFetch<AdminOrganizationFeatures>(
+    `/admin/organization.features?${qs}`,
+  );
+}
+
+export function setOrganizationFeature(input: {
+  organizationID: string;
+  featureName: AdminOrganizationFeatureName;
+  enabled: boolean;
+}): Promise<AdminOrganizationFeatures> {
+  return gramAdminMutation<AdminOrganizationFeatures>(
+    "/admin/organization.features",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        organization_id: input.organizationID,
+        feature_name: input.featureName,
+        enabled: input.enabled,
+      }),
+    },
+  );
+}
+
+export type AdminChatAnalysisJudge = "work_units" | "business_memory";
+
+export type AdminOrganizationChatAnalysisSettings = {
+  organization_id: string;
+  work_units_enabled: boolean;
+  work_units_daily_cap: number;
+  business_memory_enabled: boolean;
+  business_memory_daily_cap: number;
+  is_default: boolean;
+};
+
+export function getOrganizationChatAnalysisSettings(
+  organizationID: string,
+): Promise<AdminOrganizationChatAnalysisSettings> {
+  const qs = toSearchParams({ organization_id: organizationID });
+  return gramAdminFetch<AdminOrganizationChatAnalysisSettings>(
+    `/admin/organization.chatAnalysisSettings?${qs}`,
+  );
+}
+
+export type AdminChatAnalysisTriggerResult = {
+  projects_signaled: number;
+};
+
+export function triggerOrganizationChatAnalysis(
+  organizationID: string,
+): Promise<AdminChatAnalysisTriggerResult> {
+  return gramAdminMutation<AdminChatAnalysisTriggerResult>(
+    "/admin/organization.chatAnalysisTrigger",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ organization_id: organizationID }),
+    },
+  );
+}
+
+export function setOrganizationChatAnalysisSetting(input: {
+  organizationID: string;
+  judge: AdminChatAnalysisJudge;
+  enabled: boolean;
+  dailyCap: number;
+}): Promise<AdminOrganizationChatAnalysisSettings> {
+  return gramAdminMutation<AdminOrganizationChatAnalysisSettings>(
+    "/admin/organization.chatAnalysisSettings",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        organization_id: input.organizationID,
+        judge: input.judge,
+        enabled: input.enabled,
+        daily_cap: input.dailyCap,
+      }),
+    },
+  );
+}
+
 export function getInferenceKeys(
   organizationID: string,
 ): Promise<AdminInferenceKey[]> {
   const qs = toSearchParams({ organization_id: organizationID });
   return gramAdminFetch<AdminInferenceKey[]>(
     `/admin/organization.inferenceKeys?${qs}`,
+  );
+}
+
+export type AdminInferenceKeyType = "chat" | "internal";
+
+export type AdminInferenceKeyLimit = Pick<
+  AdminInferenceKey,
+  "key_type" | "monthly_credits"
+>;
+
+export function setInferenceKeyMonthlyLimit(input: {
+  organizationID: string;
+  keyType: AdminInferenceKeyType;
+  monthlyCredits: number;
+}): Promise<AdminInferenceKeyLimit> {
+  return gramAdminMutation<AdminInferenceKeyLimit>(
+    "/admin/organization.setInferenceKeyMonthlyLimit",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        organization_id: input.organizationID,
+        key_type: input.keyType,
+        monthly_credits: input.monthlyCredits,
+      }),
+    },
+  );
+}
+
+export type AdminInferenceSpendMonth = {
+  period_start: string;
+  period_end: string;
+  spend_usd: string;
+};
+
+export function getInferenceSpendHistory(
+  organizationID: string,
+): Promise<AdminInferenceSpendMonth[]> {
+  const qs = toSearchParams({ organization_id: organizationID });
+  return gramAdminFetch<AdminInferenceSpendMonth[]>(
+    `/admin/organization.inferenceSpendHistory?${qs}`,
   );
 }
 

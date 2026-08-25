@@ -4,8 +4,11 @@ import { Trial } from "@/components/Trial";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { badgeTone } from "@/lib/badgeTone";
-import type { AdminOrganization } from "@/lib/gramAdminApi";
-import { impersonationUrl, LEAVES_THE_APP } from "@/lib/impersonation";
+import {
+  organizationDashboardUrl,
+  type AdminOrganization,
+} from "@/lib/gramAdminApi";
+import { LEAVES_THE_APP } from "@/lib/impersonation";
 import { fmtDateShort } from "@/lib/utils";
 import { OrganizationActions } from "@/pages/organizations/OrganizationActions";
 
@@ -21,8 +24,6 @@ function Dot(): JSX.Element {
 }
 
 export function RecordHeader({ org }: { org: AdminOrganization }): JSX.Element {
-  const gramUrl = impersonationUrl(org.slug);
-
   return (
     <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
       <div className="min-w-0">
@@ -51,18 +52,21 @@ export function RecordHeader({ org }: { org: AdminOrganization }): JSX.Element {
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
-        {/* Absent rather than dead when no app origin is configured. */}
-        {gramUrl && (
-          <Button asChild variant="outline" size="xs">
-            {/* The record's other way out of the admin app, marked the way the
-                nav's Features row is. Appended rather than an `aria-label`,
-                which would take the visible words away and leave the aside. */}
-            <a href={gramUrl} target="_blank" rel="noreferrer">
-              Open in Gram
-              <span className="sr-only">{LEAVES_THE_APP}</span>
-            </a>
+        {/* POST makes the admin origin check protect handoff issuance. The
+            named target keeps the organization record open in this tab. */}
+        <form
+          method="post"
+          action={organizationDashboardUrl(org.id)}
+          target="_blank"
+          // Keep the referrer: noreferrer makes Chromium send Origin: null for
+          // this POST, which the admin CSRF middleware correctly rejects.
+          rel="noopener"
+        >
+          <Button type="submit" variant="outline" size="xs">
+            Open in Dashboard
+            <span className="sr-only">{LEAVES_THE_APP}</span>
           </Button>
-        )}
+        </form>
         {/* Lifecycle only. The action that resolves the trial belongs beside
             the deadline it acts on, in the callout. */}
         <OrganizationActions org={org} layout="buttons" actions="lifecycle" />

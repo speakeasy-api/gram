@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/speakeasy-api/gram/server/internal/chat"
 )
 
@@ -36,6 +38,11 @@ const (
 	// runnerMaxResponseBytes bounds runner response reads so a misbehaving
 	// runner cannot exhaust server memory.
 	runnerMaxResponseBytes = 4 << 20
+	// runnerInterruptTimeoutSeconds caps an interrupt call. The runner only
+	// bumps a counter and acks, so a slow answer means the VM is wedged — and
+	// a user waiting on a stop button should hear back either way rather than
+	// sit behind the default multi-minute budget.
+	runnerInterruptTimeoutSeconds = 10
 )
 
 // runtimeResourcePrefix names runner resources across backends (GKE claims,
@@ -165,6 +172,38 @@ func (c runnerClient) turn(ctx context.Context, baseURL string, runtime assistan
 		return fmt.Errorf("%w: execute %s turn request: %w", classifyTurnError(err), c.backend, err)
 	}
 	return nil
+}
+
+// interrupt asks the runner to stop the turn in flight on a thread. The
+// runner answers 200 with interrupted=false when it holds no live task for
+// the thread, which is not an error: the turn either never reached this VM or
+// has already finished.
+func (c runnerClient) interrupt(ctx context.Context, baseURL string, threadID uuid.UUID) (bool, error) {
+	body, err := c.request(ctx, baseURL, runtimeHTTPRequest{
+		Method:         http.MethodPost,
+		Path:           "/threads/" + threadID.String() + "/interrupt",
+		ContentType:    "",
+		Body:           nil,
+		MaxTimeSeconds: runnerInterruptTimeoutSeconds,
+		IdempotencyKey: "",
+	})
+	if err != nil {
+		return false, fmt.Errorf("execute %s interrupt request: %w", c.backend, err)
+	}
+	return decodeRunnerInterrupt(body)
+}
+
+// runnerInterruptResponse is the runner's ack for /threads/{id}/interrupt.
+type runnerInterruptResponse struct {
+	Interrupted bool `json:"interrupted"`
+}
+
+func decodeRunnerInterrupt(body []byte) (bool, error) {
+	var decoded runnerInterruptResponse
+	if err := json.Unmarshal(body, &decoded); err != nil {
+		return false, fmt.Errorf("decode runtime interrupt response: %w", err)
+	}
+	return decoded.Interrupted, nil
 }
 
 func firstNonEmpty(values ...string) string {

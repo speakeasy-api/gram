@@ -29,6 +29,14 @@ export type InfoResponseBody = {
    */
   impersonatorEmail?: string | undefined;
   isAdmin: boolean;
+  /**
+   * Whether this is a validated, time-bounded organization support session.
+   */
+  organizationOverride: boolean;
+  /**
+   * Fixed expiration of the organization support session.
+   */
+  organizationOverrideExpiresAt?: Date | undefined;
   organizations: Array<OrganizationEntry>;
   trial: Trial | null;
   userDisplayName?: string | undefined;
@@ -83,6 +91,10 @@ export const InfoResponseBody$inboundSchema: z.ZodMiniType<
     has_active_subscription: z.boolean(),
     impersonator_email: z.optional(z.string()),
     is_admin: z.boolean(),
+    organization_override: z.boolean(),
+    organization_override_expires_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
     organizations: z.array(OrganizationEntry$inboundSchema),
     trial: z.nullable(z.lazy(() => Trial$inboundSchema)),
     user_display_name: z.optional(z.string()),
@@ -99,6 +111,8 @@ export const InfoResponseBody$inboundSchema: z.ZodMiniType<
       "has_active_subscription": "hasActiveSubscription",
       "impersonator_email": "impersonatorEmail",
       "is_admin": "isAdmin",
+      "organization_override": "organizationOverride",
+      "organization_override_expires_at": "organizationOverrideExpiresAt",
       "user_display_name": "userDisplayName",
       "user_email": "userEmail",
       "user_id": "userId",

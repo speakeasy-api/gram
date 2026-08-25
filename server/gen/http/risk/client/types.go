@@ -56,7 +56,8 @@ type CreateRiskPolicyRequestBody struct {
 	ScopeExempt *string `form:"scope_exempt,omitempty" json:"scope_exempt,omitempty" xml:"scope_exempt,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
-	// Policy action: flag, warn (challenge), or block.
+	// Policy action: flag, warn (challenge), block, or quarantine (deny and freeze
+	// the hook session).
 	Action string `form:"action" json:"action" xml:"action"`
 	// Policy audience type: everyone or targeted.
 	AudienceType string `form:"audience_type" json:"audience_type" xml:"audience_type"`
@@ -131,7 +132,8 @@ type UpdateRiskPolicyRequestBody struct {
 	ScopeExempt *string `form:"scope_exempt,omitempty" json:"scope_exempt,omitempty" xml:"scope_exempt,omitempty"`
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
-	// Policy action: flag, warn (challenge), or block.
+	// Policy action: flag, warn (challenge), block, or quarantine (deny and freeze
+	// the hook session).
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
 	// Policy audience type: everyone or targeted. Omit to preserve the current
 	// audience type.
@@ -149,6 +151,11 @@ type UpdateRiskPolicyRequestBody struct {
 	// For allow_all policies: complete desired canonical URL block set. Omit to
 	// preserve; send empty to clear.
 	ShadowMcpBlockedUrls []string `json:"shadow_mcp_blocked_urls"`
+	// Confirms that this edit may displace standing MCP approval decisions its URL
+	// lists contradict, transitioning them to superseded (audit-logged, decision
+	// history preserved). Without it, a contradicting edit is rejected with a
+	// conflict naming the affected servers.
+	SupersedeDecisions *bool `json:"supersede_decisions"`
 	// Whether the policy name should be auto-generated.
 	AutoName *bool `form:"auto_name,omitempty" json:"auto_name,omitempty" xml:"auto_name,omitempty"`
 	// Optional message shown to end users when this policy blocks an action or
@@ -163,6 +170,13 @@ type UpdateRiskPolicyRequestBody struct {
 	// CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit
 	// to preserve the current value.
 	Score *float64 `form:"score,omitempty" json:"score,omitempty" xml:"score,omitempty"`
+}
+
+// ReleaseSessionQuarantineRequestBody is the type of the "risk" service
+// "releaseSessionQuarantine" endpoint HTTP request body.
+type ReleaseSessionQuarantineRequestBody struct {
+	// The session quarantine ID.
+	ID string `form:"id" json:"id" xml:"id"`
 }
 
 // UnmaskRiskResultRequestBody is the type of the "risk" service
@@ -473,7 +487,8 @@ type CreateRiskPolicyResponseBody struct {
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only), warn (challenge: warn the user and require
-	// acknowledgement to proceed), or block (deny in real-time).
+	// acknowledgement to proceed), block (deny in real-time), or quarantine (deny
+	// and freeze the hook session).
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
 	// Policy audience type: everyone or targeted.
 	AudienceType *string `form:"audience_type,omitempty" json:"audience_type,omitempty" xml:"audience_type,omitempty"`
@@ -585,7 +600,8 @@ type GetRiskPolicyResponseBody struct {
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only), warn (challenge: warn the user and require
-	// acknowledgement to proceed), or block (deny in real-time).
+	// acknowledgement to proceed), block (deny in real-time), or quarantine (deny
+	// and freeze the hook session).
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
 	// Policy audience type: everyone or targeted.
 	AudienceType *string `form:"audience_type,omitempty" json:"audience_type,omitempty" xml:"audience_type,omitempty"`
@@ -681,7 +697,8 @@ type UpdateRiskPolicyResponseBody struct {
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only), warn (challenge: warn the user and require
-	// acknowledgement to proceed), or block (deny in real-time).
+	// acknowledgement to proceed), block (deny in real-time), or quarantine (deny
+	// and freeze the hook session).
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
 	// Policy audience type: everyone or targeted.
 	AudienceType *string `form:"audience_type,omitempty" json:"audience_type,omitempty" xml:"audience_type,omitempty"`
@@ -723,6 +740,40 @@ type UpdateRiskPolicyResponseBody struct {
 	// Total number of messages in the project. Populated on single-policy reads;
 	// omitted from list responses.
 	TotalMessages *int64 `form:"total_messages,omitempty" json:"total_messages,omitempty" xml:"total_messages,omitempty"`
+}
+
+// ListSessionQuarantinesResponseBody is the type of the "risk" service
+// "listSessionQuarantines" endpoint HTTP response body.
+type ListSessionQuarantinesResponseBody struct {
+	// Active session quarantines.
+	Quarantines []*SessionQuarantineResponseBody `form:"quarantines,omitempty" json:"quarantines,omitempty" xml:"quarantines,omitempty"`
+}
+
+// ReleaseSessionQuarantineResponseBody is the type of the "risk" service
+// "releaseSessionQuarantine" endpoint HTTP response body.
+type ReleaseSessionQuarantineResponseBody struct {
+	// The session quarantine ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The organization ID.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The project ID.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The hook conversation ID that is quarantined.
+	SessionID *string `form:"session_id,omitempty" json:"session_id,omitempty" xml:"session_id,omitempty"`
+	// The risk policy that opened the quarantine, when still available.
+	RiskPolicyID *string `form:"risk_policy_id,omitempty" json:"risk_policy_id,omitempty" xml:"risk_policy_id,omitempty"`
+	// The risk policy name captured when the quarantine opened.
+	RiskPolicyName *string `form:"risk_policy_name,omitempty" json:"risk_policy_name,omitempty" xml:"risk_policy_name,omitempty"`
+	// The user whose hook event opened the quarantine.
+	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	// The deny reason captured when the quarantine opened.
+	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// When the quarantine opened.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// When the quarantine was released.
+	ReleasedAt *string `form:"released_at,omitempty" json:"released_at,omitempty" xml:"released_at,omitempty"`
+	// The user who released the quarantine.
+	ReleasedBy *string `form:"released_by,omitempty" json:"released_by,omitempty" xml:"released_by,omitempty"`
 }
 
 // ListRiskResultsResponseBody is the type of the "risk" service
@@ -2424,6 +2475,385 @@ type DeleteRiskPolicyUnexpectedResponseBody struct {
 // DeleteRiskPolicyGatewayErrorResponseBody is the type of the "risk" service
 // "deleteRiskPolicy" endpoint HTTP response body for the "gateway_error" error.
 type DeleteRiskPolicyGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSessionQuarantinesUnauthorizedResponseBody is the type of the "risk"
+// service "listSessionQuarantines" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListSessionQuarantinesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSessionQuarantinesForbiddenResponseBody is the type of the "risk"
+// service "listSessionQuarantines" endpoint HTTP response body for the
+// "forbidden" error.
+type ListSessionQuarantinesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSessionQuarantinesBadRequestResponseBody is the type of the "risk"
+// service "listSessionQuarantines" endpoint HTTP response body for the
+// "bad_request" error.
+type ListSessionQuarantinesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSessionQuarantinesNotFoundResponseBody is the type of the "risk" service
+// "listSessionQuarantines" endpoint HTTP response body for the "not_found"
+// error.
+type ListSessionQuarantinesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSessionQuarantinesConflictResponseBody is the type of the "risk" service
+// "listSessionQuarantines" endpoint HTTP response body for the "conflict"
+// error.
+type ListSessionQuarantinesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSessionQuarantinesUnsupportedMediaResponseBody is the type of the "risk"
+// service "listSessionQuarantines" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListSessionQuarantinesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSessionQuarantinesInvalidResponseBody is the type of the "risk" service
+// "listSessionQuarantines" endpoint HTTP response body for the "invalid" error.
+type ListSessionQuarantinesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSessionQuarantinesInvariantViolationResponseBody is the type of the
+// "risk" service "listSessionQuarantines" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListSessionQuarantinesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSessionQuarantinesUnexpectedResponseBody is the type of the "risk"
+// service "listSessionQuarantines" endpoint HTTP response body for the
+// "unexpected" error.
+type ListSessionQuarantinesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListSessionQuarantinesGatewayErrorResponseBody is the type of the "risk"
+// service "listSessionQuarantines" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListSessionQuarantinesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReleaseSessionQuarantineUnauthorizedResponseBody is the type of the "risk"
+// service "releaseSessionQuarantine" endpoint HTTP response body for the
+// "unauthorized" error.
+type ReleaseSessionQuarantineUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReleaseSessionQuarantineForbiddenResponseBody is the type of the "risk"
+// service "releaseSessionQuarantine" endpoint HTTP response body for the
+// "forbidden" error.
+type ReleaseSessionQuarantineForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReleaseSessionQuarantineBadRequestResponseBody is the type of the "risk"
+// service "releaseSessionQuarantine" endpoint HTTP response body for the
+// "bad_request" error.
+type ReleaseSessionQuarantineBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReleaseSessionQuarantineNotFoundResponseBody is the type of the "risk"
+// service "releaseSessionQuarantine" endpoint HTTP response body for the
+// "not_found" error.
+type ReleaseSessionQuarantineNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReleaseSessionQuarantineConflictResponseBody is the type of the "risk"
+// service "releaseSessionQuarantine" endpoint HTTP response body for the
+// "conflict" error.
+type ReleaseSessionQuarantineConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReleaseSessionQuarantineUnsupportedMediaResponseBody is the type of the
+// "risk" service "releaseSessionQuarantine" endpoint HTTP response body for
+// the "unsupported_media" error.
+type ReleaseSessionQuarantineUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReleaseSessionQuarantineInvalidResponseBody is the type of the "risk"
+// service "releaseSessionQuarantine" endpoint HTTP response body for the
+// "invalid" error.
+type ReleaseSessionQuarantineInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReleaseSessionQuarantineInvariantViolationResponseBody is the type of the
+// "risk" service "releaseSessionQuarantine" endpoint HTTP response body for
+// the "invariant_violation" error.
+type ReleaseSessionQuarantineInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReleaseSessionQuarantineUnexpectedResponseBody is the type of the "risk"
+// service "releaseSessionQuarantine" endpoint HTTP response body for the
+// "unexpected" error.
+type ReleaseSessionQuarantineUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ReleaseSessionQuarantineGatewayErrorResponseBody is the type of the "risk"
+// service "releaseSessionQuarantine" endpoint HTTP response body for the
+// "gateway_error" error.
+type ReleaseSessionQuarantineGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -10204,7 +10634,8 @@ type RiskPolicyResponseBody struct {
 	// Whether the policy is active.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Policy action: flag (log only), warn (challenge: warn the user and require
-	// acknowledgement to proceed), or block (deny in real-time).
+	// acknowledgement to proceed), block (deny in real-time), or quarantine (deny
+	// and freeze the hook session).
 	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
 	// Policy audience type: everyone or targeted.
 	AudienceType *string `form:"audience_type,omitempty" json:"audience_type,omitempty" xml:"audience_type,omitempty"`
@@ -10270,6 +10701,33 @@ type BuiltinExclusionEntryResponseBody struct {
 	Samples []string `form:"samples,omitempty" json:"samples,omitempty" xml:"samples,omitempty"`
 }
 
+// SessionQuarantineResponseBody is used to define fields on response body
+// types.
+type SessionQuarantineResponseBody struct {
+	// The session quarantine ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The organization ID.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The project ID.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The hook conversation ID that is quarantined.
+	SessionID *string `form:"session_id,omitempty" json:"session_id,omitempty" xml:"session_id,omitempty"`
+	// The risk policy that opened the quarantine, when still available.
+	RiskPolicyID *string `form:"risk_policy_id,omitempty" json:"risk_policy_id,omitempty" xml:"risk_policy_id,omitempty"`
+	// The risk policy name captured when the quarantine opened.
+	RiskPolicyName *string `form:"risk_policy_name,omitempty" json:"risk_policy_name,omitempty" xml:"risk_policy_name,omitempty"`
+	// The user whose hook event opened the quarantine.
+	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	// The deny reason captured when the quarantine opened.
+	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// When the quarantine opened.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// When the quarantine was released.
+	ReleasedAt *string `form:"released_at,omitempty" json:"released_at,omitempty" xml:"released_at,omitempty"`
+	// The user who released the quarantine.
+	ReleasedBy *string `form:"released_by,omitempty" json:"released_by,omitempty" xml:"released_by,omitempty"`
+}
+
 // RiskResultResponseBody is used to define fields on response body types.
 type RiskResultResponseBody struct {
 	// The result ID.
@@ -10322,9 +10780,22 @@ type RiskResultResponseBody struct {
 	MatchRedacted *string `form:"match_redacted,omitempty" json:"match_redacted,omitempty" xml:"match_redacted,omitempty"`
 	// When this result was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	// When this result was manually marked as a false positive. Null when not
-	// dismissed.
+	// Deprecated: mirror of suppressed_at, kept while clients migrate to the
+	// suppressed_* fields. Null when not suppressed.
 	FalsePositiveAt *string `form:"false_positive_at,omitempty" json:"false_positive_at,omitempty" xml:"false_positive_at,omitempty"`
+	// When this result was suppressed (hidden from open-finding listings). Null
+	// when not suppressed.
+	SuppressedAt *string `form:"suppressed_at,omitempty" json:"suppressed_at,omitempty" xml:"suppressed_at,omitempty"`
+	// Why the result is suppressed: 'rule' (an exclusion rule, see exclusion_id),
+	// 'manual' (dismissed by a user), or 'automated' (the automated false-positive
+	// sweep). Null when not suppressed.
+	SuppressedReason *string `form:"suppressed_reason,omitempty" json:"suppressed_reason,omitempty" xml:"suppressed_reason,omitempty"`
+	// Free-form suppression context: the user-supplied dismissal reason for manual
+	// suppressions, the catalog reason for automated ones. Null when absent.
+	SuppressedDetail *string `form:"suppressed_detail,omitempty" json:"suppressed_detail,omitempty" xml:"suppressed_detail,omitempty"`
+	// The exclusion rule that suppressed this result. Only set when
+	// suppressed_reason is 'rule'.
+	ExclusionID *string `form:"exclusion_id,omitempty" json:"exclusion_id,omitempty" xml:"exclusion_id,omitempty"`
 }
 
 // RiskSpanResponseBody is used to define fields on response body types.
@@ -10858,6 +11329,7 @@ func NewUpdateRiskPolicyRequestBody(p *risk.UpdateRiskPolicyPayload) *UpdateRisk
 		Action:                 p.Action,
 		AudienceType:           p.AudienceType,
 		ShadowMcpDisposition:   p.ShadowMcpDisposition,
+		SupersedeDecisions:     p.SupersedeDecisions,
 		AutoName:               p.AutoName,
 		UserMessage:            p.UserMessage,
 		Prompt:                 p.Prompt,
@@ -10935,6 +11407,15 @@ func NewUpdateRiskPolicyRequestBody(p *risk.UpdateRiskPolicyPayload) *UpdateRisk
 	}
 	if p.ModelConfig != nil {
 		body.ModelConfig = marshalTypesRiskPolicyModelConfigToRiskPolicyModelConfigRequestBody(p.ModelConfig)
+	}
+	return body
+}
+
+// NewReleaseSessionQuarantineRequestBody builds the HTTP request body from the
+// payload of the "releaseSessionQuarantine" endpoint of the "risk" service.
+func NewReleaseSessionQuarantineRequestBody(p *risk.ReleaseSessionQuarantinePayload) *ReleaseSessionQuarantineRequestBody {
+	body := &ReleaseSessionQuarantineRequestBody{
+		ID: p.ID,
 	}
 	return body
 }
@@ -12449,6 +12930,342 @@ func NewDeleteRiskPolicyUnexpected(body *DeleteRiskPolicyUnexpectedResponseBody)
 // NewDeleteRiskPolicyGatewayError builds a risk service deleteRiskPolicy
 // endpoint gateway_error error.
 func NewDeleteRiskPolicyGatewayError(body *DeleteRiskPolicyGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSessionQuarantinesResultOK builds a "risk" service
+// "listSessionQuarantines" endpoint result from a HTTP "OK" response.
+func NewListSessionQuarantinesResultOK(body *ListSessionQuarantinesResponseBody) *risk.ListSessionQuarantinesResult {
+	v := &risk.ListSessionQuarantinesResult{}
+	v.Quarantines = make([]*risk.SessionQuarantine, len(body.Quarantines))
+	for i, val := range body.Quarantines {
+		if val == nil {
+			v.Quarantines[i] = nil
+			continue
+		}
+		v.Quarantines[i] = unmarshalSessionQuarantineResponseBodyToRiskSessionQuarantine(val)
+	}
+
+	return v
+}
+
+// NewListSessionQuarantinesUnauthorized builds a risk service
+// listSessionQuarantines endpoint unauthorized error.
+func NewListSessionQuarantinesUnauthorized(body *ListSessionQuarantinesUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSessionQuarantinesForbidden builds a risk service
+// listSessionQuarantines endpoint forbidden error.
+func NewListSessionQuarantinesForbidden(body *ListSessionQuarantinesForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSessionQuarantinesBadRequest builds a risk service
+// listSessionQuarantines endpoint bad_request error.
+func NewListSessionQuarantinesBadRequest(body *ListSessionQuarantinesBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSessionQuarantinesNotFound builds a risk service
+// listSessionQuarantines endpoint not_found error.
+func NewListSessionQuarantinesNotFound(body *ListSessionQuarantinesNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSessionQuarantinesConflict builds a risk service
+// listSessionQuarantines endpoint conflict error.
+func NewListSessionQuarantinesConflict(body *ListSessionQuarantinesConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSessionQuarantinesUnsupportedMedia builds a risk service
+// listSessionQuarantines endpoint unsupported_media error.
+func NewListSessionQuarantinesUnsupportedMedia(body *ListSessionQuarantinesUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSessionQuarantinesInvalid builds a risk service
+// listSessionQuarantines endpoint invalid error.
+func NewListSessionQuarantinesInvalid(body *ListSessionQuarantinesInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSessionQuarantinesInvariantViolation builds a risk service
+// listSessionQuarantines endpoint invariant_violation error.
+func NewListSessionQuarantinesInvariantViolation(body *ListSessionQuarantinesInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSessionQuarantinesUnexpected builds a risk service
+// listSessionQuarantines endpoint unexpected error.
+func NewListSessionQuarantinesUnexpected(body *ListSessionQuarantinesUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListSessionQuarantinesGatewayError builds a risk service
+// listSessionQuarantines endpoint gateway_error error.
+func NewListSessionQuarantinesGatewayError(body *ListSessionQuarantinesGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReleaseSessionQuarantineSessionQuarantineOK builds a "risk" service
+// "releaseSessionQuarantine" endpoint result from a HTTP "OK" response.
+func NewReleaseSessionQuarantineSessionQuarantineOK(body *ReleaseSessionQuarantineResponseBody) *risk.SessionQuarantine {
+	v := &risk.SessionQuarantine{
+		ID:             *body.ID,
+		OrganizationID: *body.OrganizationID,
+		ProjectID:      *body.ProjectID,
+		SessionID:      *body.SessionID,
+		RiskPolicyID:   body.RiskPolicyID,
+		RiskPolicyName: *body.RiskPolicyName,
+		UserID:         *body.UserID,
+		Reason:         *body.Reason,
+		CreatedAt:      *body.CreatedAt,
+		ReleasedAt:     body.ReleasedAt,
+		ReleasedBy:     body.ReleasedBy,
+	}
+
+	return v
+}
+
+// NewReleaseSessionQuarantineUnauthorized builds a risk service
+// releaseSessionQuarantine endpoint unauthorized error.
+func NewReleaseSessionQuarantineUnauthorized(body *ReleaseSessionQuarantineUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReleaseSessionQuarantineForbidden builds a risk service
+// releaseSessionQuarantine endpoint forbidden error.
+func NewReleaseSessionQuarantineForbidden(body *ReleaseSessionQuarantineForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReleaseSessionQuarantineBadRequest builds a risk service
+// releaseSessionQuarantine endpoint bad_request error.
+func NewReleaseSessionQuarantineBadRequest(body *ReleaseSessionQuarantineBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReleaseSessionQuarantineNotFound builds a risk service
+// releaseSessionQuarantine endpoint not_found error.
+func NewReleaseSessionQuarantineNotFound(body *ReleaseSessionQuarantineNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReleaseSessionQuarantineConflict builds a risk service
+// releaseSessionQuarantine endpoint conflict error.
+func NewReleaseSessionQuarantineConflict(body *ReleaseSessionQuarantineConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReleaseSessionQuarantineUnsupportedMedia builds a risk service
+// releaseSessionQuarantine endpoint unsupported_media error.
+func NewReleaseSessionQuarantineUnsupportedMedia(body *ReleaseSessionQuarantineUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReleaseSessionQuarantineInvalid builds a risk service
+// releaseSessionQuarantine endpoint invalid error.
+func NewReleaseSessionQuarantineInvalid(body *ReleaseSessionQuarantineInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReleaseSessionQuarantineInvariantViolation builds a risk service
+// releaseSessionQuarantine endpoint invariant_violation error.
+func NewReleaseSessionQuarantineInvariantViolation(body *ReleaseSessionQuarantineInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReleaseSessionQuarantineUnexpected builds a risk service
+// releaseSessionQuarantine endpoint unexpected error.
+func NewReleaseSessionQuarantineUnexpected(body *ReleaseSessionQuarantineUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewReleaseSessionQuarantineGatewayError builds a risk service
+// releaseSessionQuarantine endpoint gateway_error error.
+func NewReleaseSessionQuarantineGatewayError(body *ReleaseSessionQuarantineGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -19372,8 +20189,8 @@ func ValidateCreateRiskPolicyResponseBody(body *CreateRiskPolicyResponseBody) (e
 		}
 	}
 	if body.Action != nil {
-		if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block"}))
+		if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block" || *body.Action == "quarantine") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block", "quarantine"}))
 		}
 	}
 	if body.AudienceType != nil {
@@ -19514,8 +20331,8 @@ func ValidateGetRiskPolicyResponseBody(body *GetRiskPolicyResponseBody) (err err
 		}
 	}
 	if body.Action != nil {
-		if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block"}))
+		if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block" || *body.Action == "quarantine") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block", "quarantine"}))
 		}
 	}
 	if body.AudienceType != nil {
@@ -19621,8 +20438,8 @@ func ValidateUpdateRiskPolicyResponseBody(body *UpdateRiskPolicyResponseBody) (e
 		}
 	}
 	if body.Action != nil {
-		if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block"}))
+		if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block" || *body.Action == "quarantine") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block", "quarantine"}))
 		}
 	}
 	if body.AudienceType != nil {
@@ -19650,6 +20467,67 @@ func ValidateUpdateRiskPolicyResponseBody(body *UpdateRiskPolicyResponseBody) (e
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateListSessionQuarantinesResponseBody runs the validations defined on
+// ListSessionQuarantinesResponseBody
+func ValidateListSessionQuarantinesResponseBody(body *ListSessionQuarantinesResponseBody) (err error) {
+	if body.Quarantines == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("quarantines", "body"))
+	}
+	for _, e := range body.Quarantines {
+		if e != nil {
+			if err2 := ValidateSessionQuarantineResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateReleaseSessionQuarantineResponseBody runs the validations defined on
+// ReleaseSessionQuarantineResponseBody
+func ValidateReleaseSessionQuarantineResponseBody(body *ReleaseSessionQuarantineResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.SessionID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("session_id", "body"))
+	}
+	if body.RiskPolicyName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("risk_policy_name", "body"))
+	}
+	if body.UserID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_id", "body"))
+	}
+	if body.Reason == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.RiskPolicyID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.risk_policy_id", *body.RiskPolicyID, goa.FormatUUID))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.ReleasedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.released_at", *body.ReleasedAt, goa.FormatDateTime))
 	}
 	return
 }
@@ -22157,6 +23035,489 @@ func ValidateDeleteRiskPolicyUnexpectedResponseBody(body *DeleteRiskPolicyUnexpe
 // ValidateDeleteRiskPolicyGatewayErrorResponseBody runs the validations
 // defined on deleteRiskPolicy_gateway_error_response_body
 func ValidateDeleteRiskPolicyGatewayErrorResponseBody(body *DeleteRiskPolicyGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSessionQuarantinesUnauthorizedResponseBody runs the validations
+// defined on listSessionQuarantines_unauthorized_response_body
+func ValidateListSessionQuarantinesUnauthorizedResponseBody(body *ListSessionQuarantinesUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSessionQuarantinesForbiddenResponseBody runs the validations
+// defined on listSessionQuarantines_forbidden_response_body
+func ValidateListSessionQuarantinesForbiddenResponseBody(body *ListSessionQuarantinesForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSessionQuarantinesBadRequestResponseBody runs the validations
+// defined on listSessionQuarantines_bad_request_response_body
+func ValidateListSessionQuarantinesBadRequestResponseBody(body *ListSessionQuarantinesBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSessionQuarantinesNotFoundResponseBody runs the validations
+// defined on listSessionQuarantines_not_found_response_body
+func ValidateListSessionQuarantinesNotFoundResponseBody(body *ListSessionQuarantinesNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSessionQuarantinesConflictResponseBody runs the validations
+// defined on listSessionQuarantines_conflict_response_body
+func ValidateListSessionQuarantinesConflictResponseBody(body *ListSessionQuarantinesConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSessionQuarantinesUnsupportedMediaResponseBody runs the
+// validations defined on listSessionQuarantines_unsupported_media_response_body
+func ValidateListSessionQuarantinesUnsupportedMediaResponseBody(body *ListSessionQuarantinesUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSessionQuarantinesInvalidResponseBody runs the validations
+// defined on listSessionQuarantines_invalid_response_body
+func ValidateListSessionQuarantinesInvalidResponseBody(body *ListSessionQuarantinesInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSessionQuarantinesInvariantViolationResponseBody runs the
+// validations defined on
+// listSessionQuarantines_invariant_violation_response_body
+func ValidateListSessionQuarantinesInvariantViolationResponseBody(body *ListSessionQuarantinesInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSessionQuarantinesUnexpectedResponseBody runs the validations
+// defined on listSessionQuarantines_unexpected_response_body
+func ValidateListSessionQuarantinesUnexpectedResponseBody(body *ListSessionQuarantinesUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListSessionQuarantinesGatewayErrorResponseBody runs the validations
+// defined on listSessionQuarantines_gateway_error_response_body
+func ValidateListSessionQuarantinesGatewayErrorResponseBody(body *ListSessionQuarantinesGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReleaseSessionQuarantineUnauthorizedResponseBody runs the
+// validations defined on releaseSessionQuarantine_unauthorized_response_body
+func ValidateReleaseSessionQuarantineUnauthorizedResponseBody(body *ReleaseSessionQuarantineUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReleaseSessionQuarantineForbiddenResponseBody runs the validations
+// defined on releaseSessionQuarantine_forbidden_response_body
+func ValidateReleaseSessionQuarantineForbiddenResponseBody(body *ReleaseSessionQuarantineForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReleaseSessionQuarantineBadRequestResponseBody runs the validations
+// defined on releaseSessionQuarantine_bad_request_response_body
+func ValidateReleaseSessionQuarantineBadRequestResponseBody(body *ReleaseSessionQuarantineBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReleaseSessionQuarantineNotFoundResponseBody runs the validations
+// defined on releaseSessionQuarantine_not_found_response_body
+func ValidateReleaseSessionQuarantineNotFoundResponseBody(body *ReleaseSessionQuarantineNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReleaseSessionQuarantineConflictResponseBody runs the validations
+// defined on releaseSessionQuarantine_conflict_response_body
+func ValidateReleaseSessionQuarantineConflictResponseBody(body *ReleaseSessionQuarantineConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReleaseSessionQuarantineUnsupportedMediaResponseBody runs the
+// validations defined on
+// releaseSessionQuarantine_unsupported_media_response_body
+func ValidateReleaseSessionQuarantineUnsupportedMediaResponseBody(body *ReleaseSessionQuarantineUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReleaseSessionQuarantineInvalidResponseBody runs the validations
+// defined on releaseSessionQuarantine_invalid_response_body
+func ValidateReleaseSessionQuarantineInvalidResponseBody(body *ReleaseSessionQuarantineInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReleaseSessionQuarantineInvariantViolationResponseBody runs the
+// validations defined on
+// releaseSessionQuarantine_invariant_violation_response_body
+func ValidateReleaseSessionQuarantineInvariantViolationResponseBody(body *ReleaseSessionQuarantineInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReleaseSessionQuarantineUnexpectedResponseBody runs the validations
+// defined on releaseSessionQuarantine_unexpected_response_body
+func ValidateReleaseSessionQuarantineUnexpectedResponseBody(body *ReleaseSessionQuarantineUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateReleaseSessionQuarantineGatewayErrorResponseBody runs the
+// validations defined on releaseSessionQuarantine_gateway_error_response_body
+func ValidateReleaseSessionQuarantineGatewayErrorResponseBody(body *ReleaseSessionQuarantineGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -32163,8 +33524,8 @@ func ValidateRiskPolicyResponseBody(body *RiskPolicyResponseBody) (err error) {
 		}
 	}
 	if body.Action != nil {
-		if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block"}))
+		if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block" || *body.Action == "quarantine") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block", "quarantine"}))
 		}
 	}
 	if body.AudienceType != nil {
@@ -32230,6 +33591,51 @@ func ValidateBuiltinExclusionEntryResponseBody(body *BuiltinExclusionEntryRespon
 	return
 }
 
+// ValidateSessionQuarantineResponseBody runs the validations defined on
+// SessionQuarantineResponseBody
+func ValidateSessionQuarantineResponseBody(body *SessionQuarantineResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.SessionID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("session_id", "body"))
+	}
+	if body.RiskPolicyName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("risk_policy_name", "body"))
+	}
+	if body.UserID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_id", "body"))
+	}
+	if body.Reason == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.RiskPolicyID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.risk_policy_id", *body.RiskPolicyID, goa.FormatUUID))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.ReleasedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.released_at", *body.ReleasedAt, goa.FormatDateTime))
+	}
+	return
+}
+
 // ValidateRiskResultResponseBody runs the validations defined on
 // RiskResultResponseBody
 func ValidateRiskResultResponseBody(body *RiskResultResponseBody) (err error) {
@@ -32278,6 +33684,17 @@ func ValidateRiskResultResponseBody(body *RiskResultResponseBody) (err error) {
 	}
 	if body.FalsePositiveAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.false_positive_at", *body.FalsePositiveAt, goa.FormatDateTime))
+	}
+	if body.SuppressedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.suppressed_at", *body.SuppressedAt, goa.FormatDateTime))
+	}
+	if body.SuppressedReason != nil {
+		if !(*body.SuppressedReason == "rule" || *body.SuppressedReason == "manual" || *body.SuppressedReason == "automated") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.suppressed_reason", *body.SuppressedReason, []any{"rule", "manual", "automated"}))
+		}
+	}
+	if body.ExclusionID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.exclusion_id", *body.ExclusionID, goa.FormatUUID))
 	}
 	return
 }

@@ -30,10 +30,6 @@ function loginUrl(slug: string, destination: string): string | undefined {
   return url.toString();
 }
 
-export function impersonationUrl(slug: string): string | undefined {
-  return loginUrl(slug, "");
-}
-
 // Out of the admin app on purpose. Every `productfeatures` endpoint here reads
 // and writes the operator's own organization, which is fixed at login and has
 // no per-request override, so an in-app Features view would edit the wrong

@@ -14,6 +14,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
+	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
@@ -87,15 +88,11 @@ type Publishers struct {
 	PromptInjectionAnalysis gcp.Publisher[*riskv1.PromptInjectionAnalysis]
 	PromptPolicyAnalysis    gcp.Publisher[*riskv1.PromptPolicyAnalysis]
 	CustomRulesAnalysis     gcp.Publisher[*riskv1.CustomRulesAnalysis]
-	// RiskFindings is the shared findings topic the ClickHouse risk_findings
-	// writer consumes. The batch path publishes only sources with no stream
-	// publisher on it (see risk_analysis.batchOnlyFindingSources).
-	RiskFindings  gcp.Publisher[*riskv1.Finding]
-	TelemetryLogs gcp.Publisher[*telemetryv1.LogRecord]
-	// Outbox publishes whatever the publish_outbox table holds. It resolves its
-	// topic per message rather than being bound to one, because the destination
-	// is a property of the row and not of this wiring.
-	Outbox topics.Publisher
+	RiskFindings            gcp.Publisher[*riskv1.Finding]
+	TelemetryLogs           gcp.Publisher[*telemetryv1.LogRecord]
+	OTELLogs                gcp.Publisher[*otelv1.InboundLogRecord]
+	OTELSpans               gcp.Publisher[*otelv1.InboundSpan]
+	Outbox                  topics.Publisher
 }
 
 type Activities struct {
@@ -166,6 +163,7 @@ type Activities struct {
 	outboxGC                        *outbox_relay.GC
 	publishOutbox                   *publish_outbox.Relay
 	pluginPublisher                 *activities.PluginPublisher
+	sessionQuarantineReassert       *activities.SessionQuarantineReassert
 	listSpendRuleOrgs               *spend_rules.ListOrgs
 	evaluateOrgSpendRules           *spend_rules.EvaluateOrg
 	skillEfficacyScorer             *activities.SkillEfficacyScorer
@@ -426,6 +424,7 @@ func NewActivities(
 		outboxGC:                        outbox_relay.NewGC(logger, meterProvider, db),
 		publishOutbox:                   publish_outbox.New(logger, tracerProvider, meterProvider, db, publishers.Outbox),
 		pluginPublisher:                 activities.NewPluginPublisher(logger, db, pluginPublisher),
+		sessionQuarantineReassert:       activities.NewSessionQuarantineReassert(logger, db, cacheAdapter),
 		listSpendRuleOrgs:               spend_rules.NewListOrgs(logger, db),
 		demoteExpiredTrials: activities.NewDemoteExpiredTrials(
 			logger,
@@ -557,7 +556,7 @@ func (a *Activities) RefreshOpenRouterKey(ctx context.Context, input activities.
 	return a.refreshOpenRouterKey.Do(ctx, input)
 }
 
-func (a *Activities) SetOpenRouterSpendCap(ctx context.Context, input activities.SetOpenRouterSpendCapArgs) error {
+func (a *Activities) SetOpenRouterSpendCap(ctx context.Context, input activities.SetOpenRouterSpendCapArgs) (int, error) {
 	return a.setOpenRouterSpendCap.Do(ctx, input)
 }
 
@@ -960,6 +959,13 @@ func (a *Activities) ListSpendRuleOrgs(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("list spend rule orgs: %w", err)
 	}
 	return orgs, nil
+}
+
+func (a *Activities) ReassertSessionQuarantines(ctx context.Context) error {
+	if err := a.sessionQuarantineReassert.Do(ctx); err != nil {
+		return fmt.Errorf("reassert session quarantines: %w", err)
+	}
+	return nil
 }
 
 func (a *Activities) EvaluateOrgSpendRules(ctx context.Context, args spend_rules.EvaluateOrgArgs) error {

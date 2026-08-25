@@ -238,4 +238,10 @@ export const ACTION_OPTIONS: {
     title: "Deny the request",
     description: "Deny prompts and tool calls that match detection rules",
   },
+  {
+    value: "quarantine",
+    title: "Quarantine session",
+    description:
+      "Deny the matching event and freeze prompts and tool calls in that session until an admin releases it.",
+  },
 ];

@@ -271,7 +271,7 @@ func BuildUpdateRiskPolicyPayload(riskUpdateRiskPolicyBody string, riskUpdateRis
 	{
 		err = json.Unmarshal([]byte(riskUpdateRiskPolicyBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"action\": \"warn\",\n      \"approved_email_domains\": [\n         \"abc123\"\n      ],\n      \"audience_principal_urns\": [\n         \"abc123\"\n      ],\n      \"audience_type\": \"targeted\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"detection_scopes\": [\n         {\n            \"category\": \"abc123\",\n            \"scope_exempt\": \"abc123\",\n            \"scope_include\": \"abc123\"\n         }\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"model_config\": {\n         \"fail_open\": false,\n         \"model\": \"abc123\",\n         \"temperature\": 1\n      },\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"presidio_score_threshold\": 0.75,\n      \"prompt\": \"abc123\",\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"scope_exempt\": \"abc123\",\n      \"scope_include\": \"abc123\",\n      \"score\": 5,\n      \"shadow_mcp_allowed_urls\": [\n         \"abc123\"\n      ],\n      \"shadow_mcp_blocked_urls\": [\n         \"abc123\"\n      ],\n      \"shadow_mcp_disposition\": \"allow_all\",\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"action\": \"warn\",\n      \"approved_email_domains\": [\n         \"abc123\"\n      ],\n      \"audience_principal_urns\": [\n         \"abc123\"\n      ],\n      \"audience_type\": \"targeted\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"detection_scopes\": [\n         {\n            \"category\": \"abc123\",\n            \"scope_exempt\": \"abc123\",\n            \"scope_include\": \"abc123\"\n         }\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"message_types\": [\n         \"abc123\"\n      ],\n      \"model_config\": {\n         \"fail_open\": false,\n         \"model\": \"abc123\",\n         \"temperature\": 1\n      },\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"presidio_score_threshold\": 0.75,\n      \"prompt\": \"abc123\",\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"scope_exempt\": \"abc123\",\n      \"scope_include\": \"abc123\",\n      \"score\": 5,\n      \"shadow_mcp_allowed_urls\": [\n         \"abc123\"\n      ],\n      \"shadow_mcp_blocked_urls\": [\n         \"abc123\"\n      ],\n      \"shadow_mcp_disposition\": \"allow_all\",\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"supersede_decisions\": false,\n      \"user_message\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.PresidioScoreThreshold != nil {
@@ -285,8 +285,8 @@ func BuildUpdateRiskPolicyPayload(riskUpdateRiskPolicyBody string, riskUpdateRis
 			}
 		}
 		if body.Action != nil {
-			if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block"}))
+			if !(*body.Action == "flag" || *body.Action == "warn" || *body.Action == "block" || *body.Action == "quarantine") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.action", *body.Action, []any{"flag", "warn", "block", "quarantine"}))
 			}
 		}
 		if body.AudienceType != nil {
@@ -341,6 +341,7 @@ func BuildUpdateRiskPolicyPayload(riskUpdateRiskPolicyBody string, riskUpdateRis
 		Action:                 body.Action,
 		AudienceType:           body.AudienceType,
 		ShadowMcpDisposition:   body.ShadowMcpDisposition,
+		SupersedeDecisions:     body.SupersedeDecisions,
 		AutoName:               body.AutoName,
 		UserMessage:            body.UserMessage,
 		Prompt:                 body.Prompt,
@@ -458,6 +459,78 @@ func BuildDeleteRiskPolicyPayload(riskDeleteRiskPolicyID string, riskDeleteRiskP
 	}
 	v := &risk.DeleteRiskPolicyPayload{}
 	v.ID = id
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListSessionQuarantinesPayload builds the payload for the risk
+// listSessionQuarantines endpoint from CLI flags.
+func BuildListSessionQuarantinesPayload(riskListSessionQuarantinesApikeyToken string, riskListSessionQuarantinesSessionToken string, riskListSessionQuarantinesProjectSlugInput string) (*risk.ListSessionQuarantinesPayload, error) {
+	var apikeyToken *string
+	{
+		if riskListSessionQuarantinesApikeyToken != "" {
+			apikeyToken = &riskListSessionQuarantinesApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskListSessionQuarantinesSessionToken != "" {
+			sessionToken = &riskListSessionQuarantinesSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskListSessionQuarantinesProjectSlugInput != "" {
+			projectSlugInput = &riskListSessionQuarantinesProjectSlugInput
+		}
+	}
+	v := &risk.ListSessionQuarantinesPayload{}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildReleaseSessionQuarantinePayload builds the payload for the risk
+// releaseSessionQuarantine endpoint from CLI flags.
+func BuildReleaseSessionQuarantinePayload(riskReleaseSessionQuarantineBody string, riskReleaseSessionQuarantineApikeyToken string, riskReleaseSessionQuarantineSessionToken string, riskReleaseSessionQuarantineProjectSlugInput string) (*risk.ReleaseSessionQuarantinePayload, error) {
+	var err error
+	var body ReleaseSessionQuarantineRequestBody
+	{
+		err = json.Unmarshal([]byte(riskReleaseSessionQuarantineBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskReleaseSessionQuarantineApikeyToken != "" {
+			apikeyToken = &riskReleaseSessionQuarantineApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskReleaseSessionQuarantineSessionToken != "" {
+			sessionToken = &riskReleaseSessionQuarantineSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskReleaseSessionQuarantineProjectSlugInput != "" {
+			projectSlugInput = &riskReleaseSessionQuarantineProjectSlugInput
+		}
+	}
+	v := &risk.ReleaseSessionQuarantinePayload{
+		ID: body.ID,
+	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -1013,7 +1086,7 @@ func BuildUnmarkRiskResultsFalsePositivePayload(riskUnmarkRiskResultsFalsePositi
 
 // BuildListDismissedRiskResultsPayload builds the payload for the risk
 // listDismissedRiskResults endpoint from CLI flags.
-func BuildListDismissedRiskResultsPayload(riskListDismissedRiskResultsCursor string, riskListDismissedRiskResultsLimit string, riskListDismissedRiskResultsApikeyToken string, riskListDismissedRiskResultsSessionToken string, riskListDismissedRiskResultsProjectSlugInput string) (*risk.ListDismissedRiskResultsPayload, error) {
+func BuildListDismissedRiskResultsPayload(riskListDismissedRiskResultsCursor string, riskListDismissedRiskResultsLimit string, riskListDismissedRiskResultsReasons string, riskListDismissedRiskResultsApikeyToken string, riskListDismissedRiskResultsSessionToken string, riskListDismissedRiskResultsProjectSlugInput string) (*risk.ListDismissedRiskResultsPayload, error) {
 	var err error
 	var cursor *string
 	{
@@ -1042,6 +1115,23 @@ func BuildListDismissedRiskResultsPayload(riskListDismissedRiskResultsCursor str
 			}
 		}
 	}
+	var reasons []string
+	{
+		if riskListDismissedRiskResultsReasons != "" {
+			err = json.Unmarshal([]byte(riskListDismissedRiskResultsReasons), &reasons)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for reasons, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"manual\"\n   ]'")
+			}
+			for _, e := range reasons {
+				if !(e == "rule" || e == "manual" || e == "automated") {
+					err = goa.MergeErrors(err, goa.InvalidEnumValueError("reasons[*]", e, []any{"rule", "manual", "automated"}))
+				}
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	var apikeyToken *string
 	{
 		if riskListDismissedRiskResultsApikeyToken != "" {
@@ -1063,6 +1153,7 @@ func BuildListDismissedRiskResultsPayload(riskListDismissedRiskResultsCursor str
 	v := &risk.ListDismissedRiskResultsPayload{}
 	v.Cursor = cursor
 	v.Limit = limit
+	v.Reasons = reasons
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

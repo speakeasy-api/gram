@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -111,9 +112,9 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid custom_domain_id").LogError(ctx, logger)
 	}
 
-	mcpServerID, err := uuid.Parse(payload.McpServerID)
+	mcpServerID, metaMcpServerID, err := s.parseEndpointBackendIDs(ctx, logger, payload.McpServerID, payload.MetaMcpServerID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp_server_id").LogError(ctx, logger)
+		return nil, err
 	}
 
 	slug := string(payload.Slug)
@@ -129,15 +130,47 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 
 	txRepo := repo.New(dbtx)
 
-	if err := verifyEndpointReferenceOwnership(ctx, dbtx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, mcpServerID, customDomainID); err != nil {
+	// Match the deletion and update paths' lock order — custom domains before
+	// backend rows — so a create racing a backend deletion cannot deadlock:
+	// the insert's FK share on the domain row must not be requested while
+	// this transaction already holds the backend row a deleter is waiting on.
+	if err := lockCustomDomains(ctx, dbtx, uniqueIDs(customDomainID)); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeInvalid, err, "custom_domain_id does not reference a live custom domain").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "lock custom domain").LogError(ctx, logger)
+	}
+
+	// Lock the backend row before validating and inserting. Backend deletion
+	// tombstones the backend and cascades a soft delete over its endpoints in
+	// one transaction, so an unlocked create could validate a live backend,
+	// then insert after that cascade commits, leaving a live endpoint pointing
+	// at a tombstoned backend.
+	if mcpServerID.Valid {
+		if _, err := mcpserversrepo.New(dbtx).LockMCPServerByIDAndProjectID(ctx, mcpserversrepo.LockMCPServerByIDAndProjectIDParams{
+			ID:        mcpServerID.UUID,
+			ProjectID: *authCtx.ProjectID,
+		}); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, oops.E(oops.CodeInvalid, err, "mcp_server_id does not reference a resource in this project").LogError(ctx, logger)
+			}
+			return nil, oops.E(oops.CodeUnexpected, err, "lock mcp server").LogError(ctx, logger)
+		}
+	}
+	if err := s.lockMetaMcpServers(ctx, dbtx, authCtx, uniqueIDs(metaMcpServerID), metaMcpServerID); err != nil {
+		return nil, err
+	}
+
+	if err := verifyEndpointReferenceOwnership(ctx, dbtx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, mcpServerID, metaMcpServerID, customDomainID); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp endpoint").LogError(ctx, logger)
 	}
 
 	created, err := txRepo.CreateMCPEndpoint(ctx, repo.CreateMCPEndpointParams{
-		ProjectID:      *authCtx.ProjectID,
-		CustomDomainID: customDomainID,
-		McpServerID:    mcpServerID,
-		Slug:           slug,
+		ProjectID:       *authCtx.ProjectID,
+		CustomDomainID:  customDomainID,
+		McpServerID:     mcpServerID,
+		MetaMcpServerID: metaMcpServerID,
+		Slug:            slug,
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -159,9 +192,14 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 		return nil, oops.E(oops.CodeUnexpected, err, "log mcp endpoint creation").LogError(ctx, logger)
 	}
 
-	pluginCreated, err := s.attachToDefaultPlugin(ctx, dbtx, authCtx, mcpServerID)
-	if err != nil {
-		return nil, err
+	// Meta-MCP-backed endpoints never participate in default-plugin attachment
+	// or marketplace publishing; that flow is exclusive to generic MCP servers.
+	var pluginCreated bool
+	if mcpServerID.Valid {
+		pluginCreated, err = s.attachToDefaultPlugin(ctx, dbtx, authCtx, mcpServerID.UUID)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
@@ -307,7 +345,13 @@ func (s *Service) ListMcpEndpoints(ctx context.Context, payload *gen.ListMcpEndp
 
 	r := repo.New(s.db)
 
-	if payload.McpServerID != nil && *payload.McpServerID != "" {
+	hasServerFilter := payload.McpServerID != nil && *payload.McpServerID != ""
+	hasMetaFilter := payload.MetaMcpServerID != nil && *payload.MetaMcpServerID != ""
+	if hasServerFilter && hasMetaFilter {
+		return nil, oops.E(oops.CodeInvalid, nil, "provide at most one of mcp_server_id or meta_mcp_server_id").LogError(ctx, s.logger)
+	}
+
+	if hasServerFilter {
 		serverID, err := uuid.Parse(*payload.McpServerID)
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp_server_id").LogError(ctx, s.logger)
@@ -319,6 +363,23 @@ func (s *Service) ListMcpEndpoints(ctx context.Context, payload *gen.ListMcpEndp
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "list mcp endpoints by server").LogError(ctx, s.logger)
+		}
+
+		return &gen.ListMcpEndpointsResult{McpEndpoints: mv.BuildMcpEndpointListView(rows)}, nil
+	}
+
+	if hasMetaFilter {
+		metaID, err := uuid.Parse(*payload.MetaMcpServerID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid meta_mcp_server_id").LogError(ctx, s.logger)
+		}
+
+		rows, err := r.ListMCPEndpointsByMetaMCPServerID(ctx, repo.ListMCPEndpointsByMetaMCPServerIDParams{
+			ProjectID:       *authCtx.ProjectID,
+			MetaMcpServerID: metaID,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list mcp endpoints by meta server").LogError(ctx, s.logger)
 		}
 
 		return &gen.ListMcpEndpointsResult{McpEndpoints: mv.BuildMcpEndpointListView(rows)}, nil
@@ -354,9 +415,9 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid custom_domain_id").LogError(ctx, logger)
 	}
 
-	mcpServerID, err := uuid.Parse(payload.McpServerID)
+	mcpServerID, metaMcpServerID, err := s.parseEndpointBackendIDs(ctx, logger, payload.McpServerID, payload.MetaMcpServerID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp_server_id").LogError(ctx, logger)
+		return nil, err
 	}
 
 	slug := string(payload.Slug)
@@ -383,8 +444,11 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 
 	txRepo := repo.New(dbtx)
 
-	domainIDs := uniqueDomainIDs(preexisting.CustomDomainID, customDomainID)
+	domainIDs := uniqueIDs(preexisting.CustomDomainID, customDomainID)
 	if err := lockCustomDomains(ctx, dbtx, domainIDs); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeInvalid, err, "custom_domain_id does not reference a live custom domain").LogError(ctx, logger)
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "lock custom domains").LogError(ctx, logger)
 	}
 
@@ -404,50 +468,52 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 
 	beforeView := mv.BuildMcpEndpointView(existing)
 
-	serverIDs := []uuid.UUID{existing.McpServerID}
-	if existing.McpServerID != mcpServerID {
-		serverIDs = append(serverIDs, mcpServerID)
-	}
-	slices.SortFunc(serverIDs, func(a, b uuid.UUID) int {
-		return strings.Compare(a.String(), b.String())
-	})
-	lockedServers, err := mcpserversrepo.New(dbtx).LockMCPServersByIDs(ctx, mcpserversrepo.LockMCPServersByIDsParams{
-		ProjectID: *authCtx.ProjectID,
-		Ids:       serverIDs,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "lock mcp servers").LogError(ctx, logger)
-	}
 	var targetServer *mcpserversrepo.McpServer
-	for i := range lockedServers {
-		if lockedServers[i].ID == mcpServerID {
-			targetServer = &lockedServers[i]
-			break
+	if serverIDs := uniqueIDs(existing.McpServerID, mcpServerID); len(serverIDs) > 0 {
+		lockedServers, err := mcpserversrepo.New(dbtx).LockMCPServersByIDs(ctx, mcpserversrepo.LockMCPServersByIDsParams{
+			ProjectID: *authCtx.ProjectID,
+			Ids:       serverIDs,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock mcp servers").LogError(ctx, logger)
+		}
+		for i := range lockedServers {
+			if mcpServerID.Valid && lockedServers[i].ID == mcpServerID.UUID {
+				targetServer = &lockedServers[i]
+				break
+			}
 		}
 	}
-	if targetServer == nil {
+	if mcpServerID.Valid && targetServer == nil {
 		return nil, oops.E(oops.CodeInvalid, nil, "mcp_server_id does not reference a resource in this project").LogError(ctx, logger)
 	}
 
-	if err := verifyEndpointReferenceOwnership(ctx, dbtx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, mcpServerID, customDomainID); err != nil {
+	if err := s.lockMetaMcpServers(ctx, dbtx, authCtx, uniqueIDs(existing.MetaMcpServerID, metaMcpServerID), metaMcpServerID); err != nil {
+		return nil, err
+	}
+
+	if err := verifyEndpointReferenceOwnership(ctx, dbtx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, mcpServerID, metaMcpServerID, customDomainID); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp endpoint").LogError(ctx, logger)
 	}
 
 	wasRoot := existing.IsDomainRoot.Valid && existing.IsDomainRoot.Bool
 	sameDomain := existing.CustomDomainID == customDomainID
-	keepRoot := wasRoot && sameDomain && targetServer.Visibility != mcpservers.VisibilityDisabled
+	// Meta-MCP-backed endpoints have no visibility notion, so a meta target
+	// keeps an existing root marker whenever the domain is unchanged.
+	keepRoot := wasRoot && sameDomain && (targetServer == nil || targetServer.Visibility != mcpservers.VisibilityDisabled)
 	rootMarker := pgtype.Bool{Bool: false, Valid: false}
 	if keepRoot {
 		rootMarker = pgtype.Bool{Bool: true, Valid: true}
 	}
 
 	updated, err := txRepo.UpdateMCPEndpoint(ctx, repo.UpdateMCPEndpointParams{
-		CustomDomainID: customDomainID,
-		McpServerID:    mcpServerID,
-		Slug:           slug,
-		IsDomainRoot:   rootMarker,
-		ID:             endpointID,
-		ProjectID:      *authCtx.ProjectID,
+		CustomDomainID:  customDomainID,
+		McpServerID:     mcpServerID,
+		MetaMcpServerID: metaMcpServerID,
+		Slug:            slug,
+		IsDomainRoot:    rootMarker,
+		ID:              endpointID,
+		ProjectID:       *authCtx.ProjectID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -569,7 +635,7 @@ func (s *Service) DeleteMcpEndpoint(ctx context.Context, payload *gen.DeleteMcpE
 
 	txRepo := repo.New(dbtx)
 
-	if err := lockCustomDomains(ctx, dbtx, uniqueDomainIDs(preexisting.CustomDomainID)); err != nil {
+	if err := lockCustomDomains(ctx, dbtx, uniqueIDs(preexisting.CustomDomainID)); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "lock custom domain").LogError(ctx, logger)
 	}
 	existing, err := txRepo.LockMCPEndpointByID(ctx, repo.LockMCPEndpointByIDParams{
@@ -629,7 +695,51 @@ func (s *Service) DeleteMcpEndpoint(ctx context.Context, payload *gen.DeleteMcpE
 	return nil
 }
 
-func uniqueDomainIDs(ids ...uuid.NullUUID) []uuid.UUID {
+// parseEndpointBackendIDs parses the two mutually exclusive backend id fields
+// and enforces that exactly one is provided. Returned errors are fully formed
+// oops errors, already logged; callers return them as-is.
+func (s *Service) parseEndpointBackendIDs(ctx context.Context, logger *slog.Logger, mcpServerID *string, metaMcpServerID *string) (uuid.NullUUID, uuid.NullUUID, error) {
+	serverID, err := conv.PtrToNullUUID(mcpServerID)
+	if err != nil {
+		return uuid.NullUUID{}, uuid.NullUUID{}, oops.E(oops.CodeBadRequest, err, "invalid mcp_server_id").LogError(ctx, logger)
+	}
+
+	metaID, err := conv.PtrToNullUUID(metaMcpServerID)
+	if err != nil {
+		return uuid.NullUUID{}, uuid.NullUUID{}, oops.E(oops.CodeBadRequest, err, "invalid meta_mcp_server_id").LogError(ctx, logger)
+	}
+
+	if serverID.Valid == metaID.Valid {
+		return uuid.NullUUID{}, uuid.NullUUID{}, oops.E(oops.CodeInvalid, nil, "provide exactly one of mcp_server_id or meta_mcp_server_id").LogError(ctx, logger)
+	}
+
+	return serverID, metaID, nil
+}
+
+// lockMetaMcpServers locks the given meta MCP server rows in sorted order. A
+// row that no longer exists is only an error when it is the endpoint's target
+// backend; a vanished previous backend just has nothing left to lock.
+func (s *Service) lockMetaMcpServers(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, metaIDs []uuid.UUID, target uuid.NullUUID) error {
+	metaRepo := metamcprepo.New(dbtx)
+	for _, metaID := range metaIDs {
+		if _, err := metaRepo.LockMetaMCPServer(ctx, metamcprepo.LockMetaMCPServerParams{
+			ID:             metaID,
+			OrganizationID: authCtx.ActiveOrganizationID,
+			ProjectID:      *authCtx.ProjectID,
+		}); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				if target.Valid && target.UUID == metaID {
+					return oops.E(oops.CodeInvalid, err, "meta_mcp_server_id does not reference a resource in this project").LogError(ctx, s.logger)
+				}
+				continue
+			}
+			return oops.E(oops.CodeUnexpected, err, "lock meta mcp server").LogError(ctx, s.logger)
+		}
+	}
+	return nil
+}
+
+func uniqueIDs(ids ...uuid.NullUUID) []uuid.UUID {
 	seen := make(map[uuid.UUID]struct{}, len(ids))
 	result := make([]uuid.UUID, 0, len(ids))
 	for _, id := range ids {
@@ -712,10 +822,11 @@ func validateSlugPrefix(slug string, customDomainID uuid.NullUUID, organizationS
 	return nil
 }
 
-// verifyEndpointReferenceOwnership checks that the referenced mcp_server lives
-// in the caller's project and that the optional custom_domain is registered
-// to the caller's organization. The raw FK constraints only enforce existence,
-// not tenancy, so this closes a cross-tenant leak.
+// verifyEndpointReferenceOwnership checks that the referenced backend (an
+// mcp_server or a meta_mcp_server) lives in the caller's project and that the
+// optional custom_domain is registered to the caller's organization. The raw
+// FK constraints only enforce existence, not tenancy, so this closes a
+// cross-tenant leak.
 //
 // Each check delegates to the owning package's scoped Get*ByID query and
 // treats sql.ErrNoRows as "not in this project/organization".
@@ -724,17 +835,33 @@ func verifyEndpointReferenceOwnership(
 	dbtx pgx.Tx,
 	projectID uuid.UUID,
 	organizationID string,
-	mcpServerID uuid.UUID,
+	mcpServerID uuid.NullUUID,
+	metaMcpServerID uuid.NullUUID,
 	customDomainID uuid.NullUUID,
 ) error {
-	if _, err := mcpserversrepo.New(dbtx).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
-		ID:        mcpServerID,
-		ProjectID: projectID,
-	}); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return fmt.Errorf("mcp_server_id does not reference a resource in this project")
+	if mcpServerID.Valid {
+		if _, err := mcpserversrepo.New(dbtx).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
+			ID:        mcpServerID.UUID,
+			ProjectID: projectID,
+		}); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return fmt.Errorf("mcp_server_id does not reference a resource in this project")
+			}
+			return fmt.Errorf("check mcp server ownership: %w", err)
 		}
-		return fmt.Errorf("check mcp server ownership: %w", err)
+	}
+
+	if metaMcpServerID.Valid {
+		if _, err := metamcprepo.New(dbtx).GetMetaMCPServer(ctx, metamcprepo.GetMetaMCPServerParams{
+			ID:             metaMcpServerID.UUID,
+			OrganizationID: organizationID,
+			ProjectID:      projectID,
+		}); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return fmt.Errorf("meta_mcp_server_id does not reference a resource in this project")
+			}
+			return fmt.Errorf("check meta mcp server ownership: %w", err)
+		}
 	}
 
 	if !customDomainID.Valid {

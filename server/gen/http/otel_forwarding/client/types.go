@@ -19,7 +19,8 @@ type UpsertConfigRequestBody struct {
 	EndpointURL string `form:"endpoint_url" json:"endpoint_url" xml:"endpoint_url"`
 	// Whether forwarding should be active.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
-	// Full set of headers to attach. Replaces any existing headers.
+	// Complete desired header set. Omitted entries are removed; entries with an
+	// omitted value preserve the existing encrypted value for the same name.
 	Headers []*OtelForwardingHeaderInputRequestBody `form:"headers,omitempty" json:"headers,omitempty" xml:"headers,omitempty"`
 }
 
@@ -633,8 +634,9 @@ type OtelForwardingHeaderResponseBody struct {
 type OtelForwardingHeaderInputRequestBody struct {
 	// Header name.
 	Name string `form:"name" json:"name" xml:"name"`
-	// Header value. Stored encrypted at rest; never returned on reads.
-	Value string `form:"value" json:"value" xml:"value"`
+	// Header value. Omit to preserve an existing value; provide to create,
+	// replace, or clear it. Stored encrypted at rest and never returned on reads.
+	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
 }
 
 // NewUpsertConfigRequestBody builds the HTTP request body from the payload of

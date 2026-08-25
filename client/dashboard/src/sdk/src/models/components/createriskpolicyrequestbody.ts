@@ -17,15 +17,16 @@ import {
 } from "./riskpolicymodelconfig.js";
 
 /**
- * Policy action: flag, warn (challenge), or block.
+ * Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).
  */
 export const CreateRiskPolicyRequestBodyAction = {
   Flag: "flag",
   Warn: "warn",
   Block: "block",
+  Quarantine: "quarantine",
 } as const;
 /**
- * Policy action: flag, warn (challenge), or block.
+ * Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).
  */
 export type CreateRiskPolicyRequestBodyAction = ClosedEnum<
   typeof CreateRiskPolicyRequestBodyAction
@@ -69,7 +70,7 @@ export type ShadowMcpDisposition = ClosedEnum<typeof ShadowMcpDisposition>;
 
 export type CreateRiskPolicyRequestBody = {
   /**
-   * Policy action: flag, warn (challenge), or block.
+   * Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).
    */
   action?: CreateRiskPolicyRequestBodyAction | undefined;
   /**

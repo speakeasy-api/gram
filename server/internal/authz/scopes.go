@@ -71,11 +71,13 @@ var adminScopes = []Scope{
 	ScopeSkillWrite,
 	// chat:read and chat:write are intentionally NOT defaults for any system
 	// role: reading other members' session transcripts is sensitive, and
-	// mutating them (pin, rename, feedback, delete) is destructive, so both
-	// must be granted explicitly via a custom role grant. Everyone reads and
-	// mutates their own sessions via owner-matching in the chat handlers
-	// regardless. chat:write satisfies chat:read via scopeExpansions, so a
-	// session reviewer who should not be able to delete gets chat:read alone.
+	// mutating them (rename, feedback, delete) is destructive, so both must be
+	// granted explicitly via a custom role grant. Pinning follows chat:read —
+	// it is a shared project bookmark, not a transcript mutation. Everyone
+	// reads and mutates their own sessions via owner-matching in the chat
+	// handlers regardless. chat:write satisfies chat:read via scopeExpansions,
+	// so a session reviewer who should not be able to delete gets chat:read
+	// alone.
 }
 
 // scopeVisibilityByScope is the source of truth for whether a scope is exposed

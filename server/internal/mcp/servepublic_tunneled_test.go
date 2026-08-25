@@ -171,7 +171,7 @@ func newPublicTunnelFixture(t *testing.T, ctx context.Context, ti *testInstance,
 	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:      *authCtx.ProjectID,
 		CustomDomainID: uuid.NullUUID{},
-		McpServerID:    mcpServer.ID,
+		McpServerID:    uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
 		Slug:           endpointSlug,
 	})
 	require.NoError(t, err)
@@ -447,7 +447,7 @@ func TestServePublic_Tunneled_OAuthSurfaceIs404(t *testing.T) {
 	fixture := newPublicTunnelFixture(t, ctx, ti, gateway, true)
 
 	logger := ti.logger
-	mcpEndpoint, mcpServer, err := ti.service.ResolveMCPEndpointAndServer(ctx, logger, fixture.endpointSlug)
+	mcpEndpoint, mcpServer, _, err := ti.service.ResolveMCPEndpointAndServer(ctx, logger, fixture.endpointSlug)
 	require.NoError(t, err)
 
 	req := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-protected-resource/mcp/"+fixture.endpointSlug, nil)
@@ -521,7 +521,7 @@ func TestServePublic_Tunneled_PrivateVisibilityUnaffected(t *testing.T) {
 	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:      *authCtx.ProjectID,
 		CustomDomainID: uuid.NullUUID{},
-		McpServerID:    mcpServer.ID,
+		McpServerID:    uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
 		Slug:           endpointSlug,
 	})
 	require.NoError(t, err)

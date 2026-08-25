@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/email"
@@ -1528,11 +1529,13 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 	// by Magic Auth, and the WorkOS session ID is stored for logout revocation.
 	sessionID := uuid.New().String()
 	session := sessions.Session{
-		SessionID:            sessionID,
-		UserID:               gramUserID,
-		ActiveOrganizationID: invite.OrganizationID,
-		WorkOSSessionID:      idpUser.WorkOSSessionID,
-		ImpersonatorEmail:    "",
+		SessionID:             sessionID,
+		UserID:                gramUserID,
+		ActiveOrganizationID:  invite.OrganizationID,
+		WorkOSSessionID:       idpUser.WorkOSSessionID,
+		ImpersonatorEmail:     "",
+		SupportOrganizationID: "",
+		SupportExpiresAt:      time.Time{},
 	}
 	if err := s.sessions.StoreSession(ctx, session); err != nil {
 		s.logger.ErrorContext(ctx, "invite callback: failed to store session", attr.SlogError(err))
@@ -1552,9 +1555,9 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 
 	//nolint:exhaustruct // only desired fields — avoid unexpected zero-value behavior
 	http.SetCookie(w, &http.Cookie{
-		Name:     "gram_session",
+		Name:     constants.SessionCookie,
 		Value:    sessionID,
-		MaxAge:   2592000,
+		MaxAge:   constants.SessionCookieMaxAgeSeconds,
 		Path:     "/",
 		Secure:   true,
 		HttpOnly: true,

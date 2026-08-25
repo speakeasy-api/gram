@@ -73,6 +73,13 @@ type EndpointRef struct {
 	// /mcp callers.
 	McpServerID uuid.NullUUID `json:"mcp_server_id"`
 
+	// MetaMcpServerID, when valid, identifies the meta_mcp_servers row that
+	// owns this challenge. Populated for meta-MCP-backed endpoints; zero
+	// everywhere else. In-flight states minted before this field landed
+	// simply lack it, which is safe: no meta endpoint could mint a
+	// challenge before it existed.
+	MetaMcpServerID uuid.NullUUID `json:"meta_mcp_server_id,omitzero"`
+
 	// Path of a toolset-backed endpoint. Set for /mcp and toolset-backed
 	// /x/mcp challenges.
 	McpSlug string `json:"mcp_slug"`
@@ -361,6 +368,7 @@ func (s *Service) contextForSessionSubject(
 		ProjectSlug:           nil,
 		APIKeyScopes:          nil,
 		IsAdmin:               false,
+		SupportOrganizationID: "",
 	}
 	switch subject.Kind {
 	case urn.SessionSubjectKindUser:

@@ -33,16 +33,21 @@ copy_from_main=(
 
 for item in "${copy_from_main[@]}"; do
   src="${main_worktree}/${item}"
-  [ -e "$src" ] && rsync -a "$src" .
+  [ -e "$src" ] || continue
+  if [ -d "$src" ]; then
+    tools/rclone copy --metadata --links --create-empty-src-dirs "$src" "$item"
+  else
+    tools/rclone copyto --metadata --links "$src" "$item"
+  fi
 done
 
 # Seed the custom linter so lint:server can reuse it when build inputs match.
 gcl="${main_worktree}/server/bin/gcl"
 if [ -x "$gcl" ]; then
   mkdir -p "${current_worktree}/server/bin"
-  rsync -a "$gcl" "${current_worktree}/server/bin/"
+  tools/rclone copyto --metadata "$gcl" "${current_worktree}/server/bin/gcl"
   if [ -f "${gcl}.fingerprint" ]; then
-    rsync -a "${gcl}.fingerprint" "${current_worktree}/server/bin/"
+    tools/rclone copyto --metadata "${gcl}.fingerprint" "${current_worktree}/server/bin/gcl.fingerprint"
   fi
 fi
 
@@ -55,6 +60,21 @@ fi
 suffix=$(LC_ALL=C tr -dc 'a-z0-9' < /dev/urandom | head -c 4)
 compose_project="gram-infra-${suffix}"
 mise set --file mise.local.toml "COMPOSE_PROJECT_NAME=${compose_project}"
+
+# Temporal runs once for the whole machine. A namespace per Compose project
+# isolates workflow IDs, schedules, and task queues across worktrees.
+mise set --file mise.local.toml "TEMPORAL_NAMESPACE=${compose_project}"
+
+# Pub/Sub resource paths include the project ID. Giving each worktree its
+# Compose project ID keeps identical topic and subscription IDs isolated when
+# every worktree connects to one shared emulator.
+mise set --file mise.local.toml "GRAM_GCP_PROJECT_ID=${compose_project}"
+
+# Temporal, Pub/Sub, and LGTM are shared across every worktree
+# (compose.shared.yml). The namespace and project ID above isolate state; this
+# label keeps traces and metrics separate too. The OTel SDK reads it directly,
+# so nothing in the Go code has to know.
+mise set --file mise.local.toml "OTEL_RESOURCE_ATTRIBUTES=worktree=${compose_project}"
 
 remap=$(mise run zero:remap-ports --format flat --file -)
 for line in $remap; do

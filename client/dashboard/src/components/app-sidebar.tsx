@@ -25,7 +25,6 @@ import { Link } from "react-router";
 import { McpDetailSidebarNav } from "./mcp-detail-sidebar-nav";
 import { McpServerXSidebarNav } from "./mcp-server-x-sidebar-nav";
 import { OnboardingResumeButton } from "./onboarding-resume-button";
-import { PlatformMcpSidebarCta } from "./platform-mcp-sidebar-cta";
 import { PluginDetailSidebarNav } from "./plugin-detail-sidebar-nav";
 import type { ProjectNavRoute } from "@/hooks/useProjectNavRoutes";
 import { RequireScope } from "./require-scope";
@@ -207,10 +206,10 @@ export function AppSidebar({
           <ScopeGatedNavGroup
             label="Secure"
             Icon={(p) => <Icon {...p} name="shield" />}
-            stage="beta"
             items={[
-              // Watchdog supersedes Risk Overview and Risk Events: exactly one
-              // of the two sets shows, mirroring useProjectNavRoutes.
+              // Watchdog supersedes Risk Overview: exactly one of the two
+              // shows, mirroring useProjectNavRoutes. Risk Events sits below
+              // the landing surface in both modes.
               ...(isRiskWatchdogEnabled
                 ? [{ item: routes.watchdog, ...accessFor(routes.watchdog) }]
                 : [
@@ -219,20 +218,9 @@ export function AppSidebar({
                       ...accessFor(routes.riskOverview),
                     },
                   ]),
+              { item: routes.riskEvents, ...accessFor(routes.riskEvents) },
               { item: routes.policyCenter, ...accessFor(routes.policyCenter) },
-              ...(isRiskWatchdogEnabled
-                ? []
-                : [
-                    {
-                      item: routes.riskEvents,
-                      ...accessFor(routes.riskEvents),
-                    },
-                  ]),
               { item: routes.shadowMCP, ...accessFor(routes.shadowMCP) },
-              {
-                item: routes.detectionRules,
-                ...accessFor(routes.detectionRules),
-              },
             ]}
           />
 
@@ -314,7 +302,6 @@ export function AppSidebar({
         <div className="mb-2 flex flex-col gap-1.5">
           <TrialStatusCard />
           <OnboardingResumeButton />
-          <PlatformMcpSidebarCta />
           <InsightsDockResumeButton />
         </div>
         <SidebarUserMenu />

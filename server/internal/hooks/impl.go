@@ -19,6 +19,7 @@ import (
 	"goa.design/goa/v3/security"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -50,6 +51,7 @@ type Service struct {
 	telemetryLogger    *telemetry.Logger
 	auth               authorizer
 	authz              *authz.Engine
+	audit              *audit.Logger
 	cache              cache.Cache
 	temporalEnv        *tenv.Environment
 	repo               *repo.Queries
@@ -238,6 +240,7 @@ func NewService(
 	completionsClient openrouter.CompletionClient,
 	temporalEnv *tenv.Environment,
 	authz *authz.Engine,
+	auditLogger *audit.Logger,
 	pfClient ProductFeaturesClient,
 	chatTitleGenerator ChatTitleGenerator,
 	riskScanner risk.RiskScanner,
@@ -261,6 +264,7 @@ func NewService(
 		telemetryLogger:    telemetryLogger,
 		auth:               auth.New(logger, db, sessionsMgr, authz),
 		authz:              authz,
+		audit:              auditLogger,
 		cache:              cacheAdapter,
 		temporalEnv:        temporalEnv,
 		repo:               repo.New(db),

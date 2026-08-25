@@ -141,7 +141,10 @@ type ApprovalRequestSummary struct {
 	ArtifactRef *string
 	// Whether the reference names an exact version.
 	VersionPinned bool
-	// The request's current status.
+	// The request's current status: unreviewed, requested, approved, denied, or
+	// superseded (the latest decision was explicitly displaced by a policy
+	// URL-list edit; history preserved, no enforcement derives from it until
+	// re-decided).
 	Status string
 	// How many people have asked for this server.
 	RequesterCount int
@@ -261,7 +264,8 @@ type ListRequestsPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
-	// Only return requests in this status.
+	// Only return requests in this status: unreviewed, requested, approved,
+	// denied, or superseded.
 	Status *string
 	// The number of requests to return per page
 	Limit *int32
@@ -306,6 +310,33 @@ type RefreshEvidencePayload struct {
 	ID string
 }
 
+// A page the agent fetched, with what came back and the injection judge's
+// verdict on it. A fetch spends nothing.
+type ResearchPageFetchCall struct {
+	// The page the agent fetched.
+	URL *string
+	// Where the fetch landed after redirects, when it differed.
+	FinalURL *string
+	// The fetched page's content type.
+	ContentType *string
+	// The fetched page's extracted-text size.
+	ContentBytes *int
+	// Whether the fetch hit its caps and the preview is of a prefix.
+	Truncated *bool
+	// Whether the injection judge reached a verdict on this page.
+	Judged *bool
+	// Whether the judge found the page tried to instruct its reader.
+	InjectionFlagged *bool
+	// The judge's reasoning, when it flagged the page.
+	JudgeRationale *string
+	// A bounded preview of the extracted page text. Untrusted web content.
+	ContentPreview *string
+	// Indices of the report claims that cited this page — the link from a fetch to
+	// the evidence it became. Empty when the page was read but nothing in the
+	// final report rests on it.
+	CitedByClaims []int
+}
+
 // ResearchReport is the result type of the mcpApproval service startResearch
 // method.
 type ResearchReport struct {
@@ -333,6 +364,41 @@ type ResearchReport struct {
 	Error *string
 	// When the run was requested.
 	CreatedAt string
+	// The run's per-action trace — every search and page fetch, in order. The
+	// report above is a synthesis that drops most of what was read; this is what
+	// the agent actually did.
+	ToolCalls []*ResearchToolCall
+}
+
+// One action a research run took, named by tool and carrying the payload for
+// that tool. The report is a synthesis that drops most of what was read; this
+// is what the agent actually did. Observability, never a claim about the
+// server.
+type ResearchToolCall struct {
+	// Position in the run, from zero.
+	Sequence int
+	// The tool that ran: web_search or fetch_page. The discriminator for which
+	// payload below is present.
+	Tool string
+	// The tool's failure text, when the call did not succeed.
+	Error *string
+	// The web-search payload, present when tool is web_search.
+	Search *ResearchWebSearchCall
+	// The page-fetch payload, present when tool is fetch_page.
+	Fetch *ResearchPageFetchCall
+}
+
+// A web search the agent ran. A search runs a billed completion, so its token
+// spend lives here.
+type ResearchWebSearchCall struct {
+	// What the agent searched for.
+	Query *string
+	// How many citations the search returned.
+	ResultCount *int
+	// Prompt tokens this search spent.
+	PromptTokens *int
+	// Completion tokens this search spent.
+	CompletionTokens *int
 }
 
 // StartResearchPayload is the payload type of the mcpApproval service

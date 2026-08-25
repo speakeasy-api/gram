@@ -1450,6 +1450,488 @@ func DecodeDeleteRiskPolicyResponse(decoder func(*http.Response) goahttp.Decoder
 	}
 }
 
+// BuildListSessionQuarantinesRequest instantiates a HTTP request object with
+// method and path set to call the "risk" service "listSessionQuarantines"
+// endpoint
+func (c *Client) BuildListSessionQuarantinesRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListSessionQuarantinesRiskPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("risk", "listSessionQuarantines", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListSessionQuarantinesRequest returns an encoder for requests sent to
+// the risk listSessionQuarantines server.
+func EncodeListSessionQuarantinesRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*risk.ListSessionQuarantinesPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("risk", "listSessionQuarantines", "*risk.ListSessionQuarantinesPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListSessionQuarantinesResponse returns a decoder for responses
+// returned by the risk listSessionQuarantines endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeListSessionQuarantinesResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListSessionQuarantinesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListSessionQuarantinesResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listSessionQuarantines", err)
+			}
+			err = ValidateListSessionQuarantinesResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listSessionQuarantines", err)
+			}
+			res := NewListSessionQuarantinesResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListSessionQuarantinesUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listSessionQuarantines", err)
+			}
+			err = ValidateListSessionQuarantinesUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listSessionQuarantines", err)
+			}
+			return nil, NewListSessionQuarantinesUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListSessionQuarantinesForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listSessionQuarantines", err)
+			}
+			err = ValidateListSessionQuarantinesForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listSessionQuarantines", err)
+			}
+			return nil, NewListSessionQuarantinesForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListSessionQuarantinesBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listSessionQuarantines", err)
+			}
+			err = ValidateListSessionQuarantinesBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listSessionQuarantines", err)
+			}
+			return nil, NewListSessionQuarantinesBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListSessionQuarantinesNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listSessionQuarantines", err)
+			}
+			err = ValidateListSessionQuarantinesNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listSessionQuarantines", err)
+			}
+			return nil, NewListSessionQuarantinesNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListSessionQuarantinesConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listSessionQuarantines", err)
+			}
+			err = ValidateListSessionQuarantinesConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listSessionQuarantines", err)
+			}
+			return nil, NewListSessionQuarantinesConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListSessionQuarantinesUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listSessionQuarantines", err)
+			}
+			err = ValidateListSessionQuarantinesUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listSessionQuarantines", err)
+			}
+			return nil, NewListSessionQuarantinesUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListSessionQuarantinesInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listSessionQuarantines", err)
+			}
+			err = ValidateListSessionQuarantinesInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listSessionQuarantines", err)
+			}
+			return nil, NewListSessionQuarantinesInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListSessionQuarantinesInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "listSessionQuarantines", err)
+				}
+				err = ValidateListSessionQuarantinesInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "listSessionQuarantines", err)
+				}
+				return nil, NewListSessionQuarantinesInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListSessionQuarantinesUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "listSessionQuarantines", err)
+				}
+				err = ValidateListSessionQuarantinesUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "listSessionQuarantines", err)
+				}
+				return nil, NewListSessionQuarantinesUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("risk", "listSessionQuarantines", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListSessionQuarantinesGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "listSessionQuarantines", err)
+			}
+			err = ValidateListSessionQuarantinesGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "listSessionQuarantines", err)
+			}
+			return nil, NewListSessionQuarantinesGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("risk", "listSessionQuarantines", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildReleaseSessionQuarantineRequest instantiates a HTTP request object with
+// method and path set to call the "risk" service "releaseSessionQuarantine"
+// endpoint
+func (c *Client) BuildReleaseSessionQuarantineRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ReleaseSessionQuarantineRiskPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("risk", "releaseSessionQuarantine", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeReleaseSessionQuarantineRequest returns an encoder for requests sent
+// to the risk releaseSessionQuarantine server.
+func EncodeReleaseSessionQuarantineRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*risk.ReleaseSessionQuarantinePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("risk", "releaseSessionQuarantine", "*risk.ReleaseSessionQuarantinePayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewReleaseSessionQuarantineRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("risk", "releaseSessionQuarantine", err)
+		}
+		return nil
+	}
+}
+
+// DecodeReleaseSessionQuarantineResponse returns a decoder for responses
+// returned by the risk releaseSessionQuarantine endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeReleaseSessionQuarantineResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeReleaseSessionQuarantineResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ReleaseSessionQuarantineResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "releaseSessionQuarantine", err)
+			}
+			err = ValidateReleaseSessionQuarantineResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "releaseSessionQuarantine", err)
+			}
+			res := NewReleaseSessionQuarantineSessionQuarantineOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ReleaseSessionQuarantineUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "releaseSessionQuarantine", err)
+			}
+			err = ValidateReleaseSessionQuarantineUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "releaseSessionQuarantine", err)
+			}
+			return nil, NewReleaseSessionQuarantineUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ReleaseSessionQuarantineForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "releaseSessionQuarantine", err)
+			}
+			err = ValidateReleaseSessionQuarantineForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "releaseSessionQuarantine", err)
+			}
+			return nil, NewReleaseSessionQuarantineForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ReleaseSessionQuarantineBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "releaseSessionQuarantine", err)
+			}
+			err = ValidateReleaseSessionQuarantineBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "releaseSessionQuarantine", err)
+			}
+			return nil, NewReleaseSessionQuarantineBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ReleaseSessionQuarantineNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "releaseSessionQuarantine", err)
+			}
+			err = ValidateReleaseSessionQuarantineNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "releaseSessionQuarantine", err)
+			}
+			return nil, NewReleaseSessionQuarantineNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ReleaseSessionQuarantineConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "releaseSessionQuarantine", err)
+			}
+			err = ValidateReleaseSessionQuarantineConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "releaseSessionQuarantine", err)
+			}
+			return nil, NewReleaseSessionQuarantineConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ReleaseSessionQuarantineUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "releaseSessionQuarantine", err)
+			}
+			err = ValidateReleaseSessionQuarantineUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "releaseSessionQuarantine", err)
+			}
+			return nil, NewReleaseSessionQuarantineUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ReleaseSessionQuarantineInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "releaseSessionQuarantine", err)
+			}
+			err = ValidateReleaseSessionQuarantineInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "releaseSessionQuarantine", err)
+			}
+			return nil, NewReleaseSessionQuarantineInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ReleaseSessionQuarantineInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "releaseSessionQuarantine", err)
+				}
+				err = ValidateReleaseSessionQuarantineInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "releaseSessionQuarantine", err)
+				}
+				return nil, NewReleaseSessionQuarantineInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ReleaseSessionQuarantineUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("risk", "releaseSessionQuarantine", err)
+				}
+				err = ValidateReleaseSessionQuarantineUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("risk", "releaseSessionQuarantine", err)
+				}
+				return nil, NewReleaseSessionQuarantineUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("risk", "releaseSessionQuarantine", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ReleaseSessionQuarantineGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("risk", "releaseSessionQuarantine", err)
+			}
+			err = ValidateReleaseSessionQuarantineGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("risk", "releaseSessionQuarantine", err)
+			}
+			return nil, NewReleaseSessionQuarantineGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("risk", "releaseSessionQuarantine", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListRiskResultsRequest instantiates a HTTP request object with method
 // and path set to call the "risk" service "listRiskResults" endpoint
 func (c *Client) BuildListRiskResultsRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -2997,6 +3479,9 @@ func EncodeListDismissedRiskResultsRequest(encoder func(*http.Request) goahttp.E
 		}
 		if p.Limit != nil {
 			values.Add("limit", fmt.Sprintf("%v", *p.Limit))
+		}
+		for _, value := range p.Reasons {
+			values.Add("reasons", value)
 		}
 		req.URL.RawQuery = values.Encode()
 		return nil
@@ -11582,6 +12067,27 @@ func unmarshalBuiltinExclusionEntryResponseBodyToRiskBuiltinExclusionEntry(v *Bu
 	return res
 }
 
+// unmarshalSessionQuarantineResponseBodyToRiskSessionQuarantine builds a value
+// of type *risk.SessionQuarantine from a value of type
+// *SessionQuarantineResponseBody.
+func unmarshalSessionQuarantineResponseBodyToRiskSessionQuarantine(v *SessionQuarantineResponseBody) *risk.SessionQuarantine {
+	res := &risk.SessionQuarantine{
+		ID:             *v.ID,
+		OrganizationID: *v.OrganizationID,
+		ProjectID:      *v.ProjectID,
+		SessionID:      *v.SessionID,
+		RiskPolicyID:   v.RiskPolicyID,
+		RiskPolicyName: *v.RiskPolicyName,
+		UserID:         *v.UserID,
+		Reason:         *v.Reason,
+		CreatedAt:      *v.CreatedAt,
+		ReleasedAt:     v.ReleasedAt,
+		ReleasedBy:     v.ReleasedBy,
+	}
+
+	return res
+}
+
 // unmarshalRiskResultResponseBodyToTypesRiskResult builds a value of type
 // *types.RiskResult from a value of type *RiskResultResponseBody.
 func unmarshalRiskResultResponseBodyToTypesRiskResult(v *RiskResultResponseBody) *types.RiskResult {
@@ -11605,6 +12111,10 @@ func unmarshalRiskResultResponseBodyToTypesRiskResult(v *RiskResultResponseBody)
 		MatchRedacted:     v.MatchRedacted,
 		CreatedAt:         *v.CreatedAt,
 		FalsePositiveAt:   v.FalsePositiveAt,
+		SuppressedAt:      v.SuppressedAt,
+		SuppressedReason:  v.SuppressedReason,
+		SuppressedDetail:  v.SuppressedDetail,
+		ExclusionID:       v.ExclusionID,
 	}
 	if v.Tags != nil {
 		res.Tags = make([]string, len(v.Tags))

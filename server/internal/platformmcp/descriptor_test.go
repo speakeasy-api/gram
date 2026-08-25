@@ -13,7 +13,7 @@ import (
 func TestEveryRegisteredToolDeclaresAnAudience(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	descriptors := registrar.Descriptors()
 	require.NotEmpty(t, descriptors, "the deployment registers tools even when every dependency is absent")
 
@@ -72,40 +72,45 @@ func names(descriptors []Descriptor) []string {
 func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 
 	admitted := map[string]bool{}
 	for _, descriptor := range registrar.For(AudienceAssistant) {
 		admitted[descriptor.Name] = true
 	}
 
-	// Each of these still reaches state keyed by a connection. Remove a name
-	// here in the same change that makes its path connection-less.
+	// Provider attachment still mutates connection-scoped state. Named-plugin
+	// distribution is intentionally unavailable until compatibility deployment.
 	for _, name := range []string{
-		"get_mcp_readiness",
-		"get_mcp_repair_plan",
-		"register_platform_mcp_for_project",
-		"get_platform_mcp_onboarding_status",
 		"attach_platform_mcp_identity_provider",
-		"add_platform_mcp_to_default_plugin",
+		"distribute_mcp_to_plugin",
+		"remove_mcp_from_plugin",
+		"list_plugins",
+		"get_plugin",
 	} {
-		require.False(t, admitted[name], "tool %q needs a connection and must not be admitted to the assistant", name)
+		require.False(t, admitted[name], "tool %q needs a connection or is rollout-gated and must not be admitted to the assistant", name)
 	}
 
-	// The reads, the registration path, and the catalogue-to-setup path are
+	// The reads, registration paths, and persisted readiness projections are
 	// connection-less end to end. get_setup_handoff is admitted because the
 	// handoff only carries the caller to the dashboard, which completes setup
 	// under its own session.
 	for _, name := range []string{
 		"get_platform_context",
 		"list_projects",
-		"list_project_mcps",
+		"find_mcp",
 		"get_mcp",
+		"update_mcp_metadata",
 		"register_catalog_mcp",
+		"register_remote_mcp",
 		"search_mcp_catalog",
 		"inspect_mcp_candidate",
 		"send_platform_mcp_feedback",
 		"get_setup_handoff",
+		"get_mcp_readiness",
+		"get_mcp_repair_plan",
+		"disable_mcp",
+		"enable_mcp",
 	} {
 		require.True(t, admitted[name], "tool %q works without a connection and should serve the assistant", name)
 	}
@@ -117,7 +122,7 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 func TestExternalEndpointServesOnlyExternallyAdmittedTools(t *testing.T) {
 	t.Parallel()
 
-	server, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, CatalogDescriptor{})
+	server, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 
 	admitted := make(map[string]bool)
 	for _, descriptor := range registrar.For(AudienceExternal) {

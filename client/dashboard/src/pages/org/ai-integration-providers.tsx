@@ -1,7 +1,5 @@
 import { type ReactNode } from "react";
-import { ClaudeCodeIcon, CodexIcon, CursorIcon } from "../hooks/HookSourceIcon";
-
-type ProviderIcon = (props: { className?: string }) => JSX.Element;
+import type { AgentProviderId } from "@/components/agent-providers/agent-providers";
 
 export type AIIntegrationProvider = {
   provider: string;
@@ -26,7 +24,7 @@ export type AIIntegrationProvider = {
       showsForm?: boolean;
     }>;
   };
-  icon: ProviderIcon;
+  providerId: AgentProviderId;
   apiKeyLabel: string;
   apiKeyPlaceholder: string;
   requiresOrganizationId: boolean;
@@ -125,7 +123,7 @@ const CURSOR_AI_INTEGRATION: AIIntegrationProvider = {
       },
     ],
   },
-  icon: CursorIcon,
+  providerId: "cursor",
   apiKeyLabel: "Cursor Admin API key",
   apiKeyPlaceholder: "key_xxx",
   requiresOrganizationId: false,
@@ -210,7 +208,7 @@ const ANTHROPIC_AI_INTEGRATION: AIIntegrationProvider = {
       },
     ],
   },
-  icon: ClaudeCodeIcon,
+  providerId: "claude",
   apiKeyLabel: "Compliance Access API Key",
   apiKeyPlaceholder: "Paste your Compliance Access Key",
   requiresOrganizationId: true,
@@ -279,7 +277,7 @@ const CODEX_AI_INTEGRATION: AIIntegrationProvider = {
       },
     ],
   },
-  icon: CodexIcon,
+  providerId: "codex",
   apiKeyLabel: "OpenAI Compliance Logs API key",
   apiKeyPlaceholder: "Paste your OpenAI Compliance Logs API key",
   requiresOrganizationId: true,
@@ -344,7 +342,7 @@ const CHATGPT_AI_INTEGRATION: AIIntegrationProvider = {
       },
     ],
   },
-  icon: CodexIcon,
+  providerId: "codex",
   apiKeyLabel: "OpenAI Compliance Logs API key",
   apiKeyPlaceholder: "Paste your OpenAI Compliance Logs API key",
   requiresOrganizationId: true,

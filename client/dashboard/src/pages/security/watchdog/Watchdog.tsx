@@ -1,4 +1,8 @@
-import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
+import {
+  StatTile,
+  StatTileGroup,
+  StatTileSkeleton,
+} from "@/components/chart/stat-tile";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { defineFilters, useFilterState } from "@/components/filters";
 import {
@@ -44,10 +48,12 @@ import {
   type SignalSeverity,
 } from "./signals-helpers";
 import { collectFindingsForRules } from "./collect-findings";
-import { DismissFindingsDialog } from "./DismissFindingsDialog";
+import { SuppressFindingsDialog } from "./SuppressFindingsDialog";
+import { SuppressMenu } from "./SuppressMenu";
 import { ExposureBar } from "./ExposureBar";
 import { SignalDrawer } from "./SignalDrawer";
 import { SignalsList } from "./SignalsList";
+import { SuppressedFindings } from "./SuppressedFindings";
 
 const WATCHDOG_PRESETS: DateRangePreset[] = ["1d", "7d", "30d"];
 
@@ -182,11 +188,19 @@ function WatchdogContent(): JSX.Element {
     if (selected.length === 0) return;
     setCollecting(true);
     try {
+      // Unwindowed on purpose: the listing filters by message event time,
+      // signals exist by scan time — a windowed collection can miss the very
+      // findings the selected signals display.
       const results = await collectFindingsForRules(
         client,
         selected.map((signal) => signal.ruleId),
-        { from: window.from, to: window.to },
+        { from: undefined, to: undefined },
       );
+      if (results.length === 0) {
+        // dismiss() ignores empty batches — fail loudly instead.
+        toast.error("No suppressible findings found for the selection.");
+        return;
+      }
       setPendingDismiss({ results, signalCount: selected.length });
     } catch {
       toast.error("Failed to load the selected signals' findings.");
@@ -210,7 +224,7 @@ function WatchdogContent(): JSX.Element {
     );
     if (excludable.length === 0) {
       toast.info(
-        "Prompt-based findings can't be excluded — mark them as false positives instead.",
+        "Prompt-based findings can't be excluded — suppress them instead.",
       );
       return;
     }
@@ -338,32 +352,13 @@ function WatchdogContent(): JSX.Element {
                 </div>
                 {hasSelection ? (
                   <div className="flex items-center gap-2">
-                    <Button
+                    <SuppressMenu
                       variant="secondary"
                       size="sm"
-                      disabled={collecting}
-                      onClick={() => void handleDismissSelected()}
-                    >
-                      {collecting && (
-                        <Button.LeftIcon>
-                          <Loader2 className="size-4 animate-spin" />
-                        </Button.LeftIcon>
-                      )}
-                      <Button.Text>Mark as false positive</Button.Text>
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      disabled={creatingExclusions}
-                      onClick={handleExcludeSelected}
-                    >
-                      {creatingExclusions && (
-                        <Button.LeftIcon>
-                          <Loader2 className="size-4 animate-spin" />
-                        </Button.LeftIcon>
-                      )}
-                      <Button.Text>Set up exclusion rules</Button.Text>
-                    </Button>
+                      busy={collecting || creatingExclusions}
+                      onSuppressOnce={() => void handleDismissSelected()}
+                      onCreateRule={handleExcludeSelected}
+                    />
                     <Button
                       variant="secondary"
                       size="sm"
@@ -417,15 +412,21 @@ function WatchdogContent(): JSX.Element {
               />
             </>
           )}
+          {/* Everything the list above deliberately omits. Unfiltered and
+              unwindowed on purpose: it's the audit trail for what is being
+              hidden, not another view of the current window — and outside the
+              signals branch on purpose too, since it reads a different endpoint
+              and has its own loading, error, and empty handling. A failed
+              signals query must not take the audit trail down with it. */}
+          <SuppressedFindings />
           {/* Inside Body on purpose: Page.Section slot-extracts only its known
               child components and silently drops anything else, so the drawer
               must live under a slot to render at all. */}
           <SignalDrawer
             signal={selectedSignal}
-            window={window}
             onClose={() => setUrlParam("signal", null)}
           />
-          <DismissFindingsDialog
+          <SuppressFindingsDialog
             results={pendingDismiss?.results ?? null}
             subject={
               pendingDismiss?.signalCount === 1
@@ -542,8 +543,7 @@ function CreateExclusionsDialog({
           <Text small muted>
             {skippedJudge} prompt-based{" "}
             {skippedJudge === 1 ? "signal was" : "signals were"} left out —
-            those findings can't be excluded. Mark them as false positives
-            instead.
+            those findings can't be excluded. Suppress them instead.
           </Text>
         )}
         <Dialog.Footer>
@@ -590,10 +590,10 @@ function KPIRow({
   if (!data && isLoading) {
     return (
       <StatTileGroup>
-        <Skeleton className="h-[100px] flex-1" />
-        <Skeleton className="h-[100px] flex-1" />
-        <Skeleton className="h-[100px] flex-1" />
-        <Skeleton className="h-[100px] flex-1" />
+        <StatTileSkeleton />
+        <StatTileSkeleton />
+        <StatTileSkeleton />
+        <StatTileSkeleton />
       </StatTileGroup>
     );
   }

@@ -79,7 +79,8 @@ func newTestExternalMCPService(t *testing.T) (context.Context, *testInstance) {
 	serverURL, err := url.Parse(testServerURL)
 	require.NoError(t, err)
 
-	svc := externalmcp.NewService(logger, tracerProvider, conn, sessionManager, mcpRegistryClient, authzEngine, serverURL)
+	catalog := externalmcp.NewCatalogService(conn, mcpRegistryClient, nil)
+	svc := externalmcp.NewService(logger, tracerProvider, conn, sessionManager, mcpRegistryClient, catalog, authzEngine, serverURL)
 
 	return ctx, &testInstance{
 		service:        svc,

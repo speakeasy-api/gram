@@ -11,8 +11,11 @@ import {
 } from "@tanstack/react-query";
 import {
   getOrganization,
+  getOrganizationChatAnalysisSettings,
+  getOrganizationFeatures,
   getOrganizationStats,
   getInferenceKeys,
+  getInferenceSpendHistory,
   getPaygBillingSummary,
   getStripeSubscription,
   getProject,
@@ -22,7 +25,10 @@ import {
   listOrganizations,
   omitUnset,
   type AdminInferenceKey,
+  type AdminInferenceSpendMonth,
   type AdminOrganization,
+  type AdminOrganizationChatAnalysisSettings,
+  type AdminOrganizationFeatures,
   type AdminProjectDetail,
   type AdminPaygBillingSummary,
   type AdminStripeSubscription,
@@ -88,6 +94,33 @@ export function organizationQuery(
   });
 }
 
+export function organizationFeaturesQuery(
+  organizationID: string,
+): AdminQuery<
+  AdminOrganizationFeatures,
+  readonly ["gram-admin-organization-features", string]
+> {
+  return queryOptions({
+    queryKey: ["gram-admin-organization-features", organizationID] as const,
+    queryFn: () => getOrganizationFeatures(organizationID),
+  });
+}
+
+export function organizationChatAnalysisSettingsQuery(
+  organizationID: string,
+): AdminQuery<
+  AdminOrganizationChatAnalysisSettings,
+  readonly ["gram-admin-organization-chat-analysis-settings", string]
+> {
+  return queryOptions({
+    queryKey: [
+      "gram-admin-organization-chat-analysis-settings",
+      organizationID,
+    ] as const,
+    queryFn: () => getOrganizationChatAnalysisSettings(organizationID),
+  });
+}
+
 export function organizationProjectsQuery(
   organizationID: string,
 ): AdminQuery<
@@ -121,6 +154,19 @@ export function inferenceKeysQuery(
   return queryOptions({
     queryKey: ["gram-admin-inference-keys", organizationID] as const,
     queryFn: () => getInferenceKeys(organizationID),
+    retry: false,
+  });
+}
+
+export function inferenceSpendHistoryQuery(
+  organizationID: string,
+): AdminQuery<
+  AdminInferenceSpendMonth[],
+  readonly ["gram-admin-inference-spend-history", string]
+> {
+  return queryOptions({
+    queryKey: ["gram-admin-inference-spend-history", organizationID] as const,
+    queryFn: () => getInferenceSpendHistory(organizationID),
     retry: false,
   });
 }

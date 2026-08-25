@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math/big"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgerrcode"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/repo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 )
 
@@ -37,9 +39,10 @@ const (
 type SettleStripeInvoiceAllocationsArgs struct {
 	Now time.Time
 	// RestrictOpenRouterToReadyOrganizations is explicit so an empty list from
-	// Temporal means "freeze no chat spend", never "freeze every org".
+	// Temporal means "freeze no billable key spend", never "freeze every org".
 	RestrictOpenRouterToReadyOrganizations bool
 	OpenRouterReadyOrganizationIDs         []string
+	OpenRouterBillableKeyPolicyFingerprint string
 }
 
 // SettleStripeInvoiceAllocations freezes OpenRouter charges, attaches TUM
@@ -77,7 +80,10 @@ func (s *SettleStripeInvoiceAllocations) Do(ctx context.Context, args SettleStri
 	}
 
 	queries := repo.New(s.db)
-	organizations, err := queries.ListStripeInvoiceBillingOrganizations(ctx, timestamptz(now))
+	organizations, err := queries.ListStripeInvoiceBillingOrganizations(ctx, repo.ListStripeInvoiceBillingOrganizationsParams{
+		BillableKeyTypes: openrouter.BillableKeyTypeStrings(),
+		Now:              timestamptz(now),
+	})
 	if err != nil {
 		return fmt.Errorf("list Stripe invoice billing organizations: %w", err)
 	}
@@ -90,7 +96,8 @@ func (s *SettleStripeInvoiceAllocations) Do(ctx context.Context, args SettleStri
 	for _, organizationID := range organizations {
 		_, openRouterReady := ready[organizationID]
 		if err := s.settleOrganization(ctx, queries, organizationID, now,
-			!args.RestrictOpenRouterToReadyOrganizations || openRouterReady); err != nil {
+			!args.RestrictOpenRouterToReadyOrganizations ||
+				(openRouterReady && args.OpenRouterBillableKeyPolicyFingerprint == openrouter.BillableKeyPolicyFingerprint())); err != nil {
 			s.logger.ErrorContext(ctx, "settle Stripe invoice allocations",
 				attr.SlogOrganizationID(organizationID),
 				attr.SlogError(err),
@@ -111,8 +118,9 @@ func (s *SettleStripeInvoiceAllocations) settleOrganization(
 ) error {
 	organizationIDParam := pgtype.Text{String: organizationID, Valid: true}
 	invoices, err := queries.ListStripeInvoicesForOpenRouterBilling(ctx, repo.ListStripeInvoicesForOpenRouterBillingParams{
-		OrganizationID: organizationIDParam,
-		Now:            timestamptz(now),
+		OrganizationID:   organizationIDParam,
+		BillableKeyTypes: openrouter.BillableKeyTypeStrings(),
+		Now:              timestamptz(now),
 	})
 	if err != nil {
 		return fmt.Errorf("list invoices: %w", err)
@@ -165,17 +173,18 @@ func (s *SettleStripeInvoiceAllocations) freezeInvoice(
 	cycleEnd := invoice.ServicePeriodEnd.Time.UTC()
 	if invoice.ServicePeriodEnd.Valid && !now.Before(cycleEnd.Add(openRouterInvoiceFreezeDelay)) {
 		days, err := queries.ListOpenRouterInvoiceSourceDays(ctx, repo.ListOpenRouterInvoiceSourceDaysParams{
-			OrganizationID:  organizationID,
-			StripeInvoiceID: invoice.StripeInvoiceID,
-			Now:             timestamptz(now),
+			OrganizationID:   organizationID,
+			StripeInvoiceID:  invoice.StripeInvoiceID,
+			BillableKeyTypes: openrouter.BillableKeyTypeStrings(),
+			Now:              timestamptz(now),
 		})
 		if err != nil {
 			return fmt.Errorf("list source days for invoice %s: %w", invoice.StripeInvoiceID, err)
 		}
 
 		missedFreeze := !now.Before(cycleEnd.Add(openRouterInvoiceObservationDelay))
-		frozenSnapshots := make([]pgtype.Numeric, 0, len(days))
-		previousCumulativeCents := int64(0)
+		frozenTotals := make(map[string]*big.Rat, len(openrouter.BillableKeyTypes()))
+		previousCumulativeCents := make(map[string]int64, len(openrouter.BillableKeyTypes()))
 		for _, day := range days {
 			// A day frozen by an earlier pass is immovable, so the chain
 			// continues from the snapshot on record. Reseeding it from spend that
@@ -188,13 +197,21 @@ func (s *SettleStripeInvoiceAllocations) freezeInvoice(
 			case missedFreeze:
 				snapshot = numericFromCents(0)
 			}
-			frozenSnapshots = append(frozenSnapshots, snapshot)
-			cumulativeCents, err := roundNumericsToCents(frozenSnapshots)
+			total, err := addNumericToTotal(frozenTotals[day.KeyType], snapshot)
 			if err != nil {
 				return fmt.Errorf("round baseline for %s: %w", day.SourceDay.Time.Format(time.DateOnly), err)
 			}
-			cents := cumulativeCents - previousCumulativeCents
-			previousCumulativeCents = cumulativeCents
+			frozenTotals[day.KeyType] = total
+			cumulativeCents, err := roundRatToCents(total)
+			if err != nil {
+				return fmt.Errorf("round baseline for %s: %w", day.SourceDay.Time.Format(time.DateOnly), err)
+			}
+			cents := cumulativeCents - previousCumulativeCents[day.KeyType]
+			previousCumulativeCents[day.KeyType] = cumulativeCents
+
+			if day.FrozenSnapshotUsd.Valid {
+				continue
+			}
 
 			destination := pgtype.Text{String: "", Valid: false}
 			if cents != 0 && invoice.InvoiceState == "draft" {
@@ -203,6 +220,7 @@ func (s *SettleStripeInvoiceAllocations) freezeInvoice(
 			if _, err := queries.CreateOpenRouterInvoiceAllocation(ctx, openRouterAllocationParams(
 				organizationID,
 				day.SourceDay,
+				day.KeyType,
 				1,
 				snapshot,
 				cents,
@@ -220,70 +238,90 @@ func (s *SettleStripeInvoiceAllocations) freezeInvoice(
 	}
 
 	baselines, err := queries.ListOpenRouterInvoiceBaselines(ctx, repo.ListOpenRouterInvoiceBaselinesParams{
-		OrganizationID:  organizationID,
-		StripeInvoiceID: invoice.StripeInvoiceID,
-		Now:             timestamptz(now),
+		OrganizationID:   organizationID,
+		StripeInvoiceID:  invoice.StripeInvoiceID,
+		BillableKeyTypes: openrouter.BillableKeyTypeStrings(),
+		Now:              timestamptz(now),
 	})
 	if err != nil {
 		return fmt.Errorf("list final source snapshots for invoice %s: %w", invoice.StripeInvoiceID, err)
 	}
 	// A final row is either durable spend or an authoritative pre-key zero. Do
-	// not allocate past the first unresolved day: later cents depend on every
-	// earlier exact snapshot.
-	readyCount := 0
+	// not allocate a key past its first unresolved day: later cents in that
+	// key's rounding chain depend on every earlier exact snapshot. Other keys
+	// have independent chains and can continue reconciling.
+	readyBaselines := make([]repo.ListOpenRouterInvoiceBaselinesRow, 0, len(baselines))
+	unresolvedKeyTypes := make(map[string]struct{}, len(openrouter.BillableKeyTypes()))
 	for _, baseline := range baselines {
-		if !baseline.FinalSpendUsd.Valid {
-			break
+		if _, unresolved := unresolvedKeyTypes[baseline.KeyType]; unresolved {
+			continue
 		}
-		readyCount++
+		if !baseline.FinalSpendUsd.Valid {
+			unresolvedKeyTypes[baseline.KeyType] = struct{}{}
+			continue
+		}
+		readyBaselines = append(readyBaselines, baseline)
 	}
-	baselines = baselines[:readyCount]
+	baselines = readyBaselines
 
-	frozenSnapshots := make([]pgtype.Numeric, 0, len(baselines))
-	finalSnapshots := make([]pgtype.Numeric, 0, len(baselines))
-	previousCumulativeDeltaCents := int64(0)
+	frozenTotals := make(map[string]*big.Rat, len(openrouter.BillableKeyTypes()))
+	finalTotals := make(map[string]*big.Rat, len(openrouter.BillableKeyTypes()))
+	previousCumulativeDeltaCents := make(map[string]int64, len(openrouter.BillableKeyTypes()))
 	idealCarryCents := make([]int64, len(baselines))
-	existingCarryCents := int64(0)
-	missingCarryCount := 0
+	existingCarryCents := make(map[string]int64, len(openrouter.BillableKeyTypes()))
+	missingCarryCount := make(map[string]int, len(openrouter.BillableKeyTypes()))
 	for i, baseline := range baselines {
-		frozenSnapshots = append(frozenSnapshots, baseline.SourceSnapshotUsd)
-		finalSnapshots = append(finalSnapshots, baseline.FinalSpendUsd)
-		frozenCents, err := roundNumericsToCents(frozenSnapshots)
+		keyType := baseline.KeyType
+		frozenTotal, err := addNumericToTotal(frozenTotals[keyType], baseline.SourceSnapshotUsd)
 		if err != nil {
 			return fmt.Errorf("round frozen snapshot for %s: %w", baseline.SourceKey, err)
 		}
-		finalCents, err := roundNumericsToCents(finalSnapshots)
+		frozenTotals[keyType] = frozenTotal
+		finalTotal, err := addNumericToTotal(finalTotals[keyType], baseline.FinalSpendUsd)
+		if err != nil {
+			return fmt.Errorf("round final snapshot for %s: %w", baseline.SourceKey, err)
+		}
+		finalTotals[keyType] = finalTotal
+		frozenCents, err := roundRatToCents(frozenTotal)
+		if err != nil {
+			return fmt.Errorf("round frozen snapshot for %s: %w", baseline.SourceKey, err)
+		}
+		finalCents, err := roundRatToCents(finalTotal)
 		if err != nil {
 			return fmt.Errorf("round final snapshot for %s: %w", baseline.SourceKey, err)
 		}
 		cumulativeDeltaCents := finalCents - frozenCents
-		idealCarryCents[i] = cumulativeDeltaCents - previousCumulativeDeltaCents
-		previousCumulativeDeltaCents = cumulativeDeltaCents
+		idealCarryCents[i] = cumulativeDeltaCents - previousCumulativeDeltaCents[keyType]
+		previousCumulativeDeltaCents[keyType] = cumulativeDeltaCents
 		if baseline.ExistingCarryAmountUsd.Valid {
 			cents, err := roundNumericToCents(baseline.ExistingCarryAmountUsd)
 			if err != nil {
 				return fmt.Errorf("read existing carry for %s: %w", baseline.SourceKey, err)
 			}
-			existingCarryCents += cents
+			existingCarryCents[keyType] += cents
 		} else {
-			missingCarryCount++
+			missingCarryCount[keyType]++
 		}
 	}
 
 	// Existing carries are immutable. If an older run stored a later sibling
-	// before a missing middle day arrived, put the aggregate reconciliation on
-	// the last missing row so all seq=2 rows still sum to the rounded cycle delta.
-	remainingCarryCents := previousCumulativeDeltaCents - existingCarryCents
+	// before a missing middle day arrived, put each key's aggregate reconciliation
+	// on its last missing row so its seq=2 rows sum to that key's rounded delta.
+	remainingCarryCents := make(map[string]int64, len(openrouter.BillableKeyTypes()))
+	for _, keyType := range openrouter.BillableKeyTypeStrings() {
+		remainingCarryCents[keyType] = previousCumulativeDeltaCents[keyType] - existingCarryCents[keyType]
+	}
 	for i, baseline := range baselines {
 		if baseline.ExistingCarryAmountUsd.Valid {
 			continue
 		}
+		keyType := baseline.KeyType
 		deltaCents := idealCarryCents[i]
-		missingCarryCount--
-		if missingCarryCount == 0 {
-			deltaCents = remainingCarryCents
+		missingCarryCount[keyType]--
+		if missingCarryCount[keyType] == 0 {
+			deltaCents = remainingCarryCents[keyType]
 		}
-		remainingCarryCents -= deltaCents
+		remainingCarryCents[keyType] -= deltaCents
 		destination := pgtype.Text{String: "", Valid: false}
 		if deltaCents < 0 {
 			destination = pgtype.Text{String: invoice.StripeInvoiceID, Valid: true}
@@ -291,6 +329,7 @@ func (s *SettleStripeInvoiceAllocations) freezeInvoice(
 		if _, err := queries.CreateOpenRouterInvoiceAllocation(ctx, openRouterAllocationParams(
 			organizationID,
 			baseline.SourceDay,
+			baseline.KeyType,
 			2,
 			baseline.FinalSpendUsd,
 			deltaCents,
@@ -315,7 +354,9 @@ func (s *SettleStripeInvoiceAllocations) freezeInvoice(
 // reaches that one still raises. Both keys derive from the same (organization,
 // source day, seq) tuple, so the violation means the row this run wanted is
 // already stored, and no UPDATE in this package rewrites a stored allocation's
-// amount_usd or source_snapshot_usd. The loser has nothing left to do.
+// amount_usd or source_snapshot_usd. Both identities include the key type, so
+// different billable keys on the same UTC day cannot collide. The loser has
+// nothing left to do.
 //
 // Any other violation, the arbiter's included, is a fault this activity has
 // never reasoned about and still has to surface.
@@ -329,6 +370,7 @@ func allocationAlreadyClaimed(err error) bool {
 func openRouterAllocationParams(
 	organizationID pgtype.Text,
 	day pgtype.Date,
+	keyType string,
 	seq int32,
 	snapshot pgtype.Numeric,
 	cents int64,
@@ -345,14 +387,14 @@ func openRouterAllocationParams(
 	dayText := day.Time.UTC().Format(time.DateOnly)
 	return repo.CreateOpenRouterInvoiceAllocationParams{
 		OrganizationID:       organizationID,
-		SourceKey:            dayText + ":chat",
+		SourceKey:            dayText + ":" + keyType,
 		Seq:                  seq,
 		SourceDay:            day,
 		SourceSnapshotUsd:    snapshot,
 		AmountUsd:            numericFromCents(cents),
 		OriginalInvoiceID:    pgtype.Text{String: originalInvoiceID, Valid: true},
 		DestinationInvoiceID: destinationInvoiceID,
-		IdempotencyKey:       fmt.Sprintf("openrouter:%s:%s:%d", organizationID.String, dayText, seq),
+		IdempotencyKey:       fmt.Sprintf("openrouter:%s:%s:%s:%d", organizationID.String, dayText, keyType, seq),
 		DeliveryState:        deliveryState,
 		ConfirmedAt:          confirmedAt,
 	}
@@ -669,7 +711,14 @@ func allocationPeriodAndDescription(claim repo.ClaimNextStripeInvoiceAllocationR
 
 func allocationDescription(claim repo.ClaimNextStripeInvoiceAllocationRow) string {
 	if claim.SourceKind == stripeAllocationSourceOpenRouter && claim.SourceDay.Valid {
-		return "OpenRouter chat usage for " + claim.SourceDay.Time.UTC().Format(time.DateOnly)
+		label := "OpenRouter inference"
+		switch {
+		case strings.HasSuffix(claim.SourceKey, ":"+string(openrouter.KeyTypeChat)):
+			label = "Other inference"
+		case strings.HasSuffix(claim.SourceKey, ":"+string(openrouter.KeyTypeInternal)):
+			label = "Security inference"
+		}
+		return label + " usage for " + claim.SourceDay.Time.UTC().Format(time.DateOnly)
 	}
 	if claim.SourceKind == stripeAllocationSourceTUM && claim.SourcePeriodStart.Valid && claim.SourcePeriodEnd.Valid {
 		return fmt.Sprintf("TUM usage adjustment for %s to %s",
@@ -680,27 +729,32 @@ func allocationDescription(claim repo.ClaimNextStripeInvoiceAllocationRow) strin
 }
 
 func roundNumericToCents(value pgtype.Numeric) (int64, error) {
-	return roundNumericsToCents([]pgtype.Numeric{value})
+	total, err := addNumericToTotal(nil, value)
+	if err != nil {
+		return 0, err
+	}
+	return roundRatToCents(total)
 }
 
-func roundNumericsToCents(values []pgtype.Numeric) (int64, error) {
-	total := new(big.Rat)
-	for _, value := range values {
-		if !value.Valid || value.NaN || value.InfinityModifier != pgtype.Finite || value.Int == nil {
-			return 0, errors.New("amount is not a finite numeric")
-		}
-
-		term := new(big.Rat).SetInt(value.Int)
-		if value.Exp >= 0 {
-			factor := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(value.Exp)), nil)
-			term.Mul(term, new(big.Rat).SetInt(factor))
-		} else {
-			divisor := new(big.Int).Exp(big.NewInt(10), big.NewInt(-int64(value.Exp)), nil)
-			term.Quo(term, new(big.Rat).SetInt(divisor))
-		}
-		total.Add(total, term)
+func addNumericToTotal(total *big.Rat, value pgtype.Numeric) (*big.Rat, error) {
+	if !value.Valid || value.NaN || value.InfinityModifier != pgtype.Finite || value.Int == nil {
+		return nil, errors.New("amount is not a finite numeric")
 	}
+	if total == nil {
+		total = new(big.Rat)
+	}
+	term := new(big.Rat).SetInt(value.Int)
+	if value.Exp >= 0 {
+		factor := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(value.Exp)), nil)
+		term.Mul(term, new(big.Rat).SetInt(factor))
+	} else {
+		divisor := new(big.Int).Exp(big.NewInt(10), big.NewInt(-int64(value.Exp)), nil)
+		term.Quo(term, new(big.Rat).SetInt(divisor))
+	}
+	return total.Add(total, term), nil
+}
 
+func roundRatToCents(total *big.Rat) (int64, error) {
 	scaled := new(big.Rat).Mul(total, big.NewRat(100, 1))
 	absNumerator := new(big.Int).Abs(new(big.Int).Set(scaled.Num()))
 	quotient, remainder := new(big.Int).QuoRem(absNumerator, scaled.Denom(), new(big.Int))

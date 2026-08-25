@@ -808,6 +808,8 @@ tags:
     description: Consumer APIs for interacting with all relevant data for an instance of a toolset and environment.
   - name: integrations
     description: Explore third-party tools in Gram.
+  - name: jsonWebKeySets
+    description: Manage organization-level JSON Web Key Sets — published public keys backed by customer KMS keys — and the publish/activate/retire/revoke lifecycle of their keys.
   - name: keys
     description: Managing system api keys.
   - name: litellm
@@ -815,15 +817,19 @@ tags:
   - name: mcpApproval
     description: Dashboard API for reviewing and deciding MCP server approval requests.
   - name: mcpEndpoints
-    description: Managing MCP endpoints, the url-friendly slug identifiers that address MCP servers.
+    description: Managing MCP endpoints, the url-friendly slug identifiers that address MCP servers and meta MCP servers.
   - name: mcpMetadata
     description: Manages metadata for the MCP install page shown to users.
   - name: mcpServers
     description: Managing MCP servers, which configure authentication, environment, and backend selection for an MCP server.
+  - name: metaMcp
+    description: 'Managing meta MCP servers: aggregate servers that front an explicitly managed set of MCP servers through a single endpoint.'
   - name: modelKeys
     description: Manage customer-supplied model provider API keys, scoped per project and responsibility slot.
   - name: organizations
     description: Organization membership, invitations, and directory.
+  - name: otel
+    description: Receives OpenTelemetry signals from LLM providers and harnesses.
   - name: otelForwarding
     description: Manage per-organization forwarding of inbound OTEL hook payloads to a customer-owned endpoint.
   - name: packages

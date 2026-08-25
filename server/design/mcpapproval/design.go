@@ -22,7 +22,7 @@ var _ = Service("mcpApproval", func() {
 			security.SessionPayload()
 			security.ByKeyPayload()
 			security.ProjectPayload()
-			Attribute("status", String, "Only return requests in this status.")
+			Attribute("status", String, "Only return requests in this status: unreviewed, requested, approved, denied, or superseded.")
 			Attribute("limit", Int32, "The number of requests to return per page")
 		})
 
@@ -275,7 +275,7 @@ var ApprovalRequestSummary = Type("ApprovalRequestSummary", func() {
 	Attribute("server_slug", String, "The Shadow MCP inventory page slug for a server_url target — the same identifier the inventory derives from the canonical URL, so a request links to the server page it describes. Absent for stdio targets.")
 	Attribute("artifact_ref", String, "The resolved artifact identity. Absent when the server could not be identified, which must surface as unknown rather than as an absence of findings.")
 	Attribute("version_pinned", Boolean, "Whether the reference names an exact version.")
-	Attribute("status", String, "The request's current status.")
+	Attribute("status", String, "The request's current status: unreviewed, requested, approved, denied, or superseded (the latest decision was explicitly displaced by a policy URL-list edit; history preserved, no enforcement derives from it until re-decided).")
 	Attribute("requester_count", Int, "How many people have asked for this server.")
 	Attribute("evidence_changed_at", String, "When the daily recheck first found the permission-relevant evidence differing from what the latest approval rested on. Absent when nothing has drifted. Cleared only by recording a new decision.", func() { Format(FormatDateTime) })
 	Attribute("created_at", String, "When the request was first raised.", func() { Format(FormatDateTime) })
@@ -329,8 +329,45 @@ var ResearchReport = Type("ResearchReport", func() {
 	Attribute("completed_at", String, "When the run finished.", func() { Format(FormatDateTime) })
 	Attribute("error", String, "Why the run failed, when it did.")
 	Attribute("created_at", String, "When the run was requested.", func() { Format(FormatDateTime) })
+	Attribute("tool_calls", ArrayOf(ResearchToolCall), "The run's per-action trace — every search and page fetch, in order. The report above is a synthesis that drops most of what was read; this is what the agent actually did.")
 
 	Required("id", "status", "report_version", "created_at")
+})
+
+var ResearchToolCall = Type("ResearchToolCall", func() {
+	Description("One action a research run took, named by tool and carrying the payload for that tool. The report is a synthesis that drops most of what was read; this is what the agent actually did. Observability, never a claim about the server.")
+
+	Attribute("sequence", Int, "Position in the run, from zero.")
+	Attribute("tool", String, "The tool that ran: web_search or fetch_page. The discriminator for which payload below is present.")
+	Attribute("error", String, "The tool's failure text, when the call did not succeed.")
+	Attribute("search", ResearchWebSearchCall, "The web-search payload, present when tool is web_search.")
+	Attribute("fetch", ResearchPageFetchCall, "The page-fetch payload, present when tool is fetch_page.")
+
+	Required("sequence", "tool")
+})
+
+var ResearchWebSearchCall = Type("ResearchWebSearchCall", func() {
+	Description("A web search the agent ran. A search runs a billed completion, so its token spend lives here.")
+
+	Attribute("query", String, "What the agent searched for.")
+	Attribute("result_count", Int, "How many citations the search returned.")
+	Attribute("prompt_tokens", Int, "Prompt tokens this search spent.")
+	Attribute("completion_tokens", Int, "Completion tokens this search spent.")
+})
+
+var ResearchPageFetchCall = Type("ResearchPageFetchCall", func() {
+	Description("A page the agent fetched, with what came back and the injection judge's verdict on it. A fetch spends nothing.")
+
+	Attribute("url", String, "The page the agent fetched.")
+	Attribute("final_url", String, "Where the fetch landed after redirects, when it differed.")
+	Attribute("content_type", String, "The fetched page's content type.")
+	Attribute("content_bytes", Int, "The fetched page's extracted-text size.")
+	Attribute("truncated", Boolean, "Whether the fetch hit its caps and the preview is of a prefix.")
+	Attribute("judged", Boolean, "Whether the injection judge reached a verdict on this page.")
+	Attribute("injection_flagged", Boolean, "Whether the judge found the page tried to instruct its reader.")
+	Attribute("judge_rationale", String, "The judge's reasoning, when it flagged the page.")
+	Attribute("content_preview", String, "A bounded preview of the extracted page text. Untrusted web content.")
+	Attribute("cited_by_claims", ArrayOf(Int), "Indices of the report claims that cited this page — the link from a fetch to the evidence it became. Empty when the page was read but nothing in the final report rests on it.")
 })
 
 var EvidenceFieldChange = Type("EvidenceFieldChange", func() {

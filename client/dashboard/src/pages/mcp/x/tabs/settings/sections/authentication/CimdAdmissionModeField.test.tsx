@@ -153,11 +153,11 @@ describe("CimdAdmissionModeField", () => {
   it("warns about origin reach when Open is selected", () => {
     render(<CimdAdmissionModeField userSessionIssuer={issuer("presets")} />);
 
-    expect(screen.queryByText(/only guardrails/)).toBeNull();
+    expect(screen.queryByText(/any valid CIMD client/i)).toBeNull();
 
     fireEvent.click(screen.getByRole("radio", { name: "Open" }));
 
-    expect(screen.getByText(/only guardrails/)).toBeDefined();
+    expect(screen.getByText(/any valid CIMD client/i)).toBeDefined();
   });
 
   it("saves a mode change directly for an already-configured issuer", () => {

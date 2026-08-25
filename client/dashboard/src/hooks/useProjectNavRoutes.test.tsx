@@ -41,7 +41,7 @@ const routes = {
   orgMemory: route("Org Memory", "org-memory"),
   playground: route("Playground", "playground"),
   plugins: route("Plugins", "plugins"),
-  policyCenter: route("Risk Policies", "risk-policies"),
+  policyCenter: route("Guardrails", "risk-policies"),
   riskEvents: route("Risk Events", "risk-events"),
   riskOverview: route("Risk Overview", "risk"),
   watchdog: route("Watchdog", "watchdog"),
@@ -154,8 +154,9 @@ describe("useProjectNavRoutes", () => {
     expect(navRoutes).toContain(routes.assistants);
     expect(navRoutes).toContain(routes.watchdog);
     expect(navRoutes).not.toContain(routes.deployments);
-    // Watchdog supersedes the legacy risk pages in the nav.
+    // Watchdog supersedes the legacy overview in the nav; Risk Events shows
+    // in both modes.
     expect(navRoutes).not.toContain(routes.riskOverview);
-    expect(navRoutes).not.toContain(routes.riskEvents);
+    expect(navRoutes).toContain(routes.riskEvents);
   });
 });

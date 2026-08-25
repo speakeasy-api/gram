@@ -1,4 +1,4 @@
-h1:iDTj8OvajD/+UXjdm/QEbe7jIb+Sb2xex3VTBIugwKY=
+h1:BuiAwSCHyJvHjNldMK66c+aiHP9YCQNRjPOOjv/1pqk=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -356,3 +356,11 @@ h1:iDTj8OvajD/+UXjdm/QEbe7jIb+Sb2xex3VTBIugwKY=
 20260818190528_remote-session-issuers-add-code-challenge-methods-supported.sql h1:OPMkLq4PyRSo/rSAJBXDFigYnRsbRX1gWxoy5yS2SjQ=
 20260818203516_mcp-approval-evidence-change-detection.sql h1:yNs/1liPkJfSG3clzyfd+6zGfhYbWVHVFo4rUfXOQ3Q=
 20260818203838_mcp-research-tool-calls.sql h1:fhhTuuxv18VW3fc5N07RpyZEygKdoaBGVCdx/oAUpxw=
+20260820013033_add-chat-session-links.sql h1:3UEJgkRNXr+31yQFpteFRyq48s1l7HYq+kttJm2Q0rQ=
+20260820053103_platform-mcp-d1-lifecycle-registry-prerequisite.sql h1:4Ci7OgdkcBEp3xDucTJcjzzqfrt4LopTeWolre7Ej50=
+20260820193631_user-session-client-asymmetric-auth.sql h1:gnmZD+REuCyrzSBVkS1Aw7mdaq+M794XwNu09qJUKLM=
+20260820223741_add-meta-mcp-servers.sql h1:IeASYht+IS0A2fUpejqgmnveRLsI/toU3TXQkk0eR0U=
+20260824101637_session-quarantines.sql h1:u9OuwdWdmTtmMQAKi87E16bPyf37dcYtyD8eVl8i+Ps=
+20260824205231_add-meta-mcp-visibility.sql h1:sNzUickcYBYZhyuODqZl5gQkHRg20UNRtul3fKxd+oE=
+20260825013503_platform-mcp-operation-receipt-result-payload.sql h1:WjXtdhOf4ZTjor8hkwXynhj2TI2Gv5iO4z/EzFaK0lQ=
+20260825101109_platform-mcp-cimd-storage.sql h1:+lWTYrX8sO91BWLyAP+4Z1gDOtXvlowQuZTSfCezwDE=

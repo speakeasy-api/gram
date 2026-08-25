@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import { formatShortDate } from "@/components/access/shadow-mcp-utils";
 import ShadowMCPServerDetail from "./ShadowMCPServerDetail";
+import { testAccessSummary } from "@/components/shadow-mcp/shadowMCPInventoryTestFixtures";
 
 const mocks = vi.hoisted(() => ({
   useMembers: vi.fn(),
@@ -120,13 +121,15 @@ vi.mock("@/components/mcp-approvals/DecideAccessSheet", () => ({
 }));
 
 vi.mock("@/components/mcp-approvals/ApprovalReview", () => ({
-  // The double renders the usage slot, because the real review does: observed
-  // traffic is a section of the review, and a double that swallowed it would
-  // hide the page's own table from every test here.
+  // The double renders the usage and summary slots, because the real review
+  // does: observed traffic and the at-a-glance strip are both sections of the
+  // review, and a double that swallowed them would hide the page's own table
+  // and stats from every test here.
   ApprovalReview: ({
     audience,
     requestId,
     usage,
+    summary,
   }: {
     audience?: {
       disposition: string | null;
@@ -135,12 +138,14 @@ vi.mock("@/components/mcp-approvals/ApprovalReview", () => ({
     };
     requestId: string;
     usage?: React.ReactNode;
+    summary?: React.ReactNode;
   }) => (
     <div
       data-testid="approval-review"
       data-audience-disposition={audience?.disposition ?? undefined}
       data-request-id={requestId}
     >
+      {summary}
       {usage}
     </div>
   ),
@@ -358,6 +363,9 @@ function inventoryServer(
     urlHost: "github.example.com",
     userCount: 2,
     ...overrides,
+    accessSummary:
+      overrides.accessSummary ??
+      testAccessSummary(overrides.access ?? "allowed"),
   };
 }
 

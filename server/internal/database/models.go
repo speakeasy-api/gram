@@ -477,6 +477,24 @@ type ChatResolutionMessage struct {
 	MessageID        uuid.UUID
 }
 
+type ChatSessionLink struct {
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	OrganizationID  string
+	ParentChatID    uuid.UUID
+	ChildChatID     uuid.NullUUID
+	ParentSessionID string
+	ChildSessionID  pgtype.Text
+	Kind            string
+	TargetHarness   string
+	SourceSurface   pgtype.Text
+	ActorEmail      pgtype.Text
+	DeviceSerial    pgtype.Text
+	DeviceHostname  pgtype.Text
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
 type ChatUserFeedback struct {
 	ID                  uuid.UUID
 	ProjectID           uuid.UUID
@@ -1142,16 +1160,17 @@ type McpApprovalRequestRequester struct {
 }
 
 type McpEndpoint struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
-	CustomDomainID uuid.NullUUID
-	McpServerID    uuid.UUID
-	Slug           string
-	IsDomainRoot   pgtype.Bool
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	CustomDomainID  uuid.NullUUID
+	McpServerID     uuid.NullUUID
+	MetaMcpServerID uuid.NullUUID
+	Slug            string
+	IsDomainRoot    pgtype.Bool
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
 }
 
 type McpEnvironmentConfig struct {
@@ -1182,13 +1201,20 @@ type McpMetadatum struct {
 }
 
 type McpRegistry struct {
-	ID        uuid.UUID
-	Name      string
-	Url       string
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
-	DeletedAt pgtype.Timestamptz
-	Deleted   bool
+	ID                   uuid.UUID
+	Name                 string
+	Url                  string
+	SourceType           pgtype.Text
+	AuthProfile          pgtype.Text
+	Enabled              pgtype.Bool
+	CertificationState   pgtype.Text
+	CertificationVersion pgtype.Text
+	Priority             pgtype.Int4
+	SourceKey            pgtype.Text
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	DeletedAt            pgtype.Timestamptz
+	Deleted              bool
 }
 
 // Research-agent output for an approval request. Findings are gathered and cited, never adjudicated — the admin decides.
@@ -1267,6 +1293,31 @@ type MdmDevice struct {
 	MissingSince              pgtype.Timestamptz
 	CreatedAt                 pgtype.Timestamptz
 	UpdatedAt                 pgtype.Timestamptz
+}
+
+type MetaMcpServer struct {
+	ID                  uuid.UUID
+	OrganizationID      string
+	ProjectID           uuid.UUID
+	UserSessionIssuerID uuid.NullUUID
+	Name                string
+	Visibility          string
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	DeletedAt           pgtype.Timestamptz
+	Deleted             bool
+}
+
+type MetaMcpServerMember struct {
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	MetaMcpServerID uuid.UUID
+	McpServerID     uuid.UUID
+	SortOrder       int32
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
 }
 
 type ModelProviderKey struct {
@@ -1615,6 +1666,7 @@ type PlatformMcpDistribution struct {
 	ProjectID            uuid.UUID
 	RegistrationID       uuid.UUID
 	DefaultPluginID      uuid.UUID
+	PluginID             uuid.NullUUID
 	PluginServerID       uuid.NullUUID
 	State                string
 	Version              int64
@@ -1657,16 +1709,20 @@ type PlatformMcpFeedback struct {
 }
 
 type PlatformMcpOauthClient struct {
-	ID                    uuid.UUID
-	ClientID              string
-	ClientSecretHash      pgtype.Text
-	ClientName            string
-	RedirectUris          []string
-	ClientIDIssuedAt      pgtype.Timestamptz
-	ClientSecretExpiresAt pgtype.Timestamptz
-	RevokedAt             pgtype.Timestamptz
-	CreatedAt             pgtype.Timestamptz
-	UpdatedAt             pgtype.Timestamptz
+	ID                             uuid.UUID
+	ClientID                       string
+	ClientSecretHash               pgtype.Text
+	ClientName                     string
+	RedirectUris                   []string
+	ClientIDIssuedAt               pgtype.Timestamptz
+	ClientSecretExpiresAt          pgtype.Timestamptz
+	RevokedAt                      pgtype.Timestamptz
+	ClientIDMetadataUri            pgtype.Text
+	ClientIDMetadataFetchedAt      pgtype.Timestamptz
+	ClientIDMetadataCacheExpiresAt pgtype.Timestamptz
+	ClientIDMetadataEtag           pgtype.Text
+	CreatedAt                      pgtype.Timestamptz
+	UpdatedAt                      pgtype.Timestamptz
 }
 
 type PlatformMcpOnboardingMilestone struct {
@@ -1717,6 +1773,7 @@ type PlatformMcpOperationReceipt struct {
 	InputHash            string
 	Status               string
 	ResultCode           pgtype.Text
+	ResultPayload        []byte
 	ExpiresAt            pgtype.Timestamptz
 	CreatedAt            pgtype.Timestamptz
 	UpdatedAt            pgtype.Timestamptz
@@ -2240,6 +2297,21 @@ type SessionHandoffLink struct {
 	ConsumedAt     pgtype.Timestamptz
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
+}
+
+type SessionQuarantine struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	SessionID      string
+	RiskPolicyID   uuid.NullUUID
+	RiskPolicyName string
+	UserID         string
+	Reason         string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	ReleasedAt     pgtype.Timestamptz
+	ReleasedBy     pgtype.Text
 }
 
 type Skill struct {
@@ -2906,6 +2978,9 @@ type UserSessionClient struct {
 	ClientIDMetadataFetchedAt      pgtype.Timestamptz
 	ClientIDMetadataCacheExpiresAt pgtype.Timestamptz
 	ClientIDMetadataEtag           pgtype.Text
+	TokenEndpointAuthMethod        pgtype.Text
+	ClientJwks                     []byte
+	ClientJwksUri                  pgtype.Text
 	CreatedAt                      pgtype.Timestamptz
 	UpdatedAt                      pgtype.Timestamptz
 	DeletedAt                      pgtype.Timestamptz

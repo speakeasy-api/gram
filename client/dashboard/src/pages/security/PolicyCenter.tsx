@@ -22,7 +22,6 @@ import {
 } from "@/components/ui/Sheet";
 import { Text } from "@/components/ui/Text";
 import { ExclusionsTab, type ExclusionSheetState } from "./ExclusionsTab";
-import { DismissedFindingsTab } from "./DismissedFindingsTab";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import {
@@ -61,6 +60,11 @@ import {
   invalidateAllRiskListPolicies,
   useRiskListPolicies,
 } from "@gram/client/react-query/riskListPolicies.js";
+import {
+  invalidateAllRiskListSessionQuarantines,
+  useRiskListSessionQuarantines,
+} from "@gram/client/react-query/riskListSessionQuarantines.js";
+import { useRiskReleaseSessionQuarantineMutation } from "@gram/client/react-query/riskReleaseSessionQuarantine.js";
 import { useRiskPoliciesDeleteMutation } from "@gram/client/react-query/riskPoliciesDelete.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import {
@@ -68,6 +72,7 @@ import {
   invalidateAllRiskPoliciesStatus,
 } from "@gram/client/react-query/riskPoliciesStatus.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
+import type { SessionQuarantine } from "@gram/client/models/components/sessionquarantine.js";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { Role } from "@gram/client/models/components/role.js";
 import {
@@ -98,6 +103,8 @@ import {
   getPolicyDeleteRuleListItems,
   getPolicyRuleGroupNamesForDeleteDialog,
 } from "./policy-delete-dialog";
+import { DetectionRulesTab } from "./DetectionRules";
+import { BUILTIN_RULE_ID_LIST } from "./detection-rules-data";
 import { SeverityBadge } from "./risk-ui";
 import { policySummary } from "./policy-summary";
 import { policyEnabledActionLabel } from "./policy-enabled";
@@ -551,7 +558,58 @@ function PolicyDateCell({ date }: { date: Date }): JSX.Element {
   );
 }
 
-const POLICY_CENTER_TABS = ["policies", "exclusions", "dismissed"] as const;
+function truncateSessionID(sessionID: string): string {
+  if (sessionID.length <= 18) return sessionID;
+  return `${sessionID.slice(0, 8)}...${sessionID.slice(-6)}`;
+}
+
+// Suppressed findings used to be a third tab here; they now live in the
+// Watchdog page's Suppressed section. `tab` is parsed as a string literal
+// union, so a stale `?tab=dismissed` link falls back to "policies" rather
+// than rendering an empty page.
+const POLICY_CENTER_TABS = [
+  "policies",
+  "detection-rules",
+  "exclusions",
+  "quarantines",
+] as const;
+
+/** Assistant context for the Detection Rules tab: assembled from the static
+ *  client-side rule catalog so the other tabs pay no extra queries for it.
+ *  Rule-activity questions route through the finding-level tools. */
+const DETECTION_RULES_INSIGHTS_CONTEXT = [
+  "Page: Guardrails, Detection Rules tab — the catalog of built-in and custom detection rules that policies compose.",
+  `Built-in rule ids: ${BUILTIN_RULE_ID_LIST.join(", ")}.`,
+  "Custom rules are organization-defined CEL expressions with ids prefixed 'custom.'; list them with listCustomDetectionRules.",
+  "For rule activity, query findings by rule_id via listRiskResultsForAgent (match content is redacted).",
+  "Never echo match_redacted values verbatim. Refer to findings by rule_id and source.",
+].join(" ");
+
+/** The page-level primary action follows the active tab: each tab creates its
+ *  own kind of resource. */
+function policyCenterHeaderAction(
+  activeTab: (typeof POLICY_CENTER_TABS)[number],
+  actions: {
+    newPolicy: () => void;
+    newDetectionRule: () => void;
+    newExclusion: () => void;
+  },
+): { label: string; onClick: () => void } | null {
+  switch (activeTab) {
+    case "policies":
+      return { label: "New Policy", onClick: actions.newPolicy };
+    case "detection-rules":
+      return {
+        label: "Custom Detection Rule",
+        onClick: actions.newDetectionRule,
+      };
+    case "exclusions":
+      return { label: "Set up Exclusion Rule", onClick: actions.newExclusion };
+    // Quarantines are event-driven; the tab has no creation affordance.
+    case "quarantines":
+      return null;
+  }
+}
 
 export default function PolicyCenter(): JSX.Element {
   return (
@@ -572,6 +630,12 @@ function PolicyCenterContent() {
   const routes = useRoutes();
   const telemetry = useTelemetry();
   const { data, isLoading } = useRiskListPolicies();
+  const {
+    data: quarantinesData,
+    isLoading: quarantinesLoading,
+    isError: quarantinesError,
+    refetch: refetchQuarantines,
+  } = useRiskListSessionQuarantines();
   const nlEnabled = telemetry.isFeatureEnabled("gram-prompt-policies") ?? false;
 
   const policyRows = useMemo(
@@ -597,6 +661,13 @@ function PolicyCenterContent() {
   );
   const [exclusionSheet, setExclusionSheet] =
     useState<ExclusionSheetState | null>(null);
+  // The Detection Rules tab's create sheet is owned here so the page-level
+  // primary action can open it. Leaving the tab closes it — otherwise the
+  // sheet would silently reopen when the tab is next visited.
+  const [ruleCreateOpen, setRuleCreateOpen] = useState(false);
+  useEffect(() => {
+    if (activeTab !== "detection-rules") setRuleCreateOpen(false);
+  }, [activeTab]);
 
   // Deep-link support: `?policy=<id>` redirects to that policy's detail page.
   // The command palette uses this since policies have no per-item list route.
@@ -616,6 +687,11 @@ function PolicyCenterContent() {
     onSuccess: () => {
       setPolicyToDelete(null);
       invalidate();
+    },
+  });
+  const releaseQuarantineMutation = useRiskReleaseSessionQuarantineMutation({
+    onSuccess: () => {
+      void invalidateAllRiskListSessionQuarantines(queryClient);
     },
   });
 
@@ -755,7 +831,7 @@ function PolicyCenterContent() {
   );
 
   const insightsContext = [
-    "Page: Policy Center.",
+    `Page: Guardrails, ${activeTab === "exclusions" ? "Exclusion Rules" : "Policies"} tab.`,
     `Total policies: ${policyRows.length}.`,
     `Active policies: ${policyRows.filter((r) => r.policy.enabled).length}.`,
     `Policy actions: ${policyRows.map((r) => `${r.policy.name} (${r.policy.action}${r.policy.enabled ? "" : ", inactive"})`).join(", ") || "none"}.`,
@@ -910,13 +986,67 @@ function PolicyCenterContent() {
     },
   ];
 
-  const headerAction =
-    activeTab === "policies"
-      ? { label: "New Policy", onClick: () => routes.policyCenter.new.goTo() }
-      : {
-          label: "Set up Exclusion Rule",
-          onClick: () => setExclusionSheet({ mode: "create" }),
-        };
+  const quarantineColumns: Column<SessionQuarantine>[] = [
+    {
+      key: "session",
+      header: "Session",
+      width: "1.4fr",
+      render: (row) => (
+        <span className="font-mono text-sm">
+          {truncateSessionID(row.sessionId)}
+        </span>
+      ),
+    },
+    {
+      key: "policy",
+      header: "Policy",
+      width: "1.4fr",
+      render: (row) => <span className="text-sm">{row.riskPolicyName}</span>,
+    },
+    {
+      key: "user",
+      header: "User",
+      width: "1fr",
+      render: (row) => (
+        <span className="text-muted-foreground text-sm">
+          {row.userId || "Unknown user"}
+        </span>
+      ),
+    },
+    {
+      key: "created",
+      header: "Quarantined",
+      width: "0.8fr",
+      render: (row) => <PolicyDateCell date={row.createdAt} />,
+    },
+    {
+      key: "actions",
+      header: "",
+      width: "0.4fr",
+      render: (row) => (
+        <Button
+          variant="tertiary"
+          size="sm"
+          disabled={releaseQuarantineMutation.isPending}
+          onClick={() => releaseQuarantine(row.id)}
+        >
+          <Button.Text>Release</Button.Text>
+        </Button>
+      ),
+    },
+  ];
+
+  function releaseQuarantine(id: string) {
+    releaseQuarantineMutation.mutate({
+      request: { sessionQuarantineReleaseRequestBody: { id } },
+    });
+  }
+
+  const headerAction = policyCenterHeaderAction(activeTab, {
+    newPolicy: () => routes.policyCenter.new.goTo(),
+    newDetectionRule: () => setRuleCreateOpen(true),
+    newExclusion: () => setExclusionSheet({ mode: "create" }),
+  });
   const policyDeleteRuleListItems = policyToDelete
     ? getPolicyDeleteRuleListItems(
         getPolicyRuleGroupNamesForDeleteDialog(policyToDelete.policy),
@@ -956,43 +1086,142 @@ function PolicyCenterContent() {
     policiesBody = policiesEmptyState;
   }
 
-  const primaryAction = isLoading ? undefined : (
-    <Button onClick={headerAction.onClick}>
-      <Button.LeftIcon>
-        <Plus className="mr-2 h-4 w-4" />
-      </Button.LeftIcon>
-      <Button.Text>{headerAction.label}</Button.Text>
-    </Button>
-  );
+  const activeQuarantines = quarantinesData?.quarantines ?? [];
+  let quarantinesBody =
+    activeQuarantines.length > 0 ? (
+      <>
+        <div className="hidden sm:block">
+          <Table
+            columns={quarantineColumns}
+            data={activeQuarantines}
+            rowKey={(row) => row.id}
+          />
+        </div>
+        <div className="divide-y border-y sm:hidden">
+          {activeQuarantines.map((row) => (
+            <div className="space-y-3 py-4" key={row.id}>
+              <div className="flex items-start justify-between gap-3">
+                <span className="min-w-0 break-all font-mono text-sm">
+                  {row.sessionId}
+                </span>
+                <Button
+                  variant="tertiary"
+                  size="sm"
+                  disabled={releaseQuarantineMutation.isPending}
+                  onClick={() => releaseQuarantine(row.id)}
+                >
+                  <Button.Text>Release</Button.Text>
+                </Button>
+              </div>
+              <dl className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm">
+                <dt className="text-muted-foreground">Policy</dt>
+                <dd>{row.riskPolicyName}</dd>
+                <dt className="text-muted-foreground">User</dt>
+                <dd className="break-all">{row.userId || "Unknown user"}</dd>
+                <dt className="text-muted-foreground">Quarantined</dt>
+                <dd>
+                  <PolicyDateCell date={row.createdAt} />
+                </dd>
+              </dl>
+            </div>
+          ))}
+        </div>
+      </>
+    ) : (
+      <Table
+        columns={quarantineColumns}
+        data={activeQuarantines}
+        rowKey={(row) => row.id}
+        noResultsMessage={
+          <Text small muted>
+            No active session quarantines
+          </Text>
+        }
+      />
+    );
+  if (quarantinesLoading) {
+    quarantinesBody = (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
+      </div>
+    );
+  } else if (quarantinesError) {
+    quarantinesBody = (
+      <div className="border-border flex flex-col items-center gap-3 border py-12 text-center">
+        <Text small muted>
+          We couldn&apos;t load session quarantines.
+        </Text>
+        <Button
+          variant="tertiary"
+          size="sm"
+          onClick={() => void refetchQuarantines()}
+        >
+          <RefreshCw className="h-4 w-4" />
+          <Button.Text>Retry</Button.Text>
+        </Button>
+      </div>
+    );
+  }
+
+  const primaryAction =
+    isLoading || headerAction == null ? undefined : (
+      <Button onClick={headerAction.onClick}>
+        <Button.LeftIcon>
+          <Plus className="mr-2 h-4 w-4" />
+        </Button.LeftIcon>
+        <Button.Text>{headerAction.label}</Button.Text>
+      </Button>
+    );
 
   return (
     <TabbedPage
-      title="Policies"
-      stage="beta"
-      description="Configure policies to detect secrets, sensitive information, and prompt-defined risks in agent session interactions."
+      title="Guardrails"
+      description="Configure the policies, detection rules, and exclusion rules that govern risk detection in agent session interactions."
       primaryAction={primaryAction}
       activeTab={activeTab}
       tabs={[
         { value: "policies", label: "Policies", href: "?tab=policies" },
         {
+          value: "detection-rules",
+          label: "Detection Rules",
+          href: "?tab=detection-rules",
+        },
+        {
           value: "exclusions",
-          label: "Exclusion rules",
+          label: "Exclusion Rules",
           href: "?tab=exclusions",
         },
         {
-          value: "dismissed",
-          label: "False Positives",
-          href: "?tab=dismissed",
+          value: "quarantines",
+          label: "Quarantines",
+          href: "?tab=quarantines",
         },
       ]}
     >
-      <InsightsConfig
-        contextInfo={insightsContext}
-        suggestions={INSIGHTS_SUGGESTIONS["risk-policies"]}
-        title="Policy insights"
-        subtitle="Ask about policy status, coverage, and detector capabilities. Match content is redacted before it reaches the assistant."
-      />
+      {/* The dock follows the active tab: the Detection Rules tab took over
+          the standalone page whose URL used to select these suggestions. */}
+      {activeTab === "detection-rules" ? (
+        <InsightsConfig
+          contextInfo={DETECTION_RULES_INSIGHTS_CONTEXT}
+          suggestions={INSIGHTS_SUGGESTIONS["detection-rules"]}
+          title="Detection rule insights"
+          subtitle="Ask about rule activity, noisy rules, and coverage gaps. Match content is redacted before it reaches the assistant."
+        />
+      ) : (
+        <InsightsConfig
+          contextInfo={insightsContext}
+          suggestions={INSIGHTS_SUGGESTIONS["risk-policies"]}
+          title="Policy insights"
+          subtitle="Ask about policy status, coverage, and detector capabilities. Match content is redacted before it reaches the assistant."
+        />
+      )}
       {activeTab === "policies" && policiesBody}
+      {activeTab === "detection-rules" && (
+        <DetectionRulesTab
+          createOpen={ruleCreateOpen}
+          onCreateOpenChange={setRuleCreateOpen}
+        />
+      )}
       {activeTab === "exclusions" && (
         <ExclusionsTab
           policies={data?.policies ?? []}
@@ -1000,7 +1229,7 @@ function PolicyCenterContent() {
           onSheetChange={setExclusionSheet}
         />
       )}
-      {activeTab === "dismissed" && <DismissedFindingsTab />}
+      {activeTab === "quarantines" && quarantinesBody}
 
       {/* View Run Panel */}
       <Sheet
@@ -1642,6 +1871,7 @@ const ACTION_BADGE_CONFIG: Record<
   flag: { label: "Flag", variant: "neutral" },
   warn: { label: "Warn", variant: "warning" },
   block: { label: "Block", variant: "destructive" },
+  quarantine: { label: "Quarantine", variant: "destructive" },
 };
 
 function ActionBadge({ action }: { action: PolicyAction }): JSX.Element {

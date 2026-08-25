@@ -17,6 +17,9 @@ const PRODUCT_SURFACE_LABELS: Record<string, string> = {
   cowork: "Claude Cowork",
   "claude-cowork": "Claude Cowork",
   cursor: "Cursor",
+  // The device agent's IDE deeplink target — the same Cursor surface as the
+  // cursor CLI, reached via the desktop app.
+  "cursor-app": "Cursor",
   codex: "Codex",
   "codex-web": "Codex Web",
   // ChatGPT (web/desktop chat) and ChatGPT Work, observed via the OpenAI

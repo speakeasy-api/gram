@@ -66,6 +66,17 @@ SELECT
   , r.target_key
   , r.status
   , r.evidence_changed_at
+  -- The latest decision independent of lifecycle status: a reopened
+  -- request's prior decision still stands until re-decided.
+  , COALESCE((
+      SELECT d.decision
+      FROM mcp_approval_decisions d
+      WHERE d.mcp_approval_request_id = r.id
+        AND d.project_id = r.project_id
+        AND d.deleted IS FALSE
+      ORDER BY d.decided_at DESC, d.id DESC
+      LIMIT 1
+    ), '')::text AS latest_decision
   , (
       SELECT count(*)
       FROM mcp_approval_request_requesters req
@@ -92,6 +103,16 @@ SELECT
   , r.evidence_changed_at
   , r.created_at
   , r.updated_at
+  -- Same latest-decision join as ListApprovalRequestsByTargetKeys.
+  , COALESCE((
+      SELECT d.decision
+      FROM mcp_approval_decisions d
+      WHERE d.mcp_approval_request_id = r.id
+        AND d.project_id = r.project_id
+        AND d.deleted IS FALSE
+      ORDER BY d.decided_at DESC, d.id DESC
+      LIMIT 1
+    ), '')::text AS latest_decision
   , (
       SELECT count(*)
       FROM mcp_approval_request_requesters req
@@ -225,7 +246,7 @@ ON CONFLICT (project_id, target_kind, target_key) WHERE deleted IS FALSE DO UPDA
 SET updated_at = clock_timestamp()
   , status = CASE
       WHEN EXCLUDED.status = 'requested'
-        AND mcp_approval_requests.status IN ('denied', 'unreviewed')
+        AND mcp_approval_requests.status IN ('denied', 'unreviewed', 'superseded')
         THEN EXCLUDED.status
       ELSE mcp_approval_requests.status
     END
@@ -386,11 +407,13 @@ SELECT pg_advisory_xact_lock(hashtextextended('mcp-approval-enforcement:' || @pr
 
 -- name: ListStandingServerDecisionsForProject :many
 -- The latest decision per server_url review in a project — what enforcement
--- derived its grants from. Read by the policy-creation backfill so a blocking
--- policy created after decisions were recorded honors them, instead of
--- blocking servers whose rows still read approved.
+-- derived its grants from. Read by the policy-creation backfill and by the
+-- policy URL-list conflict check (which is why the request id rides along).
+-- Superseded requests are excluded: their decisions were explicitly
+-- overridden and must never be replayed.
 SELECT
-    r.target_key
+    r.id
+  , r.target_key
   , r.target_raw
   , d.decision
   , d.granted_principal_urns
@@ -406,6 +429,7 @@ JOIN LATERAL (
 ) d ON TRUE
 WHERE r.project_id = @project_id
   AND r.target_kind = 'server_url'
+  AND r.status != 'superseded'
   AND r.deleted IS FALSE;
 
 -- name: LockApprovalRequestForResearch :one
@@ -462,6 +486,7 @@ UPDATE mcp_research_reports
 SET status = 'completed'
   , report = @report
   , report_version = @report_version
+  , tool_calls = COALESCE(sqlc.narg(tool_calls)::jsonb, tool_calls)
   , model = sqlc.narg(model)::text
   , completed_at = clock_timestamp()
   , updated_at = clock_timestamp()
@@ -477,6 +502,7 @@ RETURNING *;
 UPDATE mcp_research_reports
 SET status = 'failed'
   , error = sqlc.narg(error)::text
+  , tool_calls = COALESCE(sqlc.narg(tool_calls)::jsonb, tool_calls)
   , completed_at = clock_timestamp()
   , updated_at = clock_timestamp()
 WHERE id = @id

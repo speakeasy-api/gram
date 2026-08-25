@@ -3,9 +3,12 @@ package guardian_test
 import (
 	"context"
 	"errors"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -21,6 +24,56 @@ func fastRetryConfig() *guardian.RetryConfig {
 	cfg.WaitMax = 5 * time.Millisecond
 	cfg.MaxAttempts = 2
 	return cfg
+}
+
+func TestPooledClientClosesIdleConnections(t *testing.T) {
+	t.Parallel()
+
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+	requirePooledClientClosesIdleConnections(t, policy.PooledClient())
+}
+
+func TestRetryingPooledClientClosesIdleConnections(t *testing.T) {
+	t.Parallel()
+
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+	requirePooledClientClosesIdleConnections(t, policy.PooledClient(guardian.WithRetryConfig(fastRetryConfig())))
+}
+
+func requirePooledClientClosesIdleConnections(t *testing.T, client *http.Client) {
+	t.Helper()
+
+	var newConnections atomic.Int64
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "ok")
+	}))
+	server.Config.ConnState = func(_ net.Conn, state http.ConnState) {
+		if state == http.StateNew {
+			newConnections.Add(1)
+		}
+	}
+	server.Start()
+	t.Cleanup(server.Close)
+
+	request := func() {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL, nil)
+		require.NoError(t, err)
+		response, err := client.Do(req)
+		require.NoError(t, err)
+		_, err = io.Copy(io.Discard, response.Body)
+		require.NoError(t, err)
+		require.NoError(t, response.Body.Close())
+	}
+
+	request()
+	request()
+	require.Equal(t, int64(1), newConnections.Load())
+
+	client.CloseIdleConnections()
+	request()
+	require.Equal(t, int64(2), newConnections.Load())
 }
 
 func TestClient_RetriesExhausted_PreservesFinalStatusAndBody(t *testing.T) {

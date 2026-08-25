@@ -34,6 +34,11 @@ type ReportSessionMovedRequestBody struct {
 	SessionID *string `form:"session_id,omitempty" json:"session_id,omitempty" xml:"session_id,omitempty"`
 	// Harness the session was moved to (e.g. cursor, codex, claude-code).
 	TargetHarness *string `form:"target_harness,omitempty" json:"target_harness,omitempty" xml:"target_harness,omitempty"`
+	// Native session id minted for the continuation, when the daemon knows it at
+	// launch time (claude-code targets today; Cursor mints ids server-side so
+	// moves there omit it). Lets Gram link the original session and its
+	// continuation.
+	TargetSessionID *string `form:"target_session_id,omitempty" json:"target_session_id,omitempty" xml:"target_session_id,omitempty"`
 	// Harness the session originated in, as detected by the agent (e.g.
 	// claude-code, codex).
 	SourceSurface *string `form:"source_surface,omitempty" json:"source_surface,omitempty" xml:"source_surface,omitempty"`
@@ -2610,10 +2615,11 @@ func NewCreateSessionHandoffGatewayErrorResponseBody(res *goa.ServiceError) *Cre
 }
 
 // NewGetPluginsPayload builds a agent service getPlugins endpoint payload.
-func NewGetPluginsPayload(email string, apikeyToken *string, serialNumber *string, hostname *string) *agent.GetPluginsPayload {
+func NewGetPluginsPayload(legacyEmail *string, apikeyToken *string, email *string, serialNumber *string, hostname *string) *agent.GetPluginsPayload {
 	v := &agent.GetPluginsPayload{}
-	v.Email = email
+	v.LegacyEmail = legacyEmail
 	v.ApikeyToken = apikeyToken
+	v.Email = email
 	v.SerialNumber = serialNumber
 	v.Hostname = hostname
 
@@ -2667,10 +2673,11 @@ func NewGetSessionMetaPayload(sessionIds []string, apikeyToken *string) *agent.G
 // endpoint payload.
 func NewReportSessionMovedPayload(body *ReportSessionMovedRequestBody, apikeyToken *string, serialNumber *string, hostname *string) *agent.ReportSessionMovedPayload {
 	v := &agent.ReportSessionMovedPayload{
-		SessionID:     *body.SessionID,
-		TargetHarness: *body.TargetHarness,
-		SourceSurface: body.SourceSurface,
-		Email:         body.Email,
+		SessionID:       *body.SessionID,
+		TargetHarness:   *body.TargetHarness,
+		TargetSessionID: body.TargetSessionID,
+		SourceSurface:   body.SourceSurface,
+		Email:           body.Email,
 	}
 	v.ApikeyToken = apikeyToken
 	v.SerialNumber = serialNumber
@@ -2721,6 +2728,11 @@ func ValidateReportSessionMovedRequestBody(body *ReportSessionMovedRequestBody) 
 	if body.TargetHarness != nil {
 		if utf8.RuneCountInString(*body.TargetHarness) > 64 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.target_harness", *body.TargetHarness, utf8.RuneCountInString(*body.TargetHarness), 64, false))
+		}
+	}
+	if body.TargetSessionID != nil {
+		if utf8.RuneCountInString(*body.TargetSessionID) > 256 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.target_session_id", *body.TargetSessionID, utf8.RuneCountInString(*body.TargetSessionID), 256, false))
 		}
 	}
 	if body.SourceSurface != nil {

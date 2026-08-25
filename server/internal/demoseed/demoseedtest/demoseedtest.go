@@ -223,9 +223,9 @@ func SnapshotClickHouse(ctx context.Context, ch driver.Conn, orgID string, proje
 }
 
 // TamperDemoRows plants stray rows inside the demo scope — a duplicated chat
-// in Postgres and a duplicated telemetry row in ClickHouse — so a subsequent
-// seed run can be shown to clean up unexpected demo-org data, not merely
-// re-assert its own rows.
+// and a visitor-minted API key in Postgres, a duplicated telemetry row in
+// ClickHouse — so a subsequent seed run can be shown to clean up unexpected
+// demo-org data, not merely re-assert its own rows.
 func TamperDemoRows(ctx context.Context, db *pgxpool.Pool, ch driver.Conn, orgID string, projectID string) error {
 	// Generated columns (e.g. chats.deleted) cannot be written, so the
 	// duplicated row is built column by column from the non-generated set.
@@ -261,6 +261,26 @@ func TamperDemoRows(ctx context.Context, db *pgxpool.Pool, ch driver.Conn, orgID
 	}
 	if tag.RowsAffected() != 1 {
 		return fmt.Errorf("tamper postgres chat: expected 1 row inserted, got %d", tag.RowsAffected())
+	}
+
+	// The seed itself never inserts an API key or a LiteLLM instance, so these
+	// rows cannot be cloned from existing ones: they stand in for what a demo
+	// visitor creates with the org:admin grants every demo session holds. The
+	// projects delete only SET NULLs api_keys.project_id, so the key needs an
+	// explicit scoped delete — and litellm_instances.api_key_id is ON DELETE
+	// RESTRICT, so the instance must be deleted before the key or the whole
+	// reseed aborts on the FK.
+	if _, err := db.Exec(ctx, `
+		WITH key AS (
+			INSERT INTO api_keys (organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes)
+			VALUES ($1, $2::uuid, 'user_demo_tamper', 'tampered visitor key', 'gram_demo', 'DEMO-TAMPER-HASH', ARRAY['producer'])
+			RETURNING organization_id, project_id, id
+		)
+		INSERT INTO litellm_instances (organization_id, project_id, api_key_id, created_by_user_id, name)
+		SELECT organization_id, project_id, id, 'user_demo_tamper', 'tampered visitor instance' FROM key`,
+		orgID, projectID,
+	); err != nil {
+		return fmt.Errorf("tamper postgres api key: %w", err)
 	}
 
 	err = ch.Exec(ctx, fmt.Sprintf(`

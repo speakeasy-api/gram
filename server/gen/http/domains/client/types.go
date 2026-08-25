@@ -1742,13 +1742,15 @@ type CustomDomainMcpEndpointResponseBody struct {
 	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
 	// The url-friendly slug of the project the endpoint belongs to
 	ProjectSlug *string `form:"project_slug,omitempty" json:"project_slug,omitempty" xml:"project_slug,omitempty"`
-	// The ID of the parent MCP server
+	// The ID of the parent MCP server. Null for meta-MCP-backed endpoints.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
-	// The display name of the parent MCP server. May be empty if the parent has no
+	// The ID of the parent meta MCP server. Null for MCP-server-backed endpoints.
+	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
+	// The display name of the parent server. May be empty if the parent has no
 	// configured name.
 	McpServerName *string `form:"mcp_server_name,omitempty" json:"mcp_server_name,omitempty" xml:"mcp_server_name,omitempty"`
 	// The url-friendly slug of the parent MCP server. May be empty if the parent
-	// has no configured slug.
+	// has no configured slug or is a meta MCP server.
 	McpServerSlug *string `form:"mcp_server_slug,omitempty" json:"mcp_server_slug,omitempty" xml:"mcp_server_slug,omitempty"`
 	// Whether this endpoint is mapped to the custom-domain root
 	IsDomainRoot *bool `form:"is_domain_root,omitempty" json:"is_domain_root,omitempty" xml:"is_domain_root,omitempty"`
@@ -5367,9 +5369,6 @@ func ValidateCustomDomainMcpEndpointResponseBody(body *CustomDomainMcpEndpointRe
 	if body.ProjectSlug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("project_slug", "body"))
 	}
-	if body.McpServerID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
-	}
 	if body.IsDomainRoot == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("is_domain_root", "body"))
 	}
@@ -5381,6 +5380,9 @@ func ValidateCustomDomainMcpEndpointResponseBody(body *CustomDomainMcpEndpointRe
 	}
 	if body.McpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	if body.MetaMcpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", *body.MetaMcpServerID, goa.FormatUUID))
 	}
 	return
 }

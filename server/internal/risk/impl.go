@@ -16,6 +16,7 @@ import (
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
+	"github.com/cenkalti/backoff/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
@@ -62,6 +63,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
+	"github.com/speakeasy-api/gram/server/internal/sessionquarantine"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -69,6 +71,8 @@ import (
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
+
+const sessionQuarantineCircuitDeleteAttempts = 3
 
 // RiskAnalysisSignaler signals the per-project risk analysis coordinator workflow.
 type RiskAnalysisSignaler interface {
@@ -518,6 +522,9 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 			Scope:          authz.ScopeRiskPolicyBypass,
 			DesiredURLs:    shadowMCPAllowedURLs,
 			Principals:     audiencePrincipals,
+			// No preserve set on create: the replay below re-derives every
+			// standing decision's grants over whatever this list wrote.
+			PreserveURLs: nil,
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "reconcile shadow mcp policy allowed urls").LogError(ctx, s.logger)
 		}
@@ -531,6 +538,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 			Scope:          authz.ScopeRiskPolicyBlock,
 			DesiredURLs:    shadowMCPBlockedURLs,
 			Principals:     []urn.Principal{authz.AllUsersPrincipal()},
+			PreserveURLs:   nil,
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "reconcile shadow mcp policy blocked urls").LogError(ctx, s.logger)
 		}
@@ -620,6 +628,118 @@ func (s *Service) ListRiskPolicies(ctx context.Context, payload *gen.ListRiskPol
 	}
 
 	return &gen.ListRiskPoliciesResult{Policies: policies}, nil
+}
+
+func (s *Service) ListSessionQuarantines(ctx context.Context, _ *gen.ListSessionQuarantinesPayload) (*gen.ListSessionQuarantinesResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	rows, err := s.repo.ListActiveSessionQuarantines(ctx, repo.ListActiveSessionQuarantinesParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list session quarantines").LogError(ctx, s.logger)
+	}
+
+	quarantines := make([]*gen.SessionQuarantine, 0, len(rows))
+	for _, row := range rows {
+		quarantines = append(quarantines, buildSessionQuarantine(row))
+	}
+	return &gen.ListSessionQuarantinesResult{Quarantines: quarantines}, nil
+}
+
+func (s *Service) ReleaseSessionQuarantine(ctx context.Context, payload *gen.ReleaseSessionQuarantinePayload) (*gen.SessionQuarantine, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	id, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid session quarantine id")
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "open transaction").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	row, err := repo.New(dbtx).ReleaseSessionQuarantine(ctx, repo.ReleaseSessionQuarantineParams{
+		ID:             id,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		ReleasedBy:     conv.ToPGTextEmpty(authCtx.UserID),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.C(oops.CodeNotFound)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "release session quarantine").LogError(ctx, s.logger)
+	}
+
+	riskPolicyID := ""
+	if row.RiskPolicyID.Valid {
+		riskPolicyID = row.RiskPolicyID.UUID.String()
+	}
+	if err := s.audit.LogSessionQuarantineRelease(ctx, dbtx, audit.LogSessionQuarantineEvent{
+		OrganizationID:       row.OrganizationID,
+		ProjectID:            row.ProjectID,
+		Actor:                urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:     authCtx.Email,
+		ActorSlug:            nil,
+		SessionQuarantineURN: urn.NewSessionQuarantine(row.ID),
+		RiskPolicyName:       row.RiskPolicyName,
+		Metadata: audit.SessionQuarantineMetadata{
+			SessionID:      row.SessionID,
+			RiskPolicyID:   riskPolicyID,
+			RiskPolicyName: row.RiskPolicyName,
+			UserID:         row.UserID,
+			Reason:         row.Reason,
+		},
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "audit session quarantine release").LogError(ctx, s.logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit session quarantine release").LogError(ctx, s.logger)
+	}
+
+	s.clearSessionQuarantineCircuit(ctx, row)
+
+	return buildSessionQuarantine(row), nil
+}
+
+func (s *Service) clearSessionQuarantineCircuit(ctx context.Context, row repo.SessionQuarantine) {
+	exp := backoff.NewExponentialBackOff()
+	exp.InitialInterval = 25 * time.Millisecond
+	exp.MaxInterval = 100 * time.Millisecond
+	exp.RandomizationFactor = 0
+
+	_, err := backoff.Retry(ctx, func() (struct{}, error) {
+		if err := sessionquarantine.Delete(ctx, s.cache, row.OrganizationID, row.ProjectID.String(), row.SessionID); err != nil {
+			return struct{}{}, fmt.Errorf("delete session quarantine circuit: %w", err)
+		}
+		return struct{}{}, nil
+	}, backoff.WithBackOff(exp), backoff.WithMaxTries(sessionQuarantineCircuitDeleteAttempts))
+	if err != nil {
+		s.logger.ErrorContext(ctx, "clear released session quarantine circuit",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(row.OrganizationID),
+			attr.SlogProjectID(row.ProjectID.String()),
+		)
+	}
 }
 
 // ListBuiltinExclusions returns the built-in exclusion library grouped by
@@ -1004,6 +1124,41 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	if err := syncRiskPolicyAudienceGrants(ctx, dbtx, authCtx.ActiveOrganizationID, row.ID.String(), audienceType, audiencePrincipalURNs); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "sync risk policy audience").LogError(ctx, s.logger)
 	}
+
+	wasBlocking := current.Enabled && current.Action == "block" && slices.Contains(current.Sources, shadowmcp.SourceShadowMCP)
+	nowBlocking := enabled && action == "block" && slices.Contains(sources, shadowmcp.SourceShadowMCP)
+
+	// The conflict review runs exactly where the replay below does not: on a
+	// policy that was and stays blocking, this edit is the only writer of
+	// URL grant state, so it must not displace a standing decision without
+	// the caller's explicit confirmation. Standing URLs are preserved
+	// through the reconcile either way.
+	var preserveDecisionURLs map[string]struct{}
+	if s.approvalIntake != nil && wasBlocking && nowBlocking {
+		review, err := s.approvalIntake.ReviewShadowMCPPolicyURLEdit(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, current.ID, effectiveDisposition, shadowMCPAllowedURLs, shadowMCPBlockedURLs)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "review shadow mcp policy url edit").LogError(ctx, s.logger)
+		}
+		if len(review.Conflicts) > 0 {
+			if payload.SupersedeDecisions == nil || !*payload.SupersedeDecisions {
+				names := make([]string, 0, len(review.Conflicts))
+				for _, conflict := range review.Conflicts {
+					names = append(names, conflict.TargetRaw)
+				}
+				return nil, oops.E(oops.CodeConflict, nil, "This change contradicts recorded access decisions for %s. Confirm superseding those decisions to proceed.", strings.Join(names, ", "))
+			}
+			if err := s.approvalIntake.SupersedeShadowMCPDecisions(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, review.Conflicts, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), authCtx.Email); err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "supersede contradicted decisions").LogError(ctx, s.logger)
+			}
+		}
+		if len(review.StandingURLs) > 0 {
+			preserveDecisionURLs = make(map[string]struct{}, len(review.StandingURLs))
+			for _, serverURL := range review.StandingURLs {
+				preserveDecisionURLs[serverURL] = struct{}{}
+			}
+		}
+	}
+
 	if payload.ShadowMcpAllowedUrls != nil || audienceUpdateRequested {
 		if err := s.reconcileShadowMCPPolicyURLs(ctx, dbtx, policybypass.ReconcilePolicyURLsInput{
 			OrganizationID: authCtx.ActiveOrganizationID,
@@ -1011,6 +1166,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 			Scope:          authz.ScopeRiskPolicyBypass,
 			DesiredURLs:    shadowMCPAllowedURLs,
 			Principals:     audiencePrincipals,
+			PreserveURLs:   preserveDecisionURLs,
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "reconcile shadow mcp policy allowed urls").LogError(ctx, s.logger)
 		}
@@ -1024,6 +1180,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 			Scope:          authz.ScopeRiskPolicyBlock,
 			DesiredURLs:    shadowMCPBlockedURLs,
 			Principals:     []urn.Principal{authz.AllUsersPrincipal()},
+			PreserveURLs:   preserveDecisionURLs,
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "reconcile shadow mcp policy blocked urls").LogError(ctx, s.logger)
 		}
@@ -1034,8 +1191,6 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	// apply to it exactly as they would to a newly created one. The replay
 	// is idempotent, so firing on any transition into the blocking state is
 	// safe even when stale grants survive a disable/enable cycle.
-	wasBlocking := current.Enabled && current.Action == "block" && slices.Contains(current.Sources, shadowmcp.SourceShadowMCP)
-	nowBlocking := enabled && action == "block" && slices.Contains(sources, shadowmcp.SourceShadowMCP)
 	if s.approvalIntake != nil && nowBlocking && !wasBlocking {
 		if err := s.approvalIntake.ReconcileStandingDecisionsForPolicy(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, row.ID); err != nil {
 			// Same shareable pass-through as the create path: the radius
@@ -3641,6 +3796,30 @@ func buildRiskPolicyType(row repo.RiskPolicy, totalMessages, analyzedMessages *i
 	}
 }
 
+func buildSessionQuarantine(row repo.SessionQuarantine) *gen.SessionQuarantine {
+	var riskPolicyID *string
+	if row.RiskPolicyID.Valid {
+		riskPolicyID = conv.PtrEmpty(row.RiskPolicyID.UUID.String())
+	}
+	var releasedAt *string
+	if row.ReleasedAt.Valid {
+		releasedAt = conv.PtrEmpty(row.ReleasedAt.Time.Format(time.RFC3339))
+	}
+	return &gen.SessionQuarantine{
+		ID:             row.ID.String(),
+		OrganizationID: row.OrganizationID,
+		ProjectID:      row.ProjectID.String(),
+		SessionID:      row.SessionID,
+		RiskPolicyID:   riskPolicyID,
+		RiskPolicyName: row.RiskPolicyName,
+		UserID:         row.UserID,
+		Reason:         row.Reason,
+		CreatedAt:      row.CreatedAt.Time.Format(time.RFC3339),
+		ReleasedAt:     releasedAt,
+		ReleasedBy:     conv.FromPGText[string](row.ReleasedBy),
+	}
+}
+
 func policyRowSnapshotWithAudience(row repo.RiskPolicy, audiencePrincipalURNs []string) *types.RiskPolicy {
 	if audiencePrincipalURNs == nil {
 		audiencePrincipalURNs = []string{}
@@ -3851,6 +4030,8 @@ func (s *Service) fallbackPolicyName(sources, customRuleTitles []string, action 
 		actionLabel = "Blocker"
 	case "warn":
 		actionLabel = "Warner"
+	case "quarantine":
+		actionLabel = "Quarantiner"
 	}
 
 	return strings.Join(parts, " & ") + " " + actionLabel
@@ -3921,10 +4102,10 @@ func (s *Service) generatePromptPolicyName(ctx context.Context, orgID, projectID
 
 func validateAction(action string) error {
 	switch action {
-	case "flag", "block", "warn":
+	case "flag", "block", "warn", "quarantine":
 		return nil
 	default:
-		return oops.E(oops.CodeInvalid, nil, "action must be one of: flag, warn, block")
+		return oops.E(oops.CodeInvalid, nil, "action must be one of: flag, warn, block, quarantine")
 	}
 }
 
@@ -4197,10 +4378,14 @@ func foundRowToResult(
 		// for callers ListRiskResults decides shouldn't see raw match/spans.
 		MatchRedacted: nil,
 		CreatedAt:     createdAt.Time.Format(time.RFC3339),
-		// FalsePositiveAt is populated later by callers (ListDismissedRiskResults)
-		// that have a dismissal timestamp to attach; every other caller leaves it
-		// unset since listRiskResults never returns a dismissed result.
-		FalsePositiveAt: nil,
+		// The PG listings behind this mapper only return open findings, so the
+		// suppression fields (and the deprecated FalsePositiveAt mirror) stay
+		// unset; the suppressed listing populates them from its own rows.
+		FalsePositiveAt:  nil,
+		SuppressedAt:     nil,
+		SuppressedReason: nil,
+		SuppressedDetail: nil,
+		ExclusionID:      nil,
 	}
 }
 

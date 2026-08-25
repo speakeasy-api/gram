@@ -131,3 +131,57 @@ func TestSetOpenRouterSpendCapNormalizesLegacyEmptyKeyType(t *testing.T) {
 	temporalClient.AssertExpectations(t)
 	run.AssertExpectations(t)
 }
+
+func TestOpenRouterSpendCapWorkflowsEnforcePolicyMode(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	customerEnv := suite.NewTestWorkflowEnvironment()
+	customerEnv.RegisterActivityWithOptions(func(_ context.Context, args activities.SetOpenRouterSpendCapArgs) (int, error) {
+		require.False(t, args.BypassPolicy)
+		return 100, nil
+	}, activity.RegisterOptions{Name: "SetOpenRouterSpendCap"})
+	params := OpenRouterSpendCapParams{
+		OperationID: "operation_placeholder", OrganizationID: "organization_placeholder",
+		Actor: urn.NewPrincipal(urn.PrincipalTypeUser, "user_placeholder"), BypassPolicy: true,
+	}
+	customerEnv.ExecuteWorkflow(OpenRouterSpendCapWorkflow, params)
+	require.NoError(t, customerEnv.GetWorkflowError())
+
+	adminEnv := suite.NewTestWorkflowEnvironment()
+	adminEnv.RegisterActivityWithOptions(func(_ context.Context, args activities.SetOpenRouterSpendCapArgs) (int, error) {
+		require.True(t, args.BypassPolicy)
+		return 100, nil
+	}, activity.RegisterOptions{Name: "SetOpenRouterSpendCap"})
+	params.BypassPolicy = false
+	adminEnv.ExecuteWorkflow(AdminOpenRouterSpendCapWorkflow, params)
+	require.NoError(t, adminEnv.GetWorkflowError())
+}
+
+func TestSetAdminOpenRouterSpendCapBypassesPolicy(t *testing.T) {
+	t.Parallel()
+
+	temporalClient := &temporalmocks.Client{}
+	run := &temporalmocks.WorkflowRun{}
+	run.On("Get", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		result, ok := args.Get(1).(*int)
+		require.True(t, ok)
+		*result = 99
+	}).Return(nil).Once()
+	workflowParams := OpenRouterSpendCapParams{
+		OperationID: "admin_operation_placeholder", OrganizationID: "organization_placeholder",
+		KeyType: string(openrouter.KeyTypeInternal), Limit: 100,
+		Actor: urn.NewPrincipal(urn.PrincipalTypeUser, "admin_placeholder"), BypassPolicy: true,
+	}
+	temporalClient.On("ExecuteWorkflow", mock.Anything, mock.Anything, mock.Anything, workflowParams).Return(run, nil).Once()
+
+	scheduler := &OpenRouterKeyRefresher{TemporalEnv: tenv.NewEnvironment(temporalClient, "test", "test")}
+	result, err := scheduler.SetAdminOpenRouterSpendCap(
+		t.Context(), workflowParams.OperationID, workflowParams.OrganizationID, openrouter.KeyTypeInternal,
+		workflowParams.Limit, workflowParams.Actor, nil,
+	)
+	require.NoError(t, err)
+	require.Equal(t, 99, result)
+	temporalClient.AssertExpectations(t)
+	run.AssertExpectations(t)
+}

@@ -29,6 +29,7 @@ import SkillVersionHistory from "./pages/skills/SkillVersionHistory";
 import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
 import UserSessions from "./pages/org/UserSessions";
+import EventFeed from "./pages/data/EventFeed";
 import DeviceAgent, { DeviceAgentRoot } from "./pages/device-agent/DeviceAgent";
 import MdmIntegrationDetail from "./pages/org/device-integrations/MdmIntegrationDetail";
 import Elements from "./pages/elements/Elements";
@@ -74,6 +75,7 @@ import OrgIdentity from "./pages/org/OrgIdentity";
 import OrgAIIntegrations from "./pages/org/OrgAIIntegrations";
 import OrgLogs from "./pages/org/OrgLogs";
 import PlatformMCP from "./pages/org/PlatformMCP";
+import HeadlessMode from "./pages/org/HeadlessMode";
 import OrgSkills from "./pages/org/OrgSkills";
 import ExternalCredentialDetail from "./pages/org/external-services/ExternalCredentialDetail";
 import {
@@ -674,6 +676,9 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
+  // Legacy URL: Detection Rules lives as a Guardrails tab now; the
+  // component redirects there (carrying ?rule= deep links along). Kept out of
+  // the sidebar.
   detectionRules: {
     title: "Detection Rules",
     url: "detection-rules",
@@ -681,7 +686,7 @@ const ROUTE_STRUCTURE = {
     component: DetectionRules,
   },
   policyCenter: {
-    title: "Risk Policies",
+    title: "Guardrails",
     url: "risk-policies",
     icon: "shield-check",
     // Layout route: renders the policy list (index) or a policy detail subpage.
@@ -1019,6 +1024,13 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "file-text",
     component: OrgLogs,
   },
+  data: {
+    title: "Event Feed",
+    url: "data",
+    icon: "activity",
+    stage: "preview",
+    component: EventFeed,
+  },
   skills: {
     title: "Skills",
     url: "skills",
@@ -1279,6 +1291,14 @@ const ORG_ROUTE_STRUCTURE = {
     url: "setup",
     icon: "settings",
     component: SetupWizard,
+    outsideMainLayout: true,
+  },
+  // Headless mode renders its own chrome (mode tabs only, no sidebar or
+  // workspace header), so it sits outside OrgLayout.
+  headless: {
+    title: "Headless",
+    url: "headless",
+    component: HeadlessMode,
     outsideMainLayout: true,
   },
 } satisfies Record<string, RouteEntry>;

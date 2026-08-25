@@ -28,7 +28,10 @@ func TestCollectOpenRouterDailySpendWorkflowCollectsLastFourCompletedUTCDays(t *
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, args activities.CollectOpenRouterDailySpendArgs) (activities.CollectOpenRouterDailySpendResult, error) {
 			received = args
-			return activities.CollectOpenRouterDailySpendResult{ReadyOrganizationIDs: []string{"org-ready"}}, nil
+			return activities.CollectOpenRouterDailySpendResult{
+				ReadyOrganizationIDs:         []string{"org-ready"},
+				BillableKeyPolicyFingerprint: "4b4e792daf43040a6f92b112a281187144b92cc902d5b355056f28a0c2ad6894",
+			}, nil
 		},
 		activity.RegisterOptions{Name: "CollectOpenRouterDailySpend"},
 	)
@@ -49,6 +52,7 @@ func TestCollectOpenRouterDailySpendWorkflowCollectsLastFourCompletedUTCDays(t *
 	require.Equal(t, time.Date(2026, time.August, 15, 6, 30, 0, 0, time.UTC), settled.Now)
 	require.True(t, settled.RestrictOpenRouterToReadyOrganizations)
 	require.Equal(t, []string{"org-ready"}, settled.OpenRouterReadyOrganizationIDs)
+	require.Equal(t, "4b4e792daf43040a6f92b112a281187144b92cc902d5b355056f28a0c2ad6894", settled.OpenRouterBillableKeyPolicyFingerprint)
 }
 
 func TestCollectOpenRouterDailySpendWorkflowPropagatesFailureAfterRetries(t *testing.T) {

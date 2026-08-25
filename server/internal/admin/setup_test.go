@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -35,11 +37,11 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// newTestAdminService builds the minimum Service needed to exercise read-only
-// handlers like ListOrganizations. Auth, sessions, and OIDC fields are left nil
-// because the test invokes the handler directly without going through the HTTP
-// transport layer. The WorkOS field is left nil too: a handler that needs it
-// gets a service from newTestAdminServiceWithWorkOS instead.
+// newTestAdminService builds the minimum Service needed to exercise admin
+// handlers in tests. It wires the session store, login state cache, OIDC
+// client, and verifier so handlers can run through auth-aware HTTP paths. The
+// WorkOS field is left nil: a handler that needs it gets a service from
+// newTestAdminServiceWithWorkOS instead.
 func newTestAdminService(t *testing.T) (context.Context, *Service, *pgxpool.Pool) {
 	t.Helper()
 
@@ -51,13 +53,25 @@ func newTestAdminService(t *testing.T) (context.Context, *Service, *pgxpool.Pool
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
+	adminCache := cache.NewRedisCacheAdapter(redisClient)
+	enc, err := encryption.NewWithBytes(make([]byte, 32))
+	require.NoError(t, err)
+	sessions := NewSessionStore(
+		cache.NewTypedObjectCache[Session](logger, adminCache, cache.SuffixNone),
+		enc,
+	)
+	tracerProvider := testenv.NewTracerProvider(t)
 	svc := &Service{
 		logger:          logger,
 		db:              conn,
 		audit:           audit.NewLogger(),
 		trial:           trialemails.NoopNotifier{},
-		productFeatures: productfeatures.NewClient(logger, testenv.NewTracerProvider(t), conn, redisClient),
+		sessions:        sessions,
+		loginStates:     cache.NewTypedObjectCache[LoginState](logger, adminCache, cache.SuffixNone),
+		productFeatures: productfeatures.NewClient(logger, tracerProvider, conn, redisClient),
 	}
+	svc.oidc = newTestOIDCClient(t, userinfoOK("sub-admin", "operator@example.com"))
+	svc.verifier = NewVerifier(logger, sessions, svc.oidc, adminCache)
 
 	return ctx, svc, conn
 }

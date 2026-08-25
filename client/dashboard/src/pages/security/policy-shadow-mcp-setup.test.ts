@@ -1,10 +1,12 @@
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import { describe, expect, it } from "vitest";
+import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import {
   isBlockingShadowMCPPolicy,
   isShadowMCPBlockConfiguration,
   shadowMCPAllowedURLsForMutation,
   shadowMCPBlockedURLsForMutation,
+  shadowMCPDecisionConflicts,
   shadowMCPSelectionBaselineForUpdate,
   shadowMCPSelectionIsDirty,
   shadowMCPSelectionIsInitialized,
@@ -219,5 +221,117 @@ describe("shadowMCPSelectionBaselineForUpdate with blocked URLs", () => {
     expect(
       shadowMCPSelectionBaselineForUpdate({ shadowMcpBlockedUrls: [] }),
     ).toEqual(new Set());
+  });
+});
+
+describe("shadowMCPDecisionConflicts", () => {
+  const server = (
+    url: string,
+    status: "approved" | "denied" | "requested" | "superseded",
+    standingDecision?: "approved" | "denied",
+  ): ShadowMCPInventoryServer =>
+    ({
+      canonicalServerUrl: url,
+      serverName: url.replace("https://", ""),
+      approvalRequest: {
+        id: `req-${url}`,
+        status,
+        standingDecision,
+        requesterCount: 0,
+      },
+    }) as ShadowMCPInventoryServer;
+
+  const approvedURL = "https://approved.example.com/mcp";
+  const deniedURL = "https://denied.example.com/mcp";
+  const servers = [
+    server(approvedURL, "approved"),
+    server(deniedURL, "denied"),
+  ];
+
+  it("flags unchecking an approved server from a block_all allow list", () => {
+    const conflicts = shadowMCPDecisionConflicts({
+      servers,
+      originalURLs: new Set([approvedURL]),
+      selectedURLs: new Set(),
+      disposition: "block_all",
+    });
+    expect(conflicts).toEqual([
+      {
+        canonicalServerUrl: approvedURL,
+        serverName: "approved.example.com/mcp",
+        decision: "approved",
+      },
+    ]);
+  });
+
+  it("flags allow-listing a denied server", () => {
+    const conflicts = shadowMCPDecisionConflicts({
+      servers,
+      originalURLs: new Set([approvedURL]),
+      selectedURLs: new Set([approvedURL, deniedURL]),
+      disposition: "block_all",
+    });
+    expect(conflicts.map((c) => c.decision)).toEqual(["denied"]);
+  });
+
+  it("inverts directions on an allow_all block list", () => {
+    // Block-listing the approved server and unblocking the denied one both
+    // contradict standing decisions.
+    const conflicts = shadowMCPDecisionConflicts({
+      servers,
+      originalURLs: new Set([deniedURL]),
+      selectedURLs: new Set([approvedURL]),
+      disposition: "allow_all",
+    });
+    expect(conflicts.map((c) => c.canonicalServerUrl)).toEqual([
+      approvedURL,
+      deniedURL,
+    ]);
+  });
+
+  it("ignores unchanged rows, undecided reviews, and superseded decisions", () => {
+    const conflicts = shadowMCPDecisionConflicts({
+      servers: [
+        ...servers,
+        server("https://pending.example.com/mcp", "requested"),
+        server("https://superseded.example.com/mcp", "superseded"),
+      ],
+      originalURLs: new Set([approvedURL]),
+      selectedURLs: new Set([
+        approvedURL,
+        "https://pending.example.com/mcp",
+        "https://superseded.example.com/mcp",
+      ]),
+      disposition: "block_all",
+    });
+    expect(conflicts).toEqual([]);
+  });
+
+  it("flags a reopened request whose standing decision still contradicts", () => {
+    // Lifecycle reads requested (someone re-asked), but the prior denial is
+    // still enforced — allow-listing it must confirm superseding it.
+    const reopened = server(
+      "https://reopened.example.com/mcp",
+      "requested",
+      "denied",
+    );
+    const conflicts = shadowMCPDecisionConflicts({
+      servers: [reopened],
+      originalURLs: new Set(),
+      selectedURLs: new Set(["https://reopened.example.com/mcp"]),
+      disposition: "block_all",
+    });
+    expect(conflicts.map((c) => c.decision)).toEqual(["denied"]);
+  });
+
+  it("returns nothing while the baseline is unknown", () => {
+    expect(
+      shadowMCPDecisionConflicts({
+        servers,
+        originalURLs: null,
+        selectedURLs: new Set(),
+        disposition: "block_all",
+      }),
+    ).toEqual([]);
   });
 });

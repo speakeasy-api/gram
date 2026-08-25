@@ -86,11 +86,14 @@ import {
   isShadowMCPBlockConfiguration,
   shadowMCPAllowedURLsForMutation,
   shadowMCPBlockedURLsForMutation,
+  shadowMCPDecisionConflicts,
   shadowMCPSelectionBaselineForUpdate,
   shadowMCPSelectionIsDirty,
   shadowMCPSelectionIsInitialized,
+  type ShadowMCPDecisionConflict,
   type ShadowMCPDisposition,
 } from "./policy-shadow-mcp-setup";
+import { SupersedeDecisionsDialog } from "./SupersedeDecisionsDialog";
 import { type Step } from "@/pages/setup/components/onboarding-stepper";
 import {
   DETECTION_RULES,
@@ -223,6 +226,39 @@ const STANDARD_STEPS: Step[] = [
     description: "Confirm the configuration before creating the policy.",
   },
 ];
+
+const POLICY_ACTION_LABEL: Record<PolicyAction, string> = {
+  flag: "Flag",
+  warn: "Warn",
+  block: "Block",
+  quarantine: "Quarantine",
+};
+
+const POLICY_ACTION_MESSAGE: Record<
+  Exclude<PolicyAction, "flag">,
+  { label: string; description: string; placeholder: string }
+> = {
+  warn: {
+    label: "Warning message",
+    description:
+      "Shown to the user when this policy warns on a tool call or prompt. Supports %{match}, %{entity}, %{policy}, and %{rule} placeholders, substituted at warn time. Leave blank to use the default message.",
+    placeholder: "e.g. %{match} looks sensitive. Acknowledge to proceed.",
+  },
+  block: {
+    label: "Block message",
+    description:
+      "Shown to the user when this policy blocks a tool call or prompt. Leave blank to use the default message.",
+    placeholder:
+      "e.g. This action was blocked by your organization's security policy. Contact your admin for help.",
+  },
+  quarantine: {
+    label: "Quarantine message",
+    description:
+      "Shown to the user when this policy quarantines their session. Leave blank to use the default message.",
+    placeholder:
+      "e.g. This session was quarantined by your organization's security policy. Contact your admin for help.",
+  },
+};
 
 // Back the active step with a `?step=<id>` URL param so browser back/forward
 // (and refresh, and shareable links) traverse the steps. history: "push" makes
@@ -1993,21 +2029,15 @@ function ActionStep({
           {action !== "flag" && (
             <div className="space-y-2">
               <Label className="text-sm font-medium">
-                {action === "warn" ? "Warning message" : "Custom Message"}
+                {POLICY_ACTION_MESSAGE[action].label}
               </Label>
               <p className="text-muted-foreground text-xs">
-                {action === "warn"
-                  ? "Shown to the user when this policy warns on a tool call or prompt. Supports %{match}, %{entity}, %{policy}, and %{rule} placeholders, substituted at warn time. Leave blank to use the default message."
-                  : "Shown to the user when this policy blocks a tool call or prompt. Leave blank to use the default message."}
+                {POLICY_ACTION_MESSAGE[action].description}
               </p>
               <TextArea
                 value={userMessage}
                 onChange={setUserMessage}
-                placeholder={
-                  action === "warn"
-                    ? "e.g. %{match} looks sensitive. Acknowledge to proceed."
-                    : "e.g. This action was blocked by your organization's security policy. Contact your admin for help."
-                }
+                placeholder={POLICY_ACTION_MESSAGE[action].placeholder}
                 rows={3}
               />
             </div>
@@ -2405,11 +2435,7 @@ function PromptReview({
           </SummaryRow>
           <SummaryRow label="Action">
             <Badge variant={action === "flag" ? "neutral" : "warning"}>
-              {action === "block"
-                ? "Block"
-                : action === "warn"
-                  ? "Warn"
-                  : "Flag"}
+              {POLICY_ACTION_LABEL[action]}
             </Badge>
           </SummaryRow>
           <SummaryRow label="Severity">
@@ -3561,6 +3587,11 @@ export function StandardPolicyEditor({
   >(() => new Set());
   const [originalShadowMCPURLs, setOriginalShadowMCPURLs] =
     useState<Set<string> | null>(null);
+  // Standing decisions the pending save would contradict; non-null opens the
+  // supersede confirmation.
+  const [supersedeConflicts, setSupersedeConflicts] = useState<
+    ShadowMCPDecisionConflict[] | null
+  >(null);
   const [shadowMCPDisposition, setShadowMCPDisposition] =
     useState<ShadowMCPDisposition>(
       () =>
@@ -3693,6 +3724,7 @@ export function StandardPolicyEditor({
 
   const updateMutation = useRiskPoliciesUpdateMutation({
     onSuccess: (_policy, variables) => {
+      setSupersedeConflicts(null);
       const submittedURLs = shadowMCPSelectionBaselineForUpdate(
         variables.request.updateRiskPolicyRequestBody,
       );
@@ -3746,7 +3778,7 @@ export function StandardPolicyEditor({
   };
 
   // Build the full update/create body, mirroring PolicyCenter's standard branch.
-  const save = () => {
+  const save = (options?: { supersedeDecisions?: boolean }) => {
     const {
       sources,
       presidioEntities,
@@ -3796,6 +3828,24 @@ export function StandardPolicyEditor({
     };
 
     if (policy) {
+      // A URL toggle that contradicts a recorded decision needs explicit
+      // confirmation before it supersedes that decision.
+      if (
+        !options?.supersedeDecisions &&
+        targetIsShadowMCPBlock &&
+        originalHasShadowMCPBlockConfiguration
+      ) {
+        const conflicts = shadowMCPDecisionConflicts({
+          servers: inventoryQuery.data ?? [],
+          originalURLs: originalShadowMCPURLs,
+          selectedURLs: selectedShadowMCPURLs,
+          disposition: shadowMCPDisposition,
+        });
+        if (conflicts.length > 0) {
+          setSupersedeConflicts(conflicts);
+          return;
+        }
+      }
       updateMutation.mutate({
         request: {
           updateRiskPolicyRequestBody: {
@@ -3821,6 +3871,9 @@ export function StandardPolicyEditor({
               ? presidioThreshold
               : DEFAULT_PRESIDIO_THRESHOLD,
             ...setupFields,
+            ...(options?.supersedeDecisions
+              ? { supersedeDecisions: true }
+              : {}),
             ...(identityActive ? { approvedEmailDomains } : {}),
           },
         },
@@ -3869,12 +3922,18 @@ export function StandardPolicyEditor({
       saving={saving}
       actionDisabled={saveBlocked}
       onSubmit={() => save()}
-      onCreate={save}
+      onCreate={() => save()}
     />
   );
 
   return (
     <>
+      <SupersedeDecisionsDialog
+        conflicts={supersedeConflicts}
+        saving={saving}
+        onCancel={() => setSupersedeConflicts(null)}
+        onConfirm={() => save({ supersedeDecisions: true })}
+      />
       <StepperShell
         header={header}
         steps={STANDARD_STEPS}
@@ -4120,7 +4179,7 @@ function StandardReview({
         </SummaryRow>
         <SummaryRow label="Action">
           <Badge variant={action === "flag" ? "neutral" : "warning"}>
-            {action === "block" ? "Block" : action === "warn" ? "Warn" : "Flag"}
+            {POLICY_ACTION_LABEL[action]}
           </Badge>
         </SummaryRow>
         <SummaryRow label="Severity">

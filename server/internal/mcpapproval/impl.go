@@ -87,6 +87,12 @@ const statusRequested = "requested"
 // upgrades in place to requested the moment someone actually asks.
 const statusUnreviewed = "unreviewed"
 
+// statusSuperseded marks a decided request whose decision an admin
+// explicitly overrode from the policy editor: history stays, but no
+// enforcement derives from it until a new decision or re-request moves the
+// row back into the ordinary lifecycle.
+const statusSuperseded = "superseded"
+
 // gatherTimeout is the overall backstop for evidence gathering at intake.
 // Each source inside the assembler carries its own tighter deadline, so one
 // unreachable registry costs its own budget and lands in the document's gaps
@@ -1006,6 +1012,7 @@ func (s *Service) StartResearch(ctx context.Context, payload *gen.StartResearchP
 			ID:        report.ID,
 			ProjectID: projectID,
 			Error:     conv.ToPGText("the research run could not be started"),
+			ToolCalls: nil,
 		}); failErr != nil {
 			s.logger.ErrorContext(failCtx, "record research start failure", attr.SlogError(failErr))
 		}

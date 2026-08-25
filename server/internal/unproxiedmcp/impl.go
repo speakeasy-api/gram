@@ -249,9 +249,14 @@ func (s *Service) GetServer(ctx context.Context, payload *gen.GetServerPayload) 
 	return mv.BuildUnproxiedMcpServerView(server), nil
 }
 
-// listToolsTimeout bounds the live MCP handshake + tools/list round trip so a
-// slow or unresponsive vendor server can't hang the management API request.
-const listToolsTimeout = 10 * time.Second
+const (
+	// listToolsTimeout bounds the live MCP handshake + tools/list round trip so
+	// a slow or unresponsive vendor server can't hang the management API request.
+	listToolsTimeout = 10 * time.Second
+	// listToolsMaxResponseBytes bounds each untrusted initialize or tools/list
+	// response; exceeding it is reported as unavailable probe evidence.
+	listToolsMaxResponseBytes = 1 << 20
+)
 
 func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) (*gen.ListUnproxiedMcpServerToolsResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -323,9 +328,10 @@ func (s *Service) probeListTools(probeCtx context.Context, serverURL string) *ge
 	// long-lived connection — retries would let an unreachable server take
 	// minutes to report as such instead of ~10s.
 	client, err := externalmcp.NewClient(probeCtx, s.logger, s.policy, serverURL, externalmcptypes.TransportTypeStreamableHTTP, &externalmcp.ClientOptions{
-		Authorization:  "",
-		Headers:        nil,
-		DisableRetries: true,
+		Authorization:    "",
+		Headers:          nil,
+		DisableRetries:   true,
+		MaxResponseBytes: listToolsMaxResponseBytes,
 	})
 	if err != nil {
 		var authErr *externalmcp.AuthRejectedError

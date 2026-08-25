@@ -21,6 +21,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/directory"
+	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	mcpmetarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
@@ -35,7 +37,6 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
-	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -787,8 +788,8 @@ func TestPluginsService_SetPluginAssignments_PreservesUnavailableDirectoryAssign
 
 	now := time.Now().UTC()
 	groupWorkOSID := uuid.NewString()
-	directoryRepo := workosrepo.New(ti.conn)
-	groupID, err := directoryRepo.UpsertDirectoryGroup(ctx, workosrepo.UpsertDirectoryGroupParams{
+	directoryRepo := directoryrepo.New(ti.conn)
+	groupID, err := directoryRepo.UpsertDirectoryGroup(ctx, directoryrepo.UpsertDirectoryGroupParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		WorkosDirectoryGroupID: groupWorkOSID,
 		Name:                   "Unavailable",
@@ -799,14 +800,14 @@ func TestPluginsService_SetPluginAssignments_PreservesUnavailableDirectoryAssign
 	})
 	require.NoError(t, err)
 
-	principal := plugins.DirectoryGroupPrincipal(groupID)
+	principal := directory.GroupPrincipal(groupID)
 	_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
 		PluginID:      plugin.ID,
 		PrincipalUrns: []string{principal},
 	})
 	require.NoError(t, err)
 
-	_, err = directoryRepo.DeleteDirectoryGroupByWorkOSID(ctx, workosrepo.DeleteDirectoryGroupByWorkOSIDParams{
+	_, err = directoryRepo.DeleteDirectoryGroupByWorkOSID(ctx, directoryrepo.DeleteDirectoryGroupByWorkOSIDParams{
 		WorkosDeletedAt:        conv.ToPGTimestamptz(now),
 		WorkosLastEventID:      conv.ToPGTextEmpty(""),
 		WorkosDirectoryGroupID: groupWorkOSID,
@@ -836,7 +837,7 @@ func TestPluginsService_SetPluginAssignments_CanonicalizesDirectoryAttributePrin
 	require.NoError(t, err)
 
 	now := time.Now().UTC()
-	_, err = workosrepo.New(ti.conn).UpsertDirectoryUser(ctx, workosrepo.UpsertDirectoryUserParams{
+	_, err = directoryrepo.New(ti.conn).UpsertDirectoryUser(ctx, directoryrepo.UpsertDirectoryUserParams{
 		OrganizationID:        authCtx.ActiveOrganizationID,
 		UserID:                conv.ToPGTextEmpty(""),
 		WorkosDirectoryUserID: uuid.NewString(),
@@ -854,7 +855,7 @@ func TestPluginsService_SetPluginAssignments_CanonicalizesDirectoryAttributePrin
 		PrincipalUrns: []string{"directory_attribute:ZGVwYXJ0bWVudB:ZW5naW5lZXJpbmd"},
 	})
 	require.NoError(t, err)
-	require.Equal(t, plugins.DirectoryAttributePrincipal("department", "engineering"), result.Assignments[0].PrincipalUrn)
+	require.Equal(t, directory.AttributePrincipal("department", "engineering"), result.Assignments[0].PrincipalUrn)
 }
 
 func TestPluginsService_SetPluginAssignments_PreservesLegacyDirectoryAttributePrincipal(t *testing.T) {
@@ -875,7 +876,7 @@ func TestPluginsService_SetPluginAssignments_PreservesLegacyDirectoryAttributePr
 	})
 	require.NoError(t, err)
 
-	principal := plugins.DirectoryAttributePrincipal("department", "engineering")
+	principal := directory.AttributePrincipal("department", "engineering")
 	result, err := ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
 		PluginID:      plugin.ID,
 		PrincipalUrns: []string{principal},
@@ -2548,7 +2549,7 @@ func TestPluginsService_PublishProject_PlatformMCPAdmissionTransitions(t *testin
 		OrganizationID:       authCtx.ActiveOrganizationID,
 		ProjectID:            *authCtx.ProjectID,
 		RegistrationID:       registration.ID,
-		DefaultPluginID:      defaultPlugin.ID,
+		PluginID:             defaultPlugin.ID,
 		PluginServerID:       uuid.NullUUID{},
 		State:                "attached",
 		Version:              1,
@@ -2575,11 +2576,11 @@ func TestPluginsService_PublishProject_PlatformMCPAdmissionTransitions(t *testin
 	require.NoError(t, json.Unmarshal(connection.PublishedMcpFingerprints, &fingerprints))
 	require.Contains(t, fingerprints, "__platform_mcp__")
 	platformFilesBefore := map[string][]byte{
-		"platform-mcp/.claude-plugin/plugin.json":               mock.lastPushedFiles["platform-mcp/.claude-plugin/plugin.json"],
-		"platform-mcp/.mcp.json":                                mock.lastPushedFiles["platform-mcp/.mcp.json"],
-		"platform-mcp/skills/add-mcp-from-catalog/SKILL.md":     mock.lastPushedFiles["platform-mcp/skills/add-mcp-from-catalog/SKILL.md"],
-		"agent-plugins/speakeasy-aicp-platform-mcp/plugin.json": mock.lastPushedFiles["agent-plugins/speakeasy-aicp-platform-mcp/plugin.json"],
-		"agent-plugins/speakeasy-aicp-platform-mcp/mcp.json":    mock.lastPushedFiles["agent-plugins/speakeasy-aicp-platform-mcp/mcp.json"],
+		"platform-mcp/.claude-plugin/plugin.json":           mock.lastPushedFiles["platform-mcp/.claude-plugin/plugin.json"],
+		"platform-mcp/.mcp.json":                            mock.lastPushedFiles["platform-mcp/.mcp.json"],
+		"platform-mcp/skills/add-mcp-from-catalog/SKILL.md": mock.lastPushedFiles["platform-mcp/skills/add-mcp-from-catalog/SKILL.md"],
+		"agent-plugins/platform-mcp/plugin.json":            mock.lastPushedFiles["agent-plugins/platform-mcp/plugin.json"],
+		"agent-plugins/platform-mcp/mcp.json":               mock.lastPushedFiles["agent-plugins/platform-mcp/mcp.json"],
 	}
 
 	// An indeterminate result preserves the prior package and fingerprint. It
@@ -2611,6 +2612,22 @@ func TestPluginsService_PublishProject_PlatformMCPAdmissionTransitions(t *testin
 		require.Equal(t, content, mock.lastPushedFiles[filePath], filePath)
 	}
 
+	// An already-published repository may still use the previously published
+	// Agent Plugin identifier. Indeterminate admission must carry that tree
+	// as-is and skip, not regenerate a new package.
+	legacyRepo := remapPublishedFilesToLegacyPlatformMCPLayout(mock.lastPushedFiles)
+	require.Contains(t, legacyRepo, "agent-plugins/speakeasy-aicp-platform-mcp/plugin.json")
+	require.NotContains(t, legacyRepo, "agent-plugins/platform-mcp/plugin.json")
+	mock.repoFiles = legacyRepo
+	mock.getRepoFilesCalled = false
+	mock.pushFilesCalled = false
+	result, err = publisher.PublishProject(ctx, input)
+	require.NoError(t, err)
+	require.True(t, result.Skipped)
+	require.True(t, mock.getRepoFilesCalled)
+	require.False(t, mock.pushFilesCalled)
+	mock.repoFiles = nil
+
 	// A current full B2/B3 fingerprint cannot hide a missing native package.
 	// Indeterminate admission repairs the repository to an internally consistent
 	// B1-only state, then confirmed admission restores the complete native set.
@@ -2624,7 +2641,7 @@ func TestPluginsService_PublishProject_PlatformMCPAdmissionTransitions(t *testin
 	require.Contains(t, mock.lastPushedFiles, "platform-mcp/.mcp.json")
 	require.NotContains(t, mock.lastPushedFiles, "cursor-plugins/platform-mcp-cursor/.cursor-plugin/plugin.json")
 	require.NotContains(t, mock.lastPushedFiles, "platform-mcp-codex/.codex-plugin/plugin.json")
-	require.NotContains(t, mock.lastPushedFiles, "opencode-plugins/platform-mcp/plugin/speakeasy-aicp-platform-mcp.ts")
+	require.NotContains(t, mock.lastPushedFiles, "opencode-plugins/platform-mcp/plugin/platform-mcp.ts")
 
 	connection, err = pluginsrepo.New(ti.conn).GetGitHubConnection(ctx, *authCtx.ProjectID)
 	require.NoError(t, err)
@@ -2650,7 +2667,7 @@ func TestPluginsService_PublishProject_PlatformMCPAdmissionTransitions(t *testin
 	require.True(t, mock.pushFilesCalled)
 	require.Contains(t, mock.lastPushedFiles, "cursor-plugins/platform-mcp-cursor/mcp.json")
 	require.Contains(t, mock.lastPushedFiles, "platform-mcp-codex/.mcp.json")
-	require.Contains(t, mock.lastPushedFiles, "opencode-plugins/platform-mcp/plugin/speakeasy-aicp-platform-mcp.ts")
+	require.Contains(t, mock.lastPushedFiles, "opencode-plugins/platform-mcp/plugin/platform-mcp.ts")
 
 	connection, err = pluginsrepo.New(ti.conn).GetGitHubConnection(ctx, *authCtx.ProjectID)
 	require.NoError(t, err)
@@ -2771,8 +2788,8 @@ func TestPluginsService_PlatformMCPPackageStatusAndDownloadBeforeConnection(t *t
 	require.Equal(t, "missing", status.Freshness)
 	require.True(t, status.RepairAllowed)
 	require.True(t, status.DirectDownloadAvailable)
-	require.Equal(t, "speakeasy-aicp-platform-mcp-claude.zip", status.ClaudeFilename)
-	require.Equal(t, "speakeasy-aicp-platform-mcp-agent-plugin.zip", status.AgentPluginFilename)
+	require.Equal(t, "platform-mcp-claude.zip", status.ClaudeFilename)
+	require.Equal(t, "platform-mcp-agent-plugin.zip", status.AgentPluginFilename)
 
 	// Repair intentionally bootstraps the canonical default-project marketplace
 	// when none exists, without requiring a prior Platform MCP connection.
@@ -2801,13 +2818,13 @@ func TestPluginsService_PlatformMCPPackageStatusAndDownloadBeforeConnection(t *t
 		"claude":       {".claude-plugin/plugin.json", ".mcp.json", "skills/add-mcp-from-catalog/SKILL.md"},
 		"cursor":       {".cursor-plugin/plugin.json", "mcp.json", "skills/add-mcp-from-catalog/SKILL.md"},
 		"codex":        {".codex-plugin/plugin.json", ".mcp.json", "skills/add-mcp-from-catalog/SKILL.md"},
-		"opencode":     {"plugin/speakeasy-aicp-platform-mcp.ts", "speakeasy-aicp-platform-mcp/mcp.json", "speakeasy-aicp-platform-mcp/skills/add-mcp-from-catalog/SKILL.md"},
+		"opencode":     {"plugin/platform-mcp.ts", "platform-mcp/mcp.json", "platform-mcp/skills/add-mcp-from-catalog/SKILL.md"},
 		"agent-plugin": {"plugin.json", "mcp.json", "skills/add-mcp-from-catalog/SKILL.md"},
 	}
 	for platform, expectedFiles := range packageAssertions {
 		result, body, err := ti.service.DownloadPlatformMCPPlugin(ctx, &gen.DownloadPlatformMCPPluginPayload{Platform: platform})
 		require.NoError(t, err, platform)
-		require.Equal(t, fmt.Sprintf(`attachment; filename="speakeasy-aicp-platform-mcp-%s.zip"`, platform), result.ContentDisposition)
+		require.Equal(t, fmt.Sprintf(`attachment; filename="platform-mcp-%s.zip"`, platform), result.ContentDisposition)
 		archive, err := io.ReadAll(body)
 		require.NoError(t, err, platform)
 		require.NoError(t, body.Close())
@@ -2966,6 +2983,34 @@ func hooksFilesOf(files map[string][]byte) map[string]string {
 		}
 	}
 	return out
+}
+
+// remapPublishedFilesToLegacyPlatformMCPLayout rewrites only the Agent Plugin
+// directory and the OpenCode identifier so a live repository that still uses
+// that published layout can be reconstructed in tests.
+func remapPublishedFilesToLegacyPlatformMCPLayout(files map[string][]byte) map[string][]byte {
+	legacy := make(map[string][]byte, len(files))
+	for filePath, content := range files {
+		legacy[remapPublishedPathToLegacyPlatformMCP(filePath)] = content
+	}
+	return legacy
+}
+
+func remapPublishedPathToLegacyPlatformMCP(filePath string) string {
+	const currentAgentPrefix = "agent-plugins/platform-mcp/"
+	const legacyAgentPrefix = "agent-plugins/speakeasy-aicp-platform-mcp/"
+	if rest, ok := strings.CutPrefix(filePath, currentAgentPrefix); ok {
+		return legacyAgentPrefix + rest
+	}
+	if filePath == "opencode-plugins/platform-mcp/plugin/platform-mcp.ts" {
+		return "opencode-plugins/platform-mcp/plugin/speakeasy-aicp-platform-mcp.ts"
+	}
+	const currentOpenCodeIDPrefix = "opencode-plugins/platform-mcp/platform-mcp/"
+	const legacyOpenCodeIDPrefix = "opencode-plugins/platform-mcp/speakeasy-aicp-platform-mcp/"
+	if rest, ok := strings.CutPrefix(filePath, currentOpenCodeIDPrefix); ok {
+		return legacyOpenCodeIDPrefix + rest
+	}
+	return filePath
 }
 
 func filesWithPrefix(files map[string][]byte, prefix string) map[string]string {

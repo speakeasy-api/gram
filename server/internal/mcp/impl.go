@@ -14,7 +14,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -110,18 +109,11 @@ type Service struct {
 	serverURL       *url.URL
 	siteURL         *url.URL
 	posthog         *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
-	// features gates flag-controlled behavior on the OAuth surface (inbound
-	// CIMD, the consent tool picker). Wired from the environment-aware
+	// features resolves flag-controlled behavior (the managed assistant's
+	// Platform MCP toolset variant). Wired from the environment-aware
 	// provider: the posthog client in production, the CSV-backed in-memory
 	// provider in local development, feature.InMemory in tests.
 	features feature.Provider
-	// cimdOrgFlagLastKnown remembers the last successful per-organization
-	// evaluation of FlagUserSessionCIMD so a flag-provider outage degrades
-	// to the last known state instead of failing closed on the
-	// unauthenticated OAuth surface. Guarded by cimdOrgFlagMu; holds one bool
-	// per organization that touches the surface.
-	cimdOrgFlagMu        sync.RWMutex
-	cimdOrgFlagLastKnown map[string]bool
 	// cimdResolver fetches + validates Client ID Metadata Documents for
 	// URL-shaped client_ids and owns the cimd.fetch.* telemetry.
 	cimdResolver *cimd.Resolver
@@ -153,7 +145,12 @@ type Service struct {
 	platformToolsets       map[string]platformtools.Toolset
 	authnChallengeCache    cache.TypedCacheObject[AuthnChallengeState]
 	userSessionGrantCache  cache.TypedCacheObject[UserSessionGrant]
-	toolSelectionCache     cache.TypedCacheObject[sessionToolSelectionEntry]
+	// userSessionRefreshReplayCache retains the encrypted rotation outcome.
+	userSessionRefreshReplayCache cache.TypedCacheObject[userSessionRefreshReplay]
+
+	// userSessionRefreshReplayCoordination elects the database rotation winner.
+	userSessionRefreshReplayCoordination cache.Cache
+	toolSelectionCache                   cache.TypedCacheObject[sessionToolSelectionEntry]
 	// consentToolInventoryCache holds per-(state, attempt) tool inventory
 	// snapshots captured by the consent MCP transport.
 	consentToolInventoryCache cache.TypedCacheObject[consentToolInventory]
@@ -265,11 +262,14 @@ type mcpInputs struct {
 	// tools/call expose only tools whose variation row carries one of these
 	// tags. Empty means no filtering.
 	tags []string
-	// protocolVersionHeader is the sanitized MCP-Protocol-Version header value
-	// the request arrived with, or empty when absent (every `initialize`, and
-	// every request from a pre-2025-06-18 client). Threaded here because the
-	// dispatch and handlers run without access to the *http.Request.
-	protocolVersionHeader string
+	// protocolVersion is the protocol revision resolved for this request:
+	// what the request declared (header, falling back to per-request `_meta`)
+	// for telemetry, and the supported-set member in effect for behavior.
+	// Threaded here because the dispatch and handlers run without access to
+	// the *http.Request. Resolved once where this struct is built; the
+	// initialize handler overwrites InEffect with the negotiated answer, which
+	// is the one sanctioned mutation.
+	protocolVersion mcpversions.Resolution
 	// toolSelection is the consent-screen tool policy loaded from the
 	// session row by the issuer gate. Nil means all tools; non-nil is always
 	// restrictive and intersects with the live toolset, ?tags=, and RBAC.
@@ -349,8 +349,6 @@ func NewService(
 		siteURL:              siteURL,
 		posthog:              posthog,
 		features:             features,
-		cimdOrgFlagMu:        sync.RWMutex{},
-		cimdOrgFlagLastKnown: map[string]bool{},
 		cimdResolver:         cimd.NewResolver(guardianPolicy, meterProvider, logger),
 		cimdAdmissionMetrics: admission.NewMetrics(meterProvider, logger),
 		toolProxy: gateway.NewToolProxy(
@@ -391,6 +389,12 @@ func NewService(
 			cacheImpl,
 			cache.SuffixNone,
 		),
+		userSessionRefreshReplayCache: cache.NewTypedObjectCache[userSessionRefreshReplay](
+			logger.With(attr.SlogCacheNamespace("user_session_refresh_replay")),
+			cacheImpl,
+			cache.SuffixNone,
+		),
+		userSessionRefreshReplayCoordination: cacheImpl,
 		toolSelectionCache: cache.NewTypedObjectCache[sessionToolSelectionEntry](
 			logger.With(attr.SlogCacheNamespace("session_tool_selection")),
 			cacheImpl,
@@ -612,7 +616,7 @@ func (s *Service) serveProxyBackedEndpoint(w http.ResponseWriter, r *http.Reques
 	}
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
 
-	mcpEndpoint, mcpServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, mcpSlug)
+	mcpEndpoint, mcpServer, metaServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, mcpSlug)
 	var shareErr *oops.ShareableError
 	switch {
 	case err == nil:
@@ -620,6 +624,12 @@ func (s *Service) serveProxyBackedEndpoint(w http.ResponseWriter, r *http.Reques
 		return false, nil
 	default:
 		return true, err
+	}
+
+	// Meta-backed endpoints hold no upstream session and no proxied GET/SSE
+	// stream; the caller's legacy behavior (install page or 405) applies.
+	if metaServer != nil {
+		return false, nil
 	}
 
 	if !mcpServer.RemoteMcpServerID.Valid && !mcpServer.TunneledMcpServerID.Valid {
@@ -703,12 +713,15 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	// Try mcp_endpoints → mcp_servers first. On hit, dispatch through the
 	// unified backend switch (remote proxy / toolset). On 404, fall through
 	// to the legacy toolset-by-slug path below.
-	mcpEndpoint, mcpServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, mcpSlug)
+	mcpEndpoint, mcpServer, metaServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, mcpSlug)
 	var shareErr *oops.ShareableError
 	switch {
 	case err == nil:
 		if err := s.enforceCustomDomainLockdown(ctx, logger, mcpEndpoint.ProjectID); err != nil {
 			return err
+		}
+		if metaServer != nil {
+			return s.serveResolvedMetaMCPEndpoint(w, r, logger, mcpEndpoint, metaServer)
 		}
 		return s.serveResolvedMCPEndpoint(w, r, logger, mcpEndpoint, mcpServer, mcpSlug, "mcp")
 	case errors.As(err, &shareErr) && shareErr.Code == oops.CodeNotFound:
@@ -1003,7 +1016,7 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		toolVariationsGroupID: toolVariationsGroupID,
 		mcpServerID:           mcpServerID,
 		tags:                  tags,
-		protocolVersionHeader: mcpversions.Sanitize(r.Header.Get(mcpversions.HTTPHeader)),
+		protocolVersion:       mcpversions.Resolve(mcprequests.DeclaredProtocolVersion(r.Header.Get(mcpversions.HTTPHeader), req.Params), mcpversions.SupportedHostedToolset()),
 		toolSelection:         callerToolSelection,
 	}
 
@@ -1299,12 +1312,13 @@ func parseMcpEnvVariables(r *http.Request, headerDisplayNames map[string]string)
 }
 
 func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *rawRequest) (json.RawMessage, error) {
-	// The census version resolves lazily: the header answers for every
-	// conforming client since 2025-06-18, and only a header-less request pays
-	// the `_meta` scan. Handlers that consume the rest of the per-request
-	// metadata decode it themselves (tools/call in the same pass as its
-	// params, tools/list scoped to its analytics event).
-	s.metrics.RecordMCPRequest(ctx, mcprequests.DeclaredProtocolVersion(payload.protocolVersionHeader, req.Params), req.Method, mcpmetrics.SurfaceHosting)
+	// The census dimension is what the request declared, not the in-effect
+	// revision: clamping keeps absent and unknown declarations countable,
+	// and the resolved value would fabricate a revision for clients that
+	// named none. Handlers that consume the rest of the per-request metadata
+	// decode it themselves (tools/call in the same pass as its params,
+	// tools/list scoped to its analytics event).
+	s.metrics.RecordMCPRequest(ctx, payload.protocolVersion.Declared, req.Method, mcpmetrics.SurfaceHosting)
 
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
 		start := time.Now()
@@ -1330,6 +1344,8 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 		return handlePromptsGet(ctx, s.logger, s.db, payload, req)
 	case "resources/list":
 		return handleResourcesList(ctx, s.logger, s.db, payload, req, &s.toolsetCache, s.platformExtras)
+	case "resources/templates/list":
+		return handleResourcesTemplatesList(ctx, s.logger, req)
 	case "resources/read":
 		return handleResourcesRead(ctx, s.logger, s.db, payload, req, s.toolProxy, s.env, s.billingTracker, s.billingRepository, s.telemLogger, s.platformExtras)
 	default:
