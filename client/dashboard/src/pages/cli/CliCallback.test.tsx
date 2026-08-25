@@ -76,5 +76,8 @@ describe("CliCallback", () => {
         "/sign-up?redirect=https%3A%2F%2Fapp.example%2Fcli%2Fcallback%3Fstate%3Dabc",
       );
     });
+
+    expect(mocks.createKey).not.toHaveBeenCalled();
+    expect(mocks.authorizeCode).not.toHaveBeenCalled();
   });
 });

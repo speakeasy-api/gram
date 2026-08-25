@@ -16,7 +16,7 @@ export default function SignUp(): JSX.Element {
 
   const panel =
     session.session === "" ? (
-      <SignUpPanel />
+      <SignUpPanel redirectTo={redirectTo} />
     ) : (
       <RegisterPanel redirectTo={redirectTo} />
     );

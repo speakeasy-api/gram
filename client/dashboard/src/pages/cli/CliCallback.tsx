@@ -71,6 +71,7 @@ export default function CliCallback(props: CliCallbackProps): JSX.Element {
 
   useEffect(() => {
     if (!session) return;
+    if (!session.activeOrganizationId) return;
     if (hasCreatedKey.current) return;
 
     if (!validCallback) {

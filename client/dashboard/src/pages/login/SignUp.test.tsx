@@ -20,7 +20,9 @@ vi.mock("./components/auth-shell", () => ({
   AuthShell: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 vi.mock("./components/signup-panel", () => ({
-  SignUpPanel: () => <div data-testid="signup-panel" />,
+  SignUpPanel: ({ redirectTo }: { redirectTo?: string | null }) => (
+    <div data-testid="signup-panel" data-redirect-to={redirectTo} />
+  ),
 }));
 vi.mock("./components/register-panel", () => ({
   RegisterPanel: ({ redirectTo }: { redirectTo?: string | null }) => (
@@ -62,6 +64,19 @@ describe("SignUp", () => {
 
     expect(screen.getByTestId("signup-panel")).toBeTruthy();
     expect(screen.queryByTestId("register-panel")).toBeNull();
+  });
+
+  it("passes the requested destination to the logged-out signup form", () => {
+    mocks.useSession.mockReturnValue({ session: "", activeOrganizationId: "" });
+    mocks.useSearchParams.mockReturnValue([
+      new URLSearchParams("redirect=%2Fcli%2Fcallback"),
+    ]);
+
+    render(<SignUp />);
+
+    expect(
+      screen.getByTestId("signup-panel").getAttribute("data-redirect-to"),
+    ).toBe("https://app.example/cli/callback");
   });
 
   it("renders organization registration for an authenticated zero-org session", () => {
