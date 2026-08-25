@@ -46,7 +46,11 @@ type RegisterRemoteMCPToolOutput struct {
 	DashboardSetupURL string `json:"dashboard_setup_url,omitempty"`
 }
 
-func registerCatalogRegistrationTool(reg *Registrar, registrations *RegistrationService) {
+// registerCatalogRegistrationTool registers the reviewed-catalogue workflow in
+// the caller's onboarding projection after the registration itself succeeds.
+// Distribution resolves its target from that projection, so a catalogue
+// registration that skips the bind can never be distributed.
+func registerCatalogRegistrationTool(reg *Registrar, registrations *RegistrationService, onboarding *OnboardingService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "register_catalog_mcp",
 		Title:       "Register Catalog MCP",
@@ -62,6 +66,17 @@ func registerCatalogRegistrationTool(reg *Registrar, registrations *Registration
 				return budgetResult, RegisterCatalogMCPToolOutput{}, nil
 			}
 			return nil, RegisterCatalogMCPToolOutput{}, err
+		}
+		if onboarding != nil && principal.HasConnection() {
+			// Registration has committed before this projection work begins. A
+			// bookkeeping failure must not tell the caller that the durable
+			// registration failed and encourage a duplicate retry; returning the
+			// receipt lets the user recover through the dashboard if needed.
+			if err := recordRegistrationOnboarding(ctx, onboarding, principal, result.Project.ID, result.Registration); err != nil {
+				// Onboarding is a post-commit projection. Keep the successful receipt
+				// but classify the failed projection with the bounded lifecycle taxonomy.
+				registrations.telemetry.Record(ctx, LifecycleEvent{Operation: "registration", Phase: "complete", Outcome: lifecycleOutcome(err), State: ""})
+			}
 		}
 		nextAction := "start_setup"
 		if isBrowserCatalogProviderKey(result.ProviderKey) {
@@ -123,7 +138,7 @@ func registerRemoteRegistrationTool(reg *Registrar, registrations *RegistrationS
 			// bookkeeping failure must not tell the caller that the durable
 			// registration failed and encourage a duplicate retry; returning the
 			// receipt lets the user recover through the dashboard if needed.
-			if err := recordRemoteRegistrationOnboarding(ctx, onboarding, principal, result); err != nil {
+			if err := recordRegistrationOnboarding(ctx, onboarding, principal, result.Project.ID, result.Registration); err != nil {
 				// Onboarding is a post-commit projection. Keep the successful receipt
 				// but classify the failed projection with the bounded lifecycle taxonomy.
 				registrations.telemetry.Record(ctx, LifecycleEvent{Operation: "registration", Phase: "complete", Outcome: lifecycleOutcome(err), State: ""})
@@ -141,16 +156,16 @@ func registerRemoteRegistrationTool(reg *Registrar, registrations *RegistrationS
 	})
 }
 
-func recordRemoteRegistrationOnboarding(ctx context.Context, onboarding *OnboardingService, principal Principal, result RegisterRemoteMCPResult) error {
+func recordRegistrationOnboarding(ctx context.Context, onboarding *OnboardingService, principal Principal, projectID uuid.UUID, registration string) error {
 	if _, err := onboarding.Start(ctx, principal.OrganizationID, principal.UserID); err != nil {
 		return err
 	}
-	registrationID, err := uuid.Parse(result.Registration)
+	registrationID, err := uuid.Parse(registration)
 	if err != nil {
 		return ErrUnavailable
 	}
-	if _, err := onboarding.BindRegistrationForPrincipal(ctx, principal, result.Project.ID, registrationID); err != nil {
+	if _, err := onboarding.BindRegistrationForPrincipal(ctx, principal, projectID, registrationID); err != nil {
 		return err
 	}
-	return onboarding.RecordRegistrationSucceeded(ctx, principal, result.Project.ID, registrationID)
+	return onboarding.RecordRegistrationSucceeded(ctx, principal, projectID, registrationID)
 }

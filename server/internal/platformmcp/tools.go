@@ -178,7 +178,7 @@ func newServer(reader Reader, catalog Catalog, registrations *RegistrationServic
 		registerUnavailableRemoteRegistrationTool(reg)
 		registerUnavailableIdentityProviderTool(reg)
 	} else {
-		registerCatalogRegistrationTool(reg, registrations)
+		registerCatalogRegistrationTool(reg, registrations, onboarding)
 		if registrations.directRemoteInspector == nil {
 			registerUnavailableRemoteRegistrationTool(reg)
 		} else {

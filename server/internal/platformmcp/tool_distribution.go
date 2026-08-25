@@ -44,7 +44,8 @@ func registerDistributionTools(reg *Registrar, onboarding *OnboardingService, di
 			return nil, DistributeMCPToolOutput{}, err
 		}
 		if input.ProjectSlug == "" {
-			return nil, DistributeMCPToolOutput{}, ErrDistributionInvalid
+			result, _ := distributionToolError(ErrDistributionInvalid)
+			return result, DistributeMCPToolOutput{}, nil
 		}
 		// A blank plugin is refused rather than resolved: on this surface the
 		// caller is an agent acting on a name a person gave it, and silently
@@ -96,7 +97,8 @@ func registerDistributionTools(reg *Registrar, onboarding *OnboardingService, di
 			return nil, DistributeMCPToolOutput{}, err
 		}
 		if input.ProjectSlug == "" {
-			return nil, DistributeMCPToolOutput{}, ErrDistributionInvalid
+			result, _ := distributionToolError(ErrDistributionInvalid)
+			return result, DistributeMCPToolOutput{}, nil
 		}
 		if strings.TrimSpace(input.Plugin) == "" {
 			result, _ := distributionToolError(ErrPluginNotFound)
@@ -137,6 +139,8 @@ func distributionToolError(err error) (*mcp.CallToolResult, bool) {
 		result = distributionErrorResult{Code: "ambiguous_target", Message: "More than one plugin in this project matches that name. Name the plugin by its ID instead."}
 	case errors.Is(err, ErrDistributionDefaultAbsent):
 		result = distributionErrorResult{Code: "default_plugin_missing", Message: "This project does not have an existing Default plugin, so Platform MCP cannot add the MCP."}
+	case errors.Is(err, ErrDistributionInvalid):
+		result = distributionErrorResult{Code: "no_distribution_target", Message: "No registered MCP is bound to this session for that project. Give the exact slug of the project you registered in, and register the MCP with register_catalog_mcp or register_remote_mcp there, before distributing."}
 	case errors.Is(err, ErrDistributionTargetUnavailable):
 		result = distributionErrorResult{Code: "distribution_target_unavailable", Message: "The selected project or its Platform MCP setup is no longer available. Check onboarding status and choose the supported next action."}
 	case errors.Is(err, ErrDistributionConflict):
