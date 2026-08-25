@@ -319,9 +319,7 @@ func (s *Service) describeMemberToolset(
 		catalog.byName[entry.Name] = entry
 	}
 	// Duplicated names are dropped so describe never presents an ambiguous
-	// name. Execute does not consult this catalog — it resolves by first
-	// match in handleToolsCall — so an ambiguous name still executes, to an
-	// arbitrary one of the collided tools.
+	// name; handleToolsCall refuses the same names on the execute side.
 	for name := range duplicates {
 		delete(catalog.byName, name)
 	}

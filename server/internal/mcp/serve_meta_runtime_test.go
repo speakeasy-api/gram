@@ -26,12 +26,15 @@ import (
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+	variations_repo "github.com/speakeasy-api/gram/server/internal/variations/repo"
 )
 
 type hostedMemberFixture struct {
 	slug      string
 	serverID  uuid.UUID
 	toolsetID uuid.UUID
+	toolURNs  map[string]urn.Tool
 }
 
 // seedHostedMetaMember: public-MCP toolset with the named HTTP tools, fronted
@@ -53,7 +56,7 @@ func seedHostedMetaMember(
 
 	toolsetSlug := "member-ts-" + uuid.NewString()[:8]
 	toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, toolsetSlug)
-	addHTTPTools(t, ctx, ti, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID, toolNames...)
+	toolURNs := addHTTPTools(t, ctx, ti, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID, toolNames...)
 
 	serverID, err := uuid.NewV7()
 	require.NoError(t, err)
@@ -79,7 +82,7 @@ func seedHostedMetaMember(
 	})
 	require.NoError(t, err)
 
-	return hostedMemberFixture{slug: memberSlug, serverID: server.ID, toolsetID: toolset.ID}
+	return hostedMemberFixture{slug: memberSlug, serverID: server.ID, toolsetID: toolset.ID, toolURNs: toolURNs}
 }
 
 func callMetaTool(t *testing.T, ctx context.Context, ti *testInstance, endpointSlug, tool string, arguments map[string]any) map[string]json.RawMessage {
@@ -264,6 +267,50 @@ func TestServePublic_MetaEndpoint_ExecuteTool_UnknownToolOnKnownMember(t *testin
 		"arguments": map[string]any{},
 	})
 	require.Contains(t, string(envelope["error"]), "tool not found")
+}
+
+// Discovery and execution agree on an ambiguous name: a variation renaming one
+// tool onto another's name drops it from the member catalog, and execute_tool
+// refuses it rather than dispatching an arbitrary one of the pair.
+func TestServePublic_MetaEndpoint_AmbiguousToolName(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	slug := "meta-" + uuid.NewString()
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+	member := seedHostedMetaMember(t, ctx, ti, meta.ID, "hosted member", 1, mcpservers.VisibilityPublic, "alpha_tool", "beta_tool")
+
+	variationsRepo := variations_repo.New(ti.conn)
+	group, err := variationsRepo.InitGlobalToolVariationsGroup(ctx, variations_repo.InitGlobalToolVariationsGroupParams{
+		ProjectID:   *authCtx.ProjectID,
+		Name:        "default-group",
+		Description: conv.ToPGText("default group"),
+	})
+	require.NoError(t, err)
+
+	_, err = variationsRepo.UpsertToolVariation(ctx, variations_repo.UpsertToolVariationParams{
+		GroupID:     group,
+		SrcToolUrn:  member.toolURNs["alpha_tool"],
+		SrcToolName: "alpha_tool",
+		Name:        conv.ToPGText("beta_tool"),
+	})
+	require.NoError(t, err)
+
+	envelope := callMetaTool(t, ctx, ti, slug, "describe_server", map[string]any{"server": member.slug})
+	var described struct {
+		Tools []any `json:"tools"`
+	}
+	require.NoError(t, json.Unmarshal(decodeMetaToolResult(t, envelope).StructuredContent, &described))
+	require.Empty(t, described.Tools)
+
+	envelope = callMetaTool(t, ctx, ti, slug, "execute_tool", map[string]any{
+		"name":      member.slug + "--beta_tool",
+		"arguments": map[string]any{},
+	})
+	require.Contains(t, string(envelope["error"]), "ambiguous tool name")
 }
 
 func TestServePublic_MetaEndpoint_ListServers_StatusByBackend(t *testing.T) {
