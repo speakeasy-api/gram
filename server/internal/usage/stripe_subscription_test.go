@@ -96,6 +96,16 @@ func TestGetStripeSubscriptionReturnsNotFoundWithoutSubscription(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
+func TestGetStripeSubscriptionForOrganizationReturnsNotFoundWithoutSubscriptionWhenStripeUnavailable(t *testing.T) {
+	t.Parallel()
+
+	ti := newStripeCheckoutTestInstance(t)
+	ti.service.stripeClient = nil
+	_, err := ti.service.GetStripeSubscriptionForOrganization(t.Context(), ti.orgID)
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
 func TestCreateStripePortalSessionRequiresOrganizationAdmin(t *testing.T) {
 	t.Parallel()
 
