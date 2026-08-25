@@ -1,6 +1,12 @@
 import { Text } from "@/components/ui/Text";
 import { ThreadPrimitive } from "@assistant-ui/react";
 import { useGramElements } from "@/elements";
+import {
+  mcpToolsAvailability,
+  mcpToolsWelcomeSubtitle,
+  NO_MCP_TOOLS_MESSAGE,
+} from "@/elements/lib/mcpToolsAvailability";
+import { AlertCircle } from "lucide-react";
 import type { FC } from "react";
 
 /**
@@ -8,8 +14,17 @@ import type { FC } from "react";
  * Displays centered empty state with title, subtitle, and optional suggestions.
  */
 export const GramThreadWelcome: FC = () => {
-  const { config } = useGramElements();
+  const { config, mcpTools, mcpToolsLoading, mcpToolsError } =
+    useGramElements();
   const { title, subtitle, suggestions } = config.welcome ?? {};
+  const availability = mcpToolsAvailability(
+    mcpToolsLoading,
+    mcpTools,
+    mcpToolsError,
+  );
+  const resolvedSubtitle = mcpToolsWelcomeSubtitle(availability, subtitle);
+  const visibleSuggestions =
+    availability === "ready" ? (suggestions ?? []) : [];
 
   return (
     <div className="flex size-full flex-col items-center justify-center gap-3 p-8 text-center">
@@ -18,12 +33,12 @@ export const GramThreadWelcome: FC = () => {
           {title}
         </Text>
         <Text variant="small" muted>
-          {subtitle}
+          {resolvedSubtitle}
         </Text>
       </div>
-      {suggestions && suggestions.length > 0 && (
+      {visibleSuggestions.length > 0 && (
         <div className="mt-4 flex flex-wrap justify-center gap-2">
-          {suggestions.map((suggestion, index) => (
+          {visibleSuggestions.map((suggestion, index) => (
             <ThreadPrimitive.Suggestion
               key={index}
               prompt={suggestion.prompt}
@@ -43,3 +58,21 @@ export const GramThreadWelcome: FC = () => {
     </div>
   );
 };
+
+/** Persistent warning when tools/list settled empty or failed. Hidden while loading. */
+export function PlaygroundNoToolsBanner(): JSX.Element | null {
+  const { mcpTools, mcpToolsLoading, mcpToolsError } = useGramElements();
+  if (
+    mcpToolsAvailability(mcpToolsLoading, mcpTools, mcpToolsError) !==
+    "unavailable"
+  ) {
+    return null;
+  }
+
+  return (
+    <div className="bg-warning/15 border-warning/30 text-warning-foreground flex items-center gap-2 border-b px-4 py-2.5 text-sm font-medium">
+      <AlertCircle className="size-4 shrink-0" />
+      <span>{NO_MCP_TOOLS_MESSAGE}</span>
+    </div>
+  );
+}

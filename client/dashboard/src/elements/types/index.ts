@@ -1064,6 +1064,13 @@ export interface ComposerConfig {
    * the draft and sends it, so these are shortcuts rather than editable text.
    */
   slashCommands?: ComposerSlashCommand[];
+
+  /**
+   * When true, disable send until the MCP tool list has settled with at least
+   * one tool. Used by the Playground so a tools/list 401 or empty result
+   * cannot produce a confident "no tools" model reply.
+   */
+  requireMcpTools?: boolean;
 }
 
 export interface ComposerSlashCommand {
@@ -1292,4 +1299,6 @@ export type ElementsContextType = {
   mcpTools: Record<string, unknown> | undefined;
   /** True while the MCP tool list is actively being fetched. */
   mcpToolsLoading: boolean;
+  /** Set when tools/list failed (e.g. 401 on an issuer-gated server). */
+  mcpToolsError: Error | null;
 };
