@@ -167,9 +167,7 @@ SELECT
     om.workos_id,
     om.whitelisted,
     om.disabled_at,
-    om.free_trial_started_at,
-    om.free_trial_ends_at,
-    -- Must stay identical to AdminListOrganizations.
+    -- The lifecycle state calculation must stay identical to AdminListOrganizations.
     CASE
         WHEN t.organization_id IS NULL THEN 'none'
         WHEN t.converted_at IS NOT NULL THEN 'converted'
@@ -178,7 +176,10 @@ SELECT
         WHEN t.ends_at <= now() + INTERVAL '7 days' THEN 'ending_soon'
         ELSE 'running'
     END::text AS trial_state,
+    t.tier AS trial_tier,
     t.ends_at AS trial_ends_at,
+    t.converted_at AS trial_converted_at,
+    t.demoted_at AS trial_demoted_at,
     om.created_at,
     om.updated_at,
     (
@@ -201,20 +202,21 @@ type AdminGetOrganizationParams struct {
 }
 
 type AdminGetOrganizationRow struct {
-	ID                 string
-	Name               string
-	Slug               string
-	AccountType        string
-	WorkosID           pgtype.Text
-	Whitelisted        bool
-	DisabledAt         pgtype.Timestamptz
-	FreeTrialStartedAt pgtype.Timestamptz
-	FreeTrialEndsAt    pgtype.Timestamptz
-	TrialState         string
-	TrialEndsAt        pgtype.Timestamptz
-	CreatedAt          pgtype.Timestamptz
-	UpdatedAt          pgtype.Timestamptz
-	MemberCount        int64
+	ID               string
+	Name             string
+	Slug             string
+	AccountType      string
+	WorkosID         pgtype.Text
+	Whitelisted      bool
+	DisabledAt       pgtype.Timestamptz
+	TrialState       string
+	TrialTier        pgtype.Text
+	TrialEndsAt      pgtype.Timestamptz
+	TrialConvertedAt pgtype.Timestamptz
+	TrialDemotedAt   pgtype.Timestamptz
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	MemberCount      int64
 }
 
 // Resolving a slug is opt-in because every admin write is keyed on id alone.
@@ -237,10 +239,11 @@ func (q *Queries) AdminGetOrganization(ctx context.Context, arg AdminGetOrganiza
 		&i.WorkosID,
 		&i.Whitelisted,
 		&i.DisabledAt,
-		&i.FreeTrialStartedAt,
-		&i.FreeTrialEndsAt,
 		&i.TrialState,
+		&i.TrialTier,
 		&i.TrialEndsAt,
+		&i.TrialConvertedAt,
+		&i.TrialDemotedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.MemberCount,
@@ -446,8 +449,6 @@ filtered AS (
         om.workos_id,
         om.whitelisted,
         om.disabled_at,
-        om.free_trial_started_at,
-        om.free_trial_ends_at,
         -- converted/demoted precede the dates: those rows keep an ends_at that would otherwise read as running or expired.
         CASE
             WHEN t.organization_id IS NULL THEN 'none'
@@ -494,7 +495,7 @@ filtered AS (
         )
         AND ($9::text IS NULL OR om.id > $9::text)
 )
-SELECT id, name, slug, account_type, workos_id, whitelisted, disabled_at, free_trial_started_at, free_trial_ends_at, trial_state, trial_ends_at, created_at, updated_at, member_count FROM filtered
+SELECT id, name, slug, account_type, workos_id, whitelisted, disabled_at, trial_state, trial_ends_at, created_at, updated_at, member_count FROM filtered
 WHERE coalesce(cardinality($1::text[]), 0) = 0 OR trial_state = ANY($1::text[])
 ORDER BY
     CASE WHEN $2::text = 'name' AND $3::text = 'asc' THEN name END ASC NULLS LAST,
@@ -530,20 +531,18 @@ type AdminListOrganizationsParams struct {
 }
 
 type AdminListOrganizationsRow struct {
-	ID                 string
-	Name               string
-	Slug               string
-	AccountType        string
-	WorkosID           pgtype.Text
-	Whitelisted        bool
-	DisabledAt         pgtype.Timestamptz
-	FreeTrialStartedAt pgtype.Timestamptz
-	FreeTrialEndsAt    pgtype.Timestamptz
-	TrialState         string
-	TrialEndsAt        pgtype.Timestamptz
-	CreatedAt          pgtype.Timestamptz
-	UpdatedAt          pgtype.Timestamptz
-	MemberCount        int64
+	ID          string
+	Name        string
+	Slug        string
+	AccountType string
+	WorkosID    pgtype.Text
+	Whitelisted bool
+	DisabledAt  pgtype.Timestamptz
+	TrialState  string
+	TrialEndsAt pgtype.Timestamptz
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+	MemberCount int64
 }
 
 // Two paging modes share this query. A caller that supplies no sort key gets the
@@ -583,8 +582,6 @@ func (q *Queries) AdminListOrganizations(ctx context.Context, arg AdminListOrgan
 			&i.WorkosID,
 			&i.Whitelisted,
 			&i.DisabledAt,
-			&i.FreeTrialStartedAt,
-			&i.FreeTrialEndsAt,
 			&i.TrialState,
 			&i.TrialEndsAt,
 			&i.CreatedAt,

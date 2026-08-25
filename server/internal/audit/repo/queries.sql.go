@@ -315,12 +315,18 @@ WHERE a.organization_id = $1
     $7::text IS NULL
     OR a.subject_id = $7::text
   )
+  -- An empty or absent list is no filter, so a caller composing filters can
+  -- always send the parameter.
+  AND (
+    coalesce(cardinality($8::text[]), 0) = 0
+    OR a.subject_id = ANY($8::text[])
+  )
   -- A row written before attribution existed has no surface. Coalescing here
   -- means filtering for 'unknown' finds those rows too, instead of returning
   -- nothing and implying the organization has no unattributed history.
   AND (
-    $8::text IS NULL
-    OR COALESCE(a.acting_surface, 'unknown') = $8::text
+    $9::text IS NULL
+    OR COALESCE(a.acting_surface, 'unknown') = $9::text
   )
 ORDER BY a.seq DESC
 LIMIT 51
@@ -334,6 +340,7 @@ type ListAuditLogsParams struct {
 	Action         pgtype.Text
 	SubjectType    pgtype.Text
 	SubjectID      pgtype.Text
+	SubjectIds     []string
 	ActingSurface  pgtype.Text
 }
 
@@ -372,6 +379,7 @@ func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([
 		arg.Action,
 		arg.SubjectType,
 		arg.SubjectID,
+		arg.SubjectIds,
 		arg.ActingSurface,
 	)
 	if err != nil {

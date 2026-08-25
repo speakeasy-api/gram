@@ -63,8 +63,7 @@ func (e sessionToolSelectionEntry) TTL() time.Duration { return sessionToolSelec
 
 // endpointToolSelectionResource is the server-authored identity a consent
 // selection binds to: the fronting mcp_server when there is one, else the
-// toolset. Empty when the endpoint has neither (remote/tunneled backends do
-// not offer the picker).
+// toolset. Empty when the endpoint has neither, as with meta-MCP.
 func endpointToolSelectionResource(endpoint *ResolvedMcpEndpoint) string {
 	switch {
 	case endpoint.McpServerID.Valid:

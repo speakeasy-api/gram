@@ -123,6 +123,7 @@ async function $do(
     "cursor": payload?.cursor,
     "project_slug": payload?.project_slug,
     "subject_id": payload?.subject_id,
+    "subject_ids": payload?.subject_ids,
     "subject_type": payload?.subject_type,
   });
 

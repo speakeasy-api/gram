@@ -42,18 +42,12 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
 const ORG = anOrganization({
   account_type: "pro",
   whitelisted: true,
-  // The stale pair, dated apart from the real trial on purpose. A page back on
-  // `free_trial_ends_at` then shows the wrong date rather than the right one
-  // by coincidence.
-  free_trial_started_at: "2026-02-01T00:00:00Z",
-  free_trial_ends_at: "2026-11-12T00:00:00Z",
   trial_state: "running",
-  trial_ends_at: "2026-05-06T00:00:00Z",
+  trial_ends_at: "2099-05-06T00:00:00Z",
+  trial_tier: "enterprise",
 });
 
-// The trial is a date without a clock wherever it is read. UTC, because that is
-// the zone the API states these dates in and the zone they are rendered in;
-// see `utils.test.ts`.
+// Most record dates use the shared UTC date formatter.
 function shortDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { timeZone: "UTC" });
 }
@@ -155,7 +149,7 @@ afterEach(() => {
 });
 
 describe("Overview", () => {
-  it("reads the trial exactly the way the row does", async () => {
+  it("shows live trial facts without changing the shared row display", async () => {
     await renderRouteTree(routeTree, {
       initialPath: `/organizations/${ORG.slug}`,
     });
@@ -163,16 +157,17 @@ describe("Overview", () => {
     const trialEndsAt = ORG.trial_ends_at;
     if (!trialEndsAt) throw new Error("the record under test needs a trial");
 
-    const trial = await screen.findByText("Trial");
-    // Written out, not built from the component. The same string is asserted
-    // against the list's cell, which is the only way two pages that could
-    // drift apart are held together.
-    expect(valueBeside("Trial").textContent).toBe(
-      `Running ends ${shortDate(trialEndsAt)}`,
-    );
+    await screen.findByText("Trial");
+    const facts = valueBeside("Trial");
     expect(
-      trial.parentElement?.querySelector('[data-slot="badge"]'),
-    ).toBeTruthy();
+      within(facts).getByText("State").nextElementSibling?.textContent,
+    ).toBe("Running");
+    expect(
+      within(facts).getByText("Tier").nextElementSibling?.textContent,
+    ).toBe("Enterprise");
+    expect(
+      within(facts).getByText("Ends").nextElementSibling?.textContent,
+    ).toBe(new Date(trialEndsAt).toLocaleDateString());
 
     // The defaulted pair is gone from the page, not merely unread: an operator
     // who sees "Free trial ends" reads a date no organization ever earned.
@@ -180,7 +175,7 @@ describe("Overview", () => {
     expect(screen.queryByText("Free trial ends")).toBeNull();
   });
 
-  it("reads a dash for an organization that never trialled", async () => {
+  it("keeps No trial visible for an organization that never trialled", async () => {
     mocks.getOrganization.mockResolvedValue({
       ...ORG,
       trial_state: "none",
@@ -191,10 +186,7 @@ describe("Overview", () => {
     });
 
     await screen.findByText("Trial");
-    // `free_trial_ends_at` still dates this record, which is the whole reason
-    // the page was moved off it.
-    expect(ORG.free_trial_ends_at).toBeTruthy();
-    expect(valueBeside("Trial").textContent).toBe("-No trial");
+    expect(valueBeside("Trial").textContent).toBe("No trial");
   });
 
   it("reads a date as the server's day, not the reader's", async () => {

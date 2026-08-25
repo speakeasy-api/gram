@@ -249,7 +249,7 @@ WHERE organization_id = @organization_id;
 -- Test-only fixture for defensive paths that handle a dangling soft-delete FK.
 UPDATE user_session_issuers
 SET deleted_at = clock_timestamp()
-WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
+WHERE id = @id AND project_id = @project_id::uuid AND deleted IS FALSE;
 
 -- name: SetUserSessionIssuerCIMDAdmissionMode :exec
 -- Test-only fixture: writes an issuer's CIMD admission mode as a single-column
@@ -259,7 +259,7 @@ WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 -- narrow query.
 UPDATE user_session_issuers
 SET client_id_metadata_admission_mode = @client_id_metadata_admission_mode
-WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
+WHERE id = @id AND project_id = @project_id::uuid AND deleted IS FALSE;
 
 -- name: InsertPluginAssignmentFixture :exec
 -- Test-only fixture: writes a plugin_assignments row with an EXPLICIT
@@ -418,6 +418,13 @@ WHERE organization_id = @organization_id
 UPDATE remote_sessions
 SET access_expires_at = clock_timestamp() - interval '1 minute'
 WHERE id = @id;
+
+-- name: SetRemoteSessionResourceFixture :exec
+-- Test-only fixture stamping a stored RFC 8707 resource binding on a row.
+UPDATE remote_sessions
+SET resource = @resource
+WHERE subject_urn = @subject_urn
+  AND remote_session_client_id = @remote_session_client_id;
 
 -- name: GetToolCallBlockLinksFixture :one
 -- Test-only. The block page query deliberately does not expose the optional

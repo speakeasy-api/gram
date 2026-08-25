@@ -59,28 +59,30 @@ flowchart LR
 
   p0[/"📤<br/>server/internal/authz/challenge_logger.go"/]:::go
   p0 --> t_gram_authz_v1_challenge
-  p1[/"📤<br/>server/internal/ping/publisher.go"/]:::go
-  p1 --> t_gram_ping_v2_message
-  p2[/"📤<br/>server/internal/background/activities/risk_analysis/scan_custom_rules.go"/]:::go
-  p2 --> t_gram_risk_v1_custom_rules_analysis
-  p3[/"📤<br/>pystreams/src/pystreams/risk/handler.py"/]:::python
-  p3 --> t_gram_risk_v1_finding
-  p4[/"📤<br/>server/internal/risk/false_positive.go"/]:::go
+  p1[/"📤<br/>server/internal/hooks/otel_tee.go"/]:::go
+  p1 --> t_gram_otel_v1_inbound_log_record
+  p2[/"📤<br/>server/internal/ping/publisher.go"/]:::go
+  p2 --> t_gram_ping_v2_message
+  p3[/"📤<br/>server/internal/background/activities/risk_analysis/scan_custom_rules.go"/]:::go
+  p3 --> t_gram_risk_v1_custom_rules_analysis
+  p4[/"📤<br/>pystreams/src/pystreams/risk/handler.py"/]:::python
   p4 --> t_gram_risk_v1_finding
-  p5[/"📤<br/>server/internal/scanners/publish.go"/]:::go
+  p5[/"📤<br/>server/internal/risk/false_positive.go"/]:::go
   p5 --> t_gram_risk_v1_finding
-  p6[/"📤<br/>server/internal/background/activities/risk_analysis/scan_gitleaks.go"/]:::go
-  p6 --> t_gram_risk_v1_gitleaks_analysis
-  p7[/"📤<br/>server/internal/background/activities/risk_analysis/scan_presidio.go"/]:::go
-  p7 --> t_gram_risk_v1_presidio_analysis
-  p8[/"📤<br/>server/internal/background/activities/risk_analysis/scan_prompt_injection.go"/]:::go
-  p8 --> t_gram_risk_v1_prompt_injection_analysis
-  p9[/"📤<br/>server/internal/background/activities/risk_analysis/prompt_judge_batch.go"/]:::go
-  p9 --> t_gram_risk_v1_prompt_policy_analysis
-  p10[/"📤<br/>server/internal/telemetry/log_publisher.go"/]:::go
-  p10 --> t_gram_telemetry_v1_log_record
-  p11[/"📤<br/>server/internal/outbox/webhooks.go"/]:::go
-  p11 --> t_gram_webhooks_v1_event
+  p6[/"📤<br/>server/internal/scanners/publish.go"/]:::go
+  p6 --> t_gram_risk_v1_finding
+  p7[/"📤<br/>server/internal/background/activities/risk_analysis/scan_gitleaks.go"/]:::go
+  p7 --> t_gram_risk_v1_gitleaks_analysis
+  p8[/"📤<br/>server/internal/background/activities/risk_analysis/scan_presidio.go"/]:::go
+  p8 --> t_gram_risk_v1_presidio_analysis
+  p9[/"📤<br/>server/internal/background/activities/risk_analysis/scan_prompt_injection.go"/]:::go
+  p9 --> t_gram_risk_v1_prompt_injection_analysis
+  p10[/"📤<br/>server/internal/background/activities/risk_analysis/prompt_judge_batch.go"/]:::go
+  p10 --> t_gram_risk_v1_prompt_policy_analysis
+  p11[/"📤<br/>server/internal/telemetry/log_publisher.go"/]:::go
+  p11 --> t_gram_telemetry_v1_log_record
+  p12[/"📤<br/>server/internal/outbox/webhooks.go"/]:::go
+  p12 --> t_gram_webhooks_v1_event
   t_gram_authz_v1_challenge --> s_gram_authz_v1_challenge_ch_writer
   s_gram_authz_v1_challenge_ch_writer -. dead-letter .-> t_gram_authz_v1_challenge_ch_writer_dlq
   t_gram_otel_v1_inbound_log_record --> s_gram_otel_v1_inbound_log_record_transformer
@@ -108,40 +110,40 @@ flowchart LR
   t_gram_telemetry_v1_log_record --> s_gram_telemetry_v1_noop
   t_gram_webhooks_v1_event --> s_gram_webhooks_v1_svix_relay
   s_gram_webhooks_v1_svix_relay -. dead-letter .-> t_gram_webhooks_v1_svix_relay_dlq
-  c12[\"📥<br/>server/cmd/gram/streams.go<br/>authz.NewChallengeCHWriter"\]:::go
-  s_gram_authz_v1_challenge_ch_writer --> c12
-  c13[\"📥<br/>server/cmd/gram/streams.go<br/>otelsvc.NewLogTransformHandler"\]:::go
-  s_gram_otel_v1_inbound_log_record_transformer --> c13
-  c14[\"📥<br/>server/cmd/gram/streams.go<br/>otelsvc.NewSpanTransformHandler"\]:::go
-  s_gram_otel_v1_inbound_span_transformer --> c14
-  c15[\"📥<br/>server/cmd/gram/streams.go<br/>otelsvc.NewLogEventCHWriter<br/>(batch)"\]:::go
-  s_gram_otel_v1_log_event_ch_writer --> c15
-  c16[\"📥<br/>server/cmd/gram/streams.go<br/>logRelayHandler<br/>(batch)"\]:::go
-  s_gram_otel_v1_log_relay --> c16
-  c17[\"📥<br/>server/cmd/gram/streams.go<br/>otelsvc.NewSpanEventCHWriter<br/>(batch)"\]:::go
-  s_gram_otel_v1_span_event_ch_writer --> c17
-  c18[\"📥<br/>server/cmd/gram/streams.go<br/>spanRelayHandler<br/>(batch)"\]:::go
-  s_gram_otel_v1_span_relay --> c18
-  c19[\"📥<br/>server/cmd/gram/streams.go<br/>ping.NewHandler"\]:::go
-  s_gram_ping_v2_processor --> c19
-  c20[\"📥<br/>pystreams/src/pystreams/cmd/multi.py<br/>PingHandler.handle"\]:::python
-  s_gram_ping_v2_py_processor --> c20
-  c21[\"📥<br/>server/cmd/gram/streams.go<br/>customRulesHandler"\]:::go
-  s_gram_risk_v1_custom_rules_analyzer --> c21
-  c22[\"📥<br/>server/cmd/gram/streams.go<br/>risk.NewFindingCHWriter<br/>(batch)"\]:::go
-  s_gram_risk_v1_finding_ch_writer --> c22
-  c23[\"📥<br/>server/cmd/gram/streams.go<br/>gitleaksHandler"\]:::go
-  s_gram_risk_v1_gitleaks_analyzer --> c23
-  c24[\"📥<br/>pystreams/src/pystreams/cmd/multi.py<br/>presidio_handler.handle"\]:::python
-  s_gram_risk_v1_presidio_analyzer --> c24
-  c25[\"📥<br/>server/cmd/gram/streams.go<br/>promptInjectionHandler"\]:::go
-  s_gram_risk_v1_prompt_injection_analyzer --> c25
-  c26[\"📥<br/>server/cmd/gram/streams.go<br/>promptPolicyHandler"\]:::go
-  s_gram_risk_v1_prompt_policy_analyzer --> c26
-  c27[\"📥<br/>server/cmd/gram/streams.go<br/>new"\]:::go
-  s_gram_telemetry_v1_noop --> c27
-  c28[\"📥<br/>server/cmd/gram/streams.go<br/>webhookEventHandler"\]:::go
-  s_gram_webhooks_v1_svix_relay --> c28
+  c13[\"📥<br/>server/cmd/gram/streams.go<br/>authz.NewChallengeCHWriter"\]:::go
+  s_gram_authz_v1_challenge_ch_writer --> c13
+  c14[\"📥<br/>server/cmd/gram/streams.go<br/>otelsvc.NewLogTransformHandler"\]:::go
+  s_gram_otel_v1_inbound_log_record_transformer --> c14
+  c15[\"📥<br/>server/cmd/gram/streams.go<br/>otelsvc.NewSpanTransformHandler"\]:::go
+  s_gram_otel_v1_inbound_span_transformer --> c15
+  c16[\"📥<br/>server/cmd/gram/streams.go<br/>otelsvc.NewLogEventCHWriter<br/>(batch)"\]:::go
+  s_gram_otel_v1_log_event_ch_writer --> c16
+  c17[\"📥<br/>server/cmd/gram/streams.go<br/>logRelayHandler<br/>(batch)"\]:::go
+  s_gram_otel_v1_log_relay --> c17
+  c18[\"📥<br/>server/cmd/gram/streams.go<br/>otelsvc.NewSpanEventCHWriter<br/>(batch)"\]:::go
+  s_gram_otel_v1_span_event_ch_writer --> c18
+  c19[\"📥<br/>server/cmd/gram/streams.go<br/>spanRelayHandler<br/>(batch)"\]:::go
+  s_gram_otel_v1_span_relay --> c19
+  c20[\"📥<br/>server/cmd/gram/streams.go<br/>ping.NewHandler"\]:::go
+  s_gram_ping_v2_processor --> c20
+  c21[\"📥<br/>pystreams/src/pystreams/cmd/multi.py<br/>PingHandler.handle"\]:::python
+  s_gram_ping_v2_py_processor --> c21
+  c22[\"📥<br/>server/cmd/gram/streams.go<br/>customRulesHandler"\]:::go
+  s_gram_risk_v1_custom_rules_analyzer --> c22
+  c23[\"📥<br/>server/cmd/gram/streams.go<br/>risk.NewFindingCHWriter<br/>(batch)"\]:::go
+  s_gram_risk_v1_finding_ch_writer --> c23
+  c24[\"📥<br/>server/cmd/gram/streams.go<br/>gitleaksHandler"\]:::go
+  s_gram_risk_v1_gitleaks_analyzer --> c24
+  c25[\"📥<br/>pystreams/src/pystreams/cmd/multi.py<br/>presidio_handler.handle"\]:::python
+  s_gram_risk_v1_presidio_analyzer --> c25
+  c26[\"📥<br/>server/cmd/gram/streams.go<br/>promptInjectionHandler"\]:::go
+  s_gram_risk_v1_prompt_injection_analyzer --> c26
+  c27[\"📥<br/>server/cmd/gram/streams.go<br/>promptPolicyHandler"\]:::go
+  s_gram_risk_v1_prompt_policy_analyzer --> c27
+  c28[\"📥<br/>server/cmd/gram/streams.go<br/>new"\]:::go
+  s_gram_telemetry_v1_noop --> c28
+  c29[\"📥<br/>server/cmd/gram/streams.go<br/>webhookEventHandler"\]:::go
+  s_gram_webhooks_v1_svix_relay --> c29
 ```
 
 ## Topics
@@ -150,7 +152,7 @@ flowchart LR
 | --- | --- | --- | --- |
 | [`gram-authz-v1-challenge`](../infra/proto/gram/authz/v1/challenge.proto) | topic | 7d | [`server/internal/authz/challenge_logger.go`](../server/internal/authz/challenge_logger.go) |
 | [`gram-authz-v1-challenge-ch-writer-dlq`](../infra/proto/gram/authz/v1/challenge_ch_writer.proto) | DLQ | — | — |
-| [`gram-otel-v1-inbound-log-record`](../infra/proto/gram/otel/v1/inbound_log_record.proto) | topic | — | — |
+| [`gram-otel-v1-inbound-log-record`](../infra/proto/gram/otel/v1/inbound_log_record.proto) | topic | — | [`server/internal/hooks/otel_tee.go`](../server/internal/hooks/otel_tee.go) |
 | [`gram-otel-v1-inbound-log-record-transformer-dlq`](../infra/proto/gram/otel/v1/inbound_log_record_transformer.proto) | DLQ | — | — |
 | [`gram-otel-v1-inbound-span`](../infra/proto/gram/otel/v1/inbound_span.proto) | topic | — | — |
 | [`gram-otel-v1-inbound-span-transformer-dlq`](../infra/proto/gram/otel/v1/inbound_span_transformer.proto) | DLQ | — | — |
@@ -197,7 +199,6 @@ flowchart LR
 
 ## Notes
 
-- Topic `gram-otel-v1-inbound-log-record` has no publisher in `server/` or `pystreams/`.
 - Topic `gram-otel-v1-inbound-span` has no publisher in `server/` or `pystreams/`.
 - Topic `gram-otel-v1-log-record` has no publisher in `server/` or `pystreams/`.
 - Topic `gram-otel-v1-span` has no publisher in `server/` or `pystreams/`.

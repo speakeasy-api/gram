@@ -123,6 +123,146 @@ func TestAddMetaMcpMember_ServerMayJoinMultipleMetas(t *testing.T) {
 	}
 }
 
+func TestAddMetaMcpMember_RejectsSecondServerOnSameBackend(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	tests := []struct {
+		name    string
+		backend mcpserversrepo.CreateMCPServerParams
+	}{
+		{
+			name:    "remote",
+			backend: mcpserversrepo.CreateMCPServerParams{RemoteMcpServerID: conv.ToNullUUID(seedRemoteBackend(t, ctx, ti.conn, *authCtx.ProjectID))},
+		},
+		{
+			name:    "tunnel",
+			backend: mcpserversrepo.CreateMCPServerParams{TunneledMcpServerID: conv.ToNullUUID(seedTunnelBackend(t, ctx, ti.conn, *authCtx.ProjectID))},
+		},
+		{
+			name:    "toolset",
+			backend: mcpserversrepo.CreateMCPServerParams{ToolsetID: conv.ToNullUUID(seedToolsetBackend(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID))},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			meta := seedMetaMcpServer(t, ctx, ti, "shared backend host "+tt.name)
+			backend := tt.backend
+			first := seedMcpServerFronting(t, ctx, ti.conn, *authCtx.ProjectID, backend)
+			second := seedMcpServerFronting(t, ctx, ti.conn, *authCtx.ProjectID, backend)
+
+			_, err := ti.service.AddMetaMcpMember(ctx, &gen.AddMetaMcpMemberPayload{
+				SessionToken:     nil,
+				ApikeyToken:      nil,
+				ProjectSlugInput: nil,
+				MetaMcpServerID:  meta.ID,
+				McpServerID:      first.String(),
+				SortOrder:        nil,
+			})
+			require.NoError(t, err)
+
+			_, err = ti.service.AddMetaMcpMember(ctx, &gen.AddMetaMcpMemberPayload{
+				SessionToken:     nil,
+				ApikeyToken:      nil,
+				ProjectSlugInput: nil,
+				MetaMcpServerID:  meta.ID,
+				McpServerID:      second.String(),
+				SortOrder:        nil,
+			})
+			requireOopsCode(t, err, oops.CodeConflict)
+		})
+	}
+}
+
+func TestAddMetaMcpMember_AllowsDistinctBackends(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	meta := seedMetaMcpServer(t, ctx, ti, "distinct backend host")
+
+	// One server per backend kind: every member leaves three of the four
+	// backend columns null, so a null-matching guard would reject these.
+	servers := []uuid.UUID{
+		seedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID),
+		seedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID),
+		seedMcpServerFronting(t, ctx, ti.conn, *authCtx.ProjectID, mcpserversrepo.CreateMCPServerParams{
+			TunneledMcpServerID: conv.ToNullUUID(seedTunnelBackend(t, ctx, ti.conn, *authCtx.ProjectID)),
+		}),
+		seedMcpServerFronting(t, ctx, ti.conn, *authCtx.ProjectID, mcpserversrepo.CreateMCPServerParams{
+			ToolsetID: conv.ToNullUUID(seedToolsetBackend(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID)),
+		}),
+		seedMcpServerFronting(t, ctx, ti.conn, *authCtx.ProjectID, mcpserversrepo.CreateMCPServerParams{
+			UnproxiedMcpServerID: conv.ToNullUUID(seedUnproxiedBackend(t, ctx, ti.conn, *authCtx.ProjectID)),
+		}),
+	}
+
+	for _, serverID := range servers {
+		_, err := ti.service.AddMetaMcpMember(ctx, &gen.AddMetaMcpMemberPayload{
+			SessionToken:     nil,
+			ApikeyToken:      nil,
+			ProjectSlugInput: nil,
+			MetaMcpServerID:  meta.ID,
+			McpServerID:      serverID.String(),
+			SortOrder:        nil,
+		})
+		require.NoError(t, err)
+	}
+}
+
+func TestAddMetaMcpMember_RemovedMemberFreesBackend(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	meta := seedMetaMcpServer(t, ctx, ti, "freed backend host")
+	backend := mcpserversrepo.CreateMCPServerParams{
+		RemoteMcpServerID: conv.ToNullUUID(seedRemoteBackend(t, ctx, ti.conn, *authCtx.ProjectID)),
+	}
+	first := seedMcpServerFronting(t, ctx, ti.conn, *authCtx.ProjectID, backend)
+	second := seedMcpServerFronting(t, ctx, ti.conn, *authCtx.ProjectID, backend)
+
+	member, err := ti.service.AddMetaMcpMember(ctx, &gen.AddMetaMcpMemberPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		MetaMcpServerID:  meta.ID,
+		McpServerID:      first.String(),
+		SortOrder:        nil,
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, ti.service.RemoveMetaMcpMember(ctx, &gen.RemoveMetaMcpMemberPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		ID:               member.ID,
+	}))
+
+	_, err = ti.service.AddMetaMcpMember(ctx, &gen.AddMetaMcpMemberPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		MetaMcpServerID:  meta.ID,
+		McpServerID:      second.String(),
+		SortOrder:        nil,
+	})
+	require.NoError(t, err)
+}
+
 func TestAddMetaMcpMember_RejectsForeignProjectServer(t *testing.T) {
 	t.Parallel()
 

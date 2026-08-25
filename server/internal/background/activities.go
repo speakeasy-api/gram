@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/netip"
 	"net/url"
 	"time"
 
@@ -192,6 +193,7 @@ func NewActivities(
 	chatClient *chat.Client,
 	k8sClient *k8s.KubernetesClients,
 	expectedTargetCNAME string,
+	expectedARecords []netip.Addr,
 	siteURL *url.URL,
 	billingTracker billing.Tracker,
 	billingRepo billing.Repository,
@@ -368,7 +370,7 @@ func NewActivities(
 		getDeviceIntegrationCandidates:  activities.NewGetDeviceIntegrationSyncCandidates(logger, meterProvider, db, encryption, guardianPolicy, features),
 		runDeviceIntegrationSync:        activities.NewRunDeviceIntegrationSync(logger, meterProvider, db, encryption, guardianPolicy, features),
 		customDomainIngress:             activities.NewCustomDomainIngress(logger, db, k8sClient),
-		customDomainHealth:              activities.NewCustomDomainHealth(logger, db, k8sClient, expectedTargetCNAME, emailService, siteURL, guardianPolicy),
+		customDomainHealth:              activities.NewCustomDomainHealth(logger, db, k8sClient, expectedTargetCNAME, expectedARecords, emailService, siteURL, guardianPolicy),
 		fireOpenRouterCreditsMetrics:    activities.NewFireOpenRouterCreditsMetrics(logger, meterProvider),
 		sendOpenRouterCreditsAlerts:     activities.NewMaybeSendOpenRouterCreditsAlerts(logger, db, cacheAdapter, emailService, meterProvider),
 		firePlatformUsageMetrics:        activities.NewFirePlatformUsageMetrics(logger, billingTracker),
@@ -391,7 +393,7 @@ func NewActivities(
 		reconcilePaygOpenRouterChatKey:  activities.NewReconcilePaygOpenRouterChatKey(logger, db, openrouterProvisioner),
 		transitionDeployment:            activities.NewTransitionDeployment(logger, db),
 		validateDeployment:              activities.NewValidateDeployment(logger, db, billingRepo),
-		verifyCustomDomain:              activities.NewVerifyCustomDomain(logger, db, auditLogger, expectedTargetCNAME),
+		verifyCustomDomain:              activities.NewVerifyCustomDomain(logger, db, auditLogger, expectedTargetCNAME, expectedARecords),
 		generateToolsetEmbeddings:       activities.NewGenerateToolsetEmbeddingsActivity(tracerProvider, db, ragService, logger),
 		dispatchTrigger:                 activities.NewDispatchTrigger(triggerApp),
 		processScheduledTrigger:         activities.NewProcessScheduledTrigger(triggerApp),
@@ -564,7 +566,17 @@ func (a *Activities) ReconcilePaygOpenRouterChatKey(ctx context.Context, input a
 	return a.reconcilePaygOpenRouterChatKey.Do(ctx, input)
 }
 
-func (a *Activities) VerifyCustomDomain(ctx context.Context, input activities.VerifyCustomDomainArgs) error {
+func (a *Activities) VerifyCustomDomain(ctx context.Context, input activities.VerifyCustomDomainArgs) (activities.VerifyCustomDomainResult, error) {
+	return a.verifyCustomDomain.Do(ctx, input)
+}
+
+// VerifyCustomDomainV2 is the polling loop's activity. The distinct name
+// keeps a rolling deploy from mixing semantics: a worker predating the loop
+// fails an unrecognized activity type with a retryable NotRegistered error,
+// so the task retries until a new worker executes it — it can never answer
+// with the old fail-fast semantics. The loop treats such retry-exhausted
+// errors as another pending tick.
+func (a *Activities) VerifyCustomDomainV2(ctx context.Context, input activities.VerifyCustomDomainArgs) (activities.VerifyCustomDomainResult, error) {
 	return a.verifyCustomDomain.Do(ctx, input)
 }
 

@@ -21,6 +21,7 @@ type Endpoints struct {
 	CreateDomain       goa.Endpoint
 	UpdateDomain       goa.Endpoint
 	SetRootMcpEndpoint goa.Endpoint
+	ListRootMcpServers goa.Endpoint
 	CheckHealth        goa.Endpoint
 	DeleteDomain       goa.Endpoint
 	ListMcpEndpoints   goa.Endpoint
@@ -36,6 +37,7 @@ func NewEndpoints(s Service) *Endpoints {
 		CreateDomain:       NewCreateDomainEndpoint(s, a.APIKeyAuth),
 		UpdateDomain:       NewUpdateDomainEndpoint(s, a.APIKeyAuth),
 		SetRootMcpEndpoint: NewSetRootMcpEndpointEndpoint(s, a.APIKeyAuth),
+		ListRootMcpServers: NewListRootMcpServersEndpoint(s, a.APIKeyAuth),
 		CheckHealth:        NewCheckHealthEndpoint(s, a.APIKeyAuth),
 		DeleteDomain:       NewDeleteDomainEndpoint(s, a.APIKeyAuth),
 		ListMcpEndpoints:   NewListMcpEndpointsEndpoint(s, a.APIKeyAuth),
@@ -49,6 +51,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreateDomain = m(e.CreateDomain)
 	e.UpdateDomain = m(e.UpdateDomain)
 	e.SetRootMcpEndpoint = m(e.SetRootMcpEndpoint)
+	e.ListRootMcpServers = m(e.ListRootMcpServers)
 	e.CheckHealth = m(e.CheckHealth)
 	e.DeleteDomain = m(e.DeleteDomain)
 	e.ListMcpEndpoints = m(e.ListMcpEndpoints)
@@ -119,7 +122,7 @@ func NewCreateDomainEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 		if err != nil {
 			return nil, err
 		}
-		return nil, s.CreateDomain(ctx, p)
+		return s.CreateDomain(ctx, p)
 	}
 }
 
@@ -166,6 +169,29 @@ func NewSetRootMcpEndpointEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 			return nil, err
 		}
 		return s.SetRootMcpEndpoint(ctx, p)
+	}
+}
+
+// NewListRootMcpServersEndpoint returns an endpoint function that calls the
+// method "listRootMcpServers" of service "domains".
+func NewListRootMcpServersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListRootMcpServersPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListRootMcpServers(ctx, p)
 	}
 }
 

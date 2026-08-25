@@ -262,6 +262,10 @@
         <dl class="info">
           <dt>Application</dt>
           <dd>{{.ClientName}}</dd>
+          {{if .ClientIDOrigin}}
+          <dt>Verified origin</dt>
+          <dd>{{.ClientIDOrigin}}</dd>
+          {{end}}
           <dt>Organization</dt>
           <dd>{{.OrganizationName}}</dd>
           <dt>Will redirect to</dt>

@@ -403,17 +403,18 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		}
 	}
 
-	// The picker island renders only for endpoints that offer a per-tool
-	// picker at all — endpointToolSelectionResource is empty for backends
-	// without one (meta-MCP gateways), whose consent transport answers 404 —
-	// and only while tool filtering is enabled for the org (an unavailable
-	// checker reads as off): enforcement of stored selections is always live,
-	// but authoring new ones stays dark until every runtime pod enforces
-	// them. Without the island the approve button must not depend on it for
-	// enabling — the template couples the two.
+	// Only modern endpoints can author per-tool consent: legacy and meta-MCP
+	// endpoints remain unrestricted-only, and toolset-fronting servers qualify
+	// only when every tool is representable in the island. The island owns
+	// approve-button enabling, so unavailable checks must hide it rather than
+	// prevent unrestricted approval.
 	showToolsIsland := false
-	if !challengeState.FirstParty && endpointToolSelectionResource(endpoint) != "" {
-		showToolsIsland = s.consentToolFilteringEnabled(ctx, logger, endpoint.OrganizationID)
+	if !challengeState.FirstParty && s.consentToolFilteringEnabled(ctx, logger, endpoint.OrganizationID) {
+		var eligibilityErr error
+		showToolsIsland, eligibilityErr = s.consentToolPickerEligible(ctx, endpoint)
+		if eligibilityErr != nil {
+			logger.WarnContext(ctx, "consent tool picker eligibility unavailable", attr.SlogError(eligibilityErr))
+		}
 	}
 	if showToolsIsland {
 		lockedDown, lerr := s.customDomainLockdownApplies(ctx, logger, endpoint.ProjectID)
@@ -582,6 +583,14 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	// field can only widen a submission to the status quo, never past it.
 	var boundInventory *consentToolInventory
 	if r.PostForm.Get("tool_filtering") == "on" {
+		eligible, eerr := s.consentToolPickerEligible(ctx, endpoint)
+		if eerr != nil {
+			return oops.E(oops.CodeUnavailable, eerr, "service temporarily unavailable").LogError(ctx, logger)
+		}
+		if !eligible {
+			return oops.E(oops.CodeConflict, nil, "tool filtering is not available for this endpoint").LogWarn(ctx, logger)
+		}
+
 		attempt, aerr := consentAttemptID(r.PostForm.Get("tool_inventory_id"))
 		if aerr != nil {
 			return oops.E(oops.CodeConflict, aerr, "tool inventory is no longer available; reload the page and try again").LogWarn(ctx, logger)
@@ -963,11 +972,7 @@ func (s *Service) buildRemoteSessionCards(
 	// not-connected.
 	var statuses map[uuid.UUID]remotesessions.RemoteSessionState
 	if challengeState.Subject != nil && !challengeState.Subject.IsZero() {
-		clientIDs := make([]uuid.UUID, len(clients))
-		for i := range clients {
-			clientIDs[i] = clients[i].ID
-		}
-		statuses, err = s.remoteChallengeMgr.RemoteSessionStatuses(ctx, *challengeState.Subject, clientIDs)
+		statuses, err = s.remoteChallengeMgr.RemoteSessionStatuses(ctx, *challengeState.Subject, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
 		if err != nil {
 			return nil, fmt.Errorf("remote session statuses: %w", err)
 		}

@@ -123,6 +123,12 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 				autoRefresh = &v
 			}
 		}
+		// Not endpoint.UpstreamResource: under multi-binding that may belong
+		// to a different client's upstream; ambiguity derives "" (no resource).
+		clientResource, rerr := s.remoteChallengeMgr.FallbackResourceForClient(ctx, client.ID)
+		if rerr != nil {
+			return oops.E(oops.CodeUnexpected, rerr, "derive client upstream resource").LogError(ctx, logger)
+		}
 		challengeURL, berr := s.remoteChallengeMgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
 			ID:                  challengeState.ID,
 			ProjectID:           endpoint.ProjectID,
@@ -132,7 +138,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 			McpSlug:             endpoint.Slug,
 			RouteBase:           endpoint.RouteBase,
 			FinalRedirectURI:    "",
-			Resource:            endpoint.UpstreamResource,
+			Resource:            clientResource,
 			AutoRefresh:         autoRefresh,
 		}, *client)
 		if berr != nil {
@@ -146,7 +152,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		if cerr != nil {
 			return cerr
 		}
-		if _, err := s.remoteChallengeMgr.DisconnectRemoteSession(ctx, subject, client.ID); err != nil {
+		if _, err := s.remoteChallengeMgr.DisconnectRemoteSession(ctx, subject, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, client.ID); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "disconnect remote session").LogError(ctx, logger)
 		}
 		http.Redirect(w, r, backURL, http.StatusSeeOther)
@@ -160,8 +166,10 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		result, refreshErr := s.remoteChallengeMgr.RefreshRemoteSession(
 			ctx,
 			subject,
+			endpoint.ProjectID,
+			endpoint.OrganizationID,
+			endpoint.UserSessionIssuerID,
 			client.ID,
-			endpoint.UpstreamResource,
 		)
 		if refreshErr != nil {
 			switch {
@@ -194,7 +202,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		}
 		enabled := r.PostForm.Get("auto_refresh") == "on"
 		for i := range clients {
-			if _, err := s.remoteChallengeMgr.SetRemoteSessionAutoRefresh(ctx, subject, clients[i].ID, enabled); err != nil {
+			if _, err := s.remoteChallengeMgr.SetRemoteSessionAutoRefresh(ctx, subject, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, clients[i].ID, enabled); err != nil {
 				return oops.E(oops.CodeUnexpected, err, "set remote session auto refresh").LogError(ctx, logger)
 			}
 		}

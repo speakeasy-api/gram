@@ -14,11 +14,6 @@ const ORG: AdminOrganization = {
   account_type: "pro",
   workos_id: "org_workos_placeholder_identifier",
   whitelisted: true,
-  // The stale pair, dated apart from the real trial on purpose. A panel back
-  // on `free_trial_ends_at` then shows the wrong date rather than the right
-  // one by coincidence.
-  free_trial_started_at: "2026-02-01T00:00:00Z",
-  free_trial_ends_at: "2026-11-12T00:00:00Z",
   trial_state: "running",
   trial_ends_at: "2026-05-06T00:00:00Z",
   member_count: 3,
@@ -108,8 +103,7 @@ describe("PeekPanel", () => {
         org={{
           ...ORG,
           workos_id: undefined,
-          // The stale pair stays set. A panel that never trialled has to read
-          // as a dash even while the defaulted column still dates it.
+          // Factual state and date are the only trial source: no trial has no date.
           trial_state: "none",
           trial_ends_at: undefined,
         }}
@@ -233,6 +227,20 @@ describe("PeekPanel", () => {
     expect(document.activeElement).toBe(
       screen.getByRole("complementary", { name: "Organization peek" }),
     );
+  });
+
+  it("forwards callback ref cleanup when it unmounts", async () => {
+    const refCleanup = vi.fn((): void => {});
+    const ref = vi.fn((node: HTMLElement | null) =>
+      node ? refCleanup : undefined,
+    );
+    const view = await renderWithApp(
+      <PeekPanel org={ORG} onClose={noop} ref={ref} />,
+    );
+
+    view.unmount();
+
+    expect(refCleanup).toHaveBeenCalledOnce();
   });
 
   it("closes from its own control", async () => {

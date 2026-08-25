@@ -12,6 +12,55 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countMetaMCPMembersSharingBackend = `-- name: CountMetaMCPMembersSharingBackend :one
+SELECT count(*)
+FROM meta_mcp_server_members m
+JOIN mcp_servers s
+  ON s.id = m.mcp_server_id
+ AND s.project_id = m.project_id
+ AND s.deleted IS FALSE
+WHERE m.meta_mcp_server_id = $1
+  AND m.project_id = $2
+  AND m.deleted IS FALSE
+  AND m.mcp_server_id <> $3
+  AND (s.remote_mcp_server_id = $4
+    OR s.tunneled_mcp_server_id = $5
+    OR s.toolset_id = $6
+    OR s.unproxied_mcp_server_id = $7)
+`
+
+type CountMetaMCPMembersSharingBackendParams struct {
+	MetaMcpServerID      uuid.UUID
+	ProjectID            uuid.UUID
+	McpServerID          uuid.UUID
+	RemoteMcpServerID    uuid.NullUUID
+	TunneledMcpServerID  uuid.NullUUID
+	ToolsetID            uuid.NullUUID
+	UnproxiedMcpServerID uuid.NullUUID
+}
+
+// Count live members of @meta_mcp_server_id, other than @mcp_server_id, that
+// front one of the given backends. Two mcp_servers rows may name the same
+// backend, and a meta MCP server holding both would serve identical tools
+// under two slugs with nothing to route between them.
+//
+// A null argument never matches: `column = NULL` evaluates to NULL, so an
+// unset backend kind cannot pair with a member's null column.
+func (q *Queries) CountMetaMCPMembersSharingBackend(ctx context.Context, arg CountMetaMCPMembersSharingBackendParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countMetaMCPMembersSharingBackend,
+		arg.MetaMcpServerID,
+		arg.ProjectID,
+		arg.McpServerID,
+		arg.RemoteMcpServerID,
+		arg.TunneledMcpServerID,
+		arg.ToolsetID,
+		arg.UnproxiedMcpServerID,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createMetaMCPMember = `-- name: CreateMetaMCPMember :one
 INSERT INTO meta_mcp_server_members (
     project_id,
@@ -282,6 +331,59 @@ func (q *Queries) DeleteMetaMCPServer(ctx context.Context, arg DeleteMetaMCPServ
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const findMetaMCPSiblingSharingBackend = `-- name: FindMetaMCPSiblingSharingBackend :one
+SELECT meta.name
+FROM meta_mcp_server_members mine
+JOIN meta_mcp_server_members sibling
+  ON sibling.meta_mcp_server_id = mine.meta_mcp_server_id
+ AND sibling.project_id = mine.project_id
+ AND sibling.deleted IS FALSE
+ AND sibling.mcp_server_id <> mine.mcp_server_id
+JOIN mcp_servers s
+  ON s.id = sibling.mcp_server_id
+ AND s.project_id = sibling.project_id
+ AND s.deleted IS FALSE
+JOIN meta_mcp_servers meta
+  ON meta.id = mine.meta_mcp_server_id
+ AND meta.project_id = mine.project_id
+ AND meta.deleted IS FALSE
+WHERE mine.mcp_server_id = $1
+  AND mine.project_id = $2
+  AND mine.deleted IS FALSE
+  AND (s.remote_mcp_server_id = $3
+    OR s.tunneled_mcp_server_id = $4
+    OR s.toolset_id = $5
+    OR s.unproxied_mcp_server_id = $6)
+LIMIT 1
+`
+
+type FindMetaMCPSiblingSharingBackendParams struct {
+	McpServerID          uuid.UUID
+	ProjectID            uuid.UUID
+	RemoteMcpServerID    uuid.NullUUID
+	TunneledMcpServerID  uuid.NullUUID
+	ToolsetID            uuid.NullUUID
+	UnproxiedMcpServerID uuid.NullUUID
+}
+
+// Same rule as CountMetaMCPMembersSharingBackend, asked from the member
+// server's side: name a meta MCP server where @mcp_server_id already sits
+// alongside a live co-member fronting one of the given backends. Guards a
+// backend repoint on an already-attached server.
+func (q *Queries) FindMetaMCPSiblingSharingBackend(ctx context.Context, arg FindMetaMCPSiblingSharingBackendParams) (string, error) {
+	row := q.db.QueryRow(ctx, findMetaMCPSiblingSharingBackend,
+		arg.McpServerID,
+		arg.ProjectID,
+		arg.RemoteMcpServerID,
+		arg.TunneledMcpServerID,
+		arg.ToolsetID,
+		arg.UnproxiedMcpServerID,
+	)
+	var name string
+	err := row.Scan(&name)
+	return name, err
 }
 
 const getMetaMCPMember = `-- name: GetMetaMCPMember :one
@@ -616,7 +718,7 @@ const lockUserSessionIssuerForMetaMCP = `-- name: LockUserSessionIssuerForMetaMC
 SELECT id
 FROM user_session_issuers
 WHERE id = $1
-  AND project_id = $2
+  AND project_id = $2::uuid
   AND deleted IS FALSE
 FOR UPDATE
 `

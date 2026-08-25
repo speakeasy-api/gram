@@ -199,17 +199,6 @@ func (s *Service) RefreshSession(ctx context.Context, payload *orgsessionsgen.Re
 		return nil, oops.E(oops.CodeBadRequest, nil, "remote session has no refresh token").LogError(ctx, logger)
 	}
 
-	// Sessions minted since the resource column exists carry their RFC 8707
-	// binding; RefreshNow replays it. Only legacy NULL rows need the
-	// derived-from-attached-MCP-servers fallback.
-	var fallbackResource string
-	if !row.RemoteSession.Resource.Valid || row.RemoteSession.Resource.String == "" {
-		fallbackResource, err = s.refresher.FallbackResourceForClient(ctx, row.RemoteSession.RemoteSessionClientID)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "derive fallback resource").LogError(ctx, logger)
-		}
-	}
-
 	// Refresh through the shared single-flighted primitive — the same lock the
 	// lazy MCP path and the scheduled sweep hold, so an admin click can never
 	// replay a refresh token a concurrent refresh already consumed. Two
@@ -217,7 +206,7 @@ func (s *Service) RefreshSession(ctx context.Context, payload *orgsessionsgen.Re
 	// are adopted instead of double-POSTing, and a definitive upstream
 	// invalid_grant clears only the dead refresh grant so a still-working
 	// access token remains connected.
-	result, err := s.refresher.RefreshNow(ctx, row.RemoteSession, fallbackResource)
+	result, err := s.refresher.RefreshNow(ctx, row.RemoteSession, "")
 	if err != nil {
 		// Operator-actionable failures carry a public-safe reason; surface it so
 		// the admin sees why the refresh failed instead of a generic error.

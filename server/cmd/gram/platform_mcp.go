@@ -138,6 +138,11 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		Signer:        sessiontokens.NewSigner(config.JWTSigningKey),
 		Encryption:    config.Encryption,
 		Telemetry:     oauthTelemetry,
+		Logger:        config.Logger,
+		// Backs the inbound CIMD document fetcher's SSRF protection; without
+		// it the authorization server serves DCR only.
+		GuardianPolicy: config.GuardianPolicy,
+		MeterProvider:  config.MeterProvider,
 	})
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create local Platform MCP OAuth service: %w", err)
@@ -207,6 +212,10 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 			Connection:   ratelimit.New(limitStore, platformmcp.DiagnosticsConnectionLimitName, ratelimit.PerMinute(platformmcp.DiagnosticQueriesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 			Organization: ratelimit.New(limitStore, platformmcp.DiagnosticsOrganizationLimitName, ratelimit.PerMinute(platformmcp.DiagnosticQueriesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		},
+		Plugins: platformmcp.OperationBudget{
+			Connection:   ratelimit.New(limitStore, platformmcp.PluginsConnectionLimitName, ratelimit.PerMinute(platformmcp.PluginQueriesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+			Organization: ratelimit.New(limitStore, platformmcp.PluginsOrganizationLimitName, ratelimit.PerMinute(platformmcp.PluginQueriesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		},
 		// Metered separately and lower: this is the only read that reaches
 		// personal data, so exhausting it must not be possible by spending the
 		// ordinary diagnostic allowance.
@@ -266,7 +275,8 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	if err != nil {
 		return AssistantSurface{}, err
 	}
-	distributions := newPlatformMCPDistributionService(config)
+	pluginInventory := platformmcp.NewPluginsService(config.DB, budgets.Plugins, config.JWTSigningKey)
+	distributions := newPlatformMCPDistributionService(config, pluginInventory)
 
 	registryHandler := localfixture.NewRegistryHTTP(fixtureConfig).Handler()
 	config.Mux.Handle(http.MethodGet, "/v0.1/servers", registryHandler.ServeHTTP)
@@ -302,6 +312,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		distributions,
 		skillAuthoring,
 		diagnostics,
+		pluginInventory,
 		fixtureConfig.CatalogDescriptor(),
 	).WithOAuthTelemetry(oauthTelemetry)
 	oauth.Attach(config.Mux)
@@ -390,12 +401,12 @@ func newPlatformMCPLifecycleVisibilityService(config platformMCPConfig, readines
 	}, readiness, config.JWTSigningKey)
 }
 
-func newPlatformMCPDistributionService(config platformMCPConfig) *platformmcp.DistributionService {
+func newPlatformMCPDistributionService(config platformMCPConfig, pluginTargets platformmcp.PluginTargetResolver) *platformmcp.DistributionService {
 	return platformmcp.NewDistributionService(
 		config.DB,
 		config.AuditLogger,
-		func(ctx context.Context, tx pgx.Tx, authCtx *contextvalues.AuthContext, organizationID string, projectID, mcpServerID uuid.UUID, displayName string) (uuid.UUID, bool, error) {
-			attached, err := plugins.AttachToExistingDefaultPluginAudited(ctx, tx, config.AuditLogger, authCtx, organizationID, projectID, mcpServerID, displayName)
+		func(ctx context.Context, tx pgx.Tx, authCtx *contextvalues.AuthContext, organizationID string, projectID, pluginID, mcpServerID uuid.UUID, displayName string) (uuid.UUID, bool, error) {
+			attached, err := plugins.AttachToExistingPluginAudited(ctx, tx, config.AuditLogger, authCtx, organizationID, projectID, pluginID, mcpServerID, displayName)
 			if err != nil {
 				return uuid.Nil, false, err
 			}
@@ -411,6 +422,7 @@ func newPlatformMCPDistributionService(config platformMCPConfig) *platformmcp.Di
 			_, err := config.PluginPublisher.PublishProject(ctx, plugins.PublishProjectInput{ProjectID: projectID, CreatedByUserID: userID, CommitMessage: commitMessage, SkipIfUnchanged: true})
 			return err
 		},
+		pluginTargets,
 	)
 }
 
@@ -460,6 +472,11 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		Signer:        sessiontokens.NewSigner(config.JWTSigningKey),
 		Encryption:    config.Encryption,
 		Telemetry:     oauthTelemetry,
+		Logger:        config.Logger,
+		// Backs the inbound CIMD document fetcher's SSRF protection; without
+		// it the authorization server serves DCR only.
+		GuardianPolicy: config.GuardianPolicy,
+		MeterProvider:  config.MeterProvider,
 	})
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create platform mcp oauth service: %w", err)
@@ -507,6 +524,10 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		Diagnostics: platformmcp.OperationBudget{
 			Connection:   ratelimit.New(limitStore, platformmcp.DiagnosticsConnectionLimitName, ratelimit.PerMinute(platformmcp.DiagnosticQueriesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 			Organization: ratelimit.New(limitStore, platformmcp.DiagnosticsOrganizationLimitName, ratelimit.PerMinute(platformmcp.DiagnosticQueriesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		},
+		Plugins: platformmcp.OperationBudget{
+			Connection:   ratelimit.New(limitStore, platformmcp.PluginsConnectionLimitName, ratelimit.PerMinute(platformmcp.PluginQueriesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+			Organization: ratelimit.New(limitStore, platformmcp.PluginsOrganizationLimitName, ratelimit.PerMinute(platformmcp.PluginQueriesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		},
 		// Metered separately and lower: this is the only read that reaches
 		// personal data, so exhausting it must not be possible by spending the
@@ -567,27 +588,8 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	if err != nil {
 		return AssistantSurface{}, err
 	}
-	distributions := platformmcp.NewDistributionService(
-		config.DB,
-		config.AuditLogger,
-		func(ctx context.Context, tx pgx.Tx, authCtx *contextvalues.AuthContext, organizationID string, projectID, mcpServerID uuid.UUID, displayName string) (uuid.UUID, bool, error) {
-			attached, err := plugins.AttachToExistingDefaultPluginAudited(ctx, tx, config.AuditLogger, authCtx, organizationID, projectID, mcpServerID, displayName)
-			if err != nil {
-				return uuid.Nil, false, err
-			}
-			if attached == nil {
-				return uuid.Nil, false, nil
-			}
-			return attached.Server.ID, true, nil
-		},
-		func(ctx context.Context, projectID uuid.UUID, userID, commitMessage string) error {
-			if config.PluginPublisher == nil {
-				return fmt.Errorf("plugin publishing is not configured")
-			}
-			_, err := config.PluginPublisher.PublishProject(ctx, plugins.PublishProjectInput{ProjectID: projectID, CreatedByUserID: userID, CommitMessage: commitMessage, SkipIfUnchanged: true})
-			return err
-		},
-	)
+	pluginInventory := platformmcp.NewPluginsService(config.DB, budgets.Plugins, config.JWTSigningKey)
+	distributions := newPlatformMCPDistributionService(config, pluginInventory)
 	skillAuthoring := platformmcp.NewSkillsService(config.Skills, platformmcp.NewPostgresSkillTargets(config.DB), store, config.Authz, registrationGate, budgets.Skills)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB)
 	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics).
@@ -609,6 +611,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		distributions,
 		skillAuthoring,
 		diagnostics,
+		pluginInventory,
 		platformmcp.CatalogDescriptor{},
 	).WithOAuthTelemetry(oauthTelemetry)
 	oauth.Attach(config.Mux)

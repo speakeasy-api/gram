@@ -260,16 +260,6 @@ func newStartCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_ENVIRONMENT"},
 		},
 		&cli.StringFlag{
-			Name:    "custom-domain-k8s-namespace",
-			Usage:   "Kubernetes namespace for custom domain ingresses (defaults to gram-<environment>)",
-			EnvVars: []string{"GRAM_CUSTOM_DOMAIN_K8S_NAMESPACE"},
-		},
-		&cli.StringFlag{
-			Name:    "custom-domain-backend-service",
-			Usage:   "Kubernetes service that custom domain ingresses route to (defaults to gram-server)",
-			EnvVars: []string{"GRAM_CUSTOM_DOMAIN_BACKEND_SERVICE"},
-		},
-		&cli.StringFlag{
 			Name:     "ssl-key-file",
 			Usage:    "The SSL key file path to use for the server",
 			Required: false,
@@ -425,7 +415,6 @@ func newStartCommand() *cli.Command {
 			EnvVars: []string{"GRAM_SINGLE_PROCESS"},
 			Value:   false,
 		},
-
 		&cli.StringFlag{
 			Name:     "pylon-verification-secret",
 			Usage:    "The identity verification secret for pylon",
@@ -532,11 +521,6 @@ func newStartCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_DISALLOWED_CIDR_BLOCKS"},
 			Required: false,
 		},
-		&cli.StringFlag{
-			Name:    "custom-domain-cname",
-			Usage:   "The expected CNAME target for custom domain verification (e.g., cname.getgram.ai.)",
-			EnvVars: []string{"GRAM_CUSTOM_DOMAIN_CNAME"},
-		},
 		&cli.PathFlag{
 			Name:     "config-file",
 			Usage:    "Path to a config file to load. Supported formats are JSON, TOML and YAML.",
@@ -574,6 +558,7 @@ func newStartCommand() *cli.Command {
 		},
 	}
 
+	flags = append(flags, customDomainFlags()...)
 	flags = append(flags, redisFlags()...)
 	flags = append(flags, clickHouseFlags()...)
 	flags = append(flags, functionsFlags()...)
@@ -601,6 +586,11 @@ func newStartCommand() *cli.Command {
 				attr.SlogServiceEnv(serviceEnv),
 			)
 			slog.SetDefault(logger)
+
+			customDomainARecords, err := customDomainARecordsFromCLI(c)
+			if err != nil {
+				return err
+			}
 
 			platformFixture, err := platformMCPLocalFixtureConfigFromCLI(serviceEnv, c.String("server-url"))
 			if err != nil {
@@ -1332,6 +1322,7 @@ func newStartCommand() *cli.Command {
 				tracerProvider,
 				meterProvider,
 				telemLogger,
+				publishers.OTELLogs,
 				sessionManager,
 				hooksCache,
 				chatClient,
@@ -1481,7 +1472,8 @@ func newStartCommand() *cli.Command {
 			cliauth.Attach(mux, cliauth.NewService(logger, tracerProvider, db, sessionManager, authzEngine, redisClient, c.String("environment")))
 			chatsessionssvc.Attach(mux, chatsessionssvc.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, authzEngine))
 			environments.Attach(mux, environments.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, auditLogger))
-			mcpServersService := mcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, toolDispositionCache, pluginsGitHub != nil, assetsService)
+			upstreamRevoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, encryptionClient, guardianPolicy)
+			mcpServersService := mcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, toolDispositionCache, pluginsGitHub != nil, assetsService, upstreamRevoker)
 			mcpservers.Attach(mux, mcpServersService)
 			mcpendpoints.Attach(mux, mcpendpoints.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil))
 			metamcp.Attach(mux, metamcp.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv))
@@ -1565,7 +1557,7 @@ func newStartCommand() *cli.Command {
 			mcp.Attach(mux, mcpService, mcpMetadataService)
 			chat.Attach(mux, chatService)
 			variations.Attach(mux, variations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
-			customdomains.Attach(mux, customdomains.NewService(logger, tracerProvider, db, sessionManager, &background.CustomDomainRegistrationClient{TemporalEnv: temporalEnv}, authzEngine, auditLogger))
+			customdomains.Attach(mux, customdomains.NewService(logger, tracerProvider, db, sessionManager, &background.CustomDomainRegistrationClient{TemporalEnv: temporalEnv}, authzEngine, auditLogger, c.String("custom-domain-cname"), customDomainARecords))
 			usage.Attach(mux, usage.NewService(logger, tracerProvider, db, sessionManager, billingRepo, serverURL, siteURL, posthogClient, openRouter, openRouterKeyRefresher, stripeClient, authzEngine, telemetryrepo.New(chDB), auditLogger, featureFlags, productFeatures, trialEmailNotifier))
 			tm.Attach(mux, telemSvc)
 			functions.Attach(mux, functions.NewService(logger, tracerProvider, db, encryptionClient, tigrisStore))
@@ -1729,6 +1721,7 @@ func newStartCommand() *cli.Command {
 						OpenRouterSpend:           openRouter,
 						K8sClient:                 k8sClient,
 						ExpectedTargetCNAME:       c.String("custom-domain-cname"),
+						ExpectedARecords:          customDomainARecords,
 						GitHubEvidenceToken:       c.String("github-evidence-token"),
 						SiteURL:                   siteURL,
 						BillingTracker:            billingTracker,

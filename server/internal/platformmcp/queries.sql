@@ -24,6 +24,80 @@ FROM platform_mcp_oauth_clients
 WHERE client_id = @client_id
   AND revoked_at IS NULL;
 
+-- name: UpsertPlatformMCPOAuthClientFromCIMD :one
+-- Lazy upsert for a client resolved from a Client ID Metadata Document at
+-- authorize time. For CIMD rows the document URL IS the client_id, so the
+-- conflict target is the same unique index that serves DCR lookups. On
+-- refresh the mutable metadata (client_name, redirect_uris) and every cache
+-- column are replaced wholesale, including the ETag, which is set to NULL
+-- when the response carried no usable validator so the next refresh is
+-- unconditional rather than replaying a stale one.
+--
+-- The cache expiry is derived from the database clock rather than the
+-- application's, so it can never land before the client_id_metadata_fetched_at
+-- written in the same statement.
+--
+-- The DO UPDATE is guarded so it can never touch a secret-bearing DCR row
+-- that happens to share the client_id, nor resurrect a revoked one:
+-- rewriting the former would trip the client_id_metadata_uri CHECK
+-- constraints with an opaque 500, and the latter would undo an operator's
+-- revocation. Either collision surfaces as no-rows, which the resolver maps
+-- to invalid_client.
+INSERT INTO platform_mcp_oauth_clients (
+    client_id,
+    client_secret_hash,
+    client_name,
+    redirect_uris,
+    client_secret_expires_at,
+    client_id_metadata_uri,
+    client_id_metadata_fetched_at,
+    client_id_metadata_cache_expires_at,
+    client_id_metadata_etag
+) VALUES (
+    @client_id,
+    NULL,
+    @client_name,
+    @redirect_uris,
+    NULL,
+    @client_id,
+    clock_timestamp(),
+    clock_timestamp() + make_interval(secs => @cache_ttl_seconds::double precision),
+    sqlc.narg('client_id_metadata_etag')
+)
+ON CONFLICT (client_id)
+DO UPDATE SET
+    client_name = EXCLUDED.client_name,
+    redirect_uris = EXCLUDED.redirect_uris,
+    client_id_metadata_uri = EXCLUDED.client_id_metadata_uri,
+    client_id_metadata_fetched_at = EXCLUDED.client_id_metadata_fetched_at,
+    client_id_metadata_cache_expires_at = EXCLUDED.client_id_metadata_cache_expires_at,
+    client_id_metadata_etag = EXCLUDED.client_id_metadata_etag,
+    updated_at = clock_timestamp()
+WHERE platform_mcp_oauth_clients.client_secret_hash IS NULL
+  AND platform_mcp_oauth_clients.revoked_at IS NULL
+RETURNING *;
+
+-- name: UpdatePlatformMCPOAuthClientCIMDCache :one
+-- Refreshes the cache bookkeeping on a CIMD-resolved client whose document
+-- host answered 304 Not Modified. The stored client_name and redirect_uris
+-- are current by definition of the 304, so they are deliberately untouched;
+-- only the fetch stamp, the expiry, and the validator move.
+--
+-- The guards mirror UpsertPlatformMCPOAuthClientFromCIMD's, so this statement
+-- can never push a row into violating the client_id_metadata_uri CHECK
+-- constraints; such a collision surfaces as no-rows, which the resolver maps
+-- to invalid_client.
+UPDATE platform_mcp_oauth_clients
+SET client_id_metadata_fetched_at = clock_timestamp(),
+    client_id_metadata_cache_expires_at = clock_timestamp() + make_interval(secs => @cache_ttl_seconds::double precision),
+    client_id_metadata_etag = sqlc.narg('client_id_metadata_etag'),
+    updated_at = clock_timestamp()
+WHERE client_id = @client_id
+  AND client_id_metadata_uri IS NOT NULL
+  AND client_secret_hash IS NULL
+  AND revoked_at IS NULL
+RETURNING *;
+
 -- name: GetPlatformMCPOAuthClientForUpdate :one
 SELECT *
 FROM platform_mcp_oauth_clients
@@ -505,6 +579,13 @@ SELECT id, name, slug
 FROM projects
 WHERE organization_id = @organization_id
   AND slug = @slug
+  AND deleted IS FALSE;
+
+-- name: ResolvePlatformMCPProjectByID :one
+SELECT id, name, slug
+FROM projects
+WHERE organization_id = @organization_id
+  AND id = @project_id
   AND deleted IS FALSE;
 
 -- name: IsPlatformMCPCatalogRegistrationTargetEligible :one
@@ -1377,7 +1458,7 @@ RETURNING *;
 -- name: LockPlatformMCPDistribution :exec
 SELECT pg_advisory_xact_lock(
     hashtextextended(
-        jsonb_build_array(@organization_id::text, @project_id::text, @registration_id::text, @default_plugin_id::text)::text,
+        jsonb_build_array(@organization_id::text, @project_id::text, @registration_id::text, @plugin_id::text)::text,
         0
     )
 );
@@ -1395,13 +1476,16 @@ JOIN projects AS project
 WHERE distribution.organization_id = @organization_id
   AND distribution.project_id = @project_id
   AND distribution.registration_id = @registration_id
-  AND distribution.default_plugin_id = @default_plugin_id;
+  AND distribution.default_plugin_id = @plugin_id;
 
 -- name: CreatePlatformMCPDistribution :one
 INSERT INTO platform_mcp_distributions (
     organization_id,
     project_id,
     registration_id,
+    -- Dual-written during expand: default_plugin_id is the legacy column name
+    -- and no longer implies the project's default plugin, plugin_id is the
+    -- column exact-plugin readers move to. Both carry the exact target.
     default_plugin_id,
     plugin_id,
     plugin_server_id,
@@ -1415,8 +1499,8 @@ SELECT
     @organization_id,
     @project_id,
     @registration_id,
-    @default_plugin_id,
-    @default_plugin_id,
+    @plugin_id,
+    @plugin_id,
     @plugin_server_id,
     @state,
     @version,
@@ -1432,10 +1516,9 @@ WHERE EXISTS (
      AND registration.project_id = project.id
      AND registration.deleted IS FALSE
     JOIN plugins AS plugin
-      ON plugin.id = @default_plugin_id
+      ON plugin.id = @plugin_id
      AND plugin.organization_id = project.organization_id
      AND plugin.project_id = project.id
-     AND plugin.is_default IS TRUE
      AND plugin.deleted IS FALSE
     JOIN platform_mcp_connections AS connection
       ON connection.id = @connection_id
@@ -1450,8 +1533,8 @@ RETURNING *;
 
 -- name: UpdatePlatformMCPDistribution :one
 UPDATE platform_mcp_distributions
-SET plugin_id = @default_plugin_id,
-    plugin_server_id = @plugin_server_id,
+SET plugin_server_id = @plugin_server_id,
+    plugin_id = @plugin_id,
     state = @state,
     version = @version,
     attachment_was_created = @attachment_was_created,
@@ -1464,7 +1547,7 @@ WHERE platform_mcp_distributions.id = @id
   AND platform_mcp_distributions.organization_id = @organization_id
   AND platform_mcp_distributions.project_id = @project_id
   AND platform_mcp_distributions.registration_id = @registration_id
-  AND platform_mcp_distributions.default_plugin_id = @default_plugin_id
+  AND platform_mcp_distributions.default_plugin_id = @plugin_id
   AND EXISTS (
       SELECT 1
       FROM projects AS project
@@ -1477,7 +1560,6 @@ WHERE platform_mcp_distributions.id = @id
         ON plugin.id = platform_mcp_distributions.default_plugin_id
        AND plugin.organization_id = project.organization_id
        AND plugin.project_id = project.id
-       AND plugin.is_default IS TRUE
        AND plugin.deleted IS FALSE
       JOIN platform_mcp_connections AS connection
         ON connection.id = @connection_id
@@ -1499,7 +1581,7 @@ WHERE platform_mcp_distributions.id = @id
   AND platform_mcp_distributions.organization_id = @organization_id
   AND platform_mcp_distributions.project_id = @project_id
   AND platform_mcp_distributions.registration_id = @registration_id
-  AND platform_mcp_distributions.default_plugin_id = @default_plugin_id
+  AND platform_mcp_distributions.default_plugin_id = @plugin_id
   AND platform_mcp_distributions.version = @version
   AND EXISTS (
       SELECT 1
@@ -1513,7 +1595,6 @@ WHERE platform_mcp_distributions.id = @id
         ON plugin.id = platform_mcp_distributions.default_plugin_id
        AND plugin.organization_id = project.organization_id
        AND plugin.project_id = project.id
-       AND plugin.is_default IS TRUE
        AND plugin.deleted IS FALSE
       JOIN platform_mcp_connections AS connection
         ON connection.id = platform_mcp_distributions.connection_id
@@ -1527,8 +1608,10 @@ WHERE platform_mcp_distributions.id = @id
 RETURNING *;
 
 -- name: HasPlatformMCPSelectedUseEvidence :one
--- Selected-use credit remains Default-only until the exact-plugin contract is
--- live, so a future named distribution cannot produce onboarding evidence.
+-- Selected-use credit follows the plugin the distribution actually targets. The
+-- plugin join stays so evidence from a deleted plugin does not count; the
+-- Default-only restriction it carried during the compatibility rollout is gone
+-- now that named-plugin distribution is live.
 SELECT EXISTS (
     SELECT 1
     FROM platform_mcp_selected_use_evidence AS evidence
@@ -1546,7 +1629,6 @@ SELECT EXISTS (
        ON plugin.id = COALESCE(distribution.plugin_id, distribution.default_plugin_id)
       AND plugin.organization_id = distribution.organization_id
       AND plugin.project_id = distribution.project_id
-      AND plugin.is_default IS TRUE
       AND plugin.deleted IS FALSE
      JOIN platform_mcp_connections AS connection
       ON connection.id = distribution.connection_id
@@ -1560,8 +1642,8 @@ SELECT EXISTS (
 );
 
 -- name: GetPlatformMCPSelectedUseTarget :one
--- Resolve a target only through the literal Default plugin during the
--- compatibility rollout. Named-plugin rows remain excluded from selected use.
+-- Resolve the target through the plugin the distribution names, which is the
+-- default plugin only when that is what the caller asked for.
 SELECT
     distribution.id AS distribution_id,
     distribution.version AS distribution_version,
@@ -1585,7 +1667,6 @@ JOIN projects AS project
    ON plugin.id = COALESCE(distribution.plugin_id, distribution.default_plugin_id)
   AND plugin.organization_id = distribution.organization_id
   AND plugin.project_id = distribution.project_id
-  AND plugin.is_default IS TRUE
   AND plugin.deleted IS FALSE
  JOIN plugin_servers AS plugin_server
   ON plugin_server.id = distribution.plugin_server_id
@@ -1786,8 +1867,8 @@ WHERE workflow.organization_id = @organization_id
   AND registration.mcp_server_id IS NOT NULL;
 
 -- name: HasPlatformMCPOrganizationSetupComplete :one
--- Default-only setup completion must not be satisfied by a future named-plugin
--- row. A missing or no-longer-Default plugin therefore correctly does not count.
+-- Setup completion counts an attached distribution to any live plugin. A
+-- distribution whose plugin has since been deleted correctly does not count.
 SELECT EXISTS (
     SELECT 1
     FROM platform_mcp_onboarding_milestones AS milestone
@@ -1805,15 +1886,14 @@ SELECT EXISTS (
        ON plugin.id = COALESCE(distribution.plugin_id, distribution.default_plugin_id)
       AND plugin.organization_id = distribution.organization_id
       AND plugin.project_id = distribution.project_id
-      AND plugin.is_default IS TRUE
       AND plugin.deleted IS FALSE
      WHERE distribution.organization_id = @organization_id
        AND distribution.state = 'attached'
 ) AS setup_complete;
 
 -- name: HasAttachedPlatformMCPOnboardingDistributionForProject :one
--- This is intentionally Default-only during the compatibility rollout; named
--- rows added by a later release must not satisfy onboarding distribution.
+-- An attached distribution to any live plugin in the project satisfies
+-- onboarding distribution; the plugin must still exist.
 SELECT EXISTS (
     SELECT 1
     FROM platform_mcp_distributions AS distribution
@@ -1830,7 +1910,6 @@ SELECT EXISTS (
        ON plugin.id = COALESCE(distribution.plugin_id, distribution.default_plugin_id)
       AND plugin.organization_id = distribution.organization_id
       AND plugin.project_id = distribution.project_id
-      AND plugin.is_default IS TRUE
       AND plugin.deleted IS FALSE
      WHERE distribution.organization_id = @organization_id
        AND distribution.project_id = @project_id
@@ -2358,3 +2437,196 @@ LEFT JOIN toolsets AS toolset
 WHERE m.id = @mcp_server_id
   AND m.project_id = @project_id
   AND m.deleted IS FALSE;
+
+-- Plugin inventory. Plugins are the unit an administrator installs and reasons
+-- about, so this surface reads them directly rather than inferring them from
+-- distribution targets. Membership is derived from plugin_servers and
+-- skill_distributions, which are the attachment authority; nothing here is a
+-- stored projection that could drift from them.
+
+-- name: ListPlatformMCPPluginInventory :many
+-- Keyset page over a project's plugins. Assignment principals are counted by
+-- kind and never projected: a principal URN embeds a user id, which this
+-- surface must not carry.
+SELECT
+    p.id,
+    p.name,
+    p.slug,
+    p.description,
+    COALESCE(p.is_default, FALSE) AS is_default,
+    (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
+    (
+      SELECT count(*)
+      FROM skill_distributions sd
+      JOIN skills sk
+        ON sk.id = sd.skill_id
+        AND sk.project_id = sd.project_id
+        AND sk.archived_at IS NULL
+      WHERE sd.plugin_id = p.id
+        AND sd.project_id = p.project_id
+        AND sd.channel = 'plugin'
+        AND sd.assistant_id IS NULL
+        AND sd.revoked_at IS NULL
+    ) AS skill_count,
+    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.principal_urn = '*') AS wildcard_assignment_count,
+    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.principal_urn LIKE 'role:%') AS role_assignment_count,
+    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.principal_urn LIKE 'user:%') AS user_assignment_count,
+    (gc.id IS NOT NULL)::boolean AS repository_connected,
+    (COALESCE(gc.published_mcp_fingerprints ->> p.slug, '') <> '')::boolean AS published
+FROM plugins p
+JOIN projects
+  ON projects.id = p.project_id
+LEFT JOIN plugin_github_connections gc
+  ON gc.project_id = p.project_id
+WHERE p.project_id = @project_id
+  AND p.organization_id = @organization_id
+  AND projects.organization_id = @organization_id
+  AND projects.deleted IS FALSE
+  AND p.deleted IS FALSE
+  AND (NOT @use_after::boolean OR p.id > @after_id)
+ORDER BY p.id ASC
+LIMIT @result_limit;
+
+-- name: GetPlatformMCPPluginInventoryItem :one
+SELECT
+    p.id,
+    p.name,
+    p.slug,
+    p.description,
+    COALESCE(p.is_default, FALSE) AS is_default,
+    (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
+    (
+      SELECT count(*)
+      FROM skill_distributions sd
+      JOIN skills sk
+        ON sk.id = sd.skill_id
+        AND sk.project_id = sd.project_id
+        AND sk.archived_at IS NULL
+      WHERE sd.plugin_id = p.id
+        AND sd.project_id = p.project_id
+        AND sd.channel = 'plugin'
+        AND sd.assistant_id IS NULL
+        AND sd.revoked_at IS NULL
+    ) AS skill_count,
+    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.principal_urn = '*') AS wildcard_assignment_count,
+    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.principal_urn LIKE 'role:%') AS role_assignment_count,
+    (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id AND pa.principal_urn LIKE 'user:%') AS user_assignment_count,
+    (gc.id IS NOT NULL)::boolean AS repository_connected,
+    (COALESCE(gc.published_mcp_fingerprints ->> p.slug, '') <> '')::boolean AS published
+FROM plugins p
+JOIN projects
+  ON projects.id = p.project_id
+LEFT JOIN plugin_github_connections gc
+  ON gc.project_id = p.project_id
+WHERE p.id = @plugin_id
+  AND p.project_id = @project_id
+  AND p.organization_id = @organization_id
+  AND projects.organization_id = @organization_id
+  AND projects.deleted IS FALSE
+  AND p.deleted IS FALSE;
+
+-- name: ListPlatformMCPPluginServers :many
+-- One plugin's MCP server membership. A plugin server is backed by exactly one
+-- of a toolset or an mcp_server (plugin_servers_backend_exclusivity_check), so
+-- the slug and enabled state are resolved from whichever backend is set. No URL
+-- is constructed here: this surface names servers, it does not hand out
+-- endpoints.
+SELECT
+    ps.id,
+    ps.display_name,
+    ps.policy,
+    ps.sort_order,
+    (ps.toolset_id IS NOT NULL)::boolean AS toolset_backed,
+    COALESCE(t.mcp_slug, ep.slug, '')::text AS mcp_slug,
+    COALESCE(t.mcp_enabled, s.visibility <> 'disabled', FALSE)::boolean AS enabled
+FROM plugin_servers ps
+JOIN plugins p
+  ON p.id = ps.plugin_id
+  AND p.deleted IS FALSE
+LEFT JOIN toolsets t
+  ON t.id = ps.toolset_id
+  AND t.project_id = p.project_id
+  AND t.deleted IS FALSE
+LEFT JOIN mcp_servers s
+  ON s.id = ps.mcp_server_id
+  AND s.project_id = p.project_id
+  AND s.deleted IS FALSE
+LEFT JOIN LATERAL (
+  SELECT e.slug
+  FROM mcp_endpoints e
+  WHERE e.mcp_server_id = s.id
+    AND e.project_id = p.project_id
+    AND e.deleted IS FALSE
+  ORDER BY e.created_at ASC
+  LIMIT 1
+) ep ON TRUE
+WHERE ps.plugin_id = @plugin_id
+  AND p.project_id = @project_id
+  AND p.organization_id = @organization_id
+  AND ps.deleted IS FALSE
+ORDER BY ps.sort_order ASC, ps.display_name ASC
+LIMIT @result_limit;
+
+-- name: ListPlatformMCPPluginSkills :many
+-- One plugin's skill membership. pinned_version_id is null when the
+-- distribution follows the skill's latest valid version, which is the
+-- difference between a plugin that moves with authoring and one that does not.
+SELECT
+    sk.id AS skill_id,
+    sk.name AS skill_name,
+    sd.pinned_version_id
+FROM skill_distributions sd
+JOIN plugins p
+  ON p.id = sd.plugin_id
+  AND p.deleted IS FALSE
+JOIN skills sk
+  ON sk.id = sd.skill_id
+  AND sk.project_id = sd.project_id
+  AND sk.archived_at IS NULL
+WHERE sd.plugin_id = @plugin_id
+  AND sd.project_id = @project_id
+  AND p.organization_id = @organization_id
+  AND sd.channel = 'plugin'
+  AND sd.assistant_id IS NULL
+  AND sd.revoked_at IS NULL
+ORDER BY sk.name ASC
+LIMIT @result_limit;
+
+-- name: ResolvePlatformMCPPluginTarget :many
+-- Matches one plugin by id, slug, or whole name over the project's entire
+-- plugin set. Matching in SQL rather than over a bounded page is what keeps a
+-- plugin that exists from being refused as not_found, and an ambiguous name
+-- from resolving to whichever match a page happened to include. Two rows are
+-- enough to know a name is ambiguous.
+SELECT
+    p.id,
+    p.name,
+    p.slug,
+    COALESCE(p.is_default, FALSE) AS is_default
+FROM plugins p
+JOIN projects
+  ON projects.id = p.project_id
+WHERE p.project_id = @project_id
+  AND p.organization_id = @organization_id
+  AND projects.organization_id = @organization_id
+  AND projects.deleted IS FALSE
+  AND p.deleted IS FALSE
+  AND (
+    p.id::text = @target::text
+    OR lower(p.slug) = lower(@target::text)
+    OR lower(p.name) = lower(@target::text)
+  )
+ORDER BY p.id ASC
+LIMIT 2;
+
+-- name: GetPlatformMCPPluginForUpdate :one
+-- Serializes an MCP distribution write against concurrent deletion of the
+-- exact plugin the caller named. A deleted plugin deliberately returns no row,
+-- which the caller reports as not_found rather than retargeting the default.
+SELECT p.id, p.name, p.slug
+FROM plugins p
+WHERE p.id = @plugin_id
+  AND p.project_id = @project_id
+  AND p.organization_id = @organization_id
+  AND p.deleted IS FALSE
+FOR UPDATE;

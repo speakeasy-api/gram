@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/netip"
 	"net/url"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -77,6 +78,9 @@ type WorkerOptions struct {
 	OpenRouterSpend     openrouter.SpendClient
 	K8sClient           *k8s.KubernetesClients
 	ExpectedTargetCNAME string
+	// ExpectedARecords are the static ingress IPs apex custom domains point A
+	// records at; used alongside ExpectedTargetCNAME for verification/health.
+	ExpectedARecords []netip.Addr
 
 	// GitHubEvidenceToken authenticates the recheck sweep's repository
 	// lookups; empty falls back to GitHub's small unauthenticated budget.
@@ -163,6 +167,7 @@ func ForDeploymentProcessing(
 		OpenRouterSpend:     nil,
 		K8sClient:           nil,
 		ExpectedTargetCNAME: "",
+		ExpectedARecords:    nil,
 		GitHubEvidenceToken: "",
 		SiteURL:             nil,
 		BillingTracker:      nil,
@@ -226,6 +231,7 @@ func NewTemporalWorker(
 		OpenRouterSpend:           nil,
 		K8sClient:                 nil,
 		ExpectedTargetCNAME:       "",
+		ExpectedARecords:          nil,
 		GitHubEvidenceToken:       "",
 		SiteURL:                   nil,
 		BillingTracker:            nil,
@@ -275,6 +281,7 @@ func NewTemporalWorker(
 			ChatClient:                conv.Default(o.ChatClient, opts.ChatClient),
 			K8sClient:                 conv.Default(o.K8sClient, opts.K8sClient),
 			ExpectedTargetCNAME:       conv.Default(o.ExpectedTargetCNAME, opts.ExpectedTargetCNAME),
+			ExpectedARecords:          conv.DefaultSlice(o.ExpectedARecords, opts.ExpectedARecords),
 			GitHubEvidenceToken:       conv.Default(o.GitHubEvidenceToken, opts.GitHubEvidenceToken),
 			SiteURL:                   conv.Default(o.SiteURL, opts.SiteURL),
 			BillingTracker:            conv.Default(o.BillingTracker, opts.BillingTracker),
@@ -362,6 +369,7 @@ func NewTemporalWorker(
 		opts.ChatClient,
 		opts.K8sClient,
 		opts.ExpectedTargetCNAME,
+		opts.ExpectedARecords,
 		opts.SiteURL,
 		opts.BillingTracker,
 		opts.BillingRepository,
@@ -408,6 +416,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.SetOpenRouterSpendCap)
 	temporalWorker.RegisterActivity(activities.ReconcilePaygOpenRouterChatKey)
 	temporalWorker.RegisterActivity(activities.VerifyCustomDomain)
+	temporalWorker.RegisterActivity(activities.VerifyCustomDomainV2)
 	temporalWorker.RegisterActivity(activities.CustomDomainIngress)
 	temporalWorker.RegisterActivity(activities.ReconcileCustomDomain)
 	temporalWorker.RegisterActivity(activities.SignalCustomDomainReconcile)
@@ -775,7 +784,7 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 		}
 	}
 
-	if opts.DB != nil && opts.K8sClient != nil && opts.ExpectedTargetCNAME != "" {
+	if opts.DB != nil && opts.K8sClient != nil && (opts.ExpectedTargetCNAME != "" || len(opts.ExpectedARecords) > 0) {
 		if err := AddCustomDomainHealthSchedule(ctx, env); err != nil {
 			logger.ErrorContext(ctx, "failed to add custom domain health schedule", attr.SlogError(err))
 		}

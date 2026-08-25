@@ -32,6 +32,8 @@ If the user instead supplies a remote MCP URL outside the reviewed catalogue, us
 7. After the user completes any secure handoff, branch by caller surface:
    - For a connected external Platform MCP client, call `get_mcp_readiness` with `force: true`. Do not rely on stale or inferred readiness.
    - For a managed project assistant, call `get_mcp_readiness` without `force` and report only the persisted actor-scoped evidence. The user continues secure setup in the AICP dashboard.
-8. When readiness is current and ready, report the server-returned evidence. Registration remains private until a separately rollout-gated exact-plugin distribution is available.
+8. When readiness is current and ready, report the server-returned evidence. Registration is still private at this point: an MCP takes effect only once a plugin carries it.
+9. Call `list_plugins` for the selected project, present the plugins it returns, and ask the user which one should carry this MCP. Do not choose for them and do not assume the default plugin.
+10. After the user names a plugin, call `distribute_mcp_to_plugin` with that exact plugin. A name matching nothing is refused as `not_found` and a name matching more than one as `ambiguous_target`; report the refusal and ask again rather than retrying with a different plugin, creating a plugin, or distributing to another project.
 
 OAuth consent and approved secret entry are the expected out-of-agent stops. Project and catalog selection and identity-provider attachment confirmation stay in the conversation.
