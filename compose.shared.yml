@@ -35,7 +35,7 @@ services:
     # The CLI image, not temporalio/server: as of 1.31 the server image no
     # longer bundles the `temporal` binary that `server start-dev` needs.
     # CLI 1.8.1 embeds Server 1.31.2 and UI 2.50.1.
-    image: temporalio/temporal:1.8.1
+    image: temporalio/temporal:1.8.1@sha256:59561b9ef060eaeb1f46cb6a1842d6cbdd8a393eb3b6d315ecef5fe2f0b1d7a6
     restart: unless-stopped
     ports:
       - "127.0.0.1:7233:7233"
