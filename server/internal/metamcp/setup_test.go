@@ -29,6 +29,8 @@ import (
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -146,30 +148,77 @@ func seedUserSessionIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 func seedMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID) uuid.UUID {
 	t.Helper()
 
+	return seedMcpServerFronting(t, ctx, conn, projectID, mcpserversrepo.CreateMCPServerParams{
+		RemoteMcpServerID: conv.ToNullUUID(seedRemoteBackend(t, ctx, conn, projectID)),
+	})
+}
+
+// seedMcpServerFronting creates an mcp_server row on the caller's chosen
+// backend so tests can point two servers at one backend.
+func seedMcpServerFronting(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, backend mcpserversrepo.CreateMCPServerParams) uuid.UUID {
+	t.Helper()
+
+	mcpServerID, err := uuid.NewV7()
+	require.NoError(t, err)
+
+	backend.ID = mcpServerID
+	backend.ProjectID = projectID
+	backend.Name = conv.ToPGText("member mcp server")
+	backend.Slug = conv.ToPGText("member-mcp-server-" + uuid.NewString())
+	backend.UserSessionIssuerID = conv.ToNullUUID(seedUserSessionIssuer(t, ctx, conn, projectID))
+	backend.Visibility = "disabled"
+
+	frontend, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, backend)
+	require.NoError(t, err)
+
+	return frontend.ID
+}
+
+// seedRemoteBackend inserts a remote_mcp_servers row.
+func seedRemoteBackend(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID) uuid.UUID {
+	t.Helper()
+
 	server := remotemcptest.SeedServer(t, ctx, conn, remotemcprepo.CreateServerParams{
 		ProjectID:     projectID,
 		TransportType: "streamable-http",
 		Url:           "https://test.example.com/mcp/" + uuid.NewString(),
 	})
 
-	issuerID := seedUserSessionIssuer(t, ctx, conn, projectID)
+	return server.ID
+}
 
-	mcpServerID, err := uuid.NewV7()
-	require.NoError(t, err)
-	frontend, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID:                  mcpServerID,
-		ProjectID:           projectID,
-		Name:                conv.ToPGText("member mcp server"),
-		Slug:                conv.ToPGText("member-mcp-server-" + uuid.NewString()),
-		EnvironmentID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		UserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
-		RemoteMcpServerID:   uuid.NullUUID{UUID: server.ID, Valid: true},
-		ToolsetID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Visibility:          "disabled",
+// seedTunnelBackend inserts a tunneled_mcp_servers row.
+func seedTunnelBackend(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID) uuid.UUID {
+	t.Helper()
+
+	server, err := tunneledmcprepo.New(conn).CreateServer(ctx, tunneledmcprepo.CreateServerParams{
+		ID:        uuid.New(),
+		ProjectID: projectID,
+		Name:      "tunnel " + uuid.NewString(),
+		KeyHash:   "key-hash-" + uuid.NewString(),
+		KeyPrefix: "key-prefix",
 	})
 	require.NoError(t, err)
 
-	return frontend.ID
+	return server.ID
+}
+
+// seedToolsetBackend inserts a toolsets row.
+func seedToolsetBackend(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, projectID uuid.UUID) uuid.UUID {
+	t.Helper()
+
+	slug := "toolset-" + uuid.NewString()[:8]
+	toolset, err := toolsetsrepo.New(conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+		Name:           slug,
+		Slug:           slug,
+		McpSlug:        conv.ToPGText(slug),
+		McpEnabled:     true,
+	})
+	require.NoError(t, err)
+
+	return toolset.ID
 }
 
 // seedOtherProject creates an additional project in the caller's organization.
