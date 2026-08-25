@@ -92,6 +92,11 @@ import { useThemeProps } from "@/elements/hooks/useThemeProps";
 import { useToolMentions } from "@/elements/hooks/useToolMentions";
 import { getApiUrl } from "@/elements/lib/api";
 import { dictationAdapter } from "@/elements/lib/dictation";
+import {
+  mcpToolsAvailability,
+  mcpToolsSendBlocked,
+  mcpToolsSendTooltip,
+} from "@/elements/lib/mcpToolsAvailability";
 import { EASE_OUT_QUINT } from "@/elements/lib/easing";
 import { groupAssistantMessageParts } from "@/elements/lib/messagePartGrouping";
 import {
@@ -393,11 +398,22 @@ const ThreadWelcome: FC = () => {
 };
 
 const ThreadSuggestions: FC = () => {
-  const { config } = useElements();
+  const { config, mcpTools, mcpToolsLoading, mcpToolsError } = useElements();
   const r = useRadius();
   const d = useDensity();
   const suggestions = config.welcome?.suggestions ?? [];
   const isStandalone = config.variant === "standalone";
+
+  if (
+    mcpToolsSendBlocked(
+      config.composer?.requireMcpTools,
+      mcpToolsLoading,
+      mcpTools,
+      mcpToolsError,
+    )
+  ) {
+    return null;
+  }
 
   if (suggestions.length === 0) return null;
 
@@ -620,7 +636,7 @@ export const Composer: FC<ComposerProps> = ({
   showThreadAffordances = true,
   autoFocus = true,
 }) => {
-  const { config, mcpTools } = useElements();
+  const { config, mcpTools, mcpToolsLoading, mcpToolsError } = useElements();
   const { isResolved, setUnresolved } = useChatResolution();
   const r = useRadius();
   const d = useDensity();
@@ -722,7 +738,23 @@ export const Composer: FC<ComposerProps> = ({
   const composerTextRef = useRef(composerText);
   composerTextRef.current = composerText;
 
+  const toolsAvailability = mcpToolsAvailability(
+    mcpToolsLoading,
+    mcpTools,
+    mcpToolsError,
+  );
+  const sendBlocked = mcpToolsSendBlocked(
+    composerConfig.requireMcpTools,
+    mcpToolsLoading,
+    mcpTools,
+    mcpToolsError,
+  );
+  const sendTooltip = sendBlocked
+    ? mcpToolsSendTooltip(toolsAvailability)
+    : "Send message";
+
   const runSlashCommand = (command: ComposerSlashCommand) => {
+    if (sendBlocked) return;
     const composer = aui.composer();
     composer.setText(command.prompt);
     composer.send();
@@ -811,7 +843,11 @@ export const Composer: FC<ComposerProps> = ({
           ref={composerRootRef}
           // Capture: the menu owns Up/Down/Enter while it is open, before the
           // textarea inserts a newline or the composer sends the raw query.
-          onSubmit={() => {
+          onSubmit={(event) => {
+            if (sendBlocked) {
+              event.preventDefault();
+              return;
+            }
             promptHistory.record(composerTextRef.current);
           }}
           onKeyDownCapture={(event) => {
@@ -919,7 +955,11 @@ export const Composer: FC<ComposerProps> = ({
               isDictating && "invisible",
             )}
           />
-          <ComposerAction showRunState={showThreadAffordances} />
+          <ComposerAction
+            showRunState={showThreadAffordances}
+            sendBlocked={sendBlocked}
+            sendTooltip={sendTooltip}
+          />
         </ComposerPrimitive.Root>
       )}
     </div>
@@ -1779,8 +1819,14 @@ const ComposerDictate: FC = () => {
   );
 };
 
-const ComposerAction: FC<{ showRunState?: boolean }> = ({
+const ComposerAction: FC<{
+  showRunState?: boolean;
+  sendBlocked?: boolean;
+  sendTooltip?: string;
+}> = ({
   showRunState = true,
+  sendBlocked = false,
+  sendTooltip = "Send message",
 }) => {
   const { config } = useElements();
   const r = useRadius();
@@ -1820,13 +1866,14 @@ const ComposerAction: FC<{ showRunState?: boolean }> = ({
         {!showRunState && (
           <ComposerPrimitive.Send asChild>
             <TooltipIconButton
-              tooltip="Send message"
+              tooltip={sendTooltip}
               side="bottom"
               type="submit"
               variant="default"
               size="icon"
+              disabled={sendBlocked}
               className={cn("aui-composer-send size-[34px] p-1", r("full"))}
-              aria-label="Send message"
+              aria-label={sendTooltip}
             >
               <ArrowUpIcon className="aui-composer-send-icon size-5" />
             </TooltipIconButton>
@@ -1837,13 +1884,14 @@ const ComposerAction: FC<{ showRunState?: boolean }> = ({
           <ThreadPrimitive.If running={false}>
             <ComposerPrimitive.Send asChild>
               <TooltipIconButton
-                tooltip="Send message"
+                tooltip={sendTooltip}
                 side="bottom"
                 type="submit"
                 variant="default"
                 size="icon"
+                disabled={sendBlocked}
                 className={cn("aui-composer-send size-[34px] p-1", r("full"))}
-                aria-label="Send message"
+                aria-label={sendTooltip}
               >
                 <ArrowUpIcon className="aui-composer-send-icon size-5" />
               </TooltipIconButton>
