@@ -32868,6 +32868,7 @@ paths:
               - cursor
               - codex
               - opencode
+              - openclaw
             type: string
         - allowEmptyValue: true
           description: Session header
