@@ -21,3 +21,10 @@ func TestIsSupportSessionRequiresValidatedContext(t *testing.T) {
 	require.False(t, IsSupportSession(WithValidatedSupportSession(t.Context(), &nonAdmin)))
 
 }
+
+func TestRefreshSessionCookieIgnoresNilCallback(t *testing.T) {
+	t.Parallel()
+
+	ctx := WithSessionCookieRefresh(t.Context(), nil)
+	require.NotPanics(t, func() { RefreshSessionCookie(ctx, "session-id") })
+}
