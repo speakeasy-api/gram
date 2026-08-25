@@ -5,7 +5,7 @@
 SELECT id
 FROM user_session_issuers
 WHERE id = @user_session_issuer_id
-  AND project_id = @project_id
+  AND project_id = @project_id::uuid
   AND deleted IS FALSE
 FOR UPDATE;
 

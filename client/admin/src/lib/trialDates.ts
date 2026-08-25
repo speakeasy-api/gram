@@ -8,7 +8,9 @@
 // from the epoch here, so the subtraction can never land between two days: read
 // as instants instead, a fortnight across a daylight-saving boundary is 13.958
 // days and floors to 13.
-const MS_PER_DAY = 86_400_000;
+const MS_PER_MINUTE = 60_000;
+const MS_PER_HOUR = 60 * MS_PER_MINUTE;
+const MS_PER_DAY = 24 * MS_PER_HOUR;
 
 // The UTC day an instant falls on. `undefined` for an absent or unparseable
 // field, which is the same answer `fmtDateShort` gives it.
@@ -41,4 +43,44 @@ export function calendarDate(day: number): Date {
 // A day as an instant `fmtDateShort` will render as that same day.
 export function dayISO(day: number): string {
   return new Date(day * MS_PER_DAY).toISOString();
+}
+
+function quantity(value: number, unit: "day" | "hour" | "minute"): string {
+  return `${value} ${unit}${value === 1 ? "" : "s"}`;
+}
+
+// Keep the most useful precision as a trial approaches its end. Rounding up
+// prevents a still-running trial from being described as having no time left.
+export function formatTrialTimeRemaining(
+  endISO: string | undefined,
+  now: Date = new Date(),
+): string | undefined {
+  if (!endISO) return undefined;
+
+  const end = new Date(endISO);
+  const remaining = end.getTime() - now.getTime();
+  if (
+    Number.isNaN(end.getTime()) ||
+    Number.isNaN(now.getTime()) ||
+    remaining <= 0
+  ) {
+    return undefined;
+  }
+
+  if (remaining > 72 * MS_PER_HOUR) {
+    return quantity(Math.ceil(remaining / MS_PER_DAY), "day");
+  }
+  if (remaining >= 24 * MS_PER_HOUR) {
+    return quantity(Math.ceil(remaining / MS_PER_HOUR), "hour");
+  }
+
+  const totalMinutes = Math.ceil(remaining / MS_PER_MINUTE);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return [
+    hours > 0 ? quantity(hours, "hour") : undefined,
+    minutes > 0 ? quantity(minutes, "minute") : undefined,
+  ]
+    .filter((part): part is string => part !== undefined)
+    .join(" ");
 }

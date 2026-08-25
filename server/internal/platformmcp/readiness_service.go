@@ -67,7 +67,7 @@ func (s *ReadinessService) GetReadiness(ctx context.Context, principal Principal
 }
 
 func (s *ReadinessService) getReadiness(ctx context.Context, principal Principal, projectSlug, registrationID string, force, consumeBudget bool) (ResolvedProject, Readiness, bool, error) {
-	if s == nil || s.store == nil || s.gate == nil || s.adapters == nil || (consumeBudget && !s.repairBudget.valid()) || projectSlug == "" || registrationID == "" {
+	if s == nil || s.store == nil || s.gate == nil || (force && s.adapters == nil) || (consumeBudget && !s.repairBudget.valid()) || projectSlug == "" || registrationID == "" {
 		return ResolvedProject{}, Readiness{}, false, ErrUnavailable
 	}
 	if consumeBudget {

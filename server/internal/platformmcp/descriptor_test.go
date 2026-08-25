@@ -1,8 +1,10 @@
 package platformmcp
 
 import (
+	"encoding/json"
 	"testing"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 )
@@ -13,7 +15,7 @@ import (
 func TestEveryRegisteredToolDeclaresAnAudience(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	descriptors := registrar.Descriptors()
 	require.NotEmpty(t, descriptors, "the deployment registers tools even when every dependency is absent")
 
@@ -72,27 +74,26 @@ func names(descriptors []Descriptor) []string {
 func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 
 	admitted := map[string]bool{}
 	for _, descriptor := range registrar.For(AudienceAssistant) {
 		admitted[descriptor.Name] = true
 	}
 
-	// Each of these still reaches state keyed by a connection. Remove a name
-	// here in the same change that makes its path connection-less.
+	// Provider attachment still mutates connection-scoped state. Named-plugin
+	// distribution is intentionally unavailable until compatibility deployment.
 	for _, name := range []string{
-		"get_mcp_readiness",
-		"get_mcp_repair_plan",
-		"register_platform_mcp_for_project",
-		"get_platform_mcp_onboarding_status",
 		"attach_platform_mcp_identity_provider",
-		"add_platform_mcp_to_default_plugin",
+		"distribute_mcp_to_plugin",
+		"remove_mcp_from_plugin",
+		"list_plugins",
+		"get_plugin",
 	} {
-		require.False(t, admitted[name], "tool %q needs a connection and must not be admitted to the assistant", name)
+		require.False(t, admitted[name], "tool %q needs a connection or is rollout-gated and must not be admitted to the assistant", name)
 	}
 
-	// The reads, the registration path, and the catalogue-to-setup path are
+	// The reads, registration paths, and persisted readiness projections are
 	// connection-less end to end. get_setup_handoff is admitted because the
 	// handoff only carries the caller to the dashboard, which completes setup
 	// under its own session.
@@ -101,11 +102,17 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		"list_projects",
 		"find_mcp",
 		"get_mcp",
+		"update_mcp_metadata",
 		"register_catalog_mcp",
+		"register_remote_mcp",
 		"search_mcp_catalog",
 		"inspect_mcp_candidate",
 		"send_platform_mcp_feedback",
 		"get_setup_handoff",
+		"get_mcp_readiness",
+		"get_mcp_repair_plan",
+		"disable_mcp",
+		"enable_mcp",
 	} {
 		require.True(t, admitted[name], "tool %q works without a connection and should serve the assistant", name)
 	}
@@ -117,7 +124,7 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 func TestExternalEndpointServesOnlyExternallyAdmittedTools(t *testing.T) {
 	t.Parallel()
 
-	server, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	server, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 
 	admitted := make(map[string]bool)
 	for _, descriptor := range registrar.For(AudienceExternal) {
@@ -150,4 +157,58 @@ func TestExternalEndpointServesOnlyExternallyAdmittedTools(t *testing.T) {
 		}
 	}
 	require.Positive(t, withheld, "the catalogue withholds at least one tool from the external endpoint, so this test can fail")
+}
+
+// A tool whose result carries a SubjectCount must advertise that field as it
+// serializes — a number or the suppression label — not as the Go struct it is
+// reflected from. Asserted against a real session's tools/list rather than the
+// inference helper, so dropping the schema in addTool fails here too.
+func TestAdvertisedOutputSchemaMatchesTheSubjectCountWireForm(t *testing.T) {
+	t.Parallel()
+
+	// Registered directly rather than through newServer: with no dependencies
+	// the deployment substitutes the "diagnostics are not enabled" stubs, whose
+	// results carry no subject count. The handler is never called here — only
+	// the schema the registration advertises is under test.
+	server := newTestMCPServer()
+	registerDiagnosticsTools(newRegistrar(server), nil)
+
+	clientTransport, serverTransport := mcp.NewInMemoryTransports()
+	serverSession, err := server.Connect(t.Context(), serverTransport, nil)
+	require.NoError(t, err)
+	defer func() { _ = serverSession.Close() }()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "subject-count-test", Version: "0.0.1"}, nil)
+	session, err := client.Connect(t.Context(), clientTransport, nil)
+	require.NoError(t, err)
+	defer func() { _ = session.Close() }()
+
+	tools, err := session.ListTools(t.Context(), nil)
+	require.NoError(t, err)
+
+	var advertised any
+	for _, tool := range tools.Tools {
+		if tool.Name == "get_project_overview" {
+			advertised = tool.OutputSchema
+		}
+	}
+	require.NotNil(t, advertised, "the external endpoint advertises an output schema for get_project_overview")
+
+	encodedSchema, err := json.Marshal(advertised)
+	require.NoError(t, err)
+	var schema jsonschema.Schema
+	require.NoError(t, json.Unmarshal(encodedSchema, &schema))
+	resolved, err := schema.Resolve(nil)
+	require.NoError(t, err)
+
+	// Zero is reported exactly, three is suppressed, and twenty-five is
+	// reported exactly: the three shapes active_users takes on the wire.
+	for _, count := range []SubjectCount{NewSubjectCount(0), NewSubjectCount(3), NewSubjectCount(25)} {
+		encoded, err := json.Marshal(GetProjectOverviewOutput{ActiveUsers: count})
+		require.NoError(t, err)
+
+		var decoded any
+		require.NoError(t, json.Unmarshal(encoded, &decoded))
+		require.NoError(t, resolved.Validate(decoded), "output %s", encoded)
+	}
 }

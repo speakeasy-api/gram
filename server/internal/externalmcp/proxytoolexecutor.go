@@ -154,9 +154,10 @@ func (e *ProxyToolExecutor) listToolsForEntry(
 	headers := BuildHeaders(systemEnv, userConfig, plan.HeaderDefinitions, tokenForHeaders)
 
 	client, err := NewClient(ctx, e.logger, e.guardianPolicy, plan.RemoteURL, plan.TransportType, &ClientOptions{
-		Authorization:  "",
-		Headers:        headers,
-		DisableRetries: false,
+		Authorization:    "",
+		Headers:          headers,
+		DisableRetries:   false,
+		MaxResponseBytes: 0,
 	})
 	if err != nil {
 		return nil, err

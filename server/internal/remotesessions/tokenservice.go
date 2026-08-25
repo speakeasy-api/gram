@@ -138,24 +138,45 @@ func (m *ChallengeManager) ResolveAccessToken(
 	subject urn.SessionSubject,
 	resource string,
 ) (string, error) {
+	resolved, err := m.resolveUpstreamToken(ctx, clientID, subject, resource)
+	return resolved.Token, err
+}
+
+// resolveUpstreamToken is ResolveAccessToken's implementation. It returns the
+// token together with the grant-time metadata of the row it was resolved
+// from, so callers that need the recorded RFC 8707 resource read it from the
+// same row load as the token instead of re-reading the row (which would cost
+// a round trip and could pair the token with a different row's resource
+// across a disconnect+reconnect). A zero-valued Token means "no usable
+// token", exactly as ResolveAccessToken's empty string does.
+func (m *ChallengeManager) resolveUpstreamToken(
+	ctx context.Context,
+	clientID uuid.UUID,
+	subject urn.SessionSubject,
+	resource string,
+) (UpstreamToken, error) {
+	var zero UpstreamToken
+
 	sess, err := remotesessions_repo.New(m.db).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{
 		SubjectUrn:            subject,
 		RemoteSessionClientID: clientID,
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return "", nil
+		return zero, nil
 	case err != nil:
-		return "", fmt.Errorf("get active remote_session: %w", err)
+		return zero, fmt.Errorf("get active remote_session: %w", err)
 	}
 
-	tok, err := m.validateAndRefresh(ctx, sess, resource)
+	// Rebinds sess to the row the token came from, so a refresh that backfilled
+	// a legacy NULL resource routes on this same request.
+	tok, sess, err := m.validateAndRefresh(ctx, sess, resource)
 	if err != nil {
 		// A known-expired access token with no usable refresh grant is the
 		// ordinary reconnect path. The downstream 401 carries the challenge;
 		// logging every retry here would turn one stale session into noise.
 		if errors.Is(err, ErrNoValidToken) {
-			return "", nil
+			return zero, nil
 		}
 		// validateAndRefresh errors only when a refresh was required (the
 		// stored access token is past its usable window) and could not be
@@ -177,7 +198,7 @@ func (m *ChallengeManager) ResolveAccessToken(
 			attr.SlogOAuthFailureReason(reason),
 			attr.SlogError(err),
 		)
-		return "", nil
+		return zero, nil
 	}
 
 	// Stamped only on the success path: a resolved token is one that is about
@@ -196,7 +217,11 @@ func (m *ChallengeManager) ResolveAccessToken(
 		)
 	}
 
-	return tok, nil
+	return UpstreamToken{
+		Token:                 tok,
+		Resource:              conv.FromPGTextOrEmpty[string](sess.Resource),
+		RemoteSessionClientID: clientID,
+	}, nil
 }
 
 // ResolveAuthorization resolves exactly one remote-session issuer binding for a
@@ -268,11 +293,30 @@ func (m *ChallengeManager) ResolveAuthorization(
 	}, nil
 }
 
+// UpstreamToken is one resolved upstream credential entry, qualified by the
+// identity recorded at grant time so callers can route it to the upstream it
+// was minted for instead of selecting broadly or arbitrarily.
+type UpstreamToken struct {
+	// Token is the plaintext upstream bearer access token. It must remain in
+	// process and must never be persisted or logged.
+	Token string
+
+	// Resource is the RFC 8707 resource indicator recorded on the credential
+	// at code exchange — the upstream the grant was minted for. Empty when
+	// the connect flow carried no resource indicator.
+	Resource string
+
+	// RemoteSessionClientID is the remote_session_client the credential
+	// belongs to.
+	RemoteSessionClientID uuid.UUID
+}
+
 // ResolveAccessTokens is the variant the MCP serving path calls. It
 // resolves one upstream access token per remote_session_issuer the
 // subject has linked under the user_session_issuer, keyed by
 // remote_session_issuer_id, so downstream tool dispatch can forward the
-// right token per upstream.
+// right token per upstream. Each entry carries the RFC 8707 resource
+// recorded at grant time as its qualified upstream identity.
 //
 //   - Issuer has no bound remote_session_clients: returns (nil, nil). The
 //     toolset has no remote-session requirement to satisfy.
@@ -284,18 +328,15 @@ func (m *ChallengeManager) ResolveAuthorization(
 //     "any attached remote session missing or invalid" rule from AIS-136.
 //
 // Current intent (all-or-nothing): resolution fails if ANY attached upstream
-// is missing or invalid, even when the tool the caller is about to invoke
-// only needs a different upstream. This is the safe default — the runtime
-// never dispatches a half-authorized request — and matches AIS-136's wording.
-// The cost is that one expired upstream blocks every tool on the issuer until
-// it is re-linked.
-//
-// Future intent (AIS-152): once dispatch knows which remote_session_issuer a
-// given tool requires, this can soften to challenging only when the upstream a
-// tool actually needs is missing, so an expired Slack link doesn't 401 a
-// Google-only tool call. Changing that behavior here without the per-tool
-// linkage in place would let requests through unauthorized, so it is
-// deliberately deferred to AIS-152.
+// is missing or invalid, even when the request only needs a different one.
+// Toolset dispatch is what still requires this — it has no per-tool
+// remote_session_issuer mapping (AIS-152), so a partial map would silently
+// dispatch a tool with no credential instead of challenging. Proxied backends
+// no longer need it: routeUpstreamToken picks by the backend's own resource.
+// One resolver serves both, so it stays all-or-nothing here; relaxing it for
+// the proxied path is a follow-up, not a behavior change this PR makes.
+// The cost is that one expired upstream blocks every tool on the issuer, and
+// a proxied request to a still-linked upstream, until it is re-linked.
 //
 // A runtime invariant asserts that no two bound clients target the same
 // remote_session_issuer. This is the application-level counterpart to the
@@ -306,8 +347,7 @@ func (m *ChallengeManager) ResolveAccessTokens(
 	organizationID string,
 	userSessionIssuerID uuid.UUID,
 	subject urn.SessionSubject,
-	resource string,
-) (map[uuid.UUID]string, error) {
+) (map[uuid.UUID]UpstreamToken, error) {
 	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID)
 	if err != nil {
 		return nil, fmt.Errorf("list remote_session_clients: %w", err)
@@ -331,16 +371,22 @@ func (m *ChallengeManager) ResolveAccessTokens(
 		seen[c.RemoteSessionIssuerID] = true
 	}
 
-	tokens := make(map[uuid.UUID]string, len(clients))
+	tokens := make(map[uuid.UUID]UpstreamToken, len(clients))
 	for _, c := range clients {
-		tok, err := m.ResolveAccessToken(ctx, c.ClientID, subject, resource)
+		// The grant-time metadata (the recorded RFC 8707 resource) comes from
+		// the same row load that produced the token, so a disconnect+reconnect
+		// between two reads can never pair an old token with a new row's
+		// resource.
+		// No endpoint-level fallback: a refresh of a legacy NULL-resource row
+		// derives the client's own resource in RefreshNow.
+		resolved, err := m.resolveUpstreamToken(ctx, c.ClientID, subject, "")
 		if err != nil {
 			return nil, fmt.Errorf("resolve access token: %w", err)
 		}
-		if tok == "" {
+		if resolved.Token == "" {
 			return nil, ErrNoValidToken
 		}
-		tokens[c.RemoteSessionIssuerID] = tok
+		tokens[c.RemoteSessionIssuerID] = resolved
 	}
 	return tokens, nil
 }
@@ -348,6 +394,12 @@ func (m *ChallengeManager) ResolveAccessTokens(
 // validateAndRefresh returns the upstream access token for sess, refreshing
 // via the upstream /token endpoint when the token is past its usable window
 // and a refresh_token is present.
+//
+// The returned row is the one the token came from — sess when the stored token
+// was served as-is, and the post-refresh row otherwise (the CAS write's
+// RETURNING row, or the concurrent winner's re-read row when this caller lost
+// the race) — so the caller reads grant-time metadata, notably the possibly
+// just-backfilled RFC 8707 resource, from the same row as the token.
 //
 // The usable window depends on what the upstream told us:
 //   - access_expires_at set: the upstream-stated expiry governs.
@@ -360,10 +412,10 @@ func (m *ChallengeManager) validateAndRefresh(
 	ctx context.Context,
 	sess remotesessions_repo.RemoteSession,
 	resource string,
-) (string, error) {
+) (string, remotesessions_repo.RemoteSession, error) {
 	now := time.Now()
 	if sess.AuthorizationExpiresAt.Valid && !sess.AuthorizationExpiresAt.Time.After(now) {
-		return "", ErrNoValidToken
+		return "", sess, ErrNoValidToken
 	}
 
 	hasRefresh := sess.RefreshTokenEncrypted.Valid && sess.RefreshTokenEncrypted.String != ""
@@ -371,22 +423,22 @@ func (m *ChallengeManager) validateAndRefresh(
 	if !sess.AccessExpiresAt.Valid || sess.AccessExpiresAt.Time.After(now) {
 		plain, err := m.enc.Decrypt(sess.AccessTokenEncrypted)
 		if err != nil {
-			return "", fmt.Errorf("decrypt access token: %w", err)
+			return "", sess, fmt.Errorf("decrypt access token: %w", err)
 		}
-		return plain, nil
+		return plain, sess, nil
 	}
 
 	if !hasRefresh {
-		return "", ErrNoValidToken
+		return "", sess, ErrNoValidToken
 	}
 
 	res, err := m.refresher.RefreshNow(ctx, sess, resource)
 	if err != nil {
-		return "", err
+		return "", sess, err
 	}
 	// RefreshOutcomeSessionInactive lands here as an empty token, which the
 	// caller treats the same as "never linked".
-	return res.AccessToken, nil
+	return res.AccessToken, res.Session, nil
 }
 
 // refreshSessionTokens POSTs grant_type=refresh_token to the upstream token
@@ -522,7 +574,6 @@ func refreshSessionTokens(
 	// consumed. A revocation mid-POST drops the row out of scope too.
 	updated, err := q.UpdateRemoteSessionTokensIfUnchanged(ctx, remotesessions_repo.UpdateRemoteSessionTokensIfUnchangedParams{
 		SubjectUrn:             sess.SubjectUrn,
-		UserSessionIssuerID:    sess.UserSessionIssuerID,
 		RemoteSessionClientID:  sess.RemoteSessionClientID,
 		AccessTokenEncrypted:   accessEnc,
 		AccessExpiresAt:        conv.PtrToPGTimestamptz(accessExpires),
@@ -530,6 +581,7 @@ func refreshSessionTokens(
 		AuthorizationExpiresAt: authorizationExpires,
 		RefreshExpiresAt:       refreshExpires,
 		Scopes:                 scopes,
+		BackfillResource:       conv.ToPGTextEmpty(resource), // the query's COALESCE/NULLIF keeps a stored binding and rejects an empty stamp
 		ExpectedUpdatedAt:      sess.UpdatedAt,
 	})
 	if err != nil {

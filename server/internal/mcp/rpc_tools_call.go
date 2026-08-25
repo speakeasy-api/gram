@@ -203,7 +203,9 @@ func handleToolsCall(
 		plan = matchedPlan
 		toolURN = plan.Descriptor.URN
 	} else {
-		// Fall through to materialized tool handling
+		// Fall through to materialized tool handling. Tool variations can
+		// rename two tools onto one name, so the whole slice is scanned:
+		// picking the first match would dispatch an arbitrary one of them.
 		for _, t := range toolset.Tools {
 			if conv.IsProxyTool(t) {
 				continue
@@ -214,8 +216,10 @@ func handleToolsCall(
 				continue
 			}
 			if baseTool.Name == params.Name {
+				if tool != nil {
+					return nil, oops.E(oops.CodeInvalid, nil, "ambiguous tool name: %q matches more than one tool in this toolset", params.Name).LogError(ctx, logger)
+				}
 				tool = t
-				break
 			}
 		}
 

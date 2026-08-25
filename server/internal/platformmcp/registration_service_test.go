@@ -63,6 +63,97 @@ func TestRegistrationServiceRegistersReviewedCandidateWithServerComputedHash(t *
 	require.Equal(t, 1, store.completeCalls)
 }
 
+type testDirectRemoteInspector struct {
+	inspection DirectRemoteInspection
+	err        error
+	calls      int
+	rawURL     string
+}
+
+func (i *testDirectRemoteInspector) Inspect(_ context.Context, rawURL string) (DirectRemoteInspection, error) {
+	i.calls++
+	i.rawURL = rawURL
+	return i.inspection, i.err
+}
+
+func TestRegistrationServiceRegistersDirectRemoteWithFreshInspection(t *testing.T) {
+	t.Parallel()
+
+	project := ResolvedProject{ID: uuid.New(), Name: "Project", Slug: "project"}
+	registrationID := uuid.New()
+	store := &recordingRegistrationStore{
+		project:   project,
+		begin:     OperationReceipt{ID: uuid.New()},
+		converged: OperationReceipt{ID: uuid.New(), RegistrationID: uuid.NullUUID{UUID: registrationID, Valid: true}, Status: receiptStatusPending},
+		completed: OperationReceipt{ID: uuid.New(), RegistrationID: uuid.NullUUID{UUID: registrationID, Valid: true}, Status: receiptStatusSucceeded},
+	}
+	inspector := &testDirectRemoteInspector{inspection: DirectRemoteInspection{CanonicalURL: "https://remote.example.test/mcp", Transport: "streamable-http", Trust: "user_supplied_unreviewed"}}
+	service := newRegistrationService(testCatalog{}, &testRegistrationGate{enabled: true}, store).WithDirectRemoteInspector(inspector)
+
+	result, err := service.RegisterRemoteMCP(t.Context(), registrationServicePrincipal(), RegisterRemoteMCPInput{ProjectSlug: project.Slug, RemoteURL: "https://REMOTE.example.test/mcp", DisplayName: "External MCP", IdempotencyKey: "request-key"})
+
+	require.NoError(t, err)
+	require.Equal(t, "https://REMOTE.example.test/mcp", inspector.rawURL)
+	require.Equal(t, 1, inspector.calls)
+	require.Equal(t, directRemoteSourceKind, store.request.SourceKind)
+	require.Equal(t, directRemoteProviderKey, store.request.CatalogProvider)
+	require.Equal(t, "https://remote.example.test/mcp", store.request.CatalogReference)
+	require.Equal(t, "External MCP", store.configuration.displayName)
+	require.Equal(t, "https://remote.example.test/mcp", store.configuration.remoteURL)
+	require.Equal(t, registrationID.String(), result.Registration)
+}
+
+func TestRegistrationServiceRejectsOversizedDirectRemoteDisplayNameBeforePersistence(t *testing.T) {
+	t.Parallel()
+
+	store := &recordingRegistrationStore{project: ResolvedProject{ID: uuid.New(), Slug: "project"}}
+	inspector := &testDirectRemoteInspector{inspection: DirectRemoteInspection{CanonicalURL: "https://remote.example.test/mcp", Transport: "streamable-http", Trust: "user_supplied_unreviewed"}}
+	service := newRegistrationService(testCatalog{}, &testRegistrationGate{enabled: true}, store).WithDirectRemoteInspector(inspector)
+
+	_, err := service.RegisterRemoteMCP(t.Context(), registrationServicePrincipal(), RegisterRemoteMCPInput{
+		ProjectSlug: "project", RemoteURL: "https://remote.example.test/mcp", DisplayName: string(make([]byte, directRemoteDisplayNameMaxBytes+1)), IdempotencyKey: "request-key",
+	})
+
+	require.ErrorIs(t, err, ErrRegistrationInvalid)
+	require.Equal(t, 1, inspector.calls)
+	require.Zero(t, store.resolveCalls)
+	require.Zero(t, store.beginCalls)
+}
+
+func TestRegistrationServiceRejectsDirectRemoteDisplayNameWithLineBreakingCharactersBeforePersistence(t *testing.T) {
+	t.Parallel()
+
+	store := &recordingRegistrationStore{project: ResolvedProject{ID: uuid.New(), Slug: "project"}}
+	inspector := &testDirectRemoteInspector{inspection: DirectRemoteInspection{CanonicalURL: "https://remote.example.test/mcp", Transport: "streamable-http", Trust: "user_supplied_unreviewed"}}
+	service := newRegistrationService(testCatalog{}, &testRegistrationGate{enabled: true}, store).WithDirectRemoteInspector(inspector)
+
+	for _, displayName := range []string{"External\r\nMCP", "External\x1bMCP", "External\u2028MCP", "External\u2029MCP"} {
+		_, err := service.RegisterRemoteMCP(t.Context(), registrationServicePrincipal(), RegisterRemoteMCPInput{
+			ProjectSlug: "project", RemoteURL: "https://remote.example.test/mcp", DisplayName: displayName, IdempotencyKey: "request-key",
+		})
+
+		require.ErrorIs(t, err, ErrRegistrationInvalid)
+	}
+	require.Equal(t, 4, inspector.calls)
+	require.Zero(t, store.resolveCalls)
+	require.Zero(t, store.beginCalls)
+}
+
+func TestRegistrationServiceRejectsDirectRemoteBeforePersistence(t *testing.T) {
+	t.Parallel()
+
+	store := &recordingRegistrationStore{project: ResolvedProject{ID: uuid.New(), Slug: "project"}}
+	inspector := &testDirectRemoteInspector{err: ErrDirectRemoteRejected}
+	service := newRegistrationService(testCatalog{}, &testRegistrationGate{enabled: true}, store).WithDirectRemoteInspector(inspector)
+
+	_, err := service.RegisterRemoteMCP(t.Context(), registrationServicePrincipal(), RegisterRemoteMCPInput{ProjectSlug: "project", RemoteURL: "https://unsafe.example.test/mcp", IdempotencyKey: "request-key"})
+
+	require.ErrorIs(t, err, ErrDirectRemoteRejected)
+	require.Equal(t, 1, inspector.calls)
+	require.Zero(t, store.resolveCalls)
+	require.Zero(t, store.beginCalls)
+}
+
 func TestRegistrationServiceRejectsSecretConfigurationBeforePersistence(t *testing.T) {
 	t.Parallel()
 
@@ -199,13 +290,13 @@ func TestRegistrationServiceRejectsInvalidSetupHandoffInputs(t *testing.T) {
 		ProjectSlug: "project", RegistrationID: uuid.NewString(), ProviderKey: "unreviewed", CatalogRef: "unreviewed/mcp",
 	})
 	require.ErrorIs(t, err, ErrCatalogRejected)
-	require.Zero(t, store.resolveCalls)
+	require.Equal(t, 1, store.resolveCalls, "the service resolves the project before comparing the persisted registration identity")
 
 	_, err = service.IssueSetupHandoff(t.Context(), registrationServicePrincipal(), IssueSetupHandoffInput{
 		ProjectSlug: "project", RegistrationID: "not-a-uuid", ProviderKey: "provider", CatalogRef: "reviewed/mcp",
 	})
 	require.ErrorIs(t, err, ErrSetupHandoffInvalid)
-	require.Zero(t, store.resolveCalls)
+	require.Equal(t, 1, store.resolveCalls)
 }
 
 func TestRegistrationServiceReturnsPersistedSameOriginDashboardSetupURL(t *testing.T) {
@@ -228,6 +319,28 @@ func TestRegistrationServiceReturnsPersistedSameOriginDashboardSetupURL(t *testi
 
 	setupURL, err := service.DashboardSetupURL(t.Context(), registrationServicePrincipal(), IssueSetupHandoffInput{
 		ProjectSlug: project.Slug, RegistrationID: registrationID.String(), ProviderKey: providerKey, CatalogRef: "reviewed/mcp",
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "https://localhost:5173/organization/projects/project/mcp/x/server%20route/settings#authentication", setupURL)
+	require.Equal(t, 1, store.resolveCalls)
+}
+
+func TestRegistrationServiceReturnsDashboardSetupURLForDirectRemote(t *testing.T) {
+	t.Parallel()
+
+	project := ResolvedProject{ID: uuid.New(), Slug: "project"}
+	registrationID := uuid.New()
+	store := &recordingRegistrationStore{
+		project:   project,
+		candidate: CatalogCandidate{ProviderKey: directRemoteProviderKey, CatalogRef: "https://remote.example.test/mcp"},
+		dashboard: RegistrationDashboardSetup{OrganizationSlug: "organization", MCPServerRoute: "server route"},
+	}
+	service := newRegistrationService(nil, &testRegistrationGate{enabled: true}, store)
+	service.WithDashboardURL(&url.URL{Scheme: "https", Host: "localhost:5173"})
+
+	setupURL, err := service.DashboardSetupURL(t.Context(), registrationServicePrincipal(), IssueSetupHandoffInput{
+		ProjectSlug: project.Slug, RegistrationID: registrationID.String(), ProviderKey: directRemoteProviderKey, CatalogRef: "https://remote.example.test/mcp",
 	})
 
 	require.NoError(t, err)
@@ -429,6 +542,13 @@ func (g *testRegistrationGate) Enabled(_ context.Context, organizationID, projec
 	g.calls++
 	g.organizationID = organizationID
 	g.projectSlug = projectSlug
+	return g.enabled, g.err
+}
+
+func (g *testRegistrationGate) EnabledOrganization(_ context.Context, organizationID string) (bool, error) {
+	g.calls++
+	g.organizationID = organizationID
+	g.projectSlug = ""
 	return g.enabled, g.err
 }
 

@@ -9,6 +9,7 @@ export const FEATURE_FLAGS = {
   externalMcpUserSessions: "onboard-external-mcp-to-user-sessions",
   functions: "gram-functions",
   gatewayEndpoints: "gram-gateway-endpoints",
+  headlessModeSwitcher: "headless-mode-switcher",
   mcpResearch: "gram-mcp-research",
   newCostsPage: "gram-new-costs-page",
   paygSelfServeBilling: "gram-payg-self-serve-billing",

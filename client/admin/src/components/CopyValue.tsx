@@ -1,7 +1,8 @@
 import { CheckIcon, CopyIcon } from "lucide-react";
-import { useEffect, useRef, useState, type JSX } from "react";
+import { useRef, useState, type JSX } from "react";
 
 import { Button } from "@/components/ui/button";
+import { useOnUnmount } from "@/hooks/useOnUnmount";
 import { cn } from "@/lib/utils";
 
 const COPY_CONFIRM_MS = 1500;
@@ -27,7 +28,7 @@ export function CopyValue({
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const copied = copiedValue === value;
 
-  useEffect(() => () => clearTimeout(timer.current), []);
+  useOnUnmount(() => clearTimeout(timer.current));
 
   return (
     <span className="flex items-center gap-1">

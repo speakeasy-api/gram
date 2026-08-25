@@ -40,10 +40,13 @@ import { checkPort } from "get-port-please";
  */
 const SHARED_PORT_ENV_VARS = new Set([
   "PRESIDIO_PORT",
-  // The LGTM stack is shared too, so every worktree must reach Grafana, Tempo,
-  // Loki, Prometheus and the OTLP receivers on the same default host port.
-  // OTEL_EXPORTER_OTLP_ENDPOINT is derived from OTLP_GRPC_PORT and is skipped
-  // along with it, so it keeps its mise.toml default as well.
+  "PUBSUB_EMULATOR_PORT",
+  "TEMPORAL_PORT",
+  "TEMPORAL_WEB_PORT",
+  // Temporal and the LGTM stack are shared, so every worktree must reach them
+  // on the same default host ports. TEMPORAL_ADDRESS and
+  // OTEL_EXPORTER_OTLP_ENDPOINT are derived from skipped ports and therefore
+  // keep their mise.toml defaults too.
   "GRAFANA_PORT",
   "TEMPO_HTTP_PORT",
   "LOKI_HTTP_PORT",

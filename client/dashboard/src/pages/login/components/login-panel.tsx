@@ -1,4 +1,6 @@
 import { buildLoginRedirectURL, cn } from "@/lib/utils";
+import { useRoutes } from "@/routes";
+import { Link } from "react-router";
 import { AUTH_BUTTON_CLASSES, AUTH_PILLARS } from "./auth-constants";
 import { SigninErrorNotice } from "./auth-errors";
 
@@ -7,6 +9,7 @@ export function LoginPanel({
 }: {
   redirectTo: string | null;
 }): JSX.Element {
+  const routes = useRoutes();
   const handleLogin = () => {
     window.location.href = buildLoginRedirectURL(redirectTo);
   };
@@ -44,6 +47,16 @@ export function LoginPanel({
 
       <p className="auth-mono-text text-center text-[11px] leading-relaxed tracking-[0.02em] text-[var(--muted)]">
         Single sign-on through your identity provider.
+      </p>
+
+      <p className="mt-2 text-[14px] text-(--muted-strong)">
+        No account?{" "}
+        <Link
+          to={routes.signUp.href()}
+          className="text-(--link) underline hover:text-(--focus)"
+        >
+          Sign-up for a 14-day trial.
+        </Link>
       </p>
     </>
   );

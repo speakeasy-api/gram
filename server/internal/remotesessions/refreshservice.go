@@ -77,9 +77,9 @@ func NewRefreshService(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Cl
 }
 
 // FallbackResourceForClient derives the RFC 8707 resource for a client from
-// its attached MCP servers — the same derivation the org-admin refresh handler
-// uses. Callers reach for it only when a session predates the persisted
-// resource column (remote_sessions.resource IS NULL).
+// its attached MCP servers. RefreshNow applies it to rows that carry no
+// persisted resource; the consent connect arm applies it to the grant it is
+// about to mint.
 func (s *RefreshService) FallbackResourceForClient(ctx context.Context, clientID uuid.UUID) (string, error) {
 	rows, err := remotesessions_repo.New(s.db).ListOrganizationMcpServersForClient(ctx, clientID)
 	if err != nil {
@@ -118,15 +118,15 @@ func refreshLockKey(subject urn.SessionSubject, clientID uuid.UUID) string {
 // that finished while this caller was still acquiring.
 //
 // The refresh_token grant replays the session's persisted RFC 8707 resource
-// binding when one was captured at code exchange; fallbackResource covers rows
-// minted before the resource column existed (callers derive it from the
-// client's attached MCP servers, or pass "").
+// binding when one was captured at code exchange. Rows minted before the
+// resource column existed fall back to callerResource, and then to the
+// client's own derivation — one derivation rule for every refresh path.
 //
 // A non-nil error is either an operator-actionable *TokenRefreshError or an
 // internal infrastructure failure. A definitive invalid_grant clears only the
 // refresh grant: the existing access token remains usable until its own known
 // expiry. This keeps proactive refresh failure from forcing a reconnect.
-func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_repo.RemoteSession, fallbackResource string) (RefreshResult, error) {
+func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_repo.RemoteSession, callerResource string) (RefreshResult, error) {
 	var zero RefreshResult
 	q := remotesessions_repo.New(s.db)
 
@@ -217,11 +217,30 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 	// request-derived value can drift from it (e.g. after MCP server moves).
 	resource := conv.FromPGTextOrEmpty[string](sess.Resource)
 	if resource == "" {
-		resource = fallbackResource
+		resource = callerResource
+	}
+	if resource == "" {
+		// Legacy row minted before the resource column, with no caller value:
+		// derive the client's own so it is never replayed against another
+		// upstream's audience.
+		var err error
+		resource, err = s.FallbackResourceForClient(ctx, sess.RemoteSessionClientID)
+		if err != nil {
+			return zero, fmt.Errorf("derive fallback resource: %w", err)
+		}
 	}
 
 	updated, accessToken, refreshErr := refreshSessionTokens(ctx, q, s.enc, s.policy, sess, resource)
 	if refreshErr == nil {
+		// The stamp is permanent, so record which rows the backfill wrote and
+		// what it wrote — the only way to find them again if a value is wrong.
+		if !sess.Resource.Valid && updated.Resource.Valid {
+			s.logger.InfoContext(ctx, "backfilled the remote session resource binding during refresh",
+				attr.SlogRemoteSessionClientID(sess.RemoteSessionClientID.String()),
+				attr.SlogUserSessionIssuerID(sess.UserSessionIssuerID.String()),
+				attr.SlogOAuthResource(updated.Resource.String),
+			)
+		}
 		return RefreshResult{Session: updated, AccessToken: accessToken, Outcome: RefreshOutcomeRefreshed}, nil
 	}
 
@@ -230,7 +249,6 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 		_, err := q.ClearRemoteSessionRefreshTokenAfterInvalidGrant(ctx, remotesessions_repo.ClearRemoteSessionRefreshTokenAfterInvalidGrantParams{
 			ID:                    sess.ID,
 			SubjectUrn:            sess.SubjectUrn,
-			UserSessionIssuerID:   sess.UserSessionIssuerID,
 			RemoteSessionClientID: sess.RemoteSessionClientID,
 			ExpectedUpdatedAt:     sess.UpdatedAt,
 		})

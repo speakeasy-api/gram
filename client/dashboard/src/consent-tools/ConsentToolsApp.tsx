@@ -1,4 +1,5 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { CfWorkerJsonSchemaValidator } from "@modelcontextprotocol/sdk/validation/cfworker";
 import {
   StreamableHTTPClientTransport,
   StreamableHTTPError,
@@ -82,7 +83,14 @@ async function fetchConsentInventory(
       },
     },
   );
-  const client = new Client({ name: "gram-consent", version: "1.0.0" });
+  // The consent page CSP has no unsafe-eval, so the SDK's default Ajv
+  // validator (new Function codegen) throws on any upstream tool that
+  // declares an outputSchema. The cfworker validator interprets schemas
+  // instead of compiling them.
+  const client = new Client(
+    { name: "gram-consent", version: "1.0.0" },
+    { jsonSchemaValidator: new CfWorkerJsonSchemaValidator() },
+  );
   try {
     await client.connect(transport);
     const tools: ConsentTool[] = [];

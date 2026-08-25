@@ -444,12 +444,12 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 				ActorEmail:     userInfo.Email,
 			})
 			if err != nil {
-				return s.redirectSignupError(ctx, err)
+				return s.redirectSignupError(ctx, payload, err)
 			}
 
 			session.ActiveOrganizationID = org.ID
 			if err := s.sessions.StoreSession(ctx, session); err != nil {
-				return s.redirectSignupError(ctx, err)
+				return s.redirectSignupError(ctx, payload, err)
 			}
 
 			if err := s.trialNotifier.TrialStarted(ctx, org.ID); err != nil {
@@ -851,8 +851,9 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error loading existing session").LogError(ctx, s.logger)
 	}
-	existingSession.ActiveOrganizationID = authCtx.ActiveOrganizationID
-	if err := s.sessions.UpdateSession(ctx, existingSession); err != nil {
+	updatedSession := existingSession
+	updatedSession.ActiveOrganizationID = authCtx.ActiveOrganizationID
+	if err := s.sessions.UpdateSession(ctx, existingSession, updatedSession); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error updating auth session").LogError(ctx, s.logger)
 	}
 
@@ -886,13 +887,14 @@ func (s *Service) EnterDemo(ctx context.Context, payload *gen.EnterDemoPayload) 
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error loading existing session").LogError(ctx, s.logger)
 	}
-	existingSession.ActiveOrganizationID = constants.DemoOrganizationID
+	updatedSession := existingSession
+	updatedSession.ActiveOrganizationID = constants.DemoOrganizationID
 	// Entering the shared demo ends support access. Otherwise the support
 	// target would no longer match the active organization and the next
 	// authenticated request would reject the session.
-	existingSession.SupportOrganizationID = ""
-	existingSession.SupportExpiresAt = time.Time{}
-	if err := s.sessions.UpdateSession(ctx, existingSession); err != nil {
+	updatedSession.SupportOrganizationID = ""
+	updatedSession.SupportExpiresAt = time.Time{}
+	if err := s.sessions.UpdateSession(ctx, existingSession, updatedSession); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error updating auth session").LogError(ctx, s.logger)
 	}
 
@@ -1188,8 +1190,9 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error loading existing session").LogError(ctx, s.logger)
 	}
-	existingSession.ActiveOrganizationID = org.ID
-	if err := s.sessions.UpdateSession(ctx, existingSession); err != nil {
+	updatedSession := existingSession
+	updatedSession.ActiveOrganizationID = org.ID
+	if err := s.sessions.UpdateSession(ctx, existingSession, updatedSession); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error storing session").LogError(ctx, s.logger)
 	}
 
@@ -1325,12 +1328,19 @@ func (s *Service) persistProvisionedOrganization(
 // the blanket zero-org redirect in the dashboard's app layout and lands on
 // /register — making that split persist would mean storing the flow origin on
 // the session, which is not worth it for this path.
-func (s *Service) redirectSignupError(ctx context.Context, err error) (*gen.CallbackResult, error) {
+func (s *Service) redirectSignupError(ctx context.Context, payload *gen.CallbackPayload, err error) (*gen.CallbackResult, error) {
 	s.logger.ErrorContext(ctx, "signup provisioning failed", attr.SlogError(err), attr.SlogReason(string(authErrInit)))
 
 	base := strings.TrimRight(s.cfg.SignInRedirectURL, "/")
+	location := fmt.Sprintf("%s/sign-up?signin_error=%s", base, authErrInit)
+	// Keep the destination on the retry: /sign-up threads ?redirect= back
+	// through the next login attempt, so a signup that arrived with one (e.g.
+	// a marketing CTA deep link) still lands there once provisioning succeeds.
+	if dest := s.destinationFromState(payload); dest != "" {
+		location += "&redirect=" + url.QueryEscape(dest)
+	}
 	return &gen.CallbackResult{
-		Location:      fmt.Sprintf("%s/sign-up?signin_error=%s", base, authErrInit),
+		Location:      location,
 		SessionToken:  "",
 		SessionCookie: "",
 	}, nil
@@ -1375,11 +1385,7 @@ func (s *Service) captureSignupTelemetry(ctx context.Context, email, orgName str
 }
 
 func (s *Service) dispositionFromState(payload *gen.CallbackPayload) string {
-	state := decodeStateParam(payload)
-	if state == nil {
-		return ""
-	}
-	parsed, err := url.Parse(safeRedirectPath(state.FinalDestinationURL, s.siteOrigin))
+	parsed, err := url.Parse(s.destinationFromState(payload))
 	if err != nil {
 		return ""
 	}
@@ -1585,11 +1591,7 @@ func (s *Service) callbackRedirectURL(
 	ctx context.Context,
 	payload *gen.CallbackPayload,
 ) string {
-	var location string
-
-	if state := decodeStateParam(payload); state != nil {
-		location = safeRedirectPath(state.FinalDestinationURL, s.siteOrigin)
-	}
+	location := s.destinationFromState(payload)
 
 	if location != "" {
 		msg := fmt.Sprintf("Found destination URL in state: '%s'", location)
@@ -1599,4 +1601,14 @@ func (s *Service) callbackRedirectURL(
 	}
 
 	return s.cfg.SignInRedirectURL
+}
+
+// destinationFromState extracts the sanitized post-login destination carried
+// through the IDP round trip, or "" when the state holds none worth honoring.
+func (s *Service) destinationFromState(payload *gen.CallbackPayload) string {
+	state := decodeStateParam(payload)
+	if state == nil {
+		return ""
+	}
+	return safeRedirectPath(state.FinalDestinationURL, s.siteOrigin)
 }

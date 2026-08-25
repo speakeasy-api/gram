@@ -28,6 +28,7 @@ import (
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/clientauth"
 )
 
 // ResolvedMcpEndpoint carries everything the issuer-gated OAuth handlers
@@ -142,6 +143,29 @@ func (e *ResolvedMcpEndpoint) AuthorizationServerURLs(baseURL string) (Authoriza
 		*p.target = u
 	}
 	return urls, nil
+}
+
+// clientAssertionAudiences is the pair of aud values a client assertion may
+// name when authenticating at the given endpoint: the issuer identifier, or
+// that endpoint's own URL.
+//
+// Derived from the same values the RFC 8414 document advertises, so what a
+// client can read from metadata and what an assertion may name are one
+// value. Only the addressed endpoint's URL is accepted, so an assertion
+// minted for the revocation endpoint does not authenticate a token request or
+// the reverse.
+func (u AuthorizationServerURLs) clientAssertionAudiences(at clientAssertionEndpoint) clientauth.Audiences {
+	endpoint := ""
+	switch at {
+	case clientAssertionAtToken:
+		endpoint = u.Token
+	case clientAssertionAtRevoke:
+		endpoint = u.Revoke
+	}
+	return clientauth.Audiences{
+		Issuer:   u.Issuer,
+		Endpoint: endpoint,
+	}
 }
 
 // ConsentURL is the URL the user agent is redirected to after the

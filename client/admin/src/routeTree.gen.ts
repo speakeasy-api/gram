@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as OrganizationsRouteImport } from './routes/organizations'
 import { Route as ProjectsRouteImport } from './routes/projects'
+import { Route as StokenCalculatorRouteImport } from './routes/stoken-calculator'
 import { Route as OrganizationsIndexRouteImport } from './routes/organizations.index'
 import { Route as OrganizationsIdOrSlugRouteImport } from './routes/organizations.$idOrSlug'
 import { Route as ProjectsIndexRouteImport } from './routes/projects.index'
@@ -36,6 +37,11 @@ const OrganizationsRoute = OrganizationsRouteImport.update({
 const ProjectsRoute = ProjectsRouteImport.update({
   id: '/projects',
   path: '/projects',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StokenCalculatorRoute = StokenCalculatorRouteImport.update({
+  id: '/stoken-calculator',
+  path: '/stoken-calculator',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OrganizationsIndexRoute = OrganizationsIndexRouteImport.update({
@@ -99,6 +105,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/organizations': typeof OrganizationsRouteWithChildren
   '/projects': typeof ProjectsRouteWithChildren
+  '/stoken-calculator': typeof StokenCalculatorRoute
   '/organizations/$idOrSlug': typeof OrganizationsIdOrSlugRouteWithChildren
   '/projects/$idOrSlug': typeof ProjectsIdOrSlugRoute
   '/organizations/': typeof OrganizationsIndexRoute
@@ -112,6 +119,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/stoken-calculator': typeof StokenCalculatorRoute
   '/projects/$idOrSlug': typeof ProjectsIdOrSlugRoute
   '/organizations': typeof OrganizationsIndexRoute
   '/projects': typeof ProjectsIndexRoute
@@ -127,6 +135,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/organizations': typeof OrganizationsRouteWithChildren
   '/projects': typeof ProjectsRouteWithChildren
+  '/stoken-calculator': typeof StokenCalculatorRoute
   '/organizations/$idOrSlug': typeof OrganizationsIdOrSlugRouteWithChildren
   '/projects/$idOrSlug': typeof ProjectsIdOrSlugRoute
   '/organizations/': typeof OrganizationsIndexRoute
@@ -144,6 +153,7 @@ export interface FileRouteTypes {
     | '/'
     | '/organizations'
     | '/projects'
+    | '/stoken-calculator'
     | '/organizations/$idOrSlug'
     | '/projects/$idOrSlug'
     | '/organizations/'
@@ -157,6 +167,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/stoken-calculator'
     | '/projects/$idOrSlug'
     | '/organizations'
     | '/projects'
@@ -171,6 +182,7 @@ export interface FileRouteTypes {
     | '/'
     | '/organizations'
     | '/projects'
+    | '/stoken-calculator'
     | '/organizations/$idOrSlug'
     | '/projects/$idOrSlug'
     | '/organizations/'
@@ -187,6 +199,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   OrganizationsRoute: typeof OrganizationsRouteWithChildren
   ProjectsRoute: typeof ProjectsRouteWithChildren
+  StokenCalculatorRoute: typeof StokenCalculatorRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -210,6 +223,13 @@ declare module '@tanstack/react-router' {
       path: '/projects'
       fullPath: '/projects'
       preLoaderRoute: typeof ProjectsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/stoken-calculator': {
+      id: '/stoken-calculator'
+      path: '/stoken-calculator'
+      fullPath: '/stoken-calculator'
+      preLoaderRoute: typeof StokenCalculatorRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/organizations/': {
@@ -342,6 +362,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   OrganizationsRoute: OrganizationsRouteWithChildren,
   ProjectsRoute: ProjectsRouteWithChildren,
+  StokenCalculatorRoute: StokenCalculatorRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

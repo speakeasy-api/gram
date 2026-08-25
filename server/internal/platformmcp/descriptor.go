@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 
 	"github.com/google/jsonschema-go/jsonschema"
@@ -218,6 +219,11 @@ func addResource(r *Registrar, resource *mcp.Resource, meta ResourceMeta, read f
 // that reads as a restriction while restricting nothing.
 func addTool[In, Out any](r *Registrar, tool *mcp.Tool, meta ToolMeta, handler mcp.ToolHandlerFor[In, Out]) {
 	if meta.servesAudience(AudienceExternal) {
+		// Declared here rather than left to the SDK: the SDK infers the output
+		// schema from the Go type alone and cannot see a custom MarshalJSON.
+		if tool.OutputSchema == nil {
+			tool.OutputSchema = inferOutputSchema[Out](tool.Name)
+		}
 		mcp.AddTool(r.server, tool, handler)
 	}
 
@@ -293,6 +299,37 @@ func resolveInputSchema[In any](name string) *jsonschema.Resolved {
 		panic(fmt.Sprintf("platformmcp: resolve input schema for %q: %v", name, err))
 	}
 	return resolved
+}
+
+// wireTypeSchemas overrides schema inference for types whose JSON form does not
+// match their Go shape. Inference reflects on the Go type and cannot see a
+// custom MarshalJSON, so a type that serializes as something other than its
+// struct has to say so here.
+var wireTypeSchemas = map[reflect.Type]*jsonschema.Schema{
+	reflect.TypeFor[SubjectCount](): subjectCountSchema,
+}
+
+// inferOutputSchema derives the schema the tool advertises for its result,
+// honouring wireTypeSchemas. A tool with an untyped result gets no schema at
+// all, which is what the SDK would have done for it.
+func inferOutputSchema[Out any](name string) *jsonschema.Schema {
+	target := reflect.TypeFor[Out]()
+	if target == reflect.TypeFor[any]() {
+		return nil
+	}
+	// Pointer results describe the pointed-to value, matching how the SDK
+	// derives the schema it would otherwise have inferred.
+	if target.Kind() == reflect.Pointer {
+		target = target.Elem()
+	}
+	schema, err := jsonschema.ForType(target, &jsonschema.ForOptions{
+		IgnoreInvalidTypes: false,
+		TypeSchemas:        wireTypeSchemas,
+	})
+	if err != nil {
+		panic(fmt.Sprintf("platformmcp: infer output schema for %q: %v", name, err))
+	}
+	return schema
 }
 
 // validateAgainstSchema applies the tool's declared contract to a direct call.

@@ -62,17 +62,23 @@ type oauthProtectedResourceMetadata struct {
 // the legacy package's wellknown.OAuthServerMetadata for the same reason as
 // above.
 type oauthAuthorizationServerMetadata struct {
-	Issuer                               string   `json:"issuer"`
-	AuthorizationEndpoint                string   `json:"authorization_endpoint"`
-	TokenEndpoint                        string   `json:"token_endpoint"`
-	RegistrationEndpoint                 string   `json:"registration_endpoint"`
-	RevocationEndpoint                   string   `json:"revocation_endpoint"`
-	ScopesSupported                      []string `json:"scopes_supported,omitempty"`
-	ResponseTypesSupported               []string `json:"response_types_supported"`
-	GrantTypesSupported                  []string `json:"grant_types_supported"`
-	TokenEndpointAuthMethodsSupported    []string `json:"token_endpoint_auth_methods_supported"`
-	CodeChallengeMethodsSupported        []string `json:"code_challenge_methods_supported"`
-	RefreshTokenExpirationTypesSupported []string `json:"refresh_token_expiration_types_supported"`
+	Issuer                            string   `json:"issuer"`
+	AuthorizationEndpoint             string   `json:"authorization_endpoint"`
+	TokenEndpoint                     string   `json:"token_endpoint"`
+	RegistrationEndpoint              string   `json:"registration_endpoint"`
+	RevocationEndpoint                string   `json:"revocation_endpoint"`
+	ScopesSupported                   []string `json:"scopes_supported,omitempty"`
+	ResponseTypesSupported            []string `json:"response_types_supported"`
+	GrantTypesSupported               []string `json:"grant_types_supported"`
+	TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported"`
+	// TokenEndpointAuthSigningAlgValuesSupported is RFC 8414 §2's list of the
+	// JWS algorithms accepted on a private_key_jwt client assertion. It is the
+	// one part of assertion negotiation a client can discover: which of the
+	// two audience forms the server prefers has no metadata field, but the
+	// algorithm does.
+	TokenEndpointAuthSigningAlgValuesSupported []string `json:"token_endpoint_auth_signing_alg_values_supported"`
+	CodeChallengeMethodsSupported              []string `json:"code_challenge_methods_supported"`
+	RefreshTokenExpirationTypesSupported       []string `json:"refresh_token_expiration_types_supported"`
 
 	// AuthorizationResponseIssParameterSupported advertises RFC 9207 §3. Always
 	// true: every authorization response on this surface carries `iss`
@@ -462,12 +468,13 @@ func (s *Service) ServeGetAuthorizationServer(w http.ResponseWriter, r *http.Req
 		RefreshTokenExpirationTypesSupported: []string{
 			"authorization",
 		},
-		RegistrationEndpoint:              urls.Register,
-		ResponseTypesSupported:            usersessions.SupportedResponseTypes,
-		RevocationEndpoint:                urls.Revoke,
-		ScopesSupported:                   nil,
-		TokenEndpoint:                     urls.Token,
-		TokenEndpointAuthMethodsSupported: usersessions.SupportedAuthMethods,
+		RegistrationEndpoint:                       urls.Register,
+		ResponseTypesSupported:                     usersessions.SupportedResponseTypes,
+		RevocationEndpoint:                         urls.Revoke,
+		ScopesSupported:                            nil,
+		TokenEndpoint:                              urls.Token,
+		TokenEndpointAuthMethodsSupported:          usersessions.SupportedAuthMethods,
+		TokenEndpointAuthSigningAlgValuesSupported: clientAssertionSigningAlgorithms(),
 	})
 }
 

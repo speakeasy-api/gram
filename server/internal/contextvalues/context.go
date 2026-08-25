@@ -77,17 +77,18 @@ type RPCContext struct {
 }
 
 const (
-	SessionTokenContextKey      contextKey = "sessionTokenKey"
-	SessionValueContextKey      contextKey = "sessionValueKey"
-	RequestContextKey           contextKey = "requestContextKey"
-	RBACScopeOverrideContextKey contextKey = "rbacScopeOverrideKey"
-	AssistantPrincipalKey       contextKey = "assistantPrincipalKey"
-	AdminSessionTokenContextKey contextKey = "adminSessionTokenKey"
-	AdminAuthContextKey         contextKey = "adminAuthKey"
-	RPCContextKey               contextKey = "rpcContextKey"
-	pubsubSubscriberContextKey  contextKey = "pubsubSubscriberKey"
-	oauthClientIDContextKey     contextKey = "oauthClientIDKey"
-	actingSurfaceContextKey     contextKey = "actingSurfaceKey"
+	SessionTokenContextKey         contextKey = "sessionTokenKey"
+	sessionCookieRefreshContextKey contextKey = "sessionCookieRefreshKey"
+	SessionValueContextKey         contextKey = "sessionValueKey"
+	RequestContextKey              contextKey = "requestContextKey"
+	RBACScopeOverrideContextKey    contextKey = "rbacScopeOverrideKey"
+	AssistantPrincipalKey          contextKey = "assistantPrincipalKey"
+	AdminSessionTokenContextKey    contextKey = "adminSessionTokenKey"
+	AdminAuthContextKey            contextKey = "adminAuthKey"
+	RPCContextKey                  contextKey = "rpcContextKey"
+	pubsubSubscriberContextKey     contextKey = "pubsubSubscriberKey"
+	oauthClientIDContextKey        contextKey = "oauthClientIDKey"
+	actingSurfaceContextKey        contextKey = "actingSurfaceKey"
 )
 
 func SetSessionTokenInContext(ctx context.Context, value string) context.Context {
@@ -97,6 +98,16 @@ func SetSessionTokenInContext(ctx context.Context, value string) context.Context
 func GetSessionTokenFromContext(ctx context.Context) (string, bool) {
 	value, ok := ctx.Value(SessionTokenContextKey).(string)
 	return value, ok
+}
+
+func WithSessionCookieRefresh(ctx context.Context, refresh func(sessionID string)) context.Context {
+	return context.WithValue(ctx, sessionCookieRefreshContextKey, refresh)
+}
+
+func RefreshSessionCookie(ctx context.Context, sessionID string) {
+	if refresh, ok := ctx.Value(sessionCookieRefreshContextKey).(func(string)); ok && refresh != nil {
+		refresh(sessionID)
+	}
 }
 
 func SetAuthContext(ctx context.Context, value *AuthContext) context.Context {

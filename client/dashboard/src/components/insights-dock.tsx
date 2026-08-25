@@ -1041,7 +1041,6 @@ export function InsightsProvider({
   // useHideInsightsDock layout effect can register with this parent.
   const pageOwnsRuntime =
     routes.playground.active ||
-    routes.elements.active ||
     routes.assistants.newAssistant.active ||
     routes.assistants.detail.active;
   const runtimeMounted = assistantReady && !pageOwnsRuntime;

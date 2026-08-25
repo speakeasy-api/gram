@@ -36,6 +36,7 @@ import (
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
 // metaGateContext carries the per-request state the gateway tools need:
@@ -44,7 +45,7 @@ import (
 // serveResolvedMetaMCPEndpoint and threaded through dispatch.
 type metaGateContext struct {
 	projectID       uuid.UUID
-	tokens          map[uuid.UUID]string
+	tokens          map[uuid.UUID]remotesessions.UpstreamToken
 	toolSelection   *toolfilter.SessionSelection
 	authenticated   bool
 	sessionID       string
@@ -79,7 +80,7 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	// is stamped before the issuer gate and body parsing can bail out.
 	w.Header().Set(mcpversions.HTTPHeader, mcpversions.ServedMetaServer)
 
-	var gateTokens map[uuid.UUID]string
+	var gateTokens map[uuid.UUID]remotesessions.UpstreamToken
 	var gateToolSelection *toolfilter.SessionSelection
 	if metaServer.UserSessionIssuerID.Valid {
 		resolvedEndpoint, err := s.BuildResolvedMcpEndpointForMetaServer(ctx, logger, mcpEndpoint, metaServer, "mcp")

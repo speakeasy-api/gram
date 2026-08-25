@@ -8,6 +8,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { GramAdminError } from "@/lib/gramAdminApi";
 import { routeTree } from "@/routeTree.gen";
 import { anOrganization } from "@/test/fixtures";
 import { renderRouteTree } from "@/test/harness";
@@ -141,6 +142,20 @@ async function renderBilling(): Promise<QueryClient> {
 }
 
 describe("Billing", () => {
+  it("shows an empty state when the organization has no subscription", async () => {
+    mocks.getStripeSubscription.mockRejectedValue(
+      new GramAdminError(404, null, "gram admin 404"),
+    );
+
+    await renderBilling();
+
+    expect(
+      await screen.findByText("This organization has no Stripe subscription."),
+    ).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(mocks.getPaygBillingSummary).not.toHaveBeenCalled();
+  });
+
   it("renders exact current-cycle usage and payment state", async () => {
     await renderBilling();
 
@@ -233,6 +248,23 @@ describe("Billing", () => {
   });
 
   it("updates one materialized key with the canonical organization id and refreshes the keys", async () => {
+    mocks.getInferenceKeys
+      .mockResolvedValueOnce([
+        {
+          key_type: "chat",
+          credits_used: 42.75,
+          monthly_credits: 100,
+          disabled: false,
+        },
+      ])
+      .mockResolvedValue([
+        {
+          key_type: "chat",
+          credits_used: 42.75,
+          monthly_credits: 750,
+          disabled: false,
+        },
+      ]);
     await renderBilling();
     const input = await screen.findByRole("spinbutton", {
       name: "chat monthly limit in USD",
@@ -247,6 +279,12 @@ describe("Billing", () => {
         monthlyCredits: 750,
       });
       expect(mocks.getInferenceKeys).toHaveBeenCalledTimes(2);
+      expect(
+        screen.getByRole("spinbutton", {
+          name: "chat monthly limit in USD",
+        }),
+      ).toBe(input);
+      expect((input as HTMLInputElement).value).toBe("750");
     });
   });
 
