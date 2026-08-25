@@ -9,6 +9,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/client"
 	temporalmocks "go.temporal.io/sdk/mocks"
 	"go.temporal.io/sdk/workflow"
@@ -96,18 +98,27 @@ func TestWaitForCurrentCustomDomainReconcileRun(t *testing.T) {
 	})
 }
 
-func TestExecuteCustomDomainRegistrationUsesRegistrationBudget(t *testing.T) {
+func TestExecuteCustomDomainRegistrationSignalsWithStart(t *testing.T) {
 	t.Parallel()
 
+	customDomainID := uuid.New()
 	temporalClient := &temporalmocks.Client{}
 	temporalClient.On(
-		"ExecuteWorkflow",
+		"SignalWithStartWorkflow",
 		mock.Anything,
+		"v2:custom-domain-registration:"+customDomainID.String(),
+		CustomDomainReverifySignalName,
+		nil,
 		mock.MatchedBy(func(options client.StartWorkflowOptions) bool {
-			return options.WorkflowRunTimeout == customDomainRegistrationWorkflowRunTimeout
+			// A reverify while the long DNS-propagation wait is running must
+			// wake the existing workflow rather than error on the stable ID.
+			return options.WorkflowRunTimeout == customDomainRegistrationWorkflowRunTimeout &&
+				options.WorkflowIDConflictPolicy == enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
 		}),
 		mock.Anything,
-		mock.Anything,
+		mock.MatchedBy(func(params CustomDomainRegistrationParams) bool {
+			return params.CustomDomainID == customDomainID
+		}),
 	).Return(nil, nil).Once()
 
 	_, err := (&CustomDomainRegistrationClient{
@@ -116,11 +127,42 @@ func TestExecuteCustomDomainRegistrationUsesRegistrationBudget(t *testing.T) {
 		t.Context(),
 		"test-organization",
 		"test.example.com",
+		customDomainID,
 		urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"),
 		nil,
 		k8s.ProvisionerKindIngress,
 		nil,
 	)
+	require.NoError(t, err)
+	temporalClient.AssertExpectations(t)
+}
+
+func TestTerminateCustomDomainRegistrationIgnoresNotFound(t *testing.T) {
+	t.Parallel()
+
+	customDomainID := uuid.New()
+	temporalClient := &temporalmocks.Client{}
+	// Termination is row-scoped first, so a late terminate after delete can
+	// never target a successor row's workflow; the legacy hostname-scoped run
+	// is stopped alongside for the pre-v2 transition window.
+	temporalClient.On(
+		"TerminateWorkflow",
+		mock.Anything,
+		"v2:custom-domain-registration:"+customDomainID.String(),
+		"",
+		"custom domain deleted",
+	).Return(serviceerror.NewNotFound("no workflow")).Once()
+	temporalClient.On(
+		"TerminateWorkflow",
+		mock.Anything,
+		"v1:custom-domain-registration:test-organization:test.example.com",
+		"",
+		"custom domain deleted",
+	).Return(serviceerror.NewNotFound("no workflow")).Once()
+
+	err := (&CustomDomainRegistrationClient{
+		TemporalEnv: tenv.NewEnvironment(temporalClient, "test", "test"),
+	}).TerminateCustomDomainRegistration(t.Context(), "test-organization", "test.example.com", customDomainID, "custom domain deleted")
 	require.NoError(t, err)
 	temporalClient.AssertExpectations(t)
 }

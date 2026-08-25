@@ -2,6 +2,7 @@ package customdomains
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/k8s"
@@ -44,19 +45,54 @@ type HealthObservation struct {
 	CertificateExpiresAt *time.Time
 }
 
+// DNSRemediation carries what a customer needs to fix DNS-shaped health
+// issues: the CNAME target for subdomains, the static ingress IPs for apex
+// domains (which cannot carry a CNAME), and the domain itself so the record
+// type can be suggested. Apex detection is a heuristic, so the copy offers the
+// suggested record first without asserting the other is wrong.
+type DNSRemediation struct {
+	Domain           string
+	ExpectedCNAME    string
+	ExpectedARecords []string
+}
+
+// expectedRecordDescription names the DNS record the customer should create.
+// Empty when nothing is configured to point at.
+func (r DNSRemediation) expectedRecordDescription() string {
+	cname := strings.TrimSuffix(r.ExpectedCNAME, ".")
+	aRecords := strings.Join(r.ExpectedARecords, ", ")
+	aNoun := "an A record"
+	if len(r.ExpectedARecords) > 1 {
+		aNoun = "A records"
+	}
+	apex := len(r.ExpectedARecords) > 0 && IsProbablyApexDomain(r.Domain)
+	switch {
+	case apex:
+		return fmt.Sprintf("%s pointing the domain at %s", aNoun, aRecords)
+	case cname != "" && len(r.ExpectedARecords) > 0:
+		return fmt.Sprintf("a CNAME record pointing the domain at %s (or, for an apex domain, %s pointing at %s)", cname, aNoun, aRecords)
+	case cname != "":
+		return fmt.Sprintf("a CNAME record pointing the domain at %s", cname)
+	case len(r.ExpectedARecords) > 0:
+		return fmt.Sprintf("%s pointing the domain at %s", aNoun, aRecords)
+	default:
+		return ""
+	}
+}
+
 // HealthIssueMessage renders the customer-facing description of a health
-// issue. expectedCNAME is the CNAME target customers must point their domain
-// at; product messaging names the exact record instead of the platform.
-func HealthIssueMessage(issue HealthIssue, expectedCNAME string) string {
+// issue; product messaging names the exact record instead of the platform.
+func HealthIssueMessage(issue HealthIssue, remediation DNSRemediation) string {
+	record := remediation.expectedRecordDescription()
 	switch issue {
 	case HealthIssueDNSNotFound:
-		if expectedCNAME != "" {
-			return fmt.Sprintf("DNS records for the domain could not be found. Create a CNAME record pointing the domain at %s.", expectedCNAME)
+		if record != "" {
+			return fmt.Sprintf("DNS records for the domain could not be found. Create %s.", record)
 		}
 		return "DNS records for the domain could not be found."
 	case HealthIssueDNSTargetMismatch:
-		if expectedCNAME != "" {
-			return fmt.Sprintf("The domain's DNS no longer resolves to the expected target. Point the domain's CNAME record at %s.", expectedCNAME)
+		if record != "" {
+			return fmt.Sprintf("The domain's DNS no longer resolves to the expected target. Create %s.", record)
 		}
 		return "The domain's DNS no longer resolves to the expected target."
 	case HealthIssueResourceMissing:

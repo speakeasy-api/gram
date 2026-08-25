@@ -428,3 +428,185 @@ func requireOopsCode(t *testing.T, err error, code oops.Code) {
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, code, oopsErr.Code)
 }
+
+func TestSetRootMcpEndpoint_ByServerCreatesEndpointAndSetsRoot(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestCustomDomainsService(t)
+	authCtx := testAuthContext(t, ctx)
+	domain, err := ti.repo.CreateCustomDomain(ctx, cdrepo.CreateCustomDomainParams{
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		Domain:          "root-by-server.example.com",
+		ProvisionerKind: "ingress",
+		IpAllowlist:     []string{},
+	})
+	require.NoError(t, err)
+	serverID := seedNamedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, "docs-server", "public")
+
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	})
+
+	// Configure-time selection: the domain is pending (unverified) and the
+	// server has no endpoint on it yet.
+	result, err := ti.service.SetRootMcpEndpoint(ctx, &gen.SetRootMcpEndpointPayload{
+		CustomDomainID: domain.ID.String(),
+		McpServerID:    new(serverID.String()),
+	})
+	require.NoError(t, err)
+	endpointID := requireValue(t, result.RootMcpEndpointID)
+
+	endpoint, err := ti.repo.GetMcpEndpointByCustomDomainAndServer(ctx, cdrepo.GetMcpEndpointByCustomDomainAndServerParams{
+		CustomDomainID: domain.ID,
+		McpServerID:    serverID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, endpointID, endpoint.ID.String())
+	require.Equal(t, "docs-server", endpoint.Slug)
+	require.True(t, endpoint.IsDomainRoot.Valid && endpoint.IsDomainRoot.Bool)
+
+	// Staging root config must not verify or activate the pending domain.
+	row, err := ti.repo.GetCustomDomainByDomain(ctx, "root-by-server.example.com")
+	require.NoError(t, err)
+	require.False(t, row.Verified)
+	require.False(t, row.Activated)
+
+	// Re-selecting the same server reuses its endpoint instead of duplicating.
+	result, err = ti.service.SetRootMcpEndpoint(ctx, &gen.SetRootMcpEndpointPayload{
+		CustomDomainID: domain.ID.String(),
+		McpServerID:    new(serverID.String()),
+	})
+	require.NoError(t, err)
+	require.Equal(t, endpointID, requireValue(t, result.RootMcpEndpointID))
+
+	options, err := ti.service.ListRootMcpServers(ctx, &gen.ListRootMcpServersPayload{})
+	require.NoError(t, err)
+	var found bool
+	for _, option := range options.McpServers {
+		if option.McpServerID == serverID.String() {
+			found = true
+			require.True(t, option.IsDomainRoot)
+			require.Equal(t, endpointID, requireValue(t, option.AttachedEndpointID))
+		}
+	}
+	require.True(t, found, "the selected server must appear in the root options list")
+}
+
+func TestSetRootMcpEndpoint_ByServerRejectsBothIDs(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestCustomDomainsService(t)
+	authCtx := testAuthContext(t, ctx)
+	domain, err := ti.repo.CreateCustomDomain(ctx, cdrepo.CreateCustomDomainParams{
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		Domain:          "root-both-ids.example.com",
+		ProvisionerKind: "ingress",
+		IpAllowlist:     []string{},
+	})
+	require.NoError(t, err)
+	endpointID := seedMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, domain.ID, "both-ids")
+	serverID := seedNamedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, "both-ids-server", "public")
+
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	})
+
+	_, err = ti.service.SetRootMcpEndpoint(ctx, &gen.SetRootMcpEndpointPayload{
+		CustomDomainID: domain.ID.String(),
+		McpEndpointID:  new(endpointID.String()),
+		McpServerID:    new(serverID.String()),
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+}
+
+func TestSetRootMcpEndpoint_ByServerRejectsOtherOrgServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestCustomDomainsService(t)
+	authCtx := testAuthContext(t, ctx)
+	domain, err := ti.repo.CreateCustomDomain(ctx, cdrepo.CreateCustomDomainParams{
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		Domain:          "root-cross-org.example.com",
+		ProvisionerKind: "ingress",
+		IpAllowlist:     []string{},
+	})
+	require.NoError(t, err)
+
+	otherProjectID := seedProject(t, ctx, ti.conn, "other-org-root-server")
+	foreignServerID := seedNamedMcpServer(t, ctx, ti.conn, otherProjectID, "foreign-server", "public")
+
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	})
+
+	_, err = ti.service.SetRootMcpEndpoint(ctx, &gen.SetRootMcpEndpointPayload{
+		CustomDomainID: domain.ID.String(),
+		McpServerID:    new(foreignServerID.String()),
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
+}
+
+func TestSetRootMcpEndpoint_ByServerRejectsDisabledServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestCustomDomainsService(t)
+	authCtx := testAuthContext(t, ctx)
+	domain, err := ti.repo.CreateCustomDomain(ctx, cdrepo.CreateCustomDomainParams{
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		Domain:          "root-disabled.example.com",
+		ProvisionerKind: "ingress",
+		IpAllowlist:     []string{},
+	})
+	require.NoError(t, err)
+	serverID := seedNamedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, "disabled-server", "disabled")
+
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	})
+
+	_, err = ti.service.SetRootMcpEndpoint(ctx, &gen.SetRootMcpEndpointPayload{
+		CustomDomainID: domain.ID.String(),
+		McpServerID:    new(serverID.String()),
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
+}
+
+func TestSetRootMcpEndpoint_ByServerSlugConflict(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestCustomDomainsService(t)
+	authCtx := testAuthContext(t, ctx)
+	domain, err := ti.repo.CreateCustomDomain(ctx, cdrepo.CreateCustomDomainParams{
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		Domain:          "root-slug-conflict.example.com",
+		ProvisionerKind: "ingress",
+		IpAllowlist:     []string{},
+	})
+	require.NoError(t, err)
+	// Another server already occupies the slug on this domain.
+	seedMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, domain.ID, "shared-slug")
+	serverID := seedNamedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, "shared-slug", "public")
+
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	})
+
+	_, err = ti.service.SetRootMcpEndpoint(ctx, &gen.SetRootMcpEndpointPayload{
+		CustomDomainID: domain.ID.String(),
+		McpServerID:    new(serverID.String()),
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeConflict, oopsErr.Code)
+}
