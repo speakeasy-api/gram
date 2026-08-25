@@ -16,6 +16,26 @@ import (
 	"strings"
 )
 
+// Client authentication methods as they appear on the wire: the
+// token_endpoint_auth_method values of RFC 7591 §2 and the RFC 8414
+// token_endpoint_auth_methods_supported list. Every authorization server in
+// this codebase builds its accepted set from these rather than from literals,
+// so the string that is validated at registration, persisted on the client
+// row, and matched at the token endpoint is one identifier in three places.
+const (
+	// AuthMethodClientSecretBasic presents the client secret as HTTP Basic
+	// credentials (RFC 6749 §2.3.1).
+	AuthMethodClientSecretBasic = "client_secret_basic"
+
+	// AuthMethodClientSecretPost presents the client secret in the request
+	// body (RFC 6749 §2.3.1).
+	AuthMethodClientSecretPost = "client_secret_post"
+
+	// AuthMethodNone is a public client: no credential, with PKCE or
+	// refresh-token possession as the integrity proof.
+	AuthMethodNone = "none"
+)
+
 // Error carries an OAuth wire error: the shared shape used across the
 // issuer-gated endpoints (RFC 6749 / RFC 7591 / RFC 7009). The structure is
 // identical everywhere — error code plus human-readable description — so

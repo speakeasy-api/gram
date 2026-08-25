@@ -101,7 +101,7 @@ func (s *Service) ServeRegister(w http.ResponseWriter, r *http.Request, endpoint
 	}
 
 	req.SetDefaults()
-	if err := req.Validate(); err != nil {
+	if err := req.Validate(usersessions.SupportedAuthMethods); err != nil {
 		var oauthErr *oauthwire.Error
 		if errors.As(err, &oauthErr) {
 			return writeDCRError(ctx, w, logger, oauthErr.Code, oauthErr.Description)
@@ -116,7 +116,7 @@ func (s *Service) ServeRegister(w http.ResponseWriter, r *http.Request, endpoint
 	// hash as "no secret expected; PKCE is the integrity proof".
 	var clientSecret string
 	var clientSecretHash pgtype.Text
-	if req.TokenEndpointAuthMethod != "none" {
+	if req.TokenEndpointAuthMethod != oauthwire.AuthMethodNone {
 		var err error
 		clientSecret, err = generateClientSecret()
 		if err != nil {
@@ -157,7 +157,7 @@ func (s *Service) ServeRegister(w http.ResponseWriter, r *http.Request, endpoint
 	// (non-expiring per RFC 7591 §3.2.1). Public clients (none) get neither
 	// field — emitting them would suggest a secret exists.
 	var clientSecretExpiresAt *int64
-	if req.TokenEndpointAuthMethod != "none" {
+	if req.TokenEndpointAuthMethod != oauthwire.AuthMethodNone {
 		zero := int64(0)
 		clientSecretExpiresAt = &zero
 	}

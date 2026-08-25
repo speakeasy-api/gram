@@ -26,11 +26,19 @@ import (
 var (
 	SupportedGrantTypes    = []string{"authorization_code", "refresh_token"}
 	SupportedResponseTypes = []string{"code"}
+
+	// SupportedAuthMethods is the user-session AS's own accepted
+	// token_endpoint_auth_method set, and is not shared policy: the other
+	// authorization servers that reuse RegistrationRequest declare their own
+	// and pass it to Validate. A method added here therefore changes this
+	// server alone.
+	//
 	// `none` covers public PKCE-only clients (mobile, CLI, MCP SDK). Real
 	// MCP clients in the wild use it. PKCE provides per-flow integrity; the
 	// only guard against cross-flow client-id confusion is the consent
 	// prompt itself, which we always render (HandleConsent never skips).
-	SupportedAuthMethods          = []string{"client_secret_basic", "client_secret_post", "none"}
+	SupportedAuthMethods = []string{oauthwire.AuthMethodClientSecretBasic, oauthwire.AuthMethodClientSecretPost, oauthwire.AuthMethodNone}
+
 	SupportedCodeChallengeMethods = []string{"S256"}
 )
 
@@ -60,7 +68,7 @@ func (r *RegistrationRequest) SetDefaults() {
 		r.ResponseTypes = []string{"code"}
 	}
 	if r.TokenEndpointAuthMethod == "" {
-		r.TokenEndpointAuthMethod = "client_secret_basic"
+		r.TokenEndpointAuthMethod = oauthwire.AuthMethodClientSecretBasic
 	}
 }
 
@@ -68,7 +76,15 @@ func (r *RegistrationRequest) SetDefaults() {
 // document. Returns an *oauthwire.Error on a spec-defined rejection. Callers
 // must invoke SetDefaults first so grant_types / response_types / auth
 // method are populated.
-func (r *RegistrationRequest) Validate() error {
+//
+// supportedAuthMethods is the caller's accepted token_endpoint_auth_method
+// set rather than a package-level list, because several authorization servers
+// share this request type while accepting different methods: a shared list
+// would let a method added for one server start being accepted by the others
+// without anyone deciding that. Pass the same slice the server advertises as
+// token_endpoint_auth_methods_supported, so what it accepts and what it
+// advertises cannot drift apart.
+func (r *RegistrationRequest) Validate(supportedAuthMethods []string) error {
 	if r.ClientName == "" {
 		return &oauthwire.Error{Code: "invalid_client_metadata", Description: "client_name is required"}
 	}
@@ -93,7 +109,7 @@ func (r *RegistrationRequest) Validate() error {
 			return &oauthwire.Error{Code: "invalid_client_metadata", Description: fmt.Sprintf("unsupported response_type %q", rt)}
 		}
 	}
-	if !slices.Contains(SupportedAuthMethods, r.TokenEndpointAuthMethod) {
+	if !slices.Contains(supportedAuthMethods, r.TokenEndpointAuthMethod) {
 		return &oauthwire.Error{Code: "invalid_client_metadata", Description: fmt.Sprintf("unsupported token_endpoint_auth_method %q", r.TokenEndpointAuthMethod)}
 	}
 

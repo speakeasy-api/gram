@@ -10,10 +10,11 @@ import (
 )
 
 // validateAfterDefaults runs the production order — SetDefaults then
-// Validate — on the supplied request and returns the validation error.
+// Validate — on the supplied request against this server's own accepted
+// method set, and returns the validation error.
 func validateAfterDefaults(req *RegistrationRequest) error {
 	req.SetDefaults()
-	return req.Validate()
+	return req.Validate(SupportedAuthMethods)
 }
 
 func TestRegistrationRequest_Validate(t *testing.T) {
@@ -264,6 +265,27 @@ func TestRegistrationRequest_SetDefaults(t *testing.T) {
 		req.SetDefaults()
 		assert.Equal(t, first, *req)
 	})
+}
+
+// TestRegistrationRequest_ValidateHonoursCallerAuthMethods pins the per-server
+// method policy: Validate accepts exactly what its caller passed, so a method
+// one authorization server supports is still refused by another that does not
+// list it. Several servers share this request type, and a package-level list
+// would let a method added for one start being accepted by all of them.
+func TestRegistrationRequest_ValidateHonoursCallerAuthMethods(t *testing.T) {
+	t.Parallel()
+
+	req := &RegistrationRequest{
+		ClientName:              "shared-request-type",
+		RedirectURIs:            []string{"https://app.acme.test/callback"},
+		TokenEndpointAuthMethod: "client_secret_basic",
+	}
+	req.SetDefaults()
+
+	require.NoError(t, req.Validate([]string{"client_secret_basic"}))
+	require.Contains(t, SupportedAuthMethods, "client_secret_basic",
+		"the method under test must be one this server does support, or the rejection below proves nothing")
+	assertOAuthError(t, req.Validate([]string{"none"}), "invalid_client_metadata", `unsupported token_endpoint_auth_method "client_secret_basic"`)
 }
 
 // assertOAuthError fails the test unless err unwraps to a

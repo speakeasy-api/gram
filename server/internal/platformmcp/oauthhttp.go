@@ -44,6 +44,20 @@ var oauthPageHTML string
 var (
 	oauthPageTemplate      = template.Must(template.New("platform-mcp-oauth-page").Parse(oauthPageHTML))
 	errPlatformMCPDisabled = fmt.Errorf("platform mcp disabled: %w", ErrForbidden)
+
+	// supportedAuthMethods is the token_endpoint_auth_method set this
+	// authorization server accepts, advertised in its RFC 8414 metadata and
+	// enforced by RegisterHandler. Declared here rather than borrowed from
+	// usersessions, whose list belongs to the separate user-session
+	// authorization server: the two share RegistrationRequest but not a
+	// client store, a token endpoint, or a set of supported methods, so a
+	// method added there must be an explicit decision here.
+	//
+	// Every entry is either symmetric or public, which is what makes
+	// RegisterHandler's "mint a secret unless the method is none" rule
+	// correct. An asymmetric method would need a key source instead, and
+	// this endpoint has nowhere to record one.
+	supportedAuthMethods = []string{oauthwire.AuthMethodClientSecretBasic, oauthwire.AuthMethodClientSecretPost, oauthwire.AuthMethodNone}
 )
 
 type oauthPageData struct {
@@ -201,7 +215,7 @@ func (s *OAuthHTTP) AuthorizationServerHandler() http.Handler {
 			"revocation_endpoint":                   s.url("revoke"),
 			"response_types_supported":              usersessions.SupportedResponseTypes,
 			"grant_types_supported":                 usersessions.SupportedGrantTypes,
-			"token_endpoint_auth_methods_supported": usersessions.SupportedAuthMethods,
+			"token_endpoint_auth_methods_supported": supportedAuthMethods,
 			"code_challenge_methods_supported":      usersessions.SupportedCodeChallengeMethods,
 		})
 	})
@@ -218,13 +232,13 @@ func (s *OAuthHTTP) RegisterHandler() http.Handler {
 			return
 		}
 		request.SetDefaults()
-		if err := request.Validate(); err != nil {
+		if err := request.Validate(supportedAuthMethods); err != nil {
 			writeRequestOAuthError(w, http.StatusBadRequest, err)
 			return
 		}
 		clientID := "client_" + uuid.NewString()
 		var secret, secretHash string
-		if request.TokenEndpointAuthMethod != "none" {
+		if request.TokenEndpointAuthMethod != oauthwire.AuthMethodNone {
 			var err error
 			secret, err = opaqueToken()
 			if err != nil {
