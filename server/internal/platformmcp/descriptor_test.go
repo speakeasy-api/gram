@@ -79,10 +79,9 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		admitted[descriptor.Name] = true
 	}
 
-	// Provider attachment still mutates connection-scoped state. Named-plugin
-	// distribution is intentionally unavailable until compatibility deployment.
+	// Named-plugin distribution is intentionally unavailable until
+	// compatibility deployment.
 	for _, name := range []string{
-		"attach_platform_mcp_identity_provider",
 		"distribute_mcp_to_plugin",
 		"remove_mcp_from_plugin",
 		"list_plugins",
@@ -109,6 +108,9 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		"get_setup_handoff",
 		"get_mcp_readiness",
 		"get_mcp_repair_plan",
+		"attach_platform_mcp_identity_provider",
+		"get_mcp_client_admission",
+		"set_mcp_client_admission",
 		"disable_mcp",
 		"enable_mcp",
 	} {

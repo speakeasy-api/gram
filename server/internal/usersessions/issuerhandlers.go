@@ -80,7 +80,7 @@ func (s *Service) CreateUserSessionIssuer(ctx context.Context, payload *gen.Crea
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	return userSessionIssuerView(row), nil
+	return UserSessionIssuerView(row), nil
 }
 
 // Patches an issuer; nil fields are no-ops.
@@ -135,7 +135,7 @@ func (s *Service) UpdateUserSessionIssuer(ctx context.Context, payload *gen.Upda
 		return nil, oops.E(oops.CodeUnexpected, err, "get user session issuer").LogError(ctx, logger)
 	}
 
-	beforeView := userSessionIssuerView(existing)
+	beforeView := UserSessionIssuerView(existing)
 
 	updated, err := txRepo.UpdateUserSessionIssuer(ctx, repo.UpdateUserSessionIssuerParams{
 		Slug:               conv.PtrToPGText(payload.Slug),
@@ -154,7 +154,7 @@ func (s *Service) UpdateUserSessionIssuer(ctx context.Context, payload *gen.Upda
 		return nil, oops.E(oops.CodeUnexpected, err, "update user session issuer").LogError(ctx, logger)
 	}
 
-	afterView := userSessionIssuerView(updated)
+	afterView := UserSessionIssuerView(updated)
 
 	if err := s.audit.LogUserSessionIssuerUpdate(ctx, dbtx, audit.LogUserSessionIssuerUpdateEvent{
 		OrganizationID:                  authCtx.ActiveOrganizationID,
@@ -205,7 +205,7 @@ func (s *Service) ListUserSessionIssuers(ctx context.Context, payload *gen.ListU
 
 	items := make([]*types.UserSessionIssuer, len(rows))
 	for i, row := range rows {
-		items[i] = userSessionIssuerView(row)
+		items[i] = UserSessionIssuerView(row)
 	}
 
 	var nextCursor *string
@@ -268,7 +268,7 @@ func (s *Service) GetUserSessionIssuer(ctx context.Context, payload *gen.GetUser
 		}
 	}
 
-	return userSessionIssuerView(row), nil
+	return UserSessionIssuerView(row), nil
 }
 
 // Soft-deletes an issuer and cascades to its user_sessions and
@@ -386,7 +386,10 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 	return nil
 }
 
-func userSessionIssuerView(row repo.UserSessionIssuer) *types.UserSessionIssuer {
+// UserSessionIssuerView projects an issuer row onto the API view. Exported so
+// the Platform MCP admission tools build the same audit snapshots this service
+// writes, rather than a second, drifting projection of the same row.
+func UserSessionIssuerView(row repo.UserSessionIssuer) *types.UserSessionIssuer {
 	dur := time.Duration(row.SessionDuration.Microseconds) * time.Microsecond
 	// The EFFECTIVE mode, never the raw column: an issuer that has never had
 	// one set stores NULL and reports the resolved default. Clients of this

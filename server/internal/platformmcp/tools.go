@@ -140,7 +140,7 @@ func newServer(reader Reader, catalog Catalog, registrations *RegistrationServic
 		Title:   "Platform MCP",
 		Version: "0.1.0",
 	}, &mcp.ServerOptions{
-		Instructions: "Use this server to inspect the selected organization and manage reviewed MCP servers in an explicit project. List reviewed catalogue options and eligible projects, then ask the user to choose one of each before mutating. Inspect the chosen candidate and collect only its declared non-secret configuration values. Normal non-secret URLs may be discussed and returned. Register it privately. Use get_mcp_readiness with the returned registration ID to inspect persisted readiness. If readiness says an upstream identity provider is missing, ask the user to explicitly confirm and then call attach_platform_mcp_identity_provider; the server derives the provider from the persisted reviewed MCP source and returns its non-secret provider_url plus an Inspect authorization_url for the user to use Connect or Authorize. Immediately present authorization_url as the exact clickable link—never say a link is above or ask the user to confirm an unspecified authorization action. Never request or accept OAuth codes, tokens, client secrets, passwords, API keys, or secret headers in chat. The registration dashboard_setup_url is the Authentication settings fallback, not the authorization page. Force a fresh readiness check after user authorization. Registration never distributes an MCP: use list_plugins to show the project's plugins, ask the user which one should carry it, then call distribute_mcp_to_plugin naming that plugin exactly. There is no implicit default.",
+		Instructions: "Use this server to inspect the selected organization and manage reviewed MCP servers in an explicit project. List reviewed catalogue options and eligible projects, then ask the user to choose one of each before mutating. Inspect the chosen candidate and collect only its declared non-secret configuration values. Normal non-secret URLs may be discussed and returned. Register it privately. Use get_mcp_readiness with the returned registration ID to inspect persisted readiness. If readiness says an upstream identity provider is missing, ask the user to explicitly confirm and then call attach_platform_mcp_identity_provider; the server derives the provider from the persisted reviewed MCP source and returns its non-secret provider_url plus an Inspect authorization_url for the user to use Connect or Authorize. Immediately present authorization_url as the exact clickable link—never say a link is above or ask the user to confirm an unspecified authorization action. Never request or accept OAuth codes, tokens, client secrets, passwords, API keys, or secret headers in chat. The registration dashboard_setup_url is the Authentication settings fallback, not the authorization page. Force a fresh readiness check after user authorization. Setup also decides which MCP clients may authorize against the new server: read get_mcp_client_admission, explain the mode it reports, and only change it with set_mcp_client_admission after the user explicitly confirms the mode. Registration never distributes an MCP: use list_plugins to show the project's plugins, ask the user which one should carry it, then call distribute_mcp_to_plugin naming that plugin exactly. There is no implicit default.",
 		PageSize:     32,
 	})
 
@@ -201,6 +201,11 @@ func newServer(reader Reader, catalog Catalog, registrations *RegistrationServic
 	} else {
 		registerSetupHandoffTool(reg, registrations)
 	}
+	if registrations == nil || !registrations.clientAdmission.valid() || !registrations.budgets.LifecycleMetadata.valid() {
+		registerUnavailableClientAdmissionTools(reg)
+	} else {
+		registerClientAdmissionTools(reg, registrations)
+	}
 	if registrations == nil || registrations.readiness == nil || !registrations.budgets.Repair.valid() {
 		registerUnavailableReadinessTools(reg)
 	} else {
@@ -228,11 +233,6 @@ func newServer(reader Reader, catalog Catalog, registrations *RegistrationServic
 		registerUnavailableSkillsTools(reg)
 	} else {
 		registerSkillsTools(reg, skills)
-	}
-	if !plugins.valid() {
-		registerUnavailablePluginTools(reg)
-	} else {
-		registerPluginTools(reg, plugins)
 	}
 	if !plugins.valid() {
 		registerUnavailablePluginTools(reg)
