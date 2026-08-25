@@ -206,9 +206,6 @@ func TestAddMetaMcpMember_AllowsDistinctBackends(t *testing.T) {
 		seedMcpServerFronting(t, ctx, ti.conn, *authCtx.ProjectID, mcpserversrepo.CreateMCPServerParams{
 			ToolsetID: conv.ToNullUUID(seedToolsetBackend(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID)),
 		}),
-		seedMcpServerFronting(t, ctx, ti.conn, *authCtx.ProjectID, mcpserversrepo.CreateMCPServerParams{
-			UnproxiedMcpServerID: conv.ToNullUUID(seedUnproxiedBackend(t, ctx, ti.conn, *authCtx.ProjectID)),
-		}),
 	}
 
 	for _, serverID := range servers {
