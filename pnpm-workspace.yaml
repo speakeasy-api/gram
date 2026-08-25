@@ -14,6 +14,7 @@ packages:
 
 catalog:
   "@ai-sdk/react": ^4.0.69
+  "@cfworker/json-schema": ^4.1.1
   "@modelcontextprotocol/sdk": ^1.30.0
   "@tailwindcss/vite": ^4.3.3
   "@tanstack/react-query": 5.101.4

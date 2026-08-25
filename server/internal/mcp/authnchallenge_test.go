@@ -1557,6 +1557,63 @@ func TestHandleConsentMCP_LegacyEndpointNotFound(t *testing.T) {
 	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 }
 
+func TestHandleConsentMCP_RemoteToolsListStripsOutputSchema(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	upstream := newStatelessRemoteMCPUpstream(t, "structured_tool", map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"answer": map[string]any{"type": "string"},
+		},
+	})
+
+	endpointSlug := "remote-output-schema-" + uuid.NewString()
+	mcpServer, _ := createRemoteMcpEndpoint(
+		t,
+		ctx,
+		ti.conn,
+		issuer.ProjectID,
+		upstream.URL,
+		endpointSlug,
+		"public",
+		issuer.ID,
+	)
+	stateID, csrfToken := seedModernConsentChallenge(
+		t,
+		ctx,
+		ti,
+		issuer.ID,
+		client,
+		mcpServer.ID,
+		endpointSlug,
+	)
+	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, endpointSlug, "x/mcp")
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/x/mcp/"+endpointSlug+"/connect/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Gram-Consent-State", stateID)
+	req.Header.Set("Gram-Consent-Csrf", csrfToken)
+	req.Header.Set("Gram-Consent-Inventory-Attempt", uuid.NewString())
+	req = req.WithContext(ctx)
+
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.ServeConsentMCP(w, req, endpoint))
+	require.Equal(t, http.StatusOK, w.Code)
+	result := decodeMCPResult(t, w.Body.Bytes())
+	tools, ok := result["tools"].([]any)
+	require.True(t, ok)
+	require.Len(t, tools, 1)
+	tool, ok := tools[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "structured_tool", tool["name"])
+	require.Contains(t, tool, "inputSchema")
+	require.NotContains(t, tool, "outputSchema")
+}
+
 // TestHandleConsentPost_FilteringOnWithoutInventoryConflicts asserts a
 // restrictive approve cannot skip the display-to-grant binding: filtering=on
 // without a bound inventory attempt is a retryable conflict that leaves the

@@ -482,6 +482,26 @@ func (i *consentInventoryCaptureInterceptor) InterceptToolsListResponse(ctx cont
 		return fmt.Errorf("capture consent tool inventory page: %w", err)
 	}
 	*i.draft = updated
+
+	var sanitized []*mcp.Tool
+	for idx, tool := range list.Result.Tools {
+		if tool == nil || tool.OutputSchema == nil {
+			continue
+		}
+		if sanitized == nil {
+			sanitized = append([]*mcp.Tool(nil), list.Result.Tools...)
+		}
+		clone := *tool
+		clone.OutputSchema = nil
+		sanitized[idx] = &clone
+	}
+	if sanitized != nil {
+		// The browser SDK eagerly compiles output schemas with eval, which the
+		// consent page's CSP intentionally forbids.
+		if err := list.SetTools(sanitized); err != nil {
+			return fmt.Errorf("strip output schemas from consent tool inventory: %w", err)
+		}
+	}
 	return nil
 }
 
