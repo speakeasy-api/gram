@@ -115,13 +115,15 @@ func newExclusionAfterCommit(logger *slog.Logger, reconciler RiskExclusionReconc
 		return nil
 	}
 	return func(ctx context.Context, projectID, exclusionID uuid.UUID) {
-		reconcileCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-		defer cancel()
-		if err := reconciler.Reconcile(reconcileCtx, projectID, exclusionID); err != nil {
-			logger.ErrorContext(reconcileCtx, "trigger risk exclusion reconcile",
-				attr.SlogError(err),
-				attr.SlogProjectID(projectID.String()),
-			)
-		}
+		reconcileCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second) //nolint:gosec // cancel runs in the detached goroutine below
+		go func() {
+			defer cancel()
+			if err := reconciler.Reconcile(reconcileCtx, projectID, exclusionID); err != nil {
+				logger.ErrorContext(reconcileCtx, "trigger risk exclusion reconcile",
+					attr.SlogError(err),
+					attr.SlogProjectID(projectID.String()),
+				)
+			}
+		}()
 	}
 }

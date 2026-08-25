@@ -78,7 +78,7 @@ func (s *ListRiskExclusions) Descriptor() core.ToolDescriptor {
 		SourceSlug:  "risk",
 		HandlerName: "list_risk_exclusions",
 		Name:        "platform_list_risk_exclusions",
-		Description: "List the risk exclusions configured for the current project. Call this before creating an exclusion to check whether an equivalent one already exists. For exact and regex exclusions the match_value is replaced with a fixed redaction marker so suppressed secret content never enters the model context.",
+		Description: "List the risk exclusions configured for the current project. For exact and regex exclusions the match_value is replaced with a fixed redaction marker so suppressed secret content never enters the model context; create_risk_exclusion performs equivalence checks server-side.",
 		InputSchema: core.BuildInputSchema[listRiskExclusionsInput](
 			core.WithPropertyFormat("risk_policy_id", "uuid"),
 		),
