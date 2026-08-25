@@ -51,7 +51,7 @@ overrides:
   # Vite's optional Node types peer is runtime-irrelevant, but differing patch
   # versions mint separate Vite instances. TanStack Start checks its Vite
   # environment by identity, so keep the Vite peer set converged.
-  "vite>@types/node": 24.13.3
+  "vite>@types/node": ^24.13.3
   # @assistant-ui/core must resolve to a single instance: its React contexts
   # (e.g. RuntimeAdapterProvider) are shared between @assistant-ui/react and
   # @assistant-ui/react-ai-sdk, and pnpm mints a separate core instance per
