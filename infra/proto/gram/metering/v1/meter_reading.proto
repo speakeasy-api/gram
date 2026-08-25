@@ -1,0 +1,28 @@
+edition = "2024";
+
+package gram.metering.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1;meteringv1";
+
+// MeterReading records one immutable s-token workload reading. The id is stable
+// across at-least-once outbox and Pub/Sub delivery.
+message MeterReading {
+  string id = 1;
+  string organization_id = 2;
+  string project_id = 3;
+  string meter_id = 4;
+  string operation_id = 5;
+  string unit = 6;
+  int64 value = 7;
+  string occurred_at = 8; // UTC timestamp in RFC3339Nano format
+  map<string, string> attributes = 9;
+  string corrects_reading_id = 10;
+
+  option (gcp.pubsub.v1.topic) = {
+    retention_hint: {
+      seconds: 604800 /* 7 days */
+    }
+  };
+}
