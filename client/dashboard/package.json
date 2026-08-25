@@ -120,7 +120,7 @@
     "oxlint-tsgolint": "^7.0.2001",
     "react-grab": "^0.1.48",
     "storybook": "^10.5.7",
-    "svix": "1.92.2",
+    "svix": "1.99.1",
     "svix-react": "^1.13.9",
     "typescript": "catalog:",
     "vite": "catalog:",
