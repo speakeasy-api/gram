@@ -91,7 +91,7 @@ All pause cases held the drainer for one second after the writers completed. The
 
 The small-reply memory deltas are dominated by expanding the 128-connection writer pool and Redis allocator behavior, not the serialized list contents. The heavy paused case is the useful memory sizing point.
 
-The TTL is refreshed by every writer pipeline. At the tested depths, catch-up consumes far below one second, so queue depth alone does not threaten the 60-second TTL. A drainer disconnection or process stall lasting close to 60 seconds will still expire the list regardless of backlog size. That is the operational boundary to alert on.
+The TTL is refreshed by every writer pipeline. At the tested depths, catch-up consumes far below one second, so queue depth alone does not threaten the 60-second TTL. Because writers refresh the shared key, the loss boundary during a drainer outage is 60 seconds after the last write, not after the outage begins: a stalled drainer with replies still arriving accumulates an unbounded backlog until writes stop, then the whole list expires 60 seconds later. Alert on `risk.enforcement.drainer_alive` going to zero rather than on key expiry; the waiters those replies belong to die with their deadlines long before the list does.
 
 ## Waiter map and Redis connections
 

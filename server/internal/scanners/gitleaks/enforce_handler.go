@@ -56,6 +56,9 @@ func NewEnforceHandler(
 	fingerprint FingerprintFinding,
 	cfg EnforceHandlerConfig,
 ) (*EnforceHandler, error) {
+	if writer == nil {
+		return nil, errors.New("gitleaks enforcement reply writer is required")
+	}
 	if fingerprint == nil {
 		return nil, errors.New("gitleaks enforcement fingerprint function is required")
 	}
@@ -100,12 +103,21 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.GitleaksEnforceme
 	}
 
 	started := time.Now()
-	findings, scanErr := h.scanner.Scan(ctx, m.GetContent())
+	var findings []scanners.Finding
 	status := riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK
 	reason := ""
-	if scanErr != nil {
+	if len(m.GetContent()) > replyinbox.MaxContentBytes {
+		// Dispatcher enforces this budget too; a request that bypasses it must
+		// not buy an unbounded scan.
 		status = riskv1.EnforcementStatus_ENFORCEMENT_STATUS_ERROR
-		reason = scanErr.Error()
+		reason = fmt.Sprintf("enforcement content is %d bytes; maximum is %d bytes", len(m.GetContent()), replyinbox.MaxContentBytes)
+	} else {
+		var scanErr error
+		findings, scanErr = h.scanner.Scan(ctx, m.GetContent())
+		if scanErr != nil {
+			status = riskv1.EnforcementStatus_ENFORCEMENT_STATUS_ERROR
+			reason = scanErr.Error()
+		}
 	}
 
 	replyFindings := make([]*riskv1.EnforcementFinding, 0, len(findings))

@@ -50,6 +50,9 @@ type Dispatcher struct {
 
 // NewDispatcher resolves publishers for the supported enforcement lanes.
 func NewDispatcher(ctx context.Context, broker gcp.PublisherBroker, inbox *Inbox, cfg DispatcherConfig) (*Dispatcher, error) {
+	if inbox == nil {
+		return nil, errors.New("enforcement reply inbox is required")
+	}
 	if cfg.WaitTimeout <= 0 {
 		cfg.WaitTimeout = DefaultWaitTimeout
 	}
