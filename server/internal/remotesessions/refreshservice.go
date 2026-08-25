@@ -230,7 +230,6 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 		_, err := q.ClearRemoteSessionRefreshTokenAfterInvalidGrant(ctx, remotesessions_repo.ClearRemoteSessionRefreshTokenAfterInvalidGrantParams{
 			ID:                    sess.ID,
 			SubjectUrn:            sess.SubjectUrn,
-			UserSessionIssuerID:   sess.UserSessionIssuerID,
 			RemoteSessionClientID: sess.RemoteSessionClientID,
 			ExpectedUpdatedAt:     sess.UpdatedAt,
 		})

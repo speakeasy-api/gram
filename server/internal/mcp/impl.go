@@ -210,29 +210,30 @@ type oauthTokenInputs struct {
 // left empty, so dispatch injects a remote-session token into every matching
 // oauth2 tool — correct only when a single remote issuer is bound.
 //
-// Fails closed when more than one token resolves: without per-tool routing
-// (AIS-152) we cannot tell which tool needs which issuer's token, and
-// injecting all of them with empty securityKeys could forward the wrong
-// bearer upstream. This mirrors singleUpstreamToken's fail-closed posture for
-// the remote-MCP backend. The state is unreachable while the
-// remote_session_client_user_session_issuers one_per_issuer index caps a
-// user_session_issuer at one client; it becomes reachable once AIS-137 drops
-// that index, at which point AIS-152 must land to route per tool.
-func appendRemoteSessionTokenInputs(dst []oauthTokenInputs, tokens map[uuid.UUID]string) ([]oauthTokenInputs, error) {
+// Fails closed when more than one token resolves: nothing maps a tool's
+// security scheme to a remote_session_issuer (AGE-3285), so we cannot tell
+// which tool needs which issuer's token, and injecting all of them with empty
+// securityKeys would forward an arbitrary bearer upstream. This mirrors
+// routeUpstreamToken's fail-closed posture for the proxied-MCP backends,
+// which can route by the credential's grant-time resource — toolset dispatch
+// has no equivalent qualified identity yet. The multi-token state is
+// reachable: the one_per_issuer index that used to cap a user_session_issuer
+// at one client was dropped in AIS-137.
+func appendRemoteSessionTokenInputs(dst []oauthTokenInputs, tokens map[uuid.UUID]remotesessions.UpstreamToken) ([]oauthTokenInputs, error) {
 	if len(tokens) > 1 {
-		return nil, fmt.Errorf("issuer-gated endpoint resolved %d remote-session upstream tokens; per-tool routing required to dispatch (AIS-152)", len(tokens))
+		return nil, fmt.Errorf("issuer-gated endpoint resolved %d remote-session upstream tokens; per-tool routing requires a security-scheme-to-issuer mapping (AGE-3285)", len(tokens))
 	}
-	for issuerID, token := range tokens {
+	for issuerID, entry := range tokens {
 		// Defensive: ResolveAccessTokens never maps an issuer to an empty
 		// token (it returns ErrNoValidToken instead), so this skip should not
 		// fire; it guards against a caller passing an empty-valued entry.
-		if token == "" {
+		if entry.Token == "" {
 			continue
 		}
 		dst = append(dst, oauthTokenInputs{
 			securityKeys:          nil,
 			remoteSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
-			Token:                 token,
+			Token:                 entry.Token,
 		})
 	}
 	return dst, nil
@@ -792,7 +793,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 // caller-side issuer gate (today: /x/mcp's pre-dispatch ApplyIssuerGate run).
 // Nil when the caller ran no gate or the session carries no policy; the
 // in-toolset gate below populates it for /mcp callers.
-func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, toolset *toolsets_repo.Toolset, mcpSlug, mcpRouteBase string, skipIssuerGate bool, extraUpstreamTokens map[uuid.UUID]string, callerToolSelection *toolfilter.SessionSelection, mcpServerVariationsGroupID *uuid.UUID, mcpServerID *uuid.UUID) error {
+func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, toolset *toolsets_repo.Toolset, mcpSlug, mcpRouteBase string, skipIssuerGate bool, extraUpstreamTokens map[uuid.UUID]remotesessions.UpstreamToken, callerToolSelection *toolfilter.SessionSelection, mcpServerVariationsGroupID *uuid.UUID, mcpServerID *uuid.UUID) error {
 	ctx := r.Context()
 	var err error
 

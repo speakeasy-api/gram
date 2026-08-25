@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -137,7 +138,7 @@ func TestMigrateIssuer_PreservesRemoteSessionWithoutReauth(t *testing.T) {
 	// Before: the token resolves under the source issuer's id.
 	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject, "")
 	require.NoError(t, err)
-	require.Equal(t, map[uuid.UUID]string{sourceUUID: "upstream-access-token"}, tokens)
+	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{sourceUUID: {Token: "upstream-access-token", Resource: "", RemoteSessionClientID: clientUUID}}, tokens)
 
 	auditBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionIssuerMigrate)
 	require.NoError(t, err)
@@ -152,7 +153,7 @@ func TestMigrateIssuer_PreservesRemoteSessionWithoutReauth(t *testing.T) {
 	// Nothing re-authenticated; only the client's foreign key moved.
 	tokens, err = mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject, "")
 	require.NoError(t, err)
-	require.Equal(t, map[uuid.UUID]string{targetID: "upstream-access-token"}, tokens)
+	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{targetID: {Token: "upstream-access-token", Resource: "", RemoteSessionClientID: clientUUID}}, tokens)
 
 	// The session row itself was neither deleted nor rewritten.
 	q := repo.New(ti.conn)

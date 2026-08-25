@@ -909,7 +909,7 @@ func (q *Queries) IssuerAdmitsCimdClientURI(ctx context.Context, arg IssuerAdmit
 const listRemoteSessionUpstreamsForSubjects = `-- name: ListRemoteSessionUpstreamsForSubjects :many
 SELECT rs.id,
        rs.subject_urn,
-       rs.user_session_issuer_id,
+       usi.id AS user_session_issuer_id,
        rs.remote_session_client_id,
        rc.remote_session_issuer_id,
        ri.slug AS issuer_slug,
@@ -928,12 +928,20 @@ JOIN (
               unnest($2::uuid[]) AS issuer_id
      ) AS pair
   ON rs.subject_urn = pair.subject_urn
-  AND rs.user_session_issuer_id = pair.issuer_id
-JOIN user_session_issuers AS usi ON usi.id = rs.user_session_issuer_id
+JOIN user_session_issuers AS usi ON usi.id = pair.issuer_id
 JOIN remote_session_clients AS rc ON rc.id = rs.remote_session_client_id
 JOIN remote_session_issuers AS ri ON ri.id = rc.remote_session_issuer_id
 WHERE usi.project_id = $3
-  AND (rc.project_id IS NULL OR rc.project_id = $3)
+  AND (rc.project_id = $3 OR (rc.project_id IS NULL AND (rc.organization_id IS NULL OR rc.organization_id = $4)))
+  AND (
+    EXISTS (
+      SELECT 1
+      FROM remote_session_client_user_session_issuers AS blink
+      WHERE blink.remote_session_client_id = rs.remote_session_client_id
+        AND blink.user_session_issuer_id = pair.issuer_id
+    )
+    OR rs.user_session_issuer_id = pair.issuer_id
+  )
   AND rs.deleted IS FALSE
   AND rc.deleted IS FALSE
   AND ri.deleted IS FALSE
@@ -941,9 +949,10 @@ ORDER BY ri.slug ASC, rs.id ASC
 `
 
 type ListRemoteSessionUpstreamsForSubjectsParams struct {
-	SubjectUrns []string
-	IssuerIds   []uuid.UUID
-	ProjectID   uuid.UUID
+	SubjectUrns    []string
+	IssuerIds      []uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID pgtype.Text
 }
 
 type ListRemoteSessionUpstreamsForSubjectsRow struct {
@@ -963,25 +972,37 @@ type ListRemoteSessionUpstreamsForSubjectsRow struct {
 }
 
 // The outbound leg of the brokered connections on one page of user_sessions.
-// user_sessions and remote_sessions both carry (subject_urn,
-// user_session_issuer_id), so that pair is the join between "an agent can reach
-// Gram" and "Gram can reach an upstream on this subject's behalf".
+// A remote_session is one shared upstream grant per (subject_urn,
+// remote_session_client_id); its own user_session_issuer_id is provenance
+// only. The match therefore goes through the issuer's client bindings: a
+// user_session under issuer B lists every upstream grant the subject holds on
+// a client bound to B, including grants first minted through a sibling
+// issuer. It also keeps listing a grant minted through the page's issuer whose
+// client was since detached from it: those tokens are still live upstream and
+// SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuer still destroys them,
+// so hiding them would show an empty page for a revoke that is not a no-op.
+// The projected user_session_issuer_id is the requesting issuer, which is the
+// key the caller indexes by.
 // Takes the page's pairs as parallel arrays rather than two independent IN
 // lists: filtering on subjects and issuers separately would return the cross
 // product, attributing one subject's upstream session to another subject who
 // happens to share an issuer.
 // Token material is never projected — only expiry metadata and a boolean for
 // whether a refresh grant exists.
-// Scoped by the session's user_session_issuer project, not the client's project
-// (see remotesessions.ListRemoteSessionsByProjectID): an upstream established
-// through an organization-level or global client, whose project_id is NULL,
-// still belongs to the project whose user_session_issuer minted it. Filtering
+// Scoped by the binding issuer's project: an upstream established through an
+// organization-level or global client, whose project_id is NULL, still belongs
+// to the project whose user_session_issuer the client is bound to. Filtering
 // on the client's project would silently drop those upstreams and report a
 // brokered session as having none. A client that does carry a project must
 // still match, so a row that somehow paired one project's client with another
 // project's issuer stays invisible rather than being read as a shared one.
 func (q *Queries) ListRemoteSessionUpstreamsForSubjects(ctx context.Context, arg ListRemoteSessionUpstreamsForSubjectsParams) ([]ListRemoteSessionUpstreamsForSubjectsRow, error) {
-	rows, err := q.db.Query(ctx, listRemoteSessionUpstreamsForSubjects, arg.SubjectUrns, arg.IssuerIds, arg.ProjectID)
+	rows, err := q.db.Query(ctx, listRemoteSessionUpstreamsForSubjects,
+		arg.SubjectUrns,
+		arg.IssuerIds,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
 	if err != nil {
 		return nil, err
 	}
