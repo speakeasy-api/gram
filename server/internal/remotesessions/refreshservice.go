@@ -1,10 +1,11 @@
 // refreshservice.go is the single concurrency-safe entry point for refreshing
-// a remote session's upstream tokens. Three callers share it: the lazy MCP
-// resolution path (tokenservice.go), the org-admin manual refresh handler
-// (organizationsessionhandlers.go), and the scheduled pre-emptive refresh
-// activity (background worker). Sharing matters because refresh tokens rotate:
-// two callers presenting the same refresh token to a provider with reuse
-// detection (OAuth 2.0 Security BCP 4.13.2) can revoke the whole token family.
+// a remote session's upstream tokens. Four callers share it: the lazy MCP
+// resolution path (tokenservice.go), the consent page and the org-admin manual
+// refresh handler (challenge.go, organizationsessionhandlers.go), and the
+// scheduled pre-emptive refresh activity (background worker). Sharing matters
+// because refresh tokens rotate: two callers presenting the same refresh token
+// to a provider with reuse detection (OAuth 2.0 Security BCP 4.13.2) can
+// revoke the whole token family.
 
 package remotesessions
 
@@ -13,11 +14,13 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -25,54 +28,68 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// RefreshOutcome classifies how RefreshNow obtained (or failed to obtain) a
-// usable access token. Values are stable, low-cardinality strings safe for
-// metrics labels and Temporal activity results.
-type RefreshOutcome string
-
-const (
-	// RefreshOutcomeRefreshed: this caller executed the upstream refresh_token
-	// grant and persisted the rotated pair.
-	RefreshOutcomeRefreshed RefreshOutcome = "refreshed"
-	// RefreshOutcomeAdoptedConcurrentWinner: another caller refreshed the row
-	// while this one was acquiring or POSTing; its persisted token was adopted
-	// and no (or a losing) upstream call was made by this caller.
-	RefreshOutcomeAdoptedConcurrentWinner RefreshOutcome = "adopted_concurrent_winner"
-	// RefreshOutcomeSessionInactive: the row was revoked or deleted before the
-	// refresh could run. Not an error — there is simply nothing to refresh.
-	RefreshOutcomeSessionInactive RefreshOutcome = "session_inactive"
-)
-
 // RefreshResult is RefreshNow's success shape. Session and AccessToken are
-// zero/empty when Outcome is RefreshOutcomeSessionInactive.
+// zero/empty when Outcome is remotesessionmetrics.RefreshOutcomeSessionInactive.
 type RefreshResult struct {
 	Session     remotesessions_repo.RemoteSession
 	AccessToken string
-	Outcome     RefreshOutcome
+
+	// Outcome is the same closed set the upstream-refresh metric records, so
+	// a caller's log line and the metric series always agree.
+	Outcome remotesessionmetrics.RefreshOutcome
+
+	// IssuerURL is the upstream identity provider's issuer URL, the same value
+	// the upstream-refresh metric carries as its gram.oauth.issuer dimension.
+	IssuerURL string
 }
+
+// RefreshError is the error RefreshNow returns for every failed attempt. It
+// carries the issuer URL and outcome the upstream-refresh metric recorded for
+// the attempt, so a failure log can name the provider and be joined to its
+// metric series, and it wraps the underlying cause: errors.Is on
+// ErrNoValidToken and errors.As on *TokenRefreshError see through it.
+type RefreshError struct {
+	// IssuerURL is the upstream identity provider's issuer URL; empty when the
+	// attempt died before the session's client and issuer rows could be
+	// loaded.
+	IssuerURL string
+
+	// Outcome is the classification the upstream-refresh metric recorded for
+	// this attempt.
+	Outcome remotesessionmetrics.RefreshOutcome
+
+	err error
+}
+
+func (e *RefreshError) Error() string { return e.err.Error() }
+
+func (e *RefreshError) Unwrap() error { return e.err }
 
 // RefreshService owns the single-flighted refresh of a remote session. It is
 // deliberately constructible without any HTTP-serving context so the
 // background worker can hold one alongside the request-path callers.
 type RefreshService struct {
-	logger *slog.Logger
-	db     *pgxpool.Pool
-	enc    *encryption.Client
-	policy *guardian.Policy
-	locks  cache.Cache
+	logger  *slog.Logger
+	db      *pgxpool.Pool
+	enc     *encryption.Client
+	policy  *guardian.Policy
+	locks   cache.Cache
+	metrics *remotesessionmetrics.Refresh
 }
 
-func NewRefreshService(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy, locks cache.Cache) *RefreshService {
+func NewRefreshService(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy, locks cache.Cache) *RefreshService {
 	return &RefreshService{
-		logger: logger.With(attr.SlogComponent("remotesessions_refresh")),
-		db:     db,
-		enc:    enc,
-		policy: policy,
-		locks:  locks,
+		logger:  logger.With(attr.SlogComponent("remotesessions_refresh")),
+		db:      db,
+		enc:     enc,
+		policy:  policy,
+		locks:   locks,
+		metrics: remotesessionmetrics.NewRefresh(logger, meterProvider),
 	}
 }
 
@@ -121,14 +138,84 @@ func refreshLockKey(subject urn.SessionSubject, clientID uuid.UUID) string {
 // binding when one was captured at code exchange. Rows minted before the
 // resource column existed fall back to callerResource, and then to the
 // client's own derivation — one derivation rule for every refresh path.
+// trigger names the caller on the upstream-refresh metric.
 //
-// A non-nil error is either an operator-actionable *TokenRefreshError or an
-// internal infrastructure failure. A definitive invalid_grant clears only the
-// refresh grant: the existing access token remains usable until its own known
-// expiry. This keeps proactive refresh failure from forcing a reconnect.
-func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_repo.RemoteSession, callerResource string) (RefreshResult, error) {
+// Every call records exactly one upstream-refresh metric sample. A non-nil
+// error is always a *RefreshError wrapping either an operator-actionable
+// *TokenRefreshError, ErrNoValidToken, or an internal infrastructure failure.
+// A definitive invalid_grant clears only the refresh grant: the existing
+// access token remains usable until its own known expiry. This keeps
+// proactive refresh failure from forcing a reconnect.
+func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_repo.RemoteSession, callerResource string, trigger remotesessionmetrics.RefreshTrigger) (RefreshResult, error) {
 	var zero RefreshResult
 	q := remotesessions_repo.New(s.db)
+
+	// Loaded ahead of the lock so every outcome, including the concurrent-loser
+	// and inactive early exits below, carries the issuer URL. An active session
+	// whose client or issuer row was soft-deleted fails here and records
+	// internal_error; the refresh would fail on the same lookup either way.
+	client, err := q.GetRemoteSessionClientWithIssuerByID(ctx, sess.RemoteSessionClientID)
+	if err != nil {
+		err = fmt.Errorf("load remote_session_client for refresh: %w", err)
+		outcome := refreshOutcomeForError(err)
+		s.metrics.Record(ctx, "", trigger, outcome)
+		return zero, &RefreshError{IssuerURL: "", Outcome: outcome, err: err}
+	}
+
+	result, err := s.refresh(ctx, q, client, sess, callerResource)
+	if err != nil {
+		outcome := refreshOutcomeForError(err)
+		s.metrics.Record(ctx, client.IssuerUrl, trigger, outcome)
+		return zero, &RefreshError{IssuerURL: client.IssuerUrl, Outcome: outcome, err: err}
+	}
+	result.IssuerURL = client.IssuerUrl
+	s.metrics.Record(ctx, client.IssuerUrl, trigger, result.Outcome)
+	return result, nil
+}
+
+// refreshOutcomeForError maps a failed refresh onto the metric outcome set.
+// Context cancellation is checked before the transport marker because a
+// canceled POST surfaces as a transport error too, and a caller going away is
+// neither the upstream's fault nor Gram's.
+func refreshOutcomeForError(err error) remotesessionmetrics.RefreshOutcome {
+	var tokenErr *TokenRefreshError
+	switch {
+	case errors.Is(err, ErrNoValidToken):
+		return remotesessionmetrics.RefreshOutcomeNoGrant
+	case errors.Is(err, context.Canceled):
+		return remotesessionmetrics.RefreshOutcomeCanceled
+	case errors.Is(err, errRefreshUpstreamUnreachable):
+		return remotesessionmetrics.RefreshOutcomeUnreachable
+	case !errors.As(err, &tokenErr) || tokenErr.statusCode == 0:
+		// Plain infrastructure errors, and TokenRefreshErrors raised before or
+		// after the POST (no token endpoint, unreadable stored values, an empty
+		// upstream response, a lost compare-and-swap) rather than by it.
+		return remotesessionmetrics.RefreshOutcomeInternalError
+	case tokenErr.statusCode == http.StatusTooManyRequests:
+		return remotesessionmetrics.RefreshOutcomeRateLimited
+	case tokenErr.statusCode >= http.StatusInternalServerError:
+		return remotesessionmetrics.RefreshOutcomeUpstreamError
+	case tokenErr.invalidGrant():
+		return remotesessionmetrics.RefreshOutcomeInvalidGrant
+	case tokenErr.code == "":
+		return remotesessionmetrics.RefreshOutcomeRejectedUnparsed
+	default:
+		return remotesessionmetrics.RefreshOutcomeRejected
+	}
+}
+
+// refresh is RefreshNow's body: the single-flight lock, the re-reads either
+// side of the upstream POST, and the invalid_grant clearing. RefreshNow wraps
+// it so the metric sample and the RefreshError are produced in exactly one
+// place regardless of which of the many return paths below is taken.
+func (s *RefreshService) refresh(
+	ctx context.Context,
+	q *remotesessions_repo.Queries,
+	client remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow,
+	sess remotesessions_repo.RemoteSession,
+	callerResource string,
+) (RefreshResult, error) {
+	var zero RefreshResult
 
 	lockKey := refreshLockKey(sess.SubjectUrn, sess.RemoteSessionClientID)
 	lockAcquiredAt := time.Now()
@@ -187,7 +274,7 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 		// Revoked while we were acquiring. Refreshing anyway would rotate
 		// tokens upstream that nothing will ever hold.
 		var inactive remotesessions_repo.RemoteSession
-		return RefreshResult{Session: inactive, AccessToken: "", Outcome: RefreshOutcomeSessionInactive}, nil
+		return RefreshResult{Session: inactive, AccessToken: "", Outcome: remotesessionmetrics.RefreshOutcomeSessionInactive, IssuerURL: ""}, nil
 	case currentErr != nil:
 		// Whatever broke this read breaks the write below too, and a refresh we
 		// cannot persist leaves the stored token dead upstream.
@@ -202,7 +289,7 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 			if err != nil {
 				return zero, fmt.Errorf("decrypt concurrently refreshed access token: %w", err)
 			}
-			return RefreshResult{Session: current, AccessToken: plain, Outcome: RefreshOutcomeAdoptedConcurrentWinner}, nil
+			return RefreshResult{Session: current, AccessToken: plain, Outcome: remotesessionmetrics.RefreshOutcomeAdoptedConcurrentWinner, IssuerURL: ""}, nil
 		}
 	}
 	if !current.RefreshTokenEncrypted.Valid || current.RefreshTokenEncrypted.String == "" {
@@ -230,7 +317,7 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 		}
 	}
 
-	updated, accessToken, refreshErr := refreshSessionTokens(ctx, q, s.enc, s.policy, sess, resource)
+	updated, accessToken, refreshErr := refreshSessionTokens(ctx, q, s.enc, s.policy, client, sess, resource)
 	if refreshErr == nil {
 		// The stamp is permanent, so record which rows the backfill wrote and
 		// what it wrote — the only way to find them again if a value is wrong.
@@ -241,7 +328,7 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 				attr.SlogOAuthResource(updated.Resource.String),
 			)
 		}
-		return RefreshResult{Session: updated, AccessToken: accessToken, Outcome: RefreshOutcomeRefreshed}, nil
+		return RefreshResult{Session: updated, AccessToken: accessToken, Outcome: remotesessionmetrics.RefreshOutcomeRefreshed, IssuerURL: ""}, nil
 	}
 
 	var tokenRefreshErr *TokenRefreshError
@@ -284,7 +371,7 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 		return zero, refreshErr
 	}
 
-	return RefreshResult{Session: latest, AccessToken: plain, Outcome: RefreshOutcomeAdoptedConcurrentWinner}, nil
+	return RefreshResult{Session: latest, AccessToken: plain, Outcome: remotesessionmetrics.RefreshOutcomeAdoptedConcurrentWinner, IssuerURL: ""}, nil
 }
 
 func accessTokenUsable(sess remotesessions_repo.RemoteSession, now time.Time) bool {
@@ -345,6 +432,6 @@ func (s *RefreshService) awaitRefreshedSession(
 			return zero, false
 		}
 
-		return RefreshResult{Session: latest, AccessToken: plain, Outcome: RefreshOutcomeAdoptedConcurrentWinner}, true
+		return RefreshResult{Session: latest, AccessToken: plain, Outcome: remotesessionmetrics.RefreshOutcomeAdoptedConcurrentWinner, IssuerURL: ""}, true
 	}
 }

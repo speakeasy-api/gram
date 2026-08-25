@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 )
 
 // HandleConsentAction serves `POST /mcp/{mcpSlug}/connect/remote-session`.
@@ -183,7 +184,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 				return oops.E(oops.CodeUnexpected, refreshErr, "refresh remote session").LogError(ctx, logger)
 			}
 		}
-		if result.Outcome == remotesessions.RefreshOutcomeSessionInactive {
+		if result.Outcome == remotesessionmetrics.RefreshOutcomeSessionInactive {
 			return oops.E(oops.CodeBadRequest, nil, "Reconnect this service before refreshing it.").LogWarn(ctx, logger)
 		}
 		http.Redirect(w, r, backURL, http.StatusSeeOther)

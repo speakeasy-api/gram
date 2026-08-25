@@ -12,7 +12,9 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 type failingAddCache struct {
@@ -44,7 +46,7 @@ func TestRefreshNow_InvalidGrant_ClearsRefreshGrantWhenCacheUnavailable(t *testi
 		w.WriteHeader(http.StatusForbidden)
 		_, _ = w.Write([]byte(`{"error":"invalid_grant","error_description":"Unknown or invalid refresh token."}`))
 	})
-	env.refresher = env.newRefresher(failingAddCache{Cache: cache.NoopCache})
+	env.refresher = env.newRefresher(testenv.NewMeterProvider(t), failingAddCache{Cache: cache.NoopCache})
 
 	session, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
 		SubjectUrn:            env.subject,
@@ -52,7 +54,7 @@ func TestRefreshNow_InvalidGrant_ClearsRefreshGrantWhenCacheUnavailable(t *testi
 	})
 	require.NoError(t, err)
 
-	result, err := env.refresher.RefreshNow(ctx, session, "")
+	result, err := env.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerScheduled)
 	require.Error(t, err)
 	require.Empty(t, result.Outcome)
 	require.Empty(t, result.AccessToken)
@@ -161,7 +163,7 @@ func refreshNowAgainstUpstreamError(t *testing.T, slugSuffix string, status int,
 	})
 	require.NoError(t, err)
 
-	result, refreshErr := env.refresher.RefreshNow(ctx, session, "")
+	result, refreshErr := env.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerScheduled)
 	require.Error(t, refreshErr)
 	require.Empty(t, result.Outcome)
 	require.Empty(t, result.AccessToken)

@@ -45,6 +45,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -186,18 +187,29 @@ func (m *ChallengeManager) resolveUpstreamToken(
 		// above). Both collapse to the same empty-token signal downstream and
 		// then to a byte-identical 401, so log the reason here — using the
 		// public-safe TokenRefreshError.Reason when present — instead of
-		// discarding it silently.
+		// discarding it silently. The issuer URL and outcome are the ones the
+		// upstream-refresh metric recorded, so this line joins to its series;
+		// the user id is what lets "how many users are affected" be answered,
+		// since a client id is one row per provider connection, not per user.
 		reason := "upstream token refresh failed"
 		var refreshErr *TokenRefreshError
 		if errors.As(err, &refreshErr) {
 			reason = refreshErr.Reason
 		}
-		m.logger.WarnContext(ctx, "remote session unusable: upstream token refresh failed",
+		args := []any{
 			attr.SlogRemoteSessionClientID(clientID.String()),
 			attr.SlogUserSessionIssuerID(sess.UserSessionIssuerID.String()),
 			attr.SlogOAuthFailureReason(reason),
 			attr.SlogError(err),
-		)
+		}
+		var failure *RefreshError
+		if errors.As(err, &failure) {
+			args = append(args, attr.SlogOAuthIssuer(failure.IssuerURL), attr.SlogOutcome(string(failure.Outcome)))
+		}
+		if subject.Kind == urn.SessionSubjectKindUser {
+			args = append(args, attr.SlogUserID(subject.ID))
+		}
+		m.logger.WarnContext(ctx, "remote session unusable: upstream token refresh failed", args...)
 		return zero, nil
 	}
 
@@ -432,11 +444,11 @@ func (m *ChallengeManager) validateAndRefresh(
 		return "", sess, ErrNoValidToken
 	}
 
-	res, err := m.refresher.RefreshNow(ctx, sess, resource)
+	res, err := m.refresher.RefreshNow(ctx, sess, resource, remotesessionmetrics.RefreshTriggerRequest)
 	if err != nil {
 		return "", sess, err
 	}
-	// RefreshOutcomeSessionInactive lands here as an empty token, which the
+	// remotesessionmetrics.RefreshOutcomeSessionInactive lands here as an empty token, which the
 	// caller treats the same as "never linked".
 	return res.AccessToken, res.Session, nil
 }
@@ -445,10 +457,10 @@ func (m *ChallengeManager) validateAndRefresh(
 // endpoint and persists the new token pair on success, returning the updated
 // remote_session row and the new plaintext access token.
 //
-// It is shared by the lazy MCP resolution path (ChallengeManager) and the
-// explicit org-admin refresh handler. The upstream token POST is an external
-// call, so q must be a pool-bound querier, never a transaction-bound one — the
-// POST must not run inside an open database transaction.
+// RefreshService.RefreshNow is its only caller and supplies the session's
+// client + issuer row it already loaded. The upstream token POST is an
+// external call, so q must be a pool-bound querier, never a transaction-bound
+// one — the POST must not run inside an open database transaction.
 //
 // Operator-actionable failures (unreadable stored token, missing token
 // endpoint, an upstream rejection, no access token returned) come back as a
@@ -459,15 +471,12 @@ func refreshSessionTokens(
 	q *remotesessions_repo.Queries,
 	enc *encryption.Client,
 	policy *guardian.Policy,
+	client remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow,
 	sess remotesessions_repo.RemoteSession,
 	resource string,
 ) (remotesessions_repo.RemoteSession, string, error) {
 	var zero remotesessions_repo.RemoteSession
 
-	client, err := q.GetRemoteSessionClientWithIssuerByID(ctx, sess.RemoteSessionClientID)
-	if err != nil {
-		return zero, "", fmt.Errorf("load remote_session_client for refresh: %w", err)
-	}
 	if !client.TokenEndpoint.Valid || client.TokenEndpoint.String == "" {
 		return zero, "", newTokenRefreshError("the identity provider has no token endpoint configured", nil)
 	}
@@ -512,7 +521,7 @@ func refreshSessionTokens(
 
 	resp, err := policy.PooledClient().Do(req)
 	if err != nil {
-		return zero, "", fmt.Errorf("post refresh: %w", err)
+		return zero, "", fmt.Errorf("post refresh: %w: %w", errRefreshUpstreamUnreachable, err)
 	}
 	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 
