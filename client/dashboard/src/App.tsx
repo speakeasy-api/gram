@@ -15,6 +15,7 @@ import {
   useSearchParams,
 } from "react-router";
 import { AppLayout, LoginCheck, OrgLayout } from "./components/app-layout.tsx";
+import { ModeSwitchProvider } from "./components/mode-switch-stage.tsx";
 import { CommandPalette } from "./components/command-palette";
 import {
   getRecentLabelOverride,
@@ -384,7 +385,9 @@ const RouteProvider = () => {
     );
   }, [routes, orgRoutes]);
 
-  return routeElements;
+  // Above the router: the mode-switch animation spans the route swap between
+  // its shrink and zoom beats, so its state has to outlive that navigation.
+  return <ModeSwitchProvider>{routeElements}</ModeSwitchProvider>;
 };
 
 // Convert a single route into a command-palette navigation action.

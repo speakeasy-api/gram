@@ -1,7 +1,3 @@
-import {
-  BRAND_MESH_SURFACE_CLASS,
-  BrandMeshLayers,
-} from "@/components/brand-mesh";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import {
   usePlatformMcpCta,
@@ -117,9 +113,10 @@ export function OrgWelcomeBanner(): JSX.Element | null {
   return (
     // Section runs the full width of the content area; the column class below
     // keeps its contents aligned with the rest of the page.
-    <section className={cn(BRAND_MESH_SURFACE_CLASS, "w-full")}>
-      {/* Mesh spans the whole banner; the gray band below paints over it. */}
-      <BrandMeshLayers />
+    // Flat, not meshed: the brand mesh now belongs to the app chrome (the mode
+    // switcher strip and the tab grid behind it). Repeating it here stacked
+    // three bands — meshed strip, white workspace bar, meshed hero.
+    <section className="bg-background w-full">
       {/* Deep bottom padding leaves room for the cards to overlap the hero. */}
       <div
         className={cn(
