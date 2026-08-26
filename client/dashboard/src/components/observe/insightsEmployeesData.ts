@@ -144,7 +144,7 @@ function summaryEmail(summary: UserSummary): string {
 // email-less id summary shadows the member's token-bearing email summaries,
 // understating them while their real usage is orphaned into the unattributed
 // list (DNO-618, and the account-email leg for personal accounts).
-export function groupSummariesByMember(
+function groupSummariesByMember(
   members: AccessMember[],
   summaries: UserSummary[],
 ): {
