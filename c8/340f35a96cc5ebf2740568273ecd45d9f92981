@@ -1,0 +1,31 @@
+server/database/schema.sql
+  s_f31159c07d89e5::t_18cccaf03cd311 2839-2851
+server/migrations/20260825130754_risk-enforcement-settings.sql
+  s_144368660ce217::t_c896af4732c1df 1-11
+server/migrations/atlas.sum
+  s_144368660ce217::t_c896af4732c1df 1,367
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "c8340f35a96cc5ebf2740568273ecd45d9f92981",
+  "prompts": {},
+  "sessions": {
+    "s_144368660ce217": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a03905-71fd-7553-a92e-527e97799e13",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    },
+    "s_f31159c07d89e5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0104a-0166-79c3-bb7a-688693ddb25c",
+        "model": "gpt-5.5"
+      },
+      "human_author": null
+    }
+  }
+}

@@ -1,0 +1,29 @@
+seed/demo/verify.md
+  s_d16499501a966c::t_0ec2165dcff001 47-52
+server/internal/demoseed/postgres.sql
+  s_d16499501a966c::t_0ec2165dcff001 1117-1136,1314-1327
+  s_d16499501a966c::t_7a4418c131e475 1328-1329
+docs/research/age-2708-harness-quarantine-primitives.md
+  s_d16499501a966c::t_0ec2165dcff001 59,123,128,130,132,140-141,148,152
+seed/demo/PAGES.md
+  s_d16499501a966c::t_0ec2165dcff001 30
+  s_d16499501a966c::t_1662e379b11387 19
+server/internal/risk/impl.go
+  s_d16499501a966c::t_5b4cbf844938de 732
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "309bd73104de1a192385825f18ddd58e852ded0c",
+  "prompts": {},
+  "sessions": {
+    "s_d16499501a966c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a03341-61d8-73b1-b230-ec13908068ae",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
