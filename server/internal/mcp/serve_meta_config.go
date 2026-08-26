@@ -2,7 +2,7 @@ package mcp
 
 import "time"
 
-// MetaRuntimeConfig bounds the gateway's per-member upstream work. Zero
+// MetaRuntimeConfig bounds the meta MCP's per-member upstream work. Zero
 // values mean the built-in defaults, so an unwired config is safe.
 type MetaRuntimeConfig struct {
 	// MemberCallTimeout bounds one member call end to end, handshake and

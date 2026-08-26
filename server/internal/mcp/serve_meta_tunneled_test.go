@@ -1,4 +1,4 @@
-// Tunneled gateway members: execute_tool dispatches through the tunnel
+// Tunneled meta MCP members: execute_tool dispatches through the tunnel
 // gateway with the caller's lone stored credential, and fails closed —
 // making no tunnel forward — the moment the credential map turns ambiguous.
 // The fake tunnel gateway answers the handshake-first initialize (minting a

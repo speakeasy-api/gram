@@ -1,4 +1,4 @@
-// serve_meta_runtime_test.go verifies the gateway drill-down runtime for
+// serve_meta_runtime_test.go verifies the meta MCP drill-down runtime for
 // hosted members: describe_server/describe_tools/execute_tool routing,
 // qualified-name handling, member exclusion rules, proxied-member
 // not-implemented answers, the notification/version interaction, and the
@@ -225,7 +225,7 @@ func TestServePublic_MetaEndpoint_ExecuteTool_HostedMember_Dispatches(t *testing
 	// reaches the member dispatch, resolves the tool, attempts execution, and
 	// fails there — surfacing as an internal error. Routing failures look
 	// different (not-found codes, unknown server / tool not found messages),
-	// so this pins that the gateway handed the call to the member's tool
+	// so this pins that the meta MCP handed the call to the member's tool
 	// execution path without pinning dispatch-internal message text. The
 	// outer _meta rides along to prove forwarding does not disturb routing.
 	w, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, "tools/call", map[string]any{
@@ -351,7 +351,7 @@ func TestServePublic_MetaEndpoint_ListServers_StatusByBackend(t *testing.T) {
 	require.Equal(t, "unknown", statuses[proxiedSlug], "remote members stay unknown until cached health exists")
 	require.Equal(t, "unavailable", statuses[tunneledSlug], "a tunneled member with no live route is unavailable")
 
-	require.NoError(t, ti.tunnelRoutes.Publish(ctx, tunnelID.String(), "http://gateway.internal.example:8443", time.Hour))
+	require.NoError(t, ti.tunnelRoutes.Publish(ctx, tunnelID.String(), "http://meta MCP.internal.example:8443", time.Hour))
 	statuses = listStatuses()
 	require.Equal(t, "available", statuses[tunneledSlug], "a published route flips the tunneled member to available")
 	require.Equal(t, "unknown", statuses[proxiedSlug], "route publication must not disturb the remote member's status")

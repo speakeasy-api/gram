@@ -18,7 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-// metaMemberBackend classifies how the gateway reaches one member.
+// metaMemberBackend classifies how the meta MCP reaches one member.
 type metaMemberBackend int
 
 const (
@@ -69,7 +69,7 @@ func (s *Service) memberStatus(ctx context.Context, member metaMember) string {
 }
 
 // resolveMetaMemberSnapshot loads the servable members and applies the
-// per-member RBAC filter; unproxied members (no gateway dispatch path) are
+// per-member RBAC filter; unproxied members (no meta MCP dispatch path) are
 // excluded, so pre-validation memberships degrade to invisibility.
 func (s *Service) resolveMetaMemberSnapshot(
 	ctx context.Context,

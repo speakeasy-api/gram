@@ -1,5 +1,5 @@
-// The gateway's whole credential claim, asserted at the upstream: an
-// execute_tool through a gateway forwards the member's own bearer to the
+// The meta MCP's whole credential claim, asserted at the upstream: an
+// execute_tool through a meta MCP forwards the member's own bearer to the
 // member's own upstream and never a sibling's. Each member here is a real
 // MCP SDK server behind a recording reverse proxy, so the assertion reads
 // the Authorization header that actually arrived on the wire — and the SDK
@@ -128,7 +128,7 @@ func seedMetaMemberWithUpstream(
 }
 
 // insertQualifiedRemoteSessionToken plants a stored upstream token carrying
-// an RFC 8707 resource, the qualified form the gateway's strict router
+// an RFC 8707 resource, the qualified form the meta MCP's strict router
 // selects by.
 func insertQualifiedRemoteSessionToken(
 	t *testing.T,
@@ -230,7 +230,7 @@ func TestServePublic_MetaEndpoint_ExecuteTool_ForwardsEachMembersOwnBearer(t *te
 	seedMetaMemberWithUpstream(t, ctx, ti.conn, projectID, meta.ID, "Member B", "member-b", 1, upstreamB.url)
 
 	// One client per upstream authorization server, both bound to the
-	// gateway's shared issuer — the shape gateway consent produces.
+	// meta MCP's shared issuer — the shape meta MCP consent produces.
 	clientA := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-cred-a", "", []uuid.UUID{sharedIssuerID})
 	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-cred-b", "", []uuid.UUID{sharedIssuerID})
 

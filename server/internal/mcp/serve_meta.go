@@ -1,7 +1,7 @@
 // The meta-server MCP surface: protocol termination for meta-MCP-backed
 // /mcp/{slug} endpoints. This surface answers MCP 2026-07-28 — including the
 // sessionless server/discover method and per-request protocol-version
-// declarations — and exposes the fixed gateway tool contract (list_servers,
+// declarations — and exposes the fixed meta MCP tool contract (list_servers,
 // describe_server, describe_tools, execute_tool). Hosted (toolset-backed)
 // members serve the full drill-down through the in-process tool dispatch;
 // proxied (remote/tunneled) members answer a deterministic not-implemented
@@ -39,7 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
-// metaGateContext carries the per-request state the gateway tools need:
+// metaGateContext carries the per-request state the meta MCP tools need:
 // what the issuer gate produced, the caller's identity/authentication
 // outcome, and the surface-resolved protocol version. Assembled once in
 // serveResolvedMetaMCPEndpoint and threaded through dispatch.
@@ -426,7 +426,7 @@ func (s *Service) callMetaServerTool(
 		return nil, oops.E(oops.CodeNotFound, nil, "unknown tool %q", params.Name).LogError(ctx, logger)
 	}
 
-	// One snapshot per request: every gateway tool answers from the same
+	// One snapshot per request: every meta MCP tool answers from the same
 	// member set, so a membership mutation lands between requests, never
 	// inside one.
 	ctx, members, err := s.resolveMetaMemberSnapshot(ctx, logger, metaServer.ID, mcpEndpoint.ProjectID)
