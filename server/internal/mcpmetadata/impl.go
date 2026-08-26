@@ -1339,6 +1339,10 @@ func (s *Service) renderRemoteMcpInstallPage(ctx context.Context, w http.Respons
 		return oops.E(oops.CodeUnexpected, err, "resolve mcp endpoint url").LogError(ctx, s.logger, attr.SlogMcpServerID(mcpServer.ID.String()))
 	}
 
+	// Anonymous public tunnels are served without OAuth even though the schema
+	// forces an issuer on every tunneled backend (mirrors serveendpoint.go issuerGated).
+	tunneledPublic := mcpServer.TunneledMcpServerID.Valid && mcpServer.Visibility == mcpservers.VisibilityPublic
+
 	return s.writeInstallPage(ctx, w, hostedPageRenderInputs{
 		// Remote-MCP-backed installs don't expose Gram-side env vars or a tools
 		// list yet: the page renders the URL + branding only.
@@ -1353,10 +1357,8 @@ func (s *Service) renderRemoteMcpInstallPage(ctx context.Context, w http.Respons
 		DocsText:       docsText,
 		Instructions:   instructions,
 		IsPublic:       ic.isPublic(),
-		// Remote-MCP-backed installs have no toolset, so OAuth is driven solely
-		// by the server's user-session issuer (mirrors resolveSecurityMode).
-		IsOAuth: mcpServer.UserSessionIssuerID.Valid,
-		OrgName: ic.organization.Name,
+		IsOAuth:        mcpServer.UserSessionIssuerID.Valid && !tunneledPublic,
+		OrgName:        ic.organization.Name,
 		// Remote-MCP-backed installs have no tool list, so no filter scopes.
 		FilteringEnabled: false,
 		Scopes:           nil,
