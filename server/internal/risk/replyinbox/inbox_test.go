@@ -145,22 +145,36 @@ func TestOrphanReplyIsDroppedAndCounted(t *testing.T) {
 	}, time.Second, 5*time.Millisecond)
 }
 
-func TestReplyRacingClosedWaiterIsCountedAsOrphan(t *testing.T) {
+func TestReplyAfterReleaseIsCountedAsOrphan(t *testing.T) {
 	t.Parallel()
 
-	te := setupInboxTest(t, "replica-closed-waiter")
-	w, release, err := te.inbox.register("scan-closed", []Lane{gitleaksLane})
+	te := setupInboxTest(t, "replica-released-waiter")
+	_, release, err := te.inbox.register("scan-released", []Lane{gitleaksLane})
 	require.NoError(t, err)
-	defer release()
-	w.mu.Lock()
-	w.closed = true
-	w.mu.Unlock()
+	release()
 
-	reply, err := proto.Marshal(testReply("scan-closed", gitleaksLane, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK))
+	reply, err := proto.Marshal(testReply("scan-released", gitleaksLane, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK))
 	require.NoError(t, err)
 	te.inbox.route(t.Context(), string(reply))
 
-	require.Empty(t, w.replies)
+	require.Equal(t, uint64(1), te.inbox.Snapshot().OrphanedReplies)
+}
+
+func TestReplyOverflowingWaiterBufferIsCountedAsOrphan(t *testing.T) {
+	t.Parallel()
+
+	te := setupInboxTest(t, "replica-overflow")
+	w, release, err := te.inbox.register("scan-overflow", []Lane{gitleaksLane})
+	require.NoError(t, err)
+	defer release()
+
+	reply, err := proto.Marshal(testReply("scan-overflow", gitleaksLane, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK))
+	require.NoError(t, err)
+	for range cap(w.done) + 1 {
+		te.inbox.route(t.Context(), string(reply))
+	}
+
+	require.Len(t, w.done, cap(w.done))
 	require.Equal(t, uint64(1), te.inbox.Snapshot().OrphanedReplies)
 }
 
