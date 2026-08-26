@@ -1797,15 +1797,13 @@ export default {
 
     // The daemon never reads these history-sized fields (finalMessage/usage
     // ride the llm_output splice), and an oversized frame is dropped at the
-    // serve loop's size cap — strip them before they reach the pipe.
+    // serve loop's size cap — strip them before they reach the pipe. The
+    // canonical shim also strips llm_input.historyMessages; this shim never
+    // subscribes llm_input, so that branch is omitted here.
     const slimEvent = (hook, event) => {
       if (event == null || typeof event !== "object") return event
       if (hook === "agent_end" || hook === "before_agent_run") {
         const { messages, ...rest } = event
-        return rest
-      }
-      if (hook === "llm_input") {
-        const { historyMessages, ...rest } = event
         return rest
       }
       return event
