@@ -2146,6 +2146,17 @@ func TestGenerateOpenClawObservabilityPluginPackage(t *testing.T) {
 	} {
 		require.Contains(t, string(shim), want)
 	}
+	// History-sized fields the daemon never reads are stripped pre-pipe: pin
+	// the strip logic itself, not just the call site.
+	if !strings.Contains(string(shim), "const event = slimEvent(hook, rawEvent)") {
+		t.Error("every hook payload must pass through slimEvent")
+	}
+	if !strings.Contains(string(shim), `if (hook === "agent_end" || hook === "before_agent_run") {`) {
+		t.Error("slimEvent must target the history-bearing hooks")
+	}
+	if !strings.Contains(string(shim), "const { messages, ...rest } = event") {
+		t.Error("slimEvent must drop event.messages")
+	}
 	// Package installs reject TypeScript entries; the shim must stay plain JS.
 	require.NotContains(t, string(shim), ": ChildProcess")
 
