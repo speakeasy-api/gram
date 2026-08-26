@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 )
 
 // Formatter formats log records for output.
@@ -16,28 +18,82 @@ type Formatter struct {
 
 // NewFormatter creates a new Formatter with the given config.
 func NewFormatter(cfg *Config) *Formatter {
+	maybeForceColorProfile(cfg)
 	return &Formatter{cfg: cfg}
 }
 
+var forceColorProfileOnce sync.Once
+
+// maybeForceColorProfile rescues colorized output when it is enabled but the
+// destination is not a TTY. lipgloss styles render through a global renderer
+// whose color profile is detected from os.Stdout; when stdout is a pipe (for
+// example when a process manager like pitchfork captures the daemon's output)
+// that profile is Ascii and every ANSI escape is stripped, leaving plain text.
+// We only ever upgrade an Ascii profile to TrueColor, so genuine terminals and
+// an explicit NO_COLOR/CLICOLOR opt-out are left untouched.
+func maybeForceColorProfile(cfg *Config) {
+	if cfg.NoColor {
+		return
+	}
+	forceColorProfileOnce.Do(func() {
+		if termenv.EnvNoColor() {
+			return
+		}
+		if lipgloss.ColorProfile() == termenv.Ascii {
+			lipgloss.SetColorProfile(termenv.TrueColor)
+		}
+	})
+}
+
+// attrLinePrefix marks source/attribute continuation lines. It groups a
+// record's details visually in a terminal and, because it is a single
+// non-whitespace token at the start of the line, it also lets line-oriented log
+// viewers that prefix every physical line with their own timestamp (such as
+// pitchfork) treat it as the leading token: they re-absorb their timestamp
+// instead of stranding it on the indented line, and the bar itself is consumed.
+const attrLinePrefix = "│"
+
+// attrLineSep separates the bar from the detail. The leading space is required:
+// line-oriented viewers like pitchfork split the leading token on a space, so a
+// bare tab there would fail their parse and strand the viewer's timestamp on the
+// line. The trailing tab indents the detail (it survives into the viewer's
+// output, which renders it as leading whitespace).
+const attrLineSep = " \t"
+
 // Format writes a formatted log record to the output.
+//
+// The record's message occupies the first line; its source location and
+// attributes follow on their own lines, each introduced by a vertical bar:
+//
+//	<timestamp> <LEVEL> <message>
+//	│	<source>
+//	│	<key>: <value>
+//
+// When the timestamp is hidden the message line leads with the bar instead, so
+// the leading token that line-oriented viewers discard (see attrLinePrefix) is
+// never the level.
 func (f *Formatter) Format(w io.Writer, record *Record) error {
+	prefix := f.style(f.cfg.Theme.AttrBracket, attrLinePrefix)
+
 	var parts []string
 
-	// Timestamp
+	// Leading token. Line-oriented viewers such as pitchfork discard the first
+	// whitespace-delimited token of every line; the timestamp normally fills
+	// that slot. When it is hidden we lead with the bar instead so the level is
+	// never mistaken for the discarded token.
 	if !f.cfg.HideTimestamp && !record.Time.IsZero() {
 		ts := record.Time.Format("15:04:05.000")
-		ts = f.style(f.cfg.Theme.Timestamp, ts)
-		parts = append(parts, ts)
+		parts = append(parts, f.style(f.cfg.Theme.Timestamp, ts))
+	} else {
+		parts = append(parts, prefix)
 	}
 
 	// Level
-	levelStr := f.formatLevel(record)
-	parts = append(parts, levelStr)
+	parts = append(parts, f.formatLevel(record))
 
 	// Message
 	if record.Message != "" {
-		msg := f.style(f.cfg.Theme.Message, record.Message)
-		parts = append(parts, msg)
+		parts = append(parts, f.style(f.cfg.Theme.Message, record.Message))
 	}
 
 	// Write main log line
@@ -45,33 +101,24 @@ func (f *Formatter) Format(w io.Writer, record *Record) error {
 		return fmt.Errorf("writing log line: %w", err)
 	}
 
-	// Write source and attributes on separate indented lines
-	hasDetails := record.Source != nil || len(record.Attrs) > 0
-	if hasDetails {
-		// Source
-		if record.Source != nil {
-			srcStr := record.Source.RelativePath(f.cfg.WorkingDir)
-			if record.Source.Line > 0 {
-				srcStr = fmt.Sprintf("%s:%d", srcStr, record.Source.Line)
-			}
-			srcStr = f.style(f.cfg.Theme.Source, srcStr)
-			if _, err := fmt.Fprintf(w, "    %s\n", srcStr); err != nil {
-				return fmt.Errorf("writing source: %w", err)
-			}
+	// Source
+	if record.Source != nil {
+		srcStr := record.Source.RelativePath(f.cfg.WorkingDir)
+		if record.Source.Line > 0 {
+			srcStr = fmt.Sprintf("%s:%d", srcStr, record.Source.Line)
 		}
-
-		// Attributes
-		for _, attr := range record.Attrs {
-			key := f.style(f.cfg.Theme.AttrKey, attr.Key)
-			value := f.formatValue(attr.Value)
-			if _, err := fmt.Fprintf(w, "    %s: %s\n", key, value); err != nil {
-				return fmt.Errorf("writing attribute: %w", err)
-			}
+		srcStr = f.style(f.cfg.Theme.Source, srcStr)
+		if _, err := fmt.Fprintf(w, "%s%s%s\n", prefix, attrLineSep, srcStr); err != nil {
+			return fmt.Errorf("writing source: %w", err)
 		}
+	}
 
-		// Blank line after details
-		if _, err := fmt.Fprintln(w); err != nil {
-			return fmt.Errorf("writing blank line: %w", err)
+	// Attributes
+	for _, attr := range record.Attrs {
+		key := f.style(f.cfg.Theme.AttrKey, attr.Key)
+		value := f.formatValue(attr.Value)
+		if _, err := fmt.Fprintf(w, "%s%s%s: %s\n", prefix, attrLineSep, key, value); err != nil {
+			return fmt.Errorf("writing attribute: %w", err)
 		}
 	}
 
