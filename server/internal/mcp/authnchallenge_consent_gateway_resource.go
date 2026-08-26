@@ -1,9 +1,6 @@
-// Per-member credential selection for gateway endpoints. A caller authenticates
-// once at a gateway, so every credential hangs off the gateway's
-// user_session_issuer and the per-client derivation qualifies nothing. This
-// resolves the member a connecting client belongs to at consent time and records
-// its URL as the grant's RFC 8707 resource, so routeUpstreamToken routes by it
-// unchanged.
+// Per-member credential selection for gateway endpoints: resolves the member a
+// connecting client belongs to at consent time and records its URL as the
+// grant's RFC 8707 resource, which routeUpstreamToken routes by unchanged.
 
 package mcp
 
@@ -24,22 +21,13 @@ import (
 )
 
 // resolveGatewayMemberResource returns the upstream URL of the gateway member
-// whose upstream authenticates against remoteSessionIssuerID, or "" when no
-// single member can be identified.
+// whose upstream authenticates against remoteSessionIssuerID.
 //
-// A join, not a discovery call: a remote_session_client names exactly one
-// remote_session_issuer and mcp_servers records the issuer its upstream
-// authenticates against, so the member falls out of data Gram already holds.
-//
-// The second return reports whether any member claimed the issuer, a different
-// question from "is the resource non-empty". An ambiguous gateway answers
-// ("", true): declining to qualify is a decision, and the caller must not then
-// reach for a weaker signal. Only a genuine no-match lets the stored per-client
-// derivation answer instead.
-//
-// Fails closed — no match and several members both leave "". A NULL
-// remote_session_issuer_id matches nothing, so a server the sync has not reached
-// behaves as it does today. The error is a database or grant-load fault only.
+// Tri-state: ("", true) means members claimed the issuer but no single member
+// wins, and the caller must not fall back to a weaker derivation; ("", false)
+// is a genuine no-match, the only case where the stored per-client derivation
+// may answer. A NULL remote_session_issuer_id matches nothing. The error is a
+// database or grant-load fault only, and the connect fails closed on it.
 func (s *Service) resolveGatewayMemberResource(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -58,9 +46,8 @@ func (s *Service) resolveGatewayMemberResource(
 	if err != nil {
 		return "", false, fmt.Errorf("list gateway members for remote session issuer: %w", err)
 	}
-	// Claimed before RBAC: a member the caller cannot see still claimed this
-	// credential, and letting the fallback qualify it elsewhere would hand it to a
-	// member that never claimed it.
+	// Claimed is decided before RBAC: an invisible member still claimed this
+	// credential, and a fallback would hand it to a member that never did.
 	if len(rows) == 0 {
 		return "", false, nil
 	}
@@ -94,9 +81,7 @@ func (s *Service) resolveGatewayMemberResource(
 }
 
 // authorizedGatewayMembers drops members the subject holds no mcp:connect on,
-// mirroring authorizeProxyBackendAccess. A member the caller cannot reach must
-// neither claim their credential — the resolved URL is echoed back to them —
-// nor contest the claim of one they can.
+// mirroring authorizeProxyBackendAccess.
 func (s *Service) authorizedGatewayMembers(
 	ctx context.Context,
 	endpoint *ResolvedMcpEndpoint,
@@ -118,9 +103,8 @@ func (s *Service) authorizedGatewayMembers(
 		switch row.McpServerVisibility {
 		case mcpservers.VisibilityPublic:
 		case mcpservers.VisibilityPrivate:
-			// Only a denial drops a member. A fault must not: dropping narrows the
-			// candidate set, which is how two members that should read as ambiguous become
-			// one confident answer.
+			// Only a denial drops a member; dropping on a fault narrows the
+			// candidate set and turns ambiguous into a confident wrong answer.
 			if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, row.McpServerID.String(), endpoint.ProjectID.String())); err != nil {
 				if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && shareable.Code == oops.CodeForbidden {
 					continue
@@ -128,8 +112,7 @@ func (s *Service) authorizedGatewayMembers(
 				return nil, fmt.Errorf("authorize gateway member access: %w", err)
 			}
 		default:
-			// Not redundant with the query's visibility filter: that excludes one named
-			// value, this excludes every value neither arm can judge.
+			// Not redundant with the query's one-named-value visibility filter.
 			continue
 		}
 		authorized = append(authorized, row)

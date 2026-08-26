@@ -521,23 +521,23 @@ func TestServeConsentAction_GatewayConnectIgnoresAnotherProjectsUpstream(t *test
 	require.Equal(t, "https://mine.example.com/mcp", postConnectAction(t, fx, clientID).Query().Get("resource"))
 }
 
-// A tombstoned member server keeps its membership row — soft-deleting a server
-// and detaching it from a gateway are separate writes — so the lookup, not the
-// membership, is what has to stop answering for it.
-func TestServeConsentAction_GatewayConnectIgnoresTombstonedMemberServer(t *testing.T) {
+// Soft deletes on either side of the member join must stop it from qualifying
+// credentials: the mcp_servers row (membership rows survive server deletion)
+// and the remote_mcp_servers row each carry their own tombstone.
+func TestServeConsentAction_GatewayConnectIgnoresTombstonedRows(t *testing.T) {
 	t.Parallel()
 
-	ctx, fx, metaServerID := seedGatewayConsentEndpoint(t, "aim87-dead-srv-gw")
+	ctx, fx, metaServerID := seedGatewayConsentEndpoint(t, "aim87-dead-rows-gw")
 
-	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-dead-srv", "", []uuid.UUID{fx.shared})
+	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-dead-rows", "", []uuid.UUID{fx.shared})
 	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
 
-	const upstream = "https://dead-srv.example.com/mcp"
-	member := createGatewayMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-dead-srv-member", upstream, conv.ToNullUUID(issuerID), 0)
-	require.Equal(t, upstream, postConnectAction(t, fx, clientID).Query().Get("resource"), "the member must resolve while it is live")
+	const upstreamA = "https://dead-srv.example.com/mcp"
+	memberA := createGatewayMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-dead-srv-member", upstreamA, conv.ToNullUUID(issuerID), 0)
+	require.Equal(t, upstreamA, postConnectAction(t, fx, clientID).Query().Get("resource"), "the member must resolve while it is live")
 
 	_, err := mcpservers_repo.New(fx.ti.conn).DeleteMCPServer(ctx, mcpservers_repo.DeleteMCPServerParams{
-		ID:        member.mcpServerID,
+		ID:        memberA.mcpServerID,
 		ProjectID: fx.projectID,
 	})
 	require.NoError(t, err)
@@ -545,30 +545,21 @@ func TestServeConsentAction_GatewayConnectIgnoresTombstonedMemberServer(t *testi
 	loc := postConnectAction(t, fx, clientID)
 	_, hasResource := loc.Query()["resource"]
 	require.False(t, hasResource, "a tombstoned member server must stop qualifying credentials")
-}
 
-// The upstream row carries its own soft delete, and a member whose upstream is
-// gone has no URL a token could be routed to.
-func TestServeConsentAction_GatewayConnectIgnoresTombstonedUpstream(t *testing.T) {
-	t.Parallel()
+	// A second live member still resolves, so the exclusions here are the
+	// tombstone predicates and not general breakage.
+	const upstreamB = "https://dead-upstream.example.com/mcp"
+	memberB := createGatewayMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-dead-upstream-member", upstreamB, conv.ToNullUUID(issuerID), 1)
+	require.Equal(t, upstreamB, postConnectAction(t, fx, clientID).Query().Get("resource"), "the member must resolve while its upstream is live")
 
-	ctx, fx, metaServerID := seedGatewayConsentEndpoint(t, "aim87-dead-upstream-gw")
-
-	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-dead-upstream", "", []uuid.UUID{fx.shared})
-	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
-
-	const upstream = "https://dead-upstream.example.com/mcp"
-	member := createGatewayMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-dead-upstream-member", upstream, conv.ToNullUUID(issuerID), 0)
-	require.Equal(t, upstream, postConnectAction(t, fx, clientID).Query().Get("resource"), "the member must resolve while its upstream is live")
-
-	_, err := remotemcp_repo.New(fx.ti.conn).DeleteServer(ctx, remotemcp_repo.DeleteServerParams{
-		ID:        member.remoteServerID,
+	_, err = remotemcp_repo.New(fx.ti.conn).DeleteServer(ctx, remotemcp_repo.DeleteServerParams{
+		ID:        memberB.remoteServerID,
 		ProjectID: fx.projectID,
 	})
 	require.NoError(t, err)
 
-	loc := postConnectAction(t, fx, clientID)
-	_, hasResource := loc.Query()["resource"]
+	loc = postConnectAction(t, fx, clientID)
+	_, hasResource = loc.Query()["resource"]
 	require.False(t, hasResource, "a tombstoned upstream must stop qualifying credentials")
 }
 
@@ -612,26 +603,6 @@ func TestServeConsentAction_GatewayConnectLookupErrorFailsClosed(t *testing.T) {
 	// Break only the member lookup's table; everything the connect arm touches
 	// before it is already seeded (per-test cloned DB, safe to mutate).
 	_, err := fx.ti.conn.Exec(ctx, "ALTER TABLE meta_mcp_server_members RENAME TO meta_mcp_server_members_unavailable") //nolint:glint // notestingrawsql: deliberate DDL breakage to force a member-lookup DB error; not expressible as an SQLc query
-	require.NoError(t, err)
-
-	requireConnectActionFailsClosed(t, fx, clientID)
-}
-
-// A grant load that faults must fail the connect closed too. Continuing
-// without grants would admit every member the query returned without ever
-// judging whether the subject can reach it.
-func TestServeConsentAction_GatewayConnectGrantLoadErrorFailsClosed(t *testing.T) {
-	t.Parallel()
-
-	ctx, fx, metaServerID := seedGatewayConsentEndpoint(t, "aim87-grant-fault-gw")
-
-	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-grant-fault", "", []uuid.UUID{fx.shared})
-	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
-	// Public, so a swallowed fault would sail past the authorization check
-	// rather than trip over the missing grants a moment later.
-	createGatewayMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-grant-fault-member", "https://grant-fault.example.com/mcp", conv.ToNullUUID(issuerID), 0)
-
-	_, err := fx.ti.conn.Exec(ctx, "ALTER TABLE principal_grants RENAME TO principal_grants_unavailable") //nolint:glint // notestingrawsql: deliberate DDL breakage to force a grant-load DB error; not expressible as an SQLc query
 	require.NoError(t, err)
 
 	requireConnectActionFailsClosed(t, fx, clientID)

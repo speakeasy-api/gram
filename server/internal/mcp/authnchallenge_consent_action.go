@@ -124,10 +124,8 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 				autoRefresh = &v
 			}
 		}
-		// Not endpoint.UpstreamResource: under multi-binding that may belong to a
-		// different client's upstream. A gateway's members carry their own issuers
-		// while the client is bound to the gateway's, so the stored derivation finds
-		// nothing and the member lookup answers instead.
+		// Not endpoint.UpstreamResource: under multi-binding that may belong
+		// to a different client's upstream.
 		var clientResource string
 		var rerr error
 		claimedByMember := false
@@ -140,10 +138,8 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 			}
 			clientResource, claimedByMember, rerr = s.resolveGatewayMemberResource(memberCtx, logger, endpoint, client.RemoteSessionIssuerID)
 		}
-		// The stored derivation answers only when no member claimed the issuer. Gate
-		// on the claim, not on an empty resource: a gateway that declined to choose
-		// between two members has decided, and falling back would qualify the
-		// credential to one of them anyway.
+		// Gate on the claim, not an empty resource: an ambiguous gateway has
+		// decided, and falling back would qualify the credential anyway.
 		if rerr == nil && !claimedByMember {
 			clientResource, rerr = s.remoteChallengeMgr.FallbackResourceForClient(ctx, client.ID)
 		}
