@@ -22,6 +22,7 @@ import (
 type capturedMetricRelayRequest struct {
 	path        string
 	contentType string
+	bodySize    int
 	request     *collectormetricsv1.ExportMetricsServiceRequest
 	err         error
 }
@@ -42,6 +43,7 @@ func (c *metricRelayRequestCapture) handler(w http.ResponseWriter, r *http.Reque
 	c.requests = append(c.requests, capturedMetricRelayRequest{
 		path:        r.URL.Path,
 		contentType: r.Header.Get("Content-Type"),
+		bodySize:    len(body),
 		request:     request,
 		err:         err,
 	})
@@ -103,6 +105,47 @@ func TestMetricRelayHandlerPreservesMetricsWithoutMixingProvenance(t *testing.T)
 	}
 	slices.Sort(names)
 	require.Equal(t, []string{"latency", "requests", "tokens"}, names)
+}
+
+func TestMetricRelayHandlerLimitsDestinationExportsTo512KiB(t *testing.T) {
+	t.Parallel()
+
+	capture := &metricRelayRequestCapture{mu: sync.Mutex{}, requests: nil}
+	server := httptest.NewServer(http.HandlerFunc(capture.handler))
+	t.Cleanup(server.Close)
+	handler := newMetricRelayTestHandler(t, testenv.NewMeterProvider(t))
+	cacheMetricRelayTestDestination(t, handler, testMetricOrganizationID, server.URL)
+
+	items := []*otelv1.Metric{
+		relayTestMetric("one", testMetricOrganizationID, testMetricProjectID),
+		relayTestMetric("two", testMetricOrganizationID, testMetricProjectID),
+		relayTestMetric("three", testMetricOrganizationID, testMetricProjectID),
+	}
+	for _, item := range items {
+		item.SetMetadata([]*otelv1.Metric_KeyValue{
+			(&otelv1.Metric_KeyValue_builder{
+				Key: new("padding"),
+				Value: (&otelv1.Metric_AnyValue_builder{
+					BytesValue: make([]byte, maxOTLPMetricBytes/2-1024),
+				}).Build(),
+			}).Build(),
+		})
+	}
+
+	messages, failures := metricRelayTestMessages(items...)
+	require.NoError(t, handler.handleBatch(t.Context(), messages))
+	for _, failure := range failures {
+		require.NoError(t, failure)
+	}
+
+	require.Equal(t, 512*1024, maxMetricRelayExportBytes)
+	requests := capture.snapshot()
+	require.Len(t, requests, 2)
+	for _, captured := range requests {
+		require.NoError(t, captured.err)
+		require.Positive(t, captured.bodySize)
+		require.LessOrEqual(t, captured.bodySize, maxMetricRelayExportBytes)
+	}
 }
 
 func metricRelayTestMessages(items ...*otelv1.Metric) ([]metricRelayMessage, []error) {

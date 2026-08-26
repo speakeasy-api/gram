@@ -192,7 +192,7 @@ func (h *MetricRelayHandler) handleBatch(ctx context.Context, messages []metricR
 					h.recordDroppedMetrics(ctx, len(item.batch.items), reason)
 				}
 
-				h.logger.ErrorContext(
+				h.logger.WarnContext(
 					ctx,
 					"relay otel metrics",
 					attr.SlogError(err),
@@ -203,8 +203,9 @@ func (h *MetricRelayHandler) handleBatch(ctx context.Context, messages []metricR
 			return nil
 		})
 	}
-	// Export workers classify delivery failures per item and always return nil.
-	_ = exportGroup.Wait()
+	if err := exportGroup.Wait(); err != nil {
+		return fmt.Errorf("wait for metric relay exports: %w", err)
+	}
 	return nil
 }
 

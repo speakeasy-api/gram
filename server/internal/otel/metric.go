@@ -16,12 +16,12 @@ import (
 
 const (
 	meterMetricEnricherDuration = "gram.otel_metric_enricher.duration"
-	maxMetricRelayExportBytes   = 4 * constants.MiB
+	maxMetricRelayExportBytes   = 512 * constants.KiB
 
-	// Metric resource and scope context is flattened into each Pub/Sub message.
-	// Reserve enough space for that context and the OTLP export wrappers rebuilt
-	// at relay time so every accepted metric fits one destination request.
-	metricRelayEnvelopeHeadroom = 256 * constants.KiB
+	// Keep destination exports within Datadog's 512 KiB compressed intake
+	// limit even though the relay sends uncompressed protobuf. Reserve space
+	// for resource context, future bounded enrichments, and OTLP wrappers.
+	metricRelayEnvelopeHeadroom = 64 * constants.KiB
 	maxOTLPMetricBytes          = maxMetricRelayExportBytes - metricRelayEnvelopeHeadroom
 )
 
