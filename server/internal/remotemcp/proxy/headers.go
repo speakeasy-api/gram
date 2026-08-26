@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -103,6 +104,9 @@ func isSkippedResponseHeader(name string) bool {
 // [http.ResponseWriter.WriteHeader]; once the status line is written, header
 // mutations are silently dropped.
 func applyResponseHeaders(w http.ResponseWriter, remoteResp *http.Response, wwwAuthenticate string) {
+	// Marks the access log's gram.http.response.external attribute so relayed
+	// upstream statuses (including 5xx) are distinguishable from Gram faults.
+	w.Header().Set(constants.HeaderProxiedResponse, "1")
 	replaceChallenge := wwwAuthenticate != "" &&
 		(remoteResp.StatusCode == http.StatusUnauthorized || remoteResp.StatusCode == http.StatusForbidden)
 	for name, values := range remoteResp.Header {
