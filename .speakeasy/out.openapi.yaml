@@ -76291,6 +76291,9 @@ components:
           type: string
           description: The project the block belongs to.
           format: uuid
+        provider:
+          type: string
+          description: Agent surface that reported the blocked call (adapter slug, e.g. "openclaw"), when known.
         reason:
           type: string
           description: Human-readable reason the tool call was blocked.
