@@ -4503,6 +4503,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS mcp_servers_project_id_id_key
 ON mcp_servers (project_id, id);
 
 
+-- Drives the resync that recomputes remote_session_issuer_id from a set of user
+-- session issuers. That statement runs inside every client create, attach,
+-- detach and delete, so without this it sequential-scans mcp_servers while
+-- holding write locks.
+CREATE INDEX IF NOT EXISTS mcp_servers_user_session_issuer_id_idx
+ON mcp_servers (user_session_issuer_id)
+WHERE user_session_issuer_id IS NOT NULL;
+
 CREATE INDEX IF NOT EXISTS mcp_servers_remote_mcp_server_id_idx
 ON mcp_servers (remote_mcp_server_id)
 WHERE remote_mcp_server_id IS NOT NULL;
