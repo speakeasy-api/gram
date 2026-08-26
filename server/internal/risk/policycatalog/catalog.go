@@ -89,7 +89,6 @@ func Build() (Catalog, error) {
 			string(categories.CategoryOffPolicy),
 			string(categories.CategoryPII),
 			string(categories.CategoryPromptInjection),
-			string(categories.CategoryPromptPolicy),
 			string(categories.CategorySecrets),
 			string(categories.CategoryShadowMCP),
 		},
