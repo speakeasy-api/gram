@@ -70,9 +70,8 @@ export async function autoConfigureRemoteMcpAuth({
   }
   const requestHeaders = options?.headers ?? options?.fetchOptions?.headers;
   const routedProjectSlug =
-    (requestHeaders
-      ? new Headers(requestHeaders).get("gram-project")
-      : null) ?? projectSlug;
+    (requestHeaders ? new Headers(requestHeaders).get("gram-project") : null) ??
+    projectSlug;
 
   let protectedResourceMetadata: ProtectedResourceMetadata | undefined;
   try {

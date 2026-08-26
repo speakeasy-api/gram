@@ -332,6 +332,7 @@ func TestSoftDeleteSubjectSessions_SiblingIssuerRevokeDestroysSharedCredential(t
 		ti.conn,
 		testenv.NewEncryptionClient(t),
 		policy,
+		nil,
 	)
 
 	creds, err := revoker.SoftDeleteSubjectSessions(ctx, ti.conn, fx.subject, sibling, fx.projectID, fx.organizationID)
@@ -358,6 +359,7 @@ func TestSoftDeleteSubjectSessions_UnboundIssuerRevokesNothing(t *testing.T) {
 		ti.conn,
 		testenv.NewEncryptionClient(t),
 		policy,
+		nil,
 	)
 
 	creds, err := revoker.SoftDeleteSubjectSessions(ctx, ti.conn, fx.subject, unbound, fx.projectID, fx.organizationID)

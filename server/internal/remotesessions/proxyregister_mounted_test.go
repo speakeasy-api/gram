@@ -35,9 +35,10 @@ func TestProxyRegisterMountedHandlerResolvesProjectForTunneledRequest(t *testing
 	}))
 	session, err := ti.sessionManager.GetSession(ctx, *authCtx.SessionID)
 	require.NoError(t, err)
+	existingSession := session
 	session.SupportOrganizationID = authCtx.ActiveOrganizationID
 	session.SupportExpiresAt = time.Now().Add(time.Hour)
-	require.NoError(t, ti.sessionManager.UpdateSession(ctx, session))
+	require.NoError(t, ti.sessionManager.UpdateSession(ctx, existingSession, session))
 
 	tunnelID := seedTunneledMcpServer(t, ctx, ti)
 	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
