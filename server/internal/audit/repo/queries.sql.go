@@ -211,7 +211,7 @@ func (q *Queries) ListAuditActionFacets(ctx context.Context, arg ListAuditAction
 
 const listAuditActorFacets = `-- name: ListAuditActorFacets :many
 WITH filtered_logs AS (
-  SELECT actor_id, actor_type, actor_display_name, seq
+  SELECT actor_id, actor_type, actor_display_name, acting_surface, seq
   FROM audit_logs
   WHERE organization_id = $1
     AND subject_type <> 'assistant'
@@ -225,7 +225,8 @@ WITH filtered_logs AS (
     COUNT(*)::bigint AS count,
     -- Flags actor ids that appear as user actors, so callers can restrict
     -- user-specific treatment (e.g. Speakeasy staff masking) to them.
-    BOOL_OR(actor_type = 'user')::boolean AS is_user_actor
+    BOOL_OR(actor_type = 'user')::boolean AS is_user_actor,
+    BOOL_OR(COALESCE(acting_surface = 'admin', FALSE))::boolean AS is_admin_actor
   FROM filtered_logs
   GROUP BY actor_id
 ), latest_actor_names AS (
@@ -241,7 +242,8 @@ SELECT
   actor_counts.actor_id AS value,
   COALESCE(latest_actor_names.actor_display_name, actor_counts.actor_id) AS display_name,
   actor_counts.count,
-  actor_counts.is_user_actor
+  actor_counts.is_user_actor,
+  actor_counts.is_admin_actor
 FROM actor_counts
 LEFT JOIN latest_actor_names ON latest_actor_names.actor_id = actor_counts.actor_id
 ORDER BY actor_counts.count DESC, actor_counts.actor_id ASC
@@ -253,10 +255,11 @@ type ListAuditActorFacetsParams struct {
 }
 
 type ListAuditActorFacetsRow struct {
-	Value       string
-	DisplayName string
-	Count       int64
-	IsUserActor bool
+	Value        string
+	DisplayName  string
+	Count        int64
+	IsUserActor  bool
+	IsAdminActor bool
 }
 
 // Assistant activity events are excluded: facets power the platform audit
@@ -275,6 +278,7 @@ func (q *Queries) ListAuditActorFacets(ctx context.Context, arg ListAuditActorFa
 			&i.DisplayName,
 			&i.Count,
 			&i.IsUserActor,
+			&i.IsAdminActor,
 		); err != nil {
 			return nil, err
 		}

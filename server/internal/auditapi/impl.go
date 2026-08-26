@@ -148,7 +148,9 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 		return nil, oops.E(oops.CodeUnexpected, err, "error resolving audit actor identities").LogError(ctx, s.logger)
 	}
 	for _, log := range logs {
-		if log.ActorType == "user" && speakeasyActors[log.ActorID] {
+		isAdminActor := log.ActingSurface == string(audit.SurfaceAdmin)
+		isSpeakeasyActor := log.ActorType == "user" && speakeasyActors[log.ActorID]
+		if shouldMaskCustomerActor(isAdminActor, isSpeakeasyActor) {
 			log.ActorDisplayName = conv.PtrEmpty(audit.SpeakeasyTeamActorLabel)
 			log.ActorSlug = nil
 		}
@@ -158,6 +160,10 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 		Logs:       logs,
 		NextCursor: nextCursor,
 	}, nil
+}
+
+func shouldMaskCustomerActor(isAdminActor, isSpeakeasyActor bool) bool {
+	return isAdminActor || isSpeakeasyActor
 }
 
 // speakeasyActorIDs returns which of the given user actor IDs belong to the
@@ -238,8 +244,8 @@ func (s *Service) ListFacets(ctx context.Context, payload *gen.ListFacetsPayload
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error resolving audit actor identities").LogError(ctx, s.logger)
 	}
-	for _, actor := range actors {
-		if speakeasyActors[actor.Value] {
+	for i, actor := range actors {
+		if shouldMaskCustomerActor(actorRows[i].IsAdminActor, speakeasyActors[actor.Value]) {
 			actor.DisplayName = audit.SpeakeasyTeamActorLabel
 		}
 	}

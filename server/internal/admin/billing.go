@@ -12,7 +12,6 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
-	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -110,7 +109,7 @@ func (s *Service) SetInferenceKeyMonthlyLimit(ctx context.Context, payload *gen.
 		return nil, oops.E(oops.CodeConflict, nil, "the inference key is disabled")
 	}
 
-	actor, _ := adminActor(ctx)
+	actor, actorDisplayName, _ := adminActor(ctx)
 	monthlyCredits, err := s.openRouterSpendCap.SetAdminOpenRouterSpendCap(
 		ctx,
 		uuid.NewString(),
@@ -118,7 +117,7 @@ func (s *Service) SetInferenceKeyMonthlyLimit(ctx context.Context, payload *gen.
 		keyType,
 		payload.MonthlyCredits,
 		actor,
-		conv.PtrEmpty(audit.SpeakeasyTeamActorLabel),
+		actorDisplayName,
 	)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "set inference key monthly limit").LogError(ctx, s.logger)
@@ -195,9 +194,9 @@ func (s *Service) setStripeSubscriptionCancelAtPeriodEnd(ctx context.Context, re
 	if err != nil {
 		return nil, err
 	}
-	actor, _ := adminActor(ctx)
+	actor, actorDisplayName, _ := adminActor(ctx)
 	subscription, err := s.billing.SetStripeSubscriptionCancelAtPeriodEndForOrganization(ctx, organizationID, usage.BillingActor{
-		Principal: actor, DisplayName: conv.PtrEmpty(audit.SpeakeasyTeamActorLabel),
+		Principal: actor, DisplayName: actorDisplayName,
 	}, cancelAtPeriodEnd)
 	if err != nil {
 		return nil, fmt.Errorf("update Stripe subscription: %w", err)

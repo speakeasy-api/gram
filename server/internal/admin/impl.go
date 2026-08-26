@@ -858,13 +858,11 @@ func (s *Service) ExtendTrial(ctx context.Context, payload *gen.ExtendTrialPaylo
 		return nil, oops.E(oops.CodeUnexpected, err, "read organization for trial extension").LogError(ctx, logger)
 	}
 
-	actor, operatorEmail := adminActor(ctx)
+	actor, actorDisplayName, operatorEmail := adminActor(ctx)
 	if err := s.audit.LogOrganizationEnterpriseTrialExtended(ctx, tx, audit.LogOrganizationEnterpriseTrialExtendedEvent{
-		OrganizationID: payload.ID,
-		Actor:          actor,
-		// The customer reads this feed, so the entry carries the team label
-		// rather than the operator's email. adminActor says why.
-		ActorDisplayName:    conv.PtrEmpty(audit.SpeakeasyTeamActorLabel),
+		OrganizationID:      payload.ID,
+		Actor:               actor,
+		ActorDisplayName:    actorDisplayName,
 		ActorSlug:           nil,
 		OrganizationName:    organization.Name,
 		OrganizationSlug:    organization.Slug,
@@ -1155,13 +1153,11 @@ func (s *Service) rearmTrialLocked(
 		return nil, oops.E(oops.CodeUnexpected, err, "restore trial runtime features").LogError(ctx, logger)
 	}
 
-	actor, operatorEmail := adminActor(ctx)
+	actor, actorDisplayName, operatorEmail := adminActor(ctx)
 	if err := s.audit.LogOrganizationEnterpriseTrialRearmed(ctx, tx, audit.LogOrganizationEnterpriseTrialRearmedEvent{
-		OrganizationID: payload.ID,
-		Actor:          actor,
-		// The customer reads this feed, so the entry carries the team label
-		// rather than the operator's email. adminActor says why.
-		ActorDisplayName: conv.PtrEmpty(audit.SpeakeasyTeamActorLabel),
+		OrganizationID:   payload.ID,
+		Actor:            actor,
+		ActorDisplayName: actorDisplayName,
 		ActorSlug:        nil,
 		OrganizationName: organization.Name,
 		OrganizationSlug: organization.Slug,
@@ -1264,18 +1260,20 @@ func (s *Service) recapRevivedKeys(ctx context.Context, logger *slog.Logger, loc
 
 // adminActor identifies the operator behind an admin-app write. An admin session
 // carries an OIDC subject rather than a Gram user id, and a call without one
-// records the system actor the demotion sweeper uses.
-//
-// The returned email is for the structured log only, never the entry's display
-// name: these entries surface in the customer's own feed, and auditapi's
-// read-side mask cannot recognise an OIDC subject as staff.
-func adminActor(ctx context.Context) (actor urn.Principal, operatorEmail *string) {
+// records the system actor the demotion sweeper uses. The email is returned
+// separately for private structured logs.
+func adminActor(ctx context.Context) (actor urn.Principal, displayName, operatorEmail *string) {
 	authCtx, ok := contextvalues.GetAdminAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.OIDCSubject == "" {
-		return urn.NewPrincipal(urn.PrincipalTypeUser, "system"), nil
+		return urn.NewPrincipal(urn.PrincipalTypeUser, "system"), nil, nil
 	}
 
-	return urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.OIDCSubject), conv.PtrEmpty(authCtx.Email)
+	name := strings.TrimSpace(authCtx.Name)
+	if name == "" {
+		name = strings.TrimSpace(authCtx.Email)
+	}
+
+	return urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.OIDCSubject), conv.PtrEmpty(name), conv.PtrEmpty(authCtx.Email)
 }
 
 // readOrganizationAfterWrite returns the organization a write just landed on.
