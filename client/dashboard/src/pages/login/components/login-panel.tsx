@@ -49,12 +49,12 @@ export function LoginPanel({
       </p>
 
       <p className="mt-2 text-[14px] text-(--muted-strong)">
-        No account?{" "}
+        Don't have an account?{" "}
         <Link
           to={authPageHref("/sign-up", redirectTo)}
           className="text-(--link) underline hover:text-(--focus)"
         >
-          Sign-up for a 14-day trial.
+          Sign up
         </Link>
       </p>
     </>
