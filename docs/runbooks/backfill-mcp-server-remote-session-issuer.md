@@ -29,17 +29,22 @@ next binding change or a re-run of this statement — re-running is always safe.
 - Hosted servers untouched: `user_session_issuer_id IS NULL` never matches, so
   an operator-set value (direct upstream authorization, AIM-28) cannot be
   clobbered.
-- First run only ever sets: every row is NULL beforehand (preflight confirms).
+- First run only ever sets: every matchable row is NULL beforehand (preflight
+  confirms).
 - No locks needed: concurrent client mutations at worst leave a stale value on
   the same recoverable terms as the sync itself.
 
 ## Preflight
 
 ```sql
--- Expect 0: nothing has written the column yet. Non-zero means operator-set
--- rows exist (see AIM-28); stop and account for them before proceeding.
+-- Expect 0: nothing has written the column on the rows the statement can
+-- match. Operator-set hosted rows (AIM-28, user_session_issuer_id IS NULL)
+-- are excluded — the UPDATE can never touch them. Non-zero means something
+-- already wrote the sync-managed slice; stop and investigate.
 SELECT count(*) FROM mcp_servers
-WHERE remote_session_issuer_id IS NOT NULL AND deleted IS FALSE;
+WHERE remote_session_issuer_id IS NOT NULL
+  AND user_session_issuer_id IS NOT NULL
+  AND deleted IS FALSE;
 
 -- Coverage buckets over live servers carrying a user session issuer:
 -- how many will stamp (unique), stay NULL with no derivable issuer (none),
@@ -132,9 +137,12 @@ until the organization-tier management API ships.
 ## Verify
 
 ```sql
--- Stamped total equals the `unique` bucket.
+-- Stamped total over issuer-carrying servers equals the `unique` bucket;
+-- operator-set hosted rows (AIM-28) are excluded, as in the preflight.
 SELECT count(*) FROM mcp_servers
-WHERE remote_session_issuer_id IS NOT NULL AND deleted IS FALSE;
+WHERE remote_session_issuer_id IS NOT NULL
+  AND user_session_issuer_id IS NOT NULL
+  AND deleted IS FALSE;
 
 -- Idempotence: run the statement again; it must report UPDATE 0.
 ```
