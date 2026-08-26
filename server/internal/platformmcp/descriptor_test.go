@@ -310,3 +310,17 @@ func TestAdvertisedOutputSchemaMatchesTheSubjectCountWireForm(t *testing.T) {
 		require.NoError(t, resolved.Validate(decoded), "output %s", encoded)
 	}
 }
+
+// Schema inference panics at process boot, so a tool input the nil-dependency
+// server never registers can crash-loop production while CI stays green. The
+// jsonschema tag is a description; a "word=" prefix is rejected outright.
+func TestClientAdmissionToolInputsInferSchemas(t *testing.T) {
+	t.Parallel()
+
+	_, err := jsonschema.For[GetMCPClientAdmissionToolInput](nil)
+	require.NoError(t, err)
+
+	schema, err := jsonschema.For[SetMCPClientAdmissionToolInput](nil)
+	require.NoError(t, err)
+	require.Contains(t, schema.Properties["mode"].Description, "presets, open, or disabled")
+}
