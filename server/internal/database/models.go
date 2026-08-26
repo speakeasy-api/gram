@@ -2111,6 +2111,7 @@ type RemoteSessionIssuer struct {
 	AuthorizationEndpoint             pgtype.Text
 	TokenEndpoint                     pgtype.Text
 	RevocationEndpoint                pgtype.Text
+	IntrospectionEndpoint             pgtype.Text
 	RegistrationEndpoint              pgtype.Text
 	JwksUri                           pgtype.Text
 	ServiceDocumentation              pgtype.Text
