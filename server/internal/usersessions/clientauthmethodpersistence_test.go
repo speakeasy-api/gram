@@ -59,10 +59,67 @@ func TestUpsertUserSessionClientFromCIMD_RefreshesAuthMethod(t *testing.T) {
 	requireOrganizationID(t, ctx, refreshed.OrganizationID)
 }
 
-// An authorize-time refresh fills in a client's organization when it has none
-// but never moves one it already carries. The DO UPDATE branch leaves
-// project_id untouched, so adopting the issuer's current organization instead
-// would leave a row whose two tenancy columns name different owners.
+// An authorize-time refresh fills in the organization of a client that has
+// none. That is how a client created before the column existed picks up its
+// tenancy on its own, rather than staying untenanted until the backfill runs.
+func TestUpsertUserSessionClientFromCIMD_FillsMissingOrganizationOnRefresh(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	issuerID := seedIssuer(t, ctx, ti, "cimd-org-fill")
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	// Strip the issuer's organization so the client below derives a NULL one,
+	// standing in for a row written before the column existed.
+	testQueries := testrepo.New(ti.conn)
+	require.NoError(t, testQueries.SetUserSessionIssuerOrganizationID(ctx, testrepo.SetUserSessionIssuerOrganizationIDParams{
+		OrganizationID: pgtype.Text{String: "", Valid: false},
+		ID:             issuerID,
+		ProjectID:      *authCtx.ProjectID,
+	}))
+
+	documentURL := "https://org-fill.example.com/oauth/client.json"
+	queries := repo.New(ti.conn)
+
+	seeded, err := queries.UpsertUserSessionClientFromCIMD(ctx, repo.UpsertUserSessionClientFromCIMDParams{
+		UserSessionIssuerID:     issuerID,
+		ClientID:                documentURL,
+		ClientName:              "Original Name",
+		RedirectUris:            []string{"https://org-fill.example.com/cb"},
+		CacheTtlSeconds:         3600,
+		ClientIDMetadataEtag:    pgtype.Text{String: `"v1"`, Valid: true},
+		TokenEndpointAuthMethod: "none",
+	})
+	require.NoError(t, err)
+	require.False(t, seeded.OrganizationID.Valid, "the client must inherit the issuer's missing organization")
+
+	require.NoError(t, testQueries.SetUserSessionIssuerOrganizationID(ctx, testrepo.SetUserSessionIssuerOrganizationIDParams{
+		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+		ID:             issuerID,
+		ProjectID:      *authCtx.ProjectID,
+	}))
+
+	refreshed, err := queries.UpsertUserSessionClientFromCIMD(ctx, repo.UpsertUserSessionClientFromCIMDParams{
+		UserSessionIssuerID:     issuerID,
+		ClientID:                documentURL,
+		ClientName:              "Renamed",
+		RedirectUris:            []string{"https://org-fill.example.com/cb"},
+		CacheTtlSeconds:         3600,
+		ClientIDMetadataEtag:    pgtype.Text{String: `"v2"`, Valid: true},
+		TokenEndpointAuthMethod: "none",
+	})
+	require.NoError(t, err)
+	require.Equal(t, seeded.ID, refreshed.ID, "the refresh must update the same row, not insert a second one")
+	requireOrganizationID(t, ctx, refreshed.OrganizationID)
+}
+
+// An authorize-time refresh never moves a client that already carries an
+// organization, even once its issuer belongs to a different one. The DO UPDATE
+// branch leaves project_id untouched, so adopting the issuer's current
+// organization would leave a row whose two tenancy columns name different
+// owners.
 func TestUpsertUserSessionClientFromCIMD_KeepsOrganizationOnRefresh(t *testing.T) {
 	t.Parallel()
 
