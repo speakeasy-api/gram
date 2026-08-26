@@ -21,6 +21,7 @@ import (
 type handshakeRecorder struct {
 	mu       sync.Mutex
 	attempts map[string]int
+	headers  map[string]http.Header
 
 	// respond reports the status code to answer with for the given method and
 	// 1-based attempt number. A zero return means the recorder answers the
@@ -29,7 +30,18 @@ type handshakeRecorder struct {
 }
 
 func newHandshakeRecorder(respond func(method string, attempt int) int) *handshakeRecorder {
-	return &handshakeRecorder{attempts: map[string]int{}, respond: respond}
+	return &handshakeRecorder{attempts: map[string]int{}, headers: map[string]http.Header{}, respond: respond}
+}
+
+// headerFor returns the value the first attempt of method carried for the named
+// header. Tests that depend on a header reaching the wire assert on this before
+// asserting on the behavior that header is supposed to drive, so a break in
+// header injection surfaces as a failure rather than as a silently uncovered
+// case.
+func (h *handshakeRecorder) headerFor(method, name string) string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.headers[method].Get(name)
 }
 
 func (h *handshakeRecorder) attemptsFor(method string) int {
@@ -51,6 +63,9 @@ func (h *handshakeRecorder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.mu.Lock()
 	h.attempts[envelope.Method]++
 	attempt := h.attempts[envelope.Method]
+	if _, seen := h.headers[envelope.Method]; !seen {
+		h.headers[envelope.Method] = r.Header.Clone()
+	}
 	h.mu.Unlock()
 
 	if status := h.respond(envelope.Method, attempt); status != 0 {
@@ -164,6 +179,7 @@ func TestNewClientClassifiesDiscoverProbeBeforeConfiguredHeaders(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = client.Close() })
 
+	require.Equal(t, "tools/call", recorder.headerFor(methodServerDiscover, headerMCPMethod), "the configured header must reach the wire, or the overwrite is never exercised")
 	require.Equal(t, 1, recorder.attemptsFor(methodServerDiscover), "a configured Mcp-Method must not defeat the exemption")
 }
 
@@ -188,5 +204,6 @@ func TestNewClientConfiguredDiscoverHeaderDoesNotStripRetries(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = client.Close() })
 
+	require.Equal(t, methodServerDiscover, recorder.headerFor("initialize", headerMCPMethod), "the configured header must reach the wire, or the misclassification is never exercised")
 	require.Equal(t, 2, recorder.attemptsFor("initialize"), "a configured Mcp-Method must not classify other requests as the probe")
 }
