@@ -17,46 +17,46 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-type DataForwardingSensitiveData string
+type DataExportSensitiveData string
 
 const (
-	DataForwardingSensitiveDataExclude DataForwardingSensitiveData = "exclude"
-	DataForwardingSensitiveDataInclude DataForwardingSensitiveData = "include"
+	DataExportSensitiveDataExclude DataExportSensitiveData = "exclude"
+	DataExportSensitiveDataInclude DataExportSensitiveData = "include"
 )
 
-func (e *DataForwardingSensitiveData) Scan(src interface{}) error {
+func (e *DataExportSensitiveData) Scan(src interface{}) error {
 	switch s := src.(type) {
 	case []byte:
-		*e = DataForwardingSensitiveData(s)
+		*e = DataExportSensitiveData(s)
 	case string:
-		*e = DataForwardingSensitiveData(s)
+		*e = DataExportSensitiveData(s)
 	default:
-		return fmt.Errorf("unsupported scan type for DataForwardingSensitiveData: %T", src)
+		return fmt.Errorf("unsupported scan type for DataExportSensitiveData: %T", src)
 	}
 	return nil
 }
 
-type NullDataForwardingSensitiveData struct {
-	DataForwardingSensitiveData DataForwardingSensitiveData
-	Valid                       bool // Valid is true if DataForwardingSensitiveData is not NULL
+type NullDataExportSensitiveData struct {
+	DataExportSensitiveData DataExportSensitiveData
+	Valid                   bool // Valid is true if DataExportSensitiveData is not NULL
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullDataForwardingSensitiveData) Scan(value interface{}) error {
+func (ns *NullDataExportSensitiveData) Scan(value interface{}) error {
 	if value == nil {
-		ns.DataForwardingSensitiveData, ns.Valid = "", false
+		ns.DataExportSensitiveData, ns.Valid = "", false
 		return nil
 	}
 	ns.Valid = true
-	return ns.DataForwardingSensitiveData.Scan(value)
+	return ns.DataExportSensitiveData.Scan(value)
 }
 
 // Value implements the driver Valuer interface.
-func (ns NullDataForwardingSensitiveData) Value() (driver.Value, error) {
+func (ns NullDataExportSensitiveData) Value() (driver.Value, error) {
 	if !ns.Valid {
 		return nil, nil
 	}
-	return string(ns.DataForwardingSensitiveData), nil
+	return string(ns.DataExportSensitiveData), nil
 }
 
 type AgentExecution struct {
@@ -574,14 +574,14 @@ type CustomDomain struct {
 	Deleted                  bool
 }
 
-type DataForwardingRule struct {
+type DataExportRoute struct {
 	ID                uuid.UUID
 	OrganizationID    string
 	ProjectID         uuid.UUID
 	DataSource        string
 	Enabled           bool
 	OtelDestinationID uuid.NullUUID
-	SensitiveData     NullDataForwardingSensitiveData
+	SensitiveData     NullDataExportSensitiveData
 	CreatedAt         pgtype.Timestamptz
 	UpdatedAt         pgtype.Timestamptz
 	DeletedAt         pgtype.Timestamptz
