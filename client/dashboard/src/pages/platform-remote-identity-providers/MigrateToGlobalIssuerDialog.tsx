@@ -85,7 +85,12 @@ export function MigrateToGlobalIssuerDialog({
         if (!open) onClose();
       }}
     >
-      <Dialog.Content>
+      {/* Wider than a default dialog, and unconditionally so. The impact
+      summary can carry two endpoint URLs per differing field, which wrap into
+      an unreadable stack at the default width. Sizing it only when a blocker is
+      present would resize the dialog under the admin as they change the target
+      in the picker above. */}
+      <Dialog.Content className="max-w-2xl">
         <Dialog.Header>
           <Dialog.Title>
             Consolidate "{issuerDisplayName(candidate.issuer)}"

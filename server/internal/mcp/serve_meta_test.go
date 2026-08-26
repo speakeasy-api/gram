@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/metamcp/visibility"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
@@ -52,6 +53,7 @@ func createMetaMcpEndpoint(
 		ProjectID:           projectID,
 		Name:                "test meta MCP",
 		UserSessionIssuerID: issuer,
+		Visibility:          visibility.Private,
 	})
 	require.NoError(t, err)
 

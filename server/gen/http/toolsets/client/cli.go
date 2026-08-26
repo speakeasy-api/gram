@@ -365,6 +365,48 @@ func BuildListToolFiltersPayload(toolsetsListToolFiltersSlug string, toolsetsLis
 	return v, nil
 }
 
+// BuildListToolSchemaStaticValuesPayload builds the payload for the toolsets
+// listToolSchemaStaticValues endpoint from CLI flags.
+func BuildListToolSchemaStaticValuesPayload(toolsetsListToolSchemaStaticValuesSlug string, toolsetsListToolSchemaStaticValuesSessionToken string, toolsetsListToolSchemaStaticValuesApikeyToken string, toolsetsListToolSchemaStaticValuesProjectSlugInput string) (*toolsets.ListToolSchemaStaticValuesPayload, error) {
+	var err error
+	var slug string
+	{
+		slug = toolsetsListToolSchemaStaticValuesSlug
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9_-]{1,128}$"))
+		if utf8.RuneCountInString(slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if toolsetsListToolSchemaStaticValuesSessionToken != "" {
+			sessionToken = &toolsetsListToolSchemaStaticValuesSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if toolsetsListToolSchemaStaticValuesApikeyToken != "" {
+			apikeyToken = &toolsetsListToolSchemaStaticValuesApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if toolsetsListToolSchemaStaticValuesProjectSlugInput != "" {
+			projectSlugInput = &toolsetsListToolSchemaStaticValuesProjectSlugInput
+		}
+	}
+	v := &toolsets.ListToolSchemaStaticValuesPayload{}
+	v.Slug = types.Slug(slug)
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildCheckMCPSlugAvailabilityPayload builds the payload for the toolsets
 // checkMCPSlugAvailability endpoint from CLI flags.
 func BuildCheckMCPSlugAvailabilityPayload(toolsetsCheckMCPSlugAvailabilitySlug string, toolsetsCheckMCPSlugAvailabilitySessionToken string, toolsetsCheckMCPSlugAvailabilityApikeyToken string, toolsetsCheckMCPSlugAvailabilityProjectSlugInput string) (*toolsets.CheckMCPSlugAvailabilityPayload, error) {

@@ -10,7 +10,7 @@ import (
 )
 
 type SearchGramDocsToolInput struct {
-	Query string `json:"query" jsonschema:"question or provider name to look up in the reviewed Gram documentation corpus, for example 'GitHub OAuth client id' or 'Snowflake tenant URL'"`
+	Query string `json:"query" jsonschema:"question or provider name to look up in the reviewed Speakeasy setup guides, for example 'GitHub OAuth client id' or 'Snowflake tenant URL'"`
 }
 
 type SearchGramDocsToolOutput struct {
@@ -26,12 +26,12 @@ type SearchGramDocsToolOutput struct {
 	TrustedLinks []string `json:"trusted_links,omitempty"`
 }
 
-const searchGramDocsDescription = "Search the reviewed Speakeasy AICP setup and documentation corpus and return up to five cited excerpts. The corpus is a pinned, reviewed export: this tool never reads the live web, a provider's pages, or unreviewed search results. Every excerpt carries its source, version, observation date, and canonical links, plus the gram:// resource URI of the full guide — read that resource for the complete steps. If the result is guide_unavailable or an excerpt is marked stale, tell the user what is missing and hand them the canonical links. Never invent setup steps that an excerpt does not state."
+const searchGramDocsDescription = "Search the reviewed Speakeasy setup guides and return up to five cited excerpts. Constraints: the guides are a pinned, reviewed set — this tool never reads the live web, a provider's pages, or unreviewed search results. Every excerpt carries its source, version, observation date, and canonical links, plus the gram:// URI of the full guide; read that for the complete steps. If the result is guide_unavailable or an excerpt is marked stale, tell the user what is missing and hand them the canonical links. Never invent setup steps that an excerpt does not state."
 
 func registerSearchDocsTool(reg *Registrar, index DocsIndex, budget OperationBudget) {
 	addTool(reg, &mcp.Tool{
 		Name:        "search_gram_docs",
-		Title:       "Search Gram Docs",
+		Title:       "Search Setup Guides",
 		Description: searchGramDocsDescription,
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{
@@ -62,7 +62,7 @@ func registerSearchDocsTool(reg *Registrar, index DocsIndex, budget OperationBud
 				Query:        query,
 				Excerpts:     []DocsExcerpt{},
 				Code:         setupGuideUnavailableCode,
-				Message:      "No reviewed documentation answers this query. Do not invent setup steps: tell the user no reviewed guide covers this yet, and point them at the documentation index returned with this result.",
+				Message:      "No reviewed guide answers this. Do not invent setup steps: tell the user no guide covers this yet, and point them at the documentation index returned with this result.",
 				TrustedLinks: []string{docsIndexURL},
 			}, nil
 		}
@@ -122,8 +122,8 @@ func excerptLinkDescription(excerpt DocsExcerpt) string {
 func registerUnavailableSearchDocsTool(reg *Registrar) {
 	addTool(reg, &mcp.Tool{
 		Name:        "search_gram_docs",
-		Title:       "Search Gram Docs",
-		Description: "Search the reviewed Speakeasy AICP documentation corpus. Documentation search is not enabled in the current rollout.",
+		Title:       "Search Setup Guides",
+		Description: "Search the reviewed Speakeasy setup guides. This is not switched on for your organization yet.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, unavailableTool("docs_search"))
 }

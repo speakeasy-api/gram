@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
 // RiskScanner checks text against blocking risk policies.
@@ -460,7 +461,7 @@ func (s *Scanner) LookupShadowMCPBlockingPolicy(ctx context.Context, organizatio
 			continue
 		}
 		if p.Action == "block" {
-			disposition := effectiveShadowMCPDisposition(p.ShadowMcpDisposition, p.Sources, p.Action)
+			disposition := shadowmcp.EffectiveDisposition(p.ShadowMcpDisposition, p.Sources, p.Action)
 			var blockedURLs []string
 			if disposition == ShadowMCPDispositionAllowAll {
 				blockedURLs, err = loadShadowMCPBlockedURLs(ctx, s.db, organizationID, p.ID.String())

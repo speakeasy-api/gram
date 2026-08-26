@@ -13,6 +13,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 )
 
+// InstrumentMCPRequestRejected is the OTel instrument name for the counter of
+// requests the Session OAuth authentication gate rejected before dispatch.
+const InstrumentMCPRequestRejected = "mcp.request.rejected"
+
 // OAuthFlowStage is the closed set of coarse stages at which a user-facing
 // OAuth flow can terminally resolve to a non-completion outcome (failed or
 // declined). It names the handler leg where the flow ended. Kept as a bounded
@@ -57,6 +61,14 @@ type Metrics struct {
 	// remote/tunnel /x/mcp backends publish the same instrument from the
 	// proxy's request interceptor, which constructs its own [RequestCounter].
 	requestCensus *RequestCounter
+
+	// mcpRequestRejectedCounter is the unsampled census of requests the issuer
+	// gate turned away before dispatch: the population that never reaches
+	// requestCensus. It carries a per-server URL because "which server is
+	// rejecting" is the operational question; the URL is rebuilt from the
+	// resolved endpoint rather than taken from the request so an
+	// unauthenticated caller cannot mint series through the query string.
+	mcpRequestRejectedCounter metric.Int64Counter
 
 	mcpToolCallCounter metric.Int64Counter
 	mcpRequestDuration metric.Float64Histogram
@@ -164,10 +176,20 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		logger.ErrorContext(context.Background(), "failed to create oauth refresh token replay served counter", attr.SlogError(err))
 	}
 
+	mcpRequestRejectedCounter, err := meter.Int64Counter(
+		InstrumentMCPRequestRejected,
+		metric.WithDescription("MCP requests rejected by the Session OAuth authentication gate before dispatch, by failure reason, server URL, and surface"),
+		metric.WithUnit("{request}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create metric", attr.SlogMetricName(InstrumentMCPRequestRejected), attr.SlogError(err))
+	}
+
 	return &Metrics{
 		mcpToolCallCounter:                   mcpToolCallCounter,
 		mcpRequestDuration:                   mcpRequestDuration,
 		mcpInitializeCounter:                 mcpInitializeCounter,
+		mcpRequestRejectedCounter:            mcpRequestRejectedCounter,
 		requestCensus:                        NewRequestCounter(meter, logger),
 		oauthFlowStartedCounter:              oauthFlowStartedCounter,
 		oauthFlowCompletedCounter:            oauthFlowCompletedCounter,
@@ -230,6 +252,30 @@ func (m *Metrics) RecordMCPRequest(ctx context.Context, protocolVersion, method 
 	}
 
 	m.requestCensus.Record(ctx, protocolVersion, method, surface)
+}
+
+// RecordMCPRequestRejected counts one MCP request the Session OAuth
+// authentication gate turned away before dispatch. reason is the closed set
+// the gate logs under gram.oauth.failure_reason; mcpURL is the same
+// gram.mcp.url key `mcp.request.duration` and `mcp.tool.call` carry, so every
+// per-server MCP metric groups the same way; surface is the same value the
+// `mcp.request` census carries, so `rejected / (rejected + request)` is well
+// defined per surface.
+//
+// Rejected requests are absent from every other instrument: the census and
+// the duration histogram record after the gate has passed a request. This
+// counter therefore partitions traffic at the gate rather than overlapping
+// with them.
+func (m *Metrics) RecordMCPRequestRejected(ctx context.Context, reason string, mcpURL string, surface Surface) {
+	if m == nil || m.mcpRequestRejectedCounter == nil {
+		return
+	}
+
+	m.mcpRequestRejectedCounter.Add(ctx, 1, metric.WithAttributes(
+		attr.OAuthFailureReason(reason),
+		attr.McpURL(mcpURL),
+		attr.McpSurface(string(surface)),
+	))
 }
 
 // RecordMCPRequestDuration records one dispatched request's duration. The

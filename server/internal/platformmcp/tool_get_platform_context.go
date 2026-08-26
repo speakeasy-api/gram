@@ -10,8 +10,8 @@ import (
 func registerGetPlatformContextTool(reg *Registrar) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_platform_context",
-		Title:       "Get Platform Context",
-		Description: "Show the organization and connection bound to this Platform MCP session.",
+		Title:       "Show the Current Organization",
+		Description: "Show which organization this session is working in, and how an MCP server reaches people here. Call this first in a new conversation: the overview it returns is the shape of every other request.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, PlatformContext, error) {
 		principal, err := principalFromToolContext(ctx)
@@ -22,6 +22,7 @@ func registerGetPlatformContextTool(reg *Registrar) {
 			OrganizationID: principal.OrganizationID,
 			ConnectionID:   principal.ConnectionID,
 			ReadOnly:       false,
+			Overview:       platformOverview,
 		}, nil
 	})
 }

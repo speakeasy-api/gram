@@ -461,6 +461,18 @@ func (l *Logger) LogOrganizationEnterpriseTrialExtended(ctx context.Context, dbt
 	if err != nil {
 		return fmt.Errorf("marshal %s metadata: %w", action, err)
 	}
+	beforeSnapshot, err := marshalAuditPayload(map[string]any{
+		"trial_ends_at": event.PreviousTrialEndsAt,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
+	}
+	afterSnapshot, err := marshalAuditPayload(map[string]any{
+		"trial_ends_at": event.TrialEndsAt,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
+	}
 
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
@@ -479,8 +491,8 @@ func (l *Logger) LogOrganizationEnterpriseTrialExtended(ctx context.Context, dbt
 		SubjectSlug:        conv.ToPGTextEmpty(event.OrganizationSlug),
 
 		Metadata:       metadata,
-		BeforeSnapshot: nil,
-		AfterSnapshot:  nil,
+		BeforeSnapshot: beforeSnapshot,
+		AfterSnapshot:  afterSnapshot,
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationEnterpriseTrialV1})

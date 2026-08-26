@@ -17,7 +17,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const remoteSessionRefreshKeepalive = 24 * time.Hour
@@ -123,20 +125,28 @@ func (r *RemoteSessionRefresh) Do(ctx context.Context, input RefreshRemoteSessio
 	}
 	sess := candidate.RemoteSession
 
-	result, err := r.refresher.RefreshNow(ctx, sess, "")
+	result, err := r.refresher.RefreshNow(ctx, sess, "", remotesessionmetrics.RefreshTriggerScheduled)
 	if err != nil {
-		if remotesessions.IsTokenRefreshRateLimited(err) {
-			logger.WarnContext(ctx, "scheduled remote session refresh rate limited",
-				attr.SlogRemoteSessionClientID(sess.RemoteSessionClientID.String()),
-				attr.SlogUserSessionIssuerID(sess.UserSessionIssuerID.String()),
-			)
-			return RefreshRemoteSessionResult{RateLimited: true}, nil
-		}
-		logger.WarnContext(ctx, "scheduled remote session refresh failed",
+		// The issuer URL and outcome are the ones the upstream-refresh metric
+		// recorded, so these lines join to its series; the user id is what
+		// lets "how many users are affected" be answered, since a client id is
+		// one row per provider connection, not per user.
+		args := []any{
 			attr.SlogRemoteSessionClientID(sess.RemoteSessionClientID.String()),
 			attr.SlogUserSessionIssuerID(sess.UserSessionIssuerID.String()),
-			attr.SlogError(err),
-		)
+		}
+		var failure *remotesessions.RefreshError
+		if errors.As(err, &failure) {
+			args = append(args, attr.SlogOAuthIssuer(failure.IssuerURL), attr.SlogOutcome(string(failure.Outcome)))
+		}
+		if sess.SubjectUrn.Kind == urn.SessionSubjectKindUser {
+			args = append(args, attr.SlogUserID(sess.SubjectUrn.ID))
+		}
+		if remotesessions.IsTokenRefreshRateLimited(err) {
+			logger.WarnContext(ctx, "scheduled remote session refresh rate limited", args...)
+			return RefreshRemoteSessionResult{RateLimited: true}, nil
+		}
+		logger.WarnContext(ctx, "scheduled remote session refresh failed", append(args, attr.SlogError(err))...)
 		return RefreshRemoteSessionResult{RateLimited: false}, nil
 	}
 

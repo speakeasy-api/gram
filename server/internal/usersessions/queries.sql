@@ -1,12 +1,14 @@
 -- name: CreateUserSessionIssuer :one
 INSERT INTO user_session_issuers (
     project_id,
+    organization_id,
     slug,
     authn_challenge_mode,
     session_duration
 )
 VALUES (
     @project_id::uuid,
+    @organization_id,
     @slug,
     @authn_challenge_mode,
     @session_duration
@@ -246,19 +248,23 @@ SELECT EXISTS (
 -- than silently reviving an old one.
 --
 -- `inserted` distinguishes the two so the caller only records an add event
--- for a real new grant. The DO UPDATE is a deliberate no-op write of the
--- existing updated_at: a genuine touch would misreport a re-add as a
+-- for a real new grant. The DO UPDATE deliberately rewrites updated_at with
+-- its own existing value: a genuine touch would misreport a re-add as a
 -- modification, but ON CONFLICT still needs an action for RETURNING to
 -- yield the row. `xmax = 0` is the standard test for "this row came from
--- the INSERT rather than the UPDATE".
-INSERT INTO user_session_issuer_cimd_clients (project_id, user_session_issuer_id, client_id_metadata_uri)
-SELECT @project_id::uuid, iss.id, @client_id_metadata_uri
+-- the INSERT rather than the UPDATE". organization_id is the one column the
+-- branch really writes, and only when the row has none, so re-adding a grant
+-- can fill in tenancy without ever moving it.
+INSERT INTO user_session_issuer_cimd_clients (project_id, organization_id, user_session_issuer_id, client_id_metadata_uri)
+SELECT @project_id::uuid, iss.organization_id, iss.id, @client_id_metadata_uri
 FROM user_session_issuers AS iss
 WHERE iss.id = @user_session_issuer_id
   AND iss.project_id = @project_id::uuid
   AND iss.deleted IS FALSE
 ON CONFLICT (user_session_issuer_id, client_id_metadata_uri) WHERE deleted IS FALSE
-DO UPDATE SET updated_at = user_session_issuer_cimd_clients.updated_at
+DO UPDATE SET
+    organization_id = COALESCE(user_session_issuer_cimd_clients.organization_id, EXCLUDED.organization_id),
+    updated_at = user_session_issuer_cimd_clients.updated_at
 RETURNING *, (xmax = 0) AS inserted;
 
 -- name: GetUserSessionIssuerCimdClientByID :one
@@ -352,6 +358,12 @@ SELECT s.id, s.user_session_issuer_id, s.user_session_client_id, s.subject_urn, 
        iss.slug AS issuer_slug,
        c.client_name AS client_name,
        c.client_id_metadata_uri AS client_id_metadata_uri,
+       c.token_endpoint_auth_method AS client_token_endpoint_auth_method,
+       -- Whether the client stores a secret, never the hash itself: the
+       -- credential kind cannot be derived from the declared method alone (a
+       -- method predating the column resolves by whether a secret is on the
+       -- row), and the management API must not carry the hash.
+       (c.client_secret_hash IS NOT NULL)::boolean AS client_has_secret,
        u.display_name AS user_display_name,
        u.email AS user_email,
        u.photo_url AS user_photo_url,
@@ -478,6 +490,7 @@ WHERE user_session_issuer_id = @user_session_issuer_id
 -- Registers a client from an RFC 7591 request.
 INSERT INTO user_session_clients (
     project_id,
+    organization_id,
     user_session_issuer_id,
     client_id,
     client_secret_hash,
@@ -490,6 +503,7 @@ INSERT INTO user_session_clients (
 )
 VALUES (
     (SELECT project_id FROM user_session_issuers WHERE id = @user_session_issuer_id),
+    (SELECT organization_id FROM user_session_issuers WHERE id = @user_session_issuer_id),
     @user_session_issuer_id,
     @client_id,
     @client_secret_hash,
@@ -528,6 +542,7 @@ RETURNING *;
 --     already map to invalid_client.
 INSERT INTO user_session_clients (
     project_id,
+    organization_id,
     user_session_issuer_id,
     client_id,
     client_secret_hash,
@@ -544,6 +559,7 @@ INSERT INTO user_session_clients (
 )
 VALUES (
     (SELECT project_id FROM user_session_issuers WHERE id = @user_session_issuer_id),
+    (SELECT organization_id FROM user_session_issuers WHERE id = @user_session_issuer_id),
     @user_session_issuer_id,
     @client_id,
     NULL,
@@ -560,6 +576,14 @@ VALUES (
 )
 ON CONFLICT (user_session_issuer_id, client_id) WHERE deleted IS FALSE
 DO UPDATE SET
+    -- Fill-only: a refresh may populate an organization the row was created
+    -- without, but never replaces one it already carries, so the stored value
+    -- comes first. Deliberately asymmetric with project_id, which this branch
+    -- leaves alone entirely, because a row created before organization
+    -- tenancy existed has no other occasion to acquire one. Tracking the
+    -- parent instead would move a row's organization while its project_id
+    -- stayed put, leaving the two contradicting each other.
+    organization_id = COALESCE(user_session_clients.organization_id, EXCLUDED.organization_id),
     client_name = EXCLUDED.client_name,
     redirect_uris = EXCLUDED.redirect_uris,
     client_id_metadata_uri = EXCLUDED.client_id_metadata_uri,
@@ -691,6 +715,7 @@ RETURNING *;
 -- HandleToken's refresh_token grant.
 INSERT INTO user_sessions (
     project_id,
+    organization_id,
     user_session_issuer_id,
     user_session_client_id,
     subject_urn,
@@ -702,6 +727,7 @@ INSERT INTO user_sessions (
 )
 VALUES (
     (SELECT project_id FROM user_session_issuers WHERE id = @user_session_issuer_id),
+    (SELECT organization_id FROM user_session_issuers WHERE id = @user_session_issuer_id),
     @user_session_issuer_id,
     @user_session_client_id,
     @subject_urn,
@@ -716,12 +742,14 @@ RETURNING *;
 -- name: CreateUserSessionConsent :one
 INSERT INTO user_session_consents (
     project_id,
+    organization_id,
     subject_urn,
     user_session_client_id,
     remote_set_hash
 )
 VALUES (
     (SELECT project_id FROM user_session_clients WHERE id = @user_session_client_id),
+    (SELECT organization_id FROM user_session_clients WHERE id = @user_session_client_id),
     @subject_urn,
     @user_session_client_id,
     @remote_set_hash

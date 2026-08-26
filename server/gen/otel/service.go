@@ -19,6 +19,8 @@ import (
 type Service interface {
 	// Endpoint to receive OTEL logs data from LLM providers and harnesses.
 	Logs(context.Context, *LogsPayload, io.ReadCloser) (err error)
+	// Endpoint to receive OTEL metrics data from LLM providers and harnesses.
+	Metrics(context.Context, *MetricsPayload, io.ReadCloser) (err error)
 	// Endpoint to receive OTEL traces data from LLM providers and harnesses.
 	Traces(context.Context, *TracesPayload, io.ReadCloser) (err error)
 	// Org-scoped event feed over ingested OpenTelemetry signals: log records and
@@ -54,7 +56,7 @@ const ServiceName = "otel"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [5]string{"logs", "traces", "listEventLog", "getEventVolume", "getEventFacets"}
+var MethodNames = [6]string{"logs", "metrics", "traces", "listEventLog", "getEventVolume", "getEventFacets"}
 
 // A single ingested OpenTelemetry signal (log record or span) in the event feed
 type EventLogEntry struct {
@@ -175,6 +177,15 @@ type ListEventLogResult struct {
 
 // LogsPayload is the payload type of the otel service logs method.
 type LogsPayload struct {
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// Encoding applied to the OTLP request body. Supported values are gzip and
+	// identity.
+	ContentEncoding *string
+}
+
+// MetricsPayload is the payload type of the otel service metrics method.
+type MetricsPayload struct {
 	ApikeyToken      *string
 	ProjectSlugInput *string
 	// Encoding applied to the OTLP request body. Supported values are gzip and

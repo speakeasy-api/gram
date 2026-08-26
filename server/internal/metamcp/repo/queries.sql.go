@@ -111,13 +111,15 @@ INSERT INTO meta_mcp_servers (
     organization_id,
     project_id,
     name,
-    user_session_issuer_id
+    user_session_issuer_id,
+    visibility
 )
 VALUES (
     $1,
     $2,
     $3,
-    $4
+    $4,
+    $5
 )
 RETURNING id, organization_id, project_id, user_session_issuer_id, name, visibility, created_at, updated_at, deleted_at, deleted
 `
@@ -127,6 +129,7 @@ type CreateMetaMCPServerParams struct {
 	ProjectID           uuid.UUID
 	Name                string
 	UserSessionIssuerID uuid.NullUUID
+	Visibility          string
 }
 
 func (q *Queries) CreateMetaMCPServer(ctx context.Context, arg CreateMetaMCPServerParams) (MetaMcpServer, error) {
@@ -135,6 +138,7 @@ func (q *Queries) CreateMetaMCPServer(ctx context.Context, arg CreateMetaMCPServ
 		arg.ProjectID,
 		arg.Name,
 		arg.UserSessionIssuerID,
+		arg.Visibility,
 	)
 	var i MetaMcpServer
 	err := row.Scan(
@@ -542,6 +546,70 @@ func (q *Queries) ListMetaMCPMembers(ctx context.Context, arg ListMetaMCPMembers
 	return items, nil
 }
 
+const listMetaMCPMembersForRemoteSessionIssuer = `-- name: ListMetaMCPMembersForRemoteSessionIssuer :many
+SELECT
+    s.id AS mcp_server_id,
+    s.visibility AS mcp_server_visibility,
+    r.url AS upstream_url
+FROM meta_mcp_server_members m
+JOIN mcp_servers s
+  ON s.id = m.mcp_server_id
+ AND s.project_id = m.project_id
+ AND s.deleted IS FALSE
+ AND s.visibility <> 'disabled'
+JOIN remote_mcp_servers r
+  ON r.id = s.remote_mcp_server_id
+ AND r.project_id = m.project_id
+ AND r.deleted IS FALSE
+WHERE m.meta_mcp_server_id = $1
+  AND m.project_id = $2
+  AND m.deleted IS FALSE
+  AND s.remote_session_issuer_id = $3
+ORDER BY m.sort_order, m.created_at, m.id
+`
+
+type ListMetaMCPMembersForRemoteSessionIssuerParams struct {
+	MetaMcpServerID       uuid.UUID
+	ProjectID             uuid.UUID
+	RemoteSessionIssuerID uuid.NullUUID
+}
+
+type ListMetaMCPMembersForRemoteSessionIssuerRow struct {
+	McpServerID         uuid.UUID
+	McpServerVisibility string
+	UpstreamUrl         string
+}
+
+// The meta MCP's remote-backed members that authenticate against a given
+// authorization server, filtered exactly as ListServableMetaMCPMembers so a
+// member invisible to the serving path cannot claim a credential either.
+//
+// A client names exactly one remote_session_issuer, so matching it against the
+// member's own is the whole lookup; the caller still fails closed on none or
+// several, since a grant records one resource.
+//
+// Joins remote_mcp_servers rather than reading a URL off mcp_servers, which also
+// excludes tunneled, hosted, and unproxied members: none has an upstream URL.
+func (q *Queries) ListMetaMCPMembersForRemoteSessionIssuer(ctx context.Context, arg ListMetaMCPMembersForRemoteSessionIssuerParams) ([]ListMetaMCPMembersForRemoteSessionIssuerRow, error) {
+	rows, err := q.db.Query(ctx, listMetaMCPMembersForRemoteSessionIssuer, arg.MetaMcpServerID, arg.ProjectID, arg.RemoteSessionIssuerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMetaMCPMembersForRemoteSessionIssuerRow
+	for rows.Next() {
+		var i ListMetaMCPMembersForRemoteSessionIssuerRow
+		if err := rows.Scan(&i.McpServerID, &i.McpServerVisibility, &i.UpstreamUrl); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMetaMCPServers = `-- name: ListMetaMCPServers :many
 SELECT id, organization_id, project_id, user_session_issuer_id, name, visibility, created_at, updated_at, deleted_at, deleted
 FROM meta_mcp_servers
@@ -801,10 +869,11 @@ const updateMetaMCPServer = `-- name: UpdateMetaMCPServer :one
 UPDATE meta_mcp_servers
 SET name = $1,
     user_session_issuer_id = $2,
+    visibility = COALESCE($3, visibility),
     updated_at = clock_timestamp()
-WHERE id = $3
-  AND organization_id = $4
-  AND project_id = $5
+WHERE id = $4
+  AND organization_id = $5
+  AND project_id = $6
   AND deleted IS FALSE
 RETURNING id, organization_id, project_id, user_session_issuer_id, name, visibility, created_at, updated_at, deleted_at, deleted
 `
@@ -812,16 +881,20 @@ RETURNING id, organization_id, project_id, user_session_issuer_id, name, visibil
 type UpdateMetaMCPServerParams struct {
 	Name                string
 	UserSessionIssuerID uuid.NullUUID
+	Visibility          pgtype.Text
 	ID                  uuid.UUID
 	OrganizationID      string
 	ProjectID           uuid.UUID
 }
 
-// Full-record replace: a null user_session_issuer_id clears the reference.
+// Full-record replace: a null user_session_issuer_id clears the reference. A
+// null visibility preserves the stored value so callers that do not manage
+// visibility cannot re-enable a disabled gateway.
 func (q *Queries) UpdateMetaMCPServer(ctx context.Context, arg UpdateMetaMCPServerParams) (MetaMcpServer, error) {
 	row := q.db.QueryRow(ctx, updateMetaMCPServer,
 		arg.Name,
 		arg.UserSessionIssuerID,
+		arg.Visibility,
 		arg.ID,
 		arg.OrganizationID,
 		arg.ProjectID,

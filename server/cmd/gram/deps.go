@@ -1214,6 +1214,14 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	}
 	pubs = append(pubs, labelledStop{label: "otelLogs", pub: otelLogs})
 
+	otelMetrics, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &otelv1.InboundMetric{},
+		gcp.WithPubSubPublishSettings(&otelPublishSettings),
+	)
+	if err != nil {
+		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for otel metrics: %w", err)
+	}
+	pubs = append(pubs, labelledStop{label: "otelMetrics", pub: otelMetrics})
+
 	otelSpans, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &otelv1.InboundSpan{},
 		gcp.WithPubSubPublishSettings(&otelPublishSettings),
 	)
@@ -1264,6 +1272,7 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 		RiskFindings:            riskFindings,
 		TelemetryLogs:           telemetryLogs,
 		OTELLogs:                otelLogs,
+		OTELMetrics:             otelMetrics,
 		OTELSpans:               otelSpans,
 	}, shutdown, nil
 }

@@ -173,6 +173,10 @@ var UserSession = Type("UserSession", func() {
 	})
 	Attribute("client_name", String, "Name of the MCP client that established the session, if known. Client-controlled and unverified; do not present it as an identity.")
 	Attribute("client_id_metadata_uri", String, "Set when the client that established this session was resolved from a Client ID Metadata Document (CIMD) hosted at this URL, rather than registered via RFC 7591 DCR. Null for DCR clients and for sessions with no bound client.")
+	Attribute("client_credential_kind", String, "What the client that established this session must present to authenticate: 'public' (nothing), 'secret' (a client secret), 'key' (an assertion signed by its published key), or 'misconfigured'. Derived by the same rule the token endpoint enforces. Null only when the session has no bound client, which is the case for API key and anonymous subjects; a bound client always resolves to one of the four.", func() {
+		Enum("public", "secret", "key", "misconfigured")
+	})
+	Attribute("client_token_endpoint_auth_method", String, "The raw RFC 7591 token_endpoint_auth_method the client declared, for debugging against the spec. Null both for a session with no bound client and for a client registered before the value was recorded; client_credential_kind separates those cases and is what should be displayed.")
 	Attribute("subject_type", String, "Subject kind: 'user', 'apikey', or 'anonymous'.")
 	Attribute("subject_display_name", String, "Resolved human-readable name of the subject, if known.")
 	Attribute("subject_photo_url", String, "Avatar URL for the subject when it resolves to a Gram user with one. Null for API key and anonymous subjects, and for users who have no photo.")

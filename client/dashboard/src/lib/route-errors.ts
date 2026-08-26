@@ -1,4 +1,5 @@
 import { GramError } from "@gram/client/models/errors/gramerror.js";
+import { queryKeySessionInfo } from "@gram/client/react-query/sessionInfo.core.js";
 
 function getHttpStatusCode(error: unknown): number | undefined {
   if (error instanceof GramError) {
@@ -40,6 +41,22 @@ export function isUnauthorizedError(error: unknown): boolean {
  */
 export function isGramSessionUnauthorizedError(error: unknown): boolean {
   return error instanceof GramError && error.statusCode === 401;
+}
+
+// The static part of the auth.info query key; the final element is the
+// per-call parameters object and never participates in the match.
+const SESSION_INFO_KEY_PREFIX = queryKeySessionInfo({}).slice(0, -1);
+
+/**
+ * True for the session-bootstrap query (auth.info). Its 401 is the expected
+ * "logged out" answer — AuthProvider renders the logged-out tree and
+ * LoginCheck redirects in-SPA — so the global 401 handler must not also
+ * force a full-page navigation for it. Reacting to both produced a double
+ * page load on every logged-out visit: SPA-rendered login screen, then a
+ * hard reload of the same screen.
+ */
+export function isSessionInfoQueryKey(queryKey: readonly unknown[]): boolean {
+  return SESSION_INFO_KEY_PREFIX.every((part, i) => queryKey[i] === part);
 }
 
 const UUID_PATTERN =

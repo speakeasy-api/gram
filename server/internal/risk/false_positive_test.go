@@ -6,8 +6,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 
+	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -18,19 +21,28 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
-// chDismissalCopy builds the ClickHouse row mirrorFalsePositiveToClickHouse
-// appends when a result is dismissed: a fresh copy of the finding carrying the
-// suppression on excluded_at/excluded_reason plus the legacy false_positive_at.
-// A zero suppressedAt builds the undo copy instead — same id, no suppression at
-// all — which is what an unmark republish produces.
-func chDismissalCopy(t *testing.T, projectID uuid.UUID, orgID, policyID string, id, chatID, msgID uuid.UUID, suppressedAt time.Time) chrepo.RiskFindingRow {
+// chDismissalCopy builds one ClickHouse copy of a finding in the FP flow,
+// with the event kind the producing pipeline would stamp: the scanner's
+// original row (EventKindFinding), the mirror's dismissal copy
+// (EventKindSuppression, carrying the suppression on
+// excluded_at/excluded_reason plus the legacy false_positive_at), or the
+// mirror's undo copy (EventKindUnsuppression — same id, no suppression at
+// all). Stamping the kind per producer makes these hand-appended rows
+// exercise the same state-change-outranks-finding dedup the relayed
+// production rows rely on. suppressedAt must be set exactly for suppression
+// copies.
+func chDismissalCopy(t *testing.T, projectID uuid.UUID, orgID, policyID string, id, chatID, msgID uuid.UUID, suppressedAt time.Time, eventKind string) chrepo.RiskFindingRow {
 	t.Helper()
+	require.Equal(t, eventKind == chrepo.EventKindSuppression, !suppressedAt.IsZero(),
+		"suppression copies carry a suppression time; finding and unsuppression copies never do")
 
 	created := time.Now().UTC().AddDate(0, 0, -1)
 	row := chListFinding(t, projectID, orgID, chatID, msgID, policyID, created, created, "gitleaks", "aws-access-key-id", "alice@example.com", "AKIA**************LE", "fp-dismissal", "")
 	row.ID = id
+	row.EventKind = eventKind
 	if !suppressedAt.IsZero() {
 		at := suppressedAt
 		row.ExcludedAt = &at
@@ -68,13 +80,12 @@ func TestMarkUnmarkRiskResultsFalsePositive(t *testing.T) {
 	require.NoError(t, err)
 
 	// The dismissed listing reads ClickHouse while the mark/unmark RPCs write
-	// Postgres and republish onto the findings topic. The harness wires
-	// findingsPub as nil, so the mirror never runs here and each state change's
-	// ClickHouse copy is appended by hand — the same rows
-	// mirrorFalsePositiveToClickHouse would produce.
+	// Postgres and enqueue the mirror on the transactional outbox. No relay
+	// runs in the harness, so each state change's ClickHouse copy is appended
+	// by hand — the same rows the relayed mirror messages would produce.
 	chQueries := chrepo.New(ti.chConn)
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{
-		chDismissalCopy(t, projectID, orgID, policy.ID, resultUUID, chatID, msgID, time.Time{}),
+		chDismissalCopy(t, projectID, orgID, policy.ID, resultUUID, chatID, msgID, time.Time{}, chrepo.EventKindFinding),
 	}))
 	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
@@ -99,7 +110,7 @@ func TestMarkUnmarkRiskResultsFalsePositive(t *testing.T) {
 
 	dismissedAt := time.Now().UTC()
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{
-		chDismissalCopy(t, projectID, orgID, policy.ID, resultUUID, chatID, msgID, dismissedAt),
+		chDismissalCopy(t, projectID, orgID, policy.ID, resultUUID, chatID, msgID, dismissedAt, chrepo.EventKindSuppression),
 	}))
 	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
@@ -141,7 +152,7 @@ func TestMarkUnmarkRiskResultsFalsePositive(t *testing.T) {
 	require.Len(t, afterUnmark.Results, 1)
 
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{
-		chDismissalCopy(t, projectID, orgID, policy.ID, resultUUID, chatID, msgID, time.Time{}),
+		chDismissalCopy(t, projectID, orgID, policy.ID, resultUUID, chatID, msgID, time.Time{}, chrepo.EventKindUnsuppression),
 	}))
 	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
@@ -149,6 +160,169 @@ func TestMarkUnmarkRiskResultsFalsePositive(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, dismissedAfterUnmark.Results, "the undo's ClickHouse copy supersedes the dismissal")
 	require.Equal(t, int64(0), dismissedAfterUnmark.TotalCount)
+}
+
+// listFindingMirrorRows decodes the riskv1.Finding messages the FP mirror has
+// enqueued on the transactional outbox, in insertion order. Other topics
+// (e.g. audit webhook events) are filtered out.
+func listFindingMirrorRows(t *testing.T, conn *pgxpool.Pool) []*riskv1.Finding {
+	t.Helper()
+
+	rows, err := testrepo.New(conn).ListPublishOutboxRows(t.Context())
+	require.NoError(t, err)
+	topic := string(proto.MessageName(new(riskv1.Finding)))
+	var out []*riskv1.Finding
+	for _, row := range rows {
+		if row.Topic != topic {
+			continue
+		}
+		f := new(riskv1.Finding)
+		require.NoError(t, proto.Unmarshal(row.Message, f))
+		out = append(out, f)
+	}
+	return out
+}
+
+// TestMarkUnmarkRiskResultsFalsePositive_MirrorRidesTheTransaction pins the
+// delivery contract on the ClickHouse mirror: each state change is enqueued on
+// the transactional outbox inside the mark/unmark transaction, so ClickHouse
+// delivery is atomic with the Postgres commit. A client retry whose UPDATE
+// matches nothing enqueues nothing — the original request's enqueue is already
+// durable — and adds no duplicate audit entries either.
+func TestMarkUnmarkRiskResultsFalsePositive_MirrorRidesTheTransaction(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Mirror Outbox Test")})
+	require.NoError(t, err)
+	policyID, err := uuid.Parse(policy.ID)
+	require.NoError(t, err)
+
+	_, msgID := seedChatMessage(t, ti, projectID, orgID)
+	seedRiskResult(t, ti, projectID, orgID, policyID, 1, msgID, true)
+
+	listed, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{PolicyID: &policy.ID})
+	require.NoError(t, err)
+	require.Len(t, listed.Results, 1)
+	resultID := listed.Results[0].ID
+
+	err = ti.service.MarkRiskResultsFalsePositive(ctx, &gen.MarkRiskResultsFalsePositivePayload{
+		ResultIds: []string{resultID},
+		Reason:    new("noise"),
+	})
+	require.NoError(t, err)
+
+	mirrored := listFindingMirrorRows(t, ti.conn)
+	require.Len(t, mirrored, 1)
+	require.Equal(t, chrepo.EventKindSuppression, mirrored[0].GetEventKind())
+	require.Equal(t, resultID, mirrored[0].GetId())
+	require.NotEmpty(t, mirrored[0].GetFalsePositiveAt())
+	require.Equal(t, chrepo.ExcludedReasonManual, mirrored[0].GetExcludedReason())
+	require.Equal(t, "noise", mirrored[0].GetExcludedDetail())
+
+	dismissCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskResultDismiss)
+	require.NoError(t, err)
+
+	// The retry: the result is already marked, so the UPDATE changes nothing
+	// and nothing new needs enqueueing — the first request's mirror row is
+	// already durably on the outbox.
+	err = ti.service.MarkRiskResultsFalsePositive(ctx, &gen.MarkRiskResultsFalsePositivePayload{
+		ResultIds: []string{resultID},
+		Reason:    new("noise"),
+	})
+	require.NoError(t, err)
+	require.Len(t, listFindingMirrorRows(t, ti.conn), 1)
+
+	dismissCountAfterRetry, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskResultDismiss)
+	require.NoError(t, err)
+	require.Equal(t, dismissCount, dismissCountAfterRetry, "a retry that changes nothing must not add audit entries")
+
+	err = ti.service.UnmarkRiskResultsFalsePositive(ctx, &gen.UnmarkRiskResultsFalsePositivePayload{
+		ResultIds: []string{resultID},
+	})
+	require.NoError(t, err)
+
+	mirrored = listFindingMirrorRows(t, ti.conn)
+	require.Len(t, mirrored, 2)
+	require.Equal(t, chrepo.EventKindUnsuppression, mirrored[1].GetEventKind())
+	require.Equal(t, resultID, mirrored[1].GetId())
+	require.Empty(t, mirrored[1].GetFalsePositiveAt())
+
+	// Same on the unmark retry: nothing changed, nothing enqueued.
+	err = ti.service.UnmarkRiskResultsFalsePositive(ctx, &gen.UnmarkRiskResultsFalsePositivePayload{
+		ResultIds: []string{resultID},
+	})
+	require.NoError(t, err)
+	require.Len(t, listFindingMirrorRows(t, ti.conn), 2)
+}
+
+// TestMarkRiskResultsFalsePositive_ExclusionOwnedRowNotMirrored pins the
+// boundary between the two suppression pipelines: marking a batch that
+// includes a rule-excluded row must not enqueue a manual-suppression mirror
+// for it — the exclusion owns that finding's ClickHouse identity, and a
+// manual copy would overwrite the rule suppression at read time. Other rows
+// in the batch still mirror, and Postgres marks every requested row.
+func TestMarkRiskResultsFalsePositive_ExclusionOwnedRowNotMirrored(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Exclusion Owned Mirror Test")})
+	require.NoError(t, err)
+	policyID, err := uuid.Parse(policy.ID)
+	require.NoError(t, err)
+
+	_, msgID := seedChatMessage(t, ti, projectID, orgID)
+	excludedID := seedRiskResultWith(t, ti, projectID, orgID, policyID, msgID, "gitleaks", "aws-access-key-id", "EXCLUDED_MATCH_TOKEN")
+	plainID := seedRiskResultWith(t, ti, projectID, orgID, policyID, msgID, "gitleaks", "generic-api-key", "PLAIN_MATCH_TOKEN")
+
+	// Stamp the exclusion on one row the way the reconcile sweep does.
+	stamped, err := riskrepo.New(ti.conn).ApplyExactExclusionBatch(ctx, riskrepo.ApplyExactExclusionBatchParams{
+		ExclusionID:  uuid.NullUUID{UUID: uuid.Must(uuid.NewV7()), Valid: true},
+		ProjectID:    projectID,
+		PolicyID:     uuid.NullUUID{UUID: policyID, Valid: true},
+		MatchValue:   pgtype.Text{String: "EXCLUDED_MATCH_TOKEN", Valid: true},
+		RuleIDFilter: pgtype.Text{String: "", Valid: false},
+		SourceFilter: pgtype.Text{String: "", Valid: false},
+		Cursor:       uuid.Nil,
+		BatchLimit:   10,
+	})
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{excludedID}, stamped)
+
+	err = ti.service.MarkRiskResultsFalsePositive(ctx, &gen.MarkRiskResultsFalsePositivePayload{
+		ResultIds: []string{excludedID.String(), plainID.String()},
+		Reason:    new("noise"),
+	})
+	require.NoError(t, err)
+
+	mirrored := listFindingMirrorRows(t, ti.conn)
+	require.Len(t, mirrored, 1, "the exclusion-owned row must not be mirrored")
+	require.Equal(t, plainID.String(), mirrored[0].GetId())
+
+	// Postgres still carries the mark on both rows.
+	rows, err := riskrepo.New(ti.conn).GetRiskResultsByIDs(ctx, riskrepo.GetRiskResultsByIDsParams{
+		ProjectID: projectID,
+		Ids:       []uuid.UUID{excludedID, plainID},
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	for _, row := range rows {
+		require.True(t, row.FalsePositiveAt.Valid, "marking must apply in Postgres regardless of the mirror")
+	}
 }
 
 func TestMarkRiskResultsFalsePositive_RejectsEmptyIDs(t *testing.T) {
@@ -290,11 +464,11 @@ func TestMarkRiskResultsFalsePositive_ContentPartAnchoredFindingIsListable(t *te
 	})
 	require.NoError(t, err)
 
-	// The harness has no findings publisher, so the mirror the mark would
-	// normally trigger is appended by hand. A content-part-anchored finding
-	// carries its anchor in content_part_id with chat_message_id empty.
+	// No outbox relay runs in the harness, so the mirror row the mark
+	// enqueued is appended by hand. A content-part-anchored finding carries
+	// its anchor in content_part_id with chat_message_id empty.
 	dismissedAt := time.Now().UTC()
-	dismissal := chDismissalCopy(t, projectID, orgID, policy.ID, resultID, chatID, msgID, dismissedAt)
+	dismissal := chDismissalCopy(t, projectID, orgID, policy.ID, resultID, chatID, msgID, dismissedAt, chrepo.EventKindSuppression)
 	dismissal.ChatMessageID = ""
 	dismissal.ContentPartID = partID.String()
 
@@ -316,7 +490,7 @@ func TestMarkRiskResultsFalsePositive_ContentPartAnchoredFindingIsListable(t *te
 	})
 	require.NoError(t, err)
 
-	restored := chDismissalCopy(t, projectID, orgID, policy.ID, resultID, chatID, msgID, time.Time{})
+	restored := chDismissalCopy(t, projectID, orgID, policy.ID, resultID, chatID, msgID, time.Time{}, chrepo.EventKindUnsuppression)
 	restored.ChatMessageID = ""
 	restored.ContentPartID = partID.String()
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{restored}))
@@ -609,14 +783,14 @@ func TestListDismissedRiskResults_ClickHouseResolvesLatestCopy(t *testing.T) {
 	dismissedAt := time.Now().UTC().Add(-time.Hour)
 
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{
-		chDismissalCopy(t, projectID, orgID, policy.ID, restoredID, chatID, msgID, dismissedAt),
-		chDismissalCopy(t, projectID, orgID, policy.ID, stillDismissedID, chatID, msgID, dismissedAt),
+		chDismissalCopy(t, projectID, orgID, policy.ID, restoredID, chatID, msgID, dismissedAt, chrepo.EventKindSuppression),
+		chDismissalCopy(t, projectID, orgID, policy.ID, stillDismissedID, chatID, msgID, dismissedAt, chrepo.EventKindSuppression),
 	}))
 	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	// The undo's copy: same id, no suppression, inserted later.
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{
-		chDismissalCopy(t, projectID, orgID, policy.ID, restoredID, chatID, msgID, time.Time{}),
+		chDismissalCopy(t, projectID, orgID, policy.ID, restoredID, chatID, msgID, time.Time{}, chrepo.EventKindUnsuppression),
 	}))
 	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 

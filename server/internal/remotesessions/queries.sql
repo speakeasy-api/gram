@@ -2238,3 +2238,16 @@ WHERE subject_urn = @subject_urn
   AND remote_session_client_id = @remote_session_client_id
   AND deleted IS FALSE
   AND (last_used_at IS NULL OR last_used_at <= @used_cutoff::timestamptz);
+
+-- name: ListUserSessionIssuersBoundToProjectClient :many
+-- The bindings DeleteRemoteSessionClient is about to purge, read first so the
+-- post-commit resync knows which issuers to recompute. Mirrors the purge's own
+-- predicate exactly: narrower would miss bindings the purge still deletes.
+SELECT link.user_session_issuer_id
+FROM remote_session_client_user_session_issuers AS link
+JOIN remote_session_clients AS c
+  ON c.id = link.remote_session_client_id
+WHERE link.remote_session_client_id = @remote_session_client_id
+  AND c.project_id = @project_id
+ORDER BY link.user_session_issuer_id;
+

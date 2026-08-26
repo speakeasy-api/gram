@@ -173,6 +173,19 @@ DECLARE
   doa_id       CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000da01';
   toolset_1    CONSTANT uuid := 'dec0de00-0000-4000-a000-000000005e01';
   toolset_2    CONSTANT uuid := 'dec0de00-0000-4000-a000-000000005e02';
+  toolset_3    CONSTANT uuid := 'dec0de00-0000-4000-a000-000000005e03';
+  us_issuer    CONSTANT uuid := 'dec0de00-0000-4000-a000-000000005a01';
+  -- One registered agent per credential kind the Connections list can report,
+  -- plus the pre-column row whose kind is resolved from the rest of it.
+  usc_key      CONSTANT uuid := 'dec0de00-0000-4000-a000-000000005c01';
+  usc_public   CONSTANT uuid := 'dec0de00-0000-4000-a000-000000005c02';
+  usc_secret   CONSTANT uuid := 'dec0de00-0000-4000-a000-000000005c03';
+  usc_legacy   CONSTANT uuid := 'dec0de00-0000-4000-a000-000000005c04';
+  usc_broken   CONSTANT uuid := 'dec0de00-0000-4000-a000-000000005c05';
+  -- Marked as fake in the value itself. Nothing verifies these: no demo agent
+  -- ever presents a secret, and the seed must never carry a real hash.
+  demo_secret_hash CONSTANT text := '$2a$10$DEMOSEEDNOTAREALBCRYPTHASHxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
+  demo_cimd_url CONSTANT text := 'https://agents.example.com/.well-known/oauth-client';
   rule_monthly CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000e001';
   rule_weekly  CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000e002';
 
@@ -536,7 +549,14 @@ BEGIN
      'Support workflows: logs, refunds, customer lookups.',
      'acme-demo-support', TRUE, FALSE),
     (toolset_2, demo_org, proj_a, 'Acme Ops', 'acme-ops',
-     'Operational checks and deploy tooling.', NULL, TRUE, FALSE);
+     'Operational checks and deploy tooling.', NULL, TRUE, FALSE),
+    -- The OAuth-protected server, kept separate from the two above: attaching
+    -- a session issuer changes what a server's authentication tab and install
+    -- instructions say, and the support server is the one a visitor meets
+    -- first.
+    (toolset_3, demo_org, proj_a, 'Acme Partner Gateway', 'acme-partner-gateway',
+     'Tools Acme exposes to partner agents, behind OAuth.',
+     'acme-demo-partner', TRUE, FALSE);
 
   -- Version = epoch seconds: the server caches toolset contents in Redis
   -- keyed by (deployment, toolset, version), and a reseed reusing version 1
@@ -544,7 +564,103 @@ BEGIN
   -- changes the cache key, so every reseed is immediately visible.
   INSERT INTO toolset_versions (toolset_id, version, tool_urns, resource_urns) VALUES
     (toolset_1, extract(epoch FROM now())::bigint, tool_urns, '{}'),
-    (toolset_2, extract(epoch FROM now())::bigint, ARRAY[tool_urns[1], tool_urns[2], tool_urns[5], tool_urns[7], tool_urns[8]], '{}');
+    (toolset_2, extract(epoch FROM now())::bigint, ARRAY[tool_urns[1], tool_urns[2], tool_urns[5], tool_urns[7], tool_urns[8]], '{}'),
+    (toolset_3, extract(epoch FROM now())::bigint, ARRAY[tool_urns[1], tool_urns[3], tool_urns[4]], '{}');
+
+  ------------------------------------------------------------------
+  -- MCP connections: the issuer that gates the partner gateway, the agents
+  -- registered against it, and the sessions they hold. Without these the
+  -- Connections surfaces (the server's Clients and Sessions tab, the
+  -- organization MCP Sessions page, and a person's connections on their
+  -- employee page) render an empty state.
+  --
+  -- The registrations deliberately span every credential kind the list can
+  -- report, including one that cannot authenticate at all, so the badge and
+  -- the detail sheet have something to show without a real agent connecting.
+  --
+  -- No explicit deletes: user_session_issuers, user_session_clients, and
+  -- user_sessions all cascade from projects, which is deleted and recreated
+  -- above.
+  ------------------------------------------------------------------
+  INSERT INTO user_session_issuers (id, project_id, slug, authn_challenge_mode, session_duration)
+  VALUES (us_issuer, proj_a, 'acme-partner-gateway', 'interactive', interval '30 days');
+
+  UPDATE toolsets SET user_session_issuer_id = us_issuer WHERE id = toolset_3;
+
+  -- Resolved from a Client ID Metadata Document, and the strongest posture
+  -- available: it signs an assertion with a key it publishes, so Gram holds no
+  -- secret for it. This is the row the "Key-authenticated" badge appears on.
+  INSERT INTO user_session_clients
+    (id, project_id, user_session_issuer_id, client_id, client_name, redirect_uris,
+     client_id_issued_at, client_id_metadata_uri, client_id_metadata_fetched_at,
+     client_id_metadata_cache_expires_at, client_id_metadata_etag,
+     token_endpoint_auth_method, client_jwks_uri)
+  VALUES
+    (usc_key, proj_a, us_issuer, demo_cimd_url, 'Partner Reconciliation Agent',
+     ARRAY['https://agents.example.com/callback'],
+     now() - interval '9 days', demo_cimd_url, now() - interval '2 hours',
+     now() + interval '22 hours', '"demo-etag-v3"',
+     'private_key_jwt', 'https://agents.example.com/.well-known/jwks.json');
+
+  INSERT INTO user_session_clients
+    (id, project_id, user_session_issuer_id, client_id, client_secret_hash, client_name,
+     redirect_uris, client_id_issued_at, token_endpoint_auth_method)
+  VALUES
+    -- A public client: it presents nothing, and PKCE is the whole proof. The
+    -- ordinary case, and deliberately unbadged in the list.
+    (usc_public, proj_a, us_issuer, 'gram_demo_client_public', NULL, 'Claude Code',
+     ARRAY['http://127.0.0.1:41293/callback'], now() - interval '11 days', 'none'),
+    -- A confidential client presenting a secret Gram issued it.
+    (usc_secret, proj_a, us_issuer, 'gram_demo_client_secret', demo_secret_hash,
+     'Acme Nightly Batch', ARRAY['https://batch.example.com/callback'],
+     now() - interval '12 days', 'client_secret_basic'),
+    -- Registered before the method was recorded. The kind still resolves --
+    -- off the stored secret -- rather than reading as unknown, which is the
+    -- whole reason it is derived on the server.
+    (usc_legacy, proj_a, us_issuer, 'gram_demo_client_legacy', demo_secret_hash,
+     'Acme Legacy Connector', ARRAY['https://legacy.example.com/callback'],
+     now() - interval '40 days', NULL),
+    -- Contradicts itself: it committed to signed assertions and yet carries a
+    -- secret, so the token endpoint refuses it. It holds a session it obtained
+    -- before it was broken, and cannot refresh that session.
+    (usc_broken, proj_a, us_issuer, 'gram_demo_client_broken', demo_secret_hash,
+     'Vendor Sync (misconfigured)', ARRAY['https://vendor.example.com/callback'],
+     now() - interval '6 days', 'private_key_jwt');
+
+  -- refresh_token_hash is globally unique, so it is derived rather than
+  -- literal: two tenants seeded into one database would otherwise collide.
+  -- Nothing ever presents these; no demo session can be refreshed.
+  INSERT INTO user_sessions
+    (id, project_id, user_session_issuer_id, user_session_client_id, subject_urn, jti,
+     refresh_token_hash, refresh_expires_at, expires_at, last_used_at, created_at)
+  VALUES
+    (demo.det_uuid('gram-demo-user-session-1'), proj_a, us_issuer, usc_key,
+     'user:' || demo_user_ids[1], 'demo-jti-1',
+     demo.det_uuid('gram-demo-user-session-refresh-1')::text,
+     now() + interval '21 days', now() + interval '40 minutes',
+     now() - interval '25 minutes', now() - interval '9 days'),
+    (demo.det_uuid('gram-demo-user-session-2'), proj_a, us_issuer, usc_key,
+     'user:' || demo_user_ids[3], 'demo-jti-2',
+     demo.det_uuid('gram-demo-user-session-refresh-2')::text,
+     now() + interval '19 days', now() - interval '5 minutes',
+     now() - interval '3 hours', now() - interval '7 days'),
+    (demo.det_uuid('gram-demo-user-session-3'), proj_a, us_issuer, usc_public,
+     'user:' || demo_user_ids[2], 'demo-jti-3',
+     demo.det_uuid('gram-demo-user-session-refresh-3')::text,
+     now() + interval '27 days', now() + interval '35 minutes',
+     now() - interval '2 hours', now() - interval '11 days'),
+    (demo.det_uuid('gram-demo-user-session-4'), proj_a, us_issuer, usc_secret,
+     'user:' || demo_user_ids[4], 'demo-jti-4',
+     demo.det_uuid('gram-demo-user-session-refresh-4')::text,
+     now() + interval '3 days', now() - interval '20 minutes',
+     now() - interval '4 days', now() - interval '12 days'),
+    -- Expiring, and its registration can no longer authenticate, so this one
+    -- is the connection an operator is meant to notice.
+    (demo.det_uuid('gram-demo-user-session-5'), proj_a, us_issuer, usc_broken,
+     'user:' || demo_user_ids[5], 'demo-jti-5',
+     demo.det_uuid('gram-demo-user-session-refresh-5')::text,
+     now() + interval '16 hours', now() - interval '50 minutes',
+     now() - interval '30 hours', now() - interval '6 days');
 
   ------------------------------------------------------------------
   -- Prompts (the Prompts page otherwise falls back to onboarding).
@@ -1372,6 +1488,36 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   SELECT count(*) INTO stray FROM api_keys WHERE organization_id = demo_org;
   IF stray > 0 THEN
     RAISE EXCEPTION 'demo seed postflight: % api keys survived the reseed', stray;
+  END IF;
+
+  -- The registrations are the point of the Connections surfaces: one per
+  -- credential kind, plus the pre-column row. A rerun that dropped or
+  -- duplicated any of them would leave the badges telling a different story
+  -- than the one they were seeded to tell.
+  SELECT count(*) INTO stray FROM user_session_issuers
+  WHERE project_id = proj_a AND deleted IS FALSE;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 1 user session issuer, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM user_session_clients
+  WHERE project_id = proj_a AND deleted IS FALSE;
+  IF stray <> 5 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 5 registered agents, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM user_sessions
+  WHERE project_id = proj_a AND deleted IS FALSE;
+  IF stray <> 5 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 5 MCP connections, found %', stray;
+  END IF;
+
+  -- Every seeded connection hangs off a registration. One with none would be
+  -- filed under "Unknown client" and carry no credential reading at all.
+  SELECT count(*) INTO stray FROM user_sessions
+  WHERE project_id = proj_a AND deleted IS FALSE AND user_session_client_id IS NULL;
+  IF stray > 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: % MCP connections have no registration', stray;
   END IF;
 
   RAISE NOTICE 'demo seed ok: % chats, % findings, % members, % tools',

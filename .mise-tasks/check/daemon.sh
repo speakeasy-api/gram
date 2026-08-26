@@ -49,9 +49,6 @@ case "$usage_name" in
   tunnel-gateway)
     mise run check:http --url "http://localhost:$TUNNEL_GATEWAY_PUBLIC_PORT/healthz"
     ;;
-  tunnel-postgres-mcp)
-    echo "no readiness probe: ${usage_name} port 9000 is only reachable inside the Docker network."
-    ;;
   *)
     echo "error: unknown daemon name: $usage_name" >&2
     exit 1

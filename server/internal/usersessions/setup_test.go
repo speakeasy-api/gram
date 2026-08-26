@@ -259,6 +259,33 @@ func seedUserSessionClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 	return row, nil
 }
 
+// seedUserSessionClientWithAuth inserts a client that declares a specific
+// token_endpoint_auth_method, and optionally stores a secret hash. Both are
+// inputs to the credential kind the management API reports, and their
+// combinations include ones no registration path would produce -- a declared
+// method with a contradicting secret is exactly the row that reads as
+// misconfigured.
+func seedUserSessionClientWithAuth(t *testing.T, ctx context.Context, conn *pgxpool.Pool, issuerID uuid.UUID, clientID, authMethod string, secretHash pgtype.Text) (repo.UserSessionClient, error) {
+	t.Helper()
+
+	r := repo.New(conn)
+	row, err := r.CreateUserSessionClient(ctx, repo.CreateUserSessionClientParams{
+		UserSessionIssuerID:     issuerID,
+		ClientID:                clientID,
+		ClientSecretHash:        secretHash,
+		ClientName:              "test-" + clientID,
+		RedirectUris:            []string{"https://example.com/cb"},
+		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: 0, Valid: false},
+		TokenEndpointAuthMethod: authMethod,
+		ClientJwks:              nil,
+		ClientJwksUri:           pgtype.Text{String: "https://example.com/jwks.json", Valid: authMethod == "private_key_jwt"},
+	})
+	if err != nil {
+		return repo.UserSessionClient{}, fmt.Errorf("seed user session client with auth: %w", err)
+	}
+	return row, nil
+}
+
 // seedCimdUserSessionClient inserts a CIMD-resolved user_session_clients row.
 // It has to go through the CIMD upsert rather than seedUserSessionClient
 // because CreateUserSessionClient cannot write client_id_metadata_uri at all --
@@ -347,6 +374,21 @@ func seedUserSessionConsent(t *testing.T, ctx context.Context, conn *pgxpool.Poo
 		return repo.UserSessionConsent{}, fmt.Errorf("seed user session consent: %w", err)
 	}
 	return row, nil
+}
+
+// requireOrganizationID asserts that a row carries the organization tenancy of
+// the test's auth context. Every user-session row is written with its
+// organization alongside its project, either supplied by the writer or derived
+// from the row's parent, so a NULL here means a write path skipped it.
+func requireOrganizationID(t *testing.T, ctx context.Context, got pgtype.Text) {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotEmpty(t, authCtx.ActiveOrganizationID)
+
+	require.True(t, got.Valid, "organization_id must not be NULL")
+	require.Equal(t, authCtx.ActiveOrganizationID, got.String)
 }
 
 // seedIssuer creates an issuer with the given slug and returns its id.

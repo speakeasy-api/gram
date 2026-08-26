@@ -22,7 +22,7 @@ func registerPluginTools(reg *Registrar, plugins *PluginsService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "list_plugins",
 		Title:       "List Plugins",
-		Description: "List the plugins in an explicit project. A plugin is the bundle of MCP servers and skills an administrator distributes to people, so this is the level to answer \"what do we ship\" at, rather than adding up individual servers. Each entry reports how much the plugin carries, who receives it, and whether it has been published.",
+		Description: "List the plugins in a named project. A plugin is the bundle of MCP servers and skills an administrator shares with people, so this is the level to answer \"what do we ship\" at, rather than adding up individual servers. Each entry reports how much the plugin carries, who receives it, and whether it has been published — that is, whether the people it is shared with have it yet.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListPluginsInput) (*mcp.CallToolResult, ListPluginsOutput, error) {
 		return pluginToolCall(ctx, func(principal Principal) (ListPluginsOutput, error) {
@@ -32,8 +32,8 @@ func registerPluginTools(reg *Registrar, plugins *PluginsService) {
 
 	addTool(reg, &mcp.Tool{
 		Name:        "get_plugin",
-		Title:       "Get Plugin",
-		Description: "Get one exact plugin and what it carries: its MCP servers, and its skills with the version each is pinned to. Name the plugin exactly by ID, slug, or name — a name that matches nothing is refused as not_found and a name matching more than one plugin as ambiguous_target, never silently answered with the default plugin.",
+		Title:       "Get One Plugin",
+		Description: "Get one plugin — the bundle of MCP servers and skills you share with people — and what it carries: its MCP servers, and its skills with the version each is fixed to. Constraints: name the plugin exactly by ID, slug, or name; a name matching nothing is refused as not_found and a name matching more than one plugin as ambiguous_target, never silently answered with the default plugin.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetPluginInput) (*mcp.CallToolResult, GetPluginOutput, error) {
 		return pluginToolCall(ctx, func(principal Principal) (GetPluginOutput, error) {
@@ -48,8 +48,8 @@ func registerUnavailablePluginTools(reg *Registrar) {
 		title       string
 		description string
 	}{
-		{"list_plugins", "List Plugins", "List the plugins in a project. Plugin inventory is not enabled in the current rollout."},
-		{"get_plugin", "Get Plugin", "Get one plugin and what it carries. Plugin inventory is not enabled in the current rollout."},
+		{"list_plugins", "List Plugins", "List the plugins in a project. This is not switched on for your organization yet."},
+		{"get_plugin", "Get One Plugin", "Get one plugin and what it carries. This is not switched on for your organization yet."},
 	} {
 		addTool(reg, &mcp.Tool{
 			Name:        tool.name,
@@ -83,13 +83,13 @@ func pluginToolResult(err error) (*mcp.CallToolResult, bool) {
 	var result pluginRefusalResult
 	switch {
 	case errors.Is(err, ErrPluginProjectNotFound):
-		result = pluginRefusalResult{Code: "not_found", Message: "That project is not available to this connection. Use a project ID returned by list_projects."}
+		result = pluginRefusalResult{Code: "not_found", Message: "That project is not one you can use here. Pick one returned by list_projects."}
 	case errors.Is(err, ErrPluginNotFound):
-		result = pluginRefusalResult{Code: "not_found", Message: "No plugin in this project matches that target exactly. List the project's plugins with list_plugins and name one of them; there is no fallback to the default plugin."}
+		result = pluginRefusalResult{Code: "not_found", Message: "No plugin in this project has that exact name. List the project's plugins with list_plugins and name one of them; nothing is picked by default."}
 	case errors.Is(err, ErrPluginAmbiguous):
-		result = pluginRefusalResult{Code: "ambiguous_target", Message: "More than one plugin in this project matches that name. Name the plugin by its ID instead."}
+		result = pluginRefusalResult{Code: "ambiguous_target", Message: "More than one plugin in this project has that name. Name it by its ID instead."}
 	case errors.Is(err, ErrPluginCursorInvalid):
-		result = pluginRefusalResult{Code: "invalid_request", Message: "That page cursor was not issued for this project and connection. Start the listing again without a cursor."}
+		result = pluginRefusalResult{Code: "invalid_request", Message: "That page marker does not belong to this project. Start the list again from the beginning."}
 	default:
 		if budgetResult, ok := operationBudgetToolResult(err); ok {
 			return budgetResult, true

@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 )
 
 // HandleConsentAction serves `POST /mcp/{mcpSlug}/connect/remote-session`.
@@ -124,8 +125,24 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 			}
 		}
 		// Not endpoint.UpstreamResource: under multi-binding that may belong
-		// to a different client's upstream; ambiguity derives "" (no resource).
-		clientResource, rerr := s.remoteChallengeMgr.FallbackResourceForClient(ctx, client.ID)
+		// to a different client's upstream.
+		var clientResource string
+		var rerr error
+		claimedByMember := false
+		if endpoint.MetaMcpServerID.Valid {
+			// Member visibility is judged against the consent subject, as the runtime
+			// request the minted session will make will be.
+			memberCtx, cerr := s.contextForSessionSubject(ctx, endpoint, subject, "consent:"+challengeState.ID, challengeState.ClientID)
+			if cerr != nil {
+				return oops.E(oops.CodeUnexpected, cerr, "stamp consent subject context").LogError(ctx, logger)
+			}
+			clientResource, claimedByMember, rerr = s.resolveMetaMemberResource(memberCtx, logger, endpoint, client.RemoteSessionIssuerID)
+		}
+		// Gate on the claim, not an empty resource: an ambiguous meta MCP has
+		// decided, and falling back would qualify the credential anyway.
+		if rerr == nil && !claimedByMember {
+			clientResource, rerr = s.remoteChallengeMgr.FallbackResourceForClient(ctx, client.ID)
+		}
 		if rerr != nil {
 			return oops.E(oops.CodeUnexpected, rerr, "derive client upstream resource").LogError(ctx, logger)
 		}
@@ -183,7 +200,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 				return oops.E(oops.CodeUnexpected, refreshErr, "refresh remote session").LogError(ctx, logger)
 			}
 		}
-		if result.Outcome == remotesessions.RefreshOutcomeSessionInactive {
+		if result.Outcome == remotesessionmetrics.RefreshOutcomeSessionInactive {
 			return oops.E(oops.CodeBadRequest, nil, "Reconnect this service before refreshing it.").LogWarn(ctx, logger)
 		}
 		http.Redirect(w, r, backURL, http.StatusSeeOther)

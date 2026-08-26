@@ -16,7 +16,7 @@ import (
 func TestCopyProjection_LockstepWithInsertColumns(t *testing.T) {
 	t.Parallel()
 
-	projected := strings.Split(copyProjection("?", "NULL", "'rule'", "''"), ", ")
+	projected := strings.Split(copyProjection("?", "NULL", "'rule'", "''", "'suppression'"), ", ")
 	require.Len(t, projected, len(riskFindingColumns))
 
 	for i, col := range riskFindingColumns {
@@ -31,6 +31,8 @@ func TestCopyProjection_LockstepWithInsertColumns(t *testing.T) {
 			require.Equal(t, "'rule'", projected[i])
 		case "excluded_detail":
 			require.Equal(t, "''", projected[i])
+		case "event_kind":
+			require.Equal(t, "'suppression'", projected[i])
 		default:
 			require.Equal(t, col, projected[i], "column %d must pass through verbatim", i)
 		}
@@ -38,13 +40,16 @@ func TestCopyProjection_LockstepWithInsertColumns(t *testing.T) {
 }
 
 // TestApplyReversalProjections pins the two directions' replacement values:
-// apply stamps excluded_reason='rule' with a cleared detail, reversal clears
-// the whole suppression annotation.
+// apply stamps excluded_reason='rule' with a cleared detail and a suppression
+// event kind, reversal clears the whole suppression annotation and stamps an
+// unsuppression event kind.
 func TestApplyReversalProjections(t *testing.T) {
 	t.Parallel()
 
 	require.Contains(t, applyProjection(), "?, ?, false_positive_at, '"+ExcludedReasonRule+"', ''")
+	require.Contains(t, applyProjection(), "tool_call_id, '"+EventKindSuppression+"'")
 	require.Contains(t, reversalProjection(), "NULL, NULL, false_positive_at, '', ''")
+	require.Contains(t, reversalProjection(), "tool_call_id, '"+EventKindUnsuppression+"'")
 }
 
 func TestRetroExclusionPredicate_ApplyConditions(t *testing.T) {

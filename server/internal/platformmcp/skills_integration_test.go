@@ -57,7 +57,7 @@ func TestPlatformMCPSkillsToolsAuthorAndDistributeEndToEnd(t *testing.T) {
 	require.True(t, created.CreatedSkill)
 	require.True(t, created.CreatedVersion)
 	require.False(t, created.Distributed)
-	require.Contains(t, created.InertMessage, "inert")
+	require.Contains(t, created.InertMessage, "no agent loads it yet")
 	require.Equal(t, "distribute_skill", created.NextAction)
 	require.Contains(t, skillTargetNames(created.DistributionTargets), "Marketing")
 

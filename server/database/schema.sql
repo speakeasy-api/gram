@@ -4457,8 +4457,9 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
 
   environment_id uuid,
   user_session_issuer_id uuid,
-  -- Direct upstream authorization: the client authorizes at the upstream and
-  -- its bearer is forwarded verbatim, so Gram is not the authorization server.
+  -- The authorization server the upstream authenticates against. Coexists with
+  -- user_session_issuer_id: Gram fronting an upstream does not change which AS
+  -- issued the upstream's credential.
   -- The FK cannot qualify tenancy; writers must use the tenant-scoped lookup.
   remote_session_issuer_id uuid,
   remote_mcp_server_id uuid,
@@ -4487,9 +4488,7 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   CONSTRAINT mcp_servers_tool_variations_group_id_fkey FOREIGN KEY (tool_variations_group_id) REFERENCES tool_variations_groups (id) ON DELETE SET NULL,
   CONSTRAINT mcp_servers_remote_session_issuer_id_fkey FOREIGN KEY (remote_session_issuer_id) REFERENCES remote_session_issuers (id) ON DELETE SET NULL,
   -- Exactly one backend must be set.
-  CONSTRAINT mcp_servers_backend_exclusivity_check CHECK (num_nonnulls(remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id) = 1),
-  -- Gram-as-AS and direct upstream authorization are alternatives, never both.
-  CONSTRAINT mcp_servers_authorization_exclusivity_check CHECK (num_nonnulls(user_session_issuer_id, remote_session_issuer_id) <= 1)
+  CONSTRAINT mcp_servers_backend_exclusivity_check CHECK (num_nonnulls(remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id) = 1)
 );
 
 CREATE INDEX IF NOT EXISTS mcp_servers_project_id_idx
@@ -4503,6 +4502,14 @@ WHERE deleted IS FALSE;
 CREATE UNIQUE INDEX IF NOT EXISTS mcp_servers_project_id_id_key
 ON mcp_servers (project_id, id);
 
+
+-- Drives the resync that recomputes remote_session_issuer_id from a set of user
+-- session issuers. That statement runs inside every client create, attach,
+-- detach and delete, so without this it sequential-scans mcp_servers while
+-- holding write locks.
+CREATE INDEX IF NOT EXISTS mcp_servers_user_session_issuer_id_idx
+ON mcp_servers (user_session_issuer_id)
+WHERE user_session_issuer_id IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS mcp_servers_remote_mcp_server_id_idx
 ON mcp_servers (remote_mcp_server_id)
@@ -6112,6 +6119,11 @@ CREATE TABLE IF NOT EXISTS gcp_iam_credentials (
   wif_pool_id TEXT,
   wif_provider_id TEXT,
   wif_project_number TEXT,
+  -- Exempts this credential from the validation that refuses an impersonation
+  -- target in the server's own GCP project. Recorded on the row because the
+  -- same validation runs on the outbound path, where there is no request actor
+  -- to consult.
+  skip_project_verification boolean NOT NULL DEFAULT FALSE,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   CONSTRAINT gcp_iam_credentials_pkey PRIMARY KEY (external_credential_id),

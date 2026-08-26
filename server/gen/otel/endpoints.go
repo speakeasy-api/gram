@@ -18,6 +18,7 @@ import (
 // Endpoints wraps the "otel" service endpoints.
 type Endpoints struct {
 	Logs           goa.Endpoint
+	Metrics        goa.Endpoint
 	Traces         goa.Endpoint
 	ListEventLog   goa.Endpoint
 	GetEventVolume goa.Endpoint
@@ -29,6 +30,15 @@ type Endpoints struct {
 type LogsRequestData struct {
 	// Payload is the method payload.
 	Payload *LogsPayload
+	// Body streams the HTTP request body.
+	Body io.ReadCloser
+}
+
+// MetricsRequestData holds both the payload and the HTTP request body reader
+// of the "metrics" method.
+type MetricsRequestData struct {
+	// Payload is the method payload.
+	Payload *MetricsPayload
 	// Body streams the HTTP request body.
 	Body io.ReadCloser
 }
@@ -48,6 +58,7 @@ func NewEndpoints(s Service) *Endpoints {
 	a := s.(Auther)
 	return &Endpoints{
 		Logs:           NewLogsEndpoint(s, a.APIKeyAuth),
+		Metrics:        NewMetricsEndpoint(s, a.APIKeyAuth),
 		Traces:         NewTracesEndpoint(s, a.APIKeyAuth),
 		ListEventLog:   NewListEventLogEndpoint(s, a.APIKeyAuth),
 		GetEventVolume: NewGetEventVolumeEndpoint(s, a.APIKeyAuth),
@@ -58,6 +69,7 @@ func NewEndpoints(s Service) *Endpoints {
 // Use applies the given middleware to all the "otel" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Logs = m(e.Logs)
+	e.Metrics = m(e.Metrics)
 	e.Traces = m(e.Traces)
 	e.ListEventLog = m(e.ListEventLog)
 	e.GetEventVolume = m(e.GetEventVolume)
@@ -96,6 +108,41 @@ func NewLogsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoi
 			return nil, err
 		}
 		return nil, s.Logs(ctx, ep.Payload, ep.Body)
+	}
+}
+
+// NewMetricsEndpoint returns an endpoint function that calls the method
+// "metrics" of service "otel".
+func NewMetricsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		ep := req.(*MetricsRequestData)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"hooks"},
+		}
+		var key string
+		if ep.Payload.ApikeyToken != nil {
+			key = *ep.Payload.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"hooks"},
+			}
+			var key string
+			if ep.Payload.ProjectSlugInput != nil {
+				key = *ep.Payload.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.Metrics(ctx, ep.Payload, ep.Body)
 	}
 }
 

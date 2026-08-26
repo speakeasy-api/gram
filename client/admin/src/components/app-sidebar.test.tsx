@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   getProject: vi.fn(),
   listOrganizationProjects: vi.fn(),
   listOrganizationMembers: vi.fn(),
+  listOrganizationActivity: vi.fn(),
 }));
 
 vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
@@ -27,6 +28,7 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
     getProject: mocks.getProject,
     listOrganizationProjects: mocks.listOrganizationProjects,
     listOrganizationMembers: mocks.listOrganizationMembers,
+    listOrganizationActivity: mocks.listOrganizationActivity,
   };
 });
 
@@ -75,6 +77,8 @@ beforeEach(() => {
   mocks.listOrganizationProjects.mockResolvedValue({ projects: [] });
   mocks.listOrganizationMembers.mockReset();
   mocks.listOrganizationMembers.mockResolvedValue({ members: [] });
+  mocks.listOrganizationActivity.mockReset();
+  mocks.listOrganizationActivity.mockResolvedValue({ logs: [] });
 });
 
 afterEach(cleanup);
@@ -122,6 +126,7 @@ function isActive(name: string): boolean {
 const RECORD_NAV = [
   "All organizations",
   "Overview",
+  "Activity",
   "Projects",
   "Features",
   "Members",
@@ -380,11 +385,31 @@ describe("AppSidebar", () => {
     expect(navState()).toEqual({
       "All organizations": { active: false, current: false },
       Overview: { active: true, current: true },
+      Activity: { active: false, current: false },
       Projects: { active: false, current: false },
       Features: { active: false, current: false },
       Members: { active: false, current: false },
     });
   });
+
+  it.each([ORG.slug, ORG.id])(
+    "names Activity as the sole current page on the activity view addressed by %s",
+    async (idOrSlug) => {
+      await renderRouteTree(routeTree, {
+        initialPath: `/organizations/${idOrSlug}/activity`,
+      });
+      await screen.findByRole("link", { name: "All organizations" });
+
+      expect(navState()).toEqual({
+        "All organizations": { active: false, current: false },
+        Overview: { active: false, current: false },
+        Activity: { active: true, current: true },
+        Projects: { active: false, current: false },
+        Features: { active: false, current: false },
+        Members: { active: false, current: false },
+      });
+    },
+  );
 
   it("names one current page on the members view", async () => {
     await renderRouteTree(routeTree, {
@@ -397,6 +422,7 @@ describe("AppSidebar", () => {
     expect(navState()).toEqual({
       "All organizations": { active: false, current: false },
       Overview: { active: false, current: false },
+      Activity: { active: false, current: false },
       Projects: { active: false, current: false },
       Features: { active: false, current: false },
       Members: { active: true, current: true },
@@ -416,6 +442,7 @@ describe("AppSidebar", () => {
     expect(navState()).toEqual({
       "All organizations": { active: false, current: false },
       Overview: { active: false, current: false },
+      Activity: { active: false, current: false },
       Projects: { active: true, current: true },
       Features: { active: false, current: false },
       Members: { active: false, current: false },
@@ -443,6 +470,7 @@ describe("AppSidebar", () => {
     expect(navState()).toEqual({
       "All organizations": { active: false, current: false },
       Overview: { active: false, current: false },
+      Activity: { active: false, current: false },
       Projects: { active: true, current: true },
       Features: { active: false, current: false },
       Members: { active: false, current: false },
@@ -464,6 +492,7 @@ describe("AppSidebar", () => {
     expect(navState()).toEqual({
       "All organizations": { active: false, current: false },
       Overview: { active: false, current: false },
+      Activity: { active: false, current: false },
       Projects: { active: true, current: true },
       Features: { active: false, current: false },
       Members: { active: false, current: false },

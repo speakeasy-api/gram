@@ -1,6 +1,7 @@
 package platformmcp
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -224,4 +225,24 @@ func TestCompareScope_ComparesAgainstTheRestOfTheOrganization(t *testing.T) {
 	require.Equal(t, FaultScopeUnknown, compareScope(server, server))
 
 	require.Equal(t, FaultScopeUnknown, compareScope(outcomeTotals{}, outcomeTotals{Total: 500, Success: 500}))
+}
+
+// The fault value is a wire contract: a client reads the JSON, not the Go
+// constant, so a rename that only the constant covers would ship silently. It
+// says "mcp_client" rather than "client" because this package also registers
+// OAuth clients, and a bare "client" reads as either one.
+func TestFaultAttributionSerializesTheCallingClientAsMCPClient(t *testing.T) {
+	t.Parallel()
+
+	attribution := attributeFault(
+		freshReadiness(ReadinessReady),
+		true,
+		outcomeTotals{Total: 20, Success: 2, ClientError: 18},
+		outcomeTotals{},
+	)
+	require.Equal(t, FaultClient, attribution.Fault)
+
+	encoded, err := json.Marshal(attribution)
+	require.NoError(t, err)
+	require.Contains(t, string(encoded), `"fault":"mcp_client"`)
 }
