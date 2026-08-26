@@ -149,6 +149,15 @@ const NARRATIVE_STEP_RESULTS: Record<JourneyId, readonly string[]> = {
   ],
 };
 
+const NARRATIVE_STEP_LABELS: Partial<Record<JourneyId, readonly string[]>> = {
+  "third-party-mcp": [
+    "Pick a server",
+    "Connect your agent to this server",
+    "Prompt agent to list the tools",
+    "Watch the first governed call",
+  ],
+};
+
 export function projectGuideOperationKey(
   scope: ProjectGuideOperationScope,
 ): string {
@@ -216,6 +225,14 @@ function stepLabel(context: ProjectGuideMachineContext, offset = 0): string {
   );
 }
 
+function narrativeStepLabel(path: JourneyId, step: number): string {
+  return (
+    NARRATIVE_STEP_LABELS[path]?.[step] ??
+    JOURNEY_BY_ID[path].steps[step] ??
+    "Journey complete"
+  );
+}
+
 function pathStepCount(path: JourneyId): number {
   return JOURNEY_BY_ID[path].steps.length;
 }
@@ -268,14 +285,17 @@ function narrativeOutputFor(
         NARRATIVE_STEP_RESULTS[path][index] ??
         `Completed · ${journey.steps[index]}`,
     });
-    const nextLabel = journey.steps[index + 1];
-    if (nextLabel)
-      entries.push({ kind: "next", message: `Next · ${nextLabel}` });
+    if (journey.steps[index + 1]) {
+      entries.push({
+        kind: "next",
+        message: `Next · ${narrativeStepLabel(path, index + 1)}`,
+      });
+    }
   }
 
   entries.push({
     kind: "note",
-    message: `Ready · ${journey.steps[completedCount] ?? "Journey complete"}`,
+    message: `Ready · ${narrativeStepLabel(path, completedCount)}`,
   });
   return entries;
 }
@@ -430,16 +450,19 @@ export const projectGuideMachine = setup({
       return appendOutput(context, [
         {
           kind: "note",
-          message: `${event.name} Selected, Click start to begin setup`,
+          message: `${event.name} selected. Ready to start the journey`,
         },
       ]);
     }),
     recordStart: assign(({ context }) => {
       const mode = stepMode(context);
+      const message =
+        context.activePath === "third-party-mcp" &&
+        getProjectGuideCurrentStep(context) === 0
+          ? "Starting…"
+          : `Started · ${stepLabel(context)}`;
       return {
-        ...appendOutput(context, [
-          { kind: "start", message: `Started · ${stepLabel(context)}` },
-        ]),
+        ...appendOutput(context, [{ kind: "start", message }]),
         error: null,
         operationProgress: null,
         attempt: 0,
@@ -472,7 +495,9 @@ export const projectGuideMachine = setup({
       }
       if (!context.activePath) return {};
       const nextStep = getProjectGuideCurrentStep(context) + 1;
-      const nextLabel = JOURNEY_BY_ID[context.activePath].steps[nextStep];
+      const nextLabel = JOURNEY_BY_ID[context.activePath].steps[nextStep]
+        ? narrativeStepLabel(context.activePath, nextStep)
+        : undefined;
       const entries: Array<Omit<ProjectGuideOutputEntry, "id">> = [
         {
           kind: "result",

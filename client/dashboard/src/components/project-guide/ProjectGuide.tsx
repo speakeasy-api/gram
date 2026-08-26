@@ -104,12 +104,6 @@ function ProjectGuideContent({
         if (signal.type === "abort") {
           nextReportAtRef.current = 0;
         }
-        if (signal.type === "start") {
-          nextReportAtRef.current = Math.max(
-            nextReportAtRef.current,
-            Date.now() + PROJECT_GUIDE_MICRO_STEP_DELAY_MS,
-          );
-        }
         const report =
           signal.type === "prepare"
             ? (result: ProjectGuideOperationReport) =>
@@ -292,11 +286,7 @@ function ProjectGuideContent({
                             currentStep === 2 &&
                             displayState === "checkpoint"
                           ) {
-                            send({
-                              type: "USER_CHECKPOINT_COMPLETE",
-                              result:
-                                "Prompt copied · listening for the governed call",
-                            });
+                            mcpOperations.markPromptCopied();
                           }
                         }}
                         onMcpServerSelected={(name) =>
@@ -436,7 +426,8 @@ function primaryActionFor(
     case "checkpoint":
       if (journey.id === "third-party-mcp" && currentStep === 1) {
         return {
-          label: "I've added the server to my client",
+          label: "Server is installed",
+          icon: "play",
           disabled:
             !mcpOperations.connectionPrompts ||
             !mcpOperations.connectionPromptCopied,
@@ -448,7 +439,16 @@ function primaryActionFor(
         };
       }
       if (journey.id === "third-party-mcp" && currentStep === 2) {
-        return null;
+        return {
+          label: "Prompt run",
+          icon: "play",
+          disabled: !mcpOperations.promptCopied,
+          onClick: () =>
+            send({
+              type: "USER_CHECKPOINT_COMPLETE",
+              result: "Prompt copied · listening for the governed call",
+            }),
+        };
       }
       if (journey.id === "secret-block" && currentStep === 2) {
         return {

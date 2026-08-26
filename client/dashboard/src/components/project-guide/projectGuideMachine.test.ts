@@ -117,7 +117,7 @@ describe("project guide coordinator contract", () => {
     ]);
     expect(service.getSnapshot().context.output.at(-1)).toMatchObject({
       kind: "start",
-      message: "Started · Pick and set up a server",
+      message: "Starting…",
     });
   });
 
@@ -128,14 +128,14 @@ describe("project guide coordinator contract", () => {
     service.send({ type: "SELECT_MCP_SERVER", name: "Linear" });
     expect(service.getSnapshot().context.output.at(-1)).toMatchObject({
       kind: "note",
-      message: "Linear Selected, Click start to begin setup",
+      message: "Linear selected. Ready to start the journey",
     });
 
     service.send({ type: "START" });
     service.send({ type: "SELECT_MCP_SERVER", name: "Notion" });
 
     expect(service.getSnapshot().context.output.at(-1)?.message).not.toBe(
-      "Notion Selected, Click start to begin setup",
+      "Notion selected. Ready to start the journey",
     );
     expect(signals).toHaveLength(1);
   });
@@ -149,10 +149,10 @@ describe("project guide coordinator contract", () => {
       service.getSnapshot().context.output.map((entry) => entry.message),
     ).toEqual([
       "Server selected",
-      "Next · Connect your client",
+      "Next · Connect your agent to this server",
       "Endpoint verified",
-      "Next · Ask the agent to list the tools",
-      "Ready · Ask the agent to list the tools",
+      "Next · Prompt agent to list the tools",
+      "Ready · Prompt agent to list the tools",
     ]);
   });
 

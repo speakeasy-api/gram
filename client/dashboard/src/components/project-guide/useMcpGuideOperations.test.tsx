@@ -320,7 +320,7 @@ describe("useMcpGuideOperations", () => {
     expect(report).toHaveBeenNthCalledWith(2, {
       type: "progress",
       scope: SERVER_SCOPE,
-      message: "Installing Notion into this project",
+      message: "Adding Notion MCP server to this project",
       progress: 0.5,
     });
   });
@@ -343,7 +343,7 @@ describe("useMcpGuideOperations", () => {
     expect(report).toHaveBeenCalledWith({
       type: "progress",
       scope: SERVER_SCOPE,
-      message: "Installing Linear into this project",
+      message: "Adding Linear MCP server to this project",
       progress: 0.5,
     });
     expect(report).toHaveBeenCalledWith({

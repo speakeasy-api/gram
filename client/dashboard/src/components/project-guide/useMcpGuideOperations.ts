@@ -217,12 +217,14 @@ export function useMcpGuideOperations(): {
   catalogServers: PulseMCPServer[] | undefined;
   client: McpGuideClient;
   connectionPromptCopied: boolean;
+  promptCopied: boolean;
   endpointUrl: string | undefined;
   handleSignal: (
     signal: ProjectGuideOperationSignal,
     report: (report: ProjectGuideOperationReport) => void,
   ) => void;
   markConnectionPromptCopied: () => void;
+  markPromptCopied: () => void;
   mcpServer: McpServer | undefined;
   projectStateError: boolean;
   projectStatePending: boolean;
@@ -243,6 +245,7 @@ export function useMcpGuideOperations(): {
   >(undefined);
   const [client, setClient] = useState<McpGuideClient>("claude");
   const [connectionPromptCopied, setConnectionPromptCopied] = useState(false);
+  const [promptCopied, setPromptCopied] = useState(false);
   const [activeOperation, setActiveOperation] = useState<
     ActiveOperation | undefined
   >(undefined);
@@ -638,7 +641,7 @@ export function useMcpGuideOperations(): {
       operation.report({
         type: "progress",
         scope: operation.scope,
-        message: `Installing ${name} into this project`,
+        message: `Adding ${name} MCP server to this project`,
         progress: 0.5,
       });
       if (extractAuthType(selectedServer) === "oauth") {
@@ -756,9 +759,11 @@ export function useMcpGuideOperations(): {
     catalogServers,
     client,
     connectionPromptCopied,
+    promptCopied,
     endpointUrl,
     handleSignal,
     markConnectionPromptCopied: () => setConnectionPromptCopied(true),
+    markPromptCopied: () => setPromptCopied(true),
     mcpServer,
     projectStateError,
     projectStatePending,
@@ -770,6 +775,7 @@ export function useMcpGuideOperations(): {
     selectServer: (server) => {
       setSelectedServer(server);
       setConnectionPromptCopied(false);
+      setPromptCopied(false);
       activityBaselineRef.current = undefined;
       setActivityBaseline(undefined);
       setBaselineCaptureError(false);
@@ -779,6 +785,7 @@ export function useMcpGuideOperations(): {
     setClient: (nextClient) => {
       setClient(nextClient);
       setConnectionPromptCopied(false);
+      setPromptCopied(false);
     },
     connectionPrompts,
     toolLogsHref: routes.logs.href(),
