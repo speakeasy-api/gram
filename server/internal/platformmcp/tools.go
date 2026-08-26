@@ -388,7 +388,7 @@ func operationBudgetToolResult(err error) (*mcp.CallToolResult, bool) {
 	case errors.Is(err, ErrReadinessRegistrationNotFound):
 		result = operationBudgetResult{Code: "registration_not_found", Message: "That MCP server is not one this project and caller can act on. Use the one returned when it was added to the project."}
 	case errors.Is(err, ErrRegistrationInvalid), errors.Is(err, ErrLifecycleMetadataInvalid), errors.Is(err, ErrLifecycleVisibilityInvalid), errors.Is(err, ErrReadinessInvalid), errors.Is(err, ErrCatalogConfigurationRejected), errors.Is(err, ErrCatalogRejected), errors.Is(err, ErrCatalogCursorInvalid):
-		result = operationBudgetResult{Code: "invalid_request", Message: "That request does not match what the reviewed catalogue now offers. Read the current options again; do not retry the same input."}
+		result = operationBudgetResult{Code: "invalid_request", Message: "That request is not valid, or no longer matches how things are set up now. Read the current state again; do not retry the same input."}
 	case errors.Is(err, ErrOperationRateLimited), errors.Is(err, ErrReadinessRateLimited):
 		result = operationBudgetResult{Code: "rate_limited", Message: "That was asked for too often just now. Try again shortly."}
 	case errors.Is(err, ErrCatalogUnavailable):

@@ -11,7 +11,7 @@ func registerDiagnosticsTools(reg *Registrar, diagnostics *DiagnosticsService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_project_overview",
 		Title:       "Project Health Overview",
-		Description: "Summarize how one project's MCP servers have been behaving, and what has been failing, over a recent window. Start here for any question about how a project or its MCP servers are doing; only go to the closer diagnostics once this names a specific server or failure to look into. Constraints: results are aggregated server-side and carry the window they cover, how fresh the underlying observations are, and whether there were any observations at all.",
+		Description: "Summarize how one project's MCP servers have been behaving, and what has been failing, over a recent window. Start here for any question about how a project or its MCP servers are doing; only look further once this names a specific server or failure to investigate. Constraints: results are aggregated server-side and carry the window they cover, how fresh the underlying observations are, and whether there were any observations at all.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetProjectOverviewInput) (*mcp.CallToolResult, GetProjectOverviewOutput, error) {
 		principal, err := principalFromToolContext(ctx)
@@ -55,8 +55,8 @@ func registerUnavailableDiagnosticsTools(reg *Registrar) {
 		title       string
 		description string
 	}{
-		{"get_project_overview", "Project Health Overview", "Summarize one project's MCP activity and failures. Diagnostics are not enabled in the current rollout."},
-		{"get_mcp_diagnostics", "Diagnose an MCP Server", "Diagnose one configured MCP that is not working. Diagnostics are not enabled in the current rollout."},
+		{"get_project_overview", "Project Health Overview", "Summarize one project's MCP activity and failures. This is not switched on for your organization yet."},
+		{"get_mcp_diagnostics", "Diagnose an MCP Server", "Diagnose one MCP server that is not working. This is not switched on for your organization yet."},
 	} {
 		addTool(reg, &mcp.Tool{
 			Name:        tool.name,
