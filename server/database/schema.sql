@@ -1950,6 +1950,10 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
   -- is common and not an error: revoking a Remote Session then stays a local
   -- soft-delete with no upstream call.
   revocation_endpoint TEXT,
+  -- RFC 7662 token introspection endpoint, captured from the RFC 8414
+  -- introspection_endpoint metadata field. NULL when the issuer advertises
+  -- none. Not consulted by the refresh lifecycle.
+  introspection_endpoint TEXT,
   registration_endpoint TEXT,
   jwks_uri TEXT,
   service_documentation TEXT,
