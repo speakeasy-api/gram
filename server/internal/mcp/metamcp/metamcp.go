@@ -17,6 +17,9 @@ const MaxBodyBytes = 1 << 20
 // magnitude.
 const MaxDescribeTools = 250
 
+// MaxMemberResponseBytes caps one proxied member's captured response body.
+const MaxMemberResponseBytes = 4 << 20
+
 // The fixed gateway tool contract. ToolDescribeTools and ToolExecuteTool
 // intentionally carry the same wire names as the dynamic toolset surface's
 // tools so agents see one vocabulary across Gram surfaces.

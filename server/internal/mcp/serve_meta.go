@@ -456,7 +456,7 @@ func (s *Service) handleMetaListServersCall(
 			Slug:      member.slug,
 			Name:      member.name,
 			SortOrder: int(member.sortOrder),
-			Status:    member.status(),
+			Status:    s.memberStatus(ctx, member),
 		})
 	}
 

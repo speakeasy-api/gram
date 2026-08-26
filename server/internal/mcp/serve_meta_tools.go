@@ -60,11 +60,7 @@ func (s *Service) handleMetaDescribeServerCall(
 	if !ok {
 		return nil, oops.E(oops.CodeNotFound, nil, "unknown server %q; call list_servers to see available servers", args.Server).LogWarn(ctx, logger)
 	}
-	if member.backend != metaMemberBackendHosted {
-		return nil, oops.E(oops.CodeNotImplemented, nil, "describe_server is not yet available for proxied member servers")
-	}
-
-	catalog, err := s.describeMemberToolset(ctx, logger, gate, member)
+	catalog, err := s.describeGatewayMember(ctx, logger, gate, member)
 	if err != nil {
 		var memberErr *metaMemberError
 		if errors.As(err, &memberErr) {
@@ -86,7 +82,7 @@ func (s *Service) handleMetaDescribeServerCall(
 			Slug:      member.slug,
 			Name:      member.name,
 			SortOrder: int(member.sortOrder),
-			Status:    member.status(),
+			Status:    s.memberStatus(ctx, member),
 		},
 		Tools: described,
 	})
@@ -147,9 +143,6 @@ func (s *Service) handleMetaDescribeToolsCall(
 			notFound = append(notFound, qualified)
 			continue
 		}
-		if member.backend != metaMemberBackendHosted {
-			return nil, oops.E(oops.CodeNotImplemented, nil, "describe_tools is not yet available for proxied member servers")
-		}
 		mr, ok := requestsBySlug[serverSlug]
 		if !ok {
 			mr = &memberRequest{member: member, toolNames: nil}
@@ -160,13 +153,17 @@ func (s *Service) handleMetaDescribeToolsCall(
 	}
 
 	described := []metamcp.SchemaTool{}
+	failed := []metamcp.FailedServer{}
 	for _, slug := range order {
 		mr := requestsBySlug[slug]
-		catalog, err := s.describeMemberToolset(ctx, logger, gate, mr.member)
+		catalog, err := s.describeGatewayMember(ctx, logger, gate, mr.member)
 		if err != nil {
+			// A member outage degrades only that member: its names land in
+			// failed while every other member is still described.
 			var memberErr *metaMemberError
 			if errors.As(err, &memberErr) {
-				return marshalMetaToolError(ctx, logger, req.ID, memberErr.message)
+				failed = append(failed, metamcp.FailedServer{Server: mr.member.slug, Message: memberErr.message})
+				continue
 			}
 			return nil, err
 		}
@@ -188,6 +185,7 @@ func (s *Service) handleMetaDescribeToolsCall(
 	structured, err := json.Marshal(metamcp.DescribeToolsResult{
 		Tools:    described,
 		NotFound: notFound,
+		Failed:   failed,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "serialize describe_tools result").LogError(ctx, logger)
@@ -221,7 +219,7 @@ func (s *Service) handleMetaExecuteToolCall(
 		return nil, oops.E(oops.CodeNotFound, nil, "unknown server %q; call list_servers to see available servers", serverSlug).LogWarn(ctx, logger)
 	}
 	if member.backend != metaMemberBackendHosted {
-		return nil, oops.E(oops.CodeNotImplemented, nil, "execute_tool is not yet available for proxied member servers")
+		return s.executeProxiedMemberTool(ctx, logger, gate, member, req, toolName, arguments, meta)
 	}
 
 	toolset, inputs, err := s.buildMemberDispatch(ctx, logger, gate, member)

@@ -180,6 +180,9 @@ type Service struct {
 	tunnelManager      *tunnelManager
 	// Nil when no Redis was wired; every public tunneled request then fails closed.
 	tunnelPublic *tunnelPublicRuntime
+
+	// metaRuntime bounds the gateway's per-member upstream work.
+	metaRuntime MetaRuntimeConfig
 }
 
 // oauthTokenInputs is one upstream OAuth access token collected during MCP
@@ -321,6 +324,7 @@ func NewService(
 	tunnelGatewayCIDRs []string,
 	redisClient *redis.Client,
 	tunnelPublicConfig TunnelPublicConfig,
+	metaRuntimeConfig MetaRuntimeConfig,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
@@ -419,6 +423,7 @@ func NewService(
 		remoteProxyManager: remoteProxyManager,
 		tunnelManager:      newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs),
 		tunnelPublic:       newTunnelPublicRuntime(redisClient, tunnelPublicConfig),
+		metaRuntime:        metaRuntimeConfig.withDefaults(),
 	}
 }
 

@@ -5,8 +5,9 @@ package metamcp
 // StatusUnknown until the runtime holds live member sessions to report on
 // (AGE-3291 PR 2).
 const (
-	StatusUnknown   = "unknown"
-	StatusAvailable = "available"
+	StatusUnknown     = "unknown"
+	StatusAvailable   = "available"
+	StatusUnavailable = "unavailable"
 )
 
 // ListedServer is one member entry in a list_servers result.

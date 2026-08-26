@@ -36,17 +36,36 @@ type metaMember struct {
 	sortOrder             int32
 	backend               metaMemberBackend
 	toolsetID             uuid.NullUUID
+	remoteServerID        uuid.NullUUID
+	tunneledServerID      uuid.NullUUID
+	visibility            string
 	environmentID         uuid.NullUUID
 	toolVariationsGroupID uuid.NullUUID
 }
 
-// status is the list_servers connection state: hosted members are always
-// available; proxied stay unknown until the runtime holds live sessions.
-func (m metaMember) status() string {
-	if m.backend == metaMemberBackendHosted {
+// memberStatus is the list_servers connection state. Hosted members execute
+// in-process, so they are always available. A tunneled member's liveness is
+// one route-store read; a remote member's would be a credentialed network
+// probe per listing, so it stays unknown until cached health exists.
+func (s *Service) memberStatus(ctx context.Context, member metaMember) string {
+	switch {
+	case member.backend == metaMemberBackendHosted:
 		return metamcp.StatusAvailable
+	case member.tunneledServerID.Valid:
+		if s.tunnelManager == nil || s.tunnelManager.routes == nil {
+			return metamcp.StatusUnknown
+		}
+		candidates, err := s.tunnelManager.routes.Candidates(ctx, member.tunneledServerID.UUID.String())
+		if err != nil {
+			return metamcp.StatusUnknown
+		}
+		if len(candidates) == 0 {
+			return metamcp.StatusUnavailable
+		}
+		return metamcp.StatusAvailable
+	default:
+		return metamcp.StatusUnknown
 	}
-	return metamcp.StatusUnknown
 }
 
 // resolveMetaMemberSnapshot loads the servable members and applies the
@@ -115,6 +134,9 @@ func (s *Service) resolveMetaMemberSnapshot(
 			sortOrder:             row.SortOrder,
 			backend:               backend,
 			toolsetID:             row.McpServerToolsetID,
+			remoteServerID:        row.McpServerRemoteMcpServerID,
+			tunneledServerID:      row.McpServerTunneledMcpServerID,
+			visibility:            row.McpServerVisibility,
 			environmentID:         row.McpServerEnvironmentID,
 			toolVariationsGroupID: row.McpServerToolVariationsGroupID,
 		})
