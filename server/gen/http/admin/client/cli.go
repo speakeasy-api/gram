@@ -332,6 +332,33 @@ func BuildListOrganizationProjectsPayload(adminListOrganizationProjectsOrganizat
 	return v, nil
 }
 
+// BuildListOrganizationActivityPayload builds the payload for the admin
+// listOrganizationActivity endpoint from CLI flags.
+func BuildListOrganizationActivityPayload(adminListOrganizationActivityOrganizationID string, adminListOrganizationActivityCursor string, adminListOrganizationActivityAdminSessionToken string) (*admin.ListOrganizationActivityPayload, error) {
+	var organizationID string
+	{
+		organizationID = adminListOrganizationActivityOrganizationID
+	}
+	var cursor *string
+	{
+		if adminListOrganizationActivityCursor != "" {
+			cursor = &adminListOrganizationActivityCursor
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminListOrganizationActivityAdminSessionToken != "" {
+			adminSessionToken = &adminListOrganizationActivityAdminSessionToken
+		}
+	}
+	v := &admin.ListOrganizationActivityPayload{}
+	v.OrganizationID = organizationID
+	v.Cursor = cursor
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildListOrganizationsPayload builds the payload for the admin
 // listOrganizations endpoint from CLI flags.
 func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrganizationsAccountType string, adminListOrganizationsAccountTypes string, adminListOrganizationsTrialStates string, adminListOrganizationsDisabledStates string, adminListOrganizationsIncludeDisabled string, adminListOrganizationsCursor string, adminListOrganizationsLimit string, adminListOrganizationsSort string, adminListOrganizationsDirection string, adminListOrganizationsPage string, adminListOrganizationsAdminSessionToken string) (*admin.ListOrganizationsPayload, error) {

@@ -68,7 +68,7 @@ LEFT JOIN LATERAL (
 -- name: ListAuditLogs :many
 -- When no subject_type filter is given, assistant activity events (one per
 -- assistant tool call) are excluded so they don't drown out the platform
--- audit feed; callers fetch them explicitly with subject_type = 'assistant'.
+-- audit feed. The private admin caller can explicitly include all events.
 SELECT a.*, p.slug AS project_slug
 FROM audit_logs a
 LEFT JOIN projects p ON p.id = a.project_id
@@ -90,7 +90,10 @@ WHERE a.organization_id = @organization_id
     OR a.action = sqlc.narg(action)::text
   )
   AND (
-    (sqlc.narg(subject_type)::text IS NULL AND a.subject_type <> 'assistant')
+    (
+      sqlc.narg(subject_type)::text IS NULL
+      AND (@include_assistant_events::boolean OR a.subject_type <> 'assistant')
+    )
     OR a.subject_type = sqlc.narg(subject_type)::text
   )
   AND (
@@ -193,3 +196,9 @@ WHERE organization_id = @organization_id
   )
 GROUP BY action
 ORDER BY count DESC, action ASC;
+
+-- name: UpdateAuditLogCreatedAtForTesting :exec
+-- Test fixture for deterministic ordering and cursor-boundary coverage.
+UPDATE audit_logs
+SET created_at = @created_at
+WHERE id = ANY(@ids::uuid[]);

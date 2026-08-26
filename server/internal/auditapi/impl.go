@@ -2,12 +2,10 @@ package auditapi
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
-	"strconv"
 	"strings"
 	"time"
 
@@ -100,16 +98,17 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 			Int64: 0,
 			Valid: false,
 		},
-		ActorID:       conv.PtrToPGTextEmpty(payload.ActorID),
-		Action:        conv.PtrToPGTextEmpty(payload.Action),
-		SubjectType:   conv.PtrToPGTextEmpty(payload.SubjectType),
-		SubjectID:     conv.PtrToPGTextEmpty(payload.SubjectID),
-		SubjectIds:    normalizeSubjectIDs(payload.SubjectIds),
-		ActingSurface: conv.PtrToPGTextEmpty(payload.ActingSurface),
+		ActorID:                conv.PtrToPGTextEmpty(payload.ActorID),
+		Action:                 conv.PtrToPGTextEmpty(payload.Action),
+		SubjectType:            conv.PtrToPGTextEmpty(payload.SubjectType),
+		SubjectID:              conv.PtrToPGTextEmpty(payload.SubjectID),
+		SubjectIds:             normalizeSubjectIDs(payload.SubjectIds),
+		ActingSurface:          conv.PtrToPGTextEmpty(payload.ActingSurface),
+		IncludeAssistantEvents: false,
 	}
 
 	if payload.Cursor != nil && *payload.Cursor != "" {
-		seq, err := decodeCursor(*payload.Cursor)
+		seq, err := audit.DecodeCursor(*payload.Cursor)
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, s.logger)
 		}
@@ -132,7 +131,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 
 	var nextCursor *string
 	if len(rows) > listAuditLogsPageSize {
-		cursor := encodeCursor(rows[listAuditLogsPageSize-1].Seq, rows[listAuditLogsPageSize-1].ID.String())
+		cursor := audit.EncodeCursor(rows[listAuditLogsPageSize-1].Seq, rows[listAuditLogsPageSize-1].ID.String())
 		nextCursor = &cursor
 		logs = logs[:listAuditLogsPageSize]
 	}
@@ -274,32 +273,6 @@ func (s *Service) resolveProjectID(ctx context.Context, organizationID string, p
 	default:
 		return uuid.NullUUID{UUID: project.ID, Valid: true}, nil
 	}
-}
-
-func encodeCursor(seq int64, id string) string {
-	// currently, the id is included to ensure the cursor is unique by customer
-	// and reduce predictability (hyrum's law).
-	payload := fmt.Sprintf("%d:%s", seq, id)
-	return base64.RawURLEncoding.EncodeToString([]byte(payload))
-}
-
-func decodeCursor(cursor string) (int64, error) {
-	decoded, err := base64.RawURLEncoding.DecodeString(cursor)
-	if err != nil {
-		return 0, fmt.Errorf("decode cursor: %w", err)
-	}
-
-	parts := strings.SplitN(string(decoded), ":", 2)
-	if len(parts) != 2 {
-		return 0, fmt.Errorf("invalid cursor format")
-	}
-
-	seq, err := strconv.ParseInt(parts[0], 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("parse cursor seq: %w", err)
-	}
-
-	return seq, nil
 }
 
 func toAuditLog(row repo.ListAuditLogsRow) (*gen.AuditLog, error) {

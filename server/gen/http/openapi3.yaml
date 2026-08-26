@@ -277,6 +277,100 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
+    /admin/organization.activity:
+        get:
+            description: Lists activity belonging to an organization for admin operators.
+            operationId: adminListOrganizationActivity
+            parameters:
+                - allowEmptyValue: true
+                  description: Organization ID.
+                  in: query
+                  name: organization_id
+                  required: true
+                  schema:
+                    description: Organization ID.
+                    type: string
+                - allowEmptyValue: true
+                  description: Cursor for paginating through organization activity.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Cursor for paginating through organization activity.
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminListOrganizationActivityResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: listOrganizationActivity admin
+            tags:
+                - admin
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: cursor
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_cursor
+                type: cursor
     /admin/organization.cancelStripeSubscription:
         post:
             tags:
@@ -62278,6 +62372,19 @@ components:
                 - period_start
                 - period_end
                 - spend_usd
+        AdminListOrganizationActivityResult:
+            type: object
+            properties:
+                logs:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AuditLog'
+                    description: List of organization activity.
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page of results.
+            required:
+                - logs
         AdminListOrganizationMembersResult:
             type: object
             properties:
@@ -87027,8 +87134,6 @@ components:
 tags:
     - name: access
       description: Manage roles, team member access control, and authorization challenge events.
-    - name: admin
-      description: Operations supporting admin tasks, protected by Google workspace auth.
     - name: agent
       description: Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies most of these endpoints (it implies 'agent_user'), so existing installs keep working during the transition. The content-bearing session-portability endpoints — getSessionMeta and createSessionHandoff — refuse it and require a per-user key.
     - name: aiIntegrations
@@ -87043,6 +87148,8 @@ tags:
       description: Manage assistants and their runtime configuration.
     - name: auditlogs
       description: Manages audit logs in Gram.
+    - name: admin
+      description: Operations supporting admin tasks, protected by Google workspace auth.
     - name: auth
       description: Managed auth for gram producers and dashboard.
     - name: businessMemories
