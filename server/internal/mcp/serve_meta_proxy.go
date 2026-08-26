@@ -90,8 +90,9 @@ func routeGatewayMemberToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, 
 }
 
 // memberProxyBuilder yields a fresh proxy per upstream exchange, since a
-// Proxy is a one-request value.
-type memberProxyBuilder func() (*proxy.Proxy, error)
+// Proxy is a one-request value. It takes the exchange's own context so a
+// detached close is not built on an expired call context.
+type memberProxyBuilder func(ctx context.Context) (*proxy.Proxy, error)
 
 // dialGatewayMember loads the member's backend rows, routes its credential
 // strictly, and returns a per-exchange proxy builder. The snapshot already
@@ -133,7 +134,7 @@ func (s *Service) dialGatewayMember(
 		if terr != nil {
 			return nil, terr
 		}
-		return func() (*proxy.Proxy, error) {
+		return func(context.Context) (*proxy.Proxy, error) {
 			// No WWW-Authenticate relay: a member's auth challenge must not
 			// invite the client to re-authenticate against the gateway.
 			p := s.remoteProxyManager.Build(logger, &remoteServer, member.serverID.String(), headers, member.visibility, gate.projectID.String(), upstreamToken, "", gate.toolSelection)
@@ -150,7 +151,7 @@ func (s *Service) dialGatewayMember(
 		// Per-member namespace so one caller's handshake, calls, and DELETE
 		// land on one tunnel gateway.
 		affinity := tunnelrouting.HashedClientAffinityKey("meta:"+member.serverID.String(), callerIdentity)
-		return func() (*proxy.Proxy, error) {
+		return func(ctx context.Context) (*proxy.Proxy, error) {
 			p, berr := s.tunnelManager.buildProxy(ctx, affinity, logger, gate.projectID, &serverRow, upstreamToken, "", gate.toolSelection)
 			if berr != nil {
 				return nil, fmt.Errorf("build tunnel proxy: %w", berr)
@@ -327,7 +328,7 @@ func (sess *memberSession) close(ctx context.Context) {
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), memberSessionCloseTimeout)
 	defer cancel()
-	p, err := sess.build()
+	p, err := sess.build(ctx)
 	if err != nil {
 		return
 	}
@@ -365,7 +366,7 @@ func (s *Service) callProxiedMember(
 
 // memberExchange drives one HTTP exchange through a fresh member proxy.
 func (s *Service) memberExchange(ctx context.Context, build memberProxyBuilder, member metaMember, body []byte, sessionID string) (*memberResponseRecorder, error) {
-	p, err := build()
+	p, err := build(ctx)
 	if err != nil {
 		var memberErr *metaMemberError
 		if errors.As(err, &memberErr) {
@@ -521,7 +522,7 @@ func (s *Service) executeProxiedMemberTool(
 	upstreamResult, rpcErr, err := s.callProxiedMember(ctx, logger, build, member, "tools/call", toolsCallParams{
 		Name:      toolName,
 		Arguments: arguments,
-		Meta:      meta,
+		Meta:      memberWireMeta(meta),
 	})
 	if err != nil {
 		var memberErr *metaMemberError
@@ -550,6 +551,18 @@ func (s *Service) executeProxiedMemberTool(
 		return nil, oops.E(oops.CodeUnexpected, err, "serialize member tool result").LogError(ctx, logger)
 	}
 	return bs, nil
+}
+
+// memberWireMeta rewrites the client's declared protocol version to the one
+// this upstream hop actually speaks, so the forwarded _meta cannot contradict
+// the member session's handshake; the rest of _meta rides along.
+func memberWireMeta(meta *mcprequests.WireMeta) *mcprequests.WireMeta {
+	if meta == nil || meta.ProtocolVersion == metaMemberUpstreamProtocolVersion {
+		return meta
+	}
+	m := *meta
+	m.ProtocolVersion = metaMemberUpstreamProtocolVersion
+	return &m
 }
 
 // maxProxiedListPages bounds cursor-following on a member's tools/list.

@@ -358,8 +358,8 @@ func TestServePublic_MetaEndpoint_ListServers_StatusByBackend(t *testing.T) {
 }
 
 // A proxied member is drill-down navigable end to end: describe_server and
-// describe_tools read its live tools/list, and an unauthenticated anonymous
-// gateway still answers deterministically.
+// describe_tools read its live tools/list, and a dead member degrades
+// member-scoped.
 func TestServePublic_MetaEndpoint_DrillDown_ProxiedMember(t *testing.T) {
 	t.Parallel()
 
