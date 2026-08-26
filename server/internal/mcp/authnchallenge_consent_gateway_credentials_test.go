@@ -1,9 +1,8 @@
 // The point of per-member credential selection is that a later request to one
 // gateway member forwards that member's credential and no other. These tests
-// carry a real gateway all the way through — consent, authorize, code
-// exchange, persisted remote_sessions rows — and then hand the result to the
-// production routing decision, so the feature is asserted end to end rather
-// than at the redirect it starts with.
+// carry a real gateway through consent, authorize, code exchange and persisted
+// remote_sessions rows, then hand the result to the production routing
+// decision, so the feature is asserted end to end.
 
 package mcp_test
 
@@ -66,13 +65,10 @@ func (g connectedGateway) route(t *testing.T, ctx context.Context, tokens map[uu
 }
 
 // connectGateway seeds a gateway with count remote members and drives each
-// member's client through consent, the authorize redirect, and the code
-// exchange, so every credential is persisted the way production writes it.
-//
-// Each member gets its own authorization server, and its mcp_servers row is
-// stamped with that server's issuer — the state the binding resync produces.
-// stamped=false leaves the column NULL, reproducing both the pre-backfill
-// fleet and the pre-change behaviour where no grant carries a resource.
+// client through consent, authorize and code exchange, so every credential is
+// persisted the way production writes it. Each member gets its own
+// authorization server and is stamped with it — the state the resync produces.
+// stamped=false leaves the column NULL, reproducing the pre-backfill fleet.
 func connectGateway(t *testing.T, prefix string, count int, stamped bool) (context.Context, connectedGateway) {
 	t.Helper()
 
@@ -165,10 +161,9 @@ func TestGatewayCredentials_EachMemberSelectsItsOwnCredential(t *testing.T) {
 	require.Empty(t, got)
 }
 
-// The same three-member gateway with the column unpopulated records
-// unqualified grants, and routeUpstreamToken — whose behaviour this change does
-// not touch — then serves no member at all. Recorded as the negative that gives
-// the positive above its meaning, and as the pre-backfill state.
+// The same gateway unstamped records unqualified grants, and routeUpstreamToken
+// — untouched by this change — then serves no member at all. The negative that
+// gives the positive above its meaning, and the pre-backfill state.
 func TestGatewayCredentials_UnstampedGrantsFailClosedForEveryMember(t *testing.T) {
 	t.Parallel()
 
@@ -189,10 +184,9 @@ func TestGatewayCredentials_UnstampedGrantsFailClosedForEveryMember(t *testing.T
 	}
 }
 
-// The complement of the case above, and pre-existing routeUpstreamToken
-// behaviour this change leaves alone: a lone credential is forwarded even to a
-// member it was not minted for. It is why qualification matters as soon as a
-// gateway holds a second member.
+// The complement, and pre-existing routeUpstreamToken behaviour this change
+// leaves alone: a lone credential is forwarded even to a member it was not
+// minted for. Why qualification matters once a gateway holds a second member.
 func TestGatewayCredentials_LoneUnqualifiedCredentialIsStillForwarded(t *testing.T) {
 	t.Parallel()
 
@@ -221,10 +215,9 @@ func TestGatewayCredentials_StaleGrantStaysBoundToItsOwnMember(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// The detach is only observable through a lookup that runs after it, and
-	// consent is where the lookup runs. A detached member no longer claims its
-	// client's authorization server, so a new grant for that client carries no
-	// resource at all.
+	// The detach is only observable through a lookup that runs after it, and consent
+	// is where that runs. A detached member no longer claims its client's
+	// authorization server, so a new grant carries no resource.
 	_, hasResource := postConnectAction(t, gw.fx, removed.clientID).Query()["resource"]
 	require.False(t, hasResource, "a detached member must stop qualifying its client's credential")
 	survivor := gw.members[1]

@@ -58,10 +58,9 @@ type gatewayMember struct {
 	memberID       uuid.UUID
 }
 
-// createGatewayMember attaches a remote-backed member to metaServerID. The
-// member carries its own user session issuer, as one does in production, plus
-// the remote session issuer its upstream authenticates against — the pair the
-// dropped exclusivity CHECK used to forbid and the lookup depends on.
+// createGatewayMember attaches a remote-backed member to metaServerID, carrying
+// both its own user session issuer and the remote session issuer its upstream
+// authenticates against — the pair the dropped exclusivity CHECK forbade.
 func createGatewayMember(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, metaServerID uuid.UUID, slug, serverURL string, remoteIssuerID uuid.NullUUID, sortOrder int32) gatewayMember {
 	t.Helper()
 	return createGatewayMemberWithVisibility(t, ctx, conn, projectID, metaServerID, slug, serverURL, remoteIssuerID, sortOrder, "public")
@@ -72,11 +71,10 @@ func createGatewayMemberWithVisibility(t *testing.T, ctx context.Context, conn *
 	return createGatewayMemberWithUpstreamIn(t, ctx, conn, projectID, projectID, metaServerID, slug, serverURL, remoteIssuerID, sortOrder, visibility)
 }
 
-// createGatewayMemberWithUpstreamIn attaches a member whose remote_mcp_servers
-// row lives in upstreamProjectID, which normally equals the member's own
-// project. Pointing it elsewhere is how a test reproduces a cross-tenant
-// upstream reference: mcp_servers.remote_mcp_server_id is a single-column FK,
-// so nothing in the schema requires the two projects to agree.
+// createGatewayMemberWithUpstreamIn puts the member's remote_mcp_servers row in
+// upstreamProjectID, normally its own project. Pointing it elsewhere reproduces
+// a cross-tenant upstream: remote_mcp_server_id is a single-column FK, so
+// nothing in the schema requires the two projects to agree.
 func createGatewayMemberWithUpstreamIn(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, upstreamProjectID, metaServerID uuid.UUID, slug, serverURL string, remoteIssuerID uuid.NullUUID, sortOrder int32, visibility string) gatewayMember {
 	t.Helper()
 
@@ -122,9 +120,8 @@ func createSiblingProject(t *testing.T, ctx context.Context, conn *pgxpool.Pool,
 }
 
 // seedGatewayMemberConnectGrant grants mcp:connect on one member to every user
-// in the organization. That is the principal a consent subject resolves
-// through: the subject is a session user, not an organization member, so a
-// grant written against its own user URN would never load.
+// in the organization — the principal a consent subject resolves through, since
+// the subject is a session user and a grant on its own URN would never load.
 func seedGatewayMemberConnectGrant(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, mcpServerID uuid.UUID) {
 	t.Helper()
 	selectors, err := authz.NewSelector(authz.ScopeMCPConnect, mcpServerID.String()).MarshalJSON()
@@ -138,13 +135,10 @@ func seedGatewayMemberConnectGrant(t *testing.T, ctx context.Context, conn *pgxp
 	require.NoError(t, err)
 }
 
-// stampRemoteSessionIssuer writes the column the way the binding resync does.
-// Server creation cannot set it — a server has no client bindings yet at that
-// point — so tests stamp it after the fact, as production does.
-//
-// Insists the stamp landed on exactly one row. A stamp that matched nothing
-// would leave a negative test asserting the absence of a member it never
-// created, which passes for the wrong reason.
+// stampRemoteSessionIssuer writes the column the way the binding resync does,
+// after creation, since a new server has no client bindings yet. Insists it
+// landed on exactly one row: a stamp that matched nothing would leave a negative
+// test asserting the absence of a member it never created.
 func stampRemoteSessionIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, mcpServerID uuid.UUID, remoteIssuerID uuid.NullUUID) {
 	t.Helper()
 	if !remoteIssuerID.Valid {
@@ -221,8 +215,8 @@ func createGatewayMetaServer(t *testing.T, ctx context.Context, conn *pgxpool.Po
 
 // seedGatewayConsentEndpoint builds a gateway endpoint over one shared user
 // session issuer, so every client the consent screen offers hangs off the
-// gateway rather than off any member. That is exactly why the stored
-// derivation finds nothing and the member lookup has to answer.
+// gateway rather than a member — which is why the stored derivation finds
+// nothing and the member lookup has to answer.
 func seedGatewayConsentEndpoint(t *testing.T, slug string) (context.Context, consentActionFixture, uuid.UUID) {
 	t.Helper()
 
@@ -307,11 +301,10 @@ func TestServeConsentAction_GatewayConnectSharedIssuerSendsNoResource(t *testing
 	require.Empty(t, mintedRemoteLoginState(t, ctx, fx, loc.Query().Get("state")).Resource)
 }
 
-// Declining to choose between two members is a decision, not a miss, so the
-// stored derivation must not then qualify the credential to one of them. This
-// is the case the plain shared-issuer test cannot reach: here the client is
-// also bound to a member's own issuer, so the fallback has a real answer to
-// give and the guard is the only thing standing between it and the grant.
+// Declining to choose between two members is a decision, not a miss. The plain
+// shared-issuer test cannot reach this: here the client is also bound to a
+// member's own issuer, so the fallback has a real answer and the guard is the
+// only thing between it and the grant.
 func TestServeConsentAction_GatewayConnectAmbiguityIsNotUndoneByTheFallback(t *testing.T) {
 	t.Parallel()
 
@@ -391,14 +384,11 @@ func TestServeConsentAction_GatewayConnectExcludesMembersTheSubjectCannotConnect
 	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-rbac", "", []uuid.UUID{fx.shared})
 	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
 
-	// Private, and the consent subject — a user URN that belongs to no
-	// organization, so its only principal is user:all — holds no mcp:connect on
-	// it. It is a denial, not a missing AuthContext: a genuinely anonymous
-	// subject would carry no AuthContext at all, and Require would answer
-	// CodeUnauthorized rather than CodeForbidden, which the propagation branch
-	// turns into a failed consent instead of an excluded member. That state is
-	// unreachable here — a meta endpoint always has an issuer, so /authorize
-	// forces the IDP before consent is ever served.
+	// Private, and the consent subject holds no mcp:connect on it. A denial, not a
+	// missing AuthContext: a genuinely anonymous subject would carry none and
+	// Require would answer CodeUnauthorized, which fails the consent instead of
+	// excluding the member. Unreachable here — a meta endpoint always has an issuer,
+	// so /authorize forces the IDP first.
 	createGatewayMemberWithVisibility(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-rbac-private", "https://private.example.com/mcp", conv.ToNullUUID(issuerID), 0, "private")
 
 	loc := postConnectAction(t, fx, clientID)
@@ -411,10 +401,9 @@ func TestServeConsentAction_GatewayConnectExcludesMembersTheSubjectCannotConnect
 	require.Equal(t, "https://public.example.com/mcp", postConnectAction(t, fx, clientID).Query().Get("resource"))
 }
 
-// The exclusion above is a per-subject decision, not a blanket refusal of
-// private members: a subject that does hold mcp:connect has that member
-// qualify its credential, and a private sibling it cannot reach neither claims
-// the credential nor makes the answer ambiguous.
+// The exclusion above is per-subject, not a blanket refusal of private members:
+// a subject that does hold mcp:connect has that member qualify its credential,
+// and an unreachable private sibling neither claims it nor makes it ambiguous.
 func TestServeConsentAction_GatewayConnectResolvesAPrivateMemberTheSubjectCanConnectTo(t *testing.T) {
 	t.Parallel()
 
@@ -440,11 +429,11 @@ func TestServeConsentAction_GatewayConnectResolvesAPrivateMemberTheSubjectCanCon
 	require.Equal(t, granted, mintedRemoteLoginState(t, ctx, fx, loc.Query().Get("state")).Resource)
 }
 
-// A member that claimed the credential outranks the stored per-client
-// derivation even when the derivation has a different answer of its own. The
-// member matched this client's authorization server; the derivation only knows
-// which servers the client is bound to, and letting it win would send the
-// credential to an upstream that never claimed it.
+// A member that claimed the credential outranks the stored derivation even when
+// the derivation has an answer of its own. The member matched this client's
+// authorization server; the derivation only knows which servers the client is
+// bound to, and letting it win would send the credential to an upstream that
+// never claimed it.
 func TestServeConsentAction_GatewayConnectMemberClaimOutranksTheFallback(t *testing.T) {
 	t.Parallel()
 
@@ -486,10 +475,9 @@ func TestServeConsentAction_GatewayConnectIgnoresDisabledMembers(t *testing.T) {
 	require.False(t, hasResource, "a disabled member must not qualify a credential")
 }
 
-// A visibility that is neither known value must fail closed. The query
-// excludes only the one value it names, so a visibility added later reaches the
-// authorization switch, and admitting it there would let a member whose access
-// nobody can evaluate claim a credential unchecked.
+// An unknown visibility must fail closed. The query excludes only the value it
+// names, so a visibility added later reaches the authorization switch, and
+// admitting it there would let a member nobody can evaluate claim a credential.
 func TestServeConsentAction_GatewayConnectIgnoresUnknownVisibility(t *testing.T) {
 	t.Parallel()
 
@@ -509,9 +497,9 @@ func TestServeConsentAction_GatewayConnectIgnoresUnknownVisibility(t *testing.T)
 }
 
 // The upstream URL must come from this project's own remote server row.
-// mcp_servers.remote_mcp_server_id is a single-column foreign key, so the
-// schema permits a member pointing at another tenant's upstream and only the
-// lookup's project predicate keeps that URL out of a credential's resource.
+// remote_mcp_server_id is a single-column FK, so the schema permits a member
+// pointing at another tenant's upstream and only the lookup's project predicate
+// keeps that URL out of a credential's resource.
 func TestServeConsentAction_GatewayConnectIgnoresAnotherProjectsUpstream(t *testing.T) {
 	t.Parallel()
 

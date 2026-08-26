@@ -255,14 +255,12 @@ RETURNING *;
 -- authorization server, filtered exactly as ListServableMetaMCPMembers so a
 -- member invisible to the serving path cannot claim a credential either.
 --
--- Answers "which member is this client's credential for" at consent time. A
--- client names exactly one remote_session_issuer, so matching it against the
--- member's own is the whole lookup; the caller still has to fail closed when
--- this returns none or several, since a grant records one resource.
+-- A client names exactly one remote_session_issuer, so matching it against the
+-- member's own is the whole lookup; the caller still fails closed on none or
+-- several, since a grant records one resource.
 --
--- Joins remote_mcp_servers rather than reading a URL off mcp_servers, which
--- also excludes tunneled, hosted, and unproxied members: none of them has an
--- upstream URL a token could be routed to.
+-- Joins remote_mcp_servers rather than reading a URL off mcp_servers, which also
+-- excludes tunneled, hosted, and unproxied members: none has an upstream URL.
 SELECT
     s.id AS mcp_server_id,
     s.visibility AS mcp_server_visibility,

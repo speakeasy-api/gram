@@ -124,29 +124,26 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 				autoRefresh = &v
 			}
 		}
-		// Not endpoint.UpstreamResource: under multi-binding that may belong
-		// to a different client's upstream; ambiguity derives "" (no resource).
-		// A gateway's members carry their own issuers while the client is bound
-		// to the gateway's, so the stored derivation finds nothing there and
-		// the member lookup answers instead.
+		// Not endpoint.UpstreamResource: under multi-binding that may belong to a
+		// different client's upstream. A gateway's members carry their own issuers
+		// while the client is bound to the gateway's, so the stored derivation finds
+		// nothing and the member lookup answers instead.
 		var clientResource string
 		var rerr error
 		claimedByMember := false
 		if endpoint.MetaMcpServerID.Valid {
-			// Member visibility is judged against the consent subject, exactly
-			// like the runtime request the minted session will make.
+			// Member visibility is judged against the consent subject, as the runtime
+			// request the minted session will make will be.
 			memberCtx, cerr := s.contextForSessionSubject(ctx, endpoint, subject, "consent:"+challengeState.ID, challengeState.ClientID)
 			if cerr != nil {
 				return oops.E(oops.CodeUnexpected, cerr, "stamp consent subject context").LogError(ctx, logger)
 			}
 			clientResource, claimedByMember, rerr = s.resolveGatewayMemberResource(memberCtx, logger, endpoint, client.RemoteSessionIssuerID)
 		}
-		// The stored derivation answers only when no member claimed the issuer
-		// — for a client bound to a member's own issuer, and for servers the
-		// sync has not recorded yet. Gate on the claim rather than on an empty
-		// resource: a gateway that declined to choose between two members has
-		// decided, and falling back would qualify the credential to one of them
-		// anyway, defeating the guard that produced the empty value.
+		// The stored derivation answers only when no member claimed the issuer. Gate
+		// on the claim, not on an empty resource: a gateway that declined to choose
+		// between two members has decided, and falling back would qualify the
+		// credential to one of them anyway.
 		if rerr == nil && !claimedByMember {
 			clientResource, rerr = s.remoteChallengeMgr.FallbackResourceForClient(ctx, client.ID)
 		}

@@ -1,10 +1,9 @@
-// Per-member credential selection for gateway endpoints. A caller
-// authenticates once at a gateway, so every upstream credential they hold
-// hangs off the gateway's user_session_issuer and the per-client derivation
-// that qualifies a normal endpoint's grants derives nothing. This resolves the
-// member a connecting client belongs to at consent time and records that
-// member's URL as the grant's RFC 8707 resource, so routeUpstreamToken can
-// route by it unchanged.
+// Per-member credential selection for gateway endpoints. A caller authenticates
+// once at a gateway, so every credential hangs off the gateway's
+// user_session_issuer and the per-client derivation qualifies nothing. This
+// resolves the member a connecting client belongs to at consent time and records
+// its URL as the grant's RFC 8707 resource, so routeUpstreamToken routes by it
+// unchanged.
 
 package mcp
 
@@ -28,27 +27,19 @@ import (
 // whose upstream authenticates against remoteSessionIssuerID, or "" when no
 // single member can be identified.
 //
-// The lookup is a join, not a discovery call: a remote_session_client names
-// exactly one remote_session_issuer, and mcp_servers records the issuer its
-// upstream authenticates against, so the member falls out of the data Gram
-// already holds. Probing each member's RFC 9728 metadata would answer the same
-// question over the network, but that document is optional, its contents can
-// change without Gram knowing, and a mismatch would surface as a token-routing
-// failure rather than a configuration one.
+// A join, not a discovery call: a remote_session_client names exactly one
+// remote_session_issuer and mcp_servers records the issuer its upstream
+// authenticates against, so the member falls out of data Gram already holds.
 //
-// The second return reports whether this gateway answered at all: true when
-// some member claims the issuer, false when none does. It is a different
+// The second return reports whether any member claimed the issuer, a different
 // question from "is the resource non-empty". An ambiguous gateway answers
-// ("", true), because declining to qualify the credential is a decision — the
-// caller must not then reach for a weaker signal and qualify it anyway. Only a
-// genuine no-match lets the stored per-client derivation answer instead.
+// ("", true): declining to qualify is a decision, and the caller must not then
+// reach for a weaker signal. Only a genuine no-match lets the stored per-client
+// derivation answer instead.
 //
-// Fails closed: no match and several members both leave "". A NULL
-// remote_session_issuer_id simply matches nothing, so a server the sync has not
-// reached yet resolves to "" and behaves as it does today.
-//
-// The returned error is a database or grant-load fault only; the connect arm
-// turns it into a failed consent rather than minting an unqualified grant.
+// Fails closed — no match and several members both leave "". A NULL
+// remote_session_issuer_id matches nothing, so a server the sync has not reached
+// behaves as it does today. The error is a database or grant-load fault only.
 func (s *Service) resolveGatewayMemberResource(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -67,9 +58,9 @@ func (s *Service) resolveGatewayMemberResource(
 	if err != nil {
 		return "", false, fmt.Errorf("list gateway members for remote session issuer: %w", err)
 	}
-	// Claimed by the gateway, before RBAC: a member the caller cannot see still
-	// claimed this credential, and letting the fallback qualify it to something
-	// else would hand the credential to a member that never claimed it.
+	// Claimed before RBAC: a member the caller cannot see still claimed this
+	// credential, and letting the fallback qualify it elsewhere would hand it to a
+	// member that never claimed it.
 	if len(rows) == 0 {
 		return "", false, nil
 	}
@@ -83,16 +74,14 @@ func (s *Service) resolveGatewayMemberResource(
 	for _, row := range candidates {
 		upstream := strings.TrimRight(row.UpstreamUrl, "/")
 		switch {
-		// Two members may front one URL: remote_mcp_servers is unique on
-		// (project_id, slug), not on url. routeUpstreamToken keys on the
-		// destination URL, so a token minted for it serves either member.
+		// Two members may front one URL — remote_mcp_servers is unique on
+		// (project_id, slug), not url — and a token keyed on that URL serves either.
 		case upstream == "", upstream == resource:
 		case resource == "":
 			resource = upstream
 		default:
-			// One authorization server fronting two members of the same
-			// gateway. A grant records one resource per (subject, client), so
-			// there is nothing to record that would route both correctly.
+			// One authorization server, two members: a grant records one resource per
+			// (subject, client), so nothing routes both.
 			logger.WarnContext(ctx, "gateway members share an authorization server; credential cannot be qualified to one member",
 				attr.SlogMetaMcpServerID(endpoint.MetaMcpServerID.UUID.String()),
 				attr.SlogRemoteSessionIssuerID(remoteSessionIssuerID.String()),
@@ -104,11 +93,10 @@ func (s *Service) resolveGatewayMemberResource(
 	return resource, true, nil
 }
 
-// authorizedGatewayMembers drops the members the connecting subject holds no
-// mcp:connect on, mirroring authorizeProxyBackendAccess on the serving path. A
-// member the caller cannot reach must neither claim their credential — the
-// resolved URL is echoed to them and sent to the authorization server — nor
-// contest the claim of a member they can.
+// authorizedGatewayMembers drops members the subject holds no mcp:connect on,
+// mirroring authorizeProxyBackendAccess. A member the caller cannot reach must
+// neither claim their credential — the resolved URL is echoed back to them —
+// nor contest the claim of one they can.
 func (s *Service) authorizedGatewayMembers(
 	ctx context.Context,
 	endpoint *ResolvedMcpEndpoint,
@@ -126,15 +114,13 @@ func (s *Service) authorizedGatewayMembers(
 	authorized := make([]metamcprepo.ListGatewayMembersForRemoteSessionIssuerRow, 0, len(rows))
 	for _, row := range rows {
 		// Only proxy backends reach here, so mcp:connect is keyed on the
-		// mcp_servers id, as authorizeProxyBackendAccess keys it. Any visibility
-		// other than the two known values fails closed.
+		// mcp_servers id. Unknown visibility fails closed.
 		switch row.McpServerVisibility {
 		case mcpservers.VisibilityPublic:
 		case mcpservers.VisibilityPrivate:
-			// Only a denial drops a member. A fault must not, because dropping
-			// narrows the candidate set, and a narrower set is how two members
-			// that should have read as ambiguous become one confident answer —
-			// the serving path propagates these for the same reason.
+			// Only a denial drops a member. A fault must not: dropping narrows the
+			// candidate set, which is how two members that should read as ambiguous become
+			// one confident answer.
 			if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, row.McpServerID.String(), endpoint.ProjectID.String())); err != nil {
 				if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && shareable.Code == oops.CodeForbidden {
 					continue
@@ -142,9 +128,8 @@ func (s *Service) authorizedGatewayMembers(
 				return nil, fmt.Errorf("authorize gateway member access: %w", err)
 			}
 		default:
-			// Not redundant with the query's visibility filter: that excludes
-			// the one value it names, this excludes every value neither branch
-			// above can judge.
+			// Not redundant with the query's visibility filter: that excludes one named
+			// value, this excludes every value neither arm can judge.
 			continue
 		}
 		authorized = append(authorized, row)

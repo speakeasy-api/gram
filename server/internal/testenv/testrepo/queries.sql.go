@@ -1564,13 +1564,11 @@ type SetMcpServerRemoteSessionIssuerFixtureParams struct {
 }
 
 // Test-only fixture: stamps the denormalised upstream authorization server on
-// an MCP server. Server creation cannot set it — a server has no client
-// bindings yet at that point — so tests seed it after the fact, standing in
-// for the binding resync that writes it in production.
+// an MCP server. Server creation cannot set it — no client bindings exist yet —
+// so tests seed it after the fact, standing in for the binding resync.
 //
-// Returns the row count so the caller can insist the stamp landed. A stamp that
-// matched nothing — wrong project, tombstoned server — would otherwise succeed
-// silently and let a negative test pass because no member was ever stamped.
+// Returns the row count so the caller can insist the stamp landed: one that
+// matched nothing would otherwise let a negative test pass vacuously.
 func (q *Queries) SetMcpServerRemoteSessionIssuerFixture(ctx context.Context, arg SetMcpServerRemoteSessionIssuerFixtureParams) (int64, error) {
 	result, err := q.db.Exec(ctx, setMcpServerRemoteSessionIssuerFixture, arg.RemoteSessionIssuerID, arg.ID, arg.ProjectID)
 	if err != nil {
