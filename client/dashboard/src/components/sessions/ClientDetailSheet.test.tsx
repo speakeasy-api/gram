@@ -61,6 +61,11 @@ vi.mock("@/contexts/Auth", () => ({
   useProject: () => ({ id: "project-1", slug: "project-1" }),
 }));
 
+// The route-derived fallback the SDK would otherwise apply itself.
+vi.mock("@/contexts/Sdk", () => ({
+  useProjectSlugForRequests: () => "project-1",
+}));
+
 const DOCUMENT_URL = "https://client.example.com/oauth/client.json";
 
 function cimdClient(overrides: Partial<UserSessionClient> = {}) {
@@ -104,6 +109,9 @@ function renderSheetForId(
   client?: UserSessionClient,
   projectSlug?: string,
 ) {
+  const project = projectSlug
+    ? { slug: projectSlug, id: `${projectSlug}-id` }
+    : undefined;
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -113,7 +121,7 @@ function renderSheetForId(
         <ClientDetailSheet
           clientId={clientId}
           client={client}
-          projectSlug={projectSlug}
+          project={project}
           open
           onOpenChange={() => {}}
         />
@@ -173,7 +181,7 @@ describe("ClientDetailSheet", () => {
     fireEvent.click(screen.getByRole("button", { name: "Refresh metadata" }));
 
     expect(refreshMutate).toHaveBeenCalledWith({
-      request: { id: "client-1" },
+      request: { id: "client-1", gramProject: "project-1" },
     });
   });
 
@@ -229,6 +237,20 @@ describe("ClientDetailSheet", () => {
       undefined,
       expect.objectContaining({ enabled: true }),
     );
+  });
+
+  // The refresh is a write against the same registration, so it has to be sent
+  // with the project the lookup used. Left to the SDK's fallback it would go to
+  // the literal "default" project and fail on a button that looked live.
+  it("sends the refresh with the project it was given", () => {
+    renderSheetForId("client-1", cimdClient(), "analytics");
+
+    const button = screen.getByRole("button", { name: "Refresh metadata" });
+    fireEvent.click(button);
+
+    expect(refreshMutate).toHaveBeenCalledWith({
+      request: { id: "client-1", gramProject: "analytics" },
+    });
   });
 
   // Opened from a surface that holds only an id, the sheet has nothing to

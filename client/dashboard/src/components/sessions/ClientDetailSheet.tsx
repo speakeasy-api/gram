@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/Sheet";
 import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
+import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import { safeExternalHttpUrl } from "@/lib/safe-external-url";
 import {
@@ -43,7 +44,7 @@ import { ClientSourceBadge } from "./ClientSourceBadge";
 export function ClientDetailSheet({
   clientId,
   client,
-  projectSlug,
+  project,
   open,
   onOpenChange,
 }: {
@@ -58,17 +59,23 @@ export function ClientDetailSheet({
    */
   client?: UserSessionClient;
   /**
-   * Project the lookup is scoped to. Required from a surface whose route
-   * carries no project slug, where the SDK would otherwise stamp the request
-   * with the literal "default" and the lookup would miss; a route that names
-   * its project can leave this unset.
+   * Project this registration belongs to. Required from a surface whose route
+   * carries no project slug, where the SDK would otherwise stamp requests with
+   * the literal "default" and both the lookup and the refresh would miss; a
+   * route that names its project can leave this unset.
    */
-  projectSlug?: string;
+  project?: { slug: string; id: string };
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }): JSX.Element {
+  // Named rather than left to the SDK's own fallback so the query key matches
+  // the scope the request is actually sent with: keyed on an absent project,
+  // one project's cached registration would answer for another's.
+  const routeProject = useProjectSlugForRequests();
+  const gramProject = project?.slug ?? routeProject;
+
   const detailQuery = useUserSessionClient(
-    { id: clientId, gramProject: projectSlug },
+    { id: clientId, gramProject },
     undefined,
     { enabled: open },
   );
@@ -153,7 +160,11 @@ export function ClientDetailSheet({
           </div>
 
           {userSessionClientSource(detail) === "cimd" && (
-            <CimdMetadataPanel client={detail} />
+            <CimdMetadataPanel
+              client={detail}
+              gramProject={gramProject}
+              projectId={project?.id}
+            />
           )}
         </div>
       </SheetContent>
@@ -167,16 +178,24 @@ export function ClientDetailSheet({
  */
 function CimdMetadataPanel({
   client,
+  gramProject,
+  projectId,
 }: {
   client: UserSessionClient;
+  /** Project slug the refresh is sent with, matching the lookup's scope. */
+  gramProject: string;
+  /** Id of that same project, when the caller named one. */
+  projectId?: string;
 }): JSX.Element {
   const queryClient = useQueryClient();
   const { hasScope } = useRBAC();
-  const project = useProject();
-  // Refresh is a write mutation the backend gates on project:write for THIS
-  // project; an unscoped hasScope is existential across every project the
-  // user holds grants in. Mirrors the listing's Revoke gating.
-  const canRefresh = hasScope("project:write", project.id);
+  const routeProject = useProject();
+  // Refresh is a write mutation the backend gates on project:write for THE
+  // PROJECT THE REGISTRATION IS IN; an unscoped hasScope is existential across
+  // every project the user holds grants in. Mirrors the listing's Revoke
+  // gating. A caller that names no project is on a route that names one, where
+  // the ambient project is the registration's own.
+  const canRefresh = hasScope("project:write", projectId ?? routeProject.id);
 
   const refresh = useRefreshUserSessionClientCIMDMutation({
     onSuccess: async (data) => {
@@ -244,7 +263,9 @@ function CimdMetadataPanel({
           size="sm"
           className="self-start"
           disabled={refresh.isPending}
-          onClick={() => refresh.mutate({ request: { id: client.id } })}
+          onClick={() =>
+            refresh.mutate({ request: { id: client.id, gramProject } })
+          }
         >
           {refresh.isPending ? "Refreshing…" : "Refresh metadata"}
         </Button>

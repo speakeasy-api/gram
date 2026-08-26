@@ -304,14 +304,14 @@ function ConnectionGroupRow({
   now,
   canRevoke,
   onRevoked,
-  projectSlug,
+  project,
 }: {
   group: ConnectionGroup;
   grouping: ConnectionGrouping;
   /** Ticking clock, so a row's state ages with the page rather than freezing. */
   now: number;
-  /** Project the registration lookup is scoped to; see the list's own prop. */
-  projectSlug?: string;
+  /** Project the registrations belong to; see the list's own prop. */
+  project?: { slug: string; id: string };
   canRevoke: boolean;
   onRevoked: () => void;
 }): JSX.Element {
@@ -531,7 +531,7 @@ function ConnectionGroupRow({
         <ClientDetailSheet
           clientId={group.clientId}
           client={group.client}
-          projectSlug={projectSlug}
+          project={project}
           open={detailOpen}
           onOpenChange={setDetailOpen}
         />
@@ -552,7 +552,7 @@ export function ConnectionsList({
   canRevoke,
   onRevoked,
   clients,
-  projectSlug,
+  project,
 }: {
   sessions: UserSession[];
   grouping: ConnectionGrouping;
@@ -565,12 +565,12 @@ export function ConnectionsList({
    */
   clients?: UserSessionClient[];
   /**
-   * Project to scope the registration lookup to, for a surface whose route
-   * carries no project slug. The organization page is the one such caller: it
-   * chooses a project through a filter, while the SDK would otherwise stamp the
-   * request with the literal "default" and the lookup would miss.
+   * Project the registrations belong to, for a surface whose route carries no
+   * project slug. The organization page is the one such caller: it chooses a
+   * project through a filter, while the SDK would otherwise stamp requests with
+   * the literal "default" and both the lookup and its refresh would miss.
    */
-  projectSlug?: string;
+  project?: { slug: string; id: string };
 }): JSX.Element {
   const now = useNow();
   const { active, inactive } = useMemo(
@@ -589,7 +589,7 @@ export function ConnectionsList({
           now={now}
           canRevoke={canRevoke}
           onRevoked={onRevoked}
-          projectSlug={projectSlug}
+          project={project}
         />
       ))}
     </div>

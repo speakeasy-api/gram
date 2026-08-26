@@ -50,7 +50,7 @@ export const CREDENTIAL_KIND_PRESENTATION: Record<
   public: {
     label: "Public",
     badgeVariant: "neutral",
-    detail: "presents no credential; PKCE is the only proof offered.",
+    detail: "presents no client credential; PKCE binds the code exchange.",
   },
   secret: {
     label: "Secret",
