@@ -1,0 +1,106 @@
+infra/proto/gram/risk/v1/presidio_enforcement.proto
+  s_b390d6ce53b276::t_024825ffc3de16 1-30
+infra/internal/diagram/diagram.go
+  s_b390d6ce53b276::t_2b912cf5d1be85 568
+infra/gen/gram/risk/v1/presidio_enforcer.pb.go
+  s_b390d6ce53b276::t_4f9806a9ce9e04 1-111
+pystreams/src/pystreams/risk/maskdisplay.py
+  s_b390d6ce53b276::t_02b6f1f972f235 1-44
+infra/gen/gram/risk/v1/presidio_enforcement.pb.go
+  s_b390d6ce53b276::t_96d70695e82339 1-499
+infra/proto/gram/risk/v1/presidio_enforcer.proto
+  s_b390d6ce53b276::t_05dc2a43bf20f3 11-15
+  s_b390d6ce53b276::t_5360ae04b078f5 1-10,16-23
+docs/pubsub-topology.md
+  s_b390d6ce53b276::t_eec5d1c88ab2c2 167-178
+  s_b390d6ce53b276::t_62eaeefba94cfd 43-44,66,130-131,211
+  s_b390d6ce53b276::t_46323e2cd4b55b 137-156
+  s_b390d6ce53b276::t_e861bb90dec053 238
+  s_b390d6ce53b276::t_85cb679abd9feb 210
+  s_b390d6ce53b276::t_13dda12fe754da 92-101
+  s_b390d6ce53b276::t_cc15ca5510e4d4 157-166
+server/internal/risk/enforcereply/dispatch.go
+  s_b390d6ce53b276::t_9447b58bb6876e 99-101
+  s_b390d6ce53b276::t_c3d6bd2462d5d4 66-68
+  s_b390d6ce53b276::t_91f9ab9066a303 48,64-65,69-76
+  s_b390d6ce53b276::t_690532e7da8125 134-143
+  s_b390d6ce53b276::t_c5f7340af2caab 171-177
+infra/gen_py/gram/risk/v1/presidio_enforcement_pb2.pyi
+  s_b390d6ce53b276::t_62eaeefba94cfd 1-36
+infra/gen_py/gram/risk/v1/presidio_enforcer_pb2.py
+  s_b390d6ce53b276::t_71c2d39f5bf176 1-40
+pystreams/tests/test_multi.py
+  s_b390d6ce53b276::t_28506f4ee3264f 67-69
+pystreams/src/pystreams/risk/replywriter.py
+  s_b390d6ce53b276::t_84bf81b7233f9e 28,31
+  s_b390d6ce53b276::t_79c0557c9bc059 1-11,13-14,16-27,29-30,32-48,50-65
+  s_b390d6ce53b276::t_b693924e9af08a 12,15
+  s_b390d6ce53b276::t_35e5e57fcbf34c 49
+server/internal/risk/enforcereply/dispatch_test.go
+  s_b390d6ce53b276::t_dc036efc4d43ca 35-53
+  s_b390d6ce53b276::t_bd4dc079a3d257 89-119
+infra/pkg/topics/topics_gen.go
+  s_b390d6ce53b276::t_62eaeefba94cfd 53-54,81,118-119,165-166
+pystreams/src/pystreams/risk/fingerprint.py
+  s_b390d6ce53b276::t_524695306e4bdd 54-57,67-68
+  s_b390d6ce53b276::t_5091b256197eb7 114,119-124
+  s_b390d6ce53b276::t_ded7f5cde16487 1-22,29-53,58-66,69-95,99-113,115-118,125-127
+  s_b390d6ce53b276::t_7400c7b4ef169f 96-98
+  s_b390d6ce53b276::t_3499333534512f 23-28
+pystreams/src/pystreams/cmd/flags_enforce.py
+  s_b390d6ce53b276::t_faf9f60e8f0266 1-32
+pystreams/src/pystreams/risk/enforce_handler.py
+  s_b390d6ce53b276::t_c5681cd7873420 158-162
+  s_b390d6ce53b276::t_40504d431632ce 1-102,104-136,138-157,163-259
+  s_b390d6ce53b276::t_7400c7b4ef169f 103,137
+pystreams/pyproject.toml
+  s_b390d6ce53b276::t_f78c42f5119e40 21
+  s_b390d6ce53b276::t_8274c5692ac093 29
+infra/gen_py/gram/risk/v1/presidio_enforcer_pb2.pyi
+  s_b390d6ce53b276::t_62eaeefba94cfd 1-10
+pystreams/tests/test_risk_enforce.py
+  s_b390d6ce53b276::t_9ba61a43cd426f 1-32,37-63,73-109,111-137,139-176,180-227,242-249
+  s_b390d6ce53b276::t_f2385f9f3e853c 228-231,235
+  s_b390d6ce53b276::t_1d173fc10446d6 110
+  s_b390d6ce53b276::t_7400c7b4ef169f 33-36,138
+  s_b390d6ce53b276::t_2f005d88354942 177-179
+  s_b390d6ce53b276::t_e16ef120f09a77 67
+  s_b390d6ce53b276::t_bcd72104d1ba4d 64-66,68-72
+  s_b390d6ce53b276::t_bc62da6bf5c08d 232-234,236-241
+pystreams/src/pystreams/cmd/multi.py
+  s_b390d6ce53b276::t_f73e8347c54294 33-34,36,38
+  s_b390d6ce53b276::t_5b9b9403c4dd59 12-18
+  s_b390d6ce53b276::t_6d17ed95cdf38f 244-246
+  s_b390d6ce53b276::t_0e7972addade45 247-253,258
+  s_b390d6ce53b276::t_b466a1b5d87d94 264-273
+  s_b390d6ce53b276::t_1c20fa9ac0a699 196-200
+  s_b390d6ce53b276::t_e16ef120f09a77 24
+  s_b390d6ce53b276::t_edd5ba75d9e0ed 243,254-257,259
+  s_b390d6ce53b276::t_6fac77c80923cf 159-166,170-173,176,181-192
+  s_b390d6ce53b276::t_39d0907faa2848 167-169,174-175,177-180
+  s_b390d6ce53b276::t_57788bfb562b69 79-82
+  s_b390d6ce53b276::t_0f544204cf596c 4
+  s_b390d6ce53b276::t_da3fd1b32e89cf 49
+infra/gen/kcc.yaml
+  s_b390d6ce53b276::t_62eaeefba94cfd 928-949,1323-1340,1602-1617
+infra/gen_py/gram/risk/v1/presidio_enforcement_pb2.py
+  s_b390d6ce53b276::t_bc93bccad402d8 1-40
+uv.lock
+  s_b390d6ce53b276::t_d8e33f935ba83a 310-322,1084,1092,1115,1123,1185-1193
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "66f7f856a92ea66fc90b2db50a20e4501033363c",
+  "prompts": {},
+  "sessions": {
+    "s_b390d6ce53b276": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c7be466b-35a7-46f8-83d3-cbbede48fd92",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
