@@ -162,8 +162,12 @@ func TestListOrganizationActivity_NewestFirstWithDistinctTimestamps(t *testing.T
 	middle := insertActivity(t, ctx, conn, activitySeed{organizationID: "org_activity_order", subjectType: "project", action: "project:update"})
 	newest := insertActivity(t, ctx, conn, activitySeed{organizationID: "org_activity_order", subjectType: "project", action: "project:delete"})
 	baseTime := time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)
+	queries := auditrepo.New(conn)
 	for i, id := range []uuid.UUID{oldest, middle, newest} {
-		_, err := conn.Exec(ctx, "UPDATE audit_logs SET created_at = $1 WHERE id = $2", baseTime.Add(time.Duration(i)*time.Hour), id)
+		err := queries.UpdateAuditLogCreatedAtForTesting(ctx, auditrepo.UpdateAuditLogCreatedAtForTestingParams{
+			CreatedAt: pgtype.Timestamptz{Time: baseTime.Add(time.Duration(i) * time.Hour), Valid: true},
+			Ids:       []uuid.UUID{id},
+		})
 		require.NoError(t, err)
 	}
 
@@ -183,7 +187,14 @@ func TestListOrganizationActivity_PaginationEqualTimestampsUsesSeqDescending(t *
 		id := insertActivity(t, ctx, conn, activitySeed{organizationID: "org_activity_pages", subjectType: "project", action: "project:update"})
 		inserted = append(inserted, id.String())
 	}
-	_, err := conn.Exec(ctx, "UPDATE audit_logs SET created_at = $1 WHERE organization_id = $2", time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC), "org_activity_pages")
+	ids := make([]uuid.UUID, len(inserted))
+	for i, id := range inserted {
+		ids[i] = uuid.MustParse(id)
+	}
+	err := auditrepo.New(conn).UpdateAuditLogCreatedAtForTesting(ctx, auditrepo.UpdateAuditLogCreatedAtForTestingParams{
+		CreatedAt: pgtype.Timestamptz{Time: time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC), Valid: true},
+		Ids:       ids,
+	})
 	require.NoError(t, err)
 
 	first, err := svc.ListOrganizationActivity(ctx, &gen.ListOrganizationActivityPayload{OrganizationID: "org_activity_pages"})
@@ -236,6 +247,8 @@ func TestAdminActivityLog_ResponseMapping(t *testing.T) {
 		"boolean":   []byte("true"),
 	} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
 			row := base
 			row.Metadata = metadata
 			_, err := adminActivityLog(row)

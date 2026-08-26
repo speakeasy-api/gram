@@ -726,7 +726,16 @@ func (s *Service) ListOrganizationActivity(ctx context.Context, payload *gen.Lis
 	}
 
 	params := auditrepo.ListAuditLogsParams{
-		OrganizationID: payload.OrganizationID, IncludeAssistantEvents: true,
+		OrganizationID:         payload.OrganizationID,
+		ProjectID:              uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		CursorSeq:              pgtype.Int8{Int64: 0, Valid: false},
+		ActorID:                pgtype.Text{String: "", Valid: false},
+		Action:                 pgtype.Text{String: "", Valid: false},
+		SubjectType:            pgtype.Text{String: "", Valid: false},
+		IncludeAssistantEvents: true,
+		SubjectID:              pgtype.Text{String: "", Valid: false},
+		SubjectIds:             nil,
+		ActingSurface:          pgtype.Text{String: "", Valid: false},
 	}
 	if payload.Cursor != nil && *payload.Cursor != "" {
 		seq, err := audit.DecodeCursor(*payload.Cursor)

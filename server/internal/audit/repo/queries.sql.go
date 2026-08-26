@@ -484,3 +484,20 @@ func (q *Queries) ListAuditSurfaceFacets(ctx context.Context, arg ListAuditSurfa
 	}
 	return items, nil
 }
+
+const updateAuditLogCreatedAtForTesting = `-- name: UpdateAuditLogCreatedAtForTesting :exec
+UPDATE audit_logs
+SET created_at = $1
+WHERE id = ANY($2::uuid[])
+`
+
+type UpdateAuditLogCreatedAtForTestingParams struct {
+	CreatedAt pgtype.Timestamptz
+	Ids       []uuid.UUID
+}
+
+// Test fixture for deterministic ordering and cursor-boundary coverage.
+func (q *Queries) UpdateAuditLogCreatedAtForTesting(ctx context.Context, arg UpdateAuditLogCreatedAtForTestingParams) error {
+	_, err := q.db.Exec(ctx, updateAuditLogCreatedAtForTesting, arg.CreatedAt, arg.Ids)
+	return err
+}

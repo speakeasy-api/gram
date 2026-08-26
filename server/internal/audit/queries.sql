@@ -196,3 +196,9 @@ WHERE organization_id = @organization_id
   )
 GROUP BY action
 ORDER BY count DESC, action ASC;
+
+-- name: UpdateAuditLogCreatedAtForTesting :exec
+-- Test fixture for deterministic ordering and cursor-boundary coverage.
+UPDATE audit_logs
+SET created_at = @created_at
+WHERE id = ANY(@ids::uuid[]);
