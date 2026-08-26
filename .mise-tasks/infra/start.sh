@@ -84,7 +84,7 @@ fi
 # worktrees can still run Temporal, Pub/Sub, or Presidio containers that
 # compose.yml no longer declares. Removing this worktree's copies before
 # asserting the shared services frees fixed ports in the main tree and removes
-# obsolete remapped copies elsewhere. Profile-gated services (litellm, tunnel,
+# obsolete remapped copies elsewhere. Profile-gated services (litellm,
 # local-registry) remain declared in compose.yml and are not treated as orphans.
 docker compose up -d --remove-orphans || exit 1
 
