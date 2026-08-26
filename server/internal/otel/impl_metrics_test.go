@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -20,6 +21,7 @@ import (
 	commonv1 "go.opentelemetry.io/proto/otlp/common/v1"
 	metricsv1 "go.opentelemetry.io/proto/otlp/metrics/v1"
 	resourcev1 "go.opentelemetry.io/proto/otlp/resource/v1"
+	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -42,8 +44,6 @@ func TestMetricsPublishesInboundWithoutEnrichment(t *testing.T) {
 	t.Parallel()
 
 	request := metricRelayTestExport()
-	body, err := proto.Marshal(request)
-	require.NoError(t, err)
 
 	var published *otelv1.InboundMetric
 	publisher := gcp.NewMockPublisher[*otelv1.InboundMetric]()
@@ -52,28 +52,7 @@ func TestMetricsPublishesInboundWithoutEnrichment(t *testing.T) {
 		require.True(t, ok)
 		published = item
 	}).Return(gcp.NewSuccessPublishResult()).Once()
-	service := &Service{
-		logger:          testenv.NewLogger(t),
-		tracer:          testenv.NewTracerProvider(t).Tracer("test"),
-		auth:            nil,
-		authz:           nil,
-		chRepo:          nil,
-		logsEnabled:     nil,
-		logPublisher:    nil,
-		metricPublisher: publisher,
-		spanPublisher:   nil,
-	}
-	projectID := uuid.MustParse(testMetricProjectID)
-	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
-		ActiveOrganizationID: testMetricOrganizationID,
-		ProjectID:            &projectID,
-	})
-
-	err = service.Metrics(ctx, &gen.MetricsPayload{
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-		ContentEncoding:  nil,
-	}, io.NopCloser(bytes.NewReader(body)))
+	err := ingestMetricTestExport(t, request, publisher)
 
 	require.NoError(t, err)
 	publisher.AssertExpectations(t)
@@ -100,11 +79,98 @@ func TestMetricsRejectsInvalidExportBeforePublishing(t *testing.T) {
 		request.ResourceMetrics[0].ScopeMetrics[0].Metrics,
 		&metricsv1.Metric{Name: "", Data: &metricsv1.Metric_Gauge{Gauge: &metricsv1.Gauge{DataPoints: nil}}},
 	)
+	publisher := gcp.NewMockPublisher[*otelv1.InboundMetric]()
+	publisher.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult()).Maybe()
+	err := ingestMetricTestExport(t, request, publisher)
+
+	require.ErrorContains(t, err, "invalid OTLP metric export")
+	publisher.AssertNotCalled(t, "Publish", mock.Anything, mock.Anything)
+}
+
+func TestMetricsRejectsTooManyFlattenedMetricsBeforePublishing(t *testing.T) {
+	t.Parallel()
+
+	request := metricRelayTestExport()
+	scopeMetrics := request.ResourceMetrics[0].ScopeMetrics[0]
+	metric := scopeMetrics.Metrics[0]
+	scopeMetrics.Metrics = make([]*metricsv1.Metric, maxOTLPMetricsPerExport+1)
+	for i := range scopeMetrics.Metrics {
+		scopeMetrics.Metrics[i] = metric
+	}
+	require.Less(t, proto.Size(request), maxOTLPExportBytes)
+
+	publisher := gcp.NewMockPublisher[*otelv1.InboundMetric]()
+	err := ingestMetricTestExport(t, request, publisher)
+
+	require.ErrorContains(t, err, "metric export exceeds maximum count of 10000 metrics")
+	publisher.AssertNotCalled(t, "Publish", mock.Anything, mock.Anything)
+}
+
+func TestMetricsRejectsExpandedExportBeforePublishing(t *testing.T) {
+	t.Parallel()
+
+	request := metricRelayTestExport()
+	request.ResourceMetrics[0].Resource.Attributes[0].Value = &commonv1.AnyValue{
+		Value: &commonv1.AnyValue_StringValue{
+			StringValue: strings.Repeat("x", maxOTLPExportBytes/100),
+		},
+	}
+	scopeMetrics := request.ResourceMetrics[0].ScopeMetrics[0]
+	metric := scopeMetrics.Metrics[0]
+	scopeMetrics.Metrics = make([]*metricsv1.Metric, 101)
+	for i := range scopeMetrics.Metrics {
+		scopeMetrics.Metrics[i] = metric
+	}
+	require.Less(t, proto.Size(request), maxOTLPExportBytes)
+
+	publisher := gcp.NewMockPublisher[*otelv1.InboundMetric]()
+	err := ingestMetricTestExport(t, request, publisher)
+
+	require.ErrorContains(t, err, "normalized metric export exceeds maximum size")
+	publisher.AssertNotCalled(t, "Publish", mock.Anything, mock.Anything)
+}
+
+func TestDecodeOTLPMetricExportClearsProducerPrivateSchemaFields(t *testing.T) {
+	t.Parallel()
+
+	request := metricRelayTestExport()
+	resourceMetrics := request.ResourceMetrics[0]
+	resourceMetrics.SchemaUrl = ""
+	scopeMetrics := resourceMetrics.ScopeMetrics[0]
+	scopeMetrics.SchemaUrl = ""
+	metric := scopeMetrics.Metrics[0]
+	spoofedPrivateFields := protowire.AppendTag(nil, 1001, protowire.BytesType)
+	spoofedPrivateFields = protowire.AppendString(spoofedPrivateFields, "spoofed-resource-schema")
+	spoofedPrivateFields = protowire.AppendTag(spoofedPrivateFields, 1003, protowire.BytesType)
+	spoofedPrivateFields = protowire.AppendString(spoofedPrivateFields, "spoofed-scope-schema")
+	metric.ProtoReflect().SetUnknown(spoofedPrivateFields)
+	raw, err := proto.Marshal(request)
+	require.NoError(t, err)
+
+	provenance := (&otelv1.InboundMetric_Provenance_builder{
+		Source:         new(ProvenanceSource),
+		OrganizationId: new(testMetricOrganizationID),
+		ProjectId:      new(testMetricProjectID),
+	}).Build()
+	decoded, err := decodeOTLPMetricExport(raw, provenance)
+
+	require.NoError(t, err)
+	require.Len(t, decoded, 1)
+	require.Empty(t, decoded[0].GetResourceSchemaUrl())
+	require.Empty(t, decoded[0].GetScopeSchemaUrl())
+	require.Same(t, provenance, decoded[0].GetProvenance())
+}
+
+func ingestMetricTestExport(
+	t *testing.T,
+	request *collectormetricsv1.ExportMetricsServiceRequest,
+	publisher gcp.Publisher[*otelv1.InboundMetric],
+) error {
+	t.Helper()
+
 	body, err := proto.Marshal(request)
 	require.NoError(t, err)
 
-	publisher := gcp.NewMockPublisher[*otelv1.InboundMetric]()
-	publisher.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult()).Maybe()
 	service := &Service{
 		logger:          testenv.NewLogger(t),
 		tracer:          testenv.NewTracerProvider(t).Tracer("test"),
@@ -122,14 +188,11 @@ func TestMetricsRejectsInvalidExportBeforePublishing(t *testing.T) {
 		ProjectID:            &projectID,
 	})
 
-	err = service.Metrics(ctx, &gen.MetricsPayload{
+	return service.Metrics(ctx, &gen.MetricsPayload{
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		ContentEncoding:  nil,
 	}, io.NopCloser(bytes.NewReader(body)))
-
-	require.ErrorContains(t, err, "invalid OTLP metric export")
-	publisher.AssertNotCalled(t, "Publish", mock.Anything, mock.Anything)
 }
 
 func metricRelayTestExport() *collectormetricsv1.ExportMetricsServiceRequest {

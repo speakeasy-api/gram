@@ -411,10 +411,11 @@ func newStreamsCommand() *cli.Command {
 			var (
 				findingsPub gcp.Publisher[*riskv1.Finding]
 				logPub      gcp.Publisher[*otelv1.LogRecord]
+				metricPub   gcp.Publisher[*otelv1.Metric]
 				spanPub     gcp.Publisher[*otelv1.Span]
 			)
 			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
-				return shutdownPubSubPublishers(ctx, pubsubShutdown, findingsPub, logPub, spanPub)
+				return shutdownPubSubPublishers(ctx, pubsubShutdown, findingsPub, logPub, metricPub, spanPub)
 			})
 
 			riskFingerprinter, err := risk.ParsePepperKeyRing([]byte(c.String("risk-fingerprint-pepper-keyring")))
@@ -521,7 +522,7 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("failed to create pubsub publisher for otel logs: %w", err)
 			}
 
-			metricPub, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &otelv1.Metric{})
+			metricPub, err = gcp.PubSubPublisherForMessage(ctx, psbroker, &otelv1.Metric{})
 			if err != nil {
 				return fmt.Errorf("failed to create pubsub publisher for otel metrics: %w", err)
 			}

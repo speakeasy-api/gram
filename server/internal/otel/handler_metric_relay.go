@@ -21,7 +21,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/streams"
 )
 
@@ -204,9 +203,7 @@ func (h *MetricRelayHandler) handleBatch(ctx context.Context, messages []metricR
 			return nil
 		})
 	}
-	if err := exportGroup.Wait(); err != nil {
-		return o11y.LogError(ctx, h.logger, fmt.Errorf("wait for metric relay exports: %w", err), "failed to relay metric batch")
-	}
+	exportGroup.Wait()
 	return nil
 }
 

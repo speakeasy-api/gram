@@ -13,6 +13,8 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/otel"
 )
 
+const maxOTLPMetricsPerExport = 10_000
+
 func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload, body io.ReadCloser) error {
 	return ingestOTLPExport(ctx, s.logger, otlpIngestSpec[*otelv1.InboundMetric]{
 		signal:          "metric",
@@ -38,6 +40,7 @@ func decodeOTLPMetricExport(raw []byte, provenance *otelv1.InboundMetric_Provena
 	}
 
 	metrics := make([]*otelv1.InboundMetric, 0)
+	normalizedSize := 0
 	for _, resourceMetrics := range request.GetResourceMetrics() {
 		if resourceMetrics == nil {
 			continue
@@ -68,11 +71,20 @@ func decodeOTLPMetricExport(raw []byte, provenance *otelv1.InboundMetric_Provena
 				if metric == nil {
 					continue
 				}
+				if len(metrics) >= maxOTLPMetricsPerExport {
+					return nil, fmt.Errorf("metric export exceeds maximum count of %d metrics", maxOTLPMetricsPerExport)
+				}
 
 				converted := new(otelv1.InboundMetric)
 				if err := transcodeOTLPMessage(metric, converted); err != nil {
 					return nil, fmt.Errorf("convert OTLP metric: %w", err)
 				}
+
+				converted.ClearResource()
+				converted.ClearResourceSchemaUrl()
+				converted.ClearScope()
+				converted.ClearScopeSchemaUrl()
+				converted.ClearProvenance()
 
 				converted.SetResource(resource)
 				converted.SetScope(scope)
@@ -83,6 +95,12 @@ func decodeOTLPMetricExport(raw []byte, provenance *otelv1.InboundMetric_Provena
 				if schemaURL := scopeMetrics.GetSchemaUrl(); schemaURL != "" {
 					converted.SetScopeSchemaUrl(schemaURL)
 				}
+
+				metricSize := proto.Size(converted)
+				if metricSize > maxOTLPExportBytes-normalizedSize {
+					return nil, fmt.Errorf("normalized metric export exceeds maximum size of %d bytes", maxOTLPExportBytes)
+				}
+				normalizedSize += metricSize
 				metrics = append(metrics, converted)
 			}
 		}
