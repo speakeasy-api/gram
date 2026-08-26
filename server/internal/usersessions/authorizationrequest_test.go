@@ -25,8 +25,7 @@ func TestAuthorizationRequestFromQuery(t *testing.T) {
 	require.Equal(t, "xyz", req.State)
 	require.Equal(t, "abc123", req.CodeChallenge)
 	require.Equal(t, "S256", req.CodeChallengeMethod)
-	require.NotNil(t, req.Resource)
-	require.Equal(t, "https://acme.example.com/mcp/support-bot", *req.Resource)
+	require.Equal(t, []string{"https://acme.example.com/mcp/support-bot"}, req.Resources)
 }
 
 func TestAuthorizationRequest_ValidateRedirectableFields(t *testing.T) {

@@ -274,7 +274,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build token resource identifier").LogError(ctx, logger)
 	}
-	if err := oauthwire.ValidateResourceIndicator(req.Resource, canonicalResource); err != nil {
+	if err := oauthwire.ValidateResourceIndicators(req.Resources, canonicalResource); err != nil {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "resource_mismatch")
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
@@ -409,7 +409,7 @@ func (s *Service) handleTokenRefreshTokenGrant(
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build token resource identifier").LogError(ctx, logger)
 	}
-	if err := oauthwire.ValidateResourceIndicator(req.Resource, canonicalResource); err != nil {
+	if err := oauthwire.ValidateResourceIndicators(req.Resources, canonicalResource); err != nil {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "resource_mismatch")
 		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
 	}

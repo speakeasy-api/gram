@@ -148,7 +148,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	// believes it is getting a token for an endpoint this one will never mint
 	// for. Rejecting makes that misconfiguration visible at the point it
 	// happens instead of at first use.
-	if err := oauthwire.ValidateResourceIndicator(req.Resource, issuer); err != nil {
+	if err := oauthwire.ValidateResourceIndicators(req.Resources, issuer); err != nil {
 		return redirectAuthorizeOAuthError(ctx, w, r, logger, issuer, req.RedirectURI, req.State, "resource_mismatch", err)
 	}
 

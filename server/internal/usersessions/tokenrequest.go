@@ -23,12 +23,12 @@ type AuthCodeTokenRequest struct {
 	RedirectURI  string
 	CodeVerifier string
 
-	// Resource is the RFC 8707 resource indicator naming the MCP server the
-	// token is being requested for. Nil when the parameter was absent, which
-	// stays acceptable; a present value is validated against the addressed
-	// endpoint's canonical URI by oauthwire.ValidateResourceIndicator in the
-	// /token handler.
-	Resource *string
+	// Resources holds every RFC 8707 `resource` indicator submitted, naming the
+	// MCP server the token is being requested for. Empty when the parameter was
+	// absent, which stays acceptable; every value is validated against the
+	// addressed endpoint's canonical URI by
+	// oauthwire.ValidateResourceIndicators in the /token handler.
+	Resources []string
 }
 
 // AuthCodeTokenRequestFromForm decodes from url.Values (typically
@@ -38,7 +38,7 @@ func AuthCodeTokenRequestFromForm(form url.Values) *AuthCodeTokenRequest {
 		Code:         form.Get("code"),
 		RedirectURI:  form.Get("redirect_uri"),
 		CodeVerifier: form.Get("code_verifier"),
-		Resource:     oauthwire.ResourceIndicatorFrom(form),
+		Resources:    oauthwire.ResourceIndicatorsFrom(form),
 	}
 }
 
@@ -70,13 +70,13 @@ func (r *AuthCodeTokenRequest) Validate() error {
 type RefreshTokenRequest struct {
 	RefreshToken string
 
-	// Resource is the RFC 8707 resource indicator naming the MCP server the
-	// rotated token is being requested for. MCP 2026-07-28 has clients send it
-	// on every token request, refreshes included. Nil when the parameter was
-	// absent, which stays acceptable; a present value is validated against the
-	// addressed endpoint's canonical URI by
-	// oauthwire.ValidateResourceIndicator in the /token handler.
-	Resource *string
+	// Resources holds every RFC 8707 `resource` indicator submitted, naming the
+	// MCP server the rotated token is being requested for. MCP 2026-07-28 has
+	// clients send the parameter on every token request, refreshes included.
+	// Empty when it was absent, which stays acceptable; every value is validated
+	// against the addressed endpoint's canonical URI by
+	// oauthwire.ValidateResourceIndicators in the /token handler.
+	Resources []string
 }
 
 // RefreshTokenRequestFromForm decodes from url.Values (typically
@@ -84,7 +84,7 @@ type RefreshTokenRequest struct {
 func RefreshTokenRequestFromForm(form url.Values) *RefreshTokenRequest {
 	return &RefreshTokenRequest{
 		RefreshToken: form.Get("refresh_token"),
-		Resource:     oauthwire.ResourceIndicatorFrom(form),
+		Resources:    oauthwire.ResourceIndicatorsFrom(form),
 	}
 }
 
