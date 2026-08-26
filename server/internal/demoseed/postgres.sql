@@ -1605,10 +1605,12 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   -- credential kind, plus the pre-column row. A rerun that dropped or
   -- duplicated any of them would leave the badges telling a different story
   -- than the one they were seeded to tell.
+  -- One issuer per Connections credential story (acme-partner-gateway) plus
+  -- the three MCP server issuers (linear, slack, acme-agent-gateway).
   SELECT count(*) INTO stray FROM user_session_issuers
   WHERE project_id = proj_a AND deleted IS FALSE;
-  IF stray <> 1 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 1 user session issuer, found %', stray;
+  IF stray <> 4 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 4 user session issuers, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM user_session_clients
