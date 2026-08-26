@@ -86191,12 +86191,23 @@ components:
         UserSession:
             type: object
             properties:
+                client_credential_kind:
+                    type: string
+                    description: 'What the client that established this session must present to authenticate: ''public'' (nothing), ''secret'' (a client secret), ''key'' (an assertion signed by its published key), or ''misconfigured''. Derived by the same rule the token endpoint enforces. Null only when the session has no bound client, which is the case for API key and anonymous subjects; a bound client always resolves to one of the four.'
+                    enum:
+                        - public
+                        - secret
+                        - key
+                        - misconfigured
                 client_id_metadata_uri:
                     type: string
                     description: Set when the client that established this session was resolved from a Client ID Metadata Document (CIMD) hosted at this URL, rather than registered via RFC 7591 DCR. Null for DCR clients and for sessions with no bound client.
                 client_name:
                     type: string
                     description: Name of the MCP client that established the session, if known. Client-controlled and unverified; do not present it as an identity.
+                client_token_endpoint_auth_method:
+                    type: string
+                    description: The raw RFC 7591 token_endpoint_auth_method the client declared, for debugging against the spec. Null both for a session with no bound client and for a client registered before the value was recorded; client_credential_kind separates those cases and is what should be displayed.
                 created_at:
                     type: string
                     format: date-time
@@ -86304,6 +86315,14 @@ components:
                 created_at:
                     type: string
                     format: date-time
+                credential_kind:
+                    type: string
+                    description: 'What the client must present to authenticate: ''public'' (nothing), ''secret'' (a client secret), ''key'' (an assertion signed by its published key), or ''misconfigured''. Derived by the same rule the token endpoint enforces, so it reads what the client will actually be held to rather than what it declared. ''misconfigured'' means the registration contradicts itself and the client cannot authenticate at all.'
+                    enum:
+                        - public
+                        - secret
+                        - key
+                        - misconfigured
                 id:
                     type: string
                     description: The user_session_client id.
@@ -86313,6 +86332,9 @@ components:
                     items:
                         type: string
                     description: Validated on every /authorize.
+                token_endpoint_auth_method:
+                    type: string
+                    description: The raw RFC 7591 token_endpoint_auth_method the client declared, for debugging against the spec. Null for a client registered before the value was recorded, which is not the same as declaring 'none' -- credential_kind resolves both cases and is what should be displayed.
                 updated_at:
                     type: string
                     format: date-time
@@ -86326,6 +86348,7 @@ components:
                 - user_session_issuer_id
                 - client_id
                 - client_name
+                - credential_kind
                 - redirect_uris
                 - client_id_issued_at
                 - created_at
