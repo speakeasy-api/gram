@@ -1,4 +1,4 @@
-// Per-member credential selection for gateway endpoints: resolves the member a
+// Per-member credential selection for meta MCP endpoints: resolves the member a
 // connecting client belongs to at consent time and records its URL as the
 // grant's RFC 8707 resource, which routeUpstreamToken routes by unchanged.
 
@@ -20,7 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-// resolveGatewayMemberResource returns the upstream URL of the gateway member
+// resolveMetaMemberResource returns the upstream URL of the meta MCP member
 // whose upstream authenticates against remoteSessionIssuerID.
 //
 // Tri-state: ("", true) means members claimed the issuer but no single member
@@ -28,7 +28,7 @@ import (
 // is a genuine no-match, the only case where the stored per-client derivation
 // may answer. A NULL remote_session_issuer_id matches nothing. The error is a
 // database or grant-load fault only, and the connect fails closed on it.
-func (s *Service) resolveGatewayMemberResource(
+func (s *Service) resolveMetaMemberResource(
 	ctx context.Context,
 	logger *slog.Logger,
 	endpoint *ResolvedMcpEndpoint,
@@ -38,13 +38,13 @@ func (s *Service) resolveGatewayMemberResource(
 		return "", false, nil
 	}
 
-	rows, err := metamcprepo.New(s.db).ListGatewayMembersForRemoteSessionIssuer(ctx, metamcprepo.ListGatewayMembersForRemoteSessionIssuerParams{
+	rows, err := metamcprepo.New(s.db).ListMetaMCPMembersForRemoteSessionIssuer(ctx, metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerParams{
 		MetaMcpServerID:       endpoint.MetaMcpServerID.UUID,
 		ProjectID:             endpoint.ProjectID,
 		RemoteSessionIssuerID: uuid.NullUUID{UUID: remoteSessionIssuerID, Valid: true},
 	})
 	if err != nil {
-		return "", false, fmt.Errorf("list gateway members for remote session issuer: %w", err)
+		return "", false, fmt.Errorf("list meta MCP members for remote session issuer: %w", err)
 	}
 	// Claimed is decided before RBAC: an invisible member still claimed this
 	// credential, and a fallback would hand it to a member that never did.
@@ -52,7 +52,7 @@ func (s *Service) resolveGatewayMemberResource(
 		return "", false, nil
 	}
 
-	candidates, err := s.authorizedGatewayMembers(ctx, endpoint, rows)
+	candidates, err := s.authorizedMetaMembers(ctx, endpoint, rows)
 	if err != nil {
 		return "", false, err
 	}
@@ -69,7 +69,7 @@ func (s *Service) resolveGatewayMemberResource(
 		default:
 			// One authorization server, two members: a grant records one resource per
 			// (subject, client), so nothing routes both.
-			logger.WarnContext(ctx, "gateway members share an authorization server; credential cannot be qualified to one member",
+			logger.WarnContext(ctx, "meta MCP members share an authorization server; credential cannot be qualified to one member",
 				attr.SlogMetaMcpServerID(endpoint.MetaMcpServerID.UUID.String()),
 				attr.SlogRemoteSessionIssuerID(remoteSessionIssuerID.String()),
 				attr.SlogMcpServerID(row.McpServerID.String()),
@@ -80,13 +80,13 @@ func (s *Service) resolveGatewayMemberResource(
 	return resource, true, nil
 }
 
-// authorizedGatewayMembers drops members the subject holds no mcp:connect on,
+// authorizedMetaMembers drops members the subject holds no mcp:connect on,
 // mirroring authorizeProxyBackendAccess.
-func (s *Service) authorizedGatewayMembers(
+func (s *Service) authorizedMetaMembers(
 	ctx context.Context,
 	endpoint *ResolvedMcpEndpoint,
-	rows []metamcprepo.ListGatewayMembersForRemoteSessionIssuerRow,
-) ([]metamcprepo.ListGatewayMembersForRemoteSessionIssuerRow, error) {
+	rows []metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerRow,
+) ([]metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerRow, error) {
 	if len(rows) == 0 {
 		return nil, nil
 	}
@@ -96,7 +96,7 @@ func (s *Service) authorizedGatewayMembers(
 		return nil, fmt.Errorf("load access grants: %w", err)
 	}
 
-	authorized := make([]metamcprepo.ListGatewayMembersForRemoteSessionIssuerRow, 0, len(rows))
+	authorized := make([]metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerRow, 0, len(rows))
 	for _, row := range rows {
 		// Only proxy backends reach here, so mcp:connect is keyed on the
 		// mcp_servers id. Unknown visibility fails closed.
@@ -109,7 +109,7 @@ func (s *Service) authorizedGatewayMembers(
 				if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && shareable.Code == oops.CodeForbidden {
 					continue
 				}
-				return nil, fmt.Errorf("authorize gateway member access: %w", err)
+				return nil, fmt.Errorf("authorize meta MCP member access: %w", err)
 			}
 		default:
 			// Not redundant with the query's one-named-value visibility filter.

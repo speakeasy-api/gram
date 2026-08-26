@@ -136,9 +136,9 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 			if cerr != nil {
 				return oops.E(oops.CodeUnexpected, cerr, "stamp consent subject context").LogError(ctx, logger)
 			}
-			clientResource, claimedByMember, rerr = s.resolveGatewayMemberResource(memberCtx, logger, endpoint, client.RemoteSessionIssuerID)
+			clientResource, claimedByMember, rerr = s.resolveMetaMemberResource(memberCtx, logger, endpoint, client.RemoteSessionIssuerID)
 		}
-		// Gate on the claim, not an empty resource: an ambiguous gateway has
+		// Gate on the claim, not an empty resource: an ambiguous meta MCP has
 		// decided, and falling back would qualify the credential anyway.
 		if rerr == nil && !claimedByMember {
 			clientResource, rerr = s.remoteChallengeMgr.FallbackResourceForClient(ctx, client.ID)

@@ -483,70 +483,6 @@ func (q *Queries) GetMetaMCPServerByIDAndProjectID(ctx context.Context, arg GetM
 	return i, err
 }
 
-const listGatewayMembersForRemoteSessionIssuer = `-- name: ListGatewayMembersForRemoteSessionIssuer :many
-SELECT
-    s.id AS mcp_server_id,
-    s.visibility AS mcp_server_visibility,
-    r.url AS upstream_url
-FROM meta_mcp_server_members m
-JOIN mcp_servers s
-  ON s.id = m.mcp_server_id
- AND s.project_id = m.project_id
- AND s.deleted IS FALSE
- AND s.visibility <> 'disabled'
-JOIN remote_mcp_servers r
-  ON r.id = s.remote_mcp_server_id
- AND r.project_id = m.project_id
- AND r.deleted IS FALSE
-WHERE m.meta_mcp_server_id = $1
-  AND m.project_id = $2
-  AND m.deleted IS FALSE
-  AND s.remote_session_issuer_id = $3
-ORDER BY m.sort_order, m.created_at, m.id
-`
-
-type ListGatewayMembersForRemoteSessionIssuerParams struct {
-	MetaMcpServerID       uuid.UUID
-	ProjectID             uuid.UUID
-	RemoteSessionIssuerID uuid.NullUUID
-}
-
-type ListGatewayMembersForRemoteSessionIssuerRow struct {
-	McpServerID         uuid.UUID
-	McpServerVisibility string
-	UpstreamUrl         string
-}
-
-// The gateway's remote-backed members that authenticate against a given
-// authorization server, filtered exactly as ListServableMetaMCPMembers so a
-// member invisible to the serving path cannot claim a credential either.
-//
-// A client names exactly one remote_session_issuer, so matching it against the
-// member's own is the whole lookup; the caller still fails closed on none or
-// several, since a grant records one resource.
-//
-// Joins remote_mcp_servers rather than reading a URL off mcp_servers, which also
-// excludes tunneled, hosted, and unproxied members: none has an upstream URL.
-func (q *Queries) ListGatewayMembersForRemoteSessionIssuer(ctx context.Context, arg ListGatewayMembersForRemoteSessionIssuerParams) ([]ListGatewayMembersForRemoteSessionIssuerRow, error) {
-	rows, err := q.db.Query(ctx, listGatewayMembersForRemoteSessionIssuer, arg.MetaMcpServerID, arg.ProjectID, arg.RemoteSessionIssuerID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListGatewayMembersForRemoteSessionIssuerRow
-	for rows.Next() {
-		var i ListGatewayMembersForRemoteSessionIssuerRow
-		if err := rows.Scan(&i.McpServerID, &i.McpServerVisibility, &i.UpstreamUrl); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listMetaMCPMembers = `-- name: ListMetaMCPMembers :many
 SELECT
     m.id,
@@ -596,6 +532,70 @@ func (q *Queries) ListMetaMCPMembers(ctx context.Context, arg ListMetaMCPMembers
 			&i.McpServerName,
 			&i.McpServerSlug,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMetaMCPMembersForRemoteSessionIssuer = `-- name: ListMetaMCPMembersForRemoteSessionIssuer :many
+SELECT
+    s.id AS mcp_server_id,
+    s.visibility AS mcp_server_visibility,
+    r.url AS upstream_url
+FROM meta_mcp_server_members m
+JOIN mcp_servers s
+  ON s.id = m.mcp_server_id
+ AND s.project_id = m.project_id
+ AND s.deleted IS FALSE
+ AND s.visibility <> 'disabled'
+JOIN remote_mcp_servers r
+  ON r.id = s.remote_mcp_server_id
+ AND r.project_id = m.project_id
+ AND r.deleted IS FALSE
+WHERE m.meta_mcp_server_id = $1
+  AND m.project_id = $2
+  AND m.deleted IS FALSE
+  AND s.remote_session_issuer_id = $3
+ORDER BY m.sort_order, m.created_at, m.id
+`
+
+type ListMetaMCPMembersForRemoteSessionIssuerParams struct {
+	MetaMcpServerID       uuid.UUID
+	ProjectID             uuid.UUID
+	RemoteSessionIssuerID uuid.NullUUID
+}
+
+type ListMetaMCPMembersForRemoteSessionIssuerRow struct {
+	McpServerID         uuid.UUID
+	McpServerVisibility string
+	UpstreamUrl         string
+}
+
+// The meta MCP's remote-backed members that authenticate against a given
+// authorization server, filtered exactly as ListServableMetaMCPMembers so a
+// member invisible to the serving path cannot claim a credential either.
+//
+// A client names exactly one remote_session_issuer, so matching it against the
+// member's own is the whole lookup; the caller still fails closed on none or
+// several, since a grant records one resource.
+//
+// Joins remote_mcp_servers rather than reading a URL off mcp_servers, which also
+// excludes tunneled, hosted, and unproxied members: none has an upstream URL.
+func (q *Queries) ListMetaMCPMembersForRemoteSessionIssuer(ctx context.Context, arg ListMetaMCPMembersForRemoteSessionIssuerParams) ([]ListMetaMCPMembersForRemoteSessionIssuerRow, error) {
+	rows, err := q.db.Query(ctx, listMetaMCPMembersForRemoteSessionIssuer, arg.MetaMcpServerID, arg.ProjectID, arg.RemoteSessionIssuerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMetaMCPMembersForRemoteSessionIssuerRow
+	for rows.Next() {
+		var i ListMetaMCPMembersForRemoteSessionIssuerRow
+		if err := rows.Scan(&i.McpServerID, &i.McpServerVisibility, &i.UpstreamUrl); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

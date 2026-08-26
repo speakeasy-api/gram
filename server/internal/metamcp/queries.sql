@@ -250,8 +250,8 @@ WHERE id = @id
   AND deleted IS FALSE
 RETURNING *;
 
--- name: ListGatewayMembersForRemoteSessionIssuer :many
--- The gateway's remote-backed members that authenticate against a given
+-- name: ListMetaMCPMembersForRemoteSessionIssuer :many
+-- The meta MCP's remote-backed members that authenticate against a given
 -- authorization server, filtered exactly as ListServableMetaMCPMembers so a
 -- member invisible to the serving path cannot claim a credential either.
 --
