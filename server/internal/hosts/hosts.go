@@ -304,9 +304,10 @@ func origin(u *url.URL) *url.URL {
 
 // base keeps scheme, host, and path. A query or fragment on a configured URL
 // would end up before the path every caller joins onto, so the callback path
-// would land after it and the redirect would break.
+// would land after it and the redirect would break. RawPath rides along so a
+// path holding an escaped character still renders the way it was configured.
 func base(u *url.URL) *url.URL {
-	return &url.URL{Scheme: u.Scheme, Host: strings.ToLower(u.Host), Path: u.Path}
+	return &url.URL{Scheme: u.Scheme, Host: strings.ToLower(u.Host), Path: u.Path, RawPath: u.RawPath}
 }
 
 func clone(u *url.URL) *url.URL {

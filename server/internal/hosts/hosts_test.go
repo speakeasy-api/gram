@@ -208,6 +208,11 @@ func TestBasePathIsPreserved(t *testing.T) {
 	require.Equal(t, "https://app.getgram.ai/gram", withNoise.Canonical().String())
 	require.Equal(t, "https://callback.example.com/oauth", withNoise.OutboundCallback().String())
 
+	// An escaped character in the base path survives.
+	escaped, err := hosts.New(testenv.NewLogger(t), conn, mustParse(t, "https://app.getgram.ai/a%2Fb"), nil, canonical)
+	require.NoError(t, err)
+	require.Equal(t, "https://app.getgram.ai/a%2Fb", escaped.Canonical().String())
+
 	// Credentials would be copied into URLs sent upstream.
 	_, err = hosts.New(testenv.NewLogger(t), conn, mustParse(t, "https://user:pass@app.getgram.ai"), nil, canonical)
 	require.Error(t, err)
