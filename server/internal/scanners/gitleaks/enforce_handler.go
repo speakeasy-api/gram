@@ -15,8 +15,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
-	"github.com/speakeasy-api/gram/server/internal/risk/maskdisplay"
 	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
+	"github.com/speakeasy-api/gram/server/internal/risk/maskdisplay"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
