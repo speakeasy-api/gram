@@ -1,0 +1,23 @@
+server/internal/remotemcp/proxy/headers.go
+  s_4a5851d0d3db74::t_f5ed3379d9ac42 8
+  s_4a5851d0d3db74::t_285b451a06c266 107-109
+server/internal/mcp/rpc_tools_call.go
+  s_4a5851d0d3db74::t_1a50823c3555a7 416
+  s_4a5851d0d3db74::t_feee2c95c47400 413-415,417-419
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "337f020564f201701722f8d720314f8b5d10950f",
+  "prompts": {},
+  "sessions": {
+    "s_4a5851d0d3db74": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0d9bbaff-a041-462a-9504-b75830355636",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
