@@ -938,6 +938,7 @@ trackedFiles:
   src/models/components/interruptturnrequestbody.ts: {}
   src/models/components/interruptturnresult.ts: {}
   src/models/components/issuerconvergencecandidate.ts: {}
+  src/models/components/issuerfieldmismatch.ts: {}
   src/models/components/issuermigratepreflight.ts: {}
   src/models/components/jsonwebkey.ts: {}
   src/models/components/jsonwebkeyset.ts: {}
@@ -5299,7 +5300,7 @@ examples:
           target_id: "55beba50-b7b7-464f-844a-ce63acbbdbfb"
       responses:
         "200":
-          application/json: {"can_migrate": false, "client_count": 324927, "conflicting_mcp_server_names": ["<value 1>"], "endpoint_mismatches": ["<value 1>"], "mcp_server_names": ["<value 1>", "<value 2>"], "target_tenant_client_count": 887590, "warnings": ["<value 1>", "<value 2>"]}
+          application/json: {"can_migrate": false, "client_count": 324927, "conflicting_mcp_server_names": ["<value 1>"], "endpoint_mismatches": [{"field": "<value>"}], "mcp_server_names": ["<value 1>", "<value 2>"], "target_tenant_client_count": 887590, "warnings": [{"field": "<value>"}, {"field": "<value>"}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -5563,7 +5564,7 @@ examples:
           target_id: "b04d1fd3-1ca3-4ee5-a1f0-eaac9c354d3e"
       responses:
         "200":
-          application/json: {"can_migrate": false, "client_count": 375885, "conflicting_mcp_server_names": ["<value 1>"], "endpoint_mismatches": [], "mcp_server_names": ["<value 1>", "<value 2>", "<value 3>"], "warnings": ["<value 1>", "<value 2>"]}
+          application/json: {"can_migrate": false, "client_count": 375885, "conflicting_mcp_server_names": ["<value 1>"], "endpoint_mismatches": [], "mcp_server_names": ["<value 1>", "<value 2>", "<value 3>"], "warnings": [{"field": "<value>"}, {"field": "<value>"}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
