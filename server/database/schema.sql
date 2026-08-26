@@ -4457,8 +4457,9 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
 
   environment_id uuid,
   user_session_issuer_id uuid,
-  -- Direct upstream authorization: the client authorizes at the upstream and
-  -- its bearer is forwarded verbatim, so Gram is not the authorization server.
+  -- The authorization server the upstream authenticates against. Coexists with
+  -- user_session_issuer_id: Gram fronting an upstream does not change which AS
+  -- issued the upstream's credential.
   -- The FK cannot qualify tenancy; writers must use the tenant-scoped lookup.
   remote_session_issuer_id uuid,
   remote_mcp_server_id uuid,
@@ -4487,9 +4488,7 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   CONSTRAINT mcp_servers_tool_variations_group_id_fkey FOREIGN KEY (tool_variations_group_id) REFERENCES tool_variations_groups (id) ON DELETE SET NULL,
   CONSTRAINT mcp_servers_remote_session_issuer_id_fkey FOREIGN KEY (remote_session_issuer_id) REFERENCES remote_session_issuers (id) ON DELETE SET NULL,
   -- Exactly one backend must be set.
-  CONSTRAINT mcp_servers_backend_exclusivity_check CHECK (num_nonnulls(remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id) = 1),
-  -- Gram-as-AS and direct upstream authorization are alternatives, never both.
-  CONSTRAINT mcp_servers_authorization_exclusivity_check CHECK (num_nonnulls(user_session_issuer_id, remote_session_issuer_id) <= 1)
+  CONSTRAINT mcp_servers_backend_exclusivity_check CHECK (num_nonnulls(remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id) = 1)
 );
 
 CREATE INDEX IF NOT EXISTS mcp_servers_project_id_idx
