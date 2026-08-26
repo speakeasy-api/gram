@@ -126,7 +126,7 @@ func NewClient(ctx context.Context, logger *slog.Logger, guardianPolicy *guardia
 	if opts.DisableRetries {
 		httpClient = guardianPolicy.PooledClient()
 	} else {
-		httpClient = guardianPolicy.PooledClient(guardian.WithDefaultRetryConfig())
+		httpClient = guardianPolicy.PooledClient(guardian.WithRetryConfig(discoverAwareRetryConfig(logger, remoteURL)))
 	}
 	trasnport := httpClient.Transport
 	authRT := &authRoundTripper{
@@ -342,6 +342,10 @@ func (rt *authRoundTripper) RoundTrip(req *http.Request) (*http.Response, error)
 		}
 	}
 
+	if req.Header.Get(headerMCPMethod) == methodServerDiscover {
+		req = req.WithContext(context.WithValue(req.Context(), discoverProbeContextKey{}, true))
+	}
+
 	resp, err := rt.base.RoundTrip(req)
 	if err != nil {
 		return nil, fmt.Errorf("external mcp round trip: %w", err)
@@ -357,4 +361,60 @@ func (rt *authRoundTripper) RoundTrip(req *http.Request) (*http.Response, error)
 	}
 
 	return resp, nil
+}
+
+const (
+	// headerMCPMethod mirrors the JSON-RPC method of an MCP request into an
+	// HTTP header. The SDK sets it only from protocol revision 2026-07-28
+	// onwards, so the legacy initialize handshake never carries it.
+	headerMCPMethod = "Mcp-Method"
+
+	// methodServerDiscover is the capability probe the SDK sends before every
+	// connect. An upstream that predates protocol revision 2026-07-28 rejects
+	// it, and the SDK then falls back to the legacy initialize handshake on
+	// the same connection.
+	methodServerDiscover = "server/discover"
+)
+
+// discoverProbeContextKey marks a request context as belonging to the
+// server/discover capability probe. The marker is set on the outbound request
+// and read back by the retry policy, which only receives a context and a
+// response and so cannot recognize the probe on a transport failure otherwise.
+type discoverProbeContextKey struct{}
+
+// discoverAwareRetryConfig returns the default retry configuration with one
+// exception: the server/discover capability probe is never retried.
+//
+// A rejected probe is the expected answer from any upstream that predates MCP
+// 2026-07-28, and the SDK answers it by falling back to the legacy initialize
+// handshake. Retrying a rejection that will not change spends the whole backoff
+// budget first: five attempts and roughly 15 seconds, on a client that connects
+// once per tool call. Every other request, the fallback handshake and the tool
+// call included, keeps the full retry budget.
+func discoverAwareRetryConfig(logger *slog.Logger, remoteURL string) *guardian.RetryConfig {
+	config := guardian.DefaultRetryConfig()
+	checkRetry := config.CheckRetry
+
+	config.CheckRetry = func(ctx context.Context, resp *http.Response, err error) (bool, error) {
+		retry, checkErr := checkRetry(ctx, resp, err)
+		if !retry {
+			return retry, checkErr
+		}
+		if probe, _ := ctx.Value(discoverProbeContextKey{}).(bool); !probe {
+			return retry, checkErr
+		}
+
+		args := []any{attr.SlogURL(remoteURL)}
+		if resp != nil {
+			args = append(args, attr.SlogHTTPResponseStatusCode(resp.StatusCode))
+		}
+		if err != nil {
+			args = append(args, attr.SlogError(err))
+		}
+		logger.InfoContext(ctx, "external mcp server rejected the capability probe, falling back to the legacy handshake", args...)
+
+		return false, checkErr
+	}
+
+	return config
 }
