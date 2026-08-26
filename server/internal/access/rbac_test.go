@@ -12,9 +12,9 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestService_ListRoles_ForbiddenWithoutOrgReadGrant(t *testing.T) {
@@ -62,7 +62,7 @@ func TestService_GetRole_AllowsOrgReadGrant(t *testing.T) {
 	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgRead, Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID)})
 
 	roleID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_custom", "Custom Builder", "custom-builder", "Can build selected resources"))
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project-1")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, seededRolePrincipal(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "custom-builder"), authz.ScopeProjectRead, "project-1")
 
 	role, err := ti.service.GetRole(ctx, &gen.GetRolePayload{ID: roleID})
 	require.NoError(t, err)
@@ -126,7 +126,7 @@ func TestService_CreateRole_ForbiddenWithoutOrgAdminGrant(t *testing.T) {
 	ctx, ti := newTestAccessService(t)
 	ctx = withRBACGrants(t, ctx)
 
-	_, err := ti.service.CreateRole(ctx, &gen.CreateRolePayload{Name: "Denied", Description: "Denied"})
+	_, err := ti.service.CreateRole(ctx, &gen.CreateRolePayload{Name: "Denied", Description: conv.PtrEmpty("Denied")})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
@@ -151,7 +151,7 @@ func TestService_CreateRole_AllowsOrgAdminGrant(t *testing.T) {
 		UpdatedAt:   mockRoleTimestamp,
 	}, nil).Once()
 
-	role, err := ti.service.CreateRole(ctx, &gen.CreateRolePayload{Name: "Allowed", Description: "Allowed"})
+	role, err := ti.service.CreateRole(ctx, &gen.CreateRolePayload{Name: "Allowed", Description: conv.PtrEmpty("Allowed")})
 	require.NoError(t, err)
 	require.NotEmpty(t, role.ID)
 	require.NotEqual(t, "role_allowed", role.ID)
@@ -213,7 +213,7 @@ func TestService_DeleteRole_AllowsOrgAdminGrant(t *testing.T) {
 
 	roleID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_custom", "Custom Builder", "custom-builder", "Old description"))
 	ti.roles.On("DeleteRole", mock.Anything, mockidp.MockOrgID, "custom-builder").Return(nil).Once()
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "custom-builder"), authz.ScopeProjectRead, "project-1")
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, seededRolePrincipal(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "custom-builder"), authz.ScopeProjectRead, "project-1")
 
 	err := ti.service.DeleteRole(ctx, &gen.DeleteRolePayload{ID: roleID})
 	require.NoError(t, err)

@@ -259,7 +259,7 @@ jobs:
           # keep this job's cache separate from the full-install caches.
           install_args: yq
           cache: true
-          cache_key_prefix: mise-yq-v1
+          cache_key_prefix: mise-yq-blacksmith-v1
           env: false
 
       - id: "auth"
@@ -296,6 +296,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -315,9 +316,16 @@ jobs:
       - name: Install dependencies
         run: aube install --frozen-lockfile
 
+      # hk.pkl amends a pkl package hosted on github.com, so evaluating the
+      # config is a network call on every run. Cache it against a blip there.
+      # Namespaced by runner provider, as the other cache families are.
+      - name: Cache pkl packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: pkl-blacksmith-v1-${{ runner.os }}-${{ hashFiles('hk.pkl') }}
+          path: ~/.pkl/cache
+
       - name: Check formatting
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: hk check --all
 
       - name: Prune aube store
@@ -461,6 +469,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -606,10 +615,25 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
         run: mise run github
+
+      - name: Cache aube store
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: ${{ env.GH_CACHE_AUBE_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_AUBE_KEY }}
+            ${{ env.GH_CACHE_AUBE_KEY_PARTIAL }}
+          path: |
+            ${{ env.AUBE_STORE_PATH }}
+
+      # fly:init-runner is a .mts task that imports zx from the workspace.
+      - name: Install dependencies
+        run: aube install --frozen-lockfile
 
       - name: "[DEV] Create fly app"
         id: collectorFlyCreateDev
@@ -747,6 +771,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Run ClickHouse migrations with golang-migrate
@@ -779,6 +804,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       # The ordering check needs both the checked-out head and the base commit
@@ -846,6 +872,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Lint PostgreSQL migrations
@@ -961,7 +988,7 @@ jobs:
           fi
 
       - name: Push PostgreSQL migrations
-        uses: ariga/atlas-action/migrate/push@ba65b510ea74c2886c9c52ce7aa54fd7f5fc6293 # v1.15.6
+        uses: ariga/atlas-action/migrate/push@a6a4733a3fcccd0690570184deb2f7f50b13e656 # v1.16.1
         with:
           dir: file://server/migrations
           dir-name: gram
@@ -969,7 +996,7 @@ jobs:
           tag: ${{ steps.tag.outputs.tag }}
 
       - name: Push ClickHouse migrations
-        uses: ariga/atlas-action/migrate/push@ba65b510ea74c2886c9c52ce7aa54fd7f5fc6293 # v1.15.6
+        uses: ariga/atlas-action/migrate/push@a6a4733a3fcccd0690570184deb2f7f50b13e656 # v1.16.1
         with:
           dir: file://server/clickhouse/migrations
           dir-name: gram-clickhouse
@@ -993,6 +1020,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Fetch main branch
@@ -1055,6 +1083,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1098,6 +1127,8 @@ jobs:
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           install-mode: none
+          # Skips a JSONSchema fetch from golangci-lint.run on every run.
+          verify: false
           working-directory: server
 
       - name: Upload server build
@@ -1151,6 +1182,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1186,8 +1218,10 @@ jobs:
       - name: Lint proto files
         run: mise run lint:infra --against ".git#ref=origin/${{ github.base_ref || 'main' }}"
 
+      # gram-infra only. --all-packages would pull in pystreams, whose spaCy
+      # model is a 400MB wheel fetched from a github.com release on every run.
       - name: Install uv dependencies
-        run: mise run install:uv --all-packages --locked
+        run: mise run install:uv --package gram-infra --locked
 
       - name: Type-check and test the infra Python package
         run: mise run test:infra
@@ -1217,6 +1251,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1272,6 +1307,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1295,6 +1331,8 @@ jobs:
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           install-mode: none
+          # Skips a JSONSchema fetch from golangci-lint.run on every run.
+          verify: false
           working-directory: cli
 
       - name: Install Go tools
@@ -1326,6 +1364,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1369,6 +1408,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1396,6 +1436,8 @@ jobs:
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           install-mode: none
+          # Skips a JSONSchema fetch from golangci-lint.run on every run.
+          verify: false
           working-directory: plog
 
       - name: Test
@@ -1433,6 +1475,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1453,7 +1496,24 @@ jobs:
         run: mise run install:go
 
       - name: Test
-        run: mise run test:server --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+        # --rerun-fails=1 gives a failing test one more attempt before the
+        # shard is marked failed, so a flaky test does not block the PR.
+        run: mise run test:server --shard=${{ matrix.shard }}/${{ strategy.job-total }} --rerun-fails=1
+
+      # A retried test leaves the check green, so without this a flake is
+      # invisible unless someone reads the raw log.
+      - name: Report retried tests
+        if: always()
+        working-directory: server
+        run: |
+          [ -s rerun-report.txt ] || exit 0
+          {
+            echo "### Retried tests (shard ${{ matrix.shard }})"
+            echo
+            echo '```'
+            cat rerun-report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # Standalone gate for the demo seed: TestDemoSeedSafety proves the seed
   # cannot touch other tenants' data, cleans up stray demo-org rows, and stays
@@ -1476,6 +1536,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1517,6 +1578,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1700,6 +1762,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1728,11 +1791,15 @@ jobs:
         working-directory: client/dashboard
 
       - name: Lint admin
-        run: pnpm lint
+        run: aube run lint
         working-directory: client/admin
 
       - name: Knip (dead code / unused deps)
         run: aube run knip
+        working-directory: client/dashboard
+
+      - name: Rebuild committed consent island bundle
+        run: aube run build:consent
         working-directory: client/dashboard
 
       - name: Check for dirty files
@@ -1757,6 +1824,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1803,6 +1871,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1848,6 +1917,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -1896,6 +1966,8 @@ jobs:
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           install-mode: none
+          # Skips a JSONSchema fetch from golangci-lint.run on every run.
+          verify: false
           working-directory: functions
 
       - name: Test Go server
@@ -1948,6 +2020,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -2094,6 +2167,7 @@ jobs:
         with:
           install: true
           cache: true
+          cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -2137,7 +2211,8 @@ jobs:
     name: Detect UI anti-patterns
     runs-on: blacksmith-2vcpu-ubuntu-2404
     # The scan itself takes ~3s; this only guards against a hung npx install.
-    timeout-minutes: 5
+    # A cold mise cache alone can take >5 minutes on the 2vcpu runner.
+    timeout-minutes: 12
     env:
       # Pin the CLI so a new release cannot turn a green PR red without a commit.
       IMPECCABLE_VERSION: "3.4.0"
@@ -2153,6 +2228,10 @@ jobs:
         with:
           install: true
           cache: true
+          # This job only needs npx; avoid restoring the full ~606 MiB toolchain
+          # into a job with a five-minute timeout.
+          install_args: node
+          cache_key_prefix: mise-node-blacksmith-v1
           env: false
 
       - name: Run impeccable

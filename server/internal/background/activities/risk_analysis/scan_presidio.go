@@ -14,10 +14,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
-func (a *AnalyzeBatch) scanPresidio(ctx context.Context, args AnalyzeBatchArgs, requestID uuid.UUID, messages []batchMessage, contents []string) ([][]scanners.Finding, error) {
-	scoreThreshold := resolvePresidioScoreThreshold(args.PresidioScoreThreshold)
-	a.publishPresidioScanRequests(ctx, args, requestID, messages, scoreThreshold)
-
+// scanPresidio runs the inline Presidio scan. The async scan-request publish
+// lives with the caller (scanStandardPolicy), which fails the activity on a
+// publish error while tolerating this scan's partial results.
+func (a *AnalyzeBatch) scanPresidio(ctx context.Context, args AnalyzeBatchArgs, scoreThreshold float64, messages []batchMessage, contents []string) ([][]scanners.Finding, error) {
 	results, err := a.piiScanner.AnalyzeBatch(ctx, contents, args.PresidioEntities, scoreThreshold, func() {
 		activity.RecordHeartbeat(ctx, SourcePresidio)
 	})
@@ -34,7 +34,7 @@ func (a *AnalyzeBatch) scanPresidio(ctx context.Context, args AnalyzeBatchArgs, 
 	return results, err
 }
 
-func (a *AnalyzeBatch) publishPresidioScanRequests(ctx context.Context, args AnalyzeBatchArgs, requestID uuid.UUID, messages []batchMessage, scoreThreshold float64) {
+func (a *AnalyzeBatch) publishPresidioScanRequests(ctx context.Context, args AnalyzeBatchArgs, requestID uuid.UUID, messages []batchMessage, scoreThreshold float64) error {
 	createdAt := time.Now().UTC().Format(time.RFC3339)
 	publishResults := make([]gcp.PublishResult, 0, len(messages))
 	for _, msg := range messages {
@@ -55,5 +55,5 @@ func (a *AnalyzeBatch) publishPresidioScanRequests(ctx context.Context, args Ana
 			ScoreThreshold: &scoreThreshold,
 		}.Build()))
 	}
-	drainPublishAcks(ctx, a.logger, "failed to publish presidio scan request", publishResults)
+	return drainPublishAcks(ctx, "publish presidio scan requests", publishResults)
 }

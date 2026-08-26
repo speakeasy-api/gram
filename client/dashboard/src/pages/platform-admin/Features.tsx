@@ -6,9 +6,11 @@ import {
 import {
   invalidateAllProductFeatures,
   useProductFeatures,
+  type ProductFeaturesQueryData,
 } from "@gram/client/react-query/productFeatures.js";
 
 import { Badge } from "@/components/ui/Badge";
+import { useOrganization } from "@/contexts/Auth";
 import { Button } from "@/components/ui/Button";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
@@ -25,8 +27,12 @@ import { useState } from "react";
 import { useTriggerChatAnalysisMutation } from "@gram/client/react-query/triggerChatAnalysis.js";
 import { useUpsertBusinessMemoryAnalysisSettingsMutation } from "@gram/client/react-query/upsertBusinessMemoryAnalysisSettings.js";
 import { useUpsertChatAnalysisSettingsMutation } from "@gram/client/react-query/upsertChatAnalysisSettings.js";
+import { useIsCurrentOrganization } from "@/hooks/useIsCurrentOrganization";
 
 export default function PlatformAdminFeatures(): JSX.Element {
+  const organization = useOrganization();
+  const isCurrentOrganization = useIsCurrentOrganization(organization.id);
+
   return (
     <Page>
       <Page.Header>
@@ -44,7 +50,11 @@ export default function PlatformAdminFeatures(): JSX.Element {
           <Page.Section.Body>
             <PlatformAdminGate>
               <div className="space-y-8">
-                <ProductFeaturesSection />
+                <ProductFeaturesSection
+                  key={organization.id}
+                  organizationId={organization.id}
+                  isCurrentOrganization={isCurrentOrganization}
+                />
                 <ChatAnalysisSection />
                 <DeveloperSection />
               </div>
@@ -56,75 +66,152 @@ export default function PlatformAdminFeatures(): JSX.Element {
   );
 }
 
-const PRODUCT_FEATURES: {
-  featureName: FeatureName;
-  label: string;
-  description: string;
-  enabledKey:
-    | "authzChallengeLoggingEnabled"
-    | "customerManagedEncryptionKeysEnabled"
-    | "customModelKeysEnabled"
-    | "platformMcpEnabled"
-    | "remoteSessionAutoRefreshEnabled"
-    | "ssoEnabled"
-    | "scimEnabled";
-}[] = [
-  {
-    featureName: FeatureName.AuthzChallengeLogging,
+// Every product feature the SDK exposes gets an entry: either a toggle
+// rendered here, or an explicit note of where else it is administered.
+// Keying the record by FeatureName turns a backend feature added without a
+// decision on this page into a type error instead of a missing toggle.
+type ProductFeatureEntry =
+  | {
+      kind: "toggle";
+      label: string;
+      description: string;
+      enabledKey: keyof ProductFeaturesQueryData;
+    }
+  | { kind: "managed-elsewhere"; where: string };
+
+const PRODUCT_FEATURES: Record<FeatureName, ProductFeatureEntry> = {
+  [FeatureName.AiPlatformPushIntegrations]: {
+    kind: "toggle",
+    label: "AI Platform Push Integrations",
+    description:
+      "Allows this organization to provision push integrations for AI platforms.",
+    enabledKey: "aiPlatformPushIntegrationsEnabled",
+  },
+  [FeatureName.AuthzChallengeLogging]: {
+    kind: "toggle",
     label: "Authz Challenge Logging",
     description:
       'Log every authorization decision (allow/deny) to ClickHouse. Powers auditing of "why did X have access to Y?"',
     enabledKey: "authzChallengeLoggingEnabled",
   },
-  {
-    featureName: FeatureName.CustomerManagedEncryptionKeys,
+  [FeatureName.CustomerManagedEncryptionKeys]: {
+    kind: "toggle",
     label: "Customer-Managed Encryption Keys",
     description:
       "Unlocks encryption key management for an organization, enabling external service credential, external encryption key, and asymmetric signing functionality.",
     enabledKey: "customerManagedEncryptionKeysEnabled",
   },
-  {
-    featureName: FeatureName.CustomModelKeys,
+  [FeatureName.CustomModelKeys]: {
+    kind: "toggle",
     label: "Custom Model Provider Keys",
     description:
       "Allows projects in this organization to store OpenRouter API keys for model completions.",
     enabledKey: "customModelKeysEnabled",
   },
-
-  {
-    featureName: FeatureName.PlatformMcp,
+  [FeatureName.PlatformMcp]: {
+    kind: "toggle",
     label: "Platform MCP access",
     description:
       "Allows this organization to authenticate to and use Platform MCP, including manual setup. Disabling it denies runtime access without removing existing setup records.",
     enabledKey: "platformMcpEnabled",
   },
-
-  {
-    featureName: FeatureName.RemoteSessionAutoRefresh,
+  [FeatureName.RemoteSessionAutoRefresh]: {
+    kind: "toggle",
     label: "Automatic Remote Session Refresh",
     description:
       "Shows the Auto refresh opt-in on remote-session consent screens.",
     enabledKey: "remoteSessionAutoRefreshEnabled",
   },
-  {
-    featureName: FeatureName.Sso,
+  [FeatureName.Sso]: {
+    kind: "toggle",
     label: "SSO",
     description: "Enables WorkOS portal link creation for managing SSO.",
     enabledKey: "ssoEnabled",
   },
-  {
-    featureName: FeatureName.Scim,
+  [FeatureName.Scim]: {
+    kind: "toggle",
     label: "SCIM",
     description: "Enables WorkOS portal link creation for managing SCIM.",
     enabledKey: "scimEnabled",
   },
-];
 
-function ProductFeaturesSection(): JSX.Element {
+  // Self-serve org settings own these; a second switch here would compete
+  // with the control the organization already sees.
+  [FeatureName.Logs]: {
+    kind: "managed-elsewhere",
+    where: "Organization settings → Logs",
+  },
+  [FeatureName.ToolIoLogs]: {
+    kind: "managed-elsewhere",
+    where: "Organization settings → Logs",
+  },
+  [FeatureName.SessionCapture]: {
+    kind: "managed-elsewhere",
+    where: "Organization settings → Logs",
+  },
+  [FeatureName.SessionPortability]: {
+    kind: "toggle",
+    label: "Session Portability",
+    description:
+      "Enables agent session portability for the device agent: session sharing links, move reporting with lineage, and picker title enrichment.",
+    enabledKey: "sessionPortabilityEnabled",
+  },
+  [FeatureName.HooksBrowserLogin]: {
+    kind: "managed-elsewhere",
+    where: "Organization settings → Logs",
+  },
+  [FeatureName.HooksFailOpen]: {
+    kind: "managed-elsewhere",
+    where: "Organization settings → Logs",
+  },
+  [FeatureName.SkillCaptureMetadataOnly]: {
+    kind: "managed-elsewhere",
+    where: "Organization settings → Skills content upload",
+  },
+  [FeatureName.ConsentToolFiltering]: {
+    kind: "managed-elsewhere",
+    where: "Organization settings → consent tool filtering",
+  },
+  // The enforced variant is one arm of a three-state policy
+  // (disabled / user-controlled / enforced) written through
+  // features.setRemoteSessionAutoRefreshPolicy; flipping it on its own here
+  // would desync it from the sibling entitlement.
+  [FeatureName.RemoteSessionAutoRefreshEnforced]: {
+    kind: "managed-elsewhere",
+    where: "Organization settings → remote session refresh policy",
+  },
+  // Skills is generally available and the server refuses to disable it, so a
+  // switch would be a lie in one direction.
+  [FeatureName.Skills]: {
+    kind: "managed-elsewhere",
+    where: "always on — enabled with the organization's entitlements",
+  },
+};
+
+const TOGGLEABLE_FEATURES = Object.values(FeatureName)
+  .flatMap((featureName) => {
+    const entry = PRODUCT_FEATURES[featureName];
+    return entry.kind === "toggle" ? [{ featureName, ...entry }] : [];
+  })
+  .sort((a, b) => a.label.localeCompare(b.label));
+
+function ProductFeaturesSection({
+  organizationId,
+  isCurrentOrganization,
+}: {
+  organizationId: string;
+  isCurrentOrganization: () => boolean;
+}): JSX.Element {
   const queryClient = useQueryClient();
-  const { data: features, isLoading, error } = useProductFeatures();
+  const {
+    data: features,
+    isLoading,
+    error,
+  } = useProductFeatures({
+    organizationId,
+  });
   const platformMcp = useFeatureFlag(FEATURE_FLAGS.platformMcp);
-  const visibleFeatures = PRODUCT_FEATURES.filter(
+  const visibleFeatures = TOGGLEABLE_FEATURES.filter(
     (feature) =>
       feature.featureName !== FeatureName.PlatformMcp ||
       platformMcp.status === "enabled",
@@ -137,6 +224,7 @@ function ProductFeaturesSection(): JSX.Element {
     variables,
   } = useFeaturesSetMutation({
     onSuccess: () => {
+      if (!isCurrentOrganization()) return;
       void invalidateAllProductFeatures(queryClient);
     },
   });
@@ -185,6 +273,7 @@ function ProductFeaturesSection(): JSX.Element {
                     mutate({
                       request: {
                         setProductFeatureRequestBody: {
+                          organizationId,
                           featureName: feature.featureName,
                           enabled: next,
                         },
@@ -221,6 +310,7 @@ const WORK_UNITS_MAX_CAP = 10_000;
 const WORK_UNITS_SUGGESTED_CAP = 100;
 
 function RunChatAnalysisNow(): JSX.Element {
+  const organization = useOrganization();
   const trigger = useTriggerChatAnalysisMutation({
     onSuccess: (data) => {
       toast.success(
@@ -243,7 +333,15 @@ function RunChatAnalysisNow(): JSX.Element {
       <Button
         variant="secondary"
         size="sm"
-        onClick={() => trigger.mutate({})}
+        onClick={() =>
+          trigger.mutate({
+            request: {
+              triggerAnalysisRequestBody: {
+                organizationId: organization.id,
+              },
+            },
+          })
+        }
         disabled={trigger.isPending}
       >
         {trigger.isPending ? "Running…" : "Run now"}
@@ -257,14 +355,16 @@ function RunChatAnalysisNow(): JSX.Element {
 // reservation spends against, so they get their own section beside the
 // entitlement toggles rather than rows among them.
 function ChatAnalysisSection(): JSX.Element {
+  const organization = useOrganization();
+
   return (
     <AdminSection
       title="Chat analysis"
       description="Caps are evaluations per UTC day; a cap of 0 disables the pipeline."
     >
       <div className="divide-border divide-y">
-        <WorkUnitsAnalysisRow />
-        <BusinessMemoryAnalysisRow />
+        <WorkUnitsAnalysisRow key={`work-units-${organization.id}`} />
+        <BusinessMemoryAnalysisRow key={`business-memory-${organization.id}`} />
       </div>
     </AdminSection>
   );
@@ -389,10 +489,15 @@ function AnalysisRow({
 }
 
 function WorkUnitsAnalysisRow(): JSX.Element {
+  const organization = useOrganization();
   const queryClient = useQueryClient();
-  const query = useChatAnalysisSettings(undefined, undefined, {
-    throwOnError: false,
-  });
+  const query = useChatAnalysisSettings(
+    { organizationId: organization.id },
+    undefined,
+    {
+      throwOnError: false,
+    },
+  );
   const mutation = useUpsertChatAnalysisSettingsMutation();
 
   return (
@@ -415,6 +520,7 @@ function WorkUnitsAnalysisRow(): JSX.Element {
           {
             request: {
               upsertWorkUnitsSettingsRequestBody: {
+                organizationId: organization.id,
                 workUnitsEnabled: enabled,
                 workUnitsDailyCap: dailyCap,
               },
@@ -433,10 +539,15 @@ function WorkUnitsAnalysisRow(): JSX.Element {
 }
 
 function BusinessMemoryAnalysisRow(): JSX.Element {
+  const organization = useOrganization();
   const queryClient = useQueryClient();
-  const query = useChatAnalysisSettings(undefined, undefined, {
-    throwOnError: false,
-  });
+  const query = useChatAnalysisSettings(
+    { organizationId: organization.id },
+    undefined,
+    {
+      throwOnError: false,
+    },
+  );
   const mutation = useUpsertBusinessMemoryAnalysisSettingsMutation();
 
   return (
@@ -459,6 +570,7 @@ function BusinessMemoryAnalysisRow(): JSX.Element {
           {
             request: {
               upsertBusinessMemorySettingsRequestBody: {
+                organizationId: organization.id,
                 businessMemoryEnabled: enabled,
                 businessMemoryDailyCap: dailyCap,
               },

@@ -51,8 +51,10 @@ func resourcesReadRequestFromUserRequest(req *UserRequest) (*ResourcesReadReques
 	}
 
 	params := &mcp.ReadResourceParams{
-		Meta: nil,
-		URI:  "",
+		Meta:           nil,
+		URI:            "",
+		InputResponses: nil,
+		RequestState:   "",
 	}
 	if err := json.Unmarshal(rpcReq.Params, params); err != nil {
 		return nil, false

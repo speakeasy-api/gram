@@ -16,7 +16,7 @@ Every application template has:
 
    ```bash
    mise exec -- go run ./server/cmd/sync-loops-email-templates --validate-only
-   mise exec -- go test ./server/internal/email/... ./server/cmd/sync-loops-email-templates
+   mise run test:server ./internal/email/... ./cmd/sync-loops-email-templates
    ```
 
 Validation requires the manifest variable list to match the Go `Variables()`
@@ -26,13 +26,15 @@ undeclared or accidentally unused variables in registered templates.
 
 ## Design system
 
-The intended design reference is `transactional_base.mjml`: a light editorial shell
-with the Speakeasy spectrum rail, wordmark, compact mono labels, Tobias display
-headlines, square black actions, neutral outlined details, and a dashed pale
-footer. `weekly_usage_summary.mjml` specializes that system for a data-heavy
-report. Do not replace this language with a separate LMX-derived theme.
+The intended design reference is `transactional_base.mjml`: a light shell with
+the Speakeasy lockup header, uppercase gray eyebrow, RGB gradient line under
+the headline, square black action, neutral outlined details, and a plain gray
+footer reason — no closing brand banner. The full spec, including the
+Loops-hosted asset URLs and the theme that supplies Helvetica, lives in the
+`craft-transactional-emails` skill (`.agents/skills/craft-transactional-emails/`).
 
-`transactional_base.lmx` is the production translation. It uses Loops-hosted
-copies of the spectrum rail and logo mark, plus the Inter fallback, while
-preserving the same hierarchy, palette, square action, panels, and pale footer.
-Copy those managed asset URLs unchanged into every production template.
+`transactional_base.lmx` is the production translation. It references the
+team's "Speakeasy Trial" Loops theme for the Helvetica body font (the LMX API
+rejects non-Google fonts inline) and pins every other style attribute
+explicitly. Copy its managed asset URLs unchanged into every production
+template, and never use the name "Gram" in recipient-visible copy.

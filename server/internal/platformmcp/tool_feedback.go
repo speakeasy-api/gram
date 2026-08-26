@@ -31,15 +31,15 @@ func feedbackToolResult(err error) (*mcp.CallToolResult, bool) {
 	var result operationBudgetResult
 	switch {
 	case errors.Is(err, ErrFeedbackRateLimited):
-		result = operationBudgetResult{Code: "rate_limited", Message: "Platform MCP feedback is temporarily rate limited. Retry after a short delay."}
+		result = operationBudgetResult{Code: "rate_limited", Message: "Feedback was sent too often just now. Try again shortly."}
 	case errors.Is(err, ErrFeedbackInvalid):
-		result = operationBudgetResult{Code: "invalid_input", Message: "Feedback must use the documented fields and must not contain sensitive or identifying data."}
+		result = operationBudgetResult{Code: "invalid_input", Message: "Feedback must use the fields described here, and must not contain anything sensitive or identifying."}
 	case errors.Is(err, ErrFeedbackConflict):
-		result = operationBudgetResult{Code: "conflict", Message: "This feedback retry key was previously used with different feedback."}
+		result = operationBudgetResult{Code: "conflict", Message: "That retry key was already used for different feedback. Use a new one."}
 	case errors.Is(err, ErrFeedbackForbidden):
-		result = operationBudgetResult{Code: "forbidden", Message: "The Platform MCP connection is no longer active."}
+		result = operationBudgetResult{Code: "forbidden", Message: "This session is no longer connected. Reconnect and try again."}
 	case errors.Is(err, ErrFeedbackUnavailable):
-		result = operationBudgetResult{Code: unavailableCode, Message: "Platform MCP feedback is unavailable in the current rollout."}
+		result = operationBudgetResult{Code: unavailableCode, Message: "Feedback is not switched on for your organization yet."}
 	default:
 		return nil, false
 	}
@@ -50,12 +50,13 @@ func feedbackToolResult(err error) (*mcp.CallToolResult, bool) {
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(content)}}, IsError: true}, true
 }
 
-func registerFeedbackTool(server *mcp.Server, feedback *FeedbackService) {
-	mcp.AddTool(server, &mcp.Tool{
+func registerFeedbackTool(reg *Registrar, feedback *FeedbackService) {
+	addTool(reg, &mcp.Tool{
 		Name:        "send_platform_mcp_feedback",
-		Title:       "Send Platform MCP Feedback",
-		Description: "Store one bounded Platform MCP feedback report for local review. Ask for consent outside this tool before submitting feedback. Never include credentials, URLs, identifiers, payloads, logs, headers, or attachments.",
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, input SendPlatformMCPFeedbackToolInput) (*mcp.CallToolResult, SendPlatformMCPFeedbackToolOutput, error) {
+		Title:       "Send Feedback About This Platform",
+		Description: "Store one short feedback report about this platform for the team to read. Ask the user for consent before submitting. Constraints: never include credentials, URLs, identifiers, payloads, logs, headers, or attachments.",
+	}, ToolMeta{
+		Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input SendPlatformMCPFeedbackToolInput) (*mcp.CallToolResult, SendPlatformMCPFeedbackToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, SendPlatformMCPFeedbackToolOutput{}, err

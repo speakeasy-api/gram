@@ -191,6 +191,7 @@ chat_activity AS (
   -- aggregating every candidate chat's full message history.
   SELECT
     cc.id,
+    cc.created_at,
     COALESCE(last_msg.ts, cc.created_at) AS last_message_timestamp
   FROM candidate_chats cc
   CROSS JOIN LATERAL (
@@ -202,7 +203,7 @@ chat_activity AS (
 SELECT COUNT(*) AS total
 FROM chat_activity ca
 WHERE ($1::timestamptz IS NULL OR ca.last_message_timestamp >= $1)
-  AND ($2::timestamptz IS NULL OR ca.last_message_timestamp <= $2)
+  AND ($2::timestamptz IS NULL OR ca.created_at <= $2)
 `
 
 type CountChatsParams struct {
@@ -233,6 +234,9 @@ type CountChatsParams struct {
 // filters become a cheap join instead of a correlated subquery per chat. The
 // parameter-only gate makes it a one-time filter that skips the scan entirely
 // when neither risk filter is active.
+// Interval overlap, mirroring ListChats: last activity after the range opens,
+// created before it closes. Bounding last_message_timestamp above would evict
+// an actively-writing chat as soon as a message lands past the caller's @to.
 func (q *Queries) CountChats(ctx context.Context, arg CountChatsParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countChats,
 		arg.FromTime,
@@ -743,7 +747,7 @@ func (q *Queries) GetAssistantThreadAssistantIDByChatID(ctx context.Context, arg
 }
 
 const getChat = `-- name: GetChat :one
-SELECT c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.external_chat_id, c.title, c.title_manually_set, c.pinned_at, c.summary, c.summary_generated_at, c.user_account_id, c.litellm_proxied, c.created_at, c.updated_at, c.deleted_at, c.deleted, COALESCE(ua.account_type, '')::text AS account_type, COALESCE(ua.email, '')::text AS account_email,
+SELECT c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.external_chat_id, c.title, c.title_manually_set, c.pinned_at, c.summary, c.summary_generated_at, c.user_account_id, c.litellm_proxied, c.cwd, c.created_at, c.updated_at, c.deleted_at, c.deleted, COALESCE(ua.account_type, '')::text AS account_type, COALESCE(ua.email, '')::text AS account_email,
   at.assistant_id, a.name AS assistant_name
 FROM chats c
 LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
@@ -771,6 +775,7 @@ type GetChatRow struct {
 	SummaryGeneratedAt pgtype.Timestamptz
 	UserAccountID      uuid.NullUUID
 	LitellmProxied     bool
+	Cwd                pgtype.Text
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	DeletedAt          pgtype.Timestamptz
@@ -802,6 +807,7 @@ func (q *Queries) GetChat(ctx context.Context, arg GetChatParams) (GetChatRow, e
 		&i.SummaryGeneratedAt,
 		&i.UserAccountID,
 		&i.LitellmProxied,
+		&i.Cwd,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1978,6 +1984,112 @@ func (q *Queries) ListChatMessagesForMatch(ctx context.Context, arg ListChatMess
 	return items, nil
 }
 
+const listChatSessionLinks = `-- name: ListChatSessionLinks :many
+SELECT
+  l.parent_chat_id,
+  l.child_chat_id,
+  l.child_session_id,
+  l.kind,
+  l.target_harness,
+  l.source_surface,
+  l.actor_email,
+  l.device_hostname,
+  l.created_at,
+  pc.title AS parent_title,
+  (pc.id IS NOT NULL)::boolean AS parent_captured,
+  cc.title AS child_title,
+  (cc.id IS NOT NULL)::boolean AS child_captured
+FROM chat_session_links l
+LEFT JOIN chats pc ON pc.id = l.parent_chat_id AND pc.project_id = l.project_id AND pc.deleted IS FALSE
+  AND ($1::text = '' OR pc.external_user_id = $1::text)
+  AND ($2::text = '' OR pc.user_id = $2::text)
+LEFT JOIN chats cc ON l.child_chat_id IS NOT NULL AND cc.id = l.child_chat_id AND cc.project_id = l.project_id AND cc.deleted IS FALSE
+  AND ($1::text = '' OR cc.external_user_id = $1::text)
+  AND ($2::text = '' OR cc.user_id = $2::text)
+WHERE l.project_id = $3
+  AND (l.parent_chat_id = ANY ($4::uuid[]) OR l.child_chat_id = ANY ($4::uuid[]))
+  AND (
+    ($1::text = '' AND $2::text = '')
+    OR pc.id IS NOT NULL
+    OR cc.id IS NOT NULL
+  )
+ORDER BY l.created_at DESC
+`
+
+type ListChatSessionLinksParams struct {
+	ExternalUserID string
+	UserID         string
+	ProjectID      uuid.UUID
+	ChatIds        []uuid.UUID
+}
+
+type ListChatSessionLinksRow struct {
+	ParentChatID   uuid.UUID
+	ChildChatID    uuid.NullUUID
+	ChildSessionID pgtype.Text
+	Kind           string
+	TargetHarness  string
+	SourceSurface  pgtype.Text
+	ActorEmail     pgtype.Text
+	DeviceHostname pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	ParentTitle    pgtype.Text
+	ParentCaptured bool
+	ChildTitle     pgtype.Text
+	ChildCaptured  bool
+}
+
+// Session-lineage edges touching any of the requested chats, either as the
+// parent (the session that was moved) or the child (the continuation).
+// Titles resolve through LEFT JOINs because either end may not be captured
+// yet — a dangling edge still renders as "moved to <harness>". Visibility
+// mirrors ListChats: an unrestricted caller (both scope params empty) sees
+// every edge; a restricted caller sees only edges with at least one end on a
+// chat their scope can read. Each end's title and captured flag are
+// additionally masked by that end's own visibility, so owning one end of an
+// edge never reveals the other end's title to a restricted caller.
+// The caller's visibility predicate lives in the JOIN conditions, so an end
+// the caller cannot read joins as NULL — masking its title and reading as
+// not-captured — indistinguishable from a not-yet-captured end by design.
+func (q *Queries) ListChatSessionLinks(ctx context.Context, arg ListChatSessionLinksParams) ([]ListChatSessionLinksRow, error) {
+	rows, err := q.db.Query(ctx, listChatSessionLinks,
+		arg.ExternalUserID,
+		arg.UserID,
+		arg.ProjectID,
+		arg.ChatIds,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChatSessionLinksRow
+	for rows.Next() {
+		var i ListChatSessionLinksRow
+		if err := rows.Scan(
+			&i.ParentChatID,
+			&i.ChildChatID,
+			&i.ChildSessionID,
+			&i.Kind,
+			&i.TargetHarness,
+			&i.SourceSurface,
+			&i.ActorEmail,
+			&i.DeviceHostname,
+			&i.CreatedAt,
+			&i.ParentTitle,
+			&i.ParentCaptured,
+			&i.ChildTitle,
+			&i.ChildCaptured,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChatSources = `-- name: ListChatSources :many
 SELECT DISTINCT latest.source
 FROM chats c
@@ -2286,8 +2398,14 @@ filtered_chats AS (
     cc.account_email
   FROM candidate_chats cc
   JOIN chat_stats cs ON cs.id = cc.id
+  -- The range test is interval overlap: the chat was active after the range
+  -- opened (last message >= @from_time) and existed before it closed
+  -- (created_at <= @to_time). Bounding last_message_timestamp above instead
+  -- would evict an actively-writing chat the moment a new message lands past
+  -- the caller's @to — the dashboard freezes @to when a range is picked, so
+  -- running sessions would flicker out of the list until the next reload.
   WHERE ($13::timestamptz IS NULL OR cs.last_message_timestamp >= $13)
-    AND ($14::timestamptz IS NULL OR cs.last_message_timestamp <= $14)
+    AND ($14::timestamptz IS NULL OR cc.created_at <= $14)
 ),
 limited_chats AS (
   SELECT

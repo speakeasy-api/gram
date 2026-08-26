@@ -13,9 +13,11 @@ Status: `[x]` seeded + verified · `[~]` seeded, not yet verified · `[ ]` not s
 | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
 | Agent sessions list                                            | PG `chats` + org `rbac` feature (without it ShouldEnforce=false hides everything)                                                                        | `[x]`  |
 | Chat detail sheet (transcript + per-turn cost + tool payloads) | PG `chat_messages` (`message_id`=prompt id, `tool_call_id`=call_demo_i_k) + CH api_request/tool_result rows; demo-org impersonation lift in chat.load    | `[~]`  |
-| Risk events / findings                                         | PG `risk_results` (all 60 on the secrets & PII policy) + 6 enabled `risk_policies`                                                                       | `[x]`  |
-| Policy Center                                                  | PG `risk_policies` ×6 (OWASP-derived: secrets/PII, prompt injection, destructive commands, shadow MCP, non-corporate accounts, custom CEL)               | `[~]`  |
-| Detection rules (custom CEL)                                   | PG `risk_custom_detection_rules` ×3, `detection_expr` only; compile-checked by TestSeedCELCompiles                                                       | `[~]`  |
+| Risk events / findings                                         | PG `risk_results` (~125, 13 rule types across 6 policies) mirrored 1:1 into CH `risk_findings`; 8 enabled `risk_policies`                                | `[x]`  |
+| Watchdog (risk signals)                                        | CH `risk_findings` only — needs `chat_source`/`team`/`user_email` for its App/Team/top-user groupings, and a policy-score spread for its severities      | `[~]`  |
+| Dismissed findings / exclusions                                | PG `risk_exclusions` ×3 + suppressed `risk_results`; CH `excluded_reason` in {rule, manual, automated}                                                   | `[~]`  |
+| Policy Center                                                  | Verify 9 policy rows (including Quarantine action) and 1 active `session_quarantines` row on the Quarantines tab                                         | `[~]`  |
+| Detection rules (custom CEL)                                   | PG `risk_custom_detection_rules` ×3, `detection_expr` only; compile-checked by TestSeedCELCompiles; all three now carry findings                         | `[~]`  |
 | Risk overview (CH mirror ready)                                | PG today; CH `risk_findings` mirror seeded for the flag flip                                                                                             | `[x]`  |
 | Cost dashboard, all pivots                                     | CH `attribute_metrics_summaries` via provenance rows carrying `user.attributes.*`, roles/groups, hostname, skill/agent/mcp attribution                   | `[~]`  |
 | Costs Efficiency dataset                                       | CH `chat_analysis:work_units:score` rows                                                                                                                 | `[~]`  |
@@ -25,25 +27,36 @@ Status: `[x]` seeded + verified · `[~]` seeded, not yet verified · `[ ]` not s
 | Insights (MCP & Tools)                                         | CH `trace_summaries`: unique per-surface trace ids + `gram.toolset.slug` (direct branch) + `gram.event.source=hook` rows (hook branch) + Skill hook rows | `[~]`  |
 | Team page                                                      | PG `organization_user_relationships` + `users.workos_id` + role assignments (global_roles admin/member, skipped if absent)                               | `[~]`  |
 | Employee enrollment                                            | PG memberships + `user_accounts` + `device_owners` + `device_agent_syncs`; roster served via impersonation carve-out                                     | `[~]`  |
-| Org home (activity, facepiles, challenges)                     | PG `audit_logs` (12 rows, both projects) + CH `authz_challenges` (13 rows incl. api_key bucket)                                                          | `[~]`  |
+| Org home (activity, facepiles, challenges)                     | PG `audit_logs` (13 rows, including `session_quarantine:open`) + CH `authz_challenges` (13 rows incl. api_key bucket)                                    | `[~]`  |
 | Access challenges                                              | CH `authz_challenges` (member user_ids pass the suppression filter)                                                                                      | `[~]`  |
 | Budgets / spend controls                                       | PG `spend_rules` ×2 + `spend_rule_events` ×4, calibrated to CH usage (breach+warning per rule); usage MV already fed by existing rows                    | `[~]`  |
 | Toolsets / MCP / Sources / Deployments / Playground            | PG deployment stack: asset + completed deployment + 8 `http_tool_definitions` (urns match telemetry, doc slug `acme`) + 2 toolsets (+versions)           | `[~]`  |
 | Prompts                                                        | PG `prompt_templates` ×2                                                                                                                                 | `[~]`  |
 | Skills                                                         | PG `skills` ×3 + `skill_versions` + 1 open edit suggestion with diff                                                                                     | `[~]`  |
-| Shadow MCP                                                     | CH `shadow_mcp_inventory_urls` ×4 + `hooks:` telemetry rows                                                                                              | `[~]`  |
+| Shadow MCP                                                     | CH `shadow_mcp_inventory_urls` ×15 + `hooks:` telemetry rows                                                                                             | `[~]`  |
 | Directory dimensions                                           | PG `directory_users`/`directory_groups`/memberships mirroring the CH `user.attributes.*` profiles                                                        | `[~]`  |
+
+## Local only (RunLocalFixtures, never the demo org)
+
+These come from `server/internal/demoseed/local.go` after the seed, so they are
+present in a developer's org and deliberately absent from the shared demo org.
+
+| Page               | Backing data                                                       |
+| ------------------ | ------------------------------------------------------------------ |
+| Environments       | One `Default` environment                                          |
+| Playground MCP App | Functions deployment + UI resource, zipped from `demoseed/mcpapp/` |
+| API keys           | The well-known `seed-key`                                          |
+| Catalog            | The global `Gram Recommended` registry row                         |
 
 ## Not seeded (deliberate)
 
-| Page                                   | Why                                                          |
-| -------------------------------------- | ------------------------------------------------------------ |
-| Plugins / Assistants                   | Auto-provision on first visit; empty state is intentional    |
-| Catalog                                | Registry-backed, self-populating                             |
-| Environments / Integrations / Triggers | Acceptable empty states                                      |
-| Billing / Device agent / Settings      | Render fine without seed data                                |
-| ChatGPT/Work usage split               | Later phase (`chatgpt:usage:metrics` rows)                   |
-| Logs page content                      | Enterprise-gated for the demo account type (README change 7) |
+| Page                              | Why                                                          |
+| --------------------------------- | ------------------------------------------------------------ |
+| Plugins / Assistants              | Auto-provision on first visit; empty state is intentional    |
+| Integrations / Triggers           | Acceptable empty states                                      |
+| Billing / Device agent / Settings | Render fine without seed data                                |
+| ChatGPT/Work usage split          | Later phase (`chatgpt:usage:metrics` rows)                   |
+| Logs page content                 | Enterprise-gated for the demo account type (README change 7) |
 
 ## Rules when extending
 

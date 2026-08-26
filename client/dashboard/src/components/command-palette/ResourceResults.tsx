@@ -1,6 +1,7 @@
 import { CommandGroup, CommandItem } from "@/components/ui/Command";
-import { useSlugs } from "@/contexts/Sdk";
+import { useProjectSlugForRequests, useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
+import { mcpServerRouteParam } from "@/lib/sources";
 import { useEnvironments } from "@/pages/environments/useEnvironments";
 import { BUILTIN_RULES_BY_CATEGORY } from "@/pages/security/detection-rules-data";
 import { useRoutes } from "@/routes";
@@ -8,8 +9,9 @@ import { useAssistantsListSuspense } from "@gram/client/react-query/assistantsLi
 import { useLatestDeploymentSuspense } from "@gram/client/react-query/latestDeployment.js";
 import { useListDeploymentsSuspense } from "@gram/client/react-query/listDeployments.js";
 import { useListToolsetsSuspense } from "@gram/client/react-query/listToolsets.js";
+import { useMcpServersSuspense } from "@gram/client/react-query/mcpServers.js";
 import { useRiskListCustomDetectionRulesSuspense } from "@gram/client/react-query/riskListCustomDetectionRules.js";
-import { useRiskListPolicyBypassRequestsSuspense } from "@gram/client/react-query/riskListPolicyBypassRequests.js";
+import { useListMcpApprovalRequestsSuspense } from "@gram/client/react-query/listMcpApprovalRequests.js";
 import { useRiskListPoliciesSuspense } from "@gram/client/react-query/riskListPolicies.js";
 import { usePluginsSuspense } from "@gram/client/react-query/plugins";
 import { Icon } from "@/components/ui/Icon";
@@ -79,11 +81,41 @@ function ResultItem({
   );
 }
 
+// TODO(AGE-1902): collapse the two fetches once Hosted (toolset-backed) MCP
+// servers also source from mcp_servers.
+//
+// The palette mirrors the /mcp listing (see pages/mcp/MCP.tsx): "MCP Servers"
+// is one user-facing collection assembled from two backing stores, so both are
+// searched under a single heading. mcp_servers rows are filtered to the
+// non-toolset backends for the same reason the listing does it — a
+// toolset-backed mcp_servers row is the *same* server the toolsets fetch
+// already returned, so including it would double every hosted server in the
+// results. With that filter the two sets are disjoint and no dedupe is needed.
+//
+// Both fetches share this group's Suspense/error boundary, so either failing
+// hides the whole group. That's deliberate: half an "MCP Servers" list is worse
+// than none, because a user who searches and finds nothing concludes the server
+// doesn't exist.
 function McpServersGroup({ onNavigate }: GroupProps) {
   const routes = useRoutes();
-  const { data } = useListToolsetsSuspense();
-  const toolsets = data.toolsets ?? [];
-  if (!toolsets.length) return null;
+  const gramProject = useProjectSlugForRequests();
+  // Both lists are keyed by project: the SDK folds gramProject into the query
+  // key, so omitting it shares one cache entry across every project and a
+  // switch renders the previous project's rows until the refetch lands.
+  const { data: toolsetsData } = useListToolsetsSuspense({ gramProject });
+  const { data: mcpServersData } = useMcpServersSuspense({ gramProject });
+  const toolsets = toolsetsData.toolsets ?? [];
+  const mcpServers = useMemo(
+    () =>
+      (mcpServersData.mcpServers ?? []).filter(
+        (server) =>
+          !!server.remoteMcpServerId ||
+          !!server.tunneledMcpServerId ||
+          !!server.unproxiedMcpServerId,
+      ),
+    [mcpServersData],
+  );
+  if (!toolsets.length && !mcpServers.length) return null;
   return (
     <CommandGroup heading="MCP Servers">
       {toolsets.map((toolset) => (
@@ -95,6 +127,19 @@ function McpServersGroup({ onNavigate }: GroupProps) {
           icon="network"
           onSelect={() => {
             routes.mcp.details.goTo(toolset.slug);
+            onNavigate();
+          }}
+        />
+      ))}
+      {mcpServers.map((server) => (
+        <ResultItem
+          key={server.id}
+          value={`mcp ${server.name ?? ""} ${server.slug ?? ""} ${server.id}`}
+          label={server.name || "MCP Server"}
+          sublabel={server.slug}
+          icon="network"
+          onSelect={() => {
+            routes.mcp.x.overview.goTo(mcpServerRouteParam(server));
             onNavigate();
           }}
         />
@@ -253,7 +298,7 @@ function RiskPoliciesGroup({ onNavigate }: GroupProps) {
   const policies = data?.policies ?? [];
   if (!policies.length) return null;
   return (
-    <CommandGroup heading="Risk Policies">
+    <CommandGroup heading="Guardrails">
       {policies.map((policy) => (
         <ResultItem
           key={policy.id}
@@ -308,9 +353,10 @@ function DetectionRulesGroup({ onNavigate }: GroupProps) {
           sublabel={rule.severity}
           icon="scan-search"
           onSelect={() => {
-            // No per-rule route; deep-link opens the rule's sheet by id.
+            // No per-rule route; deep-link opens the rule's sheet by id on
+            // the Guardrails page's Detection Rules tab.
             void navigate(
-              `${routes.detectionRules.href()}?rule=${encodeURIComponent(rule.id)}`,
+              `${routes.policyCenter.href()}?tab=detection-rules&rule=${encodeURIComponent(rule.id)}`,
             );
             onNavigate();
           }}
@@ -324,38 +370,33 @@ function ApprovalRequestsGroup({ onNavigate }: GroupProps) {
   const routes = useRoutes();
   const navigate = useNavigate();
   const { projectSlug = "" } = useSlugs();
-  const { data } = useRiskListPolicyBypassRequestsSuspense({
+  const { data } = useListMcpApprovalRequestsSuspense({
     status: "requested",
     gramProject: projectSlug,
   });
   const requests = data?.requests ?? [];
   if (!requests.length) return null;
   return (
-    <CommandGroup heading="Approval Requests">
-      {requests.map((request) => {
-        const label =
-          request.targetLabel ??
-          request.targetKey ??
-          request.requesterEmail ??
-          request.requesterUserId ??
-          request.id;
-        return (
-          <ResultItem
-            key={request.id}
-            value={`approval request ${label} ${request.id}`}
-            label={label}
-            sublabel={request.status}
-            icon="inbox"
-            onSelect={() => {
-              // No per-request route; deep-link opens the review sheet by id.
-              void navigate(
-                `${routes.approvalRequests.href()}?review=${encodeURIComponent(request.id)}`,
-              );
-              onNavigate();
-            }}
-          />
-        );
-      })}
+    <CommandGroup heading="Access Requests">
+      {requests.map((request) => (
+        <ResultItem
+          key={request.id}
+          value={`access request ${request.targetRaw} ${request.id}`}
+          label={request.targetRaw}
+          sublabel={request.status}
+          icon="inbox"
+          onSelect={() => {
+            // stdio targets have no server page; their row on the servers
+            // table opens the review sheet.
+            void navigate(
+              request.serverSlug
+                ? routes.shadowMCP.detail.href(request.serverSlug)
+                : routes.shadowMCP.href(),
+            );
+            onNavigate();
+          }}
+        />
+      ))}
     </CommandGroup>
   );
 }
@@ -364,10 +405,13 @@ export function ResourceResults({
   onNavigate,
   query,
 }: GroupProps & { query: string }): JSX.Element {
-  const { hasAnyScope } = useRBAC();
+  const { hasAnyScope, hasScope } = useRBAC();
   // Risk resources are org:admin-gated on their own pages; mirror that here so
   // non-admins never fire the (forbidden) list calls.
   const isAdmin = hasAnyScope(["org:admin"]);
+  // Approval requests are an org-admin surface, matching the queue page's
+  // own gate.
+  const canReadApprovals = hasScope("org:admin");
   // Detection rules are high-cardinality (dozens of built-ins), so they'd flood
   // the default view and fetch on open. Make them search-only: render (and
   // fetch) the group only once the user types, letting cmdk filter the results.
@@ -403,10 +447,12 @@ export function ResourceResults({
               <DetectionRulesGroup onNavigate={onNavigate} />
             </LazyGroup>
           )}
-          <LazyGroup>
-            <ApprovalRequestsGroup onNavigate={onNavigate} />
-          </LazyGroup>
         </>
+      )}
+      {canReadApprovals && (
+        <LazyGroup>
+          <ApprovalRequestsGroup onNavigate={onNavigate} />
+        </LazyGroup>
       )}
     </>
   );

@@ -1,4 +1,5 @@
 import { useTelemetry } from "@/contexts/Telemetry";
+import { authPageHref } from "@/lib/safe-external-url";
 import { buildLoginRedirectURL, cn } from "@/lib/utils";
 import { useForm } from "@tanstack/react-form";
 import { Link } from "react-router";
@@ -30,7 +31,11 @@ function firstError(errors: unknown[]): string | undefined {
   return typeof error === "string" ? error : undefined;
 }
 
-export function SignUpPanel(): JSX.Element {
+export function SignUpPanel({
+  redirectTo,
+}: {
+  redirectTo?: string | null;
+}): JSX.Element {
   const telemetry = useTelemetry();
   const form = useForm({
     defaultValues: { email: "", companyName: "" },
@@ -51,7 +56,7 @@ export function SignUpPanel(): JSX.Element {
       // arrives pre-filled, and is never stored at all.
       window.location.assign(
         buildLoginRedirectURL(
-          null,
+          redirectTo ?? null,
           normalizeOrgName(value.companyName),
           value.email.trim(),
         ),
@@ -227,7 +232,7 @@ export function SignUpPanel(): JSX.Element {
                   "mx-auto px-[22px] disabled:cursor-not-allowed disabled:opacity-50",
                 )}
               >
-                Start Trial
+                Create Account
               </button>
             </>
           )}
@@ -241,7 +246,7 @@ export function SignUpPanel(): JSX.Element {
       <p className="mt-2 text-[14px] text-(--muted-strong)">
         Already have an account?{" "}
         <Link
-          to="/login"
+          to={authPageHref("/login", redirectTo)}
           className="text-(--link) underline hover:text-(--focus)"
         >
           Log in

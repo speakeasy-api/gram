@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeSimple } from "../lib/encodings.js";
+import { encodeJSON, encodeSimple } from "../lib/encodings.js";
 import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
@@ -42,11 +42,11 @@ import { Result } from "../types/fp.js";
  * triggerAnalysis adminChatAnalysis
  *
  * @remarks
- * Wake the chat analysis coordinator for every project in the active organization, instead of waiting for the periodic sweep. Requires platform admin.
+ * Wake the chat analysis coordinator for every project in the named organization, instead of waiting for the periodic sweep. Requires platform admin.
  */
 export function adminChatAnalysisTriggerAnalysis(
   client: GramCore,
-  request?: TriggerChatAnalysisRequest | undefined,
+  request: TriggerChatAnalysisRequest,
   security?: TriggerChatAnalysisSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
@@ -73,7 +73,7 @@ export function adminChatAnalysisTriggerAnalysis(
 
 async function $do(
   client: GramCore,
-  request?: TriggerChatAnalysisRequest | undefined,
+  request: TriggerChatAnalysisRequest,
   security?: TriggerChatAnalysisSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
@@ -95,21 +95,23 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      z.parse(z.optional(TriggerChatAnalysisRequest$outboundSchema), value),
+    (value) => z.parse(TriggerChatAnalysisRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = null;
+  const body = encodeJSON("body", payload.TriggerAnalysisRequestBody, {
+    explode: true,
+  });
 
   const path = pathToFunc("/rpc/adminChatAnalysis.triggerAnalysis")();
 
   const headers = new Headers(compactMap({
+    "Content-Type": "application/json",
     Accept: "application/json",
-    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),

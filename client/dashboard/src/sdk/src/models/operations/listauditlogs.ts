@@ -43,6 +43,14 @@ export type ListAuditLogsRequest = {
    */
   subjectId?: string | undefined;
   /**
+   * Subject IDs to filter audit logs to a set of subjects at once, e.g. a resource together with the child resources whose events name the child as the subject. Matches any listed subject of any subject type, except that assistant activity events stay excluded unless subject_type is 'assistant'; combine with subject_type to pin the kind. Blank entries are ignored.
+   */
+  subjectIds?: Array<string> | undefined;
+  /**
+   * Acting surface to filter audit logs to changes made through one surface, e.g. 'platform_mcp' to review agent-driven activity alone.
+   */
+  actingSurface?: string | undefined;
+  /**
    * API Key header
    */
   gramKey?: string | undefined;
@@ -95,6 +103,8 @@ export type ListAuditLogsRequest$Outbound = {
   action?: string | undefined;
   subject_type?: string | undefined;
   subject_id?: string | undefined;
+  subject_ids?: Array<string> | undefined;
+  acting_surface?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
 };
@@ -111,6 +121,8 @@ export const ListAuditLogsRequest$outboundSchema: z.ZodMiniType<
     action: z.optional(z.string()),
     subjectType: z.optional(z.string()),
     subjectId: z.optional(z.string()),
+    subjectIds: z.optional(z.array(z.string())),
+    actingSurface: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
   }),
@@ -120,6 +132,8 @@ export const ListAuditLogsRequest$outboundSchema: z.ZodMiniType<
       actorId: "actor_id",
       subjectType: "subject_type",
       subjectId: "subject_id",
+      subjectIds: "subject_ids",
+      actingSurface: "acting_surface",
       gramKey: "Gram-Key",
       gramSession: "Gram-Session",
     });

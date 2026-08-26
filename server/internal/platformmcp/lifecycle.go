@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -91,10 +92,13 @@ func (s *RegistrationStore) IssueSetupHandoff(ctx context.Context, principal Pri
 	if s == nil || s.db == nil {
 		return IssuedSetupHandoff{}, ErrUnavailable
 	}
-	connectionID, generation, err := principalConnection(principal)
+	// A surface acting under assistant identity issues a handoff bound to its
+	// user; the dashboard completing it authenticates under its own session.
+	connectionID, generation, err := parseOptionalConnection(principal)
 	if err != nil {
 		return IssuedSetupHandoff{}, err
 	}
+	connection := principalConnectionPair(principal, connectionID, generation)
 	if err := validateSetupHandoffBinding(principal.OrganizationID, binding); err != nil {
 		return IssuedSetupHandoff{}, err
 	}
@@ -123,7 +127,7 @@ func (s *RegistrationStore) IssueSetupHandoff(ctx context.Context, principal Pri
 	}
 	lock := platformrepo.LockPlatformMCPSetupHandoffParams{
 		RegistrationID:       binding.RegistrationID.String(),
-		ConnectionID:         connectionID.String(),
+		ConnectionID:         handoffLockKey(principal, connectionID),
 		ConnectionGeneration: generation.String(),
 		Intent:               binding.Intent,
 	}
@@ -134,8 +138,9 @@ func (s *RegistrationStore) IssueSetupHandoff(ctx context.Context, principal Pri
 		OrganizationID:       principal.OrganizationID,
 		ProjectID:            binding.ProjectID,
 		RegistrationID:       binding.RegistrationID,
-		ConnectionID:         connectionID,
-		ConnectionGeneration: generation,
+		ConnectionID:         connection.id,
+		ConnectionGeneration: connection.generation,
+		UserID:               conv.ToPGText(principal.UserID),
 		Intent:               binding.Intent,
 	}); err != nil {
 		return IssuedSetupHandoff{}, fmt.Errorf("invalidate platform mcp setup handoffs: %w", err)
@@ -145,8 +150,10 @@ func (s *RegistrationStore) IssueSetupHandoff(ctx context.Context, principal Pri
 		OrganizationID:       principal.OrganizationID,
 		ProjectID:            binding.ProjectID,
 		RegistrationID:       binding.RegistrationID,
-		ConnectionID:         connectionID,
-		ConnectionGeneration: generation,
+		ConnectionID:         connection.id,
+		ConnectionGeneration: connection.generation,
+		UserID:               conv.ToPGText(principal.UserID),
+		ActingSurface:        conv.ToPGText(string(principal.surface())),
 		ProviderKey:          binding.ProviderKey,
 		Intent:               binding.Intent,
 		HandoffHash:          setupHandoffHash(value),
@@ -182,10 +189,13 @@ func (s *RegistrationStore) ConsumeSetupHandoff(ctx context.Context, principal P
 	if s == nil || s.db == nil {
 		return SetupHandoff{}, ErrUnavailable
 	}
-	connectionID, generation, err := principalConnection(principal)
+	// A handoff issued by a connection-less surface is redeemed by its user, so
+	// the redemption tolerates the absent pair the same way the lookup does.
+	connectionID, generation, err := parseOptionalConnection(principal)
 	if err != nil {
 		return SetupHandoff{}, err
 	}
+	connection := principalConnectionPair(principal, connectionID, generation)
 	if err := validateSetupHandoffBinding(principal.OrganizationID, binding); err != nil || value == "" {
 		return SetupHandoff{}, ErrSetupHandoffInvalid
 	}
@@ -211,8 +221,9 @@ func (s *RegistrationStore) ConsumeSetupHandoff(ctx context.Context, principal P
 		OrganizationID:       principal.OrganizationID,
 		ProjectID:            binding.ProjectID,
 		RegistrationID:       binding.RegistrationID,
-		ConnectionID:         connectionID,
-		ConnectionGeneration: generation,
+		ConnectionID:         connection.id,
+		ConnectionGeneration: connection.generation,
+		UserID:               conv.ToPGText(principal.UserID),
 		ProviderKey:          binding.ProviderKey,
 		Intent:               binding.Intent,
 		SubjectUrn:           userSubjectURN(principal.UserID),
@@ -247,7 +258,10 @@ func (s *RegistrationStore) BeginProviderSetup(ctx context.Context, principal Pr
 	if s == nil || s.db == nil {
 		return ProviderSetupResult{}, ErrUnavailable
 	}
-	connectionID, generation, err := principalConnection(principal)
+	// A handoff issued by a connection-less surface carries no connection to
+	// bind the setup to. The dashboard completing it is authenticated by its own
+	// session, so the setup is identified by the acting user instead.
+	connectionID, generation, err := parseOptionalConnection(principal)
 	if err != nil {
 		return ProviderSetupResult{}, err
 	}
@@ -275,7 +289,7 @@ func (s *RegistrationStore) BeginProviderSetup(ctx context.Context, principal Pr
 	if err != nil {
 		return ProviderSetupResult{}, fmt.Errorf("load platform mcp provider endpoint: %w", err)
 	}
-	if endpoint.McpServerID != registration.McpServerID.UUID || endpoint.Slug == "" || endpoint.CustomDomainID.Valid || endpoint.IsDomainRoot.Bool {
+	if !endpoint.McpServerID.Valid || endpoint.McpServerID.UUID != registration.McpServerID.UUID || endpoint.Slug == "" || endpoint.CustomDomainID.Valid || endpoint.IsDomainRoot.Bool {
 		return ProviderSetupResult{}, ErrSetupHandoffInvalid
 	}
 	preflight := ProviderSetupRequest{
@@ -318,7 +332,7 @@ func (s *RegistrationStore) ProbeProviderReadiness(ctx context.Context, principa
 	if s == nil || s.db == nil {
 		return Readiness{}, ErrUnavailable
 	}
-	connectionID, generation, err := principalConnection(principal)
+	connectionID, generation, err := parseConnection(principal)
 	if err != nil {
 		return Readiness{}, err
 	}
@@ -342,7 +356,12 @@ func (s *RegistrationStore) ProbeProviderReadiness(ctx context.Context, principa
 		Generation:          generation,
 	}
 	var result ProviderReadinessProbeResult
-	if isBrowserCatalogProviderKey(registration.CatalogProvider) {
+	// Browser catalogue and direct remote registrations both persist a Remote
+	// MCP source plus user-session issuer. Their readiness is therefore probed
+	// through that source instead of a reviewed fixture adapter. The provider
+	// key selects only the registration workflow; it must not make the same
+	// persisted source unreachable after direct registration joins onboarding.
+	if isBrowserCatalogProviderKey(registration.CatalogProvider) || registration.CatalogProvider == directRemoteProviderKey {
 		if len(generic) == 0 || generic[0] == nil {
 			return Readiness{}, ErrProviderAdapterUnavailable
 		}
@@ -389,6 +408,8 @@ func (s *RegistrationStore) GetProviderReadiness(ctx context.Context, principal 
 		RegistrationID:       registrationID,
 		ConnectionID:         connectionID,
 		ConnectionGeneration: generation,
+		UserID:               conv.ToPGText(principal.UserID),
+		ActingSurface:        conv.ToPGText(string(principal.surface())),
 	}); err != nil {
 		return Readiness{}, false, fmt.Errorf("delete expired platform mcp readiness: %w", err)
 	}
@@ -398,6 +419,8 @@ func (s *RegistrationStore) GetProviderReadiness(ctx context.Context, principal 
 		RegistrationID:       registrationID,
 		ConnectionID:         connectionID,
 		ConnectionGeneration: generation,
+		UserID:               conv.ToPGText(principal.UserID),
+		ActingSurface:        conv.ToPGText(string(principal.surface())),
 		SubjectUrn:           userSubjectURN(principal.UserID),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -415,6 +438,11 @@ func (s *RegistrationStore) GetProviderReadiness(ctx context.Context, principal 
 func (s *RegistrationStore) RecordReadiness(ctx context.Context, principal Principal, binding ReadinessBinding, state ReadinessState, evidenceCode string, checkedAt, expiresAt time.Time) (Readiness, error) {
 	if s == nil || s.db == nil {
 		return Readiness{}, ErrUnavailable
+	}
+	// Only the managed project assistant can persist readiness without an OAuth
+	// connection. External and dashboard setup probes remain connection-bound.
+	if !principal.HasConnection() && principal.surface() != SurfaceProjectAssistant {
+		return Readiness{}, ErrReadinessInvalid
 	}
 	connectionID, generation, err := principalConnection(principal)
 	if err != nil {
@@ -438,18 +466,36 @@ func (s *RegistrationStore) RecordReadiness(ctx context.Context, principal Princ
 		return Readiness{}, fmt.Errorf("load platform mcp readiness registration lifecycle: %w", err)
 	}
 
-	row, err := q.UpsertPlatformMCPReadiness(ctx, platformrepo.UpsertPlatformMCPReadinessParams{
+	fingerprint := binding.ProviderAuthorizationFingerprint
+	if !principal.HasConnection() {
+		// The retained legacy NULLS-NOT-DISTINCT binding index cannot distinguish
+		// connectionless actors. Scope its persisted key to this user and trusted
+		// surface as well as the provider's authorization state, so two assistants
+		// cannot collide before the assistant partial-index arbiter applies.
+		fingerprint = assistantReadinessFingerprint(fingerprint, principal.UserID, principal.surface())
+	}
+	readinessParams := platformrepo.UpsertPlatformMCPReadinessAssistantParams{
 		OrganizationID:                   principal.OrganizationID,
 		ProjectID:                        binding.ProjectID,
 		RegistrationID:                   binding.RegistrationID,
 		ConnectionID:                     connectionID,
 		ConnectionGeneration:             generation,
-		ProviderAuthorizationFingerprint: binding.ProviderAuthorizationFingerprint,
+		UserID:                           conv.ToPGText(principal.UserID),
+		ActingSurface:                    conv.ToPGText(string(principal.surface())),
+		ProviderAuthorizationFingerprint: fingerprint,
 		State:                            string(state),
 		EvidenceCode:                     optionalText(evidenceCode),
 		CheckedAt:                        timestamp(checkedAt),
 		ExpiresAt:                        optionalLifecycleTimestamp(expiresAt),
-	})
+	}
+	var row platformrepo.PlatformMcpReadiness
+	if principal.HasConnection() {
+		// Both generated query params deliberately share this exact persistence
+		// shape; conversion keeps the external write synchronized with it.
+		row, err = q.UpsertPlatformMCPReadinessExternal(ctx, platformrepo.UpsertPlatformMCPReadinessExternalParams(readinessParams))
+	} else {
+		row, err = q.UpsertPlatformMCPReadinessAssistant(ctx, readinessParams)
+	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		current, loadErr := q.GetPlatformMCPReadiness(ctx, platformrepo.GetPlatformMCPReadinessParams{
 			OrganizationID:                   principal.OrganizationID,
@@ -457,7 +503,9 @@ func (s *RegistrationStore) RecordReadiness(ctx context.Context, principal Princ
 			RegistrationID:                   binding.RegistrationID,
 			ConnectionID:                     connectionID,
 			ConnectionGeneration:             generation,
-			ProviderAuthorizationFingerprint: binding.ProviderAuthorizationFingerprint,
+			UserID:                           conv.ToPGText(principal.UserID),
+			ActingSurface:                    conv.ToPGText(string(principal.surface())),
+			ProviderAuthorizationFingerprint: fingerprint,
 		})
 		if loadErr == nil {
 			if err := tx.Commit(ctx); err != nil {
@@ -512,7 +560,7 @@ func (s *RegistrationStore) recordSetupFailure(ctx context.Context, principal Pr
 }
 
 func recordSetupMilestone(ctx context.Context, q *platformrepo.Queries, principal Principal, registration platformrepo.PlatformMcpCatalogRegistration, handoffID uuid.UUID, milestone string) error {
-	connectionID, generation, err := principalConnection(principal)
+	connectionID, generation, err := parseConnection(principal)
 	if err != nil {
 		return err
 	}
@@ -542,6 +590,10 @@ func isSetupMilestone(value string) bool {
 	}
 }
 
+// lifecycleRegistration resolves a registration the caller is entitled to act
+// on. Ownership matches the real user; a caller holding an OAuth connection
+// additionally has its generation checked live, which a connectionless surface
+// has no equivalent of and is instead authorized on every call upstream.
 func lifecycleRegistration(ctx context.Context, q *platformrepo.Queries, principal Principal, projectID, registrationID uuid.UUID) (platformrepo.PlatformMcpCatalogRegistration, error) {
 	connectionID, generation, err := principalConnection(principal)
 	if err != nil {
@@ -553,6 +605,7 @@ func lifecycleRegistration(ctx context.Context, q *platformrepo.Queries, princip
 		ProjectID:            projectID,
 		ConnectionID:         connectionID,
 		ConnectionGeneration: generation,
+		UserID:               conv.ToPGText(principal.UserID),
 		SubjectUrn:           userSubjectURN(principal.UserID),
 	})
 	if err != nil {
@@ -605,8 +658,8 @@ func setupHandoffFromRow(row platformrepo.PlatformMcpSetupHandoff) SetupHandoff 
 		ProviderKey:          row.ProviderKey,
 		Intent:               row.Intent,
 		ExpiresAt:            row.ExpiresAt.Time,
-		ConnectionID:         row.ConnectionID,
-		ConnectionGeneration: row.ConnectionGeneration,
+		ConnectionID:         row.ConnectionID.UUID,
+		ConnectionGeneration: row.ConnectionGeneration.UUID,
 	}
 }
 
@@ -619,8 +672,8 @@ func readinessFromRow(row platformrepo.PlatformMcpReadiness, now time.Time) Read
 		EvidenceCode:         row.EvidenceCode.String,
 		CheckedAt:            row.CheckedAt.Time,
 		ExpiresAt:            row.ExpiresAt.Time,
-		ConnectionID:         row.ConnectionID,
-		ConnectionGeneration: row.ConnectionGeneration,
+		ConnectionID:         row.ConnectionID.UUID,
+		ConnectionGeneration: row.ConnectionGeneration.UUID,
 		Fresh:                row.ExpiresAt.Valid && row.ExpiresAt.Time.After(now),
 	}
 }

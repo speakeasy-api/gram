@@ -72,10 +72,11 @@ func (s *FeedbackService) Submit(ctx context.Context, principal Principal, input
 		return FeedbackResult{}, err
 	}
 
-	connectionID, generation, err := principalConnection(principal)
+	connectionID, generation, err := parseOptionalConnection(principal)
 	if err != nil {
 		return FeedbackResult{}, ErrFeedbackInvalid
 	}
+	pair := principalConnectionPair(principal, connectionID, generation)
 	inputHash := feedbackInputHash(input)
 	now := s.now().UTC()
 
@@ -86,15 +87,20 @@ func (s *FeedbackService) Submit(ctx context.Context, principal Principal, input
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	q := repo.New(tx)
-	connection, err := q.GetActivePlatformMCPConnectionForFeedbackForUpdate(ctx, repo.GetActivePlatformMCPConnectionForFeedbackForUpdateParams{
-		ID:             connectionID,
-		OrganizationID: principal.OrganizationID,
-	})
-	if errors.Is(err, pgx.ErrNoRows) || err == nil && (connection.SubjectUrn != userSubjectURN(principal.UserID) || connection.ActiveGeneration != generation) {
-		return FeedbackResult{}, ErrFeedbackForbidden
-	}
-	if err != nil {
-		return FeedbackResult{}, fmt.Errorf("resolve active platform mcp feedback connection: %w", err)
+	// A connection-less caller has no connection row to resolve. Its identity is
+	// the authenticated user the surface acts for, which the subject URN on the
+	// stored row records.
+	if pair.id.Valid {
+		connection, err := q.GetActivePlatformMCPConnectionForFeedbackForUpdate(ctx, repo.GetActivePlatformMCPConnectionForFeedbackForUpdateParams{
+			ID:             connectionID,
+			OrganizationID: principal.OrganizationID,
+		})
+		if errors.Is(err, pgx.ErrNoRows) || err == nil && (connection.SubjectUrn != userSubjectURN(principal.UserID) || connection.ActiveGeneration != generation) {
+			return FeedbackResult{}, ErrFeedbackForbidden
+		}
+		if err != nil {
+			return FeedbackResult{}, fmt.Errorf("resolve active platform mcp feedback connection: %w", err)
+		}
 	}
 	if err := q.LockPlatformMCPFeedbackOrganization(ctx, principal.OrganizationID); err != nil {
 		return FeedbackResult{}, fmt.Errorf("lock platform mcp feedback organization: %w", err)
@@ -129,13 +135,19 @@ func (s *FeedbackService) Submit(ctx context.Context, principal Principal, input
 	}
 
 	since := pgtype.Timestamptz{Time: now.Add(-time.Hour), Valid: true}
-	connectionCount, err := q.CountRecentPlatformMCPFeedbackByConnection(ctx, repo.CountRecentPlatformMCPFeedbackByConnectionParams{
-		OrganizationID: principal.OrganizationID,
-		ConnectionID:   uuid.NullUUID{UUID: connectionID, Valid: true},
-		Since:          since,
-	})
-	if err != nil {
-		return FeedbackResult{}, fmt.Errorf("count platform mcp feedback by connection: %w", err)
+	// A connection-less caller has no connection to meter, so only the
+	// organization limit below bounds it — the same shape the operation budget
+	// uses for such a caller.
+	connectionCount := int64(0)
+	if pair.id.Valid {
+		connectionCount, err = q.CountRecentPlatformMCPFeedbackByConnection(ctx, repo.CountRecentPlatformMCPFeedbackByConnectionParams{
+			OrganizationID: principal.OrganizationID,
+			ConnectionID:   pair.id,
+			Since:          since,
+		})
+		if err != nil {
+			return FeedbackResult{}, fmt.Errorf("count platform mcp feedback by connection: %w", err)
+		}
 	}
 	if connectionCount >= feedbackConnectionHourlyLimit {
 		return FeedbackResult{}, ErrFeedbackRateLimited
@@ -154,8 +166,8 @@ func (s *FeedbackService) Submit(ctx context.Context, principal Principal, input
 	created, err := q.CreatePlatformMCPFeedback(ctx, repo.CreatePlatformMCPFeedbackParams{
 		OrganizationID:       principal.OrganizationID,
 		SubjectUrn:           userSubjectURN(principal.UserID),
-		ConnectionID:         uuid.NullUUID{UUID: connectionID, Valid: true},
-		ConnectionGeneration: uuid.NullUUID{UUID: generation, Valid: true},
+		ConnectionID:         pair.id,
+		ConnectionGeneration: pair.generation,
 		Category:             input.Category,
 		Rating:               optionalFeedbackRating(input.Rating),
 		Success:              optionalFeedbackSuccess(input.Success),
@@ -270,7 +282,7 @@ func hasEmbeddedURIScheme(value string) bool {
 }
 
 func hasUnsafeFeedbackPath(value string) bool {
-	for _, word := range strings.Fields(value) {
+	for word := range strings.FieldsSeq(value) {
 		trimmed := strings.Trim(word, "([{\"'")
 		trimmed = strings.TrimRight(trimmed, ".,;:!?)]}\"")
 		if trimmed == "" {
@@ -372,7 +384,7 @@ func optionalFeedbackText(value string) pgtype.Text {
 var knownPlatformMCPToolNames = map[string]struct{}{
 	"get_platform_context":                  {},
 	"list_projects":                         {},
-	"list_project_mcps":                     {},
+	"find_mcp":                              {},
 	"get_mcp":                               {},
 	"search_mcp_catalog":                    {},
 	"inspect_mcp_candidate":                 {},
@@ -380,11 +392,16 @@ var knownPlatformMCPToolNames = map[string]struct{}{
 	"get_setup_handoff":                     {},
 	"get_mcp_readiness":                     {},
 	"get_mcp_repair_plan":                   {},
-	"distribute_mcp_to_default_plugin":      {},
-	"remove_mcp_from_default_plugin":        {},
-	"register_platform_mcp_for_project":     {},
-	"get_platform_mcp_onboarding_status":    {},
+	"register_remote_mcp":                   {},
 	"attach_platform_mcp_identity_provider": {},
-	"add_platform_mcp_to_default_plugin":    {},
+	"distribute_mcp_to_plugin":              {},
+	"remove_mcp_from_plugin":                {},
+	"update_mcp_metadata":                   {},
+	"disable_mcp":                           {},
+	"enable_mcp":                            {},
+	"list_plugins":                          {},
+	"get_plugin":                            {},
+	"get_mcp_client_admission":              {},
+	"set_mcp_client_admission":              {},
 	"send_platform_mcp_feedback":            {},
 }

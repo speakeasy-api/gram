@@ -14,6 +14,8 @@ export interface LogWorkbenchProps {
   description?: React.ReactNode;
   actions?: React.ReactNode;
   filters?: React.ReactNode;
+  /** Full-width row (e.g. a summary chart) between the filters and the log surface. */
+  summary?: React.ReactNode;
   status?: React.ReactNode;
   header?: React.ReactNode;
   children: React.ReactNode;
@@ -33,6 +35,7 @@ export function LogWorkbench({
   description,
   actions,
   filters,
+  summary,
   status,
   header,
   children,
@@ -73,6 +76,8 @@ export function LogWorkbench({
             <div className="flex flex-wrap items-center gap-4">{filters}</div>
           ) : null}
         </div>
+
+        {summary ? <div className="shrink-0">{summary}</div> : null}
 
         {/* Inset the table in a bordered card so it doesn't run full-bleed to
             the page edges — matching the Tool Logs page layout. */}

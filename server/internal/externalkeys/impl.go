@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -30,6 +31,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpauth"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpkms"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -41,7 +44,10 @@ type Service struct {
 	auth            *auth.Auth
 	authz           *authz.Engine
 	audit           *audit.Logger
+	gcpIdentity     *gcpauth.Identity
+	kmsClients      gcpkms.SigningClientFactory
 	productFeatures *productfeatures.Client
+	verifyLimiter   *ratelimit.Limiter
 }
 
 var (
@@ -52,11 +58,15 @@ var (
 func NewService(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
+	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
+	gcpIdentity *gcpauth.Identity,
+	kmsClients gcpkms.SigningClientFactory,
 	productFeatures *productfeatures.Client,
+	verifyStore ratelimit.Store,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("externalkeys"))
 
@@ -67,7 +77,12 @@ func NewService(
 		auth:            auth.New(logger, db, sessions, authzEngine),
 		authz:           authzEngine,
 		audit:           auditLogger,
+		gcpIdentity:     gcpIdentity,
+		kmsClients:      kmsClients,
 		productFeatures: productFeatures,
+		verifyLimiter: ratelimit.New(verifyStore, "external-key-verify",
+			ratelimit.PerMinute(verifyRatePerMin).WithBurst(verifyRateBurst),
+			ratelimit.WithMetrics(meterProvider)),
 	}
 }
 
@@ -549,13 +564,12 @@ func (s *Service) DeleteGcpKmsKey(ctx context.Context, payload *gen.DeleteGcpKms
 // because a published JWK is a permanent, externally cached promise — verifiers
 // cache a kid and expect it to keep verifying for as long as it is published.
 // The guard is application-level and has to be: `deleted` is a generated column,
-// so a soft delete never fires either foreign key. See
-// ExternalKeyHasJsonWebKeyReferences for why the lock mode below matters and why
-// the foreign keys are deliberately NO ACTION rather than RESTRICT.
+// so a soft delete never fires either foreign key. The row lock below must stay
+// FOR UPDATE, because a JWKS insert takes FOR KEY SHARE on this row and only
+// FOR UPDATE conflicts with that.
 //
-// The refusal path has no test here: no Go package owns json_web_key_sets /
-// json_web_keys yet, and tests may not write raw SQL. AIS-240 introduces that
-// repo and owns the coverage.
+// The refusal path's coverage lives with the jsonwebkeysets package tests,
+// which own the JWKS fixtures this package's tests cannot create.
 func (s *Service) deleteExternalKey(ctx context.Context, provider, rawID string) error {
 	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
 	if err != nil {

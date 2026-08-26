@@ -87,25 +87,12 @@ describe("countPluginInstalls", () => {
     ).toBe(1);
   });
 
-  it("matches role assignments stored in the legacy role:<slug> form", () => {
-    const syncedUsers = [synced("member@corp.com")];
-    const members = [member("u1", "member@corp.com", ["role-eng"])];
-    expect(
-      countPluginInstalls(
-        [assignment("role:engineering")],
-        syncedUsers,
-        members,
-        [engineering],
-      ),
-    ).toBe(1);
-  });
-
   it("does not double-count a user matched by multiple assignments", () => {
     const syncedUsers = [synced("member@corp.com")];
     const members = [member("u1", "member@corp.com", ["role-eng"])];
     expect(
       countPluginInstalls(
-        [assignment("user:u1"), assignment("role:engineering")],
+        [assignment("user:u1"), assignment("role:organization:role-eng")],
         syncedUsers,
         members,
         [engineering],

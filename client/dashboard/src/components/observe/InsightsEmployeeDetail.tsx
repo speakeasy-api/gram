@@ -29,8 +29,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/Tooltip";
-import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
-import { SessionRow } from "@/components/sessions/SessionRow";
+import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
+import { ConnectionsListSection } from "@/components/connections/ConnectionsListSection";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
@@ -174,10 +174,17 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
     isLoading: membersLoading,
     error: membersError,
   } = useMembers();
-  const routeUser = useMemo(
-    () => (userSlug ? decodeURIComponent(userSlug) : ""),
-    [userSlug],
-  );
+  // React Router has already decoded the path param once; this second decode
+  // exists for callers that double-encode. A raw '%' in a telemetry-derived
+  // email makes it throw, so a segment that no longer decodes is used as-is.
+  const routeUser = useMemo(() => {
+    if (!userSlug) return "";
+    try {
+      return decodeURIComponent(userSlug);
+    } catch {
+      return userSlug;
+    }
+  }, [userSlug]);
   const members = useMemo(() => membersData?.members ?? [], [membersData]);
   const member = useMemo(
     () =>
@@ -708,31 +715,21 @@ function EmployeeSessions({ userId }: { userId: string }): JSX.Element {
           <Icon name="key-round" className="text-muted-foreground size-4" />
         </div>
       </div>
-      {isPending ? (
-        <Skeleton className="h-12 w-full" />
-      ) : isError ? (
-        <button
-          type="button"
-          onClick={() => void refetch()}
-          className="text-destructive text-sm underline-offset-2 hover:underline"
-        >
-          Couldn&apos;t load sessions — retry
-        </button>
-      ) : sessions.length === 0 ? (
-        <span className="text-muted-foreground text-sm">
-          No active sessions
-        </span>
-      ) : (
-        <ul className="divide-border max-h-80 divide-y overflow-y-auto border">
-          {sessions.map((s) => (
-            <SessionRow
-              key={s.id}
-              session={s}
-              onRevoked={() => void refetch()}
-            />
-          ))}
-        </ul>
-      )}
+      {/* The same component the organization page and the MCP server detail tab
+          render, already scoped to this person — so a connection reads
+          identically wherever an admin meets it. Grouped by provider here:
+          within one person's page, who they are is a given and what they reach
+          is the question. */}
+      <ConnectionsListSection
+        sessions={sessions}
+        isPending={isPending}
+        isError={isError}
+        onRetry={() => void refetch()}
+        onRevoked={() => void refetch()}
+        defaultGrouping="provider"
+        emptyHeading="No active connections"
+        emptyDescription="This person has no live MCP connections."
+      />
     </section>
   );
 }
@@ -1067,7 +1064,7 @@ function DataFlowNodeVisual({
   if (node.tier === "client" && !isSummary) {
     return (
       <span className="border-border bg-background inline-flex size-7 items-center justify-center border">
-        <HookSourceIcon source={node.label} className="size-4" />
+        <AgentProviderIcon source={node.label} className="size-4" />
       </span>
     );
   }

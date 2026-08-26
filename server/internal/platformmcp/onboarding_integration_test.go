@@ -25,8 +25,8 @@ func TestOnboardingServicePersistsWorkflowAndUsesSubjectQualifiedEvidence(t *tes
 		CatalogProvider:      "fixture",
 		CatalogReference:     "onboarding-test",
 		Status:               registrationStatusPending,
-		ConnectionID:         connectionIDFromPrincipal(t, principal),
-		ConnectionGeneration: connectionIDFromPrincipalGeneration(t, principal),
+		ConnectionID:         uuid.NullUUID{UUID: connectionIDFromPrincipal(t, principal), Valid: true},
+		ConnectionGeneration: uuid.NullUUID{UUID: connectionIDFromPrincipalGeneration(t, principal), Valid: true},
 	})
 	require.NoError(t, err)
 	service := NewOnboardingService(conn)
@@ -40,9 +40,10 @@ func TestOnboardingServicePersistsWorkflowAndUsesSubjectQualifiedEvidence(t *tes
 	started, err := service.Start(ctx, principal.OrganizationID, principal.UserID)
 	require.NoError(t, err)
 	require.NotNil(t, started.Workflow)
-	require.Equal(t, onboardingSourceDashboard, started.Workflow.SourceSurface)
+	require.Equal(t, string(OnboardingSourcePlatformMCPSettings), started.Workflow.SourceSurface)
 	require.Equal(t, OnboardingClientClaudeCode, started.Workflow.ClientFamily)
 	require.Equal(t, OnboardingStageAuthorized, started.Stage)
+	require.False(t, started.OrganizationSetupComplete)
 
 	resumed, err := service.Start(ctx, principal.OrganizationID, principal.UserID)
 	require.NoError(t, err)
@@ -63,6 +64,10 @@ func TestOnboardingServicePersistsWorkflowAndUsesSubjectQualifiedEvidence(t *tes
 	require.NotNil(t, intent.Workflow)
 	require.Equal(t, started.Workflow.ID, intent.Workflow.ID)
 	require.Equal(t, OnboardingClientCursor, intent.Workflow.ClientFamily)
+
+	reselected, err := service.RecordInstallIntent(ctx, principal.OrganizationID, principal.UserID, OnboardingClientClaudeCode)
+	require.NoError(t, err, "re-selecting an agent in the same workflow is idempotent")
+	require.Equal(t, OnboardingClientClaudeCode, reselected.Workflow.ClientFamily)
 
 	configurationCopied, err := service.RecordAgentConfigurationCopied(ctx, principal.OrganizationID, principal.UserID)
 	require.NoError(t, err)
@@ -86,12 +91,40 @@ func TestOnboardingServicePersistsWorkflowAndUsesSubjectQualifiedEvidence(t *tes
 	require.True(t, readinessVerified.ReadinessVerified)
 
 	connectionID := connectionIDFromPrincipal(t, principal)
+	connectionGeneration := connectionIDFromPrincipalGeneration(t, principal)
+	require.NoError(t, platformrepo.New(conn).RecordPlatformMCPFirstValueAchieved(ctx, platformrepo.RecordPlatformMCPFirstValueAchievedParams{
+		OrganizationID:       principal.OrganizationID,
+		ConnectionID:         uuid.NullUUID{UUID: connectionID, Valid: true},
+		ConnectionGeneration: uuid.NullUUID{UUID: connectionGeneration, Valid: true},
+		ProjectID:            uuid.NullUUID{UUID: project.ID, Valid: true},
+		McpKey:               "platform-mcp:first-value",
+	}))
+	completed, err := service.Get(ctx, principal.OrganizationID, principal.UserID)
+	require.NoError(t, err)
+	require.True(t, completed.OrganizationSetupComplete, "durable first value hides promotion for the organization")
+
 	newGeneration := uuid.New()
+	now := time.Now().UTC()
 	_, err = platformrepo.New(conn).RotatePlatformMCPConnectionGeneration(ctx, platformrepo.RotatePlatformMCPConnectionGenerationParams{
-		ActiveGeneration: newGeneration,
-		ReauthorizedAt:   timestamp(time.Now().UTC()),
-		ConnectionID:     connectionID,
-		OrganizationID:   principal.OrganizationID,
+		ActiveGeneration:       newGeneration,
+		ReauthorizedAt:         timestamp(now),
+		AuthorizationExpiresAt: timestamp(now.Add(90 * 24 * time.Hour)),
+		ConnectionID:           connectionID,
+		OrganizationID:         principal.OrganizationID,
+	})
+	require.NoError(t, err)
+	currentConnection, err := platformrepo.New(conn).GetActivePlatformMCPConnectionByID(ctx, platformrepo.GetActivePlatformMCPConnectionByIDParams{ID: connectionID, OrganizationID: principal.OrganizationID})
+	require.NoError(t, err)
+	_, err = platformrepo.New(conn).CreatePlatformMCPSession(ctx, platformrepo.CreatePlatformMCPSessionParams{
+		ID:                   uuid.New(),
+		OrganizationID:       principal.OrganizationID,
+		ConnectionID:         connectionID,
+		OauthClientID:        currentConnection.OauthClientID,
+		ConnectionGeneration: newGeneration,
+		Jti:                  "jti-" + uuid.NewString(),
+		RefreshTokenHash:     "refresh-" + uuid.NewString(),
+		ExpiresAt:            timestamp(now.Add(time.Hour)),
+		RefreshExpiresAt:     timestamp(now.Add(30 * 24 * time.Hour)),
 	})
 	require.NoError(t, err)
 	principal.Generation = newGeneration.String()

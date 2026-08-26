@@ -350,6 +350,39 @@ WHERE toolset_id = ANY(@toolset_ids::uuid[])
   AND deleted IS FALSE
 ORDER BY toolset_id, version DESC;
 
+-- name: ToolsetHasExternalMCPProxy :one
+WITH latest_toolset_version AS (
+  SELECT tv.tool_urns
+  FROM toolsets t
+  JOIN toolset_versions tv ON tv.toolset_id = t.id
+  WHERE t.id = @toolset_id
+    AND t.project_id = @project_id
+    AND t.deleted IS FALSE
+    AND tv.deleted IS FALSE
+  ORDER BY tv.version DESC
+  LIMIT 1
+),
+active_deployment AS (
+  SELECT d.id
+  FROM deployments d
+  JOIN deployment_statuses ds ON ds.deployment_id = d.id
+  WHERE d.project_id = @project_id
+    AND ds.status = 'completed'
+  ORDER BY d.id DESC
+  LIMIT 1
+)
+SELECT EXISTS (
+  SELECT 1
+  FROM latest_toolset_version tv
+  CROSS JOIN LATERAL unnest(tv.tool_urns) AS tool_urn(value)
+  JOIN external_mcp_tool_definitions etd ON etd.tool_urn = tool_urn.value
+  JOIN external_mcp_attachments ea ON ea.id = etd.external_mcp_attachment_id
+  WHERE ea.deployment_id = (SELECT id FROM active_deployment)
+    AND etd.type = 'proxy'
+    AND etd.deleted IS FALSE
+    AND ea.deleted IS FALSE
+);
+
 -- name: GetToolsetPromptTemplateNames :many
 SELECT tp.prompt_name
 FROM toolset_prompts tp

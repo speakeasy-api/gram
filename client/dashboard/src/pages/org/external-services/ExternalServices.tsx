@@ -1,4 +1,4 @@
-import { Page } from "@/components/page-layout";
+import { CustomerManagedKeysGate } from "@/components/customer-managed-keys-gate";
 import { ResourceListPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
 import { Dialog } from "@/components/ui/Dialog";
@@ -13,7 +13,6 @@ import {
   invalidateAllListExternalCredentials,
   useListExternalCredentials,
 } from "@gram/client/react-query/listExternalCredentials";
-import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useVerifyGcpIamCredentialMutation } from "@gram/client/react-query/verifyGcpIamCredential";
 import { Button } from "@/components/ui/Button";
 import {
@@ -32,8 +31,17 @@ import { toast } from "sonner";
 import { CreateExternalCredentialSheet } from "./CreateExternalCredentialSheet";
 import { providerLabel, providerSlug } from "./providers";
 
+// The scope and entitlement gates sit on the route root so every page beneath
+// it (the list and each credential's detail page) is covered, and so no
+// protected request fires for a visitor lacking the page scope.
 export function ExternalServicesRoot(): JSX.Element {
-  return <Outlet />;
+  return (
+    <RequireScope scope={["org:read", "org:admin"]} level="page">
+      <CustomerManagedKeysGate>
+        <Outlet />
+      </CustomerManagedKeysGate>
+    </RequireScope>
+  );
 }
 
 // The probe reports the principal it resolved, but an identity source that
@@ -42,51 +50,10 @@ function verifiedMessage(principal: string | undefined): string {
   if (!principal) {
     return "Verified.";
   }
-  return `Gram can impersonate ${principal}.`;
+  return `Speakeasy can impersonate ${principal}.`;
 }
 
 export function ExternalServicesPage(): JSX.Element {
-  // Gate first so no protected request (product-feature read, credential list)
-  // fires for a visitor lacking the page scope.
-  return (
-    <RequireScope scope={["org:read", "org:admin"]} level="page">
-      <ExternalServicesGate />
-    </RequireScope>
-  );
-}
-
-// Product-feature (entitlement) gate, mounted only after the RBAC scope gate
-// passes. A gated-but-authorized org sees only the framed refusal, with no
-// header or toolbar.
-function ExternalServicesGate(): JSX.Element {
-  const { data: features, isLoading: featuresLoading } = useProductFeatures(
-    undefined,
-    undefined,
-    { staleTime: 30_000, throwOnError: false },
-  );
-
-  // The sidebar entry is already hidden without the entitlement; this covers a
-  // direct URL. Treat "still loading" and "the read failed" as not-yet-known so
-  // an entitled organization never flashes the gate.
-  const gated =
-    !featuresLoading &&
-    features?.customerManagedEncryptionKeysEnabled === false;
-
-  if (gated) {
-    return (
-      <Page>
-        <Page.Header>
-          <Page.Header.Breadcrumbs />
-        </Page.Header>
-        <Page.Body>
-          <Text muted className="py-8 text-center">
-            Customer-managed keys are not enabled for this organization.
-          </Text>
-        </Page.Body>
-      </Page>
-    );
-  }
-
   return <ExternalServicesOverview />;
 }
 
@@ -134,7 +101,7 @@ function ExternalServicesOverview(): JSX.Element {
     <>
       <ResourceListPage
         title="External Services"
-        description="How Gram authenticates into your cloud account to reach the keys you manage there. Gram impersonates a service account you nominate, so it never holds long-lived credentials of your own."
+        description="How Speakeasy authenticates into your cloud account to reach the keys you manage there. Speakeasy impersonates a service account you nominate, so it never holds long-lived credentials of your own."
         primaryAction={
           <RequireScope scope="org:admin" level="component">
             <Button size="sm" onClick={() => setCreateOpen(true)}>

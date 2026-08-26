@@ -81,6 +81,15 @@ linters:
         linters:
           - gosec
         text: G304
+      # An audit record's acting surface and client describe the request, not
+      # the event, so (*audit.Logger).log stamps them from the context for every
+      # audited mutation. Requiring each event to name them would invite call
+      # sites to set them individually, which is the drift the central stamp
+      # exists to prevent. Every other field of the struct stays enforced.
+      - path: internal/audit/
+        linters:
+          - exhaustruct
+        text: InsertAuditLogParams is missing fields ActingSurface, ActingClientID
       - path: internal/dns/net_resolver\.go
         linters:
           - wrapcheck
@@ -95,6 +104,14 @@ linters:
         linters:
           - gosec
         text: G306
+      # NOT a false positive: the local development seed deliberately provisions
+      # a well-known API key so mise.toml can ship it as a default. It only
+      # ever exists in a developer's own database, and it carries a `local`
+      # marker in its prefix. See seed/demo/README.md.
+      - path: internal/demoseed/(local|mcpapp)\.go
+        linters:
+          - gosec
+        text: G101
       # False positives that scope constants are somehow hardcoded credentials.
       - path: internal/access/scopes\.go
         linters:
@@ -460,6 +477,7 @@ linters:
         - "(go.temporal.io/sdk/internal.Future).Get("
         - "(github.com/stretchr/testify/mock.Arguments).Error("
 
+        - "github.com/speakeasy-api/gram/server/internal/o11y.LogError("
         - "github.com/speakeasy-api/gram/server/internal/oops.C("
         - "github.com/speakeasy-api/gram/server/internal/oops.E("
         - "github.com/speakeasy-api/gram/server/internal/oops.Permanent("
@@ -471,11 +489,13 @@ linters:
         - "(*github.com/speakeasy-api/gram/server/internal/access.Manager).Filter("
         - "(*github.com/speakeasy-api/gram/server/internal/access.Manager).PrepareContext("
         - "github.com/speakeasy-api/gram/server/internal/access.RequireStaffForUnproxiedMcp("
+        - "github.com/speakeasy-api/gram/server/internal/auth.RequirePlatformAdmin("
         - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).Require("
         - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).RequireAny("
         - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).Filter("
         - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).ShouldEnforce("
         - "github.com/speakeasy-api/gram/server/internal/authz.GrantsForRole("
+        - "github.com/speakeasy-api/gram/server/internal/organizations/orgprovision.ValidateName("
         - "(*github.com/speakeasy-api/gram/server/internal/auth.Auth).Authorize("
         - "(*github.com/speakeasy-api/gram/server/internal/auth/chatsessions.Manager).Authorize("
         - "(*github.com/speakeasy-api/gram/server/internal/auth.Auth).CheckProjectAccess("

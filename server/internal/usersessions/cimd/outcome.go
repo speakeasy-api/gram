@@ -25,7 +25,7 @@ const (
 	OutcomeUnparseable Outcome = "unparseable"
 
 	// OutcomeInvalidDocument means the body parsed as JSON but the document
-	// violates the spec or Gram's origin-binding policy. Reason carries the
+	// violates the spec or this server's policy rules. Reason carries the
 	// specific rule.
 	OutcomeInvalidDocument Outcome = "invalid_document"
 )

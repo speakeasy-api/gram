@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"slices"
 	"strings"
 	"time"
@@ -19,6 +20,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
 	srv "github.com/speakeasy-api/gram/server/gen/http/agent/server"
 	"github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -31,19 +33,30 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
+// ProductFeaturesClient is the slice of the product-features client the agent
+// service needs; declared here (mirroring hooks.ProductFeaturesClient) so
+// tests can stub feature state without a database round-trip.
+type ProductFeaturesClient interface {
+	IsFeatureEnabled(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error)
+}
+
 type Service struct {
-	tracer    trace.Tracer
-	logger    *slog.Logger
-	db        *pgxpool.Pool
-	repo      *repo.Queries
-	auth      *auth.Auth
-	authz     *authz.Engine
-	audit     *audit.Logger
-	serverURL string
+	tracer          trace.Tracer
+	logger          *slog.Logger
+	db              *pgxpool.Pool
+	repo            *repo.Queries
+	auth            *auth.Auth
+	authz           *authz.Engine
+	audit           *audit.Logger
+	productFeatures ProductFeaturesClient
+	serverURL       string
+	blobStore       assets.BlobStore
 }
 
 var (
@@ -59,18 +72,22 @@ func NewService(
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
+	productFeatures ProductFeaturesClient,
 	serverURL string,
+	blobStore assets.BlobStore,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("agent"))
 	return &Service{
-		tracer:    tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/agent"),
-		logger:    logger,
-		db:        db,
-		repo:      repo.New(db),
-		auth:      auth.New(logger, db, sessions, authzEngine),
-		authz:     authzEngine,
-		audit:     auditLogger,
-		serverURL: serverURL,
+		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/agent"),
+		logger:          logger,
+		db:              db,
+		repo:            repo.New(db),
+		auth:            auth.New(logger, db, sessions, authzEngine),
+		authz:           authzEngine,
+		audit:           auditLogger,
+		productFeatures: productFeatures,
+		serverURL:       serverURL,
+		blobStore:       blobStore,
 	}
 }
 
@@ -82,6 +99,9 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		mux,
 		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
 	)
+	// Public capability-URL route for minted session handoffs (see
+	// handoffs.go): unauthenticated by design, the token is the credential.
+	o11y.AttachHandler(mux, http.MethodGet, "/shared/handoffs/{token}", oops.ErrHandle(service.logger, service.ServeSessionHandoff).ServeHTTP)
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
@@ -90,21 +110,23 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 
 // GetPlugins returns every plugin assigned to the device user's resolved
 // principal set within the caller's org, marketplace-first. From the polling
-// user's email it resolves email → user_id, then RBAC role membership, to
-// produce the user:<id>, user:all, and role:<...> principals; the email
-// principal and the org wildcard are always included so email- and
-// everyone-scoped assignments still deliver.
+// user's email it resolves directory audiences, email → user_id, then RBAC
+// role membership, to produce directory_group:<id>, directory_attribute:<...>,
+// user:<id>, user:all, and role:<...> principals; the email principal and the
+// org wildcard are always included so email- and everyone-scoped assignments
+// still deliver.
 //
 // The polling identity is resolved by credential type (DNO-383), because who
 // the key belongs to differs:
 //   - Per-user key (`agent_user`): the key owner IS the enrolled developer
 //     (minted by token-exchange or manual enrollment), so the polling identity
-//     is the authenticated key owner (authCtx.Email) and the vouched `email`
-//     param is ignored. Delivery is bound to the authenticated principal.
+//     is the authenticated key owner (authCtx.Email) and the vouched email is
+//     ignored. Delivery is bound to the authenticated principal.
 //   - Org install key (`agent` scope): the key owner is whoever minted the org
 //     token in the dashboard (an admin), NOT the developer. The polling identity
-//     is the vouched `email` param the MDM profile supplies — required here.
-//     This is the zero-touch MDM path where the developer never signs in.
+//     is the vouched email the MDM profile supplies in the Gram-User-Email
+//     header — required here. This is the zero-touch MDM path where the
+//     developer never signs in.
 //
 // SECURITY: a per-user `agent_user` key's polling identity is the authenticated
 // key owner, so it cannot claim another member's user-/role-scoped plugins. An
@@ -170,10 +192,15 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 	var email string
 	if isInstallKey {
 		// Org key: the owner is an admin, not the developer, so we must be vouched
-		// an email — the MDM profile supplies it.
-		email = conv.NormalizeEmail(payload.Email)
+		// an email — the MDM profile supplies it via the Gram-User-Email header,
+		// or the deprecated `?email=` param on agents predating it.
+		vouched := conv.PtrValOr(payload.Email, "")
+		if vouched == "" {
+			vouched = conv.PtrValOr(payload.LegacyEmail, "")
+		}
+		email = conv.NormalizeEmail(vouched)
 		if email == "" {
-			return nil, oops.E(oops.CodeBadRequest, nil, "email is required when authenticating with an org-scoped agent install key")
+			return nil, oops.E(oops.CodeBadRequest, nil, "a vouched email is required when authenticating with an org-scoped agent install key; send it in the Gram-User-Email header")
 		}
 	} else if authCtx.Email != nil {
 		// Per-user key: the owner is the enrolled developer, bound to the token.
@@ -226,9 +253,14 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 	// Assignments can target the email or the org wildcard directly; those always
 	// apply regardless of whether the email maps to an org member.
 	principals := []string{emailPrincipal.String(), urn.PrincipalWildcard}
+	directoryAudiences, err := plugins.ResolveDirectoryAudiencePrincipalsByEmails(ctx, s.db, authCtx.ActiveOrganizationID, []string{email})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent directory audiences").LogError(ctx, s.logger)
+	}
+	principals = append(principals, directoryAudiences[email]...)
 
 	// Resolve the reported email to an org member so user:<id>, user:all, and
-	// role:<...> assignments deliver too. A non-member (or unknown email) is not
+	// role:<kind>:<uuid> assignments deliver too. A non-member (or unknown email) is not
 	// an error: the caller still receives email- and wildcard-scoped plugins.
 	user, err := usersrepo.New(s.db).GetConnectedUserByEmail(ctx, usersrepo.GetConnectedUserByEmailParams{
 		Email:          email,

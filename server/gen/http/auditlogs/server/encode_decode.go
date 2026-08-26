@@ -36,14 +36,17 @@ func DecodeListRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.De
 	return func(r *http.Request) (*auditlogs.ListPayload, error) {
 		var payload *auditlogs.ListPayload
 		var (
-			cursor       *string
-			projectSlug  *string
-			actorID      *string
-			action       *string
-			subjectType  *string
-			subjectID    *string
-			apikeyToken  *string
-			sessionToken *string
+			cursor        *string
+			projectSlug   *string
+			actorID       *string
+			action        *string
+			subjectType   *string
+			subjectID     *string
+			subjectIds    []string
+			actingSurface *string
+			apikeyToken   *string
+			sessionToken  *string
+			err           error
 		)
 		qp := r.URL.Query()
 		cursorRaw := qp.Get("cursor")
@@ -70,6 +73,14 @@ func DecodeListRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.De
 		if subjectIDRaw != "" {
 			subjectID = &subjectIDRaw
 		}
+		subjectIds = qp["subject_ids"]
+		if len(subjectIds) > 200 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("subject_ids", subjectIds, len(subjectIds), 200, false))
+		}
+		actingSurfaceRaw := qp.Get("acting_surface")
+		if actingSurfaceRaw != "" {
+			actingSurface = &actingSurfaceRaw
+		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
@@ -78,7 +89,10 @@ func DecodeListRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.De
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload = NewListPayload(cursor, projectSlug, actorID, action, subjectType, subjectID, apikeyToken, sessionToken)
+		if err != nil {
+			return payload, err
+		}
+		payload = NewListPayload(cursor, projectSlug, actorID, action, subjectType, subjectID, subjectIds, actingSurface, apikeyToken, sessionToken)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -476,6 +490,8 @@ func marshalAuditlogsAuditLogToAuditLogResponseBody(v *auditlogs.AuditLog) *Audi
 		ActorDisplayName:   v.ActorDisplayName,
 		ActorSlug:          v.ActorSlug,
 		Action:             v.Action,
+		ActingSurface:      v.ActingSurface,
+		ActingClientID:     v.ActingClientID,
 		SubjectID:          v.SubjectID,
 		SubjectType:        v.SubjectType,
 		SubjectDisplayName: v.SubjectDisplayName,

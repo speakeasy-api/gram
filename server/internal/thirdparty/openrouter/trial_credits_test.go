@@ -168,6 +168,7 @@ func insertTrial(t *testing.T, conn *pgxpool.Pool, orgID string, endsAt time.Tim
 
 	require.NoError(t, trialsRepo.New(conn).InsertTrialFixture(t.Context(), trialsRepo.InsertTrialFixtureParams{
 		OrganizationID: orgID,
+		Tier:           "enterprise",
 		CreatedAt:      conv.ToPGTimestamptz(time.Now().UTC().Add(-24 * time.Hour)),
 		EndsAt:         conv.ToPGTimestamptz(endsAt),
 		ConvertedAt:    conv.PtrToPGTimestamptz(convertedAt),
@@ -210,10 +211,30 @@ func TestProvisionAPIKey_PaidEnterpriseKeepsTierCap(t *testing.T) {
 	require.Equal(t, []float64{wantEnterpriseLimit}, fixture.recorder.createdLimits())
 }
 
-// TestProvisionAPIKey_InactiveTrialKeepsTierCap pins the three lifecycle states
-// that end a trial. Each one must release the cap, because the organization has
-// either paid or lost the trial. A query that dropped any of these filters
-// would cap a paying customer forever.
+// TestProvisionAPIKey_ExpiredUndemotedTrialKeepsTrialCap pins the window
+// between ends_at and the demotion sweep. GetActiveTrial drops the row the
+// instant the clock passes ends_at, but the organization is still trial-tier
+// until the sweeper stamps demoted_at. A first-key mint in that window must
+// carry the trial cap, not the enterprise amount the account type would
+// otherwise grant.
+func TestProvisionAPIKey_ExpiredUndemotedTrialKeepsTrialCap(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	fixture := newTrialCapFixture(t)
+	insertTrial(t, fixture.conn, fixture.orgID, time.Now().UTC().Add(-time.Hour), nil, nil)
+
+	_, err := fixture.provisioner.ProvisionAPIKey(ctx, fixture.orgID, KeyTypeChat)
+	require.NoError(t, err)
+
+	require.Equal(t, []float64{wantTrialLimit}, fixture.recorder.createdLimits(),
+		"an expired, undemoted, unconverted trial must still carry the trial cap")
+}
+
+// TestProvisionAPIKey_InactiveTrialKeepsTierCap pins the two lifecycle states
+// that end a trial. Each one must release the cap, because the organization
+// has either paid or been demoted. A query that dropped either filter would
+// cap a paying customer forever.
 func TestProvisionAPIKey_InactiveTrialKeepsTierCap(t *testing.T) {
 	t.Parallel()
 
@@ -230,17 +251,14 @@ func TestProvisionAPIKey_InactiveTrialKeepsTierCap(t *testing.T) {
 	demoted := seedOrg(t, fixture.conn)
 	insertTrial(t, fixture.conn, demoted, future, nil, &past)
 
-	expired := seedOrg(t, fixture.conn)
-	insertTrial(t, fixture.conn, expired, past, nil, nil)
-
-	orgIDs := []string{converted, demoted, expired}
+	orgIDs := []string{converted, demoted}
 	for _, orgID := range orgIDs {
 		_, err := fixture.provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
 		require.NoError(t, err)
 	}
 
 	require.Equal(t, slices.Repeat([]float64{wantEnterpriseLimit}, len(orgIDs)), fixture.recorder.createdLimits(),
-		"a converted, demoted, or expired trial must not cap the key")
+		"a converted or demoted trial must not cap the key")
 }
 
 // TestGetCreditsUsed_ReportsKeyLimitOverTierDefault covers the organizations
@@ -267,19 +285,21 @@ func TestGetCreditsUsed_ReportsKeyLimitOverTierDefault(t *testing.T) {
 	require.Equal(t, raised, reported, "the reported ceiling must follow the key, not the account type")
 }
 
-// TestGetCreditsUsed_ZeroKeyLimitFallsBackToPolicy covers the keys minted
-// before the monthly_credits column carried a value. Those rows hold zero, and
-// reporting it would tell the customer they have no credits at all.
-func TestGetCreditsUsed_ZeroKeyLimitFallsBackToPolicy(t *testing.T) {
+// TestGetCreditsUsed_ZeroKeyLimitReportsUncapped covers a provider key whose
+// authoritative limit is unlimited. Zero is the local representation of that
+// absence, not a request to invent the account-type default.
+func TestGetCreditsUsed_ZeroKeyLimitReportsUncapped(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
 	fixture := newTrialCapFixture(t)
 
-	_, err := repo.New(fixture.conn).CreateOpenRouterAPIKey(ctx, repo.CreateOpenRouterAPIKeyParams{
+	ciphertext, err := fixture.provisioner.enc.Encrypt([]byte("sk-or-legacy-zero"))
+	require.NoError(t, err)
+	_, err = repo.New(fixture.conn).CreateOpenRouterAPIKey(ctx, repo.CreateOpenRouterAPIKeyParams{
 		OrganizationID: fixture.orgID,
 		KeyType:        string(KeyTypeChat),
-		Key:            conv.ToPGText("sk-or-legacy-zero"),
+		KeyEncrypted:   conv.ToPGText(ciphertext),
 		KeyHash:        "hash-legacy",
 		MonthlyCredits: 0,
 	})
@@ -287,6 +307,5 @@ func TestGetCreditsUsed_ZeroKeyLimitFallsBackToPolicy(t *testing.T) {
 
 	_, reported, err := fixture.provisioner.GetCreditsUsed(ctx, fixture.orgID, KeyTypeChat)
 	require.NoError(t, err)
-	require.Equal(t, wantEnterpriseLimit, reported,
-		"a key with no recorded ceiling must report the account-type amount")
+	require.Zero(t, reported, "a key with no provider ceiling must report no cap")
 }

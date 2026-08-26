@@ -25,6 +25,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -130,6 +131,7 @@ func TestRemoteLoginCallback_StandardRefreshExpirationFields(t *testing.T) {
 		t.Context(),
 		env.subject,
 		env.projectID,
+		env.organizationID,
 		env.session.UserSessionIssuerID,
 	)
 	require.NoError(t, err)
@@ -146,13 +148,17 @@ type syntheticExpiryEnv struct {
 	mgr *remotesessions.ChallengeManager
 	// refresher shares the manager's database, encryption key, and Redis lock
 	// cache, standing in for the scheduled sweep's caller in concurrency tests.
-	refresher    *remotesessions.RefreshService
-	newRefresher func(cache.Cache) *remotesessions.RefreshService
-	q            *repo.Queries
-	projectID    uuid.UUID
-	clientID     uuid.UUID
-	subject      urn.SessionSubject
-	session      repo.RemoteSession
+	refresher *remotesessions.RefreshService
+	// newRefresher builds a second RefreshService over the same database and
+	// encryption key, with the caller's meter provider and lock cache, so a
+	// test can observe recorded metrics or simulate a degraded lock cache.
+	newRefresher   func(metric.MeterProvider, cache.Cache) *remotesessions.RefreshService
+	q              *repo.Queries
+	projectID      uuid.UUID
+	organizationID string
+	clientID       uuid.UUID
+	subject        urn.SessionSubject
+	session        repo.RemoteSession
 }
 
 // newSyntheticExpiryEnv wires a ChallengeManager to a mock upstream token
@@ -192,7 +198,7 @@ func newSyntheticExpiryEnv(t *testing.T, slugSuffix string, tokenHandler http.Ha
 		cache.NewRedisCacheAdapter(redisClient),
 		mustURL(t, "http://localhost"),
 	)
-	refresher := remotesessions.NewRefreshService(logger, ti.conn, enc, policy, cache.NewRedisCacheAdapter(redisClient))
+	refresher := remotesessions.NewRefreshService(logger, testenv.NewMeterProvider(t), ti.conn, enc, policy, cache.NewRedisCacheAdapter(redisClient))
 
 	q := repo.New(ti.conn)
 	issuer, err := q.CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
@@ -275,13 +281,14 @@ func newSyntheticExpiryEnv(t *testing.T, slugSuffix string, tokenHandler http.Ha
 	return ctx, syntheticExpiryEnv{
 		mgr:       mgr,
 		refresher: refresher,
-		newRefresher: func(locks cache.Cache) *remotesessions.RefreshService {
-			return remotesessions.NewRefreshService(logger, ti.conn, enc, policy, locks)
+		newRefresher: func(meterProvider metric.MeterProvider, locks cache.Cache) *remotesessions.RefreshService {
+			return remotesessions.NewRefreshService(logger, meterProvider, ti.conn, enc, policy, locks)
 		},
-		q:         q,
-		projectID: *authCtx.ProjectID,
-		clientID:  client.ID,
-		subject:   subject,
-		session:   session,
+		q:              q,
+		projectID:      *authCtx.ProjectID,
+		organizationID: authCtx.ActiveOrganizationID,
+		clientID:       client.ID,
+		subject:        subject,
+		session:        session,
 	}
 }

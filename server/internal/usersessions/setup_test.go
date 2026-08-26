@@ -16,6 +16,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
+	issuersgen "github.com/speakeasy-api/gram/server/gen/user_session_issuers"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
@@ -75,7 +76,11 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 // without an unreachable Redis, which would cost ~1.7s per seeded session
 // (1s DialTimeout plus go-redis retries). Pass nil for the real
 // chatsessions.Manager over the test Redis.
-func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker) (context.Context, *testInstance) {
+//
+// guardianOpts extend the guardian policy the CIMD resolver fetches through —
+// e.g. guardian.WithTLSRootCAs so refresh tests can trust an httptest TLS
+// document server.
+func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker, guardianOpts ...func(*guardian.Policy)) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx := t.Context()
@@ -95,7 +100,7 @@ func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker) 
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
-	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{}, guardianOpts...)
 	require.NoError(t, err)
 
 	var tokenRevoker usersessions.TokenRevoker = chatSessionsManager
@@ -240,12 +245,13 @@ func seedUserSessionClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 
 	r := repo.New(conn)
 	row, err := r.CreateUserSessionClient(ctx, repo.CreateUserSessionClientParams{
-		UserSessionIssuerID:   issuerID,
-		ClientID:              clientID,
-		ClientSecretHash:      pgtype.Text{String: "", Valid: false},
-		ClientName:            "test-" + clientID,
-		RedirectUris:          []string{"https://example.com/cb"},
-		ClientSecretExpiresAt: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: 0, Valid: false},
+		UserSessionIssuerID:     issuerID,
+		ClientID:                clientID,
+		ClientSecretHash:        pgtype.Text{String: "", Valid: false},
+		ClientName:              "test-" + clientID,
+		RedirectUris:            []string{"https://example.com/cb"},
+		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: 0, Valid: false},
+		TokenEndpointAuthMethod: "none",
 	})
 	if err != nil {
 		return repo.UserSessionClient{}, fmt.Errorf("seed user session client: %w", err)
@@ -264,10 +270,11 @@ func seedCimdUserSessionClient(t *testing.T, ctx context.Context, conn *pgxpool.
 
 	r := repo.New(conn)
 	row, err := r.UpsertUserSessionClientFromCIMD(ctx, repo.UpsertUserSessionClientFromCIMDParams{
-		UserSessionIssuerID: issuerID,
-		ClientID:            documentURL,
-		ClientName:          "test-cimd-" + documentURL,
-		RedirectUris:        []string{"https://example.com/cb"},
+		UserSessionIssuerID:     issuerID,
+		ClientID:                documentURL,
+		ClientName:              "test-cimd-" + documentURL,
+		RedirectUris:            []string{"https://example.com/cb"},
+		TokenEndpointAuthMethod: "none",
 	})
 	if err != nil {
 		return repo.UserSessionClient{}, fmt.Errorf("seed cimd user session client: %w", err)
@@ -340,4 +347,20 @@ func seedUserSessionConsent(t *testing.T, ctx context.Context, conn *pgxpool.Poo
 		return repo.UserSessionConsent{}, fmt.Errorf("seed user session consent: %w", err)
 	}
 	return row, nil
+}
+
+// seedIssuer creates an issuer with the given slug and returns its id.
+func seedIssuer(t *testing.T, ctx context.Context, ti *testInstance, slug string) uuid.UUID {
+	t.Helper()
+
+	issuer, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 slug,
+		AuthnChallengeMode:   "chain",
+		SessionDurationHours: 24,
+	})
+	require.NoError(t, err)
+	return uuid.MustParse(issuer.ID)
 }

@@ -109,14 +109,15 @@ func newTestMCPMetadataService(t *testing.T) (context.Context, *testInstance) {
 
 // mcpServerFixtureOptions tunes the fixture pair created by
 // createMcpServerWithEndpoint. ToolsetID is non-Nil for toolset-backed
-// mcp_servers (the dual-source bridge path); RemoteMcpServerID is non-Nil for
-// Remote-MCP-backed installs.
+// mcp_servers (the dual-source bridge path); RemoteMcpServerID and
+// TunneledMcpServerID select their respective remote backends.
 type mcpServerFixtureOptions struct {
 	name                string
 	visibility          string
 	endpointSlug        string
 	toolsetID           uuid.NullUUID
 	remoteMcpServerID   uuid.NullUUID
+	tunneledMcpServerID uuid.NullUUID
 	customDomainID      uuid.NullUUID
 	userSessionIssuerID uuid.NullUUID
 }
@@ -143,10 +144,7 @@ func createMcpServerWithEndpoint(
 		opts.endpointSlug = "test-endpoint-" + uuid.NewString()[:8]
 	}
 
-	// mcp_servers carries an XOR check on (toolset_id, remote_mcp_server_id);
-	// when neither is supplied by the caller, default to a fresh toolset so
-	// fixtures focused on the metadata flow don't need to spell out a backend.
-	if !opts.toolsetID.Valid && !opts.remoteMcpServerID.Valid {
+	if !opts.toolsetID.Valid && !opts.remoteMcpServerID.Valid && !opts.tunneledMcpServerID.Valid {
 		toolset, err := toolsets_repo.New(ti.conn).CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 			OrganizationID:         authCtx.ActiveOrganizationID,
 			ProjectID:              *authCtx.ProjectID,
@@ -172,6 +170,7 @@ func createMcpServerWithEndpoint(
 		EnvironmentID:       uuid.NullUUID{},
 		UserSessionIssuerID: opts.userSessionIssuerID,
 		RemoteMcpServerID:   opts.remoteMcpServerID,
+		TunneledMcpServerID: opts.tunneledMcpServerID,
 		ToolsetID:           opts.toolsetID,
 		Visibility:          opts.visibility,
 	})
@@ -180,7 +179,7 @@ func createMcpServerWithEndpoint(
 	endpoint, err := mcpendpoints_repo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpoints_repo.CreateMCPEndpointParams{
 		ProjectID:      *authCtx.ProjectID,
 		CustomDomainID: opts.customDomainID,
-		McpServerID:    server.ID,
+		McpServerID:    uuid.NullUUID{UUID: server.ID, Valid: true},
 		Slug:           opts.endpointSlug,
 	})
 	require.NoError(t, err)

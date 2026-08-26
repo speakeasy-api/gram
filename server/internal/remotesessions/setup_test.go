@@ -2,6 +2,8 @@ package remotesessions_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"log"
 	"net/url"
 	"os"
@@ -16,6 +18,7 @@ import (
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	issuersgen "github.com/speakeasy-api/gram/server/gen/remote_session_issuers"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	assetsrepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -114,7 +117,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		guardianPolicy,
 		audit.NewLogger(),
 		serverURL,
-		remotesessions.NewRefreshService(logger, conn, enc, guardianPolicy, redisCache),
+		remotesessions.NewRefreshService(logger, testenv.NewMeterProvider(t), conn, enc, guardianPolicy, redisCache),
 	)
 
 	return ctx, &testInstance{
@@ -302,6 +305,32 @@ func createRemoteIssuerInProject(t *testing.T, ctx context.Context, conn *pgxpoo
 	return issuer.ID
 }
 
+// createTestImageAsset inserts an image asset row owned by the auth context's
+// project so issuer logo tests have a valid assets FK target. The sha256 is
+// derived from a fresh uuid so repeated calls never collide on the
+// per-project content-dedupe unique index.
+func createTestImageAsset(t *testing.T, ctx context.Context, conn *pgxpool.Pool) uuid.UUID {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sum := sha256.Sum256([]byte(uuid.NewString()))
+	asset, err := assetsrepo.New(conn).CreateAsset(ctx, assetsrepo.CreateAssetParams{
+		Name:           "issuer-logo.png",
+		Url:            "https://assets.example.com/issuer-logo.png",
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Sha256:         hex.EncodeToString(sum[:]),
+		Kind:           "image",
+		ContentType:    "image/png",
+		ContentLength:  1024,
+	})
+	require.NoError(t, err)
+	return asset.ID
+}
+
 // seedOrgLevelRemoteIssuer creates an organization-level (cross-project,
 // project_id IS NULL) remote session issuer owned by the supplied organization.
 // Org-level issuers are addressed only by id; pass the caller's active org to
@@ -394,6 +423,29 @@ func seedOrgLevelRemoteClient(t *testing.T, ctx context.Context, conn *pgxpool.P
 		}))
 	}
 	return created.ID
+}
+
+// attachRemoteMcpServerToIssuer binds a remote-backed MCP server to issuerID
+// so clients on that issuer derive serverURL as their resource.
+func attachRemoteMcpServerToIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, issuerID uuid.UUID, slug, serverURL string) {
+	t.Helper()
+	remoteServer, err := remotemcprepo.New(conn).CreateServer(ctx, remotemcprepo.CreateServerParams{
+		ID:            uuid.New(),
+		ProjectID:     projectID,
+		TransportType: "sse",
+		Url:           serverURL,
+	})
+	require.NoError(t, err)
+	_, err = mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                  uuid.New(),
+		ProjectID:           projectID,
+		Name:                conv.ToPGText(slug),
+		Slug:                conv.ToPGText(slug),
+		RemoteMcpServerID:   conv.ToNullUUID(remoteServer.ID),
+		Visibility:          "private",
+		UserSessionIssuerID: conv.ToNullUUID(issuerID),
+	})
+	require.NoError(t, err)
 }
 
 // seedMCPServerInOrg creates a project in the supplied organization and an MCP

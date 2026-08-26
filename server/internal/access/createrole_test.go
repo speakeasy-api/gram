@@ -66,7 +66,7 @@ func TestService_CreateRole(t *testing.T) {
 
 	role, err := ti.service.CreateRole(ctx, &gen.CreateRolePayload{
 		Name:        "Custom Builder",
-		Description: "Can build selected resources",
+		Description: conv.PtrEmpty("Can build selected resources"),
 		Grants: []*gen.RoleGrant{
 			{Scope: string(authz.ScopeProjectRead), Selectors: []*gen.Selector{{ResourceKind: "project", ResourceID: "project-1"}, {ResourceKind: "project", ResourceID: "project-2"}}},
 			{Scope: string(authz.ScopeMCPConnect), Selectors: nil},
@@ -98,7 +98,7 @@ func TestService_CreateRole_RejectsRiskPolicyGrant(t *testing.T) {
 
 	_, err := ti.service.CreateRole(ctx, &gen.CreateRolePayload{
 		Name:        "Risk Policy Writer",
-		Description: "Should not be allowed through access roles",
+		Description: conv.PtrEmpty("Should not be allowed through access roles"),
 		Grants: []*gen.RoleGrant{
 			{Scope: string(authz.ScopeRiskPolicyEvaluate), Selectors: nil},
 		},
@@ -108,6 +108,39 @@ func TestService_CreateRole_RejectsRiskPolicyGrant(t *testing.T) {
 	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 	require.ErrorContains(t, err, `managed by "risk_policy" grants`)
 	ti.roles.AssertNotCalled(t, "CreateRole", mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestService_CreateRole_WithoutDescription(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	ti.roles.On("CreateRole", mock.Anything, mockidp.MockOrgID, thirdpartyworkos.CreateRoleOpts{
+		Name:        "Custom Builder",
+		Slug:        "org-custom-builder",
+		Description: "",
+	}).Return(&thirdpartyworkos.Role{
+		ID:          "role_1",
+		Name:        "Custom Builder",
+		Slug:        "org-custom-builder",
+		Description: "",
+		CreatedAt:   mockRoleTimestamp,
+		UpdatedAt:   mockRoleTimestamp,
+	}, nil).Once()
+
+	role, err := ti.service.CreateRole(ctx, &gen.CreateRolePayload{
+		Name:        "Custom Builder",
+		Description: nil,
+		Grants: []*gen.RoleGrant{
+			{Scope: string(authz.ScopeProjectRead), Selectors: []*gen.Selector{{ResourceKind: "project", ResourceID: "project-1"}}},
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "Custom Builder", role.Name)
+	require.Empty(t, role.Description)
+
+	roundtrip, err := ti.service.GetRole(ctx, &gen.GetRolePayload{ID: role.ID})
+	require.NoError(t, err)
+	require.Empty(t, roundtrip.Description)
 }
 
 func TestService_CreateRole_WorkOSCreateFailure(t *testing.T) {
@@ -122,7 +155,7 @@ func TestService_CreateRole_WorkOSCreateFailure(t *testing.T) {
 
 	role, err := ti.service.CreateRole(ctx, &gen.CreateRolePayload{
 		Name:        "Custom Builder",
-		Description: "Can build selected resources",
+		Description: conv.PtrEmpty("Can build selected resources"),
 		Grants: []*gen.RoleGrant{
 			{Scope: string(authz.ScopeProjectRead), Selectors: []*gen.Selector{{ResourceKind: "project", ResourceID: "project-1"}}},
 		},
@@ -143,7 +176,7 @@ func TestService_CreateRole_WorkOSConflictFailure(t *testing.T) {
 
 	role, err := ti.service.CreateRole(ctx, &gen.CreateRolePayload{
 		Name:        "Custom Builder",
-		Description: "Can build selected resources",
+		Description: conv.PtrEmpty("Can build selected resources"),
 		Grants: []*gen.RoleGrant{
 			{Scope: string(authz.ScopeProjectRead), Selectors: []*gen.Selector{{ResourceKind: "project", ResourceID: "project-1"}}},
 		},
@@ -164,7 +197,7 @@ func TestService_CreateRole_RejectsActiveLocalSlugCollision(t *testing.T) {
 
 	_, err := ti.service.CreateRole(ctx, &gen.CreateRolePayload{
 		Name:        "Custom Builder",
-		Description: "Can build selected resources",
+		Description: conv.PtrEmpty("Can build selected resources"),
 		Grants: []*gen.RoleGrant{
 			{Scope: string(authz.ScopeProjectRead), Selectors: []*gen.Selector{{ResourceKind: "project", ResourceID: "project-1"}}},
 		},
@@ -193,7 +226,6 @@ func TestService_CreateRole_ReactivatesDeletedSlug(t *testing.T) {
 
 	roleID := seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_1", "Custom Builder", "org-custom-builder", "Old description"))
 	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+roleID), authz.ScopeRiskPolicyEvaluate, "policy-1")
-	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "org-custom-builder"), authz.ScopeMCPConnect, authz.WildcardResource)
 
 	deleted, err := accessrepo.New(ti.conn).MarkOrganizationRoleDeleted(ctx, accessrepo.MarkOrganizationRoleDeletedParams{
 		WorkosDeletedAt:   conv.ToPGTimestamptz(time.Now().UTC()),
@@ -204,7 +236,7 @@ func TestService_CreateRole_ReactivatesDeletedSlug(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(1), deleted)
 
-	err = authz.DeleteRoleGrants(ctx, accessrepo.New(ti.conn), authCtx.ActiveOrganizationID, "org-custom-builder", "role:organization:"+roleID)
+	err = authz.DeleteRoleGrants(ctx, accessrepo.New(ti.conn), authCtx.ActiveOrganizationID, "role:organization:"+roleID)
 	require.NoError(t, err)
 
 	ti.roles.On("CreateRole", mock.Anything, mockidp.MockOrgID, thirdpartyworkos.CreateRoleOpts{
@@ -222,7 +254,7 @@ func TestService_CreateRole_ReactivatesDeletedSlug(t *testing.T) {
 
 	role, err := ti.service.CreateRole(ctx, &gen.CreateRolePayload{
 		Name:        "Custom Builder",
-		Description: "New description",
+		Description: conv.PtrEmpty("New description"),
 		Grants: []*gen.RoleGrant{
 			{Scope: string(authz.ScopeProjectRead), Selectors: []*gen.Selector{{ResourceKind: "project", ResourceID: "project-1"}}},
 		},
@@ -239,9 +271,6 @@ func TestService_CreateRole_ReactivatesDeletedSlug(t *testing.T) {
 	require.False(t, row.Deleted)
 	require.False(t, row.WorkosDeleted)
 
-	legacyGrants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "org-custom-builder"))
-	require.Empty(t, legacyGrants)
-
 	grants := listPrincipalGrants(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+roleID))
 	require.Len(t, grants, 1)
 	require.Equal(t, string(authz.ScopeProjectRead), grants[0].Scope)
@@ -254,7 +283,7 @@ func TestService_CreateRole_RejectsEmptySlug(t *testing.T) {
 
 	_, err := ti.service.CreateRole(ctx, &gen.CreateRolePayload{
 		Name:        "!!!",
-		Description: "Can build selected resources",
+		Description: conv.PtrEmpty("Can build selected resources"),
 		Grants: []*gen.RoleGrant{
 			{Scope: string(authz.ScopeProjectRead), Selectors: []*gen.Selector{{ResourceKind: "project", ResourceID: "project-1"}}},
 		},
@@ -285,7 +314,7 @@ func TestService_CreateRole_AuditLog(t *testing.T) {
 
 	role, err := ti.service.CreateRole(ctx, &gen.CreateRolePayload{
 		Name:        "Audit Builder",
-		Description: "Tracks audit writes",
+		Description: conv.PtrEmpty("Tracks audit writes"),
 		Grants: []*gen.RoleGrant{{
 			Scope:     string(authz.ScopeProjectRead),
 			Selectors: []*gen.Selector{{ResourceKind: "project", ResourceID: "project-1"}},
@@ -326,7 +355,7 @@ func TestService_CreateRole_LocalRoleWriteFailureDoesNotAssignMembers(t *testing
 		DisplayName: authCtx.Email,
 	}, &gen.CreateRolePayload{
 		Name:        "Broken Builder",
-		Description: "Will fail local write",
+		Description: conv.PtrEmpty("Will fail local write"),
 		Grants: []*gen.RoleGrant{
 			{Scope: string(authz.ScopeProjectRead), Selectors: []*gen.Selector{{ResourceKind: "project", ResourceID: "project-1"}}},
 		},

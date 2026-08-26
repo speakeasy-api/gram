@@ -94,7 +94,7 @@ func (s *Service) GetRiskSignals(ctx context.Context, payload *gen.GetRiskSignal
 	// from the final one past the length cap.
 	bucketSeconds := max((int64(to.Sub(from).Seconds())+riskSignalSparkBuckets-1)/riskSignalSparkBuckets, 60)
 
-	// The five reads are independent (they only share the resolved window), so
+	// The four reads are independent (they only share the resolved window), so
 	// fan them out: each rescans risk_findings through the dedup subquery, and
 	// running them sequentially would stack those scan costs into the response
 	// latency on large tenants.
@@ -103,7 +103,6 @@ func (s *Service) GetRiskSignals(ctx context.Context, payload *gen.GetRiskSignal
 		userRows     []chrepo.RiskSignalUserCount
 		seriesRows   []chrepo.RiskSignalSeriesPoint
 		windowCounts chrepo.RiskSignalSplitCounts
-		dayCounts    chrepo.RiskSignalSplitCounts
 	)
 	group, groupCtx := errgroup.WithContext(ctx)
 	group.Go(func() error {
@@ -135,20 +134,6 @@ func (s *Service) GetRiskSignals(ctx context.Context, payload *gen.GetRiskSignal
 		windowCounts, err = s.findingsCH.GetRiskSignalSplitCounts(groupCtx, doubled)
 		if err != nil {
 			return fmt.Errorf("get risk signal window counts: %w", err)
-		}
-		return nil
-	})
-	group.Go(func() error {
-		var err error
-		dayCounts, err = s.findingsCH.GetRiskSignalSplitCounts(groupCtx, chrepo.RiskSignalWindowParams{
-			OrganizationID: organizationID,
-			ProjectID:      projectID,
-			WideFrom:       to.Add(-48 * time.Hour),
-			From:           to.Add(-24 * time.Hour),
-			To:             to,
-		})
-		if err != nil {
-			return fmt.Errorf("get risk signal 24h counts: %w", err)
 		}
 		return nil
 	})
@@ -252,8 +237,8 @@ func (s *Service) GetRiskSignals(ctx context.Context, payload *gen.GetRiskSignal
 		To:                   to.UTC().Format(time.RFC3339),
 		OrgRiskScore:         orgRiskScore(scores, windowCounts.FindingsCur),
 		PreviousOrgRiskScore: orgRiskScore(prevScores, windowCounts.FindingsPrev),
-		Findings24h:          safeCount(dayCounts.FindingsCur),
-		PreviousFindings24h:  safeCount(dayCounts.FindingsPrev),
+		Findings:             safeCount(windowCounts.FindingsCur),
+		PreviousFindings:     safeCount(windowCounts.FindingsPrev),
 		OpenSignals:          int64(len(signals)),
 		CriticalSignals:      criticalSignals,
 		UsersExposed:         safeCount(windowCounts.UsersCur),
@@ -332,6 +317,11 @@ func signalTopUsersByRule(rows []chrepo.RiskSignalUserCount) map[string][]*gen.R
 	}
 	merged := make(map[string]map[userKey]userStats)
 	for _, row := range rows {
+		// Mirror the Users stat's predicate (signalUserNonEmpty): rows it
+		// doesn't count must not appear here as "Unknown user" rows either.
+		if row.ExternalUserID == "" && row.UserID == "" {
+			continue
+		}
 		email := row.Email
 		if email == "" && strings.Contains(row.ExternalUserID, "@") {
 			email = row.ExternalUserID

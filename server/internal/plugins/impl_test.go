@@ -6,10 +6,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"maps"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -19,6 +21,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/directory"
+	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	mcpmetarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
@@ -715,11 +719,13 @@ func TestPluginsService_SetPluginAssignments(t *testing.T) {
 
 	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Assignment Test"})
 	require.NoError(t, err)
+	engineeringRole := createTestRolePrincipal(t, ctx, ti, "engineering")
+	gtmRole := createTestRolePrincipal(t, ctx, ti, "gtm")
 
 	// Set initial assignments.
 	result, err := ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
 		PluginID:      plugin.ID,
-		PrincipalUrns: []string{"role:engineering", "role:gtm"},
+		PrincipalUrns: []string{engineeringRole, gtmRole},
 	})
 	require.NoError(t, err)
 	require.Len(t, result.Assignments, 2)
@@ -746,14 +752,15 @@ func TestPluginsService_SetPluginAssignments_NormalizesAndDeduplicatesPrincipalU
 
 	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Dedupe Assignment Test"})
 	require.NoError(t, err)
+	engineeringRole := createTestRolePrincipal(t, ctx, ti, "engineering")
 
 	result, err := ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
 		PluginID: plugin.ID,
 		PrincipalUrns: []string{
 			"email:Dev@Acme.Corp",
 			"email:dev@acme.corp",
-			"role:engineering",
-			"role:engineering",
+			engineeringRole,
+			engineeringRole,
 			"*",
 			"*",
 		},
@@ -761,12 +768,121 @@ func TestPluginsService_SetPluginAssignments_NormalizesAndDeduplicatesPrincipalU
 	require.NoError(t, err)
 	require.Len(t, result.Assignments, 3)
 	require.Equal(t, "email:dev@acme.corp", result.Assignments[0].PrincipalUrn)
-	require.Equal(t, "role:engineering", result.Assignments[1].PrincipalUrn)
+	require.Equal(t, engineeringRole, result.Assignments[1].PrincipalUrn)
 	require.Equal(t, "*", result.Assignments[2].PrincipalUrn)
 
 	fetched, err := ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
 	require.NoError(t, err)
 	require.Len(t, fetched.Assignments, 3)
+}
+
+func TestPluginsService_SetPluginAssignments_PreservesUnavailableDirectoryAssignments(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Unavailable Assignment"})
+	require.NoError(t, err)
+
+	now := time.Now().UTC()
+	groupWorkOSID := uuid.NewString()
+	directoryRepo := directoryrepo.New(ti.conn)
+	groupID, err := directoryRepo.UpsertDirectoryGroup(ctx, directoryrepo.UpsertDirectoryGroupParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		WorkosDirectoryGroupID: groupWorkOSID,
+		Name:                   "Unavailable",
+		Attributes:             []byte(`{}`),
+		WorkosCreatedAt:        conv.ToPGTimestamptz(now),
+		WorkosUpdatedAt:        conv.ToPGTimestamptz(now),
+		WorkosLastEventID:      conv.ToPGTextEmpty(""),
+	})
+	require.NoError(t, err)
+
+	principal := directory.GroupPrincipal(groupID)
+	_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
+		PluginID:      plugin.ID,
+		PrincipalUrns: []string{principal},
+	})
+	require.NoError(t, err)
+
+	_, err = directoryRepo.DeleteDirectoryGroupByWorkOSID(ctx, directoryrepo.DeleteDirectoryGroupByWorkOSIDParams{
+		WorkosDeletedAt:        conv.ToPGTimestamptz(now),
+		WorkosLastEventID:      conv.ToPGTextEmpty(""),
+		WorkosDirectoryGroupID: groupWorkOSID,
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
+		PluginID:      plugin.ID,
+		PrincipalUrns: []string{principal},
+	})
+	require.NoError(t, err)
+	require.Equal(t, principal, result.Assignments[0].PrincipalUrn)
+
+	result, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{PluginID: plugin.ID})
+	require.NoError(t, err)
+	require.Empty(t, result.Assignments)
+}
+
+func TestPluginsService_SetPluginAssignments_CanonicalizesDirectoryAttributePrincipal(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Attribute Assignment"})
+	require.NoError(t, err)
+
+	now := time.Now().UTC()
+	_, err = directoryrepo.New(ti.conn).UpsertDirectoryUser(ctx, directoryrepo.UpsertDirectoryUserParams{
+		OrganizationID:        authCtx.ActiveOrganizationID,
+		UserID:                conv.ToPGTextEmpty(""),
+		WorkosDirectoryUserID: uuid.NewString(),
+		Email:                 conv.ToPGText("member@example.com"),
+		Attributes:            []byte(`{"department":"engineering"}`),
+		WorkosCreatedAt:       conv.ToPGTimestamptz(now),
+		WorkosUpdatedAt:       conv.ToPGTimestamptz(now),
+		WorkosLastEventID:     conv.ToPGTextEmpty(""),
+		RestoreDeleted:        true,
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
+		PluginID:      plugin.ID,
+		PrincipalUrns: []string{"directory_attribute:ZGVwYXJ0bWVudB:ZW5naW5lZXJpbmd"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, directory.AttributePrincipal("department", "engineering"), result.Assignments[0].PrincipalUrn)
+}
+
+func TestPluginsService_SetPluginAssignments_PreservesLegacyDirectoryAttributePrincipal(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Legacy Attribute Assignment"})
+	require.NoError(t, err)
+
+	legacyPrincipal := "directory_attribute:ZGVwYXJ0bWVudB:ZW5naW5lZXJpbmd"
+	_, err = pluginsrepo.New(ti.conn).AddPluginAssignment(ctx, pluginsrepo.AddPluginAssignmentParams{
+		PluginID:       uuid.MustParse(plugin.ID),
+		OrganizationID: authCtx.ActiveOrganizationID,
+		PrincipalUrn:   legacyPrincipal,
+	})
+	require.NoError(t, err)
+
+	principal := directory.AttributePrincipal("department", "engineering")
+	result, err := ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
+		PluginID:      plugin.ID,
+		PrincipalUrns: []string{principal},
+	})
+	require.NoError(t, err)
+	require.Equal(t, principal, result.Assignments[0].PrincipalUrn)
 }
 
 func TestPluginsService_SetPluginAssignments_NonExistentPluginReturnsNotFound(t *testing.T) {
@@ -795,7 +911,45 @@ func TestPluginsService_SetPluginAssignments_InvalidURNReturnsBadRequest(t *test
 
 	_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
 		PluginID:      plugin.ID,
-		PrincipalUrns: []string{"role:engineering", "not a valid urn"},
+		PrincipalUrns: []string{"not a valid urn"},
+	})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+}
+
+func TestPluginsService_SetPluginAssignments_LegacyRoleURNReturnsBadRequest(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Legacy Role URN Validation"})
+	require.NoError(t, err)
+
+	_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
+		PluginID:      plugin.ID,
+		PrincipalUrns: []string{"role:engineering"},
+	})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+}
+
+func TestPluginsService_SetPluginAssignments_UnknownRoleURNReturnsBadRequest(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Unknown Role URN Validation"})
+	require.NoError(t, err)
+
+	_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{
+		PluginID:      plugin.ID,
+		PrincipalUrns: []string{"role:organization:" + uuid.NewString()},
 	})
 	require.Error(t, err)
 
@@ -2379,8 +2533,8 @@ func TestPluginsService_PublishProject_PlatformMCPAdmissionTransitions(t *testin
 		CatalogProvider:      "fixture",
 		CatalogReference:     "platform-mcp-publish-test",
 		Status:               "pending",
-		ConnectionID:         connectionID,
-		ConnectionGeneration: connectionGeneration,
+		ConnectionID:         uuid.NullUUID{UUID: connectionID, Valid: true},
+		ConnectionGeneration: uuid.NullUUID{UUID: connectionGeneration, Valid: true},
 	})
 	require.NoError(t, err)
 	registration, err = platformRepo.UpdatePlatformMCPCatalogRegistrationComponents(ctx, platformmcprepo.UpdatePlatformMCPCatalogRegistrationComponentsParams{
@@ -2395,13 +2549,13 @@ func TestPluginsService_PublishProject_PlatformMCPAdmissionTransitions(t *testin
 		OrganizationID:       authCtx.ActiveOrganizationID,
 		ProjectID:            *authCtx.ProjectID,
 		RegistrationID:       registration.ID,
-		DefaultPluginID:      defaultPlugin.ID,
+		PluginID:             defaultPlugin.ID,
 		PluginServerID:       uuid.NullUUID{},
 		State:                "attached",
 		Version:              1,
 		AttachmentWasCreated: true,
-		ConnectionID:         connectionID,
-		ConnectionGeneration: connectionGeneration,
+		ConnectionID:         uuid.NullUUID{UUID: connectionID, Valid: true},
+		ConnectionGeneration: uuid.NullUUID{UUID: connectionGeneration, Valid: true},
 	})
 	require.NoError(t, err)
 
@@ -2422,8 +2576,11 @@ func TestPluginsService_PublishProject_PlatformMCPAdmissionTransitions(t *testin
 	require.NoError(t, json.Unmarshal(connection.PublishedMcpFingerprints, &fingerprints))
 	require.Contains(t, fingerprints, "__platform_mcp__")
 	platformFilesBefore := map[string][]byte{
-		"platform-mcp/.claude-plugin/plugin.json": mock.lastPushedFiles["platform-mcp/.claude-plugin/plugin.json"],
-		"platform-mcp/.mcp.json":                  mock.lastPushedFiles["platform-mcp/.mcp.json"],
+		"platform-mcp/.claude-plugin/plugin.json":           mock.lastPushedFiles["platform-mcp/.claude-plugin/plugin.json"],
+		"platform-mcp/.mcp.json":                            mock.lastPushedFiles["platform-mcp/.mcp.json"],
+		"platform-mcp/skills/add-mcp-from-catalog/SKILL.md": mock.lastPushedFiles["platform-mcp/skills/add-mcp-from-catalog/SKILL.md"],
+		"agent-plugins/platform-mcp/plugin.json":            mock.lastPushedFiles["agent-plugins/platform-mcp/plugin.json"],
+		"agent-plugins/platform-mcp/mcp.json":               mock.lastPushedFiles["agent-plugins/platform-mcp/mcp.json"],
 	}
 
 	// An indeterminate result preserves the prior package and fingerprint. It
@@ -2436,8 +2593,87 @@ func TestPluginsService_PublishProject_PlatformMCPAdmissionTransitions(t *testin
 	require.True(t, result.Skipped)
 	require.True(t, mock.getRepoFilesCalled)
 	require.False(t, mock.pushFilesCalled)
-	require.Equal(t, platformFilesBefore["platform-mcp/.claude-plugin/plugin.json"], mock.lastPushedFiles["platform-mcp/.claude-plugin/plugin.json"])
-	require.Equal(t, platformFilesBefore["platform-mcp/.mcp.json"], mock.lastPushedFiles["platform-mcp/.mcp.json"])
+	for filePath, content := range platformFilesBefore {
+		require.Equal(t, content, mock.lastPushedFiles[filePath], filePath)
+	}
+
+	// A missing admission provider is unavailable, not a confirmed disable. It
+	// must preserve the published package exactly as an explicit indeterminate
+	// evaluation does.
+	nilAdmissionPublisher := newTestPluginPublisher(t, ti, mock, nil, nil)
+	mock.getRepoFilesCalled = false
+	mock.pushFilesCalled = false
+	result, err = nilAdmissionPublisher.PublishProject(ctx, input)
+	require.NoError(t, err)
+	require.True(t, result.Skipped)
+	require.True(t, mock.getRepoFilesCalled)
+	require.False(t, mock.pushFilesCalled)
+	for filePath, content := range platformFilesBefore {
+		require.Equal(t, content, mock.lastPushedFiles[filePath], filePath)
+	}
+
+	// An already-published repository may still use the previously published
+	// Agent Plugin identifier. Indeterminate admission must carry that tree
+	// as-is and skip, not regenerate a new package.
+	legacyRepo := remapPublishedFilesToLegacyPlatformMCPLayout(mock.lastPushedFiles)
+	require.Contains(t, legacyRepo, "agent-plugins/speakeasy-aicp-platform-mcp/plugin.json")
+	require.NotContains(t, legacyRepo, "agent-plugins/platform-mcp/plugin.json")
+	mock.repoFiles = legacyRepo
+	mock.getRepoFilesCalled = false
+	mock.pushFilesCalled = false
+	result, err = publisher.PublishProject(ctx, input)
+	require.NoError(t, err)
+	require.True(t, result.Skipped)
+	require.True(t, mock.getRepoFilesCalled)
+	require.False(t, mock.pushFilesCalled)
+	mock.repoFiles = nil
+
+	// A current full B2/B3 fingerprint cannot hide a missing native package.
+	// Indeterminate admission repairs the repository to an internally consistent
+	// B1-only state, then confirmed admission restores the complete native set.
+	mock.repoFiles = maps.Clone(mock.lastPushedFiles)
+	delete(mock.repoFiles, "cursor-plugins/platform-mcp-cursor/mcp.json")
+	mock.pushFilesCalled = false
+	result, err = publisher.PublishProject(ctx, input)
+	require.NoError(t, err)
+	require.False(t, result.Skipped)
+	require.True(t, mock.pushFilesCalled)
+	require.Contains(t, mock.lastPushedFiles, "platform-mcp/.mcp.json")
+	require.NotContains(t, mock.lastPushedFiles, "cursor-plugins/platform-mcp-cursor/.cursor-plugin/plugin.json")
+	require.NotContains(t, mock.lastPushedFiles, "platform-mcp-codex/.codex-plugin/plugin.json")
+	require.NotContains(t, mock.lastPushedFiles, "opencode-plugins/platform-mcp/plugin/platform-mcp.ts")
+
+	connection, err = pluginsrepo.New(ti.conn).GetGitHubConnection(ctx, *authCtx.ProjectID)
+	require.NoError(t, err)
+	var b1Fingerprints map[string]string
+	require.NoError(t, json.Unmarshal(connection.PublishedMcpFingerprints, &b1Fingerprints))
+	require.NotEqual(t, fingerprints["__platform_mcp__"], b1Fingerprints["__platform_mcp__"])
+
+	// Once the B1-compatible repair is persisted truthfully, another
+	// indeterminate rollout is unchanged and must verify then skip rather than
+	// rotating customer package credentials again.
+	mock.repoFiles = nil
+	mock.pushFilesCalled = false
+	result, err = publisher.PublishProject(ctx, input)
+	require.NoError(t, err)
+	require.True(t, result.Skipped)
+	require.False(t, mock.pushFilesCalled)
+
+	mock.pushFilesCalled = false
+	enabledPublisher := newTestPluginPublisher(t, ti, mock, nil, fixedPlatformAdmission{admission: platformmcp.AdmissionEnabled})
+	result, err = enabledPublisher.PublishProject(ctx, input)
+	require.NoError(t, err)
+	require.False(t, result.Skipped)
+	require.True(t, mock.pushFilesCalled)
+	require.Contains(t, mock.lastPushedFiles, "cursor-plugins/platform-mcp-cursor/mcp.json")
+	require.Contains(t, mock.lastPushedFiles, "platform-mcp-codex/.mcp.json")
+	require.Contains(t, mock.lastPushedFiles, "opencode-plugins/platform-mcp/plugin/platform-mcp.ts")
+
+	connection, err = pluginsrepo.New(ti.conn).GetGitHubConnection(ctx, *authCtx.ProjectID)
+	require.NoError(t, err)
+	var restoredFingerprints map[string]string
+	require.NoError(t, json.Unmarshal(connection.PublishedMcpFingerprints, &restoredFingerprints))
+	require.Equal(t, fingerprints["__platform_mcp__"], restoredFingerprints["__platform_mcp__"])
 
 	// Indeterminate admission repairs a missing shared marketplace file rather
 	// than reporting the incomplete repository as current.
@@ -2505,37 +2741,151 @@ func TestPluginsService_PublishProject_PlatformMCPAdmissionTransitions(t *testin
 	require.NotContains(t, afterDisabled, "__platform_mcp__")
 }
 
-func TestPluginsService_PublishProject_PlatformMCPRequiresSelectedProjectAttachment(t *testing.T) {
+func TestPluginsService_PublishProject_PlatformMCPOnlyInDefaultProjectMarketplace(t *testing.T) {
 	t.Parallel()
 
 	mock := &mockGitHubPublisher{}
 	ctx, ti := newTestPluginsServiceWithGitHubAndFeatures(t, mock, nil, fixedPlatformAdmission{admission: platformmcp.AdmissionEnabled})
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	setProjectSlug(t, ctx, ti.conn, *authCtx.ProjectID, "selected-project")
-	selectedProjectSlug := "selected-project"
-	authCtx.ProjectSlug = &selectedProjectSlug
-	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
-	_, err := ti.service.PublishProject(ctx, plugins.PublishProjectInput{
-		ProjectID:       *authCtx.ProjectID,
+	other, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "non-default-platform-project",
+		Slug:           "non-default-platform-project",
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.PublishProject(ctx, plugins.PublishProjectInput{
+		ProjectID:       other.ID,
 		CreatedByUserID: authCtx.UserID,
-		CommitMessage:   "platform eligible but not attached",
+		CommitMessage:   "publish non-default marketplace",
 		SkipIfUnchanged: true,
 	})
 	require.NoError(t, err)
 	require.NotContains(t, mock.lastPushedFiles, "platform-mcp/.claude-plugin/plugin.json")
 	require.NotContains(t, mock.lastPushedFiles, "platform-mcp/.mcp.json")
 
-	connection, err := pluginsrepo.New(ti.conn).GetGitHubConnection(ctx, *authCtx.ProjectID)
+	connection, err := pluginsrepo.New(ti.conn).GetGitHubConnection(ctx, other.ID)
 	require.NoError(t, err)
 	var fingerprints map[string]string
 	require.NoError(t, json.Unmarshal(connection.PublishedMcpFingerprints, &fingerprints))
 	require.NotContains(t, fingerprints, "__platform_mcp__")
-	status, err := ti.service.GetPublishStatus(ctx, &gen.GetPublishStatusPayload{})
+}
+
+func TestPluginsService_PlatformMCPPackageStatusAndDownloadBeforeConnection(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHubAndFeatures(t, mock, nil, fixedPlatformAdmission{admission: platformmcp.AdmissionEnabled})
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	status, err := ti.service.GetPlatformMCPPackageStatus(ctx, &gen.GetPlatformMCPPackageStatusPayload{})
 	require.NoError(t, err)
-	require.NotNil(t, status.UpToDate)
-	require.True(t, *status.UpToDate, "publish status must exclude the un-attached Platform MCP package")
+	require.Equal(t, "enabled", status.Admission)
+	require.True(t, status.Available)
+	require.Equal(t, "missing", status.Freshness)
+	require.True(t, status.RepairAllowed)
+	require.True(t, status.DirectDownloadAvailable)
+	require.Equal(t, "platform-mcp-claude.zip", status.ClaudeFilename)
+	require.Equal(t, "platform-mcp-agent-plugin.zip", status.AgentPluginFilename)
+
+	// Repair intentionally bootstraps the canonical default-project marketplace
+	// when none exists, without requiring a prior Platform MCP connection.
+	repaired, err := ti.service.RepairPlatformMCPPackage(ctx, &gen.RepairPlatformMCPPackagePayload{})
+	require.NoError(t, err)
+	require.True(t, mock.createRepoCalled)
+	require.True(t, mock.pushFilesCalled)
+	require.True(t, repaired.MarketplaceConnected)
+	require.True(t, repaired.PackagePresent)
+	require.Equal(t, "current", repaired.Freshness)
+
+	// Explicit repair must restore a deleted native package even when persisted
+	// fingerprints still report the package as current.
+	mock.repoFiles = maps.Clone(mock.lastPushedFiles)
+	delete(mock.repoFiles, "cursor-plugins/platform-mcp-cursor/mcp.json")
+	mock.pushFilesCalled = false
+	repaired, err = ti.service.RepairPlatformMCPPackage(ctx, &gen.RepairPlatformMCPPackagePayload{})
+	require.NoError(t, err)
+	require.True(t, mock.pushFilesCalled)
+	require.Contains(t, mock.lastPushedFiles, "cursor-plugins/platform-mcp-cursor/mcp.json")
+	require.True(t, repaired.PackagePresent)
+	require.Equal(t, "current", repaired.Freshness)
+	mock.repoFiles = nil
+
+	packageAssertions := map[string][]string{
+		"claude":       {".claude-plugin/plugin.json", ".mcp.json", "skills/add-mcp-from-catalog/SKILL.md"},
+		"cursor":       {".cursor-plugin/plugin.json", "mcp.json", "skills/add-mcp-from-catalog/SKILL.md"},
+		"codex":        {".codex-plugin/plugin.json", ".mcp.json", "skills/add-mcp-from-catalog/SKILL.md"},
+		"opencode":     {"plugin/platform-mcp.ts", "platform-mcp/mcp.json", "platform-mcp/skills/add-mcp-from-catalog/SKILL.md"},
+		"agent-plugin": {"plugin.json", "mcp.json", "skills/add-mcp-from-catalog/SKILL.md"},
+	}
+	for platform, expectedFiles := range packageAssertions {
+		result, body, err := ti.service.DownloadPlatformMCPPlugin(ctx, &gen.DownloadPlatformMCPPluginPayload{Platform: platform})
+		require.NoError(t, err, platform)
+		require.Equal(t, fmt.Sprintf(`attachment; filename="platform-mcp-%s.zip"`, platform), result.ContentDisposition)
+		archive, err := io.ReadAll(body)
+		require.NoError(t, err, platform)
+		require.NoError(t, body.Close())
+		reader, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
+		require.NoError(t, err, platform)
+		contents := make(map[string]string, len(reader.File))
+		for _, file := range reader.File {
+			rc, err := file.Open()
+			require.NoError(t, err, platform)
+			content, err := io.ReadAll(rc)
+			require.NoError(t, err, platform)
+			require.NoError(t, rc.Close())
+			contents[file.Name] = string(content)
+		}
+		for _, expectedFile := range expectedFiles {
+			require.Contains(t, contents, expectedFile, platform)
+		}
+		for _, content := range contents {
+			require.NotContains(t, content, authCtx.ActiveOrganizationID, platform)
+			require.NotContains(t, content, "GRAM_API_KEY", platform)
+			require.NotContains(t, content, "hooks_api_key", platform)
+			require.NotContains(t, content, "gram_local_", platform)
+		}
+	}
+}
+
+func TestPluginsService_PlatformMCPPackageStatusDoesNotRequireProjectContext(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHubAndFeatures(t, mock, nil, fixedPlatformAdmission{admission: platformmcp.AdmissionEnabled})
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	organizationCtx := *authCtx
+	organizationCtx.ProjectID = nil
+	ctx = contextvalues.SetAuthContext(ctx, &organizationCtx)
+
+	status, err := ti.service.GetPlatformMCPPackageStatus(ctx, &gen.GetPlatformMCPPackageStatusPayload{})
+	require.NoError(t, err)
+	require.Equal(t, "enabled", status.Admission)
+	require.True(t, status.Available)
+	require.NotNil(t, status.CanonicalProjectSlug)
+}
+
+func TestPluginsService_PlatformMCPPackageDisabledFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHubAndFeatures(t, mock, nil, fixedPlatformAdmission{admission: platformmcp.AdmissionDisabled})
+
+	status, err := ti.service.GetPlatformMCPPackageStatus(ctx, &gen.GetPlatformMCPPackageStatusPayload{})
+	require.NoError(t, err)
+	require.Equal(t, "disabled", status.Admission)
+	require.False(t, status.Available)
+	require.False(t, status.DirectDownloadAvailable)
+
+	_, _, err = ti.service.DownloadPlatformMCPPlugin(ctx, &gen.DownloadPlatformMCPPluginPayload{Platform: "claude"})
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeFailedPrecondition, oopsErr.Code)
 }
 
 func TestPluginsService_PublishProject_StopsForCanceledPlatformMCPAdmission(t *testing.T) {
@@ -2633,6 +2983,34 @@ func hooksFilesOf(files map[string][]byte) map[string]string {
 		}
 	}
 	return out
+}
+
+// remapPublishedFilesToLegacyPlatformMCPLayout rewrites only the Agent Plugin
+// directory and the OpenCode identifier so a live repository that still uses
+// that published layout can be reconstructed in tests.
+func remapPublishedFilesToLegacyPlatformMCPLayout(files map[string][]byte) map[string][]byte {
+	legacy := make(map[string][]byte, len(files))
+	for filePath, content := range files {
+		legacy[remapPublishedPathToLegacyPlatformMCP(filePath)] = content
+	}
+	return legacy
+}
+
+func remapPublishedPathToLegacyPlatformMCP(filePath string) string {
+	const currentAgentPrefix = "agent-plugins/platform-mcp/"
+	const legacyAgentPrefix = "agent-plugins/speakeasy-aicp-platform-mcp/"
+	if rest, ok := strings.CutPrefix(filePath, currentAgentPrefix); ok {
+		return legacyAgentPrefix + rest
+	}
+	if filePath == "opencode-plugins/platform-mcp/plugin/platform-mcp.ts" {
+		return "opencode-plugins/platform-mcp/plugin/speakeasy-aicp-platform-mcp.ts"
+	}
+	const currentOpenCodeIDPrefix = "opencode-plugins/platform-mcp/platform-mcp/"
+	const legacyOpenCodeIDPrefix = "opencode-plugins/platform-mcp/speakeasy-aicp-platform-mcp/"
+	if rest, ok := strings.CutPrefix(filePath, currentOpenCodeIDPrefix); ok {
+		return legacyOpenCodeIDPrefix + rest
+	}
+	return filePath
 }
 
 func filesWithPrefix(files map[string][]byte, prefix string) map[string]string {

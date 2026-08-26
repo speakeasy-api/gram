@@ -482,6 +482,62 @@ func TestScanner_ScanForEnforcement_BlockWinsOverWarn(t *testing.T) {
 	}
 }
 
+func TestScanner_OutOfScopeQuarantineDoesNotDelayBlock(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	require.NotNil(t, authCtx.ProjectID)
+
+	repo := riskrepo.New(ti.conn)
+	newPolicy := func(name, action string, entities, messageTypes []string) {
+		id := uuid.New()
+		_, err := repo.CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
+			ID:               id,
+			ProjectID:        *authCtx.ProjectID,
+			OrganizationID:   authCtx.ActiveOrganizationID,
+			Name:             name,
+			Sources:          []string{"presidio"},
+			PresidioEntities: entities,
+			MessageTypes:     messageTypes,
+			Enabled:          true,
+			Action:           action,
+			AudienceType:     "everyone",
+			AutoName:         false,
+		})
+		require.NoError(t, err)
+		grantRiskPolicyToAllUsers(t, ti, ctx, authCtx.ActiveOrganizationID, id)
+	}
+	newPolicy("fast block", "block", []string{"FAST"}, nil)
+	newPolicy("slow block", "block", []string{"SLOW"}, nil)
+	newPolicy("tool quarantine", "quarantine", []string{"FAST"}, []string{message.ToolRequest})
+
+	pii := &instrumentedPIIScanner{
+		delay:        5 * time.Second,
+		findOnEntity: "FAST",
+		slowStarted:  make(chan struct{}),
+	}
+	scanner, err := risk.NewScanner(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		ti.conn,
+		newTestCustomRuleAnalyzer(t, ti.conn),
+		pii,
+		nil,
+		nil,
+		nil,
+		testCELEngine(t),
+	)
+	require.NoError(t, err)
+
+	result, err := scanner.ScanForEnforcement(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "irrelevant text", message.User, "")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "fast block", result.PolicyName)
+	require.Eventually(t, func() bool { return pii.cancellations.Load() > 0 }, time.Second, 10*time.Millisecond,
+		"an out-of-scope quarantine must not keep an applicable slow sibling running")
+}
+
 func TestScanner_RespectsMessageTypes(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)

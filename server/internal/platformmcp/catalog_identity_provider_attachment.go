@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -115,7 +116,7 @@ func (s *CatalogIdentityProviderAttachmentService) attachLocked(ctx context.Cont
 	if err != nil {
 		return CatalogIdentityProviderAttachmentResult{}, fmt.Errorf("load platform mcp identity-provider registration: %w", err)
 	}
-	if !isBrowserCatalogProviderKey(registration.CatalogProvider) || registration.Status != registrationStatusRegistered || !registrationComponentsComplete(registration) {
+	if (!isBrowserCatalogProviderKey(registration.CatalogProvider) && registration.CatalogProvider != directRemoteProviderKey) || registration.Status != registrationStatusRegistered || !registrationComponentsComplete(registration) {
 		return CatalogIdentityProviderAttachmentResult{}, ErrIdentityProviderAttachmentUnsupported
 	}
 
@@ -261,6 +262,13 @@ func (s *CatalogIdentityProviderAttachmentService) ensureIssuer(ctx context.Cont
 		GrantTypesSupported:               append([]string(nil), metadata.GrantTypesSupported...),
 		ResponseTypesSupported:            append([]string(nil), metadata.ResponseTypesSupported...),
 		TokenEndpointAuthMethodsSupported: append([]string(nil), metadata.TokenEndpointAuthMethodsSupported...),
+		// An empty advertised list must survive as empty here: discovery ran,
+		// so the nullable column should record "advertises no methods" ({})
+		// rather than "not captured" (NULL). The plain append copy used by the
+		// sibling fields collapses an empty slice to nil, so this field uses
+		// slices.Clone, which preserves emptiness — and
+		// DiscoveredIssuerMetadata guarantees the field non-nil.
+		CodeChallengeMethodsSupported:     slices.Clone(metadata.CodeChallengeMethodsSupported),
 		ClientIDMetadataDocumentSupported: metadata.ClientIDMetadataDocumentSupported,
 		Oidc:                              false,
 		Passthrough:                       false,

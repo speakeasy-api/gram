@@ -14,6 +14,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -107,7 +109,7 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 	redisClient, err := testInfra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 	billingClient := billing.NewStubClient(logger, tracerProvider)
-	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("litellm-test-"+uuid.NewString()), billingClient)
+	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("litellm-test"), billingClient)
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 	chConn, err := testInfra.NewClickhouseClient(t)
 	require.NoError(t, err)
@@ -143,11 +145,13 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 		tracerProvider,
 		meterProvider,
 		nil,
+		gcp.NewNoopPublisher[*otelv1.InboundLogRecord](),
 		sessionManager,
 		cacheAdapter,
 		nil,
 		nil,
 		authzEngine,
+		audit.NewLogger(),
 		captureEnabledFeatures{},
 		nil,
 		scanner,
@@ -156,6 +160,7 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 		spendGate,
 		shadowmcp.NewClient(logger, conn, cacheAdapter, serverURL),
 		chatWriter,
+		nil,
 		nil,
 		nil,
 		serverURL,

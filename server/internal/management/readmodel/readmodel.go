@@ -57,6 +57,17 @@ func (r *Reader) GetProject(ctx context.Context, projectID uuid.UUID, organizati
 	return project, nil
 }
 
+func (r *Reader) GetProjectBySlug(ctx context.Context, slug, organizationID string) (projectsrepo.Project, error) {
+	project, err := r.projects.GetProjectBySlug(ctx, projectsrepo.GetProjectBySlugParams{
+		Slug:           slug,
+		OrganizationID: organizationID,
+	})
+	if err != nil {
+		return projectsrepo.Project{}, fmt.Errorf("get project by slug: %w", err)
+	}
+	return project, nil
+}
+
 func (r *Reader) ListMCPServers(ctx context.Context, projectID uuid.UUID, filters mcpserversrepo.ListMCPServersByProjectIDParams) ([]mcpserversrepo.McpServer, error) {
 	filters.ProjectID = projectID
 	servers, err := r.mcpServers.ListMCPServersByProjectID(ctx, filters)

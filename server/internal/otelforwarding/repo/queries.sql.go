@@ -53,6 +53,33 @@ func (q *Queries) GetOrgOTELForwardingConfig(ctx context.Context, organizationID
 	return i, err
 }
 
+const getOrgOTELForwardingConfigForUpdate = `-- name: GetOrgOTELForwardingConfigForUpdate :one
+SELECT created_at, deleted_at, updated_at, endpoint_url, headers_encrypted, organization_id, project_id, enabled, id, deleted
+FROM otel_forwarding_configs
+WHERE organization_id = $1
+  AND project_id IS NULL
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+func (q *Queries) GetOrgOTELForwardingConfigForUpdate(ctx context.Context, organizationID string) (OtelForwardingConfig, error) {
+	row := q.db.QueryRow(ctx, getOrgOTELForwardingConfigForUpdate, organizationID)
+	var i OtelForwardingConfig
+	err := row.Scan(
+		&i.CreatedAt,
+		&i.DeletedAt,
+		&i.UpdatedAt,
+		&i.EndpointUrl,
+		&i.HeadersEncrypted,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Enabled,
+		&i.ID,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const softDeleteOrgOTELForwardingConfig = `-- name: SoftDeleteOrgOTELForwardingConfig :exec
 UPDATE otel_forwarding_configs
 SET deleted_at = clock_timestamp()

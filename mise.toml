@@ -57,7 +57,7 @@ pkl = "0.32.1"
 buf = "1.72.0"
 ruff = "0.16.1"
 "github:ast-grep/ast-grep" = "0.45.0"
-pitchfork = "2.20.0"
+pitchfork = "2.22.0"
 "npm:@playwright/cli" = "0.1.17"
 
 # ℹ️ The settings below are sensible defaults for local development. When
@@ -148,6 +148,13 @@ GRAM_REDIS_CACHE_PORT = "5445"
 GRAM_REDIS_CACHE_ADDR = "{{env.GRAM_REDIS_CACHE_HOST}}:{{env.GRAM_REDIS_CACHE_PORT}}"
 GRAM_REDIS_CACHE_PASSWORD = "xi9XILbY"
 GRAM_REDIS_ENABLE_TRACING = "false"
+## Material the local seed provisions (`mise run seed`). These are fixed,
+## well-known local-only values written straight into the database by
+## `gram demo-seed --local`, so they are checked in here rather than written
+## back into mise.local.toml after a seed run — a fresh clone is configured
+## before it is ever seeded. Keep in sync with server/internal/demoseed/local.go.
+GRAM_API_KEY = "gram_local_5eed10ca15eed10ca15eed10ca15eed10ca15eed10ca15eed10ca15eed10ca11"
+
 ## Local-only value; real deployments inject this via secrets.
 GRAM_TUNNEL_FORWARD_TOKEN = "local-dev-tunnel-forward-token"
 TUNNEL_GATEWAY_PUBLIC_PORT = "8090"
@@ -211,7 +218,10 @@ GRAM_PYSTREAMS_DETECT_BLOCKING = "1"
 ##########################
 OTLP_GRPC_HOST = "localhost"
 OTLP_GRPC_PORT = "4317"
+OTLP_HTTP_PORT = "4318"
 OTEL_EXPORTER_OTLP_ENDPOINT = "http://{{env.OTLP_GRPC_HOST}}:{{env.OTLP_GRPC_PORT}}"
+OTEL_EXPORTER_OTLP_PROTOCOL = "grpc"
+OTEL_RESOURCE_ATTRIBUTES = "worktree=main"
 ## Change these to 0 to disable OpenTelemetry traces and metrics to be emitted.
 GRAM_ENABLE_OTEL_TRACES = 1
 GRAM_ENABLE_OTEL_METRICS = 1
@@ -221,6 +231,7 @@ GRAM_ENABLE_OTEL_METRICS = 1
 ################################
 GRAFANA_PORT = "13000"
 TEMPO_HTTP_PORT = "13200"
+LOKI_HTTP_PORT = "13100"
 PROMETHEUS_PORT = "9099"
 LITELLM_PORT = "4001"
 GRAM_LOG_PRETTY = { default = "1" }
@@ -273,10 +284,17 @@ GRAM_FUNCTIONS_LOCAL_RUNNER_ROOT = "{{config_root}}/local/functions"
 ########################################
 ## Where assistant runtimes run.
 ## Allowed values: local, flyio, gke.
+## Left unset here so `./zero` / `mise run zero:assistants` can tell "not
+## configured" from an intentional override in mise.local.toml or the
+## environment. When unset, that task writes local defaults:
+##   GRAM_ASSISTANT_RUNTIME_PROVIDER = "local"
+##   GRAM_ASSISTANT_RUNTIME_OCI_IMAGE = "gram-assistant-runtime"
+## and builds `gram-assistant-runtime:dev` if the image is missing.
+## `mise run zero:assistants --restart` rewrites those keys and rebuilds.
 ## The local provider starts runtime containers on demand on this machine's
-## Docker daemon. Build the image with `mise run build:assistants-runtime-image`.
-GRAM_ASSISTANT_RUNTIME_PROVIDER = "local"
-GRAM_ASSISTANT_RUNTIME_OCI_IMAGE = "gram-assistant-runtime"
+## Docker daemon. Rebuild anytime with `mise run build:assistants-runtime-image`.
+# GRAM_ASSISTANT_RUNTIME_PROVIDER = "local"
+# GRAM_ASSISTANT_RUNTIME_OCI_IMAGE = "gram-assistant-runtime"
 
 ##################
 ## MCP Registry ##
@@ -288,6 +306,19 @@ PULSE_REGISTRY_KEY = { default = "unset" }
 ## Risk ##
 ##########
 GRAM_RISK_FINGERPRINT_PEPPER_KEYRING = '{"current": "v1", "keys": {"v1": "bmvSy6Zn8YAN/32TAgGQrkXwaN2Fzp32kvB9j2Aa4ws="}}'
+
+##########################
+## Stripe configuration ##
+##########################
+## PAYG self-serve billing. Run `mise run stripe:setup` to provision and
+## validate the sandbox TUM meter, product, and metered price. The task writes
+## the catalog values into mise.local.toml. Requires a Stripe sandbox API key.
+STRIPE_API_KEY = { default = "unset" }
+STRIPE_WEBHOOK_SECRET = { default = "unset" }
+STRIPE_PRICE_ID_TUM = { default = "" }
+STRIPE_METER_ID_TUM = { default = "" }
+STRIPE_METER_EVENT_NAME = { default = "tum" }
+STRIPE_PORTAL_CONFIGURATION_ID = { default = "" }
 
 #########################
 ## Polar configuration ##
@@ -340,7 +371,8 @@ GRAM_SVIX_API_KEY = { default = "unset" }
 ################
 ## GCP config ##
 ################
-## Typically this variable is omitted and the GCP SDK will detect project ID
-## from the environment. However, for local development, it can be set to a
-## static value.
+## The Pub/Sub emulator namespaces resources by project ID. The main tree keeps
+## this stable default; git:workinit overrides it with the worktree's unique
+## Compose project so one shared emulator can isolate identical topic and
+## subscription IDs from concurrent worktrees.
 GRAM_GCP_PROJECT_ID = "local-dev-project"

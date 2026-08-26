@@ -46,4 +46,14 @@ type UserSession struct {
 	SubjectPhotoURL *string
 	// When the session was revoked, if it has been.
 	RevokedAt *string
+	// When this session last carried an MCP request. Recorded on the request path
+	// and coalesced to a five-minute resolution, so treat it as accurate to within
+	// that. Null means the session has not been used since the column was
+	// introduced — unknown, not never.
+	LastUsedAt *string
+	// The upstream providers Gram holds tokens for on this session's subject,
+	// through the same issuer. Empty when the session reaches only Gram-native
+	// tools. A session can have several: an issuer may have more than one
+	// remote_session_client attached.
+	Upstreams []*UserSessionUpstream
 }

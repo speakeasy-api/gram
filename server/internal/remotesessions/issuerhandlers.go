@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -53,6 +54,15 @@ type rfc8414Document struct {
 	GrantTypesSupported               []string `json:"grant_types_supported"`
 	ResponseTypesSupported            []string `json:"response_types_supported"`
 	TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported"`
+
+	// CodeChallengeMethodsSupported stays nil when the document omits the
+	// field, and only here: persistence collapses it to an empty array
+	// ("captured; the upstream advertises nothing", RFC 8414's stated meaning
+	// for absence) while the column's NULL is reserved for rows discovery has
+	// not captured at all. The nil/empty split survives just long enough for
+	// collectDiscoveryWarnings to word the two cases differently.
+	CodeChallengeMethodsSupported []string `json:"code_challenge_methods_supported"`
+
 	// ClientIDMetadataDocumentSupported comes from the OAuth CIMD draft
 	// (draft-ietf-oauth-client-id-metadata-document), not base RFC 8414: whether
 	// the issuer accepts a Client ID Metadata Document URL as client_id. Used to
@@ -281,6 +291,7 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 		GrantTypesSupported:               payload.GrantTypesSupported,
 		ResponseTypesSupported:            payload.ResponseTypesSupported,
 		TokenEndpointAuthMethodsSupported: payload.TokenEndpointAuthMethodsSupported,
+		CodeChallengeMethodsSupported:     payload.CodeChallengeMethodsSupported,
 		ClientIDMetadataDocumentSupported: conv.PtrValOr(payload.ClientIDMetadataDocumentSupported, false),
 		Oidc:                              conv.PtrValOr(payload.Oidc, false),
 		Passthrough:                       conv.PtrValOr(payload.Passthrough, false),
@@ -379,9 +390,14 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 		return nil, oops.E(oops.CodeBadRequest, nil, "client_setup_documentation_url must be an absolute http(s) URL").LogError(ctx, logger)
 	}
 
-	logoAssetID, err := conv.PtrToNullUUID(payload.LogoAssetID)
-	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid logo asset id").LogError(ctx, logger)
+	// An empty logo asset id stays legal: the update query reads it as the
+	// explicit "clear to NULL" sentinel. Any other value must be a uuid —
+	// the query casts the text parameter, so a malformed value has to be
+	// rejected here rather than surfacing as a Postgres cast error.
+	if v := conv.PtrValOr(payload.LogoAssetID, ""); v != "" {
+		if _, err := uuid.Parse(v); err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid logo asset id").LogError(ctx, logger)
+		}
 	}
 
 	// Revocation endpoint must be HTTPS, or HTTP on loopback where a token
@@ -438,7 +454,7 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 		Slug:                              conv.PtrToPGText(payload.Slug),
 		Issuer:                            conv.PtrToPGText(payload.Issuer),
 		Name:                              conv.PtrToPGText(payload.Name),
-		LogoAssetID:                       logoAssetID,
+		LogoAssetID:                       conv.PtrToPGText(payload.LogoAssetID),
 		ClientSetupDocumentationUrl:       conv.PtrToPGText(payload.ClientSetupDocumentationURL),
 		AuthorizationEndpoint:             conv.PtrToPGText(payload.AuthorizationEndpoint),
 		TokenEndpoint:                     conv.PtrToPGText(payload.TokenEndpoint),
@@ -452,6 +468,7 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 		GrantTypesSupported:               payload.GrantTypesSupported,
 		ResponseTypesSupported:            payload.ResponseTypesSupported,
 		TokenEndpointAuthMethodsSupported: payload.TokenEndpointAuthMethodsSupported,
+		CodeChallengeMethodsSupported:     payload.CodeChallengeMethodsSupported,
 		ClientIDMetadataDocumentSupported: conv.PtrToPGBool(payload.ClientIDMetadataDocumentSupported),
 		Oidc:                              conv.PtrToPGBool(payload.Oidc),
 		Passthrough:                       conv.PtrToPGBool(payload.Passthrough),
@@ -830,7 +847,7 @@ func (e *discoveryError) UserMessage() string {
 // deviations from the spec callers should be aware of. The supplied
 // guardian.Policy gates the outbound dial.
 //
-// It probes the well-known locations returned by issuerProbeCandidates in
+// It probes the well-known locations returned by IssuerMetadataProbeCandidates in
 // order, returning the first that yields a usable document — one carrying both
 // an authorization_endpoint and a token_endpoint. A 200 that parses but lacks
 // those endpoints is almost always a SPA/gateway catch-all answering our
@@ -853,6 +870,13 @@ type DiscoveredIssuerMetadata struct {
 	GrantTypesSupported               []string
 	ResponseTypesSupported            []string
 	TokenEndpointAuthMethodsSupported []string
+
+	// CodeChallengeMethodsSupported is never nil: discovery ran, so a document
+	// that omits the field yields an empty slice — the persisted
+	// "captured; the upstream advertises nothing" state — rather than the nil
+	// that the nullable column would store as "never captured".
+	CodeChallengeMethodsSupported []string
+
 	ClientIDMetadataDocumentSupported bool
 }
 
@@ -874,12 +898,20 @@ func DiscoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 		GrantTypesSupported:               append([]string(nil), doc.GrantTypesSupported...),
 		ResponseTypesSupported:            append([]string(nil), doc.ResponseTypesSupported...),
 		TokenEndpointAuthMethodsSupported: append([]string(nil), doc.TokenEndpointAuthMethodsSupported...),
+
+		// An empty advertised list must survive as empty here, because nil and
+		// empty persist differently for this field (NULL "never captured" vs
+		// {} "captured, advertises nothing"). The plain append copy used by
+		// the sibling fields collapses an empty slice to nil, so it gets an
+		// orEmptySlice on top.
+		CodeChallengeMethodsSupported: orEmptySlice(append([]string(nil), doc.CodeChallengeMethodsSupported...)),
+
 		ClientIDMetadataDocumentSupported: doc.ClientIDMetadataDocumentSupported,
 	}, nil
 }
 
 func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuerURL string) (rfc8414Document, []string, error) {
-	candidates, err := issuerProbeCandidates(issuerURL)
+	candidates, err := IssuerMetadataProbeCandidates(issuerURL)
 	if err != nil {
 		return rfc8414Document{}, nil, &discoveryError{
 			WellKnownURL: "",
@@ -1003,7 +1035,7 @@ func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKn
 	return doc, nil
 }
 
-// issuerProbeCandidates returns the ordered list of well-known metadata URLs to
+// IssuerMetadataProbeCandidates returns the ordered list of well-known metadata URLs to
 // probe for an issuer. The first candidate is the canonical RFC 8414 location;
 // the rest broaden coverage to OpenID Connect Discovery and to non-compliant
 // upstreams that only serve metadata at the origin root.
@@ -1015,7 +1047,7 @@ func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKn
 // path component we additionally fall back to the origin-style locations, since
 // some gateways and SPA catch-alls serve metadata at the root regardless of the
 // issuer path. Duplicate URLs (e.g. when the issuer has no path) are collapsed.
-func issuerProbeCandidates(issuerURL string) ([]string, error) {
+func IssuerMetadataProbeCandidates(issuerURL string) ([]string, error) {
 	u, err := url.Parse(issuerURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse issuer url: %w", err)
@@ -1135,6 +1167,17 @@ func collectDiscoveryWarnings(requestedIssuer string, doc rfc8414Document) []str
 	}
 	if doc.JwksURI == "" {
 		warnings = append(warnings, "jwks_uri missing from discovery document")
+	}
+	// Advisory rather than a defect report: RFC 8414 makes the field OPTIONAL,
+	// but MCP requires clients to refuse authorization servers that do not
+	// advertise PKCE support, so a future change may enforce it. The
+	// absent and empty cases read differently because only the wording here
+	// can distinguish them — persistence collapses both to an empty array.
+	switch {
+	case doc.CodeChallengeMethodsSupported == nil:
+		warnings = append(warnings, "code_challenge_methods_supported missing from discovery document; the MCP specification requires verifying that the identity provider advertises PKCE S256 support, and a future change may enforce this")
+	case !slices.Contains(doc.CodeChallengeMethodsSupported, "S256"):
+		warnings = append(warnings, "discovery document does not list S256 in code_challenge_methods_supported; the MCP specification requires verifying that the identity provider advertises PKCE S256 support, and a future change may enforce this")
 	}
 	return warnings
 }

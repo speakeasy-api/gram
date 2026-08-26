@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -37,7 +38,6 @@ const (
 	registrationStatusPending    = "pending"
 	registrationStatusRegistered = "registered"
 	receiptLifetime              = 24 * time.Hour
-	platformMCPIssuerLifetime    = 14 * 24 * time.Hour
 	maxMCPEndpointSlugLength     = 128
 )
 
@@ -68,15 +68,18 @@ type ResolvedProject struct {
 }
 
 type OperationReceipt struct {
-	ID                   uuid.UUID
-	RegistrationID       uuid.NullUUID
-	Status               string
-	ResultCode           string
-	InputHash            string
-	ExpiresAt            time.Time
-	Replayed             bool
-	ConnectionID         uuid.UUID
-	ConnectionGeneration uuid.UUID
+	ID             uuid.UUID
+	RegistrationID uuid.NullUUID
+	Status         string
+	ResultCode     string
+	InputHash      string
+	ExpiresAt      time.Time
+	Replayed       bool
+	// Invalid when the receipt was written by a surface with no OAuth
+	// connection. Unwrapping these to a bare uuid.Nil would be read downstream
+	// as "connection missing" rather than "no connection applies".
+	ConnectionID         uuid.NullUUID
+	ConnectionGeneration uuid.NullUUID
 }
 
 // RegistrationStoreConfig carries values whose production defaults require
@@ -264,8 +267,11 @@ func (s *RegistrationStore) BeginReceipt(ctx context.Context, principal Principa
 	if err := q.LockPlatformMCPOperationReceipt(ctx, lock); err != nil {
 		return OperationReceipt{}, fmt.Errorf("lock platform mcp registration receipt: %w", err)
 	}
+	// Matched on the real user; SubjectUrn only reaches receipts written
+	// before user_id existed, which carry a connection instead.
 	receiptLookup := platformrepo.GetPlatformMCPOperationReceiptParams{
 		OrganizationID: principal.OrganizationID,
+		UserID:         conv.ToPGText(principal.UserID),
 		SubjectUrn:     userSubjectURN(principal.UserID),
 		ProjectID:      project.ID,
 		Operation:      operationRegisterCatalogMCP,
@@ -295,6 +301,8 @@ func (s *RegistrationStore) BeginReceipt(ctx context.Context, principal Principa
 		RegistrationID:       uuid.NullUUID{},
 		ConnectionID:         connectionID,
 		ConnectionGeneration: generation,
+		UserID:               conv.ToPGText(principal.UserID),
+		ActingSurface:        conv.ToPGText(string(principal.surface())),
 		Operation:            operationRegisterCatalogMCP,
 		IdempotencyKey:       request.IdempotencyKey,
 		InputHash:            request.InputHash,
@@ -349,6 +357,7 @@ func (s *RegistrationStore) ConvergeRegistration(ctx context.Context, principal 
 	}
 	storedReceipt, err := q.GetPlatformMCPOperationReceipt(ctx, platformrepo.GetPlatformMCPOperationReceiptParams{
 		OrganizationID: receiptLock.OrganizationID,
+		UserID:         conv.ToPGText(principal.UserID),
 		SubjectUrn:     receiptLock.SubjectUrn,
 		ProjectID:      project.ID,
 		Operation:      receiptLock.Operation,
@@ -446,6 +455,8 @@ func (s *RegistrationStore) ConvergeRegistration(ctx context.Context, principal 
 			Status:               registrationStatusPending,
 			ConnectionID:         connectionID,
 			ConnectionGeneration: generation,
+			UserID:               conv.ToPGText(principal.UserID),
+			ActingSurface:        conv.ToPGText(string(principal.surface())),
 		})
 		if err != nil {
 			return OperationReceipt{}, fmt.Errorf("create platform mcp catalog registration: %w", err)
@@ -488,7 +499,7 @@ func (s *RegistrationStore) CompleteRegistration(ctx context.Context, principal 
 	if s == nil || s.db == nil {
 		return OperationReceipt{}, ErrUnavailable
 	}
-	if err := validateCatalogRegistrationRequest(principal, project, request); err != nil || receipt.ID == uuid.Nil || !receipt.RegistrationID.Valid || !validRegistrationRemoteURL(configuration.remoteURL) {
+	if err := validateCatalogRegistrationRequest(principal, project, request); err != nil || receipt.ID == uuid.Nil || !receipt.RegistrationID.Valid || !validRegistrationRemoteURL(configuration.remoteURL) || (request.SourceKind == directRemoteSourceKind && !validDirectRemoteRegistrationURL(configuration.remoteURL)) {
 		return OperationReceipt{}, ErrRegistrationInvalid
 	}
 	connectionID, generation, err := principalConnection(principal)
@@ -515,6 +526,7 @@ func (s *RegistrationStore) CompleteRegistration(ctx context.Context, principal 
 	}
 	storedReceipt, err := q.GetPlatformMCPOperationReceipt(ctx, platformrepo.GetPlatformMCPOperationReceiptParams{
 		OrganizationID: receiptLock.OrganizationID,
+		UserID:         conv.ToPGText(principal.UserID),
 		SubjectUrn:     receiptLock.SubjectUrn,
 		ProjectID:      project.ID,
 		Operation:      receiptLock.Operation,
@@ -655,8 +667,8 @@ func (s *RegistrationStore) CompleteRegistration(ctx context.Context, principal 
 	}
 	if err := q.RecordPlatformMCPRegistrationSucceeded(ctx, platformrepo.RecordPlatformMCPRegistrationSucceededParams{
 		OrganizationID:       principal.OrganizationID,
-		ConnectionID:         uuid.NullUUID{UUID: connectionID, Valid: true},
-		ConnectionGeneration: uuid.NullUUID{UUID: generation, Valid: true},
+		ConnectionID:         connectionID,
+		ConnectionGeneration: generation,
 		ProjectID:            uuid.NullUUID{UUID: project.ID, Valid: true},
 		McpKey:               registration.CatalogProvider + ":" + registration.CatalogReference,
 		AttemptID:            uuid.NullUUID{UUID: registration.ID, Valid: true},
@@ -694,10 +706,6 @@ func (s *RegistrationStore) createPrivateRegistrationComponents(ctx context.Cont
 	if err != nil {
 		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("generate platform mcp remote source id: %w", err)
 	}
-	serverID, err := uuid.NewV7()
-	if err != nil {
-		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("generate platform mcp server id: %w", err)
-	}
 	suffix, err := newRegistrationComponentSuffix()
 	if err != nil {
 		return platformrepo.PlatformMcpCatalogRegistration{}, err
@@ -707,7 +715,6 @@ func (s *RegistrationStore) createPrivateRegistrationComponents(ctx context.Cont
 		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("load platform mcp component organization: %w", err)
 	}
 	remoteSlug := "platform-mcp-remote-" + suffix
-	serverSlug := "platform-mcp-" + suffix
 	displayName := configuration.displayName
 	if displayName == "" {
 		displayName = "MCP Catalogue server"
@@ -754,13 +761,18 @@ func (s *RegistrationStore) createPrivateRegistrationComponents(ctx context.Cont
 		Slug:               "platform-mcp-issuer-" + suffix,
 		AuthnChallengeMode: "interactive",
 		SessionDuration: pgtype.Interval{
-			Microseconds: platformMCPIssuerLifetime.Microseconds(),
+			Microseconds: 14 * 24 * time.Hour.Microseconds(),
 			Valid:        true,
 		},
 	})
 	if err != nil {
 		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("create platform mcp session issuer: %w", err)
 	}
+	serverID, err := uuid.NewV7()
+	if err != nil {
+		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("generate platform mcp server id: %w", err)
+	}
+	serverSlug := "platform-mcp-" + suffix
 	server, err := mcpserversrepo.New(tx).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID:                  serverID,
 		ProjectID:           project.ID,
@@ -775,7 +787,7 @@ func (s *RegistrationStore) createPrivateRegistrationComponents(ctx context.Cont
 	}
 	endpoint, err := mcpendpointsrepo.New(tx).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:   project.ID,
-		McpServerID: server.ID,
+		McpServerID: uuid.NullUUID{UUID: server.ID, Valid: true},
 		Slug:        platformMCPEndpointSlug(organization.Slug, suffix),
 	})
 	if err != nil {
@@ -835,7 +847,64 @@ func validateCatalogRegistrationRequest(principal Principal, project ResolvedPro
 	return nil
 }
 
-func principalConnection(principal Principal) (uuid.UUID, uuid.UUID, error) {
+// principalConnection resolves the caller's OAuth connection, if it has one.
+// A principal with no connection — the project assistant acts under assistant
+// identity — yields two invalid NullUUIDs rather than an error: the row it
+// writes is attributed by user and acting surface instead.
+func principalConnection(principal Principal) (uuid.NullUUID, uuid.NullUUID, error) {
+	if !principal.HasConnection() {
+		return uuid.NullUUID{}, uuid.NullUUID{}, nil
+	}
+	connectionID, generation, err := parseConnection(principal)
+	if err != nil {
+		return uuid.NullUUID{}, uuid.NullUUID{}, err
+	}
+	return uuid.NullUUID{UUID: connectionID, Valid: true}, uuid.NullUUID{UUID: generation, Valid: true}, nil
+}
+
+// connectionPair is a connection pair as the repository takes it, absent for a
+// principal that holds no connection.
+type connectionPair struct {
+	id         uuid.NullUUID
+	generation uuid.NullUUID
+}
+
+func principalConnectionPair(principal Principal, connectionID, generation uuid.UUID) connectionPair {
+	if !principal.HasConnection() {
+		return connectionPair{id: uuid.NullUUID{}, generation: uuid.NullUUID{}}
+	}
+	return connectionPair{
+		id:         uuid.NullUUID{UUID: connectionID, Valid: true},
+		generation: uuid.NullUUID{UUID: generation, Valid: true},
+	}
+}
+
+// handoffLockKey serialises handoff issuance per issuer. A connection-less
+// caller has no connection to key on, so it serialises per user instead —
+// keying every such caller on the nil UUID would serialise the whole
+// deployment on one advisory lock.
+func handoffLockKey(principal Principal, connectionID uuid.UUID) string {
+	if !principal.HasConnection() {
+		return "user:" + principal.UserID
+	}
+	return connectionID.String()
+}
+
+// parseOptionalConnection reads the connection pair of a principal that may not
+// have one. A connection-less caller yields the nil pair without an error, so a
+// setup it started is identified by its user instead. A caller that claims a
+// connection is still held to a complete, parseable pair.
+func parseOptionalConnection(principal Principal) (uuid.UUID, uuid.UUID, error) {
+	if !principal.HasConnection() {
+		if principal.UserID == "" {
+			return uuid.Nil, uuid.Nil, fmt.Errorf("parse platform mcp registration connection: %w", ErrUnauthorized)
+		}
+		return uuid.Nil, uuid.Nil, nil
+	}
+	return parseConnection(principal)
+}
+
+func parseConnection(principal Principal) (uuid.UUID, uuid.UUID, error) {
 	connectionID, err := uuid.Parse(principal.ConnectionID)
 	if err != nil {
 		return uuid.Nil, uuid.Nil, fmt.Errorf("parse platform mcp registration connection: %w", err)

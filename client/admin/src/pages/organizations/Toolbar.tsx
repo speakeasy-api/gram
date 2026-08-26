@@ -1,12 +1,13 @@
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import type { Column, RowData } from "@tanstack/react-table";
 import { SearchIcon } from "lucide-react";
-import { useEffect, useState, type JSX } from "react";
+import { useRef, useState, type JSX, type ReactNode } from "react";
 
 import type {
   DataTableFeatures,
   DataTableInstance,
 } from "@/components/data-table";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -15,21 +16,41 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { useOnUnmount } from "@/hooks/useOnUnmount";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { ACCOUNT_TYPE_OPTIONS, isAccountType } from "@/lib/accountTypes";
+  FILTER_GROUPS,
+  filterSummary,
+  optionsFor,
+  type FilterGroupKey,
+  type FilterSelection,
+} from "@/lib/organizationFilters";
 import { cn } from "@/lib/utils";
 import type { OrganizationsSearch } from "@/routes/organizations.index";
+
+import { useApplyFilters } from "./applyFilters";
+import { CreateOrganization } from "./CreateOrganization";
+import { FilterSheet } from "./FilterSheet";
+import type { WriteReporter } from "./OrganizationActions";
 
 const ROUTE_ID = "/organizations/";
 const SEARCH_DEBOUNCE_MS = 300;
 
-export function Toolbar(): JSX.Element {
+type ToolbarProps = {
+  /**
+   * Changes whenever a control cleared the search term. A draft still inside
+   * the debounce reached no URL, so the box has nothing else to notice by.
+   */
+  searchCleared: number;
+  // Passed straight through to the create control. This row sits outside the
+  // provider the row menu reads, and the live region it speaks through belongs
+  // to the page.
+  reporter: WriteReporter;
+};
+
+export function Toolbar({
+  searchCleared,
+  reporter,
+}: ToolbarProps): JSX.Element {
   const search = useSearch({ from: ROUTE_ID });
   const navigate = useNavigate({ from: ROUTE_ID });
 
@@ -37,6 +58,11 @@ export function Toolbar(): JSX.Element {
   // reaches it debounced.
   const committed = search.q ?? "";
   const [draft, setDraft] = useState(committed);
+  const draftRef = useRef(draft);
+  const committedRef = useRef(committed);
+  const searchTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  committedRef.current = committed;
+  useOnUnmount(() => clearTimeout(searchTimer.current));
   const [lastCommitted, setLastCommitted] = useState(committed);
 
   // The back button, and a link an operator pasted, both move `q` under the
@@ -49,42 +75,68 @@ export function Toolbar(): JSX.Element {
     // back here as a change. Repainting on that one would eat a space the
     // operator just typed. `lastCommitted` still moves either way, or this
     // block runs on every render.
-    if (draft.trim() !== committed) setDraft(committed);
+    if (draft.trim() !== committed) {
+      draftRef.current = committed;
+      setDraft(committed);
+    }
   }
 
-  useEffect(() => {
-    const next = draft.trim();
-    // A term that settles back on the committed one is not a change, so a typo
-    // and a backspace leave the URL alone.
-    if (next === committed) return;
+  const [lastCleared, setLastCleared] = useState(searchCleared);
+  if (searchCleared !== lastCleared) {
+    setLastCleared(searchCleared);
+    // Invalidate any event-owned debounce that has not reached the URL yet.
+    clearTimeout(searchTimer.current);
+    if (draft !== "") {
+      draftRef.current = "";
+      setDraft("");
+    }
+  }
 
-    const timer = setTimeout(() => {
+  const changeSearch = (value: string): void => {
+    draftRef.current = value;
+    setDraft(value);
+
+    clearTimeout(searchTimer.current);
+    const next = value.trim();
+    if (next === committedRef.current) return;
+
+    searchTimer.current = setTimeout(() => {
+      // Later input, a clear action, or Router navigation supersedes this event.
+      if (draftRef.current !== value || committedRef.current === next) return;
       void navigate({
         search: (prev: OrganizationsSearch) => ({
           ...prev,
           q: next || undefined,
-          page: undefined,
         }),
         // Keystroke rate. One history entry per burst of typing, not one per
         // keystroke.
         replace: true,
       });
     }, SEARCH_DEBOUNCE_MS);
-
-    return () => clearTimeout(timer);
-  }, [draft, committed, navigate]);
-
-  const applyFilter = (patch: Partial<OrganizationsSearch>): void => {
-    void navigate({
-      search: (prev: OrganizationsSearch) => ({
-        ...prev,
-        ...patch,
-        page: undefined,
-      }),
-    });
   };
 
-  const selectedType = search.type ?? "";
+  // Which group the sheet is showing, and null when it is closed.
+  const [openGroup, setOpenGroup] = useState<FilterGroupKey | null>(null);
+  const triggers = useRef<Partial<Record<FilterGroupKey, HTMLButtonElement>>>(
+    {},
+  );
+  // The trigger the sheet has to give the keyboard back to. A ref rather than
+  // `openGroup`, because the sheet asks for it as it unmounts: by then the
+  // state that opened it has already been cleared.
+  const openedFrom = useRef<FilterGroupKey | null>(null);
+
+  const filters: FilterSelection = {
+    type: search.type ?? [],
+    trial: search.trial ?? [],
+    disabled: search.disabled ?? [],
+  };
+
+  const applyFilters = useApplyFilters();
+
+  const openFilters = (group: FilterGroupKey): void => {
+    openedFrom.current = group;
+    setOpenGroup(group);
+  };
 
   return (
     <div className="mb-2 flex items-center gap-2">
@@ -92,42 +144,58 @@ export function Toolbar(): JSX.Element {
         <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-2 size-4 -translate-y-1/2" />
         <Input
           aria-label="Search organizations"
-          placeholder="Search by name or slug..."
+          placeholder="Search by name, slug or id..."
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(event) => changeSearch(event.target.value)}
           className="w-full py-1.5 pr-2 pl-8"
         />
       </div>
-      <Select
-        value={selectedType || "all"}
-        onValueChange={(value) =>
-          applyFilter({ type: isAccountType(value) ? value : undefined })
-        }
-      >
-        <SelectTrigger
-          aria-label="Account type"
-          className="h-auto w-auto px-2 py-1.5"
-        >
-          <SelectValue placeholder="All types" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">All types</SelectItem>
-          {ACCOUNT_TYPE_OPTIONS.map((t) => (
-            <SelectItem key={t} value={t}>
-              {t}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Button
-        variant={search.disabled ? "default" : "ghost"}
-        size="xs"
-        onClick={() =>
-          applyFilter({ disabled: search.disabled ? undefined : true })
-        }
-      >
-        {search.disabled ? "Hide disabled" : "Show disabled"}
-      </Button>
+
+      {/* One trigger per group, all opening the same sheet. The group is the
+          unit an operator thinks in, and a single Filters button would make
+          them find the group again inside the sheet. */}
+      {FILTER_GROUPS.map((group) => {
+        const chosen = filters[group.key];
+        return (
+          <Button
+            key={group.key}
+            ref={(node) => {
+              if (node) triggers.current[group.key] = node;
+            }}
+            variant={chosen.length > 0 ? "secondary" : "ghost"}
+            size="xs"
+            // The count is the whole visible signal, and a count does not say
+            // what it counts. The name a screen reader announces says it.
+            aria-label={`${group.label} filter: ${filterSummary(
+              group,
+              chosen,
+              optionsFor(group, chosen),
+            )}`}
+            onClick={() => openFilters(group.key)}
+          >
+            {group.label}
+            {chosen.length > 0 && <Badge>{chosen.length}</Badge>}
+          </Button>
+        );
+      })}
+
+      <FilterSheet
+        value={filters}
+        openGroup={openGroup}
+        onOpenChange={(open) => {
+          if (!open) setOpenGroup(null);
+        }}
+        onApply={applyFilters}
+        onReturnFocus={() => {
+          const group = openedFrom.current;
+          if (group) triggers.current[group]?.focus();
+        }}
+      />
+
+      {/* Last in the row and the only filled control in it, so it reads as the
+          page's primary action rather than another way to narrow the list. */}
+      <span className="min-w-0 flex-1" />
+      <CreateOrganization reporter={reporter} />
     </div>
   );
 }
@@ -139,16 +207,53 @@ export function Toolbar(): JSX.Element {
  */
 export function TableActionBar<T extends RowData>({
   table,
+  onColumnToggled,
+  bulkActions,
 }: {
   table: DataTableInstance<T>;
+  // Told after a toggle lands, so a page that overrides what this menu writes
+  // can answer a request the menu cannot satisfy on its own.
+  onColumnToggled?: (columnId: string, label: string) => void;
+  // Shown in place of "Nothing selected", so the strip keeps its height and no
+  // row moves under the pointer. A table with no select column never has a
+  // selection, so it never shows these.
+  bulkActions?: ReactNode;
 }): JSX.Element {
+  // The row model, not the selection state: the state is a map of row ids and
+  // it can name a row this page no longer holds, which would count a record
+  // that is not on screen and not in what the bulk action sends.
+  const selectedCount = table.getSelectedRowModel().rows.length;
+
   // Read off the table rather than walked a second time here, so the menu
   // cannot disagree with the table about how many columns are left.
-  const visibleCount = table.getVisibleLeafColumns().length;
+  //
+  // Only the hideable ones count. A column that opts out of hiding is visible
+  // whatever the operator does, so counting it holds this total off the floor
+  // and the guard below never fires: the operator can then hide every column
+  // that carries data and be left with a table of controls and no records.
+  const visibleCount = table
+    .getVisibleLeafColumns()
+    .filter((column) => column.getCanHide()).length;
 
   return (
     <div className="flex items-center gap-3 border-b px-3 py-2">
-      <span className="text-muted-foreground text-xs">Nothing selected</span>
+      {selectedCount === 0 ? (
+        <span className="text-muted-foreground text-xs">Nothing selected</span>
+      ) : (
+        <>
+          {/* The bar is generic over the record, so the count is bare here and
+              the confirmation names what is being counted. */}
+          <span className="text-xs">{selectedCount} selected</span>
+          {bulkActions}
+          <Button
+            variant="ghost"
+            size="xs"
+            onClick={() => table.resetRowSelection()}
+          >
+            Clear selection
+          </Button>
+        </>
+      )}
       <span className="flex-1" />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -179,7 +284,9 @@ export function TableActionBar<T extends RowData>({
                   if (locked) event.preventDefault();
                 }}
                 onCheckedChange={() => {
-                  if (!locked) column.toggleVisibility();
+                  if (locked) return;
+                  column.toggleVisibility();
+                  onColumnToggled?.(column.id, columnLabel(column));
                 }}
               >
                 {columnLabel(column)}
@@ -193,10 +300,12 @@ export function TableActionBar<T extends RowData>({
 }
 
 // A header is a renderable in general, and only a string carries a label a
-// screen reader can announce here. The id is the readable fallback.
+// screen reader can announce here. A column drawing a control instead names
+// itself through its meta, and the id is the readable fallback.
 function columnLabel<T extends RowData>(
   column: Column<DataTableFeatures, T>,
 ): string {
-  const { header } = column.columnDef;
+  const { header, meta } = column.columnDef;
+  if (meta?.label) return meta.label;
   return typeof header === "string" ? header : column.id;
 }

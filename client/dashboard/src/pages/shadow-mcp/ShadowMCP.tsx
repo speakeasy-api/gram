@@ -1,11 +1,11 @@
-import { ResourceListPage } from "@/components/page-templates";
+import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import type { ShadowMCPPolicy } from "@/components/shadow-mcp/ShadowMCPInventoryActions";
 import { ShadowMCPInventoryTable } from "@/components/shadow-mcp/ShadowMCPInventoryTable";
 import { ShadowMCPPolicyStatus } from "@/components/shadow-mcp/ShadowMCPPolicyStatus";
 import {
   eligibleShadowMCPAllowRulePolicies,
   shadowMCPBlockingPolicyDisposition,
+  type ShadowMCPPolicy,
   shadowMCPPolicyState,
 } from "@/components/shadow-mcp/shadowMCPInventoryStatus";
 import { SkeletonTable } from "@/components/ui/Skeleton";
@@ -33,17 +33,25 @@ function ShadowMCPLoadingState(): JSX.Element {
 }
 
 export default function ShadowMCP(): JSX.Element {
-  // Keep the scope gate OUTSIDE the data-owning component so the risk-policy /
-  // members / roles queries never fire for unauthorized visitors.
+  const pageTitle = "Shadow MCP";
+
   return (
-    <RequireScope scope="org:admin" level="page">
-      <ShadowMCPInner />
-    </RequireScope>
+    <Page>
+      <Page.Header>
+        <Page.Header.Breadcrumbs
+          substitutions={{ ["shadow-mcp"]: pageTitle }}
+        />
+      </Page.Header>
+      <Page.Body fullHeight className="pb-8">
+        <RequireScope scope="org:admin" level="page">
+          <ShadowMCPInventory pageTitle={pageTitle} />
+        </RequireScope>
+      </Page.Body>
+    </Page>
   );
 }
 
-function ShadowMCPInner(): JSX.Element {
-  const pageTitle = "Shadow MCP";
+function ShadowMCPInventory({ pageTitle }: { pageTitle: string }): JSX.Element {
   const project = useProject();
   const routes = useRoutes();
   const policiesQuery = useRiskListPolicies();
@@ -61,35 +69,40 @@ function ShadowMCPInner(): JSX.Element {
   const disposition = shadowMCPBlockingPolicyDisposition(shadowMCPPolicies);
 
   return (
-    <ResourceListPage
-      breadcrumbSubstitutions={{ ["shadow-mcp"]: pageTitle }}
-      title={pageTitle}
-      stage="beta"
-      description="Manage the Shadow MCP server inventory, allow decisions, and requests."
-      primaryAction={
-        policyDataReady ? (
+    <Page.Section>
+      <Page.Section.Title stage="beta" area="">
+        {pageTitle}
+      </Page.Section.Title>
+      <Page.Section.Description>
+        Every MCP server this project knows about — observed in agent traffic or
+        raised in an access request — with its review state. Click a server for
+        its evidence, requesters, and decision history.
+      </Page.Section.Description>
+      {policyDataReady ? (
+        <Page.Section.CTA>
           <ShadowMCPPolicyStatus
             disposition={disposition}
             policyState={policyState}
           />
-        ) : undefined
-      }
-      isLoading={!policyDataReady}
-      loadingFallback={<ShadowMCPLoadingState />}
-      fullHeight
-    >
-      <div className="flex min-h-0 flex-1 flex-col pb-8">
-        <ShadowMCPInventoryTable
-          members={membersQuery.data?.members ?? []}
-          onOpenServer={(server) =>
-            routes.shadowMCP.detail.goTo(server.serverSlug)
-          }
-          policyState={policyState}
-          projectID={project.id}
-          roles={rolesQuery.data?.roles ?? []}
-          shadowMCPPolicies={shadowMCPPolicies}
-        />
-      </div>
-    </ResourceListPage>
+        </Page.Section.CTA>
+      ) : null}
+      <Page.Section.Body>
+        {policyDataReady ? (
+          <div className="flex flex-col pb-8">
+            <ShadowMCPInventoryTable
+              members={membersQuery.data?.members ?? []}
+              onOpenServer={(server) =>
+                routes.shadowMCP.detail.goTo(server.serverSlug)
+              }
+              projectID={project.id}
+              roles={rolesQuery.data?.roles ?? []}
+              shadowMCPPolicies={shadowMCPPolicies}
+            />
+          </div>
+        ) : (
+          <ShadowMCPLoadingState />
+        )}
+      </Page.Section.Body>
+    </Page.Section>
   );
 }

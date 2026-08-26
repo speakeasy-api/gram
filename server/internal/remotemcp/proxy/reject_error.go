@@ -25,6 +25,10 @@ const (
 	// "blocked by tool-usage policy"). It sits in the -32000..-32099
 	// implementation-defined band reserved by JSON-RPC 2.0.
 	RejectCodeServerError = -32000
+
+	// RejectCodeHeaderMismatch reports a 2026-07-28 mirrored request header
+	// that disagrees with the JSON-RPC body it claims to describe.
+	RejectCodeHeaderMismatch = -32020
 )
 
 // RejectError is the typed rejection shape an interceptor can return when it

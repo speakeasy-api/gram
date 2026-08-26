@@ -320,7 +320,7 @@ func TestServiceAttachRemoteMcpServerToAssistant(t *testing.T) {
 
 	_, err = mcpendpointsRepo.New(conn).CreateMCPEndpoint(t.Context(), mcpendpointsRepo.CreateMCPEndpointParams{
 		ProjectID:   projectID,
-		McpServerID: server.ID,
+		McpServerID: uuid.NullUUID{UUID: server.ID, Valid: true},
 		Slug:        "team-remote-mcp",
 	})
 	require.NoError(t, err)
@@ -422,7 +422,7 @@ func TestAssistantsService_AttachMCPServer_RejectsUnreachable(t *testing.T) {
 	require.NoError(t, err)
 	_, err = mcpendpointsRepo.New(conn).CreateMCPEndpoint(t.Context(), mcpendpointsRepo.CreateMCPEndpointParams{
 		ProjectID:   projectID,
-		McpServerID: disabled.ID,
+		McpServerID: uuid.NullUUID{UUID: disabled.ID, Valid: true},
 		Slug:        "disabled-remote-endpoint",
 	})
 	require.NoError(t, err)

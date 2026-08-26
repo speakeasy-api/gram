@@ -526,156 +526,64 @@ func BuildListShadowMCPInventoryUsersPayload(accessListShadowMCPInventoryUsersPr
 	return v, nil
 }
 
-// BuildUpsertShadowMCPInventoryPolicyBypassPayload builds the payload for the
-// access upsertShadowMCPInventoryPolicyBypass endpoint from CLI flags.
-func BuildUpsertShadowMCPInventoryPolicyBypassPayload(accessUpsertShadowMCPInventoryPolicyBypassBody string, accessUpsertShadowMCPInventoryPolicyBypassSessionToken string) (*access.UpsertShadowMCPInventoryPolicyBypassPayload, error) {
-	var err error
-	var body UpsertShadowMCPInventoryPolicyBypassRequestBody
-	{
-		err = json.Unmarshal([]byte(accessUpsertShadowMCPInventoryPolicyBypassBody), &body)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"policy_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_url\": \"https://example.com/foo\"\n   }'")
-		}
-		if body.PolicyIds == nil {
-			err = goa.MergeErrors(err, goa.MissingFieldError("policy_ids", "body"))
-		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", body.ProjectID, goa.FormatUUID))
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.server_url", body.ServerURL, goa.FormatURI))
-		for _, e := range body.PolicyIds {
-			err = goa.MergeErrors(err, goa.ValidateFormat("body.policy_ids[*]", e, goa.FormatUUID))
-		}
-		if err != nil {
-			return nil, err
-		}
-	}
-	var sessionToken *string
-	{
-		if accessUpsertShadowMCPInventoryPolicyBypassSessionToken != "" {
-			sessionToken = &accessUpsertShadowMCPInventoryPolicyBypassSessionToken
-		}
-	}
-	v := &access.UpsertShadowMCPInventoryPolicyBypassPayload{
-		ProjectID: body.ProjectID,
-		ServerURL: body.ServerURL,
-	}
-	if body.PolicyIds != nil {
-		v.PolicyIds = make([]string, len(body.PolicyIds))
-		for i, val := range body.PolicyIds {
-			v.PolicyIds[i] = val
-		}
-	} else {
-		v.PolicyIds = []string{}
-	}
-	v.SessionToken = sessionToken
-
-	return v, nil
-}
-
-// BuildDeleteShadowMCPInventoryPolicyBypassPayload builds the payload for the
-// access deleteShadowMCPInventoryPolicyBypass endpoint from CLI flags.
-func BuildDeleteShadowMCPInventoryPolicyBypassPayload(accessDeleteShadowMCPInventoryPolicyBypassProjectID string, accessDeleteShadowMCPInventoryPolicyBypassServerURL string, accessDeleteShadowMCPInventoryPolicyBypassSessionToken string) (*access.DeleteShadowMCPInventoryPolicyBypassPayload, error) {
+// BuildListShadowMCPInventoryServersForUserPayload builds the payload for the
+// access listShadowMCPInventoryServersForUser endpoint from CLI flags.
+func BuildListShadowMCPInventoryServersForUserPayload(accessListShadowMCPInventoryServersForUserProjectID string, accessListShadowMCPInventoryServersForUserUserKeys string, accessListShadowMCPInventoryServersForUserLimit string, accessListShadowMCPInventoryServersForUserSessionToken string) (*access.ListShadowMCPInventoryServersForUserPayload, error) {
 	var err error
 	var projectID string
 	{
-		projectID = accessDeleteShadowMCPInventoryPolicyBypassProjectID
+		projectID = accessListShadowMCPInventoryServersForUserProjectID
 		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
 		if err != nil {
 			return nil, err
 		}
 	}
-	var serverURL string
+	var userKeys []string
 	{
-		serverURL = accessDeleteShadowMCPInventoryPolicyBypassServerURL
-		err = goa.MergeErrors(err, goa.ValidateFormat("server_url", serverURL, goa.FormatURI))
+		err = json.Unmarshal([]byte(accessListShadowMCPInventoryServersForUserUserKeys), &userKeys)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for userKeys, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"abc123\",\n      \"abc123\"\n   ]'")
+		}
+		if len(userKeys) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("user_keys", userKeys, len(userKeys), 1, true))
+		}
+		if len(userKeys) > 200 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("user_keys", userKeys, len(userKeys), 200, false))
+		}
 		if err != nil {
 			return nil, err
 		}
 	}
-	var sessionToken *string
+	var limit int
 	{
-		if accessDeleteShadowMCPInventoryPolicyBypassSessionToken != "" {
-			sessionToken = &accessDeleteShadowMCPInventoryPolicyBypassSessionToken
+		if accessListShadowMCPInventoryServersForUserLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(accessListShadowMCPInventoryServersForUserLimit, 10, strconv.IntSize)
+			limit = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+			}
+			if limit > 200 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 200, false))
+			}
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
-	v := &access.DeleteShadowMCPInventoryPolicyBypassPayload{}
+	var sessionToken *string
+	{
+		if accessListShadowMCPInventoryServersForUserSessionToken != "" {
+			sessionToken = &accessListShadowMCPInventoryServersForUserSessionToken
+		}
+	}
+	v := &access.ListShadowMCPInventoryServersForUserPayload{}
 	v.ProjectID = projectID
-	v.ServerURL = serverURL
-	v.SessionToken = sessionToken
-
-	return v, nil
-}
-
-// BuildBlockShadowMCPInventoryServerPayload builds the payload for the access
-// blockShadowMCPInventoryServer endpoint from CLI flags.
-func BuildBlockShadowMCPInventoryServerPayload(accessBlockShadowMCPInventoryServerBody string, accessBlockShadowMCPInventoryServerSessionToken string) (*access.BlockShadowMCPInventoryServerPayload, error) {
-	var err error
-	var body BlockShadowMCPInventoryServerRequestBody
-	{
-		err = json.Unmarshal([]byte(accessBlockShadowMCPInventoryServerBody), &body)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"policy_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_url\": \"https://example.com/foo\"\n   }'")
-		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", body.ProjectID, goa.FormatUUID))
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.server_url", body.ServerURL, goa.FormatURI))
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.policy_id", body.PolicyID, goa.FormatUUID))
-		if err != nil {
-			return nil, err
-		}
-	}
-	var sessionToken *string
-	{
-		if accessBlockShadowMCPInventoryServerSessionToken != "" {
-			sessionToken = &accessBlockShadowMCPInventoryServerSessionToken
-		}
-	}
-	v := &access.BlockShadowMCPInventoryServerPayload{
-		ProjectID: body.ProjectID,
-		ServerURL: body.ServerURL,
-		PolicyID:  body.PolicyID,
-	}
-	v.SessionToken = sessionToken
-
-	return v, nil
-}
-
-// BuildUnblockShadowMCPInventoryServerPayload builds the payload for the
-// access unblockShadowMCPInventoryServer endpoint from CLI flags.
-func BuildUnblockShadowMCPInventoryServerPayload(accessUnblockShadowMCPInventoryServerProjectID string, accessUnblockShadowMCPInventoryServerServerURL string, accessUnblockShadowMCPInventoryServerPolicyID string, accessUnblockShadowMCPInventoryServerSessionToken string) (*access.UnblockShadowMCPInventoryServerPayload, error) {
-	var err error
-	var projectID string
-	{
-		projectID = accessUnblockShadowMCPInventoryServerProjectID
-		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
-		if err != nil {
-			return nil, err
-		}
-	}
-	var serverURL string
-	{
-		serverURL = accessUnblockShadowMCPInventoryServerServerURL
-		err = goa.MergeErrors(err, goa.ValidateFormat("server_url", serverURL, goa.FormatURI))
-		if err != nil {
-			return nil, err
-		}
-	}
-	var policyID string
-	{
-		policyID = accessUnblockShadowMCPInventoryServerPolicyID
-		err = goa.MergeErrors(err, goa.ValidateFormat("policy_id", policyID, goa.FormatUUID))
-		if err != nil {
-			return nil, err
-		}
-	}
-	var sessionToken *string
-	{
-		if accessUnblockShadowMCPInventoryServerSessionToken != "" {
-			sessionToken = &accessUnblockShadowMCPInventoryServerSessionToken
-		}
-	}
-	v := &access.UnblockShadowMCPInventoryServerPayload{}
-	v.ProjectID = projectID
-	v.ServerURL = serverURL
-	v.PolicyID = policyID
+	v.UserKeys = userKeys
+	v.Limit = limit
 	v.SessionToken = sessionToken
 
 	return v, nil

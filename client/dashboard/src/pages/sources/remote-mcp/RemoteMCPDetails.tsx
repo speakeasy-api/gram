@@ -120,6 +120,8 @@ export default function RemoteMCPDetails(): JSX.Element {
   const endpointCountByServerId = useMemo(() => {
     const counts = new Map<string, number>();
     for (const endpoint of endpointsResult?.mcpEndpoints ?? []) {
+      // Meta-MCP-backed endpoints have no generic server to count against.
+      if (!endpoint.mcpServerId) continue;
       counts.set(
         endpoint.mcpServerId,
         (counts.get(endpoint.mcpServerId) ?? 0) + 1,

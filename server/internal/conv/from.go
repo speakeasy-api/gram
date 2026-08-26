@@ -78,6 +78,15 @@ func Default[T comparable](val T, def T) T {
 	return val
 }
 
+// DefaultSlice returns the given slice or a default if the slice is empty.
+func DefaultSlice[T any](val []T, def []T) []T {
+	if len(val) == 0 {
+		return def
+	}
+
+	return val
+}
+
 // PtrToNullUUID parses an optional string pointer into a uuid.NullUUID.
 // If the pointer is nil, it returns an invalid NullUUID. Otherwise it parses
 // the string as a UUID.

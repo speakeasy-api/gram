@@ -50,6 +50,15 @@ import (
 
 type HTTPClient = http.Client
 
+type closeIdleRoundTripper struct {
+	http.RoundTripper
+	closeIdleConnections func()
+}
+
+func (t *closeIdleRoundTripper) CloseIdleConnections() {
+	t.closeIdleConnections()
+}
+
 var (
 	ErrBadHost   = fmt.Errorf("bad host")
 	ErrBlockedIP = fmt.Errorf("blocked ip")
@@ -115,12 +124,15 @@ type RetryConfig struct {
 // only a few fields need to be overridden.
 func DefaultRetryConfig() *RetryConfig {
 	return &RetryConfig{
-		WaitMin:      1 * time.Second,
-		WaitMax:      30 * time.Second,
-		MaxAttempts:  4,
-		CheckRetry:   retryablehttp.DefaultRetryPolicy,
-		Backoff:      retryablehttp.DefaultBackoff,
-		ErrorHandler: nil,
+		WaitMin:     1 * time.Second,
+		WaitMax:     30 * time.Second,
+		MaxAttempts: 4,
+		CheckRetry:  retryablehttp.DefaultRetryPolicy,
+		Backoff:     retryablehttp.DefaultBackoff,
+		// Exhausted retries surface as *RetriesExhaustedError so callers
+		// keep the final attempt's status and body instead of the opaque
+		// "giving up" message that discards the response.
+		ErrorHandler: retriesExhaustedErrorHandler,
 		PrepareRetry: nil,
 	}
 }
@@ -361,6 +373,10 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 			breaker: p.breaker,
 		}
 	}
+	roundTripper = &closeIdleRoundTripper{
+		RoundTripper:         roundTripper,
+		closeIdleConnections: transport.CloseIdleConnections,
+	}
 
 	if opts.retryConfig == nil {
 		return &http.Client{Transport: roundTripper}
@@ -392,7 +408,12 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 		retryClient.Backoff = opts.retryConfig.Backoff
 	}
 
-	return retryClient.StandardClient()
+	client := retryClient.StandardClient()
+	client.Transport = &closeIdleRoundTripper{
+		RoundTripper:         client.Transport,
+		closeIdleConnections: transport.CloseIdleConnections,
+	}
+	return client
 }
 
 type dialerOptions struct {

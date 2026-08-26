@@ -14,6 +14,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -68,6 +72,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -122,6 +130,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -176,6 +188,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -230,6 +246,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -284,6 +304,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -338,6 +362,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -392,6 +420,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -446,6 +478,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -500,6 +536,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -554,6 +594,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -608,6 +652,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -662,6 +710,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -716,6 +768,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -762,7 +818,7 @@ webhooks:
                 required: true
     audit_log.chat_session_event_v1:
         post:
-            description: Emitted when a chat session is accessed
+            description: Emitted when a chat session is accessed, moved to another harness, or exported as a handoff
             operationId: audit_log.chat_session_event_v1
             requestBody:
                 content:
@@ -770,6 +826,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -824,6 +884,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -878,6 +942,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -932,6 +1000,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -986,6 +1058,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -1040,6 +1116,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -1094,6 +1174,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -1148,6 +1232,126 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
+    audit_log.json_web_key_event_v1:
+        post:
+            description: Emitted when changes to published JSON Web Keys are made
+            operationId: audit_log.json_web_key_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
+    audit_log.json_web_key_set_event_v1:
+        post:
+            description: Emitted when changes to JSON Web Key Sets are made
+            operationId: audit_log.json_web_key_set_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -1202,6 +1406,68 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
+    audit_log.mcp_approval_request_event_v1:
+        post:
+            description: Emitted when changes to MCP approval requests are made
+            operationId: audit_log.mcp_approval_request_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -1256,6 +1522,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -1310,6 +1580,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -1364,6 +1638,68 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
+    audit_log.meta_mcp_server_event_v1:
+        post:
+            description: Emitted when changes to meta MCP servers or their memberships are made
+            operationId: audit_log.meta_mcp_server_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -1418,6 +1754,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -1472,6 +1812,68 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
+    audit_log.organization_billing_event_v1:
+        post:
+            description: Emitted when the organization's billing state changes
+            operationId: audit_log.organization_billing_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -1526,6 +1928,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -1572,7 +1978,7 @@ webhooks:
                 required: true
     audit_log.organization_enterprise_trial_event_v1:
         post:
-            description: Emitted when the organization's enterprise trial is armed or demoted
+            description: Emitted when the organization's enterprise trial is armed, extended, demoted, or re-armed
             operationId: audit_log.organization_enterprise_trial_event_v1
             requestBody:
                 content:
@@ -1580,6 +1986,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -1634,6 +2044,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -1688,6 +2102,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -1742,6 +2160,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -1796,6 +2218,68 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
+                                action:
+                                    type: string
+                                actor_display_name:
+                                    type: string
+                                actor_id:
+                                    type: string
+                                actor_slug:
+                                    type: string
+                                actor_type:
+                                    type: string
+                                after_snapshot:
+                                    additionalProperties: true
+                                before_snapshot:
+                                    additionalProperties: true
+                                id:
+                                    format: uuid
+                                    type: string
+                                metadata:
+                                    additionalProperties: true
+                                organization_id:
+                                    type: string
+                                project_id:
+                                    format: uuid
+                                    type:
+                                        - string
+                                        - "null"
+                                subject_display_name:
+                                    type: string
+                                subject_id:
+                                    type: string
+                                subject_slug:
+                                    type: string
+                                subject_type:
+                                    type: string
+                            required:
+                                - id
+                                - organization_id
+                                - actor_id
+                                - actor_type
+                                - action
+                                - subject_id
+                                - subject_type
+                            type: object
+                required: true
+    audit_log.platform_mcp_diagnostics_event_v1:
+        post:
+            description: Emitted when a Platform MCP diagnostic reads an individual subject's status
+            operationId: audit_log.platform_mcp_diagnostics_event_v1
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            additionalProperties: false
+                            properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -1850,6 +2334,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -1904,6 +2392,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -1958,6 +2450,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -2012,6 +2508,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -2066,6 +2566,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -2120,6 +2624,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -2174,6 +2682,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -2228,6 +2740,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -2282,6 +2798,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -2336,6 +2856,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -2390,6 +2914,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -2444,6 +2972,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -2498,6 +3030,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -2552,6 +3088,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -2606,6 +3146,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -2660,6 +3204,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -2714,6 +3262,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -2768,6 +3320,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -2822,6 +3378,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -2876,6 +3436,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -2930,6 +3494,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -2984,6 +3552,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -3038,6 +3610,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -3092,6 +3668,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -3146,6 +3726,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -3200,6 +3784,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:
@@ -3254,6 +3842,10 @@ webhooks:
                         schema:
                             additionalProperties: false
                             properties:
+                                acting_client_id:
+                                    type: string
+                                acting_surface:
+                                    type: string
                                 action:
                                     type: string
                                 actor_display_name:

@@ -1,7 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { ProjectDetail } from "@/pages/ProjectDetail";
+import { projectQuery } from "@/lib/adminQueries";
+import { ProjectDetailRoute } from "@/pages/ProjectDetail";
 
 export const Route = createFileRoute("/projects/$idOrSlug")({
-  component: ProjectDetail,
+  component: ProjectDetailRoute,
+  staticData: {
+    crumb: ({ idOrSlug }) => (idOrSlug ? projectQuery(idOrSlug) : undefined),
+  },
 });

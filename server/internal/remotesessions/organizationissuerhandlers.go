@@ -141,6 +141,7 @@ func (s *Service) CreateIssuer(ctx context.Context, payload *orgissuersgen.Creat
 		GrantTypesSupported:               payload.GrantTypesSupported,
 		ResponseTypesSupported:            payload.ResponseTypesSupported,
 		TokenEndpointAuthMethodsSupported: payload.TokenEndpointAuthMethodsSupported,
+		CodeChallengeMethodsSupported:     payload.CodeChallengeMethodsSupported,
 		ClientIDMetadataDocumentSupported: conv.PtrValOr(payload.ClientIDMetadataDocumentSupported, false),
 		Oidc:                              conv.PtrValOr(payload.Oidc, false),
 		Passthrough:                       conv.PtrValOr(payload.Passthrough, false),
@@ -396,9 +397,14 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orgissuersgen.Updat
 		return nil, oops.E(oops.CodeBadRequest, nil, "issuer cannot be set to empty").LogError(ctx, logger)
 	}
 
-	logoAssetID, err := conv.PtrToNullUUID(payload.LogoAssetID)
-	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid logo asset id").LogError(ctx, logger)
+	// An empty logo asset id stays legal: the update query reads it as the
+	// explicit "clear to NULL" sentinel. Any other value must be a uuid —
+	// the query casts the text parameter, so a malformed value has to be
+	// rejected here rather than surfacing as a Postgres cast error.
+	if v := conv.PtrValOr(payload.LogoAssetID, ""); v != "" {
+		if _, err := uuid.Parse(v); err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid logo asset id").LogError(ctx, logger)
+		}
 	}
 
 	// Revocation endpoint must be HTTPS, or HTTP on loopback where a token
@@ -463,7 +469,7 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orgissuersgen.Updat
 		Slug:                              conv.PtrToPGText(payload.Slug),
 		Issuer:                            conv.PtrToPGText(payload.Issuer),
 		Name:                              conv.PtrToPGText(payload.Name),
-		LogoAssetID:                       logoAssetID,
+		LogoAssetID:                       conv.PtrToPGText(payload.LogoAssetID),
 		ClientSetupDocumentationUrl:       conv.PtrToPGText(payload.ClientSetupDocumentationURL),
 		AuthorizationEndpoint:             conv.PtrToPGText(payload.AuthorizationEndpoint),
 		TokenEndpoint:                     conv.PtrToPGText(payload.TokenEndpoint),
@@ -477,6 +483,7 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orgissuersgen.Updat
 		GrantTypesSupported:               payload.GrantTypesSupported,
 		ResponseTypesSupported:            payload.ResponseTypesSupported,
 		TokenEndpointAuthMethodsSupported: payload.TokenEndpointAuthMethodsSupported,
+		CodeChallengeMethodsSupported:     payload.CodeChallengeMethodsSupported,
 		ClientIDMetadataDocumentSupported: conv.PtrToPGBool(payload.ClientIDMetadataDocumentSupported),
 		Oidc:                              conv.PtrToPGBool(payload.Oidc),
 		Passthrough:                       conv.PtrToPGBool(payload.Passthrough),

@@ -1,16 +1,3 @@
-import { Page } from "@/components/page-layout";
-import { RequireScope } from "@/components/require-scope";
-import { Text } from "@/components/ui/Text";
-import { useIsSpeakeasyStaff } from "@/contexts/Auth";
-import { useTelemetry } from "@/contexts/Telemetry";
-import { useRoutes } from "@/routes";
-import { Button } from "@/components/ui/Button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/Dropdown";
 import {
   ChevronDown,
   Code,
@@ -20,6 +7,20 @@ import {
   Plus,
   Server,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/Dropdown";
+
+import { Button } from "@/components/ui/Button";
+import { Page } from "@/components/page-layout";
+import { RequireScope } from "@/components/require-scope";
+import { Text } from "@/components/ui/Text";
+import { useIsSpeakeasyStaff } from "@/contexts/Auth";
+import { useRoutes } from "@/routes";
+import { useTelemetry } from "@/contexts/Telemetry";
 
 type SourcesEmptyStateProps = {
   isTunneledMcpEnabled: boolean;

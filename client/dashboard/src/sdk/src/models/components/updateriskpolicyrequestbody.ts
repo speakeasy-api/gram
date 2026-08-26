@@ -17,15 +17,16 @@ import {
 } from "./riskpolicymodelconfig.js";
 
 /**
- * Policy action: flag, warn (challenge), or block.
+ * Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).
  */
 export const UpdateRiskPolicyRequestBodyAction = {
   Flag: "flag",
   Warn: "warn",
   Block: "block",
+  Quarantine: "quarantine",
 } as const;
 /**
- * Policy action: flag, warn (challenge), or block.
+ * Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).
  */
 export type UpdateRiskPolicyRequestBodyAction = ClosedEnum<
   typeof UpdateRiskPolicyRequestBodyAction
@@ -61,7 +62,7 @@ export type UpdateRiskPolicyRequestBodyShadowMcpDisposition = ClosedEnum<
 
 export type UpdateRiskPolicyRequestBody = {
   /**
-   * Policy action: flag, warn (challenge), or block.
+   * Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).
    */
   action?: UpdateRiskPolicyRequestBodyAction | undefined;
   /**
@@ -156,6 +157,10 @@ export type UpdateRiskPolicyRequestBody = {
    */
   sources?: Array<string> | undefined;
   /**
+   * Confirms that this edit may displace standing MCP approval decisions its URL lists contradict, transitioning them to superseded (audit-logged, decision history preserved). Without it, a contradicting edit is rejected with a conflict naming the affected servers.
+   */
+  supersedeDecisions?: boolean | undefined;
+  /**
    * Optional message shown to end users when this policy blocks an action or surfaces a flagged finding. Send an empty string to clear.
    */
   userMessage?: string | undefined;
@@ -203,6 +208,7 @@ export type UpdateRiskPolicyRequestBody$Outbound = {
   shadow_mcp_blocked_urls?: Array<string> | undefined;
   shadow_mcp_disposition?: string | undefined;
   sources?: Array<string> | undefined;
+  supersede_decisions?: boolean | undefined;
   user_message?: string | undefined;
 };
 
@@ -240,6 +246,7 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
       UpdateRiskPolicyRequestBodyShadowMcpDisposition$outboundSchema,
     ),
     sources: z.optional(z.array(z.string())),
+    supersedeDecisions: z.optional(z.boolean()),
     userMessage: z.optional(z.string()),
   }),
   z.transform((v) => {
@@ -261,6 +268,7 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
       shadowMcpAllowedUrls: "shadow_mcp_allowed_urls",
       shadowMcpBlockedUrls: "shadow_mcp_blocked_urls",
       shadowMcpDisposition: "shadow_mcp_disposition",
+      supersedeDecisions: "supersede_decisions",
       userMessage: "user_message",
     });
   }),

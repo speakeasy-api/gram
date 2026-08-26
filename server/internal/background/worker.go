@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/netip"
 	"net/url"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -17,7 +18,9 @@ import (
 	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 
+	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
@@ -57,6 +60,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
+	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 )
@@ -71,11 +75,20 @@ type WorkerOptions struct {
 	ChatMessageWriter   *chat.ChatMessageWriter
 	ChatClient          *chat.Client
 	OpenRouter          openrouter.Provisioner
+	OpenRouterSpend     openrouter.SpendClient
 	K8sClient           *k8s.KubernetesClients
 	ExpectedTargetCNAME string
+	// ExpectedARecords are the static ingress IPs apex custom domains point A
+	// records at; used alongside ExpectedTargetCNAME for verification/health.
+	ExpectedARecords []netip.Addr
+
+	// GitHubEvidenceToken authenticates the recheck sweep's repository
+	// lookups; empty falls back to GitHub's small unauthenticated budget.
+	GitHubEvidenceToken string
 	SiteURL             *url.URL
 	BillingTracker      billing.Tracker
 	BillingRepository   billing.Repository
+	StripeClient        stripeclient.Client
 	RedisClient         *redis.Client
 	CacheAdapter        cache.Cache
 	EmailService        *email.Service
@@ -151,11 +164,15 @@ func ForDeploymentProcessing(
 		ChatMessageWriter:   nil,
 		ChatClient:          nil,
 		OpenRouter:          nil,
+		OpenRouterSpend:     nil,
 		K8sClient:           nil,
 		ExpectedTargetCNAME: "",
+		ExpectedARecords:    nil,
+		GitHubEvidenceToken: "",
 		SiteURL:             nil,
 		BillingTracker:      nil,
 		BillingRepository:   nil,
+		StripeClient:        nil,
 		RagService:          nil,
 		RedisClient:         nil,
 		PosthogClient:       nil,
@@ -184,6 +201,9 @@ func ForDeploymentProcessing(
 			CustomRulesAnalysis:     gcp.NewNoopPublisher[*riskv1.CustomRulesAnalysis](),
 			RiskFindings:            gcp.NewNoopPublisher[*riskv1.Finding](),
 			TelemetryLogs:           gcp.NewNoopPublisher[*telemetryv1.LogRecord](),
+			OTELLogs:                gcp.NewNoopPublisher[*otelv1.InboundLogRecord](),
+			OTELMetrics:             gcp.NewNoopPublisher[*otelv1.InboundMetric](),
+			OTELSpans:               gcp.NewNoopPublisher[*otelv1.InboundSpan](),
 			Outbox:                  topics.NewNoopPublisher(),
 		},
 		TrialEmailsService:        nil,
@@ -209,11 +229,15 @@ func NewTemporalWorker(
 		ChatMessageWriter:         nil,
 		ChatClient:                nil,
 		OpenRouter:                nil,
+		OpenRouterSpend:           nil,
 		K8sClient:                 nil,
 		ExpectedTargetCNAME:       "",
+		ExpectedARecords:          nil,
+		GitHubEvidenceToken:       "",
 		SiteURL:                   nil,
 		BillingTracker:            nil,
 		BillingRepository:         nil,
+		StripeClient:              nil,
 		RedisClient:               nil,
 		PosthogClient:             nil,
 		FunctionsDeployer:         nil,
@@ -254,12 +278,16 @@ func NewTemporalWorker(
 			SlackClient:               conv.Default(o.SlackClient, opts.SlackClient),
 			ChatMessageWriter:         conv.Default(o.ChatMessageWriter, opts.ChatMessageWriter),
 			OpenRouter:                conv.Default(o.OpenRouter, opts.OpenRouter),
+			OpenRouterSpend:           conv.Default(o.OpenRouterSpend, opts.OpenRouterSpend),
 			ChatClient:                conv.Default(o.ChatClient, opts.ChatClient),
 			K8sClient:                 conv.Default(o.K8sClient, opts.K8sClient),
 			ExpectedTargetCNAME:       conv.Default(o.ExpectedTargetCNAME, opts.ExpectedTargetCNAME),
+			ExpectedARecords:          conv.DefaultSlice(o.ExpectedARecords, opts.ExpectedARecords),
+			GitHubEvidenceToken:       conv.Default(o.GitHubEvidenceToken, opts.GitHubEvidenceToken),
 			SiteURL:                   conv.Default(o.SiteURL, opts.SiteURL),
 			BillingTracker:            conv.Default(o.BillingTracker, opts.BillingTracker),
 			BillingRepository:         conv.Default(o.BillingRepository, opts.BillingRepository),
+			StripeClient:              conv.Default(o.StripeClient, opts.StripeClient),
 			RedisClient:               conv.Default(o.RedisClient, opts.RedisClient),
 			PosthogClient:             conv.Default(o.PosthogClient, opts.PosthogClient),
 			FunctionsDeployer:         conv.Default(o.FunctionsDeployer, opts.FunctionsDeployer),
@@ -338,12 +366,15 @@ func NewTemporalWorker(
 		opts.AssetStorage,
 		opts.SlackClient,
 		opts.OpenRouter,
+		opts.OpenRouterSpend,
 		opts.ChatClient,
 		opts.K8sClient,
 		opts.ExpectedTargetCNAME,
+		opts.ExpectedARecords,
 		opts.SiteURL,
 		opts.BillingTracker,
 		opts.BillingRepository,
+		opts.StripeClient,
 		opts.PosthogClient,
 		opts.FunctionsDeployer,
 		opts.FunctionsVersion,
@@ -372,6 +403,7 @@ func NewTemporalWorker(
 		judgeRateLimiter,
 		opts.BuiltinPresets,
 		opts.TrialEmailsService,
+		opts.GitHubEvidenceToken,
 		opts.RiskFingerprinter,
 		opts.DisableRiskRetroReconcile,
 	)
@@ -382,7 +414,10 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.DeployFunctionRunners)
 	temporalWorker.RegisterActivity(activities.ReapFlyApps)
 	temporalWorker.RegisterActivity(activities.RefreshOpenRouterKey)
+	temporalWorker.RegisterActivity(activities.SetOpenRouterSpendCap)
+	temporalWorker.RegisterActivity(activities.ReconcilePaygOpenRouterChatKey)
 	temporalWorker.RegisterActivity(activities.VerifyCustomDomain)
+	temporalWorker.RegisterActivity(activities.VerifyCustomDomainV2)
 	temporalWorker.RegisterActivity(activities.CustomDomainIngress)
 	temporalWorker.RegisterActivity(activities.ReconcileCustomDomain)
 	temporalWorker.RegisterActivity(activities.SignalCustomDomainReconcile)
@@ -391,6 +426,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.NotifyCustomDomainUnhealthy)
 	temporalWorker.RegisterActivity(activities.FindOrphanCustomDomainResources)
 	temporalWorker.RegisterActivity(activities.CollectOpenRouterCreditsMetrics)
+	temporalWorker.RegisterActivity(activities.CollectOpenRouterDailySpend)
+	temporalWorker.RegisterActivity(activities.SettleStripeInvoiceAllocations)
 	temporalWorker.RegisterActivity(activities.FireOpenRouterCreditsMetrics)
 	temporalWorker.RegisterActivity(activities.MaybeSendOpenRouterCreditsAlerts)
 	temporalWorker.RegisterActivity(activities.CollectPlatformUsageMetrics)
@@ -400,6 +437,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.RunDeviceIntegrationSync)
 	temporalWorker.RegisterActivity(activities.RefreshBillingUsage)
 	temporalWorker.RegisterActivity(activities.SnapshotBillingCycleUsage)
+	temporalWorker.RegisterActivity(activities.ReportTUMUsageToStripe)
 	temporalWorker.RegisterActivity(activities.ListWeeklyUsageSummaryTargets)
 	temporalWorker.RegisterActivity(activities.SendWeeklyUsageSummary)
 	temporalWorker.RegisterActivity(activities.ForwardTokenUsageToPostHog)
@@ -407,7 +445,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ValidateDeployment)
 	temporalWorker.RegisterActivity(activities.GenerateToolsetEmbeddings)
 	temporalWorker.RegisterActivity(activities.GenerateChatTitle)
-	temporalWorker.RegisterActivity(activities.CorrelateClaudePrompts)
+	temporalWorker.RegisterActivity(activities.SyncIdentityMap)
 	temporalWorker.RegisterActivity(activities.PromoteStagedTelemetry)
 	temporalWorker.RegisterActivity(activities.ListStagedTelemetryProjects)
 	temporalWorker.RegisterActivity(activities.SegmentChat)
@@ -455,6 +493,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ListPluginPublishCandidates)
 	temporalWorker.RegisterActivity(activities.PublishPluginProject)
 	// Spend rule evaluation activities
+	temporalWorker.RegisterActivity(activities.ReassertSessionQuarantines)
 	temporalWorker.RegisterActivity(activities.ListSpendRuleOrgs)
 	temporalWorker.RegisterActivity(activities.EvaluateOrgSpendRules)
 	temporalWorker.RegisterActivity(activities.RefreshSpendRuleActor)
@@ -464,7 +503,13 @@ func NewTemporalWorker(
 	// Trial expiry activities
 	temporalWorker.RegisterActivity(activities.ListExpiredTrials)
 	temporalWorker.RegisterActivity(activities.DemoteExpiredTrial)
+	temporalWorker.RegisterActivity(activities.RunMcpResearch)
+	temporalWorker.RegisterActivity(activities.MarkMcpResearchInterrupted)
 	temporalWorker.RegisterActivity(activities.SendTrialLifecycleEmail)
+	temporalWorker.RegisterActivity(activities.ResolveTrialEndingReminder)
+	temporalWorker.RegisterActivity(activities.SendTrialEndingSoonEmail)
+	temporalWorker.RegisterActivity(activities.SendAccessPausedEmail)
+	temporalWorker.RegisterActivity(activities.SendPaygActivatedEmail)
 	// Skill efficacy activities — the database steps run on the main queue and
 	// only the judged publication goes to the dedicated worker.
 	temporalWorker.RegisterActivity(activities.skillEfficacyScorer.EnqueueSkillEfficacyPage)
@@ -505,6 +550,9 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(FunctionsReaperWorkflow)
 	temporalWorker.RegisterWorkflow(OpenrouterKeyRefreshWorkflow)
+	temporalWorker.RegisterWorkflow(OpenRouterSpendCapWorkflow)
+	temporalWorker.RegisterWorkflow(AdminOpenRouterSpendCapWorkflow)
+	temporalWorker.RegisterWorkflow(PaygOpenRouterChatKeyReconcileWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainRegistrationWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainDeletionWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainUpdateWorkflow)
@@ -513,6 +561,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(CustomDomainUnhealthyNotifyWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainHealthSweepWorkflow)
 	temporalWorker.RegisterWorkflow(CollectOpenRouterCreditsMetricsWorkflow)
+	temporalWorker.RegisterWorkflow(CollectOpenRouterDailySpendWorkflow)
 	temporalWorker.RegisterWorkflow(CollectPlatformUsageMetricsWorkflow)
 	temporalWorker.RegisterWorkflow(AIUsagePollerCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(DeviceIntegrationSyncCoordinatorWorkflow)
@@ -522,7 +571,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(WeeklyUsageSummaryWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
 	temporalWorker.RegisterWorkflow(GenerateChatTitleWorkflow)
-	temporalWorker.RegisterWorkflow(CorrelateClaudePromptsWorkflow)
+	temporalWorker.RegisterWorkflow(SyncIdentityMapWorkflow)
 	temporalWorker.RegisterWorkflow(PromoteStagedTelemetryWorkflow)
 	temporalWorker.RegisterWorkflow(StagedTelemetrySweepWorkflow)
 	temporalWorker.RegisterWorkflow(AnalyzeChatResolutionsWorkflow)
@@ -533,6 +582,11 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(TriggerWakeWorkflow)
 	// Risk analysis coordinator workflow
 	temporalWorker.RegisterWorkflow(RiskAnalysisCoordinatorWorkflow)
+	// Retire per-policy executions created before the coordinator migration.
+	temporalWorker.RegisterWorkflowWithOptions(legacyDrainRiskAnalysisWorkflow, workflow.RegisterOptions{
+		Name:                          legacyDrainRiskAnalysisWorkflowName,
+		DisableAlreadyRegisteredCheck: false,
+	})
 	temporalWorker.RegisterWorkflow(RiskExclusionReconcileWorkflow)
 	temporalWorker.RegisterWorkflow(ReconcileSkillObservationsWorkflow)
 	temporalWorker.RegisterWorkflow(SkillObservationReconciliationSweepWorkflow)
@@ -561,6 +615,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(PluginGeneratorRolloutWorkflow)
 	temporalWorker.RegisterWorkflow(PluginInitialPublishWorkflow)
 	// Spend rule evaluation workflows
+	temporalWorker.RegisterWorkflow(SessionQuarantineReassertWorkflow)
 	temporalWorker.RegisterWorkflow(SpendRuleEvaluationWorkflow)
 	temporalWorker.RegisterWorkflow(SpendRuleOrgEvaluationWorkflow)
 	temporalWorker.RegisterWorkflow(SpendRuleOrgEvaluationWorkflowDebounced)
@@ -570,6 +625,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(SkillEfficacyCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(SkillEfficacySweepWorkflow)
 	// Chat analysis workflows
+	temporalWorker.RegisterWorkflow(McpResearchWorkflow)
 	temporalWorker.RegisterWorkflow(ChatAnalysisCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(ChatAnalysisSweepWorkflow)
 	// Pre-emptive remote session refresh workflows
@@ -577,56 +633,84 @@ func NewTemporalWorker(
 	// Trial expiry workflows
 	temporalWorker.RegisterWorkflow(DemoteExpiredTrialsWorkflow)
 	temporalWorker.RegisterWorkflow(TrialLifecycleEmailWorkflow)
-	if err := AddPlatformUsageMetricsSchedule(context.Background(), env); err != nil {
+	temporalWorker.RegisterWorkflow(AccessPausedEmailWorkflow)
+	temporalWorker.RegisterWorkflow(PaygActivatedEmailWorkflow)
+
+	return &Workers{
+		main:              temporalWorker,
+		riskAnalysis:      riskWorker,
+		aiUsage:           aiUsageWorker,
+		skillEfficacy:     skillEfficacyWorker,
+		env:               env,
+		logger:            logger,
+		opts:              opts,
+		hasSkillSuggester: activities.skillSuggestionAnalyzer != nil,
+	}
+}
+
+// registerSchedules installs the fleet's recurring Temporal schedules and the
+// one-shot startup kicks that belong with them. Every schedule is best-effort:
+// a failure is logged and the worker still comes up, because a missing sweep
+// degrades a background pipeline rather than the request path.
+func (w *Workers) registerSchedules(ctx context.Context) {
+	env, logger, opts := w.env, w.logger, w.opts
+
+	if err := AddPlatformUsageMetricsSchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
-			logger.ErrorContext(context.Background(), "failed to add platform usage metrics schedule", attr.SlogError(err))
+			logger.ErrorContext(ctx, "failed to add platform usage metrics schedule", attr.SlogError(err))
 		}
 	}
 
-	if err := AddOpenRouterCreditsMetricsSchedule(context.Background(), env); err != nil {
+	if err := AddOpenRouterCreditsMetricsSchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
-			logger.ErrorContext(context.Background(), "failed to add openrouter credits metrics schedule", attr.SlogError(err))
+			logger.ErrorContext(ctx, "failed to add openrouter credits metrics schedule", attr.SlogError(err))
 		}
 	}
 
-	if err := AddDeviceIntegrationSyncCoordinatorSchedule(context.Background(), env); err != nil {
+	if err := AddOpenRouterDailySpendSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add openrouter daily spend schedule", attr.SlogError(err))
+	}
+
+	if err := AddDeviceIntegrationSyncCoordinatorSchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
-			logger.ErrorContext(context.Background(), "failed to add device integration sync schedule", attr.SlogError(err))
+			logger.ErrorContext(ctx, "failed to add device integration sync schedule", attr.SlogError(err))
 		}
 	}
 
-	if err := AddAIUsagePollerCoordinatorSchedule(context.Background(), env); err != nil {
+	if err := AddAIUsagePollerCoordinatorSchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
-			logger.ErrorContext(context.Background(), "failed to add ai integration usage polling schedule", attr.SlogError(err))
+			logger.ErrorContext(ctx, "failed to add ai integration usage polling schedule", attr.SlogError(err))
 		}
 	}
 
-	if err := AddWeeklyUsageSummarySchedule(context.Background(), env); err != nil {
-		logger.ErrorContext(context.Background(), "failed to add weekly usage summary schedule", attr.SlogError(err))
-	}
-
-	if err := AddRefreshBillingUsageSchedule(context.Background(), env); err != nil {
+	if err := AddWeeklyUsageSummarySchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
-			logger.ErrorContext(context.Background(), "failed to add refresh billing usage schedule", attr.SlogError(err))
+			logger.ErrorContext(ctx, "failed to add weekly usage summary schedule", attr.SlogError(err))
 		}
 	}
 
-	if err := AddProcessOutboxSchedule(context.Background(), env); err != nil {
+	if err := AddRefreshBillingUsageSchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
-			logger.ErrorContext(context.Background(), "failed to add relay outbox to svix schedule", attr.SlogError(err))
+			logger.ErrorContext(ctx, "failed to add refresh billing usage schedule", attr.SlogError(err))
 		}
 	}
 
-	if err := AddAssistantReaperSchedule(context.Background(), env); err != nil {
-		logger.ErrorContext(context.Background(), "failed to add assistant reaper schedule", attr.SlogError(err))
+	if err := AddProcessOutboxSchedule(ctx, env); err != nil {
+		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
+			logger.ErrorContext(ctx, "failed to add relay outbox to svix schedule", attr.SlogError(err))
+		}
 	}
 
-	if err := AddAssistantRuntimeJanitorSchedule(context.Background(), env); err != nil {
-		logger.ErrorContext(context.Background(), "failed to add assistant runtime janitor schedule", attr.SlogError(err))
+	if err := AddAssistantReaperSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add assistant reaper schedule", attr.SlogError(err))
 	}
 
-	if err := AddAssistantMemoriesReaperSchedule(context.Background(), env); err != nil {
-		logger.ErrorContext(context.Background(), "failed to add assistant memories reaper schedule", attr.SlogError(err))
+	if err := AddAssistantRuntimeJanitorSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add assistant runtime janitor schedule", attr.SlogError(err))
+	}
+
+	if err := AddAssistantMemoriesReaperSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add assistant memories reaper schedule", attr.SlogError(err))
 	}
 
 	// One image recycle sweep per deployed runtime image: a new worker build
@@ -635,77 +719,83 @@ func NewTemporalWorker(
 	// per-admission recycle.
 	if opts.AssistantsCore != nil {
 		if imageRef := opts.AssistantsCore.RuntimeImageRef(); imageRef != "" {
-			if err := KickAssistantRuntimeImageRecycle(context.Background(), env, imageRef); err != nil {
-				logger.ErrorContext(context.Background(), "failed to kick assistant runtime image recycle", attr.SlogError(err))
+			if err := KickAssistantRuntimeImageRecycle(ctx, env, imageRef); err != nil {
+				logger.ErrorContext(ctx, "failed to kick assistant runtime image recycle", attr.SlogError(err))
 			}
 		}
 	}
 
-	if err := AddOutboxGCSchedule(context.Background(), env); err != nil {
-		logger.ErrorContext(context.Background(), "failed to add outbox gc schedule", attr.SlogError(err))
+	if err := AddOutboxGCSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add outbox gc schedule", attr.SlogError(err))
 	}
 
-	if err := AddPublishOutboxSchedule(context.Background(), env); err != nil {
-		logger.ErrorContext(context.Background(), "failed to add publish outbox schedule", attr.SlogError(err))
+	if err := AddPublishOutboxSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add publish outbox schedule", attr.SlogError(err))
 	}
 
-	if err := AddPublishOutboxGCSchedule(context.Background(), env); err != nil {
-		logger.ErrorContext(context.Background(), "failed to add publish outbox gc schedule", attr.SlogError(err))
+	if err := AddPublishOutboxGCSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add publish outbox gc schedule", attr.SlogError(err))
 	}
 
-	if err := AddStagedTelemetrySweepSchedule(context.Background(), env); err != nil {
-		logger.ErrorContext(context.Background(), "failed to add staged telemetry sweep schedule", attr.SlogError(err))
+	if err := AddStagedTelemetrySweepSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add staged telemetry sweep schedule", attr.SlogError(err))
 	}
 
-	if err := AddSpendRuleEvaluationSchedule(context.Background(), env); err != nil {
+	if err := AddIdentityMapSyncSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add identity map sync schedule", attr.SlogError(err))
+	}
+
+	if err := AddSpendRuleEvaluationSchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
-			logger.ErrorContext(context.Background(), "failed to add spend rule evaluation schedule", attr.SlogError(err))
+			logger.ErrorContext(ctx, "failed to add spend rule evaluation schedule", attr.SlogError(err))
 		}
 	}
 
-	if err := AddSkillObservationReconciliationSchedule(context.Background(), env); err != nil {
-		logger.ErrorContext(context.Background(), "failed to add skill observation reconciliation schedule", attr.SlogError(err))
+	if err := AddSessionQuarantineReassertSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add session quarantine reassert schedule", attr.SlogError(err))
 	}
 
-	if err := AddSkillEfficacySweepSchedule(context.Background(), env); err != nil {
-		logger.ErrorContext(context.Background(), "failed to add skill efficacy sweep schedule", attr.SlogError(err))
+	if err := AddSkillObservationReconciliationSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add skill observation reconciliation schedule", attr.SlogError(err))
 	}
 
-	if err := AddChatAnalysisSweepSchedule(context.Background(), env); err != nil {
-		logger.ErrorContext(context.Background(), "failed to add chat analysis sweep schedule", attr.SlogError(err))
+	if err := AddSkillEfficacySweepSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add skill efficacy sweep schedule", attr.SlogError(err))
 	}
 
-	if err := AddRemoteSessionRefreshSchedule(context.Background(), env); err != nil {
+	if err := AddChatAnalysisSweepSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add chat analysis sweep schedule", attr.SlogError(err))
+	}
+
+	if err := AddRemoteSessionRefreshSchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
-			logger.ErrorContext(context.Background(), "failed to add remote session refresh schedule", attr.SlogError(err))
+			logger.ErrorContext(ctx, "failed to add remote session refresh schedule", attr.SlogError(err))
 		}
 	}
 
-	if err := AddTrialDemotionSchedule(context.Background(), env); err != nil {
+	if err := AddTrialDemotionSchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
-			logger.ErrorContext(context.Background(), "failed to add trial demotion schedule", attr.SlogError(err))
+			logger.ErrorContext(ctx, "failed to add trial demotion schedule", attr.SlogError(err))
 		}
 	}
 
-	if activities.skillSuggestionAnalyzer != nil {
-		if err := AddSkillSuggestionSweepSchedule(context.Background(), env); err != nil {
-			logger.ErrorContext(context.Background(), "failed to add skill suggestion sweep schedule", attr.SlogError(err))
+	if w.hasSkillSuggester {
+		if err := AddSkillSuggestionSweepSchedule(ctx, env); err != nil {
+			logger.ErrorContext(ctx, "failed to add skill suggestion sweep schedule", attr.SlogError(err))
 		}
 	}
 
-	if opts.DB != nil && opts.K8sClient != nil && opts.ExpectedTargetCNAME != "" {
-		if err := AddCustomDomainHealthSchedule(context.Background(), env); err != nil {
-			logger.ErrorContext(context.Background(), "failed to add custom domain health schedule", attr.SlogError(err))
+	if opts.DB != nil && opts.K8sClient != nil && (opts.ExpectedTargetCNAME != "" || len(opts.ExpectedARecords) > 0) {
+		if err := AddCustomDomainHealthSchedule(ctx, env); err != nil {
+			logger.ErrorContext(ctx, "failed to add custom domain health schedule", attr.SlogError(err))
 		}
 	}
 
 	if opts.PluginPublisher != nil {
-		if err := AddPluginGeneratorRolloutSchedule(context.Background(), env); err != nil {
-			logger.ErrorContext(context.Background(), "failed to add plugin generator rollout schedule", attr.SlogError(err))
+		if err := AddPluginGeneratorRolloutSchedule(ctx, env); err != nil {
+			logger.ErrorContext(ctx, "failed to add plugin generator rollout schedule", attr.SlogError(err))
 		}
 	}
-
-	return &Workers{main: temporalWorker, riskAnalysis: riskWorker, aiUsage: aiUsageWorker, skillEfficacy: skillEfficacyWorker}
 }
 
 // Fleet-wide cap on in-flight AnalyzeBatch per worker pod — the only knob
@@ -737,11 +827,20 @@ type Workers struct {
 	riskAnalysis  worker.Worker
 	aiUsage       worker.Worker
 	skillEfficacy worker.Worker
+
+	// Retained so Run can install the recurring schedules; see
+	// registerSchedules.
+	env               *tenv.Environment
+	logger            *slog.Logger
+	opts              *WorkerOptions
+	hasSkillSuggester bool
 }
 
-// Run starts dedicated workers, then blocks running the main worker until
-// interruptCh receives.
+// Run registers the recurring schedules, starts the dedicated workers, then
+// blocks running the main worker until interruptCh receives.
 func (w *Workers) Run(interruptCh <-chan any) error {
+	w.registerSchedules(context.Background())
+
 	if err := w.riskAnalysis.Start(); err != nil {
 		return fmt.Errorf("start risk analysis worker: %w", err)
 	}
@@ -764,6 +863,12 @@ func (w *Workers) Run(interruptCh <-chan any) error {
 }
 
 // Start starts all workers without blocking. Pair with Stop (used by tests).
+//
+// Unlike Run, this deliberately does not register the recurring schedules. A
+// test builds a throwaway namespace per test case and only exercises the
+// workflow it started; installing ~20 scheduler workflows in each of those
+// namespaces made the shared dev server, not the code under test, the
+// bottleneck.
 func (w *Workers) Start() error {
 	if err := w.main.Start(); err != nil {
 		return fmt.Errorf("start main worker: %w", err)

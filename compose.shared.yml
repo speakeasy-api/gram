@@ -1,36 +1,125 @@
 # Shared infra — one copy across ALL git worktrees.
 #
-# The Presidio analyzer is a stateless /analyze HTTP service: it holds no
-# per-worktree state and loads a ~1 GB spaCy model, so running one copy per
-# worktree wasted the most memory of anything in the stack. It lives here under
-# a FIXED project name instead of the per-worktree `COMPOSE_PROJECT_NAME` used
-# by compose.yml.
+# Temporal is stateful and shared. `git:workinit` gives every worktree a unique
+# TEMPORAL_NAMESPACE, so identical workflow IDs and task queues remain isolated.
+# The default namespace belongs to the main tree.
 #
-# (LGTM/OTel-collector are intentionally NOT shared: their signals
-# would collide across worktrees — same-commit worktrees emit identical
-# Prometheus series and intermixed traces — so they stay per-worktree in
-# compose.yml.)
+# Pub/Sub is stateful too, but its fully-qualified resource paths include a
+# project ID. `git:workinit` gives every worktree a unique GRAM_GCP_PROJECT_ID,
+# so one emulator can safely host identical topic and subscription IDs for all
+# trees.
 #
-# Always manage this file with an explicit fixed project so a worktree's
-# COMPOSE_PROJECT_NAME cannot fork it into a second copy:
+# Presidio is stateless and expensive to duplicate. LGTM separates intermixed
+# telemetry with OTEL_RESOURCE_ATTRIBUTES=worktree=$COMPOSE_PROJECT_NAME.
+# `git:workinit` writes all worktree dimensions; `mise.toml` holds the main tree
+# defaults.
+#
+# Always manage this file under its fixed project:
 #
 #   docker compose -f compose.shared.yml -p gram-shared up -d
 #   docker compose -f compose.shared.yml -p gram-shared down
 #
-# The host port is a hardcoded literal, NOT ${PRESIDIO_PORT}. As a single
-# shared singleton it must land on the same fixed host port no matter which
-# worktree starts it — interpolating per-worktree env would let a worktree that
-# still carries a stale PRESIDIO_PORT remap (not yet cleaned by git:worksync)
-# recreate this container republished on a different port, fragmenting the
-# shared stack for everyone else. Keep this literal in sync with PRESIDIO_PORT's
-# default in mise.toml (5050), which is what every worktree's app connects to.
+# Host ports are hardcoded literals, not interpolated per-worktree variables.
+# This prevents a worktree carrying stale remapped ports from republishing a
+# shared container elsewhere and fragmenting the stack. Keep the literals in
+# sync with mise.toml: Temporal 7233/8233, Pub/Sub 8088, Presidio 5050, LGTM
+# 13000/13200/13100/9099, and OTLP 4317/4318.
 #
-# Bound to 127.0.0.1: Presidio is an unauthenticated PII-analysis service and
-# only ever called by local host processes, so it must not be reachable on the
-# host's external interfaces.
+# Every port is bound to 127.0.0.1. These unauthenticated local development
+# services are consumed only by host processes and must not be externally
+# reachable.
 name: gram-shared
 
 services:
+  gram-temporal:
+    # The CLI image, not temporalio/server: as of 1.31 the server image no
+    # longer bundles the `temporal` binary that `server start-dev` needs.
+    # CLI 1.8.1 embeds Server 1.31.2 and UI 2.50.1.
+    image: temporalio/temporal:1.8.1@sha256:59561b9ef060eaeb1f46cb6a1842d6cbdd8a393eb3b6d315ecef5fe2f0b1d7a6
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:7233:7233"
+      - "127.0.0.1:8233:8233"
+    environment:
+      # The dev server is a single Go process, so its footprint is governed by
+      # the Go runtime rather than by cgroup limits. GOMEMLIMIT is a soft heap
+      # ceiling the GC actively works to stay under, which is what caps memory
+      # in sandboxes where `deploy.resources.limits` cannot be applied.
+      GOMEMLIMIT: 256MiB
+      # Per-P allocator caches and GC workers scale with core count; the dev
+      # server never needs the whole host.
+      GOMAXPROCS: 4
+    entrypoint: ["temporal"]
+    command: [
+        "server",
+        "start-dev",
+        "--ip",
+        "0.0.0.0",
+        "--ui-ip",
+        "0.0.0.0",
+        "--namespace",
+        "default",
+        "--db-filename",
+        "/home/temporal/dev.db",
+        # Temporal's history cache is count-bounded by default (128k mutable
+        # state entries host-wide), which puts no ceiling on bytes. Switch it to
+        # a size-based limit so the live heap stays bounded and GOMEMLIMIT does
+        # not turn into GC thrash. 1.31 dropped the shard-level cache, so
+        # hostLevelCacheMaxSizeBytes is the only size knob left.
+        "--dynamic-config-value",
+        "history.cacheSizeBasedLimit=true",
+        "--dynamic-config-value",
+        "history.hostLevelCacheMaxSizeBytes=67108864",
+        "--dynamic-config-value",
+        "history.eventsCacheMaxSizeBytes=2097152",
+        "--dynamic-config-value",
+        'history.cacheTTL="5m"',
+        "--dynamic-config-value",
+        'history.eventsCacheTTL="5m"',
+        # Worktrees share this server but use separate namespaces. One worker
+        # per namespace still does not need the default four task queue
+        # partitions, each of which carries its own manager and buffers.
+        "--dynamic-config-value",
+        "matching.numTaskqueueReadPartitions=1",
+        "--dynamic-config-value",
+        "matching.numTaskqueueWritePartitions=1",
+      ]
+    volumes:
+      # The fixed project keeps persistence independent of whichever worktree
+      # starts the shared stack first.
+      - temporal_data:/home/temporal
+    healthcheck:
+      test: ["CMD", "temporal", "operator", "cluster", "health"]
+      interval: 5s
+      timeout: 30s
+      retries: 5
+
+  pubsub-emulator:
+    image: gcr.io/google.com/cloudsdktool/google-cloud-cli:573.0.0-emulators@sha256:1b083a6a9647024a98d4f38c2b51906a0f61ca36adcba11672b8933544962efe
+    restart: unless-stopped
+    environment:
+      # The emulator is a JVM app launched without -Xmx, so its default maximum
+      # heap is one quarter of the whole Docker VM. This shared local instance
+      # does not need an unbounded multi-gigabyte ceiling.
+      JAVA_TOOL_OPTIONS: -Xmx128m
+    ports:
+      - "127.0.0.1:8088:8085"
+    command:
+      [
+        "gcloud",
+        "beta",
+        "emulators",
+        "pubsub",
+        "start",
+        "--host-port=0.0.0.0:8085",
+      ]
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8085"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+      start_period: 2s
+
   gram-presidio:
     image: mcr.microsoft.com/presidio-analyzer:2.2.362
     restart: unless-stopped
@@ -47,3 +136,42 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # Tempo only makes a trace searchable once it has idled the trace out and cut
+  # a block — seconds to a minute. Lookup by trace ID is immediate.
+  lgtm:
+    image: grafana/otel-lgtm:0.30.1@sha256:bb182ac3174a20923fa58f00d1790fa71eb06cc0150078c0b0e8feb9e6611492
+    restart: unless-stopped
+    # Bound to 127.0.0.1 for the same reason as Presidio: every one of these
+    # APIs is unauthenticated, and this container now holds every worktree's
+    # traces and metrics. All consumers are local host processes
+    # (OTEL_EXPORTER_OTLP_ENDPOINT points at localhost), so nothing needs it on
+    # the host's external interfaces.
+    ports:
+      - "127.0.0.1:13000:3000" # Grafana UI
+      - "127.0.0.1:13200:3200" # Tempo HTTP API
+      - "127.0.0.1:13100:3100" # Loki HTTP API
+      - "127.0.0.1:9099:9090" # Prometheus UI/API
+      - "127.0.0.1:4317:4317" # OTLP gRPC receiver
+      - "127.0.0.1:4318:4318" # OTLP HTTP receiver
+    volumes:
+      # Runs as root, so wipe this from inside the container rather than sudo:
+      # docker compose -f compose.shared.yml -p gram-shared exec lgtm \
+      #   sh -c 'rm -rf /data/*'
+      #
+      # A named volume, not ./local/lgtm: this stack is started by whichever
+      # worktree happens to run infra:start first, so a relative bind mount
+      # would put the data wherever that tree is — letting which worktree
+      # booted the machine silently decide where everyone's telemetry lives.
+      - lgtm_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  temporal_data:
+    driver: local
+  lgtm_data:
+    driver: local

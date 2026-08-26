@@ -574,6 +574,7 @@ chat_activity AS (
   -- aggregating every candidate chat's full message history.
   SELECT
     cc.id,
+    cc.created_at,
     COALESCE(last_msg.ts, cc.created_at) AS last_message_timestamp
   FROM candidate_chats cc
   CROSS JOIN LATERAL (
@@ -584,8 +585,11 @@ chat_activity AS (
 )
 SELECT COUNT(*) AS total
 FROM chat_activity ca
+-- Interval overlap, mirroring ListChats: last activity after the range opens,
+-- created before it closes. Bounding last_message_timestamp above would evict
+-- an actively-writing chat as soon as a message lands past the caller's @to.
 WHERE (@from_time::timestamptz IS NULL OR ca.last_message_timestamp >= @from_time)
-  AND (@to_time::timestamptz IS NULL OR ca.last_message_timestamp <= @to_time);
+  AND (@to_time::timestamptz IS NULL OR ca.created_at <= @to_time);
 
 -- name: ListChats :many
 -- Returns the page plus the pre-LIMIT total (total_count window column), so the
@@ -734,8 +738,14 @@ filtered_chats AS (
     cc.account_email
   FROM candidate_chats cc
   JOIN chat_stats cs ON cs.id = cc.id
+  -- The range test is interval overlap: the chat was active after the range
+  -- opened (last message >= @from_time) and existed before it closed
+  -- (created_at <= @to_time). Bounding last_message_timestamp above instead
+  -- would evict an actively-writing chat the moment a new message lands past
+  -- the caller's @to — the dashboard freezes @to when a range is picked, so
+  -- running sessions would flicker out of the list until the next reload.
   WHERE (@from_time::timestamptz IS NULL OR cs.last_message_timestamp >= @from_time)
-    AND (@to_time::timestamptz IS NULL OR cs.last_message_timestamp <= @to_time)
+    AND (@to_time::timestamptz IS NULL OR cc.created_at <= @to_time)
 ),
 limited_chats AS (
   SELECT
@@ -1773,3 +1783,46 @@ VALUES (@assistant_id, @project_id, @correlation_id, @chat_id, 'cron');
 -- Test fixture: soft-delete an assistant (mirrors DeleteAssistant, which leaves
 -- its threads behind).
 UPDATE assistants SET deleted_at = clock_timestamp() WHERE id = @id;
+
+-- name: ListChatSessionLinks :many
+-- Session-lineage edges touching any of the requested chats, either as the
+-- parent (the session that was moved) or the child (the continuation).
+-- Titles resolve through LEFT JOINs because either end may not be captured
+-- yet — a dangling edge still renders as "moved to <harness>". Visibility
+-- mirrors ListChats: an unrestricted caller (both scope params empty) sees
+-- every edge; a restricted caller sees only edges with at least one end on a
+-- chat their scope can read. Each end's title and captured flag are
+-- additionally masked by that end's own visibility, so owning one end of an
+-- edge never reveals the other end's title to a restricted caller.
+SELECT
+  l.parent_chat_id,
+  l.child_chat_id,
+  l.child_session_id,
+  l.kind,
+  l.target_harness,
+  l.source_surface,
+  l.actor_email,
+  l.device_hostname,
+  l.created_at,
+  pc.title AS parent_title,
+  (pc.id IS NOT NULL)::boolean AS parent_captured,
+  cc.title AS child_title,
+  (cc.id IS NOT NULL)::boolean AS child_captured
+FROM chat_session_links l
+-- The caller's visibility predicate lives in the JOIN conditions, so an end
+-- the caller cannot read joins as NULL — masking its title and reading as
+-- not-captured — indistinguishable from a not-yet-captured end by design.
+LEFT JOIN chats pc ON pc.id = l.parent_chat_id AND pc.project_id = l.project_id AND pc.deleted IS FALSE
+  AND (@external_user_id::text = '' OR pc.external_user_id = @external_user_id::text)
+  AND (@user_id::text = '' OR pc.user_id = @user_id::text)
+LEFT JOIN chats cc ON l.child_chat_id IS NOT NULL AND cc.id = l.child_chat_id AND cc.project_id = l.project_id AND cc.deleted IS FALSE
+  AND (@external_user_id::text = '' OR cc.external_user_id = @external_user_id::text)
+  AND (@user_id::text = '' OR cc.user_id = @user_id::text)
+WHERE l.project_id = @project_id
+  AND (l.parent_chat_id = ANY (@chat_ids::uuid[]) OR l.child_chat_id = ANY (@chat_ids::uuid[]))
+  AND (
+    (@external_user_id::text = '' AND @user_id::text = '')
+    OR pc.id IS NOT NULL
+    OR cc.id IS NOT NULL
+  )
+ORDER BY l.created_at DESC;

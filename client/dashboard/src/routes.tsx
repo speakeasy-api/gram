@@ -29,9 +29,9 @@ import SkillVersionHistory from "./pages/skills/SkillVersionHistory";
 import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
 import UserSessions from "./pages/org/UserSessions";
+import EventFeed from "./pages/data/EventFeed";
 import DeviceAgent, { DeviceAgentRoot } from "./pages/device-agent/DeviceAgent";
 import MdmIntegrationDetail from "./pages/org/device-integrations/MdmIntegrationDetail";
-import Elements from "./pages/elements/Elements";
 import EnvironmentPage from "./pages/environments/Environment";
 import Environments, {
   EnvironmentsRoot,
@@ -74,12 +74,22 @@ import OrgIdentity from "./pages/org/OrgIdentity";
 import OrgAIIntegrations from "./pages/org/OrgAIIntegrations";
 import OrgLogs from "./pages/org/OrgLogs";
 import PlatformMCP from "./pages/org/PlatformMCP";
+import HeadlessMode from "./pages/org/HeadlessMode";
 import OrgSkills from "./pages/org/OrgSkills";
 import ExternalCredentialDetail from "./pages/org/external-services/ExternalCredentialDetail";
 import {
   ExternalServicesPage,
   ExternalServicesRoot,
 } from "./pages/org/external-services/ExternalServices";
+import ExternalKeyDetail from "./pages/org/encryption-keys/ExternalKeyDetail";
+import JsonWebKeySetDetail, {
+  SigningKeySetsIndex,
+  SigningKeySetsRoot,
+} from "./pages/org/encryption-keys/jwks/JsonWebKeySetDetail";
+import {
+  EncryptionKeysPage,
+  EncryptionKeysRoot,
+} from "./pages/org/encryption-keys/EncryptionKeys";
 import OrgWebhooks from "./pages/org/OrgWebhooks";
 import {
   RemoteIdentityProvidersPage,
@@ -111,7 +121,6 @@ import SecurityOverview, {
 } from "./pages/security/SecurityOverview";
 import Watchdog from "./pages/security/watchdog/Watchdog";
 import RiskEventsPage from "./pages/security/RiskEventsPage";
-import ApprovalRequests from "./pages/security/ApprovalRequests";
 import ShadowMCP, { ShadowMCPRoot } from "./pages/shadow-mcp/ShadowMCP";
 import ShadowMCPServerDetail from "./pages/shadow-mcp/ShadowMCPServerDetail";
 import RiskOverviewCategoriesIndex from "./pages/security/RiskOverviewCategoriesIndex";
@@ -225,7 +234,9 @@ const ROUTE_STRUCTURE = {
     unauthenticated: true,
   },
   home: {
-    title: "Home",
+    // "Home" now belongs to the org-level nav entry; the project's landing
+    // page is its overview.
+    title: "Project Overview",
     url: "",
     icon: "house",
     component: Home,
@@ -251,12 +262,6 @@ const ROUTE_STRUCTURE = {
     url: "playground",
     icon: "message-circle",
     component: Playground,
-  },
-  elements: {
-    title: "Chat Elements",
-    url: "elements",
-    icon: "message-circle",
-    component: Elements,
   },
   integrations: {
     title: "Integrations",
@@ -668,20 +673,17 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
+  // Legacy URL: Detection Rules lives as a Guardrails tab now; the
+  // component redirects there (carrying ?rule= deep links along). Kept out of
+  // the sidebar.
   detectionRules: {
     title: "Detection Rules",
     url: "detection-rules",
     icon: "scan-search",
     component: DetectionRules,
   },
-  approvalRequests: {
-    title: "Approval Requests",
-    url: "approval-requests",
-    icon: "inbox",
-    component: ApprovalRequests,
-  },
   policyCenter: {
-    title: "Risk Policies",
+    title: "Guardrails",
     url: "risk-policies",
     icon: "shield-check",
     // Layout route: renders the policy list (index) or a policy detail subpage.
@@ -1019,6 +1021,13 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "file-text",
     component: OrgLogs,
   },
+  data: {
+    title: "Event Feed",
+    url: "data",
+    icon: "activity",
+    stage: "preview",
+    component: EventFeed,
+  },
   skills: {
     title: "Skills",
     url: "skills",
@@ -1066,6 +1075,55 @@ const ORG_ROUTE_STRUCTURE = {
         component: ExternalCredentialDetail,
         subPages: {
           overview: { title: "Overview", url: "overview" },
+          kmsKeys: { title: "KMS Keys", url: "kms-keys" },
+          settings: { title: "Settings", url: "settings" },
+        },
+      },
+    },
+  },
+  encryptionKeys: {
+    title: "Encryption Keys",
+    url: "encryption-keys",
+    icon: "key-square",
+    component: EncryptionKeysRoot,
+    indexComponent: EncryptionKeysPage,
+    subPages: {
+      // Keyed on the provider for the same reason credentials are: the detail
+      // page is per-provider, with its own get/update endpoints and its own
+      // fields, so a deep link has to carry which provider it names rather than
+      // relying on state handed over from the list.
+      keyDetail: {
+        title: "Encryption Key",
+        url: ":provider/:keyId",
+        component: ExternalKeyDetail,
+        subPages: {
+          overview: { title: "Overview", url: "overview" },
+          signingKeys: { title: "Signing Keys", url: "signing-keys" },
+          settings: { title: "Settings", url: "settings" },
+        },
+      },
+    },
+  },
+  // Signing key sets are listed on the Encryption Keys page (a set is the
+  // published face of the KMS key that backs it), but their detail pages get
+  // their own top-level path so a set id can never be mistaken for the
+  // :provider/:keyId segments of an encryption key. The index redirects to
+  // that list, which keeps the breadcrumb and command palette entry landing
+  // somewhere real. Not in the sidebar.
+  signingKeySets: {
+    title: "Signing Key Sets",
+    url: "signing-keys",
+    icon: "key-round",
+    component: SigningKeySetsRoot,
+    indexComponent: SigningKeySetsIndex,
+    subPages: {
+      setDetail: {
+        title: "Signing Key Set",
+        url: ":setId",
+        component: JsonWebKeySetDetail,
+        subPages: {
+          overview: { title: "Overview", url: "overview" },
+          keys: { title: "Keys", url: "keys" },
           settings: { title: "Settings", url: "settings" },
         },
       },
@@ -1077,9 +1135,9 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "history",
     component: OrgAuditLogs,
   },
-  userSessions: {
-    title: "MCP Connections",
-    url: "user-sessions",
+  mcpSessions: {
+    title: "MCP Sessions",
+    url: "mcp-sessions",
     icon: "users",
     component: UserSessions,
   },
@@ -1256,6 +1314,14 @@ const ORG_ROUTE_STRUCTURE = {
     url: "setup",
     icon: "settings",
     component: SetupWizard,
+    outsideMainLayout: true,
+  },
+  // Headless mode renders its own chrome (mode tabs only, no sidebar or
+  // workspace header), so it sits outside OrgLayout.
+  headless: {
+    title: "Headless",
+    url: "headless",
+    component: HeadlessMode,
     outsideMainLayout: true,
   },
 } satisfies Record<string, RouteEntry>;

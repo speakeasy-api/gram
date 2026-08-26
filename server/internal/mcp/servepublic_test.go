@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	variations_repo "github.com/speakeasy-api/gram/server/internal/variations/repo"
@@ -704,4 +705,126 @@ func TestServePublic_ToolsCall_FilteredOutTool_NotFound(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp), "body: %s", w.Body.String())
 	require.NotNil(t, resp.Error, "expected a JSON-RPC error, body: %s", w.Body.String())
 	require.Contains(t, resp.Error.Message, "not found")
+}
+
+// makeInitializeBodyWithVersion mirrors makeInitializeBody with a
+// caller-chosen protocolVersion; an empty version omits the field entirely,
+// which is how the no-version cohort handshakes.
+func makeInitializeBodyWithVersion(version string) []byte {
+	params := map[string]any{
+		"capabilities": map[string]any{},
+		"clientInfo": map[string]any{
+			"name":    "test-client",
+			"version": "1.0.0",
+		},
+	}
+	if version != "" {
+		params["protocolVersion"] = version
+	}
+	bs, _ := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "initialize",
+		"params":  params,
+	})
+	return bs
+}
+
+// answeredProtocolVersion extracts result.protocolVersion from a successful
+// initialize response.
+func answeredProtocolVersion(t *testing.T, w *httptest.ResponseRecorder) string {
+	t.Helper()
+
+	var response map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response), "response body: %s", w.Body.String())
+	require.Nil(t, response["error"], "response body: %s", w.Body.String())
+	result, ok := response["result"].(map[string]any)
+	require.True(t, ok, "result should be a map: %v", response)
+	version, ok := result["protocolVersion"].(string)
+	require.True(t, ok, "protocolVersion should be a string: %v", result)
+	return version
+}
+
+func TestServePublic_InitializeEchoesEverySupportedVersion(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolsetsRepo := toolsets_repo.New(ti.conn)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "negotiate-echo-mcp")
+
+	for _, v := range mcpversions.SupportedHostedToolset() {
+		w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeInitializeBodyWithVersion(v), "", nil)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, w.Code, "requested %s, body: %s", v, w.Body.String())
+		require.Equal(t, v, answeredProtocolVersion(t, w), "a supported requested version must be echoed")
+	}
+}
+
+func TestServePublic_InitializeAnswersUnsupportedVersionWithNewestSupported(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolsetsRepo := toolsets_repo.New(ti.conn)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "negotiate-down-mcp")
+
+	// The expected value is pinned rather than derived from the supported
+	// set, so raising the ceiling breaks this test and forces choosing new
+	// out-of-set requested versions that keep the fallback arm exercised.
+	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeInitializeBodyWithVersion(mcpversions.Version20260728), "", nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Equal(t, mcpversions.Version20251125, answeredProtocolVersion(t, w), "an unsupported requested version is answered with the newest supported one")
+
+	w, err = servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeInitializeBodyWithVersion("1999-12-31"), "", nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Equal(t, mcpversions.Version20251125, answeredProtocolVersion(t, w), "an unrecognized requested version is answered with the newest supported one")
+}
+
+// TestServePublic_InitializeAnswersAbsentVersionWithDefault pins that the
+// no-version cohort is not handed the ceiling: a handshake naming no revision
+// is answered the spec's unversioned default.
+func TestServePublic_InitializeAnswersAbsentVersionWithDefault(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolsetsRepo := toolsets_repo.New(ti.conn)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "negotiate-absent-mcp")
+
+	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeInitializeBodyWithVersion(""), "", nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Equal(t, mcpversions.DefaultInEffect, answeredProtocolVersion(t, w))
+}
+
+// TestServePublic_InitializeBodyWinsOverNonconformingHeader pins which source
+// negotiation reads when a nonconforming client stamps MCP-Protocol-Version on
+// the initialize request itself, where the header is not defined: the body's
+// requested version is the negotiation, so the header must not influence the
+// answer.
+func TestServePublic_InitializeBodyWinsOverNonconformingHeader(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolsetsRepo := toolsets_repo.New(ti.conn)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "negotiate-header-mcp")
+
+	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeInitializeBodyWithVersion(mcpversions.Version20251125), "", map[string]string{
+		mcpversions.HTTPHeader: mcpversions.Version20250618,
+	})
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Equal(t, mcpversions.Version20251125, answeredProtocolVersion(t, w))
 }

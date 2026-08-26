@@ -8,13 +8,13 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-func registerGetMCPTool(server *mcp.Server, reader Reader) {
-	mcp.AddTool(server, &mcp.Tool{
+func registerGetMCPTool(reg *Registrar, reader Reader) {
+	addTool(reg, &mcp.Tool{
 		Name:        "get_mcp",
-		Title:       "Get MCP",
-		Description: "Get an allowlisted summary of one configured MCP in an explicit project.",
+		Title:       "Get One MCP Server",
+		Description: "Get a summary of one MCP server already set up in a named project.",
 		Annotations: readOnlyAnnotations(),
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMCPInput) (*mcp.CallToolResult, MCP, error) {
+	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMCPInput) (*mcp.CallToolResult, MCP, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, MCP{}, err

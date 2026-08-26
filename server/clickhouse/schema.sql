@@ -1179,6 +1179,37 @@ SELECT
 FROM telemetry_logs
 GROUP BY gram_project_id, attribute_key;
 
+-- Raw usage ledger only. Meter definitions, pricing, billability, aggregation,
+-- finalized billing-cycle records, and reconciliation live in transactional models.
+-- Outbox and Pub/Sub delivery is at least once. Producers keep each deterministic
+-- id's payload stable. Readers must use FINAL or equivalent id deduplication
+-- before summing. Adjustments use distinct ids and never update originals.
+CREATE TABLE IF NOT EXISTS billing_meter_readings (
+    id UUID COMMENT 'Deterministic reading UUID stable across redelivery.',
+    organization_id String COMMENT 'Organization that owns the workload.',
+    project_id UUID COMMENT 'Project that owns the workload.',
+    meter_id LowCardinality(String) COMMENT 'Registered workload meter identifier.',
+    operation_id String COMMENT 'Domain operation that produced the reading.',
+    unit LowCardinality(String) COMMENT 'Measurement unit, currently stokens.',
+    value Int64 COMMENT 'Signed workload value where usage is positive and adjustments may be positive or negative.',
+    occurred_at DateTime64(9, 'UTC') COMMENT 'Usage-effective UTC time when the metered work executed.',
+    inserted_at DateTime64(9, 'UTC') DEFAULT now64(9) COMMENT 'ClickHouse ingestion time and ReplacingMergeTree version.',
+    corrects_reading_id Nullable(UUID) COMMENT 'Original reading corrected by this immutable adjustment.',
+    reading_kind LowCardinality(String) MATERIALIZED if(isNull(corrects_reading_id), 'usage', 'adjustment') COMMENT 'Derived row kind based on whether the reading corrects an earlier reading.',
+    attributes Map(String, String) COMMENT 'Additional producer-supplied reading dimensions.',
+    tokenizer_codec LowCardinality(String) MATERIALIZED attributes['codec'] COMMENT 'Tokenizer codec promoted from attributes for billing analysis.',
+    CONSTRAINT identity_valid CHECK id != toUUID('00000000-0000-0000-0000-000000000000') AND project_id != toUUID('00000000-0000-0000-0000-000000000000') AND notEmpty(trimBoth(organization_id)) AND notEmpty(trimBoth(meter_id)) AND notEmpty(trimBoth(operation_id)),
+    CONSTRAINT value_kind_valid CHECK (isNull(corrects_reading_id) AND value > 0) OR (isNotNull(corrects_reading_id) AND value != 0),
+    CONSTRAINT correction_id_valid CHECK isNull(corrects_reading_id) OR (corrects_reading_id != toUUID('00000000-0000-0000-0000-000000000000') AND corrects_reading_id != id),
+    CONSTRAINT measurement_valid CHECK unit = 'stokens' AND tokenizer_codec = 'tiktoken_o200k_base',
+    INDEX idx_billing_meter_readings_occurred_at occurred_at TYPE minmax GRANULARITY 1
+) ENGINE = ReplacingMergeTree(inserted_at)
+PARTITION BY cityHash64(toString(id)) % 64
+PRIMARY KEY (organization_id, meter_id, project_id)
+ORDER BY (organization_id, meter_id, project_id, id)
+SETTINGS index_granularity = 8192
+COMMENT 'Raw immutable s-token usage ledger with stable-id convergence and billing reads requiring FINAL or equivalent id deduplication';
+
 CREATE TABLE IF NOT EXISTS authz_challenges (
     -- Identity
     id UUID DEFAULT generateUUIDv7() COMMENT 'Unique identifier for the challenge entry.',
@@ -1393,7 +1424,23 @@ CREATE TABLE IF NOT EXISTS risk_findings (
     -- migration-built ones.
     chat_source LowCardinality(String) DEFAULT '' COMMENT 'Canonical product surface the scanned message came from (chat_messages.source canonicalized at ingest, e.g. codex, cursor, claude-code). Empty for rows written before the column existed or when attribution is unresolved.',
     team LowCardinality(String) DEFAULT '' COMMENT 'WorkOS directory department_name of the resolved user at ingest. Empty when the user has no directory profile or attribution is unresolved.',
-    user_email String DEFAULT '' COMMENT 'Email of the resolved internal user at ingest (users.email), letting the Watchdog display users without a Postgres lookup. Empty for external-only users or when attribution is unresolved.' CODEC(ZSTD)
+    user_email String DEFAULT '' COMMENT 'Email of the resolved internal user at ingest (users.email), letting the Watchdog display users without a Postgres lookup. Empty for external-only users or when attribution is unresolved.' CODEC(ZSTD),
+
+    -- Suppression convergence: why excluded_at is set. Extends the exclusion
+    -- annotation above (excluded_at/exclusion_id) so rule-based exclusions,
+    -- manual dismissals and the automated false-positive sweep all record
+    -- suppression on the same fields, replacing the parallel false_positive_at
+    -- flow. Declared last for the same append-only migration reason as the
+    -- watchdog attribution columns above.
+    excluded_reason LowCardinality(String) DEFAULT '' COMMENT 'Why the finding was suppressed: rule (exclusion rule, exclusion_id set), manual (dismissed by a user via UI or agent tool) or automated (offline false-positive sweep). Empty when the finding is not suppressed or on legacy rows written before this column existed.',
+    excluded_detail String DEFAULT '' COMMENT 'Free-form context for the suppression: the user-supplied dismissal reason for manual rows, the false-positive catalog reason for automated rows. Empty for rule rows and when no reason was given.' CODEC(ZSTD),
+
+    -- Event-log kind, ranking an id's copies at read time: state-change copies
+    -- (suppression/unsuppression) outrank finding copies regardless of
+    -- inserted_at, so an at-least-once redelivery of the original scanner row
+    -- can never clobber a later dismissal. Declared last for the same
+    -- append-only migration reason as the columns above.
+    event_kind LowCardinality(String) DEFAULT '' COMMENT 'Kind of this copy of the finding: finding (scanner output, dead-letter sentinels included), suppression or unsuppression (appended state-change copies from manual dismiss/undo and the retroactive exclusion reconcile). Empty on rows written before the column existed - such rows rank as finding copies.'
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(created_at)
 ORDER BY (organization_id, project_id, created_at, id)
@@ -1495,3 +1542,109 @@ ORDER BY (organization_id, project_id, judge, created_at, id)
 TTL toDateTime(created_at) + INTERVAL 730 DAY
 SETTINGS index_granularity = 8192
 COMMENT 'Chat session analysis verdicts produced by the chat analysis judges.';
+
+-- Join engine (not a dictionary) so joinGet lookups need no source connection:
+-- a CLICKHOUSE-source dictionary authenticates its loopback load as the
+-- 'default' user, which does not exist in our deployments and would require
+-- environment-specific credentials in DDL.
+CREATE TABLE IF NOT EXISTS identity_map (
+    org_id String COMMENT 'Organization the identity belongs to.',
+    email_lower String COMMENT 'Normalized (lowercased, trimmed) email observed in telemetry.',
+    canonical_user_id String COMMENT 'Directory user id the email resolves to.',
+    canonical_email String COMMENT 'Normalized directory email of the owning user - the fold target for analytics.'
+) ENGINE = Join(ANY, LEFT, org_id, email_lower)
+COMMENT 'Employee identity fold map synced from Postgres. Maps each unambiguous directory or linked-account email to its owning user so analytics reads can fold one employee into one identity via joinGet, with missing keys returning the empty string to signal fall-back-to-literal. Ambiguous emails are deliberately absent.';
+
+CREATE TABLE IF NOT EXISTS identity_map_staging (
+    org_id String COMMENT 'Organization the identity belongs to.',
+    email_lower String COMMENT 'Normalized (lowercased, trimmed) email observed in telemetry.',
+    canonical_user_id String COMMENT 'Directory user id the email resolves to.',
+    canonical_email String COMMENT 'Normalized directory email of the owning user - the fold target for analytics.'
+) ENGINE = Join(ANY, LEFT, org_id, email_lower)
+COMMENT 'Staging twin of identity_map. The sync worker rebuilds this table then swaps it live with EXCHANGE TABLES so readers never observe a partial map.';
+
+CREATE TABLE IF NOT EXISTS otel_logs (
+    -- Tenancy, stamped by the ingest edge from authenticated state.
+    organization_id String COMMENT 'Organization the record belongs to, from the provenance stamped at the ingest edge.' CODEC(ZSTD),
+    project_id String COMMENT 'Project the record was ingested under, from the provenance stamped at the ingest edge.' CODEC(ZSTD),
+
+    -- Timing
+    time_unix_nano Int64 COMMENT 'Unix time (ns) when the event occurred. The writer substitutes observed_time_unix_nano when the producer sent 0 and drops records with neither, so this is never epoch zero.' CODEC(Delta, ZSTD),
+    observed_time_unix_nano Int64 COMMENT 'Unix time (ns) when the event was observed by the collection system. 0 when the producer omitted it.' CODEC(Delta, ZSTD),
+    timestamp DateTime64(9) DEFAULT fromUnixTimestamp64Nano(time_unix_nano) COMMENT 'Human-readable timestamp derived from time_unix_nano.',
+
+    -- Source
+    source LowCardinality(String) COMMENT 'Canonicalized producer surface derived from resource service.name at write time (e.g. claude-code, litellm). unknown when the resource carries no service.name.',
+
+    -- Trace context
+    trace_id String COMMENT 'Hex-encoded W3C trace id (32 chars). Empty when the record has no span context.' CODEC(ZSTD),
+    span_id String COMMENT 'Hex-encoded span id (16 chars). Empty when the record has no span context.' CODEC(ZSTD),
+
+    -- Log fields
+    event_name String COMMENT 'Event name for records that represent a named event (OTLP 1.5+). Empty otherwise.' CODEC(ZSTD),
+    severity_text LowCardinality(String) COMMENT 'Producer-supplied severity text (DEBUG, INFO, WARN, ERROR, FATAL). Empty when unclassified.',
+    severity_number Int32 COMMENT 'OTLP SeverityNumber enum value (1-24). 0 when unspecified.',
+    body String COMMENT 'Log body. String bodies are stored verbatim and structured bodies are JSON-encoded.' CODEC(ZSTD),
+    log_attributes JSON COMMENT 'Log record attributes, including Gram enrichments applied by the transform pipeline.' CODEC(ZSTD),
+    flags UInt32 COMMENT 'W3C trace flags for the emitting span context.',
+
+    -- Resource / scope context
+    resource_attributes JSON COMMENT 'Attributes of the resource that produced the record.' CODEC(ZSTD),
+    resource_schema_url String COMMENT 'Schema URL of the resource. Empty when not reported.' CODEC(ZSTD),
+    scope_name LowCardinality(String) COMMENT 'Instrumentation scope name. The transform pipeline rewrites this to com.speakeasy.ai.logging and keeps the producer scope in log_attributes under speakeasy.original_instrumentation_scope.name.',
+    scope_version String COMMENT 'Instrumentation scope version. Empty when not reported.' CODEC(ZSTD),
+    scope_attributes JSON COMMENT 'Instrumentation scope attributes.' CODEC(ZSTD)
+) ENGINE = MergeTree
+PARTITION BY toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))
+ORDER BY (organization_id, time_unix_nano)
+TTL fromUnixTimestamp64Nano(time_unix_nano) + INTERVAL 90 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'Normalized OTel log records teed off the gram.otel.v1.LogRecord topic after transform/enrichment, powering the org-scoped Event Feed. Ingestion is at-least-once, so Pub/Sub redelivery can produce duplicate rows and readers must tolerate them.';
+
+-- organization_id leads the ORDER BY, so no index is needed for it.
+CREATE INDEX IF NOT EXISTS idx_otel_logs_trace_id ON otel_logs (trace_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_otel_logs_event_name ON otel_logs (event_name) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_otel_logs_source ON otel_logs (source) TYPE set(0) GRANULARITY 4;
+CREATE INDEX IF NOT EXISTS idx_otel_logs_severity ON otel_logs (severity_text) TYPE set(0) GRANULARITY 4;
+
+CREATE TABLE IF NOT EXISTS otel_traces (
+    -- Tenancy, stamped by the ingest edge from authenticated state.
+    organization_id String COMMENT 'Organization the span belongs to, from the provenance stamped at the ingest edge.' CODEC(ZSTD),
+    project_id String COMMENT 'Project the span was ingested under, from the provenance stamped at the ingest edge.' CODEC(ZSTD),
+
+    -- Timing
+    time_unix_nano Int64 COMMENT 'Span start time as Unix time (ns). Validated non-zero at the ingest edge.' CODEC(Delta, ZSTD),
+    timestamp DateTime64(9) DEFAULT fromUnixTimestamp64Nano(time_unix_nano) COMMENT 'Human-readable timestamp derived from time_unix_nano.',
+    duration_nano Int64 COMMENT 'Span duration in nanoseconds (end time minus start time).',
+
+    -- Source
+    source LowCardinality(String) COMMENT 'Canonicalized producer surface derived from resource service.name at write time (e.g. claude-code, litellm). unknown when the resource carries no service.name.',
+
+    -- Span identity and structure
+    trace_id String COMMENT 'Hex-encoded W3C trace id (32 chars).' CODEC(ZSTD),
+    span_id String COMMENT 'Hex-encoded span id (16 chars).' CODEC(ZSTD),
+    parent_span_id String COMMENT 'Hex-encoded parent span id. Empty for root spans.' CODEC(ZSTD),
+    span_name String COMMENT 'Span name.' CODEC(ZSTD),
+    span_kind LowCardinality(String) COMMENT 'OTLP span kind: unspecified | internal | server | client | producer | consumer.',
+    status_code LowCardinality(String) COMMENT 'OTLP status code: unspecified | ok | error.',
+    status_message String COMMENT 'Status message, set only when status_code is error.' CODEC(ZSTD),
+    trace_state String COMMENT 'W3C tracestate header value. Empty when not reported.' CODEC(ZSTD),
+    span_attributes JSON COMMENT 'Span attributes, including Gram enrichments applied by the transform pipeline.' CODEC(ZSTD),
+
+    -- Resource / scope context
+    resource_attributes JSON COMMENT 'Attributes of the resource that produced the span.' CODEC(ZSTD),
+    resource_schema_url String COMMENT 'Schema URL of the resource. Empty when not reported.' CODEC(ZSTD),
+    scope_name LowCardinality(String) COMMENT 'Instrumentation scope name. The transform pipeline rewrites this to com.speakeasy.ai.logging and keeps the producer scope in span_attributes under speakeasy.original_instrumentation_scope.name.',
+    scope_version String COMMENT 'Instrumentation scope version. Empty when not reported.' CODEC(ZSTD),
+    scope_attributes JSON COMMENT 'Instrumentation scope attributes.' CODEC(ZSTD)
+) ENGINE = MergeTree
+PARTITION BY toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))
+ORDER BY (organization_id, time_unix_nano)
+TTL fromUnixTimestamp64Nano(time_unix_nano) + INTERVAL 90 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'Normalized OTel spans teed off the gram.otel.v1.Span topic after transform/enrichment, powering the org-scoped Event Feed. Ingestion is at-least-once, so Pub/Sub redelivery can produce duplicate rows and readers must tolerate them.';
+
+-- organization_id leads the ORDER BY, so no index is needed for it.
+CREATE INDEX IF NOT EXISTS idx_otel_traces_trace_id ON otel_traces (trace_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_otel_traces_span_name ON otel_traces (span_name) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_otel_traces_source ON otel_traces (source) TYPE set(0) GRANULARITY 4;

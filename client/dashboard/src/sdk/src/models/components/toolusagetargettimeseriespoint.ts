@@ -12,7 +12,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 /**
  * Tool usage aggregation target kind
  */
-export const TargetKind = {
+export const ToolUsageTargetTimeSeriesPointTargetKind = {
   Server: "server",
   LocalTools: "local_tools",
   Skill: "skill",
@@ -20,7 +20,9 @@ export const TargetKind = {
 /**
  * Tool usage aggregation target kind
  */
-export type TargetKind = ClosedEnum<typeof TargetKind>;
+export type ToolUsageTargetTimeSeriesPointTargetKind = ClosedEnum<
+  typeof ToolUsageTargetTimeSeriesPointTargetKind
+>;
 
 /**
  * Tool usage target type
@@ -62,7 +64,7 @@ export type ToolUsageTargetTimeSeriesPoint = {
   /**
    * Tool usage aggregation target kind
    */
-  targetKind: TargetKind;
+  targetKind: ToolUsageTargetTimeSeriesPointTargetKind;
   /**
    * User-facing label for the target
    */
@@ -74,8 +76,10 @@ export type ToolUsageTargetTimeSeriesPoint = {
 };
 
 /** @internal */
-export const TargetKind$inboundSchema: z.ZodMiniEnum<typeof TargetKind> = z
-  .enum(TargetKind);
+export const ToolUsageTargetTimeSeriesPointTargetKind$inboundSchema:
+  z.ZodMiniEnum<typeof ToolUsageTargetTimeSeriesPointTargetKind> = z.enum(
+    ToolUsageTargetTimeSeriesPointTargetKind,
+  );
 
 /** @internal */
 export const ToolUsageTargetTimeSeriesPointTargetType$inboundSchema:
@@ -93,7 +97,7 @@ export const ToolUsageTargetTimeSeriesPoint$inboundSchema: z.ZodMiniType<
     event_count: z.int(),
     failure_count: z.int(),
     target_id: z.string(),
-    target_kind: TargetKind$inboundSchema,
+    target_kind: ToolUsageTargetTimeSeriesPointTargetKind$inboundSchema,
     target_label: z.string(),
     target_type: ToolUsageTargetTimeSeriesPointTargetType$inboundSchema,
   }),

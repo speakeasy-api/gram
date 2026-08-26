@@ -32,6 +32,11 @@ func TestLogSafeURL(t *testing.T) {
 			want: "/rpc/skills.getShared?token=REDACTED",
 		},
 		{
+			name: "support handoff query parameter redacted",
+			in:   "/rpc/auth.login?support_handoff=opaque-secret&redirect=%2Fhome",
+			want: "/rpc/auth.login?support_handoff=REDACTED&redirect=%2Fhome",
+		},
+		{
 			name: "token query parameter redacted among others",
 			in:   "/rpc/chatSessions.revoke?a=1&token=supersecret",
 			want: "/rpc/chatSessions.revoke?a=1&token=REDACTED",
@@ -55,6 +60,11 @@ func TestLogSafeURL(t *testing.T) {
 			name: "shared skills prefix without token untouched",
 			in:   "/shared/skills/",
 			want: "/shared/skills/",
+		},
+		{
+			name: "shared handoff path segment redacted",
+			in:   "/shared/handoffs/aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899",
+			want: "/shared/handoffs/REDACTED",
 		},
 		{
 			name: "unrelated shared path untouched",

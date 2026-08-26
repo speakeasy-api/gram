@@ -9,7 +9,7 @@ import (
 )
 
 var _ = Service("mcpEndpoints", func() {
-	Description("Managing MCP endpoints, the url-friendly slug identifiers that address MCP servers.")
+	Description("Managing MCP endpoints, the url-friendly slug identifiers that address MCP servers and meta MCP servers.")
 	Security(security.Session, security.ProjectSlug)
 	Security(security.ByKey, security.ProjectSlug, func() {
 		Scope("producer")
@@ -17,7 +17,7 @@ var _ = Service("mcpEndpoints", func() {
 	shared.DeclareErrorResponses()
 
 	Method("createMcpEndpoint", func() {
-		Description("Create a new MCP endpoint for an MCP server")
+		Description("Create a new MCP endpoint for an MCP server or a meta MCP server. Provide exactly one of mcp_server_id or meta_mcp_server_id.")
 
 		Payload(func() {
 			Extend(CreateMcpEndpointForm)
@@ -76,10 +76,13 @@ var _ = Service("mcpEndpoints", func() {
 	})
 
 	Method("listMcpEndpoints", func() {
-		Description("List MCP endpoints for a project. Optionally filter to only those associated with a specific MCP server.")
+		Description("List MCP endpoints for a project. Optionally filter to only those associated with a specific MCP server or meta MCP server (not both).")
 
 		Payload(func() {
 			Attribute("mcp_server_id", String, "Optional filter: only return endpoints associated with this MCP server.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("meta_mcp_server_id", String, "Optional filter: only return endpoints associated with this meta MCP server.", func() {
 				Format(FormatUUID)
 			})
 			security.SessionPayload()
@@ -92,6 +95,7 @@ var _ = Service("mcpEndpoints", func() {
 		HTTP(func() {
 			GET("/rpc/mcpEndpoints.list")
 			Param("mcp_server_id")
+			Param("meta_mcp_server_id")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()
@@ -104,7 +108,7 @@ var _ = Service("mcpEndpoints", func() {
 	})
 
 	Method("updateMcpEndpoint", func() {
-		Description("Update an MCP endpoint. This is a full-record replace: fields omitted from the request become null on the stored record. The id, mcp_server_id, and slug fields are required.")
+		Description("Update an MCP endpoint. This is a full-record replace: fields omitted from the request become null on the stored record. The id and slug fields are required, along with exactly one of mcp_server_id or meta_mcp_server_id.")
 
 		Payload(func() {
 			Extend(UpdateMcpEndpointForm)
@@ -195,21 +199,24 @@ var McpEndpointSlug = Type("McpEndpointSlug", String, func() {
 })
 
 var CreateMcpEndpointForm = Type("CreateMcpEndpointForm", func() {
-	Description("Form for creating a new MCP endpoint. Platform-domain endpoint slugs (no custom_domain_id) must be prefixed with the organization slug.")
+	Description("Form for creating a new MCP endpoint. Provide exactly one of mcp_server_id or meta_mcp_server_id. Platform-domain endpoint slugs (no custom_domain_id) must be prefixed with the organization slug.")
 
 	Attribute("custom_domain_id", String, "The ID of the custom domain to register the endpoint slug under. Omit for a platform-domain endpoint.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("mcp_server_id", String, "The ID of the MCP server this endpoint addresses", func() {
+	Attribute("mcp_server_id", String, "The ID of the MCP server this endpoint addresses. Mutually exclusive with meta_mcp_server_id.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("meta_mcp_server_id", String, "The ID of the meta MCP server this endpoint addresses. Mutually exclusive with mcp_server_id.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("slug", McpEndpointSlug, "The slug")
 
-	Required("mcp_server_id", "slug")
+	Required("slug")
 })
 
 var UpdateMcpEndpointForm = Type("UpdateMcpEndpointForm", func() {
-	Description("Form for updating an MCP endpoint. This is a full-record replace: the custom_domain_id field omitted from the request becomes null on the stored record. Platform-domain endpoint slugs (no custom_domain_id) must be prefixed with the organization slug.")
+	Description("Form for updating an MCP endpoint. This is a full-record replace: the custom_domain_id field omitted from the request becomes null on the stored record. Provide exactly one of mcp_server_id or meta_mcp_server_id. Platform-domain endpoint slugs (no custom_domain_id) must be prefixed with the organization slug.")
 
 	Attribute("id", String, "The ID of the MCP endpoint to update", func() {
 		Format(FormatUUID)
@@ -217,18 +224,21 @@ var UpdateMcpEndpointForm = Type("UpdateMcpEndpointForm", func() {
 	Attribute("custom_domain_id", String, "The ID of the custom domain to register the endpoint slug under. Omit to move the endpoint to a platform domain.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("mcp_server_id", String, "The ID of the MCP server this endpoint addresses", func() {
+	Attribute("mcp_server_id", String, "The ID of the MCP server this endpoint addresses. Mutually exclusive with meta_mcp_server_id.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("meta_mcp_server_id", String, "The ID of the meta MCP server this endpoint addresses. Mutually exclusive with mcp_server_id.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("slug", McpEndpointSlug, "The slug")
 
-	Required("id", "mcp_server_id", "slug")
+	Required("id", "slug")
 })
 
 var McpEndpoint = Type("McpEndpoint", func() {
 	Meta("struct:pkg:path", "types")
 
-	Description("An MCP endpoint: a url-friendly slug identifier that addresses an MCP server.")
+	Description("An MCP endpoint: a url-friendly slug identifier that addresses an MCP server or a meta MCP server. Exactly one of mcp_server_id and meta_mcp_server_id is set.")
 
 	Attribute("id", String, "The ID of the MCP endpoint", func() {
 		Format(FormatUUID)
@@ -239,7 +249,10 @@ var McpEndpoint = Type("McpEndpoint", func() {
 	Attribute("custom_domain_id", String, "The ID of the custom domain this endpoint slug is registered under. Null for platform-domain endpoints.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("mcp_server_id", String, "The ID of the MCP server this endpoint addresses", func() {
+	Attribute("mcp_server_id", String, "The ID of the MCP server this endpoint addresses. Null for meta-MCP-backed endpoints.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("meta_mcp_server_id", String, "The ID of the meta MCP server this endpoint addresses. Null for MCP-server-backed endpoints.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("slug", McpEndpointSlug, "The slug")
@@ -253,7 +266,7 @@ var McpEndpoint = Type("McpEndpoint", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "project_id", "mcp_server_id", "slug", "is_domain_root", "created_at", "updated_at")
+	Required("id", "project_id", "slug", "is_domain_root", "created_at", "updated_at")
 })
 
 var ListMcpEndpointsResult = Type("ListMcpEndpointsResult", func() {

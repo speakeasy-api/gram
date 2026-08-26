@@ -8,12 +8,14 @@ import (
 	"os"
 	"os/signal"
 	"runtime/debug"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v2/altsrc"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/propagation"
@@ -25,6 +27,7 @@ import (
 
 	"github.com/speakeasy-api/gram/infra/gen"
 	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
+	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	pingv2 "github.com/speakeasy-api/gram/infra/gen/gram/ping/v2"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
@@ -32,16 +35,20 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/background"
+	"github.com/speakeasy-api/gram/server/internal/billingnotifications"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/control"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/modelkeys"
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
+	otelchrepo "github.com/speakeasy-api/gram/server/internal/otel/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/ping"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -58,6 +65,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/subscribers"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	"github.com/speakeasy-api/gram/server/internal/usage"
 	"github.com/speakeasy-api/gram/server/internal/webhooks/svixrelay"
 )
 
@@ -90,6 +98,34 @@ func newStreamsCommand() *cli.Command {
 			Required: true,
 		},
 		&cli.StringFlag{
+			Name:    "temporal-address",
+			Usage:   "The address of the temporal server",
+			EnvVars: []string{"TEMPORAL_ADDRESS"},
+			Value:   "localhost:7233",
+		},
+		&cli.StringFlag{
+			Name:    "temporal-namespace",
+			Usage:   "The temporal namespace to use",
+			EnvVars: []string{"TEMPORAL_NAMESPACE"},
+			Value:   "default",
+		},
+		&cli.StringFlag{
+			Name:    "temporal-task-queue",
+			Usage:   "Task queue of the Temporal server",
+			EnvVars: []string{"TEMPORAL_TASK_QUEUE"},
+			Value:   "main",
+		},
+		&cli.StringFlag{
+			Name:    "temporal-client-cert",
+			Usage:   "Client cert of the Temporal server",
+			EnvVars: []string{"TEMPORAL_CLIENT_CERT"},
+		},
+		&cli.StringFlag{
+			Name:    "temporal-client-key",
+			Usage:   "Client key of the Temporal server",
+			EnvVars: []string{"TEMPORAL_CLIENT_KEY"},
+		},
+		&cli.StringFlag{
 			Name:     "encryption-key",
 			Usage:    "Key for App level AES encryption/decyryption",
 			Required: true,
@@ -105,6 +141,40 @@ func newStreamsCommand() *cli.Command {
 			Usage:   "Provisioning key for OpenRouter to create new API keys for orgs - https://openrouter.ai/settings/provisioning-keys",
 			EnvVars: []string{"OPENROUTER_PROVISIONING_KEY"},
 		},
+		&cli.StringFlag{
+			Name:    "stripe-api-key",
+			Usage:   "The Stripe API key",
+			EnvVars: []string{"STRIPE_API_KEY"},
+		},
+		&cli.StringFlag{
+			Name:    "stripe-webhook-secret",
+			Usage:   "The Stripe webhook signing secret",
+			EnvVars: []string{"STRIPE_WEBHOOK_SECRET"},
+		},
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "stripe-price-id-tum",
+			Aliases: []string{"stripe.price_id_tum"},
+			Usage:   "The Stripe metered TUM price ID",
+			EnvVars: []string{"STRIPE_PRICE_ID_TUM"},
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "stripe-meter-id-tum",
+			Aliases: []string{"stripe.meter_id_tum"},
+			Usage:   "The Stripe TUM billing meter ID",
+			EnvVars: []string{"STRIPE_METER_ID_TUM"},
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "stripe-meter-event-name",
+			Aliases: []string{"stripe.meter_event_name"},
+			Usage:   "The Stripe TUM meter event name",
+			EnvVars: []string{"STRIPE_METER_EVENT_NAME"},
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:    "stripe-portal-configuration-id",
+			Aliases: []string{"stripe.portal_configuration_id"},
+			Usage:   "The controlled Stripe customer portal configuration ID",
+			EnvVars: []string{"STRIPE_PORTAL_CONFIGURATION_ID"},
+		}),
 		&cli.StringFlag{
 			Name:     "polar-api-key",
 			Usage:    "The polar API key",
@@ -247,6 +317,22 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("embedded descriptor set is empty: cannot generate pubsub topology")
 			}
 
+			temporalEnv, shutdown, err := newTemporalClient(logger, meterProvider, temporalClientOptions{
+				address:      c.String("temporal-address"),
+				namespace:    c.String("temporal-namespace"),
+				taskQueue:    c.String("temporal-task-queue"),
+				certPEMBlock: []byte(c.String("temporal-client-cert")),
+				keyPEMBlock:  []byte(c.String("temporal-client-key")),
+			})
+			if err != nil {
+				return fmt.Errorf("failed to create temporal client: %w", err)
+			}
+			if temporalEnv == nil {
+				return errors.New("insufficient options to create temporal client")
+			}
+			shutdownFuncs = append(shutdownFuncs, shutdown)
+			openRouterKeyRefresher := &background.OpenRouterKeyRefresher{TemporalEnv: temporalEnv}
+
 			db, err := newDBClient(ctx, logger, meterProvider, c.String("database-url"), dbClientOptions{
 				enableUnsafeLogging: c.Bool("unsafe-db-log"),
 			})
@@ -289,7 +375,12 @@ func newStreamsCommand() *cli.Command {
 			}
 
 			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
-			_, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, c)
+			stripeClient, err := newStripeClient(ctx, logger, guardianPolicy, c)
+			if err != nil {
+				return fmt.Errorf("failed to create Stripe client: %w", err)
+			}
+
+			_, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, stripeClient, c)
 			if err != nil {
 				return fmt.Errorf("failed to create billing provider: %w", err)
 			}
@@ -317,6 +408,15 @@ func newStreamsCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to create pubsub client: %w", err)
 			}
+			var (
+				findingsPub gcp.Publisher[*riskv1.Finding]
+				logPub      gcp.Publisher[*otelv1.LogRecord]
+				metricPub   gcp.Publisher[*otelv1.Metric]
+				spanPub     gcp.Publisher[*otelv1.Span]
+			)
+			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
+				return shutdownPubSubPublishers(ctx, pubsubShutdown, findingsPub, logPub, metricPub, spanPub)
+			})
 
 			riskFingerprinter, err := risk.ParsePepperKeyRing([]byte(c.String("risk-fingerprint-pepper-keyring")))
 			if err != nil {
@@ -333,15 +433,10 @@ func newStreamsCommand() *cli.Command {
 			// Gitleaks shadow-mode subscriber: re-runs the in-process gitleaks
 			// scan over GitleaksAnalysis requests and publishes any matches into
 			// the shared Finding topic (nothing consumes them yet).
-			findingsPub, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.Finding{})
+			findingsPub, err = gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.Finding{})
 			if err != nil {
 				return fmt.Errorf("failed to create pubsub publisher for risk findings: %w", err)
 			}
-			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
-				stopErr := findingsPub.Stop(ctx)
-				closeErr := pubsubShutdown(ctx)
-				return errors.Join(stopErr, closeErr)
-			})
 
 			gitleaksHandler := gitleaks.NewHandler(logger, findingsPub)
 			promptInjectionScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, judgeRateLimiter).Classify)
@@ -371,7 +466,7 @@ func newStreamsCommand() *cli.Command {
 					[]*o11y.NamedResource[*o11y.HTTPEndpoint]{},
 					[]*o11y.NamedResource[*pgxpool.Pool]{{Name: "read-replica", Resource: replicaDB}},
 					[]*o11y.NamedResource[*redis.Client]{{Name: "default", Resource: redisClient}},
-					[]*o11y.NamedResource[client.Client]{},
+					[]*o11y.NamedResource[client.Client]{{Name: "default", Resource: temporalEnv.Client()}},
 				))
 				if err != nil {
 					return fmt.Errorf("failed to start control server: %w", err)
@@ -406,12 +501,64 @@ func newStreamsCommand() *cli.Command {
 			shutdownFuncs = append(shutdownFuncs, svixShutdown)
 
 			svixRelayHandler := svixrelay.NewHandler(logger, meterProvider, db, svixClient)
+			paygKeyRefreshHandler := usage.NewPaygKeyRefreshHandler(logger, openRouterKeyRefresher)
+			billingNotificationHandler := billingnotifications.NewEventHandler(logger, &background.TemporalBillingEmailScheduler{TemporalEnv: temporalEnv})
+			webhookEventHandler := streams.HandlerFunc[*webhooksv1.Event](func(ctx context.Context, event *webhooksv1.Event, metadata gcp.MessageMetadata) error {
+				var handlerErrors []error
+				if err := svixRelayHandler.Handle(ctx, event, metadata); err != nil {
+					handlerErrors = append(handlerErrors, fmt.Errorf("relay webhook event to Svix: %w", err))
+				}
+				if err := paygKeyRefreshHandler.Handle(ctx, event, metadata); err != nil {
+					handlerErrors = append(handlerErrors, fmt.Errorf("schedule PAYG key refresh: %w", err))
+				}
+				if err := billingNotificationHandler.Handle(ctx, event, metadata); err != nil {
+					handlerErrors = append(handlerErrors, fmt.Errorf("schedule billing notification: %w", err))
+				}
+				return errors.Join(handlerErrors...)
+			})
 
-			pingLogLevel := conv.Ternary(c.String("environment") == "local", slog.LevelInfo, slog.LevelDebug)
+			logPub, err = gcp.PubSubPublisherForMessage(ctx, psbroker, &otelv1.LogRecord{})
+			if err != nil {
+				return fmt.Errorf("failed to create pubsub publisher for otel logs: %w", err)
+			}
+
+			metricPub, err = gcp.PubSubPublisherForMessage(ctx, psbroker, &otelv1.Metric{})
+			if err != nil {
+				return fmt.Errorf("failed to create pubsub publisher for otel metrics: %w", err)
+			}
+
+			spanPub, err = gcp.PubSubPublisherForMessage(ctx, psbroker, &otelv1.Span{})
+			if err != nil {
+				return fmt.Errorf("failed to create pubsub publisher for otel spans: %w", err)
+			}
+
+			logRelayHandler := otelsvc.NewLogRelayHandler(
+				logger,
+				meterProvider,
+				replicaDB,
+				encryptionClient,
+				guardianPolicy,
+			)
+
+			metricRelayHandler := otelsvc.NewMetricRelayHandler(
+				logger,
+				meterProvider,
+				replicaDB,
+				encryptionClient,
+				guardianPolicy,
+			)
+
+			spanRelayHandler := otelsvc.NewSpanRelayHandler(
+				logger,
+				meterProvider,
+				replicaDB,
+				encryptionClient,
+				guardianPolicy,
+			)
 
 			// Start subscription receivers in this block
 			{
-				mustReceive(rg, &pingv2.Message{}, &pingv2.Processor{}, ping.NewHandler(logger, pingLogLevel))
+				mustReceive(rg, &pingv2.Message{}, &pingv2.Processor{}, ping.NewHandler(logger, slog.LevelDebug))
 
 				mustReceive(rg, &riskv1.GitleaksAnalysis{}, &riskv1.GitleaksAnalyzer{}, gitleaksHandler)
 				mustReceive(rg, &riskv1.PromptInjectionAnalysis{}, &riskv1.PromptInjectionAnalyzer{}, promptInjectionHandler)
@@ -420,19 +567,40 @@ func newStreamsCommand() *cli.Command {
 
 				mustReceive(rg, &telemetryv1.LogRecord{}, &telemetryv1.Noop{}, new(subscribers.NoopHandler[*telemetryv1.LogRecord]))
 
-				mustReceive(rg, &webhooksv1.Event{}, &webhooksv1.SvixRelay{}, svixRelayHandler)
+				mustReceive(rg, &webhooksv1.Event{}, &webhooksv1.SvixRelay{}, webhookEventHandler)
 
-				mustReceive(
-					rg, &authzv1.Challenge{}, &authzv1.ChallengeCHWriter{},
-					authz.NewChallengeCHWriter(logger, chConn),
-				)
+				mustReceive(rg, &authzv1.Challenge{}, &authzv1.ChallengeCHWriter{}, authz.NewChallengeCHWriter(logger, chConn))
+
+				mustReceive(rg, &otelv1.InboundLogRecord{}, &otelv1.InboundLogRecordTransformer{}, otelsvc.NewLogTransformHandler(
+					logger,
+					meterProvider,
+					logPub,
+					replicaDB,
+					cache.NewRedisCacheAdapter(redisClient),
+				))
+				mustReceive(rg, &otelv1.InboundMetric{}, &otelv1.InboundMetricTransformer{}, otelsvc.NewMetricTransformHandler(
+					logger,
+					meterProvider,
+					metricPub,
+				))
+				mustReceive(rg, &otelv1.InboundSpan{}, &otelv1.InboundSpanTransformer{}, otelsvc.NewSpanTransformHandler(
+					logger,
+					meterProvider,
+					spanPub,
+					replicaDB,
+					cache.NewRedisCacheAdapter(redisClient),
+				))
+				mustReceiveBatchWithResult(rg, &otelv1.LogRecord{}, &otelv1.LogRelay{}, logRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
+				mustReceiveBatchWithResult(rg, &otelv1.Metric{}, &otelv1.MetricRelay{}, metricRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
+				mustReceiveBatchWithResult(rg, &otelv1.Span{}, &otelv1.SpanRelay{}, spanRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
+
+				// Event feed tee: mirror the normalized OTEL topics into the
+				// otel_logs / otel_traces ClickHouse tables.
+				mustReceiveBatch(rg, &otelv1.LogRecord{}, &otelv1.LogEventCHWriter{}, otelsvc.NewLogEventCHWriter(logger, meterProvider, otelchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
+				mustReceiveBatch(rg, &otelv1.Span{}, &otelv1.SpanEventCHWriter{}, otelsvc.NewSpanEventCHWriter(logger, meterProvider, otelchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
 
 				if enableCHRiskWrites {
-					mustReceiveBatch(
-						rg, &riskv1.Finding{}, &riskv1.FindingCHWriter{},
-						gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second},
-						risk.NewFindingCHWriter(logger, replicaDB, meterProvider, chrepo.New(chConn), riskFingerprinter),
-					)
+					mustReceiveBatchWithResult(rg, &riskv1.Finding{}, &riskv1.FindingCHWriter{}, risk.NewFindingCHWriter(logger, replicaDB, meterProvider, chrepo.New(chConn), riskFingerprinter), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second})
 				}
 			}
 
@@ -461,6 +629,33 @@ func newStreamsCommand() *cli.Command {
 			return runShutdown(PullLogger(c.Context), c.Context, shutdownFuncs)
 		},
 	}
+}
+
+type publisherStopper interface {
+	Stop(context.Context) error
+}
+
+func shutdownPubSubPublishers(
+	ctx context.Context,
+	closeClient func(context.Context) error,
+	publishers ...publisherStopper,
+) error {
+	stopErrors := make([]error, len(publishers))
+	var stops sync.WaitGroup
+	for i, publisher := range publishers {
+		if publisher == nil {
+			continue
+		}
+		stops.Go(func() {
+			stopErrors[i] = publisher.Stop(ctx)
+		})
+	}
+	stops.Wait()
+
+	if err := closeClient(ctx); err != nil {
+		stopErrors = append(stopErrors, err)
+	}
+	return errors.Join(stopErrors...)
 }
 
 type receiverGroup struct {
@@ -597,8 +792,8 @@ func receiveBatch[M proto.Message](
 	g receiverGroup,
 	msg M,
 	subscription proto.Message,
-	settings gcp.BatchReceiveSettings,
 	handler streams.BatchHandler[M],
+	settings gcp.BatchReceiveSettings,
 	options ...gcp.SubscriberOption,
 ) error {
 	sub, msgName, subName, ctx, err := setupSubscriber(g, msg, subscription, options...)
@@ -664,9 +859,80 @@ func mustReceiveBatch[M proto.Message](
 	g receiverGroup,
 	msg M,
 	subscription proto.Message,
-	settings gcp.BatchReceiveSettings,
 	handler streams.BatchHandler[M],
+	settings gcp.BatchReceiveSettings,
 	options ...gcp.SubscriberOption,
 ) {
-	must.Nil(receiveBatch(g, msg, subscription, settings, handler, options...))
+	must.Nil(receiveBatch(g, msg, subscription, handler, settings, options...))
+}
+
+// receiveBatchWithResult registers a BatchResultHandler whose messages can
+// stage individual failures without changing the all-or-nothing BatchHandler
+// contract.
+func receiveBatchWithResult[M proto.Message](
+	g receiverGroup,
+	msg M,
+	subscription proto.Message,
+	handler streams.BatchResultHandler[M],
+	settings gcp.BatchReceiveSettings,
+	options ...gcp.SubscriberOption,
+) error {
+	sub, msgName, subName, ctx, err := setupSubscriber(g, msg, subscription, options...)
+	if err != nil {
+		return err
+	}
+
+	g.group.Go(func() error {
+		if err := sub.ReceiveBatchWithResult(ctx, settings, func(ctx context.Context, msgs []gcp.BatchMessage[M]) (err error) {
+			ctx, span := g.tracer.Start(ctx, "stream.handleBatch", trace.WithAttributes(
+				attr.TopicProtoName(msgName),
+				attr.SubscriptionProtoName(subName),
+				attr.SubscriberBatchSize(len(msgs)),
+			))
+
+			defer func() {
+				if err != nil {
+					span.RecordError(err)
+					span.SetStatus(codes.Error, err.Error())
+				}
+				span.End()
+			}()
+
+			defer func() {
+				if r := recover(); r != nil {
+					err = fmt.Errorf("panic recovered in batch result handler: %v", r)
+					g.logger.ErrorContext(ctx, "panic recovered in batch result handler",
+						attr.SlogError(err),
+						attr.SlogErrorStack(string(debug.Stack())),
+					)
+				}
+			}()
+
+			err = handler.HandleBatchWithResult(ctx, msgs)
+			if err != nil {
+				return fmt.Errorf("handle message batch with result: %w", err)
+			}
+			if err = ctx.Err(); err != nil {
+				return fmt.Errorf("handle message batch with result: %w", err)
+			}
+			return nil
+		}); err != nil {
+			return fmt.Errorf("subscriber receive batch with result error: %w", err)
+		}
+
+		return nil
+	})
+
+	return nil
+}
+
+func mustReceiveBatchWithResult[M proto.Message](
+	g receiverGroup,
+	msg M,
+	subscription proto.Message,
+	handler streams.BatchResultHandler[M],
+	settings gcp.BatchReceiveSettings,
+	options ...gcp.SubscriberOption,
+) {
+	must.Nil(receiveBatchWithResult(g, msg, subscription, handler, settings, options...))
 }

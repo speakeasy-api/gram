@@ -10,9 +10,15 @@ import (
 type Feature string
 
 const (
-	FeatureLogs                       Feature = "logs"
-	FeatureToolIOLogs                 Feature = "tool_io_logs"
-	FeatureSessionCapture             Feature = "session_capture"
+	FeatureLogs           Feature = "logs"
+	FeatureToolIOLogs     Feature = "tool_io_logs"
+	FeatureSessionCapture Feature = "session_capture"
+	// FeatureSessionPortability gates agent session portability: the device
+	// agent's "continue this session in another harness" flow and the agent
+	// service endpoints backing it (getSessionMeta, reportSessionMoved).
+	// Sibling of FeatureSessionCapture — capture records sessions, portability
+	// moves them.
+	FeatureSessionPortability         Feature = "session_portability"
 	FeatureAuthzChallengeLogging      Feature = "authz_challenge_logging"
 	FeatureSSO                        Feature = "sso"
 	FeatureSCIM                       Feature = "scim"
@@ -40,6 +46,11 @@ const (
 	// FeatureRemoteSessionAutoRefresh, which only governs whether the opt-in
 	// control is visible and leaves the choice to each user.
 	FeatureRemoteSessionAutoRefreshEnforced Feature = "remote_session_auto_refresh_enforced"
+	// FeatureConsentToolFiltering lets organization admins turn on the
+	// consent-screen tool picker for their organization. Enforcement of stored
+	// selections is always on; this only governs whether new approvals can
+	// author one.
+	FeatureConsentToolFiltering Feature = "consent_tool_filtering"
 )
 
 type FeatureCache struct {

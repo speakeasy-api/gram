@@ -14,7 +14,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -57,7 +56,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/httpcache"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/sessionclientinfo"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
@@ -79,6 +82,7 @@ import (
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/clientauth"
 	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
@@ -94,7 +98,7 @@ type IdentityResolver interface {
 type Service struct {
 	logger          *slog.Logger
 	tracer          trace.Tracer
-	metrics         *metrics
+	metrics         *mcpmetrics.Metrics
 	guardianPolicy  *guardian.Policy
 	db              *pgxpool.Pool
 	authRepo        *auth_repo.Queries
@@ -106,17 +110,11 @@ type Service struct {
 	serverURL       *url.URL
 	siteURL         *url.URL
 	posthog         *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
-	// features gates flag-controlled behavior on the OAuth surface (inbound
-	// CIMD). Wired from the same posthog client in production; typed as the
-	// interface so tests can inject feature.InMemory.
+	// features resolves flag-controlled behavior (the managed assistant's
+	// Platform MCP toolset variant). Wired from the environment-aware
+	// provider: the posthog client in production, the CSV-backed in-memory
+	// provider in local development, feature.InMemory in tests.
 	features feature.Provider
-	// cimdOrgFlagLastKnown remembers the last successful per-organization
-	// evaluation of FlagUserSessionCIMD so a flag-provider outage degrades
-	// to the last known state instead of failing closed on the
-	// unauthenticated OAuth surface. Guarded by cimdOrgFlagMu; holds one bool
-	// per organization that touches the surface.
-	cimdOrgFlagMu        sync.RWMutex
-	cimdOrgFlagLastKnown map[string]bool
 	// cimdResolver fetches + validates Client ID Metadata Documents for
 	// URL-shaped client_ids and owns the cimd.fetch.* telemetry.
 	cimdResolver *cimd.Resolver
@@ -124,30 +122,43 @@ type Service struct {
 	// before the resolver runs, on their own cimd.admission.decisions
 	// instrument (a denial performs no fetch, so it has no place under
 	// cimd.fetch.attempts).
-	cimdAdmissionMetrics   *admission.Metrics
-	toolProxy              *gateway.ToolProxy
-	oauthRepo              *oauth_repo.Queries
-	billingTracker         billing.Tracker
-	billingRepository      billing.Repository
-	toolsetCache           cache.TypedCacheObject[mv.ToolsetBaseContents]
-	telemLogger            *tm.Logger
-	vectorToolStore        *rag.ToolsetVectorStore
-	temporal               *temporal.Environment
-	assistantTokens        *assistanttokens.Manager
-	sessions               *sessions.Manager
-	identityResolver       IdentityResolver
-	chatSessionsManager    *chatsessions.Manager
-	externalmcpRepo        *externalmcp_repo.Queries
-	deploymentsRepo        *deployments_repo.Queries
-	enc                    *encryption.Client
-	authz                  *authz.Engine
-	shadowMCPClient        *shadowmcp.Client
-	auditLogger            *audit.Logger
-	platformExtras         []platformtools.ExternalTool
-	platformFeatureChecker platformtools.FeatureChecker
-	platformToolsets       map[string]platformtools.Toolset
-	authnChallengeCache    cache.TypedCacheObject[AuthnChallengeState]
-	userSessionGrantCache  cache.TypedCacheObject[UserSessionGrant]
+	cimdAdmissionMetrics *admission.Metrics
+	// clientAssertionVerifier verifies private_key_jwt client assertions at
+	// the token and revocation endpoints. Nil without Redis, in which case
+	// assertion clients are refused rather than admitted unverified.
+	clientAssertionVerifier *clientauth.Verifier
+	toolProxy               *gateway.ToolProxy
+	oauthRepo               *oauth_repo.Queries
+	billingTracker          billing.Tracker
+	billingRepository       billing.Repository
+	toolsetCache            cache.TypedCacheObject[mv.ToolsetBaseContents]
+	telemLogger             *tm.Logger
+	vectorToolStore         *rag.ToolsetVectorStore
+	temporal                *temporal.Environment
+	assistantTokens         *assistanttokens.Manager
+	sessions                *sessions.Manager
+	identityResolver        IdentityResolver
+	chatSessionsManager     *chatsessions.Manager
+	externalmcpRepo         *externalmcp_repo.Queries
+	deploymentsRepo         *deployments_repo.Queries
+	enc                     *encryption.Client
+	authz                   *authz.Engine
+	shadowMCPClient         *shadowmcp.Client
+	auditLogger             *audit.Logger
+	platformExtras          []platformtools.ExternalTool
+	platformFeatureChecker  platformtools.FeatureChecker
+	platformToolsets        map[string]platformtools.Toolset
+	authnChallengeCache     cache.TypedCacheObject[AuthnChallengeState]
+	userSessionGrantCache   cache.TypedCacheObject[UserSessionGrant]
+	// userSessionRefreshReplayCache retains the encrypted rotation outcome.
+	userSessionRefreshReplayCache cache.TypedCacheObject[userSessionRefreshReplay]
+
+	// userSessionRefreshReplayCoordination elects the database rotation winner.
+	userSessionRefreshReplayCoordination cache.Cache
+	toolSelectionCache                   cache.TypedCacheObject[sessionToolSelectionEntry]
+	// consentToolInventoryCache holds per-(state, attempt) tool inventory
+	// snapshots captured by the consent MCP transport.
+	consentToolInventoryCache cache.TypedCacheObject[consentToolInventory]
 	// sessionClientInfo holds the MCP client identity captured at initialize
 	// so tools/call on the same session can resolve it. Always usable: without
 	// Redis it records nothing and every caller resolves as unknown.
@@ -204,29 +215,30 @@ type oauthTokenInputs struct {
 // left empty, so dispatch injects a remote-session token into every matching
 // oauth2 tool — correct only when a single remote issuer is bound.
 //
-// Fails closed when more than one token resolves: without per-tool routing
-// (AIS-152) we cannot tell which tool needs which issuer's token, and
-// injecting all of them with empty securityKeys could forward the wrong
-// bearer upstream. This mirrors singleUpstreamToken's fail-closed posture for
-// the remote-MCP backend. The state is unreachable while the
-// remote_session_client_user_session_issuers one_per_issuer index caps a
-// user_session_issuer at one client; it becomes reachable once AIS-137 drops
-// that index, at which point AIS-152 must land to route per tool.
-func appendRemoteSessionTokenInputs(dst []oauthTokenInputs, tokens map[uuid.UUID]string) ([]oauthTokenInputs, error) {
+// Fails closed when more than one token resolves: nothing maps a tool's
+// security scheme to a remote_session_issuer (AGE-3285), so we cannot tell
+// which tool needs which issuer's token, and injecting all of them with empty
+// securityKeys would forward an arbitrary bearer upstream. This mirrors
+// routeUpstreamToken's fail-closed posture for the proxied-MCP backends,
+// which can route by the credential's grant-time resource — toolset dispatch
+// has no equivalent qualified identity yet. The multi-token state is
+// reachable: the one_per_issuer index that used to cap a user_session_issuer
+// at one client was dropped in AIS-137.
+func appendRemoteSessionTokenInputs(dst []oauthTokenInputs, tokens map[uuid.UUID]remotesessions.UpstreamToken) ([]oauthTokenInputs, error) {
 	if len(tokens) > 1 {
-		return nil, fmt.Errorf("issuer-gated endpoint resolved %d remote-session upstream tokens; per-tool routing required to dispatch (AIS-152)", len(tokens))
+		return nil, fmt.Errorf("issuer-gated endpoint resolved %d remote-session upstream tokens; per-tool routing requires a security-scheme-to-issuer mapping (AGE-3285)", len(tokens))
 	}
-	for issuerID, token := range tokens {
+	for issuerID, entry := range tokens {
 		// Defensive: ResolveAccessTokens never maps an issuer to an empty
 		// token (it returns ErrNoValidToken instead), so this skip should not
 		// fire; it guards against a caller passing an empty-valued entry.
-		if token == "" {
+		if entry.Token == "" {
 			continue
 		}
 		dst = append(dst, oauthTokenInputs{
 			securityKeys:          nil,
 			remoteSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
-			Token:                 token,
+			Token:                 entry.Token,
 		})
 	}
 	return dst, nil
@@ -256,6 +268,18 @@ type mcpInputs struct {
 	// tools/call expose only tools whose variation row carries one of these
 	// tags. Empty means no filtering.
 	tags []string
+	// protocolVersion is the protocol revision resolved for this request:
+	// what the request declared (header, falling back to per-request `_meta`)
+	// for telemetry, and the supported-set member in effect for behavior.
+	// Threaded here because the dispatch and handlers run without access to
+	// the *http.Request. Resolved once where this struct is built; the
+	// initialize handler overwrites InEffect with the negotiated answer, which
+	// is the one sanctioned mutation.
+	protocolVersion mcpversions.Resolution
+	// toolSelection is the consent-screen tool policy loaded from the
+	// session row by the issuer gate. Nil means all tools; non-nil is always
+	// restrictive and intersects with the live toolset, ?tags=, and RBAC.
+	toolSelection *toolfilter.SessionSelection
 }
 
 func NewService(
@@ -314,27 +338,26 @@ func NewService(
 	)
 
 	return &Service{
-		logger:               logger,
-		tracer:               tracer,
-		metrics:              newMetrics(meter, logger),
-		guardianPolicy:       guardianPolicy,
-		db:                   db,
-		authRepo:             auth_repo.New(db),
-		toolsetsRepo:         toolsets_repo.New(db),
-		mcpMetadataRepo:      metadata_repo.New(db),
-		orgsRepo:             organizations_repo.New(db),
-		deploymentsRepo:      deployments_repo.New(db),
-		externalmcpRepo:      externalmcp_repo.New(db),
-		auth:                 auth.New(logger, db, sessions, authzEngine),
-		env:                  env,
-		serverURL:            serverURL,
-		siteURL:              siteURL,
-		posthog:              posthog,
-		features:             features,
-		cimdOrgFlagMu:        sync.RWMutex{},
-		cimdOrgFlagLastKnown: map[string]bool{},
-		cimdResolver:         cimd.NewResolver(guardianPolicy, meterProvider, logger),
-		cimdAdmissionMetrics: admission.NewMetrics(meterProvider, logger),
+		logger:                  logger,
+		tracer:                  tracer,
+		metrics:                 mcpmetrics.NewMetrics(meter, logger),
+		guardianPolicy:          guardianPolicy,
+		db:                      db,
+		authRepo:                auth_repo.New(db),
+		toolsetsRepo:            toolsets_repo.New(db),
+		mcpMetadataRepo:         metadata_repo.New(db),
+		orgsRepo:                organizations_repo.New(db),
+		deploymentsRepo:         deployments_repo.New(db),
+		externalmcpRepo:         externalmcp_repo.New(db),
+		auth:                    auth.New(logger, db, sessions, authzEngine),
+		env:                     env,
+		serverURL:               serverURL,
+		siteURL:                 siteURL,
+		posthog:                 posthog,
+		features:                features,
+		cimdResolver:            cimd.NewResolver(guardianPolicy, meterProvider, logger),
+		cimdAdmissionMetrics:    admission.NewMetrics(meterProvider, logger),
+		clientAssertionVerifier: newClientAssertionVerifier(redisClient, guardianPolicy, meterProvider, logger),
 		toolProxy: gateway.NewToolProxy(
 			logger,
 			tracerProvider,
@@ -370,6 +393,22 @@ func NewService(
 		),
 		userSessionGrantCache: cache.NewTypedObjectCache[UserSessionGrant](
 			logger.With(attr.SlogCacheNamespace("user_session_grant")),
+			cacheImpl,
+			cache.SuffixNone,
+		),
+		userSessionRefreshReplayCache: cache.NewTypedObjectCache[userSessionRefreshReplay](
+			logger.With(attr.SlogCacheNamespace("user_session_refresh_replay")),
+			cacheImpl,
+			cache.SuffixNone,
+		),
+		userSessionRefreshReplayCoordination: cacheImpl,
+		toolSelectionCache: cache.NewTypedObjectCache[sessionToolSelectionEntry](
+			logger.With(attr.SlogCacheNamespace("session_tool_selection")),
+			cacheImpl,
+			cache.SuffixNone,
+		),
+		consentToolInventoryCache: cache.NewTypedObjectCache[consentToolInventory](
+			logger.With(attr.SlogCacheNamespace("consent_tool_inventory")),
 			cacheImpl,
 			cache.SuffixNone,
 		),
@@ -439,8 +478,11 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "GET", PublicServerRoute+"/connect", oops.ErrHandle(service.logger, service.HandleConsent).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", PublicServerRoute+"/connect", oops.ErrHandle(service.logger, service.HandleConsent).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", PublicServerRoute+"/connect/remote-session", oops.ErrHandle(service.logger, service.HandleConsentAction).ServeHTTP)
+	o11y.AttachHandler(mux, "POST", PublicServerRoute+"/connect/mcp", oops.ErrHandle(service.logger, service.HandleConsentMCP).ServeHTTP)
+	o11y.AttachHandler(mux, "DELETE", PublicServerRoute+"/connect/mcp", oops.ErrHandle(service.logger, service.HandleConsentMCP).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", PublicServerRoute+"/connect/first-party", oops.ErrHandle(service.logger, service.HandleFirstPartyConnect).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/consent-page-{hash}.js", oops.ErrHandle(service.logger, service.ServeConsentScript).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", "/mcp/consent-tools-{hash}.js", oops.ErrHandle(service.logger, service.ServeConsentToolsScript).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", PublicServerRoute+"/token", oops.ErrHandle(service.logger, service.HandleToken).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", PublicServerRoute+"/revoke", oops.ErrHandle(service.logger, service.HandleRevoke).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", PublicServerRoute+"/remote_login_callback", oops.ErrHandle(service.logger, service.HandleRemoteLoginCallback).ServeHTTP)
@@ -581,7 +623,7 @@ func (s *Service) serveProxyBackedEndpoint(w http.ResponseWriter, r *http.Reques
 	}
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
 
-	mcpEndpoint, mcpServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, mcpSlug)
+	mcpEndpoint, mcpServer, metaServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, mcpSlug)
 	var shareErr *oops.ShareableError
 	switch {
 	case err == nil:
@@ -589,6 +631,12 @@ func (s *Service) serveProxyBackedEndpoint(w http.ResponseWriter, r *http.Reques
 		return false, nil
 	default:
 		return true, err
+	}
+
+	// Meta-backed endpoints hold no upstream session and no proxied GET/SSE
+	// stream; the caller's legacy behavior (install page or 405) applies.
+	if metaServer != nil {
+		return false, nil
 	}
 
 	if !mcpServer.RemoteMcpServerID.Valid && !mcpServer.TunneledMcpServerID.Valid {
@@ -672,12 +720,15 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	// Try mcp_endpoints → mcp_servers first. On hit, dispatch through the
 	// unified backend switch (remote proxy / toolset). On 404, fall through
 	// to the legacy toolset-by-slug path below.
-	mcpEndpoint, mcpServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, mcpSlug)
+	mcpEndpoint, mcpServer, metaServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, mcpSlug)
 	var shareErr *oops.ShareableError
 	switch {
 	case err == nil:
 		if err := s.enforceCustomDomainLockdown(ctx, logger, mcpEndpoint.ProjectID); err != nil {
 			return err
+		}
+		if metaServer != nil {
+			return s.serveResolvedMetaMCPEndpoint(w, r, logger, mcpEndpoint, metaServer)
 		}
 		return s.serveResolvedMCPEndpoint(w, r, logger, mcpEndpoint, mcpServer, mcpSlug, "mcp")
 	case errors.As(err, &shareErr) && shareErr.Code == oops.CodeNotFound:
@@ -705,7 +756,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	// Legacy toolset-by-slug path has no mcp_server, so there is no
 	// server-level variation group override (ServeToolsetResolved falls back to
 	// the toolset's own column) and no fronting mcp_servers id to record.
-	return s.ServeToolsetResolved(w, r, toolset, mcpSlug, "mcp", false, nil, nil, nil)
+	return s.ServeToolsetResolved(w, r, toolset, mcpSlug, "mcp", false, nil, nil, nil, nil)
 }
 
 // ServeToolsetResolved serves an MCP runtime request after the slug has
@@ -744,7 +795,11 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 // off the row.
 //
 // The caller is responsible for closing r.Body.
-func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, toolset *toolsets_repo.Toolset, mcpSlug, mcpRouteBase string, skipIssuerGate bool, extraUpstreamTokens map[uuid.UUID]string, mcpServerVariationsGroupID *uuid.UUID, mcpServerID *uuid.UUID) error {
+// callerToolSelection is the consent-screen tool policy resolved by a
+// caller-side issuer gate (today: /x/mcp's pre-dispatch ApplyIssuerGate run).
+// Nil when the caller ran no gate or the session carries no policy; the
+// in-toolset gate below populates it for /mcp callers.
+func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, toolset *toolsets_repo.Toolset, mcpSlug, mcpRouteBase string, skipIssuerGate bool, extraUpstreamTokens map[uuid.UUID]remotesessions.UpstreamToken, callerToolSelection *toolfilter.SessionSelection, mcpServerVariationsGroupID *uuid.UUID, mcpServerID *uuid.UUID) error {
 	ctx := r.Context()
 	var err error
 
@@ -819,11 +874,12 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		// all need to match the caller's surface, not the toolset's
 		// canonical /mcp surface.
 		endpoint := newResolvedMcpEndpointFromToolset(toolset, mcpRouteBase)
-		newCtx, gateTokens, err := s.ApplyIssuerGate(ctx, w, authToken, baseURL, endpoint)
+		newCtx, gateTokens, gateToolSelection, err := s.ApplyIssuerGate(ctx, w, authToken, baseURL, endpoint)
 		if err != nil {
 			return err
 		}
 		ctx = newCtx
+		callerToolSelection = gateToolSelection
 		tokenInputs, err = appendRemoteSessionTokenInputs(tokenInputs, gateTokens)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for issuer-gated toolset").LogError(ctx, s.logger)
@@ -967,6 +1023,8 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		toolVariationsGroupID: toolVariationsGroupID,
 		mcpServerID:           mcpServerID,
 		tags:                  tags,
+		protocolVersion:       mcpversions.Resolve(mcprequests.DeclaredProtocolVersion(r.Header.Get(mcpversions.HTTPHeader), req.Params), mcpversions.SupportedHostedToolset()),
+		toolSelection:         callerToolSelection,
 	}
 
 	// Record the resolved variation group and requested tag filter for
@@ -1227,8 +1285,29 @@ func parseMcpEnvVariables(r *http.Request, headerDisplayNames map[string]string)
 			normalizedKey := strings.ReplaceAll(strings.TrimPrefix(keySanitized, "mcp-"), "-", "_")
 
 			// Check if this is a display name and map to actual header name
-			if actualKey, ok := displayNameToActual[normalizedKey]; ok {
+			actualKey, aliased := displayNameToActual[normalizedKey]
+			if aliased {
 				normalizedKey = actualKey
+			}
+
+			// The MCP-Protocol-Version header is protocol metadata every
+			// conforming client stamps on every request since 2025-06-18, and
+			// without this skip it silently becomes a `protocol_version`
+			// variable. The skip is alias-aware: a toolset whose configured
+			// display name maps to it keeps receiving it as before.
+			//
+			// The remaining 2026-07-28 standard headers (Mcp-Method, Mcp-Name,
+			// Mcp-Param-*; httpheaders.IsStandardMCPRequestHeader is the
+			// canonical set) are deliberately NOT skipped yet. Clients on that
+			// revision are not measurably present, while skipping now would
+			// silently break any variable whose actual name collides — default
+			// variable headers are minted as MCP-<VAR> and never appear in the
+			// display-name alias map, so the alias exception cannot save them.
+			// Reserving those headers belongs to the 2026-07-28 support work,
+			// where header-body validation gives clients a visible rejection
+			// instead of a silently dropped value.
+			if !aliased && strings.EqualFold(keySanitized, mcpversions.HTTPHeader) {
+				continue
 			}
 
 			envVars[normalizedKey] = r.Header.Get(k)
@@ -1240,6 +1319,14 @@ func parseMcpEnvVariables(r *http.Request, headerDisplayNames map[string]string)
 }
 
 func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *rawRequest) (json.RawMessage, error) {
+	// The census dimension is what the request declared, not the in-effect
+	// revision: clamping keeps absent and unknown declarations countable,
+	// and the resolved value would fabricate a revision for clients that
+	// named none. Handlers that consume the rest of the per-request metadata
+	// decode it themselves (tools/call in the same pass as its params,
+	// tools/list scoped to its analytics event).
+	s.metrics.RecordMCPRequest(ctx, payload.protocolVersion.Declared, req.Method, mcpmetrics.SurfaceHosting)
+
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
 		start := time.Now()
 		defer func() {
@@ -1249,13 +1336,13 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 
 	switch req.Method {
 	case "ping":
-		return handlePing(ctx, s.logger, req.ID)
+		return handlePing(ctx, s.logger, req.ID, serverInfoHostedToolset)
 	case "initialize":
 		return handleInitialize(ctx, s.logger, s.metrics, req, payload, s.posthog, s.toolsetsRepo, s.mcpMetadataRepo, s.sessionClientInfo)
 	case "notifications/initialized", "notifications/cancelled":
 		return nil, nil
 	case "tools/list":
-		return handleToolsList(ctx, s.logger, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.temporal, s.shadowMCPClient, s.platformExtras)
+		return handleToolsList(ctx, s.logger, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.temporal, s.shadowMCPClient, s.platformExtras, s.sessionClientInfo)
 	case "tools/call":
 		return handleToolsCall(ctx, s.logger, s.metrics, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.vectorToolStore, s.temporal, s.mcpMetadataRepo, s.auditLogger, s.platformExtras, s.sessionClientInfo)
 	case "prompts/list":
@@ -1264,6 +1351,8 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 		return handlePromptsGet(ctx, s.logger, s.db, payload, req)
 	case "resources/list":
 		return handleResourcesList(ctx, s.logger, s.db, payload, req, &s.toolsetCache, s.platformExtras)
+	case "resources/templates/list":
+		return handleResourcesTemplatesList(ctx, s.logger, req)
 	case "resources/read":
 		return handleResourcesRead(ctx, s.logger, s.db, payload, req, s.toolProxy, s.env, s.billingTracker, s.billingRepository, s.telemLogger, s.platformExtras)
 	default:
@@ -1419,7 +1508,8 @@ func (s *Service) HandleToolsList(
 		Params:  json.RawMessage("{}"),
 	}
 
-	// Call existing handleToolsList with all dependencies
+	// Call existing handleToolsList with all dependencies. Internal callers
+	// carry no HTTP request and therefore no per-request `_meta`.
 	result, err := handleToolsList(
 		ctx,
 		s.logger,
@@ -1435,6 +1525,7 @@ func (s *Service) HandleToolsList(
 		s.temporal,
 		s.shadowMCPClient,
 		s.platformExtras,
+		s.sessionClientInfo,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("handle tools list: %w", err)

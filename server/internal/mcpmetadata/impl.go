@@ -31,6 +31,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/mcp_metadata/server"
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_metadata"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -575,12 +576,7 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 	metadataRecord, metadataErr := s.repo.GetMetadataForToolset(ctx, uuid.NullUUID{UUID: toolset.ID, Valid: true})
 	if metadataErr == nil {
 		if metadataRecord.LogoID.Valid {
-			logoURLValue := *s.serverURL
-			logoURLValue.Path = "/rpc/assets.serveImage"
-			q := logoURLValue.Query()
-			q.Set("id", metadataRecord.LogoID.UUID.String())
-			logoURLValue.RawQuery = q.Encode()
-			logoURL = new(logoURLValue.String())
+			logoURL = new(assets.ServeImageURL(s.serverURL, metadataRecord.LogoID.UUID))
 		}
 		docsURL = conv.FromPGText[string](metadataRecord.ExternalDocumentationUrl)
 		instructions = conv.FromPGText[string](metadataRecord.Instructions)
@@ -1037,13 +1033,20 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 // a 404 and is allowed to fall through to the legacy path, again matching
 // mcp.ServePublic.
 func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*installContext, error) {
-	endpoint, server, err := mcpendpoints.BySlugAndCustomDomain(ctx, s.db, s.logger, mcpSlug)
+	endpoint, server, metaServer, err := mcpendpoints.BySlugAndCustomDomain(ctx, s.db, s.logger, mcpSlug)
 	var shareErr *oops.ShareableError
 	switch {
 	case errors.As(err, &shareErr) && shareErr.Code == oops.CodeNotFound:
 		// Fall through to legacy toolset lookup.
 	case err != nil:
 		return nil, fmt.Errorf("resolve mcp endpoint: %w", err)
+	case metaServer != nil:
+		// Meta-backed endpoints have no install page yet (AGE-3299); the
+		// slug is authoritative, so surface not-found rather than falling
+		// through to an unrelated legacy toolset. Wrapping errToolsetNotFound
+		// is what makes ServeInstallPage render the not-found page instead of
+		// treating this as an unexpected failure.
+		return nil, fmt.Errorf("%w: meta-backed endpoint has no install page", errToolsetNotFound)
 	default:
 		var bridgeToolset *toolsets_repo.Toolset
 		if server.ToolsetID.Valid {
@@ -1176,12 +1179,7 @@ func (s *Service) renderToolsetInstallPage(ctx context.Context, w http.ResponseW
 
 	if metadataRecord != nil {
 		if metadataRecord.LogoID.Valid {
-			logoURL := *s.serverURL
-			logoURL.Path = "/rpc/assets.serveImage"
-			q := logoURL.Query()
-			q.Set("id", metadataRecord.LogoID.UUID.String())
-			logoURL.RawQuery = q.Encode()
-			logoAssetURL = logoURL.String()
+			logoAssetURL = assets.ServeImageURL(s.serverURL, metadataRecord.LogoID.UUID)
 		}
 		if docs := conv.FromPGText[string](metadataRecord.ExternalDocumentationUrl); docs != nil {
 			docsURL = strings.TrimSpace(*docs)
@@ -1323,12 +1321,7 @@ func (s *Service) renderRemoteMcpInstallPage(ctx context.Context, w http.Respons
 	var docsURL, docsText, instructions string
 	if metadataRecord != nil {
 		if metadataRecord.LogoID.Valid {
-			logoURL := *s.serverURL
-			logoURL.Path = "/rpc/assets.serveImage"
-			q := logoURL.Query()
-			q.Set("id", metadataRecord.LogoID.UUID.String())
-			logoURL.RawQuery = q.Encode()
-			logoAssetURL = logoURL.String()
+			logoAssetURL = assets.ServeImageURL(s.serverURL, metadataRecord.LogoID.UUID)
 		}
 		if docs := conv.FromPGText[string](metadataRecord.ExternalDocumentationUrl); docs != nil {
 			docsURL = strings.TrimSpace(*docs)
@@ -1346,6 +1339,10 @@ func (s *Service) renderRemoteMcpInstallPage(ctx context.Context, w http.Respons
 		return oops.E(oops.CodeUnexpected, err, "resolve mcp endpoint url").LogError(ctx, s.logger, attr.SlogMcpServerID(mcpServer.ID.String()))
 	}
 
+	// Anonymous public tunnels are served without OAuth even though the schema
+	// forces an issuer on every tunneled backend (mirrors serveendpoint.go issuerGated).
+	tunneledPublic := mcpServer.TunneledMcpServerID.Valid && mcpServer.Visibility == mcpservers.VisibilityPublic
+
 	return s.writeInstallPage(ctx, w, hostedPageRenderInputs{
 		// Remote-MCP-backed installs don't expose Gram-side env vars or a tools
 		// list yet: the page renders the URL + branding only.
@@ -1360,10 +1357,8 @@ func (s *Service) renderRemoteMcpInstallPage(ctx context.Context, w http.Respons
 		DocsText:       docsText,
 		Instructions:   instructions,
 		IsPublic:       ic.isPublic(),
-		// Remote-MCP-backed installs have no toolset, so OAuth is driven solely
-		// by the server's user-session issuer (mirrors resolveSecurityMode).
-		IsOAuth: mcpServer.UserSessionIssuerID.Valid,
-		OrgName: ic.organization.Name,
+		IsOAuth:        mcpServer.UserSessionIssuerID.Valid && !tunneledPublic,
+		OrgName:        ic.organization.Name,
 		// Remote-MCP-backed installs have no tool list, so no filter scopes.
 		FilteringEnabled: false,
 		Scopes:           nil,

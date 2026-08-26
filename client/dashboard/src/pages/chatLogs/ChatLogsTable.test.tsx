@@ -37,6 +37,12 @@ vi.mock("@gram/client/react-query/members.js", () => ({
   }),
 }));
 
+vi.mock("@gram/client/react-query/listChatSessionLinks.js", () => ({
+  // No lineage edges by default: rows render without the icon cluster, and
+  // the hook never reaches useGramContext (no SDK provider in these tests).
+  useListChatSessionLinks: () => ({ data: { links: [] } }),
+}));
+
 vi.mock("@gram/client/react-query/chatSetPinned.js", () => ({
   useChatSetPinnedMutation: () => ({
     mutate: vi.fn(),

@@ -90,7 +90,7 @@ func createToolsetMcpEndpoint(
 	_, err = mcpendpointsrepo.New(conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:      projectID,
 		CustomDomainID: customDomainID,
-		McpServerID:    mcpServer.ID,
+		McpServerID:    uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
 		Slug:           slug,
 	})
 	require.NoError(t, err)
@@ -140,7 +140,7 @@ func createRemoteMcpEndpoint(
 	_, err = mcpendpointsrepo.New(conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:      projectID,
 		CustomDomainID: uuid.NullUUID{},
-		McpServerID:    mcpServer.ID,
+		McpServerID:    uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
 		Slug:           slug,
 	})
 	require.NoError(t, err)
@@ -191,7 +191,7 @@ func TestServePublic_McpEndpoint_PublicTunneledBacked_FailsClosed(t *testing.T) 
 	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:      *authCtx.ProjectID,
 		CustomDomainID: uuid.NullUUID{},
-		McpServerID:    mcpServer.ID,
+		McpServerID:    uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
 		Slug:           endpointSlug,
 	})
 	require.NoError(t, err)
@@ -297,10 +297,11 @@ func mintIssuerBearerForEndpoint(
 	clientID := "test-client-" + uuid.NewString()
 	redirectURI := "http://localhost:3000/callback"
 	_, err = usersessionsrepo.New(ti.conn).CreateUserSessionClient(ctx, usersessionsrepo.CreateUserSessionClientParams{
-		UserSessionIssuerID: mcpServer.UserSessionIssuerID.UUID,
-		ClientID:            clientID,
-		ClientName:          "servepublic test client",
-		RedirectUris:        []string{redirectURI},
+		UserSessionIssuerID:     mcpServer.UserSessionIssuerID.UUID,
+		ClientID:                clientID,
+		ClientName:              "servepublic test client",
+		RedirectUris:            []string{redirectURI},
+		TokenEndpointAuthMethod: "none",
 	})
 	require.NoError(t, err)
 
@@ -557,7 +558,7 @@ func TestServePublic_PlatformDomain_DoesNotResolveCustomDomainEndpoint(t *testin
 // MCP client handshake — mirroring the dumb upstream used by
 // TestServePublic_McpEndpoint_RemoteBacked_Proxies. The single tool is named
 // toolName.
-func newStatelessRemoteMCPUpstream(t *testing.T, toolName string) *httptest.Server {
+func newStatelessRemoteMCPUpstream(t *testing.T, toolName string, outputSchema map[string]any) *httptest.Server {
 	t.Helper()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -577,11 +578,15 @@ func newStatelessRemoteMCPUpstream(t *testing.T, toolName string) *httptest.Serv
 				"serverInfo":      map[string]any{"name": "upstream", "version": "1.0"},
 			}
 		case "tools/list":
-			result = map[string]any{"tools": []map[string]any{{
+			tool := map[string]any{
 				"name":        toolName,
 				"description": "Returns pong",
 				"inputSchema": map[string]any{"type": "object", "properties": map[string]any{}},
-			}}}
+			}
+			if outputSchema != nil {
+				tool["outputSchema"] = outputSchema
+			}
+			result = map[string]any{"tools": []map[string]any{tool}}
 		case "tools/call":
 			result = map[string]any{"content": []map[string]any{{"type": "text", "text": "pong"}}, "isError": false}
 		default:
@@ -656,7 +661,7 @@ func TestServePublic_McpEndpoint_IssuerGatedPrivateRemote_RBACEnforced_ResolvesG
 	require.NotNil(t, authCtx.ProjectID)
 
 	const toolName = "ping"
-	upstream := newStatelessRemoteMCPUpstream(t, toolName)
+	upstream := newStatelessRemoteMCPUpstream(t, toolName, nil)
 
 	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
 	endpointSlug := "endpoint-" + uuid.NewString()
@@ -674,13 +679,14 @@ func TestServePublic_McpEndpoint_IssuerGatedPrivateRemote_RBACEnforced_ResolvesG
 	// the issuer URN (remote-backed endpoints bind the audience to the
 	// issuer, not the backend id). Subject is the dev user, an active member
 	// of the org, so PrepareContext can resolve principals.
-	token, _, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{
+	token, jti, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{
 		Subject:  urn.NewUserSubject(mockidp.MockUserID),
 		Audience: urn.NewUserSessionIssuer(issuerID).String(),
 		Issuer:   ti.serverURL.String() + "/x/mcp/" + endpointSlug,
 		Lifetime: time.Hour,
 	})
 	require.NoError(t, err)
+	persistTestUserSession(t, ti, issuerID, urn.NewUserSubject(mockidp.MockUserID), jti)
 
 	// A plain context (no session auth) so the only credential is the bearer
 	// JWT, exactly as a real Remote MCP client would present it.
@@ -738,13 +744,14 @@ func TestServePublic_McpEndpoint_IssuerGatedPrivateRemote_RBACEnforced_RequiresC
 	endpointSlug := "endpoint-" + uuid.NewString()
 	mcpServer, _ := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.URL, endpointSlug, "private", issuerID)
 
-	token, _, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{
+	token, jti, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{
 		Subject:  urn.NewUserSubject(mockidp.MockUserID),
 		Audience: urn.NewUserSessionIssuer(issuerID).String(),
 		Issuer:   ti.serverURL.String() + "/x/mcp/" + endpointSlug,
 		Lifetime: time.Hour,
 	})
 	require.NoError(t, err)
+	persistTestUserSession(t, ti, issuerID, urn.NewUserSubject(mockidp.MockUserID), jti)
 
 	_, err = servePublicHTTP(t, context.Background(), ti, endpointSlug, makeInitializeBody(), token, nil)
 	require.Error(t, err)

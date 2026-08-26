@@ -86,9 +86,11 @@ func (rw *responseWriter) Unwrap() http.ResponseWriter {
 // binding a query parameter to a payload attribute.
 var redactedQueryParams = map[string]bool{
 	// Live capability token on public share and signed-asset URLs.
-	"token": true,
+	"token":           true,
+	"support_handoff": true,
 
-	// Email address on auth.login and agent.getPlugins.
+	// Email address on auth.login, and on agent.getPlugins polls from legacy
+	// agents that still append `?email=` (current agents send a header).
 	"email": true,
 
 	// Chat search terms, which are user-typed free text.
@@ -104,13 +106,17 @@ func logSafeURL(u *url.URL) string {
 	safe := *u
 	changed := false
 
-	if rest, ok := strings.CutPrefix(safe.Path, "/shared/skills/"); ok && rest != "" {
+	for _, prefix := range []string{"/shared/skills/", "/shared/handoffs/"} {
+		rest, ok := strings.CutPrefix(safe.Path, prefix)
+		if !ok || rest == "" {
+			continue
+		}
 		if i := strings.IndexByte(rest, '/'); i >= 0 {
 			rest = "REDACTED" + rest[i:]
 		} else {
 			rest = "REDACTED"
 		}
-		safe.Path = "/shared/skills/" + rest
+		safe.Path = prefix + rest
 		safe.RawPath = ""
 		changed = true
 	}

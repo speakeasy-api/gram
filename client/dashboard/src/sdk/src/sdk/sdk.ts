@@ -4,6 +4,7 @@
 
 import { ClientSDK } from "../lib/sdks.js";
 import { Access } from "./access.js";
+import { AdminAssets } from "./adminassets.js";
 import { AdminChatAnalysis } from "./adminchatanalysis.js";
 import { AdminExternalCredentials } from "./adminexternalcredentials.js";
 import { AdminOpenRouterKeys } from "./adminopenrouterkeys.js";
@@ -32,17 +33,22 @@ import { Hooks } from "./hooks.js";
 import { HooksServerNames } from "./hooksservernames.js";
 import { Instances } from "./instances.js";
 import { Integrations } from "./integrations.js";
+import { JsonWebKeySets } from "./jsonwebkeysets.js";
 import { Keys } from "./keys.js";
 import { Litellm } from "./litellm.js";
+import { McpApproval } from "./mcpapproval.js";
 import { McpEndpoints } from "./mcpendpoints.js";
 import { McpMetadata } from "./mcpmetadata.js";
 import { McpRegistries } from "./mcpregistries.js";
 import { McpServers } from "./mcpservers.js";
+import { MetaMcp } from "./metamcp.js";
 import { ModelKeys } from "./modelkeys.js";
+import { OrganizationAssets } from "./organizationassets.js";
 import { OrganizationRemoteSessionClients } from "./organizationremotesessionclients.js";
 import { OrganizationRemoteSessionIssuers } from "./organizationremotesessionissuers.js";
 import { OrganizationRemoteSessions } from "./organizationremotesessions.js";
 import { Organizations } from "./organizations.js";
+import { Otel } from "./otel.js";
 import { OtelForwarding } from "./otelforwarding.js";
 import { Packages } from "./packages.js";
 import { PlatformMcp } from "./platformmcp.js";
@@ -74,9 +80,19 @@ import { UserSessions } from "./usersessions.js";
 import { Variations } from "./variations.js";
 
 export class Gram extends ClientSDK {
+  private _otel?: Otel;
+  get otel(): Otel {
+    return (this._otel ??= new Otel(this._options));
+  }
+
   private _access?: Access;
   get access(): Access {
     return (this._access ??= new Access(this._options));
+  }
+
+  private _adminAssets?: AdminAssets;
+  get adminAssets(): AdminAssets {
+    return (this._adminAssets ??= new AdminAssets(this._options));
   }
 
   private _adminChatAnalysis?: AdminChatAnalysis;
@@ -222,6 +238,11 @@ export class Gram extends ClientSDK {
     return (this._integrations ??= new Integrations(this._options));
   }
 
+  private _jsonWebKeySets?: JsonWebKeySets;
+  get jsonWebKeySets(): JsonWebKeySets {
+    return (this._jsonWebKeySets ??= new JsonWebKeySets(this._options));
+  }
+
   private _keys?: Keys;
   get keys(): Keys {
     return (this._keys ??= new Keys(this._options));
@@ -230,6 +251,11 @@ export class Gram extends ClientSDK {
   private _litellm?: Litellm;
   get litellm(): Litellm {
     return (this._litellm ??= new Litellm(this._options));
+  }
+
+  private _mcpApproval?: McpApproval;
+  get mcpApproval(): McpApproval {
+    return (this._mcpApproval ??= new McpApproval(this._options));
   }
 
   private _mcpEndpoints?: McpEndpoints;
@@ -252,9 +278,19 @@ export class Gram extends ClientSDK {
     return (this._mcpServers ??= new McpServers(this._options));
   }
 
+  private _metaMcp?: MetaMcp;
+  get metaMcp(): MetaMcp {
+    return (this._metaMcp ??= new MetaMcp(this._options));
+  }
+
   private _modelKeys?: ModelKeys;
   get modelKeys(): ModelKeys {
     return (this._modelKeys ??= new ModelKeys(this._options));
+  }
+
+  private _organizationAssets?: OrganizationAssets;
+  get organizationAssets(): OrganizationAssets {
+    return (this._organizationAssets ??= new OrganizationAssets(this._options));
   }
 
   private _organizationRemoteSessionClients?: OrganizationRemoteSessionClients;

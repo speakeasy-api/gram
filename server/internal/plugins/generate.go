@@ -3,6 +3,7 @@ package plugins
 import (
 	"bytes"
 	"crypto/sha256"
+	"embed"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -90,7 +91,7 @@ type GenerateConfig struct {
 	// it scopes the default marketplace name for non-default projects.
 	ProjectSlug string
 	// IsDefaultProject reports whether this is the org's default project (its
-	// oldest, by id ASC). The default project keeps the bare org-derived
+	// oldest by created_at, then id). The default project keeps the bare org-derived
 	// marketplace name; non-default projects get a project-scoped one. Must be
 	// resolved identically to the device-agent endpoint (see naming.MarketplaceName).
 	IsDefaultProject bool
@@ -101,7 +102,7 @@ type GenerateConfig struct {
 	// defaults for tests, fingerprints, and the CI render diff.
 	Version string
 	// PlatformMCPEnabled adds the first-party organization-level Platform MCP
-	// package to the literal-default project's Claude marketplace only.
+	// package to the literal-default project's supported client marketplaces.
 	PlatformMCPEnabled bool
 	// MarketplaceName is the identifier users type into Claude Code or Codex
 	// (e.g. `<plugin>@<marketplace>`) and the `name` field in the generated
@@ -375,7 +376,7 @@ const mcpGeneratorVersion = "11"
 // platformMCPGeneratorVersion is independent from mcpGeneratorVersion so adding
 // or changing the first-party Platform MCP never triggers a fleet-wide customer
 // plugin republish.
-const platformMCPGeneratorVersion = "1"
+const platformMCPGeneratorVersion = "2"
 
 // hooksGeneratorVersion is the sole rollout signal for the observability (hooks)
 // plugin. It is stamped into the hooks plugin.json version (see
@@ -388,7 +389,7 @@ const platformMCPGeneratorVersion = "1"
 // line when it pins a new binary, because new checksums always change the
 // rendered bootstrap script. Any other change to hooks generation needs a
 // manual bump, which the Plugin Generate Check CI workflow enforces.
-const hooksGeneratorVersion = "32"
+const hooksGeneratorVersion = "34"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -410,9 +411,38 @@ const mcpSharedFingerprintKey = "__shared__"
 const mcpPlatformFingerprintKey = "__platform_mcp__"
 
 const (
-	platformMCPPluginName = "speakeasy-aicp-platform-mcp"
-	platformMCPPluginRoot = "platform-mcp"
+	platformMCPPluginName         = "platform-mcp"
+	platformMCPDisplayName        = "Platform MCP"
+	platformMCPServerName         = "platform-mcp"
+	platformMCPPluginRoot         = "platform-mcp"
+	platformMCPDescription        = "Manage MCPs, Risk Policies and explore logs in your favorite agent."
+	platformMCPCursorPluginRoot   = cursorPluginRoot + "/platform-mcp-cursor"
+	platformMCPCodexPluginRoot    = "platform-mcp-codex"
+	platformMCPOpenCodePluginRoot = opencodePluginRoot + "/platform-mcp"
+	platformMCPAgentPluginRoot    = agentPluginRoot + "/" + platformMCPPluginName
+
+	// platformMCPLegacyPluginName is the Agent Plugin and OpenCode identifier
+	// carry still recognizes in already-published repositories. Indeterminate
+	// admission preserves those bytes; a confirmed decision migrates them to
+	// platformMCPPluginName.
+	platformMCPLegacyPluginName = "speakeasy-aicp-platform-mcp"
+
+	// platformMCPLegacyAgentPluginRoot is the Agent Plugin directory that
+	// already-published repositories may still contain.
+	platformMCPLegacyAgentPluginRoot = agentPluginRoot + "/" + platformMCPLegacyPluginName
 )
+
+func platformMCPPackageFilename(platform string) string {
+	return platformMCPPluginName + "-" + platform + ".zip"
+}
+
+// platformMCPSkillsFS is the single source for reviewed skills distributed with
+// every Platform MCP package. Add skills as
+// platform_mcp_skills/<canonical-name>/SKILL.md; loadPlatformMCPSkills validates
+// directory/frontmatter names before any package is generated.
+//
+//go:embed platform_mcp_skills/*/SKILL.md
+var platformMCPSkillsFS embed.FS
 
 // MCPFingerprints returns per-plugin content fingerprints of the MCP (feature)
 // plugins that would be generated for the given plugins — a map of plugin slug ->
@@ -631,6 +661,9 @@ func generateHooksFiles(cfg GenerateConfig) (map[string][]byte, error) {
 	if err := generateCopilotObservabilityPlugin(files, cfg); err != nil {
 		return nil, fmt.Errorf("generate copilot observability plugin: %w", err)
 	}
+	if err := generateOpenClawObservabilityPlugin(files, cfg); err != nil {
+		return nil, fmt.Errorf("generate openclaw observability plugin: %w", err)
+	}
 	return files, nil
 }
 
@@ -716,6 +749,13 @@ func generateMCPFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][]by
 // observability entry is listed first (so it's the first thing team admins see)
 // and only when a hooks key is configured, matching generateHooksFiles.
 func generateSharedFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][]byte, error) {
+	return generateSharedFilesWithPlatformClients(plugins, cfg, true)
+}
+
+// generateSharedFilesWithPlatformClients allows an indeterminate-admission
+// publish to preserve a complete B1 Claude/portable package without advertising
+// B2/B3 marketplace entries whose native package directories are not present.
+func generateSharedFilesWithPlatformClients(plugins []PluginInfo, cfg GenerateConfig, includePlatformNativeClients bool) (map[string][]byte, error) {
 	files := make(map[string][]byte)
 
 	claudePlugins := make([]marketplaceEntry, 0)
@@ -762,10 +802,29 @@ func generateSharedFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][
 	if cfg.PlatformMCPEnabled {
 		claudePlugins = append(claudePlugins, marketplaceEntry{
 			Name:        platformMCPPluginName,
-			DisplayName: "Speakeasy AICP Platform MCP",
+			DisplayName: platformMCPDisplayName,
 			Source:      "./" + platformMCPPluginRoot,
-			Description: "Read-only organization administration through the Speakeasy AICP Platform MCP.",
+			Description: platformMCPDescription,
 		})
+		if includePlatformNativeClients {
+			cursorPlugins = append(cursorPlugins, marketplaceEntry{
+				Name:        "platform-mcp-cursor",
+				DisplayName: "",
+				Source:      "platform-mcp-cursor",
+				Description: platformMCPDescription,
+			})
+			codexPlugins = append(codexPlugins, codexMarketplaceEntry{
+				Name: "platform-mcp-codex",
+				Source: codexMarketplaceSource{
+					Source: "local",
+					Path:   "./" + platformMCPCodexPluginRoot,
+				},
+				Policy: codexMarketplacePolicy{
+					Installation:   "AVAILABLE",
+					Authentication: "ON_USE",
+				},
+			})
+		}
 	}
 
 	for _, p := range plugins {
@@ -900,8 +959,8 @@ func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
 	}
 
 	if cfg.PlatformMCPEnabled {
-		b.WriteString("## Speakeasy AICP Platform MCP\n\n")
-		b.WriteString("The `speakeasy-aicp-platform-mcp` plugin provides read-only organization administration through Speakeasy OAuth. Install it in Claude Cowork to authorize a Platform MCP connection.\n\n")
+		b.WriteString("## " + platformMCPDisplayName + "\n\n")
+		fmt.Fprintf(&b, "The `%s` plugin connects supported agents to Speakeasy through OAuth and includes a reviewed workflow for adding an MCP catalog server to an explicit project. Installing the package grants no organization access until OAuth and live authorization succeed.\n\n", platformMCPPluginName)
 	}
 
 	if len(plugins) > 0 {
@@ -1207,6 +1266,9 @@ func OpenCodeObservabilitySlug(cfg GenerateConfig) string {
 func CopilotObservabilitySlug(cfg GenerateConfig) string {
 	return conv.ToSlug(conv.Default(cfg.HooksOrgName, cfg.OrgName)) + "-observability-copilot"
 }
+func OpenClawObservabilitySlug(cfg GenerateConfig) string {
+	return conv.ToSlug(conv.Default(cfg.HooksOrgName, cfg.OrgName)) + "-observability-openclaw"
+}
 
 // hooksSubtreePrefixes returns the repo directory prefixes the hooks
 // (observability) subtree occupies for a given org name — every hooks
@@ -1222,6 +1284,15 @@ func hooksSubtreePrefixes(orgName string) []string {
 		conv.ToSlug(orgName) + "-observability-codex/",
 		conv.ToSlug(orgName) + "-observability-opencode/",
 		conv.ToSlug(orgName) + "-observability-copilot/",
+	}
+}
+
+// hooksOptionalSubtreePrefixes lists hooks subtrees added after repos were
+// first published: the carry copies them when present but must not fail
+// (forcing regeneration past the rollout gate) when absent.
+func hooksOptionalSubtreePrefixes(orgName string) []string {
+	return []string{
+		conv.ToSlug(orgName) + "-observability-openclaw/",
 	}
 }
 
@@ -1733,6 +1804,205 @@ export const SpeakeasyObservability = async (ctx: any) => {
 export default SpeakeasyObservability
 `
 
+// generateOpenClawObservabilityPlugin renders the native OpenClaw plugin
+// package, installed with `openclaw plugins install <dir>` plus a Gateway
+// restart; conversation-scope hooks additionally require
+// plugins.entries.speakeasy-observability.hooks.allowConversationAccess.
+func generateOpenClawObservabilityPlugin(files map[string][]byte, cfg GenerateConfig) error {
+	return generateOpenClawObservabilityPluginInDir(files, OpenClawObservabilitySlug(cfg), cfg)
+}
+
+func generateOpenClawObservabilityPluginFlat(files map[string][]byte, cfg GenerateConfig) error {
+	return generateOpenClawObservabilityPluginInDir(files, "", cfg)
+}
+
+func generateOpenClawObservabilityPluginInDir(files map[string][]byte, subdir string, cfg GenerateConfig) error {
+	manifest, err := json.MarshalIndent(map[string]any{
+		"id":          "speakeasy-observability",
+		"name":        "Speakeasy Observability",
+		"description": "Speakeasy observability hooks for OpenClaw.",
+		"version":     "0.0.0",
+		"configSchema": map[string]any{
+			"type":                 "object",
+			"additionalProperties": false,
+			"properties":           map[string]any{},
+		},
+		"activation": map[string]any{"onStartup": true},
+	}, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal openclaw plugin manifest: %w", err)
+	}
+	pkg, err := json.MarshalIndent(map[string]any{
+		"name":     "openclaw-plugin-speakeasy-observability",
+		"version":  "0.0.0",
+		"type":     "module",
+		"private":  true,
+		"openclaw": map[string]any{"extensions": []string{"./index.js"}},
+	}, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal openclaw package.json: %w", err)
+	}
+	files[path.Join(subdir, "openclaw.plugin.json")] = append(manifest, '\n')
+	files[path.Join(subdir, "package.json")] = append(pkg, '\n')
+	files[path.Join(subdir, "index.js")] = []byte(openclawObservabilityShim)
+	if err := writeHooksRuntimeFiles(files, subdir, cfg); err != nil {
+		return err
+	}
+	// The shim picks the PowerShell bootstrapper on Windows.
+	files[path.Join(subdir, "hooks/bootstrap.ps1")] = renderHooksPowerShellBootstrap(cfg)
+	return nil
+}
+
+// openclawObservabilityShim is the OpenClaw plugin module. It carries no
+// org-specific values — deployment identity rides in the sibling
+// speakeasy.json — and mirrors agenthooks' canonical shim
+// (install/render_openclaw.go): reply output is returned verbatim as the
+// hook handler's return value, and gates run under shim-owned deadlines
+// because OpenClaw applies no default hook timeout (agenthooks quirks #34–#37).
+const openclawObservabilityShim = `// Generated by Speakeasy. Proxies OpenClaw typed plugin hooks to the
+// Speakeasy hooks binary over NDJSON stdio (agenthooks serve
+// --provider=openclaw). Plain JavaScript: OpenClaw package installs reject
+// TypeScript entry modules.
+import { spawn } from "node:child_process"
+import { createInterface } from "node:readline"
+import { fileURLToPath } from "node:url"
+import { dirname, join } from "node:path"
+
+const ROOT = dirname(fileURLToPath(import.meta.url))
+const SERVE_ARGS = ["agenthooks", "serve", "--provider=openclaw", "--timeout=60s", "--config=" + join(ROOT, "speakeasy.json")]
+const COMMAND =
+  process.platform === "win32"
+    ? ["powershell.exe", "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", join(ROOT, "hooks", "bootstrap.ps1"), ...SERVE_ARGS]
+    : ["bash", join(ROOT, "hooks", "bootstrap.sh"), ...SERVE_ARGS]
+const HOOKS = ["before_tool_call", "after_tool_call", "before_agent_run", "session_start", "session_end", "agent_end", "llm_output", "gateway_start", "gateway_stop"]
+const GATE_TIMEOUT_MS = { before_tool_call: 60000, before_agent_run: 60000 }
+const DEFAULT_TIMEOUT_MS = 30000
+// The relay resolves the org's fail-open posture in-process; shim-level
+// fail-closed covers the binary being unavailable (mirrors cursor failClosed).
+const FAIL_CLOSED = true
+
+export default {
+  id: "speakeasy-observability",
+  name: "Speakeasy Observability",
+  description: "Speakeasy observability hooks for OpenClaw.",
+  register(api) {
+    const child = spawn(COMMAND[0], [...COMMAND.slice(1)], {
+      stdio: ["pipe", "pipe", "inherit"],
+    })
+    let seq = 0
+    const pending = new Map()
+    // agent_end carries no final message or usage; cache the turn's
+    // llm_output and splice it into the agent_end frame.
+    const llmByRun = new Map()
+
+    createInterface({ input: child.stdout }).on("line", (line) => {
+      if (!line.trim()) return
+      let reply
+      try {
+        reply = JSON.parse(line)
+      } catch {
+        return
+      }
+      const resolve = pending.get(reply.seq)
+      if (!resolve) return
+      pending.delete(reply.seq)
+      resolve(reply)
+    })
+    child.on("exit", () => {
+      // An exited consumer cannot evaluate gates: resolve as timed out so
+      // FAIL_CLOSED applies instead of silently allowing.
+      for (const [, resolve] of pending) resolve({ timedOut: true })
+      pending.clear()
+    })
+
+    const call = (hook, event, ctx, timeoutMs) => {
+      if (child.exitCode !== null || !child.stdin?.writable) {
+        return Promise.resolve({ timedOut: true })
+      }
+      const id = ++seq
+      // Gate frames carry the shim deadline so the daemon can stop working
+      // as soon as the shim gives up (observe frames omit it).
+      const frame = { seq: id, hook, event, ctx }
+      if (timeoutMs !== undefined) frame.timeoutMs = timeoutMs
+      child.stdin.write(JSON.stringify(frame) + "\n")
+      return new Promise((resolve) => {
+        pending.set(id, resolve)
+        const timer = setTimeout(() => {
+          if (pending.delete(id)) resolve({ timedOut: true })
+        }, timeoutMs ?? DEFAULT_TIMEOUT_MS)
+        if (typeof timer.unref === "function") timer.unref()
+      })
+    }
+
+    const sanitizeCtx = (hook, ctx) => {
+      if (hook !== "gateway_start" && hook !== "gateway_stop") return ctx
+      // Gateway hooks hand plugins the full config including auth secrets;
+      // never forward it.
+      return { port: ctx?.port, workspaceDir: ctx?.workspaceDir }
+    }
+
+    const failClosedResult = (hook, event) => {
+      const reason = "Speakeasy hooks are unavailable (fail-closed)"
+      if (hook === "before_agent_run") {
+        return { outcome: "block", reason }
+      }
+      // Tell the daemon this call was blocked locally so its after_tool_call
+      // sibling still decodes as blocked rather than a successful completion.
+      if (event?.toolCallId) {
+        void call("gate_timeout", { toolCallId: event.toolCallId, reason }, null)
+      }
+      return { block: true, blockReason: reason }
+    }
+
+    for (const hook of HOOKS) {
+      const gateTimeoutMs = GATE_TIMEOUT_MS[hook]
+      api.on(hook, (event, ctx) => {
+        if (hook === "llm_output") {
+          const texts = Array.isArray(event?.assistantTexts) ? event.assistantTexts : []
+          const key = event?.runId ?? event?.sessionId ?? ""
+          llmByRun.set(key, { finalMessage: texts.join("\n") || undefined, usage: event?.usage })
+          void call(hook, event, sanitizeCtx(hook, ctx))
+          return
+        }
+        if (hook === "agent_end") {
+          // Consume exactly the entry that served the splice: deleting the
+          // other candidate key could destroy a concurrent turn's pending entry.
+          const runKey = event?.runId ?? ""
+          let cached = llmByRun.get(runKey)
+          if (cached !== undefined) {
+            llmByRun.delete(runKey)
+          } else {
+            const sessionKey = ctx?.sessionId ?? ""
+            cached = llmByRun.get(sessionKey)
+            if (cached !== undefined) llmByRun.delete(sessionKey)
+          }
+          const spliced = cached ? { ...event, finalMessage: cached.finalMessage, usage: cached.usage } : event
+          void call(hook, spliced, sanitizeCtx(hook, ctx))
+          return
+        }
+        if (gateTimeoutMs === undefined) {
+          void call(hook, event, sanitizeCtx(hook, ctx))
+          return
+        }
+        return call(hook, event, sanitizeCtx(hook, ctx), gateTimeoutMs).then((reply) => {
+          // An output-less reply is the daemon's legitimate "no decision";
+          // only a shim timeout or daemon-reported error may fail closed.
+          if ((reply?.timedOut || reply?.error) && FAIL_CLOSED) return failClosedResult(hook, event)
+          return reply?.output
+        })
+      })
+    }
+
+    api.on("gateway_stop", () => {
+      try {
+        child.stdin.end()
+        child.kill()
+      } catch {}
+    })
+  },
+}
+`
+
 // GenerateObservabilityPluginPackage produces the file map for a single
 // observability plugin for direct ZIP installation (no <org>-observability/
 // subdir). Minting a fresh hooks key is the caller's responsibility — this
@@ -1759,6 +2029,10 @@ func GenerateObservabilityPluginPackage(cfg GenerateConfig, platform string) (ma
 	case "copilot":
 		if err := generateCopilotObservabilityPluginFlat(files, cfg); err != nil {
 			return nil, fmt.Errorf("generate copilot observability plugin: %w", err)
+		}
+	case "openclaw":
+		if err := generateOpenClawObservabilityPluginFlat(files, cfg); err != nil {
+			return nil, fmt.Errorf("generate openclaw observability plugin: %w", err)
 		}
 	default:
 		return nil, fmt.Errorf("unsupported platform: %s", platform)
@@ -2140,39 +2414,288 @@ func generatePlatformMCPFiles(cfg GenerateConfig) (map[string][]byte, error) {
 }
 
 func generatePlatformMCPFilesInto(files map[string][]byte, cfg GenerateConfig) error {
-	platformURL, err := url.Parse(strings.TrimRight(cfg.ServerURL, "/") + "/platform-mcp")
-	if err != nil || platformURL.Host == "" || platformURL.User != nil || platformURL.RawQuery != "" || platformURL.Fragment != "" || (platformURL.Scheme != "http" && platformURL.Scheme != "https") {
-		return fmt.Errorf("invalid Platform MCP server URL %q", cfg.ServerURL)
+	platformURL, err := platformMCPURL(cfg.ServerURL)
+	if err != nil {
+		return err
 	}
 
+	packages := []struct {
+		root     string
+		platform string
+	}{
+		{root: platformMCPPluginRoot, platform: "claude"},
+		{root: platformMCPCursorPluginRoot, platform: "cursor"},
+		{root: platformMCPCodexPluginRoot, platform: "codex"},
+		{root: platformMCPOpenCodePluginRoot, platform: "opencode"},
+		{root: platformMCPAgentPluginRoot, platform: "agent-plugin"},
+	}
+	for _, packageSpec := range packages {
+		packageFiles, err := generatePlatformMCPPackageForClient(cfg, platformURL.String(), packageSpec.platform)
+		if err != nil {
+			return err
+		}
+		for filePath, content := range packageFiles {
+			files[path.Join(packageSpec.root, filePath)] = content
+		}
+	}
+	return nil
+}
+
+func platformMCPURL(serverURL string) (*url.URL, error) {
+	platformURL, err := url.Parse(strings.TrimRight(serverURL, "/") + "/platform-mcp")
+	if err != nil || platformURL.Host == "" || platformURL.User != nil || platformURL.RawQuery != "" || platformURL.Fragment != "" || (platformURL.Scheme != "http" && platformURL.Scheme != "https") {
+		return nil, fmt.Errorf("invalid Platform MCP server URL %q", serverURL)
+	}
+	return platformURL, nil
+}
+
+func platformMCPManifestVersion(cfg GenerateConfig) string {
+	return "0." + platformMCPGeneratorVersion + "." + conv.Default(cfg.Version, "0")
+}
+
+func loadPlatformMCPSkills() (map[string][]byte, error) {
+	entries, err := platformMCPSkillsFS.ReadDir("platform_mcp_skills")
+	if err != nil {
+		return nil, fmt.Errorf("read embedded Platform MCP skills: %w", err)
+	}
+	skills := make(map[string][]byte, len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() || !domainskills.ValidSpecName(entry.Name()) {
+			return nil, fmt.Errorf("invalid Platform MCP skill directory %q", entry.Name())
+		}
+		content, err := platformMCPSkillsFS.ReadFile(path.Join("platform_mcp_skills", entry.Name(), "SKILL.md"))
+		if err != nil {
+			return nil, fmt.Errorf("read Platform MCP skill %q: %w", entry.Name(), err)
+		}
+		if err := domainskills.ValidateSkillManifest(string(content), entry.Name()); err != nil {
+			return nil, fmt.Errorf("validate Platform MCP skill %q: %w", entry.Name(), err)
+		}
+		skills[entry.Name()] = content
+	}
+	if len(skills) == 0 {
+		return nil, errors.New("platform MCP package must contain at least one reviewed skill")
+	}
+	return skills, nil
+}
+
+func emitPlatformMCPSkills(files map[string][]byte) error {
+	skills, err := loadPlatformMCPSkills()
+	if err != nil {
+		return err
+	}
+	for name, content := range skills {
+		files[path.Join("skills", name, "SKILL.md")] = bytes.Clone(content)
+	}
+	return nil
+}
+
+func generatePlatformMCPPackage(cfg GenerateConfig, platformURL string) (map[string][]byte, error) {
+	files := make(map[string][]byte)
 	meta, err := marshalJSON(claudePluginMeta{
 		Name:        platformMCPPluginName,
-		DisplayName: "Speakeasy AICP Platform MCP",
-		Description: "Read-only organization administration through the Speakeasy AICP Platform MCP.",
-		Version:     "0." + platformMCPGeneratorVersion + "." + conv.Default(cfg.Version, "0"),
-		Author:      pluginAuthor{Name: "Gram", URL: "https://getgram.ai"},
-		Homepage:    "https://getgram.ai",
+		DisplayName: platformMCPDisplayName,
+		Description: platformMCPDescription,
+		Version:     platformMCPManifestVersion(cfg),
+		Author:      pluginAuthor{Name: "Speakeasy", URL: "https://www.speakeasy.com/"},
+		Homepage:    "https://www.speakeasy.com/product/gram",
 		UserConfig:  nil,
 	})
 	if err != nil {
-		return fmt.Errorf("marshal Platform MCP plugin.json: %w", err)
+		return nil, fmt.Errorf("marshal Platform MCP plugin.json: %w", err)
 	}
-	files[path.Join(platformMCPPluginRoot, ".claude-plugin/plugin.json")] = meta
+	files[".claude-plugin/plugin.json"] = meta
 
 	mcpConfig, err := marshalJSON(claudeMCPConfig{MCPServers: map[string]claudeMCPServer{
-		platformMCPPluginName: {
+		platformMCPServerName: {
 			Type:    "http",
 			Command: "",
 			Args:    nil,
-			URL:     platformURL.String(),
+			URL:     platformURL,
 			Headers: nil,
 		},
 	}})
 	if err != nil {
-		return fmt.Errorf("marshal Platform MCP .mcp.json: %w", err)
+		return nil, fmt.Errorf("marshal Platform MCP .mcp.json: %w", err)
 	}
-	files[path.Join(platformMCPPluginRoot, ".mcp.json")] = mcpConfig
-	return nil
+	files[".mcp.json"] = mcpConfig
+	if err := emitPlatformMCPSkills(files); err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
+func platformMCPPluginInfo(platformURL string) PluginInfo {
+	return PluginInfo{
+		Name:        platformMCPDisplayName,
+		Slug:        platformMCPPluginName,
+		Description: platformMCPDescription,
+		Servers: []PluginServerInfo{{
+			DisplayName: platformMCPServerName,
+			Policy:      "optional",
+			MCPURL:      platformURL,
+			IsPublic:    true,
+			IsOAuth:     true,
+			IsUnproxied: false,
+			EnvConfigs:  nil,
+		}},
+		// Platform skills are emitted through emitPlatformMCPSkills after the
+		// native adapter runs. Keeping them out of this ordinary plugin model avoids
+		// coupling the first-party package to the hooks-backed skill-feedback sidecar.
+		Skills:               nil,
+		AgentPluginsV1Issues: nil,
+	}
+}
+
+func generatePlatformMCPCursorPackage(cfg GenerateConfig, platformURL string) (map[string][]byte, error) {
+	plugin := platformMCPPluginInfo(platformURL)
+	files := make(map[string][]byte)
+	if err := generateCursorPluginInDir(files, "", "platform-mcp-cursor", plugin, cfg); err != nil {
+		return nil, fmt.Errorf("generate Platform MCP Cursor package: %w", err)
+	}
+	var manifest cursorPluginMeta
+	if err := json.Unmarshal(files[".cursor-plugin/plugin.json"], &manifest); err != nil {
+		return nil, fmt.Errorf("decode Platform MCP Cursor manifest: %w", err)
+	}
+	manifest.Version = platformMCPManifestVersion(cfg)
+	manifest.Author = cursorAuthor{Name: "Speakeasy", Email: ""}
+	manifest.Homepage = "https://www.speakeasy.com/product/gram"
+	manifestJSON, err := marshalJSON(manifest)
+	if err != nil {
+		return nil, fmt.Errorf("marshal Platform MCP Cursor manifest: %w", err)
+	}
+	files[".cursor-plugin/plugin.json"] = manifestJSON
+	if err := emitPlatformMCPSkills(files); err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
+func generatePlatformMCPCodexPackage(cfg GenerateConfig, platformURL string) (map[string][]byte, error) {
+	plugin := platformMCPPluginInfo(platformURL)
+	files := make(map[string][]byte)
+	if err := generateCodexPluginInDir(files, "", "platform-mcp-codex", plugin, cfg); err != nil {
+		return nil, fmt.Errorf("generate Platform MCP Codex package: %w", err)
+	}
+	var manifest codexPluginMeta
+	if err := json.Unmarshal(files[".codex-plugin/plugin.json"], &manifest); err != nil {
+		return nil, fmt.Errorf("decode Platform MCP Codex manifest: %w", err)
+	}
+	manifest.Version = platformMCPManifestVersion(cfg)
+	manifestJSON, err := marshalJSON(manifest)
+	if err != nil {
+		return nil, fmt.Errorf("marshal Platform MCP Codex manifest: %w", err)
+	}
+	files[".codex-plugin/plugin.json"] = manifestJSON
+	if err := emitPlatformMCPSkills(files); err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
+func generatePlatformMCPOpenCodePackage(cfg GenerateConfig, platformURL string) (map[string][]byte, error) {
+	plugin := platformMCPPluginInfo(platformURL)
+	files := make(map[string][]byte)
+	if err := generateOpenCodePluginInDir(files, "", plugin, cfg); err != nil {
+		return nil, fmt.Errorf("generate Platform MCP OpenCode package: %w", err)
+	}
+	skills, err := loadPlatformMCPSkills()
+	if err != nil {
+		return nil, err
+	}
+	for name, content := range skills {
+		files[path.Join(platformMCPPluginName, "skills", name, "SKILL.md")] = bytes.Clone(content)
+	}
+	return files, nil
+}
+
+func generatePlatformMCPAgentPackage(cfg GenerateConfig, platformURL string) (map[string][]byte, error) {
+	manifest := agentPluginManifest{
+		Schema:      agentPluginSchemaID,
+		Name:        platformMCPPluginName,
+		Version:     platformMCPManifestVersion(cfg),
+		Description: platformMCPDescription,
+		Author:      agentPluginAuthor{Name: "Speakeasy", URL: "https://www.speakeasy.com/"},
+		Homepage:    "https://www.speakeasy.com/product/gram",
+	}
+	mcpConfig := agentMCPConfig{
+		Schema: agentMCPSchemaID,
+		MCPServers: map[string]agentMCPServer{
+			platformMCPServerName: {
+				Type:    "streamable-http",
+				Command: "",
+				Args:    nil,
+				Env:     nil,
+				CWD:     "",
+				URL:     platformURL,
+				Headers: nil,
+			},
+		},
+	}
+	if err := validateAgentPluginDocument(agentPluginSchemaID, manifest); err != nil {
+		return nil, fmt.Errorf("validate Platform Agent Plugin manifest: %w", err)
+	}
+	if err := validateAgentPluginDocument(agentMCPSchemaID, mcpConfig); err != nil {
+		return nil, fmt.Errorf("validate Platform Agent Plugin MCP config: %w", err)
+	}
+	manifestJSON, err := marshalJSON(manifest)
+	if err != nil {
+		return nil, fmt.Errorf("marshal Platform Agent Plugin manifest: %w", err)
+	}
+	mcpJSON, err := marshalJSON(mcpConfig)
+	if err != nil {
+		return nil, fmt.Errorf("marshal Platform Agent Plugin MCP config: %w", err)
+	}
+	files := map[string][]byte{
+		"plugin.json": manifestJSON,
+		"mcp.json":    mcpJSON,
+	}
+	if err := emitPlatformMCPSkills(files); err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
+func generatePlatformMCPPackageForClient(cfg GenerateConfig, platformURL, platform string) (map[string][]byte, error) {
+	switch platform {
+	case "claude":
+		return generatePlatformMCPPackage(cfg, platformURL)
+	case "cursor":
+		return generatePlatformMCPCursorPackage(cfg, platformURL)
+	case "codex":
+		return generatePlatformMCPCodexPackage(cfg, platformURL)
+	case "opencode":
+		return generatePlatformMCPOpenCodePackage(cfg, platformURL)
+	case "agent-plugin":
+		return generatePlatformMCPAgentPackage(cfg, platformURL)
+	default:
+		return nil, fmt.Errorf("unsupported Platform MCP platform: %s", platform)
+	}
+}
+
+// GeneratePlatformMCPPluginPackage produces a credential-free direct-install
+// package from the same server-owned definition used by marketplace publishing.
+func GeneratePlatformMCPPluginPackage(serverURL, version, platform string) (map[string][]byte, error) {
+	cfg := GenerateConfig{
+		OrgName:            "",
+		OrgEmail:           "",
+		OrgID:              "",
+		ServerURL:          serverURL,
+		APIKey:             "",
+		HooksAPIKey:        "",
+		ProjectSlug:        "",
+		IsDefaultProject:   false,
+		Version:            version,
+		PlatformMCPEnabled: false,
+		MarketplaceName:    "",
+		BrowserLogin:       false,
+		HooksOrgName:       "",
+		InstallFailOpen:    false,
+	}
+	platformURL, err := platformMCPURL(serverURL)
+	if err != nil {
+		return nil, err
+	}
+	return generatePlatformMCPPackageForClient(cfg, platformURL.String(), platform)
 }
 
 func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginInfo, cfg GenerateConfig) error {

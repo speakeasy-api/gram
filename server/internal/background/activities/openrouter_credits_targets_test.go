@@ -10,6 +10,7 @@ import (
 	repo "github.com/speakeasy-api/gram/server/internal/background/activities/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	openrouterrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 )
 
@@ -22,6 +23,12 @@ func TestGetOpenRouterCreditsMonitoringTargets_OneRowPerKeyType(t *testing.T) {
 
 	ctx := t.Context()
 	conn, err := infra.CloneTestDatabase(t, "targetstest")
+	require.NoError(t, err)
+
+	enc := testenv.NewEncryptionClient(t)
+	chatCiphertext, err := enc.Encrypt([]byte("sk-chat"))
+	require.NoError(t, err)
+	internalCiphertext, err := enc.Encrypt([]byte("sk-internal"))
 	require.NoError(t, err)
 
 	orgID := "org-" + uuid.NewString()[:8]
@@ -38,7 +45,7 @@ func TestGetOpenRouterCreditsMonitoringTargets_OneRowPerKeyType(t *testing.T) {
 	_, err = orKeys.CreateOpenRouterAPIKey(ctx, openrouterrepo.CreateOpenRouterAPIKeyParams{
 		OrganizationID: orgID,
 		KeyType:        "chat",
-		Key:            conv.ToPGText("sk-chat"),
+		KeyEncrypted:   conv.ToPGText(chatCiphertext),
 		KeyHash:        "hash-chat",
 		MonthlyCredits: 100,
 	})
@@ -46,7 +53,7 @@ func TestGetOpenRouterCreditsMonitoringTargets_OneRowPerKeyType(t *testing.T) {
 	_, err = orKeys.CreateOpenRouterAPIKey(ctx, openrouterrepo.CreateOpenRouterAPIKeyParams{
 		OrganizationID: orgID,
 		KeyType:        "internal",
-		Key:            conv.ToPGText("sk-internal"),
+		KeyEncrypted:   conv.ToPGText(internalCiphertext),
 		KeyHash:        "hash-internal",
 		MonthlyCredits: 100,
 	})
@@ -60,7 +67,10 @@ func TestGetOpenRouterCreditsMonitoringTargets_OneRowPerKeyType(t *testing.T) {
 		if row.OrganizationID != orgID {
 			continue
 		}
-		byKeyType[row.KeyType] = row.ApiKey.String
+		require.True(t, row.ApiKeyEncrypted.Valid)
+		decrypted, decErr := enc.Decrypt(row.ApiKeyEncrypted.String)
+		require.NoError(t, decErr)
+		byKeyType[row.KeyType] = decrypted
 	}
 	require.Equal(t, map[string]string{
 		"chat":     "sk-chat",
@@ -74,12 +84,12 @@ func TestGetOpenRouterCreditsMonitoringTargets_OneRowPerKeyType(t *testing.T) {
 		KeyType:        "chat",
 	})
 	require.NoError(t, err)
-	require.Equal(t, "sk-chat", chatKey.Key.String)
+	require.Equal(t, chatCiphertext, chatKey.KeyEncrypted.String)
 
 	internalKey, err := orKeys.GetOpenRouterAPIKey(ctx, openrouterrepo.GetOpenRouterAPIKeyParams{
 		OrganizationID: orgID,
 		KeyType:        "internal",
 	})
 	require.NoError(t, err)
-	require.Equal(t, "sk-internal", internalKey.Key.String)
+	require.Equal(t, internalCiphertext, internalKey.KeyEncrypted.String)
 }

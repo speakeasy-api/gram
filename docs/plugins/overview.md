@@ -15,7 +15,7 @@ Org admin                     Gram                        GitHub repo (auto-mana
   │                             │                                │
   ├─ create plugin "AI Tools"   │                                │
   ├─ add 3 MCP servers          │                                │
-  ├─ assign to role:engineers ──► publishPlugins() ─────────────► push .claude-plugin/
+  ├─ assign to a role ──────────► publishPlugins() ─────────────► push .claude-plugin/
   │                             │   mint API keys                   .cursor-plugin/
   │                             │   generate ZIPs                   .codex-plugin/
   │                             │   store marketplace token         marketplace.json
@@ -32,7 +32,7 @@ Team member installs from Claude/Cursor/Codex marketplace
 **Assignments.** Plugins are assigned to principals using URN strings:
 
 - `*` — all users in the org
-- `role:engineers` — all members of a named role
+- `role:organization:<role-uuid>` — all members of an organization role
 - `user:<uuid>` — a specific user
 
 Assignments control who sees the plugin in their marketplace; RBAC (`mcp:connect` scope) still enforces access at the MCP entrypoint.

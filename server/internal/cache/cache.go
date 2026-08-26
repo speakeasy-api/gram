@@ -18,6 +18,18 @@ const (
 
 // Cache defines a generic interface for cache operations.
 // Implementations can use any underlying storage (Redis, in-memory, etc.)
+// LeaseCache provides ownership-aware distributed leases.
+type LeaseCache interface {
+	AcquireLease(ctx context.Context, key, owner string, ttl time.Duration) (bool, error)
+	ReleaseLeaseIfOwner(ctx context.Context, key, owner string) (bool, error)
+}
+
+// ConditionalCache is implemented by caches that can atomically preserve the
+// first value published for a key.
+type ConditionalCache interface {
+	SetIfAbsent(ctx context.Context, key string, value any, ttl time.Duration) (bool, error)
+}
+
 type Cache interface {
 	Get(ctx context.Context, key string, value any) error
 	// GetAndDelete atomically reads the value at key and deletes the key.
@@ -42,6 +54,13 @@ type Cache interface {
 	ListAppend(ctx context.Context, key string, value any, ttl time.Duration) error
 	ListRange(ctx context.Context, key string, start, stop int64, value any) error
 	DeleteByPrefix(ctx context.Context, prefix string) error
+}
+
+// CompareAndSwapCache is an optional capability for atomically replacing a
+// cache value only when its serialized value still matches an expected value.
+type CompareAndSwapCache interface {
+	CompareAndSwap(ctx context.Context, key string, expected, replacement any, ttl time.Duration) (bool, error)
+	CompareAndDelete(ctx context.Context, key string, expected any) (bool, error)
 }
 
 type TypedCacheObject[T CacheableObject[T]] struct {
@@ -150,6 +169,52 @@ func (d *TypedCacheObject[T]) Store(ctx context.Context, obj T) error {
 		return fmt.Errorf("store: %s: %w", d.fullKey(obj.CacheKey()), err)
 	}
 	return nil
+}
+
+func (d *TypedCacheObject[T]) StoreIfAbsent(ctx context.Context, obj T) (bool, error) {
+	if d.cache == nil {
+		return false, errors.New("cache is not configured")
+	}
+	conditional, ok := d.cache.(ConditionalCache)
+	if !ok {
+		return false, errors.New("cache does not support conditional writes")
+	}
+	stored, err := conditional.SetIfAbsent(ctx, d.fullKey(obj.CacheKey()), obj, obj.TTL())
+	if err != nil {
+		return false, fmt.Errorf("store if absent: %s: %w", d.fullKey(obj.CacheKey()), err)
+	}
+	return stored, nil
+}
+
+// CompareAndSwap atomically replaces expected when the cached value has not changed.
+func (d *TypedCacheObject[T]) CompareAndSwap(ctx context.Context, expected, replacement T) (bool, error) {
+	if expected.CacheKey() != replacement.CacheKey() {
+		return false, errors.New("compare and swap cache keys differ")
+	}
+	cas, ok := d.cache.(CompareAndSwapCache)
+	if !ok {
+		return false, errors.New("cache does not support compare and swap")
+	}
+	key := d.fullKey(expected.CacheKey())
+	swapped, err := cas.CompareAndSwap(ctx, key, expected, replacement, replacement.TTL())
+	if err != nil {
+		return false, fmt.Errorf("compare and swap %s: %w", key, err)
+	}
+	return swapped, nil
+}
+
+// CompareAndDelete atomically deletes expected when the cached value has not changed.
+func (d *TypedCacheObject[T]) CompareAndDelete(ctx context.Context, expected T) (bool, error) {
+	cas, ok := d.cache.(CompareAndSwapCache)
+	if !ok {
+		return false, errors.New("cache does not support compare and delete")
+	}
+	key := d.fullKey(expected.CacheKey())
+	deleted, err := cas.CompareAndDelete(ctx, key, expected)
+	if err != nil {
+		return false, fmt.Errorf("compare and delete %s: %w", key, err)
+	}
+	return deleted, nil
 }
 
 func (d *TypedCacheObject[T]) Update(ctx context.Context, obj T) error {

@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -408,4 +409,108 @@ func TestRefreshSweep_ClaimAdvancesPastOldestSession(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, secondPage, 1)
 	require.Equal(t, secondID, secondPage[0].ID)
+}
+
+func seedSweepSharedGrant(
+	t *testing.T,
+	ctx context.Context,
+	ti *testInstance,
+	slug string,
+	gramOnIssuerB bool,
+) (sessionID uuid.UUID, issuerA uuid.UUID, issuerB uuid.UUID, org string) {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	remoteIssuerID := createRemoteIssuer(t, ctx, ti, slug+"-issuer", "")
+	issuerA = createUserSessionIssuer(t, ctx, ti.conn, slug+"-usi-a")
+	issuerB = createUserSessionIssuer(t, ctx, ti.conn, slug+"-usi-b")
+	clientID := createRemoteClient(t, ctx, ti, remoteIssuerID, issuerA.String(), slug+"-client")
+	clientUUID, err := uuid.Parse(clientID)
+	require.NoError(t, err)
+	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: clientUUID,
+		UserSessionIssuerID:   issuerB,
+	}))
+
+	subject := urn.NewUserSubject("subject-" + slug)
+	session, err := repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+		SubjectUrn:            subject,
+		UserSessionIssuerID:   issuerA,
+		RemoteSessionClientID: clientUUID,
+		AccessTokenEncrypted:  "access-ciphertext",
+		AccessExpiresAt:       conv.ToPGTimestamptz(time.Now().Add(time.Hour)),
+		RefreshTokenEncrypted: conv.ToPGText("refresh-ciphertext"),
+		RefreshExpiresAt:      pgtype.Timestamptz{},
+		Scopes:                []string{},
+		Resource:              pgtype.Text{},
+		AutoRefresh:           true,
+	})
+	require.NoError(t, err)
+	require.NoError(t, repo.New(ti.conn).SetRemoteSessionUpdatedAt(ctx, repo.SetRemoteSessionUpdatedAtParams{
+		ID:        session.ID,
+		ProjectID: conv.ToNullUUID(*authCtx.ProjectID),
+		UpdatedAt: conv.ToPGTimestamptz(time.Now().Add(-25 * time.Hour)),
+	}))
+
+	gramIssuer := issuerA
+	if gramOnIssuerB {
+		gramIssuer = issuerB
+	}
+	seedGramSession(t, ctx, ti, subject, gramIssuer, slug, 24*time.Hour)
+
+	return session.ID, issuerA, issuerB, authCtx.ActiveOrganizationID
+}
+
+func TestRefreshSweep_FindsGrantAfterMintingIssuerSoftDeleted(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	sessionID, issuerA, _, org := seedSweepSharedGrant(t, ctx, ti, "sweep-v2-deleted-a", true)
+	enableOrgAutoRefreshFeature(t, ctx, ti, org, productfeatures.FeatureRemoteSessionAutoRefresh)
+	err := testrepo.New(ti.conn).ForceSoftDeleteUserSessionIssuer(ctx, testrepo.ForceSoftDeleteUserSessionIssuerParams{
+		ID:        issuerA,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+
+	window := newSweepWindow()
+	q := repo.New(ti.conn)
+	rows, err := q.ClaimDueRemoteSessionRefreshCandidates(ctx, window.claimParams())
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, sessionID, rows[0].ID)
+	require.Equal(t, org, rows[0].OrganizationID)
+
+	candidate, err := q.GetDueRemoteSessionRefreshCandidate(ctx, window.candidateParams(sessionID, org))
+	require.NoError(t, err)
+	require.Equal(t, sessionID, candidate.RemoteSession.ID)
+	require.Equal(t, issuerA, candidate.RemoteSession.UserSessionIssuerID)
+}
+
+func TestRefreshSweep_SkipsWhenLiveBindingHasNoGramSession(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	sessionID, issuerA, _, org := seedSweepSharedGrant(t, ctx, ti, "sweep-v2-session-on-a", false)
+	enableOrgAutoRefreshFeature(t, ctx, ti, org, productfeatures.FeatureRemoteSessionAutoRefresh)
+	err := testrepo.New(ti.conn).ForceSoftDeleteUserSessionIssuer(ctx, testrepo.ForceSoftDeleteUserSessionIssuerParams{
+		ID:        issuerA,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+
+	rows, err := repo.New(ti.conn).ClaimDueRemoteSessionRefreshCandidates(ctx, newSweepWindow().claimParams())
+	require.NoError(t, err)
+	for _, row := range rows {
+		require.NotEqual(t, sessionID, row.ID)
+	}
 }

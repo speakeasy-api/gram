@@ -42,7 +42,7 @@ var _ = Service("risk", func() {
 			Attribute("scope_include", String, "CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Omit/empty means all messages are in scope.")
 			Attribute("scope_exempt", String, "CEL exemption predicate: the policy is skipped for a message when this boolean expression is true. Omit/empty means no inline exemption.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
-			Attribute("action", String, "Policy action: flag, warn (challenge), or block.", func() {
+			Attribute("action", String, "Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).", func() {
 				shared.RiskPolicyActionEnum()
 				Default("flag")
 			})
@@ -194,7 +194,7 @@ var _ = Service("risk", func() {
 			Attribute("scope_include", String, "CEL scope predicate (in addition to message_types). Omit to preserve the current value; send empty to clear.")
 			Attribute("scope_exempt", String, "CEL exemption predicate. Omit to preserve the current value; send empty to clear.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
-			Attribute("action", String, "Policy action: flag, warn (challenge), or block.", func() {
+			Attribute("action", String, "Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).", func() {
 				shared.RiskPolicyActionEnum()
 			})
 			Attribute("audience_type", String, "Policy audience type: everyone or targeted. Omit to preserve the current audience type.", func() {
@@ -209,6 +209,9 @@ var _ = Service("risk", func() {
 			})
 			Attribute("shadow_mcp_blocked_urls", ArrayOf(String), "For allow_all policies: complete desired canonical URL block set. Omit to preserve; send empty to clear.", func() {
 				Meta("struct:tag:json", "shadow_mcp_blocked_urls")
+			})
+			Attribute("supersede_decisions", Boolean, "Confirms that this edit may displace standing MCP approval decisions its URL lists contradict, transitioning them to superseded (audit-logged, decision history preserved). Without it, a contradicting edit is rejected with a conflict naming the affected servers.", func() {
+				Meta("struct:tag:json", "supersede_decisions")
 			})
 			Attribute("auto_name", Boolean, "Whether the policy name should be auto-generated.")
 			Attribute("user_message", String, "Optional message shown to end users when this policy blocks an action or surfaces a flagged finding. Send an empty string to clear.")
@@ -264,6 +267,61 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "delete")
 	})
 
+	Method("listSessionQuarantines", func() {
+		Description("List active session quarantines for the current project.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListSessionQuarantinesResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.listSessionQuarantines")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listSessionQuarantines")
+		Meta("openapi:extension:x-speakeasy-group", "risk.sessionQuarantines")
+		Meta("openapi:extension:x-speakeasy-name-override", "listSessionQuarantines")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListSessionQuarantines"}`)
+	})
+
+	Method("releaseSessionQuarantine", func() {
+		Description("Release an active session quarantine.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The session quarantine ID.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+		})
+
+		Result(SessionQuarantine)
+
+		HTTP(func() {
+			POST("/rpc/risk.releaseSessionQuarantine")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Body(SessionQuarantineReleaseRequestBody)
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "releaseSessionQuarantine")
+		Meta("openapi:extension:x-speakeasy-group", "risk.sessionQuarantines")
+		Meta("openapi:extension:x-speakeasy-name-override", "releaseSessionQuarantine")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskReleaseSessionQuarantine", "type": "mutation"}`)
+	})
+
 	Method("listRiskResults", func() {
 		Description("List risk analysis results for the current project.")
 
@@ -280,6 +338,7 @@ var _ = Service("risk", func() {
 			Attribute("category", String, "Optional rule category key to filter by (e.g. secrets, pii, financial).")
 			Attribute("rule_id", String, "Optional rule identifier substring to filter by (case-insensitive, e.g. 'secret' matches all 'secret.*' rules).")
 			Attribute("user_id", String, "Optional user identifier substring to filter by (case-insensitive, matched against the chat's external user id).")
+			Attribute("external_user_ids", ArrayOf(String), "Optional external user identifiers to filter by, matched whole rather than as a substring. Pass every identifier a subject is known by; unlike user_id this cannot pull in another person whose identifier merely contains theirs.")
 			Attribute("unique_match", Boolean, "If true, collapse results to one row per (policy_id, rule_id, match), keeping the most recent occurrence. Useful when the same secret is detected many times within a single message body.")
 			Attribute("non_assistant", Boolean, "If true, only return findings from chats that are not linked to an assistant. Useful for surfacing events that are missing user attribution.")
 			Attribute("assistant_id", String, "Optional assistant ID; only return findings from chats linked to this assistant.", func() {
@@ -310,6 +369,7 @@ var _ = Service("risk", func() {
 			Param("category")
 			Param("rule_id")
 			Param("user_id")
+			Param("external_user_ids")
 			Param("unique_match")
 			Param("non_assistant")
 			Param("assistant_id")
@@ -511,7 +571,7 @@ var _ = Service("risk", func() {
 	})
 
 	Method("listDismissedRiskResults", func() {
-		Description("List risk results manually marked as false positive for the current project (the Dismissed tab). Kept separate from listRiskResults, which never returns dismissed results.")
+		Description("List suppressed risk results for the current project — findings hidden by an exclusion rule, a manual dismissal, or the automated false-positive sweep. Kept separate from listRiskResults, which never returns suppressed results.")
 
 		Payload(func() {
 			security.ByKeyPayload()
@@ -522,6 +582,9 @@ var _ = Service("risk", func() {
 				Minimum(1)
 				Maximum(200)
 			})
+			Attribute("reasons", ArrayOf(String, func() {
+				Enum("rule", "manual", "automated")
+			}), "Only return results suppressed for these reasons. Omitted or empty means all reasons.")
 		})
 
 		Result(ListRiskResultsResult)
@@ -533,6 +596,7 @@ var _ = Service("risk", func() {
 			security.ProjectHeader()
 			Param("cursor")
 			Param("limit")
+			Param("reasons")
 			Response(StatusOK)
 		})
 
@@ -779,10 +843,13 @@ var _ = Service("risk", func() {
 			security.SessionPayload()
 			security.ByKeyPayload()
 			Attribute("request_token", String, "Signed request token generated when a risk policy blocks an action.")
+			Attribute("note", String, "The requester's own justification for needing this, shown to whoever decides. Optional: an older client that sends none falls back to the policy's block reason.", func() {
+				MaxLength(4000)
+			})
 			Required("request_token")
 		})
 
-		Result(RiskPolicyBypassRequest)
+		Result(PolicyBypassRedemption)
 
 		HTTP(func() {
 			POST("/rpc/risk.createPolicyBypassRequest")
@@ -1891,6 +1958,17 @@ var RiskOverviewTimeSeriesFinding = Type("RiskOverviewTimeSeriesFinding", func()
 	Required("bucket_start", "category", "findings")
 })
 
+var PolicyBypassRedemption = Type("PolicyBypassRedemption", func() {
+	Description("What a redeemed block-link token turned into: an MCP access request when the approval workflow handles the server, or a legacy policy bypass request otherwise.")
+	Required("kind", "id", "status")
+
+	Attribute("kind", String, "The kind of request the token redeemed into.", func() {
+		Enum("approval_request", "bypass_request")
+	})
+	Attribute("id", String, "The id of the created or refreshed request.")
+	Attribute("status", String, "The request's current status.")
+})
+
 var RiskPolicyBypassRequest = Type("RiskPolicyBypassRequest", func() {
 	Attribute("id", String, "The bypass request ID.", func() {
 		Format(FormatUUID)
@@ -1950,6 +2028,15 @@ var RiskIDRequestBody = Type("RiskIDRequestBody", func() {
 	Required("id")
 })
 
+var SessionQuarantineReleaseRequestBody = Type("SessionQuarantineReleaseRequestBody", func() {
+	Meta("openapi:typename", "SessionQuarantineReleaseRequestBody")
+
+	Attribute("id", String, "The session quarantine ID.", func() {
+		Format(FormatUUID)
+	})
+	Required("id")
+})
+
 var RiskPolicyBypassApprovalRequestBody = Type("RiskPolicyBypassApprovalRequestBody", func() {
 	Meta("openapi:typename", "RiskPolicyBypassApprovalRequestBody")
 
@@ -1963,6 +2050,36 @@ var RiskPolicyBypassApprovalRequestBody = Type("RiskPolicyBypassApprovalRequestB
 var ListRiskPolicyBypassRequestsResult = Type("ListRiskPolicyBypassRequestsResult", func() {
 	Attribute("requests", ArrayOf(RiskPolicyBypassRequest), "Current risk policy bypass request records.")
 	Required("requests")
+})
+
+var SessionQuarantine = Type("SessionQuarantine", func() {
+	Attribute("id", String, "The session quarantine ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("organization_id", String, "The organization ID.")
+	Attribute("project_id", String, "The project ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("session_id", String, "The hook conversation ID that is quarantined.")
+	Attribute("risk_policy_id", String, "The risk policy that opened the quarantine, when still available.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("risk_policy_name", String, "The risk policy name captured when the quarantine opened.")
+	Attribute("user_id", String, "The user whose hook event opened the quarantine.")
+	Attribute("reason", String, "The deny reason captured when the quarantine opened.")
+	Attribute("created_at", String, "When the quarantine opened.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("released_at", String, "When the quarantine was released.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("released_by", String, "The user who released the quarantine.")
+	Required("id", "organization_id", "project_id", "session_id", "risk_policy_name", "user_id", "reason", "created_at")
+})
+
+var ListSessionQuarantinesResult = Type("ListSessionQuarantinesResult", func() {
+	Attribute("quarantines", ArrayOf(SessionQuarantine), "Active session quarantines.")
+	Required("quarantines")
 })
 
 var RiskSignalTopUser = Type("RiskSignalTopUser", func() {
@@ -2020,8 +2137,8 @@ var RiskSignalsResult = Type("RiskSignalsResult", func() {
 	})
 	Attribute("org_risk_score", Float64, "Heuristic organization risk score on the 0.1-10 scale, blended from the top signal scores and finding volume. Zero when the window has no findings.")
 	Attribute("previous_org_risk_score", Float64, "Organization risk score computed the same way over the equal-length window immediately before from.")
-	Attribute("findings_24h", Int64, "Deduplicated findings in the 24 hours ending at to.")
-	Attribute("previous_findings_24h", Int64, "Deduplicated findings in the 24 hours before that.")
+	Attribute("findings", Int64, "Deduplicated live findings in the window.")
+	Attribute("previous_findings", Int64, "Deduplicated live findings in the equal-length window immediately before from.")
 	Attribute("open_signals", Int64, "Signals with at least one live finding in the window.")
 	Attribute("critical_signals", Int64, "Signals rated critical in the window.")
 	Attribute("users_exposed", Int64, "Distinct users with at least one finding in the window.")
@@ -2029,5 +2146,5 @@ var RiskSignalsResult = Type("RiskSignalsResult", func() {
 	Attribute("exposure", ArrayOf(RiskExposureSlice), "Finding counts by category, largest first.")
 	Attribute("signals", ArrayOf(RiskSignal), "Signals ranked by risk score, highest first.")
 
-	Required("from", "to", "org_risk_score", "previous_org_risk_score", "findings_24h", "previous_findings_24h", "open_signals", "critical_signals", "users_exposed", "previous_users_exposed", "exposure", "signals")
+	Required("from", "to", "org_risk_score", "previous_org_risk_score", "findings", "previous_findings", "open_signals", "critical_signals", "users_exposed", "previous_users_exposed", "exposure", "signals")
 })

@@ -11,6 +11,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/sessionclientinfo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -64,6 +65,7 @@ func newClientIdentityFixture(t *testing.T) (*fakeClientInfoStore, *mcpInputs) {
 		toolVariationsGroupID: nil,
 		mcpServerID:           nil,
 		tags:                  nil,
+		protocolVersion:       mcpversions.Resolve("", mcpversions.SupportedHostedToolset()),
 	}
 }
 
@@ -76,12 +78,34 @@ func TestResolveClientIdentity_FallsBackToHandshake(t *testing.T) {
 
 	storeSessionClientInfo(ctx, logger, store, payload, "handshake-client", "1.2.3", mcpversions.Version20250618)
 
-	identity := resolveClientIdentity(ctx, logger, store, payload, nil)
+	identity, storedProtocolVersion := resolveClientIdentity(ctx, logger, store, payload, nil)
 	require.Equal(t, toolconfig.MCPClientIdentity{
 		Name:          "handshake-client",
 		Version:       "1.2.3",
 		OAuthClientID: "",
 	}, identity)
+	require.Equal(t, mcpversions.Version20250618, storedProtocolVersion,
+		"the stored handshake version rides along for per-request telemetry enrichment")
+}
+
+// TestResolveClientIdentity_HintPathReportsNoStoredVersion pins that the
+// stored protocol version is only reported when the identity actually came
+// from the stored record: a client on the per-request hint path declares its
+// version on the request itself, so callers already have a better source.
+func TestResolveClientIdentity_HintPathReportsNoStoredVersion(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	logger := testenv.NewLogger(t)
+	store, payload := newClientIdentityFixture(t)
+
+	storeSessionClientInfo(ctx, logger, store, payload, "handshake-client", "1.2.3", mcpversions.Version20250618)
+
+	_, storedProtocolVersion := resolveClientIdentity(ctx, logger, store, payload, &mcprequests.SanitizedClientInfo{
+		Name:    "per-call-client",
+		Version: "9.9.9",
+	})
+	require.Empty(t, storedProtocolVersion)
 }
 
 // TestResolveClientIdentity_PerCallHintWins covers the draft stateless model
@@ -97,7 +121,7 @@ func TestResolveClientIdentity_PerCallHintWins(t *testing.T) {
 
 	storeSessionClientInfo(ctx, logger, store, payload, "handshake-client", "1.2.3", mcpversions.Version20250618)
 
-	identity := resolveClientIdentity(ctx, logger, store, payload, &mcpClientInfoHint{
+	identity, _ := resolveClientIdentity(ctx, logger, store, payload, &mcprequests.SanitizedClientInfo{
 		Name:    "per-call-client",
 		Version: "9.9.9",
 	})
@@ -116,7 +140,7 @@ func TestResolveClientIdentity_NamelessHintFallsBack(t *testing.T) {
 
 	storeSessionClientInfo(ctx, logger, store, payload, "handshake-client", "1.2.3", mcpversions.Version20250618)
 
-	identity := resolveClientIdentity(ctx, logger, store, payload, &mcpClientInfoHint{
+	identity, _ := resolveClientIdentity(ctx, logger, store, payload, &mcprequests.SanitizedClientInfo{
 		Name:    "",
 		Version: "9.9.9",
 	})
@@ -131,7 +155,7 @@ func TestResolveClientIdentity_BoundsPerCallHint(t *testing.T) {
 	logger := testenv.NewLogger(t)
 	store, payload := newClientIdentityFixture(t)
 
-	identity := resolveClientIdentity(ctx, logger, store, payload, &mcpClientInfoHint{
+	identity, _ := resolveClientIdentity(ctx, logger, store, payload, &mcprequests.SanitizedClientInfo{
 		Name:    "ev\x00il\nclient",
 		Version: "1.\t0",
 	})
@@ -214,7 +238,7 @@ func TestResolveClientIdentity_OAuthClientIsIndependent(t *testing.T) {
 	store, payload := newClientIdentityFixture(t)
 	ctx := contextvalues.SetOAuthClientID(t.Context(), "oauth-client-1")
 
-	identity := resolveClientIdentity(ctx, logger, store, payload, nil)
+	identity, _ := resolveClientIdentity(ctx, logger, store, payload, nil)
 	require.Empty(t, identity.Name, "no client reported an identity")
 	require.Equal(t, "oauth-client-1", identity.OAuthClientID)
 }
@@ -226,7 +250,9 @@ func TestResolveClientIdentity_UnknownCallerIsZero(t *testing.T) {
 	logger := testenv.NewLogger(t)
 	store, payload := newClientIdentityFixture(t)
 
-	require.True(t, resolveClientIdentity(ctx, logger, store, payload, nil).IsZero())
+	identity, storedProtocolVersion := resolveClientIdentity(ctx, logger, store, payload, nil)
+	require.True(t, identity.IsZero())
+	require.Empty(t, storedProtocolVersion)
 }
 
 // TestResolveClientIdentity_StampsBothProtocolVersions covers the cohort this
@@ -259,6 +285,43 @@ func TestResolveClientIdentity_StampsBothProtocolVersions(t *testing.T) {
 	}
 
 	require.Equal(t, mcpversions.Version20241105, got[string(attr.McpRequestedProtocolVersionKey)])
-	require.Equal(t, mcpversions.ServedHostedToolset, got[string(attr.McpNegotiatedProtocolVersionKey)],
-		"this surface answers its served constant, so the negotiated half is deterministic here")
+	require.Equal(t, mcpversions.Version20241105, got[string(attr.McpNegotiatedProtocolVersionKey)],
+		"negotiation echoes a supported requested version, so the derived negotiated half matches the handshake's answer")
+}
+
+// TestResolveClientIdentity_DerivesDowngradedNegotiatedVersion covers the
+// derivation's downgrade arm: a session whose handshake requested a revision
+// outside the supported set was answered the newest supported one, and the
+// replayed negotiated attribute must reproduce that answer rather than echo
+// the stored request.
+func TestResolveClientIdentity_DerivesDowngradedNegotiatedVersion(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	logger := testenv.NewLogger(t)
+	store, payload := newClientIdentityFixture(t)
+
+	storeSessionClientInfo(ctx, logger, store, payload, "handshake-client", "1.2.3", mcpversions.Version20260728)
+
+	recorder := tracetest.NewSpanRecorder()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	t.Cleanup(func() { _ = provider.Shutdown(context.Background()) })
+
+	spanCtx, span := provider.Tracer("test").Start(ctx, "tools/call")
+	resolveClientIdentity(spanCtx, logger, store, payload, nil)
+	span.End()
+
+	ended := recorder.Ended()
+	require.Len(t, ended, 1)
+
+	got := map[string]string{}
+	for _, kv := range ended[0].Attributes() {
+		got[string(kv.Key)] = kv.Value.AsString()
+	}
+
+	// The expected value is pinned rather than derived from the supported
+	// set, so raising the ceiling breaks this test and forces choosing a new
+	// out-of-set stored version that keeps the downgrade arm exercised.
+	require.Equal(t, mcpversions.Version20260728, got[string(attr.McpRequestedProtocolVersionKey)])
+	require.Equal(t, mcpversions.Version20251125, got[string(attr.McpNegotiatedProtocolVersionKey)])
 }

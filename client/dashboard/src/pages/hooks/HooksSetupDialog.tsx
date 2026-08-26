@@ -13,8 +13,12 @@ import { usePublishStatus } from "@gram/client/react-query/publishStatus";
 import { ExternalLink, Plus, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
+import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
+import {
+  ACTIVE_AGENT_PROVIDER_IDS,
+  agentProvidersForSurface,
+} from "@/components/agent-providers/agent-providers";
 import { CopilotInstallContent } from "../plugins/InstallInstructionsDialog";
-import { HookSourceIcon } from "./HookSourceIcon";
 
 function ClaudeInstallContent({
   marketplaceUrl,
@@ -428,44 +432,9 @@ function CodexInstallContent({
   );
 }
 
-type Provider =
-  | "claude"
-  | "cursor"
-  | "codex"
-  | "copilot"
-  | "gemini"
-  | "glean"
-  | "bedrock";
+type Provider = (typeof providers)[number]["id"];
 
-const providers: {
-  id: Provider;
-  label: string;
-  source: string;
-  available: boolean;
-}[] = [
-  {
-    id: "claude",
-    label: "Claude Code",
-    source: "claude-code",
-    available: true,
-  },
-  { id: "cursor", label: "Cursor", source: "cursor", available: true },
-  { id: "codex", label: "Codex", source: "codex", available: true },
-  {
-    id: "copilot",
-    label: "Copilot",
-    source: "copilot",
-    available: true,
-  },
-  { id: "gemini", label: "Gemini", source: "gemini", available: false },
-  { id: "glean", label: "Glean", source: "glean", available: false },
-  {
-    id: "bedrock",
-    label: "AWS Bedrock",
-    source: "aws-bedrock",
-    available: false,
-  },
-];
+const providers = agentProvidersForSurface("hooks");
 
 // PublishedRepoPanel surfaces the simpler install path for orgs that have
 // already connected a published GitHub repo: a one-click "install the base
@@ -497,7 +466,7 @@ function PublishedRepoPanel() {
 export function HooksSetupDialog({
   open,
   onOpenChange,
-  defaultProvider = "claude",
+  defaultProvider = ACTIVE_AGENT_PROVIDER_IDS.hooks[0],
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -541,11 +510,11 @@ export function HooksSetupDialog({
                     "hover:border-border cursor-not-allowed opacity-50 hover:bg-transparent",
                 )}
               >
-                <HookSourceIcon source={p.source} className="size-5" />
-                {p.label}
+                <AgentProviderIcon source={p.iconSource} className="size-5" />
+                {p.name}
                 {!p.available && (
                   <span className="text-muted-foreground ml-1 text-[10px] tracking-wide uppercase">
-                    Soon
+                    Coming soon
                   </span>
                 )}
               </button>

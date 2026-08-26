@@ -127,7 +127,25 @@ func chFinding() *riskv1.Finding {
 	return f
 }
 
-func TestFindingCHWriter_HandleBatch_MapsAllFields(t *testing.T) {
+// processBatch runs the writer over msgs, failing the test on a batch-level
+// error and returning the per-message rejections.
+func processBatch(t *testing.T, w *risk.FindingCHWriter, ctx context.Context, msgs []*riskv1.Finding) []error {
+	t.Helper()
+	failed, err := w.ProcessBatch(ctx, msgs)
+	require.NoError(t, err)
+	return failed
+}
+
+// requireNoRejects asserts that no message in the batch was individually
+// rejected.
+func requireNoRejects(t *testing.T, failed []error) {
+	t.Helper()
+	for i, err := range failed {
+		require.NoError(t, err, "message %d must not be rejected", i)
+	}
+}
+
+func TestFindingCHWriter_ProcessBatch_MapsAllFields(t *testing.T) {
 	t.Parallel()
 
 	w, ins := newCHWriter(t)
@@ -136,7 +154,7 @@ func TestFindingCHWriter_HandleBatch_MapsAllFields(t *testing.T) {
 	id := uuid.Must(uuid.NewV7())
 	f.SetId(id.String())
 
-	require.NoError(t, w.HandleBatch(context.Background(), []*riskv1.Finding{f}, nil))
+	requireNoRejects(t, processBatch(t, w, context.Background(), []*riskv1.Finding{f}))
 
 	require.Equal(t, 1, ins.calls)
 	all := chRows(t, ins)
@@ -195,7 +213,7 @@ func TestFindingCHWriter_HandleBatch_MapsAllFields(t *testing.T) {
 // its non-secret server identifier through verbatim as maskdisplay's
 // documented carve-out. Storing boundary characters of real matches is the
 // signed-off relaxation from the reveal-from-ClickHouse design.
-func TestFindingCHWriter_HandleBatch_MaskDisplayPerSource(t *testing.T) {
+func TestFindingCHWriter_ProcessBatch_MaskDisplayPerSource(t *testing.T) {
 	t.Parallel()
 
 	accountIdentity := chFinding()
@@ -211,7 +229,7 @@ func TestFindingCHWriter_HandleBatch_MaskDisplayPerSource(t *testing.T) {
 	shadowMCP.SetMatch("mcp.internal.example")
 
 	w, ins := newCHWriter(t)
-	require.NoError(t, w.HandleBatch(context.Background(), []*riskv1.Finding{accountIdentity, judge, shadowMCP}, nil))
+	requireNoRejects(t, processBatch(t, w, context.Background(), []*riskv1.Finding{accountIdentity, judge, shadowMCP}))
 
 	rows := chRows(t, ins)
 	require.Len(t, rows, 3)
@@ -228,7 +246,7 @@ func TestFindingCHWriter_HandleBatch_MaskDisplayPerSource(t *testing.T) {
 		"shadow_mcp server identifiers are the documented verbatim carve-out")
 }
 
-func TestFindingCHWriter_HandleBatch_NoMatchYieldsNoFingerprintsOrRedaction(t *testing.T) {
+func TestFindingCHWriter_ProcessBatch_NoMatchYieldsNoFingerprintsOrRedaction(t *testing.T) {
 	t.Parallel()
 
 	w, ins := newCHWriter(t)
@@ -236,7 +254,7 @@ func TestFindingCHWriter_HandleBatch_NoMatchYieldsNoFingerprintsOrRedaction(t *t
 	f := chFinding()
 	f.SetMatch("")
 
-	require.NoError(t, w.HandleBatch(context.Background(), []*riskv1.Finding{f}, nil))
+	requireNoRejects(t, processBatch(t, w, context.Background(), []*riskv1.Finding{f}))
 
 	row := chRows(t, ins)[0]
 	require.Empty(t, row.FingerprintGlobalHS256)
@@ -245,7 +263,7 @@ func TestFindingCHWriter_HandleBatch_NoMatchYieldsNoFingerprintsOrRedaction(t *t
 	require.Equal(t, uint32(0), row.MatchLen)
 }
 
-func TestFindingCHWriter_HandleBatch_DeadLetterSuppressesFingerprintsAndRedaction(t *testing.T) {
+func TestFindingCHWriter_ProcessBatch_DeadLetterSuppressesFingerprintsAndRedaction(t *testing.T) {
 	t.Parallel()
 
 	w, ins := newCHWriter(t)
@@ -253,7 +271,7 @@ func TestFindingCHWriter_HandleBatch_DeadLetterSuppressesFingerprintsAndRedactio
 	f := chFinding()
 	f.SetDeadLetterReason("malformed")
 
-	require.NoError(t, w.HandleBatch(context.Background(), []*riskv1.Finding{f}, nil))
+	requireNoRejects(t, processBatch(t, w, context.Background(), []*riskv1.Finding{f}))
 
 	row := chRows(t, ins)[0]
 	require.Equal(t, "malformed", row.DeadLetterReason)
@@ -264,7 +282,7 @@ func TestFindingCHWriter_HandleBatch_DeadLetterSuppressesFingerprintsAndRedactio
 	require.Empty(t, row.Category, "dead-letter sentinels get no category, not the custom fallback")
 }
 
-func TestFindingCHWriter_HandleBatch_ClassifiesCategory(t *testing.T) {
+func TestFindingCHWriter_ProcessBatch_ClassifiesCategory(t *testing.T) {
 	t.Parallel()
 
 	w, ins := newCHWriter(t)
@@ -277,7 +295,7 @@ func TestFindingCHWriter_HandleBatch_ClassifiesCategory(t *testing.T) {
 	secret.SetSource("gitleaks")
 	secret.SetRuleId("secret.aws_access_key")
 
-	require.NoError(t, w.HandleBatch(context.Background(), []*riskv1.Finding{pii, secret}, nil))
+	requireNoRejects(t, processBatch(t, w, context.Background(), []*riskv1.Finding{pii, secret}))
 
 	rows := chRows(t, ins)
 	require.Len(t, rows, 2)
@@ -289,7 +307,7 @@ func TestFindingCHWriter_HandleBatch_ClassifiesCategory(t *testing.T) {
 	require.Equal(t, "secrets", byID[uuid.MustParse(secret.GetId())].Category)
 }
 
-func TestFindingCHWriter_HandleBatch_TenantFingerprintRequiresOrg(t *testing.T) {
+func TestFindingCHWriter_ProcessBatch_TenantFingerprintRequiresOrg(t *testing.T) {
 	t.Parallel()
 
 	w, ins := newCHWriter(t)
@@ -297,14 +315,14 @@ func TestFindingCHWriter_HandleBatch_TenantFingerprintRequiresOrg(t *testing.T) 
 	f := chFinding()
 	f.SetOrganizationId("   ") // trims to empty
 
-	require.NoError(t, w.HandleBatch(context.Background(), []*riskv1.Finding{f}, nil))
+	requireNoRejects(t, processBatch(t, w, context.Background(), []*riskv1.Finding{f}))
 
 	row := chRows(t, ins)[0]
 	require.Equal(t, wantGlobalFingerprint("hunter2"), row.FingerprintGlobalHS256)
 	require.Empty(t, row.FingerprintTenantHS256, "no org id means no tenant-qualified fingerprint")
 }
 
-func TestFindingCHWriter_HandleBatch_InvalidTimestampSkipsFinding(t *testing.T) {
+func TestFindingCHWriter_ProcessBatch_InvalidTimestampSkipsFinding(t *testing.T) {
 	t.Parallel()
 
 	w, ins := newCHWriter(t)
@@ -316,20 +334,22 @@ func TestFindingCHWriter_HandleBatch_InvalidTimestampSkipsFinding(t *testing.T) 
 	goodID := uuid.Must(uuid.NewV7())
 	good.SetId(goodID.String())
 
-	require.NoError(t, w.HandleBatch(context.Background(), []*riskv1.Finding{bad, good}, nil))
+	failed := processBatch(t, w, context.Background(), []*riskv1.Finding{bad, good})
+	require.Error(t, failed[0], "the malformed finding is rejected to redeliver on its own")
+	require.NoError(t, failed[1])
 
 	rows := chRows(t, ins)
 	require.Len(t, rows, 1, "only the finding with a valid timestamp is inserted")
 	require.Equal(t, goodID, rows[0].ID, "the surviving row must be the valid finding, not the skipped one")
 }
 
-// TestFindingCHWriter_HandleBatch_InvalidFalsePositiveAtSkipsFinding guards
+// TestFindingCHWriter_ProcessBatch_InvalidFalsePositiveAtSkipsFinding guards
 // against a real regression: a false_positive_at that fails to parse used to
 // fall through with falsePositiveAt left nil, appending the row as if it
 // were an active (non-dismissed) finding — silently resurrecting a
 // previously-dismissed finding in ClickHouse's dedup instead of dropping the
 // malformed message, matching how an invalid created_at is already handled.
-func TestFindingCHWriter_HandleBatch_InvalidFalsePositiveAtSkipsFinding(t *testing.T) {
+func TestFindingCHWriter_ProcessBatch_InvalidFalsePositiveAtSkipsFinding(t *testing.T) {
 	t.Parallel()
 
 	w, ins := newCHWriter(t)
@@ -341,35 +361,39 @@ func TestFindingCHWriter_HandleBatch_InvalidFalsePositiveAtSkipsFinding(t *testi
 	goodID := uuid.Must(uuid.NewV7())
 	good.SetId(goodID.String())
 
-	require.NoError(t, w.HandleBatch(context.Background(), []*riskv1.Finding{bad, good}, nil))
+	failed := processBatch(t, w, context.Background(), []*riskv1.Finding{bad, good})
+	require.Error(t, failed[0], "the malformed finding is rejected to redeliver on its own")
+	require.NoError(t, failed[1])
 
 	rows := chRows(t, ins)
 	require.Len(t, rows, 1, "only the finding with a valid (or absent) false_positive_at is inserted")
 	require.Equal(t, goodID, rows[0].ID, "the surviving row must be the valid finding, not the skipped one")
 }
 
-func TestFindingCHWriter_HandleBatch_EmptyBatchSkipsInsert(t *testing.T) {
+func TestFindingCHWriter_ProcessBatch_EmptyBatchSkipsInsert(t *testing.T) {
 	t.Parallel()
 
 	w, ins := newCHWriter(t)
 
-	require.NoError(t, w.HandleBatch(context.Background(), nil, nil))
+	requireNoRejects(t, processBatch(t, w, context.Background(), nil))
 
 	require.Zero(t, ins.calls, "an empty batch should not issue an insert")
 	require.Nil(t, ins.rows)
 }
 
-func TestFindingCHWriter_HandleBatch_InserterErrorIsSwallowed(t *testing.T) {
+func TestFindingCHWriter_ProcessBatch_InserterErrorNacksBatch(t *testing.T) {
 	t.Parallel()
 
 	w, ins := newCHWriter(t)
 	ins.err = errors.New("clickhouse unavailable")
 
-	// Shadow mode: the writer logs but does not surface insert failures.
-	require.NoError(t, w.HandleBatch(context.Background(), []*riskv1.Finding{chFinding()}, nil))
+	// ClickHouse is the findings store of record: a failed insert must surface
+	// so the whole batch nacks and redelivers.
+	_, err := w.ProcessBatch(context.Background(), []*riskv1.Finding{chFinding()})
+	require.Error(t, err)
 }
 
-func TestFindingCHWriter_HandleBatch_RecordsInsertedMetric(t *testing.T) {
+func TestFindingCHWriter_ProcessBatch_RecordsInsertedMetric(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -388,7 +412,12 @@ func TestFindingCHWriter_HandleBatch_RecordsInsertedMetric(t *testing.T) {
 		w, ins := newCHWriterWithMeter(t, mp)
 		ins.err = tt.inserterErr
 
-		require.NoError(t, w.HandleBatch(context.Background(), []*riskv1.Finding{chFinding(), chFinding()}, nil))
+		_, err := w.ProcessBatch(context.Background(), []*riskv1.Finding{chFinding(), chFinding()})
+		if tt.inserterErr != nil {
+			require.Error(t, err)
+		} else {
+			require.NoError(t, err)
+		}
 
 		point := chMessagesInsertedPoint(t, reader)
 		require.Equal(t, int64(2), point.Value)
@@ -402,7 +431,7 @@ func TestFindingCHWriter_HandleBatch_RecordsInsertedMetric(t *testing.T) {
 // Integration test against a real Postgres: a going-forward exclusion must drop
 // the matching finding before it reaches ClickHouse, mirroring the Postgres
 // scan path. Findings from the shadow path are otherwise unfiltered.
-func TestFindingCHWriter_HandleBatch_AnnotatesExcludedFindings(t *testing.T) {
+func TestFindingCHWriter_ProcessBatch_AnnotatesExcludedFindings(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestRiskService(t)
@@ -440,11 +469,22 @@ func TestFindingCHWriter_HandleBatch_AnnotatesExcludedFindings(t *testing.T) {
 	kept.SetRiskPolicyId(policyID)
 	kept.SetMatch("different-secret")
 
-	require.NoError(t, w.HandleBatch(ctx, []*riskv1.Finding{excluded, kept}, nil))
+	// Republished manual suppression: matches the exclusion value, but the
+	// message-carried state must win over the ingest-time rule check.
+	manualAt := time.Now().UTC().Truncate(time.Second)
+	manual := chFinding()
+	manual.SetProjectId(authCtx.ProjectID.String())
+	manual.SetRiskPolicyId(policyID)
+	manual.SetMatch("hunter2")
+	manual.SetExcludedAt(manualAt.Format(time.RFC3339))
+	manual.SetExcludedReason(chrepo.ExcludedReasonManual)
+	manual.SetExcludedDetail("dismissed from the dashboard")
 
-	// Both rows are inserted: excluded findings are annotated, not dropped.
+	requireNoRejects(t, processBatch(t, w, ctx, []*riskv1.Finding{excluded, kept, manual}))
+
+	// All rows are inserted: excluded findings are annotated, not dropped.
 	rows := chRows(t, ins)
-	require.Len(t, rows, 2, "excluded findings are annotated, not dropped")
+	require.Len(t, rows, 3, "excluded findings are annotated, not dropped")
 
 	byID := map[uuid.UUID]chrepo.RiskFindingRow{}
 	for _, r := range rows {
@@ -455,17 +495,90 @@ func TestFindingCHWriter_HandleBatch_AnnotatesExcludedFindings(t *testing.T) {
 	require.NotNil(t, excludedRow.ExclusionID, "excluded finding must carry the exclusion id")
 	require.Equal(t, exclusion.ID, *excludedRow.ExclusionID)
 	require.NotNil(t, excludedRow.ExcludedAt, "excluded finding must carry excluded_at")
+	require.Equal(t, chrepo.ExcludedReasonRule, excludedRow.ExcludedReason, "rule exclusion must stamp excluded_reason=rule")
+	require.Empty(t, excludedRow.ExcludedDetail, "rule exclusion carries no detail")
 
 	keptRow := byID[uuid.MustParse(kept.GetId())]
 	require.Nil(t, keptRow.ExclusionID, "non-excluded finding must not carry an exclusion id")
 	require.Nil(t, keptRow.ExcludedAt, "non-excluded finding must not carry excluded_at")
+	require.Empty(t, keptRow.ExcludedReason, "non-excluded finding must not carry a reason")
+
+	manualRow := byID[uuid.MustParse(manual.GetId())]
+	require.Nil(t, manualRow.ExclusionID, "message-carried suppression carries no exclusion id")
+	require.NotNil(t, manualRow.ExcludedAt, "message-carried excluded_at must be preserved")
+	require.True(t, manualAt.Equal(*manualRow.ExcludedAt), "message-carried excluded_at wins over the ingest-time rule check")
+	require.Equal(t, chrepo.ExcludedReasonManual, manualRow.ExcludedReason)
+	require.Equal(t, "dismissed from the dashboard", manualRow.ExcludedDetail)
+}
+
+// TestFindingCHWriter_ProcessBatch_InvalidExcludedAtSkipsFinding mirrors the
+// false_positive_at guard: an excluded_at that fails to parse must skip the
+// message rather than append the row unsuppressed, which would silently
+// resurface a suppressed finding in ClickHouse's dedup.
+// TestFindingCHWriter_ProcessBatch_StampsEventKind pins the event-kind
+// resolution feeding the read-time state ranking: explicit kinds pass
+// through, a legacy message carrying a suppression stamp derives suppression,
+// and everything else (unknown values included) derives finding.
+func TestFindingCHWriter_ProcessBatch_StampsEventKind(t *testing.T) {
+	t.Parallel()
+
+	w, ins := newCHWriter(t)
+
+	scanner := chFinding()
+
+	legacySuppression := chFinding()
+	legacySuppression.SetExcludedAt("2026-06-27T13:00:00Z")
+	legacySuppression.SetExcludedReason(chrepo.ExcludedReasonManual)
+
+	explicitSuppression := chFinding()
+	explicitSuppression.SetExcludedAt("2026-06-27T13:00:00Z")
+	explicitSuppression.SetExcludedReason(chrepo.ExcludedReasonManual)
+	explicitSuppression.SetEventKind(chrepo.EventKindSuppression)
+
+	// An unmark republish: no suppression stamps, but still a state change.
+	unsuppression := chFinding()
+	unsuppression.SetEventKind(chrepo.EventKindUnsuppression)
+
+	unknown := chFinding()
+	unknown.SetEventKind("bogus")
+
+	requireNoRejects(t, processBatch(t, w, context.Background(), []*riskv1.Finding{scanner, legacySuppression, explicitSuppression, unsuppression, unknown}))
+
+	rows := chRows(t, ins)
+	require.Len(t, rows, 5)
+	require.Equal(t, chrepo.EventKindFinding, rows[0].EventKind)
+	require.Equal(t, chrepo.EventKindSuppression, rows[1].EventKind, "a carried suppression stamp derives a suppression copy for legacy producers")
+	require.Equal(t, chrepo.EventKindSuppression, rows[2].EventKind)
+	require.Equal(t, chrepo.EventKindUnsuppression, rows[3].EventKind)
+	require.Equal(t, chrepo.EventKindFinding, rows[4].EventKind, "an unknown kind falls back to derivation")
+}
+
+func TestFindingCHWriter_ProcessBatch_InvalidExcludedAtSkipsFinding(t *testing.T) {
+	t.Parallel()
+
+	w, ins := newCHWriter(t)
+
+	bad := chFinding()
+	bad.SetExcludedAt("not-a-timestamp")
+
+	good := finding()
+	goodID := uuid.Must(uuid.NewV7())
+	good.SetId(goodID.String())
+
+	failed := processBatch(t, w, context.Background(), []*riskv1.Finding{bad, good})
+	require.Error(t, failed[0], "the malformed finding is rejected to redeliver on its own")
+	require.NoError(t, failed[1])
+
+	rows := chRows(t, ins)
+	require.Len(t, rows, 1, "only the finding with a valid (or absent) excluded_at is inserted")
+	require.Equal(t, goodID, rows[0].ID, "the surviving row must be the valid finding, not the skipped one")
 }
 
 // Integration test against a real Postgres: the writer batch-resolves the
 // denormalized attribution (chat id, user ids) for findings that reference a
 // real chat message. Message-level ids win over chat-level ids; unresolvable
 // message ids leave the attribution empty without dropping the finding.
-func TestFindingCHWriter_HandleBatch_ResolvesAttribution(t *testing.T) {
+func TestFindingCHWriter_ProcessBatch_ResolvesAttribution(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestRiskService(t)
@@ -537,7 +650,7 @@ func TestFindingCHWriter_HandleBatch_ResolvesAttribution(t *testing.T) {
 	unknown.SetChatMessageId(uuid.Must(uuid.NewV7()).String())
 	unknown.SetProjectId(authCtx.ProjectID.String())
 
-	require.NoError(t, w.HandleBatch(ctx, []*riskv1.Finding{own, fallback, unknown}, nil))
+	requireNoRejects(t, processBatch(t, w, ctx, []*riskv1.Finding{own, fallback, unknown}))
 
 	rows := chRows(t, ins)
 	require.Len(t, rows, 3)
@@ -585,7 +698,7 @@ func TestFindingCHWriter_HandleBatch_ResolvesAttribution(t *testing.T) {
 
 	ins2 := &fakeCHInserter{}
 	w2 := risk.NewFindingCHWriter(testenv.NewLogger(t), ti.conn, testenv.NewMeterProvider(t), ins2, fp)
-	require.NoError(t, w2.HandleBatch(ctx, []*riskv1.Finding{legit, otherProject}, nil))
+	requireNoRejects(t, processBatch(t, w2, ctx, []*riskv1.Finding{legit, otherProject}))
 
 	crossRows := chRows(t, ins2)
 	require.Len(t, crossRows, 2)
@@ -605,7 +718,7 @@ func TestFindingCHWriter_HandleBatch_ResolvesAttribution(t *testing.T) {
 	require.Empty(t, crossRow.ExternalUserID)
 }
 
-func TestFindingCHWriter_HandleBatch_ResolvesContentPartAttribution(t *testing.T) {
+func TestFindingCHWriter_ProcessBatch_ResolvesContentPartAttribution(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestRiskService(t)
@@ -668,7 +781,7 @@ func TestFindingCHWriter_HandleBatch_ResolvesContentPartAttribution(t *testing.T
 	f.SetProjectId(authCtx.ProjectID.String())
 	f.SetRiskPolicyId(uuid.NewString())
 
-	require.NoError(t, w.HandleBatch(ctx, []*riskv1.Finding{f}, nil))
+	requireNoRejects(t, processBatch(t, w, ctx, []*riskv1.Finding{f}))
 
 	rows := chRows(t, ins)
 	require.Len(t, rows, 1)
@@ -691,7 +804,7 @@ func TestFindingCHWriter_HandleBatch_ResolvesContentPartAttribution(t *testing.T
 
 	ins2 := &fakeCHInserter{}
 	w2 := risk.NewFindingCHWriter(testenv.NewLogger(t), ti.conn, testenv.NewMeterProvider(t), ins2, fp)
-	require.NoError(t, w2.HandleBatch(ctx, []*riskv1.Finding{otherProject}, nil))
+	requireNoRejects(t, processBatch(t, w2, ctx, []*riskv1.Finding{otherProject}))
 
 	crossRows := chRows(t, ins2)
 	require.Len(t, crossRows, 1)
@@ -705,7 +818,7 @@ func TestFindingCHWriter_HandleBatch_ResolvesContentPartAttribution(t *testing.T
 // inherit that message's user ids. The join is what enforces this, so a stale
 // or forged parent id falls back to the part's own chat instead of leaking the
 // other chat's identifiers.
-func TestFindingCHWriter_HandleBatch_IgnoresParentMessageFromAnotherChat(t *testing.T) {
+func TestFindingCHWriter_ProcessBatch_IgnoresParentMessageFromAnotherChat(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestRiskService(t)
@@ -763,7 +876,7 @@ func TestFindingCHWriter_HandleBatch_IgnoresParentMessageFromAnotherChat(t *test
 // part claiming one project while its chat sits in another must resolve no
 // attribution at all: otherwise the caller's per-finding project check would be
 // comparing against a project id the chat never belonged to.
-func TestFindingCHWriter_HandleBatch_RejectsPartWhoseChatIsInAnotherProject(t *testing.T) {
+func TestFindingCHWriter_ProcessBatch_RejectsPartWhoseChatIsInAnotherProject(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestRiskService(t)
@@ -811,7 +924,7 @@ func TestFindingCHWriter_HandleBatch_RejectsPartWhoseChatIsInAnotherProject(t *t
 // user ids, the assistant link, and the directory lookup's organization all
 // come from that chat, so the attribution query rejects the mismatched anchor
 // outright rather than attributing it.
-func TestFindingCHWriter_HandleBatch_RejectsMessageWhoseChatIsInAnotherProject(t *testing.T) {
+func TestFindingCHWriter_ProcessBatch_RejectsMessageWhoseChatIsInAnotherProject(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestRiskService(t)
@@ -856,7 +969,7 @@ func TestFindingCHWriter_HandleBatch_RejectsMessageWhoseChatIsInAnotherProject(t
 	f.SetChatMessageId(msgID.String())
 	f.SetProjectId(authCtx.ProjectID.String())
 
-	require.NoError(t, w.HandleBatch(ctx, []*riskv1.Finding{f}, nil))
+	requireNoRejects(t, processBatch(t, w, ctx, []*riskv1.Finding{f}))
 
 	rows := chRows(t, ins)
 	require.Len(t, rows, 1)

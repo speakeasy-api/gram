@@ -373,121 +373,41 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ShadowMCPInventoryUsers"}`)
 	})
 
-	Method("upsertShadowMCPInventoryPolicyBypass", func() {
-		Description("Create or modify a Shadow MCP URL allow decision for selected blocking policies.")
-		Security(security.Session)
-
-		Payload(func() {
-			Extend(ShadowMCPInventoryPolicyBypassForm)
-			security.SessionPayload()
-		})
-
-		Result(ShadowMCPInventoryURLStateModel)
-
-		HTTP(func() {
-			POST("/rpc/access.upsertShadowMCPInventoryPolicyBypass")
-			security.SessionHeader()
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "upsertShadowMCPInventoryPolicyBypass")
-		Meta("openapi:extension:x-speakeasy-name-override", "upsertShadowMCPInventoryPolicyBypass")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpsertShadowMCPInventoryPolicyBypass", "type": "mutation"}`)
-	})
-
-	Method("deleteShadowMCPInventoryPolicyBypass", func() {
-		Description("Remove a Shadow MCP URL allow decision.")
+	Method("listShadowMCPInventoryServersForUser", func() {
+		Description("List the Shadow MCP servers one person reached, with each server's access state. The inverse of listShadowMCPInventoryUsers, which expands a single server into its users.")
 		Security(security.Session)
 
 		Payload(func() {
 			Attribute("project_id", String, func() {
 				Format(FormatUUID)
 			})
-			Attribute("server_url", String, func() {
-				Format(FormatURI)
+			Attribute("user_keys", ArrayOf(String), "The identifiers to attribute usage to, matched against the reported email or user id. Pass every identifier the subject is known by.", func() {
+				MinLength(1)
+				MaxLength(200)
 			})
-			Required("project_id", "server_url")
+			Attribute("limit", Int, func() {
+				Default(50)
+				Minimum(1)
+				Maximum(200)
+			})
+			Required("project_id", "user_keys")
 			security.SessionPayload()
 		})
 
-		Result(ShadowMCPInventoryURLStateModel)
+		Result(ListShadowMCPInventoryResult)
 
 		HTTP(func() {
-			DELETE("/rpc/access.deleteShadowMCPInventoryPolicyBypass")
+			GET("/rpc/access.listShadowMCPInventoryServersForUser")
 			Param("project_id")
-			Param("server_url")
+			Param("user_keys")
+			Param("limit")
 			security.SessionHeader()
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "deleteShadowMCPInventoryPolicyBypass")
-		Meta("openapi:extension:x-speakeasy-name-override", "deleteShadowMCPInventoryPolicyBypass")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteShadowMCPInventoryPolicyBypass", "type": "mutation"}`)
-	})
-
-	Method("blockShadowMCPInventoryServer", func() {
-		Description("Block a Shadow MCP server URL under an allow-by-default (allow_all) blocking policy by adding a risk_policy:block grant.")
-		Security(security.Session)
-
-		Payload(func() {
-			Attribute("project_id", String, func() {
-				Format(FormatUUID)
-			})
-			Attribute("server_url", String, func() {
-				Format(FormatURI)
-			})
-			Attribute("policy_id", String, func() {
-				Format(FormatUUID)
-			})
-			Required("project_id", "server_url", "policy_id")
-			security.SessionPayload()
-		})
-
-		Result(ShadowMCPInventoryURLStateModel)
-
-		HTTP(func() {
-			POST("/rpc/access.blockShadowMCPInventoryServer")
-			security.SessionHeader()
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "blockShadowMCPInventoryServer")
-		Meta("openapi:extension:x-speakeasy-name-override", "blockShadowMCPInventoryServer")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "BlockShadowMCPInventoryServer", "type": "mutation"}`)
-	})
-
-	Method("unblockShadowMCPInventoryServer", func() {
-		Description("Unblock a Shadow MCP server URL under an allow-by-default (allow_all) blocking policy by removing its risk_policy:block grant.")
-		Security(security.Session)
-
-		Payload(func() {
-			Attribute("project_id", String, func() {
-				Format(FormatUUID)
-			})
-			Attribute("server_url", String, func() {
-				Format(FormatURI)
-			})
-			Attribute("policy_id", String, func() {
-				Format(FormatUUID)
-			})
-			Required("project_id", "server_url", "policy_id")
-			security.SessionPayload()
-		})
-
-		Result(ShadowMCPInventoryURLStateModel)
-
-		HTTP(func() {
-			DELETE("/rpc/access.unblockShadowMCPInventoryServer")
-			Param("project_id")
-			Param("server_url")
-			Param("policy_id")
-			security.SessionHeader()
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "unblockShadowMCPInventoryServer")
-		Meta("openapi:extension:x-speakeasy-name-override", "unblockShadowMCPInventoryServer")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UnblockShadowMCPInventoryServer", "type": "mutation"}`)
+		Meta("openapi:operationId", "listShadowMCPInventoryServersForUser")
+		Meta("openapi:extension:x-speakeasy-name-override", "listShadowMCPInventoryServersForUser")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ShadowMCPInventoryServersForUser"}`)
 	})
 
 	Method("resolveShadowMCPInventoryRequest", func() {
@@ -787,10 +707,10 @@ var ListScopesResult = Type("ListScopesResult", func() {
 })
 
 var CreateRoleForm = Type("CreateRoleForm", func() {
-	Required("name", "description", "grants")
+	Required("name", "grants")
 
 	Attribute("name", String, "Display name for the role.")
-	Attribute("description", String, "Description of what this role can do.")
+	Attribute("description", String, "Optional description of what this role can do.")
 	Attribute("grants", ArrayOf(RoleGrantModel), "Scope grants to assign.")
 	Attribute("member_ids", ArrayOf(String), "Optional member IDs to additionally assign to this role on creation.")
 })
@@ -862,12 +782,35 @@ var UpdateShadowMCPInventoryServerNameForm = Type("UpdateShadowMCPInventoryServe
 	Attribute("name", String, func() { MaxLength(255) })
 })
 
+var ShadowMCPInventoryApprovalRequestModel = Type("ShadowMCPInventoryApprovalRequest", func() {
+	Description("The MCP approval request tracking review status for a server. Status records the review outcome, which may cover only selected principals; the server's access field reports enforcement state.")
+	Required("id", "status", "requester_count")
+
+	Attribute("id", String, func() {
+		Format(FormatUUID)
+	})
+	Attribute("status", String, func() {
+		Description("superseded means the latest decision was explicitly displaced by a policy URL-list edit: the history is preserved but no enforcement derives from it until someone re-decides.")
+		Enum("unreviewed", "requested", "approved", "denied", "superseded")
+	})
+	Attribute("standing_decision", String, func() {
+		Description("The latest recorded decision still standing for this server, independent of the request's lifecycle status — a reopened request's prior decision keeps enforcing until re-decided, and clients checking an edit against standing intent must read this rather than status. Absent when nothing was ever decided or the decision was superseded.")
+		Enum("approved", "denied")
+	})
+	Attribute("requester_count", Int, "How many distinct people have asked for this server.")
+	Attribute("evidence_changed_at", String, "When the daily recheck first found the permission-relevant evidence differing from what the latest approval rested on. Absent when nothing has drifted; cleared only by a new decision.", func() { Format(FormatDateTime) })
+})
+
 var ShadowMCPInventoryServerModel = Type("ShadowMCPInventoryServer", func() {
 	Required("canonical_server_url", "server_slug", "url_host", "first_seen", "last_seen", "observed_use_count", "user_count", "top_users", "access", "request_count", "allowed_policy_ids", "blocked_policy_ids")
 
 	Attribute("canonical_server_url", String)
 	Attribute("server_slug", String)
 	Attribute("url_host", String)
+	Attribute("target_kind", String, func() {
+		Description("What the row identifies: a server URL observed or requested, or a local stdio command known only through its review. Absent means server_url.")
+		Enum("server_url", "stdio_command")
+	})
 	Attribute("server_name", String)
 	Attribute("first_seen", String, func() {
 		Format(FormatDateTime)
@@ -882,10 +825,15 @@ var ShadowMCPInventoryServerModel = Type("ShadowMCPInventoryServer", func() {
 	Attribute("user_count", Int)
 	Attribute("top_users", ArrayOf(String))
 	Attribute("access", String, func() {
-		Enum("none", "allowed", "blocked")
+		Description("Deprecated: read access_summary.state. Kept one release so older clients keep rendering, then removed together with making access_summary required. Note the values themselves are corrected in this release: URLs whose bypass grants cover only part of a policy's audience now read restricted where they previously read allowed.")
+		Enum("none", "allowed", "blocked", "restricted")
+	})
+	Attribute("access_summary", ShadowMCPAccessSummaryModel, func() {
+		Description("The server-computed enforcement verdict. Optional for one release only so a client deployed ahead of a rolled-back server degrades to the legacy access field instead of failing to parse; the server always sends it. Becomes required when access is removed.")
 	})
 	Attribute("request_count", Int)
 	Attribute("latest_request", ShadowMCPInventoryRequestSummaryModel)
+	Attribute("approval_request", ShadowMCPInventoryApprovalRequestModel)
 	Attribute("allowed_policy_ids", ArrayOf(String))
 	Attribute("blocked_policy_ids", ArrayOf(String), "Enabled blocking policies that block this server via a risk_policy:block grant (allow_all policies only).")
 })
@@ -921,12 +869,50 @@ var ListShadowMCPInventoryUsersResult = Type("ListShadowMCPInventoryUsersResult"
 	Attribute("next_cursor", String, "Cursor for the next page of results.")
 })
 
+var ShadowMCPAccessSummaryModel = Type("ShadowMCPAccessSummary", func() {
+	Description("The enforcement verdict for a shadow MCP server, computed server-side from policies, grants, and the recorded decision. state is the canonical compression of who may call the server; the remaining fields name the mechanisms so a client renders wording without re-deriving enforcement.")
+
+	Required("state", "allowed_for", "blocked_for", "blocking_default", "decision_coverage")
+
+	Attribute("state", String, func() {
+		Description("The shape of the user-to-access function: allowed and blocked are uniform, restricted varies by user, unenforced means no blocking policy applies.")
+		Enum("allowed", "restricted", "blocked", "unenforced")
+	})
+	Attribute("allowed_for", String, func() {
+		Description("Reach of explicit allow grants: everyone when every deny-by-default policy's audience is covered (an all-users grant, or grants naming the policy's whole audience), selected when grants free only part of an audience, none without grants. A role grant whose membership happens to span the organization still reads selected — reach compares principal sets, not expanded memberships.")
+		Enum("everyone", "selected", "none")
+	})
+	Attribute("blocked_for", String, func() {
+		Description("Reach of explicit block mechanisms: an everyone-audience block rule, a targeted rule or targeted deny-by-default policy, or none.")
+		Enum("everyone", "some", "none")
+	})
+	Attribute("blocking_default", String, func() {
+		Description("What happens to a user no rule names: deny under an everyone-audience deny-by-default policy, allow when blocking exists without one, none when no blocking policy is enabled.")
+		Enum("deny", "allow", "none")
+	})
+	Attribute("decision", String, func() {
+		Description("The recorded review decision, when one exists.")
+		Enum("approved", "denied")
+	})
+	Attribute("decision_coverage", String, func() {
+		Description("How much of the recorded decision enforcement delivers. full: the decision's own writes are intact — an approval's grants survive unoverridden (a scoped blast radius is the decision as recorded, not a shortfall), or a denial lands as a project-wide block. partial: something carries the decision but not all of it, such as a denial only a targeted policy enforces, or an approval whose grants were later removed or overridden. none: nothing carries it — no blocking policy exists, the target is a local command (stdio decisions are recorded without writing enforcement), or no decision is recorded at all.")
+		Enum("full", "partial", "none")
+	})
+})
+
 var ShadowMCPInventoryURLStateModel = Type("ShadowMCPInventoryURLState", func() {
 	Required("access", "request_count", "allowed_policy_ids", "blocked_policy_ids")
 
-	Attribute("access", String)
+	Attribute("access", String, func() {
+		Description("Deprecated: read access_summary.state. Kept one release so older clients keep rendering, then removed together with making access_summary required. Note the values themselves are corrected in this release: URLs whose bypass grants cover only part of a policy's audience now read restricted where they previously read allowed.")
+		Enum("none", "allowed", "blocked", "restricted")
+	})
+	Attribute("access_summary", ShadowMCPAccessSummaryModel, func() {
+		Description("The server-computed enforcement verdict. Optional for one release only so a client deployed ahead of a rolled-back server degrades to the legacy access field instead of failing to parse; the server always sends it. Becomes required when access is removed.")
+	})
 	Attribute("request_count", Int)
 	Attribute("latest_request", ShadowMCPInventoryRequestSummaryModel)
+	Attribute("approval_request", ShadowMCPInventoryApprovalRequestModel)
 	Attribute("allowed_policy_ids", ArrayOf(String))
 	Attribute("blocked_policy_ids", ArrayOf(String), "Enabled blocking policies that block this server via a risk_policy:block grant (allow_all policies only).")
 })

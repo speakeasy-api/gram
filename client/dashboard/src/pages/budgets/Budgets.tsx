@@ -366,9 +366,6 @@ function RulesTab({
           placeholder="Search rules"
           debounceMs={150}
         />
-        <Page.Toolbar.Count>
-          {filtered.length} of {rules.length} rules
-        </Page.Toolbar.Count>
         <Page.Toolbar.Actions>
           <SegmentedControl<ActionFilter>
             value={actionFilter}
@@ -647,9 +644,6 @@ function EventsTab({ rules }: { rules: SpendRule[] }): JSX.Element {
   return (
     <div className="space-y-3">
       <Page.Toolbar>
-        <Page.Toolbar.Count>
-          {events.length} {events.length === 1 ? "event" : "events"}
-        </Page.Toolbar.Count>
         <Page.Toolbar.Actions>
           <SegmentedControl<EventFilter>
             value={filter}

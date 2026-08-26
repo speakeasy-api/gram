@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -17,16 +18,20 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -35,9 +40,22 @@ func (s *Service) ServeMCPEndpoint(w http.ResponseWriter, r *http.Request, slug,
 	ctx := r.Context()
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(slug))
 
-	mcpEndpoint, mcpServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, slug)
+	mcpEndpoint, mcpServer, metaServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, slug)
 	if err != nil {
 		return err
+	}
+
+	if metaServer != nil {
+		// Meta-backed endpoints are served only on the canonical /mcp
+		// surface; /x/mcp stays a generic-backend surface with no meta
+		// exposure.
+		if mcpRouteBase != "mcp" {
+			return oops.E(oops.CodeNotFound, nil, "mcp endpoint not found")
+		}
+		if err := s.enforceCustomDomainLockdown(ctx, logger, mcpEndpoint.ProjectID); err != nil {
+			return err
+		}
+		return s.serveResolvedMetaMCPEndpoint(w, r, logger, mcpEndpoint, metaServer)
 	}
 
 	if err := s.enforceCustomDomainLockdown(ctx, logger, mcpEndpoint.ProjectID); err != nil {
@@ -55,38 +73,50 @@ func (s *Service) ServeMCPEndpoint(w http.ResponseWriter, r *http.Request, slug,
 // the allowlist for that hostname. The lockdown engages as soon as an allowlist
 // is configured, regardless of whether the domain is verified/activated yet.
 //
-// This guard is wired ONLY into the runtime MCP dispatch (ServePublic,
-// ServeMCPEndpoint). The install page (ServeInstallPage / HandleGetServer's
-// inline browser path) and OAuth metadata routes are intentionally left
-// ungated: private-MCP install pages must keep working on the platform host
-// (app.getgram.ai), where the dashboard session cookie lives, even when the
-// org's custom domain has an allowlist. Do not call this from those handlers.
+// This guard is wired into runtime MCP dispatch (ServePublic,
+// ServeMCPEndpoint) and the consent-scoped MCP transport, which can enumerate
+// live inventories. The install page (ServeInstallPage / HandleGetServer's
+// inline browser path), consent HTML, and OAuth metadata routes are
+// intentionally left ungated: private-MCP install and consent pages must keep
+// working on the platform host (app.getgram.ai), where the dashboard session
+// cookie lives, even when the org's custom domain has an allowlist.
 func (s *Service) enforceCustomDomainLockdown(ctx context.Context, logger *slog.Logger, projectID uuid.UUID) error {
+	lockedDown, err := s.customDomainLockdownApplies(ctx, logger, projectID)
+	if err != nil {
+		return err
+	}
+	if lockedDown {
+		return oops.E(oops.CodeForbidden, nil, "this MCP server is only accessible via its custom domain")
+	}
+	return nil
+}
+
+// customDomainLockdownApplies reports whether a platform-origin request must
+// be kept away from runtime-like MCP surfaces. Requests already carrying a
+// custom-domain context passed through the ingress allowlist and are never
+// locked down here.
+func (s *Service) customDomainLockdownApplies(ctx context.Context, logger *slog.Logger, projectID uuid.UUID) (bool, error) {
 	if customdomains.FromContext(ctx) != nil {
-		return nil
+		return false, nil
 	}
 
 	project, err := projectsrepo.New(s.db).GetProjectByID(ctx, projectID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return oops.E(oops.CodeNotFound, err, "project not found")
+		return false, oops.E(oops.CodeNotFound, err, "project not found")
 	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "load project for custom domain lockdown").LogError(ctx, logger)
+		return false, oops.E(oops.CodeUnexpected, err, "load project for custom domain lockdown").LogError(ctx, logger)
 	}
 
 	domain, err := customdomainsrepo.New(s.db).GetCustomDomainByOrganization(ctx, project.OrganizationID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil
+		return false, nil
 	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "load custom domain for lockdown").LogError(ctx, logger)
+		return false, oops.E(oops.CodeUnexpected, err, "load custom domain for lockdown").LogError(ctx, logger)
 	}
 
-	if len(domain.IpAllowlist) > 0 {
-		return oops.E(oops.CodeForbidden, nil, "this MCP server is only accessible via its custom domain")
-	}
-
-	return nil
+	return len(domain.IpAllowlist) > 0, nil
 }
 
 // serveResolvedMCPEndpoint dispatches an already-resolved (mcp_endpoint,
@@ -127,20 +157,24 @@ func (s *Service) serveResolvedMCPEndpoint(
 	// gate (skipIssuerGate=true) so the same request isn't gated twice;
 	// remote-backed proxying forwards the upstream remote-session token
 	// via AuthorizationOverride.
-	var upstreamTokens map[uuid.UUID]string
+	var upstreamTokens map[uuid.UUID]remotesessions.UpstreamToken
+	var upstreamResource string
+	var sessionToolSelection *toolfilter.SessionSelection
 	var wwwAuthenticate string
 	if issuerGated {
 		resolvedEndpoint, err := s.BuildResolvedMcpEndpointForServer(ctx, logger, mcpEndpoint, mcpServer, mcpRouteBase)
 		if err != nil {
 			return err
 		}
-		newCtx, tokens, err := s.ApplyIssuerGate(ctx, w, httpheaders.AuthorizationBearerToken(r), s.BaseURLForRequest(r), resolvedEndpoint)
+		upstreamResource = resolvedEndpoint.UpstreamResource
+		newCtx, tokens, toolSelection, err := s.ApplyIssuerGate(ctx, w, httpheaders.AuthorizationBearerToken(r), s.BaseURLForRequest(r), resolvedEndpoint)
 		if err != nil {
 			return fmt.Errorf("apply issuer gate: %w", err)
 		}
 		ctx = newCtx
 		r = r.WithContext(ctx)
 		upstreamTokens = tokens
+		sessionToolSelection = toolSelection
 
 		// Issuer-gated clients authenticate with this server's AS, so an
 		// upstream 401/403 relayed by the proxy must challenge them with
@@ -154,18 +188,20 @@ func (s *Service) serveResolvedMCPEndpoint(
 	}
 
 	switch {
-	case mcpServer.RemoteMcpServerID.Valid:
-		upstreamToken, err := singleUpstreamToken(upstreamTokens)
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "resolve upstream token for remote MCP backend").LogError(ctx, logger)
+	case mcpServer.RemoteMcpServerID.Valid, mcpServer.TunneledMcpServerID.Valid:
+		upstreamToken, err := routeUpstreamToken(ctx, logger, upstreamTokens, upstreamResource)
+		var routeErr *upstreamRoutingError
+		switch {
+		case errors.As(err, &routeErr):
+			// routeUpstreamToken already logged the structured detail.
+			return oops.E(oops.CodeFailedPrecondition, err, "this MCP server's upstream credentials are not configured unambiguously")
+		case err != nil:
+			return oops.E(oops.CodeUnexpected, err, "resolve upstream token for proxied MCP backend").LogError(ctx, logger)
 		}
-		return s.serveRemoteBackend(w, r, logger, mcpEndpoint, mcpServer, upstreamToken, wwwAuthenticate)
-	case mcpServer.TunneledMcpServerID.Valid:
-		upstreamToken, err := singleUpstreamToken(upstreamTokens)
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "resolve upstream token for tunneled MCP backend").LogError(ctx, logger)
+		if mcpServer.RemoteMcpServerID.Valid {
+			return s.serveRemoteBackend(w, r, logger, mcpEndpoint, mcpServer, upstreamToken, wwwAuthenticate, sessionToolSelection)
 		}
-		return s.serveTunneledBackend(w, r, logger, mcpEndpoint, mcpServer, upstreamToken, wwwAuthenticate)
+		return s.serveTunneledBackend(w, r, logger, mcpEndpoint, mcpServer, upstreamToken, wwwAuthenticate, sessionToolSelection)
 	case mcpServer.ToolsetID.Valid:
 		// AGE-1902: toolset-backed branch still reads runtime config from the
 		// toolsets row (visibility, OAuth, default environment). Once
@@ -193,7 +229,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 			mcpServerVariationsGroupID = &id
 		}
 
-		if err := s.ServeToolsetResolved(w, r, &toolset, slug, mcpRouteBase, issuerGated, upstreamTokens, mcpServerVariationsGroupID, &mcpServer.ID); err != nil {
+		if err := s.ServeToolsetResolved(w, r, &toolset, slug, mcpRouteBase, issuerGated, upstreamTokens, sessionToolSelection, mcpServerVariationsGroupID, &mcpServer.ID); err != nil {
 			return fmt.Errorf("serve toolset-backed mcp: %w", err)
 		}
 		return nil
@@ -204,25 +240,107 @@ func (s *Service) serveResolvedMCPEndpoint(
 	}
 }
 
-// singleUpstreamToken collapses the per-remote-issuer token map from
-// ApplyIssuerGate to the one Authorization value a remote MCP backend
-// forwards upstream. A remote-backed mcp_server proxies to exactly one
-// upstream, so at most one remote_session token is meaningful: the
-// remote_session_client_user_session_issuers one_per_issuer index binds a
-// user_session_issuer to a single remote issuer, so the map holds 0 or 1
-// entries. More than one token means the runtime cannot tell which upstream
-// credential the backend needs, so it fails closed rather than forwarding an
-// arbitrary (possibly mismatched) token; resolving the right token per
-// upstream is tracked in AIS-152.
-func singleUpstreamToken(tokens map[uuid.UUID]string) (string, error) {
-	if len(tokens) > 1 {
-		return "", fmt.Errorf("remote MCP backend bound to %d remote_session_issuers; cannot determine which upstream token to forward", len(tokens))
+// routeUpstreamToken selects the one Authorization value a proxied
+// (remote or tunneled) MCP backend forwards upstream, from the
+// per-remote-issuer token map ApplyIssuerGate resolved.
+//
+// A proxied mcp_server talks to exactly one upstream, so exactly one entry is
+// meaningful. A user_session_issuer may be bound to several
+// remote_session_clients (the one_per_issuer index was dropped in AIS-137),
+// so the map can hold several entries; selection is by qualified identity —
+// the RFC 8707 resource recorded on each credential at grant time must match
+// the backend's own upstream resource. Ambiguity fails closed: zero or
+// multiple matching entries, or a multi-entry map with no resource to match
+// against (tunneled backends record none), returns an error rather than
+// forwarding an arbitrary, possibly mismatched, bearer.
+//
+// A single-entry map is forwarded as-is: a lone binding is that backend's
+// credential by construction (this preserves behavior for servers connected
+// before resources were recorded, and for tunneled backends whose resource is
+// always empty). A lone credential whose recorded resource disagrees with the
+// backend's is still forwarded, but logged at warn level so the mismatch is
+// visible in production and a future move to strict single-entry matching has
+// a signal for how often it would reject. A backend with no resource of its
+// own (tunneled) has nothing to disagree with, so it never warns.
+func routeUpstreamToken(ctx context.Context, logger *slog.Logger, tokens map[uuid.UUID]remotesessions.UpstreamToken, upstreamResource string) (string, error) {
+	want := strings.TrimRight(upstreamResource, "/")
+
+	switch len(tokens) {
+	case 0:
+		return "", nil
+	case 1:
+		for _, entry := range tokens {
+			if want != "" && entry.Resource != "" && strings.TrimRight(entry.Resource, "/") != want {
+				logger.WarnContext(ctx, "forwarding lone remote_session token whose recorded resource does not match the backend's upstream resource",
+					attr.SlogRemoteSessionClientID(entry.RemoteSessionClientID.String()),
+					attr.SlogOAuthResource(entry.Resource),
+					attr.SlogResourceURI(upstreamResource),
+				)
+			}
+			return entry.Token, nil
+		}
 	}
-	// len <= 1 here, so this returns the sole entry (or "" for an empty map).
-	for _, token := range tokens {
-		return token, nil
+
+	if want == "" {
+		return "", routeFailClosed(ctx, logger, "backend_no_resource", tokens, upstreamResource,
+			fmt.Sprintf("proxied MCP backend has no upstream resource to route by, but %d remote_session tokens resolved", len(tokens)))
 	}
-	return "", nil
+	var match string
+	found, nullResources := 0, 0
+	for _, entry := range tokens {
+		if entry.Resource == "" {
+			nullResources++
+		}
+		if strings.TrimRight(entry.Resource, "/") == want {
+			found++
+			match = entry.Token
+		}
+	}
+	if found != 1 {
+		// Distinguish routing failures by cause: legacy grants minted before
+		// the resource column vs genuine duplicates.
+		reason := "duplicate_resource"
+		if found == 0 {
+			reason = "no_match"
+			if nullResources > 0 {
+				reason = "legacy_null_resource"
+			}
+		}
+		return "", routeFailClosed(ctx, logger, reason, tokens, upstreamResource,
+			fmt.Sprintf("%d of %d resolved remote_session tokens match the backend's upstream resource", found, len(tokens)))
+	}
+	return match, nil
+}
+
+// upstreamRoutingError is a fail-closed routing outcome: the endpoint's
+// credentials are ambiguous for this backend, which is a configuration state
+// an operator must resolve rather than a runtime fault. Call sites map it to a
+// precondition failure so a misconfigured tenant does not page as a 500.
+type upstreamRoutingError struct {
+	reason string
+	detail string
+}
+
+func (e *upstreamRoutingError) Error() string {
+	return "upstream token routing failed closed (" + e.reason + "): " + e.detail
+}
+
+// routeFailClosed emits the one structured line per fail-closed routing
+// outcome — so legacy-NULL, unmatched, duplicate, and resourceless-backend
+// causes are distinguishable in aggregate — and returns the typed error. Call
+// sites do not log it again.
+func routeFailClosed(ctx context.Context, logger *slog.Logger, reason string, tokens map[uuid.UUID]remotesessions.UpstreamToken, upstreamResource, detail string) error {
+	recorded := make([]string, 0, len(tokens))
+	for _, entry := range tokens {
+		recorded = append(recorded, entry.Resource)
+	}
+	slices.Sort(recorded)
+	logger.WarnContext(ctx, "remote_session token routing failed closed",
+		attr.SlogReason(reason),
+		attr.SlogResourceURI(upstreamResource),
+		attr.SlogOAuthResource(strings.Join(recorded, ",")),
+	)
+	return &upstreamRoutingError{reason: reason, detail: detail}
 }
 
 // ResolveMCPEndpointAndServer walks the runtime addressing chain shared by
@@ -239,7 +357,7 @@ func singleUpstreamToken(tokens map[uuid.UUID]string) (string, error) {
 //
 // Thin wrapper around mcpendpoints.BySlugAndCustomDomain; kept as a method
 // for the existing /mcp and /x/mcp call sites.
-func (s *Service) ResolveMCPEndpointAndServer(ctx context.Context, logger *slog.Logger, slug string) (*mcpendpointsrepo.McpEndpoint, *mcpserversrepo.McpServer, error) {
+func (s *Service) ResolveMCPEndpointAndServer(ctx context.Context, logger *slog.Logger, slug string) (*mcpendpointsrepo.McpEndpoint, *mcpserversrepo.McpServer, *metamcprepo.MetaMcpServer, error) {
 	return mcpendpoints.BySlugAndCustomDomain(ctx, s.db, logger, slug) //nolint:wrapcheck // thin passthrough; underlying error already carries context.
 }
 
@@ -261,10 +379,18 @@ func (s *Service) ResolveMCPEndpointAndServer(ctx context.Context, logger *slog.
 // mcpRouteBase ("mcp" or "x/mcp") propagates into the resolved endpoint's
 // URL building on both the primary and fallback paths.
 func (s *Service) LoadResolvedMcpEndpointBySlug(ctx context.Context, logger *slog.Logger, slug, mcpRouteBase string) (*ResolvedMcpEndpoint, error) {
-	mcpEndpoint, mcpServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, slug)
+	mcpEndpoint, mcpServer, metaServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, slug)
 	var shareErr *oops.ShareableError
 	switch {
 	case err == nil:
+		if metaServer != nil {
+			// Meta-backed endpoints expose OAuth handlers only on the
+			// canonical /mcp surface, and only when issuer-gated.
+			if mcpRouteBase != "mcp" || !metaServer.UserSessionIssuerID.Valid {
+				return nil, oops.E(oops.CodeNotFound, nil, "not found")
+			}
+			return s.BuildResolvedMcpEndpointForMetaServer(ctx, logger, mcpEndpoint, metaServer, mcpRouteBase)
+		}
 		// Public tunneled servers serve anonymously and expose no OAuth
 		// surface: every issuer-gated handler resolving through here
 		// (authorize, token, register, revoke, consent) must 404 even
@@ -356,6 +482,9 @@ func (s *Service) resolveUpstreamResource(
 // remote server. It's only populated when the caller ran the issuer
 // gate; otherwise it's empty and the proxy does not forward an
 // Authorization header upstream.
+//
+// selection is the session's consent-screen tool selection; non-nil attaches
+// the proxy's exact-name enforcement interceptors.
 func (s *Service) serveRemoteBackend(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -364,6 +493,7 @@ func (s *Service) serveRemoteBackend(
 	mcpServer *mcpserversrepo.McpServer,
 	upstreamAuth string,
 	wwwAuthenticate string,
+	selection *toolfilter.SessionSelection,
 ) error {
 	ctx := r.Context()
 	logger = logger.With(attr.SlogRemoteMCPServerID(mcpServer.RemoteMcpServerID.UUID.String()))
@@ -394,7 +524,7 @@ func (s *Service) serveRemoteBackend(
 		return oops.E(oops.CodeUnexpected, nil, "remote MCP proxy manager is unavailable").LogError(ctx, logger)
 	}
 
-	p := s.remoteProxyManager.Build(logger, &server, mcpServer.ID.String(), headers, mcpServer.Visibility, endpoint.ProjectID.String(), upstreamAuth, wwwAuthenticate)
+	p := s.remoteProxyManager.Build(logger, &server, mcpServer.ID.String(), headers, mcpServer.Visibility, endpoint.ProjectID.String(), upstreamAuth, wwwAuthenticate, selection)
 
 	return serveProxyBackend(w, r.WithContext(ctx), p)
 }
@@ -430,6 +560,7 @@ func (s *Service) serveTunneledBackend(
 	mcpServer *mcpserversrepo.McpServer,
 	upstreamAuth string,
 	wwwAuthenticate string,
+	selection *toolfilter.SessionSelection,
 ) error {
 	ctx := r.Context()
 	logger = logger.With(attr.SlogTunneledMCPServerID(mcpServer.TunneledMcpServerID.UUID.String()))
@@ -444,7 +575,7 @@ func (s *Service) serveTunneledBackend(
 		return err
 	}
 
-	p, err := s.tunnelManager.buildProxy(ctx, r, logger, endpoint, mcpServer, upstreamAuth, wwwAuthenticate)
+	p, err := s.tunnelManager.buildProxy(ctx, tunnelrouting.ClientAffinityKeyFromRequest(r), logger, endpoint.ProjectID, mcpServer, upstreamAuth, wwwAuthenticate, selection)
 	if err != nil {
 		return err
 	}
@@ -523,31 +654,6 @@ func (s *Service) prepareProxyBackendContext(
 			}
 			ctx = setProxyBackendProjectContext(ctx, authCtx, project.ID, project.Slug)
 		}
-
-		// Prepare RBAC grants for both the issuer-gated and non-issuer-gated
-		// paths. The proxy attaches the private-visibility mcp:connect
-		// interceptors (tools/list filter, tools/call authz) regardless of how
-		// the caller authenticated, and for RBAC-enforced callers those run
-		// FindMatched / Require, which fail with ErrMissingGrants unless grants
-		// are in context. Issuer-gated callers were authenticated by
-		// ApplyIssuerGate, which stamps the principal but does not load grants,
-		// so without this they hit that failure (AGE-2672). PrepareContext runs
-		// after the non-issuer-gated identity auth above has stamped the auth
-		// context, and is a no-op for callers RBAC never enforces.
-		var prepErr error
-		ctx, prepErr = s.authz.PrepareContext(ctx)
-		if prepErr != nil {
-			return nil, oops.E(oops.CodeUnexpected, prepErr, "load access grants").LogError(ctx, logger)
-		}
-
-		// mcp:connect covers non-tool proxy methods; tool interceptors still enforce per-tool scopes.
-		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, mcpServer.ID.String(), endpoint.ProjectID.String())); err != nil {
-			serverName := ""
-			if mcpServer.Name.Valid {
-				serverName = mcpServer.Name.String
-			}
-			return nil, fmt.Errorf("authorize MCP server access: %w", mcpaccess.ServerPermissionDenied(err, s.requestAccessURL(ctx, mcpServer.ID.String(), serverName)))
-		}
 	case mcpservers.VisibilityPublic:
 		// Public, no OAuth: optionally probe Gram identity if the
 		// caller supplied an Authorization or Gram-Chat-Session
@@ -568,7 +674,53 @@ func (s *Service) prepareProxyBackendContext(
 		return nil, oops.E(oops.CodeUnexpected, nil, "unrecognized mcp server visibility %q", mcpServer.Visibility).LogError(ctx, logger)
 	}
 
-	return ctx, nil
+	return s.authorizeProxyBackendAccess(ctx, logger, endpoint.ProjectID, mcpServer)
+}
+
+// authorizeProxyBackendAccess runs the visibility-scoped RBAC gate for a
+// proxied MCP backend after identity/AuthContext setup, shared by the
+// runtime dispatch path and consent-time tool enumeration.
+//
+// For private servers it prepares RBAC grants for both the issuer-gated and
+// non-issuer-gated paths: the proxy attaches the private-visibility
+// mcp:connect interceptors (tools/list filter, tools/call authz) regardless
+// of how the caller authenticated, and for RBAC-enforced callers those run
+// FindMatched / Require, which fail with ErrMissingGrants unless grants are
+// in context. Issuer-gated callers were authenticated by ApplyIssuerGate,
+// which stamps the principal but does not load grants, so without this they
+// hit that failure (AGE-2672). PrepareContext runs after identity auth has
+// stamped the auth context, and is a no-op for callers RBAC never enforces.
+//
+// Public servers bypass server-level RBAC by design; unknown visibility
+// fails closed.
+func (s *Service) authorizeProxyBackendAccess(
+	ctx context.Context,
+	logger *slog.Logger,
+	projectID uuid.UUID,
+	mcpServer *mcpserversrepo.McpServer,
+) (context.Context, error) {
+	switch mcpServer.Visibility {
+	case mcpservers.VisibilityPrivate:
+		var prepErr error
+		ctx, prepErr = s.authz.PrepareContext(ctx)
+		if prepErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, prepErr, "load access grants").LogError(ctx, logger)
+		}
+
+		// mcp:connect covers non-tool proxy methods; tool interceptors still enforce per-tool scopes.
+		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, mcpServer.ID.String(), projectID.String())); err != nil {
+			serverName := ""
+			if mcpServer.Name.Valid {
+				serverName = mcpServer.Name.String
+			}
+			return nil, fmt.Errorf("authorize MCP server access: %w", mcpaccess.ServerPermissionDenied(err, s.requestAccessURL(ctx, mcpServer.ID.String(), serverName)))
+		}
+		return ctx, nil
+	case mcpservers.VisibilityPublic:
+		return ctx, nil
+	default:
+		return nil, oops.E(oops.CodeUnexpected, nil, "unrecognized mcp server visibility %q", mcpServer.Visibility).LogError(ctx, logger)
+	}
 }
 
 func setProxyBackendProjectContext(ctx context.Context, authCtx *contextvalues.AuthContext, projectID uuid.UUID, projectSlug string) context.Context {
@@ -602,4 +754,25 @@ func (s *Service) setProxyBackendProjectContextIfOwner(ctx context.Context, logg
 	}
 
 	return setProxyBackendProjectContext(ctx, authCtx, project.ID, project.Slug), nil
+}
+
+// BuildResolvedMcpEndpointForMetaServer materialises a ResolvedMcpEndpoint
+// from a resolved (mcp_endpoint, meta_mcp_server) pair and verifies its
+// issuer FK is still live. Caller is responsible for first checking
+// metaServer.UserSessionIssuerID.Valid. Unlike the generic-server builder no
+// project lookup is needed: meta_mcp_servers carries the organization id
+// directly.
+func (s *Service) BuildResolvedMcpEndpointForMetaServer(
+	ctx context.Context,
+	logger *slog.Logger,
+	mcpEndpoint *mcpendpointsrepo.McpEndpoint,
+	metaServer *metamcprepo.MetaMcpServer,
+	mcpRouteBase string,
+) (*ResolvedMcpEndpoint, error) {
+	resolved := NewResolvedMcpEndpointFromMetaMcpServer(mcpEndpoint, metaServer, metaServer.OrganizationID, mcpRouteBase)
+	if err := s.RequireUserSessionIssuer(ctx, resolved); err != nil {
+		return nil, err
+	}
+	logger.DebugContext(ctx, "resolved meta mcp endpoint", attr.SlogMetaMcpServerID(metaServer.ID.String()))
+	return resolved, nil
 }

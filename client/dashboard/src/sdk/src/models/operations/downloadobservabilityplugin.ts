@@ -23,6 +23,7 @@ export const Platform = {
   Codex: "codex",
   Opencode: "opencode",
   Copilot: "copilot",
+  Openclaw: "openclaw",
 } as const;
 /**
  * Target platform.

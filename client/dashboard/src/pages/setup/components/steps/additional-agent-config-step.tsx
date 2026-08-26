@@ -8,6 +8,8 @@ import {
 } from "lucide-react";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
+import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
+import { AGENT_PROVIDERS } from "@/components/agent-providers/agent-providers";
 import {
   Sheet,
   SheetContent,
@@ -174,15 +176,16 @@ function ProviderComingSoonCard({
 }: {
   provider: AdditionalAgentConfigProvider;
 }): JSX.Element {
-  const Icon = provider.icon;
-
   return (
     <div
       aria-disabled
       className="border-border bg-card flex cursor-not-allowed items-center gap-3 border p-3 opacity-50"
     >
       <div className="bg-secondary flex h-8 w-8 flex-shrink-0 items-center justify-center">
-        <Icon className="text-foreground h-4 w-4" />
+        <AgentProviderIcon
+          source={AGENT_PROVIDERS[provider.providerId].iconSource}
+          className="text-foreground h-4 w-4"
+        />
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-foreground truncate text-sm font-medium">
@@ -209,8 +212,6 @@ function ProviderSetupRow({
 }): JSX.Element {
   const { data } = useAiIntegrationConfig({ provider: provider.provider });
   const isComplete = status === "complete" || Boolean(data?.id);
-  const Icon = provider.icon;
-
   useEffect(() => {
     if (data?.id) onConfigured(provider.provider);
   }, [data?.id, onConfigured, provider.provider]);
@@ -232,7 +233,10 @@ function ProviderSetupRow({
           isComplete ? "bg-foreground/10" : "bg-secondary",
         )}
       >
-        <Icon className="text-foreground h-5 w-5" />
+        <AgentProviderIcon
+          source={AGENT_PROVIDERS[provider.providerId].iconSource}
+          className="text-foreground h-5 w-5"
+        />
       </div>
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex items-center gap-2">

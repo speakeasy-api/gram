@@ -53,7 +53,7 @@ func TestUpdateConfigurationPersistsAndDeliversOnPluginPoll(t *testing.T) {
 	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, ti.orgID))
 	ctx = withPlatformAdmin(t, ctx)
 
-	beforePoll, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: "developer@example.com"})
+	beforePoll, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new("developer@example.com")})
 	require.NoError(t, err)
 	require.Nil(t, beforePoll.Configuration)
 
@@ -96,7 +96,7 @@ func TestUpdateConfigurationPersistsAndDeliversOnPluginPoll(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, updated, dashboardView)
 
-	afterPoll, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: "developer@example.com"})
+	afterPoll, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new("developer@example.com")})
 	require.NoError(t, err)
 	require.NotNil(t, afterPoll.Configuration)
 	require.Equal(t, updated, afterPoll.Configuration)

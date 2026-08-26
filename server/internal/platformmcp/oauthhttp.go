@@ -11,23 +11,29 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"log/slog"
 	"mime"
 	"net/http"
 	"net/url"
-	"slices"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/metric/noop"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
@@ -35,18 +41,43 @@ const (
 	platformOAuthChallengePrefix = "platformMCPChallenge:"
 	platformOAuthCodeLifetime    = 10 * time.Minute
 	platformAccessTokenLifetime  = time.Hour
-	platformRefreshTokenLifetime = 24 * time.Hour
+	platformRefreshTokenLifetime = 30 * 24 * time.Hour
 )
 
 //go:embed oauth_page.html
 var oauthPageHTML string
 
-var oauthPageTemplate = template.Must(template.New("platform-mcp-oauth-page").Parse(oauthPageHTML))
+var (
+	oauthPageTemplate      = template.Must(template.New("platform-mcp-oauth-page").Parse(oauthPageHTML))
+	errPlatformMCPDisabled = fmt.Errorf("platform mcp disabled: %w", ErrForbidden)
+
+	// supportedAuthMethods is the token_endpoint_auth_method set this
+	// authorization server accepts, advertised in its RFC 8414 metadata and
+	// enforced by RegisterHandler. Declared here rather than borrowed from
+	// usersessions, whose list belongs to the separate user-session
+	// authorization server: the two share RegistrationRequest but not a
+	// client store, a token endpoint, or a set of supported methods, so a
+	// method added there must be an explicit decision here.
+	//
+	// Every entry is either symmetric or public, which is what makes
+	// RegisterHandler's "mint a secret unless the method is none" rule
+	// correct. An asymmetric method would need a key source instead, and
+	// this endpoint has nowhere to record one.
+	supportedAuthMethods = []string{oauthwire.AuthMethodClientSecretBasic, oauthwire.AuthMethodClientSecretPost, oauthwire.AuthMethodNone}
+)
 
 type oauthPageData struct {
-	Title            string
-	Kind             string
+	Title string
+	Kind  string
+	// ClientName is attacker-chosen for any CIMD-resolved client: it comes
+	// from a document served at a URL the client picked. ClientIDOrigin is
+	// the trust anchor that name lacks — the host the document was fetched
+	// from, which the client cannot fake without controlling it — so the
+	// consent page shows both whenever a client arrived by CIMD. It is
+	// empty for dynamically registered clients, which have no origin to
+	// vouch for them at all.
 	ClientName       string
+	ClientIDOrigin   string
 	OrganizationName string
 	Organizations    []OrganizationOption
 	RedirectURI      string
@@ -105,6 +136,15 @@ type OAuthHTTP struct {
 	credentials   *CredentialCodec
 	issuer        string
 	audience      string
+	telemetry     OAuthTelemetry
+	now           func() time.Time
+	logger        *slog.Logger
+	// cimd resolves URL-shaped client_ids against their Client ID Metadata
+	// Documents. Nil disables inbound CIMD entirely: such a client_id then
+	// falls through to an ordinary registry lookup and is rejected as
+	// unknown, and the AS metadata stops advertising support.
+	cimd          clientMetadataResolver
+	cimdAdmission *admission.Metrics
 }
 
 type OAuthHTTPConfig struct {
@@ -118,6 +158,12 @@ type OAuthHTTPConfig struct {
 	Organizations OrganizationSelector
 	Signer        *sessiontokens.Signer
 	Encryption    *encryption.Client
+	Telemetry     OAuthTelemetry
+	Logger        *slog.Logger
+	// GuardianPolicy backs the CIMD document fetcher's SSRF protection.
+	// Nil leaves inbound CIMD disabled.
+	GuardianPolicy *guardian.Policy
+	MeterProvider  metric.MeterProvider
 }
 
 func NewOAuthHTTP(config OAuthHTTPConfig) (*OAuthHTTP, error) {
@@ -127,6 +173,20 @@ func NewOAuthHTTP(config OAuthHTTPConfig) (*OAuthHTTP, error) {
 	credentials, err := NewCredentialCodec(config.Encryption)
 	if err != nil {
 		return nil, err
+	}
+	logger := config.Logger
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
+	meterProvider := config.MeterProvider
+	if meterProvider == nil {
+		meterProvider = noop.NewMeterProvider()
+	}
+	// A nil guardian policy leaves resolver nil, which disables inbound
+	// CIMD rather than fetching documents through an unguarded client.
+	var resolver clientMetadataResolver
+	if config.GuardianPolicy != nil {
+		resolver = cimd.NewResolver(config.GuardianPolicy, meterProvider, logger)
 	}
 	baseURL := *config.BaseURL
 	issuer, err := url.JoinPath(baseURL.String(), "platform-mcp")
@@ -146,7 +206,19 @@ func NewOAuthHTTP(config OAuthHTTPConfig) (*OAuthHTTP, error) {
 		credentials:   credentials,
 		issuer:        issuer,
 		audience:      issuer,
+		telemetry:     config.Telemetry,
+		now:           time.Now,
+		logger:        logger,
+		cimd:          resolver,
+		cimdAdmission: admission.NewMetrics(meterProvider, logger),
 	}, nil
+}
+
+func (s *OAuthHTTP) oauthTelemetry() OAuthTelemetry {
+	if s.telemetry == nil {
+		return noopOAuthTelemetry{}
+	}
+	return s.telemetry
 }
 
 func (s *OAuthHTTP) Attach(mux interface {
@@ -178,7 +250,7 @@ func (s *OAuthHTTP) ProtectedResourceHandler() http.Handler {
 
 func (s *OAuthHTTP) AuthorizationServerHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]any{
+		metadata := map[string]any{
 			"issuer":                                s.issuer,
 			"authorization_endpoint":                s.url("authorize"),
 			"token_endpoint":                        s.url("token"),
@@ -186,9 +258,20 @@ func (s *OAuthHTTP) AuthorizationServerHandler() http.Handler {
 			"revocation_endpoint":                   s.url("revoke"),
 			"response_types_supported":              usersessions.SupportedResponseTypes,
 			"grant_types_supported":                 usersessions.SupportedGrantTypes,
-			"token_endpoint_auth_methods_supported": usersessions.SupportedAuthMethods,
+			"token_endpoint_auth_methods_supported": supportedAuthMethods,
 			"code_challenge_methods_supported":      usersessions.SupportedCodeChallengeMethods,
-		})
+		}
+		// Advertised only when a document can actually be resolved and the
+		// admission mode admits something, and omitted rather than sent as
+		// false otherwise: an absent member is how RFC 8414 metadata says
+		// "unsupported", and it is what the hosted authorization server
+		// emits. Advertising support while admitting nothing would route
+		// spec-compliant clients into a guaranteed-failure flow instead of
+		// letting them fall back to dynamic client registration.
+		if s.cimd != nil && platformCIMDAdmissionMode != admission.ModeDisabled {
+			metadata["client_id_metadata_document_supported"] = true
+		}
+		writeJSON(w, http.StatusOK, metadata)
 	})
 }
 
@@ -203,13 +286,13 @@ func (s *OAuthHTTP) RegisterHandler() http.Handler {
 			return
 		}
 		request.SetDefaults()
-		if err := request.Validate(); err != nil {
+		if err := request.Validate(supportedAuthMethods); err != nil {
 			writeRequestOAuthError(w, http.StatusBadRequest, err)
 			return
 		}
 		clientID := "client_" + uuid.NewString()
 		var secret, secretHash string
-		if request.TokenEndpointAuthMethod != "none" {
+		if request.TokenEndpointAuthMethod != oauthwire.AuthMethodNone {
 			var err error
 			secret, err = opaqueToken()
 			if err != nil {
@@ -248,8 +331,18 @@ func (s *OAuthHTTP) AuthorizeHandler() http.Handler {
 			writeRequestOAuthError(w, http.StatusBadRequest, err)
 			return
 		}
-		client, err := s.store.GetClient(r.Context(), request.ClientID)
-		if err != nil || !s.clientRedirectAllowed(client, request.RedirectURI) {
+		// URL-shaped client_ids resolve via CIMD here (admission-gated,
+		// inside the resolver). Every resolution failure renders inline per
+		// RFC 6749 §4.1.2.1 — the redirect_uri of an unresolved client
+		// cannot be trusted — and a document fetch failure aborts the
+		// request per draft-ietf-oauth-client-id-metadata-document-02 §5.1
+		// (fail closed, no stale fallback).
+		client, err := s.resolveClient(r.Context(), request.ClientID, resolveClientCIMD)
+		if err != nil {
+			s.writeClientResolutionError(w, r.Context(), request.ClientID, err)
+			return
+		}
+		if !clientRedirectAllowed(client, request.RedirectURI) {
 			writeOAuthError(w, http.StatusUnauthorized, "invalid_client", "unknown client_id or redirect_uri")
 			return
 		}
@@ -349,13 +442,16 @@ func (s *OAuthHTTP) organizationSelectionGet(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	client, err := s.store.GetClient(r.Context(), challenge.ClientID)
+	// Lookup only: authorize already resolved and persisted any CIMD row,
+	// and a mid-flow leg must keep working even if the document host has
+	// since become unreachable.
+	client, err := s.resolveClient(r.Context(), challenge.ClientID, lookupClientOnly)
 	if err != nil {
 		writeOAuthError(w, http.StatusUnauthorized, "invalid_client", "authorization client is unavailable")
 		return
 	}
 	s.renderOAuthPage(w, oauthPageData{
-		Title:         "Choose an organization · Speakeasy AICP Platform MCP",
+		Title:         "Choose an organization · Platform MCP",
 		Kind:          "organization",
 		ClientName:    client.Name,
 		Organizations: organizations,
@@ -428,7 +524,7 @@ func (s *OAuthHTTP) selectedOrganization(ctx context.Context, challenge oauthCha
 func (s *OAuthHTTP) ProviderSetupCompleteHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		s.renderOAuthPage(w, oauthPageData{
-			Title:     "Provider connected · Speakeasy AICP Platform MCP",
+			Title:     "Provider connected · Platform MCP",
 			Kind:      "provider-complete",
 			AutoClose: true,
 		})
@@ -455,7 +551,10 @@ func (s *OAuthHTTP) connectGet(w http.ResponseWriter, r *http.Request) {
 		writeOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization state is invalid or incomplete")
 		return
 	}
-	client, err := s.store.GetClient(r.Context(), challenge.ClientID)
+	// Lookup only: authorize already resolved and persisted any CIMD row,
+	// and a mid-flow leg must keep working even if the document host has
+	// since become unreachable.
+	client, err := s.resolveClient(r.Context(), challenge.ClientID, lookupClientOnly)
 	if err != nil {
 		writeOAuthError(w, http.StatusUnauthorized, "invalid_client", "authorization client is unavailable")
 		return
@@ -466,9 +565,10 @@ func (s *OAuthHTTP) connectGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.renderOAuthPage(w, oauthPageData{
-		Title:            "Connect Platform MCP · Speakeasy AICP Platform MCP",
+		Title:            "Connect Platform MCP",
 		Kind:             "connect",
 		ClientName:       client.Name,
+		ClientIDOrigin:   clientIDOrigin(client),
 		OrganizationName: organization.Name,
 		RedirectURI:      challenge.RedirectURI,
 		State:            challenge.ID,
@@ -477,6 +577,16 @@ func (s *OAuthHTTP) connectGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *OAuthHTTP) connectPost(w http.ResponseWriter, r *http.Request) {
+	recorded := &oauthResponseRecorder{ResponseWriter: w}
+	w = recorded
+	defer func() {
+		s.oauthTelemetry().Record(r.Context(), OAuthEvent{
+			Operation: "interactive_authorization",
+			Outcome:   recorded.outcome(),
+			Reason:    recorded.reason,
+		})
+	}()
+
 	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
 	if err := r.ParseForm(); err != nil {
 		writeOAuthError(w, http.StatusBadRequest, "invalid_request", "could not parse authorization")
@@ -492,6 +602,7 @@ func (s *OAuthHTTP) connectPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.PostForm.Get("action") != "approve" {
+		setOAuthTelemetryReason(w, "authorization_denied")
 		redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "user denied authorization"})
 		return
 	}
@@ -510,14 +621,16 @@ func (s *OAuthHTTP) connectPost(w http.ResponseWriter, r *http.Request) {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not complete authorization")
 		return
 	}
+	now := s.now()
 	_, err = s.store.AuthorizeConnection(r.Context(), platformoauth.AuthorizeConnectionInput{
 		Connection: platformoauth.Connection{
-			ID:             uuid.NewString(),
-			ClientID:       challenge.ClientID,
-			Subject:        challenge.Subject,
-			OrganizationID: challenge.OrganizationID,
-			Generation:     uuid.NewString(),
-			RevokedAt:      nil,
+			ID:                     uuid.NewString(),
+			ClientID:               challenge.ClientID,
+			Subject:                challenge.Subject,
+			OrganizationID:         challenge.OrganizationID,
+			Generation:             uuid.NewString(),
+			AuthorizationExpiresAt: now.Add(platformoauth.AuthorizationLifetime),
+			RevokedAt:              nil,
 		},
 		Grant: platformoauth.Grant{
 			Code:          code,
@@ -525,26 +638,36 @@ func (s *OAuthHTTP) connectPost(w http.ResponseWriter, r *http.Request) {
 			Connection:    platformoauth.Connection{},
 			RedirectURI:   challenge.RedirectURI,
 			CodeChallenge: challenge.CodeChallenge,
-			ExpiresAt:     time.Now().Add(platformOAuthCodeLifetime),
+			ExpiresAt:     now.Add(platformOAuthCodeLifetime),
 		},
-		Now: time.Now(),
+		Now: now,
 	})
 	if err != nil {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not complete authorization")
 		return
 	}
+	recorded.setOAuthOutcome("succeeded")
 	http.Redirect(w, r, redirectURL(challenge.RedirectURI, code, challenge.State, "", ""), http.StatusSeeOther)
 }
 
 func (s *OAuthHTTP) TokenHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		recorded := &oauthResponseRecorder{ResponseWriter: w}
+		w = recorded
 		r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
 		if err := r.ParseForm(); err != nil {
 			writeOAuthError(w, http.StatusBadRequest, "invalid_request", "could not parse token request")
 			return
 		}
+		operation, ok := tokenOperation(r.PostForm.Get("grant_type"))
+		if ok {
+			defer func() {
+				s.oauthTelemetry().Record(r.Context(), OAuthEvent{Operation: operation, Outcome: recorded.outcome(), Reason: recorded.reason})
+			}()
+		}
+		now := s.now()
 		clientID, clientSecret := clientCredentials(r)
-		client, err := s.authenticateClient(r.Context(), clientID, clientSecret)
+		client, err := s.authenticateClient(r.Context(), clientID, clientSecret, now)
 		if err != nil {
 			writeOAuthError(w, http.StatusUnauthorized, "invalid_client", "client authentication failed")
 			return
@@ -561,12 +684,13 @@ func (s *OAuthHTTP) TokenHandler() http.Handler {
 				writeOAuthError(w, http.StatusBadRequest, "invalid_grant", "authorization code is invalid")
 				return
 			}
-			grant, err := s.store.ConsumeGrant(r.Context(), platformoauth.ConsumeGrantInput{OrganizationID: organizationID, Code: request.Code, ClientID: client.ID, RedirectURI: request.RedirectURI, CodeVerifier: request.CodeVerifier, Now: time.Now()})
+			input := platformoauth.ConsumeGrantInput{OrganizationID: organizationID, Code: request.Code, ClientID: client.ID, RedirectURI: request.RedirectURI, CodeVerifier: request.CodeVerifier, Now: now}
+			grant, err := s.store.ValidateGrant(r.Context(), input)
 			if err != nil {
-				writeOAuthError(w, http.StatusBadRequest, "invalid_grant", "authorization code is invalid")
+				writeTokenStateError(w, err, "authorization code")
 				return
 			}
-			s.mintAndRespond(w, r, grant.Connection, client.ID)
+			s.mintAndExchangeGrant(w, r, input, grant, client.ID, now)
 		case "refresh_token":
 			request := usersessions.RefreshTokenRequestFromForm(r.PostForm)
 			if err := request.Validate(); err != nil {
@@ -579,14 +703,9 @@ func (s *OAuthHTTP) TokenHandler() http.Handler {
 				return
 			}
 			refreshHash := opaqueHash(request.RefreshToken)
-			old, err := s.store.GetSessionByRefreshHash(r.Context(), organizationID, refreshHash)
-			if err != nil || old.ClientID != client.ID {
-				writeOAuthError(w, http.StatusBadRequest, "invalid_grant", "refresh token is invalid")
-				return
-			}
-			reused, err := s.store.DetectRefreshReuse(r.Context(), organizationID, refreshHash, time.Now())
-			if err != nil || reused {
-				writeOAuthError(w, http.StatusBadRequest, "invalid_grant", "refresh token is invalid")
+			old, err := s.store.PrepareRefresh(r.Context(), platformoauth.PrepareRefreshInput{OrganizationID: organizationID, RefreshHash: refreshHash, ClientID: client.ID, Now: now})
+			if err != nil {
+				writeTokenStateError(w, err, "refresh token")
 				return
 			}
 			subject, err := urn.ParseSessionSubject(old.Connection.Subject)
@@ -595,10 +714,16 @@ func (s *OAuthHTTP) TokenHandler() http.Handler {
 				return
 			}
 			if err := s.gateAndAuthorize(r.Context(), Principal{UserID: subject.ID, OrganizationID: old.Connection.OrganizationID, ConnectionID: old.Connection.ID, Generation: old.Connection.Generation, ClientID: client.ID}); err != nil {
+				if errors.Is(err, ErrForbidden) && !errors.Is(err, errPlatformMCPDisabled) {
+					if markErr := s.store.MarkAuthorizationLost(r.Context(), old.Connection.OrganizationID, old.Connection.ID, old.Connection.Generation, now); markErr != nil {
+						writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "organization access change could not be recorded")
+						return
+					}
+				}
 				writeTokenGateError(w, err)
 				return
 			}
-			s.mintReplacementAndRespond(w, r, old, client.ID)
+			s.mintReplacementAndRespond(w, r, old, client.ID, now)
 		default:
 			writeOAuthError(w, http.StatusBadRequest, "unsupported_grant_type", "unsupported grant_type")
 		}
@@ -610,7 +735,7 @@ func (s *OAuthHTTP) RevokeHandler() http.Handler {
 		r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
 		if r.ParseForm() == nil {
 			clientID, secret := clientCredentials(r)
-			if client, err := s.authenticateClient(r.Context(), clientID, secret); err == nil {
+			if client, err := s.authenticateClient(r.Context(), clientID, secret, s.now()); err == nil {
 				token := r.PostForm.Get("token")
 				switch r.PostForm.Get("token_type_hint") {
 				case "access_token":
@@ -643,7 +768,8 @@ func (s *OAuthHTTP) revokeAccessToken(ctx context.Context, token, clientID strin
 	_, _ = s.store.RevokeAccessSession(ctx, organizationID, jti, clientID, time.Now())
 }
 
-func (s *OAuthHTTP) mintAndRespond(w http.ResponseWriter, r *http.Request, connection platformoauth.Connection, clientID string) {
+func (s *OAuthHTTP) mintAndExchangeGrant(w http.ResponseWriter, r *http.Request, input platformoauth.ConsumeGrantInput, grant platformoauth.Grant, clientID string, now time.Time) {
+	connection := grant.Connection
 	subject, err := urn.ParseSessionSubject(connection.Subject)
 	if err != nil || subject.Kind != urn.SessionSubjectKindUser {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not mint token")
@@ -659,7 +785,9 @@ func (s *OAuthHTTP) mintAndRespond(w http.ResponseWriter, r *http.Request, conne
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not mint token")
 		return
 	}
-	accessToken, jti, err := s.signer.Mint(sessiontokens.MintParams{Subject: subject, Audience: s.audience, Issuer: s.issuer, Lifetime: platformAccessTokenLifetime, ClientID: clientID, JTI: jti})
+	accessExpiresAt := minTime(now.Add(platformAccessTokenLifetime), connection.AuthorizationExpiresAt)
+	refreshExpiresAt := minTime(now.Add(platformRefreshTokenLifetime), connection.AuthorizationExpiresAt)
+	accessToken, jti, err := s.signer.Mint(sessiontokens.MintParams{Subject: subject, Audience: s.audience, Issuer: s.issuer, ExpiresAt: &accessExpiresAt, ClientID: clientID, JTI: jti})
 	if err != nil {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not mint token")
 		return
@@ -669,14 +797,15 @@ func (s *OAuthHTTP) mintAndRespond(w http.ResponseWriter, r *http.Request, conne
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not mint token")
 		return
 	}
-	if err := s.store.CreateSession(r.Context(), platformoauth.Session{ID: uuid.NewString(), ClientID: clientID, Connection: connection, JTI: jti, RefreshHash: opaqueHash(refreshToken), ExpiresAt: time.Now().Add(platformAccessTokenLifetime), RefreshExpiresAt: time.Now().Add(platformRefreshTokenLifetime), RevokedAt: nil}); err != nil {
-		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not mint token")
+	session := platformoauth.Session{ID: uuid.NewString(), ClientID: clientID, Connection: connection, JTI: jti, RefreshHash: opaqueHash(refreshToken), ExpiresAt: accessExpiresAt, RefreshExpiresAt: refreshExpiresAt, RevokedAt: nil}
+	if _, err := s.store.ExchangeGrant(r.Context(), platformoauth.ExchangeGrantInput{ConsumeGrantInput: input, Session: session}); err != nil {
+		writeTokenStateError(w, err, "authorization code")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"access_token": accessToken, "token_type": "Bearer", "expires_in": int64(platformAccessTokenLifetime.Seconds()), "refresh_token": refreshToken})
+	writeJSON(w, http.StatusOK, map[string]any{"access_token": accessToken, "token_type": "Bearer", "expires_in": int64(accessExpiresAt.Sub(now).Seconds()), "refresh_token": refreshToken})
 }
 
-func (s *OAuthHTTP) mintReplacementAndRespond(w http.ResponseWriter, r *http.Request, old platformoauth.Session, clientID string) {
+func (s *OAuthHTTP) mintReplacementAndRespond(w http.ResponseWriter, r *http.Request, old platformoauth.Session, clientID string, now time.Time) {
 	subject, err := urn.ParseSessionSubject(old.Connection.Subject)
 	if err != nil {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not mint token")
@@ -687,7 +816,9 @@ func (s *OAuthHTTP) mintReplacementAndRespond(w http.ResponseWriter, r *http.Req
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not mint token")
 		return
 	}
-	accessToken, jti, err := s.signer.Mint(sessiontokens.MintParams{Subject: subject, Audience: s.audience, Issuer: s.issuer, Lifetime: platformAccessTokenLifetime, ClientID: clientID, JTI: jti})
+	accessExpiresAt := minTime(now.Add(platformAccessTokenLifetime), old.Connection.AuthorizationExpiresAt)
+	refreshExpiresAt := minTime(now.Add(platformRefreshTokenLifetime), old.Connection.AuthorizationExpiresAt)
+	accessToken, jti, err := s.signer.Mint(sessiontokens.MintParams{Subject: subject, Audience: s.audience, Issuer: s.issuer, ExpiresAt: &accessExpiresAt, ClientID: clientID, JTI: jti})
 	if err != nil {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not mint token")
 		return
@@ -697,16 +828,17 @@ func (s *OAuthHTTP) mintReplacementAndRespond(w http.ResponseWriter, r *http.Req
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not mint token")
 		return
 	}
-	now := time.Now()
-	replacement := platformoauth.Session{ID: uuid.NewString(), ClientID: clientID, Connection: old.Connection, JTI: jti, RefreshHash: opaqueHash(refreshToken), ExpiresAt: now.Add(platformAccessTokenLifetime), RefreshExpiresAt: now.Add(platformRefreshTokenLifetime), RevokedAt: nil}
+	replacement := platformoauth.Session{ID: uuid.NewString(), ClientID: clientID, Connection: old.Connection, JTI: jti, RefreshHash: opaqueHash(refreshToken), ExpiresAt: accessExpiresAt, RefreshExpiresAt: refreshExpiresAt, RevokedAt: nil}
 	if _, err := s.store.RotateSession(r.Context(), platformoauth.RotateSessionInput{OrganizationID: old.Connection.OrganizationID, RefreshHash: old.RefreshHash, ClientID: clientID, Generation: old.Connection.Generation, Now: now, Replacement: replacement}); err != nil {
-		writeOAuthError(w, http.StatusBadRequest, "invalid_grant", "refresh token is invalid")
+		writeTokenStateError(w, err, "refresh token")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"access_token": accessToken, "token_type": "Bearer", "expires_in": int64(platformAccessTokenLifetime.Seconds()), "refresh_token": refreshToken})
+	generationAuthorizedAt := old.Connection.AuthorizationExpiresAt.Add(-platformoauth.AuthorizationLifetime)
+	s.oauthTelemetry().RecordRefreshSuccess(r.Context(), s.now().Sub(now), now.Sub(generationAuthorizedAt))
+	writeJSON(w, http.StatusOK, map[string]any{"access_token": accessToken, "token_type": "Bearer", "expires_in": int64(accessExpiresAt.Sub(now).Seconds()), "refresh_token": refreshToken})
 }
 
-func (s *OAuthHTTP) authenticateClient(ctx context.Context, clientID, secret string) (platformoauth.Client, error) {
+func (s *OAuthHTTP) authenticateClient(ctx context.Context, clientID, secret string, now time.Time) (platformoauth.Client, error) {
 	if clientID == "" {
 		return platformoauth.Client{}, platformoauth.ErrNotFound
 	}
@@ -714,7 +846,7 @@ func (s *OAuthHTTP) authenticateClient(ctx context.Context, clientID, secret str
 	if err != nil {
 		return platformoauth.Client{}, fmt.Errorf("get platform oauth client: %w", err)
 	}
-	if client.SecretExpiresAt != nil && time.Now().After(*client.SecretExpiresAt) {
+	if client.SecretExpiresAt != nil && !now.Before(*client.SecretExpiresAt) {
 		return platformoauth.Client{}, platformoauth.ErrExpired
 	}
 	if client.SecretHash == "" {
@@ -729,13 +861,20 @@ func (s *OAuthHTTP) authenticateClient(ctx context.Context, clientID, secret str
 	return client, nil
 }
 
+func minTime(a, b time.Time) time.Time {
+	if a.Before(b) {
+		return a
+	}
+	return b
+}
+
 func (s *OAuthHTTP) gateAndAuthorize(ctx context.Context, principal Principal) error {
 	enabled, err := s.gate.Enabled(ctx, principal.OrganizationID)
 	if err != nil {
 		return fmt.Errorf("check platform mcp feature gate: %w: %w", ErrUnavailable, err)
 	}
 	if !enabled {
-		return ErrForbidden
+		return errPlatformMCPDisabled
 	}
 	if err := s.authorizer.RequireLiveOrgAdmin(ctx, principal); err != nil {
 		if isAuthorizationDenied(err) {
@@ -747,6 +886,7 @@ func (s *OAuthHTTP) gateAndAuthorize(ctx context.Context, principal Principal) e
 }
 
 func writeAuthorizationGateError(w http.ResponseWriter, r *http.Request, challenge oauthChallenge, err error) {
+	setOAuthTelemetryReason(w, oauthGateReason(err))
 	if errors.Is(err, ErrUnavailable) {
 		redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "temporarily_unavailable", Description: "organization access could not be verified"})
 		return
@@ -754,7 +894,110 @@ func writeAuthorizationGateError(w http.ResponseWriter, r *http.Request, challen
 	redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "organization access is not available"})
 }
 
+func writeTokenStateError(w http.ResponseWriter, err error, credential string) {
+	setOAuthTelemetryReason(w, oauthStateFailureReason(err))
+	switch {
+	case errors.Is(err, platformoauth.ErrNotFound), errors.Is(err, platformoauth.ErrRevoked), errors.Is(err, platformoauth.ErrExpired), errors.Is(err, platformoauth.ErrAlreadyUsed), errors.Is(err, platformoauth.ErrClientMismatch), errors.Is(err, platformoauth.ErrGeneration), errors.Is(err, platformoauth.ErrRedirectURI), errors.Is(err, platformoauth.ErrPKCE):
+		writeOAuthError(w, http.StatusBadRequest, "invalid_grant", credential+" is invalid")
+	default:
+		writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "token exchange could not be completed")
+	}
+}
+
+func tokenOperation(grantType string) (string, bool) {
+	switch grantType {
+	case "authorization_code":
+		return "code_exchange", true
+	case "refresh_token":
+		return "refresh", true
+	default:
+		return "", false
+	}
+}
+
+type oauthResponseRecorder struct {
+	http.ResponseWriter
+	status       int
+	oauthOutcome string
+	reason       string
+}
+
+func (w *oauthResponseRecorder) WriteHeader(status int) {
+	if w.status == 0 {
+		w.status = status
+	}
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w *oauthResponseRecorder) Write(body []byte) (int, error) {
+	if w.status == 0 {
+		w.status = http.StatusOK
+	}
+	written, err := w.ResponseWriter.Write(body)
+	if err != nil {
+		return written, fmt.Errorf("write OAuth response: %w", err)
+	}
+	return written, nil
+}
+
+func (w *oauthResponseRecorder) outcome() string {
+	if validOAuthOutcome(w.oauthOutcome) {
+		return w.oauthOutcome
+	}
+	if w.status >= http.StatusOK && w.status < http.StatusMultipleChoices {
+		return "succeeded"
+	}
+	return "server_error"
+}
+
+func (w *oauthResponseRecorder) setOAuthOutcome(outcome string) {
+	if validOAuthOutcome(outcome) {
+		w.oauthOutcome = outcome
+	}
+}
+
+func (w *oauthResponseRecorder) setOAuthReason(reason string) {
+	if validOAuthReason(reason) {
+		w.reason = reason
+	}
+}
+
+func setOAuthTelemetryOutcome(w http.ResponseWriter, outcome string) {
+	if recorder, ok := w.(*oauthResponseRecorder); ok {
+		recorder.setOAuthOutcome(outcome)
+	}
+}
+
+func setOAuthTelemetryReason(w http.ResponseWriter, reason string) {
+	if recorder, ok := w.(*oauthResponseRecorder); ok {
+		recorder.setOAuthReason(reason)
+	}
+}
+
+func validOAuthOutcome(outcome string) bool {
+	switch outcome {
+	case "succeeded", "invalid_grant", "access_denied", "temporarily_unavailable", "invalid_client", "invalid_request", "server_error", "unsupported_grant_type":
+		return true
+	default:
+		return false
+	}
+}
+
+func oauthGateReason(err error) string {
+	if errors.Is(err, errPlatformMCPDisabled) {
+		return "platform_disabled"
+	}
+	if errors.Is(err, ErrForbidden) {
+		return "authorization_denied"
+	}
+	if errors.Is(err, ErrUnavailable) {
+		return "authorization_unavailable"
+	}
+	return ""
+}
+
 func writeTokenGateError(w http.ResponseWriter, err error) {
+	setOAuthTelemetryReason(w, oauthGateReason(err))
 	if errors.Is(err, ErrUnavailable) {
 		writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "organization access could not be verified")
 		return
@@ -784,8 +1027,34 @@ func (s *OAuthHTTP) url(segment string) string {
 	return s.issuer + "/" + segment
 }
 
-func (s *OAuthHTTP) clientRedirectAllowed(client platformoauth.Client, redirectURI string) bool {
-	return slices.Contains(client.RedirectURIs, redirectURI)
+// writeClientResolutionError maps the resolveClient error contract onto the
+// wire. Called before any redirect_uri is trusted, so every case renders
+// inline rather than redirecting (RFC 6749 §4.1.2.1).
+func (s *OAuthHTTP) writeClientResolutionError(w http.ResponseWriter, ctx context.Context, clientID string, err error) {
+	if admissionErr, ok := errors.AsType[*admission.DenialError](err); ok {
+		// Policy, not a spec violation, and it carries its own actionable
+		// description. Already logged inside admitCIMDClient.
+		writeOAuthError(w, http.StatusUnauthorized, "invalid_client", admissionErr.Description())
+		return
+	}
+	if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
+		writeOAuthError(w, http.StatusBadRequest, oauthErr.Code, oauthErr.Description)
+		return
+	}
+	if errors.Is(err, errCIMDFetchFailed) {
+		// The cause may name internal network conditions (SSRF denials, DNS
+		// failures); log it and keep the wire response generic. A fetch
+		// failure is transient from the client's perspective, so signal
+		// retry-later rather than a permanent invalid_client that would make
+		// SDKs stop retrying.
+		s.logger.InfoContext(ctx, "cimd document fetch failed",
+			attr.SlogOAuthClientID(truncateClientIDForLog(clientID)),
+			attr.SlogError(err),
+		)
+		writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "failed to fetch client metadata document")
+		return
+	}
+	writeOAuthError(w, http.StatusUnauthorized, "invalid_client", "unknown client_id")
 }
 
 func clientCredentials(r *http.Request) (string, string) {
@@ -847,6 +1116,7 @@ func oauthPageContentSecurityPolicy(redirectURI, scriptNonce string) string {
 }
 
 func writeOAuthError(w http.ResponseWriter, status int, code, description string) {
+	setOAuthTelemetryOutcome(w, code)
 	writeJSON(w, status, map[string]string{"error": code, "error_description": description})
 }
 
@@ -864,6 +1134,7 @@ func redirectOAuthError(w http.ResponseWriter, r *http.Request, redirectURI, sta
 	if !errors.As(err, &oauthError) {
 		oauthError = &oauthwire.Error{Code: "invalid_request", Description: "invalid request"}
 	}
+	setOAuthTelemetryOutcome(w, oauthError.Code)
 	http.Redirect(w, r, redirectURL(redirectURI, "", state, oauthError.Code, oauthError.Description), http.StatusFound)
 }
 

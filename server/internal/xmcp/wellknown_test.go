@@ -28,10 +28,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 )
 
 // runWellKnown invokes the supplied xmcp well-known handler with the chi
@@ -472,11 +472,11 @@ func TestHandleWellKnownOAuthProtectedResourceMetadata_IssuerGatedRemoteBackend_
 	require.Equal(t, []any{expectedResource}, authServers)
 }
 
-// TestHandleWellKnownOAuthServerMetadata_IssuerGated_CIMDFlagOn verifies the
-// /x/mcp well-known variant advertises client_id_metadata_document_supported
-// when the issuer organization's gram-user-session-cimd flag is on — the
-// shared mcp.ServeGetAuthorizationServer emits it for both route families.
-func TestHandleWellKnownOAuthServerMetadata_IssuerGated_CIMDFlagOn(t *testing.T) {
+// TestHandleWellKnownOAuthServerMetadata_IssuerGated_CIMDAdvertised verifies
+// the /x/mcp well-known variant advertises
+// client_id_metadata_document_supported — the shared
+// mcp.ServeGetAuthorizationServer emits it for both route families.
+func TestHandleWellKnownOAuthServerMetadata_IssuerGated_CIMDAdvertised(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -484,7 +484,6 @@ func TestHandleWellKnownOAuthServerMetadata_IssuerGated_CIMDFlagOn(t *testing.T)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	ti.features.SetFlag(feature.FlagUserSessionCIMD, authCtx.ActiveOrganizationID, true)
 	slug, _, _ := seedIssuerGatedRemoteMCPEndpoint(t, ctx, ti, *authCtx.ProjectID, "https://upstream.invalid/mcp", "public")
 
 	w, err := runWellKnown(t, ctx, ti.service.HandleWellKnownOAuthServerMetadata, "/.well-known/oauth-authorization-server/x/mcp/"+slug, slug)
@@ -496,9 +495,10 @@ func TestHandleWellKnownOAuthServerMetadata_IssuerGated_CIMDFlagOn(t *testing.T)
 	require.Equal(t, true, metadata["client_id_metadata_document_supported"])
 }
 
-// TestHandleWellKnownOAuthServerMetadata_IssuerGated_CIMDFlagOff pins the
-// omit-when-disabled behavior on the /x/mcp variant.
-func TestHandleWellKnownOAuthServerMetadata_IssuerGated_CIMDFlagOff(t *testing.T) {
+// TestHandleWellKnownOAuthServerMetadata_IssuerGated_CIMDDisabledOmitted pins
+// the omit-when-disabled behavior on the /x/mcp variant: an issuer whose
+// admission mode is `disabled` must not advertise CIMD support.
+func TestHandleWellKnownOAuthServerMetadata_IssuerGated_CIMDDisabledOmitted(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -506,7 +506,14 @@ func TestHandleWellKnownOAuthServerMetadata_IssuerGated_CIMDFlagOff(t *testing.T
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	slug, _, _ := seedIssuerGatedRemoteMCPEndpoint(t, ctx, ti, *authCtx.ProjectID, "https://upstream.invalid/mcp", "public")
+	slug, _, issuerID := seedIssuerGatedRemoteMCPEndpoint(t, ctx, ti, *authCtx.ProjectID, "https://upstream.invalid/mcp", "public")
+
+	err := testrepo.New(ti.conn).SetUserSessionIssuerCIMDAdmissionMode(ctx, testrepo.SetUserSessionIssuerCIMDAdmissionModeParams{
+		ClientIDMetadataAdmissionMode: conv.ToPGText(string(admission.ModeDisabled)),
+		ID:                            issuerID,
+		ProjectID:                     *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
 
 	w, err := runWellKnown(t, ctx, ti.service.HandleWellKnownOAuthServerMetadata, "/.well-known/oauth-authorization-server/x/mcp/"+slug, slug)
 	require.NoError(t, err)

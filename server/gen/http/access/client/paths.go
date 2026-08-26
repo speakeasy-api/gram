@@ -72,24 +72,9 @@ func ListShadowMCPInventoryUsersAccessPath() string {
 	return "/rpc/access.listShadowMCPInventoryUsers"
 }
 
-// UpsertShadowMCPInventoryPolicyBypassAccessPath returns the URL path to the access service upsertShadowMCPInventoryPolicyBypass HTTP endpoint.
-func UpsertShadowMCPInventoryPolicyBypassAccessPath() string {
-	return "/rpc/access.upsertShadowMCPInventoryPolicyBypass"
-}
-
-// DeleteShadowMCPInventoryPolicyBypassAccessPath returns the URL path to the access service deleteShadowMCPInventoryPolicyBypass HTTP endpoint.
-func DeleteShadowMCPInventoryPolicyBypassAccessPath() string {
-	return "/rpc/access.deleteShadowMCPInventoryPolicyBypass"
-}
-
-// BlockShadowMCPInventoryServerAccessPath returns the URL path to the access service blockShadowMCPInventoryServer HTTP endpoint.
-func BlockShadowMCPInventoryServerAccessPath() string {
-	return "/rpc/access.blockShadowMCPInventoryServer"
-}
-
-// UnblockShadowMCPInventoryServerAccessPath returns the URL path to the access service unblockShadowMCPInventoryServer HTTP endpoint.
-func UnblockShadowMCPInventoryServerAccessPath() string {
-	return "/rpc/access.unblockShadowMCPInventoryServer"
+// ListShadowMCPInventoryServersForUserAccessPath returns the URL path to the access service listShadowMCPInventoryServersForUser HTTP endpoint.
+func ListShadowMCPInventoryServersForUserAccessPath() string {
+	return "/rpc/access.listShadowMCPInventoryServersForUser"
 }
 
 // ResolveShadowMCPInventoryRequestAccessPath returns the URL path to the access service resolveShadowMCPInventoryRequest HTTP endpoint.

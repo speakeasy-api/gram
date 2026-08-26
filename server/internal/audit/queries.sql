@@ -13,7 +13,9 @@ INSERT INTO audit_logs (
   subject_slug,
   before_snapshot,
   after_snapshot,
-  metadata
+  metadata,
+  acting_surface,
+  acting_client_id
 ) VALUES (
   @organization_id,
   @project_id,
@@ -28,9 +30,40 @@ INSERT INTO audit_logs (
   @subject_slug,
   @before_snapshot,
   @after_snapshot,
-  @metadata
+  @metadata,
+  @acting_surface,
+  @acting_client_id
 )
 RETURNING id, organization_id;
+
+-- name: HasOpenRouterSpendCapAuditOperation :one
+SELECT EXISTS (
+  SELECT 1
+  FROM audit_logs
+  WHERE organization_id = @organization_id
+    AND project_id IS NULL
+    AND action = 'openrouter-key:set_spend_cap'
+    AND subject_id = @subject_id
+    AND metadata->>'operation_id' = @operation_id::text
+) AS recorded;
+
+-- name: GetLatestOpenRouterSpendCapAuditOperation :one
+SELECT
+  COALESCE(latest.operation_id, '')::text AS operation_id,
+  COALESCE(latest.monthly_credits, 0)::bigint AS monthly_credits
+FROM (VALUES (1)) AS singleton(value)
+LEFT JOIN LATERAL (
+  SELECT
+    metadata->>'operation_id' AS operation_id,
+    (after_snapshot->>'monthly_credits')::bigint AS monthly_credits
+  FROM audit_logs
+  WHERE organization_id = @organization_id
+    AND project_id IS NULL
+    AND action = 'openrouter-key:set_spend_cap'
+    AND subject_id = @subject_id
+  ORDER BY seq DESC
+  LIMIT 1
+) AS latest ON TRUE;
 
 -- name: ListAuditLogs :many
 -- When no subject_type filter is given, assistant activity events (one per
@@ -63,6 +96,19 @@ WHERE a.organization_id = @organization_id
   AND (
     sqlc.narg(subject_id)::text IS NULL
     OR a.subject_id = sqlc.narg(subject_id)::text
+  )
+  -- An empty or absent list is no filter, so a caller composing filters can
+  -- always send the parameter.
+  AND (
+    coalesce(cardinality(sqlc.narg(subject_ids)::text[]), 0) = 0
+    OR a.subject_id = ANY(sqlc.narg(subject_ids)::text[])
+  )
+  -- A row written before attribution existed has no surface. Coalescing here
+  -- means filtering for 'unknown' finds those rows too, instead of returning
+  -- nothing and implying the organization has no unattributed history.
+  AND (
+    sqlc.narg(acting_surface)::text IS NULL
+    OR COALESCE(a.acting_surface, 'unknown') = sqlc.narg(acting_surface)::text
   )
 ORDER BY a.seq DESC
 LIMIT 51;
@@ -105,6 +151,29 @@ SELECT
 FROM actor_counts
 LEFT JOIN latest_actor_names ON latest_actor_names.actor_id = actor_counts.actor_id
 ORDER BY actor_counts.count DESC, actor_counts.actor_id ASC;
+
+-- name: ListAuditSurfaceFacets :many
+-- Assistant activity events are excluded: facets power the platform audit
+-- feed, which hides them (see ListAuditLogs).
+-- Rows predating attribution have no surface and are counted as 'unknown',
+-- so the facet totals reconcile with the unfiltered feed rather than silently
+-- omitting an organization's older history.
+SELECT
+  COALESCE(acting_surface, 'unknown')::text AS value,
+  COALESCE(acting_surface, 'unknown')::text AS display_name,
+  COUNT(*)::bigint AS count
+FROM audit_logs
+WHERE organization_id = @organization_id
+  AND subject_type <> 'assistant'
+  AND (
+    sqlc.narg(project_id)::uuid IS NULL
+    OR project_id = sqlc.narg(project_id)::uuid
+  )
+-- Group on the coalesced value, not the column: an organization can hold both
+-- nulls from before attribution and rows the application wrote as 'unknown',
+-- and grouping on the raw column would return two facets with the same label.
+GROUP BY COALESCE(acting_surface, 'unknown')
+ORDER BY count DESC, COALESCE(acting_surface, 'unknown') ASC;
 
 -- name: ListAuditActionFacets :many
 -- Assistant activity events are excluded: facets power the platform audit

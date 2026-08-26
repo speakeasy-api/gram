@@ -157,6 +157,50 @@ func skillVersionDimensionValuesExpr(groupBy string) string {
 	return "map(" + strings.Join(parts, ", ") + ") AS dimension_values"
 }
 
+func partitionSkillVersionFilters(filters []AttributeMetricsFilter) ([][]string, []AttributeMetricsFilter) {
+	versionFilters := make([][]string, 0, len(filters))
+	sessionFilters := make([]AttributeMetricsFilter, 0, len(filters))
+	for _, filter := range filters {
+		if filter.Dimension != skillVersionDimension {
+			sessionFilters = append(sessionFilters, filter)
+			continue
+		}
+		if len(filter.Values) > 0 {
+			versionFilters = append(versionFilters, filter.Values)
+		}
+	}
+	return versionFilters, sessionFilters
+}
+
+func skillVersionMappingRows(projectIDs []string, versionFilters [][]string) squirrel.SelectBuilder {
+	rows := sq.Select().
+		From("skill_session_versions").
+		Where(squirrel.Eq{"project_id": projectIDs})
+	if len(versionFilters) == 0 {
+		return rows
+	}
+
+	relevantValues := make(map[string]struct{})
+	for _, values := range versionFilters {
+		for _, value := range values {
+			relevantValues[value] = struct{}{}
+		}
+	}
+	values := make([]string, 0, len(relevantValues))
+	for value := range relevantValues {
+		values = append(values, value)
+	}
+	sort.Strings(values)
+	return rows.Where(squirrel.Eq{"toString(skill_version_id)": values})
+}
+
+func requireSkillVersionFilters(builder squirrel.SelectBuilder, versionFilters [][]string) squirrel.SelectBuilder {
+	for _, values := range versionFilters {
+		builder = builder.Having("hasAny(groupUniqArray(toString(skill_version_id)), ?)", values)
+	}
+	return builder
+}
+
 func buildSkillVersionMetricsQuery(arg AttributeMetricsQueryParams, timeseries bool) (string, []any, error) {
 	if !attributeMeasureSet[arg.SortBy] {
 		return "", nil, fmt.Errorf("unknown sort_by measure %q", arg.SortBy)
@@ -165,84 +209,52 @@ func buildSkillVersionMetricsQuery(arg AttributeMetricsQueryParams, timeseries b
 		return "", nil, fmt.Errorf("sort_by measure %q is not supported for skill version grouping", arg.SortBy)
 	}
 
-	sessionBuilder := sq.Select(
-		"gram_project_id AS project_id",
-		"chat_id AS session_id",
-		// Surface stays in the join key: assistant completion URNs map to
-		// assistant, while every admitted dev-agent telemetry row maps to dev.
-		"if("+skillVersionAssistantUsagePredicate+", 'assistant', 'dev') AS surface",
-		"min(time_unix_nano) AS session_time_unix_nano",
-		"countIf("+skillVersionUsageMeasureFilter+") > 0 AS s_has_usage",
-	).
-		Columns(skillVersionSessionMeasureSelects...).
-		Columns(skillVersionSessionSelects()...).
-		From("telemetry_logs").
-		Where(squirrel.Eq{"gram_project_id": arg.ProjectIDs}).
-		Where("time_unix_nano >= ?", arg.TimeStart).
-		Where("time_unix_nano <= ?", arg.TimeEnd).
-		Where(skillVersionSourceRowPredicate).
-		Where("chat_id != ''")
-
-	var skillVersionFilterSets [][]string
-	existingFilters := make([]AttributeMetricsFilter, 0, len(arg.Filters))
-	for _, filter := range arg.Filters {
-		if filter.Dimension == skillVersionDimension {
-			if len(filter.Values) > 0 {
-				skillVersionFilterSets = append(skillVersionFilterSets, filter.Values)
-			}
-			continue
-		}
-		existingFilters = append(existingFilters, filter)
-	}
-	var err error
-	sessionBuilder, err = applySessionFilters(sessionBuilder, existingFilters)
-	if err != nil {
-		return "", nil, err
-	}
-	sessionBuilder = sessionBuilder.GroupBy("gram_project_id", "chat_id", "surface")
-	sessionSQL, sessionArgs, err := sessionBuilder.ToSql()
-	if err != nil {
-		return "", nil, fmt.Errorf("building skill version session query: %w", err)
-	}
-
-	mappingBuilder := sq.Select(
+	versionFilters, sessionFilters := partitionSkillVersionFilters(arg.Filters)
+	mappingRows := skillVersionMappingRows(arg.ProjectIDs, versionFilters)
+	mappings := mappingRows.Columns(
 		"project_id",
 		"session_id",
 		"surface",
 		"groupUniqArray(toString(skill_version_id)) AS skill_versions",
 	).
-		From("skill_session_versions").
-		Where(squirrel.Eq{"project_id": arg.ProjectIDs})
-	if len(skillVersionFilterSets) > 0 {
-		relevantValues := make(map[string]struct{})
-		for _, values := range skillVersionFilterSets {
-			for _, value := range values {
-				relevantValues[value] = struct{}{}
-			}
-			mappingBuilder = mappingBuilder.Having("hasAny(groupUniqArray(toString(skill_version_id)), ?)", values)
-		}
-		values := make([]string, 0, len(relevantValues))
-		for value := range relevantValues {
-			values = append(values, value)
-		}
-		sort.Strings(values)
-		mappingBuilder = mappingBuilder.Where(squirrel.Eq{"toString(skill_version_id)": values})
-	}
-	mappingBuilder = mappingBuilder.GroupBy("project_id", "session_id", "surface")
-	mappingSQL, mappingArgs, err := mappingBuilder.ToSql()
+		GroupBy("project_id", "session_id", "surface")
+	mappings = requireSkillVersionFilters(mappings, versionFilters)
+
+	mappedSessions := mappingRows.
+		Column("session_id").
+		GroupBy("project_id", "session_id", "surface")
+	mappedSessions = requireSkillVersionFilters(mappedSessions, versionFilters)
+
+	sessions := mappedSkillTelemetryQuery(arg.ProjectIDs, arg.TimeStart, arg.TimeEnd, mappedSessions).
+		Columns(
+			"gram_project_id AS project_id",
+			"chat_id AS session_id",
+			// Surface stays in the join key: assistant completion URNs map to
+			// assistant, while every admitted dev-agent telemetry row maps to dev.
+			"if("+skillVersionAssistantUsagePredicate+", 'assistant', 'dev') AS surface",
+			"min(time_unix_nano) AS session_time_unix_nano",
+			"countIf("+skillVersionUsageMeasureFilter+") > 0 AS s_has_usage",
+		).
+		Columns(skillVersionSessionMeasureSelects...).
+		Columns(skillVersionSessionSelects()...).
+		GroupBy("gram_project_id", "chat_id", "surface")
+	var err error
+	sessions, err = applySessionFilters(sessions, sessionFilters, canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg))
 	if err != nil {
-		return "", nil, fmt.Errorf("building skill version mapping query: %w", err)
+		return "", nil, err
 	}
 
 	groupExpr, grouped, err := skillVersionGroupExpr(arg.GroupBy)
 	if err != nil {
 		return "", nil, err
 	}
-	outer := sq.Select(groupExpr+" AS group_value").
+	outer := sq.Select(groupExpr + " AS group_value").
 		Columns(skillVersionMeasureSelects...).
 		From("sessions").
 		Join("mappings USING (project_id, session_id, surface)").
-		Prefix("WITH sessions AS ("+sessionSQL+"), mappings AS ("+mappingSQL+")", append(sessionArgs, mappingArgs...)...)
+		PrefixExpr(squirrel.ConcatExpr(
+			"WITH mappings AS (", mappings, "), sessions AS (", sessions, ")",
+		))
 
 	groupColumns := make([]string, 0, 2)
 	if timeseries {
@@ -264,6 +276,7 @@ func buildSkillVersionMetricsQuery(arg AttributeMetricsQueryParams, timeseries b
 		outer = outer.OrderBy(measureAliasPrefix + arg.SortBy + " DESC")
 	}
 
+	outer = withCanonicalFoldSettings(outer, canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg))
 	query, args, err := outer.ToSql()
 	if err != nil {
 		return "", nil, fmt.Errorf("building skill version metrics query: %w", err)

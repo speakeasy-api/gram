@@ -1,4 +1,4 @@
-h1:0rR+UJolRapPBUsrFodmHjWjQ8oyTew2r2IOIZKy6lA=
+h1:5xIpaQ7Q8fdToRy0Oo/pKMul9rY3feKkJPdKQWhjIJg=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -87,3 +87,8 @@ h1:0rR+UJolRapPBUsrFodmHjWjQ8oyTew2r2IOIZKy6lA=
 20260805105902_risk-findings-app-team-attribution.up.sql h1:UmQaEOmnP7ormKmGnaolNXAq2ogrRNVqxGj7EhfkGQ4=
 20260805161427_risk-findings-user-email.up.sql h1:2m9vZDNhLAZ2w5mVIS4vNtJtbTULtrHn+qZUU6ww3dE=
 20260811155533_challenge-bucket-summaries.up.sql h1:4+W+EYUk8z5tcrifQZAKKkecKy527L9MkVN/cWbPKhQ=
+20260813175845_identity-map.up.sql h1:2IG8WUJ7IjZ09mEZDv6Vm53g3w9a7wltgN4469roano=
+20260817165153_add-risk-findings-suppression-reason.up.sql h1:janOxO76sl27TabZZDLDtpq3/+t8GpigxITjcj+GsNQ=
+20260821180408_add-risk-findings-event-kind.up.sql h1:QkhOhO7Q4cfBVkbhvAatxmHdTbZtDm9MQ7+78USDRFQ=
+20260824192251_otel-event-feed-tables.up.sql h1:n3KFSIcdJXiqHRQQCAjkrD5Ux0dAsqJ1Ar9R7rM31qI=
+20260825112511_billing-meter-readings.up.sql h1:27Ts5n4EmmxCSfPKF89JmZBaixYgLQ0xvqoE/4yAGOM=

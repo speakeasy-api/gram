@@ -521,6 +521,83 @@ func (q *Queries) GetPluginServerByBackend(ctx context.Context, arg GetPluginSer
 	return i, err
 }
 
+const getPluginWithCounts = `-- name: GetPluginWithCounts :one
+SELECT
+  p.id, p.organization_id, p.project_id, p.name, p.slug, p.description, p.is_default, p.created_at, p.updated_at, p.deleted_at, p.deleted,
+  (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
+  (
+    SELECT count(*)
+    FROM skill_distributions sd
+    JOIN skills s
+      ON s.id = sd.skill_id
+      AND s.project_id = sd.project_id
+      AND s.archived_at IS NULL
+    WHERE sd.plugin_id = p.id
+      AND sd.project_id = p.project_id
+      AND sd.channel = 'plugin'
+      AND sd.assistant_id IS NULL
+      AND sd.revoked_at IS NULL
+      AND EXISTS (
+        SELECT 1
+        FROM skill_versions sv
+        WHERE sv.skill_id = sd.skill_id
+          AND sv.spec_valid IS TRUE
+          AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
+      )
+  ) AS skill_count,
+  (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id) AS assignment_count
+FROM plugins p
+WHERE p.id = $1
+  AND p.organization_id = $2
+  AND p.project_id = $3
+  AND p.deleted IS FALSE
+`
+
+type GetPluginWithCountsParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+type GetPluginWithCountsRow struct {
+	ID              uuid.UUID
+	OrganizationID  string
+	ProjectID       uuid.UUID
+	Name            string
+	Slug            string
+	Description     pgtype.Text
+	IsDefault       pgtype.Bool
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
+	ServerCount     int64
+	SkillCount      int64
+	AssignmentCount int64
+}
+
+func (q *Queries) GetPluginWithCounts(ctx context.Context, arg GetPluginWithCountsParams) (GetPluginWithCountsRow, error) {
+	row := q.db.QueryRow(ctx, getPluginWithCounts, arg.ID, arg.OrganizationID, arg.ProjectID)
+	var i GetPluginWithCountsRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.IsDefault,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+		&i.ServerCount,
+		&i.SkillCount,
+		&i.AssignmentCount,
+	)
+	return i, err
+}
+
 const getProjectMarketplaceNameContext = `-- name: GetProjectMarketplaceNameContext :one
 SELECT
   pr.slug AS project_slug,
@@ -529,7 +606,7 @@ SELECT
     FROM projects p2
     WHERE p2.organization_id = pr.organization_id
       AND p2.deleted IS FALSE
-    ORDER BY p2.id ASC
+    ORDER BY p2.created_at ASC, p2.id ASC
     LIMIT 1
   )) AS is_default_project
 FROM projects pr
@@ -543,7 +620,7 @@ type GetProjectMarketplaceNameContextRow struct {
 }
 
 // Returns a project's slug and whether it's its org's default project (oldest by
-// id ASC), the two inputs needed to resolve its marketplace name — read from the
+// created_at, then id), the two inputs needed to resolve its marketplace name — read from the
 // project row rather than trusting auth-context fields that some auth flows
 // (e.g. project-scoped API keys) leave unset.
 func (q *Queries) GetProjectMarketplaceNameContext(ctx context.Context, projectID uuid.UUID) (GetProjectMarketplaceNameContextRow, error) {
@@ -559,7 +636,7 @@ SELECT (
   FROM projects p
   WHERE p.organization_id = $1
     AND p.deleted IS FALSE
-  ORDER BY p.id ASC
+  ORDER BY p.created_at ASC, p.id ASC
   LIMIT 1
 ) = $2 AS is_default
 `
@@ -569,8 +646,8 @@ type IsDefaultProjectParams struct {
 	ProjectID      uuid.UUID
 }
 
-// Whether @project_id is the org's default project — the oldest (first by id
-// ASC) non-deleted project, created at org setup. Mirrors the default-project
+// Whether @project_id is the org's default project — the oldest non-deleted
+// project by created_at, then id. Mirrors the default-project
 // definition the agent's getPlugins read path uses, so the audience the seeding
 // side grants matches the project the delivery side treats as default. Used to
 // decide whether a new plugin defaults to the org-wide audience: only plugins in

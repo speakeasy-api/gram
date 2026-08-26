@@ -2,6 +2,7 @@ package gitleaks
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -33,14 +34,15 @@ func NewHandler(logger *slog.Logger, findingsPub gcp.Publisher[*riskv1.Finding])
 	}
 }
 
-// Handle scans the request content and publishes one Finding per match. A scan
-// failure is returned to the subscriber, which nacks the message for redelivery
-// and eventual dead-lettering, so the failure stays visible rather than being
-// silently acked. Publish failures are best-effort: they are logged and skipped
-// so a partial batch still publishes what it can. Publishing goes through
+// Handle scans the request content and publishes one Finding per match. A
+// scan failure OR a publish failure is returned to the subscriber, which
+// nacks the message for redelivery — an acked request must mean every finding
+// it produced is durably on the topic, since that topic feeds the ClickHouse
+// findings store. Publishing goes through
 // StartPublishFindings so ids are deterministic — a redelivered message
-// republishes under the same ids instead of duplicating ClickHouse rows — and
-// the reveal metadata (surface et al.) is stamped uniformly.
+// republishes under the same ids (the already-published subset included)
+// instead of duplicating ClickHouse rows — and the reveal metadata (surface
+// et al.) is stamped uniformly.
 func (h *Handler) Handle(ctx context.Context, m *riskv1.GitleaksAnalysis, _ gcp.MessageMetadata) error {
 	findings, err := h.scanner.Scan(ctx, m.GetContent())
 	if err != nil {
@@ -60,9 +62,10 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.GitleaksAnalysis, _ gcp.
 	}, findings)
 
 	published := 0
+	var publishErr error
 	for _, res := range results {
 		if _, err := res.Get(ctx); err != nil {
-			h.logger.WarnContext(ctx, "failed to publish gitleaks finding", attr.SlogError(err))
+			publishErr = errors.Join(publishErr, err)
 			continue
 		}
 		published++
@@ -77,5 +80,8 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.GitleaksAnalysis, _ gcp.
 		"rule_ids":        ruleIDs,
 	}))
 
+	if publishErr != nil {
+		return fmt.Errorf("publish gitleaks findings: %w", publishErr)
+	}
 	return nil
 }

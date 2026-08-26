@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import _Cal, { getCalApi } from "@calcom/embed-react";
+import { LockoutPaygCheckoutPanel } from "@/components/billing/lockout-payg-checkout-panel";
 import { useSessionData } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { CAL_DEMO_LINK, splitDisplayName } from "./demo-booking";
@@ -59,7 +60,7 @@ function useCalBranding() {
 // Sits above the card on the cold-signup gate. The expired-trial gate passes
 // its own header instead.
 const DEFAULT_INTRO = (
-  <div className="text-center">
+  <div className="text-center mb-4">
     <p className="text-[16px] tracking-[0.0025em]">
       Looks like your company is new to Speakeasy.
     </p>
@@ -130,8 +131,13 @@ export function DemoBookingFlow({
   const prefill = [email, companyName].filter(Boolean).join(" · ");
 
   return (
-    <div className="flex w-full flex-col items-center gap-6">
+    <div className="flex w-full flex-col items-center gap-2">
       {intro}
+
+      {/* Both gates render through this flow, so the checkout offer lives here
+          rather than in each page — the calendar below stays the fallback for
+          anyone it doesn't apply to. */}
+      <LockoutPaygCheckoutPanel />
 
       <div className="w-full overflow-hidden border border-(--edge) bg-(--card)">
         {/* The embed runs with `hideEventTypeDetails`, so this header is what
@@ -145,7 +151,7 @@ export function DemoBookingFlow({
 
         {/* Tall enough for a six-row month without clipping the last week,
             capped so the card still clears the fold on a laptop viewport. */}
-        <div className="h-[clamp(500px,58vh,600px)] w-full overflow-auto">
+        <div className="h-[clamp(500px,54vh,600px)] w-full overflow-auto">
           <Cal
             calLink={CAL_DEMO_LINK}
             config={{

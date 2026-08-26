@@ -12,15 +12,6 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// EncryptKeyRequestBody is the type of the "adminOpenRouterKeys" service
-// "encryptKey" endpoint HTTP request body.
-type EncryptKeyRequestBody struct {
-	// Organization that owns the key.
-	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	// Key type to encrypt.
-	KeyType string `form:"key_type" json:"key_type" xml:"key_type"`
-}
-
 // DisableKeyRequestBody is the type of the "adminOpenRouterKeys" service
 // "disableKey" endpoint HTTP request body.
 type DisableKeyRequestBody struct {
@@ -59,32 +50,6 @@ type GetKeyUsageResponseBody struct {
 	UpstreamLimit *int64 `form:"upstream_limit,omitempty" json:"upstream_limit,omitempty" xml:"upstream_limit,omitempty"`
 }
 
-// EncryptKeyResponseBody is the type of the "adminOpenRouterKeys" service
-// "encryptKey" endpoint HTTP response body.
-type EncryptKeyResponseBody struct {
-	// Organization that owns the key.
-	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	// Display name of the owning organization.
-	OrganizationName *string `form:"organization_name,omitempty" json:"organization_name,omitempty" xml:"organization_name,omitempty"`
-	// Slug of the owning organization.
-	OrganizationSlug *string `form:"organization_slug,omitempty" json:"organization_slug,omitempty" xml:"organization_slug,omitempty"`
-	// The organization's Gram account type (e.g. free, pro, enterprise).
-	GramAccountType *string `form:"gram_account_type,omitempty" json:"gram_account_type,omitempty" xml:"gram_account_type,omitempty"`
-	// Which upstream key this row provisions: 'chat' pays for customer-facing
-	// completions, 'internal' pays for platform-initiated LLM usage.
-	KeyType *string `form:"key_type,omitempty" json:"key_type,omitempty" xml:"key_type,omitempty"`
-	// Monthly credit ceiling last mirrored from OpenRouter.
-	MonthlyCredits *int64 `form:"monthly_credits,omitempty" json:"monthly_credits,omitempty" xml:"monthly_credits,omitempty"`
-	// Whether the key is locked down (refused locally and disabled upstream).
-	Disabled *bool `form:"disabled,omitempty" json:"disabled,omitempty" xml:"disabled,omitempty"`
-	// Storage state of the key material.
-	EncryptionStatus *string `form:"encryption_status,omitempty" json:"encryption_status,omitempty" xml:"encryption_status,omitempty"`
-	// When the key row was created.
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	// When the key row was last updated.
-	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
-}
-
 // DisableKeyResponseBody is the type of the "adminOpenRouterKeys" service
 // "disableKey" endpoint HTTP response body.
 type DisableKeyResponseBody struct {
@@ -103,8 +68,6 @@ type DisableKeyResponseBody struct {
 	MonthlyCredits *int64 `form:"monthly_credits,omitempty" json:"monthly_credits,omitempty" xml:"monthly_credits,omitempty"`
 	// Whether the key is locked down (refused locally and disabled upstream).
 	Disabled *bool `form:"disabled,omitempty" json:"disabled,omitempty" xml:"disabled,omitempty"`
-	// Storage state of the key material.
-	EncryptionStatus *string `form:"encryption_status,omitempty" json:"encryption_status,omitempty" xml:"encryption_status,omitempty"`
 	// When the key row was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the key row was last updated.
@@ -129,8 +92,6 @@ type EnableKeyResponseBody struct {
 	MonthlyCredits *int64 `form:"monthly_credits,omitempty" json:"monthly_credits,omitempty" xml:"monthly_credits,omitempty"`
 	// Whether the key is locked down (refused locally and disabled upstream).
 	Disabled *bool `form:"disabled,omitempty" json:"disabled,omitempty" xml:"disabled,omitempty"`
-	// Storage state of the key material.
-	EncryptionStatus *string `form:"encryption_status,omitempty" json:"encryption_status,omitempty" xml:"encryption_status,omitempty"`
 	// When the key row was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the key row was last updated.
@@ -489,190 +450,6 @@ type GetKeyUsageUnexpectedResponseBody struct {
 // service "getKeyUsage" endpoint HTTP response body for the "gateway_error"
 // error.
 type GetKeyUsageGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// EncryptKeyUnauthorizedResponseBody is the type of the "adminOpenRouterKeys"
-// service "encryptKey" endpoint HTTP response body for the "unauthorized"
-// error.
-type EncryptKeyUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// EncryptKeyForbiddenResponseBody is the type of the "adminOpenRouterKeys"
-// service "encryptKey" endpoint HTTP response body for the "forbidden" error.
-type EncryptKeyForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// EncryptKeyBadRequestResponseBody is the type of the "adminOpenRouterKeys"
-// service "encryptKey" endpoint HTTP response body for the "bad_request" error.
-type EncryptKeyBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// EncryptKeyNotFoundResponseBody is the type of the "adminOpenRouterKeys"
-// service "encryptKey" endpoint HTTP response body for the "not_found" error.
-type EncryptKeyNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// EncryptKeyConflictResponseBody is the type of the "adminOpenRouterKeys"
-// service "encryptKey" endpoint HTTP response body for the "conflict" error.
-type EncryptKeyConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// EncryptKeyUnsupportedMediaResponseBody is the type of the
-// "adminOpenRouterKeys" service "encryptKey" endpoint HTTP response body for
-// the "unsupported_media" error.
-type EncryptKeyUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// EncryptKeyInvalidResponseBody is the type of the "adminOpenRouterKeys"
-// service "encryptKey" endpoint HTTP response body for the "invalid" error.
-type EncryptKeyInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// EncryptKeyInvariantViolationResponseBody is the type of the
-// "adminOpenRouterKeys" service "encryptKey" endpoint HTTP response body for
-// the "invariant_violation" error.
-type EncryptKeyInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// EncryptKeyUnexpectedResponseBody is the type of the "adminOpenRouterKeys"
-// service "encryptKey" endpoint HTTP response body for the "unexpected" error.
-type EncryptKeyUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// EncryptKeyGatewayErrorResponseBody is the type of the "adminOpenRouterKeys"
-// service "encryptKey" endpoint HTTP response body for the "gateway_error"
-// error.
-type EncryptKeyGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1073,22 +850,10 @@ type AdminOpenRouterKeyResponseBody struct {
 	MonthlyCredits *int64 `form:"monthly_credits,omitempty" json:"monthly_credits,omitempty" xml:"monthly_credits,omitempty"`
 	// Whether the key is locked down (refused locally and disabled upstream).
 	Disabled *bool `form:"disabled,omitempty" json:"disabled,omitempty" xml:"disabled,omitempty"`
-	// Storage state of the key material.
-	EncryptionStatus *string `form:"encryption_status,omitempty" json:"encryption_status,omitempty" xml:"encryption_status,omitempty"`
 	// When the key row was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the key row was last updated.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
-}
-
-// NewEncryptKeyRequestBody builds the HTTP request body from the payload of
-// the "encryptKey" endpoint of the "adminOpenRouterKeys" service.
-func NewEncryptKeyRequestBody(p *adminopenrouterkeys.EncryptKeyPayload) *EncryptKeyRequestBody {
-	body := &EncryptKeyRequestBody{
-		OrganizationID: p.OrganizationID,
-		KeyType:        p.KeyType,
-	}
-	return body
 }
 
 // NewDisableKeyRequestBody builds the HTTP request body from the payload of
@@ -1439,175 +1204,6 @@ func NewGetKeyUsageGatewayError(body *GetKeyUsageGatewayErrorResponseBody) *goa.
 	return v
 }
 
-// NewEncryptKeyAdminOpenRouterKeyOK builds a "adminOpenRouterKeys" service
-// "encryptKey" endpoint result from a HTTP "OK" response.
-func NewEncryptKeyAdminOpenRouterKeyOK(body *EncryptKeyResponseBody) *adminopenrouterkeys.AdminOpenRouterKey {
-	v := &adminopenrouterkeys.AdminOpenRouterKey{
-		OrganizationID:   *body.OrganizationID,
-		OrganizationName: *body.OrganizationName,
-		OrganizationSlug: *body.OrganizationSlug,
-		GramAccountType:  *body.GramAccountType,
-		KeyType:          *body.KeyType,
-		MonthlyCredits:   *body.MonthlyCredits,
-		Disabled:         *body.Disabled,
-		EncryptionStatus: *body.EncryptionStatus,
-		CreatedAt:        *body.CreatedAt,
-		UpdatedAt:        *body.UpdatedAt,
-	}
-
-	return v
-}
-
-// NewEncryptKeyUnauthorized builds a adminOpenRouterKeys service encryptKey
-// endpoint unauthorized error.
-func NewEncryptKeyUnauthorized(body *EncryptKeyUnauthorizedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewEncryptKeyForbidden builds a adminOpenRouterKeys service encryptKey
-// endpoint forbidden error.
-func NewEncryptKeyForbidden(body *EncryptKeyForbiddenResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewEncryptKeyBadRequest builds a adminOpenRouterKeys service encryptKey
-// endpoint bad_request error.
-func NewEncryptKeyBadRequest(body *EncryptKeyBadRequestResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewEncryptKeyNotFound builds a adminOpenRouterKeys service encryptKey
-// endpoint not_found error.
-func NewEncryptKeyNotFound(body *EncryptKeyNotFoundResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewEncryptKeyConflict builds a adminOpenRouterKeys service encryptKey
-// endpoint conflict error.
-func NewEncryptKeyConflict(body *EncryptKeyConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewEncryptKeyUnsupportedMedia builds a adminOpenRouterKeys service
-// encryptKey endpoint unsupported_media error.
-func NewEncryptKeyUnsupportedMedia(body *EncryptKeyUnsupportedMediaResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewEncryptKeyInvalid builds a adminOpenRouterKeys service encryptKey
-// endpoint invalid error.
-func NewEncryptKeyInvalid(body *EncryptKeyInvalidResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewEncryptKeyInvariantViolation builds a adminOpenRouterKeys service
-// encryptKey endpoint invariant_violation error.
-func NewEncryptKeyInvariantViolation(body *EncryptKeyInvariantViolationResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewEncryptKeyUnexpected builds a adminOpenRouterKeys service encryptKey
-// endpoint unexpected error.
-func NewEncryptKeyUnexpected(body *EncryptKeyUnexpectedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewEncryptKeyGatewayError builds a adminOpenRouterKeys service encryptKey
-// endpoint gateway_error error.
-func NewEncryptKeyGatewayError(body *EncryptKeyGatewayErrorResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
 // NewDisableKeyAdminOpenRouterKeyOK builds a "adminOpenRouterKeys" service
 // "disableKey" endpoint result from a HTTP "OK" response.
 func NewDisableKeyAdminOpenRouterKeyOK(body *DisableKeyResponseBody) *adminopenrouterkeys.AdminOpenRouterKey {
@@ -1619,7 +1215,6 @@ func NewDisableKeyAdminOpenRouterKeyOK(body *DisableKeyResponseBody) *adminopenr
 		KeyType:          *body.KeyType,
 		MonthlyCredits:   *body.MonthlyCredits,
 		Disabled:         *body.Disabled,
-		EncryptionStatus: *body.EncryptionStatus,
 		CreatedAt:        *body.CreatedAt,
 		UpdatedAt:        *body.UpdatedAt,
 	}
@@ -1788,7 +1383,6 @@ func NewEnableKeyAdminOpenRouterKeyOK(body *EnableKeyResponseBody) *adminopenrou
 		KeyType:          *body.KeyType,
 		MonthlyCredits:   *body.MonthlyCredits,
 		Disabled:         *body.Disabled,
-		EncryptionStatus: *body.EncryptionStatus,
 		CreatedAt:        *body.CreatedAt,
 		UpdatedAt:        *body.UpdatedAt,
 	}
@@ -1974,53 +1568,6 @@ func ValidateGetKeyUsageResponseBody(body *GetKeyUsageResponseBody) (err error) 
 	return
 }
 
-// ValidateEncryptKeyResponseBody runs the validations defined on
-// EncryptKeyResponseBody
-func ValidateEncryptKeyResponseBody(body *EncryptKeyResponseBody) (err error) {
-	if body.OrganizationID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
-	}
-	if body.OrganizationName == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("organization_name", "body"))
-	}
-	if body.OrganizationSlug == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("organization_slug", "body"))
-	}
-	if body.GramAccountType == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("gram_account_type", "body"))
-	}
-	if body.KeyType == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("key_type", "body"))
-	}
-	if body.MonthlyCredits == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("monthly_credits", "body"))
-	}
-	if body.Disabled == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("disabled", "body"))
-	}
-	if body.EncryptionStatus == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("encryption_status", "body"))
-	}
-	if body.CreatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
-	}
-	if body.UpdatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
-	}
-	if body.EncryptionStatus != nil {
-		if !(*body.EncryptionStatus == "plaintext" || *body.EncryptionStatus == "encrypted_with_plaintext" || *body.EncryptionStatus == "encrypted") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.encryption_status", *body.EncryptionStatus, []any{"plaintext", "encrypted_with_plaintext", "encrypted"}))
-		}
-	}
-	if body.CreatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
-	}
-	if body.UpdatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
-	}
-	return
-}
-
 // ValidateDisableKeyResponseBody runs the validations defined on
 // DisableKeyResponseBody
 func ValidateDisableKeyResponseBody(body *DisableKeyResponseBody) (err error) {
@@ -2045,19 +1592,11 @@ func ValidateDisableKeyResponseBody(body *DisableKeyResponseBody) (err error) {
 	if body.Disabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("disabled", "body"))
 	}
-	if body.EncryptionStatus == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("encryption_status", "body"))
-	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
-	}
-	if body.EncryptionStatus != nil {
-		if !(*body.EncryptionStatus == "plaintext" || *body.EncryptionStatus == "encrypted_with_plaintext" || *body.EncryptionStatus == "encrypted") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.encryption_status", *body.EncryptionStatus, []any{"plaintext", "encrypted_with_plaintext", "encrypted"}))
-		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -2092,19 +1631,11 @@ func ValidateEnableKeyResponseBody(body *EnableKeyResponseBody) (err error) {
 	if body.Disabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("disabled", "body"))
 	}
-	if body.EncryptionStatus == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("encryption_status", "body"))
-	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
-	}
-	if body.EncryptionStatus != nil {
-		if !(*body.EncryptionStatus == "plaintext" || *body.EncryptionStatus == "encrypted_with_plaintext" || *body.EncryptionStatus == "encrypted") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.encryption_status", *body.EncryptionStatus, []any{"plaintext", "encrypted_with_plaintext", "encrypted"}))
-		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -2574,246 +2105,6 @@ func ValidateGetKeyUsageUnexpectedResponseBody(body *GetKeyUsageUnexpectedRespon
 // ValidateGetKeyUsageGatewayErrorResponseBody runs the validations defined on
 // getKeyUsage_gateway_error_response_body
 func ValidateGetKeyUsageGatewayErrorResponseBody(body *GetKeyUsageGatewayErrorResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateEncryptKeyUnauthorizedResponseBody runs the validations defined on
-// encryptKey_unauthorized_response_body
-func ValidateEncryptKeyUnauthorizedResponseBody(body *EncryptKeyUnauthorizedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateEncryptKeyForbiddenResponseBody runs the validations defined on
-// encryptKey_forbidden_response_body
-func ValidateEncryptKeyForbiddenResponseBody(body *EncryptKeyForbiddenResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateEncryptKeyBadRequestResponseBody runs the validations defined on
-// encryptKey_bad_request_response_body
-func ValidateEncryptKeyBadRequestResponseBody(body *EncryptKeyBadRequestResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateEncryptKeyNotFoundResponseBody runs the validations defined on
-// encryptKey_not_found_response_body
-func ValidateEncryptKeyNotFoundResponseBody(body *EncryptKeyNotFoundResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateEncryptKeyConflictResponseBody runs the validations defined on
-// encryptKey_conflict_response_body
-func ValidateEncryptKeyConflictResponseBody(body *EncryptKeyConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateEncryptKeyUnsupportedMediaResponseBody runs the validations defined
-// on encryptKey_unsupported_media_response_body
-func ValidateEncryptKeyUnsupportedMediaResponseBody(body *EncryptKeyUnsupportedMediaResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateEncryptKeyInvalidResponseBody runs the validations defined on
-// encryptKey_invalid_response_body
-func ValidateEncryptKeyInvalidResponseBody(body *EncryptKeyInvalidResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateEncryptKeyInvariantViolationResponseBody runs the validations
-// defined on encryptKey_invariant_violation_response_body
-func ValidateEncryptKeyInvariantViolationResponseBody(body *EncryptKeyInvariantViolationResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateEncryptKeyUnexpectedResponseBody runs the validations defined on
-// encryptKey_unexpected_response_body
-func ValidateEncryptKeyUnexpectedResponseBody(body *EncryptKeyUnexpectedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateEncryptKeyGatewayErrorResponseBody runs the validations defined on
-// encryptKey_gateway_error_response_body
-func ValidateEncryptKeyGatewayErrorResponseBody(body *EncryptKeyGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3339,19 +2630,11 @@ func ValidateAdminOpenRouterKeyResponseBody(body *AdminOpenRouterKeyResponseBody
 	if body.Disabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("disabled", "body"))
 	}
-	if body.EncryptionStatus == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("encryption_status", "body"))
-	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
-	}
-	if body.EncryptionStatus != nil {
-		if !(*body.EncryptionStatus == "plaintext" || *body.EncryptionStatus == "encrypted_with_plaintext" || *body.EncryptionStatus == "encrypted") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.encryption_status", *body.EncryptionStatus, []any{"plaintext", "encrypted_with_plaintext", "encrypted"}))
-		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

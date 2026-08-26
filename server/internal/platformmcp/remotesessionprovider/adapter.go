@@ -232,11 +232,12 @@ func (a *Adapter) probe(ctx context.Context, descriptor Descriptor, token string
 	httpClient.Transport = authRT
 
 	client := mcp.NewClient(&mcp.Implementation{
-		Name:       "speakeasy-aicp-platform-mcp-readiness",
-		Title:      "",
-		Version:    "1.0.0",
-		WebsiteURL: "",
-		Icons:      nil,
+		Name:        "platform-mcp-readiness",
+		Title:       "",
+		Description: "",
+		Version:     "1.0.0",
+		WebsiteURL:  "",
+		Icons:       nil,
 	}, nil)
 	session, err := client.Connect(ctx, &mcp.StreamableClientTransport{
 		Endpoint:             descriptor.StreamableHTTPURL,
@@ -293,14 +294,25 @@ func normalizedProbeFailure(err error, authRT *authorizationRoundTripper) (platf
 }
 
 func validateSetupRequest(request platformmcp.ProviderSetupRequest) error {
-	if request.UserID == "" || request.OrganizationID == "" || request.ProjectID == uuid.Nil || request.RegistrationID == uuid.Nil || request.UserSessionIssuerID == uuid.Nil || request.MCPSlug == "" || request.ConnectionID == uuid.Nil || request.Generation == uuid.Nil {
+	if request.UserID == "" || request.OrganizationID == "" || request.ProjectID == uuid.Nil || request.RegistrationID == uuid.Nil || request.UserSessionIssuerID == uuid.Nil || request.MCPSlug == "" || !validConnectionPair(request.ConnectionID, request.Generation) {
 		return platformmcp.ErrSetupHandoffInvalid
 	}
 	return nil
 }
 
+// validConnectionPair accepts a complete connection pair or none at all. A
+// connection-less caller is identified by its user, which every request already
+// carries; a half-populated pair is an incomplete identity, matching the
+// all-or-nothing CHECK the connection columns carry.
+func validConnectionPair(connectionID, generation uuid.UUID) bool {
+	return (connectionID == uuid.Nil) == (generation == uuid.Nil)
+}
+
+// A readiness probe accepts a connection-less caller on the same terms a setup
+// request does: identity comes from the user, and a half-populated connection
+// pair is rejected as an incomplete identity rather than treated as absent.
 func validateReadinessRequest(request platformmcp.ProviderReadinessProbeRequest) error {
-	if request.UserID == "" || request.OrganizationID == "" || request.ProjectID == uuid.Nil || request.RegistrationID == uuid.Nil || request.UserSessionIssuerID == uuid.Nil || request.ConnectionID == uuid.Nil || request.Generation == uuid.Nil {
+	if request.UserID == "" || request.OrganizationID == "" || request.ProjectID == uuid.Nil || request.RegistrationID == uuid.Nil || request.UserSessionIssuerID == uuid.Nil || !validConnectionPair(request.ConnectionID, request.Generation) {
 		return platformmcp.ErrReadinessInvalid
 	}
 	return nil

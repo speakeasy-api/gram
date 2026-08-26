@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -21,6 +23,7 @@ import (
 type Client struct {
 	tracer       trace.Tracer
 	logger       *slog.Logger
+	db           *pgxpool.Pool
 	repo         *repo.Queries
 	featureCache cache.TypedCacheObject[FeatureCache]
 }
@@ -31,6 +34,7 @@ func NewClient(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgx
 	return &Client{
 		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/productfeatures"),
 		logger:       logger,
+		db:           db,
 		repo:         repo.New(db),
 		featureCache: cache.NewTypedObjectCache[FeatureCache](logger.With(attr.SlogCacheNamespace("productfeature")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
 	}
@@ -46,44 +50,69 @@ func (c *Client) IsFeatureEnabled(ctx context.Context, organizationID string, fe
 		return cached.Enabled, nil
 	}
 
-	res, err := c.repo.IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
-		OrganizationID: organizationID,
-		FeatureName:    string(feature),
+	var enabled bool
+	err := c.withFeatureCacheLock(ctx, organizationID, feature, func(conn *pgxpool.Conn) error {
+		// A concurrent writer or cache fill may have populated the entry while
+		// this request waited for the lock.
+		if cached, cacheErr := c.featureCache.Get(ctx, FeatureCacheKey(organizationID, feature)); cacheErr == nil {
+			enabled = cached.Enabled
+			return nil
+		}
+
+		res, queryErr := repo.New(conn).IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
+			OrganizationID: organizationID,
+			FeatureName:    string(feature),
+		})
+		switch {
+		case errors.Is(queryErr, context.Canceled):
+			// Do not cache results if the context was canceled, as this likely
+			// indicates a timeout or shutdown in progress.
+			enabled = false
+			return nil
+		case errors.Is(queryErr, pgx.ErrNoRows):
+			res = false
+		case queryErr != nil:
+			return oops.E(
+				oops.CodeUnexpected, queryErr,
+				"failed to get organization feature flag %q", string(feature),
+			).LogError(ctx, c.logger, attr.SlogOrganizationID(organizationID))
+		}
+
+		enabled = res
+		c.storeFeatureCache(ctx, organizationID, feature, enabled, "failed to cache feature flag state")
+		return nil
 	})
+	if err != nil {
+		return false, err
+	}
+	return enabled, nil
+}
+
+// IsFeatureEnabledUncached reads the durable feature state directly. Security-
+// sensitive request gates use this when revocation must take effect faster than
+// the shared feature cache TTL. Unlike the cached lookup, cancellation remains
+// an error so callers can distinguish an incomplete live security check from a
+// durable disabled result.
+func (c *Client) IsFeatureEnabledUncached(ctx context.Context, organizationID string, feature Feature) (bool, error) {
+	if feature == FeatureSkills {
+		return true, nil
+	}
+	res, err := c.repo.IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{OrganizationID: organizationID, FeatureName: string(feature)})
 	switch {
 	case errors.Is(err, context.Canceled):
-		// Do not cache results if the context was canceled, as this likely
-		// indicates a timeout or shutdown in progress. Caching in this case
-		// could lead to incorrect feature flag states being stored.
-		return false, nil
+		return false, fmt.Errorf("check uncached organization feature: %w", err)
 	case errors.Is(err, pgx.ErrNoRows):
-		// If there is no row, the feature is not enabled. Cache this result to
-		// avoid hitting the database repeatedly for missing features.
-		res = false
+		return false, nil
 	case err != nil:
 		return false, oops.E(
 			oops.CodeUnexpected,
 			err,
-			"failed to get organization feature flag %q",
+			"failed to get uncached organization feature flag %q",
 			string(feature),
 		).LogError(ctx, c.logger, attr.SlogOrganizationID(organizationID))
+	default:
+		return res, nil
 	}
-
-	cacheEntry := FeatureCache{
-		OrganizationID: organizationID,
-		Feature:        feature,
-		Enabled:        res,
-	}
-
-	if cacheErr := c.featureCache.Store(ctx, cacheEntry); cacheErr != nil {
-		c.logger.WarnContext(ctx, "failed to cache feature flag state",
-			attr.SlogError(cacheErr),
-			attr.SlogOrganizationID(organizationID),
-			attr.SlogProductFeatureName(string(feature)),
-		)
-	}
-
-	return res, nil
 }
 
 // PlatformFeatureCheck adapts IsFeatureEnabled to the
@@ -103,22 +132,151 @@ func (c *Client) PlatformFeatureCheck(ctx context.Context, organizationID string
 	return enabled
 }
 
-// UpdateFeatureCache stores the given enabled state for the feature directly
-// into the cache. Call this after writing the feature flag to the database
-// from a code path that bypasses this client, so the cache stays consistent.
-func (c *Client) UpdateFeatureCache(ctx context.Context, organizationID string, feature Feature, enabled bool) {
+// SetFeatureEnabled writes a generic product-feature flag and refreshes its
+// cache entry. Callers must perform authorization and restrict feature names to
+// flags without specialized write behavior before calling this method.
+func (c *Client) SetFeatureEnabled(ctx context.Context, organizationID string, feature Feature, enabled bool) error {
+	return c.withFeatureCacheLock(ctx, organizationID, feature, func(conn *pgxpool.Conn) error {
+		if err := setFeatureEnabled(ctx, repo.New(conn), organizationID, feature, enabled); err != nil {
+			return err
+		}
+		c.storeFeatureCache(ctx, organizationID, feature, enabled, "failed to update feature flag cache")
+		return nil
+	})
+}
+
+// SetRemoteSessionAutoRefreshEnabled maps the standalone admin's binary control
+// to the existing tri-state policy. Either choice clears the enforced state so
+// the displayed value and runtime behavior cannot disagree.
+func (c *Client) SetRemoteSessionAutoRefreshEnabled(ctx context.Context, organizationID string, enabled bool) error {
+	return c.withFeatureCacheLocks(ctx, organizationID, []Feature{
+		FeatureRemoteSessionAutoRefresh, FeatureRemoteSessionAutoRefreshEnforced,
+	}, func(conn *pgxpool.Conn) error {
+		tx, err := conn.Begin(ctx)
+		if err != nil {
+			return fmt.Errorf("begin remote session auto-refresh update: %w", err)
+		}
+		defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+
+		queries := repo.New(tx)
+		if err := setFeatureEnabled(ctx, queries, organizationID, FeatureRemoteSessionAutoRefreshEnforced, false); err != nil {
+			return err
+		}
+		if err := setFeatureEnabled(ctx, queries, organizationID, FeatureRemoteSessionAutoRefresh, enabled); err != nil {
+			return err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("commit remote session auto-refresh update: %w", err)
+		}
+
+		c.storeFeatureCache(ctx, organizationID, FeatureRemoteSessionAutoRefreshEnforced, false, "failed to update feature flag cache")
+		c.storeFeatureCache(ctx, organizationID, FeatureRemoteSessionAutoRefresh, enabled, "failed to update feature flag cache")
+		return nil
+	})
+}
+
+// UpdateFeatureCache reloads the durable feature state and refreshes the cache
+// under the same lock used by cache fills and writes. Call this after writing
+// the feature flag from a code path that bypasses this client.
+func (c *Client) UpdateFeatureCache(ctx context.Context, organizationID string, feature Feature, _ bool) {
+	if err := c.withFeatureCacheLock(ctx, organizationID, feature, func(conn *pgxpool.Conn) error {
+		enabled, err := repo.New(conn).IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
+			OrganizationID: organizationID, FeatureName: string(feature),
+		})
+		if err != nil {
+			return fmt.Errorf("reload feature cache state: %w", err)
+		}
+		c.storeFeatureCache(ctx, organizationID, feature, enabled, "failed to update feature flag cache")
+		return nil
+	}); err != nil {
+		c.logger.WarnContext(ctx, "failed to refresh feature flag cache",
+			attr.SlogError(err), attr.SlogOrganizationID(organizationID), attr.SlogProductFeatureName(string(feature)),
+		)
+	}
+}
+
+func (c *Client) storeFeatureCache(ctx context.Context, organizationID string, feature Feature, enabled bool, message string) {
 	cacheEntry := FeatureCache{
 		OrganizationID: organizationID,
 		Feature:        feature,
 		Enabled:        enabled,
 	}
 	if err := c.featureCache.Store(ctx, cacheEntry); err != nil {
-		c.logger.WarnContext(ctx, "failed to update feature flag cache",
+		c.logger.WarnContext(ctx, message,
 			attr.SlogError(err),
 			attr.SlogOrganizationID(organizationID),
 			attr.SlogProductFeatureName(string(feature)),
 		)
 	}
+}
+
+func setFeatureEnabled(ctx context.Context, queries *repo.Queries, organizationID string, feature Feature, enabled bool) error {
+	if enabled {
+		if _, err := queries.EnableFeature(ctx, repo.EnableFeatureParams{OrganizationID: organizationID, FeatureName: string(feature)}); err != nil {
+			return fmt.Errorf("enable feature: %w", err)
+		}
+		return nil
+	}
+
+	_, err := queries.DeleteFeature(ctx, repo.DeleteFeatureParams{OrganizationID: organizationID, FeatureName: string(feature)})
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("disable feature: %w", err)
+	}
+	return nil
+}
+
+func (c *Client) withFeatureCacheLock(ctx context.Context, organizationID string, feature Feature, fn func(*pgxpool.Conn) error) error {
+	return c.withFeatureCacheLocks(ctx, organizationID, []Feature{feature}, fn)
+}
+
+func (c *Client) withFeatureCacheLocks(ctx context.Context, organizationID string, features []Feature, fn func(*pgxpool.Conn) error) error {
+	conn, release, err := c.acquireFeatureCacheLocks(ctx, organizationID, features)
+	if err != nil {
+		return err
+	}
+	defer release()
+	return fn(conn)
+}
+
+func (c *Client) acquireFeatureCacheLocks(ctx context.Context, organizationID string, features []Feature) (*pgxpool.Conn, func(), error) {
+	conn, err := c.db.Acquire(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("acquire feature cache lock connection: %w", err)
+	}
+
+	queries := repo.New(conn)
+	features = slices.Clone(features)
+	slices.Sort(features)
+	acquired := make([]repo.AcquireFeatureCacheLockParams, 0, len(features))
+	release := func() {
+		unlockCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		for i := len(acquired) - 1; i >= 0; i-- {
+			params := acquired[i]
+			unlocked, unlockErr := queries.ReleaseFeatureCacheLock(unlockCtx, repo.ReleaseFeatureCacheLockParams(params))
+			if unlockErr != nil || !unlocked {
+				c.logger.ErrorContext(unlockCtx, "failed to release feature cache lock",
+					attr.SlogError(unlockErr),
+					attr.SlogOrganizationID(organizationID),
+					attr.SlogProductFeatureName(params.FeatureName),
+				)
+				_ = conn.Hijack().Close(unlockCtx)
+				return
+			}
+		}
+		conn.Release()
+	}
+
+	for _, feature := range features {
+		params := repo.AcquireFeatureCacheLockParams{OrganizationID: organizationID, FeatureName: string(feature)}
+		if err := queries.AcquireFeatureCacheLock(ctx, params); err != nil {
+			release()
+			return nil, nil, fmt.Errorf("acquire feature cache lock: %w", err)
+		}
+		acquired = append(acquired, params)
+	}
+
+	return conn, release, nil
 }
 
 func provisionSkillsSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, organizationID string) error {
@@ -182,6 +340,42 @@ var EnterpriseTrialBundle = []Feature{
 	FeatureCustomerManagedEncryptionKeys,
 }
 
+// TrialRuntimeFeatures are disabled when an enterprise trial expires and
+// restored when the organization returns to a paid or trial state.
+var TrialRuntimeFeatures = []Feature{
+	FeatureLogs,
+	FeatureToolIOLogs,
+	FeatureSessionCapture,
+	FeaturePlatformMCP,
+}
+
+// SetTrialRuntimeFeaturesTx toggles the runtime capabilities whose trial state
+// must not outlive an expired trial. It does not modify any other entitlement.
+func SetTrialRuntimeFeaturesTx(ctx context.Context, tx pgx.Tx, organizationID string, enabled bool) error {
+	q := repo.New(tx)
+	for _, feature := range TrialRuntimeFeatures {
+		if enabled {
+			if _, err := q.EnableFeature(ctx, repo.EnableFeatureParams{
+				OrganizationID: organizationID,
+				FeatureName:    string(feature),
+			}); err != nil {
+				return fmt.Errorf("enable %s: %w", feature, err)
+			}
+			continue
+		}
+
+		if _, err := q.DeleteFeature(ctx, repo.DeleteFeatureParams{
+			OrganizationID: organizationID,
+			FeatureName:    string(feature),
+		}); errors.Is(err, pgx.ErrNoRows) {
+			continue
+		} else if err != nil {
+			return fmt.Errorf("disable %s: %w", feature, err)
+		}
+	}
+	return nil
+}
+
 // SeedEnterpriseTrialBundleTx enables the enterprise trial entitlements in the
 // caller's transaction. Idempotent, so a replayed signup is safe. The feature
 // cache is left untouched: the organization is created in the same transaction,
@@ -203,6 +397,41 @@ func SeedEnterpriseTrialBundleTx(ctx context.Context, tx pgx.Tx, organizationID 
 	}
 
 	return nil
+}
+
+// SeedPaygEntitlementsTx grants PAYG capabilities only when an organization
+// has never configured them. A soft-deleted feature remains disabled. The
+// returned features are the rows this transaction inserted, so callers can
+// update caches after commit without exposing uncommitted state.
+func SeedPaygEntitlementsTx(ctx context.Context, tx pgx.Tx, organizationID string) ([]Feature, error) {
+	q := repo.New(tx)
+	features := make([]Feature, 0, len(EnterpriseTrialBundle)+2)
+	features = append(features, FeaturePlatformMCP)
+	features = append(features, EnterpriseTrialBundle...)
+	features = append(features, FeatureSkills)
+
+	enabled := make([]Feature, 0, len(features))
+	for _, feature := range features {
+		inserted, err := q.EnableFeatureIfNeverConfigured(ctx, repo.EnableFeatureIfNeverConfiguredParams{
+			OrganizationID: organizationID,
+			FeatureName:    string(feature),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("enable new PAYG entitlement %s: %w", feature, err)
+		}
+		if inserted == 0 {
+			continue
+		}
+
+		if feature == FeatureSkills {
+			if err := provisionSkillsSystemRoleGrantsTx(ctx, tx, organizationID); err != nil {
+				return nil, fmt.Errorf("provision PAYG Skills grants: %w", err)
+			}
+		}
+		enabled = append(enabled, feature)
+	}
+
+	return enabled, nil
 }
 
 // EnableSkillsTx provisions the built-in Skills grants and enables the

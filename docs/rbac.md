@@ -26,17 +26,19 @@ Examples:
 
 ```text
 user:user_01abc
-role:admin
-role:member
-role:custom-builder
+role:global:00000000-0000-0000-0000-000000000001
+role:global:00000000-0000-0000-0000-000000000002
+role:organization:00000000-0000-0000-0000-000000000003
 ```
+
+Role principals use `role:<kind>:<role-uuid>`, where `kind` is `global` or `organization`. Role slugs such as `admin` remain display and lookup metadata; they are not principal identifiers.
 
 The current RBAC implementation supports `user` and `role` principals, but there is no hard limitation to those two. We can add other principal types as the model grows. For example, we expect to migrate the current API key system into RBAC eventually, which would introduce an `api_key` principal.
 
 A request's effective grants are normally loaded from both:
 
 - the authenticated user principal, such as `user:user_01abc`
-- the user's organization role principal, such as `role:admin` or `role:custom-builder`
+- the user's canonical role principal, such as `role:global:<role-uuid>` or `role:organization:<role-uuid>`
 
 This lets us give most access through roles while still allowing direct user grants when needed.
 
@@ -90,9 +92,9 @@ const (
 
 The Observe dashboard surface (Costs, MCP & Tools Insights, Employee Enrollment, Agent Sessions, and Tool Logs) is gated on **`org:admin`** at the page level (no dedicated scope). The Observe nav group stays visible to any project member (like the Secure section); opening a page as a non-admin renders the page-level "Access restricted" notice. This keeps telemetry out of basic members' view by default (e.g. members synced via directory/SCIM) without introducing a new scope.
 
-`chat:read` protects reading _other members'_ agent session transcripts (`chat.load`, `chat.summarize`). `chat:write` protects mutating them — `chat.setPinned`, `chat.delete`, `chat.submitFeedback`, and the rename path of `chat.generateTitle`. Neither is a default for any system role — not even `admin` — because session transcripts are sensitive and deleting one is destructive; both must be granted explicitly via a custom role grant.
+`chat:read` protects reading _other members'_ agent session transcripts (`chat.load`, `chat.summarize`) and pinning them (`chat.setPinned`). `chat:write` protects destructive mutations — `chat.delete`, `chat.submitFeedback`, and the rename path of `chat.generateTitle`. Neither is a default for any system role — not even `admin` — because session transcripts are sensitive and deleting one is destructive; both must be granted explicitly via a custom role grant.
 
-The two are separate so a session reviewer can be given `chat:read` alone: they can open every transcript in the project but cannot delete or otherwise alter one. `chat:write` satisfies `chat:read` through the normal expansion rules, so a role that needs both only has to carry `chat:write`.
+The two are separate so a session reviewer can be given `chat:read` alone: they can open every transcript in the project and pin one as a shared bookmark, but cannot delete or otherwise alter one. `chat:write` satisfies `chat:read` through the normal expansion rules, so a role that needs both only has to carry `chat:write`.
 
 Everyone (members and admins alike) can always read _and_ mutate sessions they own: the chat handlers bypass the scope check when the caller owns the session (`chat.user_id == caller`), and the session list filters to the caller's own sessions when they lack `chat:read`. Reaching another user's session — or an ownerless/external session — requires the corresponding unrestricted grant.
 
@@ -140,14 +142,14 @@ principal + scope + selector = grant
 Example:
 
 ```text
-role:member has project:read on project 018f...
+role:global:00000000-0000-0000-0000-000000000002 has project:read on project 018f...
 ```
 
 In database shape:
 
 ```json
 {
-  "principal_urn": "role:member",
+  "principal_urn": "role:global:00000000-0000-0000-0000-000000000002",
   "scope": "project:read",
   "selectors": {
     "resource_kind": "project",
@@ -385,9 +387,9 @@ org:admin
 Grants assign that vocabulary to principals:
 
 ```text
-role:admin has project:write on every project
-role:member has mcp:connect on every MCP server
-role:custom-support has mcp:connect on toolset_123, tool=search_docs
+role:global:00000000-0000-0000-0000-000000000001 has project:write on every project
+role:global:00000000-0000-0000-0000-000000000002 has mcp:connect on every MCP server
+role:organization:00000000-0000-0000-0000-000000000003 has mcp:connect on toolset_123, tool=search_docs
 ```
 
 The practical distinction is simple: add a grant when the permission already exists but another principal needs it. Add a scope only when the product needs a new kind of permission that should be independently assignable. Most changes should add or modify grants, not scopes.
@@ -475,7 +477,7 @@ The principal list usually contains the user and their role:
 
 ```text
 user:user_01abc
-role:member
+role:global:00000000-0000-0000-0000-000000000002
 ```
 
 The engine then evaluates checks in memory against the loaded grants.
@@ -528,6 +530,8 @@ Selectors matter. A project-scoped feature needs the grant selector to match the
 | Open Access / RBAC page                                                                               | `org:read` OR `org:admin`                                                                                    | Organization ID                                                       | Viewing access state can be read-only; role, grant, member-role, and challenge-resolution actions are `org:admin`.                                                                                                                                                                                                                                                                                                                                                                                                          |
 | Open Team page and manage members                                                                     | `org:admin`                                                                                                  | Organization ID                                                       | The current Team page is page-gated on `org:admin`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | Open Billing                                                                                          | `org:read` OR `org:admin`                                                                                    | Organization ID                                                       | Billing management sections and portal actions are `org:admin`.                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| See billing status banners (failed payment, inference cap reached)                                    | `org:read` OR `org:admin`                                                                                    | Organization ID                                                       | Per-key inference-cap banners ride the page header, so they appear on every organization and project page except Billing, where the failed-payment banner and cap banners are composed together. Stripe subscription state and per-key inference caps are read only after a pay-as-you-go tier check and an `org:read` gate. Their actions require `org:admin`; other readers see an ask-an-admin note instead.                                                                                                             |
+| Read per-key inference usage and monthly caps (`usage.getInferenceSpendCaps`)                         | `org:read` OR `org:admin`                                                                                    | Organization ID                                                       | Enforced server-side against the active organization. The endpoint enumerates only the materialized Gram-managed Security and Other inference keys; BYOK provider keys are excluded. The billing page's inference cap controls read it. Setting one selected key's cap (`usage.setSpendCap`) is `org:admin`.                                                                                                                                                                                                                |
 | Manage organization API keys or generate agent tokens                                                 | `org:admin`                                                                                                  | Organization ID                                                       | API key listing and creation are admin-only in the dashboard.                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | View organization domains, org logs, webhooks, identity, audit logs, device agent                     | `org:read` OR `org:admin`                                                                                    | Organization ID                                                       | Mutating settings on these pages, including domains, forwarding, webhooks, identity providers, and device-agent token generation, requires `org:admin`. The Device Agent Setup tab stays readable for org readers, but the fleet Configuration tab is admin-only to both view and change: its Configuration tab is hidden from non-admins and `agent.getConfiguration`/`agent.updateConfiguration` both require `org:admin`.                                                                                                |
 | View MCP Connections and automatic session refresh policy                                             | `org:read` OR `org:admin`                                                                                    | Organization ID                                                       | Changing the organization-wide automatic session refresh policy requires `org:admin`. Revoking connections requires `project:write` for the selected project.                                                                                                                                                                                                                                                                                                                                                               |
@@ -548,7 +552,8 @@ Selectors matter. A project-scoped feature needs the grant selector to match the
 | Open an Environment detail page                                                                       | `project:read`                                                                                               | Project ID                                                            | Adding, editing, or deleting variables requires `environment:write` (the environment scope family is independent from `project:*` because env values include secrets). The "Fill for MCP Server" action also requires `environment:write`: it prefills placeholder variables through the environment update path. Environment-specific clone checks use `environment:read` for the source and `environment:write` for the destination.                                                                                      |
 | Open the Observe section: Costs, MCP & Tools Insights, Employee Enrollment, Agent Sessions, Tool Logs | `org:admin`                                                                                                  | Organization ID                                                       | Every Observe page is gated on `org:admin` at the page level. The Observe nav group and command-palette entries stay visible to project members; opening a page as a non-admin renders the page-level "Access restricted" notice (the Secure-section pattern).                                                                                                                                                                                                                                                              |
 | Open or summarize an individual agent session transcript (`chat.load`, `chat.summarize`)              | `chat:read` (or owner)                                                                                       | Chat session                                                          | Reaching the Agent Sessions list first requires `org:admin` (row above). Anyone can always open sessions they own (owner-bypass: `chat.user_id == caller`), with no `chat:read` grant. Opening another user's session requires an explicit unrestricted `chat:read` — not a default of any system role, so even admins must be granted it. Both are recorded in the audit log (`chat_session:access`), including a cached summary.                                                                                          |
-| Pin, rename, delete, or submit feedback on an agent session                                           | `chat:write` (or owner)                                                                                      | Chat session                                                          | Deliberately separate from `chat:read` so a session reviewer can read transcripts without being able to destroy one. `chat:write` satisfies `chat:read` by expansion. Anyone can always mutate sessions they own; doing it to another user's session needs an explicit unrestricted `chat:write`, which no system role holds. Deleting a chat that backs a live assistant thread is refused regardless.                                                                                                                     |
+| Pin or unpin an agent session (`chat.setPinned`)                                                      | `chat:read` (or owner)                                                                                       | Chat session                                                          | Pinning is a shared project bookmark, not a destructive mutation of the transcript. Anyone who can open a session can pin it. Members without `chat:read` can still pin sessions they own.                                                                                                                                                                                                                                                                                                                                  |
+| Rename, delete, or submit feedback on an agent session                                                | `chat:write` (or owner)                                                                                      | Chat session                                                          | Deliberately separate from `chat:read` so a session reviewer can read and pin transcripts without being able to destroy one. `chat:write` satisfies `chat:read` by expansion. Anyone can always mutate sessions they own; doing it to another user's session needs an explicit unrestricted `chat:write`, which no system role holds. Deleting a chat that backs a live assistant thread is refused regardless.                                                                                                             |
 | Open Project Settings                                                                                 | `project:write`                                                                                              | Project ID                                                            | Settings are treated as project mutation/admin surface.                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | Open Secure pages: Risk Overview, Risk Policies, Approval Requests, Detection Rules                   | `org:admin`                                                                                                  | Organization ID                                                       | The dashboard pages are admin-only today. `risk_policy:evaluate` and `risk_policy:bypass` are policy runtime/request-flow scopes, not general dashboard page grants.                                                                                                                                                                                                                                                                                                                                                        |
 
@@ -752,7 +757,7 @@ Grant row:
 ```json
 {
   "organization_id": "org_123",
-  "principal_urn": "role:analyst",
+  "principal_urn": "role:organization:00000000-0000-0000-0000-000000000010",
   "scope": "project:read",
   "selectors": {
     "resource_kind": "project",
@@ -782,7 +787,7 @@ Grant row:
 
 ```json
 {
-  "principal_urn": "role:analyst",
+  "principal_urn": "role:organization:00000000-0000-0000-0000-000000000010",
   "scope": "project:read",
   "selectors": {
     "resource_kind": "project",
@@ -812,7 +817,7 @@ Grant row:
 
 ```json
 {
-  "principal_urn": "role:builder",
+  "principal_urn": "role:organization:00000000-0000-0000-0000-000000000011",
   "scope": "project:write",
   "selectors": {
     "resource_kind": "project",
@@ -842,7 +847,7 @@ Grant row:
 
 ```json
 {
-  "principal_urn": "role:agent-user",
+  "principal_urn": "role:organization:00000000-0000-0000-0000-000000000012",
   "scope": "mcp:connect",
   "selectors": {
     "resource_kind": "mcp",
@@ -870,7 +875,7 @@ Grant row:
 
 ```json
 {
-  "principal_urn": "role:agent-user",
+  "principal_urn": "role:organization:00000000-0000-0000-0000-000000000012",
   "scope": "mcp:connect",
   "selectors": {
     "resource_kind": "mcp",
@@ -907,7 +912,7 @@ Grant rows:
 ```json
 [
   {
-    "principal_urn": "role:analyst",
+    "principal_urn": "role:organization:00000000-0000-0000-0000-000000000010",
     "scope": "project:read",
     "selectors": {
       "resource_kind": "project",
@@ -915,7 +920,7 @@ Grant rows:
     }
   },
   {
-    "principal_urn": "role:analyst",
+    "principal_urn": "role:organization:00000000-0000-0000-0000-000000000010",
     "scope": "project:read",
     "selectors": {
       "resource_kind": "project",

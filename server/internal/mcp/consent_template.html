@@ -94,7 +94,7 @@
         border: solid 1px var(--border-neutral-softest);
         border-radius: 0.5rem;
         padding: 2rem;
-        max-width: 30rem;
+        max-width: 52rem;
         width: 100%;
         display: flex;
         flex-direction: column;
@@ -253,9 +253,21 @@
       }
 
       .remote-card .meta .issuer {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
         font-weight: 500;
         color: var(--fill-neutral-default);
         font-family: var(--font-diatype-mono);
+      }
+
+      .remote-card .meta .issuer-logo {
+        width: 1.5rem;
+        height: 1.5rem;
+        border-radius: 4px;
+        object-fit: contain;
+        flex-shrink: 0;
+        display: block;
       }
 
       .remote-card .meta .state {
@@ -382,6 +394,25 @@
       .remote-card button.btn-link[aria-disabled="true"] {
         pointer-events: none;
         opacity: 0.65;
+      }
+
+      .tools {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+
+      .tools h3 {
+        margin: 0;
+        color: var(--fill-neutral-default);
+        font-size: 0.875rem;
+        font-weight: 400;
+      }
+
+      .tools-note {
+        margin: 0;
+        font-size: 0.75rem;
+        color: var(--text-default);
       }
 
       .actions {
@@ -597,7 +628,13 @@
               data-auto-refresh-input
             />
             <div class="meta">
-              <div class="issuer">{{.IssuerSlug}}</div>
+              <div class="issuer">
+                {{if .IssuerLogoURL}}<img
+                  class="issuer-logo"
+                  src="{{.IssuerLogoURL}}"
+                  alt=""
+                />{{end}}<span>{{.IssuerDisplay}}</span>
+              </div>
               {{if .Connected}}
               <div class="state connected">✓ Connected</div>
               {{if .AutoRefreshChecked}}
@@ -659,7 +696,7 @@
                 name="action"
                 value="disconnect"
                 class="icon-btn"
-                aria-label="Disconnect {{.IssuerSlug}}"
+                aria-label="Disconnect {{.IssuerDisplay}}"
                 title="Disconnect"
               >
                 <svg
@@ -678,7 +715,29 @@
           </form>
           {{end}}
         </div>
-        {{end}} {{if .AutoClose}}
+        {{end}}
+
+        {{if .ShowToolsIsland}}
+        <div class="tools">
+          <h3>Tool access</h3>
+          <div
+            id="consent-tools-root"
+            data-tools-url="{{.ConsentToolsURL}}"
+            data-state="{{.State}}"
+            data-csrf-token="{{.CSRFToken}}"
+            data-form-id="consent-approve-form"
+            data-approve-button-id="consent-approve-button"
+            data-consent-enabled="{{if .ConsentEnabled}}true{{else}}false{{end}}"
+            data-server-name="{{.MCPSlug}}"
+            {{if .ConsentToolsPrefill}}data-prefill="{{.ConsentToolsPrefill}}"{{end}}
+            aria-live="polite"
+          >
+            <p class="tools-note">Loading available tools…</p>
+          </div>
+        </div>
+        {{end}}
+
+        {{if .AutoClose}}
         <p class="info">
           Connection complete. This tab will close automatically.
         </p>
@@ -700,10 +759,9 @@
               type="submit"
               name="action"
               value="approve"
+              id="consent-approve-button"
               class="btn btn-primary"
-              {{if
-              not
-              .ConsentEnabled}}disabled{{end}}
+              {{if or .ShowToolsIsland (not .ConsentEnabled)}}disabled{{end}}
             >
               Give Access
             </button>
@@ -725,5 +783,8 @@
       </div>
     </main>
     <script src="{{.ScriptURL}}"></script>
+    {{if .ShowToolsIsland}}
+    <script defer src="{{.ConsentToolsScriptURL}}"></script>
+    {{end}}
   </body>
 </html>

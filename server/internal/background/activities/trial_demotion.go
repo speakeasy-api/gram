@@ -11,18 +11,23 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/background/activities/keybillinglock"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type DemoteExpiredTrials struct {
-	logger     *slog.Logger
-	db         *pgxpool.Pool
-	repo       *trialsrepo.Queries
-	openRouter openrouter.Provisioner
-	audit      *audit.Logger
+	logger          *slog.Logger
+	db              *pgxpool.Pool
+	repo            *trialsrepo.Queries
+	openRouter      openrouter.Provisioner
+	audit           *audit.Logger
+	notifier        trialemails.Notifier
+	productFeatures *productfeatures.Client
 }
 
 func NewDemoteExpiredTrials(
@@ -30,13 +35,17 @@ func NewDemoteExpiredTrials(
 	db *pgxpool.Pool,
 	openRouterProvisioner openrouter.Provisioner,
 	auditLogger *audit.Logger,
+	notifier trialemails.Notifier,
+	productFeatures *productfeatures.Client,
 ) *DemoteExpiredTrials {
 	return &DemoteExpiredTrials{
-		logger:     logger.With(attr.SlogComponent("demote_expired_trials")),
-		db:         db,
-		repo:       trialsrepo.New(db),
-		openRouter: openRouterProvisioner,
-		audit:      auditLogger,
+		logger:          logger.With(attr.SlogComponent("demote_expired_trials")),
+		db:              db,
+		repo:            trialsrepo.New(db),
+		openRouter:      openRouterProvisioner,
+		audit:           auditLogger,
+		notifier:        notifier,
+		productFeatures: productFeatures,
 	}
 }
 
@@ -79,14 +88,24 @@ func (d *DemoteExpiredTrials) Demote(ctx context.Context, args DemoteExpiredTria
 	// stamp back and leaves the trial armed for the next sweep, which a lockdown
 	// after the commit would not get: a stamped row drops out of the sweep.
 	//
-	// DisableAPIKey writes its own disabled flag on the pool rather than on
-	// dbtx, so a key already taken down stays down through that rollback. The
-	// organization reads as enterprise with a dead key until the next sweep
-	// completes the demotion.
+	// DisableAPIKeyWithDB writes its disabled flag on the locked key session,
+	// outside dbtx, so a key already taken down stays down through an
+	// organization-transaction rollback. The organization reads as enterprise
+	// with a dead key until the next sweep completes the demotion.
 	for _, keyType := range openrouter.AllKeyTypes {
-		if err := d.openRouter.DisableAPIKey(ctx, args.OrganizationID, keyType); err != nil {
+		if err := keybillinglock.With(ctx, d.logger, d.db, args.OrganizationID, keyType, func(conn *pgxpool.Conn) error {
+			dbProvisioner, ok := d.openRouter.(openRouterKeyBillingDBProvisioner)
+			if !ok {
+				return errors.New("OpenRouter key provisioner cannot use the locked database session")
+			}
+			return dbProvisioner.DisableAPIKeyWithDB(ctx, conn, args.OrganizationID, keyType)
+		}); err != nil {
 			return fmt.Errorf("disable openrouter %s key: %w", keyType, err)
 		}
+	}
+
+	if err := productfeatures.SetTrialRuntimeFeaturesTx(ctx, dbtx, args.OrganizationID, false); err != nil {
+		return fmt.Errorf("disable trial runtime features: %w", err)
 	}
 
 	organization, err := tx.DemoteOrganizationToFree(ctx, args.OrganizationID)
@@ -109,6 +128,14 @@ func (d *DemoteExpiredTrials) Demote(ctx context.Context, args DemoteExpiredTria
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit trial demotion: %w", err)
+	}
+	for _, feature := range productfeatures.TrialRuntimeFeatures {
+		d.productFeatures.UpdateFeatureCache(ctx, args.OrganizationID, feature, false)
+	}
+	if d.notifier != nil {
+		if err := d.notifier.TrialInactive(ctx, args.OrganizationID); err != nil {
+			d.logger.ErrorContext(ctx, "notify inactive trial after demotion", attr.SlogOrganizationID(args.OrganizationID), attr.SlogError(err))
+		}
 	}
 
 	return nil

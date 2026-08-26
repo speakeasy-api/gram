@@ -1,13 +1,21 @@
-import { EmptyState } from "@/components/page-layout";
-import { ToolsetsGraphic } from "../toolsets/ToolsetsEmptyState";
+import { InlineEmptyState } from "@/components/inline-empty-state";
+import { Button } from "@/components/ui/Button";
+import { useRoutes } from "@/routes";
+import { Link } from "react-router";
 
 export function DeploymentsEmptyState(): JSX.Element {
+  const routes = useRoutes();
+
   return (
-    <EmptyState
+    <InlineEmptyState
+      icon="history"
       heading="No deployments yet"
-      description="The platform tracks how your MCP server evolves over time, allowing you to see change history and roll back if necessary."
-      graphic={<ToolsetsGraphic />}
-      graphicClassName="scale-90"
+      description="Connect an MCP server from the catalog to create your first deployment and generate tools."
+      action={
+        <Button asChild size="sm">
+          <Link to={routes.catalog.href()}>Browse catalog</Link>
+        </Button>
+      }
     />
   );
 }

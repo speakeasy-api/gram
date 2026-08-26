@@ -1,7 +1,7 @@
 import { toolSupportsAnnotations, type Tool } from "@/lib/toolTypes";
 import { Badge } from "@/components/ui/Badge";
 
-export interface ResolvedToolAnnotations {
+interface ResolvedToolAnnotations {
   readOnly: boolean;
   destructive: boolean;
   idempotent: boolean;
@@ -44,7 +44,7 @@ export function AnnotationBadges({ tool }: { tool: Tool }): JSX.Element | null {
  * tool is surfaced — including Distribute → MCP → Tools and the role grant
  * picker's tool rows.
  */
-export function AnnotationBadgeIcons({
+function AnnotationBadgeIcons({
   readOnly,
   destructive,
   idempotent,

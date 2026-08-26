@@ -1,3 +1,4 @@
+import { AssetImageUploadField } from "@/components/asset-image-upload-field";
 import { RequireScope } from "@/components/require-scope";
 import { useRBAC } from "@/hooks/useRBAC";
 import { Text } from "@/components/ui/Text";
@@ -33,6 +34,13 @@ export function SettingsTab({
   const orgRoutes = useOrgRoutes();
   const queryClient = useQueryClient();
   const [name, setName] = useState(issuer.name ?? "");
+  // Seeded from the saved issuer like name: buildUpdateIssuerForm always sends
+  // this field and reads "" as "clear to NULL", so starting from anything but
+  // the stored value would wipe the logo on the next unrelated save.
+  const [logoAssetId, setLogoAssetId] = useState(issuer.logoAssetId ?? "");
+  // Save is held while a logo upload is in flight: submitting mid-upload
+  // would persist the pre-upload value and silently drop the picked logo.
+  const [logoUploading, setLogoUploading] = useState(false);
   const [slug, setSlug] = useState(issuer.slug);
   const [clientSetupDocumentationUrl, setClientSetupDocumentationUrl] =
     useState(issuer.clientSetupDocumentationUrl ?? "");
@@ -75,6 +83,10 @@ export function SettingsTab({
       responseTypesSupported: issuer.responseTypesSupported ?? [],
       tokenEndpointAuthMethodsSupported:
         issuer.tokenEndpointAuthMethodsSupported ?? [],
+      // Preserved as null when never captured — no `?? []`, which would claim
+      // the issuer advertises no PKCE methods.
+      codeChallengeMethodsSupported:
+        issuer.codeChallengeMethodsSupported ?? null,
       clientIdMetadataDocumentSupported:
         issuer.clientIdMetadataDocumentSupported,
       revocationEndpoint: issuer.revocationEndpoint ?? "",
@@ -182,6 +194,7 @@ export function SettingsTab({
         updateRemoteSessionIssuerForm: buildUpdateIssuerForm({
           id: issuer.id,
           name,
+          logoAssetId,
           slug,
           clientSetupDocumentationUrl,
           issuerUrl,
@@ -203,6 +216,14 @@ export function SettingsTab({
       >
         <SettingsField label="Display name" value={name} onChange={setName} />
         <SettingsField label="Slug" value={slug} onChange={setSlug} />
+        <AssetImageUploadField
+          tier="organization"
+          value={logoAssetId}
+          onChange={setLogoAssetId}
+          onUploadingChange={setLogoUploading}
+          canEdit={hasOrgAdminScope}
+          description="Shown beside this provider in the dashboard and on the connect consent page. Saved with your other changes."
+        />
       </SettingsSection>
 
       <SettingsSection
@@ -326,7 +347,9 @@ export function SettingsTab({
         <RequireScope scope="org:admin" level="component">
           <Button
             onClick={handleSave}
-            disabled={update.isPending || refreshMetadata.isPending}
+            disabled={
+              update.isPending || refreshMetadata.isPending || logoUploading
+            }
           >
             <Button.Text>
               {update.isPending ? "Saving…" : "Save changes"}

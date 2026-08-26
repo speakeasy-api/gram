@@ -421,6 +421,23 @@ WHERE id = @id
   AND deleted IS FALSE
 RETURNING *;
 
+-- name: ResolveRequestedRiskPolicyBypassRequest :one
+-- Resolves a bypass request only while it still awaits a decision. Used when
+-- a promoted approval review is decided: a row already decided through the
+-- legacy queue keeps its recorded outcome instead of being overwritten by
+-- the review's.
+UPDATE risk_policy_bypass_requests
+SET status = @status
+  , decided_by = @decided_by
+  , granted_principal_urns = @granted_principal_urns
+  , decided_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND status = 'requested'
+  AND deleted IS FALSE
+RETURNING *;
+
 -- name: CreateCustomDetectionRule :one
 INSERT INTO risk_custom_detection_rules (
     project_id
@@ -839,13 +856,17 @@ ORDER BY buckets.bucket_start ASC, categories.category ASC;
 -- (project_id, id WHERE risk_analyzed_at IS NULL), which shrinks toward
 -- zero at steady state. The id >= @id_lower_bound bound (a UUIDv7 lower
 -- bound computed from the configured lookback) further limits the scan to
--- recent messages, reusing the same partial index ordering.
+-- recent messages, reusing the same partial index ordering. Oldest-first:
+-- under a backlog above the batch limit, newest-first would keep serving
+-- fresh messages while units nearing the lookback's edge age out without a
+-- retry; ascending order drains the window fairly and costs at most the
+-- lookback in added freshness latency.
 SELECT cm.id
 FROM chat_messages cm
 WHERE cm.project_id = @project_id
   AND cm.risk_analyzed_at IS NULL
   AND cm.id >= @id_lower_bound
-ORDER BY cm.id DESC
+ORDER BY cm.id ASC
 LIMIT @batch_limit;
 
 -- name: MarkMessagesRiskAnalyzed :exec
@@ -857,13 +878,14 @@ WHERE id = ANY(@message_ids::uuid[])
 -- name: FetchUnanalyzedContentPartIDs :many
 -- Scans the partial index chat_content_parts_risk_analyzed_at_null_idx
 -- (project_id, id WHERE risk_analyzed_at IS NULL), mirroring the chat_messages
--- unanalyzed sweep for non-turn content.
+-- unanalyzed sweep for non-turn content, including its oldest-first order so
+-- a backlog cannot starve units nearing the lookback's edge.
 SELECT ccp.id
 FROM chat_content_parts ccp
 WHERE ccp.project_id = @project_id
   AND ccp.risk_analyzed_at IS NULL
   AND ccp.id >= @id_lower_bound
-ORDER BY ccp.id DESC
+ORDER BY ccp.id ASC
 LIMIT @batch_limit;
 
 -- name: MarkContentPartsRiskAnalyzed :exec
@@ -1081,17 +1103,40 @@ DO UPDATE SET
 WHERE EXCLUDED.found IS TRUE
   AND risk_results.found IS FALSE;
 
--- name: DeleteRiskResultsForMessages :exec
+-- name: DeleteRiskResultsForUnits :many
+-- Replaces a batch's rows across both anchor kinds in one statement.
+-- Returns the identity and dismissal columns of what the re-analysis
+-- replaced: the writer recomputes each row's deterministic id from the
+-- identity columns to learn which findings an earlier committed attempt
+-- already announced (their webhook outbox events must not be re-emitted) and
+-- which carried a manual dismissal to re-stamp onto the reinserted rows.
+-- Recomputing from identity rather than trusting the stored id keeps rows
+-- written before ids became deterministic (random UUIDs) on the same footing
+-- as new ones. Heavy payload columns (match aside, which is identity) stay
+-- out of the RETURNING set.
 DELETE FROM risk_results
 WHERE risk_policy_id = @risk_policy_id
   AND project_id = @project_id
-  AND chat_message_id = ANY(@message_ids::uuid[]);
+  AND (chat_message_id = ANY(@message_ids::uuid[])
+    OR chat_content_part_id = ANY(@content_part_ids::uuid[]))
+RETURNING id, risk_policy_version, chat_message_id, chat_content_part_id,
+  found, source, rule_id, description, match, start_pos, end_pos,
+  dead_letter_reason, false_positive_at, false_positive_reason;
 
--- name: DeleteRiskResultsForContentParts :exec
-DELETE FROM risk_results
-WHERE risk_policy_id = @risk_policy_id
-  AND project_id = @project_id
-  AND chat_content_part_id = ANY(@content_part_ids::uuid[]);
+-- name: RestoreRiskResultFalsePositiveState :exec
+-- Re-stamps manual dismissals onto re-analyzed rows in the same transaction
+-- that replaced them. Ids that were not reinserted (the finding disappeared)
+-- match nothing, so a vanished finding's dismissal dies with it.
+UPDATE risk_results
+SET false_positive_at = v.false_positive_at
+  , false_positive_reason = NULLIF(v.false_positive_reason, '')
+FROM (
+    SELECT UNNEST(@ids::uuid[]) AS id
+         , UNNEST(@false_positive_ats::timestamptz[]) AS false_positive_at
+         , UNNEST(@false_positive_reasons::text[]) AS false_positive_reason
+) v
+WHERE risk_results.id = v.id
+  AND risk_results.project_id = @project_id;
 
 -- name: GetRiskResultByID :one
 -- Single-row lookup backing risk.results.unmask: fetch a result's raw match
@@ -1183,6 +1228,12 @@ FROM (
     AND (sqlc.narg(to_time)::timestamptz IS NULL OR COALESCE(cm.created_at, ccp.created_at) < sqlc.narg(to_time)::timestamptz)
     AND (@rule_id::text = '' OR rr.rule_id ILIKE '%' || @rule_id::text || '%')
     AND (@user_id::text = '' OR c.external_user_id ILIKE '%' || @user_id::text || '%')
+    -- Whole-id matching, unlike @user_id above: one subject's findings, not
+    -- everyone whose id happens to contain theirs as a substring.
+    AND (
+      COALESCE(cardinality(@external_user_ids::text[]), 0) = 0
+      OR lower(c.external_user_id) = ANY(ARRAY(SELECT lower(e) FROM unnest(@external_user_ids::text[]) AS e))
+    )
     AND (NOT @non_assistant::boolean OR NOT EXISTS (
       SELECT 1 FROM assistant_threads at
       WHERE at.chat_id = COALESCE(cm.chat_id, ccp.chat_id) AND at.deleted IS FALSE
@@ -1323,14 +1374,83 @@ ORDER BY cm.chat_id DESC
 LIMIT @page_limit;
 
 -- name: ListEnabledEnforcingPoliciesByProject :many
--- Enforcing actions are block (hard deny) and warn (challenge: deny + ack link,
--- allowed after acknowledgement). flag is non-enforcing and excluded.
+-- Enforcing actions are block (hard deny), warn (challenge: deny + ack link,
+-- allowed after acknowledgement), and quarantine (hard deny + session circuit).
+-- flag is non-enforcing and excluded.
 SELECT *
 FROM risk_policies
 WHERE project_id = @project_id
   AND enabled IS TRUE
-  AND action IN ('block', 'warn')
+  AND action IN ('block', 'warn', 'quarantine')
   AND deleted IS FALSE;
+
+-- name: IsOrganizationHooksFailOpenEnabled :one
+SELECT EXISTS (
+  SELECT 1
+  FROM organization_features
+  WHERE organization_id = @organization_id
+    AND feature_name = 'hooks_fail_open'
+    AND deleted IS FALSE
+) AS enabled;
+
+-- name: CreateSessionQuarantine :one
+INSERT INTO session_quarantines (
+    organization_id
+  , project_id
+  , session_id
+  , risk_policy_id
+  , risk_policy_name
+  , user_id
+  , reason
+) VALUES (
+    @organization_id
+  , @project_id
+  , @session_id
+  , @risk_policy_id
+  , @risk_policy_name
+  , @user_id
+  , @reason
+)
+ON CONFLICT (organization_id, project_id, session_id) WHERE released_at IS NULL DO NOTHING
+RETURNING *;
+
+-- name: GetActiveSessionQuarantineBySession :one
+SELECT *
+FROM session_quarantines
+WHERE session_id = @session_id
+  AND organization_id = @organization_id
+  AND project_id = @project_id
+  AND released_at IS NULL;
+
+-- name: ListActiveSessionQuarantines :many
+SELECT *
+FROM session_quarantines
+WHERE organization_id = @organization_id
+  AND project_id = @project_id
+  AND released_at IS NULL
+ORDER BY created_at DESC, id DESC;
+
+-- name: ListActiveSessionQuarantinesPage :many
+SELECT *
+FROM session_quarantines
+WHERE released_at IS NULL
+  AND (
+    sqlc.narg(after_created_at)::timestamptz IS NULL
+    OR (created_at, id) > (sqlc.narg(after_created_at)::timestamptz, sqlc.narg(after_id)::uuid)
+  )
+ORDER BY created_at, id
+LIMIT @page_limit;
+
+-- name: ReleaseSessionQuarantine :one
+UPDATE session_quarantines
+SET released_at = clock_timestamp()
+  , released_by = @released_by
+  , updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id = @project_id
+  AND released_at IS NULL
+RETURNING *;
 
 -- name: GetProjectFlagGroups :one
 -- Resolves the org and project slugs used to build PostHog flag-evaluation
@@ -1488,9 +1608,10 @@ WHERE project_id = @project_id
   AND id = ANY(@ids::uuid[]);
 
 -- name: MarkRiskResultsFalsePositive :many
--- Returns full rows (not just id): the caller republishes each one onto the
--- findings topic to append a ClickHouse state-change row, and needs the
--- finding content (source/rule_id/match/...) to build that message.
+-- Returns the full rows the UPDATE actually changed: they drive audit logging
+-- and the ClickHouse mirror's outbox enqueue, both inside the same
+-- transaction as this UPDATE, so a retry that changes nothing correctly
+-- audits and mirrors nothing.
 UPDATE risk_results
 SET false_positive_at = clock_timestamp()
   , false_positive_reason = sqlc.narg(reason)

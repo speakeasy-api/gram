@@ -42,6 +42,7 @@ func BuildCustomDomainView(domain customdomainsrepo.CustomDomain, isUpdating boo
 		ConsecutiveFailures:      consecutiveFailures,
 		RootMcpEndpointID:        rootMcpEndpointIDString,
 		OpenaiAppsChallengeToken: conv.FromPGText[string](domain.OpenaiAppsChallengeToken),
+		SuggestedRecordType:      "cname",
 	}
 }
 
@@ -51,15 +52,16 @@ func BuildCustomDomainMcpEndpointListView(rows []mcpendpointsrepo.ListMCPEndpoin
 	result := make([]*domains.CustomDomainMcpEndpoint, len(rows))
 	for i, r := range rows {
 		result[i] = &domains.CustomDomainMcpEndpoint{
-			ID:            r.ID.String(),
-			Slug:          r.Slug,
-			ProjectID:     r.ProjectID.String(),
-			ProjectName:   r.ProjectName,
-			ProjectSlug:   r.ProjectSlug,
-			McpServerID:   r.McpServerID.String(),
-			McpServerName: conv.FromPGText[string](r.McpServerName),
-			McpServerSlug: conv.FromPGText[string](r.McpServerSlug),
-			IsDomainRoot:  r.IsDomainRoot.Valid && r.IsDomainRoot.Bool,
+			ID:              r.ID.String(),
+			Slug:            r.Slug,
+			ProjectID:       r.ProjectID.String(),
+			ProjectName:     r.ProjectName,
+			ProjectSlug:     r.ProjectSlug,
+			McpServerID:     conv.FromNullableUUID(r.McpServerID),
+			MetaMcpServerID: conv.FromNullableUUID(r.MetaMcpServerID),
+			McpServerName:   conv.PtrEmpty(r.McpServerName),
+			McpServerSlug:   conv.FromPGText[string](r.McpServerSlug),
+			IsDomainRoot:    r.IsDomainRoot.Valid && r.IsDomainRoot.Bool,
 		}
 	}
 	return result

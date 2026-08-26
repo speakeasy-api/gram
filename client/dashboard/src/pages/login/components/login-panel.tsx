@@ -1,4 +1,6 @@
+import { authPageHref } from "@/lib/safe-external-url";
 import { buildLoginRedirectURL, cn } from "@/lib/utils";
+import { Link } from "react-router";
 import { AUTH_BUTTON_CLASSES, AUTH_PILLARS } from "./auth-constants";
 import { SigninErrorNotice } from "./auth-errors";
 
@@ -44,6 +46,16 @@ export function LoginPanel({
 
       <p className="auth-mono-text text-center text-[11px] leading-relaxed tracking-[0.02em] text-[var(--muted)]">
         Single sign-on through your identity provider.
+      </p>
+
+      <p className="mt-2 text-[14px] text-(--muted-strong)">
+        Don't have an account?{" "}
+        <Link
+          to={authPageHref("/sign-up", redirectTo)}
+          className="text-(--link) underline hover:text-(--focus)"
+        >
+          Sign up
+        </Link>
       </p>
     </>
   );

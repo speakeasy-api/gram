@@ -15,29 +15,57 @@ import (
 
 // Client is the "admin" service client.
 type Client struct {
-	LoginEndpoint                    goa.Endpoint
-	CallbackEndpoint                 goa.Endpoint
-	LogoutEndpoint                   goa.Endpoint
-	GetProjectEndpoint               goa.Endpoint
-	UpdateOrganizationEndpoint       goa.Endpoint
-	GetOrganizationEndpoint          goa.Endpoint
-	ListOrganizationMembersEndpoint  goa.Endpoint
-	ListOrganizationProjectsEndpoint goa.Endpoint
-	ListOrganizationsEndpoint        goa.Endpoint
+	LoginEndpoint                       goa.Endpoint
+	CallbackEndpoint                    goa.Endpoint
+	LogoutEndpoint                      goa.Endpoint
+	GetProjectEndpoint                  goa.Endpoint
+	UpdateOrganizationEndpoint          goa.Endpoint
+	BulkUpdateAccountTypeEndpoint       goa.Endpoint
+	DisableOrganizationEndpoint         goa.Endpoint
+	EnableOrganizationEndpoint          goa.Endpoint
+	GetOrganizationEndpoint             goa.Endpoint
+	ListOrganizationMembersEndpoint     goa.Endpoint
+	ListOrganizationProjectsEndpoint    goa.Endpoint
+	ListOrganizationsEndpoint           goa.Endpoint
+	ExtendTrialEndpoint                 goa.Endpoint
+	CreateOrganizationEndpoint          goa.Endpoint
+	RearmTrialEndpoint                  goa.Endpoint
+	GetOrganizationStatsEndpoint        goa.Endpoint
+	GetInferenceKeysEndpoint            goa.Endpoint
+	SetInferenceKeyMonthlyLimitEndpoint goa.Endpoint
+	GetInferenceSpendHistoryEndpoint    goa.Endpoint
+	GetPaygBillingSummaryEndpoint       goa.Endpoint
+	GetStripeSubscriptionEndpoint       goa.Endpoint
+	CancelStripeSubscriptionEndpoint    goa.Endpoint
+	ResumeStripeSubscriptionEndpoint    goa.Endpoint
 }
 
 // NewClient initializes a "admin" service client given the endpoints.
-func NewClient(login, callback, logout, getProject, updateOrganization, getOrganization, listOrganizationMembers, listOrganizationProjects, listOrganizations goa.Endpoint) *Client {
+func NewClient(login, callback, logout, getProject, updateOrganization, bulkUpdateAccountType, disableOrganization, enableOrganization, getOrganization, listOrganizationMembers, listOrganizationProjects, listOrganizations, extendTrial, createOrganization, rearmTrial, getOrganizationStats, getInferenceKeys, setInferenceKeyMonthlyLimit, getInferenceSpendHistory, getPaygBillingSummary, getStripeSubscription, cancelStripeSubscription, resumeStripeSubscription goa.Endpoint) *Client {
 	return &Client{
-		LoginEndpoint:                    login,
-		CallbackEndpoint:                 callback,
-		LogoutEndpoint:                   logout,
-		GetProjectEndpoint:               getProject,
-		UpdateOrganizationEndpoint:       updateOrganization,
-		GetOrganizationEndpoint:          getOrganization,
-		ListOrganizationMembersEndpoint:  listOrganizationMembers,
-		ListOrganizationProjectsEndpoint: listOrganizationProjects,
-		ListOrganizationsEndpoint:        listOrganizations,
+		LoginEndpoint:                       login,
+		CallbackEndpoint:                    callback,
+		LogoutEndpoint:                      logout,
+		GetProjectEndpoint:                  getProject,
+		UpdateOrganizationEndpoint:          updateOrganization,
+		BulkUpdateAccountTypeEndpoint:       bulkUpdateAccountType,
+		DisableOrganizationEndpoint:         disableOrganization,
+		EnableOrganizationEndpoint:          enableOrganization,
+		GetOrganizationEndpoint:             getOrganization,
+		ListOrganizationMembersEndpoint:     listOrganizationMembers,
+		ListOrganizationProjectsEndpoint:    listOrganizationProjects,
+		ListOrganizationsEndpoint:           listOrganizations,
+		ExtendTrialEndpoint:                 extendTrial,
+		CreateOrganizationEndpoint:          createOrganization,
+		RearmTrialEndpoint:                  rearmTrial,
+		GetOrganizationStatsEndpoint:        getOrganizationStats,
+		GetInferenceKeysEndpoint:            getInferenceKeys,
+		SetInferenceKeyMonthlyLimitEndpoint: setInferenceKeyMonthlyLimit,
+		GetInferenceSpendHistoryEndpoint:    getInferenceSpendHistory,
+		GetPaygBillingSummaryEndpoint:       getPaygBillingSummary,
+		GetStripeSubscriptionEndpoint:       getStripeSubscription,
+		CancelStripeSubscriptionEndpoint:    cancelStripeSubscription,
+		ResumeStripeSubscriptionEndpoint:    resumeStripeSubscription,
 	}
 }
 
@@ -148,6 +176,75 @@ func (c *Client) UpdateOrganization(ctx context.Context, p *UpdateOrganizationPa
 	return ires.(*AdminOrganization), nil
 }
 
+// BulkUpdateAccountType calls the "bulkUpdateAccountType" endpoint of the
+// "admin" service.
+// BulkUpdateAccountType may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) BulkUpdateAccountType(ctx context.Context, p *BulkUpdateAccountTypePayload) (res *AdminBulkUpdateAccountTypeResult, err error) {
+	var ires any
+	ires, err = c.BulkUpdateAccountTypeEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminBulkUpdateAccountTypeResult), nil
+}
+
+// DisableOrganization calls the "disableOrganization" endpoint of the "admin"
+// service.
+// DisableOrganization may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DisableOrganization(ctx context.Context, p *DisableOrganizationPayload) (res *AdminOrganization, err error) {
+	var ires any
+	ires, err = c.DisableOrganizationEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminOrganization), nil
+}
+
+// EnableOrganization calls the "enableOrganization" endpoint of the "admin"
+// service.
+// EnableOrganization may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) EnableOrganization(ctx context.Context, p *EnableOrganizationPayload) (res *AdminOrganization, err error) {
+	var ires any
+	ires, err = c.EnableOrganizationEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminOrganization), nil
+}
+
 // GetOrganization calls the "getOrganization" endpoint of the "admin" service.
 // GetOrganization may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
@@ -237,4 +334,255 @@ func (c *Client) ListOrganizations(ctx context.Context, p *ListOrganizationsPayl
 		return
 	}
 	return ires.(*AdminListOrganizationsResult), nil
+}
+
+// ExtendTrial calls the "extendTrial" endpoint of the "admin" service.
+// ExtendTrial may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ExtendTrial(ctx context.Context, p *ExtendTrialPayload) (res *AdminOrganization, err error) {
+	var ires any
+	ires, err = c.ExtendTrialEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminOrganization), nil
+}
+
+// CreateOrganization calls the "createOrganization" endpoint of the "admin"
+// service.
+// CreateOrganization may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CreateOrganization(ctx context.Context, p *CreateOrganizationPayload) (res *AdminOrganization, err error) {
+	var ires any
+	ires, err = c.CreateOrganizationEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminOrganization), nil
+}
+
+// RearmTrial calls the "rearmTrial" endpoint of the "admin" service.
+// RearmTrial may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) RearmTrial(ctx context.Context, p *RearmTrialPayload) (res *AdminOrganization, err error) {
+	var ires any
+	ires, err = c.RearmTrialEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminOrganization), nil
+}
+
+// GetOrganizationStats calls the "getOrganizationStats" endpoint of the
+// "admin" service.
+// GetOrganizationStats may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetOrganizationStats(ctx context.Context, p *GetOrganizationStatsPayload) (res *AdminOrganizationStats, err error) {
+	var ires any
+	ires, err = c.GetOrganizationStatsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminOrganizationStats), nil
+}
+
+// GetInferenceKeys calls the "getInferenceKeys" endpoint of the "admin"
+// service.
+// GetInferenceKeys may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetInferenceKeys(ctx context.Context, p *GetInferenceKeysPayload) (res []*AdminInferenceKey, err error) {
+	var ires any
+	ires, err = c.GetInferenceKeysEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.([]*AdminInferenceKey), nil
+}
+
+// SetInferenceKeyMonthlyLimit calls the "setInferenceKeyMonthlyLimit" endpoint
+// of the "admin" service.
+// SetInferenceKeyMonthlyLimit may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SetInferenceKeyMonthlyLimit(ctx context.Context, p *SetInferenceKeyMonthlyLimitPayload) (res *AdminInferenceKeyLimit, err error) {
+	var ires any
+	ires, err = c.SetInferenceKeyMonthlyLimitEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminInferenceKeyLimit), nil
+}
+
+// GetInferenceSpendHistory calls the "getInferenceSpendHistory" endpoint of
+// the "admin" service.
+// GetInferenceSpendHistory may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetInferenceSpendHistory(ctx context.Context, p *GetInferenceSpendHistoryPayload) (res []*AdminInferenceSpendMonth, err error) {
+	var ires any
+	ires, err = c.GetInferenceSpendHistoryEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.([]*AdminInferenceSpendMonth), nil
+}
+
+// GetPaygBillingSummary calls the "getPaygBillingSummary" endpoint of the
+// "admin" service.
+// GetPaygBillingSummary may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetPaygBillingSummary(ctx context.Context, p *GetPaygBillingSummaryPayload) (res *AdminPaygBillingSummary, err error) {
+	var ires any
+	ires, err = c.GetPaygBillingSummaryEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminPaygBillingSummary), nil
+}
+
+// GetStripeSubscription calls the "getStripeSubscription" endpoint of the
+// "admin" service.
+// GetStripeSubscription may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetStripeSubscription(ctx context.Context, p *GetStripeSubscriptionPayload) (res *AdminStripeSubscription, err error) {
+	var ires any
+	ires, err = c.GetStripeSubscriptionEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminStripeSubscription), nil
+}
+
+// CancelStripeSubscription calls the "cancelStripeSubscription" endpoint of
+// the "admin" service.
+// CancelStripeSubscription may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CancelStripeSubscription(ctx context.Context, p *CancelStripeSubscriptionPayload) (res *AdminStripeSubscription, err error) {
+	var ires any
+	ires, err = c.CancelStripeSubscriptionEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminStripeSubscription), nil
+}
+
+// ResumeStripeSubscription calls the "resumeStripeSubscription" endpoint of
+// the "admin" service.
+// ResumeStripeSubscription may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ResumeStripeSubscription(ctx context.Context, p *ResumeStripeSubscriptionPayload) (res *AdminStripeSubscription, err error) {
+	var ires any
+	ires, err = c.ResumeStripeSubscriptionEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminStripeSubscription), nil
 }

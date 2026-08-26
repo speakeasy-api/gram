@@ -4,22 +4,37 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"net/url"
 	"testing"
+	"time"
 
 	redisCache "github.com/go-redis/cache/v9"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/auth"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/auth"
+	authRepo "github.com/speakeasy-api/gram/server/internal/auth/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
+	"github.com/speakeasy-api/gram/server/internal/supporthandoff"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
+
+func nonceStateFromLocation(t *testing.T, location string) string {
+	t.Helper()
+	parsed, err := url.Parse(location)
+	require.NoError(t, err)
+	state := parsed.Query().Get("state")
+	require.NotEmpty(t, state)
+	return state
+}
 
 func TestService_Callback(t *testing.T) {
 	t.Parallel()
@@ -64,7 +79,7 @@ func TestService_Callback(t *testing.T) {
 			require.NoError(t, instance.createTestOrganization(ctx, org, userInfo.UserID))
 		}
 
-		redirectURL := "https://dev.getgram.ai/other-org/projects/default"
+		redirectURL := "http://localhost:3000/other-org/projects/default"
 		ctx, stateParam := instance.stateWithNonce(ctx, t, redirectURL)
 
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
@@ -84,86 +99,7 @@ func TestService_Callback(t *testing.T) {
 		require.Equal(t, "other-org-123", authCtx.ActiveOrganizationID, "final destination org should select active org")
 	})
 
-	t.Run("non-admin admin override is ignored", func(t *testing.T) {
-		t.Parallel()
-
-		userInfo := defaultMockUserInfo()
-		userInfo.UserID = "nonadmin-override-user"
-		userInfo.Email = "nonadmin-override@example.com"
-		userInfo.Organizations[0].ID = "nonadmin-primary-org"
-		userInfo.Organizations = append(userInfo.Organizations, MockOrganizationEntry{
-			ID:                 "override-org-123",
-			Name:               "Override Organization",
-			Slug:               "override-org",
-			UserWorkspaceSlugs: []string{"override-workspace"},
-		})
-
-		ctx, instance := newTestAuthService(t, userInfo)
-
-		require.NoError(t, instance.createTestUser(ctx, userInfo))
-		for _, org := range userInfo.Organizations {
-			require.NoError(t, instance.createTestOrganization(ctx, org, userInfo.UserID))
-		}
-
-		ctx = contextvalues.SetAdminOverrideInContext(ctx, "override-org")
-
-		ctx, stateParam := instance.stateWithNonce(ctx, t, "")
-		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-			Code:  "mock_code",
-			State: &stateParam,
-		})
-		require.NoError(t, err)
-		require.NotNil(t, result)
-		require.NotEmpty(t, result.SessionToken)
-
-		ctx, err = instance.sessionManager.Authenticate(ctx, result.SessionToken)
-		require.NoError(t, err, "load session after callback")
-		authCtx, ok := contextvalues.GetAuthContext(ctx)
-		require.True(t, ok, "auth context should be set after callback")
-		require.Equal(t, "nonadmin-primary-org", authCtx.ActiveOrganizationID, "non-admin users should ignore admin override")
-	})
-
-	t.Run("successful callback for admin with override to non-member org", func(t *testing.T) {
-		t.Parallel()
-
-		userInfo := adminMockUserInfo()
-		userInfo.UserID = "admin-override-user-123"
-		userInfo.Email = "admin-override@speakeasyapi.dev"
-		// Admin is NOT a member of customer-org — it only exists in DB.
-		ctx, instance := newTestAuthService(t, userInfo)
-
-		require.NoError(t, instance.createTestUser(ctx, userInfo))
-		for _, org := range userInfo.Organizations {
-			require.NoError(t, instance.createTestOrganization(ctx, org, userInfo.UserID))
-		}
-		// Create customer org in DB without membership.
-		require.NoError(t, instance.createTestOrganization(ctx, MockOrganizationEntry{
-			ID:   "customer-org-123",
-			Name: "Customer Organization",
-			Slug: "customer-org",
-		}, ""))
-
-		ctx = contextvalues.SetAdminOverrideInContext(ctx, "customer-org")
-
-		ctx, stateParam := instance.stateWithNonce(ctx, t, "")
-		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-			Code:  "mock_code",
-			State: &stateParam,
-		})
-		require.NoError(t, err)
-		require.NotNil(t, result)
-
-		require.Equal(t, instance.authConfigs.SignInRedirectURL, result.Location)
-		require.NotEmpty(t, result.SessionToken)
-
-		ctx, err = instance.sessionManager.Authenticate(ctx, result.SessionToken)
-		require.NoError(t, err, "load session after callback")
-		authCtx, ok := contextvalues.GetAuthContext(ctx)
-		require.True(t, ok, "auth context should be set after callback")
-		require.Equal(t, "customer-org-123", authCtx.ActiveOrganizationID, "incorrect active organization id for admin override")
-	})
-
-	t.Run("admin override takes priority over state param org", func(t *testing.T) {
+	t.Run("trusted handoff establishes foreign organization access", func(t *testing.T) {
 		t.Parallel()
 
 		userInfo := adminMockUserInfo()
@@ -192,23 +128,163 @@ func TestService_Callback(t *testing.T) {
 			Slug: "override-org",
 		}, ""))
 
-		// Set admin override to one org, but state param points to a different org.
-		ctx = contextvalues.SetAdminOverrideInContext(ctx, "override-org")
-		redirectURL := "https://dev.getgram.ai/state-org/projects/default"
-		ctx, stateParam := instance.stateWithNonce(ctx, t, redirectURL)
+		// The trusted handoff targets override-org while a stale cookie points elsewhere.
+		require.NoError(t, instance.createTestOrganization(ctx, MockOrganizationEntry{
+			ID: "stale-org-789", Name: "Stale Organization", Slug: "stale-org",
+		}, ""))
+		token, err := supporthandoff.NewIssuer(supporthandoff.NewStore(instance.nonceStore)).Issue(ctx, "override-org-456")
+		require.NoError(t, err)
+		ctx = auth.TestNonceBindingContext(ctx, "support-binding")
+		login, err := instance.service.Login(ctx, &gen.LoginPayload{SupportHandoff: &token})
+		require.NoError(t, err)
+		parsedState := nonceStateFromLocation(t, login.Location)
 
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
 			Code:  "mock_code",
-			State: &stateParam,
+			State: &parsedState,
 		})
 		require.NoError(t, err)
 		require.NotNil(t, result)
+
+		stored, err := instance.sessionManager.GetSession(ctx, result.SessionToken)
+		require.NoError(t, err)
+		require.Equal(t, "override-org-456", stored.SupportOrganizationID)
+		require.WithinDuration(t, time.Now().Add(time.Hour), stored.SupportExpiresAt, 5*time.Second)
 
 		ctx, err = instance.sessionManager.Authenticate(ctx, result.SessionToken)
 		require.NoError(t, err, "load session after callback")
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok, "auth context should be set after callback")
-		require.Equal(t, "override-org-456", authCtx.ActiveOrganizationID, "admin override should take priority over state param")
+		require.Equal(t, "override-org-456", authCtx.ActiveOrganizationID, "trusted handoff must beat stale cookie")
+		membership, err := orgRepo.New(instance.conn).HasOrganizationUserRelationship(ctx, orgRepo.HasOrganizationUserRelationshipParams{
+			OrganizationID: "override-org-456", UserID: conv.ToPGText(userInfo.UserID),
+		})
+		require.NoError(t, err)
+		require.False(t, membership, "support login must not create customer membership")
+	})
+
+	t.Run("missing expected support intent fails closed", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := adminMockUserInfo()
+		userInfo.UserID = "admin-missing-support-intent"
+		userInfo.Email = "admin-missing-support-intent@speakeasyapi.dev"
+		ctx, instance := newTestAuthService(t, userInfo)
+
+		require.NoError(t, instance.createTestUser(ctx, userInfo))
+		for _, org := range userInfo.Organizations {
+			require.NoError(t, instance.createTestOrganization(ctx, org, userInfo.UserID))
+		}
+		supportTarget := MockOrganizationEntry{ID: "missing-intent-target", Name: "Missing Intent Target", Slug: "missing-intent-target"}
+		staleTarget := MockOrganizationEntry{ID: "missing-intent-stale", Name: "Stale Override Target", Slug: "missing-intent-stale"}
+		require.NoError(t, instance.createTestOrganization(ctx, supportTarget, ""))
+		require.NoError(t, instance.createTestOrganization(ctx, staleTarget, ""))
+
+		token, err := supporthandoff.NewIssuer(supporthandoff.NewStore(instance.nonceStore)).Issue(ctx, supportTarget.ID)
+		require.NoError(t, err)
+		ctx = auth.TestNonceBindingContext(ctx, "missing-intent-binding")
+		login, err := instance.service.Login(ctx, &gen.LoginPayload{SupportHandoff: &token})
+		require.NoError(t, err)
+		state := nonceStateFromLocation(t, login.Location)
+		nonce := extractNonceFromState(t, state)
+		require.NoError(t, instance.nonceStore.Delete(ctx, "auth:support_intent:"+nonce))
+
+		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code", State: &state})
+		require.NoError(t, err)
+		require.Empty(t, result.SessionToken)
+		require.Empty(t, result.SessionCookie)
+		require.Contains(t, result.Location, "support login intent does not match login nonce")
+
+		for _, orgID := range []string{supportTarget.ID, staleTarget.ID} {
+			membership, err := orgRepo.New(instance.conn).HasOrganizationUserRelationship(ctx, orgRepo.HasOrganizationUserRelationshipParams{
+				OrganizationID: orgID, UserID: conv.ToPGText(userInfo.UserID),
+			})
+			require.NoError(t, err)
+			require.False(t, membership, "failed support callback must not create or fall back to a membership")
+		}
+	})
+
+	t.Run("unexpected support intent fails closed", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := adminMockUserInfo()
+		userInfo.UserID = "admin-unexpected-support-intent"
+		userInfo.Email = "admin-unexpected-support-intent@example.com"
+		ctx, instance := newTestAuthService(t, userInfo)
+		require.NoError(t, instance.createTestUser(ctx, userInfo))
+		for _, org := range userInfo.Organizations {
+			require.NoError(t, instance.createTestOrganization(ctx, org, userInfo.UserID))
+		}
+
+		ctx, state := instance.stateWithNonce(ctx, t, "")
+		nonce := extractNonceFromState(t, state)
+		require.NoError(t, instance.nonceStore.Set(ctx, "auth:support_intent:"+nonce, struct{ OrganizationID string }{OrganizationID: userInfo.Organizations[0].ID}, time.Minute))
+
+		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code", State: &state})
+		require.NoError(t, err)
+		require.Empty(t, result.SessionToken)
+		require.Contains(t, result.Location, "support login intent does not match login nonce")
+	})
+
+	t.Run("empty expected support intent fails closed", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := adminMockUserInfo()
+		userInfo.UserID = "admin-empty-support-intent"
+		userInfo.Email = "admin-empty-support-intent@example.com"
+		ctx, instance := newTestAuthService(t, userInfo)
+		require.NoError(t, instance.createTestUser(ctx, userInfo))
+
+		token, err := supporthandoff.NewIssuer(supporthandoff.NewStore(instance.nonceStore)).Issue(ctx, userInfo.Organizations[0].ID)
+		require.NoError(t, err)
+		ctx = auth.TestNonceBindingContext(ctx, "empty-support-binding")
+		login, err := instance.service.Login(ctx, &gen.LoginPayload{SupportHandoff: &token})
+		require.NoError(t, err)
+		state := nonceStateFromLocation(t, login.Location)
+		nonce := extractNonceFromState(t, state)
+		require.NoError(t, instance.nonceStore.Set(ctx, "auth:support_intent:"+nonce, struct{ OrganizationID string }{}, time.Minute))
+
+		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code", State: &state})
+		require.NoError(t, err)
+		require.Empty(t, result.SessionToken)
+		require.Contains(t, result.Location, "support login intent is missing an organization")
+	})
+
+	t.Run("disabled support target is rejected at callback", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := adminMockUserInfo()
+		userInfo.UserID = "admin-disabled-support-target"
+		userInfo.Email = "admin-disabled-support-target@speakeasyapi.dev"
+		ctx, instance := newTestAuthService(t, userInfo)
+		require.NoError(t, instance.createTestUser(ctx, userInfo))
+
+		target := MockOrganizationEntry{ID: "disabled-support-target", Name: "Disabled Support Target", Slug: "disabled-support-target"}
+		require.NoError(t, testrepo.New(instance.conn).CreateOrganizationMetadataFixture(ctx, testrepo.CreateOrganizationMetadataFixtureParams{
+			ID:                 target.ID,
+			Name:               target.Name,
+			Slug:               target.Slug,
+			GramAccountType:    "free",
+			WorkosID:           pgtype.Text{},
+			Whitelisted:        false,
+			FreeTrialStartedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+			FreeTrialEndsAt:    pgtype.Timestamptz{Time: time.Now().Add(24 * time.Hour), Valid: true},
+			DisabledAt:         pgtype.Timestamptz{Time: time.Now(), Valid: true},
+			CreatedAt:          pgtype.Timestamptz{},
+		}))
+
+		token, err := supporthandoff.NewIssuer(supporthandoff.NewStore(instance.nonceStore)).Issue(ctx, target.ID)
+		require.NoError(t, err)
+		ctx = auth.TestNonceBindingContext(ctx, "disabled-target-binding")
+		login, err := instance.service.Login(ctx, &gen.LoginPayload{SupportHandoff: &token})
+		require.NoError(t, err)
+		state := nonceStateFromLocation(t, login.Location)
+
+		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code", State: &state})
+		require.NoError(t, err)
+		require.Empty(t, result.SessionToken)
+		require.Empty(t, result.SessionCookie)
+		require.Contains(t, result.Location, "organization support target is disabled")
 	})
 
 	t.Run("state param takes priority over IDP org selection", func(t *testing.T) {
@@ -249,7 +325,7 @@ func TestService_Callback(t *testing.T) {
 		}
 
 		// State param points to state-target org, IDP selected idp-selected org.
-		redirectURL := "https://dev.getgram.ai/state-target/projects/default"
+		redirectURL := "http://localhost:3000/state-target/projects/default"
 		ctx, stateParam := instance.stateWithNonce(ctx, t, redirectURL)
 
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
@@ -266,7 +342,7 @@ func TestService_Callback(t *testing.T) {
 		require.Equal(t, "state-target-org", authCtx.ActiveOrganizationID, "state param should take priority over IDP org selection")
 	})
 
-	t.Run("admin state param resolves non-member org from DB", func(t *testing.T) {
+	t.Run("admin state param cannot select non-member org", func(t *testing.T) {
 		t.Parallel()
 
 		userInfo := adminMockUserInfo()
@@ -287,7 +363,7 @@ func TestService_Callback(t *testing.T) {
 		}, ""))
 
 		// State param points to the non-member customer org (e.g. link from registry).
-		redirectURL := "https://dev.getgram.ai/customer-registry/projects/default"
+		redirectURL := "http://localhost:3000/customer-registry/projects/default"
 		ctx, stateParam := instance.stateWithNonce(ctx, t, redirectURL)
 
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
@@ -301,7 +377,7 @@ func TestService_Callback(t *testing.T) {
 		require.NoError(t, err, "load session after callback")
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok, "auth context should be set after callback")
-		require.Equal(t, "customer-from-registry", authCtx.ActiveOrganizationID, "admin state param should resolve non-member org from DB")
+		require.Equal(t, userInfo.Organizations[0].ID, authCtx.ActiveOrganizationID, "bare redirect must not authorize a foreign organization")
 	})
 
 	t.Run("user with no organizations and assistants disposition auto-provisions org", func(t *testing.T) {
@@ -524,6 +600,38 @@ func TestService_Callback(t *testing.T) {
 		require.NotEmpty(t, result.SessionToken)
 	})
 
+	t.Run("callback refuses a state destination that leaves the dashboard origin", func(t *testing.T) {
+		t.Parallel()
+
+		// The state param is not signed, so an attacker can hand the callback any
+		// destination directly — this is the check the browser ultimately depends
+		// on. AIS-428 covered the first case: browsers read the leading "/\" as
+		// "//" and treat the rest as a host.
+		for _, redirectURL := range []string{
+			`/\attacker.example.net`,
+			`/\/attacker.example.net`,
+			"//attacker.example.net/phish",
+			"///attacker.example.net",
+			"https://attacker.example.net/phish",
+			"http://localhost:3000@attacker.example.net/",
+			"attacker.example.net",
+		} {
+			userInfo := defaultMockUserInfo()
+			ctx, instance := newTestAuthService(t, userInfo)
+
+			ctx, stateParam := instance.stateWithNonce(ctx, t, redirectURL)
+			result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
+				Code:  "mock_code",
+				State: &stateParam,
+			})
+			require.NoError(t, err)
+			require.NotNil(t, result)
+
+			require.Equal(t, instance.authConfigs.SignInRedirectURL, result.Location, "redirect %q must fall back to the sign-in URL", redirectURL)
+			require.NotEmpty(t, result.SessionToken)
+		}
+	})
+
 	t.Run("callback with complex state URL redirects correctly", func(t *testing.T) {
 		t.Parallel()
 
@@ -574,6 +682,87 @@ func TestService_Callback(t *testing.T) {
 		require.Equal(t, "/dashboard/environments/prod", callbackResult.Location)
 		require.NotEmpty(t, callbackResult.SessionToken)
 	})
+}
+
+func TestService_CallbackSupportRequiresCurrentPlatformAdmin(t *testing.T) {
+	t.Parallel()
+
+	userInfo := adminMockUserInfo()
+	userInfo.UserID = "revoked-before-support-callback"
+	userInfo.Email = "revoked-support@example.com"
+	ctx, instance := newTestAuthService(t, userInfo)
+	require.NoError(t, instance.createTestUser(ctx, userInfo))
+
+	target := MockOrganizationEntry{ID: "revoked-support-target", Name: "Support Target", Slug: "support-target"}
+	require.NoError(t, instance.createTestOrganization(ctx, target, ""))
+
+	// Prime the identity-layer user-info cache while the user is still an admin,
+	// then revoke the authoritative database flag before callback redemption.
+	cached, _, err := instance.sessionManager.GetUserInfo(ctx, userInfo.UserID)
+	require.NoError(t, err)
+	require.True(t, cached.Admin)
+	require.NoError(t, authRepo.New(instance.conn).SetUserAdminFixture(ctx, authRepo.SetUserAdminFixtureParams{
+		Admin:  false,
+		UserID: userInfo.UserID,
+	}))
+
+	token, err := supporthandoff.NewIssuer(supporthandoff.NewStore(instance.nonceStore)).Issue(ctx, target.ID)
+	require.NoError(t, err)
+	ctx = auth.TestNonceBindingContext(ctx, "revoked-support-binding")
+	login, err := instance.service.Login(ctx, &gen.LoginPayload{SupportHandoff: &token})
+	require.NoError(t, err)
+	state := nonceStateFromLocation(t, login.Location)
+
+	result, err := instance.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code", State: &state})
+	require.NoError(t, err)
+	require.Empty(t, result.SessionToken)
+	require.Contains(t, result.Location, "organization support access requires a platform admin")
+}
+
+func TestService_CallbackAllowsWorkOSImpersonationWithoutState(t *testing.T) {
+	t.Parallel()
+
+	userInfo := defaultMockUserInfo()
+	ctx, instance := newTestAuthService(t, userInfo)
+
+	require.NoError(t, instance.createTestUser(ctx, userInfo))
+	for _, org := range userInfo.Organizations {
+		require.NoError(t, instance.createTestOrganization(ctx, org, userInfo.UserID))
+	}
+
+	result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
+		Code: "impersonation_code",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, instance.authConfigs.SignInRedirectURL, result.Location)
+	require.NotEmpty(t, result.SessionToken)
+	require.Equal(t, result.SessionToken, result.SessionCookie)
+
+	ctx, err = instance.sessionManager.Authenticate(ctx, result.SessionToken)
+	require.NoError(t, err, "load impersonation session after callback")
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok, "auth context should be set after callback")
+	require.Equal(t, userInfo.Organizations[0].ID, authCtx.ActiveOrganizationID)
+
+	storedSession, err := instance.sessionManager.GetSession(ctx, result.SessionToken)
+	require.NoError(t, err)
+	require.Equal(t, "support@example.com", storedSession.ImpersonatorEmail)
+
+	info, err := instance.service.Info(ctx, &gen.InfoPayload{})
+	require.NoError(t, err)
+	require.NotNil(t, info.ImpersonatorEmail)
+	require.Equal(t, "support@example.com", *info.ImpersonatorEmail)
+}
+
+func TestIdentityResolverCapturesWorkOSImpersonatorEmail(t *testing.T) {
+	t.Parallel()
+
+	ctx, instance := newTestAuthService(t, defaultMockUserInfo())
+
+	idpUser, err := instance.identityResolver.ExchangeCodeForTokens(ctx, "impersonation_code")
+	require.NoError(t, err)
+	require.Equal(t, "support@example.com", idpUser.ImpersonatorEmail())
 }
 
 // extractStateFromURL extracts the state query parameter from a URL string.
@@ -665,8 +854,8 @@ func TestService_Callback_SignupIntent(t *testing.T) {
 		// auth context. The email has to be threaded through provisioning.
 		entry, err := audittest.LatestAuditLogByAction(ctx, instance.conn, audit.ActionOrganizationEnterpriseTrialArmed)
 		require.NoError(t, err)
-		require.NotNil(t, entry.ActorDisplayName, "signup must attribute the trial to the user who signed up")
-		require.Equal(t, userInfo.Email, *entry.ActorDisplayName)
+		require.NotEmpty(t, entry.ActorDisplay, "signup must attribute the trial to the user who signed up")
+		require.Equal(t, userInfo.Email, entry.ActorDisplay)
 	})
 
 	t.Run("trial notifier failure does not fail signup", func(t *testing.T) {

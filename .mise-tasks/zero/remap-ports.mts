@@ -38,7 +38,22 @@ import { checkPort } from "get-port-please";
  * skips any env var that depends on it (e.g. PRESIDIO_ANALYZER_URL), so those
  * keep their mise.toml defaults too.
  */
-const SHARED_PORT_ENV_VARS = new Set(["PRESIDIO_PORT"]);
+const SHARED_PORT_ENV_VARS = new Set([
+  "PRESIDIO_PORT",
+  "PUBSUB_EMULATOR_PORT",
+  "TEMPORAL_PORT",
+  "TEMPORAL_WEB_PORT",
+  // Temporal and the LGTM stack are shared, so every worktree must reach them
+  // on the same default host ports. TEMPORAL_ADDRESS and
+  // OTEL_EXPORTER_OTLP_ENDPOINT are derived from skipped ports and therefore
+  // keep their mise.toml defaults too.
+  "GRAFANA_PORT",
+  "TEMPO_HTTP_PORT",
+  "LOKI_HTTP_PORT",
+  "PROMETHEUS_PORT",
+  "OTLP_GRPC_PORT",
+  "OTLP_HTTP_PORT",
+]);
 
 /**
  * Range to draw worktree ports from. Deliberately BELOW the ephemeral range

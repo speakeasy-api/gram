@@ -4,10 +4,14 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
 
@@ -17,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/trialemails"
 )
 
 const testAdminHD = "example.com"
@@ -26,6 +31,13 @@ const testAdminHD = "example.com"
 // it. The verifier calls userinfo on every request, so a handler that returns
 // 401 simulates a token the provider has revoked.
 func newTestOIDCClient(t *testing.T, userinfo http.HandlerFunc) *OIDCClient {
+	t.Helper()
+	return newTestOIDCClientWithToken(t, userinfo, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	})
+}
+
+func newTestOIDCClientWithToken(t *testing.T, userinfo, token http.HandlerFunc) *OIDCClient {
 	t.Helper()
 
 	var issuer string
@@ -42,6 +54,7 @@ func newTestOIDCClient(t *testing.T, userinfo http.HandlerFunc) *OIDCClient {
 		})
 	})
 	mux.HandleFunc("/userinfo", userinfo)
+	mux.HandleFunc("/token", token)
 
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
@@ -87,10 +100,11 @@ func newTestSessionService(t *testing.T, oidcClient *OIDCClient) *Service {
 	enc, err := encryption.NewWithBytes(make([]byte, 32))
 	require.NoError(t, err)
 
+	adminCache := cache.NewRedisCacheAdapter(redisClient)
 	sessions := NewSessionStore(
 		cache.NewTypedObjectCache[Session](
 			logger,
-			cache.NewRedisCacheAdapter(redisClient),
+			adminCache,
 			cache.SuffixNone,
 		),
 		enc,
@@ -100,7 +114,8 @@ func newTestSessionService(t *testing.T, oidcClient *OIDCClient) *Service {
 		logger:   logger,
 		oidc:     oidcClient,
 		sessions: sessions,
-		verifier: NewVerifier(logger, sessions, oidcClient),
+		verifier: NewVerifier(logger, sessions, oidcClient, adminCache),
+		trial:    trialemails.NoopNotifier{},
 	}
 }
 
@@ -118,6 +133,34 @@ func callSessionGet(t *testing.T, svc *Service, sessionID string) *httptest.Resp
 	SessionMiddleware(oops.ErrHandle(svc.logger, svc.handleGetSession)).ServeHTTP(rec, req)
 
 	return rec
+}
+
+func callSessionGetConcurrently(t *testing.T, svc *Service, sessionID string, requests int, beforeWait func()) []int {
+	t.Helper()
+
+	start := make(chan struct{})
+	codes := make(chan int, requests)
+	var wg sync.WaitGroup
+	for range requests {
+		wg.Go(func() {
+			<-start
+			req := httptest.NewRequest(http.MethodGet, "/admin/session.get", nil)
+			req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
+			rec := httptest.NewRecorder()
+			SessionMiddleware(oops.ErrHandle(svc.logger, svc.handleGetSession)).ServeHTTP(rec, req)
+			codes <- rec.Code
+		})
+	}
+	close(start)
+	beforeWait()
+	wg.Wait()
+	close(codes)
+
+	results := make([]int, 0, requests)
+	for code := range codes {
+		results = append(results, code)
+	}
+	return results
 }
 
 // TestAttach_MountsSessionRoute proves the hand-written route reaches the
@@ -163,6 +206,325 @@ func TestHandleGetSession_ReturnsIdentity(t *testing.T) {
 	var got sessionInfo
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
 	require.Equal(t, sessionInfo{Email: "operator@example.com", Name: "Test Operator"}, got)
+}
+
+func TestHandleGetSession_RefreshesExpiredTokens(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	oidcClient := newTestOIDCClientWithToken(
+		t,
+		userinfoOK("sub-refresh", "operator@example.com"),
+		func(w http.ResponseWriter, r *http.Request) {
+			assert.NoError(t, r.ParseForm())
+			assert.Equal(t, "refresh_token", r.PostForm.Get("grant_type"))
+			assert.Equal(t, "old-refresh-token", r.PostForm.Get("refresh_token"))
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"access_token":  "new-access-token",
+				"refresh_token": "new-refresh-token",
+				"token_type":    "Bearer",
+				"expires_in":    3600,
+			})
+		},
+	)
+	svc := newTestSessionService(t, oidcClient)
+
+	sessionID, err := svc.sessions.Store(ctx, StoreParams{
+		Email:        "operator@example.com",
+		Name:         "Test Operator",
+		OIDCSubject:  "sub-refresh",
+		HD:           testAdminHD,
+		AccessToken:  "old-access-token",
+		RefreshToken: "old-refresh-token",
+		ExpiresAt:    time.Now().Add(-time.Minute),
+	})
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, callSessionGet(t, svc, sessionID).Code)
+
+	session, err := svc.sessions.Get(ctx, sessionID)
+	require.NoError(t, err)
+	accessToken, err := svc.sessions.DecryptAccessToken(session)
+	require.NoError(t, err)
+	require.Equal(t, "new-access-token", accessToken)
+	refreshToken, err := svc.sessions.DecryptRefreshToken(session)
+	require.NoError(t, err)
+	require.Equal(t, "new-refresh-token", refreshToken)
+	require.True(t, session.AccessTokenExpiresAt.After(time.Now()))
+}
+
+func TestSessionStore_UpdateTokensAdoptsConcurrentWinner(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	svc := newTestSessionService(t, newTestOIDCClient(t, userinfoOK("sub-cas", "operator@example.com")))
+	sessionID, err := svc.sessions.Store(ctx, StoreParams{
+		Email:        "operator@example.com",
+		Name:         "Test Operator",
+		OIDCSubject:  "sub-cas",
+		HD:           testAdminHD,
+		AccessToken:  "old-access-token",
+		RefreshToken: "old-refresh-token",
+		ExpiresAt:    time.Now().Add(-time.Minute),
+	})
+	require.NoError(t, err)
+
+	first, err := svc.sessions.Get(ctx, sessionID)
+	require.NoError(t, err)
+	stale := first
+	_, err = svc.sessions.UpdateTokens(ctx, first, "winner-access-token", "winner-refresh-token", time.Now().Add(time.Hour))
+	require.NoError(t, err)
+	winner, err := svc.sessions.Get(ctx, sessionID)
+	require.NoError(t, err)
+	adopted, err := svc.sessions.UpdateTokens(ctx, stale, "stale-access-token", "stale-refresh-token", time.Now().Add(time.Hour))
+	require.NoError(t, err)
+
+	require.Equal(t, winner, adopted)
+	accessToken, err := svc.sessions.DecryptAccessToken(adopted)
+	require.NoError(t, err)
+	require.Equal(t, "winner-access-token", accessToken)
+	refreshToken, err := svc.sessions.DecryptRefreshToken(adopted)
+	require.NoError(t, err)
+	require.Equal(t, "winner-refresh-token", refreshToken)
+	persisted, err := svc.sessions.Get(ctx, sessionID)
+	require.NoError(t, err)
+	require.Equal(t, winner, persisted)
+	deleted, err := svc.sessions.DeleteIfUnchanged(ctx, stale)
+	require.NoError(t, err)
+	require.False(t, deleted)
+	persisted, err = svc.sessions.Get(ctx, sessionID)
+	require.NoError(t, err)
+	require.Equal(t, winner, persisted)
+}
+
+func TestHandleGetSession_AdoptsConcurrentRefreshWinner(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	usedAccessToken := make(chan string, 1)
+	var svc *Service
+	var sessionID string
+	oidcClient := newTestOIDCClientWithToken(
+		t,
+		func(w http.ResponseWriter, r *http.Request) {
+			usedAccessToken <- r.Header.Get("Authorization")
+			userinfoOK("sub-cas-verifier", "operator@example.com")(w, r)
+		},
+		func(w http.ResponseWriter, r *http.Request) {
+			snapshot, err := svc.sessions.Get(r.Context(), sessionID)
+			if !assert.NoError(t, err) {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			_, err = svc.sessions.UpdateTokens(r.Context(), snapshot, "winner-access-token", "winner-refresh-token", time.Now().Add(time.Hour))
+			if !assert.NoError(t, err) {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"access_token":  "stale-access-token",
+				"refresh_token": "stale-refresh-token",
+				"token_type":    "Bearer",
+				"expires_in":    3600,
+			})
+		},
+	)
+	svc = newTestSessionService(t, oidcClient)
+	var err error
+	sessionID, err = svc.sessions.Store(ctx, StoreParams{
+		Email:        "operator@example.com",
+		Name:         "Test Operator",
+		OIDCSubject:  "sub-cas-verifier",
+		HD:           testAdminHD,
+		AccessToken:  "old-access-token",
+		RefreshToken: "old-refresh-token",
+		ExpiresAt:    time.Now().Add(-time.Minute),
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, http.StatusOK, callSessionGet(t, svc, sessionID).Code)
+	require.Equal(t, "Bearer winner-access-token", <-usedAccessToken)
+	persisted, err := svc.sessions.Get(ctx, sessionID)
+	require.NoError(t, err)
+	refreshToken, err := svc.sessions.DecryptRefreshToken(persisted)
+	require.NoError(t, err)
+	require.Equal(t, "winner-refresh-token", refreshToken)
+}
+
+func TestSessionStore_UpdateTokensDoesNotRecreateDeletedSession(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	svc := newTestSessionService(t, newTestOIDCClient(t, userinfoOK("sub-deleted", "operator@example.com")))
+	sessionID, err := svc.sessions.Store(ctx, StoreParams{
+		Email:        "operator@example.com",
+		Name:         "Test Operator",
+		OIDCSubject:  "sub-deleted",
+		HD:           testAdminHD,
+		AccessToken:  "old-access-token",
+		RefreshToken: "old-refresh-token",
+		ExpiresAt:    time.Now().Add(-time.Minute),
+	})
+	require.NoError(t, err)
+	snapshot, err := svc.sessions.Get(ctx, sessionID)
+	require.NoError(t, err)
+	require.NoError(t, svc.sessions.Delete(ctx, sessionID))
+
+	_, err = svc.sessions.UpdateTokens(ctx, snapshot, "new-access-token", "new-refresh-token", time.Now().Add(time.Hour))
+	require.Error(t, err)
+	_, err = svc.sessions.Get(ctx, sessionID)
+	require.Error(t, err)
+}
+
+func TestHandleGetSession_ClassifiesRefreshFailures(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		status      int
+		oauthError  string
+		wantStatus  int
+		wantSession bool
+	}{
+		{name: "invalid grant", status: http.StatusBadRequest, oauthError: "invalid_grant", wantStatus: http.StatusUnauthorized, wantSession: false},
+		{name: "provider unavailable", status: http.StatusServiceUnavailable, oauthError: "server_error", wantStatus: http.StatusInternalServerError, wantSession: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := t.Context()
+			oidcClient := newTestOIDCClientWithToken(
+				t,
+				userinfoOK("sub-refresh-failure", "operator@example.com"),
+				func(w http.ResponseWriter, _ *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(tt.status)
+					_ = json.NewEncoder(w).Encode(map[string]string{"error": tt.oauthError})
+				},
+			)
+			svc := newTestSessionService(t, oidcClient)
+			sessionID, err := svc.sessions.Store(ctx, StoreParams{
+				Email:        "operator@example.com",
+				Name:         "Test Operator",
+				OIDCSubject:  "sub-refresh-failure",
+				HD:           testAdminHD,
+				AccessToken:  "old-access-token",
+				RefreshToken: "old-refresh-token",
+				ExpiresAt:    time.Now().Add(-time.Minute),
+			})
+			require.NoError(t, err)
+
+			require.Equal(t, tt.wantStatus, callSessionGet(t, svc, sessionID).Code)
+			_, err = svc.sessions.Get(ctx, sessionID)
+			if tt.wantSession {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+			}
+		})
+	}
+}
+
+func TestHandleGetSession_SerializesConcurrentRefreshes(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	var refreshes atomic.Int32
+	releaseRefresh := make(chan struct{})
+	oidcClient := newTestOIDCClientWithToken(
+		t,
+		userinfoOK("sub-concurrent-refresh", "operator@example.com"),
+		func(w http.ResponseWriter, r *http.Request) {
+			refreshes.Add(1)
+			assert.NoError(t, r.ParseForm())
+			assert.Equal(t, "old-refresh-token", r.PostForm.Get("refresh_token"))
+			<-releaseRefresh
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"access_token":  "new-access-token",
+				"refresh_token": "new-refresh-token",
+				"token_type":    "Bearer",
+				"expires_in":    3600,
+			})
+		},
+	)
+	svc := newTestSessionService(t, oidcClient)
+	sessionID, err := svc.sessions.Store(ctx, StoreParams{
+		Email:        "operator@example.com",
+		Name:         "Test Operator",
+		OIDCSubject:  "sub-concurrent-refresh",
+		HD:           testAdminHD,
+		AccessToken:  "old-access-token",
+		RefreshToken: "old-refresh-token",
+		ExpiresAt:    time.Now().Add(-time.Minute),
+	})
+	require.NoError(t, err)
+
+	codes := callSessionGetConcurrently(t, svc, sessionID, 5, func() {
+		assert.Eventually(t, func() bool {
+			return refreshes.Load() == 1
+		}, time.Second, 10*time.Millisecond)
+		close(releaseRefresh)
+	})
+	for _, code := range codes {
+		require.Equal(t, http.StatusOK, code)
+	}
+	require.EqualValues(t, 1, refreshes.Load())
+}
+
+func TestHandleGetSession_SharesConcurrentReauthentication(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	var refreshes atomic.Int32
+	releaseRefresh := make(chan struct{})
+	oidcClient := newTestOIDCClientWithToken(
+		t,
+		userinfoOK("sub-concurrent-reauth", "operator@example.com"),
+		func(w http.ResponseWriter, _ *http.Request) {
+			refreshes.Add(1)
+			<-releaseRefresh
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid_grant"})
+		},
+	)
+	svc := newTestSessionService(t, oidcClient)
+	sessionID, err := svc.sessions.Store(ctx, StoreParams{
+		Email:        "operator@example.com",
+		Name:         "Test Operator",
+		OIDCSubject:  "sub-concurrent-reauth",
+		HD:           testAdminHD,
+		AccessToken:  "old-access-token",
+		RefreshToken: "old-refresh-token",
+		ExpiresAt:    time.Now().Add(-time.Minute),
+	})
+	require.NoError(t, err)
+
+	codes := callSessionGetConcurrently(t, svc, sessionID, 3, func() {
+		assert.Eventually(t, func() bool {
+			return refreshes.Load() > 0
+		}, time.Second, 10*time.Millisecond)
+		close(releaseRefresh)
+	})
+	for _, code := range codes {
+		require.Equal(t, http.StatusUnauthorized, code)
+	}
+}
+
+func TestAuthCodeURLRequestsConsentForInteractiveLogin(t *testing.T) {
+	t.Parallel()
+
+	client := newTestOIDCClient(t, userinfoOK("sub-consent", "operator@example.com"))
+	interactive, err := url.Parse(client.AuthCodeURL("state", "challenge", ""))
+	require.NoError(t, err)
+	require.Equal(t, "consent", interactive.Query().Get("prompt"))
+
+	silent, err := url.Parse(client.AuthCodeURL("state", "challenge", "  none  "))
+	require.NoError(t, err)
+	require.Equal(t, "none", silent.Query().Get("prompt"))
 }
 
 func TestHandleGetSession_NoCookie(t *testing.T) {

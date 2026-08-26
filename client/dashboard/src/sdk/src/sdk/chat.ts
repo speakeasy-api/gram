@@ -8,6 +8,7 @@ import { chatGenerateTitle } from "../funcs/chatGenerateTitle.js";
 import { chatGetAssistantSessionSummary } from "../funcs/chatGetAssistantSessionSummary.js";
 import { chatGetWorkUnitsTrend } from "../funcs/chatGetWorkUnitsTrend.js";
 import { chatList } from "../funcs/chatList.js";
+import { chatListSessionLinks } from "../funcs/chatListSessionLinks.js";
 import { chatListSources } from "../funcs/chatListSources.js";
 import { chatLoad } from "../funcs/chatLoad.js";
 import { chatSetPinned } from "../funcs/chatSetPinned.js";
@@ -21,6 +22,7 @@ import { Chat as Chat$Model } from "../models/components/chat.js";
 import { CreditUsageResponseBody } from "../models/components/creditusageresponsebody.js";
 import { GenerateTitleResponseBody } from "../models/components/generatetitleresponsebody.js";
 import { ListChatsResult } from "../models/components/listchatsresult.js";
+import { ListSessionLinksResult } from "../models/components/listsessionlinksresult.js";
 import { ListSourcesResult } from "../models/components/listsourcesresult.js";
 import { SummarizeChatResult } from "../models/components/summarizechatresult.js";
 import { SummarizeToolCallResult } from "../models/components/summarizetoolcallresult.js";
@@ -49,6 +51,10 @@ import {
   ListChatsRequest,
   ListChatsSecurity,
 } from "../models/operations/listchats.js";
+import {
+  ListChatSessionLinksRequest,
+  ListChatSessionLinksSecurity,
+} from "../models/operations/listchatsessionlinks.js";
 import {
   ListChatSourcesRequest,
   ListChatSourcesSecurity,
@@ -183,6 +189,25 @@ export class Chat extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListChatsResult> {
     return unwrapAsync(chatList(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listSessionLinks chat
+   *
+   * @remarks
+   * List session-lineage links touching the given chats (session portability). A link records that a session was moved to another harness; the child side is present when the continuation's session id was known at move time. Returns every link where a requested chat is either the parent or the child, honoring the same visibility scoping as listChats.
+   */
+  async listSessionLinks(
+    request: ListChatSessionLinksRequest,
+    security?: ListChatSessionLinksSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListSessionLinksResult> {
+    return unwrapAsync(chatListSessionLinks(
       this,
       request,
       security,

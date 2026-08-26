@@ -25,7 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -40,12 +40,7 @@ func setIssuerAdmissionMode(t *testing.T, ctx context.Context, ti *testInstance,
 	if mode == "" {
 		return
 	}
-	// Every other field is left absent so the query's COALESCE keeps the
-	// stored value. A Valid-but-empty pgtype.Text would overwrite it.
-	_, err := usersessions_repo.New(ti.conn).UpdateUserSessionIssuer(ctx, usersessions_repo.UpdateUserSessionIssuerParams{
-		Slug:                          conv.PtrToPGText(nil),
-		AuthnChallengeMode:            conv.PtrToPGText(nil),
-		SessionDuration:               conv.PtrToPGInterval(nil),
+	err := testrepo.New(ti.conn).SetUserSessionIssuerCIMDAdmissionMode(ctx, testrepo.SetUserSessionIssuerCIMDAdmissionModeParams{
 		ClientIDMetadataAdmissionMode: conv.ToPGText(string(mode)),
 		ID:                            toolset.UserSessionIssuerID.UUID,
 		ProjectID:                     toolset.ProjectID,
@@ -144,8 +139,7 @@ func requireAuthorizeErrorDescription(t *testing.T, w *httptest.ResponseRecorder
 func TestCIMDAdmission_DefaultReportsWithoutEnforcing(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti, ds, _, orgID := newTestCIMDService(t)
-	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+	ctx, ti, ds, _ := newTestCIMDService(t)
 	// A separate, never-configured issuer: the harness toolset is put in
 	// open mode, and there is no path back to NULL once a mode is written.
 	fresh := seedFreshIssuerToolset(t, ctx, ti)
@@ -167,8 +161,7 @@ func TestCIMDAdmission_DefaultReportsWithoutEnforcing(t *testing.T) {
 func TestCIMDAdmission_PresetsDeniesUnknownURLWithoutFetching(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti, ds, toolset, orgID := newTestCIMDService(t)
-	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+	ctx, ti, ds, toolset := newTestCIMDService(t)
 	setIssuerAdmissionMode(t, ctx, ti, toolset, admission.ModePresets)
 
 	verifier := pkceVerifier(t)
@@ -191,8 +184,7 @@ func TestCIMDAdmission_PresetsDeniesUnknownURLWithoutFetching(t *testing.T) {
 func TestCIMDAdmission_ReportingMatchesPresetsExceptForEnforcement(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti, ds, toolset, orgID := newTestCIMDService(t)
-	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+	ctx, ti, ds, toolset := newTestCIMDService(t)
 
 	// Two issuers, neither listing the URL, differing only in mode.
 	reporting := seedFreshIssuerToolset(t, ctx, ti)
@@ -225,8 +217,7 @@ func TestCIMDAdmission_ReportingMatchesPresetsExceptForEnforcement(t *testing.T)
 func TestCIMDAdmission_PresetsDenialIsActionable(t *testing.T) {
 	t.Parallel()
 
-	_, ti, ds, toolset, orgID := newTestCIMDService(t)
-	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+	_, ti, ds, toolset := newTestCIMDService(t)
 	setIssuerAdmissionMode(t, t.Context(), ti, toolset, admission.ModePresets)
 
 	verifier := pkceVerifier(t)
@@ -242,8 +233,7 @@ func TestCIMDAdmission_PresetsDenialIsActionable(t *testing.T) {
 func TestCIMDAdmission_CustomURLAdmitted(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti, ds, toolset, orgID := newTestCIMDService(t)
-	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+	ctx, ti, ds, toolset := newTestCIMDService(t)
 	setIssuerAdmissionMode(t, ctx, ti, toolset, admission.ModePresets)
 	allowCustomCimdURL(t, ctx, ti, toolset, ds.clientID)
 
@@ -259,8 +249,7 @@ func TestCIMDAdmission_CustomURLAdmitted(t *testing.T) {
 func TestCIMDAdmission_CustomURLIsPerIssuer(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti, ds, toolset, orgID := newTestCIMDService(t)
-	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+	ctx, ti, ds, toolset := newTestCIMDService(t)
 	setIssuerAdmissionMode(t, ctx, ti, toolset, admission.ModePresets)
 
 	// Allow the URL on a DIFFERENT live issuer in the same project. The
@@ -286,8 +275,7 @@ func TestCIMDAdmission_CustomURLIsPerIssuer(t *testing.T) {
 func TestCIMDAdmission_DisabledDeniesEverything(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti, ds, toolset, orgID := newTestCIMDService(t)
-	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+	ctx, ti, ds, toolset := newTestCIMDService(t)
 	setIssuerAdmissionMode(t, ctx, ti, toolset, admission.ModeDisabled)
 	// Even an explicitly-allowed URL is denied while the mode is disabled.
 	allowCustomCimdURL(t, ctx, ti, toolset, ds.clientID)
@@ -305,8 +293,7 @@ func TestCIMDAdmission_DisabledDeniesEverything(t *testing.T) {
 func TestCIMDAdmission_OpenAdmitsArbitraryValidDocument(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti, ds, toolset, orgID := newTestCIMDService(t)
-	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+	ctx, ti, ds, toolset := newTestCIMDService(t)
 	setIssuerAdmissionMode(t, ctx, ti, toolset, admission.ModeOpen)
 
 	verifier := pkceVerifier(t)
@@ -321,8 +308,7 @@ func TestCIMDAdmission_OpenAdmitsArbitraryValidDocument(t *testing.T) {
 func TestCIMDAdmission_UnrecognizedModeFailsClosed(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti, ds, toolset, orgID := newTestCIMDService(t)
-	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+	ctx, ti, ds, toolset := newTestCIMDService(t)
 	setIssuerAdmissionMode(t, ctx, ti, toolset, admission.Mode("allow-everything"))
 
 	verifier := pkceVerifier(t)
@@ -338,8 +324,7 @@ func TestCIMDAdmission_UnrecognizedModeFailsClosed(t *testing.T) {
 func TestCIMDAdmission_DisabledOmitsMetadataAdvertisement(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti, _, toolset, orgID := newTestCIMDService(t)
-	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+	ctx, ti, _, toolset := newTestCIMDService(t)
 	setIssuerAdmissionMode(t, ctx, ti, toolset, admission.ModeDisabled)
 
 	metadata := fetchASMetadata(t, ti, toolset.McpSlug.String)
@@ -353,8 +338,7 @@ func TestCIMDAdmission_DisabledOmitsMetadataAdvertisement(t *testing.T) {
 func TestCIMDAdmission_PresetsAdvertisesSupport(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti, _, toolset, orgID := newTestCIMDService(t)
-	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+	ctx, ti, _, toolset := newTestCIMDService(t)
 	setIssuerAdmissionMode(t, ctx, ti, toolset, admission.ModePresets)
 
 	metadata := fetchASMetadata(t, ti, toolset.McpSlug.String)
@@ -366,8 +350,7 @@ func TestCIMDAdmission_PresetsAdvertisesSupport(t *testing.T) {
 func TestCIMDAdmission_DefaultAdvertisesSupport(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti, _, _, orgID := newTestCIMDService(t)
-	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+	ctx, ti, _, _ := newTestCIMDService(t)
 	fresh := seedFreshIssuerToolset(t, ctx, ti)
 
 	metadata := fetchASMetadata(t, ti, fresh.McpSlug.String)
@@ -388,8 +371,7 @@ func TestCIMDAdmission_DefaultAdvertisesSupport(t *testing.T) {
 func TestCIMDAdmission_PortlessLoopbackRedirectMatches(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti, ds, toolset, orgID := newTestCIMDService(t)
-	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+	ctx, ti, ds, toolset := newTestCIMDService(t)
 	setIssuerAdmissionMode(t, ctx, ti, toolset, admission.ModePresets)
 	allowCustomCimdURL(t, ctx, ti, toolset, ds.clientID)
 
@@ -409,8 +391,7 @@ func TestCIMDAdmission_PortlessLoopbackRedirectMatches(t *testing.T) {
 func TestCIMDAdmission_PortlessLoopbackStillBindsPath(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti, ds, toolset, orgID := newTestCIMDService(t)
-	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+	ctx, ti, ds, toolset := newTestCIMDService(t)
 	setIssuerAdmissionMode(t, ctx, ti, toolset, admission.ModePresets)
 	allowCustomCimdURL(t, ctx, ti, toolset, ds.clientID)
 
@@ -439,8 +420,7 @@ func TestCIMDAdmission_PortlessLoopbackStillBindsPath(t *testing.T) {
 func TestCIMDAdmission_ChatGPTDocumentShapeAccepted(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti, ds, toolset, orgID := newTestCIMDService(t)
-	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+	ctx, ti, ds, toolset := newTestCIMDService(t)
 	setIssuerAdmissionMode(t, ctx, ti, toolset, admission.ModePresets)
 	allowCustomCimdURL(t, ctx, ti, toolset, ds.clientID)
 
@@ -463,17 +443,17 @@ func TestCIMDAdmission_ChatGPTDocumentShapeAccepted(t *testing.T) {
 }
 
 // TestCIMDAdmission_ExplicitConfidentialAuthMethodStillRejected: accepting
-// an ABSENT auth method must not have opened the door to confidential
-// clients declaring one explicitly.
+// an ABSENT auth method must not have opened the door to shared-secret
+// clients declaring one explicitly. -02 §4.1 bans every symmetric method
+// from a metadata document, since the document is public.
 func TestCIMDAdmission_ExplicitConfidentialAuthMethodStillRejected(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti, ds, toolset, orgID := newTestCIMDService(t)
-	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+	ctx, ti, ds, toolset := newTestCIMDService(t)
 	setIssuerAdmissionMode(t, ctx, ti, toolset, admission.ModePresets)
 	allowCustomCimdURL(t, ctx, ti, toolset, ds.clientID)
 
-	ds.doc["token_endpoint_auth_method"] = "private_key_jwt"
+	ds.doc["token_endpoint_auth_method"] = "client_secret_basic"
 
 	verifier := pkceVerifier(t)
 	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(verifier))
@@ -524,8 +504,7 @@ func requireTokenOAuthError(t *testing.T, w *httptest.ResponseRecorder, wantCode
 func TestCIMDAdmission_TokenRejectsWhenDisabled(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti, ds, toolset, orgID := newTestCIMDService(t)
-	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+	ctx, ti, ds, toolset := newTestCIMDService(t)
 	setIssuerAdmissionMode(t, ctx, ti, toolset, admission.ModeOpen)
 
 	// Establish the CIMD client row while the issuer still admits it.
@@ -557,8 +536,7 @@ func TestCIMDAdmission_TokenRejectsWhenDisabled(t *testing.T) {
 func TestCIMDAdmission_TokenAllowsWhenPresetsNoLongerListsClient(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti, ds, toolset, orgID := newTestCIMDService(t)
-	ti.features.SetFlag(feature.FlagUserSessionCIMD, orgID, true)
+	ctx, ti, ds, toolset := newTestCIMDService(t)
 	setIssuerAdmissionMode(t, ctx, ti, toolset, admission.ModePresets)
 	allowCustomCimdURL(t, ctx, ti, toolset, ds.clientID)
 

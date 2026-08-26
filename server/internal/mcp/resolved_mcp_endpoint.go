@@ -23,10 +23,12 @@ import (
 	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	metamcp_repo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/clientauth"
 )
 
 // ResolvedMcpEndpoint carries everything the issuer-gated OAuth handlers
@@ -67,6 +69,12 @@ type ResolvedMcpEndpoint struct {
 	// mcp_endpoints → mcp_servers pair. Zero (Valid=false) for the
 	// toolset-keyed resolution. Used for telemetry / log attribution.
 	McpServerID uuid.NullUUID
+
+	// MetaMcpServerID is populated when the endpoint resolves through an
+	// mcp_endpoints → meta_mcp_servers pair. Zero (Valid=false) for every
+	// other resolution. Used for telemetry / log attribution and for
+	// dispatching cached-challenge resumption back to the meta path.
+	MetaMcpServerID uuid.NullUUID
 
 	// OrganizationID is the org that owns the project.
 	OrganizationID string
@@ -137,6 +145,29 @@ func (e *ResolvedMcpEndpoint) AuthorizationServerURLs(baseURL string) (Authoriza
 	return urls, nil
 }
 
+// clientAssertionAudiences is the pair of aud values a client assertion may
+// name when authenticating at the given endpoint: the issuer identifier, or
+// that endpoint's own URL.
+//
+// Derived from the same values the RFC 8414 document advertises, so what a
+// client can read from metadata and what an assertion may name are one
+// value. Only the addressed endpoint's URL is accepted, so an assertion
+// minted for the revocation endpoint does not authenticate a token request or
+// the reverse.
+func (u AuthorizationServerURLs) clientAssertionAudiences(at clientAssertionEndpoint) clientauth.Audiences {
+	endpoint := ""
+	switch at {
+	case clientAssertionAtToken:
+		endpoint = u.Token
+	case clientAssertionAtRevoke:
+		endpoint = u.Revoke
+	}
+	return clientauth.Audiences{
+		Issuer:   u.Issuer,
+		Endpoint: endpoint,
+	}
+}
+
 // ConsentURL is the URL the user agent is redirected to after the
 // authorization request has been minted and (for private endpoints) the
 // IDP has stamped a subject onto the cached challenge state. Shape:
@@ -167,11 +198,12 @@ func (e *ResolvedMcpEndpoint) ConsentURL(baseURL, stateID string) (string, error
 // rebuild the consent redirect without re-deriving the origin.
 func (e *ResolvedMcpEndpoint) EndpointRef(baseURL string) EndpointRef {
 	return EndpointRef{
-		BaseURL:        baseURL,
-		RouteBase:      e.RouteBase,
-		McpSlug:        e.Slug,
-		CustomDomainID: e.CustomDomainID,
-		McpServerID:    e.McpServerID,
+		BaseURL:         baseURL,
+		RouteBase:       e.RouteBase,
+		McpSlug:         e.Slug,
+		CustomDomainID:  e.CustomDomainID,
+		McpServerID:     e.McpServerID,
+		MetaMcpServerID: e.MetaMcpServerID,
 	}
 }
 
@@ -200,6 +232,9 @@ func (e *ResolvedMcpEndpoint) LogWith(logger *slog.Logger) *slog.Logger {
 	}
 	if e.McpServerID.Valid {
 		args = append(args, attr.SlogMcpServerID(e.McpServerID.UUID.String()))
+	}
+	if e.MetaMcpServerID.Valid {
+		args = append(args, attr.SlogMetaMcpServerID(e.MetaMcpServerID.UUID.String()))
 	}
 	return logger.With(args...)
 }
@@ -277,6 +312,7 @@ func NewResolvedMcpEndpointFromMcpServer(
 		CustomDomainID:       mcpEndpoint.CustomDomainID,
 		IsPublic:             mcpServer.Visibility == mcpservers.VisibilityPublic,
 		McpServerID:          uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
+		MetaMcpServerID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		OrganizationID:       organizationID,
 		ProjectID:            mcpEndpoint.ProjectID,
 		RouteBase:            "x/mcp",
@@ -284,6 +320,37 @@ func NewResolvedMcpEndpointFromMcpServer(
 		ToolsetID:            mcpServer.ToolsetID,
 		UpstreamResource:     "",
 		UserSessionIssuerID:  mcpServer.UserSessionIssuerID.UUID,
+	}
+}
+
+// NewResolvedMcpEndpointFromMetaMcpServer materialises a ResolvedMcpEndpoint
+// from a resolved (mcp_endpoint, meta_mcp_server) pair plus the owning
+// project's organisation id. Caller is responsible for first checking
+// metaServer.UserSessionIssuerID.Valid. Meta MCP servers have no visibility
+// column, so IsPublic reflects only whether an issuer gates the endpoint.
+// AudienceURN is bound to the issuer URN, matching the generic-server
+// constructor, so tokens stay portable between backends under one issuer.
+func NewResolvedMcpEndpointFromMetaMcpServer(
+	mcpEndpoint *mcpendpoints_repo.McpEndpoint,
+	metaServer *metamcp_repo.MetaMcpServer,
+	organizationID string,
+	routeBase string,
+) *ResolvedMcpEndpoint {
+	return &ResolvedMcpEndpoint{
+		AudienceURN: urn.NewUserSessionIssuer(metaServer.UserSessionIssuerID.UUID).String(),
+		// Stamped by RequireUserSessionIssuer, which every path runs next.
+		CIMDAdmissionModeRaw: pgtype.Text{String: "", Valid: false},
+		CustomDomainID:       mcpEndpoint.CustomDomainID,
+		IsPublic:             !metaServer.UserSessionIssuerID.Valid,
+		McpServerID:          uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		MetaMcpServerID:      uuid.NullUUID{UUID: metaServer.ID, Valid: true},
+		OrganizationID:       organizationID,
+		ProjectID:            mcpEndpoint.ProjectID,
+		RouteBase:            routeBase,
+		Slug:                 mcpEndpoint.Slug,
+		ToolsetID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UpstreamResource:     "",
+		UserSessionIssuerID:  metaServer.UserSessionIssuerID.UUID,
 	}
 }
 
@@ -302,6 +369,7 @@ func newResolvedMcpEndpointFromToolset(toolset *toolsets_repo.Toolset, routeBase
 		CustomDomainID:       toolset.CustomDomainID,
 		IsPublic:             toolset.McpIsPublic,
 		McpServerID:          uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		MetaMcpServerID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		OrganizationID:       toolset.OrganizationID,
 		ProjectID:            toolset.ProjectID,
 		RouteBase:            routeBase,
@@ -333,6 +401,9 @@ func (s *Service) loadResolvedMcpEndpointByRef(ctx context.Context, ref Endpoint
 }
 
 func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref EndpointRef) (*ResolvedMcpEndpoint, error) {
+	if ref.MetaMcpServerID.Valid {
+		return s.buildResolvedMetaMcpEndpointByRef(ctx, ref)
+	}
 	if ref.McpServerID.Valid {
 		mcpEndpoint, err := mcpendpoints_repo.New(s.db).GetMCPEndpointByCustomDomainAndSlug(ctx, mcpendpoints_repo.GetMCPEndpointByCustomDomainAndSlugParams{
 			Slug:           ref.McpSlug,
@@ -344,8 +415,13 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 		case err != nil:
 			return nil, oops.E(oops.CodeUnexpected, err, "load mcp endpoint").LogError(ctx, s.logger)
 		}
+		// A challenge minted against a generic-server endpoint cannot resume
+		// on an endpoint that has since been re-pointed at a meta backend.
+		if !mcpEndpoint.McpServerID.Valid {
+			return nil, oops.E(oops.CodeNotFound, nil, "mcp server not found")
+		}
 		mcpServer, err := mcpservers_repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{
-			ID:        mcpEndpoint.McpServerID,
+			ID:        mcpEndpoint.McpServerID.UUID,
 			ProjectID: mcpEndpoint.ProjectID,
 		})
 		switch {
@@ -434,4 +510,53 @@ func (s *Service) loadResolvedMcpEndpointByToolsetSlug(ctx context.Context, mcpS
 		return nil, err
 	}
 	return endpoint, nil
+}
+
+// buildResolvedMetaMcpEndpointByRef resolves a cached EndpointRef minted
+// against a meta-MCP-backed endpoint. Mirrors the generic-server branch of
+// buildResolvedMcpEndpointByRef: the slug is re-resolved fresh so mutations
+// to the underlying rows are honored, and a ref whose endpoint has been
+// re-pointed at a different backend fails closed.
+func (s *Service) buildResolvedMetaMcpEndpointByRef(ctx context.Context, ref EndpointRef) (*ResolvedMcpEndpoint, error) {
+	mcpEndpoint, err := mcpendpoints_repo.New(s.db).GetMCPEndpointByCustomDomainAndSlug(ctx, mcpendpoints_repo.GetMCPEndpointByCustomDomainAndSlugParams{
+		Slug:           ref.McpSlug,
+		CustomDomainID: ref.CustomDomainID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "mcp endpoint not found")
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "load mcp endpoint").LogError(ctx, s.logger)
+	}
+	if !mcpEndpoint.MetaMcpServerID.Valid || mcpEndpoint.MetaMcpServerID.UUID != ref.MetaMcpServerID.UUID {
+		// The cached challenge belongs to the original meta server, not
+		// whatever the endpoint currently resolves to.
+		return nil, errToolsetEndpointMismatch
+	}
+	metaServer, err := metamcp_repo.New(s.db).GetMetaMCPServerByIDAndProjectID(ctx, metamcp_repo.GetMetaMCPServerByIDAndProjectIDParams{
+		ID:        mcpEndpoint.MetaMcpServerID.UUID,
+		ProjectID: mcpEndpoint.ProjectID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "meta mcp server not found")
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "load meta mcp server").LogError(ctx, s.logger)
+	}
+	if !metaServer.UserSessionIssuerID.Valid {
+		// An issuer detached mid-flow closes in-flight challenges.
+		return nil, oops.E(oops.CodeNotFound, nil, "not found")
+	}
+	project, err := projects_repo.New(s.db).GetProjectByID(ctx, mcpEndpoint.ProjectID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "project not found")
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "load project").LogError(ctx, s.logger)
+	}
+	routeBase := ref.RouteBase
+	if routeBase == "" {
+		routeBase = "mcp"
+	}
+	return NewResolvedMcpEndpointFromMetaMcpServer(&mcpEndpoint, &metaServer, project.OrganizationID, routeBase), nil
 }

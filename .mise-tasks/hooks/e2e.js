@@ -1339,9 +1339,9 @@ async function runProviderScenario(args) {
     return res;
   }
   if (args.provider === "copilot") {
-    // Copilot is the cheapest provider in the harness: --plugin-dir loads the
-    // rendered package for the session, with no install/uninstall cycle and no
-    // config file to overlay. --allow-all is required for non-interactive runs
+    // --plugin-dir loads the rendered Copilot package for the session, with no
+    // install/uninstall cycle or config file to overlay. --allow-all is required
+    // for non-interactive runs
     // (hooks still fire under it) and --no-ask-user keeps a headless turn from
     // stalling on a question. JSON output is JSONL, one event per line.
     const res = await runProcess(

@@ -95,6 +95,101 @@ func BuildSetBillingMetadataPayload(usageSetBillingMetadataBody string, usageSet
 	return v, nil
 }
 
+// BuildGetBillingEmailPayload builds the payload for the usage getBillingEmail
+// endpoint from CLI flags.
+func BuildGetBillingEmailPayload(usageGetBillingEmailSessionToken string) (*usage.GetBillingEmailPayload, error) {
+	var sessionToken *string
+	{
+		if usageGetBillingEmailSessionToken != "" {
+			sessionToken = &usageGetBillingEmailSessionToken
+		}
+	}
+	v := &usage.GetBillingEmailPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildSetBillingEmailPayload builds the payload for the usage setBillingEmail
+// endpoint from CLI flags.
+func BuildSetBillingEmailPayload(usageSetBillingEmailBody string, usageSetBillingEmailSessionToken string) (*usage.SetBillingEmailPayload, error) {
+	var err error
+	var body SetBillingEmailRequestBody
+	{
+		err = json.Unmarshal([]byte(usageSetBillingEmailBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"email\": \"alice@example.com\"\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if usageSetBillingEmailSessionToken != "" {
+			sessionToken = &usageSetBillingEmailSessionToken
+		}
+	}
+	v := &usage.SetBillingEmailPayload{
+		Email: body.Email,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildSetSpendCapPayload builds the payload for the usage setSpendCap
+// endpoint from CLI flags.
+func BuildSetSpendCapPayload(usageSetSpendCapBody string, usageSetSpendCapSessionToken string) (*usage.SetSpendCapPayload, error) {
+	var err error
+	var body SetSpendCapRequestBody
+	{
+		err = json.Unmarshal([]byte(usageSetSpendCapBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"key_type\": \"internal\",\n      \"monthly_credits\": 2\n   }'")
+		}
+		if body.KeyType != nil {
+			if !(*body.KeyType == "chat" || *body.KeyType == "internal") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.key_type", *body.KeyType, []any{"chat", "internal"}))
+			}
+		}
+		if body.MonthlyCredits < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.monthly_credits", body.MonthlyCredits, 1, true))
+		}
+		if body.MonthlyCredits > 10000 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.monthly_credits", body.MonthlyCredits, 10000, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if usageSetSpendCapSessionToken != "" {
+			sessionToken = &usageSetSpendCapSessionToken
+		}
+	}
+	v := &usage.SetSpendCapPayload{
+		KeyType:        body.KeyType,
+		MonthlyCredits: body.MonthlyCredits,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildGetInferenceSpendCapsPayload builds the payload for the usage
+// getInferenceSpendCaps endpoint from CLI flags.
+func BuildGetInferenceSpendCapsPayload(usageGetInferenceSpendCapsSessionToken string) (*usage.GetInferenceSpendCapsPayload, error) {
+	var sessionToken *string
+	{
+		if usageGetInferenceSpendCapsSessionToken != "" {
+			sessionToken = &usageGetInferenceSpendCapsSessionToken
+		}
+	}
+	v := &usage.GetInferenceSpendCapsPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildCreateCustomerSessionPayload builds the payload for the usage
 // createCustomerSession endpoint from CLI flags.
 func BuildCreateCustomerSessionPayload(usageCreateCustomerSessionSessionToken string) (*usage.CreateCustomerSessionPayload, error) {
@@ -120,6 +215,96 @@ func BuildCreateCheckoutPayload(usageCreateCheckoutSessionToken string) (*usage.
 		}
 	}
 	v := &usage.CreateCheckoutPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildCreateStripeCheckoutPayload builds the payload for the usage
+// createStripeCheckout endpoint from CLI flags.
+func BuildCreateStripeCheckoutPayload(usageCreateStripeCheckoutSessionToken string) (*usage.CreateStripeCheckoutPayload, error) {
+	var sessionToken *string
+	{
+		if usageCreateStripeCheckoutSessionToken != "" {
+			sessionToken = &usageCreateStripeCheckoutSessionToken
+		}
+	}
+	v := &usage.CreateStripeCheckoutPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildGetStripeSubscriptionPayload builds the payload for the usage
+// getStripeSubscription endpoint from CLI flags.
+func BuildGetStripeSubscriptionPayload(usageGetStripeSubscriptionSessionToken string) (*usage.GetStripeSubscriptionPayload, error) {
+	var sessionToken *string
+	{
+		if usageGetStripeSubscriptionSessionToken != "" {
+			sessionToken = &usageGetStripeSubscriptionSessionToken
+		}
+	}
+	v := &usage.GetStripeSubscriptionPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildGetPaygBillingSummaryPayload builds the payload for the usage
+// getPaygBillingSummary endpoint from CLI flags.
+func BuildGetPaygBillingSummaryPayload(usageGetPaygBillingSummarySessionToken string) (*usage.GetPaygBillingSummaryPayload, error) {
+	var sessionToken *string
+	{
+		if usageGetPaygBillingSummarySessionToken != "" {
+			sessionToken = &usageGetPaygBillingSummarySessionToken
+		}
+	}
+	v := &usage.GetPaygBillingSummaryPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildCreateStripePortalSessionPayload builds the payload for the usage
+// createStripePortalSession endpoint from CLI flags.
+func BuildCreateStripePortalSessionPayload(usageCreateStripePortalSessionSessionToken string) (*usage.CreateStripePortalSessionPayload, error) {
+	var sessionToken *string
+	{
+		if usageCreateStripePortalSessionSessionToken != "" {
+			sessionToken = &usageCreateStripePortalSessionSessionToken
+		}
+	}
+	v := &usage.CreateStripePortalSessionPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildCancelStripeSubscriptionPayload builds the payload for the usage
+// cancelStripeSubscription endpoint from CLI flags.
+func BuildCancelStripeSubscriptionPayload(usageCancelStripeSubscriptionSessionToken string) (*usage.CancelStripeSubscriptionPayload, error) {
+	var sessionToken *string
+	{
+		if usageCancelStripeSubscriptionSessionToken != "" {
+			sessionToken = &usageCancelStripeSubscriptionSessionToken
+		}
+	}
+	v := &usage.CancelStripeSubscriptionPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildResumeStripeSubscriptionPayload builds the payload for the usage
+// resumeStripeSubscription endpoint from CLI flags.
+func BuildResumeStripeSubscriptionPayload(usageResumeStripeSubscriptionSessionToken string) (*usage.ResumeStripeSubscriptionPayload, error) {
+	var sessionToken *string
+	{
+		if usageResumeStripeSubscriptionSessionToken != "" {
+			sessionToken = &usageResumeStripeSubscriptionSessionToken
+		}
+	}
+	v := &usage.ResumeStripeSubscriptionPayload{}
 	v.SessionToken = sessionToken
 
 	return v, nil

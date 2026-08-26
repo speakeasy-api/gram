@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -59,7 +60,7 @@ func parseInitializeParams(raw json.RawMessage) (initializeParams, []string, err
 	return params, slices.Sorted(maps.Keys(params.Capabilities)), nil
 }
 
-func handleInitialize(ctx context.Context, logger *slog.Logger, telemetry *metrics, req *rawRequest, payload *mcpInputs, productMetrics *posthog.Posthog, toolsetsRepoParam *toolsets_repo.Queries, metadataRepoParam *metadata_repo.Queries, clientInfoStore sessionClientInfoStore) (json.RawMessage, error) {
+func handleInitialize(ctx context.Context, logger *slog.Logger, telemetry *mcpmetrics.Metrics, req *rawRequest, payload *mcpInputs, productMetrics *posthog.Posthog, toolsetsRepoParam *toolsets_repo.Queries, metadataRepoParam *metadata_repo.Queries, clientInfoStore sessionClientInfoStore) (json.RawMessage, error) {
 	params, capabilities, err := parseInitializeParams(req.Params)
 	validParams := err == nil
 	if err != nil {
@@ -68,12 +69,22 @@ func handleInitialize(ctx context.Context, logger *slog.Logger, telemetry *metri
 		logger.WarnContext(ctx, "failed to parse mcp initialize params", attr.SlogError(err))
 	}
 
-	// The requested version is what the client asked for; the negotiated one is
-	// what this handler answers below, which is ServedHostedToolset
-	// unconditionally. Recording both makes that pin visible rather than
-	// collapsing it — on this path they differ for most clients.
-	recordMCPProtocolVersionSpan(ctx, params.ProtocolVersion, mcpversions.ServedHostedToolset)
-	telemetry.RecordMCPInitialize(ctx, params.ProtocolVersion, mcpversions.ServedHostedToolset)
+	// Genuine version negotiation: echo the requested revision when this
+	// surface supports it, otherwise answer the newest supported one. The
+	// answer is written back into the request's resolution because initialize
+	// is the one request whose in-effect revision is established mid-handling
+	// — the entry-time value is provisional — and anything downstream of
+	// dispatch must see the negotiated value. The body's requested version
+	// wins over any MCP-Protocol-Version header a nonconforming client sent
+	// on initialize: the body is the negotiation.
+	negotiated := mcpversions.Negotiate(params.ProtocolVersion, mcpversions.SupportedHostedToolset())
+	payload.protocolVersion.InEffect = negotiated
+
+	// Recording requested and negotiated separately keeps a downgrade — a
+	// client asking for a revision outside the supported set — visible rather
+	// than collapsed.
+	recordMCPProtocolVersionSpan(ctx, params.ProtocolVersion, negotiated)
+	telemetry.RecordMCPInitialize(ctx, params.ProtocolVersion, negotiated)
 
 	storeSessionClientInfo(ctx, logger, clientInfoStore, payload, params.ClientInfo.Name, params.ClientInfo.Version, params.ProtocolVersion)
 
@@ -97,18 +108,16 @@ func handleInitialize(ctx context.Context, logger *slog.Logger, telemetry *metri
 	instructions := fetchInstructions(ctx, logger, toolsetsRepoParam, metadataRepoParam, payload.toolset, payload.projectID)
 
 	result := &result[initializeResult]{
-		ID: req.ID,
+		ID:             req.ID,
+		serverIdentity: serverInfoHostedToolset,
 		Result: initializeResult{
-			ProtocolVersion: mcpversions.ServedHostedToolset,
+			ProtocolVersion: negotiated,
 			Capabilities: map[string]json.RawMessage{
 				"tools":     json.RawMessage("{}"),
 				"prompts":   json.RawMessage("{}"),
 				"resources": json.RawMessage("{}"),
 			},
-			ServerInfo: serverInfo{
-				Name:    "Gram",
-				Version: "0.0.0",
-			},
+			ServerInfo:   serverInfoHostedToolset,
 			Instructions: instructions,
 		},
 	}

@@ -32,6 +32,21 @@ func UpdateOrganizationAdminPath() string {
 	return "/admin/organization.update"
 }
 
+// BulkUpdateAccountTypeAdminPath returns the URL path to the admin service bulkUpdateAccountType HTTP endpoint.
+func BulkUpdateAccountTypeAdminPath() string {
+	return "/admin/organizations.bulkUpdateAccountType"
+}
+
+// DisableOrganizationAdminPath returns the URL path to the admin service disableOrganization HTTP endpoint.
+func DisableOrganizationAdminPath() string {
+	return "/admin/organization.disable"
+}
+
+// EnableOrganizationAdminPath returns the URL path to the admin service enableOrganization HTTP endpoint.
+func EnableOrganizationAdminPath() string {
+	return "/admin/organization.enable"
+}
+
 // GetOrganizationAdminPath returns the URL path to the admin service getOrganization HTTP endpoint.
 func GetOrganizationAdminPath() string {
 	return "/admin/organization.get"
@@ -50,4 +65,59 @@ func ListOrganizationProjectsAdminPath() string {
 // ListOrganizationsAdminPath returns the URL path to the admin service listOrganizations HTTP endpoint.
 func ListOrganizationsAdminPath() string {
 	return "/admin/organizations.list"
+}
+
+// ExtendTrialAdminPath returns the URL path to the admin service extendTrial HTTP endpoint.
+func ExtendTrialAdminPath() string {
+	return "/admin/trial.extend"
+}
+
+// CreateOrganizationAdminPath returns the URL path to the admin service createOrganization HTTP endpoint.
+func CreateOrganizationAdminPath() string {
+	return "/admin/organization.create"
+}
+
+// RearmTrialAdminPath returns the URL path to the admin service rearmTrial HTTP endpoint.
+func RearmTrialAdminPath() string {
+	return "/admin/trial.rearm"
+}
+
+// GetOrganizationStatsAdminPath returns the URL path to the admin service getOrganizationStats HTTP endpoint.
+func GetOrganizationStatsAdminPath() string {
+	return "/admin/organizations.stats"
+}
+
+// GetInferenceKeysAdminPath returns the URL path to the admin service getInferenceKeys HTTP endpoint.
+func GetInferenceKeysAdminPath() string {
+	return "/admin/organization.inferenceKeys"
+}
+
+// SetInferenceKeyMonthlyLimitAdminPath returns the URL path to the admin service setInferenceKeyMonthlyLimit HTTP endpoint.
+func SetInferenceKeyMonthlyLimitAdminPath() string {
+	return "/admin/organization.setInferenceKeyMonthlyLimit"
+}
+
+// GetInferenceSpendHistoryAdminPath returns the URL path to the admin service getInferenceSpendHistory HTTP endpoint.
+func GetInferenceSpendHistoryAdminPath() string {
+	return "/admin/organization.inferenceSpendHistory"
+}
+
+// GetPaygBillingSummaryAdminPath returns the URL path to the admin service getPaygBillingSummary HTTP endpoint.
+func GetPaygBillingSummaryAdminPath() string {
+	return "/admin/organization.paygBillingSummary"
+}
+
+// GetStripeSubscriptionAdminPath returns the URL path to the admin service getStripeSubscription HTTP endpoint.
+func GetStripeSubscriptionAdminPath() string {
+	return "/admin/organization.stripeSubscription"
+}
+
+// CancelStripeSubscriptionAdminPath returns the URL path to the admin service cancelStripeSubscription HTTP endpoint.
+func CancelStripeSubscriptionAdminPath() string {
+	return "/admin/organization.cancelStripeSubscription"
+}
+
+// ResumeStripeSubscriptionAdminPath returns the URL path to the admin service resumeStripeSubscription HTTP endpoint.
+func ResumeStripeSubscriptionAdminPath() string {
+	return "/admin/organization.resumeStripeSubscription"
 }

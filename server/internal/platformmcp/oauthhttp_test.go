@@ -135,6 +135,8 @@ func TestOAuthHTTPProviderSetupCompletionDoesNotExposeState(t *testing.T) {
 	require.Equal(t, http.StatusOK, response.Code)
 	require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
 	require.NotContains(t, response.Body.String(), "secret")
+	require.Contains(t, response.Body.String(), "setting up Platform MCP")
+	require.NotContains(t, response.Body.String(), "AICP")
 }
 
 func TestOAuthHTTPMetadataAndClientRegistration(t *testing.T) {
@@ -222,6 +224,8 @@ func TestOAuthHTTPSelectsOrganizationAfterIDPCallback(t *testing.T) {
 	require.Equal(t, http.StatusOK, selection.Code)
 	require.Contains(t, selection.Body.String(), "Organization one")
 	require.Contains(t, selection.Body.String(), "Choose an organization")
+	require.Contains(t, selection.Body.String(), "requests access to Platform MCP")
+	require.NotContains(t, selection.Body.String(), "AICP")
 	require.Contains(t, selection.Body.String(), "auth-consent-container")
 	require.Contains(t, selection.Body.String(), "font-diatype-mono")
 	require.NotContains(t, selection.Body.String(), "fonts.googleapis.com")
@@ -371,7 +375,8 @@ func TestOAuthHTTPRefreshReturnsTransientGateError(t *testing.T) {
 
 	service := newTestOAuthHTTP(t)
 	store := testStore(t, service)
-	connection := platformoauth.Connection{ID: "connection-1", ClientID: "client-1", Subject: "user:user-1", OrganizationID: "org-1", Generation: "generation-1"}
+	now := time.Now()
+	connection := platformoauth.Connection{ID: "connection-1", ClientID: "client-1", Subject: "user:user-1", OrganizationID: "org-1", Generation: "generation-1", AuthorizationExpiresAt: now.Add(platformoauth.AuthorizationLifetime)}
 	require.NoError(t, store.RegisterClient(t.Context(), platformoauth.Client{ID: "client-1", Name: "test", RedirectURIs: []string{"http://127.0.0.1:3000/callback"}}))
 	require.NoError(t, store.RegisterConnection(t.Context(), connection))
 	refreshToken, err := service.credentials.Issue(refreshTokenCredential, connection.OrganizationID)
@@ -405,7 +410,7 @@ func TestOAuthHTTPRefreshReplayIsRejectedBeforeAuthorization(t *testing.T) {
 	service := newTestOAuthHTTP(t)
 	store := testStore(t, service)
 	now := time.Now()
-	connection := platformoauth.Connection{ID: "connection-1", ClientID: "client-1", Subject: "user:user-1", OrganizationID: "org-1", Generation: "generation-1"}
+	connection := platformoauth.Connection{ID: "connection-1", ClientID: "client-1", Subject: "user:user-1", OrganizationID: "org-1", Generation: "generation-1", AuthorizationExpiresAt: now.Add(platformoauth.AuthorizationLifetime)}
 	require.NoError(t, store.RegisterClient(context.Background(), platformoauth.Client{ID: "client-1", Name: "test", RedirectURIs: []string{"http://127.0.0.1:3000/callback"}}))
 	require.NoError(t, store.RegisterConnection(context.Background(), connection))
 	refreshOld, err := service.credentials.Issue(refreshTokenCredential, connection.OrganizationID)
@@ -426,7 +431,7 @@ func TestOAuthHTTPRefreshReplayIsRejectedBeforeAuthorization(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Contains(t, response.Body.String(), `"invalid_grant"`)
 	_, err = store.RotateSession(context.Background(), platformoauth.RotateSessionInput{OrganizationID: connection.OrganizationID, RefreshHash: replacement.RefreshHash, ClientID: "client-1", Generation: connection.Generation, Now: now, Replacement: platformoauth.Session{ID: "session-after", ClientID: "client-1", Connection: connection, JTI: "jti-after", RefreshHash: "refresh-after", ExpiresAt: now.Add(time.Hour), RefreshExpiresAt: now.Add(time.Hour)}})
-	require.ErrorIs(t, err, platformoauth.ErrAlreadyUsed)
+	require.ErrorIs(t, err, platformoauth.ErrRevoked)
 }
 
 func TestOAuthHTTPRevokesExpiredAccessToken(t *testing.T) {
@@ -435,7 +440,7 @@ func TestOAuthHTTPRevokesExpiredAccessToken(t *testing.T) {
 	service := newTestOAuthHTTP(t)
 	store := testStore(t, service)
 	now := time.Now()
-	connection := platformoauth.Connection{ID: "connection-1", ClientID: "client-1", Subject: "user:user-1", OrganizationID: "org-1", Generation: "generation-1"}
+	connection := platformoauth.Connection{ID: "connection-1", ClientID: "client-1", Subject: "user:user-1", OrganizationID: "org-1", Generation: "generation-1", AuthorizationExpiresAt: now.Add(platformoauth.AuthorizationLifetime)}
 	require.NoError(t, store.RegisterClient(t.Context(), platformoauth.Client{ID: "client-1", Name: "test", RedirectURIs: []string{"http://127.0.0.1:3000/callback"}}))
 	require.NoError(t, store.RegisterConnection(t.Context(), connection))
 	jti, err := service.credentials.Issue(accessJTICredential, connection.OrganizationID)
@@ -465,7 +470,7 @@ func TestOAuthHTTPRejectsMalformedRefreshSubject(t *testing.T) {
 	store := testStore(t, service)
 	now := time.Now()
 	require.NoError(t, store.RegisterClient(context.Background(), platformoauth.Client{ID: "client-1", Name: "test", RedirectURIs: []string{"http://127.0.0.1:3000/callback"}}))
-	connection := platformoauth.Connection{ID: "connection-1", ClientID: "client-1", Subject: "malformed", OrganizationID: "org-1", Generation: "generation-1"}
+	connection := platformoauth.Connection{ID: "connection-1", ClientID: "client-1", Subject: "malformed", OrganizationID: "org-1", Generation: "generation-1", AuthorizationExpiresAt: now.Add(platformoauth.AuthorizationLifetime)}
 	require.NoError(t, store.RegisterConnection(context.Background(), connection))
 	refreshToken, err := service.credentials.Issue(refreshTokenCredential, connection.OrganizationID)
 	require.NoError(t, err)

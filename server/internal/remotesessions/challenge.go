@@ -51,6 +51,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/interceptors"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -149,6 +150,10 @@ type ChallengeManager struct {
 	// per-provider, non-standard requirements (e.g. Google's offline access).
 	// Injected here rather than via a package-global registry.
 	authorizeInterceptors []interceptors.AuthorizeInterceptor
+
+	// metrics carries the unsampled upstream-authorize census that the PKCE
+	// enforcement decision (AIS-566) reads.
+	metrics *remotesessionmetrics.Authorize
 }
 
 func NewChallengeManager(
@@ -173,12 +178,13 @@ func NewChallengeManager(
 			cache.SuffixNone,
 		),
 		locks:     cacheImpl,
-		refresher: NewRefreshService(logger, db, enc, policy, cacheImpl),
+		refresher: NewRefreshService(logger, meterProvider, db, enc, policy, cacheImpl),
 		serverURL: serverURL,
 		revoker:   NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy),
 		authorizeInterceptors: []interceptors.AuthorizeInterceptor{
 			interceptors.NewGoogle(logger),
 		},
+		metrics: remotesessionmetrics.NewAuthorize(logger, meterProvider),
 	}
 }
 
@@ -192,6 +198,14 @@ type Client struct {
 	ExternalClientID      string
 	ClientSecretEncrypted *string
 	IssuerSlug            string
+
+	// IssuerName is the issuer's operator-set display name, nil when unset.
+	IssuerName *string
+
+	// IssuerLogoAssetID references the issuer's logo image in the assets
+	// store, invalid when the issuer has no logo.
+	IssuerLogoAssetID uuid.NullUUID
+
 	IssuerURL             string
 	AuthorizationEndpoint string
 	TokenEndpoint         string
@@ -199,8 +213,16 @@ type Client struct {
 	// OAuth dance.
 	ClientScope           []string
 	IssuerScopesSupported []string
-	Audience              string
-	Passthrough           bool
+
+	// IssuerCodeChallengeMethodsSupported carries the issuer's stored
+	// code_challenge_methods_supported for flow-time PKCE telemetry. Nil means
+	// the column is NULL (never captured) — distinct from an empty slice
+	// (captured; the issuer advertises no methods), so it must not be run
+	// through nil-collapsing copy idioms.
+	IssuerCodeChallengeMethodsSupported []string
+
+	Audience    string
+	Passthrough bool
 	// LegacyCallbackUrl flips BuildAuthorizationUrl onto the
 	// /oauth/callback redirect_uri (with a JSON state carrying
 	// remote_sessions=true) so a client registered against the old
@@ -231,19 +253,22 @@ func (m *ChallengeManager) ListClients(
 	out := make([]Client, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, Client{
-			ID:                    r.ClientID,
-			RemoteSessionIssuerID: r.RemoteSessionIssuerID,
-			ExternalClientID:      r.ExternalClientID,
-			ClientSecretEncrypted: conv.FromPGText[string](r.ClientSecretEncrypted),
-			IssuerSlug:            r.IssuerSlug,
-			IssuerURL:             r.IssuerUrl,
-			AuthorizationEndpoint: conv.PtrValOr(conv.FromPGText[string](r.AuthorizationEndpoint), ""),
-			TokenEndpoint:         conv.PtrValOr(conv.FromPGText[string](r.TokenEndpoint), ""),
-			ClientScope:           r.ClientScope,
-			IssuerScopesSupported: r.ScopesSupported,
-			Audience:              conv.FromPGTextOrEmpty[string](r.ClientAudience),
-			Passthrough:           r.Passthrough,
-			LegacyCallbackUrl:     r.LegacyCallbackUrl,
+			ID:                                  r.ClientID,
+			RemoteSessionIssuerID:               r.RemoteSessionIssuerID,
+			ExternalClientID:                    r.ExternalClientID,
+			ClientSecretEncrypted:               conv.FromPGText[string](r.ClientSecretEncrypted),
+			IssuerSlug:                          r.IssuerSlug,
+			IssuerName:                          conv.FromPGText[string](r.IssuerName),
+			IssuerLogoAssetID:                   r.IssuerLogoAssetID,
+			IssuerURL:                           r.IssuerUrl,
+			AuthorizationEndpoint:               conv.PtrValOr(conv.FromPGText[string](r.AuthorizationEndpoint), ""),
+			TokenEndpoint:                       conv.PtrValOr(conv.FromPGText[string](r.TokenEndpoint), ""),
+			ClientScope:                         r.ClientScope,
+			IssuerScopesSupported:               r.ScopesSupported,
+			IssuerCodeChallengeMethodsSupported: r.CodeChallengeMethodsSupported,
+			Audience:                            conv.FromPGTextOrEmpty[string](r.ClientAudience),
+			Passthrough:                         r.Passthrough,
+			LegacyCallbackUrl:                   r.LegacyCallbackUrl,
 		})
 	}
 	return out, nil
@@ -281,14 +306,18 @@ type RemoteSessionState struct {
 }
 
 // RemoteSessionStatuses returns, per remote_session_client_id, the state of
-// `subject`'s remote_session under the given `userSessionIssuerID`. Clients
-// with no non-deleted session are omitted (disconnected). Single round-trip;
-// the caller (consent renderer) then does O(1) lookups per card. Returns an
-// empty map for zero subjects so anonymous-pre-stamp renders are no-ops.
+// `subject`'s remote_session on every client bound to the requesting
+// `userSessionIssuerID`. Clients with no non-deleted session are omitted
+// (disconnected). Single round-trip; the caller (consent renderer) then does
+// O(1) lookups per card. Returns an empty map for zero subjects so
+// anonymous-pre-stamp renders are no-ops. The stored user_session_issuer_id
+// is provenance from INSERT, not a lookup key, so a grant minted by a
+// different issuer — including one since soft-deleted — is still returned.
 func (m *ChallengeManager) RemoteSessionStatuses(
 	ctx context.Context,
 	subject urn.SessionSubject,
 	projectID uuid.UUID,
+	organizationID string,
 	userSessionIssuerID uuid.UUID,
 ) (map[uuid.UUID]RemoteSessionState, error) {
 	if subject.IsZero() {
@@ -298,6 +327,7 @@ func (m *ChallengeManager) RemoteSessionStatuses(
 		SubjectUrn:          subject,
 		UserSessionIssuerID: userSessionIssuerID,
 		ProjectID:           projectID,
+		OrganizationID:      organizationID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list remote session statuses: %w", err)
@@ -334,14 +364,34 @@ var ErrRemoteSessionNotRefreshable = errors.New("remote session has no usable re
 
 // RefreshRemoteSession performs an explicit consent-screen refresh through the
 // same best-effort single-flight path as lazy and scheduled refreshes.
+//
+// The credential is shared by every user_session_issuer bound to its client;
+// its stored user_session_issuer_id is provenance only. Authorization is
+// therefore the requesting issuer's tenant-scoped client binding, not a match
+// against the surface that happened to mint the row — any bound surface may
+// refresh, and an unbound one fails closed with ErrRemoteSessionNotRefreshable.
 func (m *ChallengeManager) RefreshRemoteSession(
 	ctx context.Context,
 	subject urn.SessionSubject,
+	projectID uuid.UUID,
+	organizationID string,
 	userSessionIssuerID uuid.UUID,
 	clientID uuid.UUID,
-	fallbackResource string,
 ) (RefreshResult, error) {
 	var zero RefreshResult
+
+	bound, err := remotesessions_repo.New(m.db).CheckRemoteSessionClientBindingForUserSessionIssuer(ctx, remotesessions_repo.CheckRemoteSessionClientBindingForUserSessionIssuerParams{
+		RemoteSessionClientID: clientID,
+		UserSessionIssuerID:   userSessionIssuerID,
+		ProjectID:             projectID,
+		OrganizationID:        organizationID,
+	})
+	if err != nil {
+		return zero, fmt.Errorf("check remote session client binding: %w", err)
+	}
+	if !bound {
+		return zero, ErrRemoteSessionNotRefreshable
+	}
 
 	session, err := remotesessions_repo.New(m.db).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{
 		SubjectUrn:            subject,
@@ -353,13 +403,17 @@ func (m *ChallengeManager) RefreshRemoteSession(
 	if err != nil {
 		return zero, fmt.Errorf("get consent remote session: %w", err)
 	}
-	if session.UserSessionIssuerID != userSessionIssuerID ||
-		!session.RefreshTokenEncrypted.Valid ||
-		session.RefreshTokenEncrypted.String == "" {
+	if !session.RefreshTokenEncrypted.Valid || session.RefreshTokenEncrypted.String == "" {
 		return zero, ErrRemoteSessionNotRefreshable
 	}
 
-	return m.refresher.RefreshNow(ctx, session, fallbackResource)
+	return m.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerManual)
+}
+
+// FallbackResourceForClient derives one client's RFC 8707 resource from its
+// attached MCP servers; ambiguous or absent upstreams derive "".
+func (m *ChallengeManager) FallbackResourceForClient(ctx context.Context, clientID uuid.UUID) (string, error) {
+	return m.refresher.FallbackResourceForClient(ctx, clientID)
 }
 
 // DisconnectRemoteSession soft-deletes the subject's remote_session for one
@@ -375,12 +429,13 @@ func (m *ChallengeManager) RefreshRemoteSession(
 //
 // Returns the number of rows affected; zero means there was nothing to
 // disconnect and nothing is sent upstream.
-func (m *ChallengeManager) DisconnectRemoteSession(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, userSessionIssuerID uuid.UUID, clientID uuid.UUID) (int64, error) {
+func (m *ChallengeManager) DisconnectRemoteSession(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID, clientID uuid.UUID) (int64, error) {
 	disconnected, err := remotesessions_repo.New(m.db).SoftDeleteRemoteSessionBySubjectAndClient(ctx, remotesessions_repo.SoftDeleteRemoteSessionBySubjectAndClientParams{
 		SubjectUrn:            subject,
 		RemoteSessionClientID: clientID,
 		UserSessionIssuerID:   userSessionIssuerID,
 		ProjectID:             projectID,
+		OrganizationID:        organizationID,
 	})
 	if err != nil {
 		return 0, fmt.Errorf("disconnect remote session: %w", err)
@@ -400,13 +455,14 @@ func (m *ChallengeManager) DisconnectRemoteSession(ctx context.Context, subject 
 // SetRemoteSessionAutoRefresh records the subject's consent-screen
 // auto-refresh choice for one client. Returns rows affected; zero means no
 // active session exists for the binding (e.g. disconnected in another tab).
-func (m *ChallengeManager) SetRemoteSessionAutoRefresh(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, userSessionIssuerID uuid.UUID, clientID uuid.UUID, enabled bool) (int64, error) {
+func (m *ChallengeManager) SetRemoteSessionAutoRefresh(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID, clientID uuid.UUID, enabled bool) (int64, error) {
 	n, err := remotesessions_repo.New(m.db).SetRemoteSessionAutoRefresh(ctx, remotesessions_repo.SetRemoteSessionAutoRefreshParams{
 		AutoRefresh:           enabled,
 		SubjectUrn:            subject,
 		RemoteSessionClientID: clientID,
 		UserSessionIssuerID:   userSessionIssuerID,
 		ProjectID:             projectID,
+		OrganizationID:        organizationID,
 	})
 	if err != nil {
 		return 0, fmt.Errorf("set remote session auto refresh: %w", err)
@@ -424,6 +480,10 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 	parent ParentChallenge,
 	client Client,
 ) (string, error) {
+	// Counted at entry, before any validation or the Redis write, so a flow
+	// that dies on an unrelated error here still lands in the census.
+	m.metrics.Record(ctx, client.IssuerURL, remotesessionmetrics.ClassifyPKCESupport(client.IssuerCodeChallengeMethodsSupported))
+
 	if client.AuthorizationEndpoint == "" {
 		return "", fmt.Errorf("remote_session_issuer %s missing authorization_endpoint", client.IssuerSlug)
 	}
@@ -604,6 +664,20 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 		return oops.E(oops.CodeUnauthorized, err, "upstream token exchange failed").LogError(ctx, logger)
 	}
 
+	// The pair is live upstream from this line on, and every path out of here
+	// that does not store it strands it: unreachable through Gram, and outside
+	// the reach of every revoke path since no row points at it. So arm the
+	// revocation on the exchange rather than on the first thing done with the
+	// result — encrypting it can fail too — and disarm it once the row is
+	// committed.
+	stranded := true
+	defer func() {
+		if !stranded {
+			return
+		}
+		m.revoker.RevokeUnstoredDetached(ctx, state.RemoteSessionClientID, tok.AccessToken, tok.RefreshToken)
+	}()
+
 	accessEnc, err := m.enc.Encrypt([]byte(tok.AccessToken))
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "encrypt access token").LogError(ctx, logger)
@@ -643,7 +717,46 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 		autoRefresh = *state.AutoRefresh
 	}
 
-	if _, err := queries.UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+	// The upstream exchange has already happened, so the token pair exists
+	// either way; this transaction decides whether Gram stores it. The
+	// client-row lock serializes the write against the issuer-delete orphan
+	// cascade, which locks the same row before sweeping the client's
+	// sessions: a callback that acquires the lock after that cascade
+	// committed re-reads the binding as dead and is rejected here, instead
+	// of resurrecting a grant no live issuer can reach or revoke. A rejected
+	// callback leaves the revocation armed above still standing.
+	dbtx, err := m.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "begin remote session transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	txQueries := remotesessions_repo.New(dbtx)
+
+	// No row means the client itself is gone, which the binding recheck below
+	// rejects on its own — there is nothing left to serialize against.
+	if _, err := txQueries.LockRemoteSessionClientForSessionWrite(ctx, state.RemoteSessionClientID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return oops.E(oops.CodeUnexpected, err, "lock remote session client").LogError(ctx, logger)
+	}
+
+	// Deliberately the issuer this login started from, not "any live binding
+	// on the client": the consent that produced this code was given on that
+	// issuer's surface, so its deletion ends the login rather than quietly
+	// re-homing the grant onto a sibling the user was never shown. The user
+	// re-authorizes through the surviving surface instead.
+	bound, err := txQueries.CheckRemoteSessionClientBindingForUserSessionIssuer(ctx, remotesessions_repo.CheckRemoteSessionClientBindingForUserSessionIssuerParams{
+		RemoteSessionClientID: state.RemoteSessionClientID,
+		UserSessionIssuerID:   state.UserSessionIssuerID,
+		ProjectID:             state.ProjectID,
+		OrganizationID:        state.OrganizationID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "recheck remote session client binding").LogError(ctx, logger)
+	}
+	if !bound {
+		return oops.E(oops.CodeUnauthorized, nil, "the connection this login was started from no longer exists").LogWarn(ctx, logger)
+	}
+
+	if _, err := txQueries.UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
 		SubjectUrn:            *state.Subject,
 		UserSessionIssuerID:   state.UserSessionIssuerID,
 		RemoteSessionClientID: state.RemoteSessionClientID,
@@ -660,6 +773,11 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "store remote session").LogError(ctx, logger)
 	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "commit remote session").LogError(ctx, logger)
+	}
+	stranded = false
 
 	routeBase := state.RouteBase
 	if routeBase == "" {

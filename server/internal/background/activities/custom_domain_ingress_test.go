@@ -164,12 +164,15 @@ func TestCustomDomainIngress_Setup_Ingress_UpdatesDB(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = customdomainsRepo.New(conn).CreateCustomDomain(ctx, customdomainsRepo.CreateCustomDomainParams{
+	setupRow, err := customdomainsRepo.New(conn).CreateCustomDomain(ctx, customdomainsRepo.CreateCustomDomainParams{
 		OrganizationID:  orgID,
 		Domain:          domain,
 		ProvisionerKind: "ingress",
 		IpAllowlist:     []string{},
 	})
+	require.NoError(t, err)
+	// Reconcile only activates verified rows; setup runs after the TXT proof.
+	_, err = customdomainsRepo.New(conn).SetCustomDomainVerified(ctx, setupRow.ID)
 	require.NoError(t, err)
 
 	stub := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, logger)
@@ -364,6 +367,9 @@ func TestReconcileCustomDomain_DeleteDuringApplyRemovesAppliedResource(t *testin
 		IpAllowlist:     []string{},
 	})
 	require.NoError(t, err)
+	// Reconcile only walks the convergence path for verified rows.
+	_, err = customdomainsRepo.New(conn).SetCustomDomainVerified(ctx, customDomain.ID)
+	require.NoError(t, err)
 
 	provisioner := newBlockingProvisioner()
 	reconciler := activities.NewCustomDomainIngress(logger, conn, &stubProvisionerFactory{provisioner: provisioner})
@@ -418,6 +424,9 @@ func TestReconcileCustomDomain_DeleteDuringConvergenceConvergesToDeleted(t *test
 		ProvisionerKind: string(k8s.ProvisionerKindIngress),
 		IpAllowlist:     []string{},
 	})
+	require.NoError(t, err)
+	// Reconcile only walks the convergence path for verified rows.
+	_, err = customdomainsRepo.New(conn).SetCustomDomainVerified(ctx, customDomain.ID)
 	require.NoError(t, err)
 
 	provisioner := newBlockingProvisioner()
@@ -546,4 +555,50 @@ func TestReconcileCustomDomain_NotFoundNoops(t *testing.T) {
 	reconciler := activities.NewCustomDomainIngress(logger, conn, &stubProvisionerFactory{provisioner: provisioner})
 	require.NoError(t, reconciler.ReconcileCustomDomain(t.Context(), activities.ReconcileCustomDomainArgs{CustomDomainID: uuid.New()}))
 	require.Empty(t, provisioner.Calls())
+}
+
+func TestReconcileCustomDomain_PendingDomainAppliesButNeverActivates(t *testing.T) {
+	t.Parallel()
+
+	const orgID = "org-pending-no-activate"
+	const domain = "pending-no-activate.example.com"
+	ctx := t.Context()
+	logger := testenv.NewLogger(t)
+
+	conn, err := infra.CloneTestDatabase(t, "pending_no_activate_test")
+	require.NoError(t, err)
+	_, err = orgRepo.New(conn).UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:          orgID,
+		Name:        orgID,
+		Slug:        orgID,
+		WorkosID:    pgtype.Text{},
+		Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+	customDomain, err := customdomainsRepo.New(conn).CreateCustomDomain(ctx, customdomainsRepo.CreateCustomDomainParams{
+		OrganizationID:  orgID,
+		Domain:          domain,
+		IngressName:     pgtype.Text{},
+		CertSecretName:  pgtype.Text{},
+		ProvisionerKind: string(k8s.ProvisionerKindIngress),
+		IpAllowlist:     []string{},
+	})
+	require.NoError(t, err)
+
+	stub := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, logger)
+	reconciler := activities.NewCustomDomainIngress(logger, conn, &stubProvisionerFactory{provisioner: stub}, activities.WithSetupSleep(0))
+
+	// Desired-state writes on a pending domain (root MCP selection, allowlist
+	// edits) trigger reconciliation. Resources may pre-provision, but the
+	// domain must never verify or activate without the TXT ownership proof.
+	require.NoError(t, reconciler.ReconcileCustomDomain(ctx, activities.ReconcileCustomDomainArgs{CustomDomainID: customDomain.ID}))
+
+	calls := stub.Calls()
+	require.Len(t, calls, 1)
+	require.Equal(t, "Apply", calls[0].Method)
+
+	row, err := customdomainsRepo.New(conn).GetCustomDomainByDomain(ctx, domain)
+	require.NoError(t, err)
+	require.False(t, row.Verified, "reconciliation must never set verified")
+	require.False(t, row.Activated, "an unverified domain must not activate")
 }

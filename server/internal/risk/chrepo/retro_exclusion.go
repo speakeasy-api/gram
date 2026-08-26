@@ -66,11 +66,12 @@ func FormatCHTime(t time.Time) string {
 	return t.UTC().Format(chTimeFormat)
 }
 
-// latestRiskFindingsSubquery is the shared latest-copy-per-id dedup base,
-// bounded to one tenant + partition day. Callers append `rn = 1` plus their
-// predicate. Args: organization_id, project_id, day start, day end.
+// latestRiskFindingsSubquery is the shared winning-copy-per-id dedup base
+// (latestCopyOrderSQL semantics), bounded to one tenant + partition day.
+// Callers append `rn = 1` plus their predicate. Args: organization_id,
+// project_id, day start, day end.
 const latestRiskFindingsSubquery = `(
-	SELECT *, ROW_NUMBER() OVER (PARTITION BY id ORDER BY inserted_at DESC) AS rn
+	SELECT *, ROW_NUMBER() OVER (PARTITION BY id ORDER BY ` + latestCopyOrderSQL + `) AS rn
 	FROM risk_findings
 	WHERE organization_id = ? AND project_id = ?
 	  AND created_at >= ? AND created_at < ?
@@ -217,10 +218,15 @@ func reversalWhere(keep RetroReversalKeep) string {
 
 // copyProjection renders the INSERT ... SELECT column projection: every
 // risk_findings column passed through verbatim except inserted_at (bound —
-// the copy must sort after every prior copy of the id) and the two exclusion
-// flags (bound or NULL per direction). Column order matches
+// the copy must sort after every prior copy of the id) and the suppression
+// columns (bound, literal or NULL per direction). excluded_reason,
+// excluded_detail and event_kind are SQL literal expressions, not bind
+// placeholders — the callers only ever stamp constants ('rule' on apply, ” on
+// reversal), so literals keep the arg plumbing untouched. event_kind is
+// stamped per direction so the copy ranks as a state change at read time and
+// a redelivered scanner row cannot clobber it. Column order matches
 // riskFindingColumns exactly, which a test pins against InsertRiskFindings.
-func copyProjection(excludedAtExpr, exclusionIDExpr string) string {
+func copyProjection(excludedAtExpr, exclusionIDExpr, excludedReasonExpr, excludedDetailExpr, eventKindExpr string) string {
 	projected := make([]string, len(riskFindingColumns))
 	for i, col := range riskFindingColumns {
 		switch col {
@@ -230,11 +236,30 @@ func copyProjection(excludedAtExpr, exclusionIDExpr string) string {
 			projected[i] = excludedAtExpr
 		case "exclusion_id":
 			projected[i] = exclusionIDExpr
+		case "excluded_reason":
+			projected[i] = excludedReasonExpr
+		case "excluded_detail":
+			projected[i] = excludedDetailExpr
+		case "event_kind":
+			projected[i] = eventKindExpr
 		default:
 			projected[i] = col
 		}
 	}
 	return strings.Join(projected, ", ")
+}
+
+// applyProjection is the copy projection for the apply direction: excluded_at
+// and exclusion_id bound, reason stamped 'rule', detail cleared, kind stamped
+// suppression.
+func applyProjection() string {
+	return copyProjection("?", "?", "'"+ExcludedReasonRule+"'", "''", "'"+EventKindSuppression+"'")
+}
+
+// reversalProjection is the copy projection for the reversal direction: the
+// whole suppression annotation cleared, kind stamped unsuppression.
+func reversalProjection() string {
+	return copyProjection("NULL", "NULL", "''", "''", "'"+EventKindUnsuppression+"'")
 }
 
 // CountRetroExclusionApply returns how many latest-copy rows in scope the
@@ -288,7 +313,7 @@ func (q *Queries) AppendRetroExclusionApply(ctx context.Context, scope RetroExcl
 	}
 
 	query := "INSERT INTO risk_findings (" + strings.Join(riskFindingColumns, ", ") + ") " +
-		"SELECT " + copyProjection("?", "?") + " FROM " + latestRiskFindingsSubquery +
+		"SELECT " + applyProjection() + " FROM " + latestRiskFindingsSubquery +
 		" WHERE rn = 1 AND " + conds
 	args := make([]any, 0, 7+len(condArgs))
 	args = append(args, insertedAt, excludedAt, exclusionID)
@@ -310,7 +335,7 @@ func (q *Queries) AppendRetroExclusionApplyByIDs(ctx context.Context, scope Retr
 	}
 
 	query := "INSERT INTO risk_findings (" + strings.Join(riskFindingColumns, ", ") + ") " +
-		"SELECT " + copyProjection("?", "?") + " FROM " + latestRiskFindingsSubquery +
+		"SELECT " + applyProjection() + " FROM " + latestRiskFindingsSubquery +
 		" WHERE rn = 1 AND dead_letter_reason = '' AND excluded_at IS NULL AND id IN (" +
 		strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",") + ")"
 	args := make([]any, 0, 7+len(ids))
@@ -346,7 +371,7 @@ func (q *Queries) CountRetroExclusionReversal(ctx context.Context, scope RetroEx
 // makes deleting or disabling an exclusion un-hide its findings.
 func (q *Queries) AppendRetroExclusionReversal(ctx context.Context, scope RetroExclusionScope, exclusionID uuid.UUID, insertedAt string, keep RetroReversalKeep) error {
 	query := "INSERT INTO risk_findings (" + strings.Join(riskFindingColumns, ", ") + ") " +
-		"SELECT " + copyProjection("NULL", "NULL") + " FROM " + latestRiskFindingsSubquery +
+		"SELECT " + reversalProjection() + " FROM " + latestRiskFindingsSubquery +
 		" WHERE " + reversalWhere(keep)
 	args := make([]any, 0, 6+len(keep.args))
 	args = append(args, insertedAt)
@@ -371,7 +396,7 @@ func (q *Queries) AppendRetroExclusionReversalByIDs(ctx context.Context, scope R
 	}
 
 	query := "INSERT INTO risk_findings (" + strings.Join(riskFindingColumns, ", ") + ") " +
-		"SELECT " + copyProjection("NULL", "NULL") + " FROM " + latestRiskFindingsSubquery +
+		"SELECT " + reversalProjection() + " FROM " + latestRiskFindingsSubquery +
 		" WHERE rn = 1 AND exclusion_id = ? AND id IN (" +
 		strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",") + ")"
 	args := make([]any, 0, 6+len(ids))

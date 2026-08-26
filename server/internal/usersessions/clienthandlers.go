@@ -21,6 +21,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -38,6 +41,16 @@ const revocationPushBudget = 5 * time.Second
 // client owning thousands of sessions can't produce a single enormous log
 // record and span attribute.
 const maxReportedRevocationFailures = 20
+
+// cimdRefreshCooldown is the server-side floor between metadata refreshes of
+// one client. RefreshUserSessionClientCIMD deliberately defeats the document
+// cache (purge then unconditional re-read), so the cache no longer bounds
+// fetch volume on this path; this comparison against the row's last
+// successful read does instead. Sized for the "I just republished my
+// document" workflow, where one re-read is the point and a second within
+// seconds serves none. Frontend debounce alone would not count -- the
+// endpoint is reachable directly.
+const cimdRefreshCooldown = 30 * time.Second
 
 // Lists registered clients, DCR and CIMD alike; keyset paginated by id
 // (descending). client_secret_hash is stripped from the view.
@@ -164,6 +177,198 @@ func activeSessionCounts(ctx context.Context, queries *repo.Queries, clientIDs [
 	return counts, nil
 }
 
+// Forces a CIMD client's metadata document to be re-read. Purges the stored
+// cache state (expiry + ETag) before resolving, so the follow-up read is
+// unconditional: back-dating the expiry alone would leave the ETag in place
+// and a host answering 304 Not Modified would re-confirm the exact copy the
+// operator is trying to stop trusting, with nothing re-fetched or
+// re-validated. The purge and its audit entry commit before the fetch, so a
+// refresh whose upstream read then fails still leaves the row in the
+// "nothing cached, next read is full" state -- which is the safe direction
+// for an operator who no longer trusts the cached copy.
+func (s *Service) RefreshUserSessionClientCIMD(ctx context.Context, payload *gen.RefreshUserSessionClientCIMDPayload) (*types.UserSessionClient, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	id, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid client id").LogError(ctx, s.logger)
+	}
+
+	logger := s.logger.With(
+		attr.SlogProjectID(authCtx.ProjectID.String()),
+		attr.SlogUserSessionClientID(id.String()),
+	)
+
+	queries := repo.New(s.db)
+
+	// Establishes project ownership and loads the fields the cooldown check
+	// and audit entry need, through the same project-scoped read the get
+	// endpoint uses. The mutations below carry their own project guard too.
+	row, err := queries.GetUserSessionClientByID(ctx, repo.GetUserSessionClientByIDParams{
+		ID:        id,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "user session client not found").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get user session client").LogError(ctx, logger)
+	}
+
+	if !row.ClientIDMetadataUri.Valid {
+		return nil, oops.E(oops.CodeBadRequest, nil, "client was registered via DCR and has no metadata document to refresh").LogError(ctx, logger)
+	}
+
+	// The issuer-level off switch applies to this fetch surface like it does
+	// to /authorize: a `disabled` issuer must not have Gram fetch documents
+	// on its behalf, refresh included. Only `disabled` blocks here — a
+	// presets catalog miss stays refreshable, mirroring the /token asymmetry
+	// where de-listing a client stops new authorize flows without breaking
+	// its existing rows. An unrecognized stored mode fails closed.
+	issuer, err := queries.GetUserSessionIssuerByID(ctx, repo.GetUserSessionIssuerByIDParams{
+		ID:        row.UserSessionIssuerID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get user session issuer").LogError(ctx, logger)
+	}
+	mode, recognized := admission.ResolveMode(issuer.ClientIDMetadataAdmissionMode.String, issuer.ClientIDMetadataAdmissionMode.Valid)
+	if !recognized {
+		logger.ErrorContext(ctx, "unrecognized cimd admission mode stored on issuer, failing closed",
+			attr.SlogCIMDAdmissionMode(issuer.ClientIDMetadataAdmissionMode.String),
+		)
+	}
+	if mode == admission.ModeDisabled {
+		return nil, oops.E(oops.CodeForbidden, nil, "CIMD is disabled for this issuer").LogError(ctx, logger)
+	}
+
+	// fetched_at advances on every successful read (a 304 revalidation
+	// included), so this floor only meters clients whose documents are
+	// reachable; a host that is down never advances it and every attempt is
+	// an upstream fetch. Acceptable: the caller is an authenticated
+	// project:write holder re-reading a host their own project points at.
+	if row.ClientIDMetadataFetchedAt.Valid && time.Since(row.ClientIDMetadataFetchedAt.Time) < cimdRefreshCooldown {
+		return nil, oops.E(oops.CodeRateLimitExceeded, nil, "metadata was read moments ago, try again in a moment")
+	}
+
+	// The purge and its audit entry commit together, before the fetch: the
+	// purge is the security-relevant mutation, and it must stay recorded even
+	// when the re-read that follows fails.
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	txRepo := repo.New(dbtx)
+
+	if _, err := txRepo.PurgeUserSessionClientCIMDCache(ctx, repo.PurgeUserSessionClientCIMDCacheParams{
+		ID:        row.ID,
+		ProjectID: *authCtx.ProjectID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// The row stopped being a live CIMD row between the read above and
+			// this write (revoked concurrently).
+			return nil, oops.E(oops.CodeNotFound, err, "user session client not found").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "purge cimd metadata cache").LogError(ctx, logger)
+	}
+
+	if err := s.audit.LogUserSessionClientCIMDRefresh(ctx, dbtx, audit.LogUserSessionClientCIMDRefreshEvent{
+		OrganizationID:       authCtx.ActiveOrganizationID,
+		ProjectID:            *authCtx.ProjectID,
+		Actor:                urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:     authCtx.Email,
+		ActorSlug:            nil,
+		UserSessionClientURN: urn.NewUserSessionClient(row.ID),
+		ClientID:             row.ClientID,
+		ClientName:           row.ClientName,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log cimd metadata refresh").LogError(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+	}
+
+	// Zero cache state forces an unconditional fetch and full re-validation.
+	// Runs outside any transaction -- this is a network call against a
+	// tenant-chosen host.
+	result, err := s.cimdResolver.Resolve(ctx, row.ClientID, cimd.CacheState{ExpiresAt: time.Time{}, ETag: ""})
+	if err != nil {
+		if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
+			// A spec/policy rejection of the document itself, with a
+			// client-safe description: the operator's fix is at the document
+			// host, not at Gram.
+			return nil, oops.E(oops.CodeInvalid, err, "metadata document failed validation: %s; the cached copy was discarded and the document will be re-read on the client's next authorization", oauthErr.Description).LogError(ctx, logger)
+		}
+		// The message carries the post-purge state because the operator's
+		// mental model of a failed refresh is "nothing changed" — here the
+		// cache mutation already committed, deliberately (a distrusted copy
+		// must not survive a host that refuses the re-read).
+		return nil, oops.E(oops.CodeGatewayError, err, "metadata document could not be fetched; the cached copy was discarded and the document will be re-read on the client's next authorization").LogError(ctx, logger)
+	}
+
+	// Unreachable with zero cache state: the two cache-hit outcomes require
+	// cache state this call did not pass. Checked so a resolver regression
+	// cannot make this handler dereference a nil Document.
+	if result.Outcome != cimd.CacheOutcomeRefreshed || result.Document == nil {
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("cimd resolver reported %q outcome for an uncached resolve", result.Outcome), "refresh client metadata").LogError(ctx, logger)
+	}
+
+	// A document that drops private_key_jwt after committing to it is
+	// indistinguishable from a domain takeover. The stored method stands, and
+	// the operator is told how to reset it deliberately: revoking the client
+	// lets the next authorize register it afresh from whatever the document
+	// then says.
+	if CIMDDocumentDowngradesAuthMethod(&row, result.Document) {
+		return nil, oops.E(oops.CodeInvalid, nil, "metadata document now declares token_endpoint_auth_method %q but the client committed to private_key_jwt; the stored method was kept. Revoke the client to let it re-register under the new method", result.Document.DeclaredAuthMethod()).LogError(ctx, logger)
+	}
+
+	// Persisted through an id-scoped update rather than the authorize path's
+	// (issuer, client_id) upsert: the upsert's conflict target is a partial
+	// unique index over live rows, so against a row revoked during the fetch
+	// it would take the INSERT branch and silently resurrect the client the
+	// operator just watched someone revoke.
+	fresh, err := queries.UpdateUserSessionClientFromCIMD(ctx, repo.UpdateUserSessionClientFromCIMDParams{
+		ID:                      row.ID,
+		ProjectID:               *authCtx.ProjectID,
+		ClientName:              result.Document.ClientName,
+		RedirectUris:            result.Document.RedirectURIs,
+		CacheTtlSeconds:         result.TTL.Seconds(),
+		ClientIDMetadataEtag:    conv.ToPGTextEmpty(result.ETag),
+		TokenEndpointAuthMethod: result.Document.DeclaredAuthMethod(),
+		ClientJwks:              result.Document.JWKS,
+		ClientJwksUri:           conv.ToPGTextEmpty(result.Document.JWKSURI),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// The row stopped being an updatable CIMD row between the purge
+			// and this write — revoked concurrently, or no longer
+			// CIMD-resolved.
+			return nil, oops.E(oops.CodeNotFound, err, "user session client not found").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "persist refreshed cimd metadata").LogError(ctx, logger)
+	}
+
+	counts, err := activeSessionCounts(ctx, queries, []uuid.UUID{fresh.ID})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "count active user sessions").LogError(ctx, logger)
+	}
+
+	return mv.BuildUserSessionClientView(fresh, counts[fresh.ID]), nil
+}
+
 // Soft-deletes a client registration and cascades to every user_session
 // issued through it. Future tokens minted for this client_id are rejected.
 func (s *Service) RevokeUserSessionClient(ctx context.Context, payload *gen.RevokeUserSessionClientPayload) error {
@@ -257,7 +462,7 @@ func (s *Service) RevokeUserSessionClient(ctx context.Context, payload *gen.Revo
 		}
 		seenSubjects[key] = struct{}{}
 
-		creds, err := s.revoker.SoftDeleteSubjectSessions(ctx, dbtx, session.SubjectUrn, session.UserSessionIssuerID, *authCtx.ProjectID)
+		creds, err := s.revoker.SoftDeleteSubjectSessions(ctx, dbtx, session.SubjectUrn, session.UserSessionIssuerID, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "revoke upstream remote sessions").LogError(ctx, logger)
 		}

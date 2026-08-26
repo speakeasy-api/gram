@@ -22,6 +22,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -102,7 +104,11 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 		return oops.E(oops.CodeBadRequest, errInvalidJSONRPCVersion, "unsupported JSON-RPC version").LogError(ctx, s.logger)
 	}
 
-	body, err := s.handlePlatformToolsetRequest(ctx, authCtx, toolset, &req, r.Header.Get("Gram-Chat-ID"))
+	// Resolved once per request; the initialize handler overwrites InEffect
+	// with the negotiated answer, which is the one sanctioned mutation.
+	protocolVersion := mcpversions.Resolve(mcprequests.DeclaredProtocolVersion(r.Header.Get(mcpversions.HTTPHeader), req.Params), mcpversions.SupportedPlatformToolset())
+
+	body, err := s.handlePlatformToolsetRequest(ctx, authCtx, toolset, &req, r.Header.Get("Gram-Chat-ID"), &protocolVersion)
 	switch {
 	case body == nil && err == nil:
 		return respondWithNoContent(true, w)
@@ -134,6 +140,15 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 // downstream tools to refuse the call.
 func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, authCtx *contextvalues.AuthContext) error {
 	switch slug {
+	case platformtools.ResearchToolsetSlug:
+		// Nobody reaches the research tools over HTTP. The research runner
+		// constructs its executors privately — the slug is not even in the
+		// toolset registry — so this refusal is a tripwire: an assistant
+		// token arriving here was never meant to have billable web search
+		// and public page fetch, and re-registering the toolset must not
+		// quietly grant them. If the runner is ever moved onto the assistant
+		// runtime, this is where its principal is checked.
+		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
 	case platformtools.ManagedAssistantPlatformToolsetSlug, platformtools.PlatformMCPReadToolsetSlug:
 	default:
 		return nil
@@ -198,7 +213,14 @@ func (s *Service) handlePlatformToolsetRequest(
 	toolset platformtools.Toolset,
 	req *rawRequest,
 	chatIDHeader string,
+	protocolVersion *mcpversions.Resolution,
 ) (json.RawMessage, error) {
+	// Count this request on the same census as the hosted dispatch. The
+	// version dimension must be Declared, not InEffect: the census exists to
+	// show what clients actually send, and RecordMCPRequest buckets an empty
+	// or unrecognized declaration into its "none"/"other" series.
+	s.metrics.RecordMCPRequest(ctx, protocolVersion.Declared, req.Method, mcpmetrics.SurfacePlatform)
+
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
 		start := time.Now()
 		defer func() {
@@ -208,9 +230,9 @@ func (s *Service) handlePlatformToolsetRequest(
 
 	switch req.Method {
 	case "ping":
-		return handlePing(ctx, s.logger, req.ID)
+		return handlePing(ctx, s.logger, req.ID, serverInfoPlatformToolset)
 	case "initialize":
-		return handlePlatformInitialize(ctx, s.logger, s.metrics, req)
+		return handlePlatformInitialize(ctx, s.logger, s.metrics, req, protocolVersion)
 	case "notifications/initialized", "notifications/cancelled":
 		return nil, nil
 	case "tools/list":
@@ -222,35 +244,38 @@ func (s *Service) handlePlatformToolsetRequest(
 	}
 }
 
-func handlePlatformInitialize(ctx context.Context, logger *slog.Logger, telemetry *metrics, req *rawRequest) (json.RawMessage, error) {
-	// This path answers ServedPlatformToolset unconditionally and does not
-	// otherwise read the request params. Parsing them purely for telemetry is
-	// the point: without it the platform surface is the one inbound path where
-	// the client's requested revision is invisible, which reads as a hole in
-	// the data rather than as "platform clients don't negotiate". Malformed
-	// params must not fail the handshake, so a parse error is logged and the
-	// requested version is simply left unrecorded.
+func handlePlatformInitialize(ctx context.Context, logger *slog.Logger, telemetry *mcpmetrics.Metrics, req *rawRequest, protocolVersion *mcpversions.Resolution) (json.RawMessage, error) {
+	// Malformed params must not fail the handshake, so a parse error is
+	// logged, the requested version is left unrecorded, and negotiation
+	// proceeds from an absent request — answering the unversioned default.
 	params, _, err := parseInitializeParams(req.Params)
 	if err != nil {
 		logger.WarnContext(ctx, "failed to parse platform mcp initialize params", attr.SlogError(err))
 	}
 
-	recordMCPProtocolVersionSpan(ctx, params.ProtocolVersion, mcpversions.ServedPlatformToolset)
-	telemetry.RecordMCPInitialize(ctx, params.ProtocolVersion, mcpversions.ServedPlatformToolset)
+	// Genuine version negotiation, mirroring the hosted surface: echo the
+	// requested revision when this surface supports it, otherwise answer the
+	// newest supported one. The answer is written back into the request's
+	// resolution because entry-time resolution saw a handshake with no
+	// declared version; anything downstream of dispatch must see the
+	// negotiated value.
+	negotiated := mcpversions.Negotiate(params.ProtocolVersion, mcpversions.SupportedPlatformToolset())
+	protocolVersion.InEffect = negotiated
+
+	recordMCPProtocolVersionSpan(ctx, params.ProtocolVersion, negotiated)
+	telemetry.RecordMCPInitialize(ctx, params.ProtocolVersion, negotiated)
 
 	result := &result[initializeResult]{
 		ID: req.ID,
 		Result: initializeResult{
-			ProtocolVersion: mcpversions.ServedPlatformToolset,
+			ProtocolVersion: negotiated,
 			Capabilities: map[string]json.RawMessage{
 				"tools": json.RawMessage("{}"),
 			},
-			ServerInfo: serverInfo{
-				Name:    "Gram Platform Toolset",
-				Version: "0.0.0",
-			},
+			ServerInfo:   serverInfoPlatformToolset,
 			Instructions: "",
 		},
+		serverIdentity: serverInfoPlatformToolset,
 	}
 	bs, err := json.Marshal(result)
 	if err != nil {
@@ -288,8 +313,9 @@ func (s *Service) listPlatformToolsetTools(
 	}
 
 	bs, err := json.Marshal(&result[toolsListResultTools]{
-		ID:     req.ID,
-		Result: toolsListResultTools{Tools: tools},
+		ID:             req.ID,
+		Result:         toolsListResultTools{Tools: tools},
+		serverIdentity: serverInfoPlatformToolset,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/list response").LogError(ctx, s.logger)
@@ -482,6 +508,7 @@ func (s *Service) callPlatformToolsetTool(
 			StructuredContent: structured,
 			IsError:           rw.statusCode < 200 || rw.statusCode >= 300,
 		},
+		serverIdentity: serverInfoPlatformToolset,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/call result").LogError(ctx, logger, attr.SlogToolName(params.Name))

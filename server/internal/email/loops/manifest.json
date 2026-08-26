@@ -2,10 +2,17 @@
   "version": 1,
   "defaults": {
     "from_name": "Speakeasy",
-    "from_email": "gram",
-    "reply_to_email": "gram@speakeasy.com"
+    "from_email": "platform",
+    "reply_to_email": "platform@speakeasy.com"
   },
   "templates": {
+    "access_paused": {
+      "managed_name": "gram.transactional.v2.access_paused",
+      "subject": "Access paused for {data.organization_name}",
+      "preview_text": "Start pay as you go to restore access.",
+      "source": "access_paused.lmx",
+      "variables": ["organization_name", "action_url"]
+    },
     "access_request": {
       "managed_name": "gram.transactional.v2.access_request",
       "subject": "Access requested for {data.organization_name}",
@@ -22,29 +29,40 @@
     },
     "enterprise_admin_onboarding": {
       "managed_name": "gram.transactional.v2.enterprise_admin_onboarding",
-      "subject": "Set up your Gram organization",
+      "subject": "Set up your Speakeasy organization",
       "preview_text": "Your enterprise workspace is ready to configure.",
       "source": "enterprise_admin_onboarding.lmx",
       "variables": ["setup_link"]
     },
     "openrouter_chat_credits_threshold": {
       "managed_name": "gram.transactional.v2.openrouter_chat_credits_threshold",
-      "subject": "Chat credits at {data.threshold_percent}% for {data.organization_name}",
-      "preview_text": "Review your platform-managed chat credit usage.",
+      "subject": "Other inference cap at {data.threshold_percent}% for {data.organization_name}",
+      "preview_text": "Review your other inference usage.",
       "source": "openrouter_chat_credits_threshold.lmx",
       "variables": ["organization_name", "threshold_percent", "exhausted"]
     },
     "openrouter_internal_credits_threshold": {
       "managed_name": "gram.transactional.v2.openrouter_internal_credits_threshold",
-      "subject": "Internal AI credits at {data.threshold_percent}% for {data.organization_name}",
-      "preview_text": "Review credits used by platform analysis.",
+      "subject": "Security inference cap at {data.threshold_percent}% for {data.organization_name}",
+      "preview_text": "Review your security inference usage.",
       "source": "openrouter_internal_credits_threshold.lmx",
       "variables": ["organization_name", "threshold_percent", "exhausted"]
     },
+    "payg_activated": {
+      "managed_name": "gram.transactional.v2.payg_activated",
+      "subject": "Pay as you go is active for {data.organization_name}",
+      "preview_text": "Review your rates and manage billing.",
+      "source": "payg_activated.lmx",
+      "variables": [
+        "organization_name",
+        "tum_price_per_million_usd",
+        "action_url"
+      ]
+    },
     "team_invite": {
       "managed_name": "gram.transactional.v2.team_invite",
-      "subject": "Join {data.organization_name} on Gram",
-      "preview_text": "{data.inviter_name} invited you to their Gram organization.",
+      "subject": "Join {data.organization_name} on Speakeasy",
+      "preview_text": "{data.inviter_name} invited you to their Speakeasy organization.",
       "source": "team_invite.lmx",
       "variables": [
         "invite_link",
@@ -52,6 +70,13 @@
         "inviter_email",
         "organization_name"
       ]
+    },
+    "trial_ending_soon": {
+      "managed_name": "gram.transactional.v2.trial_ending_soon",
+      "subject": "Your Speakeasy trial ends on {data.trial_end_date}",
+      "preview_text": "Set up billing to keep access for {data.organization_name}.",
+      "source": "trial_ending_soon.lmx",
+      "variables": ["organization_name", "trial_end_date", "action_url"]
     },
     "tum_usage_overage": {
       "managed_name": "gram.transactional.v2.tum_usage_overage",
