@@ -35,6 +35,11 @@ type Service interface {
 	// toolset, deriving effective tags with the same logic as the runtime ?tags=
 	// filter. Returns filtering disabled when no explicit group is set.
 	ListToolFilters(context.Context, *ListToolFiltersPayload) (res *types.ListToolFiltersResult, err error)
+	// List every const, default, enum, example, and examples value in each tool
+	// input schema. The result is deliberately mechanical: clients decide how to
+	// present or interpret the values. This supports reviewing the exact schema
+	// contents before changing how a toolset is shared.
+	ListToolSchemaStaticValues(context.Context, *ListToolSchemaStaticValuesPayload) (res *ListToolSchemaStaticValuesResult, err error)
 	// Check if a MCP slug is available
 	CheckMCPSlugAvailability(context.Context, *CheckMCPSlugAvailabilityPayload) (res bool, err error)
 	// Clone an existing toolset with a new name
@@ -71,7 +76,7 @@ const ServiceName = "toolsets"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [13]string{"createToolset", "listToolsets", "listToolsetsForOrg", "updateToolset", "deleteToolset", "getToolset", "listToolFilters", "checkMCPSlugAvailability", "cloneToolset", "addExternalOAuthServer", "removeOAuthServer", "setUserSessionIssuer", "setToolVariationsGroup"}
+var MethodNames = [14]string{"createToolset", "listToolsets", "listToolsetsForOrg", "updateToolset", "deleteToolset", "getToolset", "listToolFilters", "listToolSchemaStaticValues", "checkMCPSlugAvailability", "cloneToolset", "addExternalOAuthServer", "removeOAuthServer", "setUserSessionIssuer", "setToolVariationsGroup"}
 
 // AddExternalOAuthServerPayload is the payload type of the toolsets service
 // addExternalOAuthServer method.
@@ -155,6 +160,24 @@ type ListToolFiltersPayload struct {
 	ProjectSlugInput *string
 }
 
+// ListToolSchemaStaticValuesPayload is the payload type of the toolsets
+// service listToolSchemaStaticValues method.
+type ListToolSchemaStaticValuesPayload struct {
+	// The slug of the toolset
+	Slug             types.Slug
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// ListToolSchemaStaticValuesResult is the result type of the toolsets service
+// listToolSchemaStaticValues method.
+type ListToolSchemaStaticValuesResult struct {
+	// Per-tool static values for tools whose input schemas contain at least one
+	// matching keyword
+	Tools []*ToolSchemaStaticValues
+}
+
 // ListToolsetSummariesResult is the result type of the toolsets service
 // listToolsetsForOrg method.
 type ListToolsetSummariesResult struct {
@@ -216,6 +239,26 @@ type SetUserSessionIssuerPayload struct {
 	// The user_session_issuer id to link, or null to unlink.
 	UserSessionIssuerID *string
 	ProjectSlugInput    *string
+}
+
+// A literal value carried by a JSON Schema keyword.
+type ToolSchemaStaticValue struct {
+	// JSON Pointer to the schema object containing the keyword
+	SchemaPath string
+	// The JSON Schema keyword containing the value
+	Keyword string
+	// The literal JSON value; null is a valid value
+	Value any
+}
+
+// Static values found in one tool input schema.
+type ToolSchemaStaticValues struct {
+	// The tool URN
+	ToolUrn string
+	// The tool name
+	ToolName string
+	// Static values in the tool input schema
+	Values []*ToolSchemaStaticValue
 }
 
 // UpdateToolsetPayload is the payload type of the toolsets service

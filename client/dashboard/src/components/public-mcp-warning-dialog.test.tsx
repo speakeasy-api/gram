@@ -1,6 +1,14 @@
 import { render, screen, fireEvent } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PublicMcpWarningDialog } from "./public-mcp-warning-dialog";
+
+const { useListToolSchemaStaticValues } = vi.hoisted(() => ({
+  useListToolSchemaStaticValues: vi.fn(),
+}));
+
+vi.mock("@gram/client/react-query/listToolSchemaStaticValues.js", () => ({
+  useListToolSchemaStaticValues,
+}));
 
 // moonshine's bundle imports lucide-react/dynamicIconImports which can't be
 // resolved in the test environment (no package exports map). Mock the whole
@@ -26,20 +34,50 @@ const defaultProps = {
   isOpen: true,
   onClose: vi.fn(),
   onConfirm: vi.fn(),
+  toolsetSlug: "public-server",
   environmentSlug: "production",
   variableNames: ["STRIPE_API_KEY", "DATABASE_URL"],
 };
 
 describe("PublicMcpWarningDialog", () => {
-  it("renders title, body, variable names, and the environment link", () => {
+  beforeEach(() => {
+    useListToolSchemaStaticValues.mockReturnValue({
+      isPending: false,
+      isFetching: false,
+      isError: false,
+      isSuccess: true,
+      data: {
+        tools: [
+          {
+            toolUrn: "tools:weather",
+            toolName: "get_weather",
+            values: [
+              {
+                schemaPath: "/properties/api_key",
+                keyword: "example",
+                value: "example-value",
+              },
+            ],
+          },
+        ],
+      },
+      refetch: vi.fn(),
+    });
+  });
+
+  it("renders the warning, static values, and environment variables", () => {
     render(<PublicMcpWarningDialog {...defaultProps} />);
 
-    expect(
-      screen.getByText("Share system secrets with public callers."),
-    ).toBeTruthy();
+    expect(screen.getByText("Review public server values")).toBeTruthy();
+    expect(screen.getByText(/We recommend you review/)).toBeTruthy();
     expect(screen.getByText(/from the Default Environment/)).toBeTruthy();
     expect(screen.getByText("STRIPE_API_KEY")).toBeTruthy();
     expect(screen.getByText("DATABASE_URL")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /get_weather/ }));
+    expect(screen.getByText("example")).toBeTruthy();
+    expect(screen.getByText("/properties/api_key")).toBeTruthy();
+    expect(screen.getByText("example-value")).toBeTruthy();
 
     const link = screen.getByRole("link", {
       name: /Review in "Default Environment"/,
@@ -56,8 +94,26 @@ describe("PublicMcpWarningDialog", () => {
         onConfirm={() => void onConfirm()}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /Make public anyway/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Make public" }));
     expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+
+  it("blocks publishing until static values load", () => {
+    useListToolSchemaStaticValues.mockReturnValue({
+      isPending: true,
+      isFetching: true,
+      isError: false,
+      isSuccess: false,
+      data: undefined,
+      refetch: vi.fn(),
+    });
+
+    render(<PublicMcpWarningDialog {...defaultProps} />);
+
+    expect(
+      (screen.getByRole("button", { name: "Make public" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
   });
 
   it("fires onClose when Cancel is clicked", () => {

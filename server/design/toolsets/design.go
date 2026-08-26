@@ -195,6 +195,33 @@ var _ = Service("toolsets", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListToolsetToolFilters"}`)
 	})
 
+	Method("listToolSchemaStaticValues", func() {
+		Description("List every const, default, enum, example, and examples value in each tool input schema. The result is deliberately mechanical: clients decide how to present or interpret the values. This supports reviewing the exact schema contents before changing how a toolset is shared.")
+
+		Payload(func() {
+			Required("slug")
+			Attribute("slug", shared.Slug, "The slug of the toolset")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListToolSchemaStaticValuesResult)
+
+		HTTP(func() {
+			GET("/rpc/toolsets.listToolSchemaStaticValues")
+			Param("slug")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listToolsetToolSchemaStaticValues")
+		Meta("openapi:extension:x-speakeasy-name-override", "listToolSchemaStaticValues")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListToolSchemaStaticValues"}`)
+	})
+
 	Method("checkMCPSlugAvailability", func() {
 		Description("Check if a MCP slug is available")
 
@@ -371,6 +398,27 @@ var ListToolsetsResult = Type("ListToolsetsResult", func() {
 var ListToolsetSummariesResult = Type("ListToolsetSummariesResult", func() {
 	Attribute("toolsets", ArrayOf(shared.ToolsetSummary), "The list of toolset summaries")
 	Required("toolsets")
+})
+
+var ToolSchemaStaticValue = Type("ToolSchemaStaticValue", func() {
+	Description("A literal value carried by a JSON Schema keyword.")
+	Attribute("schema_path", String, "JSON Pointer to the schema object containing the keyword")
+	Attribute("keyword", String, "The JSON Schema keyword containing the value")
+	Attribute("value", Any, "The literal JSON value; null is a valid value")
+	Required("schema_path", "keyword")
+})
+
+var ToolSchemaStaticValues = Type("ToolSchemaStaticValues", func() {
+	Description("Static values found in one tool input schema.")
+	Attribute("tool_urn", String, "The tool URN")
+	Attribute("tool_name", String, "The tool name")
+	Attribute("values", ArrayOf(ToolSchemaStaticValue), "Static values in the tool input schema")
+	Required("tool_urn", "tool_name", "values")
+})
+
+var ListToolSchemaStaticValuesResult = Type("ListToolSchemaStaticValuesResult", func() {
+	Attribute("tools", ArrayOf(ToolSchemaStaticValues), "Per-tool static values for tools whose input schemas contain at least one matching keyword")
+	Required("tools")
 })
 
 var UpdateToolsetForm = Type("UpdateToolsetForm", func() {

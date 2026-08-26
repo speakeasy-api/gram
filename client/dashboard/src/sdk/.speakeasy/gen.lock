@@ -562,6 +562,7 @@ trackedFiles:
   src/funcs/toolsetsList.ts: {}
   src/funcs/toolsetsListForOrg.ts: {}
   src/funcs/toolsetsListToolFilters.ts: {}
+  src/funcs/toolsetsListToolSchemaStaticValues.ts: {}
   src/funcs/toolsetsRemoveOAuthServer.ts: {}
   src/funcs/toolsetsSetToolVariationsGroup.ts: {}
   src/funcs/toolsetsSetUserSessionIssuer.ts: {}
@@ -1039,6 +1040,7 @@ trackedFiles:
   src/models/components/listsyncedusersresult.ts: {}
   src/models/components/listtoolfiltersresult.ts: {}
   src/models/components/listtoolmetadataresult.ts: {}
+  src/models/components/listtoolschemastaticvaluesresult.ts: {}
   src/models/components/listtoolsetsresult.ts: {}
   src/models/components/listtoolsetsummariesresult.ts: {}
   src/models/components/listtoolsresult.ts: {}
@@ -1376,6 +1378,8 @@ trackedFiles:
   src/models/components/toolmetadata.ts: {}
   src/models/components/toolmetadataform.ts: {}
   src/models/components/toolmetric.ts: {}
+  src/models/components/toolschemastaticvalue.ts: {}
+  src/models/components/toolschemastaticvalues.ts: {}
   src/models/components/toolset.ts: {}
   src/models/components/toolsetentry.ts: {}
   src/models/components/toolsetenvironmentlink.ts: {}
@@ -1906,6 +1910,7 @@ trackedFiles:
   src/models/operations/listtoolsets.ts: {}
   src/models/operations/listtoolsetsfororg.ts: {}
   src/models/operations/listtoolsettoolfilters.ts: {}
+  src/models/operations/listtoolsettoolschemastaticvalues.ts: {}
   src/models/operations/listtoolusagetraces.ts: {}
   src/models/operations/listtoolvariationgroups.ts: {}
   src/models/operations/listtriggerdefinitions.ts: {}
@@ -2533,6 +2538,8 @@ trackedFiles:
   src/react-query/listScopes.ts: {}
   src/react-query/listSessions.core.ts: {}
   src/react-query/listSessions.ts: {}
+  src/react-query/listToolSchemaStaticValues.core.ts: {}
+  src/react-query/listToolSchemaStaticValues.ts: {}
   src/react-query/listToolUsageTraces.core.ts: {}
   src/react-query/listToolUsageTraces.ts: {}
   src/react-query/listTools.core.ts: {}
@@ -7561,6 +7568,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  listToolsetToolSchemaStaticValues:
+    speakeasy-default-list-toolset-tool-schema-static-values:
+      parameters:
+        query:
+          slug: "<value>"
+      responses:
+        "200":
+          application/json: {"tools": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   listToolsets:
     speakeasy-default-list-toolsets:
       responses:
