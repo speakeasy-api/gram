@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -213,6 +214,24 @@ func (g UserSessionGrant) TTL() time.Duration { return 10 * time.Minute }
 // endpoint's organization could not be described, so the resulting 401 is
 // not a credential rejection.
 var errIssuerGateOrgLookup = errors.New("describe organization for issuer-gated endpoint")
+
+// The gram.oauth.failure_reason values the issuer gate emits on its rejection
+// logs and on the mcp.request.rejected counter, beyond the bearer-token
+// classification issuerGateFailureReason produces. Together they are a closed
+// set, so the metric dimension stays bounded.
+const (
+	// issuerGateReasonNoCredentials: no bearer token was presented at all,
+	// which is every client's first unauthenticated handshake probe and every
+	// scanner hit on a gated endpoint. Delineated from bad-credential
+	// rejections because it is by far the largest 401 population and would
+	// otherwise swamp the rejected share.
+	issuerGateReasonNoCredentials = "no_credentials"
+
+	// issuerGateReasonInvalidRemoteSession: the bearer token was accepted but
+	// a required upstream remote session for the issuer is missing or
+	// unusable, so the runtime challenged the client to reconnect.
+	issuerGateReasonInvalidRemoteSession = "invalid_remote_session"
+)
 
 func issuerGateFailureReason(err error) string {
 	switch {
@@ -455,6 +474,21 @@ func (s *Service) ApplyIssuerGate(
 		return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "build protected-resource URL").LogError(ctx, s.logger)
 	}
 
+	// The gram.mcp.url value for a rejection, rebuilt from the resolved
+	// endpoint rather than taken from the request. The post-authentication
+	// metrics use the raw request URL, query string included; here the caller
+	// is unauthenticated, and a query string any caller can vary freely would
+	// let them mint metric series. The two agree for every query-less request.
+	host := ""
+	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
+		host = requestContext.Host
+	}
+	mcpURL := host + "/" + endpoint.RouteBase + "/" + endpoint.Slug
+	surface := mcpmetrics.SurfaceHosting
+	if endpoint.MetaMcpServerID.Valid {
+		surface = mcpmetrics.SurfaceMeta
+	}
+
 	newCtx, subject, toolSelection, valErr := s.validateUserSessionToken(ctx, authToken, endpoint)
 	if subject == nil {
 		// Accept an assistant-runtime JWT, but only when the assistant
@@ -474,13 +508,21 @@ func (s *Service) ApplyIssuerGate(
 		// signature / revoked jti), but the errIssuerGateOrgLookup wrap means
 		// the token validated and the org lookup failed — an operational
 		// error, labeled distinctly so nobody chases a phantom bad token.
+		//
+		// The no-credentials probe is counted but not logged: it fires on
+		// every client's first handshake, so a warning per probe is noise.
+		reason := issuerGateReasonNoCredentials
 		if valErr != nil {
+			reason = issuerGateFailureReason(valErr)
 			endpoint.LogWith(s.logger).WarnContext(ctx, "mcp issuer gate rejected bearer token",
 				attr.SlogUserSessionIssuerID(endpoint.UserSessionIssuerID.String()),
-				attr.SlogOAuthFailureReason(issuerGateFailureReason(valErr)),
+				attr.SlogToolsetMCPSlug(endpoint.Slug),
+				attr.SlogMcpURL(mcpURL),
+				attr.SlogOAuthFailureReason(reason),
 				attr.SlogError(valErr),
 			)
 		}
+		s.metrics.RecordMCPRequestRejected(ctx, reason, mcpURL, surface)
 		return ctx, nil, nil, WriteAuthenticateChallenge(w, protectedResourceURL, "expired or invalid access token")
 	}
 
@@ -507,8 +549,11 @@ func (s *Service) ApplyIssuerGate(
 			// remotesessions.ResolveAccessToken.
 			endpoint.LogWith(s.logger).WarnContext(newCtx, "mcp issuer gate rejected: upstream remote session missing or unusable",
 				attr.SlogUserSessionIssuerID(endpoint.UserSessionIssuerID.String()),
-				attr.SlogOAuthFailureReason("invalid_remote_session"),
+				attr.SlogToolsetMCPSlug(endpoint.Slug),
+				attr.SlogMcpURL(mcpURL),
+				attr.SlogOAuthFailureReason(issuerGateReasonInvalidRemoteSession),
 			)
+			s.metrics.RecordMCPRequestRejected(newCtx, issuerGateReasonInvalidRemoteSession, mcpURL, surface)
 			return ctx, nil, nil, WriteAuthenticateChallenge(w, protectedResourceURL, "")
 		case rerr != nil:
 			return ctx, nil, nil, oops.E(oops.CodeUnexpected, rerr, "resolve remote session").LogError(newCtx, s.logger)

@@ -117,7 +117,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		guardianPolicy,
 		audit.NewLogger(),
 		serverURL,
-		remotesessions.NewRefreshService(logger, conn, enc, guardianPolicy, redisCache),
+		remotesessions.NewRefreshService(logger, testenv.NewMeterProvider(t), conn, enc, guardianPolicy, redisCache),
 	)
 
 	return ctx, &testInstance{
