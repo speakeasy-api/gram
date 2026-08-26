@@ -588,6 +588,7 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 	s.logConversationTelemetry(ctx, payload, metadata, projectID)
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		ID:               uuid.Nil,
 		Replayed:         false,
 		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,
@@ -676,6 +677,7 @@ func (s *Service) writeToolCallRequestToPG(ctx context.Context, payload *gen.Cla
 	}
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		ID:               uuid.Nil,
 		Replayed:         false,
 		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,
@@ -729,6 +731,7 @@ func (s *Service) writeToolCallResultToPG(ctx context.Context, payload *gen.Clau
 	}
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		ID:               uuid.Nil,
 		Replayed:         false,
 		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,

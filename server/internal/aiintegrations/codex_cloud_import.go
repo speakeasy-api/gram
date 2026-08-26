@@ -455,6 +455,7 @@ func (src *codexCloudSource) writeFile(ctx context.Context, file codexapi.LogFil
 		}
 
 		rows = append(rows, chatrepo.CreateExternalChatMessageParams{
+			ID:                uuid.Nil,
 			ChatID:            src.chatIDs[event.EventDetails.SessionID],
 			Role:              role,
 			ProjectID:         src.cfg.ProjectID,

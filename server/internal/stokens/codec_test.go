@@ -96,6 +96,27 @@ func TestCodecIgnoresUncountedRolesAndPartTypes(t *testing.T) {
 	require.Equal(t, baselineCount, withIgnoredCount)
 }
 
+func TestCodecCountsArbitraryContent(t *testing.T) {
+	t.Parallel()
+
+	count, err := NewCodec().Count(t.Context(), "Plan a route", "hello")
+
+	require.NoError(t, err)
+	require.Equal(t, 4, count)
+}
+
+func TestCodecCountHonorsCanceledContext(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	count, err := NewCodec().Count(ctx, "not counted")
+
+	require.ErrorIs(t, err, context.Canceled)
+	require.Zero(t, count)
+}
+
 func TestCodecHonorsCanceledContext(t *testing.T) {
 	t.Parallel()
 

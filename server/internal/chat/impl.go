@@ -2815,14 +2815,14 @@ const (
 	searchMatchLimit = 200
 
 	// maxConcurrentChatAssetWork bounds parallelism for the per-batch marshal
-	// and asset-upload phases in storeMessages, capping goroutines, memory,
+	// and asset-upload phases in prepareMessages, capping goroutines, memory,
 	// and outbound connections for arbitrarily large batches.
 	maxConcurrentChatAssetWork = 32
 )
 
-func storeMessages(ctx context.Context, logger *slog.Logger, tx repo.DBTX, assetStorage assets.BlobStore, rows []chatMessageRow) error {
+func prepareMessages(ctx context.Context, logger *slog.Logger, assetStorage assets.BlobStore, rows []chatMessageRow) ([]repo.CreateChatMessageParams, error) {
 	if len(rows) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	// uploadResult holds the result of uploading a single message to asset storage.
@@ -2963,6 +2963,7 @@ func storeMessages(ctx context.Context, logger *slog.Logger, tx repo.DBTX, asset
 		}
 
 		dbrows[i] = repo.CreateChatMessageParams{
+			ID:               uuid.Nil,
 			Replayed:         false,
 			CreatedAt:        conv.PtrToPGTimestamptz(nil),
 			ChatID:           row.chatID,
@@ -2991,12 +2992,7 @@ func storeMessages(ctx context.Context, logger *slog.Logger, tx repo.DBTX, asset
 		}
 	}
 
-	// Batch insert all messages.
-	if _, err := insertChatMessages(ctx, tx, dbrows); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to insert chat messages").LogError(ctx, logger)
-	}
-
-	return nil
+	return dbrows, nil
 }
 
 // enrichChatsWithMetrics fetches token and cost metrics from ClickHouse and adds them to chat overviews.

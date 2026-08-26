@@ -373,6 +373,7 @@ type CreateChatContentPartParams struct {
 }
 
 type CreateChatMessageParams struct {
+	ID               uuid.UUID
 	ChatID           uuid.UUID
 	Role             string
 	ProjectID        uuid.UUID
@@ -462,9 +463,10 @@ func (q *Queries) CreateChatMessageWithToolCalls(ctx context.Context, arg Create
 	return err
 }
 
-const createExternalChatMessage = `-- name: CreateExternalChatMessage :execrows
+const createExternalChatMessage = `-- name: CreateExternalChatMessage :one
 INSERT INTO chat_messages (
-    chat_id
+    id
+  , chat_id
   , role
   , project_id
   , content
@@ -493,8 +495,8 @@ INSERT INTO chat_messages (
 VALUES (
     $1
   , $2
-  , $3::uuid
-  , $4
+  , $3
+  , $4::uuid
   , $5
   , $6
   , $7
@@ -516,12 +518,15 @@ VALUES (
   , $23
   , $24
   , $25
+  , $26
 )
 ON CONFLICT (chat_id, external_message_id) WHERE external_message_id IS NOT NULL
 DO NOTHING
+RETURNING id
 `
 
 type CreateExternalChatMessageParams struct {
+	ID                uuid.UUID
 	ChatID            uuid.UUID
 	Role              string
 	ProjectID         uuid.UUID
@@ -549,8 +554,11 @@ type CreateExternalChatMessageParams struct {
 	CreatedAt         pgtype.Timestamptz
 }
 
-func (q *Queries) CreateExternalChatMessage(ctx context.Context, arg CreateExternalChatMessageParams) (int64, error) {
-	result, err := q.db.Exec(ctx, createExternalChatMessage,
+// The writer supplies the candidate id before insertion so a newly inserted
+// message and its atomic meter reading share one durable identity.
+func (q *Queries) CreateExternalChatMessage(ctx context.Context, arg CreateExternalChatMessageParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createExternalChatMessage,
+		arg.ID,
 		arg.ChatID,
 		arg.Role,
 		arg.ProjectID,
@@ -577,10 +585,9 @@ func (q *Queries) CreateExternalChatMessage(ctx context.Context, arg CreateExter
 		arg.Generation,
 		arg.CreatedAt,
 	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const deleteChatResolutions = `-- name: DeleteChatResolutions :exec
@@ -1135,6 +1142,19 @@ func (q *Queries) GetMaxGenerationForChat(ctx context.Context, arg GetMaxGenerat
 	var generation int32
 	err := row.Scan(&generation)
 	return generation, err
+}
+
+const getProjectOrganizationID = `-- name: GetProjectOrganizationID :one
+SELECT organization_id
+FROM projects
+WHERE id = $1
+`
+
+func (q *Queries) GetProjectOrganizationID(ctx context.Context, projectID uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getProjectOrganizationID, projectID)
+	var organization_id string
+	err := row.Scan(&organization_id)
+	return organization_id, err
 }
 
 const getToolCallSummaryContext = `-- name: GetToolCallSummaryContext :one
@@ -3726,9 +3746,10 @@ func (q *Queries) UpsertChat(ctx context.Context, arg UpsertChatParams) (uuid.UU
 	return id, err
 }
 
-const upsertCorrelatedChatMessage = `-- name: UpsertCorrelatedChatMessage :execrows
+const upsertCorrelatedChatMessage = `-- name: UpsertCorrelatedChatMessage :one
 INSERT INTO chat_messages (
-    chat_id
+    id
+  , chat_id
   , role
   , project_id
   , content
@@ -3758,8 +3779,8 @@ INSERT INTO chat_messages (
 VALUES (
     $1
   , $2
-  , $3::uuid
-  , $4
+  , $3
+  , $4::uuid
   , $5
   , $6
   , $7
@@ -3782,6 +3803,7 @@ VALUES (
   , $24
   , $25
   , $26
+  , $27
 )
 ON CONFLICT (chat_id, external_message_id) WHERE external_message_id IS NOT NULL
 DO UPDATE SET
@@ -3795,9 +3817,11 @@ DO UPDATE SET
 WHERE chat_messages.project_id = EXCLUDED.project_id
   AND EXCLUDED.source IN ('codex', 'opencode')
   AND chat_messages.source = 'litellm'
+RETURNING id
 `
 
 type UpsertCorrelatedChatMessageParams struct {
+	ID                uuid.UUID
 	ChatID            uuid.UUID
 	Role              string
 	ProjectID         uuid.UUID
@@ -3826,8 +3850,11 @@ type UpsertCorrelatedChatMessageParams struct {
 	CreatedAt         pgtype.Timestamptz
 }
 
-func (q *Queries) UpsertCorrelatedChatMessage(ctx context.Context, arg UpsertCorrelatedChatMessageParams) (int64, error) {
-	result, err := q.db.Exec(ctx, upsertCorrelatedChatMessage,
+// The writer supplies the candidate id and compares it with RETURNING id to
+// distinguish a new message from promotion of an existing correlated row.
+func (q *Queries) UpsertCorrelatedChatMessage(ctx context.Context, arg UpsertCorrelatedChatMessageParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, upsertCorrelatedChatMessage,
+		arg.ID,
 		arg.ChatID,
 		arg.Role,
 		arg.ProjectID,
@@ -3855,10 +3882,9 @@ func (q *Queries) UpsertCorrelatedChatMessage(ctx context.Context, arg UpsertCor
 		arg.Replayed,
 		arg.CreatedAt,
 	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const upsertExternalChat = `-- name: UpsertExternalChat :one

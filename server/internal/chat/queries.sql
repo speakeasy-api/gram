@@ -178,12 +178,15 @@ WHERE chat_id = @chat_id
   );
 
 -- name: CreateChatMessage :copyfrom
+-- id is caller-supplied because ChatMessageWriter must know the durable message
+-- identity before COPY FROM so transactional side effects use the same id.
 -- created_at is caller-supplied so hook-captured messages carry the event's
 -- original occurred_at: spool replays arrive after newer live rows, and
 -- insert-time stamps would sort them out of conversation order. Transcript
 -- readers order by (created_at, seq).
 INSERT INTO chat_messages (
-    chat_id
+    id
+  , chat_id
   , role
   , project_id
   , content
@@ -210,7 +213,8 @@ INSERT INTO chat_messages (
   , created_at
 )
 VALUES (
-    @chat_id
+    @id
+  , @chat_id
   , @role
   , @project_id::uuid
   , @content
@@ -237,9 +241,12 @@ VALUES (
   , @created_at
 );
 
--- name: UpsertCorrelatedChatMessage :execrows
+-- name: UpsertCorrelatedChatMessage :one
+-- The writer supplies the candidate id and compares it with RETURNING id to
+-- distinguish a new message from promotion of an existing correlated row.
 INSERT INTO chat_messages (
-    chat_id
+    id
+  , chat_id
   , role
   , project_id
   , content
@@ -267,7 +274,8 @@ INSERT INTO chat_messages (
   , created_at
 )
 VALUES (
-    @chat_id
+    @id
+  , @chat_id
   , @role
   , @project_id::uuid
   , @content
@@ -305,7 +313,8 @@ DO UPDATE SET
   , risk_analyzed_at = NULL
 WHERE chat_messages.project_id = EXCLUDED.project_id
   AND EXCLUDED.source IN ('codex', 'opencode')
-  AND chat_messages.source = 'litellm';
+  AND chat_messages.source = 'litellm'
+RETURNING id;
 
 -- name: AcquireChatPromptCorrelationLock :exec
 SELECT pg_advisory_xact_lock(hashtextextended(
@@ -407,9 +416,12 @@ WHERE ccp.chat_id = @chat_id
   )
 ORDER BY created_at ASC, id ASC;
 
--- name: CreateExternalChatMessage :execrows
+-- name: CreateExternalChatMessage :one
+-- The writer supplies the candidate id before insertion so a newly inserted
+-- message and its atomic meter reading share one durable identity.
 INSERT INTO chat_messages (
-    chat_id
+    id
+  , chat_id
   , role
   , project_id
   , content
@@ -436,7 +448,8 @@ INSERT INTO chat_messages (
   , created_at
 )
 VALUES (
-    @chat_id
+    @id
+  , @chat_id
   , @role
   , @project_id::uuid
   , @content
@@ -463,7 +476,13 @@ VALUES (
   , @created_at
 )
 ON CONFLICT (chat_id, external_message_id) WHERE external_message_id IS NOT NULL
-DO NOTHING;
+DO NOTHING
+RETURNING id;
+
+-- name: GetProjectOrganizationID :one
+SELECT organization_id
+FROM projects
+WHERE id = @project_id;
 
 -- name: CountChats :one
 -- Fallback for chats.list pagination: ListChats returns the total alongside
