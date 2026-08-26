@@ -16,6 +16,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/clientauth"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/clientcred"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -70,7 +71,7 @@ func clientKeySource(row *usersessions_repo.UserSessionClient) (jwks.Source, err
 // client presenting a secret are all refused: an unrequested credential is
 // not an upgrade, it is a client that does not match its registration.
 func (s *Service) authenticateOAuthClient(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, at clientAssertionEndpoint, row *usersessions_repo.UserSessionClient, creds presentedClientCredentials, baseURL string) string {
-	kind, err := clientCredentialKindOf(row)
+	kind, err := clientcred.KindOf(row.TokenEndpointAuthMethod, row.ClientSecretHash.Valid)
 	if err != nil {
 		logger.ErrorContext(ctx, "user session client row is not authenticatable, failing closed",
 			attr.SlogOAuthClientID(row.ClientID),
@@ -80,13 +81,13 @@ func (s *Service) authenticateOAuthClient(ctx context.Context, logger *slog.Logg
 	}
 
 	switch kind {
-	case credentialKindNone:
+	case clientcred.KindPublic:
 		if creds.method != oauthwire.AuthMethodNone {
 			return "public_client_presented_credentials"
 		}
 		return ""
 
-	case credentialKindSecret:
+	case clientcred.KindSecret:
 		if creds.assertion.Presented() {
 			return "secret_client_presented_assertion"
 		}
@@ -95,7 +96,7 @@ func (s *Service) authenticateOAuthClient(ctx context.Context, logger *slog.Logg
 		}
 		return ""
 
-	case credentialKindAssertion:
+	case clientcred.KindKey:
 		// Anything secret-shaped alongside the assertion is refused, which
 		// covers HTTP Basic with an empty password: RFC 6749 §2.3 forbids
 		// more than one authentication method per request, and the
