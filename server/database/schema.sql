@@ -4066,12 +4066,15 @@ CREATE UNIQUE INDEX IF NOT EXISTS otel_forwarding_configs_org_project_key
 
 -- Reusable customer-owned OTLP collector connections. endpoint_url is an OTLP
 -- base URL; signal-specific paths are appended by the forwarding relays.
+-- sensitive_data is validated in the application so each destination can choose
+-- its disclosure policy independently as routes fan out to multiple sinks.
 CREATE TABLE IF NOT EXISTS otel_destinations (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
   project_id uuid NOT NULL,
   endpoint_url TEXT NOT NULL,
   headers_encrypted TEXT,
+  sensitive_data TEXT DEFAULT 'exclude',
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -4093,8 +4096,8 @@ CREATE INDEX IF NOT EXISTS otel_destinations_project_id_idx
   WHERE deleted IS FALSE;
 
 -- Declarative routes from a class of project data to an OTLP destination.
--- data_source and sensitive_data values are intentionally validated in the
--- application so adding a new source or policy does not require a migration.
+-- data_source values are intentionally validated in the application so adding
+-- a new source does not require a migration.
 CREATE TABLE IF NOT EXISTS data_export_routes (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
@@ -4102,7 +4105,6 @@ CREATE TABLE IF NOT EXISTS data_export_routes (
   data_source TEXT NOT NULL,
   enabled boolean NOT NULL DEFAULT true,
   otel_destination_id uuid,
-  sensitive_data TEXT DEFAULT 'exclude',
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),

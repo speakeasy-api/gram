@@ -536,7 +536,6 @@ type DataExportRoute struct {
 	DataSource        string
 	Enabled           bool
 	OtelDestinationID uuid.NullUUID
-	SensitiveData     pgtype.Text
 	CreatedAt         pgtype.Timestamptz
 	UpdatedAt         pgtype.Timestamptz
 	DeletedAt         pgtype.Timestamptz
@@ -1555,6 +1554,7 @@ type OtelDestination struct {
 	ProjectID        uuid.UUID
 	EndpointUrl      string
 	HeadersEncrypted pgtype.Text
+	SensitiveData    pgtype.Text
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
 	DeletedAt        pgtype.Timestamptz
