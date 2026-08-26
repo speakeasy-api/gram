@@ -25,6 +25,9 @@ const (
 	// The subscriber sees logs from every organization, so cap the long tail of
 	// inactive organizations without evicting the normal working set.
 	logRelayOrganizationGateMaxSize = 4096
+
+	// Keep both shared cache fills and individual callers bounded independently.
+	logRelayOrganizationGateLookupTimeout = time.Second
 )
 
 type logRelayOrganizationSlugResolver interface {
@@ -41,6 +44,7 @@ type cachedLogRelayOrganizationGate struct {
 	organizations logRelayOrganizationSlugResolver
 	enabled       *expirable.LRU[string, bool]
 	loads         singleflight.Group
+	lookupTimeout time.Duration
 }
 
 func newLogRelayOrganizationGate(
@@ -54,6 +58,7 @@ func newLogRelayOrganizationGate(
 		&postgresLogRelayOrganizationSlugResolver{db: db},
 		logRelayOrganizationGateMaxSize,
 		logRelayOrganizationGateCacheTTL,
+		logRelayOrganizationGateLookupTimeout,
 	)
 }
 
@@ -63,6 +68,7 @@ func newCachedLogRelayOrganizationGate(
 	organizations logRelayOrganizationSlugResolver,
 	maxSize int,
 	ttl time.Duration,
+	lookupTimeout time.Duration,
 ) *cachedLogRelayOrganizationGate {
 	return &cachedLogRelayOrganizationGate{
 		logger:        logger,
@@ -70,6 +76,7 @@ func newCachedLogRelayOrganizationGate(
 		organizations: organizations,
 		enabled:       expirable.NewLRU[string, bool](maxSize, nil, ttl),
 		loads:         singleflight.Group{},
+		lookupTimeout: lookupTimeout,
 	}
 }
 
@@ -81,32 +88,49 @@ func (g *cachedLogRelayOrganizationGate) Enabled(ctx context.Context, organizati
 		return enabled
 	}
 
-	value, _, _ := g.loads.Do(organizationID, func() (any, error) {
+	results := g.loads.DoChan(organizationID, func() (any, error) {
 		if enabled, ok := g.enabled.Get(organizationID); ok {
 			return enabled, nil
 		}
 
-		// Cache unavailable evaluations as disabled. This both fails closed and
-		// prevents an upstream outage from causing a lookup for every batch;
-		// the short TTL bounds recovery delay.
-		enabled := g.evaluate(ctx, organizationID)
+		lookupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), g.lookupTimeout)
+		defer cancel()
+
+		enabled, err := g.evaluate(lookupCtx, organizationID)
+		if err != nil {
+			return false, err
+		}
 		g.enabled.Add(organizationID, enabled)
 		return enabled, nil
 	})
-	enabled, ok := value.(bool)
+
+	waitCtx, cancel := context.WithTimeout(ctx, g.lookupTimeout)
+	defer cancel()
+
+	var result singleflight.Result
+	select {
+	case result = <-results:
+	case <-waitCtx.Done():
+		return false
+	}
+	if result.Err != nil {
+		return false
+	}
+
+	enabled, ok := result.Val.(bool)
 	if !ok {
 		g.logger.WarnContext(
 			ctx,
-			"read cached customer log relay feature flag",
+			"resolve customer log relay feature flag",
 			attr.SlogOrganizationID(organizationID),
-			attr.SlogError(fmt.Errorf("unexpected result type %T", value)),
+			attr.SlogError(fmt.Errorf("unexpected result type %T", result.Val)),
 		)
 		return false
 	}
 	return enabled
 }
 
-func (g *cachedLogRelayOrganizationGate) evaluate(ctx context.Context, organizationID string) bool {
+func (g *cachedLogRelayOrganizationGate) evaluate(ctx context.Context, organizationID string) (bool, error) {
 	organizationSlug, err := g.organizations.OrganizationSlug(ctx, organizationID)
 	if err != nil {
 		g.logger.WarnContext(
@@ -115,10 +139,10 @@ func (g *cachedLogRelayOrganizationGate) evaluate(ctx context.Context, organizat
 			attr.SlogError(err),
 			attr.SlogOrganizationID(organizationID),
 		)
-		return false
+		return false, fmt.Errorf("resolve organization slug: %w", err)
 	}
 	if organizationSlug == "" {
-		return false
+		return false, nil
 	}
 
 	enabled, err := g.features.IsFlagEnabled(
@@ -134,9 +158,9 @@ func (g *cachedLogRelayOrganizationGate) evaluate(ctx context.Context, organizat
 			attr.SlogError(err),
 			attr.SlogOrganizationID(organizationID),
 		)
-		return false
+		return false, fmt.Errorf("evaluate feature flag: %w", err)
 	}
-	return enabled
+	return enabled, nil
 }
 
 type postgresLogRelayOrganizationSlugResolver struct {
