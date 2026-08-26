@@ -13,8 +13,10 @@ import (
 func appendToOutbox(ctx context.Context, dbtx repo.DBTX, entry auditEntry, result repo.InsertAuditLogRow) error {
 	input := entry.Params
 	actorDisplayName := conv.FromPGTextOrEmpty[string](input.ActorDisplayName)
+	actorSlug := conv.FromPGTextOrEmpty[string](input.ActorSlug)
 	if conv.FromPGTextOrEmpty[string](input.ActingSurface) == string(SurfaceAdmin) {
 		actorDisplayName = SpeakeasyTeamActorLabel
+		actorSlug = ""
 	}
 
 	if _, err := outbox.PublishWebhookEvent(ctx, dbtx, result.OrganizationID, entry.OutboxEvent, events.AuditLogCreatedPayloadV1{
@@ -24,7 +26,7 @@ func appendToOutbox(ctx context.Context, dbtx repo.DBTX, entry auditEntry, resul
 		ActorID:            input.ActorID,
 		ActorType:          input.ActorType,
 		ActorDisplayName:   actorDisplayName,
-		ActorSlug:          conv.FromPGTextOrEmpty[string](input.ActorSlug),
+		ActorSlug:          actorSlug,
 		Action:             input.Action,
 		SubjectID:          input.SubjectID,
 		SubjectType:        input.SubjectType,

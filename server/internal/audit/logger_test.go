@@ -72,23 +72,26 @@ func TestLogger_OutboxEntrySnapshotsAreInlineJSON(t *testing.T) {
 	require.True(t, ok, "metadata should be a JSON object, not a base64 string; payload=%s", string(payload))
 }
 
-func TestLogger_OutboxActorDisplayName(t *testing.T) {
+func TestLogger_OutboxActorIdentity(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name               string
 		actingSurface      string
 		wantWebhookDisplay string
+		wantWebhookSlug    string
 	}{
 		{
-			name:               "admin surface masks the actor display name",
+			name:               "admin surface masks the actor identity",
 			actingSurface:      string(audit.SurfaceAdmin),
 			wantWebhookDisplay: audit.SpeakeasyTeamActorLabel,
+			wantWebhookSlug:    "",
 		},
 		{
-			name:               "non-admin surface preserves the actor display name",
+			name:               "non-admin surface preserves the actor identity",
 			actingSurface:      string(audit.SurfaceDashboard),
 			wantWebhookDisplay: "Private Actor Name",
+			wantWebhookSlug:    "private-actor",
 		},
 	}
 
@@ -139,6 +142,7 @@ func TestLogger_OutboxActorDisplayName(t *testing.T) {
 			var payload events.AuditLogCreatedPayloadV1
 			require.NoError(t, json.Unmarshal(event.GetPayload(), &payload))
 			require.Equal(t, tt.wantWebhookDisplay, payload.ActorDisplayName)
+			require.Equal(t, tt.wantWebhookSlug, payload.ActorSlug)
 		})
 	}
 }
