@@ -265,6 +265,17 @@ var catalog = []Preset{
 		DisplayOnly: false,
 		Enabled:     true,
 	},
+
+	// Verified 2026-08-26. The apex form (skydive.com, no www) 301s to the
+	// www document, whose client_id is the www form, so the apex URL is not
+	// itself a valid client_id and is deliberately absent.
+	{
+		VendorKey:   "skydive",
+		DisplayName: "Skydive",
+		URL:         "https://www.skydive.com/api/v1/external-oauth/client-metadata",
+		DisplayOnly: false,
+		Enabled:     true,
+	},
 }
 
 // catalogURLs and catalogPatterns index the enabled catalog entries for the
