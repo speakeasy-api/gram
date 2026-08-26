@@ -6,6 +6,7 @@ import {
   ChevronLeftIcon,
   CreditCardIcon,
   FolderIcon,
+  HistoryIcon,
   SlidersHorizontalIcon,
   UsersIcon,
 } from "lucide-react";
@@ -94,6 +95,10 @@ export function RecordNav({
     to: "/organizations/$idOrSlug",
     params: { idOrSlug },
   });
+  const onActivity = !!matchRoute({
+    to: "/organizations/$idOrSlug/activity",
+    params: { idOrSlug },
+  });
   const onBilling = !!matchRoute({
     to: "/organizations/$idOrSlug/billing",
     params: { idOrSlug },
@@ -161,6 +166,23 @@ export function RecordNav({
                 >
                   <BuildingIcon />
                   <span>Overview</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={onActivity}
+                tooltip="Activity"
+              >
+                <Link
+                  to="/organizations/$idOrSlug/activity"
+                  params={{ idOrSlug }}
+                  {...currentProps(onActivity)}
+                >
+                  <HistoryIcon />
+                  <span>Activity</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
