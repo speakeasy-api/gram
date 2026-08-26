@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -298,17 +299,10 @@ func newInboxMetrics(meterProvider metric.MeterProvider) (inboxMetrics, error) {
 	}, nil
 }
 
+var replicaIDPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+
 func validReplicaID(value string) bool {
-	if value == "" {
-		return false
-	}
-	for _, r := range value {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.' {
-			continue
-		}
-		return false
-	}
-	return true
+	return replicaIDPattern.MatchString(value)
 }
 
 // ReplicaID returns the stable id represented by this inbox.
