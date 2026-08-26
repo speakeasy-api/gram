@@ -568,7 +568,7 @@ export function useMcpGuideOperations(): {
         operation.report({
           type: "success",
           scope: operation.scope,
-          result: `${resolvedName ?? "Catalog server"} governed endpoint and Default plugin verified`,
+          result: `${resolvedName ?? "Catalog server"} MCP setup ready`,
         });
         return;
       }
@@ -617,7 +617,7 @@ export function useMcpGuideOperations(): {
         operation.report({
           type: "success",
           scope: operation.scope,
-          result: `${resolvedName ?? serverName(selectedServer)} governed endpoint and Default plugin verified`,
+          result: `${resolvedName ?? serverName(selectedServer)} MCP setup ready`,
         });
       } else {
         if (readinessCheckedFor.current.has(key)) return;

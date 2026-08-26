@@ -299,6 +299,9 @@ function ProjectGuideContent({
                             });
                           }
                         }}
+                        onMcpServerSelected={(name) =>
+                          send({ type: "SELECT_MCP_SERVER", name })
+                        }
                         onSecretPromptCopied={() => {
                           if (
                             journey.id === "secret-block" &&
@@ -432,19 +435,16 @@ function primaryActionFor(
       return { label: "Preparing the next step…", disabled: true };
     case "checkpoint":
       if (journey.id === "third-party-mcp" && currentStep === 1) {
-        const baselineFailed = mcpOperations.activityBaselineError;
         return {
-          label: baselineFailed ? "Try again" : "I've connected it",
+          label: "I've added the server to my client",
           disabled:
             !mcpOperations.connectionPrompts ||
             !mcpOperations.connectionPromptCopied,
-          onClick: baselineFailed
-            ? () => void mcpOperations.prepareActivityBaseline()
-            : () =>
-                send({
-                  type: "USER_CHECKPOINT_COMPLETE",
-                  result: "Client connected to the governed endpoint",
-                }),
+          onClick: () =>
+            send({
+              type: "USER_CHECKPOINT_COMPLETE",
+              result: "Server added to client",
+            }),
         };
       }
       if (journey.id === "third-party-mcp" && currentStep === 2) {
@@ -524,6 +524,7 @@ function ProjectGuideStepContent({
   mcpOperations,
   secretOperations,
   onMcpPromptCopied,
+  onMcpServerSelected,
   onSecretPromptCopied,
   onSelectAgent,
 }: {
@@ -535,6 +536,7 @@ function ProjectGuideStepContent({
   mcpOperations: McpGuideOperations;
   secretOperations: SecretGuideOperations;
   onMcpPromptCopied: () => void;
+  onMcpServerSelected: (name: string) => void;
   onSecretPromptCopied: () => void;
   onSelectAgent: (client: SecretGuideClient) => void;
 }): JSX.Element {
@@ -548,6 +550,7 @@ function ProjectGuideStepContent({
         error={error}
         operations={mcpOperations}
         onMcpPromptCopied={onMcpPromptCopied}
+        onMcpServerSelected={onMcpServerSelected}
       />
     );
   }
@@ -881,6 +884,7 @@ function ProjectGuideMcpStepContent({
   error,
   operations,
   onMcpPromptCopied,
+  onMcpServerSelected,
 }: {
   journey: JourneyMeta;
   step: number;
@@ -889,6 +893,7 @@ function ProjectGuideMcpStepContent({
   error: string | null;
   operations: McpGuideOperations;
   onMcpPromptCopied: () => void;
+  onMcpServerSelected: (name: string) => void;
 }): JSX.Element {
   return (
     <div className="grid gap-3 pt-3">
@@ -902,6 +907,7 @@ function ProjectGuideMcpStepContent({
         error={error}
         operations={operations}
         onMcpPromptCopied={onMcpPromptCopied}
+        onMcpServerSelected={onMcpServerSelected}
       />
     </div>
   );
@@ -914,6 +920,7 @@ function McpStepBody({
   error,
   operations,
   onMcpPromptCopied,
+  onMcpServerSelected,
 }: {
   step: number;
   displayState: ProjectGuideDisplayState;
@@ -921,6 +928,7 @@ function McpStepBody({
   error: string | null;
   operations: McpGuideOperations;
   onMcpPromptCopied: () => void;
+  onMcpServerSelected: (name: string) => void;
 }): JSX.Element | null {
   switch (step) {
     case 0:
@@ -930,6 +938,7 @@ function McpStepBody({
           operationProgress={operationProgress}
           error={error}
           operations={operations}
+          onMcpServerSelected={onMcpServerSelected}
         />
       );
     case 1:
@@ -953,11 +962,13 @@ function McpCatalogSelection({
   operationProgress,
   error,
   operations,
+  onMcpServerSelected,
 }: {
   displayState: ProjectGuideDisplayState;
   operationProgress: number | null;
   error: string | null;
   operations: McpGuideOperations;
+  onMcpServerSelected: (name: string) => void;
 }): JSX.Element {
   if (operations.catalogPending) {
     return (
@@ -989,7 +1000,11 @@ function McpCatalogSelection({
               key={server.registrySpecifier}
               type="button"
               aria-pressed={selected}
-              onClick={() => operations.selectServer(server)}
+              disabled={displayState !== "ready" && displayState !== "error"}
+              onClick={() => {
+                operations.selectServer(server);
+                onMcpServerSelected(name);
+              }}
               className={cn(
                 "border-border flex items-center gap-2 border px-3 py-2 text-left",
                 selected && "border-foreground",

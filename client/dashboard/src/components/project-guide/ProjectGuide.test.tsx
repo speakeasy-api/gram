@@ -437,6 +437,14 @@ describe("ProjectGuide", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
 
+    expect(
+      (
+        screen.getByRole("button", {
+          name: /Linear.*2 tools/,
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+
     const activity = screen.getByRole("log", { name: "Journey A activity" });
     expect(activity.textContent).not.toContain("Read the server's tool list");
     await act(() => vi.advanceTimersByTime(PROJECT_GUIDE_MICRO_STEP_DELAY_MS));
@@ -500,7 +508,11 @@ describe("ProjectGuide", () => {
     expect(screen.getByTestId("project-guide-run").dataset.displayState).toBe(
       "checkpoint",
     );
-    fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "I've added the server to my client",
+      }),
+    );
     expect(screen.queryByRole("button", { name: "Sent it" })).toBeNull();
     await advanceGuideDelay();
     fireEvent.click(screen.getByRole("button", { name: "copy" }));
@@ -583,7 +595,7 @@ describe("ProjectGuide", () => {
           report({
             type: "success",
             scope: signal.scope,
-            result: "Governed endpoint and Default plugin verified",
+            result: "Linear mcp server is now setup",
           });
         }
       },
@@ -613,13 +625,43 @@ describe("ProjectGuide", () => {
 
     await act(async () => baseline.resolve(true));
 
-    fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
+    expect(
+      screen.getByRole("log", { name: "Journey A activity" }).textContent,
+    ).toContain("Linear mcp server is now setup");
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "I've added the server to my client",
+      }),
+    );
     expect(
       screen.getByRole("heading", { name: "Ask the agent to list the tools" }),
     ).toBeTruthy();
     expect(
       mcpOperations.current.prepareActivityBaseline,
     ).toHaveBeenCalledOnce();
+  });
+
+  it("does not recapture the MCP baseline from the client checkpoint", () => {
+    statusByJourney.current["third-party-mcp"] = "in-progress";
+    mcpOperations.current.activityBaselineError = true;
+    render(<ProjectGuide />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "I've added the server to my client",
+      }),
+    );
+
+    expect(
+      mcpOperations.current.prepareActivityBaseline,
+    ).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("heading", { name: "Ask the agent to list the tools" }),
+    ).toBeTruthy();
   });
 
   it("awaits the hook and risk baseline before exposing the secret prompt", async () => {
@@ -720,7 +762,11 @@ describe("ProjectGuide", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
     await advanceGuideDelay();
-    fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "I've added the server to my client",
+      }),
+    );
     await advanceGuideDelay();
     expect(screen.getByText(/first list the available tools/)).toBeTruthy();
     fireEvent.click(screen.getByText(/first list the available tools/));
@@ -775,7 +821,11 @@ describe("ProjectGuide", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
     await advanceGuideDelay();
-    fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "I've added the server to my client",
+      }),
+    );
     await advanceGuideDelay();
     fireEvent.click(screen.getByRole("button", { name: "copy" }));
     await advanceGuideDelay();
@@ -1393,6 +1443,9 @@ describe("ProjectGuide", () => {
     expect(mcpOperations.current.selectServer).toHaveBeenCalledWith(
       catalogServer,
     );
+    expect(
+      screen.getByRole("log", { name: "Journey A activity" }).textContent,
+    ).toContain("Linear Selected, Click start to begin setup");
     fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
     await advanceGuideDelay();
 
@@ -1416,7 +1469,11 @@ describe("ProjectGuide", () => {
       screen.queryByRole("link", { name: "View Linear MCP server" }),
     ).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "I've added the server to my client",
+      }),
+    );
     await advanceGuideDelay();
     expect(
       screen.getByText((_, element) => {
@@ -1825,7 +1882,11 @@ describe("ProjectGuide", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
     await advanceGuideDelay();
-    fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "I've added the server to my client",
+      }),
+    );
     await advanceGuideDelay();
     fireEvent.click(screen.getByRole("button", { name: "copy" }));
 

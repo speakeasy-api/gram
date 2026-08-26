@@ -121,6 +121,25 @@ describe("project guide coordinator contract", () => {
     });
   });
 
+  it("records MCP selection and ignores selection changes during work", () => {
+    const { service, signals } = coordinator();
+    openMcp(service);
+
+    service.send({ type: "SELECT_MCP_SERVER", name: "Linear" });
+    expect(service.getSnapshot().context.output.at(-1)).toMatchObject({
+      kind: "note",
+      message: "Linear Selected, Click start to begin setup",
+    });
+
+    service.send({ type: "START" });
+    service.send({ type: "SELECT_MCP_SERVER", name: "Notion" });
+
+    expect(service.getSnapshot().context.output.at(-1)?.message).not.toBe(
+      "Notion Selected, Click start to begin setup",
+    );
+    expect(signals).toHaveLength(1);
+  });
+
   it("rebuilds the journey narrative at its resume point", () => {
     const { service } = coordinator();
 

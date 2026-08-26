@@ -81,6 +81,7 @@ export type ProjectGuideEvent =
   | { type: "SWITCH"; path: JourneyId; resumeStep: number }
   | { type: "BACK" }
   | { type: "START" }
+  | { type: "SELECT_MCP_SERVER"; name: string }
   | { type: "SELECT_AGENT"; client: string }
   | { type: "PAUSE" }
   | { type: "RESUME" }
@@ -424,6 +425,15 @@ export const projectGuideMachine = setup({
     selectAgent: assign(({ event }) =>
       event.type === "SELECT_AGENT" ? { selectedClient: event.client } : {},
     ),
+    recordMcpServerSelected: assign(({ context, event }) => {
+      if (event.type !== "SELECT_MCP_SERVER") return {};
+      return appendOutput(context, [
+        {
+          kind: "note",
+          message: `${event.name} Selected, Click start to begin setup`,
+        },
+      ]);
+    }),
     recordStart: assign(({ context }) => {
       const mode = stepMode(context);
       return {
@@ -677,6 +687,7 @@ export const projectGuideMachine = setup({
     },
     ready: {
       on: {
+        SELECT_MCP_SERVER: { actions: "recordMcpServerSelected" },
         START: [
           {
             guard: "currentOperation",
@@ -839,6 +850,7 @@ export const projectGuideMachine = setup({
     },
     error: {
       on: {
+        SELECT_MCP_SERVER: { actions: "recordMcpServerSelected" },
         RETRY: [
           {
             guard: "erroredWhilePreparing",
