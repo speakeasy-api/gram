@@ -21,8 +21,53 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// MeterReading records one immutable s-token workload reading. The id is stable
-// across at-least-once outbox and Pub/Sub delivery.
+// Kind distinguishes ordinary usage from a signed adjustment.
+type MeterReading_Kind int32
+
+const (
+	MeterReading_KIND_UNSPECIFIED MeterReading_Kind = 0
+	MeterReading_KIND_USAGE       MeterReading_Kind = 1
+	MeterReading_KIND_ADJUSTMENT  MeterReading_Kind = 2
+)
+
+// Enum value maps for MeterReading_Kind.
+var (
+	MeterReading_Kind_name = map[int32]string{
+		0: "KIND_UNSPECIFIED",
+		1: "KIND_USAGE",
+		2: "KIND_ADJUSTMENT",
+	}
+	MeterReading_Kind_value = map[string]int32{
+		"KIND_UNSPECIFIED": 0,
+		"KIND_USAGE":       1,
+		"KIND_ADJUSTMENT":  2,
+	}
+)
+
+func (x MeterReading_Kind) Enum() *MeterReading_Kind {
+	p := new(MeterReading_Kind)
+	*p = x
+	return p
+}
+
+func (x MeterReading_Kind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (MeterReading_Kind) Descriptor() protoreflect.EnumDescriptor {
+	return file_gram_metering_v1_meter_reading_proto_enumTypes[0].Descriptor()
+}
+
+func (MeterReading_Kind) Type() protoreflect.EnumType {
+	return &file_gram_metering_v1_meter_reading_proto_enumTypes[0]
+}
+
+func (x MeterReading_Kind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// MeterReading is the canonical immutable s-token workload event. ClickHouse
+// and other consumers project this domain contract into their own storage.
 type MeterReading struct {
 	state                        protoimpl.MessageState `protogen:"opaque.v1"`
 	xxx_hidden_Id                *string                `protobuf:"bytes,1,opt,name=id"`
@@ -31,10 +76,16 @@ type MeterReading struct {
 	xxx_hidden_MeterId           *string                `protobuf:"bytes,4,opt,name=meter_id,json=meterId"`
 	xxx_hidden_OperationId       *string                `protobuf:"bytes,5,opt,name=operation_id,json=operationId"`
 	xxx_hidden_Unit              *string                `protobuf:"bytes,6,opt,name=unit"`
-	xxx_hidden_Value             int64                  `protobuf:"varint,7,opt,name=value"`
+	xxx_hidden_Quantity          int64                  `protobuf:"varint,7,opt,name=quantity"`
 	xxx_hidden_OccurredAt        *string                `protobuf:"bytes,8,opt,name=occurred_at,json=occurredAt"`
 	xxx_hidden_Attributes        map[string]string      `protobuf:"bytes,9,rep,name=attributes" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	xxx_hidden_CorrectsReadingId *string                `protobuf:"bytes,10,opt,name=corrects_reading_id,json=correctsReadingId"`
+	xxx_hidden_MeterVersion      uint32                 `protobuf:"varint,11,opt,name=meter_version,json=meterVersion"`
+	xxx_hidden_Kind              MeterReading_Kind      `protobuf:"varint,12,opt,name=kind,enum=gram.metering.v1.MeterReading_Kind"`
+	xxx_hidden_ProducedAt        *string                `protobuf:"bytes,13,opt,name=produced_at,json=producedAt"`
+	xxx_hidden_MeasurementMethod *string                `protobuf:"bytes,14,opt,name=measurement_method,json=measurementMethod"`
+	xxx_hidden_AdjustmentReason  *string                `protobuf:"bytes,15,opt,name=adjustment_reason,json=adjustmentReason"`
+	xxx_hidden_Source            *string                `protobuf:"bytes,16,opt,name=source"`
 	XXX_raceDetectHookData       protoimpl.RaceDetectHookData
 	XXX_presence                 [1]uint32
 	unknownFields                protoimpl.UnknownFields
@@ -126,9 +177,9 @@ func (x *MeterReading) GetUnit() string {
 	return ""
 }
 
-func (x *MeterReading) GetValue() int64 {
+func (x *MeterReading) GetQuantity() int64 {
 	if x != nil {
-		return x.xxx_hidden_Value
+		return x.xxx_hidden_Quantity
 	}
 	return 0
 }
@@ -160,44 +211,100 @@ func (x *MeterReading) GetCorrectsReadingId() string {
 	return ""
 }
 
+func (x *MeterReading) GetMeterVersion() uint32 {
+	if x != nil {
+		return x.xxx_hidden_MeterVersion
+	}
+	return 0
+}
+
+func (x *MeterReading) GetKind() MeterReading_Kind {
+	if x != nil {
+		if protoimpl.X.Present(&(x.XXX_presence[0]), 11) {
+			return x.xxx_hidden_Kind
+		}
+	}
+	return MeterReading_KIND_UNSPECIFIED
+}
+
+func (x *MeterReading) GetProducedAt() string {
+	if x != nil {
+		if x.xxx_hidden_ProducedAt != nil {
+			return *x.xxx_hidden_ProducedAt
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *MeterReading) GetMeasurementMethod() string {
+	if x != nil {
+		if x.xxx_hidden_MeasurementMethod != nil {
+			return *x.xxx_hidden_MeasurementMethod
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *MeterReading) GetAdjustmentReason() string {
+	if x != nil {
+		if x.xxx_hidden_AdjustmentReason != nil {
+			return *x.xxx_hidden_AdjustmentReason
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *MeterReading) GetSource() string {
+	if x != nil {
+		if x.xxx_hidden_Source != nil {
+			return *x.xxx_hidden_Source
+		}
+		return ""
+	}
+	return ""
+}
+
 func (x *MeterReading) SetId(v string) {
 	x.xxx_hidden_Id = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 10)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 16)
 }
 
 func (x *MeterReading) SetOrganizationId(v string) {
 	x.xxx_hidden_OrganizationId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 10)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 16)
 }
 
 func (x *MeterReading) SetProjectId(v string) {
 	x.xxx_hidden_ProjectId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 10)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 16)
 }
 
 func (x *MeterReading) SetMeterId(v string) {
 	x.xxx_hidden_MeterId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 10)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 16)
 }
 
 func (x *MeterReading) SetOperationId(v string) {
 	x.xxx_hidden_OperationId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 10)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 16)
 }
 
 func (x *MeterReading) SetUnit(v string) {
 	x.xxx_hidden_Unit = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 10)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 16)
 }
 
-func (x *MeterReading) SetValue(v int64) {
-	x.xxx_hidden_Value = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 10)
+func (x *MeterReading) SetQuantity(v int64) {
+	x.xxx_hidden_Quantity = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 16)
 }
 
 func (x *MeterReading) SetOccurredAt(v string) {
 	x.xxx_hidden_OccurredAt = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 10)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 16)
 }
 
 func (x *MeterReading) SetAttributes(v map[string]string) {
@@ -206,7 +313,37 @@ func (x *MeterReading) SetAttributes(v map[string]string) {
 
 func (x *MeterReading) SetCorrectsReadingId(v string) {
 	x.xxx_hidden_CorrectsReadingId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 10)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 16)
+}
+
+func (x *MeterReading) SetMeterVersion(v uint32) {
+	x.xxx_hidden_MeterVersion = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 10, 16)
+}
+
+func (x *MeterReading) SetKind(v MeterReading_Kind) {
+	x.xxx_hidden_Kind = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 16)
+}
+
+func (x *MeterReading) SetProducedAt(v string) {
+	x.xxx_hidden_ProducedAt = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 12, 16)
+}
+
+func (x *MeterReading) SetMeasurementMethod(v string) {
+	x.xxx_hidden_MeasurementMethod = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 13, 16)
+}
+
+func (x *MeterReading) SetAdjustmentReason(v string) {
+	x.xxx_hidden_AdjustmentReason = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 14, 16)
+}
+
+func (x *MeterReading) SetSource(v string) {
+	x.xxx_hidden_Source = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 15, 16)
 }
 
 func (x *MeterReading) HasId() bool {
@@ -251,7 +388,7 @@ func (x *MeterReading) HasUnit() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 5)
 }
 
-func (x *MeterReading) HasValue() bool {
+func (x *MeterReading) HasQuantity() bool {
 	if x == nil {
 		return false
 	}
@@ -270,6 +407,48 @@ func (x *MeterReading) HasCorrectsReadingId() bool {
 		return false
 	}
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 9)
+}
+
+func (x *MeterReading) HasMeterVersion() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 10)
+}
+
+func (x *MeterReading) HasKind() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 11)
+}
+
+func (x *MeterReading) HasProducedAt() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 12)
+}
+
+func (x *MeterReading) HasMeasurementMethod() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 13)
+}
+
+func (x *MeterReading) HasAdjustmentReason() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 14)
+}
+
+func (x *MeterReading) HasSource() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 15)
 }
 
 func (x *MeterReading) ClearId() {
@@ -302,9 +481,9 @@ func (x *MeterReading) ClearUnit() {
 	x.xxx_hidden_Unit = nil
 }
 
-func (x *MeterReading) ClearValue() {
+func (x *MeterReading) ClearQuantity() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 6)
-	x.xxx_hidden_Value = 0
+	x.xxx_hidden_Quantity = 0
 }
 
 func (x *MeterReading) ClearOccurredAt() {
@@ -317,19 +496,66 @@ func (x *MeterReading) ClearCorrectsReadingId() {
 	x.xxx_hidden_CorrectsReadingId = nil
 }
 
+func (x *MeterReading) ClearMeterVersion() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 10)
+	x.xxx_hidden_MeterVersion = 0
+}
+
+func (x *MeterReading) ClearKind() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 11)
+	x.xxx_hidden_Kind = MeterReading_KIND_UNSPECIFIED
+}
+
+func (x *MeterReading) ClearProducedAt() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 12)
+	x.xxx_hidden_ProducedAt = nil
+}
+
+func (x *MeterReading) ClearMeasurementMethod() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 13)
+	x.xxx_hidden_MeasurementMethod = nil
+}
+
+func (x *MeterReading) ClearAdjustmentReason() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 14)
+	x.xxx_hidden_AdjustmentReason = nil
+}
+
+func (x *MeterReading) ClearSource() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 15)
+	x.xxx_hidden_Source = nil
+}
+
 type MeterReading_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
-	Id                *string
-	OrganizationId    *string
-	ProjectId         *string
-	MeterId           *string
-	OperationId       *string
-	Unit              *string
-	Value             *int64
-	OccurredAt        *string
-	Attributes        map[string]string
+	Id             *string
+	OrganizationId *string
+	ProjectId      *string
+	MeterId        *string
+	OperationId    *string
+	Unit           *string
+	// Quantity is signed. Usage is positive; adjustments may add or subtract.
+	Quantity *int64
+	// OccurredAt is the billing-effective UTC timestamp in RFC3339Nano format.
+	OccurredAt *string
+	// Attributes are non-authoritative diagnostic dimensions. Rating must use
+	// the typed fields above and below, never values stored in this map.
+	Attributes map[string]string
+	// CorrectsReadingId identifies the reading corrected by an adjustment.
 	CorrectsReadingId *string
+	// MeterVersion identifies the versioned meter definition used for rating.
+	MeterVersion *uint32
+	Kind         *MeterReading_Kind
+	// ProducedAt is the producer's UTC emission time in RFC3339Nano format. It is
+	// distinct from billing-effective occurred_at and consumer-owned inserted_at.
+	ProducedAt *string
+	// MeasurementMethod is the rating-critical measurement implementation.
+	MeasurementMethod *string
+	// AdjustmentReason is a machine-readable reason for an adjustment.
+	AdjustmentReason *string
+	// Source is an optional diagnostic origin and must not affect rating.
+	Source *string
 }
 
 func (b0 MeterReading_builder) Build() *MeterReading {
@@ -337,41 +563,65 @@ func (b0 MeterReading_builder) Build() *MeterReading {
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.Id != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 10)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 16)
 		x.xxx_hidden_Id = b.Id
 	}
 	if b.OrganizationId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 10)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 16)
 		x.xxx_hidden_OrganizationId = b.OrganizationId
 	}
 	if b.ProjectId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 10)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 16)
 		x.xxx_hidden_ProjectId = b.ProjectId
 	}
 	if b.MeterId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 10)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 16)
 		x.xxx_hidden_MeterId = b.MeterId
 	}
 	if b.OperationId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 10)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 16)
 		x.xxx_hidden_OperationId = b.OperationId
 	}
 	if b.Unit != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 10)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 16)
 		x.xxx_hidden_Unit = b.Unit
 	}
-	if b.Value != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 10)
-		x.xxx_hidden_Value = *b.Value
+	if b.Quantity != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 16)
+		x.xxx_hidden_Quantity = *b.Quantity
 	}
 	if b.OccurredAt != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 10)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 16)
 		x.xxx_hidden_OccurredAt = b.OccurredAt
 	}
 	x.xxx_hidden_Attributes = b.Attributes
 	if b.CorrectsReadingId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 10)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 16)
 		x.xxx_hidden_CorrectsReadingId = b.CorrectsReadingId
+	}
+	if b.MeterVersion != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 10, 16)
+		x.xxx_hidden_MeterVersion = *b.MeterVersion
+	}
+	if b.Kind != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 16)
+		x.xxx_hidden_Kind = *b.Kind
+	}
+	if b.ProducedAt != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 12, 16)
+		x.xxx_hidden_ProducedAt = b.ProducedAt
+	}
+	if b.MeasurementMethod != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 13, 16)
+		x.xxx_hidden_MeasurementMethod = b.MeasurementMethod
+	}
+	if b.AdjustmentReason != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 14, 16)
+		x.xxx_hidden_AdjustmentReason = b.AdjustmentReason
+	}
+	if b.Source != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 15, 16)
+		x.xxx_hidden_Source = b.Source
 	}
 	return m0
 }
@@ -380,7 +630,7 @@ var File_gram_metering_v1_meter_reading_proto protoreflect.FileDescriptor
 
 const file_gram_metering_v1_meter_reading_proto_rawDesc = "" +
 	"\n" +
-	"$gram/metering/v1/meter_reading.proto\x12\x10gram.metering.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xba\x03\n" +
+	"$gram/metering/v1/meter_reading.proto\x12\x10gram.metering.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xf7\x05\n" +
 	"\fMeterReading\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12'\n" +
 	"\x0forganization_id\x18\x02 \x01(\tR\x0eorganizationId\x12\x1d\n" +
@@ -388,32 +638,46 @@ const file_gram_metering_v1_meter_reading_proto_rawDesc = "" +
 	"project_id\x18\x03 \x01(\tR\tprojectId\x12\x19\n" +
 	"\bmeter_id\x18\x04 \x01(\tR\ameterId\x12!\n" +
 	"\foperation_id\x18\x05 \x01(\tR\voperationId\x12\x12\n" +
-	"\x04unit\x18\x06 \x01(\tR\x04unit\x12\x14\n" +
-	"\x05value\x18\a \x01(\x03R\x05value\x12\x1f\n" +
+	"\x04unit\x18\x06 \x01(\tR\x04unit\x12\x1a\n" +
+	"\bquantity\x18\a \x01(\x03R\bquantity\x12\x1f\n" +
 	"\voccurred_at\x18\b \x01(\tR\n" +
 	"occurredAt\x12N\n" +
 	"\n" +
 	"attributes\x18\t \x03(\v2..gram.metering.v1.MeterReading.AttributesEntryR\n" +
 	"attributes\x12.\n" +
 	"\x13corrects_reading_id\x18\n" +
-	" \x01(\tR\x11correctsReadingId\x1a=\n" +
+	" \x01(\tR\x11correctsReadingId\x12#\n" +
+	"\rmeter_version\x18\v \x01(\rR\fmeterVersion\x127\n" +
+	"\x04kind\x18\f \x01(\x0e2#.gram.metering.v1.MeterReading.KindR\x04kind\x12\x1f\n" +
+	"\vproduced_at\x18\r \x01(\tR\n" +
+	"producedAt\x12-\n" +
+	"\x12measurement_method\x18\x0e \x01(\tR\x11measurementMethod\x12+\n" +
+	"\x11adjustment_reason\x18\x0f \x01(\tR\x10adjustmentReason\x12\x16\n" +
+	"\x06source\x18\x10 \x01(\tR\x06source\x1a=\n" +
 	"\x0fAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01:\n" +
-	"\x8a\xb5\x18\x06\x12\x04\b\x80\xf5$BEZCgithub.com/speakeasy-api/gram/infra/gen/gram/metering/v1;meteringv1b\beditionsp\xe9\a"
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"A\n" +
+	"\x04Kind\x12\x14\n" +
+	"\x10KIND_UNSPECIFIED\x10\x00\x12\x0e\n" +
+	"\n" +
+	"KIND_USAGE\x10\x01\x12\x13\n" +
+	"\x0fKIND_ADJUSTMENT\x10\x02:\v\x8a\xb5\x18\a\x12\x05\b\x80\xbd\xa3\x01BEZCgithub.com/speakeasy-api/gram/infra/gen/gram/metering/v1;meteringv1b\beditionsp\xe9\a"
 
+var file_gram_metering_v1_meter_reading_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_gram_metering_v1_meter_reading_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_gram_metering_v1_meter_reading_proto_goTypes = []any{
-	(*MeterReading)(nil), // 0: gram.metering.v1.MeterReading
-	nil,                  // 1: gram.metering.v1.MeterReading.AttributesEntry
+	(MeterReading_Kind)(0), // 0: gram.metering.v1.MeterReading.Kind
+	(*MeterReading)(nil),   // 1: gram.metering.v1.MeterReading
+	nil,                    // 2: gram.metering.v1.MeterReading.AttributesEntry
 }
 var file_gram_metering_v1_meter_reading_proto_depIdxs = []int32{
-	1, // 0: gram.metering.v1.MeterReading.attributes:type_name -> gram.metering.v1.MeterReading.AttributesEntry
-	1, // [1:1] is the sub-list for method output_type
-	1, // [1:1] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	2, // 0: gram.metering.v1.MeterReading.attributes:type_name -> gram.metering.v1.MeterReading.AttributesEntry
+	0, // 1: gram.metering.v1.MeterReading.kind:type_name -> gram.metering.v1.MeterReading.Kind
+	2, // [2:2] is the sub-list for method output_type
+	2, // [2:2] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_gram_metering_v1_meter_reading_proto_init() }
@@ -426,13 +690,14 @@ func file_gram_metering_v1_meter_reading_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_gram_metering_v1_meter_reading_proto_rawDesc), len(file_gram_metering_v1_meter_reading_proto_rawDesc)),
-			NumEnums:      0,
+			NumEnums:      1,
 			NumMessages:   2,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_gram_metering_v1_meter_reading_proto_goTypes,
 		DependencyIndexes: file_gram_metering_v1_meter_reading_proto_depIdxs,
+		EnumInfos:         file_gram_metering_v1_meter_reading_proto_enumTypes,
 		MessageInfos:      file_gram_metering_v1_meter_reading_proto_msgTypes,
 	}.Build()
 	File_gram_metering_v1_meter_reading_proto = out.File

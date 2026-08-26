@@ -62,16 +62,27 @@ pubsub:
       definition: |
         edition = "2024";
         message MeterReading {
+          enum Kind {
+            KIND_UNSPECIFIED = 0;
+            KIND_USAGE = 1;
+            KIND_ADJUSTMENT = 2;
+          }
           string id = 1;
           string organization_id = 2;
           string project_id = 3;
           string meter_id = 4;
           string operation_id = 5;
           string unit = 6;
-          int64 value = 7;
+          int64 quantity = 7;
           string occurred_at = 8;
           map<string, string> attributes = 9;
           string corrects_reading_id = 10;
+          uint32 meter_version = 11;
+          Kind kind = 12;
+          string produced_at = 13;
+          string measurement_method = 14;
+          string adjustment_reason = 15;
+          string source = 16;
         }
       type: PROTOCOL_BUFFER
   - labels:
@@ -1051,7 +1062,11 @@ pubsub:
     name: gram-metering-v1-meter-reading-ch-writer
     spec:
       ackDeadlineSeconds: 60
-      messageRetentionDuration: 2592000s
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-metering-v1-meter-reading-ch-writer-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 2678400s
       retainAckedMessages: true
       retryPolicy:
         maximumBackoff: 600s
@@ -1376,11 +1391,17 @@ pubsub:
       proto_message: gram-metering-v1-meter-reading
     name: gram-metering-v1-meter-reading
     spec:
-      messageRetentionDuration: 604800s
+      messageRetentionDuration: 2678400s
       schemaSettings:
         encoding: BINARY
         schemaRef:
           name: gram-metering-v1-meter-reading
+  - labels:
+      dlq_for: gram-metering-v1-meter-reading-ch-writer
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-metering-v1-meter-reading-ch-writer
+    name: gram-metering-v1-meter-reading-ch-writer-dlq
+    spec: {}
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-inbound-log-record

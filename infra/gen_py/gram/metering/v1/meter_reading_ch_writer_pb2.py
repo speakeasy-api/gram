@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from gcp.pubsub.v1 import options_pb2 as gcp_dot_pubsub_dot_v1_dot_options__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n.gram/metering/v1/meter_reading_ch_writer.proto\x12\x10gram.metering.v1\x1a\x1bgcp/pubsub/v1/options.proto\"S\n\x14MeterReadingCHWriter:;\x92\xb5\x18\x37\x12\x05\x08\x80\x9a\x9e\x01\x18\x01\"\x02\x08<2\t\n\x02\x08\n\x12\x03\x08\xd8\x04R\x1dgram.metering.v1.MeterReadingBEZCgithub.com/speakeasy-api/gram/infra/gen/gram/metering/v1;meteringv1b\x08\x65\x64itionsp\xe9\x07')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n.gram/metering/v1/meter_reading_ch_writer.proto\x12\x10gram.metering.v1\x1a\x1bgcp/pubsub/v1/options.proto\"W\n\x14MeterReadingCHWriter:?\x92\xb5\x18;\x12\x05\x08\x80\xbd\xa3\x01\x18\x01\"\x02\x08<2\t\n\x02\x08\n\x12\x03\x08\xd8\x04J\x02\x10\nR\x1dgram.metering.v1.MeterReadingBEZCgithub.com/speakeasy-api/gram/infra/gen/gram/metering/v1;meteringv1b\x08\x65\x64itionsp\xe9\x07')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -34,7 +34,7 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'ZCgithub.com/speakeasy-api/gram/infra/gen/gram/metering/v1;meteringv1'
   _globals['_METERREADINGCHWRITER']._loaded_options = None
-  _globals['_METERREADINGCHWRITER']._serialized_options = b'\222\265\0307\022\005\010\200\232\236\001\030\001\"\002\010<2\t\n\002\010\n\022\003\010\330\004R\035gram.metering.v1.MeterReading'
+  _globals['_METERREADINGCHWRITER']._serialized_options = b'\222\265\030;\022\005\010\200\275\243\001\030\001\"\002\010<2\t\n\002\010\n\022\003\010\330\004J\002\020\nR\035gram.metering.v1.MeterReading'
   _globals['_METERREADINGCHWRITER']._serialized_start=97
-  _globals['_METERREADINGCHWRITER']._serialized_end=180
+  _globals['_METERREADINGCHWRITER']._serialized_end=184
 # @@protoc_insertion_point(module_scope)
