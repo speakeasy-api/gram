@@ -4,9 +4,9 @@
 // per-tool RBAC ride along via ProxyManager.BuildTarget), with the response
 // captured and parsed by the gateway rather than relayed to the client.
 //
-// Stateless-first: the target request goes out with no upstream session; a
-// session-required rejection triggers an inline initialize handshake and one
-// replay, then a best-effort DELETE so per-call sessions do not accumulate.
+// Handshake-first: session-ful upstreams reject bare requests only in-band,
+// indistinguishable from a real tool error, so every member session opens
+// with initialize. A stateless upstream answers it and returns no session id.
 
 package mcp
 
@@ -20,15 +20,18 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
@@ -40,16 +43,17 @@ import (
 // member upstreams; independent of the version negotiated with the client.
 const metaMemberUpstreamProtocolVersion = "2025-06-18"
 
-// routeGatewayMemberToken selects the bearer forwarded to one gateway member,
-// strictly: a remote member gets only a token whose recorded RFC 8707
-// resource names its upstream. There is deliberately no lone-token fallback —
-// unlike routeUpstreamToken's single-entry rule — because project mcp:write
-// suffices to attach a member pointing anywhere, and a fallback would forward
-// a sibling's credential there. No match means an anonymous call, never a
-// mismatched bearer.
-//
-// A tunneled member records no resource, so only a lone unqualified token can
-// be its credential; several tokens are unroutable and fail member-scoped.
+// memberSessionCloseTimeout bounds the best-effort session DELETE, on a
+// detached context so a member-call timeout cannot strand the session.
+const memberSessionCloseTimeout = 5 * time.Second
+
+// routeGatewayMemberToken selects the bearer forwarded to one gateway member.
+// Strict: a remote member gets only a token whose recorded RFC 8707 resource
+// names its upstream — no lone-token fallback, since mcp:write can attach a
+// member pointing anywhere and a fallback would forward a sibling's
+// credential there. No match means an anonymous call, never a mismatched
+// bearer. A tunneled member records no resource, so only a lone unqualified
+// token can be its credential; several tokens fail member-scoped.
 func routeGatewayMemberToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, member metaMember, upstreamResource string) (string, error) {
 	if member.tunneledServerID.Valid {
 		if len(tokens) > 1 {
@@ -85,25 +89,22 @@ func routeGatewayMemberToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, 
 	}
 }
 
-// metaMemberDial is one member's ready-to-call upstream: a proxy builder
-// (fresh proxy per exchange, since a Proxy is a one-request value) plus the
-// routed credential.
-type metaMemberDial struct {
-	build func() (*proxy.Proxy, error)
-}
+// memberProxyBuilder yields a fresh proxy per upstream exchange, since a
+// Proxy is a one-request value.
+type memberProxyBuilder func() (*proxy.Proxy, error)
 
 // dialGatewayMember loads the member's backend rows, routes its credential
 // strictly, and returns a per-exchange proxy builder. The snapshot already
 // enforced mcp:connect for private members with the same key
-// authorizeProxyBackendAccess uses, so there is no second server-level check
-// here; per-tool RBAC for private members attaches inside the proxy build.
+// authorizeProxyBackendAccess uses; per-tool RBAC for private members
+// attaches inside the proxy build.
 func (s *Service) dialGatewayMember(
 	ctx context.Context,
 	logger *slog.Logger,
 	gate metaGateContext,
 	member metaMember,
 	callerIdentity string,
-) (*metaMemberDial, error) {
+) (memberProxyBuilder, error) {
 	serverRow, err := mcpservers_repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{
 		ID:        member.serverID,
 		ProjectID: gate.projectID,
@@ -112,6 +113,9 @@ func (s *Service) dialGatewayMember(
 		return nil, fmt.Errorf("load gateway member server: %w", err)
 	}
 
+	// gate.toolSelection is provably nil today: meta endpoints mint no tool
+	// selections. If they ever do, its names are gateway-qualified and would
+	// have to be translated before reaching a member proxy's strict filter.
 	switch {
 	case member.remoteServerID.Valid:
 		remoteServer, rerr := remotemcp_repo.New(s.db).GetServerByID(ctx, remotemcp_repo.GetServerByIDParams{
@@ -129,37 +133,77 @@ func (s *Service) dialGatewayMember(
 		if terr != nil {
 			return nil, terr
 		}
-		return &metaMemberDial{build: func() (*proxy.Proxy, error) {
+		return func() (*proxy.Proxy, error) {
 			// No WWW-Authenticate relay: a member's auth challenge must not
 			// invite the client to re-authenticate against the gateway.
-			return s.remoteProxyManager.Build(logger, &remoteServer, member.serverID.String(), headers, member.visibility, gate.projectID.String(), upstreamToken, "", gate.toolSelection), nil
-		}}, nil
+			p := s.remoteProxyManager.Build(logger, &remoteServer, member.serverID.String(), headers, member.visibility, gate.projectID.String(), upstreamToken, "", gate.toolSelection)
+			// Gateway-synthesized initializes are not client sessions.
+			p.InitializeRequestInterceptors = nil
+			return p, nil
+		}, nil
 
 	case member.tunneledServerID.Valid:
 		upstreamToken, terr := routeGatewayMemberToken(gate.tokens, member, "")
 		if terr != nil {
 			return nil, terr
 		}
-		// Per-member namespace so one caller's handshake, replay, and DELETE
+		// Per-member namespace so one caller's handshake, calls, and DELETE
 		// land on one tunnel gateway.
 		affinity := tunnelrouting.HashedClientAffinityKey("meta:"+member.serverID.String(), callerIdentity)
-		return &metaMemberDial{build: func() (*proxy.Proxy, error) {
+		return func() (*proxy.Proxy, error) {
 			p, berr := s.tunnelManager.buildProxy(ctx, affinity, logger, gate.projectID, &serverRow, upstreamToken, "", gate.toolSelection)
 			if berr != nil {
 				return nil, fmt.Errorf("build tunnel proxy: %w", berr)
 			}
+			p.InitializeRequestInterceptors = nil
 			return p, nil
-		}}, nil
+		}, nil
 
 	default:
 		return nil, &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug)}
 	}
 }
 
+// memberAttributionContext gives member exchanges the identity the billing,
+// limits, and telemetry interceptors read. An issuer-gated authenticated
+// caller already carries one; otherwise the calls are attributed to the
+// endpoint's own organization, as hosted dispatch attributes to the
+// toolset's. Best effort: attribution must never fail the call.
+func (s *Service) memberAttributionContext(ctx context.Context, logger *slog.Logger, gate *metaGateContext) context.Context {
+	if _, ok := contextvalues.GetAuthContext(ctx); ok {
+		return ctx
+	}
+	orgMetadata, err := mv.DescribeOrganization(ctx, s.logger, s.orgsRepo, s.billingRepository, gate.organizationID)
+	if err != nil {
+		logger.WarnContext(ctx, "attribute gateway member call", attr.SlogError(err))
+		return ctx
+	}
+	projectID := gate.projectID
+	sessionID := gate.sessionID
+	return contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
+		ActiveOrganizationID:  gate.organizationID,
+		ProjectID:             &projectID,
+		UserID:                "",
+		ExternalUserID:        "",
+		APIKeyID:              "",
+		APIKeyName:            "",
+		OrgWidePluginHooksKey: false,
+		SessionID:             &sessionID,
+		OrganizationSlug:      orgMetadata.Slug,
+		Email:                 nil,
+		AccountType:           orgMetadata.GramAccountType,
+		HasActiveSubscription: orgMetadata.HasActiveSubscription,
+		Whitelisted:           orgMetadata.Whitelisted,
+		ProjectSlug:           nil,
+		APIKeyScopes:          nil,
+		IsAdmin:               false,
+		SupportOrganizationID: "",
+	})
+}
+
 // memberResponseRecorder captures a member upstream exchange instead of
-// relaying it. Flush is a no-op the proxy's SSE relay requires; the byte cap
-// turns an oversized member response into a member-scoped failure rather
-// than unbounded buffering.
+// relaying it. Flush is the no-op the proxy's SSE relay requires; the byte
+// cap turns an oversized member response into a member-scoped failure.
 type memberResponseRecorder struct {
 	header    http.Header
 	status    int
@@ -198,18 +242,112 @@ func (r *memberResponseRecorder) Write(p []byte) (int, error) {
 
 func (r *memberResponseRecorder) Flush() {}
 
+// memberSession is one open exchange scope with a proxied member: the
+// handshake ran, and every call rides the same upstream session — which is
+// what keeps pagination cursors valid across pages.
+type memberSession struct {
+	svc       *Service
+	logger    *slog.Logger
+	build     memberProxyBuilder
+	member    metaMember
+	sessionID string
+}
+
+// openMemberSession runs the initialize handshake. On any failure after a
+// session was minted, the session is closed before returning.
+func (s *Service) openMemberSession(ctx context.Context, logger *slog.Logger, build memberProxyBuilder, member metaMember) (*memberSession, error) {
+	initBody, err := marshalUpstreamRequest(mcpjsonrpc.StringID("gram-gateway-init"), "initialize", map[string]any{
+		"protocolVersion": metaMemberUpstreamProtocolVersion,
+		"capabilities":    map[string]any{},
+		"clientInfo":      map[string]string{"name": "gram-gateway", "version": "1"},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal upstream initialize: %w", err)
+	}
+	initRec, err := s.memberExchange(ctx, build, member, initBody, "")
+	if err != nil {
+		return nil, err
+	}
+	if initRec.status == http.StatusUnauthorized || initRec.status == http.StatusForbidden {
+		return nil, &metaMemberError{message: fmt.Sprintf("server %q requires authentication; connect it before calling its tools", member.slug)}
+	}
+	if initRec.status < http.StatusOK || initRec.status >= http.StatusMultipleChoices {
+		return nil, memberUpstreamFailure(member, initRec.status)
+	}
+
+	sess := &memberSession{svc: s, logger: logger, build: build, member: member, sessionID: initRec.header.Get(proxy.McpSessionIDHeader)}
+	if sess.sessionID != "" {
+		ackBody := []byte(`{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}`)
+		ackRec, aerr := s.memberExchange(ctx, build, member, ackBody, sess.sessionID)
+		if aerr != nil || ackRec.status < http.StatusOK || ackRec.status >= http.StatusMultipleChoices {
+			sess.close(ctx)
+			if aerr != nil {
+				return nil, aerr
+			}
+			return nil, memberUpstreamFailure(member, ackRec.status)
+		}
+	}
+	return sess, nil
+}
+
+// call performs one JSON-RPC request in this session and returns the
+// upstream's result or error object.
+func (sess *memberSession) call(ctx context.Context, method string, params any) (json.RawMessage, *upstreamRPCError, error) {
+	requestID := mcpjsonrpc.StringID("gram-gateway-" + method)
+	body, err := marshalUpstreamRequest(requestID, method, params)
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshal upstream %s request: %w", method, err)
+	}
+	rec, err := sess.svc.memberExchange(ctx, sess.build, sess.member, body, sess.sessionID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if rec.status == http.StatusUnauthorized || rec.status == http.StatusForbidden {
+		return nil, nil, &metaMemberError{message: fmt.Sprintf("server %q requires authentication; connect it before calling its tools", sess.member.slug)}
+	}
+	if rec.status < http.StatusOK || rec.status >= http.StatusMultipleChoices {
+		return nil, nil, memberUpstreamFailure(sess.member, rec.status)
+	}
+	if rec.truncated {
+		return nil, nil, &metaMemberError{message: fmt.Sprintf("server %q returned a response too large for the gateway", sess.member.slug)}
+	}
+	envelope, perr := parseUpstreamResponse(rec, requestID)
+	if perr != nil {
+		sess.logger.WarnContext(ctx, "unparseable gateway member response", attr.SlogError(perr), attr.SlogMcpServerID(sess.member.serverID.String()))
+		return nil, nil, &metaMemberError{message: fmt.Sprintf("server %q returned a response the gateway could not read", sess.member.slug)}
+	}
+	return envelope.Result, envelope.Error, nil
+}
+
+// close best-effort terminates the upstream session, on a detached context so
+// an expired member-call deadline cannot strand it.
+func (sess *memberSession) close(ctx context.Context) {
+	if sess.sessionID == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), memberSessionCloseTimeout)
+	defer cancel()
+	p, err := sess.build()
+	if err != nil {
+		return
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, "/", nil)
+	if err != nil {
+		return
+	}
+	req.Header.Set(proxy.McpSessionIDHeader, sess.sessionID)
+	if err := serveProxyBackend(httptest.NewRecorder(), req, p); err != nil {
+		sess.logger.DebugContext(ctx, "close gateway member session", attr.SlogError(err), attr.SlogMcpServerID(sess.member.serverID.String()))
+	}
+}
+
 // callProxiedMember performs one JSON-RPC request against a proxied member
-// and returns the upstream's result or error object. Every upstream-side
-// failure comes back as *metaMemberError so callers degrade member-scoped.
-//
-// Handshake-first: session-ful upstreams reject bare requests only in-band,
-// which cannot be distinguished reliably from a real tool error, so every
-// call opens with initialize — a stateless upstream simply answers it and
-// returns no session id. A per-call session is torn down best-effort.
+// inside its own session and deadline. Every upstream-side failure comes
+// back as *metaMemberError so callers degrade member-scoped.
 func (s *Service) callProxiedMember(
 	ctx context.Context,
 	logger *slog.Logger,
-	dial *metaMemberDial,
+	build memberProxyBuilder,
 	member metaMember,
 	method string,
 	params any,
@@ -217,64 +355,17 @@ func (s *Service) callProxiedMember(
 	ctx, cancel := context.WithTimeout(ctx, s.metaRuntime.MemberCallTimeout)
 	defer cancel()
 
-	initBody, err := marshalUpstreamRequest(mcpjsonrpc.StringID("gram-gateway-init"), "initialize", map[string]any{
-		"protocolVersion": metaMemberUpstreamProtocolVersion,
-		"capabilities":    map[string]any{},
-		"clientInfo":      map[string]string{"name": "gram-gateway", "version": "1"},
-	})
-	if err != nil {
-		return nil, nil, fmt.Errorf("marshal upstream initialize: %w", err)
-	}
-	initRec, err := s.memberExchange(ctx, dial, member, initBody, "")
+	sess, err := s.openMemberSession(ctx, logger, build, member)
 	if err != nil {
 		return nil, nil, err
 	}
-	if initRec.status == http.StatusUnauthorized || initRec.status == http.StatusForbidden {
-		return nil, nil, &metaMemberError{message: fmt.Sprintf("server %q requires authentication; connect it before calling its tools", member.slug)}
-	}
-	if initRec.status < http.StatusOK || initRec.status >= http.StatusMultipleChoices {
-		return nil, nil, memberUpstreamFailure(member, initRec.status)
-	}
-	sessionID := initRec.header.Get(proxy.McpSessionIDHeader)
-	if sessionID != "" {
-		ackBody := []byte(`{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}`)
-		if _, aerr := s.memberExchange(ctx, dial, member, ackBody, sessionID); aerr != nil {
-			return nil, nil, aerr
-		}
-		defer s.closeMemberSession(ctx, logger, dial, member, sessionID)
-	}
-
-	requestID := mcpjsonrpc.StringID("gram-gateway-" + method)
-	target, err := marshalUpstreamRequest(requestID, method, params)
-	if err != nil {
-		return nil, nil, fmt.Errorf("marshal upstream %s request: %w", method, err)
-	}
-	rec, err := s.memberExchange(ctx, dial, member, target, sessionID)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	if rec.status == http.StatusUnauthorized || rec.status == http.StatusForbidden {
-		return nil, nil, &metaMemberError{message: fmt.Sprintf("server %q requires authentication; connect it before calling its tools", member.slug)}
-	}
-	if rec.status < http.StatusOK || rec.status >= http.StatusMultipleChoices {
-		return nil, nil, memberUpstreamFailure(member, rec.status)
-	}
-	if rec.truncated {
-		return nil, nil, &metaMemberError{message: fmt.Sprintf("server %q returned a response too large for the gateway", member.slug)}
-	}
-
-	envelope, perr := parseUpstreamResponse(rec, requestID)
-	if perr != nil {
-		logger.WarnContext(ctx, "unparseable gateway member response", attr.SlogError(perr), attr.SlogMcpServerID(member.serverID.String()))
-		return nil, nil, &metaMemberError{message: fmt.Sprintf("server %q returned a response the gateway could not read", member.slug)}
-	}
-	return envelope.Result, envelope.Error, nil
+	defer sess.close(ctx)
+	return sess.call(ctx, method, params)
 }
 
 // memberExchange drives one HTTP exchange through a fresh member proxy.
-func (s *Service) memberExchange(ctx context.Context, dial *metaMemberDial, member metaMember, body []byte, sessionID string) (*memberResponseRecorder, error) {
-	p, err := dial.build()
+func (s *Service) memberExchange(ctx context.Context, build memberProxyBuilder, member metaMember, body []byte, sessionID string) (*memberResponseRecorder, error) {
+	p, err := build()
 	if err != nil {
 		var memberErr *metaMemberError
 		if errors.As(err, &memberErr) {
@@ -304,22 +395,6 @@ func (s *Service) memberExchange(ctx context.Context, dial *metaMemberDial, memb
 	return rec, nil
 }
 
-// closeMemberSession best-effort terminates a per-call upstream session.
-func (s *Service) closeMemberSession(ctx context.Context, logger *slog.Logger, dial *metaMemberDial, member metaMember, sessionID string) {
-	p, err := dial.build()
-	if err != nil {
-		return
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, "/", nil)
-	if err != nil {
-		return
-	}
-	req.Header.Set(proxy.McpSessionIDHeader, sessionID)
-	if err := serveProxyBackend(httptest.NewRecorder(), req, p); err != nil {
-		logger.DebugContext(ctx, "close gateway member session", attr.SlogError(err), attr.SlogMcpServerID(member.serverID.String()))
-	}
-}
-
 func memberUpstreamFailure(member metaMember, status int) error {
 	return &metaMemberError{message: fmt.Sprintf("server %q upstream call failed with status %d", member.slug, status)}
 }
@@ -337,6 +412,13 @@ type upstreamEnvelope struct {
 	Error  *upstreamRPCError `json:"error"`
 }
 
+// answers reports whether an envelope is the response to requestID: a
+// matching id, or any error object — a null-id error is the spec's shape for
+// a request the upstream could not attribute, and it is still the answer.
+func (e *upstreamEnvelope) answers(requestID mcpjsonrpc.ID) bool {
+	return e.Error != nil || (e.ID.IsSet() && e.ID.Value() == requestID.Value())
+}
+
 func marshalUpstreamRequest(id mcpjsonrpc.ID, method string, params any) ([]byte, error) {
 	payload := map[string]any{"jsonrpc": "2.0", "id": id, "method": method}
 	if params != nil {
@@ -349,7 +431,7 @@ func marshalUpstreamRequest(id mcpjsonrpc.ID, method string, params any) ([]byte
 	return bs, nil
 }
 
-// parseUpstreamResponse extracts the response envelope matching requestID
+// parseUpstreamResponse extracts the response envelope answering requestID
 // from either a JSON body or the data frames of an SSE body; notifications
 // and unrelated messages are skipped.
 func parseUpstreamResponse(rec *memberResponseRecorder, requestID mcpjsonrpc.ID) (*upstreamEnvelope, error) {
@@ -360,7 +442,7 @@ func parseUpstreamResponse(rec *memberResponseRecorder, requestID mcpjsonrpc.ID)
 			if err := json.Unmarshal(frame, &envelope); err != nil {
 				continue
 			}
-			if envelope.ID.IsSet() && envelope.ID.Value() == requestID.Value() {
+			if envelope.answers(requestID) {
 				return &envelope, nil
 			}
 		}
@@ -371,18 +453,21 @@ func parseUpstreamResponse(rec *memberResponseRecorder, requestID mcpjsonrpc.ID)
 	if err := json.Unmarshal(rec.body.Bytes(), &envelope); err != nil {
 		return nil, fmt.Errorf("decode upstream response: %w", err)
 	}
+	if !envelope.answers(requestID) {
+		return nil, fmt.Errorf("upstream response answers a different request")
+	}
 	return &envelope, nil
 }
 
-// sseDataFrames concatenates each event's data lines per the SSE framing
-// rules and returns one payload per event.
+// sseDataFrames joins each event's data lines with newlines per the SSE
+// framing rules and returns one payload per event.
 func sseDataFrames(body []byte) [][]byte {
 	var frames [][]byte
-	var current bytes.Buffer
+	var lines [][]byte
 	flush := func() {
-		if current.Len() > 0 {
-			frames = append(frames, append([]byte(nil), current.Bytes()...))
-			current.Reset()
+		if len(lines) > 0 {
+			frames = append(frames, bytes.Join(lines, []byte("\n")))
+			lines = nil
 		}
 	}
 	for line := range bytes.SplitSeq(body, []byte("\n")) {
@@ -392,7 +477,7 @@ func sseDataFrames(body []byte) [][]byte {
 			continue
 		}
 		if data, ok := bytes.CutPrefix(line, []byte("data:")); ok {
-			current.Write(bytes.TrimPrefix(data, []byte(" ")))
+			lines = append(lines, bytes.TrimPrefix(data, []byte(" ")))
 		}
 	}
 	flush()
@@ -423,7 +508,8 @@ func (s *Service) executeProxiedMemberTool(
 	arguments json.RawMessage,
 	meta *mcprequests.WireMeta,
 ) (json.RawMessage, error) {
-	dial, err := s.dialGatewayMember(ctx, logger, *gate, member, gate.callerIdentity())
+	ctx = s.memberAttributionContext(ctx, logger, gate)
+	build, err := s.dialGatewayMember(ctx, logger, *gate, member, gate.callerIdentity())
 	if err != nil {
 		var memberErr *metaMemberError
 		if errors.As(err, &memberErr) {
@@ -432,7 +518,7 @@ func (s *Service) executeProxiedMemberTool(
 		return nil, oops.E(oops.CodeUnexpected, err, "dial gateway member").LogError(ctx, logger)
 	}
 
-	upstreamResult, rpcErr, err := s.callProxiedMember(ctx, logger, dial, member, "tools/call", toolsCallParams{
+	upstreamResult, rpcErr, err := s.callProxiedMember(ctx, logger, build, member, "tools/call", toolsCallParams{
 		Name:      toolName,
 		Arguments: arguments,
 		Meta:      meta,
@@ -448,11 +534,17 @@ func (s *Service) executeProxiedMemberTool(
 		return marshalMetaToolError(ctx, logger, req.ID,
 			fmt.Sprintf("server %q rejected the call: %s", member.slug, rpcErr.Message))
 	}
+	if len(upstreamResult) == 0 {
+		return marshalMetaToolError(ctx, logger, req.ID,
+			fmt.Sprintf("server %q returned a response the gateway could not read", member.slug))
+	}
 
 	bs, err := json.Marshal(&result[json.RawMessage]{
-		ID:             req.ID,
-		Result:         upstreamResult,
-		serverIdentity: serverInfoMetaServer,
+		ID:     req.ID,
+		Result: upstreamResult,
+		// The member's identity, matching the hosted arm's contract that a
+		// result's _meta identity stays the member's.
+		serverIdentity: serverInfo{Name: member.slug, Version: "0.0.0"},
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "serialize member tool result").LogError(ctx, logger)
@@ -472,11 +564,13 @@ func (s *Service) describeGatewayMember(ctx context.Context, logger *slog.Logger
 	return s.describeProxiedMember(ctx, logger, gate, member)
 }
 
-// describeProxiedMember pages a proxied member's tools/list into a catalog.
-// RBAC and session tool filtering already applied inside the proxy's
+// describeProxiedMember pages a proxied member's tools/list into a catalog,
+// holding one upstream session across pages so session-scoped cursors stay
+// valid. RBAC and session tool filtering already applied inside the proxy's
 // tools/list interceptors.
 func (s *Service) describeProxiedMember(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember) (*memberCatalog, error) {
-	dial, err := s.dialGatewayMember(ctx, logger, *gate, member, gate.callerIdentity())
+	ctx = s.memberAttributionContext(ctx, logger, gate)
+	build, err := s.dialGatewayMember(ctx, logger, *gate, member, gate.callerIdentity())
 	if err != nil {
 		var memberErr *metaMemberError
 		if errors.As(err, &memberErr) {
@@ -485,15 +579,29 @@ func (s *Service) describeProxiedMember(ctx context.Context, logger *slog.Logger
 		return nil, fmt.Errorf("dial gateway member: %w", err)
 	}
 
-	catalog := &memberCatalog{entries: nil, byName: map[string]*toolListEntry{}}
+	// One deadline and one upstream session cover the whole pagination.
+	ctx, cancel := context.WithTimeout(ctx, s.metaRuntime.MemberCallTimeout)
+	defer cancel()
+	sess, err := s.openMemberSession(ctx, logger, build, member)
+	if err != nil {
+		return nil, err
+	}
+	defer sess.close(ctx)
+
+	entries := []*toolListEntry{}
+	byName := map[string]*toolListEntry{}
 	dropped := map[string]struct{}{}
 	cursor := ""
-	for range maxProxiedListPages {
+	for page := 0; ; page++ {
+		if page >= maxProxiedListPages {
+			logger.WarnContext(ctx, "gateway member tool listing truncated at the page cap", attr.SlogMcpServerID(member.serverID.String()))
+			break
+		}
 		params := map[string]any{}
 		if cursor != "" {
 			params["cursor"] = cursor
 		}
-		upstreamResult, rpcErr, cerr := s.callProxiedMember(ctx, logger, dial, member, "tools/list", params)
+		upstreamResult, rpcErr, cerr := sess.call(ctx, "tools/list", params)
 		if cerr != nil {
 			return nil, cerr
 		}
@@ -512,23 +620,32 @@ func (s *Service) describeProxiedMember(ctx context.Context, logger *slog.Logger
 			if entry == nil || entry.Name == "" {
 				continue
 			}
-			catalog.entries = append(catalog.entries, entry)
-			// Duplicate names drop from byName so they fail deterministically,
-			// matching the hosted catalog's rule.
+			entries = append(entries, entry)
+			// Duplicate names drop entirely, matching the hosted catalog's
+			// rule; the tombstone keeps a third occurrence out too.
 			if _, gone := dropped[entry.Name]; gone {
 				continue
 			}
-			if _, dup := catalog.byName[entry.Name]; dup {
-				delete(catalog.byName, entry.Name)
+			if _, dup := byName[entry.Name]; dup {
+				delete(byName, entry.Name)
 				dropped[entry.Name] = struct{}{}
 				continue
 			}
-			catalog.byName[entry.Name] = entry
+			byName[entry.Name] = entry
 		}
 		if listing.NextCursor == "" || listing.NextCursor == cursor {
-			return catalog, nil
+			break
 		}
 		cursor = listing.NextCursor
+	}
+
+	// Rebuild entries from the kept set so duplicates vanish from
+	// describe_server output exactly as the hosted path's do.
+	catalog := &memberCatalog{entries: make([]*toolListEntry, 0, len(byName)), byName: byName}
+	for _, entry := range entries {
+		if kept, ok := byName[entry.Name]; ok && kept == entry {
+			catalog.entries = append(catalog.entries, entry)
+		}
 	}
 	return catalog, nil
 }

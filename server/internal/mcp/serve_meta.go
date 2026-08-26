@@ -45,6 +45,7 @@ import (
 // serveResolvedMetaMCPEndpoint and threaded through dispatch.
 type metaGateContext struct {
 	projectID       uuid.UUID
+	organizationID  string
 	tokens          map[uuid.UUID]remotesessions.UpstreamToken
 	toolSelection   *toolfilter.SessionSelection
 	authenticated   bool
@@ -124,6 +125,7 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 
 	gate := &metaGateContext{
 		projectID:      mcpEndpoint.ProjectID,
+		organizationID: metaServer.OrganizationID,
 		tokens:         gateTokens,
 		toolSelection:  gateToolSelection,
 		authenticated:  false,

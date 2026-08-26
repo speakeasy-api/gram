@@ -378,16 +378,6 @@ func newStartCommand() *cli.Command {
 			Usage:   "Deadline for one gateway member upstream call, handshake included (0 uses the built-in default)",
 			EnvVars: []string{"GRAM_META_MEMBER_CALL_TIMEOUT"},
 		},
-		&cli.DurationFlag{
-			Name:    "meta-member-probe-timeout",
-			Usage:   "Deadline for one gateway member status probe (0 uses the built-in default)",
-			EnvVars: []string{"GRAM_META_MEMBER_PROBE_TIMEOUT"},
-		},
-		&cli.IntFlag{
-			Name:    "meta-member-max-fanout",
-			Usage:   "Maximum concurrent gateway member work per request (0 uses the built-in default)",
-			EnvVars: []string{"GRAM_META_MEMBER_MAX_FANOUT"},
-		},
 		&cli.StringFlag{
 			Name:    "openrouter-provisioning-key",
 			Usage:   "Provisioning key for OpenRouter to create new API keys for orgs - https://openrouter.ai/settings/provisioning-keys",
@@ -1104,9 +1094,7 @@ func newStartCommand() *cli.Command {
 					MaxRequestLifetime: 0,
 				},
 				mcp.MetaRuntimeConfig{
-					MemberCallTimeout:  c.Duration("meta-member-call-timeout"),
-					MemberProbeTimeout: c.Duration("meta-member-probe-timeout"),
-					MaxFanout:          c.Int("meta-member-max-fanout"),
+					MemberCallTimeout: c.Duration("meta-member-call-timeout"),
 				},
 			)
 
