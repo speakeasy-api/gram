@@ -6,6 +6,7 @@ import type {
   InsightsSuggestion,
   InsightsSuggestionIcon,
 } from "@/lib/insights-suggestions";
+import { ignoreSkippedTransition } from "@/lib/view-transition";
 import { useRoutes } from "@/routes";
 
 /**
@@ -419,6 +420,9 @@ export function useChatLaunch(): (
       if (card) card.style.viewTransitionName = VT_ARRIVE;
     });
 
+    // `.ready` rejects with AbortError on a skip (a duplicate name or an
+    // overlapping transition) and nothing else awaits it, so guard it too.
+    transition.ready.catch(ignoreSkippedTransition);
     // Wait for the flight to land before starting the second transition — an
     // overlapping one would abort it mid-air.
     void transition.finished
