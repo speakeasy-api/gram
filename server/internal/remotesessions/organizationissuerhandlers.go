@@ -1018,10 +1018,9 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orgissuersgen.Migr
 		return nil, err
 	}
 
-	// Before lockIssuersForMigration: every other writer takes the derivation
-	// lock before the remote-issuer one, and a migration going the other way
-	// would deadlock against a concurrent client create or attach. Both issuers
-	// are already established as this organization's by loadMigrationPair.
+	// Before lockIssuersForMigration: the reverse order deadlocks against a
+	// concurrent client create or attach. loadMigrationPair already established
+	// both issuers as this organization's.
 	affectedUserIssuerIDs, err := prepareIssuerMigrationResync(ctx, dbtx, txRepo, source.ID, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "prepare issuer migration resync").LogError(ctx, logger)
@@ -1052,11 +1051,9 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orgissuersgen.Migr
 	}
 
 	// The source now has no active clients, so the delete guard that
-	// DeleteIssuer applies is satisfied by construction. Nothing can add one
-	// back before the commit either: validateNewClientIssuers takes the source
-	// issuer's client-binding lock — the one held here — before it so much as
-	// reads the issuer, so a racing create either 404s on the tombstone or is
-	// still waiting.
+	// DeleteIssuer applies is satisfied by construction, and nothing can add one
+	// back: validateNewClientIssuers takes the client-binding lock held here
+	// before reading the issuer, so a racing create 404s or waits.
 	deleted, err := txRepo.DeleteOrganizationRemoteSessionIssuer(ctx, repo.DeleteOrganizationRemoteSessionIssuerParams{
 		ID:             source.ID,
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),

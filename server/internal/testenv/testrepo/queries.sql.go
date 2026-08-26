@@ -221,10 +221,9 @@ type CreateOrganizationTierUserSessionIssuerFixtureParams struct {
 }
 
 // Mints an organization-tier user session issuer (project_id NULL). No
-// production path creates one yet — the column only recently became nullable —
-// but the mcp_servers.remote_session_issuer_id derivation has to handle the
-// shape already, because the arm that skips it also skips clearing a value
-// written while the issuer was still project-scoped.
+// production path creates one yet, but the derivation must handle the shape:
+// the arm that skips it also skips clearing a value written while the issuer
+// was project-scoped.
 func (q *Queries) CreateOrganizationTierUserSessionIssuerFixture(ctx context.Context, arg CreateOrganizationTierUserSessionIssuerFixtureParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, createOrganizationTierUserSessionIssuerFixture, arg.OrganizationID, arg.Slug, arg.SessionDuration)
 	var id uuid.UUID
@@ -418,9 +417,9 @@ SET deleted_at = clock_timestamp()
 WHERE id = $1
 `
 
-// Tombstones a remote session issuer with no regard for its clients. Every
-// production delete refuses while a live client references the issuer, so this
-// is the only way to build the state the derivation must reject.
+// Tombstones a remote session issuer regardless of its clients. Production
+// deletes refuse while a live client references it, so this is the only way to
+// build the state the derivation must reject.
 func (q *Queries) ForceSoftDeleteRemoteSessionIssuerFixture(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, forceSoftDeleteRemoteSessionIssuerFixture, id)
 	return err

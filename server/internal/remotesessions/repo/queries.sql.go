@@ -4162,13 +4162,9 @@ WHERE link.remote_session_client_id = $1
 ORDER BY link.user_session_issuer_id
 `
 
-// Unscoped, for the one caller that has no tenant to scope to: the
-// platform-admin DeleteGlobalClient, whose client sits in the global partition
-// (both tenancy columns NULL). It uses this as an integrity assertion rather
-// than as a resync input — a global client is unreachable from every attach
-// path, so the expected result is the empty set and any row is logged as a
-// derivation this surface cannot repair. Scoping it to an organization would
-// filter out exactly the rows the assertion exists to find.
+// Unscoped, for the platform-admin DeleteGlobalClient, whose client sits in the
+// global partition. An integrity assertion, not a resync input: the expected
+// result is empty and any row is logged as unrepairable here.
 func (q *Queries) ListUserSessionIssuersBoundToClient(ctx context.Context, remoteSessionClientID uuid.UUID) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, listUserSessionIssuersBoundToClient, remoteSessionClientID)
 	if err != nil {
@@ -4206,13 +4202,10 @@ type ListUserSessionIssuersBoundToOrganizationClientParams struct {
 	OrganizationID        pgtype.Text
 }
 
-// For the organization-admin DeleteClient, whose reachability predicate is
-// DeleteOrganizationRemoteSessionClient's: a client is the organization's when
-// either the client or the issuer it points at names the organization. That
-// delete only tombstones the client, leaving the bindings in place, so this is
-// a superset of what it acts on by design — it deliberately omits the delete's
-// deleted IS FALSE filters, since resyncing a binding whose client was already
-// gone is a no-op and missing one is not.
+// For the organization-admin DeleteClient: a client is the organization's when
+// either it or its issuer names the organization. Deliberately a superset of
+// what that delete acts on — resyncing an already-gone binding is a no-op,
+// missing one is not.
 func (q *Queries) ListUserSessionIssuersBoundToOrganizationClient(ctx context.Context, arg ListUserSessionIssuersBoundToOrganizationClientParams) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, listUserSessionIssuersBoundToOrganizationClient, arg.RemoteSessionClientID, arg.OrganizationID)
 	if err != nil {
@@ -4249,27 +4242,16 @@ type ListUserSessionIssuersBoundToProjectClientParams struct {
 	ProjectID             uuid.NullUUID
 }
 
-// The three queries below all answer "which user session issuers does this
+// The three queries below answer "which user session issuers does this
 // client's deletion change the derivation of", and differ only in the tenancy
-// each caller can prove. They exist separately rather than as one query with
-// optional filters because each one's predicate must stay identical to the
-// delete it precedes: a read narrower than its delete strands the servers
-// behind the bindings it failed to report on a value nothing can recompute.
+// each caller can prove. Each one's predicate must stay identical to the delete
+// it precedes: a read narrower than its delete strands servers on a value
+// nothing can recompute.
 //
-// All three run BEFORE the delete that establishes ownership, because the
-// derivation locks they feed have to precede every row lock in the
-// transaction and cannot be taken without the set. The ids are never returned
-// to the caller and every write they feed is bounded again by the caller's own
-// ResyncScope, so the early read discloses nothing.
-//
-// Ordered because callers take one advisory lock per returned id: unsorted,
-// two overlapping deletes could acquire them in opposing orders.
-// For DeleteRemoteSessionClient. The predicate mirrors
-// DeleteUserSessionIssuerAttachmentsForRemoteSessionClient, the purge that
-// follows it, exactly: that purge is keyed on the client and its project, and
-// takes every binding the client holds regardless of which project's user
-// session issuer is on the other end. Narrowing this read by the user session
-// issuer's own tenancy instead would drop bindings the purge still deletes.
+// All three run BEFORE that delete, because the derivation locks they feed must
+// precede every row lock. Ordered because callers take one lock per id.
+// For DeleteRemoteSessionClient. Mirrors the purge that follows it, which is
+// keyed on the client and its project and takes every binding the client holds.
 func (q *Queries) ListUserSessionIssuersBoundToProjectClient(ctx context.Context, arg ListUserSessionIssuersBoundToProjectClientParams) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, listUserSessionIssuersBoundToProjectClient, arg.RemoteSessionClientID, arg.ProjectID)
 	if err != nil {
@@ -4310,29 +4292,16 @@ type ListUserSessionIssuersBoundToRemoteIssuerParams struct {
 }
 
 // Every user session issuer reachable from a remote issuer through the client
-// bindings. Its only caller is the issuer migration, which re-points a set of
-// clients onto a new remote issuer and so changes what the servers behind them
-// derive without touching the bindings themselves.
+// bindings. Only caller is the issuer migration, which re-points clients and so
+// changes what the servers behind them derive without touching the bindings.
 //
-// Soft-deleted clients are counted on purpose. The resync derives from the
-// live ones, so a tombstoned client contributes nothing to the value; what it
-// still does is name a user session issuer whose stale value has to be
-// recomputed, and dropping it here would strand exactly the servers whose only
-// client just went away.
+// Soft-deleted clients count on purpose: a tombstoned client still names an
+// issuer whose stale value has to be recomputed.
 //
-// Scoped by organization, not by project. A re-point moves the client itself,
-// so every project behind it derives a new value and all of them have to be
-// recomputed; narrowing to one project would silently leave the rest pointing
-// at the source issuer. Organization is nonetheless a real bound rather than
-// no bound at all, because a source issuer only ever belongs to one
-// organization: both migration surfaces resolve it through an org-scoped
-// lookup, and MigrateToGlobalIssuer explicitly refuses a global source for
-// exactly this reason. The tier is taken from the user session issuer's own
-// tenancy so it matches what the resync will accept, and no id is returned
-// that the resync would then refuse to act on.
+// Scoped by organization, not project: a re-point moves the client itself, so
+// every project behind it derives a new value.
 //
-// Ordered because callers take one advisory lock per returned id: unsorted,
-// two overlapping migrations could acquire them in opposing orders.
+// Ordered because callers take one advisory lock per returned id.
 func (q *Queries) ListUserSessionIssuersBoundToRemoteIssuer(ctx context.Context, arg ListUserSessionIssuersBoundToRemoteIssuerParams) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, listUserSessionIssuersBoundToRemoteIssuer, arg.RemoteSessionIssuerID, arg.OrganizationID)
 	if err != nil {
@@ -4443,36 +4412,21 @@ SELECT pg_advisory_xact_lock(hashtextextended('user_session_issuer_derivation:' 
 
 // Serializes every writer that can change what
 // mcp_servers.remote_session_issuer_id derives to for one user session issuer.
+// LockRemoteSessionIssuerForClientBinding does not cover this: it keys on the
+// REMOTE issuer, and one user session issuer may bind clients across several.
 //
-// LockRemoteSessionIssuerForClientBinding does not cover this. It keys on the
-// REMOTE issuer, and guardSingleClientPerRemoteIssuer deliberately permits one
-// user session issuer to bind clients across several remote issuers, so two
-// writers converging on the same user session issuer through different remote
-// issuers take different keys and never block. Each then recomputes from a
-// snapshot missing the other's binding, and the last commit wins with a value
-// that was never true. The detach paths take no advisory lock at all, so the
-// same race leaves a server naming an issuer with no live binding.
-//
-// The key is salted because the sibling lock hashes a bare uuid into the same
-// advisory key space; without the prefix a user session issuer id could
-// collide with a remote session issuer id and serialize two unrelated writers.
+// The key is salted because the sibling lock hashes bare uuids into the same
+// advisory key space.
 //
 // LOCK ORDER: this must be the FIRST lock a transaction takes, before any
 // mcp_servers, remote_session_clients or binding row lock. DeleteMcpServer
-// locks mcp_servers and then reaches the resync's client rows, while every
-// remotesessions writer goes the other way, so the two orders form a cycle
-// that is only broken if the advisory lock precedes every row lock on both
-// sides. Acquiring it late — inside the resync, say — relocates the deadlock
-// onto this lock rather than removing it. Callers taking more than one MUST
-// sort ascending; LockUserSessionIssuersForRemoteIssuerDerivation does that.
+// locks mcp_servers then reaches the resync's client rows while every
+// remotesessions writer goes the other way; only taking this first breaks the
+// cycle. Callers taking more than one MUST sort ascending.
 //
-// Takes no tenant scope, deliberately. A tenancy predicate here would have to
-// read user_session_issuers, and a row that failed it would yield no row and
-// so silently take NO lock — turning a fail-safe serialization point into a
-// fail-open one whose failure mode is the wrong derived value. The lock is a
-// bare integer with no row behind it: holding one reads nothing, writes
-// nothing and reveals nothing, and every write it guards is separately bounded
-// by the caller's own scope in ResyncMCPServerRemoteSessionIssuers.
+// Takes no tenant scope, deliberately: a tenancy predicate would yield no row
+// for anything it rejects and so silently take NO lock. Every write it guards
+// is separately bounded by the caller's ResyncScope.
 func (q *Queries) LockUserSessionIssuerForRemoteIssuerDerivation(ctx context.Context, userSessionIssuerID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, lockUserSessionIssuerForRemoteIssuerDerivation, userSessionIssuerID)
 	return err
@@ -5062,18 +5016,12 @@ const tryLockUserSessionIssuerForRemoteIssuerDerivation = `-- name: TryLockUserS
 SELECT pg_try_advisory_xact_lock(hashtextextended('user_session_issuer_derivation:' || ($1::uuid)::text, 0))
 `
 
-// Non-blocking form of LockUserSessionIssuerForRemoteIssuerDerivation, for the
-// one caller that has to reach for a derivation lock while already holding
-// LockRemoteSessionIssuerForClientBinding: the issuer migration, covering a
-// binding created before it took the source issuer's lock.
+// Non-blocking form, for the one caller that reaches for a derivation lock
+// while already holding LockRemoteSessionIssuerForClientBinding: the issuer
+// migration. Blocking there would invert the lock order above and deadlock, so
+// it fails as a retryable conflict instead.
 //
-// Blocking there would invert the lock order documented above and deadlock
-// against a writer holding that same derivation lock while waiting on the
-// remote issuer's. Returning false instead lets the migration fail as a
-// retryable conflict, which is the only safe way to want a lock out of order.
-//
-// The key expression must stay byte-identical to the blocking form's; the two
-// name the same lock and a divergence would silently stop serializing them.
+// The key expression must stay byte-identical to the blocking form's.
 func (q *Queries) TryLockUserSessionIssuerForRemoteIssuerDerivation(ctx context.Context, userSessionIssuerID uuid.UUID) (bool, error) {
 	row := q.db.QueryRow(ctx, tryLockUserSessionIssuerForRemoteIssuerDerivation, userSessionIssuerID)
 	var pg_try_advisory_xact_lock bool

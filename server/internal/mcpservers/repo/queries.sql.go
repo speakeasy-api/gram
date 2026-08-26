@@ -879,15 +879,15 @@ FROM resolved
 JOIN user_session_issuers AS usi
   ON usi.id = resolved.user_session_issuer_id
 WHERE s.user_session_issuer_id = resolved.user_session_issuer_id
-  -- Axis 1: the caller's scope. UPDATE ... FROM cannot reference the target
-  -- table in a FROM-item join condition, hence EXISTS rather than a join.
+  -- Axis 1: caller scope. EXISTS because UPDATE ... FROM cannot reference the
+  -- target table in a FROM-item join condition.
   AND EXISTS (SELECT 1
               FROM projects AS caller_project
               WHERE caller_project.id = s.project_id
                 AND caller_project.organization_id = $1::text)
   AND ($2::uuid IS NULL
        OR s.project_id = $2::uuid)
-  -- Axis 2: the issuer's own tenancy must cover the server it stamps.
+  -- Axis 2: the issuer's tenancy must cover the server it stamps.
   AND (s.project_id = usi.project_id
        OR (usi.project_id IS NULL
            AND usi.organization_id IS NOT NULL
@@ -906,62 +906,24 @@ type ResyncMCPServerRemoteSessionIssuersParams struct {
 }
 
 // Recomputes mcp_servers.remote_session_issuer_id from the live client
-// bindings on each named user session issuer, so the column tracks the
-// authorization server an MCP server's upstream actually authenticates
-// against without any caller having to derive it.
+// bindings on each named user session issuer. Exactly one distinct remote
+// issuer stamps it; none or several leave it NULL and readers fail closed.
 //
-// Exactly one distinct remote session issuer across the bound clients stamps
-// it; none or several leave it NULL. Several is representable — AIS-137
-// dropped the one-client-per-user-session-issuer index, so a user session
-// issuer may bind clients across distinct remote issuers — and a scalar column
-// cannot name which, so it names none and the readers fail closed.
+// Clients and issuers are only ever soft-deleted, so `deleted IS FALSE` is the
+// removal signal; the column's ON DELETE SET NULL never fires. `i.deleted IS
+// FALSE` keeps this identical to ListRemoteSessionClientsForUserSessionIssuer,
+// which picks the credential at serve time — the column must never name an
+// issuer that resolver would refuse.
 //
-// Clients are only ever soft-deleted, so `c.deleted IS FALSE` is the removal
-// signal here. The column's own FK is ON DELETE SET NULL, but no application
-// code hard-deletes a remote session issuer; the one hard delete in the tree
-// is the demo seed's DELETE FROM projects, whose cascade takes the mcp_servers
-// rows with it. So SET NULL never has a surviving row to fix up and cannot be
-// relied on to clear a stale value. `i.deleted IS FALSE` is redundant today — every
-// issuer delete is blocked while any live client references it
-// (CountRemoteSessionClientsByIssuerID), under the same advisory lock the
-// client writers take — but it keeps this derivation identical to
-// ListRemoteSessionClientsForUserSessionIssuer, the resolver that actually
-// picks the credential at serve time. The column must never name an issuer
-// that resolver would refuse, so it filters on the same terms rather than
-// inheriting the guarantee from a check in another file.
-//
-// Tenancy is enforced on three independent axes, because the ids in
-// @user_session_issuer_ids are not themselves proof of anything: they are read
-// back from join tables that carry no tenancy column, so a bug upstream could
-// put any id in the array.
-//
-//  1. The CALLER's scope. @organization_id is required and every written
-//     server must sit in a project of that organization; project_id narrows
-//     further when the caller has one. Callers that legitimately span
-//     projects (the org-admin client delete, both issuer migrations) pass
-//     only the organization and are correct; no caller may pass neither.
-//  2. Which servers the issuer may write — the issuer must own the server's
-//     project directly, or (org-tier issuer, project_id NULL) own the
-//     organization that project belongs to. Without the second arm an
-//     org-tier issuer matches nothing, which fails closed for stamping but
-//     OPEN for clearing: a value written while the issuer was project-scoped
-//     could never be cleared again.
-//  3. Which clients count — a client is only visible to an issuer in its own
-//     tenant, mirroring ListRemoteSessionClientsForUserSessionIssuer. Without
-//     this the join table alone decides, and a binding to another project's
-//     client stamps that project's issuer onto this project's server.
-//
-// Axis 2 alone was the original design and is not sufficient: it constrains
-// the relationship between a server and the issuer it already names, which
-// every writer establishes in one project in one transaction, so it is
-// vacuous today and silently becomes a no-op the moment an org-tier issuer
-// appears. It says nothing about who asked.
+// The ids arrive from untenanted join tables and prove nothing on their own,
+// so tenancy is enforced on three axes: the caller's own scope; the issuer's
+// tenancy covering the server it stamps, including the org-tier arm, without
+// which clearing fails open; and which clients count, the issuer's tenant only.
 //
 // PRECONDITION: the caller holds
 // LockUserSessionIssuerForRemoteIssuerDerivation for every id in the array,
-// taken before any row lock in the transaction. Without it two writers on one
-// user session issuer compute from snapshots missing each other's binding and
-// the last commit wins with a value that was never true.
+// taken before any row lock. Without it two writers compute from snapshots
+// missing each other's binding and last commit wins.
 func (q *Queries) ResyncMCPServerRemoteSessionIssuers(ctx context.Context, arg ResyncMCPServerRemoteSessionIssuersParams) (int64, error) {
 	result, err := q.db.Exec(ctx, resyncMCPServerRemoteSessionIssuers, arg.OrganizationID, arg.ProjectID, arg.UserSessionIssuerIds)
 	if err != nil {

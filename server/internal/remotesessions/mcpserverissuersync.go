@@ -1,23 +1,14 @@
-// Keeps mcp_servers.remote_session_issuer_id tracking the client bindings it
-// is derived from. The column denormalises "which authorization server does
-// this server's upstream authenticate against", which is otherwise only
-// reachable by walking user_session_issuer -> bindings -> clients -> issuer.
-// Gateway token routing needs it as a lookup key, and a join at read time
-// cannot answer it per member without that walk.
+// Keeps mcp_servers.remote_session_issuer_id tracking the client bindings it is
+// derived from, so gateway token routing can use it as a lookup key.
 //
-// Every path that creates, moves, or removes a client binding has to call
-// this, in its own transaction, or the column silently rots: clients and
-// issuers are only ever soft-deleted, so the FK's ON DELETE SET NULL never
-// fires and nothing else clears a stale value.
+// Every path that creates, moves, or removes a client binding must call this in
+// its own transaction or the column rots: clients and issuers are only ever
+// soft-deleted, so the FK's ON DELETE SET NULL never fires.
 //
-// Two rules bind every caller. Both exist because a wrong value here forwards
-// a user's bearer token to the wrong third-party upstream.
-//
-//   - Pass the caller's own tenant scope. The ids come from join tables with
-//     no tenancy column, so they are not proof of anything on their own.
-//   - Take LockUserSessionIssuersForRemoteIssuerDerivation over the same ids
-//     FIRST, before any row lock in the transaction. See that query's comment
-//     for why the position matters and not just the lock.
+// Two rules bind every caller, because a wrong value forwards a user's bearer
+// to the wrong upstream: pass your own tenant scope, and take
+// LockUserSessionIssuersForRemoteIssuerDerivation over the same ids FIRST,
+// before any row lock.
 
 package remotesessions
 
@@ -58,22 +49,13 @@ func OrganizationResyncScope(organizationID string) ResyncScope {
 
 // LockUserSessionIssuersForRemoteIssuerDerivation serializes this transaction
 // against every other writer that could change what those user session issuers
-// derive. Locks are taken in ascending id order so two callers with
-// overlapping sets cannot deadlock against each other.
+// derive. Ascending id order so overlapping callers cannot deadlock.
 //
-// Call this before taking any row lock in the transaction, and over the same
-// ids the later resync will be given.
+// Call before taking any row lock, over the same ids the resync will get.
 //
-// Takes no tenant scope and does not need one. It acquires advisory locks on a
-// salted hash of each id and nothing else: no row is read, none is written,
-// and a lock's existence is not observable to anyone who is not already
-// contending for the same id. Locking an id from outside the caller's tenancy
-// therefore costs that tenant at most the contention of one transaction that,
-// on every path here, aborts a statement or two later on its own ownership
-// check. What the lock protects against — a wrong derived value — is bounded
-// separately, by the caller's ResyncScope. Scoping the lock query itself would
-// be actively worse: a tenancy predicate yields no row for anything it rejects,
-// so the lock would be silently skipped rather than refused.
+// Takes no tenant scope and does not need one: it locks a salted hash and
+// nothing else. Scoping it would be worse — a tenancy predicate yields no row
+// for what it rejects, so the lock would be silently skipped.
 func LockUserSessionIssuersForRemoteIssuerDerivation(ctx context.Context, dbtx repo.DBTX, userIssuerIDs []uuid.UUID) error {
 	q := repo.New(dbtx)
 	for _, id := range orderedDerivationLockIDs(userIssuerIDs) {
@@ -85,12 +67,9 @@ func LockUserSessionIssuersForRemoteIssuerDerivation(ctx context.Context, dbtx r
 	return nil
 }
 
-// TryLockUserSessionIssuersForRemoteIssuerDerivation is the non-blocking form,
-// reporting false the moment one of the locks is held elsewhere. Only for a
-// caller that must reach for a derivation lock while already holding a lock
-// that other derivation-lock holders wait on, where blocking would deadlock;
-// everywhere else the blocking form is correct and this one would turn routine
-// contention into a spurious failure.
+// TryLockUserSessionIssuersForRemoteIssuerDerivation is the non-blocking form.
+// Only for a caller that must reach for a derivation lock while holding a lock
+// other derivation-lock holders wait on; elsewhere the blocking form is correct.
 func TryLockUserSessionIssuersForRemoteIssuerDerivation(ctx context.Context, dbtx repo.DBTX, userIssuerIDs []uuid.UUID) (bool, error) {
 	q := repo.New(dbtx)
 	for _, id := range orderedDerivationLockIDs(userIssuerIDs) {
@@ -107,9 +86,8 @@ func TryLockUserSessionIssuersForRemoteIssuerDerivation(ctx context.Context, dbt
 }
 
 // orderedDerivationLockIDs sorts and de-duplicates a lock set. Ascending order
-// is what keeps two callers with overlapping sets from deadlocking against each
-// other, and it has to hold for the try-form too: a partial acquisition there
-// is still held for the rest of the transaction.
+// prevents deadlock between overlapping callers, and must hold for the try-form
+// too: a partial acquisition is still held for the rest of the transaction.
 func orderedDerivationLockIDs(userIssuerIDs []uuid.UUID) []uuid.UUID {
 	ordered := slices.Clone(userIssuerIDs)
 	slices.SortFunc(ordered, func(a, b uuid.UUID) int { return bytes.Compare(a[:], b[:]) })
@@ -118,19 +96,14 @@ func orderedDerivationLockIDs(userIssuerIDs []uuid.UUID) []uuid.UUID {
 
 // ResyncMCPServerRemoteSessionIssuers recomputes the denormalised issuer for
 // every MCP server carrying one of userIssuerIDs that also falls inside scope.
-// Safe to call with issuers that no server uses, and safe to call when nothing
-// changed — the statement only writes rows whose value actually differs.
+// Safe with issuers no server uses, and when nothing changed — the statement
+// only writes rows whose value differs.
 //
-// Callers pass the issuers whose bindings they touched. For a detach or a
-// delete that means capturing them before the rows go, since afterwards there
-// is nothing left to walk. Ids outside scope are ignored rather than rejected:
-// the sets are read from untenanted join tables, so a foreign id is a fact
-// about the data, not a caller error.
+// Callers pass the issuers whose bindings they touched, captured before a
+// detach or delete removes them. Ids outside scope are ignored rather than
+// rejected: they come from untenanted join tables.
 func ResyncMCPServerRemoteSessionIssuers(ctx context.Context, dbtx mcpserversrepo.DBTX, scope ResyncScope, userIssuerIDs []uuid.UUID) error {
-	// Ahead of the empty-set shortcut: a caller that forgot its scope is a bug
-	// whichever set it happens to be holding, and letting the empty case
-	// through would make the guarantee depend on the data rather than on the
-	// call.
+	// Ahead of the empty-set shortcut, so the guarantee does not depend on data.
 	if scope.organizationID == "" {
 		return fmt.Errorf("resync mcp server remote session issuers: no organization scope")
 	}

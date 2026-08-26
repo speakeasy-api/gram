@@ -152,9 +152,8 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 
 	txRepo := repo.New(dbtx)
 
-	// Before validateNewClientIssuers, which takes the remote-issuer advisory
-	// lock: the derivation lock is the first lock in every transaction that can
-	// change what an MCP server derives, advisory locks included.
+	// Before validateNewClientIssuers takes the remote-issuer advisory lock: the
+	// derivation lock is first in every transaction, advisory locks included.
 	if err := LockUserSessionIssuersForRemoteIssuerDerivation(ctx, dbtx, userIssuerIDs); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock user session issuers for remote issuer derivation").LogError(ctx, logger)
 	}
@@ -219,8 +218,7 @@ func (s *Service) CreateCimd(ctx context.Context, payload *gen.CreateCimdPayload
 
 	txRepo := repo.New(dbtx)
 
-	// See the create path: derivation lock first, before the remote-issuer
-	// advisory lock validateNewClientIssuers takes.
+	// Derivation lock first, as on the create path.
 	if err := LockUserSessionIssuersForRemoteIssuerDerivation(ctx, dbtx, userIssuerIDs); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock user session issuers for remote issuer derivation").LogError(ctx, logger)
 	}
@@ -607,8 +605,8 @@ func (s *Service) AttachUserSessionIssuer(ctx context.Context, payload *gen.Atta
 
 	txRepo := repo.New(dbtx)
 
-	// First lock in the transaction, before the client read and before the
-	// remote-issuer advisory lock the guard below takes.
+	// First lock in the transaction, before the client read and the guard's
+	// remote-issuer advisory lock.
 	if err := LockUserSessionIssuersForRemoteIssuerDerivation(ctx, dbtx, []uuid.UUID{userIssuerID}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock user session issuers for remote issuer derivation").LogError(ctx, logger)
 	}
@@ -699,9 +697,9 @@ func (s *Service) DetachUserSessionIssuer(ctx context.Context, payload *gen.Deta
 
 	txRepo := repo.New(dbtx)
 
-	// First lock in the transaction. This path takes no other lock at all,
-	// which is why two concurrent detaches on one user session issuer could
-	// each recompute from a snapshot still holding the other's binding.
+	// First lock in the transaction, and this path takes no other: without it two
+	// concurrent detaches each recompute from a snapshot holding the other's
+	// binding.
 	if err := LockUserSessionIssuersForRemoteIssuerDerivation(ctx, dbtx, []uuid.UUID{userIssuerID}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock user session issuers for remote issuer derivation").LogError(ctx, logger)
 	}
@@ -829,19 +827,14 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 
 	txRepo := repo.New(dbtx)
 
-	// Read the bindings before anything removes them: this path, unlike the
-	// organization and platform deletes, purges the attachments outright, so
-	// afterwards there is nothing left to derive the affected servers' issuer
-	// from. The read is scoped to this project's own clients, which is exactly
-	// the purge's own predicate — narrowing it further, to this project's user
-	// session issuers, would destroy bindings it never reported and strand
-	// those servers on a value nothing can recompute.
+	// Read the bindings before the purge removes them — this path, unlike the
+	// organization and platform deletes, purges attachments outright. Scoped to
+	// the purge's own predicate; narrowing further would destroy bindings it
+	// never reported.
 	//
-	// It still runs before the delete establishes that the caller owns the
-	// client, because the derivation locks below have to precede every row lock
-	// and cannot be taken without the set. Nothing is disclosed by that: a
-	// client this project does not own yields the empty set, and the delete
-	// below is what answers the caller either way.
+	// Runs before the delete proves ownership, because the derivation locks must
+	// precede every row lock. Discloses nothing: an unowned client yields the
+	// empty set and the delete answers the caller either way.
 	boundUserIssuerIDs, err := txRepo.ListUserSessionIssuersBoundToProjectClient(ctx, repo.ListUserSessionIssuersBoundToProjectClientParams{
 		RemoteSessionClientID: clientID,
 		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),

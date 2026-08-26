@@ -797,17 +797,15 @@ func (s *Service) MigrateToGlobalIssuer(ctx context.Context, payload *adminrsgen
 		return nil, err
 	}
 
-	// A tenant source issuer belongs to exactly one organization — this surface
-	// refuses a global source precisely so that stays true — and that is what
-	// bounds the resync below.
+	// A tenant source issuer belongs to exactly one organization, which is what
+	// bounds the resync below; this surface refuses a global source.
 	affectedOrganizationID, err := resolveIssuerOrganizationID(ctx, txRepo, source)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "resolve owning organization for source issuer").LogError(ctx, logger)
 	}
 
-	// Before lockIssuersForMigration: every other writer takes the derivation
-	// lock before the remote-issuer one, and a migration going the other way
-	// would deadlock against a concurrent client create or attach.
+	// Before lockIssuersForMigration: the reverse order deadlocks against a
+	// concurrent client create or attach.
 	affectedUserIssuerIDs, err := prepareIssuerMigrationResync(ctx, dbtx, txRepo, source.ID, affectedOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "prepare issuer migration resync").LogError(ctx, logger)
@@ -837,11 +835,9 @@ func (s *Service) MigrateToGlobalIssuer(ctx context.Context, payload *adminrsgen
 	}
 
 	// The source now has no active clients, so the delete guard that the
-	// tenant-facing deletes apply is satisfied by construction. Nothing can add
-	// one back before the commit either: validateNewClientIssuers takes the
-	// source issuer's client-binding lock — the one held here — before it so
-	// much as reads the issuer, so a racing create either 404s on the tombstone
-	// or is still waiting.
+	// tenant-facing deletes apply is satisfied by construction, and nothing can
+	// add one back: validateNewClientIssuers takes the client-binding lock held
+	// here before reading the issuer, so a racing create 404s or waits.
 	deleted, err := txRepo.DeleteTenantRemoteSessionIssuer(ctx, source.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "soft-delete migrated remote session issuer").LogError(ctx, logger)
@@ -1098,18 +1094,11 @@ func (s *Service) DeleteGlobalClient(ctx context.Context, payload *adminrsgen.De
 		return oops.E(oops.CodeUnexpected, err, "delete global remote session client").LogError(ctx, logger)
 	}
 
-	// A global client carries no bindings when created, and no tenant can add
-	// one afterwards: every attach resolves its client through
-	// GetRemoteSessionClientByID, whose non-project arm requires
-	// c.organization_id = @organization_id and so never matches the NULL a
-	// global client carries. So there is nothing here to resync — and no
-	// tenant to scope a resync to, this being the one caller with neither a
-	// project nor an organization.
-	//
-	// Checked rather than assumed, because that invariant lives in a query in
-	// another file and the join table has no tenancy column to enforce it. A
-	// binding here would leave MCP servers in some organization deriving from
-	// a client that just went away, with nothing able to recompute them.
+	// A global client carries no bindings and no tenant can add one, so there is
+	// nothing to resync — and no tenant to scope a resync to. Checked rather
+	// than assumed: the invariant lives in another file's query and the join
+	// table has no tenancy column. A row here strands MCP servers on a value
+	// nothing can recompute.
 	boundUserIssuerIDs, err := txRepo.ListUserSessionIssuersBoundToClient(ctx, deleted.ID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "list user session issuers bound to client").LogError(ctx, logger)

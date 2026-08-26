@@ -1,7 +1,7 @@
 // mcp_servers.remote_session_issuer_id is derived, so what matters is that it
-// tracks the bindings through every shape they can take — including the ones
-// where nothing deletes a row and the value would otherwise go stale, and the
-// ones where a row exists but belongs to somebody else.
+// tracks the bindings through every shape: the ones where nothing deletes a row
+// and the value would go stale, and the ones where a row belongs to somebody
+// else.
 
 package remotesessions_test
 
@@ -24,11 +24,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
-// seedServerOnIssuer creates a remote-backed MCP server carrying userIssuerID,
-// the shape every proxied server has: mcpservers mints the user session issuer
-// unconditionally, which is why the column has to coexist with it. projectID
-// and userIssuerID are independent so a test can build the cross-tenant shape
-// the FK does not forbid.
+// seedServerOnIssuer creates a remote-backed MCP server carrying userIssuerID —
+// the shape every proxied server has, since mcpservers mints the issuer
+// unconditionally. projectID and userIssuerID are independent so a test can
+// build the cross-tenant shape the FK does not forbid.
 func seedServerOnIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, userIssuerID uuid.UUID, slug string) uuid.UUID {
 	t.Helper()
 
@@ -54,9 +53,8 @@ func seedServerOnIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, p
 }
 
 // createOrgTierUserSessionIssuer creates an organization-tier user session
-// issuer (project_id NULL). No repo method mints one yet — the column only
-// became nullable recently — but the resync has to handle the shape, because
-// the arm that skips it also skips clearing a value written earlier.
+// issuer (project_id NULL). No repo method mints one yet, but the resync must
+// handle the shape: the arm that skips it also skips clearing.
 func createOrgTierUserSessionIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID, slug string) uuid.UUID {
 	t.Helper()
 
@@ -188,10 +186,9 @@ func TestResyncMCPServerRemoteSessionIssuers(t *testing.T) {
 	t.Run("another project's client cannot stamp this project's server", func(t *testing.T) {
 		t.Parallel()
 
-		// The join table carries no tenancy column, so a binding between this
-		// project's user session issuer and another project's client is
-		// representable. Only the derivation's own client-visibility rule keeps
-		// that client's issuer off this project's server.
+		// The join table has no tenancy column, so this cross-project binding is
+		// representable. Only the client-visibility rule keeps that client's
+		// issuer off this project's server.
 		userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-sync-xclient")
 		serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "sync-xclient")
 
@@ -206,11 +203,9 @@ func TestResyncMCPServerRemoteSessionIssuers(t *testing.T) {
 	t.Run("another project's issuer cannot stamp this project's server", func(t *testing.T) {
 		t.Parallel()
 
-		// mcp_servers_user_session_issuer_id_fkey is a plain single-column FK,
-		// so a server in one project can reference an issuer in another. This
-		// builds exactly that row: without the issuer-tenancy arm the resync
-		// would match it on user_session_issuer_id alone and stamp across the
-		// boundary.
+		// The FK is single-column, so a server in one project can reference an
+		// issuer in another. Without the issuer-tenancy arm the resync would
+		// match on user_session_issuer_id alone and stamp across the boundary.
 		otherProjectID := createProject(t, ctx, ti.conn, "sync-xissuer-project")
 		foreignIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, otherProjectID, "usi-sync-xissuer")
 		_, foreignRemoteIssuerID := seedActiveClient(t, ctx, ti.conn, otherProjectID, foreignIssuerID, orgID, "rsi-sync-xissuer")
@@ -269,10 +264,8 @@ func TestResyncMCPServerRemoteSessionIssuers(t *testing.T) {
 	t.Run("an organization-tier issuer is stamped and cleared", func(t *testing.T) {
 		t.Parallel()
 
-		// project_id is NULL here, so the plain s.project_id = usi.project_id
-		// arm evaluates to NULL and matches nothing. That fails closed for
-		// stamping but open for clearing, which is the dangerous half: a value
-		// written while the issuer was project-scoped could never go away.
+		// project_id is NULL, so s.project_id = usi.project_id matches nothing.
+		// Fails closed for stamping but open for clearing — the dangerous half.
 		orgIssuerID := createOrgTierUserSessionIssuer(t, ctx, ti.conn, orgID, "usi-sync-orgtier")
 		serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, orgIssuerID, "sync-orgtier")
 
@@ -333,11 +326,9 @@ func TestResyncMCPServerRemoteSessionIssuers(t *testing.T) {
 }
 
 // TestListUserSessionIssuersBoundToClient_Scoping covers the reads the three
-// client deletes take before they have proven anything: they run ahead of the
-// ownership check because the derivation locks they feed must precede every row
-// lock, so the tenancy has to be in the query itself. The platform-admin form
-// is deliberately unscoped, having no tenant to scope to, and is an integrity
-// assertion rather than a resync input.
+// client deletes take before proving ownership, so the tenancy has to live in
+// the query. The platform-admin form is deliberately unscoped — an integrity
+// assertion, not a resync input.
 func TestListUserSessionIssuersBoundToClient_Scoping(t *testing.T) {
 	t.Parallel()
 

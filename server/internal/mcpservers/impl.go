@@ -802,13 +802,10 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 
 	txRepo := repo.New(dbtx)
 
-	// LOCK ORDER. This transaction is the only one that locks mcp_servers and
-	// then reaches remote_session_clients (below, through the issuer cascade in
-	// DetachUserSessionIssuerFromClients). Every remotesessions writer goes the
-	// other way, so the two orders form a cycle unless the user session
-	// issuer's derivation lock is taken here first, ahead of every row lock.
-	// Taking it later — even immediately before the resync — only relocates the
-	// deadlock onto this lock.
+	// LOCK ORDER. This is the only transaction that locks mcp_servers and then
+	// reaches remote_session_clients, through the issuer cascade below. Every
+	// remotesessions writer goes the other way, so the derivation lock must be
+	// taken here ahead of every row lock or the two orders form a cycle.
 	//
 	// That needs the issuer id before the row lock that would confirm it, so
 	// read it unlocked and re-check under the lock below.
@@ -822,8 +819,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 			return oops.E(oops.CodeUnexpected, err, "lock user session issuers for remote issuer derivation").LogError(ctx, logger)
 		}
 	case errors.Is(err, pgx.ErrNoRows):
-		// Leave the NotFound to the locked read below, which is the one that
-		// decides whether this server exists for this caller.
+		// Leave the NotFound to the locked read below.
 	default:
 		return oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, logger)
 	}
@@ -856,12 +852,10 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		return oops.E(oops.CodeUnexpected, err, "lock mcp server").LogError(ctx, logger)
 	}
 
-	// The unlocked pre-read above decided which derivation lock to take, and a
-	// concurrent update can attach an issuer to a server that had none. Bail
-	// rather than continue holding the wrong lock: acquiring the right one now
-	// would be the very out-of-order acquisition this ordering exists to
-	// prevent. Retrying the delete succeeds, since the issuer is then visible
-	// to the pre-read.
+	// A concurrent update can attach an issuer to a server the pre-read saw
+	// without one. Bail rather than hold the wrong lock: taking the right one
+	// now is the out-of-order acquisition this ordering exists to prevent. A
+	// retry succeeds, the issuer being visible to the pre-read by then.
 	if lockedServer.UserSessionIssuerID != preLockServer.UserSessionIssuerID {
 		return oops.E(oops.CodeConflict, nil, "mcp server changed while preparing the delete; retry").LogError(ctx, logger)
 	}

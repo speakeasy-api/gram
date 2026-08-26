@@ -1,12 +1,9 @@
 // The issuer migration re-points clients without touching their bindings, so
-// nothing but its own resync updates mcp_servers.remote_session_issuer_id for
-// the servers behind them. It reads that set before it takes the source
-// issuer's client-binding lock — it has to, the derivation locks it takes with
-// it must precede every other lock — which leaves a window a concurrent attach
-// can commit inside. These tests drive that window directly rather than racing
-// for it: the migration is parked on a lock the test holds, and the test
-// performs the attach while it is parked, so the interleaving is fixed rather
-// than hoped for.
+// only its own resync updates the servers behind them. It must read that set
+// before taking the source's client-binding lock, which leaves a window a
+// concurrent attach can commit inside. These tests drive the window rather than
+// racing for it: the migration is parked on a lock the test holds while the
+// test performs the attach, so the interleaving is fixed.
 
 package remotesessions_test
 
@@ -82,11 +79,10 @@ func newMigrationWindow(t *testing.T, ctx context.Context, ti *testInstance, pre
 	return w
 }
 
-// attachInsideWindow is the concurrent writer, replayed at the exact point the
-// window opens: it binds the still-unmigrated client to a user session issuer
-// the migration's early read did not return, and recomputes that issuer the way
-// its own handler does — to the source, which is what the client points at
-// until the re-point lands.
+// attachInsideWindow is the concurrent writer, replayed where the window opens:
+// it binds the unmigrated client to an issuer the early read missed and
+// recomputes it as its handler would — to the source, which is what the client
+// points at until the re-point lands.
 func (w migrationWindow) attachInsideWindow(t *testing.T, ctx context.Context, ti *testInstance) {
 	t.Helper()
 
@@ -99,12 +95,10 @@ func (w migrationWindow) attachInsideWindow(t *testing.T, ctx context.Context, t
 		"the racing writer stamps the source, which is still what its client points at")
 }
 
-// waitForDerivationLock blocks until userIssuerID's derivation lock is held by
-// somebody else, which for these tests means the migration has finished its
-// early read and is on its way to the issuer lock the test is holding. Probing
-// with the non-blocking form is what makes that a fact rather than a guess: a
-// sleep would only establish that the migration had not finished, not where it
-// had got to.
+// waitForDerivationLock blocks until userIssuerID's derivation lock is held
+// elsewhere, meaning the migration finished its early read and is heading for
+// the issuer lock the test holds. Probing with the non-blocking form makes that
+// a fact; a sleep would only show the migration had not finished.
 func waitForDerivationLock(t *testing.T, ctx context.Context, conn *pgxpool.Pool, userIssuerID uuid.UUID) {
 	t.Helper()
 
@@ -134,12 +128,10 @@ func awaitMigration(t *testing.T, done <-chan error) error {
 }
 
 // TestMigrateIssuer_ResyncsBindingsAddedBeforeTheIssuerLock is the regression
-// test for the window. A binding committed after the migration's early read but
-// before it holds the source issuer's client-binding lock used to be resynced
-// by nobody: its own writer stamps the pre-re-point source and commits first,
-// and the migration then re-points the client without recomputing it. The
-// server was left naming an issuer the same transaction went on to soft-delete,
-// which the runtime resolver skips, so it stopped resolving entirely.
+// test for the window. A binding committed inside it used to be resynced by
+// nobody: its writer stamps the pre-re-point source and commits first, then the
+// migration re-points without recomputing. The server was left naming an issuer
+// the same transaction soft-deleted, so it stopped resolving.
 func TestMigrateIssuer_ResyncsBindingsAddedBeforeTheIssuerLock(t *testing.T) {
 	t.Parallel()
 
@@ -169,12 +161,10 @@ func TestMigrateIssuer_ResyncsBindingsAddedBeforeTheIssuerLock(t *testing.T) {
 }
 
 // TestMigrateIssuer_ConflictsWhenAWindowBindingIsLockedElsewhere covers the
-// other half of the same fix. The migration cannot wait for a derivation lock
-// while holding the client-binding lock every derivation-lock holder waits on —
-// that is the deadlock the global lock order exists to prevent — so it takes
-// the window's new ids without blocking and gives up when one is held. The
-// giving up has to be a conflict the caller can retry, and the retry has to
-// work, or the fix would just trade a stale value for a stuck migration.
+// other half. The migration cannot wait for a derivation lock while holding the
+// lock those holders wait on, so it takes the window's ids without blocking and
+// gives up when one is held. That has to surface as a retryable conflict, and
+// the retry has to work, or the fix trades a stale value for a stuck migration.
 func TestMigrateIssuer_ConflictsWhenAWindowBindingIsLockedElsewhere(t *testing.T) {
 	t.Parallel()
 
