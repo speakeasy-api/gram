@@ -339,7 +339,7 @@ func runReplyPoint(
 			}
 			for replyIndex, lane := range lanes {
 				reply := syntheticReply(scanID, lane, cfg.findings, replyIndex)
-				if writeErr := writer.Write(pointCtx, inbox.ReplyURN(scanID), reply); writeErr != nil {
+				if writeErr := writer.Write(pointCtx, inbox.URN(scanID), reply); writeErr != nil {
 					writerErrors.Add(1)
 					return
 				}
@@ -432,7 +432,7 @@ func runPauseProbe(
 		scanID := fmt.Sprintf("pause-%d", scan)
 		go func() {
 			defer writers.Done()
-			if writeErr := writer.Write(pointCtx, inbox.ReplyURN(scanID), syntheticReply(scanID, lane, cfg.findings, 0)); writeErr != nil {
+			if writeErr := writer.Write(pointCtx, inbox.URN(scanID), syntheticReply(scanID, lane, cfg.findings, 0)); writeErr != nil {
 				writerErrors.Add(1)
 				return
 			}

@@ -17,7 +17,7 @@ func TestWriterSurfacesInTransactionCommandFailure(t *testing.T) {
 	te := setupInboxTest(t, "replica-writer-txn")
 	require.NoError(t, te.client.Set(t.Context(), InboxKey("replica-writer-txn"), "scalar", 0).Err())
 
-	err := te.writer.Write(t.Context(), te.inbox.ReplyURN("scan-txn"), testReply("scan-txn", gitleaksLane, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK))
+	err := te.writer.Write(t.Context(), te.inbox.URN("scan-txn"), testReply("scan-txn", gitleaksLane, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK))
 	require.Error(t, err)
-	require.ErrorContains(t, err, "write enforcement reply")
+	require.ErrorContains(t, err, "write reply")
 }

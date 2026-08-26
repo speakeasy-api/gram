@@ -94,9 +94,9 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 	}
 	scanID := scanUUID.String()
 	started := time.Now()
-	w, release, err := d.inbox.register(scanID, request.Lanes)
+	w, release, err := d.inbox.Register(scanID, request.Lanes)
 	if err != nil {
-		return Outcome{}, err
+		return Outcome{}, fmt.Errorf("register enforcement waiter: %w", err)
 	}
 	defer release()
 
@@ -112,7 +112,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 				ProjectId:      new(request.ProjectID),
 				OrganizationId: new(request.OrganizationID),
 				CreatedAt:      new(createdAt),
-				ReplyUrn:       new(d.inbox.ReplyURN(scanID)),
+				ReplyUrn:       new(d.inbox.URN(scanID)),
 				Content:        new(request.Content),
 			}.Build()
 			results = append(results, d.gitleaksPub.Publish(waitCtx, enforcement))
@@ -124,13 +124,21 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 		_, err := result.Get(waitCtx)
 		switch {
 		case errors.Is(err, context.DeadlineExceeded):
-			return d.inbox.awaitRegistered(waitCtx, scanID, w, started)
+			return d.await(waitCtx, scanID, w, started)
 		case err != nil:
 			return Outcome{}, fmt.Errorf("publish enforcement request: %w", err)
 		}
 	}
 
-	return d.inbox.awaitRegistered(waitCtx, scanID, w, started)
+	return d.await(waitCtx, scanID, w, started)
+}
+
+func (d *Dispatcher) await(ctx context.Context, scanID string, w *Waiter, started time.Time) (Outcome, error) {
+	outcome, err := d.inbox.AwaitRegistered(ctx, scanID, w, started)
+	if err != nil {
+		return outcome, fmt.Errorf("await enforcement replies: %w", err)
+	}
+	return outcome, nil
 }
 
 // Close flushes and stops the dispatcher's publishers.
