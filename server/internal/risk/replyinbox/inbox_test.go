@@ -170,11 +170,11 @@ func TestReplyOverflowingWaiterBufferIsCountedAsOrphan(t *testing.T) {
 
 	reply, err := proto.Marshal(testReply("scan-overflow", gitleaksLane, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK))
 	require.NoError(t, err)
-	for range cap(w.done) + 1 {
+	for range cap(w.reply) + 1 {
 		te.inbox.route(t.Context(), string(reply))
 	}
 
-	require.Len(t, w.done, cap(w.done))
+	require.Len(t, w.reply, cap(w.reply))
 	require.Equal(t, uint64(1), te.inbox.Snapshot().OrphanedReplies)
 }
 

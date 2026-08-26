@@ -144,7 +144,7 @@ type Inbox struct {
 // dropping all happen on the awaiting goroutine.
 type waiter struct {
 	lanes map[Lane]struct{}
-	done  chan *riskv1.EnforcementReply
+	reply chan *riskv1.EnforcementReply
 }
 
 type inboxMetrics struct {
@@ -340,7 +340,7 @@ func (i *Inbox) register(scanID string, lanes []Lane) (*waiter, func(), error) {
 	// blocks, and overflow beyond the slack is dropped and counted.
 	w := &waiter{
 		lanes: requested,
-		done:  make(chan *riskv1.EnforcementReply, len(lanes)+duplicateReplySlack),
+		reply: make(chan *riskv1.EnforcementReply, len(lanes)+duplicateReplySlack),
 	}
 	if _, exists := i.waiters.LoadOrStore(scanID, w); exists {
 		return nil, nil, fmt.Errorf("scan %s: %w", scanID, ErrDuplicateWaiter)
@@ -358,7 +358,7 @@ func (i *Inbox) awaitRegistered(ctx context.Context, scanID string, w *waiter, s
 		i.metrics.roundTrip.Record(ctx, time.Since(started).Seconds())
 	}()
 
-	// The router only sends raw replies into w.done; this loop owns all
+	// The router only sends raw replies into w.reply; this loop owns all
 	// per-scan state. It folds one reply per distinct requested lane,
 	// refuses unrequested lanes (counted as orphans), and drops duplicate
 	// redeliveries, exiting once every lane has answered.
@@ -375,7 +375,7 @@ func (i *Inbox) awaitRegistered(ctx context.Context, scanID string, w *waiter, s
 		case <-i.shutdown:
 			span.SetStatus(codes.Error, "reply inbox closed")
 			return Outcome{ByLane: byLane, Complete: false, Deadline: false}, fmt.Errorf("await enforcement replies: reply inbox closed")
-		case reply := <-w.done:
+		case reply := <-w.reply:
 			lane := Lane{Scanner: reply.GetScanner(), PolicyID: reply.GetPolicyId()}
 			if _, requested := w.lanes[lane]; !requested {
 				i.recordOrphan(ctx)
@@ -542,7 +542,7 @@ func (i *Inbox) route(ctx context.Context, raw string) {
 		return
 	}
 	select {
-	case w.done <- reply:
+	case w.reply <- reply:
 	default:
 		// The buffer absorbs the lane count plus duplicate slack; overflow
 		// means a redelivery storm and dropping is the safe disposition.
