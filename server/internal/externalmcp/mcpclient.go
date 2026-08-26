@@ -332,6 +332,12 @@ type authRoundTripper struct {
 }
 
 func (rt *authRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	// Configured headers are operator-supplied and are not yet reserved against
+	// the protocol's own header names, so a definition naming Mcp-Method would
+	// overwrite the SDK's value below. Classify the request from what the SDK
+	// sent, before that can happen.
+	discoverProbe := req.Header.Get(headerMCPMethod) == methodServerDiscover
+
 	if rt.authorization != "" || len(rt.headers) > 0 {
 		req = req.Clone(req.Context())
 		if rt.authorization != "" {
@@ -342,7 +348,7 @@ func (rt *authRoundTripper) RoundTrip(req *http.Request) (*http.Response, error)
 		}
 	}
 
-	if req.Header.Get(headerMCPMethod) == methodServerDiscover {
+	if discoverProbe {
 		req = req.WithContext(context.WithValue(req.Context(), discoverProbeContextKey{}, true))
 	}
 

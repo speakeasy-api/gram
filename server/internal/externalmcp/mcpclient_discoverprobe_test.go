@@ -78,7 +78,7 @@ func (h *handshakeRecorder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func newDiscoverProbeClient(t *testing.T, handler http.Handler) (*Client, error) {
+func newDiscoverProbeClient(t *testing.T, handler http.Handler, headers map[string]string) (*Client, error) {
 	t.Helper()
 
 	server := httptest.NewServer(handler)
@@ -95,7 +95,7 @@ func newDiscoverProbeClient(t *testing.T, handler http.Handler) (*Client, error)
 		policy,
 		server.URL,
 		types.TransportTypeStreamableHTTP,
-		&ClientOptions{DisableRetries: false},
+		&ClientOptions{DisableRetries: false, Headers: headers},
 	)
 }
 
@@ -114,7 +114,7 @@ func TestNewClientDoesNotRetryRejectedDiscoverProbe(t *testing.T) {
 		return 0
 	})
 
-	client, err := newDiscoverProbeClient(t, recorder)
+	client, err := newDiscoverProbeClient(t, recorder, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = client.Close() })
 
@@ -138,10 +138,55 @@ func TestNewClientRetriesNonDiscoverFailures(t *testing.T) {
 		}
 	})
 
-	client, err := newDiscoverProbeClient(t, recorder)
+	client, err := newDiscoverProbeClient(t, recorder, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = client.Close() })
 
 	require.Equal(t, 1, recorder.attemptsFor(methodServerDiscover), "the capability probe must not be retried")
 	require.Equal(t, 2, recorder.attemptsFor("initialize"), "a failed legacy handshake must be retried")
+}
+
+// Configured headers are operator-supplied and are not reserved against the
+// protocol's own header names, so a header definition may name Mcp-Method. The
+// probe must still be recognized from what the SDK sent rather than from the
+// overwritten value, or the exemption silently stops applying.
+func TestNewClientClassifiesDiscoverProbeBeforeConfiguredHeaders(t *testing.T) {
+	t.Parallel()
+
+	recorder := newHandshakeRecorder(func(method string, _ int) int {
+		if method == methodServerDiscover {
+			return http.StatusInternalServerError
+		}
+		return 0
+	})
+
+	client, err := newDiscoverProbeClient(t, recorder, map[string]string{headerMCPMethod: "tools/call"})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = client.Close() })
+
+	require.Equal(t, 1, recorder.attemptsFor(methodServerDiscover), "a configured Mcp-Method must not defeat the exemption")
+}
+
+// The mirror of the case above: a configured Mcp-Method naming the probe must
+// not classify unrelated requests as the probe, which would strip the retry
+// budget from the request that most depends on it.
+func TestNewClientConfiguredDiscoverHeaderDoesNotStripRetries(t *testing.T) {
+	t.Parallel()
+
+	recorder := newHandshakeRecorder(func(method string, attempt int) int {
+		switch {
+		case method == methodServerDiscover:
+			return http.StatusInternalServerError
+		case method == "initialize" && attempt == 1:
+			return http.StatusInternalServerError
+		default:
+			return 0
+		}
+	})
+
+	client, err := newDiscoverProbeClient(t, recorder, map[string]string{headerMCPMethod: methodServerDiscover})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = client.Close() })
+
+	require.Equal(t, 2, recorder.attemptsFor("initialize"), "a configured Mcp-Method must not classify other requests as the probe")
 }
