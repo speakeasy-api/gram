@@ -79,7 +79,7 @@ func registerDistributionTools(reg *Registrar, onboarding *OnboardingService, di
 			Plugin:           distribution.Plugin,
 			Attached:         distribution.AttachmentLive,
 			PublicationState: distribution.PublicationState,
-			Message:          distributionOutcomeMessage(distribution.Plugin, distribution.PublicationState, false),
+			Message:          distributionOutcomeMessage(distribution.Plugin, distribution.PublicationState, distribution.AttachmentLive, false),
 		}, nil
 	})
 
@@ -123,7 +123,7 @@ func registerDistributionTools(reg *Registrar, onboarding *OnboardingService, di
 			Plugin:           distribution.Plugin,
 			Attached:         distribution.AttachmentLive,
 			PublicationState: distribution.PublicationState,
-			Message:          distributionOutcomeMessage(distribution.Plugin, distribution.PublicationState, true),
+			Message:          distributionOutcomeMessage(distribution.Plugin, distribution.PublicationState, distribution.AttachmentLive, true),
 		}, nil
 	})
 }
@@ -158,28 +158,40 @@ func distributionToolError(err error) (*mcp.CallToolResult, bool) {
 }
 
 // distributionOutcomeMessage says what actually reached people, not merely what
-// was recorded. Membership can commit while publishing the package fails, which
-// leaves the change real in the project and absent from every installed client.
-// The server instructions tell the model not to narrate publication_state on its
-// own, so this message is the only account the administrator hears — claiming
-// delivery unconditionally would make a failed publish silent.
-func distributionOutcomeMessage(plugin, publicationState string, removed bool) string {
-	membership := "This MCP server is now part of the " + plugin + " plugin"
+// was recorded. Two things can diverge from the membership write: publishing the
+// package can fail independently, leaving the change real in the project and
+// absent from every installed client; and a removal deliberately preserves an
+// attachment an administrator made by hand, so the MCP server keeps reaching
+// people even though this flow's own membership is gone. The server instructions
+// tell the model not to narrate publication_state on its own, so this message is
+// the only account the administrator hears.
+func distributionOutcomeMessage(plugin, publicationState string, attachmentLive, removed bool) string {
 	if removed {
-		membership = "This MCP server is no longer part of the " + plugin + " plugin"
+		if attachmentLive {
+			// Remove only withdraws the attachment this flow created; see
+			// DistributionService.Remove, which returns the attachment authority
+			// after publication. Saying people will stop receiving it here would
+			// be false.
+			return "This MCP server is no longer part of the " + plugin + " plugin through this setup, but an administrator added it to that plugin separately and that stays, so the people it is shared with still get it. Remove that one in the dashboard to stop it reaching them."
+		}
+		switch publicationState {
+		case publicationStateCurrent:
+			return "This MCP server is no longer part of the " + plugin + " plugin, and the people it was shared with will stop getting it. Refresh that project's package for the change to reach them."
+		case publicationStatePending:
+			return "This MCP server is no longer part of the " + plugin + " plugin. The package that carries that change to people has not finished updating yet, so check again shortly."
+		default:
+			return "This MCP server is no longer part of the " + plugin + " plugin, but the package that carries that change to people could not be updated, so the change may not have reached them yet. Publish it again from the dashboard."
+		}
 	}
 	switch publicationState {
 	case publicationStateCurrent:
-		if removed {
-			return membership + ", and the people it was shared with will stop getting it. Refresh that project's package for the change to reach them."
-		}
-		return membership + ", and the people it is shared with will get it. Install or refresh that project's package, then try one of its tools to confirm it works."
+		return "This MCP server is now part of the " + plugin + " plugin, and the people it is shared with will get it. Install or refresh that project's package, then try one of its tools to confirm it works."
 	case publicationStatePending:
-		return membership + ". The package that carries that change to people has not finished updating yet, so check again shortly."
+		return "This MCP server is now part of the " + plugin + " plugin. The package that carries it to people has not finished updating yet, so check again shortly."
 	default:
-		if removed {
-			return membership + ", but the package that carries that change to people could not be updated, so they may still have it. Publish it again from the dashboard."
-		}
-		return membership + ", but the package that carries it to people could not be updated, so they do not have it yet. Publish it again from the dashboard."
+		// This may be a first distribution or a later update to one already out
+		// there, and repair_required does not distinguish them, so the copy says
+		// the change has not landed rather than that nobody has the MCP server.
+		return "This MCP server is now part of the " + plugin + " plugin, but the package that carries it to people could not be updated, so the change may not have reached them yet. Publish it again from the dashboard."
 	}
 }
