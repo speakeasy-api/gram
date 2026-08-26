@@ -5,6 +5,9 @@
 package database
 
 import (
+	"database/sql/driver"
+	"fmt"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	pgvector_go "github.com/pgvector/pgvector-go"
@@ -13,6 +16,48 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/tools/repo/models"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
+
+type DataForwardingSensitiveData string
+
+const (
+	DataForwardingSensitiveDataExclude DataForwardingSensitiveData = "exclude"
+	DataForwardingSensitiveDataInclude DataForwardingSensitiveData = "include"
+)
+
+func (e *DataForwardingSensitiveData) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = DataForwardingSensitiveData(s)
+	case string:
+		*e = DataForwardingSensitiveData(s)
+	default:
+		return fmt.Errorf("unsupported scan type for DataForwardingSensitiveData: %T", src)
+	}
+	return nil
+}
+
+type NullDataForwardingSensitiveData struct {
+	DataForwardingSensitiveData DataForwardingSensitiveData
+	Valid                       bool // Valid is true if DataForwardingSensitiveData is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullDataForwardingSensitiveData) Scan(value interface{}) error {
+	if value == nil {
+		ns.DataForwardingSensitiveData, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.DataForwardingSensitiveData.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullDataForwardingSensitiveData) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.DataForwardingSensitiveData), nil
+}
 
 type AgentExecution struct {
 	ID           string
@@ -527,6 +572,20 @@ type CustomDomain struct {
 	UpdatedAt                pgtype.Timestamptz
 	DeletedAt                pgtype.Timestamptz
 	Deleted                  bool
+}
+
+type DataForwardingRule struct {
+	ID                uuid.UUID
+	OrganizationID    string
+	ProjectID         uuid.UUID
+	DataSource        string
+	Enabled           bool
+	OtelDestinationID uuid.NullUUID
+	SensitiveData     NullDataForwardingSensitiveData
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	DeletedAt         pgtype.Timestamptz
+	Deleted           bool
 }
 
 type Deployment struct {
@@ -1533,6 +1592,18 @@ type OrganizationUserRelationship struct {
 	UpdatedAt          pgtype.Timestamptz
 	DeletedAt          pgtype.Timestamptz
 	Deleted            bool
+}
+
+type OtelDestination struct {
+	ID               uuid.UUID
+	OrganizationID   string
+	ProjectID        uuid.UUID
+	EndpointUrl      string
+	HeadersEncrypted pgtype.Text
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	DeletedAt        pgtype.Timestamptz
+	Deleted          bool
 }
 
 type OtelForwardingConfig struct {
