@@ -16,6 +16,7 @@ func TestAuthorizationRequestFromQuery(t *testing.T) {
 	q.Set("state", "xyz")
 	q.Set("code_challenge", "abc123")
 	q.Set("code_challenge_method", "S256")
+	q.Set("resource", "https://acme.example.com/mcp/support-bot")
 
 	req := AuthorizationRequestFromQuery(q)
 	require.Equal(t, "client_abc", req.ClientID)
@@ -24,6 +25,7 @@ func TestAuthorizationRequestFromQuery(t *testing.T) {
 	require.Equal(t, "xyz", req.State)
 	require.Equal(t, "abc123", req.CodeChallenge)
 	require.Equal(t, "S256", req.CodeChallengeMethod)
+	require.Equal(t, "https://acme.example.com/mcp/support-bot", req.Resource)
 }
 
 func TestAuthorizationRequest_ValidateRedirectableFields(t *testing.T) {

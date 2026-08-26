@@ -267,6 +267,19 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
 	}
 
+	// RFC 8707 §2, token leg. Built from the address this request arrived on,
+	// so it matches the identifier the protected-resource metadata advertised
+	// to the client that is now redeeming its code.
+	canonicalResource, err := endpoint.RootURL(baseURL)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "build token resource identifier").LogError(ctx, logger)
+	}
+	if err := oauthwire.ValidateResourceIndicator(req.Resource, canonicalResource); err != nil {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "resource_mismatch")
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
+		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
+	}
+
 	// Atomic GETDEL: single-use authorization code. If two clients race to
 	// redeem the same code, exactly one wins the GETDEL; the other gets
 	// ErrCacheMiss and is rejected as invalid_grant (RFC 6749 §4.1.2 / §10.5).
@@ -384,6 +397,20 @@ func (s *Service) handleTokenRefreshTokenGrant(
 	req.SetDefaults()
 	if err := req.Validate(); err != nil {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "invalid_request")
+		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
+	}
+
+	// RFC 8707 §2 applies to the refresh leg too: MCP 2026-07-28 has clients
+	// send `resource` on every token request, so a rotation naming another
+	// server is the same misconfiguration as it is on the authorization_code
+	// grant. No flow-failure metric here — a refresh is not part of an initial
+	// flow, and the completion ratio counts only those.
+	canonicalResource, err := endpoint.RootURL(baseURL)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "build token resource identifier").LogError(ctx, logger)
+	}
+	if err := oauthwire.ValidateResourceIndicator(req.Resource, canonicalResource); err != nil {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "resource_mismatch")
 		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
 	}
 

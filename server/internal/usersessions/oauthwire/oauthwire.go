@@ -104,3 +104,33 @@ func ValidateRedirectURI(raw string) error {
 		return nil
 	}
 }
+
+// ValidateResourceIndicator checks an RFC 8707 `resource` parameter against
+// canonical, the resource identifier for the address the request arrived on.
+// An empty resource is accepted: RFC 8707 §2 leaves demanding the parameter to
+// the authorization server's discretion, and clients predating MCP 2026-07-28
+// do not send one.
+//
+// Comparison is byte equality. MCP 2026-07-28 asks implementations to accept
+// uppercase scheme and host components for robustness; this surface
+// deliberately declines, holding `resource` to the simple string comparison
+// (RFC 3986 §6.2.1) that RFC 9207 §2.4 mandates for `iss`. The two identifiers
+// are minted from one base URL and published in the same metadata documents,
+// so a client echoing the value it read back matches on the first attempt.
+//
+// canonical is address-specific — one MCP server is reachable under several
+// identifiers (custom domain or platform origin, each under two route bases).
+// Callers must derive it from the request being validated, never from a stored
+// or global URL.
+func ValidateResourceIndicator(resource, canonical string) error {
+	if resource == "" {
+		return nil
+	}
+	if resource != canonical {
+		// The submitted value is deliberately not echoed: on the authorize leg
+		// this description is carried in a redirect the client renders. The
+		// expected value is already public in the protected-resource metadata.
+		return &Error{Code: "invalid_target", Description: fmt.Sprintf("resource does not identify this MCP server (expected %q)", canonical)}
+	}
+	return nil
+}

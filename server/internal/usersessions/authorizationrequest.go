@@ -30,6 +30,12 @@ type AuthorizationRequest struct {
 	// so Subject is stamped from authoritative claims. No-op on private
 	// toolsets, which always route through the IDP.
 	RequireUserIdentity bool
+
+	// Resource is the RFC 8707 resource indicator naming the MCP server the
+	// client intends to use the token with. Optional on the wire; validated
+	// against the addressed endpoint's canonical URI by
+	// oauthwire.ValidateResourceIndicator once the redirect_uri is trusted.
+	Resource string
 }
 
 // AuthorizationRequestFromQuery decodes an AuthorizationRequest from
@@ -44,6 +50,7 @@ func AuthorizationRequestFromQuery(q url.Values) *AuthorizationRequest {
 		CodeChallenge:       q.Get("code_challenge"),
 		CodeChallengeMethod: q.Get("code_challenge_method"),
 		RequireUserIdentity: requireUserIdentity,
+		Resource:            q.Get("resource"),
 	}
 }
 
