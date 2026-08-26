@@ -47,13 +47,15 @@ const cimdClientName = "Speakeasy"
 // for parity with the sibling OAuth metadata documents.
 const clientMetadataDocumentPath = "/.well-known/oauth-client/"
 
-// ClientMetadataDocumentURL builds the platform-canonical CIMD document URL for
-// a client id. serverURL is the Gram deployment's public base URL; the path
-// component is the client's globally unique primary key. This is the value
-// stored as both client_id and client_id_metadata_uri on a CIMD-mode row and
-// the URL Gram sends upstream as client_id.
-func ClientMetadataDocumentURL(serverURL *url.URL, clientID uuid.UUID) string {
-	return strings.TrimRight(serverURL.String(), "/") + clientMetadataDocumentPath + clientID.String()
+// ClientMetadataDocumentURL builds the CIMD document URL for a client id.
+// outboundCallbackURL is the deployment's pinned outbound callback host — not
+// its canonical host, which may move — and the path component is the client's
+// globally unique primary key. This is the value stored as both client_id and
+// client_id_metadata_uri on a CIMD-mode row and the URL Gram sends upstream as
+// client_id; an upstream Authorization Server dereferences it long after the
+// row was written, so it has to stay put.
+func ClientMetadataDocumentURL(outboundCallbackURL *url.URL, clientID uuid.UUID) string {
+	return strings.TrimRight(outboundCallbackURL.String(), "/") + clientMetadataDocumentPath + clientID.String()
 }
 
 // clientMetadataDocument is the JSON body served at the CIMD endpoint. Fields

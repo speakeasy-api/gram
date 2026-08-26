@@ -5,16 +5,16 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"net/url"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	domainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/hosts"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-func Middleware(logger *slog.Logger, db *pgxpool.Pool, env string, serverURL *url.URL) func(next http.Handler) http.Handler {
+func Middleware(logger *slog.Logger, db *pgxpool.Pool, env string, platformHosts *hosts.Hosts) func(next http.Handler) http.Handler {
 	domainsRepo := domainsRepo.New(db)
 	logger = logger.With(attr.SlogComponent("custom_domains_middleware"))
 
@@ -38,7 +38,10 @@ func Middleware(logger *slog.Logger, db *pgxpool.Pool, env string, serverURL *ur
 				return
 			}
 
-			if host == serverURL.Host {
+			// Every platform host is first-party and skips the lookup, not
+			// just the canonical one: a deployment answering on more than one
+			// of its own hosts must not 403 the others.
+			if platformHosts.IsPlatform(host) {
 				next.ServeHTTP(w, r)
 				return
 			}

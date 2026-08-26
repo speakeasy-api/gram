@@ -41,6 +41,19 @@ WHERE organization_id = @organization_id
 LIMIT 1
 FOR UPDATE;
 
+-- name: GetActiveAppScopedCustomDomainForOrganization :one
+-- The one domain an organization may serve the full control plane on. Read on
+-- every host resolution, so a domain that is deleted or deactivated makes the
+-- organization fall back to the canonical host without a data migration.
+SELECT *
+FROM custom_domains
+WHERE organization_id = @organization_id
+  AND scope = 'app'
+  AND verified IS TRUE
+  AND activated IS TRUE
+  AND deleted IS FALSE
+LIMIT 1;
+
 -- name: GetCustomDomainByDomain :one
 SELECT *
 FROM custom_domains

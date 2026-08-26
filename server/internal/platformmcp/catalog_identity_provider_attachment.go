@@ -59,15 +59,18 @@ type CatalogIdentityProviderAttachmentService struct {
 	enc       *encryption.Client
 	policy    *guardian.Policy
 	audit     *audit.Logger
-	serverURL *url.URL
+	// outboundCallbackURL is the deployment's pinned outbound callback host,
+	// which is what dynamic client registration publishes upstream as its
+	// redirect target. Not the canonical host: registrations outlive it.
+	outboundCallbackURL *url.URL
 }
 
-func NewCatalogIdentityProviderAttachmentService(db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy, auditLogger *audit.Logger, serverURL *url.URL) *CatalogIdentityProviderAttachmentService {
-	if serverURL == nil {
+func NewCatalogIdentityProviderAttachmentService(db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy, auditLogger *audit.Logger, outboundCallbackURL *url.URL) *CatalogIdentityProviderAttachmentService {
+	if outboundCallbackURL == nil {
 		return &CatalogIdentityProviderAttachmentService{}
 	}
-	serverURLCopy := *serverURL
-	return &CatalogIdentityProviderAttachmentService{db: db, enc: enc, policy: policy, audit: auditLogger, serverURL: &serverURLCopy}
+	callbackCopy := *outboundCallbackURL
+	return &CatalogIdentityProviderAttachmentService{db: db, enc: enc, policy: policy, audit: auditLogger, outboundCallbackURL: &callbackCopy}
 }
 
 // Attach discovers the exact provider advertised by the lifecycle-owned Remote
@@ -75,7 +78,7 @@ func NewCatalogIdentityProviderAttachmentService(db *pgxpool.Pool, enc *encrypti
 // and binds it to the registration's existing user-session issuer. It is safe
 // to retry after a successful call: the existing matching binding is reused.
 func (s *CatalogIdentityProviderAttachmentService) Attach(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (CatalogIdentityProviderAttachmentResult, error) {
-	if s == nil || s.db == nil || s.enc == nil || s.policy == nil || s.audit == nil || s.serverURL == nil || principal.UserID == "" || principal.OrganizationID == "" || project.ID == uuid.Nil || registrationID == uuid.Nil {
+	if s == nil || s.db == nil || s.enc == nil || s.policy == nil || s.audit == nil || s.outboundCallbackURL == nil || principal.UserID == "" || principal.OrganizationID == "" || project.ID == uuid.Nil || registrationID == uuid.Nil {
 		return CatalogIdentityProviderAttachmentResult{}, ErrIdentityProviderAttachmentUnavailable
 	}
 
@@ -156,7 +159,7 @@ func (s *CatalogIdentityProviderAttachmentService) attachLocked(ctx context.Cont
 	// This is server-to-server; any client secret stays in the stack frame only
 	// until createAndAttachClient encrypts it for persistence.
 	scope := strings.Join(resourceMetadata.ScopesSupported, " ")
-	registered, err := remotesessions.RegisterDynamicClient(ctx, s.policy, s.serverURL, remotesessions.ProxyRegisterRequest{
+	registered, err := remotesessions.RegisterDynamicClient(ctx, s.policy, s.outboundCallbackURL, remotesessions.ProxyRegisterRequest{
 		RegistrationEndpoint:    metadata.RegistrationEndpoint,
 		Scope:                   optionalString(scope),
 		TokenEndpointAuthMethod: optionalString(browserCatalogDCRAuthMethod),

@@ -465,7 +465,7 @@ func (s *Service) CreateCimdClient(ctx context.Context, payload *orgclientsgen.C
 		ProjectID:             clientProjectID,
 		OrganizationID:        conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
 		RemoteSessionIssuerID: issuerID,
-		ClientIDMetadataUri:   ClientMetadataDocumentURL(s.serverURL, clientID),
+		ClientIDMetadataUri:   ClientMetadataDocumentURL(s.outboundCallbackURL, clientID),
 		ClientIDIssuedAt:      conv.ToPGTimestamptz(time.Now().UTC()),
 		Scope:                 payload.Scope,
 		Audience:              conv.PtrToPGText(payload.Audience),

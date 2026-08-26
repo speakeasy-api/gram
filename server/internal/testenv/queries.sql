@@ -198,6 +198,33 @@ INSERT INTO organization_metadata (
     COALESCE(sqlc.narg('created_at')::timestamptz, clock_timestamp())
 );
 
+-- name: SetOrganizationDefaultHostFixture :exec
+-- Test-only fixture for seeding an organization's default host. Deliberately
+-- kept out of CreateOrganizationMetadataFixture for the same reason as
+-- SetWorkosLastEventIDFixture: a column added mid-list renumbers every
+-- positional placeholder after it.
+UPDATE organization_metadata
+SET default_host = sqlc.narg('default_host')::text
+WHERE id = @id;
+
+-- name: CreateScopedCustomDomainFixture :exec
+-- Test-only fixture for seeding a custom domain at a chosen scope and
+-- verification state. CreateCustomDomain writes neither, so host-resolution
+-- tests cannot build their fixtures with it.
+INSERT INTO custom_domains (
+    organization_id,
+    domain,
+    scope,
+    verified,
+    activated
+) VALUES (
+    @organization_id,
+    @domain,
+    @scope,
+    @verified,
+    @activated
+);
+
 -- name: SetWorkosLastEventIDFixture :exec
 -- Test-only fixture for seeding the WorkOS webhook cursor on an organization
 -- that already exists. Deliberately kept out of

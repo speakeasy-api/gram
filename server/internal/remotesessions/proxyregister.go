@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -83,8 +84,12 @@ type DCRResponse struct {
 // registration endpoint were discovered from a persisted resource, never from
 // an MCP or browser input. The returned secret is transient and callers must
 // encrypt it before persistence without returning or logging it.
-func RegisterDynamicClient(ctx context.Context, policy *guardian.Policy, serverURL *url.URL, request ProxyRegisterRequest) (ProxyRegisterResponse, error) {
-	if policy == nil || serverURL == nil {
+//
+// outboundCallbackURL is the deployment's pinned outbound callback host, not
+// its canonical host: the redirect URIs registered here live on the upstream
+// provider indefinitely, so they must not move when the canonical host does.
+func RegisterDynamicClient(ctx context.Context, policy *guardian.Policy, outboundCallbackURL *url.URL, request ProxyRegisterRequest) (ProxyRegisterResponse, error) {
+	if policy == nil || outboundCallbackURL == nil {
 		return ProxyRegisterResponse{}, fmt.Errorf("dynamic client registration is not configured")
 	}
 
@@ -93,7 +98,7 @@ func RegisterDynamicClient(ctx context.Context, policy *guardian.Policy, serverU
 		return ProxyRegisterResponse{}, ErrInvalidDynamicClientRegistrationEndpoint
 	}
 
-	origin := serverURL.String()
+	origin := strings.TrimRight(outboundCallbackURL.String(), "/")
 	redirectURIs := []string{
 		fmt.Sprintf("%s/oauth/callback", origin),
 		fmt.Sprintf("%s/mcp/remote_login_callback", origin),
@@ -200,7 +205,7 @@ func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) er
 		return oops.E(oops.CodeBadRequest, err, "invalid JSON in request body").LogError(ctx, s.logger)
 	}
 
-	registered, err := RegisterDynamicClient(ctx, s.policy, s.serverURL, req)
+	registered, err := RegisterDynamicClient(ctx, s.policy, s.outboundCallbackURL, req)
 	if err != nil {
 		if errors.Is(err, ErrInvalidDynamicClientRegistrationEndpoint) {
 			return oops.E(oops.CodeBadRequest, err, "invalid identity provider registration endpoint").LogWarn(ctx, s.logger)
