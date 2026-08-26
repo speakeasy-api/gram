@@ -20,9 +20,9 @@ class Metric(_message.Message):
     AGGREGATION_TEMPORALITY_CUMULATIVE: Metric.AggregationTemporality
     class DataPointFlags(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
         __slots__ = ()
-        DATA_POINT_FLAGS_DO_NOT_USE: _ClassVar[Metric.DataPointFlags]
+        DATA_POINT_FLAGS_DO_NOT_USE_UNSPECIFIED: _ClassVar[Metric.DataPointFlags]
         DATA_POINT_FLAGS_NO_RECORDED_VALUE_MASK: _ClassVar[Metric.DataPointFlags]
-    DATA_POINT_FLAGS_DO_NOT_USE: Metric.DataPointFlags
+    DATA_POINT_FLAGS_DO_NOT_USE_UNSPECIFIED: Metric.DataPointFlags
     DATA_POINT_FLAGS_NO_RECORDED_VALUE_MASK: Metric.DataPointFlags
     class Provenance(_message.Message):
         __slots__ = ("source", "organization_id", "project_id")

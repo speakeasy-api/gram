@@ -20,9 +20,9 @@ class InboundMetric(_message.Message):
     AGGREGATION_TEMPORALITY_CUMULATIVE: InboundMetric.AggregationTemporality
     class DataPointFlags(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
         __slots__ = ()
-        DATA_POINT_FLAGS_DO_NOT_USE: _ClassVar[InboundMetric.DataPointFlags]
+        DATA_POINT_FLAGS_DO_NOT_USE_UNSPECIFIED: _ClassVar[InboundMetric.DataPointFlags]
         DATA_POINT_FLAGS_NO_RECORDED_VALUE_MASK: _ClassVar[InboundMetric.DataPointFlags]
-    DATA_POINT_FLAGS_DO_NOT_USE: InboundMetric.DataPointFlags
+    DATA_POINT_FLAGS_DO_NOT_USE_UNSPECIFIED: InboundMetric.DataPointFlags
     DATA_POINT_FLAGS_NO_RECORDED_VALUE_MASK: InboundMetric.DataPointFlags
     class Provenance(_message.Message):
         __slots__ = ("source", "organization_id", "project_id")

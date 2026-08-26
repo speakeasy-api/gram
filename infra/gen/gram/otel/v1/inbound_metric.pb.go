@@ -68,18 +68,18 @@ func (x InboundMetric_AggregationTemporality) Number() protoreflect.EnumNumber {
 type InboundMetric_DataPointFlags int32
 
 const (
-	InboundMetric_DATA_POINT_FLAGS_DO_NOT_USE             InboundMetric_DataPointFlags = 0
+	InboundMetric_DATA_POINT_FLAGS_DO_NOT_USE_UNSPECIFIED InboundMetric_DataPointFlags = 0
 	InboundMetric_DATA_POINT_FLAGS_NO_RECORDED_VALUE_MASK InboundMetric_DataPointFlags = 1
 )
 
 // Enum value maps for InboundMetric_DataPointFlags.
 var (
 	InboundMetric_DataPointFlags_name = map[int32]string{
-		0: "DATA_POINT_FLAGS_DO_NOT_USE",
+		0: "DATA_POINT_FLAGS_DO_NOT_USE_UNSPECIFIED",
 		1: "DATA_POINT_FLAGS_NO_RECORDED_VALUE_MASK",
 	}
 	InboundMetric_DataPointFlags_value = map[string]int32{
-		"DATA_POINT_FLAGS_DO_NOT_USE":             0,
+		"DATA_POINT_FLAGS_DO_NOT_USE_UNSPECIFIED": 0,
 		"DATA_POINT_FLAGS_NO_RECORDED_VALUE_MASK": 1,
 	}
 )
@@ -3818,7 +3818,7 @@ var File_gram_otel_v1_inbound_metric_proto protoreflect.FileDescriptor
 
 const file_gram_otel_v1_inbound_metric_proto_rawDesc = "" +
 	"\n" +
-	"!gram/otel/v1/inbound_metric.proto\x12\fgram.otel.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\x9a(\n" +
+	"!gram/otel/v1/inbound_metric.proto\x12\fgram.otel.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xa6(\n" +
 	"\rInboundMetric\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x12\n" +
@@ -3966,9 +3966,9 @@ const file_gram_otel_v1_inbound_metric_proto_rawDesc = "" +
 	"\x16AggregationTemporality\x12'\n" +
 	"#AGGREGATION_TEMPORALITY_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dAGGREGATION_TEMPORALITY_DELTA\x10\x01\x12&\n" +
-	"\"AGGREGATION_TEMPORALITY_CUMULATIVE\x10\x02\"^\n" +
-	"\x0eDataPointFlags\x12\x1f\n" +
-	"\x1bDATA_POINT_FLAGS_DO_NOT_USE\x10\x00\x12+\n" +
+	"\"AGGREGATION_TEMPORALITY_CUMULATIVE\x10\x02\"j\n" +
+	"\x0eDataPointFlags\x12+\n" +
+	"'DATA_POINT_FLAGS_DO_NOT_USE_UNSPECIFIED\x10\x00\x12+\n" +
 	"'DATA_POINT_FLAGS_NO_RECORDED_VALUE_MASK\x10\x01:\n" +
 	"\x8a\xb5\x18\x06\x12\x04\b\x80\xf5$B\x06\n" +
 	"\x04dataJ\x04\b\x04\x10\x05J\x04\b\x06\x10\aJ\x04\b\b\x10\tB=Z;github.com/speakeasy-api/gram/infra/gen/gram/otel/v1;otelv1b\beditionsp\xe9\a"

@@ -214,7 +214,7 @@ pubsub:
             AGGREGATION_TEMPORALITY_CUMULATIVE = 2;
           }
           enum DataPointFlags {
-            DATA_POINT_FLAGS_DO_NOT_USE = 0;
+            DATA_POINT_FLAGS_DO_NOT_USE_UNSPECIFIED = 0;
             DATA_POINT_FLAGS_NO_RECORDED_VALUE_MASK = 1;
           }
           message NumberDataPoint {
@@ -580,7 +580,7 @@ pubsub:
             AGGREGATION_TEMPORALITY_CUMULATIVE = 2;
           }
           enum DataPointFlags {
-            DATA_POINT_FLAGS_DO_NOT_USE = 0;
+            DATA_POINT_FLAGS_DO_NOT_USE_UNSPECIFIED = 0;
             DATA_POINT_FLAGS_NO_RECORDED_VALUE_MASK = 1;
           }
           message NumberDataPoint {

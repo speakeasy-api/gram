@@ -86,7 +86,7 @@ message InboundMetric {
   }
 
   enum DataPointFlags {
-    DATA_POINT_FLAGS_DO_NOT_USE = 0;
+    DATA_POINT_FLAGS_DO_NOT_USE_UNSPECIFIED = 0;
     DATA_POINT_FLAGS_NO_RECORDED_VALUE_MASK = 1;
   }
 

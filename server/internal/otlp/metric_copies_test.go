@@ -56,7 +56,7 @@ func metricCopies() []metricCopy {
 			keyValueList:                new(otelv1.Metric_KeyValueList),
 			keyValue:                    new(otelv1.Metric_KeyValue),
 			aggregationTemporality:      otelv1.Metric_AGGREGATION_TEMPORALITY_UNSPECIFIED.Descriptor(),
-			dataPointFlags:              otelv1.Metric_DATA_POINT_FLAGS_DO_NOT_USE.Descriptor(),
+			dataPointFlags:              otelv1.Metric_DATA_POINT_FLAGS_DO_NOT_USE_UNSPECIFIED.Descriptor(),
 		},
 		{
 			name:                        "InboundMetric",
@@ -80,7 +80,7 @@ func metricCopies() []metricCopy {
 			keyValueList:                new(otelv1.InboundMetric_KeyValueList),
 			keyValue:                    new(otelv1.InboundMetric_KeyValue),
 			aggregationTemporality:      otelv1.InboundMetric_AGGREGATION_TEMPORALITY_UNSPECIFIED.Descriptor(),
-			dataPointFlags:              otelv1.InboundMetric_DATA_POINT_FLAGS_DO_NOT_USE.Descriptor(),
+			dataPointFlags:              otelv1.InboundMetric_DATA_POINT_FLAGS_DO_NOT_USE_UNSPECIFIED.Descriptor(),
 		},
 	}
 }
