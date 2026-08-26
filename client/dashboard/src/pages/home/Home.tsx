@@ -8,24 +8,10 @@ import {
 } from "@/components/brand-mesh";
 import { cn } from "@/lib/utils";
 import { ChatLanding } from "@/pages/chat/Chat";
-import { useRBAC } from "@/hooks/useRBAC";
-import { useRoutes } from "@/routes";
-import { Navigate } from "react-router";
 
 export default function Home(): JSX.Element {
-  const { hasAnyScope, isLoading } = useRBAC();
-  const routes = useRoutes();
   // Home carries its own "Ask anything" widget, so suppress the floating dock.
   useHideInsightsDock();
-
-  // Redirect MCP-only users (no project:read) to the MCP page
-  if (
-    !isLoading &&
-    !hasAnyScope(["project:read"]) &&
-    hasAnyScope(["mcp:read", "mcp:write"])
-  ) {
-    return <Navigate to={routes.mcp.href()} replace />;
-  }
 
   return (
     <Page>
@@ -38,14 +24,6 @@ export default function Home(): JSX.Element {
               below (the /chat page centers it; the home page does not). The
               compact variant drops pinned/recents — history lives on /chat. */}
           <div className="w-full pt-2 pb-6">
-            {/* Neutral theme-following gradient surface with the brand
-                rainbow breathing in from the top-right corner as an edge
-                affordance, and film grain throughout. */}
-            {/* No `overflow-hidden` here — it would clip the composer's slash
-                menu. The decorative layers clip themselves instead. */}
-            {/* `z-10` lifts the card's stacking context above the dashboard
-                below, so the slash menu overlays it instead of the other way
-                round. */}
             <div
               className={cn(
                 BRAND_MESH_SURFACE_CLASS,
