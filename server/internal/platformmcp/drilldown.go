@@ -137,7 +137,7 @@ func (s *DiagnosticsService) drilldownEnvelope(ctx context.Context, target drill
 // filter and no attribute selector: the only axis is the MCP the overview
 // already named.
 type QueryMCPEventsInput struct {
-	ProjectID string `json:"project_id" jsonschema:"AICP project ID that owns the MCP"`
+	ProjectID string `json:"project_id" jsonschema:"project ID that owns the MCP"`
 	MCPID     string `json:"mcp_id" jsonschema:"configured MCP ID as returned by find_mcp or get_mcp"`
 	Window    string `json:"window,omitempty" jsonschema:"observation window: 1h or 24h (default); this tool looks back at most 24h"`
 }
@@ -225,7 +225,7 @@ func toolEvents(rows []telemetryrepo.MCPToolOutcomeBreakdownRow) ([]MCPToolEvent
 // QueryMCPTracesInput asks for individual occurrences of a failure class the
 // overview or diagnostics already identified.
 type QueryMCPTracesInput struct {
-	ProjectID string `json:"project_id" jsonschema:"AICP project ID that owns the MCP"`
+	ProjectID string `json:"project_id" jsonschema:"project ID that owns the MCP"`
 	MCPID     string `json:"mcp_id" jsonschema:"configured MCP ID as returned by find_mcp or get_mcp"`
 	Window    string `json:"window,omitempty" jsonschema:"observation window: 1h or 24h (default); this tool looks back at most 24h"`
 	Outcome   string `json:"outcome,omitempty" jsonschema:"optional outcome class to narrow to: success, unauthorized, client_error, server_error, failed, or unknown"`
@@ -381,7 +381,7 @@ func summaryIdentityParams(target drilldownTarget, start, end int64) telemetryre
 
 // QueryMCPMetricsInput asks for one MCP's aggregate levels over a window.
 type QueryMCPMetricsInput struct {
-	ProjectID string `json:"project_id" jsonschema:"AICP project ID that owns the MCP"`
+	ProjectID string `json:"project_id" jsonschema:"project ID that owns the MCP"`
 	MCPID     string `json:"mcp_id" jsonschema:"configured MCP ID as returned by find_mcp or get_mcp"`
 	Window    string `json:"window,omitempty" jsonschema:"observation window: 1h, 24h (default), or 7d"`
 }
@@ -476,7 +476,7 @@ func (s *DiagnosticsService) QueryMCPMetrics(ctx context.Context, principal Prin
 // or name: the caller asks about someone it was shown, not about someone it
 // can describe.
 type GetUserMCPStatusInput struct {
-	ProjectID string `json:"project_id" jsonschema:"AICP project ID that owns the MCP"`
+	ProjectID string `json:"project_id" jsonschema:"project ID that owns the MCP"`
 	MCPID     string `json:"mcp_id" jsonschema:"configured MCP ID as returned by find_mcp or get_mcp"`
 	// SubjectReference is an expiring, session-bound handle returned in the
 	// optional rows of a summary tool. It cannot be searched, joined,

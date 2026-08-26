@@ -140,15 +140,15 @@ func repairActions(state ReadinessState) []RepairAction {
 	case ReadinessReady:
 		return []RepairAction{}
 	case ReadinessNeedsProviderSetup, ReadinessNeedsGramAuthorization, ReadinessAuthFailed, ReadinessUnauthorized:
-		return []RepairAction{{Kind: "continue_dashboard_setup", Label: "Complete the secure dashboard source and authentication setup"}}
+		return []RepairAction{{Kind: "continue_dashboard_setup", Label: "Finish setting up this MCP server's source and sign-in in the dashboard"}}
 	case ReadinessNeedsConfiguration:
-		return []RepairAction{{Kind: "continue_dashboard_setup", Label: "Complete the required dashboard source configuration"}}
+		return []RepairAction{{Kind: "continue_dashboard_setup", Label: "Finish setting up this MCP server's source in the dashboard"}}
 	case ReadinessUnreachable, ReadinessUnsupported, ReadinessDegraded:
-		return []RepairAction{{Kind: "retry_readiness", Label: "Retry the authenticated readiness check"}}
+		return []RepairAction{{Kind: "retry_readiness", Label: "Check again whether this MCP server is working"}}
 	case ReadinessGuideUnavailable:
-		return []RepairAction{{Kind: "contact_support", Label: "Ask an administrator to restore the reviewed setup guide"}}
+		return []RepairAction{{Kind: "contact_support", Label: "Ask an administrator to restore the setup guide for this MCP server"}}
 	default:
-		return []RepairAction{{Kind: "retry_readiness", Label: "Retry the authenticated readiness check"}}
+		return []RepairAction{{Kind: "retry_readiness", Label: "Check again whether this MCP server is working"}}
 	}
 }
 

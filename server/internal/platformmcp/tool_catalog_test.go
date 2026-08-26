@@ -54,7 +54,7 @@ func TestCandidateInspectionReturnsSafeDirectRemoteErrors(t *testing.T) {
 
 	var refusal *ToolRefusalError
 	require.ErrorAs(t, err, &refusal)
-	require.JSONEq(t, `{"code":"feature_unavailable","reason":"remote_inspection_unavailable","message":"The remote MCP could not be inspected safely right now. Retry after a short delay."}`, refusal.Payload)
+	require.JSONEq(t, `{"code":"feature_unavailable","reason":"remote_inspection_unavailable","message":"That MCP server could not be checked safely right now. Try again shortly."}`, refusal.Payload)
 }
 
 func fmtDirectRemoteInspectionError() error {

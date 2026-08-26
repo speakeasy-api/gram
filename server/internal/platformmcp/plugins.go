@@ -149,7 +149,7 @@ type PluginSkill struct {
 }
 
 type ListPluginsInput struct {
-	ProjectID string `json:"project_id" jsonschema:"AICP project ID whose plugins to list"`
+	ProjectID string `json:"project_id" jsonschema:"project ID whose plugins to list"`
 	Limit     int    `json:"limit,omitempty" jsonschema:"maximum number of plugins to return; server clamps this to 50"`
 	Cursor    string `json:"cursor,omitempty" jsonschema:"opaque cursor from a previous list_plugins result"`
 }
@@ -167,7 +167,7 @@ type ListPluginsOutput struct {
 }
 
 type GetPluginInput struct {
-	ProjectID string `json:"project_id" jsonschema:"AICP project ID that owns the plugin"`
+	ProjectID string `json:"project_id" jsonschema:"project ID that owns the plugin"`
 	Plugin    string `json:"plugin" jsonschema:"exact plugin ID, slug, or name as returned by list_plugins"`
 }
 

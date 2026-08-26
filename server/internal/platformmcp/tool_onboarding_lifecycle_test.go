@@ -19,7 +19,7 @@ func TestIdentityProviderAttachmentOutputPresentsExactAuthorizationLink(t *testi
 
 	require.Equal(t, "open_authorization_url", output.NextAction)
 	require.Equal(t, "https://dashboard.example/organization/projects/project/mcp/x/server/inspect", output.AuthorizationURL)
-	require.Contains(t, output.Message, "Open this Inspect authorization link now: "+output.AuthorizationURL)
+	require.Contains(t, output.Message, "Open this link to authorize it: "+output.AuthorizationURL)
 	require.Contains(t, output.Message, "Connect or Authorize")
 	require.NotContains(t, output.Message, "above")
 }
@@ -37,13 +37,13 @@ func TestIdentityProviderAttachmentReturnsOnlyBoundedResults(t *testing.T) {
 			name:    "unsupported provider contract",
 			err:     ErrIdentityProviderAttachmentUnsupported,
 			code:    "automatic_identity_provider_attachment_unsupported",
-			message: "This reviewed MCP does not advertise exactly one identity provider with supported OAuth metadata and dynamic client registration. Automatic attachment was not performed. Explain this limitation to the user and ask how they want to proceed.",
+			message: "This MCP server does not advertise exactly one sign-in provider with the OAuth metadata and dynamic client registration needed to set it up automatically, so nothing was changed. Explain that to the user and ask how they want to proceed.",
 		},
 		{
 			name:    "existing attachment conflict",
 			err:     ErrIdentityProviderAttachmentConflict,
 			code:    "identity_provider_attachment_conflict",
-			message: "This MCP already has a different or ambiguous remote identity-provider configuration. Automatic attachment was not performed. Ask the user how they want to proceed.",
+			message: "This MCP server already has a different or unclear sign-in provider set up, so nothing was changed. Ask the user how they want to proceed.",
 		},
 	}
 
