@@ -1,4 +1,7 @@
-import { catalogBackedMcpServers } from "@/components/project-guide/journeyStatus";
+import {
+  catalogBackedMcpServers,
+  hasDefaultPluginServer,
+} from "@/components/project-guide/journeyStatus";
 import { AUTOMATIC_CATALOG_SERVER_NAMES } from "@/components/project-guide/journeys";
 import type {
   ProjectGuideEventCard,
@@ -6,6 +9,7 @@ import type {
   ProjectGuideOperationScope,
   ProjectGuideOperationSignal,
 } from "@/components/project-guide/projectGuideMachine";
+import { projectGuideOperationKey } from "@/components/project-guide/projectGuideMachine";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { getServerURL } from "@/lib/utils";
 import { type PulseMCPServer, useListMCPCatalog } from "@/pages/catalog/hooks";
@@ -21,9 +25,12 @@ import {
 import { useRemoteMcpInstallWorkflow } from "@/pages/catalog/useRemoteMcpInstallWorkflow";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
-import type { McpServerActivity } from "@gram/client/models/components/mcpserveractivity.js";
+import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
+import type { Plugin } from "@gram/client/models/components/plugin.js";
+import type { RemoteMcpServer } from "@gram/client/models/components/remotemcpserver.js";
+import type { ToolUsageTraceSummary } from "@gram/client/models/components/toolusagetracesummary.js";
 import type { ExternalMCPServer } from "@gram/client/models/components/externalmcpserver.js";
-import { useGetMcpServerActivity } from "@gram/client/react-query/getMcpServerActivity.js";
+import { useListToolUsageTraces } from "@gram/client/react-query/listToolUsageTraces.js";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { usePlugins } from "@gram/client/react-query/plugins.js";
@@ -39,7 +46,8 @@ type ActiveOperation = {
 };
 
 type ActivityBaseline = {
-  totalToolCalls: number;
+  capturedAtMs: number;
+  traceIds: Set<string>;
 };
 
 const CLIENTS: McpGuideClient[] = ["claude", "codex", "cursor"];
@@ -133,27 +141,55 @@ function promptFor(name: string, endpointUrl: string): string {
   return `Using the ${name} MCP server at this exact URL, ${endpointUrl}, first list the available tools. If multiple servers have the same name, use only the one at this URL. Then choose one tool marked read-only and call it with a harmless request. Do not create, update, or delete anything. Summarize the result, and do not call any tool unless it is marked read-only.`;
 }
 
-function activityFor(
-  activity: McpServerActivity[] | undefined,
-  server: McpServer | undefined,
-): McpServerActivity | undefined {
-  if (!server?.slug) return undefined;
-  return activity?.find(
-    (entry) =>
-      entry.targetType === "hosted_mcp_server" &&
-      entry.targetId === server.slug,
-  );
+function traceTimeMs(trace: ToolUsageTraceSummary): number | undefined {
+  try {
+    return Number(BigInt(trace.startTimeUnixNano) / 1_000_000n);
+  } catch {
+    return undefined;
+  }
 }
 
-function isNewActivity(
+function firstNewTrace(
   baseline: ActivityBaseline,
-  activity: McpServerActivity | undefined,
-): boolean {
-  return Boolean(activity && activity.totalToolCalls > baseline.totalToolCalls);
+  traces: ToolUsageTraceSummary[] | undefined,
+  server: McpServer | undefined,
+): ToolUsageTraceSummary | undefined {
+  if (!server?.slug) return undefined;
+  return traces
+    ?.filter((trace) => {
+      const observedAtMs = traceTimeMs(trace);
+      return (
+        trace.targetType === "hosted_mcp_server" &&
+        trace.targetId === server.slug &&
+        !baseline.traceIds.has(trace.id) &&
+        observedAtMs !== undefined &&
+        observedAtMs >= baseline.capturedAtMs
+      );
+    })
+    .sort(
+      (left, right) =>
+        (traceTimeMs(left) ?? Number.POSITIVE_INFINITY) -
+        (traceTimeMs(right) ?? Number.POSITIVE_INFINITY),
+    )[0];
 }
 
-function operationKey(scope: ProjectGuideOperationScope): string {
-  return `${scope.path}:${scope.step}:${scope.attempt}:${scope.runId}`;
+function selectedServerReadiness(
+  servers: McpServer[],
+  remoteServers: RemoteMcpServer[],
+  endpoints: McpEndpoint[],
+  plugins: Plugin[],
+  selectedServer: PulseMCPServer,
+): boolean {
+  const server = catalogBackedMcpServers(servers, remoteServers, [
+    filterToHttpRemotes(selectedServer),
+  ])[0];
+  return Boolean(
+    server &&
+    endpoints.some(
+      (endpoint) => endpoint.mcpServerId === server.id && endpoint.slug,
+    ) &&
+    hasDefaultPluginServer(plugins, server.id),
+  );
 }
 
 function catalogServerForMcp(
@@ -174,7 +210,8 @@ function catalogServerForMcp(
 }
 
 export function useMcpGuideOperations(): {
-  activityError: boolean;
+  activityBaselineError: boolean;
+  activityBaselinePending: boolean;
   catalogError: boolean;
   catalogPending: boolean;
   catalogServers: PulseMCPServer[] | undefined;
@@ -190,7 +227,7 @@ export function useMcpGuideOperations(): {
   projectStateError: boolean;
   projectStatePending: boolean;
   prompt: string | undefined;
-  retryActivity: () => void;
+  prepareActivityBaseline: () => Promise<boolean>;
   retryCatalog: () => void;
   selectServer: (server: PulseMCPServer) => void;
   selectedServer: PulseMCPServer | undefined;
@@ -212,10 +249,15 @@ export function useMcpGuideOperations(): {
   const activeOperationRef = useRef<ActiveOperation | undefined>(undefined);
   const [, setActivityBaseline] = useState<ActivityBaseline>();
   const activityBaselineRef = useRef<ActivityBaseline | undefined>(undefined);
+  const captureActivityBaselineRef = useRef<() => Promise<boolean>>(() =>
+    Promise.resolve(false),
+  );
   const installStartedFor = useRef<string | undefined>(undefined);
   const progressReportedFor = useRef(new Set<string>());
+  const readinessCheckedFor = useRef(new Set<string>());
   const [suppressActivityError, setSuppressActivityError] = useState(false);
   const [baselineCaptureError, setBaselineCaptureError] = useState(false);
+  const [baselineCapturePending, setBaselineCapturePending] = useState(false);
 
   const catalog = useListMCPCatalog();
   const serversQuery = useMcpServers({ gramProject }, undefined, {
@@ -309,25 +351,36 @@ export function useMcpGuideOperations(): {
     serverNameSuffix: "_Governed",
   });
 
-  const activityQuery = useGetMcpServerActivity(
-    { gramProject, getMcpServerActivityPayload: {} },
-    undefined,
-    {
-      enabled: Boolean(endpointUrl),
-      refetchInterval:
-        activeOperation?.scope.step === 3 && !activeOperation.paused
-          ? 5_000
-          : false,
-      throwOnError: false,
-    },
+  const tracesRequest = useMemo(
+    () => ({
+      gramProject,
+      listToolUsageTracesPayload: {
+        from: new Date(0),
+        to: new Date(),
+        hostedToolsetSlugs: mcpServer?.slug ? [mcpServer.slug] : undefined,
+        targetTypes: ["hosted_mcp_server"] as Array<"hosted_mcp_server">,
+        limit: 20,
+        sort: "asc" as const,
+      },
+    }),
+    [gramProject, mcpServer?.slug],
   );
+  const activityQuery = useListToolUsageTraces(tracesRequest, undefined, {
+    enabled: Boolean(endpointUrl && mcpServer?.slug),
+    refetchInterval: () => {
+      tracesRequest.listToolUsageTracesPayload.to = new Date();
+      return activeOperation?.scope.step === 3 && !activeOperation.paused
+        ? 5_000
+        : false;
+    },
+    throwOnError: false,
+  });
   const queryActivityError =
     activityQuery.isError ||
-    (Boolean(endpointUrl) &&
+    (Boolean(endpointUrl && mcpServer?.slug) &&
       !activityQuery.isPending &&
       activityQuery.data === undefined);
   const activityError = baselineCaptureError || queryActivityError;
-  const serverActivity = activityFor(activityQuery.data?.activity, mcpServer);
 
   const connectionPrompts =
     endpointUrl && clientName
@@ -344,27 +397,86 @@ export function useMcpGuideOperations(): {
     [],
   );
 
-  const captureActivityBaseline = useCallback(async (): Promise<void> => {
+  const captureActivityBaseline = useCallback(async (): Promise<boolean> => {
     activityBaselineRef.current = undefined;
     setActivityBaseline(undefined);
     setBaselineCaptureError(false);
+    setBaselineCapturePending(true);
     setSuppressActivityError(true);
+    tracesRequest.listToolUsageTracesPayload.to = new Date();
     try {
       const result = await activityQuery.refetch();
       if (result.isError || !result.data) {
         setBaselineCaptureError(true);
-        return;
+        return false;
       }
-      const current = activityFor(result.data.activity, mcpServer);
-      const baseline = { totalToolCalls: current?.totalToolCalls ?? 0 };
+      const latestTraceMs = result.data.traces.reduce(
+        (latest, trace) => Math.max(latest, traceTimeMs(trace) ?? 0),
+        0,
+      );
+      const baseline = {
+        capturedAtMs: Math.max(Date.now(), latestTraceMs),
+        traceIds: new Set(result.data.traces.map((trace) => trace.id)),
+      };
       activityBaselineRef.current = baseline;
       setActivityBaseline(baseline);
+      tracesRequest.listToolUsageTracesPayload.from = new Date(
+        baseline.capturedAtMs,
+      );
+      tracesRequest.listToolUsageTracesPayload.to = new Date();
+      return true;
     } catch {
       setBaselineCaptureError(true);
+      return false;
     } finally {
+      setBaselineCapturePending(false);
       setSuppressActivityError(false);
     }
-  }, [activityQuery, mcpServer]);
+  }, [activityQuery, tracesRequest]);
+  captureActivityBaselineRef.current = captureActivityBaseline;
+
+  const refetchSelectedServerReadiness = useCallback(async (): Promise<
+    "ready" | "not-ready" | "unreadable"
+  > => {
+    if (!selectedServer) return "not-ready";
+    try {
+      const [servers, remoteServers, endpoints, plugins] = await Promise.all([
+        serversQuery.refetch(),
+        remoteServersQuery.refetch(),
+        endpointsQuery.refetch(),
+        pluginsQuery.refetch(),
+      ]);
+      if (
+        servers.isError ||
+        remoteServers.isError ||
+        endpoints.isError ||
+        plugins.isError ||
+        !servers.data ||
+        !remoteServers.data ||
+        !endpoints.data ||
+        !plugins.data
+      ) {
+        return "unreadable";
+      }
+      return selectedServerReadiness(
+        servers.data.mcpServers,
+        remoteServers.data.remoteMcpServers,
+        endpoints.data.mcpEndpoints,
+        plugins.data.plugins,
+        selectedServer,
+      )
+        ? "ready"
+        : "not-ready";
+    } catch {
+      return "unreadable";
+    }
+  }, [
+    endpointsQuery,
+    pluginsQuery,
+    remoteServersQuery,
+    selectedServer,
+    serversQuery,
+  ]);
 
   const retryActivity = useCallback(() => {
     if (!activityBaselineRef.current) {
@@ -372,8 +484,9 @@ export function useMcpGuideOperations(): {
       return;
     }
     setSuppressActivityError(true);
+    tracesRequest.listToolUsageTracesPayload.to = new Date();
     void activityQuery.refetch().finally(() => setSuppressActivityError(false));
-  }, [activityQuery, captureActivityBaseline]);
+  }, [activityQuery, captureActivityBaseline, tracesRequest]);
 
   const handleSignal = useCallback(
     (
@@ -388,20 +501,22 @@ export function useMcpGuideOperations(): {
         setActivityBaseline(undefined);
         return;
       }
+      if (signal.type === "prepare") {
+        void captureActivityBaselineRef.current();
+        return;
+      }
       if (signal.type === "pause") {
         const current = activeOperationRef.current;
         if (
           current &&
-          operationKey(current.scope) === operationKey(signal.scope)
+          projectGuideOperationKey(current.scope) ===
+            projectGuideOperationKey(signal.scope)
         ) {
           updateActiveOperation({ ...current, paused: true });
         }
         return;
       }
-      if (signal.type === "checkpoint") {
-        if (signal.scope.step === 2) void captureActivityBaseline();
-        return;
-      }
+      if (signal.type === "checkpoint") return;
 
       updateActiveOperation({ scope: signal.scope, report, paused: false });
       if (signal.type === "start" && signal.scope.step === 3) {
@@ -416,13 +531,42 @@ export function useMcpGuideOperations(): {
         if (signal.scope.step === 3) retryActivity();
       }
     },
-    [captureActivityBaseline, retryActivity, updateActiveOperation, workflow],
+    [retryActivity, updateActiveOperation, workflow],
   );
 
   useEffect(() => {
     const operation = activeOperation;
     if (!operation || operation.paused || operation.scope.step !== 0) return;
-    const key = operationKey(operation.scope);
+    const key = projectGuideOperationKey(operation.scope);
+    const finishReadinessCheck = (
+      readiness: "ready" | "not-ready" | "unreadable",
+    ): void => {
+      const current = activeOperationRef.current;
+      if (
+        !current ||
+        projectGuideOperationKey(current.scope) !==
+          projectGuideOperationKey(operation.scope)
+      ) {
+        return;
+      }
+      updateActiveOperation(undefined);
+      if (readiness === "ready") {
+        operation.report({
+          type: "success",
+          scope: operation.scope,
+          result: `${resolvedName ?? "Catalog server"} governed endpoint and Default plugin verified`,
+        });
+        return;
+      }
+      operation.report({
+        type: "error",
+        scope: operation.scope,
+        message:
+          readiness === "unreadable"
+            ? "Could not verify the governed endpoint and Default plugin. Retry the readiness check."
+            : "The governed endpoint or Default plugin is not ready yet. Retry the readiness check.",
+      });
+    };
     if (!selectedServer) {
       updateActiveOperation(undefined);
       operation.report({
@@ -446,12 +590,26 @@ export function useMcpGuideOperations(): {
       return;
     }
     if (mcpServer) {
-      updateActiveOperation(undefined);
-      operation.report({
-        type: "success",
-        scope: operation.scope,
-        result: `${resolvedName ?? serverName(selectedServer)} is already installed as a governed MCP server`,
-      });
+      if (
+        selectedServerReadiness(
+          serversQuery.data?.mcpServers ?? [],
+          remoteServersQuery.data?.remoteMcpServers ?? [],
+          endpointsQuery.data?.mcpEndpoints ?? [],
+          pluginsQuery.data?.plugins ?? [],
+          selectedServer,
+        )
+      ) {
+        updateActiveOperation(undefined);
+        operation.report({
+          type: "success",
+          scope: operation.scope,
+          result: `${resolvedName ?? serverName(selectedServer)} governed endpoint and Default plugin verified`,
+        });
+      } else {
+        if (readinessCheckedFor.current.has(key)) return;
+        readinessCheckedFor.current.add(key);
+        void refetchSelectedServerReadiness().then(finishReadinessCheck);
+      }
       return;
     }
     if (!progressReportedFor.current.has(key)) {
@@ -491,8 +649,8 @@ export function useMcpGuideOperations(): {
     const failure = workflow.statuses.find(
       (status) => status.status === "failed",
     );
-    updateActiveOperation(undefined);
     if (failure) {
+      updateActiveOperation(undefined);
       operation.report({
         type: "error",
         scope: operation.scope,
@@ -502,11 +660,9 @@ export function useMcpGuideOperations(): {
       });
       return;
     }
-    operation.report({
-      type: "success",
-      scope: operation.scope,
-      result: `${serverName(selectedServer)} installed as a governed MCP server`,
-    });
+    if (readinessCheckedFor.current.has(key)) return;
+    readinessCheckedFor.current.add(key);
+    void refetchSelectedServerReadiness().then(finishReadinessCheck);
   }, [
     activeOperation,
     catalogError,
@@ -514,8 +670,13 @@ export function useMcpGuideOperations(): {
     projectDataDefined,
     projectStateError,
     projectStatePending,
+    refetchSelectedServerReadiness,
     resolvedName,
     selectedServer,
+    endpointsQuery.data?.mcpEndpoints,
+    pluginsQuery.data?.plugins,
+    remoteServersQuery.data?.remoteMcpServers,
+    serversQuery.data?.mcpServers,
     updateActiveOperation,
     workflow,
   ]);
@@ -536,35 +697,46 @@ export function useMcpGuideOperations(): {
       });
       return;
     }
-    if (!isNewActivity(baseline, serverActivity)) return;
+    const trace = firstNewTrace(
+      baseline,
+      activityQuery.data?.traces,
+      mcpServer,
+    );
+    if (!trace || !endpointUrl) return;
 
     const event: ProjectGuideEventCard = {
       kind: "Governed call",
       tone: "allow",
-      title: serverActivity?.targetLabel ?? resolvedName ?? "MCP server",
+      title: trace.toolName,
       rows: [
-        { key: "server", value: resolvedName ?? "Catalog server" },
+        { key: "server", value: trace.targetLabel },
+        { key: "endpoint", value: endpointUrl },
         {
-          key: "calls",
-          value: `${serverActivity?.totalToolCalls ?? 0} recorded`,
+          key: "result",
+          value:
+            trace.httpStatusCode === undefined
+              ? trace.eventSource
+              : `HTTP ${trace.httpStatusCode}`,
         },
       ],
-      note: "The new call is recorded in Tool Logs.",
+      note: "The first new call is recorded in Tool Logs.",
     };
     updateActiveOperation(undefined);
     operation.report({ type: "event", scope: operation.scope, event });
   }, [
     activeOperation,
     activityError,
+    activityQuery.data?.traces,
     activityQuery.isPending,
-    resolvedName,
-    serverActivity,
+    endpointUrl,
+    mcpServer,
     suppressActivityError,
     updateActiveOperation,
   ]);
 
   return {
-    activityError,
+    activityBaselineError: baselineCaptureError,
+    activityBaselinePending: baselineCapturePending,
     catalogError,
     catalogPending: catalog.isPending,
     catalogServers,
@@ -577,7 +749,7 @@ export function useMcpGuideOperations(): {
     projectStateError,
     projectStatePending,
     prompt,
-    retryActivity,
+    prepareActivityBaseline: captureActivityBaseline,
     retryCatalog: () => {
       void catalog.refetch();
     },

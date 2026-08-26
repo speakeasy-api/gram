@@ -53,6 +53,7 @@ const PREFERRED_PROJECT_KEY = "preferredProject";
 const SLUG_EXEMPT_PATHS = [
   "/switch-org",
   "/explore-demo",
+  "/guide",
   "/talk-to-us",
   "/shadow-mcp/request",
   "/risk-policy-bypass/request",

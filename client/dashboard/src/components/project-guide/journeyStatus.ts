@@ -67,6 +67,10 @@ export function hasMcpServerActivity(
   );
 }
 
+export function isGuideMcpServer(server: McpServer): boolean {
+  return server.name?.endsWith("_Governed") === true;
+}
+
 export function latestSecretsFinding(
   results: RiskResult[] | undefined,
 ): RiskResult | undefined {
@@ -83,15 +87,20 @@ export function latestSecretsFinding(
 export function hasBlockingSecretsPolicy(
   policies: RiskPolicy[] | undefined,
 ): boolean {
-  return (policies ?? []).some(
-    (policy) =>
+  return (policies ?? []).some((policy) => {
+    const messageTypes = policy.messageTypes ?? [];
+    return (
       policy.enabled &&
       policy.action === "block" &&
+      policy.policyType === "standard" &&
+      policy.audienceType === "everyone" &&
+      policy.sources.length === 1 &&
       policy.sources.includes("gitleaks") &&
-      (!policy.messageTypes?.length ||
-        (policy.messageTypes.includes("tool_request") &&
-          policy.messageTypes.includes("tool_response"))),
-  );
+      messageTypes.length === 2 &&
+      messageTypes.includes("tool_request") &&
+      messageTypes.includes("tool_response")
+    );
+  });
 }
 
 /**

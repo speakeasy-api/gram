@@ -38,7 +38,6 @@ import {
   type ProjectGuideDisplayState,
   type ProjectGuideEvent,
   type ProjectGuideOperationReport,
-  type ProjectGuideOperationSignal,
   type ProjectGuideOutputEntry,
 } from "@/components/project-guide/projectGuideMachine";
 import { useSlugs } from "@/contexts/Sdk";
@@ -63,23 +62,32 @@ import { useNavigate } from "react-router";
 type McpGuideOperations = ReturnType<typeof useMcpGuideOperations>;
 type SecretGuideOperations = ReturnType<typeof useSecretGuideOperations>;
 
-export function ProjectGuide({
-  onOperationSignal,
+export function ProjectGuide(): JSX.Element {
+  const { orgSlug, projectSlug } = useSlugs();
+
+  return (
+    <ProjectGuideContent
+      key={`${orgSlug ?? ""}:${projectSlug ?? ""}`}
+      orgSlug={orgSlug}
+      projectSlug={projectSlug}
+    />
+  );
+}
+
+function ProjectGuideContent({
+  orgSlug,
+  projectSlug,
 }: {
-  onOperationSignal?: (
-    signal: ProjectGuideOperationSignal,
-    report: (report: ProjectGuideOperationReport) => void,
-  ) => void;
-} = {}): JSX.Element {
+  orgSlug: string | undefined;
+  projectSlug: string | undefined;
+}): JSX.Element {
   useHideInsightsDock();
-  const { projectSlug } = useSlugs();
   const routes = useRoutes();
   const navigate = useNavigate();
   const { statusByJourney, isPending: progressPending } =
     useProjectGuideProgress();
   const mcpOperations = useMcpGuideOperations();
   const secretOperations = useSecretGuideOperations();
-  const operationSignalRef = useRef(onOperationSignal);
   const mcpOperationSignalRef = useRef(mcpOperations.handleSignal);
   const secretOperationSignalRef = useRef(secretOperations.handleSignal);
   const reportRef = useRef<(report: ProjectGuideOperationReport) => void>(
@@ -87,7 +95,6 @@ export function ProjectGuide({
   );
   const reportTimersRef = useRef(new Set<number>());
   const nextReportAtRef = useRef(0);
-  operationSignalRef.current = onOperationSignal;
   mcpOperationSignalRef.current = mcpOperations.handleSignal;
   secretOperationSignalRef.current = secretOperations.handleSignal;
   const [snapshot, send] = useMachine(projectGuideMachine, {
@@ -104,7 +111,6 @@ export function ProjectGuide({
         }
         mcpOperationSignalRef.current(signal, reportRef.current);
         secretOperationSignalRef.current(signal, reportRef.current);
-        operationSignalRef.current?.(signal, reportRef.current);
       },
     },
   });
@@ -160,12 +166,8 @@ export function ProjectGuide({
     return () => window.clearInterval(interval);
   }, [displayState, send, snapshot.context.elapsedListeningSeconds]);
 
-  useEffect(() => {
-    if (displayState === "exited") returnToProjectHome();
-  }, [displayState, returnToProjectHome]);
-
   const openJourney = (journey: JourneyMeta): void => {
-    if (projectSlug) markProjectGuideStarted(projectSlug);
+    if (orgSlug && projectSlug) markProjectGuideStarted(orgSlug, projectSlug);
     send({
       type: "OPEN",
       path: journey.id,
@@ -420,16 +422,20 @@ function primaryActionFor(
       };
     case "checkpoint":
       if (journey.id === "third-party-mcp" && currentStep === 1) {
+        const baselineFailed = mcpOperations.activityBaselineError;
         return {
-          label: "I've connected it",
+          label: baselineFailed ? "Try again" : "I've connected it",
           disabled:
             !mcpOperations.connectionPrompts ||
-            !mcpOperations.connectionPromptCopied,
-          onClick: () =>
-            send({
-              type: "USER_CHECKPOINT_COMPLETE",
-              result: "Client connected to the governed endpoint",
-            }),
+            !mcpOperations.connectionPromptCopied ||
+            mcpOperations.activityBaselinePending,
+          onClick: baselineFailed
+            ? () => void mcpOperations.prepareActivityBaseline()
+            : () =>
+                send({
+                  type: "USER_CHECKPOINT_COMPLETE",
+                  result: "Client connected to the governed endpoint",
+                }),
         };
       }
       if (journey.id === "third-party-mcp" && currentStep === 2) {
@@ -438,12 +444,18 @@ function primaryActionFor(
       if (journey.id === "secret-block" && currentStep === 2) {
         return {
           label: "I've installed and restarted it",
-          disabled: !secretOperations.installCommand,
-          onClick: () =>
-            send({
-              type: "USER_CHECKPOINT_COMPLETE",
-              result: "Observability plugin installed and agent restarted",
-            }),
+          disabled:
+            !secretOperations.installCommand ||
+            secretOperations.baselinePending,
+          onClick: () => {
+            void (async () => {
+              if (!(await secretOperations.prepareTelemetryBaseline())) return;
+              send({
+                type: "USER_CHECKPOINT_COMPLETE",
+                result: "Observability plugin installed and agent restarted",
+              });
+            })();
+          },
         };
       }
       if (journey.id === "secret-block" && currentStep === 1) {
@@ -490,7 +502,6 @@ function primaryActionFor(
         href: secretOperations.riskEventsHref,
       };
     case "opening":
-    case "exited":
       return { label: "Start the journey", icon: "play", disabled: true };
   }
 }
@@ -573,47 +584,33 @@ type ProjectGuidePhaseStatus =
   | "ok"
   | "failed";
 
-function secretPolicyPhaseStatuses(
+function phaseStatuses(
+  labels: readonly string[],
   displayState: ProjectGuideDisplayState,
   operationProgress: number | null,
   hasError: boolean,
+  runningAt = labels.map((_, index) => index / labels.length),
 ): ProjectGuidePhaseStatus[] {
-  if (hasError) return ["failed", "queued", "queued"];
+  if (hasError) {
+    return labels.map((_, index) => (index === 0 ? "failed" : "queued"));
+  }
   if (displayState !== "running" && displayState !== "paused") {
-    return ["not run", "not run", "not run"];
+    return labels.map(() => "not run");
   }
   if (operationProgress === null) {
-    return ["not run", "not run", "not run"];
+    return labels.map(() => "not run");
   }
 
-  const progress = operationProgress;
-  const currentPhase = Math.min(
-    SECRET_POLICY_PHASES.length - 1,
-    Math.floor(progress * SECRET_POLICY_PHASES.length),
+  const currentPhase = runningAt.reduce(
+    (phase, threshold, index) =>
+      operationProgress >= threshold ? index : phase,
+    0,
   );
-  return SECRET_POLICY_PHASES.map((_, index) => {
-    if (progress >= 1 || index < currentPhase) return "ok";
+  return labels.map((_, index) => {
+    if (operationProgress >= 1 || index < currentPhase) return "ok";
     if (index === currentPhase) return "running";
     return "queued";
   });
-}
-
-function secretPluginPhaseStatuses(
-  displayState: ProjectGuideDisplayState,
-  operationProgress: number | null,
-  hasError: boolean,
-): ProjectGuidePhaseStatus[] {
-  if (hasError) return ["failed", "queued"];
-  if (displayState !== "running" && displayState !== "paused") {
-    return ["not run", "not run"];
-  }
-  if (operationProgress === null) {
-    return ["not run", "not run"];
-  }
-
-  const progress = operationProgress;
-  if (progress >= 1) return ["ok", "ok"];
-  return progress >= 0.75 ? ["ok", "running"] : ["running", "queued"];
 }
 
 function SecretPolicyPhases({
@@ -625,7 +622,8 @@ function SecretPolicyPhases({
   operationProgress: number | null;
   hasError: boolean;
 }): JSX.Element {
-  const statuses = secretPolicyPhaseStatuses(
+  const statuses = phaseStatuses(
+    SECRET_POLICY_PHASES,
     displayState,
     operationProgress,
     hasError,
@@ -638,24 +636,6 @@ function SecretPolicyPhases({
       statuses={statuses}
     />
   );
-}
-
-function mcpCatalogPhaseStatuses(
-  displayState: ProjectGuideDisplayState,
-  operationProgress: number | null,
-  hasError: boolean,
-): ProjectGuidePhaseStatus[] {
-  if (hasError) return ["failed", "queued"];
-  if (displayState !== "running" && displayState !== "paused") {
-    return ["not run", "not run"];
-  }
-  if (operationProgress === null) {
-    return ["not run", "not run"];
-  }
-
-  const progress = operationProgress;
-  if (progress >= 1) return ["ok", "ok"];
-  return progress >= 0.5 ? ["ok", "running"] : ["running", "queued"];
 }
 
 function McpCatalogPhases({
@@ -671,10 +651,12 @@ function McpCatalogPhases({
     <ProjectGuidePhaseChecklist
       title="What the wizard does"
       labels={MCP_CATALOG_PHASES}
-      statuses={mcpCatalogPhaseStatuses(
+      statuses={phaseStatuses(
+        MCP_CATALOG_PHASES,
         displayState,
         operationProgress,
         hasError,
+        [0, 0.5],
       )}
     />
   );
@@ -865,10 +847,12 @@ function SecretPluginPhases({
   operationProgress: number | null;
   hasError: boolean;
 }): JSX.Element {
-  const statuses = secretPluginPhaseStatuses(
+  const statuses = phaseStatuses(
+    SECRET_PLUGIN_PHASES,
     displayState,
     operationProgress,
     hasError,
+    [0, 0.75],
   );
 
   return (
@@ -1238,11 +1222,17 @@ function guideStepError(
     if (step === 0 && mcpOperations.catalogError) {
       return "Could not load the automatic catalog servers.";
     }
+    if (step === 1 && mcpOperations.activityBaselineError) {
+      return "We couldn't prepare the connection yet. Try again.";
+    }
     return null;
   }
 
   if (step === 0 && secretOperations.policyError) {
     return "Could not read this project's risk policies.";
+  }
+  if (step === 2 && secretOperations.baselineError) {
+    return "Could not capture the hook and risk-event baseline. Retry before opening the prompt.";
   }
   return null;
 }

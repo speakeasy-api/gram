@@ -5,10 +5,10 @@ import { ArrowRight, Sparkles } from "lucide-react";
 import { Link } from "react-router";
 
 export function ProjectGuideSidebarCta(): JSX.Element | null {
-  const { projectSlug } = useSlugs();
+  const { orgSlug, projectSlug } = useSlugs();
   const routes = useRoutes();
 
-  if (!useProjectGuideStarted(projectSlug)) return null;
+  if (!useProjectGuideStarted(orgSlug, projectSlug)) return null;
 
   return (
     <div className="group border-border/60 bg-card relative overflow-hidden border p-3 group-data-[collapsible=icon]:border-0 group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:p-0">

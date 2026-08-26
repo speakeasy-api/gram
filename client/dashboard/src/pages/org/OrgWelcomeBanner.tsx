@@ -1,3 +1,4 @@
+import { PROJECT_GUIDE_ENTRY_PATH } from "@/components/project-guide/GuideEntryRedirect";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import { Link } from "react-router";
 import { cn } from "@/lib/utils";
@@ -54,21 +55,15 @@ export function OrgWelcomeBanner(): JSX.Element | null {
       meta: "Read-only · simulated data",
       to: projectRoutes.exploreDemo.href(),
     },
-    ...(platformMcpVisible
-      ? []
-      : [
-          {
-            index: "02",
-            title: "Get started",
-            body: "Start getting your own data into the dashboard. Connect an MCP server, or set a policy and watch it block a call.",
-            cta: "Start using Speakeasy",
-            meta: "~5 minutes · your data",
-            to: startProject
-              ? projectRoutes.guide.href()
-              : orgRoutes.home.href(),
-            recommended: true,
-          },
-        ]),
+    {
+      index: "02",
+      title: "Get started",
+      body: "Start getting your own data into the dashboard. Connect an MCP server, or set a policy and watch it block a call.",
+      cta: "Start using Speakeasy",
+      meta: "~5 minutes · your data",
+      to: startProject ? PROJECT_GUIDE_ENTRY_PATH : orgRoutes.home.href(),
+      recommended: true,
+    },
   ];
 
   if (canSetUpOrg) {

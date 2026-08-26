@@ -2,12 +2,25 @@ import { createDismissedCtaStore } from "@/hooks/useDismissedCtaStore";
 
 const startedStore = createDismissedCtaStore("gram-project-guide-started");
 
-export function useProjectGuideStarted(
+function projectGuideScope(
+  orgSlug: string | undefined,
   projectSlug: string | undefined,
-): boolean {
-  return startedStore.useDismissed(projectSlug);
+): string | undefined {
+  if (!orgSlug || !projectSlug) return undefined;
+  return `${orgSlug}:${projectSlug}`;
 }
 
-export function markProjectGuideStarted(projectSlug: string): void {
-  startedStore.write(projectSlug, true);
+export function useProjectGuideStarted(
+  orgSlug: string | undefined,
+  projectSlug: string | undefined,
+): boolean {
+  return startedStore.useDismissed(projectGuideScope(orgSlug, projectSlug));
+}
+
+export function markProjectGuideStarted(
+  orgSlug: string,
+  projectSlug: string,
+): void {
+  const scope = projectGuideScope(orgSlug, projectSlug);
+  if (scope) startedStore.write(scope, true);
 }

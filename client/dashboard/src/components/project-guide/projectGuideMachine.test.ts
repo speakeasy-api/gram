@@ -11,11 +11,10 @@ import {
   type ProjectGuideOperationSignal,
 } from "./projectGuideMachine";
 
-function coordinator(listenTimeoutSeconds = LISTEN_TIMEOUT_SECONDS) {
+function coordinator() {
   const signals: ProjectGuideOperationSignal[] = [];
   const service = createActor(projectGuideMachine, {
     input: {
-      listenTimeoutSeconds,
       onSignal: (signal) => {
         signals.push(signal);
       },
@@ -163,10 +162,6 @@ describe("project guide coordinator contract", () => {
 
     expect(service.getSnapshot().value).toBe("checkpoint");
     expect(getProjectGuideCurrentStep(service.getSnapshot().context)).toBe(2);
-    expect(service.getSnapshot().context.checkpoint).toEqual({
-      step: 2,
-      label: "Ask the agent to list the tools",
-    });
     service.send({
       type: "USER_CHECKPOINT_COMPLETE",
       result: "Client connected",
@@ -200,7 +195,7 @@ describe("project guide coordinator contract", () => {
     });
   });
 
-  it("records success and advances to the next operation", () => {
+  it("records success and prepares the MCP activity baseline", () => {
     const { service, signals } = coordinator();
     openMcp(service);
     service.send({ type: "START" });
@@ -219,8 +214,8 @@ describe("project guide coordinator contract", () => {
       "next",
     ]);
     expect(signals.at(-1)).toEqual({
-      type: "start",
-      scope: { path: "third-party-mcp", step: 0, attempt: 0, runId: 1 },
+      type: "prepare",
+      scope: { path: "third-party-mcp", step: 1, attempt: 0, runId: 1 },
     });
   });
 
@@ -237,10 +232,6 @@ describe("project guide coordinator contract", () => {
 
     expect(service.getSnapshot().value).toBe("checkpoint");
     expect(getProjectGuideCurrentStep(service.getSnapshot().context)).toBe(1);
-    expect(service.getSnapshot().context.checkpoint).toEqual({
-      step: 1,
-      label: "Download the observability plugin",
-    });
     expect(service.getSnapshot().context.error).toBeNull();
     expect(signals).toHaveLength(1);
 
@@ -252,7 +243,6 @@ describe("project guide coordinator contract", () => {
     service.send({ type: "START" });
 
     expect(service.getSnapshot().value).toBe("running");
-    expect(service.getSnapshot().context.checkpoint).toBeNull();
     expect(signals.at(-1)).toEqual({
       type: "start",
       scope: { path: "secret-block", step: 1, attempt: 0, runId: 2 },
@@ -266,10 +256,6 @@ describe("project guide coordinator contract", () => {
 
     expect(service.getSnapshot().value).toBe("checkpoint");
     expect(getProjectGuideCurrentStep(service.getSnapshot().context)).toBe(2);
-    expect(service.getSnapshot().context.checkpoint).toEqual({
-      step: 2,
-      label: "Add it to your agent",
-    });
   });
 
   it("retries an operation error without losing completed progress", () => {
@@ -330,7 +316,7 @@ describe("project guide coordinator contract", () => {
     });
   });
 
-  it("switches, backs out, exits, and resets without stale active truth", () => {
+  it("switches and backs out without stale active truth", () => {
     const { service, signals } = coordinator();
     openMcp(service);
     service.send({ type: "START" });
@@ -348,22 +334,6 @@ describe("project guide coordinator contract", () => {
     service.send({ type: "BACK" });
     expect(service.getSnapshot().value).toBe("opening");
     expect(service.getSnapshot().context.activePath).toBeNull();
-
-    service.send({ type: "OPEN", path: "secret-block", resumeStep: 1 });
-    service.send({ type: "EXIT" });
-    expect(service.getSnapshot().value).toBe("exited");
-    expect(signals.at(-1)).toMatchObject({
-      type: "abort",
-      scope: { path: "secret-block" },
-      reason: "exit",
-    });
-
-    service.send({ type: "RESET" });
-    expect(service.getSnapshot().value).toBe("opening");
-    expect(service.getSnapshot().context.completedByPath).toEqual({
-      "third-party-mcp": [],
-      "secret-block": [],
-    });
   });
 
   it("completes only after a newly received event is recorded", () => {

@@ -7,7 +7,7 @@ vi.mock("@/components/project-guide/projectGuideStores", () => ({
   useProjectGuideStarted: () => started.current,
 }));
 vi.mock("@/contexts/Sdk", () => ({
-  useSlugs: () => ({ projectSlug: "project" }),
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 vi.mock("@/routes", () => ({
   useRoutes: () => ({ guide: { href: () => "/org/projects/project/guide" } }),
@@ -26,7 +26,7 @@ afterEach(() => {
 });
 
 describe("ProjectGuideSidebarCta", () => {
-  it("links back to the guide after a journey has started", () => {
+  it("returns to the same project guide that made the CTA visible", () => {
     started.current = true;
     render(<ProjectGuideSidebarCta />);
 

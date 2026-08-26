@@ -36,6 +36,9 @@ const statusByJourney = vi.hoisted(
 );
 const progressPending = vi.hoisted(() => ({ current: false }));
 const navigate = vi.hoisted(() => vi.fn());
+const slugs = vi.hoisted(() => ({
+  current: { orgSlug: "org", projectSlug: "project-guide-test" },
+}));
 const mcpOperations = vi.hoisted(() => ({
   current: {} as Record<string, unknown>,
 }));
@@ -53,7 +56,7 @@ vi.mock("./projectGuideStores", () => ({
   markProjectGuideStarted: vi.fn(),
 }));
 vi.mock("@/contexts/Sdk", () => ({
-  useSlugs: () => ({ projectSlug: "project-guide-test" }),
+  useSlugs: () => slugs.current,
 }));
 vi.mock("@/routes", () => ({
   useRoutes: () => ({
@@ -109,6 +112,17 @@ async function advanceGuideDelay(count = 1): Promise<void> {
   );
 }
 
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+} {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
+}
+
 const catalogServer = {
   description: "Read-only test server",
   registryId: "registry",
@@ -129,7 +143,8 @@ const catalogServer = {
 
 function resetMcpOperations(): void {
   mcpOperations.current = {
-    activityError: false,
+    activityBaselineError: false,
+    activityBaselinePending: false,
     catalogError: false,
     catalogPending: false,
     catalogServers: [catalogServer],
@@ -149,8 +164,8 @@ function resetMcpOperations(): void {
     projectStatePending: false,
     prompt:
       "Using the Linear_Governed MCP server at this exact URL, https://api.example/mcp/linear-endpoint, first list the available tools. If multiple servers have the same name, use only the one at this URL. Then choose one tool marked read-only and call it with a harmless request. Do not create, update, or delete anything.",
-    retryActivity: vi.fn(),
     retryCatalog: vi.fn(),
+    prepareActivityBaseline: vi.fn(() => Promise.resolve(true)),
     selectServer: vi.fn(),
     selectedServer: catalogServer,
     setClient: vi.fn(),
@@ -168,6 +183,8 @@ function resetMcpOperations(): void {
 
 function resetSecretOperations(): void {
   secretOperations.current = {
+    baselineError: false,
+    baselinePending: false,
     client: "claude",
     clientSelected: true,
     downloadedFilename: "gram-observability.zip",
@@ -178,11 +195,11 @@ function resetSecretOperations(): void {
     prompt:
       'Run this exact command in your shell:\n\necho "GITHUB_TOKEN=ghp_R2D2C3POLuk3Skywalker1234567890ab"',
     retryPolicy: vi.fn(),
+    prepareTelemetryBaseline: vi.fn(() => Promise.resolve(true)),
     riskEventsHref: "/projects/request-project/security/events",
     setClient: vi.fn((client: "claude" | "cursor" | "codex") => {
       secretOperations.current.client = client;
     }),
-    telemetryError: false,
   };
 }
 
@@ -195,6 +212,7 @@ afterEach(() => {
     "third-party-mcp": "not-started",
     "secret-block": "not-started",
   };
+  slugs.current = { orgSlug: "org", projectSlug: "project-guide-test" };
   resetMcpOperations();
   resetSecretOperations();
 });
@@ -203,6 +221,29 @@ resetMcpOperations();
 resetSecretOperations();
 
 describe("ProjectGuide", () => {
+  it("resets in-memory state when the project changes", () => {
+    const { rerender } = render(<ProjectGuide />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
+    );
+    expect(
+      screen.getByRole("heading", { name: "Govern a third-party MCP" }),
+    ).toBeTruthy();
+
+    slugs.current = { orgSlug: "org", projectSlug: "another-project" };
+    rerender(<ProjectGuide />);
+
+    expect(
+      screen.getByRole("heading", {
+        name: "Put your agent traffic under control",
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("heading", { name: "Govern a third-party MCP" }),
+    ).toBeNull();
+  });
+
   it("renders the approved opening with both selectable journeys", () => {
     render(<ProjectGuide />);
 
@@ -328,13 +369,12 @@ describe("ProjectGuide", () => {
 
   it("dispatches START and the matching operation signal from the primary button", () => {
     const signals: ProjectGuideOperationSignal[] = [];
-    render(
-      <ProjectGuide
-        onOperationSignal={(signal) => {
-          signals.push(signal);
-        }}
-      />,
+    mcpOperations.current.handleSignal = vi.fn(
+      (signal: ProjectGuideOperationSignal) => {
+        signals.push(signal);
+      },
     );
+    render(<ProjectGuide />);
 
     fireEvent.click(
       screen.getByRole("button", { name: /Govern a third-party MCP/ }),
@@ -357,30 +397,32 @@ describe("ProjectGuide", () => {
 
   it("paces automated MCP sub-steps before advancing the step", async () => {
     vi.useFakeTimers();
-    render(
-      <ProjectGuide
-        onOperationSignal={(signal, report) => {
-          if (signal.type !== "start" || signal.scope.step !== 0) return;
-          report({
-            type: "progress",
-            scope: signal.scope,
-            message: "Read the server's tool list",
-            progress: 0.2,
-          });
-          report({
-            type: "progress",
-            scope: signal.scope,
-            message: "Install it into this project",
-            progress: 0.5,
-          });
-          report({
-            type: "success",
-            scope: signal.scope,
-            result: "Server installed",
-          });
-        }}
-      />,
+    mcpOperations.current.handleSignal = vi.fn(
+      (
+        signal: ProjectGuideOperationSignal,
+        report: (report: ProjectGuideOperationReport) => void,
+      ) => {
+        if (signal.type !== "start" || signal.scope.step !== 0) return;
+        report({
+          type: "progress",
+          scope: signal.scope,
+          message: "Read the server's tool list",
+          progress: 0.2,
+        });
+        report({
+          type: "progress",
+          scope: signal.scope,
+          message: "Install it into this project",
+          progress: 0.5,
+        });
+        report({
+          type: "success",
+          scope: signal.scope,
+          result: "Server installed",
+        });
+      },
     );
+    render(<ProjectGuide />);
 
     fireEvent.click(
       screen.getByRole("button", { name: /Govern a third-party MCP/ }),
@@ -407,29 +449,31 @@ describe("ProjectGuide", () => {
     vi.useFakeTimers();
     let report: (report: ProjectGuideOperationReport) => void = () => undefined;
     let activeScope: ProjectGuideOperationScope | null = null;
-    render(
-      <ProjectGuide
-        onOperationSignal={(signal, sendReport) => {
-          report = sendReport;
-          activeScope = signal.scope;
-          if (signal.type !== "start") return;
-          if (signal.scope.step === 0) {
-            sendReport({
-              type: "success",
-              scope: signal.scope,
-              result: "Server installed",
-            });
-          }
-          if (signal.scope.step === 1) {
-            sendReport({
-              type: "success",
-              scope: signal.scope,
-              result: "Endpoint verified",
-            });
-          }
-        }}
-      />,
+    mcpOperations.current.handleSignal = vi.fn(
+      (
+        signal: ProjectGuideOperationSignal,
+        sendReport: (report: ProjectGuideOperationReport) => void,
+      ) => {
+        report = sendReport;
+        activeScope = signal.scope;
+        if (signal.type !== "start") return;
+        if (signal.scope.step === 0) {
+          sendReport({
+            type: "success",
+            scope: signal.scope,
+            result: "Server installed",
+          });
+        }
+        if (signal.scope.step === 1) {
+          sendReport({
+            type: "success",
+            scope: signal.scope,
+            result: "Endpoint verified",
+          });
+        }
+      },
     );
+    render(<ProjectGuide />);
 
     fireEvent.click(
       screen.getByRole("button", { name: /Govern a third-party MCP/ }),
@@ -487,24 +531,33 @@ describe("ProjectGuide", () => {
     expect(screen.getByText("linear.tools/list")).toBeTruthy();
   });
 
-  it("keeps the MCP prompt available while its baseline is unresolved", async () => {
+  it("captures the governed-call baseline after MCP setup completes", async () => {
     vi.useFakeTimers();
-    mcpOperations.current.activityError = true;
-    const handleSignal = vi.fn(
+    const baseline = deferred<boolean>();
+    mcpOperations.current.prepareActivityBaseline = vi.fn(
+      () => baseline.promise,
+    );
+    mcpOperations.current.handleSignal = vi.fn(
       (
         signal: ProjectGuideOperationSignal,
         report: (report: ProjectGuideOperationReport) => void,
       ) => {
-        if (signal.type === "start" && signal.scope.step < 2) {
+        if (signal.type === "prepare") {
+          void (
+            mcpOperations.current
+              .prepareActivityBaseline as () => Promise<boolean>
+          )();
+          return;
+        }
+        if (signal.type === "start" && signal.scope.step === 0) {
           report({
             type: "success",
             scope: signal.scope,
-            result: "Step complete",
+            result: "Governed endpoint and Default plugin verified",
           });
         }
       },
     );
-    mcpOperations.current.handleSignal = handleSignal;
 
     render(<ProjectGuide />);
     fireEvent.click(
@@ -512,17 +565,85 @@ describe("ProjectGuide", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
     await advanceGuideDelay();
-    fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
-    await advanceGuideDelay();
 
-    expect(screen.getByText(/first list the available tools/)).toBeTruthy();
     expect(
-      screen.queryByText(/capturing current activity baseline/i),
-    ).toBeNull();
+      mcpOperations.current.prepareActivityBaseline,
+    ).toHaveBeenCalledOnce();
+    expect(mcpOperations.current.handleSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "prepare",
+        scope: { path: "third-party-mcp", step: 1, attempt: 0, runId: 1 },
+      }),
+      expect.any(Function),
+    );
+    expect(screen.queryByText(/first list the available tools/)).toBeNull();
+
+    await act(async () => baseline.resolve(true));
+
+    fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
     expect(
-      screen.queryByText(/could not capture the current activity baseline/i),
+      screen.getByRole("heading", { name: "Ask the agent to list the tools" }),
+    ).toBeTruthy();
+    expect(
+      mcpOperations.current.prepareActivityBaseline,
+    ).toHaveBeenCalledOnce();
+  });
+
+  it("awaits the hook and risk baseline before exposing the secret prompt", async () => {
+    vi.useFakeTimers();
+    const baseline = deferred<boolean>();
+    secretOperations.current.prepareTelemetryBaseline = vi.fn(
+      () => baseline.promise,
+    );
+    secretOperations.current.handleSignal = vi.fn(
+      (
+        signal: ProjectGuideOperationSignal,
+        report: (report: ProjectGuideOperationReport) => void,
+      ) => {
+        if (signal.type === "start" && signal.scope.step === 0) {
+          report({
+            type: "success",
+            scope: signal.scope,
+            result: "Secrets policy verified",
+          });
+        }
+        if (signal.type === "start" && signal.scope.step === 1) {
+          report({
+            type: "success",
+            scope: signal.scope,
+            result: "Observability plugin downloaded",
+          });
+        }
+      },
+    );
+
+    render(<ProjectGuide />);
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Block a leaked credential mid-prompt/,
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
+    await advanceGuideDelay();
+    fireEvent.click(screen.getByRole("button", { name: "Claude Code" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
+    await advanceGuideDelay();
+    fireEvent.click(
+      screen.getByRole("button", { name: "I've installed and restarted it" }),
+    );
+
+    expect(
+      secretOperations.current.prepareTelemetryBaseline,
+    ).toHaveBeenCalledOnce();
+    expect(
+      screen.queryByText(/Run this exact command in your shell/),
     ).toBeNull();
-    expect(screen.queryByRole("button", { name: "Sent it" })).toBeNull();
+
+    await act(async () => baseline.resolve(true));
+
+    expect(
+      screen.getByText(/Run this exact command in your shell/),
+    ).toBeTruthy();
   });
 
   it("shows MCP listening guidance only in Activity", async () => {
@@ -635,24 +756,25 @@ describe("ProjectGuide", () => {
         secretOperations.current.clientSelected = true;
       },
     );
-
-    render(
-      <ProjectGuide
-        onOperationSignal={(signal, report) => {
-          if (signal.scope.step === 0) {
-            report({
-              type: "success",
-              scope: signal.scope,
-              result: "Secrets policy created",
-            });
-          }
-          if (signal.scope.step === 1) {
-            downloadReport = report;
-            downloadScope = signal.scope;
-          }
-        }}
-      />,
+    secretOperations.current.handleSignal = vi.fn(
+      (
+        signal: ProjectGuideOperationSignal,
+        report: (report: ProjectGuideOperationReport) => void,
+      ) => {
+        if (signal.scope.step === 0) {
+          report({
+            type: "success",
+            scope: signal.scope,
+            result: "Secrets policy created",
+          });
+        }
+        if (signal.scope.step === 1) {
+          downloadReport = report;
+          downloadScope = signal.scope;
+        }
+      },
     );
+    render(<ProjectGuide />);
 
     fireEvent.click(
       screen.getByRole("button", {
@@ -706,21 +828,23 @@ describe("ProjectGuide", () => {
     vi.useFakeTimers();
     const signals: ProjectGuideOperationSignal[] = [];
     let failStart = true;
-    render(
-      <ProjectGuide
-        onOperationSignal={(signal, report) => {
-          signals.push(signal);
-          if (signal.type === "start" && failStart) {
-            failStart = false;
-            report({
-              type: "error",
-              scope: signal.scope,
-              message: "Catalog unavailable",
-            });
-          }
-        }}
-      />,
+    mcpOperations.current.handleSignal = vi.fn(
+      (
+        signal: ProjectGuideOperationSignal,
+        report: (report: ProjectGuideOperationReport) => void,
+      ) => {
+        signals.push(signal);
+        if (signal.type === "start" && failStart) {
+          failStart = false;
+          report({
+            type: "error",
+            scope: signal.scope,
+            message: "Catalog unavailable",
+          });
+        }
+      },
     );
+    render(<ProjectGuide />);
 
     fireEvent.click(
       screen.getByRole("button", { name: /Govern a third-party MCP/ }),
