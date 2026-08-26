@@ -21,9 +21,9 @@ describe("LoginPanel", () => {
     renderPanel();
 
     const link = screen.getByRole("link", {
-      name: /sign-up for a 14-day trial/i,
+      name: /sign up/i,
     });
     expect(link.getAttribute("href")).toBe("/sign-up");
-    expect(screen.getByText(/no account/i)).toBeTruthy();
+    expect(screen.getByText(/don't have an account/i)).toBeTruthy();
   });
 });

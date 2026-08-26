@@ -232,7 +232,7 @@ export function SignUpPanel({
                   "mx-auto px-[22px] disabled:cursor-not-allowed disabled:opacity-50",
                 )}
               >
-                Start Trial
+                Create Account
               </button>
             </>
           )}
