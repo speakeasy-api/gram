@@ -410,7 +410,13 @@ func handleToolsCall(
 			recordToolCallErrorStatus(ctx, rw, rejected)
 			return nil, rejected
 		}
-		failure := oops.E(oops.CodeUnexpected, err, "failed to execute tool call").LogError(ctx, logger, attr.SlogToolName(params.Name))
+		// Preserve the original classification (e.g. CodeGatewayError for
+		// upstream transport failures) instead of collapsing to CodeUnexpected.
+		code := oops.CodeUnexpected
+		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
+			code = shareable.Code
+		}
+		failure := oops.E(code, err, "failed to execute tool call").LogError(ctx, logger, attr.SlogToolName(params.Name))
 		recordToolCallErrorStatus(ctx, rw, failure)
 		return nil, failure
 	}
