@@ -286,6 +286,26 @@ describe("ProjectGuide", () => {
 
   it("animates only journeys that have not started", () => {
     const { rerender } = render(<ProjectGuide />);
+    const secretGraphic = screen.getByTestId(
+      "project-guide-graphic-secret-block",
+    );
+    const longStatus = within(secretGraphic).getByText(
+      "unsafe prompt not received",
+    );
+    expect(longStatus.className).toContain("break-words");
+    expect(longStatus.className).toContain("whitespace-normal");
+    expect(longStatus.parentElement?.className).toContain("grid");
+    expect(longStatus.parentElement?.className).toContain("flex-[0_1_35%]");
+    expect(
+      secretGraphic
+        .querySelector('[data-testid="project-guide-signal-track"]')
+        ?.querySelectorAll(".h-1.flex-1"),
+    ).toHaveLength(12);
+    expect(
+      secretGraphic
+        .querySelector('[data-testid="project-guide-signal-track"]')
+        ?.querySelectorAll(".bg-border"),
+    ).toHaveLength(12);
 
     expect(
       screen
@@ -309,6 +329,31 @@ describe("ProjectGuide", () => {
         .getByTestId("project-guide-graphic-secret-block")
         .getAttribute("data-animated"),
     ).toBe("true");
+  });
+
+  it("keeps the center plate fixed and only glows while live", () => {
+    const { rerender } = render(<ProjectGuide />);
+    const secretGraphic = screen.getByTestId(
+      "project-guide-graphic-secret-block",
+    );
+    const centerPlate = within(secretGraphic).getByTestId(
+      "project-guide-graphic-center-plate",
+    );
+    const glow = within(secretGraphic).getByTestId(
+      "project-guide-graphic-center-glow",
+    );
+
+    expect(centerPlate.style.transform).toBe("");
+    expect(glow.getAttribute("data-glow-state")).toBe("off");
+
+    statusByJourney.current = {
+      "third-party-mcp": "not-started",
+      "secret-block": "in-progress",
+    };
+    rerender(<ProjectGuide />);
+
+    expect(centerPlate.style.transform).toBe("");
+    expect(glow.getAttribute("data-glow-state")).toBe("on");
   });
 
   it("keeps the other journey switchable when a selected path opens", () => {
