@@ -270,6 +270,18 @@ describe("ProjectGuide", () => {
     expect(
       screen.getByTestId("project-guide-third-party-mcp-card").textContent,
     ).toContain("Not started");
+    for (const [journeyId, stepCount] of [
+      ["secret-block", 5],
+      ["third-party-mcp", 4],
+    ] as const) {
+      const progressSegments = screen
+        .getByTestId(`project-guide-${journeyId}-card`)
+        .querySelectorAll(".h-1.w-4");
+      expect(progressSegments).toHaveLength(stepCount);
+      for (const segment of progressSegments) {
+        expect(segment.className).toContain("bg-surface-tertiary-default");
+      }
+    }
   });
 
   it("animates only journeys that have not started", () => {
@@ -1236,9 +1248,9 @@ describe("ProjectGuide", () => {
     expect(activity.className).toContain("overflow-y-auto");
     const stepList = screen.getByRole("list", { name: "Journey A steps" });
     const steps = stepList.querySelectorAll("li");
-    expect(steps[0]?.className).toContain("min-h-40");
+    expect(steps[0]?.className).toContain("min-h-48");
     for (const step of Array.from(steps).slice(1)) {
-      expect(step.className).not.toContain("min-h-40");
+      expect(step.className).not.toContain("min-h-48");
     }
     expect(activity.closest("aside")?.className).toContain("min-h-0");
     expect(activity.closest("aside")?.className).not.toContain(

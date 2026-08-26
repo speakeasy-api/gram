@@ -1335,7 +1335,7 @@ function JourneyChoice({
               className={cn(
                 "h-1 w-4",
                 !(isComplete || (isInProgress && index === 0)) &&
-                  "bg-neutral-softest",
+                  "bg-surface-tertiary-default",
               )}
               style={
                 isComplete || (isInProgress && index === 0)
