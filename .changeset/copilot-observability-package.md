@@ -1,5 +1,6 @@
 ---
-"hooks": minor
+"dashboard": minor
+"server": minor
 ---
 
 Support GitHub Copilot as a fifth observability platform. Copilot hook events
