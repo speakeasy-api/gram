@@ -1,0 +1,21 @@
+pystreams/src/pystreams/cmd/multi.py
+  s_b390d6ce53b276::t_0e7972addade45 247-253,258
+pystreams/tests/test_risk_enforce.py
+  s_b390d6ce53b276::t_f2385f9f3e853c 228-231,235
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "7b301aa71aea643c723d9c6a69b7f545c153e2d4",
+  "prompts": {},
+  "sessions": {
+    "s_b390d6ce53b276": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c7be466b-35a7-46f8-83d3-cbbede48fd92",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
