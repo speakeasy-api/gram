@@ -277,6 +277,92 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
+    /admin/organization.activity:
+        get:
+            tags:
+                - admin
+            summary: listOrganizationActivity admin
+            description: Lists activity belonging to an organization for admin operators.
+            operationId: adminListOrganizationActivity
+            parameters:
+                - name: organization_id
+                  in: query
+                  description: Organization ID.
+                  allowEmptyValue: true
+                  required: true
+                  schema:
+                    type: string
+                    description: Organization ID.
+                - name: cursor
+                  in: query
+                  description: Cursor for paginating through organization activity.
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Cursor for paginating through organization activity.
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminListOrganizationActivityResult'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
     /admin/organization.cancelStripeSubscription:
         post:
             tags:
@@ -62186,6 +62272,19 @@ components:
                 - period_start
                 - period_end
                 - spend_usd
+        AdminListOrganizationActivityResult:
+            type: object
+            properties:
+                logs:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AuditLog'
+                    description: List of organization activity.
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page of results.
+            required:
+                - logs
         AdminListOrganizationMembersResult:
             type: object
             properties:
@@ -86935,8 +87034,6 @@ components:
 tags:
     - name: access
       description: Manage roles, team member access control, and authorization challenge events.
-    - name: admin
-      description: Operations supporting admin tasks, protected by Google workspace auth.
     - name: agent
       description: Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies most of these endpoints (it implies 'agent_user'), so existing installs keep working during the transition. The content-bearing session-portability endpoints — getSessionMeta and createSessionHandoff — refuse it and require a per-user key.
     - name: aiIntegrations
@@ -86951,6 +87048,8 @@ tags:
       description: Manage assistants and their runtime configuration.
     - name: auditlogs
       description: Manages audit logs in Gram.
+    - name: admin
+      description: Operations supporting admin tasks, protected by Google workspace auth.
     - name: auth
       description: Managed auth for gram producers and dashboard.
     - name: businessMemories

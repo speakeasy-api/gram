@@ -312,40 +312,44 @@ WHERE a.organization_id = $1
     OR a.action = $5::text
   )
   AND (
-    ($6::text IS NULL AND a.subject_type <> 'assistant')
+    (
+      $6::text IS NULL
+      AND ($7::boolean OR a.subject_type <> 'assistant')
+    )
     OR a.subject_type = $6::text
   )
   AND (
-    $7::text IS NULL
-    OR a.subject_id = $7::text
+    $8::text IS NULL
+    OR a.subject_id = $8::text
   )
   -- An empty or absent list is no filter, so a caller composing filters can
   -- always send the parameter.
   AND (
-    coalesce(cardinality($8::text[]), 0) = 0
-    OR a.subject_id = ANY($8::text[])
+    coalesce(cardinality($9::text[]), 0) = 0
+    OR a.subject_id = ANY($9::text[])
   )
   -- A row written before attribution existed has no surface. Coalescing here
   -- means filtering for 'unknown' finds those rows too, instead of returning
   -- nothing and implying the organization has no unattributed history.
   AND (
-    $9::text IS NULL
-    OR COALESCE(a.acting_surface, 'unknown') = $9::text
+    $10::text IS NULL
+    OR COALESCE(a.acting_surface, 'unknown') = $10::text
   )
 ORDER BY a.seq DESC
 LIMIT 51
 `
 
 type ListAuditLogsParams struct {
-	OrganizationID string
-	ProjectID      uuid.NullUUID
-	CursorSeq      pgtype.Int8
-	ActorID        pgtype.Text
-	Action         pgtype.Text
-	SubjectType    pgtype.Text
-	SubjectID      pgtype.Text
-	SubjectIds     []string
-	ActingSurface  pgtype.Text
+	OrganizationID         string
+	ProjectID              uuid.NullUUID
+	CursorSeq              pgtype.Int8
+	ActorID                pgtype.Text
+	Action                 pgtype.Text
+	SubjectType            pgtype.Text
+	IncludeAssistantEvents bool
+	SubjectID              pgtype.Text
+	SubjectIds             []string
+	ActingSurface          pgtype.Text
 }
 
 type ListAuditLogsRow struct {
@@ -373,7 +377,7 @@ type ListAuditLogsRow struct {
 
 // When no subject_type filter is given, assistant activity events (one per
 // assistant tool call) are excluded so they don't drown out the platform
-// audit feed; callers fetch them explicitly with subject_type = 'assistant'.
+// audit feed. The private admin caller can explicitly include all events.
 func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]ListAuditLogsRow, error) {
 	rows, err := q.db.Query(ctx, listAuditLogs,
 		arg.OrganizationID,
@@ -382,6 +386,7 @@ func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([
 		arg.ActorID,
 		arg.Action,
 		arg.SubjectType,
+		arg.IncludeAssistantEvents,
 		arg.SubjectID,
 		arg.SubjectIds,
 		arg.ActingSurface,

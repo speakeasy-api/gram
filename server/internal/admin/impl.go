@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -25,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/orgslug"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/keybillinglock"
@@ -710,6 +712,78 @@ func (s *Service) ListOrganizationProjects(ctx context.Context, payload *gen.Lis
 	}
 
 	return &gen.AdminListOrganizationProjectsResult{Projects: projects}, nil
+}
+
+func (s *Service) ListOrganizationActivity(ctx context.Context, payload *gen.ListOrganizationActivityPayload) (*gen.AdminListOrganizationActivityResult, error) {
+	_, err := repo.New(s.db).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{
+		ID: payload.OrganizationID, AllowSlug: false,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.C(oops.CodeNotFound)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "lookup organization for activity").LogError(ctx, s.logger, attr.SlogOrganizationID(payload.OrganizationID))
+	}
+
+	params := auditrepo.ListAuditLogsParams{
+		OrganizationID: payload.OrganizationID, IncludeAssistantEvents: true,
+	}
+	if payload.Cursor != nil && *payload.Cursor != "" {
+		seq, err := audit.DecodeCursor(*payload.Cursor)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, s.logger)
+		}
+		params.CursorSeq = pgtype.Int8{Int64: seq, Valid: true}
+	}
+
+	rows, err := auditrepo.New(s.db).ListAuditLogs(ctx, params)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list organization activity").LogError(ctx, s.logger, attr.SlogOrganizationID(payload.OrganizationID))
+	}
+
+	const pageSize = 50
+	logs := make([]*gen.AuditLog, 0, min(len(rows), pageSize))
+	for _, row := range rows[:min(len(rows), pageSize)] {
+		log, err := adminActivityLog(row)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "build organization activity response").LogError(ctx, s.logger)
+		}
+		logs = append(logs, log)
+	}
+
+	var nextCursor *string
+	if len(rows) > pageSize {
+		cursor := audit.EncodeCursor(rows[pageSize-1].Seq, rows[pageSize-1].ID.String())
+		nextCursor = &cursor
+	}
+
+	return &gen.AdminListOrganizationActivityResult{Logs: logs, NextCursor: nextCursor}, nil
+}
+
+func adminActivityLog(row auditrepo.ListAuditLogsRow) (*gen.AuditLog, error) {
+	var metadata map[string]any
+	if len(row.Metadata) > 0 {
+		if err := json.Unmarshal(row.Metadata, &metadata); err != nil {
+			return nil, fmt.Errorf("unmarshal metadata: %w", err)
+		}
+	}
+
+	actorDisplayName := conv.FromPGText[string](row.ActorDisplayName)
+	if row.ActorID == "system" {
+		actorDisplayName = conv.PtrEmpty("System")
+	}
+	actingSurface := row.ActingSurface.String
+	if !row.ActingSurface.Valid || strings.TrimSpace(actingSurface) == "" {
+		actingSurface = string(audit.SurfaceUnknown)
+	}
+
+	return &gen.AuditLog{
+		ID: row.ID.String(), ProjectID: conv.FromNullableUUID(row.ProjectID), ProjectSlug: conv.FromPGText[string](row.ProjectSlug),
+		ActorID: row.ActorID, ActorType: row.ActorType, ActorDisplayName: actorDisplayName, ActorSlug: conv.FromPGText[string](row.ActorSlug),
+		Action: row.Action, ActingSurface: actingSurface, ActingClientID: conv.FromPGText[string](row.ActingClientID),
+		SubjectID: row.SubjectID, SubjectType: row.SubjectType, SubjectDisplayName: conv.FromPGText[string](row.SubjectDisplayName), SubjectSlug: conv.FromPGText[string](row.SubjectSlug),
+		BeforeSnapshot: row.BeforeSnapshot, AfterSnapshot: row.AfterSnapshot, Metadata: metadata, CreatedAt: row.CreatedAt.Time.Format(time.RFC3339),
+	}, nil
 }
 
 func (s *Service) UpdateOrganization(ctx context.Context, payload *gen.UpdateOrganizationPayload) (*gen.AdminOrganization, error) {
