@@ -1372,8 +1372,7 @@ function OrgDomainsInner() {
               <Text variant="body" className="text-muted-foreground mb-2">
                 If this domain already has CAA records — common when migrating
                 from Google or another certificate issuer — add a CAA record
-                that allows Let's Encrypt. Skip this if you have no CAA
-                records.
+                that allows Let's Encrypt. Skip this if you have no CAA records.
               </Text>
               <div className="bg-muted mt-2 flex items-center space-x-2 p-3">
                 <code className="flex-1 break-all">
