@@ -797,6 +797,22 @@ func (s *Service) MigrateToGlobalIssuer(ctx context.Context, payload *adminrsgen
 		return nil, err
 	}
 
+	// A tenant source issuer belongs to exactly one organization — this surface
+	// refuses a global source precisely so that stays true — and that is what
+	// bounds the resync below.
+	affectedOrganizationID, err := resolveIssuerOrganizationID(ctx, txRepo, source)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve owning organization for source issuer").LogError(ctx, logger)
+	}
+
+	// Before lockIssuersForMigration: every other writer takes the derivation
+	// lock before the remote-issuer one, and a migration going the other way
+	// would deadlock against a concurrent client create or attach.
+	affectedUserIssuerIDs, err := prepareIssuerMigrationResync(ctx, dbtx, txRepo, source.ID, affectedOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "prepare issuer migration resync").LogError(ctx, logger)
+	}
+
 	// Serialize against a concurrent client attach on either issuer before
 	// reading the conflict set, so the set we act on cannot go stale under us.
 	// Nothing in the schema enforces the one-client-per-(user_session_issuer,
@@ -815,7 +831,7 @@ func (s *Service) MigrateToGlobalIssuer(ctx context.Context, payload *adminrsgen
 		return nil, err
 	}
 
-	clientsMigrated, err := runIssuerMigration(ctx, dbtx, txRepo, logger, source, target)
+	clientsMigrated, err := runIssuerMigration(ctx, dbtx, txRepo, logger, source, target, affectedOrganizationID, affectedUserIssuerIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -829,20 +845,6 @@ func (s *Service) MigrateToGlobalIssuer(ctx context.Context, payload *adminrsgen
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
-	}
-
-	// A legacy project-scoped issuer carries no organization_id of its own, so
-	// resolve it from the owning project rather than logging a blank tenant for
-	// the very rows convergence most often touches.
-	affectedOrganizationID := conv.FromPGTextOrEmpty[string](deleted.OrganizationID)
-	if affectedOrganizationID == "" && deleted.ProjectID.Valid {
-		if orgID, err := repo.New(s.db).GetProjectOrganizationID(ctx, deleted.ProjectID.UUID); err != nil {
-			// The migration has already committed; an unresolvable owner degrades
-			// the log rather than the outcome.
-			logger.WarnContext(ctx, "could not resolve owning organization for migrated issuer", attr.SlogError(err))
-		} else {
-			affectedOrganizationID = orgID
-		}
 	}
 
 	// This log line is the only durable record of the operation, and unlike every
@@ -1084,11 +1086,6 @@ func (s *Service) DeleteGlobalClient(ctx context.Context, payload *adminrsgen.De
 
 	txRepo := repo.New(dbtx)
 
-	boundUserIssuerIDs, err := txRepo.ListUserSessionIssuersBoundToClient(ctx, clientID)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "list user session issuers bound to client").LogError(ctx, logger)
-	}
-
 	deleted, err := txRepo.DeleteGlobalRemoteSessionClient(ctx, clientID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -1097,10 +1094,27 @@ func (s *Service) DeleteGlobalClient(ctx context.Context, payload *adminrsgen.De
 		return oops.E(oops.CodeUnexpected, err, "delete global remote session client").LogError(ctx, logger)
 	}
 
-	// A global client carries no bindings when created, but a project can
-	// attach one later, so the servers behind it still have to be recomputed.
-	if err := ResyncMCPServerRemoteSessionIssuers(ctx, dbtx, boundUserIssuerIDs); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "resync mcp server remote session issuers").LogError(ctx, logger)
+	// A global client carries no bindings when created, and no tenant can add
+	// one afterwards: every attach resolves its client through
+	// GetRemoteSessionClientByID, whose non-project arm requires
+	// c.organization_id = @organization_id and so never matches the NULL a
+	// global client carries. So there is nothing here to resync — and no
+	// tenant to scope a resync to, this being the one caller with neither a
+	// project nor an organization.
+	//
+	// Checked rather than assumed, because that invariant lives in a query in
+	// another file and the join table has no tenancy column to enforce it. A
+	// binding here would leave MCP servers in some organization deriving from
+	// a client that just went away, with nothing able to recompute them.
+	boundUserIssuerIDs, err := txRepo.ListUserSessionIssuersBoundToClient(ctx, deleted.ID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "list user session issuers bound to client").LogError(ctx, logger)
+	}
+	if len(boundUserIssuerIDs) > 0 {
+		logger.ErrorContext(ctx, "global remote session client had user session issuer bindings; mcp server issuer derivations may be stale",
+			attr.SlogRemoteSessionClientID(deleted.ID.String()),
+			attr.SlogRemoteSessionClientBindingCount(len(boundUserIssuerIDs)),
+		)
 	}
 
 	cascaded, err := txRepo.SoftDeleteRemoteSessionsByClientID(ctx, deleted.ID)

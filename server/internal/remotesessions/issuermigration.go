@@ -323,6 +323,49 @@ func lockIssuersForMigration(ctx context.Context, r *repo.Queries, issuerIDs ...
 	return nil
 }
 
+// resolveIssuerOrganizationID names the organization a tenant issuer belongs
+// to. A legacy project-scoped issuer carries no organization_id of its own, so
+// fall back to the owning project rather than treating it as untenanted.
+func resolveIssuerOrganizationID(ctx context.Context, r *repo.Queries, issuer repo.RemoteSessionIssuer) (string, error) {
+	if orgID := conv.FromPGTextOrEmpty[string](issuer.OrganizationID); orgID != "" {
+		return orgID, nil
+	}
+	if !issuer.ProjectID.Valid {
+		return "", fmt.Errorf("remote session issuer %s belongs to no tenant", issuer.ID)
+	}
+
+	orgID, err := r.GetProjectOrganizationID(ctx, issuer.ProjectID.UUID)
+	if err != nil {
+		return "", fmt.Errorf("resolve owning organization for remote session issuer %s: %w", issuer.ID, err)
+	}
+	return orgID, nil
+}
+
+// prepareIssuerMigrationResync reads the user session issuers a re-point will
+// change the derivation of, and takes their derivation locks.
+//
+// Both steps must happen before lockIssuersForMigration: every other writer
+// takes the derivation lock before the remote-issuer one, so a migration that
+// took them the other way round would deadlock against a concurrent client
+// create or attach. Reading the set that early means a binding added in the
+// window between this read and the re-point is not covered here — the writer
+// that adds it holds the same derivation lock and recomputes it itself.
+func prepareIssuerMigrationResync(ctx context.Context, tx repo.DBTX, r *repo.Queries, sourceID uuid.UUID, organizationID string) ([]uuid.UUID, error) {
+	affected, err := r.ListUserSessionIssuersBoundToRemoteIssuer(ctx, repo.ListUserSessionIssuersBoundToRemoteIssuerParams{
+		RemoteSessionIssuerID: sourceID,
+		OrganizationID:        organizationID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list user session issuers bound to source issuer: %w", err)
+	}
+
+	if err := LockUserSessionIssuersForRemoteIssuerDerivation(ctx, tx, affected); err != nil {
+		return nil, err
+	}
+
+	return affected, nil
+}
+
 // runIssuerMigration applies the guards every migration shares and then
 // re-points the source's clients onto the target, returning how many moved. It
 // is the whole of the operation apart from soft-deleting the source, which each
@@ -338,8 +381,11 @@ func lockIssuersForMigration(ctx context.Context, r *repo.Queries, issuerIDs ...
 //
 // Callers must already hold the advisory locks from lockIssuersForMigration and
 // have re-read both issuers under a row lock, so that the rows validated here
-// cannot change before the transaction commits.
-func runIssuerMigration(ctx context.Context, tx repo.DBTX, r *repo.Queries, logger *slog.Logger, source, target repo.RemoteSessionIssuer) (int64, error) {
+// cannot change before the transaction commits. They must also have run
+// prepareIssuerMigrationResync, which supplies affectedUserIssuerIDs and holds
+// their derivation locks; organizationID bounds the resync to the one
+// organization a tenant source issuer can belong to.
+func runIssuerMigration(ctx context.Context, tx repo.DBTX, r *repo.Queries, logger *slog.Logger, source, target repo.RemoteSessionIssuer, organizationID string, affectedUserIssuerIDs []uuid.UUID) (int64, error) {
 	preflight, err := buildMigratePreflight(ctx, r, source, target)
 	if err != nil {
 		return 0, oops.E(oops.CodeUnexpected, err, "build remote session issuer migrate preflight").LogError(ctx, logger)
@@ -353,13 +399,6 @@ func runIssuerMigration(ctx context.Context, tx repo.DBTX, r *repo.Queries, logg
 		return 0, oops.E(oops.CodeConflict, nil, "both issuers already have a client bound to the same MCP server (%s); detach one client per server and retry", strings.Join(preflight.conflictingMcpServerNames, ", ")).LogError(ctx, logger)
 	}
 
-	// Read the affected user session issuers before the re-point: afterwards
-	// the clients name the target, so the source no longer reaches them.
-	affected, err := r.ListUserSessionIssuersBoundToRemoteIssuer(ctx, source.ID)
-	if err != nil {
-		return 0, oops.E(oops.CodeUnexpected, err, "list user session issuers bound to source issuer").LogError(ctx, logger)
-	}
-
 	clientsMigrated, err := r.UpdateRemoteSessionClientsToRemoteSessionIssuer(ctx, repo.UpdateRemoteSessionClientsToRemoteSessionIssuerParams{
 		TargetIssuerID: target.ID,
 		SourceIssuerID: source.ID,
@@ -369,8 +408,10 @@ func runIssuerMigration(ctx context.Context, tx repo.DBTX, r *repo.Queries, logg
 	}
 
 	// The bindings did not move but what they resolve to did, so every server
-	// behind them now derives the target issuer.
-	if err := ResyncMCPServerRemoteSessionIssuers(ctx, tx, affected); err != nil {
+	// behind them now derives the target issuer. Organization scope, not
+	// project: the clients being re-pointed are shared across the projects of
+	// the one organization the source belongs to.
+	if err := ResyncMCPServerRemoteSessionIssuers(ctx, tx, OrganizationResyncScope(organizationID), affectedUserIssuerIDs); err != nil {
 		return 0, oops.E(oops.CodeUnexpected, err, "resync mcp server remote session issuers").LogError(ctx, logger)
 	}
 

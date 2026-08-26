@@ -329,25 +329,73 @@ RETURNING *;
 -- issuer may bind clients across distinct remote issuers — and a scalar column
 -- cannot name which, so it names none and the readers fail closed.
 --
--- Clients are only ever soft-deleted and their issuers likewise, so `deleted
--- IS FALSE` is the removal signal here; the FK's ON DELETE SET NULL never
--- fires and cannot be relied on to clear a stale value.
+-- Clients are only ever soft-deleted, so `c.deleted IS FALSE` is the removal
+-- signal here. The column's own FK is ON DELETE SET NULL, but no application
+-- code hard-deletes a remote session issuer; the one hard delete in the tree
+-- is the demo seed's DELETE FROM projects, whose cascade takes the mcp_servers
+-- rows with it. So SET NULL never has a surviving row to fix up and cannot be
+-- relied on to clear a stale value. `i.deleted IS FALSE` is redundant today — every
+-- issuer delete is blocked while any live client references it
+-- (CountRemoteSessionClientsByIssuerID), under the same advisory lock the
+-- client writers take — but it keeps this derivation identical to
+-- ListRemoteSessionClientsForUserSessionIssuer, the resolver that actually
+-- picks the credential at serve time. The column must never name an issuer
+-- that resolver would refuse, so it filters on the same terms rather than
+-- inheriting the guarantee from a check in another file.
 --
--- Tenancy is self-qualifying rather than a caller parameter: the issuer must
--- belong to the same project as the server it stamps. That keeps the
--- cross-project admin and issuer-migration callers correct without letting one
--- project's issuer reach another project's server.
+-- Tenancy is enforced on three independent axes, because the ids in
+-- @user_session_issuer_ids are not themselves proof of anything: they are read
+-- back from join tables that carry no tenancy column, so a bug upstream could
+-- put any id in the array.
+--
+--   1. The CALLER's scope. @organization_id is required and every written
+--      server must sit in a project of that organization; project_id narrows
+--      further when the caller has one. Callers that legitimately span
+--      projects (the org-admin client delete, both issuer migrations) pass
+--      only the organization and are correct; no caller may pass neither.
+--   2. Which servers the issuer may write — the issuer must own the server's
+--      project directly, or (org-tier issuer, project_id NULL) own the
+--      organization that project belongs to. Without the second arm an
+--      org-tier issuer matches nothing, which fails closed for stamping but
+--      OPEN for clearing: a value written while the issuer was project-scoped
+--      could never be cleared again.
+--   3. Which clients count — a client is only visible to an issuer in its own
+--      tenant, mirroring ListRemoteSessionClientsForUserSessionIssuer. Without
+--      this the join table alone decides, and a binding to another project's
+--      client stamps that project's issuer onto this project's server.
+--
+-- Axis 2 alone was the original design and is not sufficient: it constrains
+-- the relationship between a server and the issuer it already names, which
+-- every writer establishes in one project in one transaction, so it is
+-- vacuous today and silently becomes a no-op the moment an org-tier issuer
+-- appears. It says nothing about who asked.
+--
+-- PRECONDITION: the caller holds
+-- LockUserSessionIssuerForRemoteIssuerDerivation for every id in the array,
+-- taken before any row lock in the transaction. Without it two writers on one
+-- user session issuer compute from snapshots missing each other's binding and
+-- the last commit wins with a value that was never true.
 WITH resolved AS (
     SELECT input.user_session_issuer_id,
-           CASE WHEN count(DISTINCT c.remote_session_issuer_id) = 1
-                THEN (array_agg(DISTINCT c.remote_session_issuer_id))[1]
+           CASE WHEN count(DISTINCT i.id) = 1
+                THEN (array_agg(DISTINCT i.id))[1]
            END AS remote_session_issuer_id
     FROM unnest(@user_session_issuer_ids::uuid[]) AS input(user_session_issuer_id)
+    JOIN user_session_issuers AS usi
+      ON usi.id = input.user_session_issuer_id
+    LEFT JOIN projects AS usi_project
+           ON usi_project.id = usi.project_id
     LEFT JOIN remote_session_client_user_session_issuers AS link
            ON link.user_session_issuer_id = input.user_session_issuer_id
     LEFT JOIN remote_session_clients AS c
            ON c.id = link.remote_session_client_id
           AND c.deleted IS FALSE
+          AND (c.project_id = usi.project_id
+               OR (c.project_id IS NULL
+                   AND c.organization_id = COALESCE(usi_project.organization_id, usi.organization_id)))
+    LEFT JOIN remote_session_issuers AS i
+           ON i.id = c.remote_session_issuer_id
+          AND i.deleted IS FALSE
     GROUP BY input.user_session_issuer_id
 )
 UPDATE mcp_servers AS s
@@ -357,6 +405,21 @@ FROM resolved
 JOIN user_session_issuers AS usi
   ON usi.id = resolved.user_session_issuer_id
 WHERE s.user_session_issuer_id = resolved.user_session_issuer_id
-  AND s.project_id = usi.project_id
+  -- Axis 1: the caller's scope. UPDATE ... FROM cannot reference the target
+  -- table in a FROM-item join condition, hence EXISTS rather than a join.
+  AND EXISTS (SELECT 1
+              FROM projects AS caller_project
+              WHERE caller_project.id = s.project_id
+                AND caller_project.organization_id = @organization_id::text)
+  AND (sqlc.narg('project_id')::uuid IS NULL
+       OR s.project_id = sqlc.narg('project_id')::uuid)
+  -- Axis 2: the issuer's own tenancy must cover the server it stamps.
+  AND (s.project_id = usi.project_id
+       OR (usi.project_id IS NULL
+           AND usi.organization_id IS NOT NULL
+           AND EXISTS (SELECT 1
+                       FROM projects AS issuer_project
+                       WHERE issuer_project.id = s.project_id
+                         AND issuer_project.organization_id = usi.organization_id)))
   AND s.deleted IS FALSE
   AND s.remote_session_issuer_id IS DISTINCT FROM resolved.remote_session_issuer_id;

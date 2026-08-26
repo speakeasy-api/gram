@@ -1018,6 +1018,15 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orgissuersgen.Migr
 		return nil, err
 	}
 
+	// Before lockIssuersForMigration: every other writer takes the derivation
+	// lock before the remote-issuer one, and a migration going the other way
+	// would deadlock against a concurrent client create or attach. Both issuers
+	// are already established as this organization's by loadMigrationPair.
+	affectedUserIssuerIDs, err := prepareIssuerMigrationResync(ctx, dbtx, txRepo, source.ID, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "prepare issuer migration resync").LogError(ctx, logger)
+	}
+
 	// Serialize against a concurrent client attach on either issuer before
 	// reading the conflict set, so the set we act on cannot go stale under us.
 	// Nothing in the schema enforces the one-client-per-(user_session_issuer,
@@ -1037,7 +1046,7 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orgissuersgen.Migr
 		return nil, err
 	}
 
-	clientsMigrated, err := runIssuerMigration(ctx, dbtx, txRepo, logger, source, target)
+	clientsMigrated, err := runIssuerMigration(ctx, dbtx, txRepo, logger, source, target, authCtx.ActiveOrganizationID, affectedUserIssuerIDs)
 	if err != nil {
 		return nil, err
 	}

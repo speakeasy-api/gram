@@ -626,9 +626,17 @@ func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.Delet
 
 	txRepo := repo.New(dbtx)
 
+	// Read the bindings, then lock them, before the delete below takes the
+	// client row lock: the derivation lock has to precede every row lock. The
+	// read is unscoped and precedes the ownership check for that reason; the
+	// resync it feeds is bounded by the caller's organization regardless.
 	boundUserIssuerIDs, err := txRepo.ListUserSessionIssuersBoundToClient(ctx, clientID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "list user session issuers bound to client").LogError(ctx, logger)
+	}
+
+	if err := LockUserSessionIssuersForRemoteIssuerDerivation(ctx, dbtx, boundUserIssuerIDs); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock user session issuers for remote issuer derivation").LogError(ctx, logger)
 	}
 
 	deleted, err := txRepo.DeleteOrganizationRemoteSessionClient(ctx, repo.DeleteOrganizationRemoteSessionClientParams{
@@ -643,8 +651,10 @@ func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.Delet
 	}
 
 	// The client is only soft-deleted, so its bindings survive it; nothing else
-	// clears the value those bindings used to justify.
-	if err := ResyncMCPServerRemoteSessionIssuers(ctx, dbtx, boundUserIssuerIDs); err != nil {
+	// clears the value those bindings used to justify. Organization scope, not
+	// project: an org-level client is bound to user session issuers across
+	// several of the org's projects, and every one of them derives a new value.
+	if err := ResyncMCPServerRemoteSessionIssuers(ctx, dbtx, OrganizationResyncScope(authCtx.ActiveOrganizationID), boundUserIssuerIDs); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "resync mcp server remote session issuers").LogError(ctx, logger)
 	}
 
@@ -739,6 +749,12 @@ func (s *Service) RemoveClientFromMcpServer(ctx context.Context, payload *orgcli
 		return oops.E(oops.CodeNotFound, nil, "mcp server is not attached to this client").LogError(ctx, logger)
 	}
 
+	// Both reads above are unlocked, so this is still the first lock in the
+	// transaction and precedes the join-row lock the detach below takes.
+	if err := LockUserSessionIssuersForRemoteIssuerDerivation(ctx, dbtx, []uuid.UUID{server.UserSessionIssuerID.UUID}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock user session issuers for remote issuer derivation").LogError(ctx, logger)
+	}
+
 	affected, err := txRepo.DetachRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachRemoteSessionClientFromUserSessionIssuerParams{
 		RemoteSessionClientID: clientID,
 		UserSessionIssuerID:   server.UserSessionIssuerID.UUID,
@@ -750,7 +766,9 @@ func (s *Service) RemoveClientFromMcpServer(ctx context.Context, payload *orgcli
 		return oops.E(oops.CodeNotFound, nil, "mcp server is not attached to this client").LogError(ctx, logger)
 	}
 
-	if err := ResyncMCPServerRemoteSessionIssuers(ctx, dbtx, []uuid.UUID{server.UserSessionIssuerID.UUID}); err != nil {
+	// The server's project is already established as the caller's org's by
+	// GetMCPServerByIDAndOrganizationID, so scope to it rather than the org.
+	if err := ResyncMCPServerRemoteSessionIssuers(ctx, dbtx, ProjectResyncScope(authCtx.ActiveOrganizationID, server.ProjectID), []uuid.UUID{server.UserSessionIssuerID.UUID}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "resync mcp server remote session issuers").LogError(ctx, logger)
 	}
 

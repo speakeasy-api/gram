@@ -208,6 +208,30 @@ func (q *Queries) CreateOrganizationMetadataFixture(ctx context.Context, arg Cre
 	return err
 }
 
+const createOrganizationTierUserSessionIssuerFixture = `-- name: CreateOrganizationTierUserSessionIssuerFixture :one
+INSERT INTO user_session_issuers (project_id, organization_id, slug, authn_challenge_mode, session_duration)
+VALUES (NULL, $1, $2, 'interactive', $3)
+RETURNING id
+`
+
+type CreateOrganizationTierUserSessionIssuerFixtureParams struct {
+	OrganizationID  pgtype.Text
+	Slug            string
+	SessionDuration pgtype.Interval
+}
+
+// Mints an organization-tier user session issuer (project_id NULL). No
+// production path creates one yet — the column only recently became nullable —
+// but the mcp_servers.remote_session_issuer_id derivation has to handle the
+// shape already, because the arm that skips it also skips clearing a value
+// written while the issuer was still project-scoped.
+func (q *Queries) CreateOrganizationTierUserSessionIssuerFixture(ctx context.Context, arg CreateOrganizationTierUserSessionIssuerFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createOrganizationTierUserSessionIssuerFixture, arg.OrganizationID, arg.Slug, arg.SessionDuration)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const createOrganizationUserRelationshipFixture = `-- name: CreateOrganizationUserRelationshipFixture :exec
 INSERT INTO organization_user_relationships (organization_id, user_id)
 VALUES ($1, $2::text)
@@ -385,6 +409,20 @@ WHERE organization_id = $1
 // generated from deleted_at, so a soft delete has to set the timestamp.
 func (q *Queries) ForceSoftDeleteOrganizationUserRelationshipsFixture(ctx context.Context, organizationID string) error {
 	_, err := q.db.Exec(ctx, forceSoftDeleteOrganizationUserRelationshipsFixture, organizationID)
+	return err
+}
+
+const forceSoftDeleteRemoteSessionIssuerFixture = `-- name: ForceSoftDeleteRemoteSessionIssuerFixture :exec
+UPDATE remote_session_issuers
+SET deleted_at = clock_timestamp()
+WHERE id = $1
+`
+
+// Tombstones a remote session issuer with no regard for its clients. Every
+// production delete refuses while a live client references the issuer, so this
+// is the only way to build the state the derivation must reject.
+func (q *Queries) ForceSoftDeleteRemoteSessionIssuerFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, forceSoftDeleteRemoteSessionIssuerFixture, id)
 	return err
 }
 
@@ -1514,6 +1552,24 @@ type SetFunctionToolVariablesParams struct {
 
 func (q *Queries) SetFunctionToolVariables(ctx context.Context, arg SetFunctionToolVariablesParams) error {
 	_, err := q.db.Exec(ctx, setFunctionToolVariables, arg.Variables, arg.ID, arg.ProjectID)
+	return err
+}
+
+const setMCPServerRemoteSessionIssuerFixture = `-- name: SetMCPServerRemoteSessionIssuerFixture :exec
+UPDATE mcp_servers
+SET remote_session_issuer_id = $1
+WHERE id = $2
+`
+
+type SetMCPServerRemoteSessionIssuerFixtureParams struct {
+	RemoteSessionIssuerID uuid.NullUUID
+	ID                    uuid.UUID
+}
+
+// Writes the derived column directly, so a test can assert that a rejected
+// resync left an existing value alone rather than merely never setting one.
+func (q *Queries) SetMCPServerRemoteSessionIssuerFixture(ctx context.Context, arg SetMCPServerRemoteSessionIssuerFixtureParams) error {
+	_, err := q.db.Exec(ctx, setMCPServerRemoteSessionIssuerFixture, arg.RemoteSessionIssuerID, arg.ID)
 	return err
 }
 

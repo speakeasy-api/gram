@@ -4159,12 +4159,16 @@ const listUserSessionIssuersBoundToClient = `-- name: ListUserSessionIssuersBoun
 SELECT link.user_session_issuer_id
 FROM remote_session_client_user_session_issuers AS link
 WHERE link.remote_session_client_id = $1
+ORDER BY link.user_session_issuer_id
 `
 
 // The user session issuers a client is bound to, for resyncing
 // mcp_servers.remote_session_issuer_id when the client itself changes rather
 // than its bindings. Soft-deleting a client leaves its bindings in place, so
 // this still returns them and the resync recomputes to NULL.
+//
+// Unscoped by tenancy for the same reason as the query above, and ordered for
+// the same reason: its callers lock one id at a time.
 func (q *Queries) ListUserSessionIssuersBoundToClient(ctx context.Context, remoteSessionClientID uuid.UUID) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, listUserSessionIssuersBoundToClient, remoteSessionClientID)
 	if err != nil {
@@ -4190,16 +4194,46 @@ SELECT DISTINCT link.user_session_issuer_id
 FROM remote_session_client_user_session_issuers AS link
 JOIN remote_session_clients AS c
   ON c.id = link.remote_session_client_id
+JOIN user_session_issuers AS usi
+  ON usi.id = link.user_session_issuer_id
+LEFT JOIN projects AS usi_project
+  ON usi_project.id = usi.project_id
 WHERE c.remote_session_issuer_id = $1
+  AND COALESCE(usi_project.organization_id, usi.organization_id) = $2::text
+ORDER BY link.user_session_issuer_id
 `
 
+type ListUserSessionIssuersBoundToRemoteIssuerParams struct {
+	RemoteSessionIssuerID uuid.UUID
+	OrganizationID        string
+}
+
 // Every user session issuer reachable from a remote issuer through the client
-// bindings. Feeds the mcp_servers.remote_session_issuer_id resync after a bulk
-// client re-point, which changes what those servers derive without touching
-// the bindings themselves. Deliberately counts soft-deleted clients too: a
-// server whose only client just went away still needs its stale value cleared.
-func (q *Queries) ListUserSessionIssuersBoundToRemoteIssuer(ctx context.Context, remoteSessionIssuerID uuid.UUID) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, listUserSessionIssuersBoundToRemoteIssuer, remoteSessionIssuerID)
+// bindings. Its only caller is the issuer migration, which re-points a set of
+// clients onto a new remote issuer and so changes what the servers behind them
+// derive without touching the bindings themselves.
+//
+// Soft-deleted clients are counted on purpose. The resync derives from the
+// live ones, so a tombstoned client contributes nothing to the value; what it
+// still does is name a user session issuer whose stale value has to be
+// recomputed, and dropping it here would strand exactly the servers whose only
+// client just went away.
+//
+// Scoped by organization, not by project. A re-point moves the client itself,
+// so every project behind it derives a new value and all of them have to be
+// recomputed; narrowing to one project would silently leave the rest pointing
+// at the source issuer. Organization is nonetheless a real bound rather than
+// no bound at all, because a source issuer only ever belongs to one
+// organization: both migration surfaces resolve it through an org-scoped
+// lookup, and MigrateToGlobalIssuer explicitly refuses a global source for
+// exactly this reason. The tier is taken from the user session issuer's own
+// tenancy so it matches what the resync will accept, and no id is returned
+// that the resync would then refuse to act on.
+//
+// Ordered because callers take one advisory lock per returned id: unsorted,
+// two overlapping migrations could acquire them in opposing orders.
+func (q *Queries) ListUserSessionIssuersBoundToRemoteIssuer(ctx context.Context, arg ListUserSessionIssuersBoundToRemoteIssuerParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listUserSessionIssuersBoundToRemoteIssuer, arg.RemoteSessionIssuerID, arg.OrganizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -4299,6 +4333,39 @@ SELECT pg_advisory_xact_lock(hashtextextended(($1::uuid)::text, 0))
 // id order so two concurrent migrations cannot deadlock.
 func (q *Queries) LockRemoteSessionIssuerForClientBinding(ctx context.Context, remoteSessionIssuerID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, lockRemoteSessionIssuerForClientBinding, remoteSessionIssuerID)
+	return err
+}
+
+const lockUserSessionIssuerForRemoteIssuerDerivation = `-- name: LockUserSessionIssuerForRemoteIssuerDerivation :exec
+SELECT pg_advisory_xact_lock(hashtextextended('user_session_issuer_derivation:' || ($1::uuid)::text, 0))
+`
+
+// Serializes every writer that can change what
+// mcp_servers.remote_session_issuer_id derives to for one user session issuer.
+//
+// LockRemoteSessionIssuerForClientBinding does not cover this. It keys on the
+// REMOTE issuer, and guardSingleClientPerRemoteIssuer deliberately permits one
+// user session issuer to bind clients across several remote issuers, so two
+// writers converging on the same user session issuer through different remote
+// issuers take different keys and never block. Each then recomputes from a
+// snapshot missing the other's binding, and the last commit wins with a value
+// that was never true. The detach paths take no advisory lock at all, so the
+// same race leaves a server naming an issuer with no live binding.
+//
+// The key is salted because the sibling lock hashes a bare uuid into the same
+// advisory key space; without the prefix a user session issuer id could
+// collide with a remote session issuer id and serialize two unrelated writers.
+//
+// LOCK ORDER: this must be the FIRST lock a transaction takes, before any
+// mcp_servers, remote_session_clients or binding row lock. DeleteMcpServer
+// locks mcp_servers and then reaches the resync's client rows, while every
+// remotesessions writer goes the other way, so the two orders form a cycle
+// that is only broken if the advisory lock precedes every row lock on both
+// sides. Acquiring it late — inside the resync, say — relocates the deadlock
+// onto this lock rather than removing it. Callers taking more than one MUST
+// sort ascending; lockUserSessionIssuersForDerivation does that.
+func (q *Queries) LockUserSessionIssuerForRemoteIssuerDerivation(ctx context.Context, userSessionIssuerID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, lockUserSessionIssuerForRemoteIssuerDerivation, userSessionIssuerID)
 	return err
 }
 

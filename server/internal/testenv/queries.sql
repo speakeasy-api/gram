@@ -519,3 +519,28 @@ WHERE organization_id = @organization_id
 SELECT blob_url, consumed_at
 FROM session_handoff_links
 WHERE token = @token;
+
+-- name: CreateOrganizationTierUserSessionIssuerFixture :one
+-- Mints an organization-tier user session issuer (project_id NULL). No
+-- production path creates one yet — the column only recently became nullable —
+-- but the mcp_servers.remote_session_issuer_id derivation has to handle the
+-- shape already, because the arm that skips it also skips clearing a value
+-- written while the issuer was still project-scoped.
+INSERT INTO user_session_issuers (project_id, organization_id, slug, authn_challenge_mode, session_duration)
+VALUES (NULL, @organization_id, @slug, 'interactive', @session_duration)
+RETURNING id;
+
+-- name: ForceSoftDeleteRemoteSessionIssuerFixture :exec
+-- Tombstones a remote session issuer with no regard for its clients. Every
+-- production delete refuses while a live client references the issuer, so this
+-- is the only way to build the state the derivation must reject.
+UPDATE remote_session_issuers
+SET deleted_at = clock_timestamp()
+WHERE id = @id;
+
+-- name: SetMCPServerRemoteSessionIssuerFixture :exec
+-- Writes the derived column directly, so a test can assert that a rejected
+-- resync left an existing value alone rather than merely never setting one.
+UPDATE mcp_servers
+SET remote_session_issuer_id = @remote_session_issuer_id
+WHERE id = @id;

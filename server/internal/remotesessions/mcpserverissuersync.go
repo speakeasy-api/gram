@@ -9,31 +9,102 @@
 // this, in its own transaction, or the column silently rots: clients and
 // issuers are only ever soft-deleted, so the FK's ON DELETE SET NULL never
 // fires and nothing else clears a stale value.
+//
+// Two rules bind every caller. Both exist because a wrong value here forwards
+// a user's bearer token to the wrong third-party upstream.
+//
+//   - Pass the caller's own tenant scope. The ids come from join tables with
+//     no tenancy column, so they are not proof of anything on their own.
+//   - Take LockUserSessionIssuersForRemoteIssuerDerivation over the same ids
+//     FIRST, before any row lock in the transaction. See that query's comment
+//     for why the position matters and not just the lock.
 
 package remotesessions
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
-// ResyncMCPServerRemoteSessionIssuers recomputes the denormalised issuer for
-// every MCP server carrying one of userIssuerIDs. Safe to call with issuers
-// that no server uses, and safe to call when nothing changed — the statement
-// only writes rows whose value actually differs.
+// ResyncScope is the caller's own tenancy, which bounds which MCP servers a
+// resync may write regardless of what ids it was handed.
+type ResyncScope struct {
+	organizationID string
+	projectID      uuid.NullUUID
+}
+
+// ProjectResyncScope confines the resync to one project of one organization.
+// Use it whenever the caller acts on a single project.
+func ProjectResyncScope(organizationID string, projectID uuid.UUID) ResyncScope {
+	return ResyncScope{organizationID: organizationID, projectID: conv.ToNullUUID(projectID)}
+}
+
+// OrganizationResyncScope confines the resync to one organization while
+// letting it span that organization's projects. Only for callers that
+// genuinely act across projects — an organization-administrator client delete,
+// or an issuer migration re-pointing clients shared by several projects — and
+// never as a substitute for a project scope the caller already holds.
+func OrganizationResyncScope(organizationID string) ResyncScope {
+	return ResyncScope{organizationID: organizationID, projectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}
+}
+
+// LockUserSessionIssuersForRemoteIssuerDerivation serializes this transaction
+// against every other writer that could change what those user session issuers
+// derive. Locks are taken in ascending id order so two callers with
+// overlapping sets cannot deadlock against each other.
 //
-// Callers pass the issuers whose bindings they touched. For a detach or a
-// delete that means capturing them before the rows go, since afterwards there
-// is nothing left to walk.
-func ResyncMCPServerRemoteSessionIssuers(ctx context.Context, dbtx mcpserversrepo.DBTX, userIssuerIDs []uuid.UUID) error {
+// Call this before taking any row lock in the transaction, and over the same
+// ids the later resync will be given.
+func LockUserSessionIssuersForRemoteIssuerDerivation(ctx context.Context, dbtx repo.DBTX, userIssuerIDs []uuid.UUID) error {
 	if len(userIssuerIDs) == 0 {
 		return nil
 	}
-	if _, err := mcpserversrepo.New(dbtx).ResyncMCPServerRemoteSessionIssuers(ctx, userIssuerIDs); err != nil {
+
+	ordered := slices.Clone(userIssuerIDs)
+	slices.SortFunc(ordered, func(a, b uuid.UUID) int { return bytes.Compare(a[:], b[:]) })
+	ordered = slices.Compact(ordered)
+
+	q := repo.New(dbtx)
+	for _, id := range ordered {
+		if err := q.LockUserSessionIssuerForRemoteIssuerDerivation(ctx, id); err != nil {
+			return fmt.Errorf("lock user session issuer %s for remote issuer derivation: %w", id, err)
+		}
+	}
+
+	return nil
+}
+
+// ResyncMCPServerRemoteSessionIssuers recomputes the denormalised issuer for
+// every MCP server carrying one of userIssuerIDs that also falls inside scope.
+// Safe to call with issuers that no server uses, and safe to call when nothing
+// changed — the statement only writes rows whose value actually differs.
+//
+// Callers pass the issuers whose bindings they touched. For a detach or a
+// delete that means capturing them before the rows go, since afterwards there
+// is nothing left to walk. Ids outside scope are ignored rather than rejected:
+// the sets are read from untenanted join tables, so a foreign id is a fact
+// about the data, not a caller error.
+func ResyncMCPServerRemoteSessionIssuers(ctx context.Context, dbtx mcpserversrepo.DBTX, scope ResyncScope, userIssuerIDs []uuid.UUID) error {
+	if len(userIssuerIDs) == 0 {
+		return nil
+	}
+	if scope.organizationID == "" {
+		return fmt.Errorf("resync mcp server remote session issuers: no organization scope")
+	}
+
+	if _, err := mcpserversrepo.New(dbtx).ResyncMCPServerRemoteSessionIssuers(ctx, mcpserversrepo.ResyncMCPServerRemoteSessionIssuersParams{
+		UserSessionIssuerIds: userIssuerIDs,
+		OrganizationID:       scope.organizationID,
+		ProjectID:            scope.projectID,
+	}); err != nil {
 		return fmt.Errorf("resync mcp server remote session issuers: %w", err)
 	}
 	return nil
