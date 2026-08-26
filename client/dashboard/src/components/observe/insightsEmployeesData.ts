@@ -154,22 +154,24 @@ function groupSummariesByMember(
   const summaryByUserId = new Map(
     summaries.map((summary) => [summary.userId, summary]),
   );
-  const summaryByEmail = new Map(
-    summaries
-      .map((summary) => {
-        const email = summaryEmail(summary);
-        return email ? ([email.toLowerCase(), summary] as const) : null;
-      })
-      .filter(
-        (entry): entry is readonly [string, UserSummary] => entry != null,
-      ),
-  );
+  // All summaries per lowercased email: case-variant keys are the same person.
+  const summariesByEmail = new Map<string, UserSummary[]>();
+  for (const summary of summaries) {
+    const email = summaryEmail(summary).toLowerCase();
+    if (!email) continue;
+    const list = summariesByEmail.get(email);
+    if (list) {
+      list.push(summary);
+    } else {
+      summariesByEmail.set(email, [summary]);
+    }
+  }
 
   const matchedSummaryIds = new Set<string>();
   const groups = members.map((member) => {
     const matched = dedupeSummaries([
       summaryByUserId.get(member.id),
-      summaryByEmail.get(member.email.toLowerCase()),
+      ...(summariesByEmail.get(member.email.toLowerCase()) ?? []),
     ]);
     for (const summary of matched) {
       matchedSummaryIds.add(summary.userId);
@@ -178,33 +180,34 @@ function groupSummariesByMember(
   });
 
   // Second pass: usage under a linked provider-account email keys its own
-  // summary and matches no member id or directory email; the directory
-  // attaches those accounts to the member's summaries, so route each leftover
-  // summary to the member owning its email. An email claimed by two members'
-  // account lists is ambiguous — leave its summary unattributed rather than
-  // credit one person with another's usage (same refusal as the server's
-  // single-owner rule, DNO-509).
-  const matchedByAccountEmail = new Map<string, UserSummary[] | null>();
-  for (const { matched } of groups) {
-    for (const summary of matched) {
-      for (const account of summary.accounts ?? []) {
-        const email = (account.email ?? "").toLowerCase();
-        if (!email) continue;
-        const claimed = matchedByAccountEmail.get(email);
-        if (claimed === undefined) {
-          matchedByAccountEmail.set(email, matched);
-        } else if (claimed !== matched) {
-          matchedByAccountEmail.set(email, null);
-        }
+  // summary and matches no member id or directory email. Every attached
+  // account carries its directory owner's user id, so route each leftover
+  // summary to that owner's member. An email whose account rows name two
+  // different owners is ambiguous — leave its summary unattributed rather
+  // than credit one person with another's usage (same refusal as the
+  // server's single-owner rule, DNO-509).
+  const ownerByAccountEmail = new Map<string, string | null>();
+  for (const summary of summaries) {
+    for (const account of summary.accounts ?? []) {
+      const email = (account.email ?? "").toLowerCase();
+      const owner = account.userId ?? "";
+      if (!email || !owner) continue;
+      const claimed = ownerByAccountEmail.get(email);
+      if (claimed === undefined) {
+        ownerByAccountEmail.set(email, owner);
+      } else if (claimed !== owner) {
+        ownerByAccountEmail.set(email, null);
       }
     }
   }
+  const groupByMemberId = new Map(groups.map((g) => [g.member.id, g]));
   for (const summary of summaries) {
     if (matchedSummaryIds.has(summary.userId)) continue;
     const email = summaryEmail(summary).toLowerCase();
-    const matched = email ? matchedByAccountEmail.get(email) : undefined;
-    if (matched) {
-      matched.push(summary);
+    const owner = email ? ownerByAccountEmail.get(email) : undefined;
+    const group = owner ? groupByMemberId.get(owner) : undefined;
+    if (group) {
+      group.matched.push(summary);
       matchedSummaryIds.add(summary.userId);
     }
   }

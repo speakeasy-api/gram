@@ -878,6 +878,48 @@ func (s *Service) resolveEmployeeIdentity(ctx context.Context, orgID, identifier
 	return identity
 }
 
+// reverseResolveAccountOwners fills ownerByKey entries for email-shaped keys
+// the directory could not resolve, using the user_accounts directory: an email
+// claimed by exactly one owner maps to that owner; shared emails stay
+// unresolved (same single-owner rule as resolveEmployeeIdentity, DNO-509).
+// Best-effort: a lookup failure resolves nothing extra.
+func (s *Service) reverseResolveAccountOwners(ctx context.Context, orgID string, keys []string, ownerByKey map[string]string) {
+	unresolved := make([]string, 0, len(keys))
+	for _, key := range keys {
+		if _, ok := ownerByKey[key]; ok || !strings.Contains(key, "@") {
+			continue
+		}
+		unresolved = append(unresolved, conv.NormalizeEmail(key))
+	}
+	unresolved = dedupeNonEmpty(unresolved)
+	if len(unresolved) == 0 {
+		return
+	}
+
+	accounts, err := s.hooksRepo.ListUserAccountsByEmails(ctx, hooksRepo.ListUserAccountsByEmailsParams{
+		OrganizationID: orgID,
+		Emails:         unresolved,
+	})
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to reverse-resolve account emails to owners", attr.SlogError(err))
+		return
+	}
+	ownersByEmail := make(map[string][]string, len(accounts))
+	for _, account := range accounts {
+		email := conv.NormalizeEmail(conv.FromPGTextOrEmpty[string](account.Email))
+		ownersByEmail[email] = append(ownersByEmail[email], conv.FromPGTextOrEmpty[string](account.UserID))
+	}
+	for _, key := range keys {
+		if _, ok := ownerByKey[key]; ok || !strings.Contains(key, "@") {
+			continue
+		}
+		owners := dedupeNonEmpty(ownersByEmail[conv.NormalizeEmail(key)])
+		if len(owners) == 1 {
+			ownerByKey[key] = owners[0]
+		}
+	}
+}
+
 // expandUserSearchKeys widens a searchUsers user-key filter to every key one
 // employee's summaries can appear under: their gram user id, their directory
 // email, and their linked provider-account emails. SearchUsers keys internal
@@ -909,18 +951,29 @@ func (s *Service) expandUserSearchKeys(ctx context.Context, orgID string, keys [
 	users := usersRepo.New(s.db)
 
 	if len(emails) > 0 {
-		rows, err := users.GetConnectedUsersByEmails(ctx, usersRepo.GetConnectedUsersByEmailsParams{
+		rows, err := users.GetConnectedUsersMatchingEmails(ctx, usersRepo.GetConnectedUsersMatchingEmailsParams{
 			Emails:         emails,
 			OrganizationID: orgID,
 		})
 		if err != nil {
 			s.logger.WarnContext(ctx, "failed to resolve search emails to org users", attr.SlogError(err))
 		}
-		resolved := make(map[string]struct{}, len(rows))
+		// Two case-variant directory users sharing an email are ambiguous; add
+		// an owner identity only when exactly one row claims the email — the
+		// same rule resolveEmployeeIdentity applies.
+		rowsByEmail := make(map[string][]usersRepo.User, len(rows))
 		for _, row := range rows {
-			resolved[conv.NormalizeEmail(row.Email)] = struct{}{}
-			ids = append(ids, row.ID)
-			out = append(out, row.Email, conv.NormalizeEmail(row.Email))
+			key := conv.NormalizeEmail(row.Email)
+			rowsByEmail[key] = append(rowsByEmail[key], row)
+		}
+		resolved := make(map[string]struct{}, len(rowsByEmail))
+		for email, owners := range rowsByEmail {
+			resolved[email] = struct{}{}
+			if len(owners) != 1 {
+				continue
+			}
+			ids = append(ids, owners[0].ID)
+			out = append(out, owners[0].Email, conv.NormalizeEmail(owners[0].Email))
 		}
 
 		// A key that is no directory email may be a linked provider-account
@@ -983,7 +1036,13 @@ func (s *Service) expandUserSearchKeys(ctx context.Context, orgID string, keys [
 		}
 	}
 
-	return dedupeNonEmpty(append(out, ids...))
+	// Keep the caller's match-nothing semantics: blank-only keys must not
+	// degenerate into no filter at all (which would return every user).
+	expanded := dedupeNonEmpty(append(out, ids...))
+	if len(expanded) == 0 {
+		return keys
+	}
+	return expanded
 }
 
 // expandEmployeeEmailFilters makes the generic cost analytics endpoints apply
@@ -1145,6 +1204,7 @@ func (s *Service) attachUserAccounts(ctx context.Context, orgID string, users []
 		idStr := row.ID.String()
 		summary.Accounts = append(summary.Accounts, &telem_gen.UserAccount{
 			ID:               &idStr,
+			UserID:           conv.FromPGText[string](row.UserID),
 			Provider:         row.Provider,
 			Email:            conv.FromPGText[string](row.Email),
 			AccountType:      conv.FromPGText[string](row.AccountType),
@@ -1260,6 +1320,11 @@ func (s *Service) searchUsersByRole(ctx context.Context, payload *telem_gen.Sear
 		keys = append(keys, item.UserID)
 	}
 	ownerByKey := s.resolveSummaryOwnerIDs(ctx, params.organizationID, keys)
+	// A linked provider-account email is no directory email, so it resolves to
+	// no owner above; reverse-resolve those through user_accounts (single-owner
+	// rule) so a member's personal-account usage lands in their role rather
+	// than Unassigned.
+	s.reverseResolveAccountOwners(ctx, params.organizationID, keys, ownerByKey)
 
 	// Single pass: aggregate per-user costs by role and build the response.
 	type roleAgg struct {
@@ -1275,7 +1340,9 @@ func (s *Service) searchUsersByRole(ctx context.Context, payload *telem_gen.Sear
 	const unassignedRoleID = "unassigned"
 	for _, item := range items {
 		ri := roleInfo{id: unassignedRoleID, name: "Unassigned"}
+		ownerKey := item.UserID
 		if owner, ok := ownerByKey[item.UserID]; ok {
+			ownerKey = owner
 			// A resolved member without an assignment stays Unassigned rather than
 			// borrowing a role through raw telemetry ids.
 			if r, ok := userToRole[owner]; ok {
@@ -1285,6 +1352,7 @@ func (s *Service) searchUsersByRole(ctx context.Context, payload *telem_gen.Sear
 			for _, rawID := range item.RawUserIDs {
 				if r, ok := userToRole[rawID]; ok {
 					ri = r
+					ownerKey = rawID
 					break
 				}
 			}
@@ -1305,10 +1373,6 @@ func (s *Service) searchUsersByRole(ctx context.Context, payload *telem_gen.Sear
 			aggByRole[ri.id] = agg
 		}
 		s := agg.summary
-		ownerKey := item.UserID
-		if owner, ok := ownerByKey[item.UserID]; ok {
-			ownerKey = owner
-		}
 		if seenByRole[ri.id] == nil {
 			seenByRole[ri.id] = make(map[string]struct{})
 		}

@@ -183,11 +183,13 @@ describe("buildEmployees attributed/unattributed split", () => {
             provider: "anthropic",
             email: "ada@example.com",
             accountType: "team",
+            userId: "member-1",
           },
           {
             provider: "anthropic",
             email: "Ada.Personal@gmail.com",
             accountType: "personal",
+            userId: "member-1",
           },
         ],
       }),
@@ -207,14 +209,42 @@ describe("buildEmployees attributed/unattributed split", () => {
     expect(isUnattributedEmployee(ada)).toBe(false);
   });
 
-  it("leaves a summary unattributed when two members claim its account email", () => {
-    // A shared account email is ambiguous; crediting the first member in list
-    // order would hand one person another's usage (DNO-509-class).
-    const sharedAccount = {
-      provider: "anthropic",
-      email: "shared@gmail.com",
-      accountType: "personal",
-    };
+  it("routes personal-account usage to a member with no other activity", () => {
+    // When the member's only activity is under a personal account email, the
+    // account (with its directory owner id) attaches to that summary itself.
+    const member = makeMember({
+      id: "member-1",
+      email: "ada@example.com",
+      name: "Ada Lovelace",
+    });
+    const employees = buildEmployees([member], noRoles, [
+      makeSummary({
+        userId: "ada.personal@gmail.com",
+        userEmail: "ada.personal@gmail.com",
+        totalInputTokens: 300,
+        totalOutputTokens: 30,
+        accounts: [
+          {
+            provider: "anthropic",
+            email: "ada.personal@gmail.com",
+            accountType: "personal",
+            userId: "member-1",
+          },
+        ],
+      }),
+    ]);
+
+    expect(employees).toHaveLength(1);
+    const ada = employees[0]!;
+    expect(ada.id).toBe("member-1");
+    expect(ada.status).toBe("enrolled");
+    expect(ada.tokenCount).toBe(330);
+  });
+
+  it("leaves a summary unattributed when two owners claim its account email", () => {
+    // Account rows naming two different directory owners for one email are
+    // ambiguous; crediting either would hand one person another's usage
+    // (DNO-509-class).
     const members = [
       makeMember({ id: "member-1", email: "ada@example.com", name: "Ada" }),
       makeMember({ id: "member-2", email: "bob@example.com", name: "Bob" }),
@@ -222,11 +252,25 @@ describe("buildEmployees attributed/unattributed split", () => {
     const employees = buildEmployees([...members], noRoles, [
       makeSummary({
         userId: "ada@example.com",
-        accounts: [{ ...sharedAccount }],
+        accounts: [
+          {
+            provider: "anthropic",
+            email: "shared@gmail.com",
+            accountType: "personal",
+            userId: "member-1",
+          },
+        ],
       }),
       makeSummary({
         userId: "bob@example.com",
-        accounts: [{ ...sharedAccount }],
+        accounts: [
+          {
+            provider: "anthropic",
+            email: "shared@gmail.com",
+            accountType: "personal",
+            userId: "member-2",
+          },
+        ],
       }),
       makeSummary({ userId: "shared@gmail.com", totalInputTokens: 999 }),
     ]);
@@ -234,6 +278,21 @@ describe("buildEmployees attributed/unattributed split", () => {
     const unattributed = employees.filter(isUnattributedEmployee);
     expect(unattributed).toHaveLength(1);
     expect(unattributed[0]!.id).toBe("usage:shared@gmail.com");
+  });
+
+  it("merges case-variant email summaries into one member row", () => {
+    const member = makeMember({
+      id: "member-1",
+      email: "ada@example.com",
+      name: "Ada Lovelace",
+    });
+    const employees = buildEmployees([member], noRoles, [
+      makeSummary({ userId: "ada@example.com", totalInputTokens: 100 }),
+      makeSummary({ userId: "Ada@Example.com", totalInputTokens: 200 }),
+    ]);
+
+    expect(employees).toHaveLength(1);
+    expect(employees[0]!.tokenCount).toBe(400);
   });
 
   it("creates unattributed rows with a usage: id for unmatched summaries", () => {
@@ -435,6 +494,7 @@ describe("foldSummariesForMembers", () => {
               provider: "anthropic",
               email: "ada.personal@gmail.com",
               accountType: "personal",
+              userId: "member-1",
             },
           ],
         }),

@@ -1884,23 +1884,30 @@ async function fetchUserSummary(
   userId: string,
   externalOrgId: string,
 ): Promise<UserSummary | null> {
-  const result = await unwrapAsync(
-    telemetrySearchUsers(client, {
-      searchUsersPayload: {
-        filter: {
-          from,
-          to,
-          userIds: [userId],
-          externalOrgId: externalOrgId || undefined,
+  const users: UserSummary[] = [];
+  let cursor: string | undefined;
+  do {
+    const result = await unwrapAsync(
+      telemetrySearchUsers(client, {
+        searchUsersPayload: {
+          cursor,
+          filter: {
+            from,
+            to,
+            userIds: [userId],
+            externalOrgId: externalOrgId || undefined,
+          },
+          limit: 50,
+          sort: "desc",
+          userType: "internal",
         },
-        limit: 50,
-        sort: "desc",
-        userType: "internal",
-      },
-    }),
-  );
+      }),
+    );
+    users.push(...result.users);
+    cursor = result.nextCursor;
+  } while (cursor);
 
-  return mergeUserSummaries(result.users);
+  return mergeUserSummaries(users);
 }
 
 async function fetchUserMetrics(

@@ -67,7 +67,18 @@ export function mergeUserSummaries(users: UserSummary[]): UserSummary | null {
     }
     for (const account of summary.accounts ?? []) {
       const key = `${account.provider}:${(account.email ?? "").toLowerCase()}`;
-      if (!accountsByKey.has(key)) accountsByKey.set(key, account);
+      const existing = accountsByKey.get(key);
+      // Duplicate (provider, email) records keep the most-recently-active
+      // instance, same as the employees-list account merge.
+      if (
+        !existing ||
+        (account.lastSeenUnixNano != null &&
+          (existing.lastSeenUnixNano == null ||
+            BigInt(account.lastSeenUnixNano) >
+              BigInt(existing.lastSeenUnixNano)))
+      ) {
+        accountsByKey.set(key, account);
+      }
     }
     for (const accountType of summary.accountTypes ?? []) {
       accountTypes.add(accountType);
