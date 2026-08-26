@@ -125,6 +125,12 @@ func TestOrphanReplyIsDroppedAndCounted(t *testing.T) {
 	t.Parallel()
 
 	te := setupInboxTest(t, "replica-orphan")
+	// The drainer only polls while a scan is in flight; an unrelated live
+	// waiter keeps it draining so the orphan is observed rather than left to
+	// expire with the list TTL.
+	_, release, err := te.inbox.register("scan-live", []Lane{gitleaksLane})
+	require.NoError(t, err)
+	defer release()
 	require.NoError(t, te.writer.Write(t.Context(), te.inbox.ReplyURN("scan-orphan"), testReply("scan-orphan", gitleaksLane, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK)))
 
 	require.Eventually(t, func() bool {
@@ -185,7 +191,7 @@ func TestReplicaInboxesDoNotCross(t *testing.T) {
 	inboxTwo, err := New(t.Context(), newTestLogger(), otel.GetTracerProvider(), otel.GetMeterProvider(), Config{
 		RedisOptions: redis.Options{Addr: te.redis.Addr(), Protocol: 2},
 		ReplicaID:    "replica-two",
-		BlockTimeout: time.Second,
+		PollInterval: DefaultPollInterval,
 		DrainGate:    nil,
 		drainFunc:    nil,
 	})
@@ -223,7 +229,7 @@ func TestInvalidReplicaIDIsRejected(t *testing.T) {
 	_, err := New(t.Context(), newTestLogger(), otel.GetTracerProvider(), otel.GetMeterProvider(), Config{
 		RedisOptions: redis.Options{Addr: "127.0.0.1:1"},
 		ReplicaID:    "replica:unsafe",
-		BlockTimeout: time.Second,
+		PollInterval: DefaultPollInterval,
 		DrainGate:    nil,
 		drainFunc:    nil,
 	})
@@ -243,19 +249,11 @@ func TestDrainerReconnectsAndDrainsQueuedReply(t *testing.T) {
 	}()
 	waitForWaiter(t, te.inbox, "scan-reconnect")
 
-	staleClient := te.inbox.redisClient()
+	// Take Redis down mid-wait: the drainer's paced polls fail until the
+	// restart, then the pool reconnects on its own with no client swap.
 	te.redis.Close()
 	require.NoError(t, te.client.Close())
-	require.Eventually(t, func() bool {
-		return te.inbox.redisClient() != staleClient
-	}, 5*time.Second, 5*time.Millisecond)
-	miniCtx, miniCancel := context.WithCancel(t.Context())
-	t.Cleanup(miniCancel)
-	// Restart does not renew miniredis's canceled blocking-command context.
-	te.redis.Ctx = miniCtx
-	te.redis.CtxCancel = miniCancel
 	require.NoError(t, te.redis.Restart())
-	require.Equal(t, te.inbox.client.Load().Options().Addr, te.redis.Addr())
 	te.client = redis.NewClient(&redis.Options{Addr: te.redis.Addr(), Protocol: 2})
 	t.Cleanup(func() { _ = te.client.Close() })
 	te.writer = NewWriter(te.client)
@@ -270,7 +268,7 @@ func TestDedicatedClientUsesBoundedPool(t *testing.T) {
 	t.Parallel()
 
 	te := setupInboxTest(t, "replica-options")
-	require.Equal(t, defaultPoolSize, te.inbox.client.Load().Options().PoolSize)
+	require.Equal(t, defaultPoolSize, te.inbox.client.Options().PoolSize)
 }
 
 func TestDrainerSupervisorRestartsAfterPanic(t *testing.T) {

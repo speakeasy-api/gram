@@ -51,7 +51,7 @@ func setupInboxTestWithDrainerAndGate(t *testing.T, replicaID string, drainGate 
 	inbox, err := New(t.Context(), newTestLogger(), otel.GetTracerProvider(), meterProvider, Config{
 		RedisOptions: redis.Options{Addr: mr.Addr(), Protocol: 2},
 		ReplicaID:    replicaID,
-		BlockTimeout: time.Second,
+		PollInterval: DefaultPollInterval,
 		DrainGate:    drainGate,
 		drainFunc:    drainFunc,
 	})

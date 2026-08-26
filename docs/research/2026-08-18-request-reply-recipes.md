@@ -109,3 +109,9 @@ Implication: the hybrid is defensible (it reuses our existing fan-out and scanne
 Further design discussion selected the replica-inbox topology, option (b) in shape, but backed by a Redis list instead of pub/sub. One drainer per replica provides O(1) connections and immediate waiter wakeup while retaining list persistence, the property that ruled out Redis pub/sub.
 
 The lifecycle complexity scored against option (b) was accepted knowingly. Process restarts may drop in-flight replies because the corresponding HTTP requests and in-process waiters die with that process. The BLPOP-per-scan design remains the documented fallback if replica-inbox lifecycle or throughput behavior proves unsuitable.
+
+## Addendum: waiter-aware polling replaces BLPOP (2026-08-26)
+
+Review discussion moved the drainer from BLPOP wakeups to non-blocking LPOP polling gated on registered waiters. Blocking commands carried the design's ugliest client semantics: go-redis v9 ignores the configured read timeout for them, applies an internal block-plus-ten-seconds socket deadline, and a popped element can be lost when that deadline races its arrival (issues 647 and 697 above). Ordinary LPOPs keep normal timeout and pool-reconnect behavior, and a timed-out poll leaves elements in the list, so the dedicated-client replacement machinery was deleted outright.
+
+The drainer sleeps on an in-process wake signal while no scans are in flight, so an idle replica issues zero Redis commands, cheaper than BLPOP's once-per-second reissue. The cost is up to one poll interval (default 25 ms) of added reply pickup latency, noise against the enforcement deadline. Single-key BLPOP carried no cluster constraint (it is single-slot by construction), so the switch was motivated by client semantics and simplicity, not cluster compatibility.
