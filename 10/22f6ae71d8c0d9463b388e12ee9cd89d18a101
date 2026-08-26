@@ -1,0 +1,41 @@
+docs/research/2026-08-18-request-reply-recipes.md
+  s_b390d6ce53b276::t_0309754cddbd99 112-117
+server/cmd/tools/enforceload/main.go
+  s_b390d6ce53b276::t_f32461605f2cf5 291,391,558
+server/internal/risk/replyinbox/inbox_test.go
+  s_b390d6ce53b276::t_105f945f05ca43 128-133
+  s_b390d6ce53b276::t_f32461605f2cf5 194,232
+  s_b390d6ce53b276::t_3b3e0fb214c570 271
+  s_b390d6ce53b276::t_d431c96c00cd9e 252-253
+server/internal/risk/replyinbox/inbox.go
+  s_b390d6ce53b276::t_ce8c989112bf1e 205,208,210-211
+  s_b390d6ce53b276::t_7b975e97fb3548 123,126,129-132
+  s_b390d6ce53b276::t_ad48301899c255 463-467,470,474,479-490,498-500,502-503,512-514,518-526
+  s_b390d6ce53b276::t_4d836a4016d804 30-34
+  s_b390d6ce53b276::t_38b4208fc22b58 354-359,361-363
+  s_b390d6ce53b276::t_fd0cc83e12be4b 575
+  s_b390d6ce53b276::t_864c783d505c9c 240
+  s_b390d6ce53b276::t_aa2773a9923759 46,54-59,61-63
+  s_b390d6ce53b276::t_498ebc6c566c9e 178-179
+  s_b390d6ce53b276::t_07bdaf3eedf4e2 133
+server/internal/risk/replyinbox/setup_test.go
+  s_b390d6ce53b276::t_f32461605f2cf5 54
+server/cmd/tools/enforceproto/main.go
+  s_b390d6ce53b276::t_f32461605f2cf5 75
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "1022f6ae71d8c0d9463b388e12ee9cd89d18a101",
+  "prompts": {},
+  "sessions": {
+    "s_b390d6ce53b276": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c7be466b-35a7-46f8-83d3-cbbede48fd92",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
