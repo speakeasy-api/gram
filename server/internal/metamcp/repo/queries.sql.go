@@ -111,13 +111,15 @@ INSERT INTO meta_mcp_servers (
     organization_id,
     project_id,
     name,
-    user_session_issuer_id
+    user_session_issuer_id,
+    visibility
 )
 VALUES (
     $1,
     $2,
     $3,
-    $4
+    $4,
+    $5
 )
 RETURNING id, organization_id, project_id, user_session_issuer_id, name, visibility, created_at, updated_at, deleted_at, deleted
 `
@@ -127,6 +129,7 @@ type CreateMetaMCPServerParams struct {
 	ProjectID           uuid.UUID
 	Name                string
 	UserSessionIssuerID uuid.NullUUID
+	Visibility          string
 }
 
 func (q *Queries) CreateMetaMCPServer(ctx context.Context, arg CreateMetaMCPServerParams) (MetaMcpServer, error) {
@@ -135,6 +138,7 @@ func (q *Queries) CreateMetaMCPServer(ctx context.Context, arg CreateMetaMCPServ
 		arg.ProjectID,
 		arg.Name,
 		arg.UserSessionIssuerID,
+		arg.Visibility,
 	)
 	var i MetaMcpServer
 	err := row.Scan(
@@ -839,10 +843,11 @@ const updateMetaMCPServer = `-- name: UpdateMetaMCPServer :one
 UPDATE meta_mcp_servers
 SET name = $1,
     user_session_issuer_id = $2,
+    visibility = COALESCE($3, visibility),
     updated_at = clock_timestamp()
-WHERE id = $3
-  AND organization_id = $4
-  AND project_id = $5
+WHERE id = $4
+  AND organization_id = $5
+  AND project_id = $6
   AND deleted IS FALSE
 RETURNING id, organization_id, project_id, user_session_issuer_id, name, visibility, created_at, updated_at, deleted_at, deleted
 `
@@ -850,16 +855,20 @@ RETURNING id, organization_id, project_id, user_session_issuer_id, name, visibil
 type UpdateMetaMCPServerParams struct {
 	Name                string
 	UserSessionIssuerID uuid.NullUUID
+	Visibility          pgtype.Text
 	ID                  uuid.UUID
 	OrganizationID      string
 	ProjectID           uuid.UUID
 }
 
-// Full-record replace: a null user_session_issuer_id clears the reference.
+// Full-record replace: a null user_session_issuer_id clears the reference. A
+// null visibility preserves the stored value so callers that do not manage
+// visibility cannot re-enable a disabled gateway.
 func (q *Queries) UpdateMetaMCPServer(ctx context.Context, arg UpdateMetaMCPServerParams) (MetaMcpServer, error) {
 	row := q.db.QueryRow(ctx, updateMetaMCPServer,
 		arg.Name,
 		arg.UserSessionIssuerID,
+		arg.Visibility,
 		arg.ID,
 		arg.OrganizationID,
 		arg.ProjectID,

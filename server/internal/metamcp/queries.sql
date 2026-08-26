@@ -14,13 +14,15 @@ INSERT INTO meta_mcp_servers (
     organization_id,
     project_id,
     name,
-    user_session_issuer_id
+    user_session_issuer_id,
+    visibility
 )
 VALUES (
     @organization_id,
     @project_id,
     @name,
-    sqlc.narg('user_session_issuer_id')
+    sqlc.narg('user_session_issuer_id'),
+    @visibility
 )
 RETURNING *;
 
@@ -60,10 +62,13 @@ WHERE organization_id = @organization_id
 ORDER BY created_at DESC, id DESC;
 
 -- name: UpdateMetaMCPServer :one
--- Full-record replace: a null user_session_issuer_id clears the reference.
+-- Full-record replace: a null user_session_issuer_id clears the reference. A
+-- null visibility preserves the stored value so callers that do not manage
+-- visibility cannot re-enable a disabled gateway.
 UPDATE meta_mcp_servers
 SET name = @name,
     user_session_issuer_id = sqlc.narg('user_session_issuer_id'),
+    visibility = COALESCE(sqlc.narg('visibility'), visibility),
     updated_at = clock_timestamp()
 WHERE id = @id
   AND organization_id = @organization_id

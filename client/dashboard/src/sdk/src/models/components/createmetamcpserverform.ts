@@ -4,6 +4,21 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { ClosedEnum } from "../../types/enums.js";
+
+/**
+ * The visibility of a meta MCP server. Disabled refuses traffic; private requires a user session.
+ */
+export const CreateMetaMcpServerFormVisibility = {
+  Disabled: "disabled",
+  Private: "private",
+} as const;
+/**
+ * The visibility of a meta MCP server. Disabled refuses traffic; private requires a user session.
+ */
+export type CreateMetaMcpServerFormVisibility = ClosedEnum<
+  typeof CreateMetaMcpServerFormVisibility
+>;
 
 /**
  * Form for creating a new meta MCP server. URL addressability is managed separately through MCP endpoints.
@@ -17,12 +32,22 @@ export type CreateMetaMcpServerForm = {
    * The ID of the user session issuer used to authenticate callers. Omit for no issuer.
    */
   userSessionIssuerId?: string | undefined;
+  /**
+   * The visibility of a meta MCP server. Disabled refuses traffic; private requires a user session.
+   */
+  visibility?: CreateMetaMcpServerFormVisibility | undefined;
 };
+
+/** @internal */
+export const CreateMetaMcpServerFormVisibility$outboundSchema: z.ZodMiniEnum<
+  typeof CreateMetaMcpServerFormVisibility
+> = z.enum(CreateMetaMcpServerFormVisibility);
 
 /** @internal */
 export type CreateMetaMcpServerForm$Outbound = {
   name: string;
   user_session_issuer_id?: string | undefined;
+  visibility?: string | undefined;
 };
 
 /** @internal */
@@ -33,6 +58,7 @@ export const CreateMetaMcpServerForm$outboundSchema: z.ZodMiniType<
   z.object({
     name: z.string(),
     userSessionIssuerId: z.optional(z.string()),
+    visibility: z.optional(CreateMetaMcpServerFormVisibility$outboundSchema),
   }),
   z.transform((v) => {
     return remap$(v, {

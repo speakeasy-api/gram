@@ -27897,7 +27897,7 @@ paths:
                 name: RemoveMetaMcpMember
     /rpc/metaMcp.update:
         post:
-            description: 'Update a meta MCP server. This is a full-record replace: a user_session_issuer_id omitted from the request becomes null on the stored record.'
+            description: 'Update a meta MCP server. This is a full-record replace: a user_session_issuer_id omitted from the request becomes null on the stored record. Visibility is the exception — omitting it preserves the stored value, so a caller that does not manage visibility cannot re-enable a disabled gateway by saving an unrelated field.'
             operationId: updateMetaMcpServer
             parameters:
                 - allowEmptyValue: true
@@ -65684,6 +65684,12 @@ components:
                     type: string
                     description: The ID of the user session issuer used to authenticate callers. Omit for no issuer.
                     format: uuid
+                visibility:
+                    type: string
+                    description: The visibility of a meta MCP server. Disabled refuses traffic; private requires a user session.
+                    enum:
+                        - disabled
+                        - private
             description: Form for creating a new meta MCP server. URL addressability is managed separately through MCP endpoints.
             required:
                 - name
@@ -74105,12 +74111,19 @@ components:
                     type: string
                     description: The ID of the user session issuer used to authenticate callers. Null when no issuer is attached.
                     format: uuid
+                visibility:
+                    type: string
+                    description: The visibility of a meta MCP server. Disabled refuses traffic; private requires a user session.
+                    enum:
+                        - disabled
+                        - private
             description: 'A meta MCP server: an aggregate server fronting an explicitly managed set of MCP servers. URL addressability lives on its MCP endpoints.'
             required:
                 - id
                 - organization_id
                 - project_id
                 - name
+                - visibility
                 - created_at
                 - updated_at
         MigrateIssuerRequestBody:
@@ -85297,7 +85310,13 @@ components:
                     type: string
                     description: The ID of the user session issuer used to authenticate callers. Omit for no issuer.
                     format: uuid
-            description: 'Form for updating a meta MCP server. This is a full-record replace: a user_session_issuer_id omitted from the request becomes null on the stored record.'
+                visibility:
+                    type: string
+                    description: The visibility of a meta MCP server. Disabled refuses traffic; private requires a user session.
+                    enum:
+                        - disabled
+                        - private
+            description: 'Form for updating a meta MCP server. This is a full-record replace: a user_session_issuer_id omitted from the request becomes null on the stored record. Visibility is the exception — omitting it preserves the stored value, so a caller that does not manage visibility cannot re-enable a disabled gateway by saving an unrelated field.'
             required:
                 - id
                 - name
