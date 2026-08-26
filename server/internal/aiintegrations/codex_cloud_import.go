@@ -439,9 +439,6 @@ func (src *codexCloudSource) writeFile(ctx context.Context, file codexapi.LogFil
 	}
 
 	rows := make([]chatrepo.CreateExternalChatMessageParams, 0, len(admitted))
-	// The actor email rides beside the rows for the OTEL mirror; the rows
-	// themselves only store the provider user id.
-	emails := make(map[string]string, len(admitted))
 	for i, event := range admitted {
 		var role, content string
 		switch event.EventDetails.DetailType {
@@ -458,7 +455,6 @@ func (src *codexCloudSource) writeFile(ctx context.Context, file codexapi.LogFil
 		if err != nil {
 			return err
 		}
-		emails[event.EventID] = event.Actor.UserEmail
 
 		rows = append(rows, chatrepo.CreateExternalChatMessageParams{
 			ChatID:            src.chatIDs[event.EventDetails.SessionID],
@@ -497,15 +493,15 @@ func (src *codexCloudSource) writeFile(ctx context.Context, file codexapi.LogFil
 		return nil
 	}
 
-	// WriteExternal inserts row by row, so a mid-batch failure still leaves
-	// the earlier rows durable — record the partial count and mirror the
-	// inserted rows before propagating the error, since a retry will neither
-	// re-count nor re-offer them.
-	inserted, err := src.svc.writer.WriteExternal(ctx, src.cfg.ProjectID, rows)
+	// Mirror every fetched row to the OTEL log topic before the Postgres
+	// write. Publishing is unconditional: a replayed file publishes the same
+	// rows again even though the insert dedupes them, and downstream
+	// consumers dedupe on the deterministic record id.
+	src.svc.mirror.PublishMessages(ctx, src.cfg, rows)
+	written, err := src.svc.writer.WriteExternal(ctx, src.cfg.ProjectID, rows)
 	src.progressMu.Lock()
-	src.progress.MessagesWritten += int64(len(inserted))
+	src.progress.MessagesWritten += written
 	src.progressMu.Unlock()
-	src.svc.mirror.PublishMessages(ctx, src.cfg, inserted, emails)
 	if err != nil {
 		return fmt.Errorf("write codex cloud messages: %w", err)
 	}

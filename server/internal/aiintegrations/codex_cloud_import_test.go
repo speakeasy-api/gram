@@ -111,7 +111,9 @@ func TestCodexCloudProcessPageWritesChatAndMessagesIdempotently(t *testing.T) {
 	t.Cleanup(func() { _ = shutdown(context.Background()) })
 
 	heartbeats := 0
-	svc := NewCodexCloudImportService(testenv.NewLogger(t), store, conn, nil, writer, newTestChatOTELMirror(t), func(context.Context, int) { heartbeats++ })
+	capture := &captureOTELLogPublisher{}
+	mirror := NewChatOTELMirror(testenv.NewLogger(t), capture)
+	svc := NewCodexCloudImportService(testenv.NewLogger(t), store, conn, nil, writer, mirror, func(context.Context, int) { heartbeats++ })
 	file := codexCloudFixtureFile(codexCloudFixture)
 	src := &codexCloudSource{
 		client: &stubCodexComplianceClient{
@@ -171,6 +173,13 @@ func TestCodexCloudProcessPageWritesChatAndMessagesIdempotently(t *testing.T) {
 	require.Zero(t, messages[1].CompletionTokens)
 	require.Zero(t, messages[1].TotalTokens)
 
+	// Every fetched message is mirrored onto the OTEL inbound log topic.
+	mirrored := capture.Sent()
+	require.Len(t, mirrored, 2)
+	require.Equal(t, "Fix the flaky retry test in CI", mirrored[0].GetBody().GetStringValue())
+	require.Equal(t, orgID, mirrored[0].GetProvenance().GetOrganizationId())
+	require.Equal(t, project.ID.String(), mirrored[0].GetProvenance().GetProjectId())
+
 	// Replaying the same file must not duplicate messages: the insert
 	// dedupes on (chat_id, external_message_id).
 	src.chatIDs = map[string]uuid.UUID{}
@@ -179,6 +188,10 @@ func TestCodexCloudProcessPageWritesChatAndMessagesIdempotently(t *testing.T) {
 	messages, err = chatrepo.New(conn).ListChatMessages(ctx, chatrepo.ListChatMessagesParams{ChatID: chatID, ProjectID: project.ID})
 	require.NoError(t, err)
 	require.Len(t, messages, 2)
+	// The mirror publishes before the write, unconditionally: the replay
+	// republishes the same rows (deterministic record ids let downstream
+	// dedupe) even though Postgres stays deduped.
+	require.Len(t, capture.Sent(), 4)
 
 	// A later poll window (fresh run: empty caches) sees only the session's
 	// later turns and derives a MID-SESSION prompt as its "first". First-wins
@@ -198,6 +211,8 @@ func TestCodexCloudProcessPageWritesChatAndMessagesIdempotently(t *testing.T) {
 	messages, err = chatrepo.New(conn).ListChatMessages(ctx, chatrepo.ListChatMessagesParams{ChatID: chatID, ProjectID: project.ID})
 	require.NoError(t, err)
 	require.Len(t, messages, 3)
+	// The later window's fetched message is mirrored as well.
+	require.Len(t, capture.Sent(), 5)
 	chatRow, err = chatrepo.New(conn).GetChat(ctx, chatrepo.GetChatParams{ID: chatID, ProjectID: project.ID})
 	require.NoError(t, err)
 	require.Equal(t, "Fix the flaky retry test in CI", chatRow.Title.String,

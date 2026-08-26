@@ -73,9 +73,6 @@ type messagePageBatch struct {
 	// cursorOnly marks a sentinel batch that carries just an activities
 	// cursor for a fully-filtered page; there is nothing to write.
 	cursorOnly bool
-	// userEmail is the chat owner's email from the message page, carried for
-	// the OTEL mirror; the rows themselves only store the provider user id.
-	userEmail string
 }
 
 type ComplianceImportService struct {
@@ -188,7 +185,7 @@ func (s *ComplianceImportService) importChatActivities(ctx context.Context, clie
 			select {
 			case <-ctx.Done():
 				return ctx.Err() //nolint:wrapcheck // Preserve context cancellation sentinel errors for callers.
-			case out <- messagePageBatch{chatID: uuid.Nil, rows: nil, lastID: "", activitiesCursor: discovered.activitiesCursor, cursorOnly: true, userEmail: ""}:
+			case out <- messagePageBatch{chatID: uuid.Nil, rows: nil, lastID: "", activitiesCursor: discovered.activitiesCursor, cursorOnly: true}:
 			}
 			continue
 		}
@@ -222,18 +219,12 @@ func (s *ComplianceImportService) writeMessagePages(ctx context.Context, cfg Con
 		if !batch.cursorOnly {
 			s.heartbeat(ctx, "message_write", progress.MessagePagesWritten+1)
 
-			inserted, err := s.writer.WriteExternal(ctx, cfg.ProjectID, batch.rows)
-			if len(inserted) > 0 {
-				// Mirror rows even when the batch failed mid-way: the rows
-				// inserted before the failure are durable and a retry will
-				// never offer them to the mirror again.
-				emails := make(map[string]string, len(inserted))
-				for _, row := range inserted {
-					emails[row.ExternalMessageID.String] = batch.userEmail
-				}
-				s.mirror.PublishMessages(ctx, cfg, inserted, emails)
-			}
-			if err != nil {
+			// Mirror every fetched row to the OTEL log topic before the
+			// Postgres write. Publishing is unconditional: a retried batch
+			// may publish the same rows again, and downstream consumers
+			// dedupe on the deterministic record id.
+			s.mirror.PublishMessages(ctx, cfg, batch.rows)
+			if _, err := s.writer.WriteExternal(ctx, cfg.ProjectID, batch.rows); err != nil {
 				return fmt.Errorf("write anthropic compliance chat messages: %w", err)
 			}
 
@@ -489,7 +480,7 @@ func (s *ComplianceImportService) fetchChatMessages(ctx context.Context, client 
 			return err
 		}
 
-		batch := messagePageBatch{chatID: chatID, rows: rows, lastID: page.LastID, activitiesCursor: "", cursorOnly: false, userEmail: page.User.EmailAddress}
+		batch := messagePageBatch{chatID: chatID, rows: rows, lastID: page.LastID, activitiesCursor: "", cursorOnly: false}
 		finalPage := !page.HasMore || page.LastID == ""
 		if finalPage {
 			// The chat's last message page closes out the activity; if the

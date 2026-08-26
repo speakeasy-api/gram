@@ -45,12 +45,12 @@ const (
 // record id and downstream consumers can dedupe.
 var chatOTELRecordNamespace = uuid.MustParse("5f2ac9a7-1f7d-4c15-9f28-3f4be3a1d0b6")
 
-// ChatOTELMirror mirrors newly imported compliance chat messages onto the
+// ChatOTELMirror mirrors fetched compliance chat messages onto the
 // gram.otel.v1.InboundLogRecord Pub/Sub topic, feeding the OTEL log pipeline
 // (transform/enrichment, ClickHouse event feed, relay) alongside the primary
 // Postgres write. It is best-effort and non-blocking: publish acks drain on a
 // detached goroutine and failures surface as a single error log — a mirror
-// failure never fails the sync that stored the rows.
+// failure never fails the sync that fetched the rows.
 type ChatOTELMirror struct {
 	logger *slog.Logger
 	pub    gcp.Publisher[*otelv1.InboundLogRecord]
@@ -71,25 +71,23 @@ func NewChatOTELMirror(logger *slog.Logger, pub gcp.Publisher[*otelv1.InboundLog
 	}
 }
 
-// PublishMessages mirrors chat message rows just inserted into Postgres.
-// Callers pass only rows that actually inserted — replayed conflicts must not
-// republish — along with any provider actor emails known for them, keyed by
-// external message id.
-func (m *ChatOTELMirror) PublishMessages(ctx context.Context, cfg Config, rows []chatrepo.CreateExternalChatMessageParams, emailByExternalMessageID map[string]string) {
+// PublishMessages mirrors fetched chat message rows onto the OTEL log topic.
+// Callers publish before writing the rows to Postgres, so a retried batch may
+// publish the same rows again; record ids are deterministic so downstream
+// consumers can dedupe.
+func (m *ChatOTELMirror) PublishMessages(ctx context.Context, cfg Config, rows []chatrepo.CreateExternalChatMessageParams) {
 	if len(rows) == 0 {
 		return
 	}
 
-	// The rows are already durable in Postgres, so caller cancellation
-	// (activity teardown) must not drop the mirror copy: a retry finds the
-	// rows already inserted and never offers them to the mirror again.
-	// Detach cancellation while keeping trace context; the publisher's own
+	// Detach caller cancellation (activity teardown) while keeping trace
+	// context so publishes are not dropped mid-batch; the publisher's own
 	// settings and chatOTELPublishAckTimeout bound the work instead.
 	ctx = context.WithoutCancel(ctx)
 
 	results := make([]gcp.PublishResult, len(rows))
 	for i, row := range rows {
-		results[i] = m.pub.Publish(ctx, chatMessageLogRecord(cfg, row, emailByExternalMessageID[row.ExternalMessageID.String]))
+		results[i] = m.pub.Publish(ctx, chatMessageLogRecord(cfg, row))
 	}
 
 	m.drains.Add(1)
@@ -105,32 +103,24 @@ func (m *ChatOTELMirror) drainPublishAcks(ctx context.Context, results []gcp.Pub
 	defer cancel()
 
 	var firstErr error
-	failed := 0
 	for _, res := range results {
-		if _, err := res.Get(ctx); err != nil {
-			failed++
-			if firstErr == nil {
-				firstErr = err
-			}
+		if _, err := res.Get(ctx); err != nil && firstErr == nil {
+			firstErr = err
 		}
 	}
 
 	if firstErr != nil {
-		m.logger.ErrorContext(ctx, "failed to publish compliance chat messages to otel log topic",
-			attr.SlogError(firstErr),
-			attr.SlogChatOTELMirrorFailedCount(failed),
-			attr.SlogChatOTELMirrorRowCount(len(results)),
-		)
+		m.logger.ErrorContext(ctx, "failed to publish compliance chat messages to otel log topic", attr.SlogError(firstErr))
 	}
 }
 
-// chatMessageLogRecord maps one inserted chat message row to its inbound OTEL
+// chatMessageLogRecord maps one fetched chat message row to its inbound OTEL
 // log record, in the wire shape the dialect.ComplianceLog interpreter reads.
 // Every derived field is deterministic — the record id comes from the same
 // (chat_id, external_message_id) pair that dedupes the Postgres import and
 // both timestamps come from the row's created_at — so a replayed publish
 // produces an identical record.
-func chatMessageLogRecord(cfg Config, row chatrepo.CreateExternalChatMessageParams, userEmail string) *otelv1.InboundLogRecord {
+func chatMessageLogRecord(cfg Config, row chatrepo.CreateExternalChatMessageParams) *otelv1.InboundLogRecord {
 	recordID := uuid.NewSHA1(chatOTELRecordNamespace, []byte(row.ChatID.String()+"/"+row.ExternalMessageID.String)).String()
 	timeNano := uint64(row.CreatedAt.Time.UnixNano())
 
@@ -141,9 +131,6 @@ func chatMessageLogRecord(cfg Config, row chatrepo.CreateExternalChatMessagePara
 	}
 	if row.ExternalUserID.String != "" {
 		attrs = append(attrs, chatOTELStringAttr(dialect.ComplianceLogUserIDAttr, row.ExternalUserID.String))
-	}
-	if userEmail != "" {
-		attrs = append(attrs, chatOTELStringAttr(dialect.ComplianceLogUserEmailAttr, userEmail))
 	}
 	if row.Model.String != "" {
 		attrs = append(attrs, chatOTELStringAttr(chatOTELModelAttr, row.Model.String))

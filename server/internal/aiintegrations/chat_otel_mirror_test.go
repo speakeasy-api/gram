@@ -63,8 +63,8 @@ func TestChatMessageLogRecordMapsRowDeterministically(t *testing.T) {
 	chatID := uuid.MustParse("77777777-7777-4777-8777-777777777777")
 	row := mirrorTestRow(chatID, "user", "what is our refund policy?", "msg_1")
 
-	record := chatMessageLogRecord(cfg, row, "ada@example.com")
-	replayed := chatMessageLogRecord(cfg, row, "ada@example.com")
+	record := chatMessageLogRecord(cfg, row)
+	replayed := chatMessageLogRecord(cfg, row)
 
 	// The record id is a UUID derived from (chat_id, external_message_id):
 	// stable across replays so downstream consumers can dedupe.
@@ -72,7 +72,7 @@ func TestChatMessageLogRecordMapsRowDeterministically(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, record.GetRecordId(), replayed.GetRecordId())
 
-	other := chatMessageLogRecord(cfg, mirrorTestRow(chatID, "user", "what is our refund policy?", "msg_2"), "ada@example.com")
+	other := chatMessageLogRecord(cfg, mirrorTestRow(chatID, "user", "what is our refund policy?", "msg_2"))
 	require.NotEqual(t, record.GetRecordId(), other.GetRecordId())
 
 	// Both timestamps come from the row's created_at, never publish time.
@@ -97,9 +97,6 @@ func TestChatMessageLogRecordMapsRowDeterministically(t *testing.T) {
 	userID, ok := mirrorRecordAttr(record, dialect.ComplianceLogUserIDAttr)
 	require.True(t, ok)
 	require.Equal(t, "external-user-id", userID)
-	email, ok := mirrorRecordAttr(record, dialect.ComplianceLogUserEmailAttr)
-	require.True(t, ok)
-	require.Equal(t, "ada@example.com", email)
 	model, ok := mirrorRecordAttr(record, "gen_ai.request.model")
 	require.True(t, ok)
 	require.Equal(t, "gpt-5.5", model)
@@ -121,11 +118,9 @@ func TestChatMessageLogRecordOmitsUnknownOptionalAttributes(t *testing.T) {
 	row.ExternalUserID = pgtype.Text{String: "", Valid: false}
 	row.Model = pgtype.Text{String: "", Valid: false}
 
-	record := chatMessageLogRecord(cfg, row, "")
+	record := chatMessageLogRecord(cfg, row)
 
 	_, ok := mirrorRecordAttr(record, dialect.ComplianceLogUserIDAttr)
-	require.False(t, ok)
-	_, ok = mirrorRecordAttr(record, dialect.ComplianceLogUserEmailAttr)
 	require.False(t, ok)
 	_, ok = mirrorRecordAttr(record, "gen_ai.request.model")
 	require.False(t, ok)
@@ -135,7 +130,7 @@ func TestChatMessageLogRecordOmitsUnknownOptionalAttributes(t *testing.T) {
 	require.Equal(t, "assistant", role)
 }
 
-func TestChatOTELMirrorPublishesEveryRowWithItsEmail(t *testing.T) {
+func TestChatOTELMirrorPublishesEveryRow(t *testing.T) {
 	t.Parallel()
 
 	capture := &captureOTELLogPublisher{}
@@ -146,19 +141,16 @@ func TestChatOTELMirrorPublishesEveryRowWithItsEmail(t *testing.T) {
 	mirror.PublishMessages(t.Context(), cfg, []chatrepo.CreateExternalChatMessageParams{
 		mirrorTestRow(chatID, "user", "hello", "msg_1"),
 		mirrorTestRow(chatID, "assistant", "hi there", "msg_2"),
-	}, map[string]string{"msg_1": "ada@example.com"})
+	})
 	mirror.drains.Wait()
 
 	sent := capture.Sent()
 	require.Len(t, sent, 2)
-	email, ok := mirrorRecordAttr(sent[0], dialect.ComplianceLogUserEmailAttr)
-	require.True(t, ok)
-	require.Equal(t, "ada@example.com", email)
-	_, ok = mirrorRecordAttr(sent[1], dialect.ComplianceLogUserEmailAttr)
-	require.False(t, ok, "row without a known email must omit the attribute")
+	require.Equal(t, "hello", sent[0].GetBody().GetStringValue())
+	require.Equal(t, "hi there", sent[1].GetBody().GetStringValue())
 
 	// Nothing to mirror publishes nothing.
-	mirror.PublishMessages(t.Context(), cfg, nil, nil)
+	mirror.PublishMessages(t.Context(), cfg, nil)
 	mirror.drains.Wait()
 	require.Len(t, capture.Sent(), 2)
 }

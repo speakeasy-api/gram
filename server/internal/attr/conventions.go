@@ -148,11 +148,6 @@ const (
 	ChatIDKey            = attribute.Key("gram.chat.id")
 	ChatContentPartIDKey = attribute.Key("gram.chat.content_part_id")
 	MessageIDKey         = attribute.Key("gram.message.id")
-	// Chat OTEL mirror attributes: stamped on the error log the compliance
-	// chat mirror emits when publishing imported messages to the inbound OTEL
-	// log topic fails.
-	ChatOTELMirrorFailedCountKey = attribute.Key("gram.chat_otel_mirror.failed_count")
-	ChatOTELMirrorRowCountKey    = attribute.Key("gram.chat_otel_mirror.row_count")
 	// Chat-analysis score event attributes: stamped on the synthetic
 	// chat_analysis:work_units:score telemetry rows the chat analysis
 	// publisher emits once per scored session, and read back by
@@ -1091,16 +1086,6 @@ func SlogChatID(v string) slog.Attr      { return slog.String(string(ChatIDKey),
 func ChatContentPartID(v string) attribute.KeyValue { return ChatContentPartIDKey.String(v) }
 func SlogChatContentPartID(v string) slog.Attr {
 	return slog.String(string(ChatContentPartIDKey), v)
-}
-
-func ChatOTELMirrorFailedCount(v int) attribute.KeyValue { return ChatOTELMirrorFailedCountKey.Int(v) }
-func SlogChatOTELMirrorFailedCount(v int) slog.Attr {
-	return slog.Int(string(ChatOTELMirrorFailedCountKey), v)
-}
-
-func ChatOTELMirrorRowCount(v int) attribute.KeyValue { return ChatOTELMirrorRowCountKey.Int(v) }
-func SlogChatOTELMirrorRowCount(v int) slog.Attr {
-	return slog.Int(string(ChatOTELMirrorRowCountKey), v)
 }
 
 func MessageID(v string) attribute.KeyValue { return MessageIDKey.String(v) }
