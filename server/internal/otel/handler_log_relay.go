@@ -20,6 +20,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/streams"
@@ -35,10 +36,11 @@ const (
 )
 
 type LogRelayHandler struct {
-	logger         *slog.Logger
-	recordsDropped metric.Int64Counter
-	recordsFailed  metric.Int64Counter
-	relay          *signalRelay
+	logger           *slog.Logger
+	recordsDropped   metric.Int64Counter
+	recordsFailed    metric.Int64Counter
+	relay            *signalRelay
+	organizationGate logRelayOrganizationGate
 }
 
 type logProvenanceKey struct {
@@ -63,6 +65,7 @@ func NewLogRelayHandler(
 	readReplica *pgxpool.Pool,
 	encryptionClient *encryption.Client,
 	policy *guardian.Policy,
+	features feature.Provider,
 ) *LogRelayHandler {
 	logger = logger.With(attr.SlogComponent("log-relay-handler"))
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/otel")
@@ -91,6 +94,11 @@ func NewLogRelayHandler(
 			policy,
 			"/v1/logs",
 			"log",
+		),
+		organizationGate: newLogRelayOrganizationGate(
+			logger,
+			readReplica,
+			features,
 		),
 	}
 }
@@ -130,6 +138,11 @@ func (h *LogRelayHandler) handleBatch(ctx context.Context, messages []logRelayMe
 	deliveries := make([]destinationDelivery, 0, len(groups))
 
 	for _, provenanceGroup := range groups {
+		organizationID := provenanceGroup.key.organizationID
+		if !h.organizationGate.Enabled(ctx, organizationID) {
+			continue
+		}
+
 		result, ok := destinations[provenanceGroup.key.organizationID]
 		if !ok {
 			result.destination, result.err = h.relay.destinationForOrganization(ctx, provenanceGroup.key.organizationID)
@@ -194,7 +207,7 @@ func (h *LogRelayHandler) handleBatch(ctx context.Context, messages []logRelayMe
 					h.recordDroppedLogs(ctx, len(item.batch.items), reason)
 				}
 
-				logger.ErrorContext(
+				logger.WarnContext(
 					ctx,
 					"relay otel logs",
 					attr.SlogError(err),

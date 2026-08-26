@@ -240,6 +240,44 @@ func TestRecordMCPRequestDuration_ClampsMethodLabel(t *testing.T) {
 	)
 }
 
+// TestRecordMCPRequestRejected_PinsInstrumentAndDimensions pins the wiring a
+// noop meter cannot see: the instrument name and the three attribute keys the
+// dashboard and the AIS-618 monitors query by.
+func TestRecordMCPRequestRejected_PinsInstrumentAndDimensions(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
+
+	m := NewMetrics(meter, testenv.NewLogger(t))
+	m.RecordMCPRequestRejected(t.Context(), "invalid_remote_session", "mcp.example.com/mcp/demo", SurfaceMeta)
+
+	got := collectMetric(t, reader, InstrumentMCPRequestRejected)
+	metricdatatest.AssertHasAttributes(t, got,
+		attr.OAuthFailureReason("invalid_remote_session"),
+		attr.McpURL("mcp.example.com/mcp/demo"),
+		attr.McpSurface(string(SurfaceMeta)),
+	)
+
+	sum, ok := got.Data.(metricdata.Sum[int64])
+	require.True(t, ok, "rejected instrument must be an int64 counter")
+	require.Len(t, sum.DataPoints, 1)
+	require.Equal(t, int64(1), sum.DataPoints[0].Value)
+}
+
+// TestRecordMCPRequestRejected_NilSafe pins the documented contract that a
+// nil *Metrics, and one whose instrument failed to construct, are both safe
+// to record against.
+func TestRecordMCPRequestRejected_NilSafe(t *testing.T) {
+	t.Parallel()
+
+	var nilMetrics *Metrics
+	nilMetrics.RecordMCPRequestRejected(t.Context(), "no_credentials", "mcp.example.com/mcp/demo", SurfaceHosting)
+
+	empty := &Metrics{}
+	empty.RecordMCPRequestRejected(t.Context(), "no_credentials", "mcp.example.com/mcp/demo", SurfaceHosting)
+}
+
 // collectMetric drains the reader and returns the named metric, failing the
 // test when it was never recorded.
 func collectMetric(t *testing.T, reader *sdkmetric.ManualReader, name string) metricdata.Metrics {

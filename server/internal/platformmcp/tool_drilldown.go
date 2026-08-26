@@ -11,13 +11,13 @@ import (
 // after the overview, with the MCP it named. Saying so in the manifest is what
 // keeps a model from starting here and paging through occurrences to build the
 // summary get_project_overview would have handed it in one call.
-const drilldownPreamble = "Bounded drill-down for one MCP that get_project_overview or get_mcp_diagnostics already identified. "
+const drilldownPreamble = "A closer look at one MCP server that get_project_overview or get_mcp_diagnostics already named. "
 
 func registerDrilldownTools(reg *Registrar, diagnostics *DiagnosticsService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "query_mcp_events",
-		Title:       "Query MCP Events",
-		Description: drilldownPreamble + "Break one MCP's calls down by tool and outcome class over a bounded window, so a failing server can be narrowed to the tool responsible. Returns server-side totals per tool; there is no free-text filter and no attribute selection.",
+		Title:       "MCP Calls by Tool and Outcome",
+		Description: drilldownPreamble + "Break its calls down by tool and outcome over a recent window, so a failing server can be narrowed to the tool responsible. Constraints: server-side totals per tool only; there is no free-text filter and no attribute selection.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input QueryMCPEventsInput) (*mcp.CallToolResult, QueryMCPEventsOutput, error) {
 		principal, err := principalFromToolContext(ctx)
@@ -36,8 +36,8 @@ func registerDrilldownTools(reg *Registrar, diagnostics *DiagnosticsService) {
 
 	addTool(reg, &mcp.Tool{
 		Name:        "query_mcp_traces",
-		Title:       "Query MCP Traces",
-		Description: drilldownPreamble + "List individual occurrences, newest first, each reduced to an opaque correlation reference plus when it happened, which tool it called, and how it ended. Narrow with an outcome class. This is not a log reader: it returns no arguments, results, bodies, headers, URLs, or identities. Quote a reference when escalating; references expire and are bound to this session.",
+		Title:       "Recent MCP Calls",
+		Description: drilldownPreamble + "List individual calls, newest first, each reduced to a reference you can quote when escalating, plus when it happened, which tool it called, and how it ended. Narrow by outcome. Constraints: this is not a log reader — no arguments, results, bodies, headers, URLs, or identities are returned, and references expire and are bound to this session.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input QueryMCPTracesInput) (*mcp.CallToolResult, QueryMCPTracesOutput, error) {
 		principal, err := principalFromToolContext(ctx)
@@ -56,8 +56,8 @@ func registerDrilldownTools(reg *Registrar, diagnostics *DiagnosticsService) {
 
 	addTool(reg, &mcp.Tool{
 		Name:        "query_mcp_metrics",
-		Title:       "Query MCP Metrics",
-		Description: drilldownPreamble + "Return one MCP's aggregate levels over a bounded window: call volume, failures, failure rate, average latency, and active users. Every value is aggregated server-side to the window named in the result; no per-bucket series is returned.",
+		Title:       "MCP Server Totals",
+		Description: drilldownPreamble + "Return its totals over a recent window: call volume, failures, failure rate, average latency, and active users. Constraints: every value is aggregated server-side to the window named in the result; no per-bucket series is returned.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input QueryMCPMetricsInput) (*mcp.CallToolResult, QueryMCPMetricsOutput, error) {
 		principal, err := principalFromToolContext(ctx)
@@ -87,8 +87,8 @@ func registerDrilldownTools(reg *Registrar, diagnostics *DiagnosticsService) {
 func registerPendingUserMCPStatusTool(reg *Registrar) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_user_mcp_status",
-		Title:       "Get User MCP Status",
-		Description: "Report one subject's state against one MCP. Unavailable: this tool takes an opaque subject reference, and the organization summary tools that return one are not available yet.",
+		Title:       "One Person's MCP Server Status",
+		Description: "Report one person's state against one MCP server. Unavailable: this needs a reference to a person that only the organization summary tools produce, and those are not built yet.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("user_mcp_status"))
 }
@@ -99,9 +99,9 @@ func registerUnavailableDrilldownTools(reg *Registrar) {
 		title       string
 		description string
 	}{
-		{"query_mcp_events", "Query MCP Events", "Break one MCP's calls down by tool and outcome. Diagnostics are not enabled in the current rollout."},
-		{"query_mcp_traces", "Query MCP Traces", "List individual occurrences for one MCP. Diagnostics are not enabled in the current rollout."},
-		{"query_mcp_metrics", "Query MCP Metrics", "Return one MCP's aggregate levels. Diagnostics are not enabled in the current rollout."},
+		{"query_mcp_events", "MCP Calls by Tool and Outcome", "Break one MCP server's calls down by tool and outcome. This is not switched on for your organization yet."},
+		{"query_mcp_traces", "Recent MCP Calls", "List recent calls for one MCP server. This is not switched on for your organization yet."},
+		{"query_mcp_metrics", "MCP Server Totals", "Return one MCP server's totals. This is not switched on for your organization yet."},
 	} {
 		addTool(reg, &mcp.Tool{
 			Name:        tool.name,

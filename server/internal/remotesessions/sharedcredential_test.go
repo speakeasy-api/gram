@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -221,7 +222,7 @@ func TestRefreshRemoteSession_SiblingIssuerRefreshesSharedCredential(t *testing.
 
 	result, err := newDisconnectChallengeManager(t, ti).RefreshRemoteSession(ctx, subject, *authCtx.ProjectID, authCtx.ActiveOrganizationID, sibling, clientID)
 	require.NoError(t, err, "a sibling issuer bound to the same client must be able to refresh the shared credential")
-	require.Equal(t, remotesessions.RefreshOutcomeRefreshed, result.Outcome)
+	require.Equal(t, remotesessionmetrics.RefreshOutcomeRefreshed, result.Outcome)
 	require.Equal(t, "sibling-refreshed-access", result.AccessToken)
 
 	stored, err := repo.New(ti.conn).GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
@@ -257,7 +258,7 @@ func TestRefreshRemoteSession_OrgLevelClientBindingAuthorizes(t *testing.T) {
 
 	result, err := mgr.RefreshRemoteSession(ctx, subject, *authCtx.ProjectID, authCtx.ActiveOrganizationID, usi, clientID)
 	require.NoError(t, err, "the org-level client arm of the binding probe must authorize the refresh")
-	require.Equal(t, remotesessions.RefreshOutcomeRefreshed, result.Outcome)
+	require.Equal(t, remotesessionmetrics.RefreshOutcomeRefreshed, result.Outcome)
 	require.Equal(t, "org-refreshed-access", result.AccessToken)
 
 	// The re-scoped lifecycle queries carry the same org arm: a write through

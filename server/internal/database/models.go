@@ -948,6 +948,7 @@ type GcpIamCredential struct {
 	WifPoolID                   pgtype.Text
 	WifProviderID               pgtype.Text
 	WifProjectNumber            pgtype.Text
+	SkipProjectVerification     bool
 	CreatedAt                   pgtype.Timestamptz
 	UpdatedAt                   pgtype.Timestamptz
 }

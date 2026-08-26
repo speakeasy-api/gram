@@ -22,13 +22,13 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload, body io.Re
 		body:            body,
 		decode: func(raw []byte, tenant otlpIngestTenant) ([]*otelv1.InboundLogRecord, error) {
 			provenance := (&otelv1.InboundLogRecord_Provenance_builder{
-				Source:         new(otelProvenanceSource),
+				Source:         new(ProvenanceSource),
 				OrganizationId: &tenant.organizationID,
 				ProjectId:      &tenant.projectID,
 			}).Build()
 			return decodeOTLPLogExport(raw, provenance)
 		},
-		validate:  validateLogRecord,
+		validate:  ValidateInboundLogRecord,
 		publisher: s.logPublisher,
 	})
 }
@@ -103,7 +103,12 @@ func decodeOTLPLogExport(raw []byte, provenance *otelv1.InboundLogRecord_Provena
 	return records, nil
 }
 
-func validateLogRecord(record *otelv1.InboundLogRecord) error {
+// ValidateInboundLogRecord enforces the ingest-edge contract on a log record
+// before it is published to the inbound pipeline topic: a record id must be
+// assigned, the record must fit the relay export budget, and trace/span ids
+// must be empty or exactly OTLP-sized. Exported so the hooks OTLP tee can
+// apply the same contract when it republishes records into this pipeline.
+func ValidateInboundLogRecord(record *otelv1.InboundLogRecord) error {
 	if record == nil {
 		return errors.New("log record is required")
 	}

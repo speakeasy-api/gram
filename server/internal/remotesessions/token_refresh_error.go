@@ -8,6 +8,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 )
 
+// errRefreshUpstreamUnreachable marks a refresh POST that never produced an
+// answer: DNS, TLS, connection refused, or the POST's own timeout. It is
+// wrapped alongside the transport error so the refresh outcome classifier can
+// tell an unreachable upstream from a Gram-side failure without inspecting
+// error text.
+var errRefreshUpstreamUnreachable = errors.New("remotesessions: upstream token endpoint unreachable")
+
 // TokenRefreshError is an operator-actionable failure of a token refresh: a
 // condition the caller can understand and act on (revoke and re-link the
 // session, fix the issuer's configuration) rather than an internal Gram fault.

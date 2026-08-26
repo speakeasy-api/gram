@@ -253,6 +253,11 @@ function UserSessionsInner(): JSX.Element {
         grouping={grouping}
         canRevoke={canRevoke}
         onRevoked={() => void refetch()}
+        project={
+          selectedProjectId
+            ? { slug: projectSlug, id: selectedProjectId }
+            : undefined
+        }
       />
     );
   }

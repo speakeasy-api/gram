@@ -9,7 +9,7 @@ import (
 )
 
 type GetSetupHandoffToolInput struct {
-	ProjectSlug    string `json:"project_slug" jsonschema:"explicit AICP project slug that owns the reviewed MCP registration"`
+	ProjectSlug    string `json:"project_slug" jsonschema:"explicit project slug that owns the reviewed MCP registration"`
 	RegistrationID string `json:"registration_id" jsonschema:"Platform MCP registration ID returned by register_catalog_mcp"`
 	ProviderKey    string `json:"provider_key" jsonschema:"reviewed provider key returned by register_catalog_mcp"`
 	CatalogRef     string `json:"catalog_ref" jsonschema:"reviewed catalog reference returned by register_catalog_mcp"`
@@ -29,8 +29,8 @@ type GetSetupHandoffToolOutput struct {
 func registerSetupHandoffTool(reg *Registrar, registrations *RegistrationService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_setup_handoff",
-		Title:       "Get Setup Handoff",
-		Description: "Get the secure dashboard continuation for one Platform-managed MCP registration. Browser Catalogue and user-supplied remote entries return a server-owned dashboard settings URL for setup; the local synthetic fixture returns a single-use setup handoff. Never persist, log, or share a handoff.",
+		Title:       "Open Setup in the Dashboard",
+		Description: "Open the dashboard where the rest of an MCP server's setup is finished — its source and its authentication. Catalogue entries and user-supplied remote MCP servers return a dashboard settings URL; the local test fixture returns a single-use link instead. Constraints: never persist, log, or share the returned link.",
 	}, ToolMeta{
 		// The handoff carries the caller to the dashboard, which completes setup
 		// under its own session. A connection-less caller issues a handoff bound

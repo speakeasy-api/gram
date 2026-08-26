@@ -59,8 +59,3 @@ ready_cmd = "mise run check:daemon --name {{name}}"
 [daemons.tunnel-gateway]
 run = "mise run start:tunnel-gateway"
 ready_cmd = "mise run check:daemon --name {{name}}"
-
-[daemons.tunnel-postgres-mcp]
-run = "mise run start:tunnel-postgres-mcp"
-ready_cmd = "mise run check:daemon --name {{name}}"
-depends = ["tunnel-gateway"]

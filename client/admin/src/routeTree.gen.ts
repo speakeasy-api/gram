@@ -18,6 +18,7 @@ import { Route as OrganizationsIdOrSlugRouteImport } from './routes/organization
 import { Route as ProjectsIndexRouteImport } from './routes/projects.index'
 import { Route as ProjectsIdOrSlugRouteImport } from './routes/projects.$idOrSlug'
 import { Route as OrganizationsIdOrSlugIndexRouteImport } from './routes/organizations.$idOrSlug.index'
+import { Route as OrganizationsIdOrSlugActivityRouteImport } from './routes/organizations.$idOrSlug.activity'
 import { Route as OrganizationsIdOrSlugBillingRouteImport } from './routes/organizations.$idOrSlug.billing'
 import { Route as OrganizationsIdOrSlugFeaturesRouteImport } from './routes/organizations.$idOrSlug.features'
 import { Route as OrganizationsIdOrSlugMembersRouteImport } from './routes/organizations.$idOrSlug.members'
@@ -70,6 +71,12 @@ const OrganizationsIdOrSlugIndexRoute =
     path: '/',
     getParentRoute: () => OrganizationsIdOrSlugRoute,
   } as any)
+const OrganizationsIdOrSlugActivityRoute =
+  OrganizationsIdOrSlugActivityRouteImport.update({
+    id: '/activity',
+    path: '/activity',
+    getParentRoute: () => OrganizationsIdOrSlugRoute,
+  } as any)
 const OrganizationsIdOrSlugBillingRoute =
   OrganizationsIdOrSlugBillingRouteImport.update({
     id: '/billing',
@@ -110,6 +117,7 @@ export interface FileRoutesByFullPath {
   '/projects/$idOrSlug': typeof ProjectsIdOrSlugRoute
   '/organizations/': typeof OrganizationsIndexRoute
   '/projects/': typeof ProjectsIndexRoute
+  '/organizations/$idOrSlug/activity': typeof OrganizationsIdOrSlugActivityRoute
   '/organizations/$idOrSlug/billing': typeof OrganizationsIdOrSlugBillingRoute
   '/organizations/$idOrSlug/features': typeof OrganizationsIdOrSlugFeaturesRoute
   '/organizations/$idOrSlug/members': typeof OrganizationsIdOrSlugMembersRoute
@@ -123,6 +131,7 @@ export interface FileRoutesByTo {
   '/projects/$idOrSlug': typeof ProjectsIdOrSlugRoute
   '/organizations': typeof OrganizationsIndexRoute
   '/projects': typeof ProjectsIndexRoute
+  '/organizations/$idOrSlug/activity': typeof OrganizationsIdOrSlugActivityRoute
   '/organizations/$idOrSlug/billing': typeof OrganizationsIdOrSlugBillingRoute
   '/organizations/$idOrSlug/features': typeof OrganizationsIdOrSlugFeaturesRoute
   '/organizations/$idOrSlug/members': typeof OrganizationsIdOrSlugMembersRoute
@@ -140,6 +149,7 @@ export interface FileRoutesById {
   '/projects/$idOrSlug': typeof ProjectsIdOrSlugRoute
   '/organizations/': typeof OrganizationsIndexRoute
   '/projects/': typeof ProjectsIndexRoute
+  '/organizations/$idOrSlug/activity': typeof OrganizationsIdOrSlugActivityRoute
   '/organizations/$idOrSlug/billing': typeof OrganizationsIdOrSlugBillingRoute
   '/organizations/$idOrSlug/features': typeof OrganizationsIdOrSlugFeaturesRoute
   '/organizations/$idOrSlug/members': typeof OrganizationsIdOrSlugMembersRoute
@@ -158,6 +168,7 @@ export interface FileRouteTypes {
     | '/projects/$idOrSlug'
     | '/organizations/'
     | '/projects/'
+    | '/organizations/$idOrSlug/activity'
     | '/organizations/$idOrSlug/billing'
     | '/organizations/$idOrSlug/features'
     | '/organizations/$idOrSlug/members'
@@ -171,6 +182,7 @@ export interface FileRouteTypes {
     | '/projects/$idOrSlug'
     | '/organizations'
     | '/projects'
+    | '/organizations/$idOrSlug/activity'
     | '/organizations/$idOrSlug/billing'
     | '/organizations/$idOrSlug/features'
     | '/organizations/$idOrSlug/members'
@@ -187,6 +199,7 @@ export interface FileRouteTypes {
     | '/projects/$idOrSlug'
     | '/organizations/'
     | '/projects/'
+    | '/organizations/$idOrSlug/activity'
     | '/organizations/$idOrSlug/billing'
     | '/organizations/$idOrSlug/features'
     | '/organizations/$idOrSlug/members'
@@ -267,6 +280,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrganizationsIdOrSlugIndexRouteImport
       parentRoute: typeof OrganizationsIdOrSlugRoute
     }
+    '/organizations/$idOrSlug/activity': {
+      id: '/organizations/$idOrSlug/activity'
+      path: '/activity'
+      fullPath: '/organizations/$idOrSlug/activity'
+      preLoaderRoute: typeof OrganizationsIdOrSlugActivityRouteImport
+      parentRoute: typeof OrganizationsIdOrSlugRoute
+    }
     '/organizations/$idOrSlug/billing': {
       id: '/organizations/$idOrSlug/billing'
       path: '/billing'
@@ -306,6 +326,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface OrganizationsIdOrSlugRouteChildren {
+  OrganizationsIdOrSlugActivityRoute: typeof OrganizationsIdOrSlugActivityRoute
   OrganizationsIdOrSlugBillingRoute: typeof OrganizationsIdOrSlugBillingRoute
   OrganizationsIdOrSlugFeaturesRoute: typeof OrganizationsIdOrSlugFeaturesRoute
   OrganizationsIdOrSlugMembersRoute: typeof OrganizationsIdOrSlugMembersRoute
@@ -315,6 +336,7 @@ interface OrganizationsIdOrSlugRouteChildren {
 }
 
 const OrganizationsIdOrSlugRouteChildren: OrganizationsIdOrSlugRouteChildren = {
+  OrganizationsIdOrSlugActivityRoute: OrganizationsIdOrSlugActivityRoute,
   OrganizationsIdOrSlugBillingRoute: OrganizationsIdOrSlugBillingRoute,
   OrganizationsIdOrSlugFeaturesRoute: OrganizationsIdOrSlugFeaturesRoute,
   OrganizationsIdOrSlugMembersRoute: OrganizationsIdOrSlugMembersRoute,

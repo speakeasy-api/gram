@@ -192,7 +192,7 @@ export class MetaMcp extends ClientSDK {
    * updateMetaMcpServer metaMcp
    *
    * @remarks
-   * Update a meta MCP server. This is a full-record replace: a user_session_issuer_id omitted from the request becomes null on the stored record.
+   * Update a meta MCP server. This is a full-record replace: a user_session_issuer_id omitted from the request becomes null on the stored record. Visibility is the exception — omitting it preserves the stored value, so a caller that does not manage visibility cannot re-enable a disabled gateway by saving an unrelated field.
    */
   async update(
     request: UpdateMetaMcpServerRequest,

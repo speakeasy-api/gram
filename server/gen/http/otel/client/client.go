@@ -20,6 +20,10 @@ type Client struct {
 	// Logs Doer is the HTTP client used to make requests to the logs endpoint.
 	LogsDoer goahttp.Doer
 
+	// Metrics Doer is the HTTP client used to make requests to the metrics
+	// endpoint.
+	MetricsDoer goahttp.Doer
+
 	// Traces Doer is the HTTP client used to make requests to the traces endpoint.
 	TracesDoer goahttp.Doer
 
@@ -56,6 +60,7 @@ func NewClient(
 ) *Client {
 	return &Client{
 		LogsDoer:            doer,
+		MetricsDoer:         doer,
 		TracesDoer:          doer,
 		ListEventLogDoer:    doer,
 		GetEventVolumeDoer:  doer,
@@ -87,6 +92,30 @@ func (c *Client) Logs() goa.Endpoint {
 		resp, err := c.LogsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("otel", "logs", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// Metrics returns an endpoint that makes HTTP requests to the otel service
+// metrics server.
+func (c *Client) Metrics() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeMetricsRequest(c.encoder)
+		decodeResponse = DecodeMetricsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildMetricsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.MetricsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("otel", "metrics", err)
 		}
 		return decodeResponse(resp)
 	}

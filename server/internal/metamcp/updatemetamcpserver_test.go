@@ -7,10 +7,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/meta_mcp"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -100,4 +102,64 @@ func TestUpdateMetaMcpServer_NotFound(t *testing.T) {
 		UserSessionIssuerID: nil,
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+func TestUpdateMetaMcpServer_OmittedVisibilityIsPreserved(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	disabled := types.MetaMcpServerVisibility(metamcp.VisibilityDisabled)
+	created, err := ti.service.CreateMetaMcpServer(ctx, &gen.CreateMetaMcpServerPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		Name:                "stays disabled",
+		UserSessionIssuerID: nil,
+		Visibility:          &disabled,
+	})
+	require.NoError(t, err)
+
+	updated, err := ti.service.UpdateMetaMcpServer(ctx, &gen.UpdateMetaMcpServerPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		ID:                  created.ID,
+		Name:                "renamed while disabled",
+		UserSessionIssuerID: nil,
+		Visibility:          nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "renamed while disabled", updated.Name)
+	require.Equal(t, disabled, updated.Visibility)
+}
+
+func TestUpdateMetaMcpServer_ChangesVisibility(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	created, err := ti.service.CreateMetaMcpServer(ctx, &gen.CreateMetaMcpServerPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		Name:                "to disable",
+		UserSessionIssuerID: nil,
+		Visibility:          nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, types.MetaMcpServerVisibility(metamcp.VisibilityPrivate), created.Visibility)
+
+	disabled := types.MetaMcpServerVisibility(metamcp.VisibilityDisabled)
+	updated, err := ti.service.UpdateMetaMcpServer(ctx, &gen.UpdateMetaMcpServerPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		ID:                  created.ID,
+		Name:                created.Name,
+		UserSessionIssuerID: nil,
+		Visibility:          &disabled,
+	})
+	require.NoError(t, err)
+	require.Equal(t, disabled, updated.Visibility)
 }

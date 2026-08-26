@@ -1689,6 +1689,248 @@ func DecodeListToolFiltersResponse(decoder func(*http.Response) goahttp.Decoder,
 	}
 }
 
+// BuildListToolSchemaStaticValuesRequest instantiates a HTTP request object
+// with method and path set to call the "toolsets" service
+// "listToolSchemaStaticValues" endpoint
+func (c *Client) BuildListToolSchemaStaticValuesRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListToolSchemaStaticValuesToolsetsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("toolsets", "listToolSchemaStaticValues", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListToolSchemaStaticValuesRequest returns an encoder for requests sent
+// to the toolsets listToolSchemaStaticValues server.
+func EncodeListToolSchemaStaticValuesRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*toolsets.ListToolSchemaStaticValuesPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("toolsets", "listToolSchemaStaticValues", "*toolsets.ListToolSchemaStaticValuesPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("slug", string(p.Slug))
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListToolSchemaStaticValuesResponse returns a decoder for responses
+// returned by the toolsets listToolSchemaStaticValues endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeListToolSchemaStaticValuesResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListToolSchemaStaticValuesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListToolSchemaStaticValuesResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "listToolSchemaStaticValues", err)
+			}
+			err = ValidateListToolSchemaStaticValuesResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "listToolSchemaStaticValues", err)
+			}
+			res := NewListToolSchemaStaticValuesResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListToolSchemaStaticValuesUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "listToolSchemaStaticValues", err)
+			}
+			err = ValidateListToolSchemaStaticValuesUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "listToolSchemaStaticValues", err)
+			}
+			return nil, NewListToolSchemaStaticValuesUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListToolSchemaStaticValuesForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "listToolSchemaStaticValues", err)
+			}
+			err = ValidateListToolSchemaStaticValuesForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "listToolSchemaStaticValues", err)
+			}
+			return nil, NewListToolSchemaStaticValuesForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListToolSchemaStaticValuesBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "listToolSchemaStaticValues", err)
+			}
+			err = ValidateListToolSchemaStaticValuesBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "listToolSchemaStaticValues", err)
+			}
+			return nil, NewListToolSchemaStaticValuesBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListToolSchemaStaticValuesNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "listToolSchemaStaticValues", err)
+			}
+			err = ValidateListToolSchemaStaticValuesNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "listToolSchemaStaticValues", err)
+			}
+			return nil, NewListToolSchemaStaticValuesNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListToolSchemaStaticValuesConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "listToolSchemaStaticValues", err)
+			}
+			err = ValidateListToolSchemaStaticValuesConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "listToolSchemaStaticValues", err)
+			}
+			return nil, NewListToolSchemaStaticValuesConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListToolSchemaStaticValuesUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "listToolSchemaStaticValues", err)
+			}
+			err = ValidateListToolSchemaStaticValuesUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "listToolSchemaStaticValues", err)
+			}
+			return nil, NewListToolSchemaStaticValuesUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListToolSchemaStaticValuesInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "listToolSchemaStaticValues", err)
+			}
+			err = ValidateListToolSchemaStaticValuesInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "listToolSchemaStaticValues", err)
+			}
+			return nil, NewListToolSchemaStaticValuesInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListToolSchemaStaticValuesInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "listToolSchemaStaticValues", err)
+				}
+				err = ValidateListToolSchemaStaticValuesInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "listToolSchemaStaticValues", err)
+				}
+				return nil, NewListToolSchemaStaticValuesInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListToolSchemaStaticValuesUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "listToolSchemaStaticValues", err)
+				}
+				err = ValidateListToolSchemaStaticValuesUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "listToolSchemaStaticValues", err)
+				}
+				return nil, NewListToolSchemaStaticValuesUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("toolsets", "listToolSchemaStaticValues", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListToolSchemaStaticValuesGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "listToolSchemaStaticValues", err)
+			}
+			err = ValidateListToolSchemaStaticValuesGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "listToolSchemaStaticValues", err)
+			}
+			return nil, NewListToolSchemaStaticValuesGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("toolsets", "listToolSchemaStaticValues", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildCheckMCPSlugAvailabilityRequest instantiates a HTTP request object with
 // method and path set to call the "toolsets" service
 // "checkMCPSlugAvailability" endpoint
@@ -3914,6 +4156,39 @@ func unmarshalToolFilterToolResponseBodyToTypesToolFilterTool(v *ToolFilterToolR
 	res := &types.ToolFilterTool{
 		ToolUrn: *v.ToolUrn,
 		Name:    *v.Name,
+	}
+
+	return res
+}
+
+// unmarshalToolSchemaStaticValuesResponseBodyToToolsetsToolSchemaStaticValues
+// builds a value of type *toolsets.ToolSchemaStaticValues from a value of type
+// *ToolSchemaStaticValuesResponseBody.
+func unmarshalToolSchemaStaticValuesResponseBodyToToolsetsToolSchemaStaticValues(v *ToolSchemaStaticValuesResponseBody) *toolsets.ToolSchemaStaticValues {
+	res := &toolsets.ToolSchemaStaticValues{
+		ToolUrn:  *v.ToolUrn,
+		ToolName: *v.ToolName,
+	}
+	res.Values = make([]*toolsets.ToolSchemaStaticValue, len(v.Values))
+	for i, val := range v.Values {
+		if val == nil {
+			res.Values[i] = nil
+			continue
+		}
+		res.Values[i] = unmarshalToolSchemaStaticValueResponseBodyToToolsetsToolSchemaStaticValue(val)
+	}
+
+	return res
+}
+
+// unmarshalToolSchemaStaticValueResponseBodyToToolsetsToolSchemaStaticValue
+// builds a value of type *toolsets.ToolSchemaStaticValue from a value of type
+// *ToolSchemaStaticValueResponseBody.
+func unmarshalToolSchemaStaticValueResponseBodyToToolsetsToolSchemaStaticValue(v *ToolSchemaStaticValueResponseBody) *toolsets.ToolSchemaStaticValue {
+	res := &toolsets.ToolSchemaStaticValue{
+		SchemaPath: *v.SchemaPath,
+		Keyword:    *v.Keyword,
+		ValueJSON:  *v.ValueJSON,
 	}
 
 	return res

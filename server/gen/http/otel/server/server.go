@@ -20,6 +20,7 @@ import (
 type Server struct {
 	Mounts         []*MountPoint
 	Logs           http.Handler
+	Metrics        http.Handler
 	Traces         http.Handler
 	ListEventLog   http.Handler
 	GetEventVolume http.Handler
@@ -54,12 +55,14 @@ func New(
 	return &Server{
 		Mounts: []*MountPoint{
 			{"Logs", "POST", "/otel/v1/logs"},
+			{"Metrics", "POST", "/otel/v1/metrics"},
 			{"Traces", "POST", "/otel/v1/traces"},
 			{"ListEventLog", "POST", "/rpc/otel.listEventLog"},
 			{"GetEventVolume", "POST", "/rpc/otel.getEventVolume"},
 			{"GetEventFacets", "POST", "/rpc/otel.getEventFacets"},
 		},
 		Logs:           NewLogsHandler(e.Logs, mux, decoder, encoder, errhandler, formatter),
+		Metrics:        NewMetricsHandler(e.Metrics, mux, decoder, encoder, errhandler, formatter),
 		Traces:         NewTracesHandler(e.Traces, mux, decoder, encoder, errhandler, formatter),
 		ListEventLog:   NewListEventLogHandler(e.ListEventLog, mux, decoder, encoder, errhandler, formatter),
 		GetEventVolume: NewGetEventVolumeHandler(e.GetEventVolume, mux, decoder, encoder, errhandler, formatter),
@@ -73,6 +76,7 @@ func (s *Server) Service() string { return "otel" }
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.Logs = m(s.Logs)
+	s.Metrics = m(s.Metrics)
 	s.Traces = m(s.Traces)
 	s.ListEventLog = m(s.ListEventLog)
 	s.GetEventVolume = m(s.GetEventVolume)
@@ -85,6 +89,7 @@ func (s *Server) MethodNames() []string { return otel.MethodNames[:] }
 // Mount configures the mux to serve the otel endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountLogsHandler(mux, h.Logs)
+	MountMetricsHandler(mux, h.Metrics)
 	MountTracesHandler(mux, h.Traces)
 	MountListEventLogHandler(mux, h.ListEventLog)
 	MountGetEventVolumeHandler(mux, h.GetEventVolume)
@@ -135,6 +140,60 @@ func NewLogsHandler(
 			return
 		}
 		data := &otel.LogsRequestData{Payload: payload, Body: r.Body}
+		res, err := endpoint(ctx, data)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountMetricsHandler configures the mux to serve the "otel" service "metrics"
+// endpoint.
+func MountMetricsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/otel/v1/metrics", f)
+}
+
+// NewMetricsHandler creates a HTTP handler which loads the HTTP request and
+// calls the "otel" service "metrics" endpoint.
+func NewMetricsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeMetricsRequest(mux, decoder)
+		encodeResponse = EncodeMetricsResponse(encoder)
+		encodeError    = EncodeMetricsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "metrics")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "otel")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		data := &otel.MetricsRequestData{Payload: payload, Body: r.Body}
 		res, err := endpoint(ctx, data)
 		if err != nil {
 			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {

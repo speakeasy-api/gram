@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	openrouterrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
@@ -82,6 +83,10 @@ type setOpenRouterSpendCapHeartbeat struct {
 }
 
 func (s *SetOpenRouterSpendCap) Do(ctx context.Context, args SetOpenRouterSpendCapArgs) (int, error) {
+	if args.BypassPolicy {
+		ctx = contextvalues.SetActingSurface(ctx, string(audit.SurfaceAdmin))
+	}
+
 	if args.OperationID == "" {
 		return 0, errors.New("spend-cap operation ID is required")
 	}

@@ -8,6 +8,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/clientcred"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -86,21 +87,29 @@ func BuildUserSessionView(row repo.ListUserSessionsByProjectIDRow, upstreams []*
 		clientID = &s
 	}
 
+	credentialKind, declaredAuthMethod := clientcred.ForBoundClient(
+		row.UserSessionClientID.Valid,
+		row.ClientTokenEndpointAuthMethod,
+		row.ClientHasSecret,
+	)
+
 	return &types.UserSession{
-		ID:                  row.ID.String(),
-		UserSessionIssuerID: row.UserSessionIssuerID.String(),
-		SubjectUrn:          row.SubjectUrn.String(),
-		Jti:                 row.Jti,
-		RefreshExpiresAt:    row.RefreshExpiresAt.Time.Format(time.RFC3339),
-		ExpiresAt:           row.ExpiresAt.Time.Format(time.RFC3339),
-		CreatedAt:           row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:           row.UpdatedAt.Time.Format(time.RFC3339),
-		IssuerSlug:          row.IssuerSlug,
-		UserSessionClientID: clientID,
-		ClientName:          conv.FromPGText[string](row.ClientName),
-		ClientIDMetadataURI: conv.FromPGText[string](row.ClientIDMetadataUri),
-		SubjectType:         subjectType,
-		SubjectDisplayName:  subjectName,
+		ID:                            row.ID.String(),
+		UserSessionIssuerID:           row.UserSessionIssuerID.String(),
+		SubjectUrn:                    row.SubjectUrn.String(),
+		Jti:                           row.Jti,
+		RefreshExpiresAt:              row.RefreshExpiresAt.Time.Format(time.RFC3339),
+		ExpiresAt:                     row.ExpiresAt.Time.Format(time.RFC3339),
+		CreatedAt:                     row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:                     row.UpdatedAt.Time.Format(time.RFC3339),
+		IssuerSlug:                    row.IssuerSlug,
+		UserSessionClientID:           clientID,
+		ClientName:                    conv.FromPGText[string](row.ClientName),
+		ClientIDMetadataURI:           conv.FromPGText[string](row.ClientIDMetadataUri),
+		ClientCredentialKind:          credentialKind,
+		ClientTokenEndpointAuthMethod: declaredAuthMethod,
+		SubjectType:                   subjectType,
+		SubjectDisplayName:            subjectName,
 		// Only a user subject resolves to a users row, so the join leaves this
 		// NULL for API key and anonymous subjects.
 		SubjectPhotoURL: conv.FromPGText[string](row.UserPhotoUrl),

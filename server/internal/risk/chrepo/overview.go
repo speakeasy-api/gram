@@ -23,18 +23,19 @@ type RiskOverviewWindowParams struct {
 // overviewFindings returns the base builder every overview read shares:
 // tenant + window scoped, live findings only.
 //
-// risk_findings is append-only: a manual dismiss/undo (mirrorFalsePositiveToClickHouse)
+// risk_findings is append-only: a manual dismiss/undo (enqueueFalsePositiveMirror)
 // appends a fresh row for an id that may already have one, rather than
 // updating in place, and Pub/Sub's at-least-once delivery can also redeliver
 // an identical row. Deduping to one row per id is therefore required for
 // correctness, not just cheapness — collapsing straight to a count would
 // double-count an id with two rows and, worse, a stale first row would still
 // satisfy "false_positive_at IS NULL" even after a second row dismissed it.
-// The inner select keeps only each id's most-recently-inserted row
-// (ROW_NUMBER() OVER ... ORDER BY inserted_at DESC); dead-letter sentinels
-// and exclusion/dismissal annotations are then filtered on that latest state.
+// The inner select keeps only each id's winning copy (ROW_NUMBER() OVER ...
+// ORDER BY latestCopyOrderSQL — state-change copies outrank finding copies,
+// latest inserted within a rank); dead-letter sentinels and
+// exclusion/dismissal annotations are then filtered on that latest state.
 func overviewFindings(p RiskOverviewWindowParams, columns ...string) squirrel.SelectBuilder {
-	latest := sq.Select("*", "ROW_NUMBER() OVER (PARTITION BY id ORDER BY inserted_at DESC) AS rn").
+	latest := sq.Select("*", "ROW_NUMBER() OVER (PARTITION BY id ORDER BY "+latestCopyOrderSQL+") AS rn").
 		From("risk_findings").
 		Where("organization_id = ?", p.OrganizationID).
 		Where("project_id = ?", p.ProjectID).

@@ -20,7 +20,7 @@ func newDemoSeedCommand() *cli.Command {
 			&cli.BoolFlag{
 				Name: "local",
 				Usage: "Seed the local development organization instead of the shared demo org: same data, " +
-					"retargeted at the dev-idp org, writable, plus the local-only fixtures (your user, API key, tunnel).",
+					"retargeted at the dev-idp org, writable, plus the local-only fixtures (your user, API key).",
 				EnvVars: []string{"GRAM_DEMO_SEED_LOCAL"},
 			},
 			&cli.StringFlag{

@@ -178,7 +178,7 @@ func NewChallengeManager(
 			cache.SuffixNone,
 		),
 		locks:     cacheImpl,
-		refresher: NewRefreshService(logger, db, enc, policy, cacheImpl),
+		refresher: NewRefreshService(logger, meterProvider, db, enc, policy, cacheImpl),
 		serverURL: serverURL,
 		revoker:   NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy),
 		authorizeInterceptors: []interceptors.AuthorizeInterceptor{
@@ -407,7 +407,7 @@ func (m *ChallengeManager) RefreshRemoteSession(
 		return zero, ErrRemoteSessionNotRefreshable
 	}
 
-	return m.refresher.RefreshNow(ctx, session, "")
+	return m.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerManual)
 }
 
 // FallbackResourceForClient derives one client's RFC 8707 resource from its

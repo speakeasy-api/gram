@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   getProject: vi.fn(),
   listOrganizationProjects: vi.fn(),
   listOrganizationMembers: vi.fn(),
+  listOrganizationActivity: vi.fn(),
 }));
 
 vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
@@ -32,6 +33,7 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
     getProject: mocks.getProject,
     listOrganizationProjects: mocks.listOrganizationProjects,
     listOrganizationMembers: mocks.listOrganizationMembers,
+    listOrganizationActivity: mocks.listOrganizationActivity,
   };
 });
 
@@ -84,6 +86,8 @@ beforeEach(() => {
   mocks.listOrganizationProjects.mockResolvedValue({ projects: [] });
   mocks.listOrganizationMembers.mockReset();
   mocks.listOrganizationMembers.mockResolvedValue({ members: [] });
+  mocks.listOrganizationActivity.mockReset();
+  mocks.listOrganizationActivity.mockResolvedValue({ logs: [] });
 });
 
 afterEach(cleanup);
@@ -153,6 +157,15 @@ describe("SiteHeader", () => {
     expect(crumbs()).toEqual(["Organizations", ORG.name, "Overview"]);
   });
 
+  it("reads Organizations / Test Org / Activity on the activity view", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}/activity`,
+      queryClient: seeded(),
+    });
+
+    expect(crumbs()).toEqual(["Organizations", ORG.name, "Activity"]);
+  });
+
   it("reads Organizations / Test Org / Members on the members view", async () => {
     await renderRouteTree(routeTree, {
       initialPath: `/organizations/${ORG.slug}/members`,
@@ -220,6 +233,7 @@ describe("SiteHeader", () => {
   it.each([
     ["the organizations list", "/organizations", "Organizations"],
     ["a record's own index", `/organizations/${ORG.slug}`, "Overview"],
+    ["the activity view", `/organizations/${ORG.slug}/activity`, "Activity"],
     ["the members view", `/organizations/${ORG.slug}/members`, "Members"],
     ["the projects list", `/organizations/${ORG.slug}/projects`, "Projects"],
     [

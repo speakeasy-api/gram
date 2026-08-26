@@ -30,6 +30,12 @@ const (
 	riskCoordinatorBatchSize  int   = 100
 
 	analyzeBatchStartToCloseTimeout = 50 * time.Minute
+
+	// riskAnalysisRetryBackoff is how long a run that saw a failed batch waits
+	// before ContinueAsNew retries the withheld units. Without the self-retry
+	// those units would sit unanalyzed until the next organic signal, which is
+	// not guaranteed to arrive inside the lookback window.
+	riskAnalysisRetryBackoff = 5 * time.Minute
 )
 
 // RiskAnalysisCoordinatorParams identifies the project this coordinator runs for.
@@ -40,11 +46,14 @@ type RiskAnalysisCoordinatorParams struct {
 // RiskAnalysisCoordinatorWorkflow is a per-project coordinator that:
 //  1. Fetches all active policies and unanalyzed message IDs (within lookback).
 //  2. Fans out AnalyzeBatch activities across all policy×batch combinations.
-//  3. Fans in, then marks all fetched messages as analyzed.
+//  3. Fans in, then marks as analyzed only the units whose every covering
+//     activity succeeded. A run that saw failures backs off and retries via
+//     ContinueAsNew until the withheld units succeed or age out of lookback.
 //
 // It sleeps until signaled (SignalRiskAnalysisRequested) and uses
 // ContinueAsNew to keep history bounded. Backfills and policy-version
-// rescans are handled out-of-band; this workflow is best-effort only.
+// rescans are handled out-of-band; this workflow only covers units within
+// the lookback window.
 func RiskAnalysisCoordinatorWorkflow(ctx workflow.Context, params RiskAnalysisCoordinatorParams) error {
 	logger := workflow.GetLogger(ctx)
 	signalCh := workflow.GetSignalChannel(ctx, SignalRiskAnalysisRequested)
@@ -84,8 +93,16 @@ func RiskAnalysisCoordinatorWorkflow(ctx workflow.Context, params RiskAnalysisCo
 	}
 
 	if (len(fetchResult.MessageIDs) > 0 || len(fetchResult.ContentPartIDs) > 0) && len(fetchResult.Policies) > 0 {
-		// Fan-out: one activity per (policy, batch).
-		var futures []workflow.Future
+		// Fan-out: one activity per (policy, batch). Each dispatch remembers the
+		// unit ids its activity covers so the fan-in can tell which units were
+		// durably analyzed.
+		type analyzeDispatch struct {
+			future         workflow.Future
+			riskPolicyID   uuid.UUID
+			messageIDs     []uuid.UUID
+			contentPartIDs []uuid.UUID
+		}
+		var dispatches []analyzeDispatch
 		for _, policy := range fetchResult.Policies {
 			for _, batch := range chunkUUIDs(fetchResult.MessageIDs, riskCoordinatorBatchSize) {
 				f := workflow.ExecuteActivity(analyzeBatchCtx, a.AnalyzeBatch, risk_analysis.AnalyzeBatchArgs{
@@ -109,7 +126,7 @@ func RiskAnalysisCoordinatorWorkflow(ctx workflow.Context, params RiskAnalysisCo
 					BuiltinPresetsEnabled: false,
 					DetectionScopes:       nil,
 				})
-				futures = append(futures, f)
+				dispatches = append(dispatches, analyzeDispatch{future: f, riskPolicyID: policy.ID, messageIDs: batch, contentPartIDs: nil})
 			}
 			for _, batch := range chunkUUIDs(fetchResult.ContentPartIDs, riskCoordinatorBatchSize) {
 				f := workflow.ExecuteActivity(analyzeBatchCtx, a.AnalyzeBatch, risk_analysis.AnalyzeBatchArgs{
@@ -128,26 +145,65 @@ func RiskAnalysisCoordinatorWorkflow(ctx workflow.Context, params RiskAnalysisCo
 					BuiltinPresetsEnabled:  false,
 					DetectionScopes:        nil,
 				})
-				futures = append(futures, f)
+				dispatches = append(dispatches, analyzeDispatch{future: f, riskPolicyID: policy.ID, messageIDs: nil, contentPartIDs: batch})
 			}
 		}
 
-		// Fan-in: collect results; log errors but do not abort.
-		for _, f := range futures {
-			if err := f.Get(ctx, nil); err != nil {
-				logger.Error("analyze batch failed", "error", err.Error())
+		// Fan-in: log failures and withhold the failed batches' units from the
+		// analyzed mark. An exhausted retry means the batch's findings may never
+		// have been durably written, so marking would drop those units
+		// permanently; left unmarked they are refetched by the next cycle's
+		// lookback instead. A unit is marked only when every policy's activity
+		// covering it succeeded. Accepted cost: a persistently failing batch is
+		// re-analyzed each cycle until its units age out of the lookback, and
+		// units that age out stay unmarked. The failed sets are membership
+		// lookups only, never iterated, so workflow determinism holds.
+		failedMessages := make(map[uuid.UUID]struct{})
+		failedParts := make(map[uuid.UUID]struct{})
+		for _, d := range dispatches {
+			if err := d.future.Get(ctx, nil); err != nil {
+				logger.Error("analyze batch failed",
+					"error", err.Error(),
+					"risk_policy_id", d.riskPolicyID.String(),
+					"message_count", len(d.messageIDs),
+					"content_part_count", len(d.contentPartIDs),
+				)
+				for _, id := range d.messageIDs {
+					failedMessages[id] = struct{}{}
+				}
+				for _, id := range d.contentPartIDs {
+					failedParts[id] = struct{}{}
+				}
 			}
 		}
 
-		// Mark all fetched units analyzed (best-effort), matching how chat
-		// messages have always been marked. Retry semantics are deliberately
-		// identical for both so one cannot silently diverge from the other.
-		if err := workflow.ExecuteActivity(ctx, a.MarkMessagesAnalyzed, risk_analysis.MarkMessagesAnalyzedArgs{
-			ProjectID:      params.ProjectID,
-			MessageIDs:     fetchResult.MessageIDs,
-			ContentPartIDs: fetchResult.ContentPartIDs,
-		}).Get(ctx, nil); err != nil {
-			logger.Error("mark messages analyzed failed", "error", err.Error())
+		markMessages := excludeUUIDs(fetchResult.MessageIDs, failedMessages)
+		markParts := excludeUUIDs(fetchResult.ContentPartIDs, failedParts)
+		markFailed := false
+		if len(markMessages) > 0 || len(markParts) > 0 {
+			if err := workflow.ExecuteActivity(ctx, a.MarkMessagesAnalyzed, risk_analysis.MarkMessagesAnalyzedArgs{
+				ProjectID:      params.ProjectID,
+				MessageIDs:     markMessages,
+				ContentPartIDs: markParts,
+			}).Get(ctx, nil); err != nil {
+				logger.Error("mark messages analyzed failed", "error", err.Error())
+				markFailed = true
+			}
+		}
+
+		// Self-retry: unmarked units are only refetched by a fresh run's
+		// lookback query, and no later signal is guaranteed to arrive. Back
+		// off, then ContinueAsNew to retry them. A failed mark leaves its
+		// units unmarked exactly like a failed batch, so it retries the same
+		// way. The loop ends on its own — either a retry succeeds, or the
+		// failing units age out of the lookback and the next run's fetch
+		// dispatches nothing.
+		if markFailed || len(failedMessages) > 0 || len(failedParts) > 0 {
+			if err := workflow.Sleep(ctx, riskAnalysisRetryBackoff); err != nil {
+				return fmt.Errorf("retry backoff: %w", err)
+			}
+			drainSignals(signalCh)
+			return workflow.NewContinueAsNewError(ctx, RiskAnalysisCoordinatorWorkflow, params)
 		}
 	}
 
@@ -161,6 +217,20 @@ func RiskAnalysisCoordinatorWorkflow(ctx workflow.Context, params RiskAnalysisCo
 
 func coordinatorWorkflowID(projectID uuid.UUID) string {
 	return fmt.Sprintf("v1:risk-analysis:%s", projectID.String())
+}
+
+// excludeUUIDs returns ids minus those present in drop, preserving order.
+func excludeUUIDs(ids []uuid.UUID, drop map[uuid.UUID]struct{}) []uuid.UUID {
+	if len(drop) == 0 {
+		return ids
+	}
+	kept := make([]uuid.UUID, 0, len(ids))
+	for _, id := range ids {
+		if _, ok := drop[id]; !ok {
+			kept = append(kept, id)
+		}
+	}
+	return kept
 }
 
 func chunkUUIDs(ids []uuid.UUID, size int) [][]uuid.UUID {

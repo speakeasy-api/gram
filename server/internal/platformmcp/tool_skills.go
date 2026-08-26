@@ -10,20 +10,20 @@ import (
 )
 
 type ListSkillsToolInput struct {
-	ProjectSlug string `json:"project_slug" jsonschema:"explicit AICP project slug whose skill registry to list"`
+	ProjectSlug string `json:"project_slug" jsonschema:"explicit project slug whose skill registry to list"`
 	Search      string `json:"search,omitempty" jsonschema:"optional case-insensitive search over skill names and summaries"`
 	Cursor      string `json:"cursor,omitempty" jsonschema:"pagination cursor returned by a previous list_skills call"`
 	Limit       int    `json:"limit,omitempty" jsonschema:"maximum skills to return; defaults to 50 and is capped at 100"`
 }
 
 type GetSkillToolInput struct {
-	ProjectSlug    string `json:"project_slug" jsonschema:"explicit AICP project slug that owns the skill"`
+	ProjectSlug    string `json:"project_slug" jsonschema:"explicit project slug that owns the skill"`
 	SkillID        string `json:"skill_id" jsonschema:"skill ID returned by list_skills"`
 	IncludeContent bool   `json:"include_content,omitempty" jsonschema:"include the latest version's SKILL.md content; off by default because a manifest is up to 64 KiB"`
 }
 
 type ListSkillVersionsToolInput struct {
-	ProjectSlug    string `json:"project_slug" jsonschema:"explicit AICP project slug that owns the skill"`
+	ProjectSlug    string `json:"project_slug" jsonschema:"explicit project slug that owns the skill"`
 	SkillID        string `json:"skill_id" jsonschema:"skill ID returned by list_skills"`
 	IncludeContent bool   `json:"include_content,omitempty" jsonschema:"include each version's SKILL.md content; off by default because a manifest is up to 64 KiB"`
 	Cursor         string `json:"cursor,omitempty" jsonschema:"pagination cursor returned by a previous list_skill_versions call"`
@@ -31,19 +31,19 @@ type ListSkillVersionsToolInput struct {
 }
 
 type CreateSkillToolInput struct {
-	ProjectSlug string `json:"project_slug" jsonschema:"explicit AICP project slug that will own the skill"`
+	ProjectSlug string `json:"project_slug" jsonschema:"explicit project slug that will own the skill"`
 	Content     string `json:"content" jsonschema:"the complete SKILL.md, including YAML frontmatter and instructions; at most 65536 UTF-8 bytes"`
 }
 
 type AddSkillVersionToolInput struct {
-	ProjectSlug             string `json:"project_slug" jsonschema:"explicit AICP project slug that owns the skill"`
+	ProjectSlug             string `json:"project_slug" jsonschema:"explicit project slug that owns the skill"`
 	SkillID                 string `json:"skill_id" jsonschema:"skill ID returned by list_skills"`
 	Content                 string `json:"content" jsonschema:"the complete replacement SKILL.md; versions are immutable, so a correction is a new version rather than an edit"`
 	ExpectedLatestVersionID string `json:"expected_latest_version_id" jsonschema:"the version the caller read before writing, from get_skill; the write is refused as a conflict if the skill has moved on"`
 }
 
 type UpdateSkillMetadataToolInput struct {
-	ProjectSlug             string `json:"project_slug" jsonschema:"explicit AICP project slug that owns the skill"`
+	ProjectSlug             string `json:"project_slug" jsonschema:"explicit project slug that owns the skill"`
 	SkillID                 string `json:"skill_id" jsonschema:"skill ID returned by list_skills"`
 	Name                    string `json:"name,omitempty" jsonschema:"new canonical skill name; omitted leaves it unchanged"`
 	DisplayName             string `json:"display_name,omitempty" jsonschema:"new user-facing skill name; omitted leaves it unchanged"`
@@ -53,7 +53,7 @@ type UpdateSkillMetadataToolInput struct {
 }
 
 type DistributeSkillToolInput struct {
-	ProjectSlug string `json:"project_slug" jsonschema:"explicit AICP project slug that owns both the skill and the target"`
+	ProjectSlug string `json:"project_slug" jsonschema:"explicit project slug that owns both the skill and the target"`
 	SkillID     string `json:"skill_id" jsonschema:"skill ID returned by list_skills or create_skill"`
 	Plugin      string `json:"plugin,omitempty" jsonschema:"exact existing plugin in the project, by ID, slug, or name; exactly one of plugin or assistant is required and there is no implicit default"`
 	Assistant   string `json:"assistant,omitempty" jsonschema:"exact existing assistant in the project, by ID or name; exactly one of plugin or assistant is required"`
@@ -68,7 +68,7 @@ func registerSkillsTools(reg *Registrar, skills *SkillsService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "list_skills",
 		Title:       "List Skills",
-		Description: "List the skills in an explicit AICP project registry, newest change first. Returns names, version counts, and the current version ID; manifest content is read separately with get_skill.",
+		Description: "List the skills in a named project, newest change first. A skill is a written set of instructions an agent loads when it applies. Returns names and how many versions each has; the instructions themselves are read separately with get_skill.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListSkillsToolInput) (*mcp.CallToolResult, ListSkillsOutput, error) {
 		return skillsToolCall(ctx, func(principal Principal) (ListSkillsOutput, error) {
@@ -79,7 +79,7 @@ func registerSkillsTools(reg *Registrar, skills *SkillsService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_skill",
 		Title:       "Get Skill",
-		Description: "Read one skill in an explicit AICP project, including its current version ID. Set include_content to read the SKILL.md itself; it is off by default because a manifest is up to 64 KiB of the caller's context.",
+		Description: "Read one skill in a named project. Constraints: set include_content to read the instructions themselves; it is off by default because they run to 64 KiB.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetSkillToolInput) (*mcp.CallToolResult, GetSkillOutput, error) {
 		return skillsToolCall(ctx, func(principal Principal) (GetSkillOutput, error) {
@@ -90,7 +90,7 @@ func registerSkillsTools(reg *Registrar, skills *SkillsService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "list_skill_versions",
 		Title:       "List Skill Versions",
-		Description: "List a skill's immutable versions, newest first. Versions are never edited in place: corrections are recorded with add_skill_version.",
+		Description: "List a skill's versions, newest first. A version is a fixed snapshot of the instructions: it is never edited in place, so a correction is recorded as a new version with add_skill_version.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListSkillVersionsToolInput) (*mcp.CallToolResult, ListSkillVersionsOutput, error) {
 		return skillsToolCall(ctx, func(principal Principal) (ListSkillVersionsOutput, error) {
@@ -101,7 +101,7 @@ func registerSkillsTools(reg *Registrar, skills *SkillsService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "create_skill",
 		Title:       "Create Skill",
-		Description: "Create a skill in an explicit AICP project from complete SKILL.md content. The skill is inert: authoring alone changes nothing at runtime, and no agent loads it until distribute_skill sends it to a plugin or an assistant. An existing active skill with the same normalized name records a new version instead, and identical canonical content returns the existing version as a no-op.",
+		Description: "Write a new skill in a named project — a set of instructions an agent loads when it applies — from complete SKILL.md content. Writing it alone does nothing: no agent loads it until distribute_skill gives it to a plugin or an assistant. Constraints: an existing active skill with the same normalized name records a new version instead, and identical content returns the existing version unchanged.",
 	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input CreateSkillToolInput) (*mcp.CallToolResult, SkillAuthoringResult, error) {
 		return skillsToolCall(ctx, func(principal Principal) (SkillAuthoringResult, error) {
 			return skills.CreateSkill(ctx, principal, CreateSkillInput(input))
@@ -111,7 +111,7 @@ func registerSkillsTools(reg *Registrar, skills *SkillsService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "add_skill_version",
 		Title:       "Add Skill Version",
-		Description: "Record a new immutable version of an existing skill from complete replacement SKILL.md content. Pass the version you read as expected_latest_version_id: if the skill has moved on since, the write is refused as a conflict rather than overwriting someone else's version. Identical canonical content returns the existing version as a no-op. Recording a version does not distribute it; existing distributions that track the latest valid version pick it up.",
+		Description: "Change what a skill tells an agent, by recording a new version from complete replacement SKILL.md content. Versions are fixed snapshots, so a correction is a new one rather than an edit. Constraints: pass the version you read as expected_latest_version_id — if the skill has moved on since, the write is refused rather than overwriting someone else's version. Identical content returns the existing version unchanged. Recording a version gives it to nobody new; the plugins and assistants that already carry the skill and track its latest version pick it up.",
 	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input AddSkillVersionToolInput) (*mcp.CallToolResult, SkillAuthoringResult, error) {
 		return skillsToolCall(ctx, func(principal Principal) (SkillAuthoringResult, error) {
 			return skills.AddSkillVersion(ctx, principal, AddSkillVersionInput(input))
@@ -120,8 +120,8 @@ func registerSkillsTools(reg *Registrar, skills *SkillsService) {
 
 	addTool(reg, &mcp.Tool{
 		Name:        "update_skill_metadata",
-		Title:       "Update Skill Metadata",
-		Description: "Change a skill's registry naming — canonical name, display name, and summary — without recording a version. Instructions live in versions, so nothing here changes what the skill tells an agent to do. Pass the version you read as expected_latest_version_id.",
+		Title:       "Rename a Skill",
+		Description: "Rename a skill, or change how it is described in the list — its canonical name, display name, and summary. Nothing here changes what the skill tells an agent to do; that lives in its versions. Constraints: pass the version you read as expected_latest_version_id.",
 	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input UpdateSkillMetadataToolInput) (*mcp.CallToolResult, UpdateSkillMetadataOutput, error) {
 		return skillsToolCall(ctx, func(principal Principal) (UpdateSkillMetadataOutput, error) {
 			return skills.UpdateSkillMetadata(ctx, principal, UpdateSkillMetadataInput(input))
@@ -130,8 +130,8 @@ func registerSkillsTools(reg *Registrar, skills *SkillsService) {
 
 	addTool(reg, &mcp.Tool{
 		Name:        "distribute_skill",
-		Title:       "Distribute Skill",
-		Description: "Distribute a skill to one exact existing plugin or assistant in the same project. This is the only way a skill takes effect. Name the target exactly: a name that matches nothing is refused as not_found and a name that matches more than one target as ambiguous_target — there is no fallback to the default plugin. Repeat calls converge on the same attachment rather than creating a second one.",
+		Title:       "Give a Skill to a Plugin or Assistant",
+		Description: "Give a skill to one plugin or one assistant in the same project, so agents there start loading it. This is the only way a skill takes effect. Constraints: name the target exactly — a name matching nothing is refused as not_found and a name matching more than one target as ambiguous_target, with no fallback to the default plugin. Repeat calls settle on the same result rather than adding it twice.",
 	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input DistributeSkillToolInput) (*mcp.CallToolResult, DistributeSkillOutput, error) {
 		return skillsToolCall(ctx, func(principal Principal) (DistributeSkillOutput, error) {
 			return skills.DistributeSkill(ctx, principal, DistributeSkillInput(input))
@@ -149,13 +149,13 @@ func registerUnavailableSkillsTools(reg *Registrar) {
 		description string
 		readOnly    bool
 	}{
-		{"list_skills", "List Skills", "List the skills in an explicit AICP project. Skill authoring is not enabled in the current rollout.", true},
-		{"get_skill", "Get Skill", "Read one skill in an explicit AICP project. Skill authoring is not enabled in the current rollout.", true},
-		{"list_skill_versions", "List Skill Versions", "List a skill's immutable versions. Skill authoring is not enabled in the current rollout.", true},
-		{"create_skill", "Create Skill", "Create a skill from complete SKILL.md content. Skill authoring is not enabled in the current rollout.", false},
-		{"add_skill_version", "Add Skill Version", "Record a new immutable version of an existing skill. Skill authoring is not enabled in the current rollout.", false},
-		{"update_skill_metadata", "Update Skill Metadata", "Change a skill's registry naming. Skill authoring is not enabled in the current rollout.", false},
-		{"distribute_skill", "Distribute Skill", "Distribute a skill to one exact plugin or assistant. Skill distribution is not enabled in the current rollout.", false},
+		{"list_skills", "List Skills", "List the skills in a project. This is not switched on for your organization yet.", true},
+		{"get_skill", "Get Skill", "Read one skill in a project. This is not switched on for your organization yet.", true},
+		{"list_skill_versions", "List Skill Versions", "List a skill's versions. This is not switched on for your organization yet.", true},
+		{"create_skill", "Create Skill", "Write a new skill from complete SKILL.md content. This is not switched on for your organization yet.", false},
+		{"add_skill_version", "Add Skill Version", "Change what a skill tells an agent, by recording a new version. This is not switched on for your organization yet.", false},
+		{"update_skill_metadata", "Rename a Skill", "Rename a skill, or change how it is described. This is not switched on for your organization yet.", false},
+		{"distribute_skill", "Give a Skill to a Plugin or Assistant", "Give a skill to one plugin or assistant. This is not switched on for your organization yet.", false},
 	} {
 		manifest := &mcp.Tool{
 			Name:        tool.name,
@@ -192,13 +192,13 @@ func skillsToolResult(err error) (*mcp.CallToolResult, bool) {
 	var result skillsRefusalResult
 	switch {
 	case errors.Is(err, ErrSkillsUnavailable):
-		result = skillsRefusalResult{Code: unavailableCode, Message: "Skill authoring and distribution are not enabled for this organization."}
+		result = skillsRefusalResult{Code: unavailableCode, Message: "Skills are not switched on for your organization yet."}
 	case errors.Is(err, ErrSkillTargetNotFound):
-		result = skillsRefusalResult{Code: "not_found", Message: "No plugin or assistant in this project matches that target exactly. List the targets returned by create_skill or add_skill_version and name one of them; the skill is not distributed anywhere by default."}
+		result = skillsRefusalResult{Code: "not_found", Message: "No plugin or assistant in this project has that exact name. Name one of the targets returned by create_skill or add_skill_version; nothing is picked by default."}
 	case errors.Is(err, ErrSkillTargetAmbiguous):
-		result = skillsRefusalResult{Code: "ambiguous_target", Message: "More than one plugin or assistant in this project matches that name. Name the target by its ID instead."}
+		result = skillsRefusalResult{Code: "ambiguous_target", Message: "More than one plugin or assistant in this project has that name. Name it by its ID instead."}
 	case errors.Is(err, ErrSkillContentTooLarge):
-		result = skillsRefusalResult{Code: "invalid_request", Message: "A SKILL.md may be at most 65536 UTF-8 bytes. Shorten the manifest rather than splitting it across versions."}
+		result = skillsRefusalResult{Code: "invalid_request", Message: "A SKILL.md may be at most 65536 UTF-8 bytes. Shorten the instructions rather than splitting them across versions."}
 	default:
 		if budgetResult, ok := operationBudgetToolResult(err); ok {
 			return budgetResult, true

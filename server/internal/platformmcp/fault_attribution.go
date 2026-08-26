@@ -13,9 +13,11 @@ const (
 	// FaultProvider is a problem upstream of Gram — the provider the MCP
 	// fronts is failing or unreachable.
 	FaultProvider Fault = "provider"
-	// FaultClient is a problem in the calling client: malformed or rejected
-	// requests that never became a provider call.
-	FaultClient Fault = "client"
+	// FaultClient is a problem in the calling MCP client: malformed or rejected
+	// requests that never became a provider call. The wire value says
+	// "mcp_client" rather than "client" so a reader cannot mistake it for the
+	// OAuth client, which is a different thing this same package registers.
+	FaultClient Fault = "mcp_client"
 	// FaultIndeterminate is the honest answer when the evidence does not
 	// separate the candidates. It is always preferred over a guess.
 	FaultIndeterminate Fault = "indeterminate"

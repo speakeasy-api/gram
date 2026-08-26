@@ -174,6 +174,7 @@ var allowList = map[string]bool{
 	"x-ai/grok-4.20":                true,
 	"qwen/qwen3.7-max":              true,
 	"qwen/qwen3-coder":              true,
+	"z-ai/glm-5.3-flash":            true,
 	"moonshotai/kimi-k2.6":          true,
 	"moonshotai/kimi-k2.5":          true,
 	"mistralai/mistral-medium-3-5":  true,
@@ -200,6 +201,7 @@ var providerFallbacks = map[string]string{
 	"meta-llama": "meta-llama/llama-4-maverick",
 	"x-ai":       "x-ai/grok-4.3",
 	"qwen":       "qwen/qwen3.7-max",
+	"z-ai":       "z-ai/glm-5.3-flash",
 	"moonshotai": "moonshotai/kimi-k2.6",
 	"mistralai":  "mistralai/mistral-medium-3-5",
 }

@@ -64,7 +64,7 @@ func TestMissingReadinessNormalizesToAStableRepairProjection(t *testing.T) {
 	require.Equal(t, ReadinessDegraded, readiness.State)
 	require.Equal(t, "readiness_unavailable", readiness.EvidenceCode)
 	require.Equal(t, "unavailable", output.Freshness)
-	require.Equal(t, []RepairAction{{Kind: "retry_readiness", Label: "Retry the authenticated readiness check"}}, output.Actions)
+	require.Equal(t, []RepairAction{{Kind: "retry_readiness", Label: "Check again whether this MCP server is working"}}, output.Actions)
 }
 
 func TestReadinessToolOutputDoesNotExposeProviderAuthorizationIdentity(t *testing.T) {

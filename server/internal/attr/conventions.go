@@ -348,6 +348,12 @@ const (
 	// OAuthDeclaredAuthMethodKey records the token_endpoint_auth_method a client metadata document declares.
 	OAuthDeclaredAuthMethodKey = attribute.Key("gram.oauth.declared_auth_method")
 
+	// OAuthRefreshTriggerKey names which caller initiated an upstream remote
+	// session refresh: a lazy MCP request, the scheduled worker sweep, or a
+	// manual consent-page or admin action. Used as a metric dimension on
+	// gram.remote_session.upstream_refresh.
+	OAuthRefreshTriggerKey = attribute.Key("gram.oauth.refresh_trigger")
+
 	OAuthPresentedAuthMethodKey = attribute.Key("gram.oauth.presented_auth_method")
 	// OAuthResourceKey is the RFC 8707 resource indicator sent to an
 	// upstream authorization server during the remote-session dance.
@@ -566,6 +572,7 @@ const (
 	TelemetryCHRowCountKey         = attribute.Key("gram.telemetry.ch.row_count")
 	OTELSpanEnricherNameKey        = attribute.Key("gram.otel.span_enricher_name")
 	OTELLogEnricherNameKey         = attribute.Key("gram.otel.log_enricher_name")
+	OTELMetricEnricherNameKey      = attribute.Key("gram.otel.metric_enricher_name")
 
 	// GenAI semantic convention keys (OTel GenAI semconv - experimental)
 	// See: https://opentelemetry.io/docs/specs/semconv/gen-ai/
@@ -847,6 +854,8 @@ func SlogTelemetryCHRowCount(v int) slog.Attr {
 }
 
 func OTELLogEnricherName(v string) attribute.KeyValue { return OTELLogEnricherNameKey.String(v) }
+
+func OTELMetricEnricherName(v string) attribute.KeyValue { return OTELMetricEnricherNameKey.String(v) }
 
 func OTELSpanEnricherName(v string) attribute.KeyValue { return OTELSpanEnricherNameKey.String(v) }
 func SlogOTELSpanEnricherName(v string) slog.Attr {
@@ -1406,6 +1415,13 @@ func SlogOAuthFlowID(v string) slog.Attr      { return slog.String(string(OAuthF
 
 func OAuthFlowStage(v string) attribute.KeyValue { return OAuthFlowStageKey.String(v) }
 func SlogOAuthFlowStage(v string) slog.Attr      { return slog.String(string(OAuthFlowStageKey), v) }
+
+func OAuthRefreshTrigger[V ~string](v V) attribute.KeyValue {
+	return OAuthRefreshTriggerKey.String(string(v))
+}
+func SlogOAuthRefreshTrigger(v string) slog.Attr {
+	return slog.String(string(OAuthRefreshTriggerKey), v)
+}
 
 func OAuthErrorDescription(v string) attribute.KeyValue {
 	return OAuthErrorDescriptionKey.String(v)

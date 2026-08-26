@@ -25,6 +25,7 @@ type auditLogSeed struct {
 	actorType          string
 	actorDisplayName   *string
 	actorSlug          *string
+	actingSurface      *string
 	action             string
 	subjectID          string
 	subjectType        string
@@ -797,6 +798,7 @@ func insertAuditLog(t *testing.T, ctx context.Context, ti *testInstance, seed au
 		ActorType:          seed.actorType,
 		ActorDisplayName:   conv.PtrToPGTextEmpty(seed.actorDisplayName),
 		ActorSlug:          conv.PtrToPGTextEmpty(seed.actorSlug),
+		ActingSurface:      conv.PtrToPGTextEmpty(seed.actingSurface),
 		Action:             seed.action,
 		SubjectID:          seed.subjectID,
 		SubjectType:        seed.subjectType,

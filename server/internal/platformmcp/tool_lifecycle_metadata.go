@@ -8,7 +8,7 @@ import (
 )
 
 type UpdateMCPMetadataToolInput struct {
-	ProjectSlug     string `json:"project_slug" jsonschema:"explicit AICP project slug that owns the Platform-managed MCP"`
+	ProjectSlug     string `json:"project_slug" jsonschema:"explicit project slug that owns the Platform-managed MCP"`
 	RegistrationID  string `json:"registration_id" jsonschema:"Platform registration ID returned by find_mcp or get_mcp"`
 	MCPID           string `json:"mcp_id" jsonschema:"configured MCP ID returned by find_mcp or get_mcp"`
 	Name            string `json:"name" jsonschema:"new project-local MCP display name; 1-256 bytes after trimming and no line breaks"`
@@ -31,8 +31,8 @@ type UpdateMCPMetadataToolOutput struct {
 func registerLifecycleMetadataTool(reg *Registrar, registrations *RegistrationService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "update_mcp_metadata",
-		Title:       "Update MCP Metadata",
-		Description: "Rename one complete Platform-managed MCP in an explicit project. This changes no provider configuration, readiness state, plugin attachment, or publication state.",
+		Title:       "Rename an MCP Server",
+		Description: "Rename one fully set-up MCP server in a named project. Nothing else changes: not its provider configuration, not whether it is working, not which plugins carry it, and not who receives it.",
 	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input UpdateMCPMetadataToolInput) (*mcp.CallToolResult, UpdateMCPMetadataToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
