@@ -194,6 +194,7 @@ function resetSecretOperations(): void {
     installCommand: "unzip -oq gram-observability.zip -d ~/.claude/plugins/",
     policyError: false,
     policyPending: false,
+    promptCopied: false,
     prompt:
       'Run this exact command in your shell:\n\necho "GITHUB_TOKEN=ghp_R2D2C3POLuk3Skywalker1234567890ab"',
     retryPolicy: vi.fn(),
@@ -202,6 +203,7 @@ function resetSecretOperations(): void {
     setClient: vi.fn((client: "claude" | "cursor" | "codex") => {
       secretOperations.current.client = client;
     }),
+    markPromptCopied: vi.fn(),
   };
 }
 
@@ -268,10 +270,42 @@ describe("ProjectGuide", () => {
     expect(
       screen.getByTestId("project-guide-third-party-mcp-card").textContent,
     ).toContain("Not started");
+    for (const [journeyId, stepCount] of [
+      ["secret-block", 5],
+      ["third-party-mcp", 4],
+    ] as const) {
+      const progressSegments = screen
+        .getByTestId(`project-guide-${journeyId}-card`)
+        .querySelectorAll(".h-1.w-4");
+      expect(progressSegments).toHaveLength(stepCount);
+      for (const segment of progressSegments) {
+        expect(segment.className).toContain("bg-surface-tertiary-default");
+      }
+    }
   });
 
   it("animates only journeys that have not started", () => {
     const { rerender } = render(<ProjectGuide />);
+    const secretGraphic = screen.getByTestId(
+      "project-guide-graphic-secret-block",
+    );
+    const longStatus = within(secretGraphic).getByText(
+      "unsafe prompt not received",
+    );
+    expect(longStatus.className).toContain("break-words");
+    expect(longStatus.className).toContain("whitespace-normal");
+    expect(longStatus.parentElement?.className).toContain("grid");
+    expect(longStatus.parentElement?.className).toContain("flex-[0_1_35%]");
+    expect(
+      secretGraphic
+        .querySelector('[data-testid="project-guide-signal-track"]')
+        ?.querySelectorAll(".h-1.flex-1"),
+    ).toHaveLength(12);
+    expect(
+      secretGraphic
+        .querySelector('[data-testid="project-guide-signal-track"]')
+        ?.querySelectorAll(".bg-border"),
+    ).toHaveLength(12);
 
     expect(
       screen
@@ -295,6 +329,31 @@ describe("ProjectGuide", () => {
         .getByTestId("project-guide-graphic-secret-block")
         .getAttribute("data-animated"),
     ).toBe("true");
+  });
+
+  it("keeps the center plate fixed and only glows while live", () => {
+    const { rerender } = render(<ProjectGuide />);
+    const secretGraphic = screen.getByTestId(
+      "project-guide-graphic-secret-block",
+    );
+    const centerPlate = within(secretGraphic).getByTestId(
+      "project-guide-graphic-center-plate",
+    );
+    const glow = within(secretGraphic).getByTestId(
+      "project-guide-graphic-center-glow",
+    );
+
+    expect(centerPlate.style.transform).toBe("");
+    expect(glow.getAttribute("data-glow-state")).toBe("off");
+
+    statusByJourney.current = {
+      "third-party-mcp": "not-started",
+      "secret-block": "in-progress",
+    };
+    rerender(<ProjectGuide />);
+
+    expect(centerPlate.style.transform).toBe("");
+    expect(glow.getAttribute("data-glow-state")).toBe("on");
   });
 
   it("keeps the other journey switchable when a selected path opens", () => {
@@ -353,7 +412,7 @@ describe("ProjectGuide", () => {
     expect(screen.getByText("Install it into this project")).toBeTruthy();
     expect(
       screen.getByRole("log", { name: "Journey A activity" }).textContent,
-    ).toContain("Ready · Pick a server");
+    ).toContain("Ready to start");
 
     fireEvent.click(switchControl);
 
@@ -679,6 +738,7 @@ describe("ProjectGuide", () => {
 
   it("awaits the hook and risk baseline before exposing the secret prompt", async () => {
     vi.useFakeTimers();
+    secretOperations.current.downloadedFilename = undefined;
     const baseline = deferred<boolean>();
     secretOperations.current.prepareTelemetryBaseline = vi.fn(
       () => baseline.promise,
@@ -714,10 +774,9 @@ describe("ProjectGuide", () => {
     fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
     await advanceGuideDelay();
     fireEvent.click(screen.getByRole("button", { name: "Claude Code" }));
-    fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
-    await advanceGuideDelay();
+    await advanceGuideDelay(3);
     fireEvent.click(
-      screen.getByRole("button", { name: "I've installed and restarted it" }),
+      screen.getByRole("button", { name: "Plugin is installed" }),
     );
 
     expect(
@@ -910,7 +969,6 @@ describe("ProjectGuide", () => {
     expect(screen.queryByRole("alert")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Cursor" }));
-    fireEvent.click(startButton);
 
     expect(screen.getByTestId("project-guide-run").dataset.displayState).toBe(
       "running",
@@ -1025,6 +1083,70 @@ describe("ProjectGuide", () => {
     ).toHaveLength(1);
   });
 
+  it.each([
+    {
+      journey: PROJECT_GUIDE_JOURNEYS[1]!,
+      href: "/projects/request-project/logs",
+      label: "Open tool logs",
+    },
+    {
+      journey: PROJECT_GUIDE_JOURNEYS[0]!,
+      href: "/projects/request-project/security/events",
+      label: "Open Risk Events",
+    },
+  ])(
+    "renders $label as a direct completion link",
+    ({ journey, href, label }) => {
+      render(
+        <ProjectGuideRun
+          journey={journey}
+          regionId={`${journey.id}-complete-link`}
+          displayState="complete"
+          completedSteps={journey.steps.map((_, index) => index)}
+          currentStep={journey.steps.length}
+          currentContent={null}
+          output={null}
+          eventCard={null}
+          primaryAction={{ label, href }}
+          onSwitchJourney={() => undefined}
+        />,
+      );
+
+      const link = screen.getByRole("link", { name: label });
+      expect(link.tagName).toBe("A");
+      expect(link.closest("button")).toBeNull();
+      expect(link.getAttribute("href")).toBe(href);
+    },
+  );
+
+  it.each([
+    {
+      journey: PROJECT_GUIDE_JOURNEYS[1]!,
+      title: "Govern a third-party MCP",
+    },
+    {
+      journey: PROJECT_GUIDE_JOURNEYS[0]!,
+      title: "Block a leaked credential mid-prompt",
+    },
+  ])(
+    "shows Continue when reopening an in-progress $title",
+    ({ journey, title }) => {
+      statusByJourney.current[journey.id] = "in-progress";
+      render(<ProjectGuide />);
+
+      fireEvent.click(screen.getByRole("button", { name: title }));
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: `Rewind to ${journey.steps[0]}`,
+        }),
+      );
+
+      const action = screen.getByRole("button", { name: "Continue" });
+      expect((action as HTMLButtonElement).disabled).toBe(false);
+      expect(action.querySelector("svg")).toBeTruthy();
+    },
+  );
+
   it("renders the ready start action with the designed play affordance", async () => {
     render(
       <ProjectGuideRun
@@ -1075,7 +1197,7 @@ describe("ProjectGuide", () => {
     await waitFor(() => expect(action.querySelector("svg")).toBeTruthy());
   });
 
-  it("keeps an enabled checkpoint action actionable without a play affordance", () => {
+  it("keeps the installed plugin checkpoint action actionable with a play affordance", () => {
     render(
       <ProjectGuideRun
         journey={PROJECT_GUIDE_JOURNEYS[1]!}
@@ -1087,7 +1209,8 @@ describe("ProjectGuide", () => {
         output={null}
         eventCard={null}
         primaryAction={{
-          label: "I've installed and restarted it",
+          label: "Plugin is installed",
+          icon: "play",
           disabled: false,
         }}
         onSwitchJourney={() => undefined}
@@ -1095,10 +1218,10 @@ describe("ProjectGuide", () => {
     );
 
     const action = screen.getByRole("button", {
-      name: "I've installed and restarted it",
+      name: "Plugin is installed",
     });
     expect((action as HTMLButtonElement).disabled).toBe(false);
-    expect(action.querySelector('[aria-hidden="true"]')).toBeNull();
+    expect(action.querySelector("svg")).toBeTruthy();
   });
 
   it("keeps a disabled checkpoint action non-interactive", () => {
@@ -1113,7 +1236,8 @@ describe("ProjectGuide", () => {
         output={null}
         eventCard={null}
         primaryAction={{
-          label: "I've installed and restarted it",
+          label: "Plugin is installed",
+          icon: "play",
           disabled: true,
         }}
         onSwitchJourney={() => undefined}
@@ -1121,10 +1245,10 @@ describe("ProjectGuide", () => {
     );
 
     const action = screen.getByRole("button", {
-      name: "I've installed and restarted it",
+      name: "Plugin is installed",
     });
     expect((action as HTMLButtonElement).disabled).toBe(true);
-    expect(action.querySelector('[aria-hidden="true"]')).toBeNull();
+    expect(action.querySelector("svg")).toBeTruthy();
   });
 
   it("keeps activity history bounded and scrolls to the latest output", () => {
@@ -1166,6 +1290,17 @@ describe("ProjectGuide", () => {
     );
 
     expect(activity.className).toContain("flex-1");
+    expect(activity.className).toContain("overflow-y-auto");
+    const stepList = screen.getByRole("list", { name: "Journey A steps" });
+    const steps = stepList.querySelectorAll("li");
+    expect(steps[0]?.className).toContain("min-h-48");
+    for (const step of Array.from(steps).slice(1)) {
+      expect(step.className).not.toContain("min-h-48");
+    }
+    expect(activity.closest("aside")?.className).toContain("min-h-0");
+    expect(activity.closest("aside")?.className).not.toContain(
+      "overflow-y-auto",
+    );
     expect(activity.scrollTop).toBe(400);
   });
 
@@ -1323,14 +1458,16 @@ describe("ProjectGuide", () => {
     );
 
     expect(screen.getByText("What the wizard does")).toBeTruthy();
-    expect(
-      screen.getByText("Detect · enable the Secrets category"),
-    ).toBeTruthy();
-    expect(
-      screen.getByText("Scope · user prompts, the recommended surface"),
-    ).toBeTruthy();
-    expect(screen.getByText("Action · deny the request")).toBeTruthy();
-    expect(screen.getAllByText("not run")).toHaveLength(3);
+    expect(screen.getByText("Enable the Secrets category")).toBeTruthy();
+    expect(screen.getByText("Scope user prompts")).toBeTruthy();
+    expect(screen.getByText("Deny the request")).toBeTruthy();
+    const phaseStatuses = screen.getAllByText("not run");
+    expect(phaseStatuses).toHaveLength(3);
+    for (const phaseStatus of phaseStatuses) {
+      expect(phaseStatus.className).toContain("text-eyebrow");
+      expect(phaseStatus.className).toContain("text-disabled");
+      expect(phaseStatus.className).toContain("ml-auto");
+    }
     expect(screen.queryByRole("tab", { name: "Claude Code" })).toBeNull();
     expect(screen.queryByRole("tab", { name: "Cursor" })).toBeNull();
     expect(screen.queryByRole("tab", { name: "Codex" })).toBeNull();
@@ -1341,7 +1478,7 @@ describe("ProjectGuide", () => {
     ).toBeNull();
   });
 
-  it("lets Step 2 select the agent before downloading its plugin", () => {
+  it("starts plugin setup when Step 2 selects an agent", () => {
     statusByJourney.current["secret-block"] = "in-progress";
     secretOperations.current.downloadedFilename = undefined;
     secretOperations.current.clientSelected = false;
@@ -1361,8 +1498,9 @@ describe("ProjectGuide", () => {
     const options = picker.querySelector('[class*="overflow-x-auto"]');
     expect(options?.className).toContain("flex");
     expect(options?.className).toContain("overflow-x-auto");
-    const action = screen.getByRole("button", { name: "Start the journey" });
-    expect((action as HTMLButtonElement).disabled).toBe(true);
+    expect(
+      screen.getByRole("button", { name: "Start the journey" }),
+    ).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
     expect(handleSignal).not.toHaveBeenCalled();
     for (const agent of ["Claude Code", "Cursor", "Codex"]) {
@@ -1388,14 +1526,8 @@ describe("ProjectGuide", () => {
         .getAttribute("aria-pressed"),
     ).toBe("true");
     expect(
-      (
-        screen.getByRole("button", {
-          name: "Start the journey",
-        }) as HTMLButtonElement
-      ).disabled,
-    ).toBe(false);
-
-    fireEvent.click(action);
+      screen.getByRole("button", { name: "Pause the journey" }),
+    ).toBeTruthy();
     expect(screen.getByTestId("project-guide-run").dataset.displayState).toBe(
       "running",
     );
@@ -1406,6 +1538,25 @@ describe("ProjectGuide", () => {
       }),
       expect.any(Function),
     );
+  });
+
+  it("shows the plugin setup title while the agent is being selected", () => {
+    statusByJourney.current["secret-block"] = "in-progress";
+    secretOperations.current.downloadedFilename = "gram-observability.zip";
+    secretOperations.current.promptCopied = false;
+    render(<ProjectGuide />);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Block a leaked credential mid-prompt/,
+      }),
+    );
+    expect(
+      screen.getByRole("heading", { name: "Setup the observability plugin" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Start the journey" }),
+    ).toBeTruthy();
   });
 
   it("renders the real MCP selection, connection, prompt, and observed call", async () => {
@@ -1547,6 +1698,7 @@ describe("ProjectGuide", () => {
 
   it("renders the real blocked-secret install, prompt checkpoint, event, and Risk Events link", async () => {
     vi.useFakeTimers();
+    secretOperations.current.downloadedFilename = undefined;
     const handleSignal = vi.fn(
       (
         signal: ProjectGuideOperationSignal,
@@ -1586,7 +1738,7 @@ describe("ProjectGuide", () => {
     );
     secretOperations.current.handleSignal = handleSignal;
 
-    render(<ProjectGuide />);
+    const view = render(<ProjectGuide />);
     fireEvent.click(
       screen.getByRole("button", {
         name: /Block a leaked credential mid-prompt/,
@@ -1594,14 +1746,11 @@ describe("ProjectGuide", () => {
     );
 
     expect(screen.getByText("What the wizard does")).toBeTruthy();
-    expect(
-      screen.getByText("Detect · enable the Secrets category"),
-    ).toBeTruthy();
+    expect(screen.getByText("Enable the Secrets category")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
     await advanceGuideDelay();
     fireEvent.click(screen.getByRole("button", { name: "Claude Code" }));
-    fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
-    await advanceGuideDelay();
+    await advanceGuideDelay(3);
 
     const installPre = screen.getByText((_, element) =>
       Boolean(
@@ -1638,7 +1787,7 @@ describe("ProjectGuide", () => {
     ).toBeNull();
     expect(screen.queryByText(/Your turn · Add it to your agent/)).toBeNull();
     fireEvent.click(
-      screen.getByRole("button", { name: "I've installed and restarted it" }),
+      screen.getByRole("button", { name: "Plugin is installed" }),
     );
     await advanceGuideDelay();
     const promptPre = screen.getByText((_, element) =>
@@ -1658,8 +1807,14 @@ describe("ProjectGuide", () => {
     expect(
       screen.getByText(/Run this exact command in your shell/),
     ).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Sent it" })).toBeNull();
-    fireEvent.click(promptPre);
+    expect(
+      (screen.getByRole("button", { name: "Prompt run" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "copy" }));
+    secretOperations.current.promptCopied = true;
+    view.rerender(<ProjectGuide />);
+    fireEvent.click(screen.getByRole("button", { name: "Prompt run" }));
     await advanceGuideDelay();
 
     expect(
@@ -1680,6 +1835,7 @@ describe("ProjectGuide", () => {
 
   it("keeps the secret prompt visible and reports send failures in the activity log", async () => {
     vi.useFakeTimers();
+    secretOperations.current.downloadedFilename = undefined;
     const listenerError =
       "Could not check for the blocked event after the prompt was copied. Retry the step.";
 
@@ -1714,7 +1870,7 @@ describe("ProjectGuide", () => {
     );
     secretOperations.current.handleSignal = handleSignal;
 
-    render(<ProjectGuide />);
+    const view = render(<ProjectGuide />);
     fireEvent.click(
       screen.getByRole("button", {
         name: /Block a leaked credential mid-prompt/,
@@ -1723,10 +1879,9 @@ describe("ProjectGuide", () => {
     fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
     await advanceGuideDelay();
     fireEvent.click(screen.getByRole("button", { name: "Claude Code" }));
-    fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
-    await advanceGuideDelay();
+    await advanceGuideDelay(3);
     fireEvent.click(
-      screen.getByRole("button", { name: "I've installed and restarted it" }),
+      screen.getByRole("button", { name: "Plugin is installed" }),
     );
     await advanceGuideDelay();
 
@@ -1738,9 +1893,14 @@ describe("ProjectGuide", () => {
     );
     expect(promptPre).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Retry baseline" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Sent it" })).toBeNull();
+    expect(
+      (screen.getByRole("button", { name: "Prompt run" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "copy" }));
-
+    secretOperations.current.promptCopied = true;
+    view.rerender(<ProjectGuide />);
+    fireEvent.click(screen.getByRole("button", { name: "Prompt run" }));
     await advanceGuideDelay();
     expect(
       screen.getByRole("log", { name: "Journey B activity" }).textContent,
@@ -1758,6 +1918,7 @@ describe("ProjectGuide", () => {
 
   it("shows secret listening guidance only in activity before an event exists", async () => {
     vi.useFakeTimers();
+    secretOperations.current.downloadedFilename = undefined;
     const handleSignal = vi.fn(
       (
         signal: ProjectGuideOperationSignal,
@@ -1782,7 +1943,7 @@ describe("ProjectGuide", () => {
     );
     secretOperations.current.handleSignal = handleSignal;
 
-    render(<ProjectGuide />);
+    const view = render(<ProjectGuide />);
     fireEvent.click(
       screen.getByRole("button", {
         name: /Block a leaked credential mid-prompt/,
@@ -1791,10 +1952,9 @@ describe("ProjectGuide", () => {
     fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
     await advanceGuideDelay();
     fireEvent.click(screen.getByRole("button", { name: "Claude Code" }));
-    fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
-    await advanceGuideDelay();
+    await advanceGuideDelay(3);
     fireEvent.click(
-      screen.getByRole("button", { name: "I've installed and restarted it" }),
+      screen.getByRole("button", { name: "Plugin is installed" }),
     );
     await advanceGuideDelay();
     const promptPre = screen.getByText((_, element) =>
@@ -1804,7 +1964,10 @@ describe("ProjectGuide", () => {
       ),
     );
     expect(promptPre).toBeTruthy();
-    fireEvent.click(promptPre);
+    fireEvent.click(screen.getByRole("button", { name: "copy" }));
+    secretOperations.current.promptCopied = true;
+    view.rerender(<ProjectGuide />);
+    fireEvent.click(screen.getByRole("button", { name: "Prompt run" }));
     await advanceGuideDelay();
     const activity = screen.getByRole("log", { name: "Journey B activity" });
     expect(activity.textContent).toContain(
@@ -1818,6 +1981,7 @@ describe("ProjectGuide", () => {
 
   it("times out and retries the blocked-secret listener without accepting history", async () => {
     vi.useFakeTimers();
+    secretOperations.current.downloadedFilename = undefined;
     const handleSignal = vi.fn(
       (
         signal: ProjectGuideOperationSignal,
@@ -1837,7 +2001,7 @@ describe("ProjectGuide", () => {
     );
     secretOperations.current.handleSignal = handleSignal;
 
-    render(<ProjectGuide />);
+    const view = render(<ProjectGuide />);
     fireEvent.click(
       screen.getByRole("button", {
         name: /Block a leaked credential mid-prompt/,
@@ -1846,10 +2010,9 @@ describe("ProjectGuide", () => {
     fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
     await advanceGuideDelay();
     fireEvent.click(screen.getByRole("button", { name: "Claude Code" }));
-    fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
-    await advanceGuideDelay();
+    await advanceGuideDelay(3);
     fireEvent.click(
-      screen.getByRole("button", { name: "I've installed and restarted it" }),
+      screen.getByRole("button", { name: "Plugin is installed" }),
     );
     await advanceGuideDelay();
     expect(screen.queryByRole("button", { name: "Sent it" })).toBeNull();
@@ -1860,7 +2023,10 @@ describe("ProjectGuide", () => {
       ),
     );
     expect(promptPre).toBeTruthy();
-    fireEvent.click(promptPre);
+    fireEvent.click(screen.getByRole("button", { name: "copy" }));
+    secretOperations.current.promptCopied = true;
+    view.rerender(<ProjectGuide />);
+    fireEvent.click(screen.getByRole("button", { name: "Prompt run" }));
 
     act(() => {
       vi.advanceTimersByTime(LISTEN_TIMEOUT_SECONDS * 1_000);

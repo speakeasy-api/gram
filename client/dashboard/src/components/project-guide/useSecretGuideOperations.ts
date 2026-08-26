@@ -1,8 +1,9 @@
-import type {
-  ProjectGuideEventCard,
-  ProjectGuideOperationReport,
-  ProjectGuideOperationScope,
-  ProjectGuideOperationSignal,
+import {
+  PROJECT_GUIDE_MICRO_STEP_DELAY_MS,
+  type ProjectGuideEventCard,
+  type ProjectGuideOperationReport,
+  type ProjectGuideOperationScope,
+  type ProjectGuideOperationSignal,
 } from "@/components/project-guide/projectGuideMachine";
 import { projectGuideOperationKey } from "@/components/project-guide/projectGuideMachine";
 import { hasBlockingSecretsPolicy } from "@/components/project-guide/journeyStatus";
@@ -202,10 +203,12 @@ export function useSecretGuideOperations(): {
   installCommand: string | undefined;
   policyError: boolean;
   policyPending: boolean;
+  promptCopied: boolean;
   prepareTelemetryBaseline: () => Promise<boolean>;
   prompt: string;
   retryPolicy: () => void;
   riskEventsHref: string;
+  markPromptCopied: () => void;
   setClient: (client: SecretGuideClient) => void;
 } {
   const gramProject = useProjectSlugForRequests();
@@ -214,6 +217,7 @@ export function useSecretGuideOperations(): {
   const routes = useRoutes();
   const queryClient = useQueryClient();
   const [client, setClientState] = useState<SecretGuideClient>();
+  const [promptCopied, setPromptCopied] = useState(false);
   const [downloadedFilename, setDownloadedFilename] = useState<string>();
   const [createdPolicy, setCreatedPolicy] = useState<RiskPolicy>();
   const [activeOperation, setActiveOperation] = useState<ActiveOperation>();
@@ -224,6 +228,10 @@ export function useSecretGuideOperations(): {
   const [baselinePending, setBaselinePending] = useState(false);
   const [suppressTelemetryError, setSuppressTelemetryError] = useState(false);
   const startedFor = useRef(new Set<string>());
+  const downloadStartedFor = useRef<string | undefined>(undefined);
+  const downloadTimerRef = useRef<{ key: string; timer: number } | undefined>(
+    undefined,
+  );
 
   const policiesQuery = useRiskListPolicies({ gramProject }, undefined, {
     throwOnError: false,
@@ -475,48 +483,70 @@ export function useSecretGuideOperations(): {
       return;
     }
     const key = projectGuideOperationKey(operation.scope);
-    if (startedFor.current.has(key)) return;
-    startedFor.current.add(key);
-    for (const [message, progress] of [
-      [
-        `Building the ${SECRET_GUIDE_CLIENTS[client].label} observability plugin`,
-        0.25,
-      ],
-      ["Signing the observability plugin bundle", 0.5],
-    ] as const) {
-      operation.report({
-        type: "progress",
-        scope: operation.scope,
-        message,
-        progress,
-      });
+    if (!startedFor.current.has(key)) {
+      startedFor.current.add(key);
+      for (const [message, progress] of [
+        [
+          `Building the ${SECRET_GUIDE_CLIENTS[client].label} observability plugin`,
+          0.25,
+        ],
+        ["Signing the observability plugin bundle", 0.5],
+      ] as const) {
+        operation.report({
+          type: "progress",
+          scope: operation.scope,
+          message,
+          progress,
+        });
+      }
     }
-    void authFetch(
-      `/rpc/plugins.downloadObservabilityPlugin?platform=${client}`,
-      {},
-    )
-      .then(async (response) => {
-        if (!response.ok) throw new Error("download failed");
-        const fallback = `observability-${client}.zip`;
-        const filename = responseFilename(response, fallback);
-        await downloadResponse(response, fallback);
-        setDownloadedFilename(filename);
-        updateActiveOperation(undefined);
-        operation.report({
-          type: "success",
-          scope: operation.scope,
-          result: `Observability plugin downloaded · ${filename}`,
+    if (downloadStartedFor.current === key) return;
+    if (downloadTimerRef.current?.key === key) return;
+
+    const timer = window.setTimeout(() => {
+      downloadTimerRef.current = undefined;
+      const current = activeOperationRef.current;
+      if (
+        !current ||
+        current.paused ||
+        projectGuideOperationKey(current.scope) !== key
+      ) {
+        return;
+      }
+      downloadStartedFor.current = key;
+      void authFetch(
+        `/rpc/plugins.downloadObservabilityPlugin?platform=${client}`,
+        {},
+      )
+        .then(async (response) => {
+          if (!response.ok) throw new Error("download failed");
+          const fallback = `observability-${client}.zip`;
+          const filename = responseFilename(response, fallback);
+          await downloadResponse(response, fallback);
+          setDownloadedFilename(filename);
+          updateActiveOperation(undefined);
+          operation.report({
+            type: "success",
+            scope: operation.scope,
+            result: `Observability plugin downloaded · ${filename}`,
+          });
+        })
+        .catch(() => {
+          updateActiveOperation(undefined);
+          operation.report({
+            type: "error",
+            scope: operation.scope,
+            message:
+              "Could not download the observability plugin. Retry the download step.",
+          });
         });
-      })
-      .catch(() => {
-        updateActiveOperation(undefined);
-        operation.report({
-          type: "error",
-          scope: operation.scope,
-          message:
-            "Could not download the observability plugin. Retry the download step.",
-        });
-      });
+    }, PROJECT_GUIDE_MICRO_STEP_DELAY_MS * 2);
+    downloadTimerRef.current = { key, timer };
+    return () => {
+      if (downloadTimerRef.current?.timer !== timer) return;
+      window.clearTimeout(timer);
+      downloadTimerRef.current = undefined;
+    };
   }, [
     activeOperation,
     authFetch,
@@ -592,15 +622,18 @@ export function useSecretGuideOperations(): {
     installCommand: install?.command,
     policyError,
     policyPending,
+    promptCopied,
     prepareTelemetryBaseline: captureBaseline,
     prompt: SECRET_GUIDE_PROMPT,
     retryPolicy: () => {
       void policiesQuery.refetch();
     },
     riskEventsHref: routes.riskEvents.href(),
+    markPromptCopied: () => setPromptCopied(true),
     setClient: (nextClient) => {
       if (downloadedFilename) return;
       setClientState(nextClient);
+      setPromptCopied(false);
     },
   };
 }

@@ -199,6 +199,7 @@ function ProjectGuideContent({
         displayState,
         selectedJourney,
         currentStep,
+        statusByJourney[selectedJourney.id],
         send,
         mcpOperations,
         secretOperations,
@@ -217,13 +218,16 @@ function ProjectGuideContent({
 
   return (
     <GuideCanvas>
-      <section className="border-border bg-card mx-auto flex min-h-96 w-full max-w-[1200px] flex-col overflow-hidden border shadow-sm">
-        <header className="border-border flex items-baseline gap-3.5 border-b px-6 py-5 pb-3">
-          <h2 className="text-display-xs">
-            {selectedJourney?.title ?? "Put your agent traffic under control"}
-          </h2>
+      <section className="border-border bg-card mx-auto flex w-full max-w-[1200px] flex-col overflow-hidden border shadow-sm">
+        <header className="border-border flex items-end gap-3.5 border-b px-6 py-4">
+          <div>
+            <h5 className="text-eyebrow">Guided Journey</h5>
+            <h2 className="text-display-xs">
+              {selectedJourney?.title ?? "Put your agent traffic under control"}
+            </h2>
+          </div>
           {selected && (
-            <div className="ml-auto flex items-center gap-3">
+            <div className="ml-auto flex items-center gap-3 mb-1">
               <button
                 type="button"
                 onClick={() => send({ type: "BACK" })}
@@ -236,7 +240,7 @@ function ProjectGuideContent({
             </div>
           )}
         </header>
-        <div className="flex min-h-96 flex-col md:flex-row">
+        <div className="flex flex-col md:flex-row">
           {PROJECT_GUIDE_JOURNEYS.map((journey) => {
             const status = statusByJourney[journey.id];
             const isSelected = selected === journey.id;
@@ -298,11 +302,7 @@ function ProjectGuideContent({
                             currentStep === 3 &&
                             displayState === "checkpoint"
                           ) {
-                            send({
-                              type: "USER_CHECKPOINT_COMPLETE",
-                              result:
-                                "Prompt copied · listening for the blocked event",
-                            });
+                            secretOperations.markPromptCopied();
                           }
                         }}
                         onSelectAgent={(client) => {
@@ -373,6 +373,7 @@ function primaryActionFor(
   displayState: ProjectGuideDisplayState,
   journey: JourneyMeta,
   currentStep: number,
+  journeyStatus: JourneyStatus,
   send: (event: ProjectGuideEvent) => void,
   mcpOperations: McpGuideOperations,
   secretOperations: SecretGuideOperations,
@@ -400,7 +401,8 @@ function primaryActionFor(
         };
       }
       return {
-        label: "Start the journey",
+        label:
+          journeyStatus === "in-progress" ? "Continue" : "Start the journey",
         icon: "play",
         disabled:
           (journey.id === "third-party-mcp" &&
@@ -452,7 +454,8 @@ function primaryActionFor(
       }
       if (journey.id === "secret-block" && currentStep === 2) {
         return {
-          label: "I've installed and restarted it",
+          label: "Plugin is installed",
+          icon: "play",
           disabled:
             !secretOperations.installCommand ||
             secretOperations.baselinePending,
@@ -479,7 +482,16 @@ function primaryActionFor(
         };
       }
       if (journey.id === "secret-block" && currentStep === 3) {
-        return null;
+        return {
+          label: "Prompt run",
+          icon: "play",
+          disabled: !secretOperations.promptCopied,
+          onClick: () =>
+            send({
+              type: "USER_CHECKPOINT_COMPLETE",
+              result: "Prompt copied · listening for the blocked event",
+            }),
+        };
       }
       return {
         label: "I've completed this step",
@@ -579,9 +591,9 @@ const MCP_CATALOG_PHASES = [
 ] as const;
 
 const SECRET_POLICY_PHASES = [
-  "Detect · enable the Secrets category",
-  "Scope · user prompts, the recommended surface",
-  "Action · deny the request",
+  "Enable the Secrets category",
+  "Scope user prompts",
+  "Deny the request",
 ] as const;
 
 const SECRET_PLUGIN_PHASES = [
@@ -643,7 +655,6 @@ function SecretPolicyPhases({
 
   return (
     <ProjectGuidePhaseChecklist
-      title="What the wizard does"
       labels={SECRET_POLICY_PHASES}
       statuses={statuses}
     />
@@ -661,7 +672,6 @@ function McpCatalogPhases({
 }): JSX.Element {
   return (
     <ProjectGuidePhaseChecklist
-      title="What the wizard does"
       labels={MCP_CATALOG_PHASES}
       statuses={phaseStatuses(
         MCP_CATALOG_PHASES,
@@ -675,46 +685,38 @@ function McpCatalogPhases({
 }
 
 function ProjectGuidePhaseChecklist({
-  title,
   labels,
   statuses,
 }: {
-  title: string;
   labels: readonly string[];
   statuses: readonly ProjectGuidePhaseStatus[];
 }): JSX.Element {
   return (
     <div className="grid gap-2 pt-2">
-      <span className="text-eyebrow text-disabled">{title}</span>
-      <div>
-        {labels.map((label, index) => {
-          const status = statuses[index] ?? "not run";
-          const statusClassName = {
-            "not run": "border-neutral-default text-disabled",
-            queued: "border-neutral-default text-disabled",
-            running: "animate-pulse border-foreground text-foreground",
-            ok: "border-success-default text-default-success",
-            failed: "border-destructive-default text-default-destructive",
-          }[status];
-
-          return (
-            <div
-              key={label}
-              className="border-border flex items-center gap-2 border-t py-3 last:border-b"
-            >
-              <span
-                aria-hidden="true"
-                className={cn("size-3 shrink-0 border", statusClassName)}
-              />
-              <span className="text-muted-foreground text-sm">{label}</span>
-              <span className="border-border flex-1 border-t" />
-              <span className={cn("text-eyebrow", statusClassName)}>
-                {status}
-              </span>
-            </div>
-          );
-        })}
-      </div>
+      {labels.map((label, index) => {
+        const status = statuses[index] ?? "not run";
+        const indicatorClassName = {
+          "not run": "border-neutral-default",
+          queued: "border-neutral-default",
+          running: "animate-pulse border-foreground",
+          ok: "border-success-default bg-success-default",
+          failed: "border-destructive-default",
+        }[status];
+        return (
+          <div key={label} className="flex items-center gap-3 py-1">
+            <span
+              aria-hidden="true"
+              className={cn("size-3 shrink-0 border", indicatorClassName)}
+            />
+            <span className="text-muted-foreground min-w-0 text-sm">
+              {label}
+            </span>
+            <span className="text-eyebrow text-disabled ml-auto shrink-0">
+              {status}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -1326,7 +1328,7 @@ function JourneyChoice({
               className={cn(
                 "h-1 w-4",
                 !(isComplete || (isInProgress && index === 0)) &&
-                  "bg-neutral-softest",
+                  "bg-surface-tertiary-default",
               )}
               style={
                 isComplete || (isInProgress && index === 0)
@@ -1432,7 +1434,7 @@ function JourneyGraphic({
       {plates.map((plate, index) => (
         <span key={plate.zone} className="flex w-full flex-col items-center">
           <JourneyGraphicPlate
-            key={`${plate.zone}-${animated ? "animated" : "static"}`}
+            key={plate.zone}
             accent={fixture.accent}
             active={active}
             animated={animated}
@@ -1441,18 +1443,18 @@ function JourneyGraphic({
           />
           {index < 2 && (
             <JourneyGraphicPipe
-              key={`${plate.zone}-pipe-${animated ? "animated" : "static"}`}
+              key={`${plate.zone}-pipe`}
               accent={fixture.accent}
               active={active}
               animated={animated}
               label={
                 isMcp
                   ? index === 0
-                    ? "requests"
-                    : "governed hop"
+                    ? "request path"
+                    : "governed route"
                   : index === 0
-                    ? "every prompt"
-                    : "denied here"
+                    ? "prompt flow"
+                    : "policy boundary"
               }
             />
           )}
@@ -1470,9 +1472,14 @@ type JourneyGraphicPlateData = {
   off: string;
 };
 
-const graphicLiveOpacity = [0, 0, 1, 1, 0];
-const graphicOffOpacity = [1, 1, 0, 0, 1];
+const graphicLiveOpacity = [0, 0, 0, 0, 1, 1, 0, 0, 0];
+const graphicOffOpacity = [1, 1, 0, 0, 0, 0, 0, 0, 1];
 const graphicLoopTimes = [0, 0.46, 0.52, 0.94, 0.99];
+const graphicTextLoopTimes = [0, 0.4, 0.46, 0.52, 0.58, 0.9, 0.94, 0.96, 1];
+const graphicStateTransition = {
+  duration: 0.16,
+  ease: [0.2, 0.7, 0.3, 1] as const,
+};
 
 function JourneyGraphicPlate({
   accent,
@@ -1498,28 +1505,29 @@ function JourneyGraphicPlate({
   const liveTransition = animated
     ? {
         duration: 9,
-        ease: "linear" as const,
+        ease: "easeInOut" as const,
         repeat: Infinity,
-        times: graphicLoopTimes,
+        times: graphicTextLoopTimes,
       }
-    : { duration: 0 };
+    : {
+        ...graphicStateTransition,
+        delay: active ? graphicStateTransition.duration : 0,
+      };
   const offTransition = animated
     ? {
         duration: 9,
-        ease: "linear" as const,
+        ease: "easeInOut" as const,
         repeat: Infinity,
-        times: [0, 0.4, 0.46, 0.96, 1],
+        times: graphicTextLoopTimes,
       }
-    : { duration: 0 };
+    : {
+        ...graphicStateTransition,
+        delay: active ? 0 : graphicStateTransition.duration,
+      };
 
   return (
-    <motion.span
-      animate={animated && isCenter ? { scale: [1, 1.018, 1] } : { scale: 1 }}
-      transition={
-        animated
-          ? { duration: 9, ease: "linear", repeat: Infinity }
-          : { duration: 0 }
-      }
+    <span
+      data-testid={isCenter ? "project-guide-graphic-center-plate" : undefined}
       className={cn(
         "border-border bg-background relative flex w-4/5 flex-col gap-2 border p-4",
         isCenter && "w-full bg-muted p-5",
@@ -1528,30 +1536,21 @@ function JourneyGraphicPlate({
       {isCenter && (
         <motion.span
           aria-hidden="true"
-          animate={
-            animated
-              ? {
-                  opacity: [0.35, 0.35, 1, 1, 0.35],
-                  boxShadow: [
-                    `inset 0 0 0 1px ${accent}`,
-                    `inset 0 0 0 1px ${accent}`,
-                    `inset 0 0 0 1px ${accent}, 0 0 18px ${accent}66`,
-                    `inset 0 0 0 1px ${accent}, 0 0 18px ${accent}66`,
-                    `inset 0 0 0 1px ${accent}`,
-                  ],
-                }
-              : { opacity: active ? 1 : 0.35, boxShadow: "none" }
-          }
+          data-testid="project-guide-graphic-center-glow"
+          data-glow-state={active ? "on" : "off"}
+          animate={animated ? liveOpacity : { opacity: active ? 1 : 0 }}
           transition={
             animated
-              ? {
-                  duration: 2.6,
-                  ease: "easeInOut",
-                  repeat: Infinity,
+              ? liveTransition
+              : {
+                  ...graphicStateTransition,
+                  delay: active ? graphicStateTransition.duration : 0,
                 }
-              : { duration: 0 }
           }
           className="pointer-events-none absolute inset-0"
+          style={{
+            boxShadow: `inset 0 0 0 1px ${accent}, 0 0 18px ${accent}66`,
+          }}
         />
       )}
       {isCenter && (
@@ -1571,38 +1570,42 @@ function JourneyGraphicPlate({
           </span>
           <span
             className={cn(
-              "relative min-w-0 truncate text-sm",
+              "relative grid min-w-0 text-sm",
               isCenter && "text-xl",
             )}
           >
             <motion.span
+              initial={false}
               animate={offOpacity}
               transition={offTransition}
-              className="block truncate"
+              className="col-start-1 row-start-1 block truncate"
             >
               {offName}
             </motion.span>
             <motion.span
+              initial={false}
               animate={liveOpacity}
               transition={liveTransition}
-              className="absolute inset-x-0 top-0 block truncate"
+              className="col-start-1 row-start-1 block truncate"
             >
               {plate.name}
             </motion.span>
           </span>
         </span>
-        <span className="text-eyebrow relative min-w-24 text-right">
+        <span className="text-eyebrow relative mt-0 mb-auto grid min-w-0 flex-[0_1_35%] text-right">
           <motion.span
+            initial={false}
             animate={offOpacity}
             transition={offTransition}
-            className="text-disabled block whitespace-nowrap"
+            className="text-disabled col-start-1 row-start-1 block min-w-0 wrap-break-words whitespace-normal"
           >
             {plate.off}
           </motion.span>
           <motion.span
+            initial={false}
             animate={liveOpacity}
             transition={liveTransition}
-            className="absolute inset-x-0 top-0 block whitespace-nowrap"
+            className="col-start-1 row-start-1 block min-w-0 wrap-break-words whitespace-normal"
             style={{ color: accent }}
           >
             {plate.on}
@@ -1610,37 +1613,49 @@ function JourneyGraphicPlate({
         </span>
       </span>
       {isCenter && (
-        <motion.span
-          animate={liveOpacity}
-          transition={liveTransition}
-          className="flex gap-1 pl-2"
-        >
-          {Array.from({ length: 12 }, (_, tick) => (
-            <motion.span
-              key={tick}
-              aria-hidden="true"
-              animate={
-                animated
-                  ? { opacity: [0.16, 1, 0.16] }
-                  : { opacity: active ? 1 : 0.16 }
-              }
-              transition={
-                animated
-                  ? {
-                      duration: 2.4,
-                      ease: "linear",
-                      repeat: Infinity,
-                      delay: -2.4 + tick * 0.2,
-                    }
-                  : { duration: 0 }
-              }
-              className="h-1 flex-1"
-              style={{ backgroundColor: accent }}
-            />
-          ))}
-        </motion.span>
+        <span className="relative grid">
+          <span
+            data-testid="project-guide-signal-track"
+            aria-hidden="true"
+            className="col-start-1 row-start-1 flex gap-1"
+          >
+            {Array.from({ length: 12 }, (_, tick) => (
+              <span key={tick} className="bg-border h-1 flex-1" />
+            ))}
+          </span>
+          <motion.span
+            initial={false}
+            animate={liveOpacity}
+            transition={liveTransition}
+            aria-hidden="true"
+            className="col-start-1 row-start-1 flex gap-1"
+          >
+            {Array.from({ length: 12 }, (_, tick) => (
+              <motion.span
+                key={tick}
+                animate={
+                  animated
+                    ? { opacity: [0.2, 1, 0.2] }
+                    : { opacity: active ? 1 : 0.2 }
+                }
+                transition={
+                  animated
+                    ? {
+                        duration: 2.4,
+                        ease: "easeInOut",
+                        repeat: Infinity,
+                        delay: -2.4 + tick * 0.2,
+                      }
+                    : { duration: 0 }
+                }
+                className="h-1 flex-1"
+                style={{ backgroundColor: accent }}
+              />
+            ))}
+          </motion.span>
+        </span>
       )}
-    </motion.span>
+    </span>
   );
 }
 
@@ -1668,7 +1683,7 @@ function JourneyGraphicPipe({
           animated
             ? {
                 duration: 9,
-                ease: "linear",
+                ease: "easeInOut",
                 repeat: Infinity,
                 times: graphicLoopTimes,
               }
@@ -1682,13 +1697,13 @@ function JourneyGraphicPipe({
           animated
             ? {
                 duration: 9,
-                ease: "linear",
+                ease: "easeInOut",
                 repeat: Infinity,
                 times: [0, 0.3, 0.36, 0.96, 1],
               }
             : { duration: 0 }
         }
-        className="bg-foreground/90 absolute inset-0 overflow-hidden"
+        className="bg-foreground/60 absolute inset-0 overflow-hidden"
       >
         <GraphicPipeStripes animated={animated} />
       </motion.span>
@@ -1698,18 +1713,18 @@ function JourneyGraphicPipe({
           animated
             ? {
                 duration: 9,
-                ease: "linear",
+                ease: "easeInOut",
                 repeat: Infinity,
                 times: graphicLoopTimes,
               }
             : { duration: 0 }
         }
         className="absolute inset-0 overflow-hidden"
-        style={{ backgroundColor: `${accent}24` }}
+        style={{ backgroundColor: `${accent}70` }}
       >
         <GraphicPipeStripes animated={animated} />
       </motion.span>
-      <span className="text-eyebrow text-disabled absolute top-1/2 left-5 -translate-y-1/2 whitespace-nowrap">
+      <span className="text-eyebrow text-disabled absolute top-1/2 left-6 -translate-y-1/2 whitespace-nowrap">
         {label}
       </span>
     </span>
@@ -1755,7 +1770,7 @@ function JourneySpine({
       aria-label={`Switch to ${journey.title}`}
       aria-controls={controlsId}
       aria-expanded="false"
-      className="flex h-full w-full flex-col items-center gap-3.5 py-5 hover:bg-card/60"
+      className="flex h-full w-full flex-col items-center gap-3.5 py-4 hover:bg-card/60"
     >
       <span
         aria-hidden="true"

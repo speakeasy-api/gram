@@ -121,6 +121,22 @@ describe("project guide coordinator contract", () => {
     });
   });
 
+  it("uses a concise ready message when a journey has not started", () => {
+    const { service } = coordinator();
+
+    openMcp(service);
+    expect(service.getSnapshot().context.output.at(-1)).toMatchObject({
+      kind: "note",
+      message: "Ready to start",
+    });
+
+    service.send({ type: "SWITCH", path: "secret-block", resumeStep: 0 });
+    expect(service.getSnapshot().context.output.at(-1)).toMatchObject({
+      kind: "note",
+      message: "Ready to start",
+    });
+  });
+
   it("records MCP selection and ignores selection changes during work", () => {
     const { service, signals } = coordinator();
     openMcp(service);
@@ -253,7 +269,7 @@ describe("project guide coordinator contract", () => {
     ).toEqual([0]);
   });
 
-  it("waits for an agent before starting Secret Step 2", () => {
+  it("starts Secret Step 2 immediately after an agent is selected", () => {
     const { service, signals } = coordinator();
     openSecret(service);
     service.send({ type: "START" });
@@ -269,12 +285,7 @@ describe("project guide coordinator contract", () => {
     expect(service.getSnapshot().context.error).toBeNull();
     expect(signals).toHaveLength(1);
 
-    service.send({ type: "START" });
-    expect(service.getSnapshot().value).toBe("checkpoint");
-    expect(signals).toHaveLength(1);
-
     service.send({ type: "SELECT_AGENT", client: "cursor" });
-    service.send({ type: "START" });
 
     expect(service.getSnapshot().value).toBe("running");
     expect(signals.at(-1)).toEqual({
