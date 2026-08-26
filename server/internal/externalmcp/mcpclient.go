@@ -146,11 +146,12 @@ func NewClient(ctx context.Context, logger *slog.Logger, guardianPolicy *guardia
 	}
 
 	client := mcp.NewClient(&mcp.Implementation{
-		Name:       "gram-server",
-		Version:    "1.0.0",
-		Title:      "",
-		WebsiteURL: "https://getgram.ai",
-		Icons:      nil,
+		Name:        "gram-server",
+		Version:     "1.0.0",
+		Title:       "",
+		Description: "",
+		WebsiteURL:  "https://getgram.ai",
+		Icons:       nil,
 	}, nil)
 
 	// mcp.StreamableClientTransport treats MaxRetries == 0 as "use the SDK's
@@ -290,9 +291,11 @@ func (c *Client) CallTool(ctx context.Context, toolName string, arguments json.R
 
 	c.beginRequest()
 	callResult, err := c.session.CallTool(ctx, &mcp.CallToolParams{
-		Meta:      mcp.Meta{},
-		Name:      toolName,
-		Arguments: args,
+		Meta:           mcp.Meta{},
+		Name:           toolName,
+		Arguments:      args,
+		InputResponses: nil,
+		RequestState:   "",
 	})
 	if err != nil {
 		return nil, classifyRequestError("call tool on external mcp server", c.remoteURL, c.authRT, c.bodyLimitRT, err)
