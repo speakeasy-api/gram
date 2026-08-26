@@ -46,6 +46,7 @@ import type { TimeSeriesBucket } from "@gram/client/models/components/timeseries
 import type { UserAccount } from "@gram/client/models/components/useraccount.js";
 import type { UserSummary } from "@gram/client/models/components/usersummary.js";
 import { AccountRow } from "@/components/observe/account-display";
+import { mergeUserSummaries } from "@/components/observe/mergeUserSummaries";
 import { providerLabel } from "@/components/observe/account-display-utils";
 import {
   Select,
@@ -1892,14 +1893,14 @@ async function fetchUserSummary(
           userIds: [userId],
           externalOrgId: externalOrgId || undefined,
         },
-        limit: 1,
+        limit: 50,
         sort: "desc",
         userType: "internal",
       },
     }),
   );
 
-  return result.users[0] ?? null;
+  return mergeUserSummaries(result.users);
 }
 
 async function fetchUserMetrics(

@@ -465,6 +465,14 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 		excludedHookSources = billing.GramHostedHookSourceNames()
 	}
 
+	// Internal grouping widens the requested user keys to the whole identity
+	// each key names — group keys are email-first, so a bare gram user id (or
+	// one of a person's emails) reaches only a slice of their rows otherwise.
+	userKeys := filter.UserIds
+	if groupBy == "user_id" {
+		userKeys = s.expandUserSearchKeys(ctx, params.organizationID, userKeys)
+	}
+
 	searchParams := repo.SearchUsersParams{
 		ExcludedHookSources:  excludedHookSources,
 		GramProjectID:        params.projectID,
@@ -476,7 +484,7 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 		AccountType:          conv.PtrValOr(filter.AccountType, ""),
 		ExternalOrgID:        conv.PtrValOr(filter.ExternalOrgID, ""),
 		GroupBy:              groupBy,
-		UserIDs:              filter.UserIds,
+		UserIDs:              userKeys,
 		SortOrder:            params.sortOrder,
 		Cursor:               params.cursor,
 		Limit:                params.limit + 1,
@@ -870,6 +878,114 @@ func (s *Service) resolveEmployeeIdentity(ctx context.Context, orgID, identifier
 	return identity
 }
 
+// expandUserSearchKeys widens a searchUsers user-key filter to every key one
+// employee's summaries can appear under: their gram user id, their directory
+// email, and their linked provider-account emails. SearchUsers keys internal
+// summaries email-first, so a bare gram user id (or the directory email alone)
+// only reaches a slice of the person's rows — the token-bearing usage-import
+// rows key by provider account email (DNO-827). Batched: a fixed number of
+// directory lookups regardless of key count. Best-effort: a lookup failure
+// leaves the keys expanded as far as the successful lookups allow.
+func (s *Service) expandUserSearchKeys(ctx context.Context, orgID string, keys []string) []string {
+	if len(keys) == 0 {
+		return keys
+	}
+
+	out := make([]string, 0, len(keys)*2)
+	ids := make([]string, 0, len(keys))
+	emails := make([]string, 0, len(keys))
+	for _, key := range keys {
+		out = append(out, key)
+		if strings.Contains(key, "@") {
+			normalized := conv.NormalizeEmail(key)
+			out = append(out, normalized)
+			emails = append(emails, normalized)
+		} else {
+			ids = append(ids, key)
+		}
+	}
+	emails = dedupeNonEmpty(emails)
+
+	users := usersRepo.New(s.db)
+
+	if len(emails) > 0 {
+		rows, err := users.GetConnectedUsersByEmails(ctx, usersRepo.GetConnectedUsersByEmailsParams{
+			Emails:         emails,
+			OrganizationID: orgID,
+		})
+		if err != nil {
+			s.logger.WarnContext(ctx, "failed to resolve search emails to org users", attr.SlogError(err))
+		}
+		resolved := make(map[string]struct{}, len(rows))
+		for _, row := range rows {
+			resolved[conv.NormalizeEmail(row.Email)] = struct{}{}
+			ids = append(ids, row.ID)
+			out = append(out, row.Email, conv.NormalizeEmail(row.Email))
+		}
+
+		// A key that is no directory email may be a linked provider-account
+		// email; reverse-resolve it when exactly one owner claims it — the same
+		// rule resolveEmployeeIdentity applies. Only when the directory lookup
+		// succeeded: after a failure every email looks unresolved.
+		unresolved := make([]string, 0, len(emails))
+		if err == nil {
+			for _, email := range emails {
+				if _, ok := resolved[email]; !ok {
+					unresolved = append(unresolved, email)
+				}
+			}
+		}
+		if len(unresolved) > 0 {
+			accounts, err := s.hooksRepo.ListUserAccountsByEmails(ctx, hooksRepo.ListUserAccountsByEmailsParams{
+				OrganizationID: orgID,
+				Emails:         unresolved,
+			})
+			if err != nil {
+				s.logger.WarnContext(ctx, "failed to resolve search account emails to org users", attr.SlogError(err))
+			}
+			ownersByEmail := make(map[string][]string, len(accounts))
+			for _, account := range accounts {
+				email := conv.NormalizeEmail(conv.FromPGTextOrEmpty[string](account.Email))
+				ownersByEmail[email] = append(ownersByEmail[email], conv.FromPGTextOrEmpty[string](account.UserID))
+			}
+			for _, owners := range ownersByEmail {
+				if owners = dedupeNonEmpty(owners); len(owners) == 1 {
+					ids = append(ids, owners[0])
+				}
+			}
+		}
+	}
+
+	ids = dedupeNonEmpty(ids)
+
+	if len(ids) > 0 {
+		rows, err := users.GetConnectedUsersByIDs(ctx, usersRepo.GetConnectedUsersByIDsParams{
+			Ids:            ids,
+			OrganizationID: orgID,
+		})
+		if err != nil {
+			s.logger.WarnContext(ctx, "failed to resolve search user ids to org users", attr.SlogError(err))
+		}
+		for _, row := range rows {
+			out = append(out, row.Email, conv.NormalizeEmail(row.Email))
+		}
+
+		accounts, err := s.hooksRepo.ListUserAccountsByUsers(ctx, hooksRepo.ListUserAccountsByUsersParams{
+			OrganizationID: orgID,
+			UserIds:        ids,
+		})
+		if err != nil {
+			s.logger.WarnContext(ctx, "failed to load linked accounts for search keys", attr.SlogError(err))
+		}
+		for _, account := range accounts {
+			email := conv.FromPGTextOrEmpty[string](account.Email)
+			out = append(out, email, conv.NormalizeEmail(email))
+		}
+	}
+
+	return dedupeNonEmpty(append(out, ids...))
+}
+
 // expandEmployeeEmailFilters makes the generic cost analytics endpoints apply
 // the same employee identity fold as the dedicated employee endpoints. Values
 // without an @ are device-hostname buckets and retain literal filter semantics.
@@ -1076,6 +1192,10 @@ func (s *Service) searchUsersByRole(ctx context.Context, payload *telem_gen.Sear
 
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
+		// Same identity widening as the employee grouping: a requested key
+		// reaches all of that person's email-first group keys, not just the
+		// literal one. Inside the group so it overlaps the assignments fetch.
+		userKeys := s.expandUserSearchKeys(egCtx, params.organizationID, filter.UserIds)
 		var fetchErr error
 		items, fetchErr = s.chRepo.SearchUsers(egCtx, repo.SearchUsersParams{
 			ExcludedHookSources:  billing.GramHostedHookSourceNames(),
@@ -1088,7 +1208,7 @@ func (s *Service) searchUsersByRole(ctx context.Context, payload *telem_gen.Sear
 			AccountType:          conv.PtrValOr(filter.AccountType, ""),
 			ExternalOrgID:        conv.PtrValOr(filter.ExternalOrgID, ""),
 			GroupBy:              "user_id",
-			UserIDs:              filter.UserIds,
+			UserIDs:              userKeys,
 			SortOrder:            "desc",
 			Cursor:               "",
 			Limit:                10001,                  // Upper bound; orgs rarely have >10k users
@@ -1147,6 +1267,11 @@ func (s *Service) searchUsersByRole(ctx context.Context, payload *telem_gen.Sear
 	}
 	aggByRole := make(map[string]*roleAgg, len(userToRole))
 
+	// One person's rows can key several summaries (work email, personal
+	// account email, bare id); count each resolved owner once per role so
+	// CostPerUser divides by people, not identity keys.
+	seenByRole := make(map[string]map[string]struct{})
+
 	const unassignedRoleID = "unassigned"
 	for _, item := range items {
 		ri := roleInfo{id: unassignedRoleID, name: "Unassigned"}
@@ -1180,7 +1305,17 @@ func (s *Service) searchUsersByRole(ctx context.Context, payload *telem_gen.Sear
 			aggByRole[ri.id] = agg
 		}
 		s := agg.summary
-		s.UserCount++
+		ownerKey := item.UserID
+		if owner, ok := ownerByKey[item.UserID]; ok {
+			ownerKey = owner
+		}
+		if seenByRole[ri.id] == nil {
+			seenByRole[ri.id] = make(map[string]struct{})
+		}
+		if _, dup := seenByRole[ri.id][ownerKey]; !dup {
+			seenByRole[ri.id][ownerKey] = struct{}{}
+			s.UserCount++
+		}
 		s.TotalCost += item.TotalCost
 		s.TotalInputTokens += item.TotalInputTokens
 		s.TotalOutputTokens += item.TotalOutputTokens
