@@ -122,6 +122,29 @@ func TestNew_DeduplicatesCanonicalFromPlatformList(t *testing.T) {
 	require.Equal(t, []*url.URL{mustParse(t, canonicalURL), mustParse(t, secondaryURL)}, h.PlatformHosts())
 }
 
+// Gram serves the callback route on the outbound callback host, so that host
+// has to be first-party — otherwise the custom-domain middleware 403s every
+// upstream redirect back into a remote login.
+func TestNew_OutboundCallbackHostIsAlwaysAPlatformHost(t *testing.T) {
+	t.Parallel()
+
+	h, err := hosts.New(testenv.NewLogger(t), newConn(t),
+		mustParse(t, secondaryURL), nil, mustParse(t, canonicalURL))
+	require.NoError(t, err)
+
+	require.True(t, h.IsPlatform("app.getgram.ai"))
+	require.Equal(t, []*url.URL{mustParse(t, secondaryURL), mustParse(t, canonicalURL)}, h.PlatformHosts())
+}
+
+// A Host header is not required to be lowercase.
+func TestIsPlatform_IsCaseInsensitive(t *testing.T) {
+	t.Parallel()
+
+	h := newHosts(t, newConn(t))
+
+	require.True(t, h.IsPlatform("App.GetGram.AI"))
+}
+
 func TestNew_RejectsMissingConfiguration(t *testing.T) {
 	t.Parallel()
 
@@ -139,6 +162,49 @@ func TestNew_RejectsMissingConfiguration(t *testing.T) {
 	require.Error(t, err)
 
 	_, err = hosts.New(logger, conn, canonical, []*url.URL{{}}, canonical)
+	require.Error(t, err)
+
+	// A scheme-relative URL parses cleanly and has a host, but cannot be
+	// rendered as an absolute public URL.
+	schemeless := mustParse(t, "//app.getgram.ai")
+	require.Equal(t, "app.getgram.ai", schemeless.Host)
+
+	_, err = hosts.New(logger, conn, schemeless, nil, canonical)
+	require.Error(t, err)
+
+	_, err = hosts.New(logger, conn, canonical, nil, schemeless)
+	require.Error(t, err)
+
+	_, err = hosts.New(logger, conn, canonical, []*url.URL{schemeless}, canonical)
+	require.Error(t, err)
+
+	_, err = hosts.ParseList("//app.getgram.ai")
+	require.Error(t, err)
+}
+
+func TestNewFromConfig(t *testing.T) {
+	t.Parallel()
+
+	conn := newConn(t)
+	logger := testenv.NewLogger(t)
+	canonical := mustParse(t, canonicalURL)
+
+	// An unset outbound callback follows the canonical host.
+	h, err := hosts.NewFromConfig(logger, conn, canonical, "", "")
+	require.NoError(t, err)
+	require.Equal(t, canonicalURL, h.OutboundCallback().String())
+	require.Equal(t, []*url.URL{canonical}, h.PlatformHosts())
+
+	h, err = hosts.NewFromConfig(logger, conn, canonical, secondaryURL, "https://callback.example.com")
+	require.NoError(t, err)
+	require.Equal(t, "https://callback.example.com", h.OutboundCallback().String())
+	require.True(t, h.IsPlatform("callback.example.com"))
+	require.True(t, h.IsPlatform("ai.speakeasy.com"))
+
+	_, err = hosts.NewFromConfig(logger, conn, canonical, "", "not-a-url")
+	require.Error(t, err)
+
+	_, err = hosts.NewFromConfig(logger, conn, canonical, "not-a-url", "")
 	require.Error(t, err)
 }
 

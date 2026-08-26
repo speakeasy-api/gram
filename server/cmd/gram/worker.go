@@ -729,22 +729,7 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("failed to parse server url: %w", err)
 			}
 
-			// An unset outbound callback follows server-url, which keeps a
-			// single-host deployment behaving exactly as it does today.
-			outboundCallbackURL := serverURL
-			if raw := c.String("outbound-callback-url"); raw != "" {
-				outboundCallbackURL, err = url.Parse(raw)
-				if err != nil {
-					return fmt.Errorf("failed to parse outbound callback url: %w", err)
-				}
-			}
-
-			platformHostURLs, err := hosts.ParseList(c.String("platform-hosts"))
-			if err != nil {
-				return fmt.Errorf("failed to parse platform hosts: %w", err)
-			}
-
-			platformHosts, err := hosts.New(logger, db, serverURL, platformHostURLs, outboundCallbackURL)
+			platformHosts, err := hosts.NewFromConfig(logger, db, serverURL, c.String("platform-hosts"), c.String("outbound-callback-url"))
 			if err != nil {
 				return fmt.Errorf("failed to build host model: %w", err)
 			}

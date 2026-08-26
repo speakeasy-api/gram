@@ -49,27 +49,37 @@ type Hosts struct {
 // New builds the host model for a deployment.
 //
 // canonical is the deployment's primary host (GRAM_SERVER_URL). platform is
-// every first-party host the deployment answers on; the canonical host is
-// always one of them, whether or not it appears in the list. outboundCallback
+// every additional first-party host the deployment answers on. outboundCallback
 // is the host upstream OAuth providers redirect back to.
+//
+// The canonical host and the outbound callback host are always platform hosts,
+// whether or not they appear in the list. The callback host has to be: Gram
+// serves the callback route there, and a host that is not first-party is
+// rejected by the custom-domain middleware, which would 403 every upstream
+// redirect back into a remote login.
 func New(logger *slog.Logger, db *pgxpool.Pool, canonical *url.URL, platform []*url.URL, outboundCallback *url.URL) (*Hosts, error) {
-	switch {
-	case db == nil:
+	if db == nil {
 		return nil, errors.New("hosts: database pool is required")
-	case canonical == nil || canonical.Host == "":
-		return nil, errors.New("hosts: canonical url is required")
-	case outboundCallback == nil || outboundCallback.Host == "":
-		return nil, errors.New("hosts: outbound callback url is required")
+	}
+	if err := validate("canonical url", canonical); err != nil {
+		return nil, err
+	}
+	if err := validate("outbound callback url", outboundCallback); err != nil {
+		return nil, err
 	}
 
 	all := []*url.URL{origin(canonical)}
-	for _, u := range platform {
-		if u == nil || u.Host == "" {
-			return nil, errors.New("hosts: platform host list contains an empty url")
-		}
+	add := func(u *url.URL) {
 		if o := origin(u); !slices.ContainsFunc(all, func(known *url.URL) bool { return known.Host == o.Host }) {
 			all = append(all, o)
 		}
+	}
+	add(outboundCallback)
+	for _, u := range platform {
+		if err := validate("platform host", u); err != nil {
+			return nil, err
+		}
+		add(u)
 	}
 
 	return &Hosts{
@@ -79,6 +89,41 @@ func New(logger *slog.Logger, db *pgxpool.Pool, canonical *url.URL, platform []*
 		platform:         all,
 		outboundCallback: origin(outboundCallback),
 	}, nil
+}
+
+// NewFromConfig builds the host model from the raw flag values the server and
+// worker commands carry, so the two stay in step as the model grows. An empty
+// outboundCallbackRaw follows the canonical host, which is what a single-host
+// deployment wants.
+func NewFromConfig(logger *slog.Logger, db *pgxpool.Pool, canonical *url.URL, platformHostsRaw, outboundCallbackRaw string) (*Hosts, error) {
+	platform, err := ParseList(platformHostsRaw)
+	if err != nil {
+		return nil, err
+	}
+
+	outboundCallback := canonical
+	if outboundCallbackRaw != "" {
+		outboundCallback, err = url.Parse(outboundCallbackRaw)
+		if err != nil {
+			return nil, fmt.Errorf("parse outbound callback url %q: %w", outboundCallbackRaw, err)
+		}
+	}
+
+	return New(logger, db, canonical, platform, outboundCallback)
+}
+
+// validate rejects a URL that cannot be rendered as an absolute public one. A
+// scheme-relative URL such as //app.getgram.ai parses without error and has a
+// host, so the host check alone would let it through.
+func validate(what string, u *url.URL) error {
+	switch {
+	case u == nil || u.Host == "":
+		return fmt.Errorf("hosts: %s is required", what)
+	case u.Scheme == "":
+		return fmt.Errorf("hosts: %s %q has no scheme", what, u.String())
+	default:
+		return nil
+	}
 }
 
 // ParseList parses a comma-separated list of platform host URLs, as the
@@ -95,8 +140,8 @@ func ParseList(raw string) ([]*url.URL, error) {
 		if err != nil {
 			return nil, fmt.Errorf("parse platform host %q: %w", part, err)
 		}
-		if u.Host == "" {
-			return nil, fmt.Errorf("platform host %q has no host component", part)
+		if err := validate("platform host", u); err != nil {
+			return nil, err
 		}
 		out = append(out, u)
 	}
@@ -135,11 +180,15 @@ func (h *Hosts) Auth() *url.URL { return clone(h.canonical) }
 func (h *Hosts) OutboundCallback() *url.URL { return clone(h.outboundCallback) }
 
 // IsPlatform reports whether a request host (the Host header, so possibly with
-// a port) is one of the deployment's first-party hosts.
+// a port) is one of the deployment's first-party hosts. Hosts are compared
+// case-insensitively: a Host header is not required to be lowercase, and
+// rejecting a mixed-case one would drop a first-party request into the
+// custom-domain lookup and 403 it.
 func (h *Hosts) IsPlatform(host string) bool {
 	if host == "" {
 		return false
 	}
+	host = strings.ToLower(host)
 	return slices.ContainsFunc(h.platform, func(u *url.URL) bool { return u.Host == host })
 }
 
@@ -174,7 +223,7 @@ func (h *Hosts) Resolve(ctx context.Context, req *http.Request, organizationID s
 			appDomain = h.appScopedDomain(ctx, organizationID)
 			appDomainLoaded = true
 		}
-		return appDomain != "" && appDomain == host
+		return appDomain != "" && strings.EqualFold(appDomain, host)
 	}
 
 	if req != nil && servable(req.Host) {
@@ -194,7 +243,7 @@ func (h *Hosts) Resolve(ctx context.Context, req *http.Request, organizationID s
 // domains share the deployment's scheme (https everywhere but local dev), so
 // there is nothing per-host to carry.
 func (h *Hosts) at(host string) *url.URL {
-	return &url.URL{Scheme: h.canonical.Scheme, Host: host}
+	return &url.URL{Scheme: h.canonical.Scheme, Host: strings.ToLower(host)}
 }
 
 // defaultHost is the organization's configured default host, empty when unset
@@ -235,7 +284,7 @@ func (h *Hosts) appScopedDomain(ctx context.Context, organizationID string) stri
 // origin strips everything but scheme and host, so a configured URL with a
 // trailing path or query cannot leak into a rendered one.
 func origin(u *url.URL) *url.URL {
-	return &url.URL{Scheme: u.Scheme, Host: u.Host}
+	return &url.URL{Scheme: u.Scheme, Host: strings.ToLower(u.Host)}
 }
 
 func clone(u *url.URL) *url.URL {
