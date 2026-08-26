@@ -225,7 +225,7 @@ func TestCreateSkillReportsTheSkillIsInertUntilDistributed(t *testing.T) {
 	require.True(t, result.CreatedSkill)
 	require.False(t, result.Distributed)
 	require.Equal(t, "distribute_skill", result.NextAction)
-	require.Contains(t, result.InertMessage, "inert")
+	require.Contains(t, result.InertMessage, "no agent loads it yet")
 	// The result names where the skill can be sent, so a caller does not have
 	// to guess a target — or assume authoring already activated it.
 	require.NotEmpty(t, result.DistributionTargets)

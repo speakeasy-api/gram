@@ -11,15 +11,15 @@ import (
 )
 
 type GetMCPClientAdmissionToolInput struct {
-	ProjectSlug    string `json:"project_slug" jsonschema:"explicit AICP project slug that owns the reviewed MCP registration"`
+	ProjectSlug    string `json:"project_slug" jsonschema:"explicit project slug that owns the reviewed MCP registration"`
 	RegistrationID string `json:"registration_id" jsonschema:"Platform MCP registration ID returned by register_catalog_mcp or register_remote_mcp"`
 }
 
 type SetMCPClientAdmissionToolInput struct {
-	ProjectSlug    string `json:"project_slug" jsonschema:"explicit AICP project slug that owns the reviewed MCP registration"`
+	ProjectSlug    string `json:"project_slug" jsonschema:"explicit project slug that owns the reviewed MCP registration"`
 	RegistrationID string `json:"registration_id" jsonschema:"Platform MCP registration ID returned by register_catalog_mcp or register_remote_mcp"`
-	Mode           string `json:"mode" jsonschema:"admission policy for MCP clients that identify themselves with a client ID metadata document; one of presets, open, or disabled"`
-	Confirmed      bool   `json:"confirmed" jsonschema:"set true only after the user explicitly confirms this exact admission mode for this exact MCP; the change takes effect for every MCP client of the server"`
+	Mode           string `json:"mode" jsonschema:"which MCP clients that identify themselves with a client ID metadata document may sign in; one of presets, open, or disabled"`
+	Confirmed      bool   `json:"confirmed" jsonschema:"set true only after the user explicitly confirms this exact setting for this exact MCP server; it takes effect for every app that connects to it"`
 }
 
 type MCPClientAdmissionToolOutput struct {
@@ -41,15 +41,15 @@ type clientAdmissionErrorResult struct {
 func modeGuidance(mode string) string {
 	switch admission.Mode(mode) {
 	case admission.ModePresets:
-		return "Known clients only: the reviewed preset catalogue plus this MCP's own custom client ID metadata URLs are admitted. Any other client is refused at authorization and cannot fall back."
+		return "Known apps only: the reviewed list of apps, plus any custom client ID metadata URLs you add for this MCP server. Every other app is turned away when it tries to sign in, with no way through."
 	case admission.ModeOpen:
-		return "Open: every spec-valid client ID metadata document is admitted. Document validation still applies."
+		return "Open: any app with a valid client ID metadata document can sign in. The document is still checked."
 	case admission.ModeDisabled:
-		return "Disabled: no client ID metadata document is admitted, and the server stops advertising support for them, so clients use dynamic client registration instead."
+		return "Off: client ID metadata documents are not accepted at all, and the server stops advertising them, so apps use dynamic client registration instead."
 	case admission.ModeReporting:
 		// Not writable, but an unconfigured issuer resolves to it, so a read
 		// can legitimately return it.
-		return "Not enforced yet: every client is admitted while the platform records what a Known clients policy would have refused."
+		return "Watching only: every app can sign in, while we record which ones \"known apps only\" would have turned away."
 	default:
 		return ""
 	}
@@ -58,14 +58,14 @@ func modeGuidance(mode string) string {
 func registerUnavailableClientAdmissionTools(reg *Registrar) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_mcp_client_admission",
-		Title:       "Get MCP Client Admission",
-		Description: "Read a reviewed MCP's client admission policy. Client admission is not available in the current preview.",
+		Title:       "Which Apps Can Sign In",
+		Description: "Show which apps can sign in to an MCP server. This is not switched on for your organization yet.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("client_admission"))
 	addTool(reg, &mcp.Tool{
 		Name:        "set_mcp_client_admission",
-		Title:       "Set MCP Client Admission",
-		Description: "Set a reviewed MCP's client admission policy. Client admission is not available in the current preview.",
+		Title:       "Choose Which Apps Can Sign In",
+		Description: "Choose which apps can sign in to an MCP server. This is not switched on for your organization yet.",
 	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("client_admission"))
 }
 
@@ -76,8 +76,8 @@ func registerUnavailableClientAdmissionTools(reg *Registrar) {
 func registerClientAdmissionTools(reg *Registrar, registrations *RegistrationService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_mcp_client_admission",
-		Title:       "Get MCP Client Admission",
-		Description: "Return which MCP clients may authorize against one registered MCP: the effective client ID metadata document admission mode, the modes that can be set, and this MCP's own custom client ID metadata URLs. Read this before proposing a change.",
+		Title:       "Which Apps Can Sign In",
+		Description: "Show which MCP clients are allowed to sign in to one MCP server: the setting in force now, the settings you can choose, and any custom client ID metadata URLs this MCP server allows on top. Read this before proposing a change.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMCPClientAdmissionToolInput) (*mcp.CallToolResult, MCPClientAdmissionToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
@@ -96,8 +96,8 @@ func registerClientAdmissionTools(reg *Registrar, registrations *RegistrationSer
 
 	addTool(reg, &mcp.Tool{
 		Name:        "set_mcp_client_admission",
-		Title:       "Set MCP Client Admission",
-		Description: "Set which MCP clients may authorize against one registered MCP. Present the current mode from get_mcp_client_admission and the consequence of the proposed one, ask for explicit user confirmation, then call this with confirmed: true. Known clients (presets) refuses unlisted clients at authorization with no fallback, so confirm the user accepts that. This tool never accepts or returns credentials, OAuth codes, tokens, or client secrets.",
+		Title:       "Choose Which Apps Can Sign In",
+		Description: "Choose which MCP clients may sign in to one MCP server. Show the user the setting in force now, from get_mcp_client_admission, and what the new one would mean, ask them to confirm out loud, then call this with confirmed: true. Constraints: \"known apps only\" turns away every app that is not on the list, with no way through — make sure the user accepts that. This tool never accepts or returns credentials, OAuth codes, tokens, or client secrets.",
 	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input SetMCPClientAdmissionToolInput) (*mcp.CallToolResult, MCPClientAdmissionToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
@@ -134,9 +134,9 @@ func clientAdmissionToolOutput(projectSlug, registrationID string, result Client
 func clientAdmissionToolError(err error) (*mcp.CallToolResult, bool) {
 	switch {
 	case errors.Is(err, ErrClientAdmissionInvalid):
-		return clientAdmissionErrorTool("invalid_request", "This registration is not a complete Platform-managed MCP with its own authentication settings, or the request no longer matches its persisted state. Re-read find_mcp or get_mcp and do not retry unchanged input."), true
+		return clientAdmissionErrorTool("invalid_request", "This MCP server is not fully set up with its own sign-in settings, or something about it changed since you last looked. Read it again with find_mcp or get_mcp; do not retry the same input."), true
 	case errors.Is(err, ErrClientAdmissionUnavailable):
-		return clientAdmissionErrorTool(unavailableCode, "Client admission settings are temporarily unavailable. No admission mode was changed. Retry later or use the MCP server's Authentication settings page."), true
+		return clientAdmissionErrorTool(unavailableCode, "This setting is temporarily unavailable, and nothing was changed. Try again later, or use the MCP server's Authentication settings page."), true
 	default:
 		return operationBudgetToolResult(err)
 	}
