@@ -2,16 +2,24 @@ package mcp_test
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	access_repo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcp_repo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -45,8 +53,9 @@ func clientRemoteIssuerID(t *testing.T, ctx context.Context, conn *pgxpool.Pool,
 // gatewayMember identifies a seeded member so a test can disable, detach, or
 // tombstone it after the fact.
 type gatewayMember struct {
-	mcpServerID uuid.UUID
-	memberID    uuid.UUID
+	mcpServerID    uuid.UUID
+	remoteServerID uuid.UUID
+	memberID       uuid.UUID
 }
 
 // createGatewayMember attaches a remote-backed member to metaServerID. The
@@ -60,10 +69,20 @@ func createGatewayMember(t *testing.T, ctx context.Context, conn *pgxpool.Pool, 
 
 func createGatewayMemberWithVisibility(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, metaServerID uuid.UUID, slug, serverURL string, remoteIssuerID uuid.NullUUID, sortOrder int32, visibility string) gatewayMember {
 	t.Helper()
+	return createGatewayMemberWithUpstreamIn(t, ctx, conn, projectID, projectID, metaServerID, slug, serverURL, remoteIssuerID, sortOrder, visibility)
+}
+
+// createGatewayMemberWithUpstreamIn attaches a member whose remote_mcp_servers
+// row lives in upstreamProjectID, which normally equals the member's own
+// project. Pointing it elsewhere is how a test reproduces a cross-tenant
+// upstream reference: mcp_servers.remote_mcp_server_id is a single-column FK,
+// so nothing in the schema requires the two projects to agree.
+func createGatewayMemberWithUpstreamIn(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, upstreamProjectID, metaServerID uuid.UUID, slug, serverURL string, remoteIssuerID uuid.NullUUID, sortOrder int32, visibility string) gatewayMember {
+	t.Helper()
 
 	remoteServer, err := remotemcp_repo.New(conn).CreateServer(ctx, remotemcp_repo.CreateServerParams{
 		ID:            uuid.New(),
-		ProjectID:     projectID,
+		ProjectID:     upstreamProjectID,
 		TransportType: "sse",
 		Url:           serverURL,
 	})
@@ -81,22 +100,63 @@ func createGatewayMemberWithVisibility(t *testing.T, ctx context.Context, conn *
 	require.NoError(t, err)
 	stampRemoteSessionIssuer(t, ctx, conn, projectID, mcpServer.ID, remoteIssuerID)
 
-	return gatewayMember{mcpServerID: mcpServer.ID, memberID: attachGatewayMember(t, ctx, conn, projectID, metaServerID, mcpServer.ID, sortOrder)}
+	return gatewayMember{
+		mcpServerID:    mcpServer.ID,
+		remoteServerID: remoteServer.ID,
+		memberID:       attachGatewayMember(t, ctx, conn, projectID, metaServerID, mcpServer.ID, sortOrder),
+	}
+}
+
+// createSiblingProject creates a second project in the same organization, so a
+// test can plant a row that only the query's project predicates keep out.
+func createSiblingProject(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string) uuid.UUID {
+	t.Helper()
+	slug := "aim87-sibling-" + uuid.NewString()[:8]
+	project, err := projects_repo.New(conn).CreateProject(ctx, projects_repo.CreateProjectParams{
+		Name:           slug,
+		Slug:           slug,
+		OrganizationID: organizationID,
+	})
+	require.NoError(t, err)
+	return project.ID
+}
+
+// seedGatewayMemberConnectGrant grants mcp:connect on one member to every user
+// in the organization. That is the principal a consent subject resolves
+// through: the subject is a session user, not an organization member, so a
+// grant written against its own user URN would never load.
+func seedGatewayMemberConnectGrant(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, mcpServerID uuid.UUID) {
+	t.Helper()
+	selectors, err := authz.NewSelector(authz.ScopeMCPConnect, mcpServerID.String()).MarshalJSON()
+	require.NoError(t, err)
+	_, err = access_repo.New(conn).UpsertPrincipalGrant(ctx, access_repo.UpsertPrincipalGrantParams{
+		OrganizationID: organizationID,
+		PrincipalUrn:   authz.AllUsersPrincipal(),
+		Scope:          string(authz.ScopeMCPConnect),
+		Selectors:      selectors,
+	})
+	require.NoError(t, err)
 }
 
 // stampRemoteSessionIssuer writes the column the way the binding resync does.
 // Server creation cannot set it — a server has no client bindings yet at that
 // point — so tests stamp it after the fact, as production does.
+//
+// Insists the stamp landed on exactly one row. A stamp that matched nothing
+// would leave a negative test asserting the absence of a member it never
+// created, which passes for the wrong reason.
 func stampRemoteSessionIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, mcpServerID uuid.UUID, remoteIssuerID uuid.NullUUID) {
 	t.Helper()
 	if !remoteIssuerID.Valid {
 		return
 	}
-	require.NoError(t, testrepo.New(conn).SetMcpServerRemoteSessionIssuerFixture(ctx, testrepo.SetMcpServerRemoteSessionIssuerFixtureParams{
+	stamped, err := testrepo.New(conn).SetMcpServerRemoteSessionIssuerFixture(ctx, testrepo.SetMcpServerRemoteSessionIssuerFixtureParams{
 		RemoteSessionIssuerID: remoteIssuerID,
 		ID:                    mcpServerID,
 		ProjectID:             projectID,
-	}))
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), stamped, "the issuer stamp must land on exactly one live server")
 }
 
 // createTunneledGatewayMember attaches a tunneled member stamped with an
@@ -126,7 +186,11 @@ func createTunneledGatewayMember(t *testing.T, ctx context.Context, conn *pgxpoo
 	require.NoError(t, err)
 	stampRemoteSessionIssuer(t, ctx, conn, projectID, mcpServer.ID, remoteIssuerID)
 
-	return gatewayMember{mcpServerID: mcpServer.ID, memberID: attachGatewayMember(t, ctx, conn, projectID, metaServerID, mcpServer.ID, sortOrder)}
+	return gatewayMember{
+		mcpServerID:    mcpServer.ID,
+		remoteServerID: uuid.Nil,
+		memberID:       attachGatewayMember(t, ctx, conn, projectID, metaServerID, mcpServer.ID, sortOrder),
+	}
 }
 
 func attachGatewayMember(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, metaServerID, mcpServerID uuid.UUID, sortOrder int32) uuid.UUID {
@@ -327,7 +391,14 @@ func TestServeConsentAction_GatewayConnectExcludesMembersTheSubjectCannotConnect
 	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-rbac", "", []uuid.UUID{fx.shared})
 	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
 
-	// Private, and the anonymous consent subject holds no mcp:connect on it.
+	// Private, and the consent subject — a user URN that belongs to no
+	// organization, so its only principal is user:all — holds no mcp:connect on
+	// it. It is a denial, not a missing AuthContext: a genuinely anonymous
+	// subject would carry no AuthContext at all, and Require would answer
+	// CodeUnauthorized rather than CodeForbidden, which the propagation branch
+	// turns into a failed consent instead of an excluded member. That state is
+	// unreachable here — a meta endpoint always has an issuer, so /authorize
+	// forces the IDP before consent is ever served.
 	createGatewayMemberWithVisibility(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-rbac-private", "https://private.example.com/mcp", conv.ToNullUUID(issuerID), 0, "private")
 
 	loc := postConnectAction(t, fx, clientID)
@@ -338,6 +409,64 @@ func TestServeConsentAction_GatewayConnectExcludesMembersTheSubjectCannotConnect
 	// the authorization check and not the lookup failing to see it at all.
 	createGatewayMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-rbac-public", "https://public.example.com/mcp", conv.ToNullUUID(issuerID), 1)
 	require.Equal(t, "https://public.example.com/mcp", postConnectAction(t, fx, clientID).Query().Get("resource"))
+}
+
+// The exclusion above is a per-subject decision, not a blanket refusal of
+// private members: a subject that does hold mcp:connect has that member
+// qualify its credential, and a private sibling it cannot reach neither claims
+// the credential nor makes the answer ambiguous.
+func TestServeConsentAction_GatewayConnectResolvesAPrivateMemberTheSubjectCanConnectTo(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx, metaServerID := seedGatewayConsentEndpoint(t, "aim87-grant-gw")
+
+	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-grant", "", []uuid.UUID{fx.shared})
+	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
+
+	const granted = "https://granted.example.com/mcp"
+	reachable := createGatewayMemberWithVisibility(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-grant-reachable", granted, conv.ToNullUUID(issuerID), 0, "private")
+	// Behind the same authorization server and left ungranted, so it stays
+	// unreachable throughout and must never contest the claim of the member the
+	// subject can reach.
+	createGatewayMemberWithVisibility(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-grant-unreachable", "https://ungranted.example.com/mcp", conv.ToNullUUID(issuerID), 1, "private")
+
+	_, hasResource := postConnectAction(t, fx, clientID).Query()["resource"]
+	require.False(t, hasResource, "neither member is reachable yet, so the grant below is what changes the answer")
+
+	seedGatewayMemberConnectGrant(t, ctx, fx.ti.conn, fx.orgID, reachable.mcpServerID)
+
+	loc := postConnectAction(t, fx, clientID)
+	require.Equal(t, granted, loc.Query().Get("resource"), "a private member the subject holds mcp:connect on must qualify the credential")
+	require.Equal(t, granted, mintedRemoteLoginState(t, ctx, fx, loc.Query().Get("state")).Resource)
+}
+
+// A member that claimed the credential outranks the stored per-client
+// derivation even when the derivation has a different answer of its own. The
+// member matched this client's authorization server; the derivation only knows
+// which servers the client is bound to, and letting it win would send the
+// credential to an upstream that never claimed it.
+func TestServeConsentAction_GatewayConnectMemberClaimOutranksTheFallback(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx, metaServerID := seedGatewayConsentEndpoint(t, "aim87-precedence-gw")
+
+	memberIssuer := createUserSessionIssuer(t, ctx, fx.ti.conn, fx.projectID)
+	attachConsentRemoteMcpServer(t, ctx, fx.ti.conn, fx.projectID, memberIssuer, "aim87-precedence-srv", consentUpstreamA)
+
+	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-precedence", "", []uuid.UUID{fx.shared, memberIssuer})
+	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
+
+	// Positive control: the fallback has a real answer, and a different one.
+	require.Equal(t, consentUpstreamA, postConnectAction(t, fx, clientID).Query().Get("resource"),
+		"the stored derivation must be able to answer, or this test proves nothing")
+
+	const claimed = "https://claimed.example.com/mcp"
+	createGatewayMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-precedence-member", claimed, conv.ToNullUUID(issuerID), 0)
+
+	loc := postConnectAction(t, fx, clientID)
+	require.Equal(t, claimed, loc.Query().Get("resource"), "the member that claimed the issuer must outrank the stored derivation")
+	require.Equal(t, claimed, mintedRemoteLoginState(t, ctx, fx, loc.Query().Get("state")).Resource,
+		"and the claim must survive onto the login state, not just the redirect")
 }
 
 // A disabled member does not exist for the serving path, so it must not
@@ -355,6 +484,169 @@ func TestServeConsentAction_GatewayConnectIgnoresDisabledMembers(t *testing.T) {
 	loc := postConnectAction(t, fx, clientID)
 	_, hasResource := loc.Query()["resource"]
 	require.False(t, hasResource, "a disabled member must not qualify a credential")
+}
+
+// A visibility that is neither known value must fail closed. The query
+// excludes only the one value it names, so a visibility added later reaches the
+// authorization switch, and admitting it there would let a member whose access
+// nobody can evaluate claim a credential unchecked.
+func TestServeConsentAction_GatewayConnectIgnoresUnknownVisibility(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx, metaServerID := seedGatewayConsentEndpoint(t, "aim87-unknown-vis-gw")
+
+	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-unknown-vis", "", []uuid.UUID{fx.shared})
+	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
+
+	// mcp_servers.visibility is only constrained to be non-empty, so a value
+	// outside the known set is storable exactly as a future migration would
+	// introduce one.
+	createGatewayMemberWithVisibility(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-unknown-vis-member", "https://unknown-visibility.example.com/mcp", conv.ToNullUUID(issuerID), 0, "unlisted")
+
+	loc := postConnectAction(t, fx, clientID)
+	_, hasResource := loc.Query()["resource"]
+	require.False(t, hasResource, "a visibility the authorization switch cannot evaluate must not qualify a credential")
+}
+
+// The upstream URL must come from this project's own remote server row.
+// mcp_servers.remote_mcp_server_id is a single-column foreign key, so the
+// schema permits a member pointing at another tenant's upstream and only the
+// lookup's project predicate keeps that URL out of a credential's resource.
+func TestServeConsentAction_GatewayConnectIgnoresAnotherProjectsUpstream(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx, metaServerID := seedGatewayConsentEndpoint(t, "aim87-tenancy-gw")
+
+	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-tenancy", "", []uuid.UUID{fx.shared})
+	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
+
+	sibling := createSiblingProject(t, ctx, fx.ti.conn, fx.orgID)
+	createGatewayMemberWithUpstreamIn(t, ctx, fx.ti.conn, fx.projectID, sibling, metaServerID, "aim87-tenancy-foreign", "https://another-tenant.example.com/mcp", conv.ToNullUUID(issuerID), 0, "public")
+
+	loc := postConnectAction(t, fx, clientID)
+	_, hasResource := loc.Query()["resource"]
+	require.False(t, hasResource, "an upstream row owned by another project must not qualify this project's credential")
+
+	// The same member with its upstream in this project does resolve, so the
+	// exclusion above was the project predicate and not the stamp or the join.
+	createGatewayMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-tenancy-mine", "https://mine.example.com/mcp", conv.ToNullUUID(issuerID), 1)
+	require.Equal(t, "https://mine.example.com/mcp", postConnectAction(t, fx, clientID).Query().Get("resource"))
+}
+
+// A tombstoned member server keeps its membership row — soft-deleting a server
+// and detaching it from a gateway are separate writes — so the lookup, not the
+// membership, is what has to stop answering for it.
+func TestServeConsentAction_GatewayConnectIgnoresTombstonedMemberServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx, metaServerID := seedGatewayConsentEndpoint(t, "aim87-dead-srv-gw")
+
+	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-dead-srv", "", []uuid.UUID{fx.shared})
+	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
+
+	const upstream = "https://dead-srv.example.com/mcp"
+	member := createGatewayMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-dead-srv-member", upstream, conv.ToNullUUID(issuerID), 0)
+	require.Equal(t, upstream, postConnectAction(t, fx, clientID).Query().Get("resource"), "the member must resolve while it is live")
+
+	_, err := mcpservers_repo.New(fx.ti.conn).DeleteMCPServer(ctx, mcpservers_repo.DeleteMCPServerParams{
+		ID:        member.mcpServerID,
+		ProjectID: fx.projectID,
+	})
+	require.NoError(t, err)
+
+	loc := postConnectAction(t, fx, clientID)
+	_, hasResource := loc.Query()["resource"]
+	require.False(t, hasResource, "a tombstoned member server must stop qualifying credentials")
+}
+
+// The upstream row carries its own soft delete, and a member whose upstream is
+// gone has no URL a token could be routed to.
+func TestServeConsentAction_GatewayConnectIgnoresTombstonedUpstream(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx, metaServerID := seedGatewayConsentEndpoint(t, "aim87-dead-upstream-gw")
+
+	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-dead-upstream", "", []uuid.UUID{fx.shared})
+	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
+
+	const upstream = "https://dead-upstream.example.com/mcp"
+	member := createGatewayMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-dead-upstream-member", upstream, conv.ToNullUUID(issuerID), 0)
+	require.Equal(t, upstream, postConnectAction(t, fx, clientID).Query().Get("resource"), "the member must resolve while its upstream is live")
+
+	_, err := remotemcp_repo.New(fx.ti.conn).DeleteServer(ctx, remotemcp_repo.DeleteServerParams{
+		ID:        member.remoteServerID,
+		ProjectID: fx.projectID,
+	})
+	require.NoError(t, err)
+
+	loc := postConnectAction(t, fx, clientID)
+	_, hasResource := loc.Query()["resource"]
+	require.False(t, hasResource, "a tombstoned upstream must stop qualifying credentials")
+}
+
+// requireConnectActionFailsClosed drives one client's connect action and
+// asserts it errored before minting anything: no upstream redirect, no login
+// state, and therefore no grant that could carry a wrongly derived resource.
+func requireConnectActionFailsClosed(t *testing.T, fx consentActionFixture, clientID uuid.UUID) {
+	t.Helper()
+
+	form := url.Values{}
+	form.Set("state", fx.stateID)
+	form.Set("csrf_token", "csrf-token")
+	form.Set("action", "connect")
+	form.Set("client_id", clientID.String())
+
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect/remote-session", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+
+	err := fx.ti.service.ServeConsentAction(w, req, fx.endpoint)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "derive client upstream resource")
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
+	require.Empty(t, w.Header().Get("Location"), "fail closed: no upstream redirect may be minted")
+}
+
+// A member lookup that faults must fail the connect closed. Treating the fault
+// as "no member claimed this" would hand the question to the weaker per-client
+// derivation, which answers for a different reason entirely.
+func TestServeConsentAction_GatewayConnectLookupErrorFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx, metaServerID := seedGatewayConsentEndpoint(t, "aim87-lookup-fault-gw")
+
+	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-lookup-fault", "", []uuid.UUID{fx.shared})
+	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
+	createGatewayMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-lookup-fault-member", "https://lookup-fault.example.com/mcp", conv.ToNullUUID(issuerID), 0)
+
+	// Break only the member lookup's table; everything the connect arm touches
+	// before it is already seeded (per-test cloned DB, safe to mutate).
+	_, err := fx.ti.conn.Exec(ctx, "ALTER TABLE meta_mcp_server_members RENAME TO meta_mcp_server_members_unavailable") //nolint:glint // notestingrawsql: deliberate DDL breakage to force a member-lookup DB error; not expressible as an SQLc query
+	require.NoError(t, err)
+
+	requireConnectActionFailsClosed(t, fx, clientID)
+}
+
+// A grant load that faults must fail the connect closed too. Continuing
+// without grants would admit every member the query returned without ever
+// judging whether the subject can reach it.
+func TestServeConsentAction_GatewayConnectGrantLoadErrorFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx, metaServerID := seedGatewayConsentEndpoint(t, "aim87-grant-fault-gw")
+
+	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-grant-fault", "", []uuid.UUID{fx.shared})
+	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
+	// Public, so a swallowed fault would sail past the authorization check
+	// rather than trip over the missing grants a moment later.
+	createGatewayMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-grant-fault-member", "https://grant-fault.example.com/mcp", conv.ToNullUUID(issuerID), 0)
+
+	_, err := fx.ti.conn.Exec(ctx, "ALTER TABLE principal_grants RENAME TO principal_grants_unavailable") //nolint:glint // notestingrawsql: deliberate DDL breakage to force a grant-load DB error; not expressible as an SQLc query
+	require.NoError(t, err)
+
+	requireConnectActionFailsClosed(t, fx, clientID)
 }
 
 // A tunneled member has no upstream URL, so there is nothing a token could be

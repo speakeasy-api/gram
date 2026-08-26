@@ -544,12 +544,17 @@ UPDATE mcp_servers
 SET remote_session_issuer_id = @remote_session_issuer_id
 WHERE id = @id;
 
--- name: SetMcpServerRemoteSessionIssuerFixture :exec
+-- name: SetMcpServerRemoteSessionIssuerFixture :execrows
 -- Test-only fixture: stamps the denormalised upstream authorization server on
 -- an MCP server. Server creation cannot set it — a server has no client
 -- bindings yet at that point — so tests seed it after the fact, standing in
 -- for the binding resync that writes it in production.
+--
+-- Returns the row count so the caller can insist the stamp landed. A stamp that
+-- matched nothing — wrong project, tombstoned server — would otherwise succeed
+-- silently and let a negative test pass because no member was ever stamped.
 UPDATE mcp_servers
 SET remote_session_issuer_id = @remote_session_issuer_id
 WHERE id = @id
-  AND project_id = @project_id;
+  AND project_id = @project_id
+  AND deleted IS FALSE;

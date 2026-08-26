@@ -142,6 +142,9 @@ func (s *Service) authorizedGatewayMembers(
 				return nil, fmt.Errorf("authorize gateway member access: %w", err)
 			}
 		default:
+			// Not redundant with the query's visibility filter: that excludes
+			// the one value it names, this excludes every value neither branch
+			// above can judge.
 			continue
 		}
 		authorized = append(authorized, row)

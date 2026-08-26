@@ -165,10 +165,10 @@ func TestGatewayCredentials_EachMemberSelectsItsOwnCredential(t *testing.T) {
 	require.Empty(t, got)
 }
 
-// The negative that gives the positive its meaning: the same three-member
-// gateway with the column unpopulated records unqualified grants, and then no
-// member can be served at all. This is the pre-backfill state, and it fails
-// closed rather than forwarding an arbitrary token.
+// The same three-member gateway with the column unpopulated records
+// unqualified grants, and routeUpstreamToken — whose behaviour this change does
+// not touch — then serves no member at all. Recorded as the negative that gives
+// the positive above its meaning, and as the pre-backfill state.
 func TestGatewayCredentials_UnstampedGrantsFailClosedForEveryMember(t *testing.T) {
 	t.Parallel()
 
@@ -189,9 +189,10 @@ func TestGatewayCredentials_UnstampedGrantsFailClosedForEveryMember(t *testing.T
 	}
 }
 
-// The v1 limitation AIM-87 names, pinned so it cannot regress silently: a lone
-// credential is forwarded even to a member it was not minted for. It is why
-// qualification matters as soon as a gateway holds a second member.
+// The complement of the case above, and pre-existing routeUpstreamToken
+// behaviour this change leaves alone: a lone credential is forwarded even to a
+// member it was not minted for. It is why qualification matters as soon as a
+// gateway holds a second member.
 func TestGatewayCredentials_LoneUnqualifiedCredentialIsStillForwarded(t *testing.T) {
 	t.Parallel()
 
@@ -206,7 +207,8 @@ func TestGatewayCredentials_LoneUnqualifiedCredentialIsStillForwarded(t *testing
 }
 
 // A grant qualified before a member was detached stays bound to the member it
-// was minted for, rather than drifting onto a surviving one.
+// was minted for, rather than drifting onto a surviving one — while a fresh
+// consent for that same client stops resolving the detached member at all.
 func TestGatewayCredentials_StaleGrantStaysBoundToItsOwnMember(t *testing.T) {
 	t.Parallel()
 
@@ -219,12 +221,22 @@ func TestGatewayCredentials_StaleGrantStaysBoundToItsOwnMember(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	// The detach is only observable through a lookup that runs after it, and
+	// consent is where the lookup runs. A detached member no longer claims its
+	// client's authorization server, so a new grant for that client carries no
+	// resource at all.
+	_, hasResource := postConnectAction(t, gw.fx, removed.clientID).Query()["resource"]
+	require.False(t, hasResource, "a detached member must stop qualifying its client's credential")
+	survivor := gw.members[1]
+	require.Equal(t, survivor.upstreamURL, postConnectAction(t, gw.fx, survivor.clientID).Query().Get("resource"),
+		"and the surviving member must still qualify its own")
+
+	// The credentials minted before the detach are untouched by it.
 	tokens := gw.resolveTokens(t, ctx)
 	got, err := gw.route(t, ctx, tokens, removed.upstreamURL)
 	require.NoError(t, err)
 	require.Equal(t, removed.accessToken, got, "the stale credential stays bound to the member it was minted for")
 
-	survivor := gw.members[1]
 	got, err = gw.route(t, ctx, tokens, survivor.upstreamURL)
 	require.NoError(t, err)
 	require.Equal(t, survivor.accessToken, got, "and the surviving member still selects its own")
