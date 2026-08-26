@@ -142,14 +142,14 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	// observe the failure. The two-phase Validate split exists to make this
 	// switch unambiguous.
 	if err := req.ValidatePostRedirect(); err != nil {
-		return redirectAuthorizeOAuthError(ctx, w, r, logger, issuer, req.RedirectURI, req.State, err)
+		return redirectAuthorizeOAuthError(ctx, w, r, logger, issuer, req.RedirectURI, req.State, "", err)
 	}
 	// RFC 8707 §2: a resource naming some other server means the client
 	// believes it is getting a token for an endpoint this one will never mint
 	// for. Rejecting makes that misconfiguration visible at the point it
 	// happens instead of at first use.
 	if err := oauthwire.ValidateResourceIndicator(req.Resource, issuer); err != nil {
-		return redirectAuthorizeOAuthError(ctx, w, r, logger, issuer, req.RedirectURI, req.State, err)
+		return redirectAuthorizeOAuthError(ctx, w, r, logger, issuer, req.RedirectURI, req.State, "resource_mismatch", err)
 	}
 
 	challengeID := uuid.NewString()
@@ -255,7 +255,11 @@ func writeAuthorizeOAuthError(ctx context.Context, w http.ResponseWriter, logger
 // invoke this AFTER the supplied redirect_uri has been validated against the
 // registered set on the OAuth client row — passing through an untrusted URI
 // here would turn the AS into an open redirector.
-func redirectAuthorizeOAuthError(ctx context.Context, w http.ResponseWriter, r *http.Request, logger *slog.Logger, issuer, redirectURI, originalState string, err error) error {
+// failureReason labels the rejection with the same vocabulary the token
+// endpoint logs (for example "resource_mismatch"), so one query finds a given
+// class of rejection on both legs. Empty when the error code alone identifies
+// the cause.
+func redirectAuthorizeOAuthError(ctx context.Context, w http.ResponseWriter, r *http.Request, logger *slog.Logger, issuer, redirectURI, originalState, failureReason string, err error) error {
 	code := "invalid_request"
 	description := err.Error()
 	var oauthErr *oauthwire.Error
@@ -263,10 +267,14 @@ func redirectAuthorizeOAuthError(ctx context.Context, w http.ResponseWriter, r *
 		code = oauthErr.Code
 		description = oauthErr.Description
 	}
-	logger.InfoContext(ctx, "authorize request rejected (post-redirect)",
+	args := []any{
 		attr.SlogOAuthError(code),
 		attr.SlogOAuthErrorDescription(description),
-	)
+	}
+	if failureReason != "" {
+		args = append(args, attr.SlogOAuthFailureReason(failureReason))
+	}
+	logger.InfoContext(ctx, "authorize request rejected (post-redirect)", args...)
 	redirect, err := buildClientRedirect(clientRedirectParams{
 		RedirectURI:      redirectURI,
 		Issuer:           issuer,

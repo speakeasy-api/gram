@@ -105,11 +105,26 @@ func ValidateRedirectURI(raw string) error {
 	}
 }
 
+// ResourceIndicatorFrom extracts the RFC 8707 `resource` parameter from a query
+// string or form body, returning nil when the parameter is absent and a pointer
+// to the raw value when it is present. The distinction is load-bearing: RFC 8707
+// §2 lets a client omit the parameter, but requires any value it does send to be
+// an absolute URI, so `resource=` is a malformed value rather than an omission
+// and must not be waved through as one.
+func ResourceIndicatorFrom(values url.Values) *string {
+	if !values.Has("resource") {
+		return nil
+	}
+	raw := values.Get("resource")
+	return &raw
+}
+
 // ValidateResourceIndicator checks an RFC 8707 `resource` parameter against
-// canonical, the resource identifier for the address the request arrived on.
-// An empty resource is accepted: RFC 8707 §2 leaves demanding the parameter to
-// the authorization server's discretion, and clients predating MCP 2026-07-28
-// do not send one.
+// canonical, the resource identifier for the address the request arrived on. A
+// nil resource is accepted: RFC 8707 §2 leaves demanding the parameter to the
+// authorization server's discretion, and clients predating MCP 2026-07-28 do not
+// send one. A present-but-empty value is rejected like any other non-matching
+// one, since the empty string is not the absolute URI the RFC requires.
 //
 // Comparison is byte equality. MCP 2026-07-28 asks implementations to accept
 // uppercase scheme and host components for robustness; this surface
@@ -122,11 +137,11 @@ func ValidateRedirectURI(raw string) error {
 // identifiers (custom domain or platform origin, each under two route bases).
 // Callers must derive it from the request being validated, never from a stored
 // or global URL.
-func ValidateResourceIndicator(resource, canonical string) error {
-	if resource == "" {
+func ValidateResourceIndicator(resource *string, canonical string) error {
+	if resource == nil {
 		return nil
 	}
-	if resource != canonical {
+	if *resource != canonical {
 		// The submitted value is deliberately not echoed: on the authorize leg
 		// this description is carried in a redirect the client renders. The
 		// expected value is already public in the protected-resource metadata.

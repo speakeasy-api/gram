@@ -19,7 +19,8 @@ func TestAuthCodeTokenRequestFromForm(t *testing.T) {
 	require.Equal(t, "auth_code_123", req.Code)
 	require.Equal(t, "https://app.acme.test/callback", req.RedirectURI)
 	require.Equal(t, "verifier_xyz", req.CodeVerifier)
-	require.Equal(t, "https://acme.example.com/mcp/support-bot", req.Resource)
+	require.NotNil(t, req.Resource)
+	require.Equal(t, "https://acme.example.com/mcp/support-bot", *req.Resource)
 }
 
 func TestAuthCodeTokenRequest_Validate(t *testing.T) {
@@ -67,7 +68,8 @@ func TestRefreshTokenRequestFromForm(t *testing.T) {
 	form.Set("resource", "https://acme.example.com/mcp/support-bot")
 	req := RefreshTokenRequestFromForm(form)
 	require.Equal(t, "refresh_xyz", req.RefreshToken)
-	require.Equal(t, "https://acme.example.com/mcp/support-bot", req.Resource)
+	require.NotNil(t, req.Resource)
+	require.Equal(t, "https://acme.example.com/mcp/support-bot", *req.Resource)
 }
 
 func TestRefreshTokenRequest_Validate(t *testing.T) {
