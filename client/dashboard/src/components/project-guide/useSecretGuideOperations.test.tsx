@@ -2,8 +2,11 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { HookTraceSummary } from "@gram/client/models/components/hooktracesummary.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ProjectGuideOperationReport } from "./projectGuideMachine";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  PROJECT_GUIDE_MICRO_STEP_DELAY_MS,
+  type ProjectGuideOperationReport,
+} from "./projectGuideMachine";
 
 const queryHooks = vi.hoisted(() => ({
   hooks: vi.fn(),
@@ -135,6 +138,10 @@ beforeEach(() => {
       },
     }),
   );
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe("useSecretGuideOperations", () => {
@@ -299,6 +306,7 @@ describe("useSecretGuideOperations", () => {
   });
 
   it("downloads the existing observability ZIP and preserves its response filename", async () => {
+    vi.useFakeTimers();
     const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
     const { result: hook } = renderHook(() => useSecretGuideOperations());
     const scope = { ...POLICY_SCOPE, step: 1, runId: 2 };
@@ -306,9 +314,11 @@ describe("useSecretGuideOperations", () => {
     act(() => hook.current.setClient("claude"));
     act(() => hook.current.handleSignal({ type: "start", scope }, report));
 
-    await waitFor(() =>
-      expect(hook.current.downloadedFilename).toBe("gram-observability.zip"),
-    );
+    await act(async () => {
+      vi.advanceTimersByTime(PROJECT_GUIDE_MICRO_STEP_DELAY_MS * 2);
+      await Promise.resolve();
+    });
+    expect(hook.current.downloadedFilename).toBe("gram-observability.zip");
     expect(authFetch).toHaveBeenCalledWith(
       "/rpc/plugins.downloadObservabilityPlugin?platform=claude",
       {},
@@ -339,14 +349,41 @@ describe("useSecretGuideOperations", () => {
     );
   });
 
-  it("waits without reporting or downloading when Step 2 has no client", async () => {
+  it("waits for the plugin build substeps before starting the download", async () => {
+    vi.useFakeTimers();
+    const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
+    const { result: hook, unmount } = renderHook(() =>
+      useSecretGuideOperations(),
+    );
+    const scope = { ...POLICY_SCOPE, step: 1, runId: 2 };
+
+    act(() => hook.current.setClient("claude"));
+    act(() => hook.current.handleSignal({ type: "start", scope }, report));
+
+    expect(authFetch).not.toHaveBeenCalled();
+    await act(async () => {
+      vi.advanceTimersByTime(PROJECT_GUIDE_MICRO_STEP_DELAY_MS * 2 - 1);
+    });
+    expect(authFetch).not.toHaveBeenCalled();
+
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(authFetch).toHaveBeenCalledWith(
+      "/rpc/plugins.downloadObservabilityPlugin?platform=claude",
+      {},
+    );
+    unmount();
+  });
+
+  it("waits without reporting or downloading when Step 2 has no client", () => {
     const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
     const { result: hook } = renderHook(() => useSecretGuideOperations());
     const scope = { ...POLICY_SCOPE, step: 1, runId: 2 };
 
     act(() => hook.current.handleSignal({ type: "start", scope }, report));
 
-    await waitFor(() => expect(authFetch).not.toHaveBeenCalled());
+    expect(authFetch).not.toHaveBeenCalled();
     expect(report).not.toHaveBeenCalled();
   });
 
@@ -365,6 +402,7 @@ describe("useSecretGuideOperations", () => {
   ])(
     "activates the generated $client archive through its existing install contract",
     async ({ client, filename, command }) => {
+      vi.useFakeTimers();
       authFetch.mockResolvedValueOnce(
         new Response(new Blob(["zip"]), {
           status: 200,
@@ -380,9 +418,11 @@ describe("useSecretGuideOperations", () => {
       act(() => hook.current.setClient(client));
       act(() => hook.current.handleSignal({ type: "start", scope }, report));
 
-      await waitFor(() =>
-        expect(hook.current.downloadedFilename).toBe(filename),
-      );
+      await act(async () => {
+        vi.advanceTimersByTime(PROJECT_GUIDE_MICRO_STEP_DELAY_MS * 2);
+        await Promise.resolve();
+      });
+      expect(hook.current.downloadedFilename).toBe(filename);
       expect(hook.current.installCommand).toBe(command);
       expect(authFetch).toHaveBeenCalledWith(
         `/rpc/plugins.downloadObservabilityPlugin?platform=${client}`,

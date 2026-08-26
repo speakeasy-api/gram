@@ -93,7 +93,7 @@ export function ProjectGuideRun({
       id={regionId}
       role="region"
       aria-label={journey.title}
-      className="h-full min-w-0"
+      className="min-w-0"
     >
       <motion.div
         initial={reducedMotion ? false : { opacity: 0, y: 8 }}
@@ -103,7 +103,7 @@ export function ProjectGuideRun({
             ? { duration: 0 }
             : { duration: 0.3, ease: [0.2, 0.7, 0.3, 1] }
         }
-        className="flex h-full min-h-0 flex-col"
+        className="flex min-h-0 flex-col"
         data-testid="project-guide-run"
         data-display-state={displayState}
       >
@@ -122,10 +122,10 @@ export function ProjectGuideRun({
             {completedSteps.length} of {journey.steps.length} done
           </span>
         </div>
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
+        <div className="relative min-w-0">
           <ol
             aria-label={`${journey.id === "third-party-mcp" ? "Journey A" : "Journey B"} steps`}
-            className="min-w-0 overflow-hidden px-6 pt-2 pb-5 lg:flex-1 lg:overflow-y-auto"
+            className="min-w-0 lg:mr-[480px]"
           >
             {journey.steps.map((step, index) => {
               const complete = completedSteps.includes(index);
@@ -135,11 +135,12 @@ export function ProjectGuideRun({
                   key={step}
                   aria-current={current ? "step" : undefined}
                   className={cn(
-                    "border-neutral-softest min-w-0 border-b border-l-2 py-3 pl-4",
-                    current && "border-l-foreground",
+                    "border-neutral-softest min-w-0 border-b border-r-3 py-5 pl-6 pr-5",
+                    current && "min-h-48",
+                    current && "border-r-foreground",
                   )}
                   style={{
-                    borderLeftColor: complete ? fixture.accent : undefined,
+                    borderRightColor: complete ? fixture.accent : undefined,
                   }}
                 >
                   <div className="flex items-baseline gap-3">
@@ -199,9 +200,9 @@ export function ProjectGuideRun({
           </ol>
           <aside
             aria-label={`${journey.id === "third-party-mcp" ? "Journey A" : "Journey B"} run panel`}
-            className="border-border bg-card flex min-h-96 min-w-0 flex-col gap-3 border-l px-5 pt-5 pb-5 lg:min-h-0 lg:w-[480px] lg:overflow-y-auto"
+            className="border-border bg-card flex min-w-0 flex-col border-l px-6 py-5 lg:absolute lg:inset-y-0 lg:right-0 lg:min-h-0 lg:w-[480px] lg:overflow-hidden"
           >
-            <div className="flex items-baseline gap-2.5">
+            <div className="flex items-baseline gap-3 px-4 py-3 border border-neutral-softest bg-muted/80">
               <span className="text-eyebrow" style={{ color: fixture.accent }}>
                 {isEndStep ? "END" : String(currentStep + 1).padStart(2, "0")}
               </span>
@@ -209,13 +210,12 @@ export function ProjectGuideRun({
                 {journey.steps[currentStep] ?? "Journey complete"}
               </h3>
             </div>
-            <span className="bg-border h-px" />
             <div
               ref={activityLogRef}
               role="log"
               aria-label={`${journey.id === "third-party-mcp" ? "Journey A" : "Journey B"} activity`}
               aria-live="polite"
-              className="border-neutral-softest bg-muted/40 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto border p-4"
+              className="border-neutral-softest bg-muted/30 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto border p-4"
             >
               <span className="text-eyebrow text-muted-foreground">
                 Activity
@@ -228,12 +228,10 @@ export function ProjectGuideRun({
             {primaryAction && (
               <div className="mt-auto grid gap-2">
                 {primaryAction.href ? (
-                  <Button asChild className="w-full">
-                    <Link to={primaryAction.href}>
-                      <Button.Text className="flex-none">
-                        {primaryAction.label}
-                      </Button.Text>
-                    </Link>
+                  <Button href={primaryAction.href} className="w-full">
+                    <Button.Text className="flex-none">
+                      {primaryAction.label}
+                    </Button.Text>
                   </Button>
                 ) : (
                   <Button
@@ -316,7 +314,9 @@ function CompletionStepBody({
 }): JSX.Element {
   return (
     <div className="grid gap-3 pt-3">
-      <h4 className="text-display-xs max-w-48">{journey.completion.heading}</h4>
+      <h4 className="text-display-xs whitespace-nowrap">
+        {journey.completion.heading}
+      </h4>
       <p className="text-muted-foreground max-w-md text-body-sm">
         {body ?? journey.completion.body}
       </p>

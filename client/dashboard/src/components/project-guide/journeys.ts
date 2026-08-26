@@ -56,7 +56,7 @@ export type JourneyFixture = {
 
 export const SECRET_BLOCK_STEPS = [
   "Create a secrets policy set to deny",
-  "Download the observability plugin",
+  "Setup the observability plugin",
   "Add it to your agent",
   "Send a prompt with a synthetic secret",
   "Watch the block land",

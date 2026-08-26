@@ -199,6 +199,7 @@ function ProjectGuideContent({
         displayState,
         selectedJourney,
         currentStep,
+        statusByJourney[selectedJourney.id],
         send,
         mcpOperations,
         secretOperations,
@@ -217,7 +218,7 @@ function ProjectGuideContent({
 
   return (
     <GuideCanvas>
-      <section className="border-border bg-card mx-auto flex min-h-96 w-full max-w-[1200px] flex-col overflow-hidden border shadow-sm">
+      <section className="border-border bg-card mx-auto flex w-full max-w-[1200px] flex-col overflow-hidden border shadow-sm">
         <header className="border-border flex items-baseline gap-3.5 border-b px-6 py-5 pb-3">
           <h2 className="text-display-xs">
             {selectedJourney?.title ?? "Put your agent traffic under control"}
@@ -236,7 +237,7 @@ function ProjectGuideContent({
             </div>
           )}
         </header>
-        <div className="flex min-h-96 flex-col md:flex-row">
+        <div className="flex flex-col md:flex-row">
           {PROJECT_GUIDE_JOURNEYS.map((journey) => {
             const status = statusByJourney[journey.id];
             const isSelected = selected === journey.id;
@@ -298,11 +299,7 @@ function ProjectGuideContent({
                             currentStep === 3 &&
                             displayState === "checkpoint"
                           ) {
-                            send({
-                              type: "USER_CHECKPOINT_COMPLETE",
-                              result:
-                                "Prompt copied · listening for the blocked event",
-                            });
+                            secretOperations.markPromptCopied();
                           }
                         }}
                         onSelectAgent={(client) => {
@@ -373,6 +370,7 @@ function primaryActionFor(
   displayState: ProjectGuideDisplayState,
   journey: JourneyMeta,
   currentStep: number,
+  journeyStatus: JourneyStatus,
   send: (event: ProjectGuideEvent) => void,
   mcpOperations: McpGuideOperations,
   secretOperations: SecretGuideOperations,
@@ -400,7 +398,8 @@ function primaryActionFor(
         };
       }
       return {
-        label: "Start the journey",
+        label:
+          journeyStatus === "in-progress" ? "Continue" : "Start the journey",
         icon: "play",
         disabled:
           (journey.id === "third-party-mcp" &&
@@ -452,7 +451,8 @@ function primaryActionFor(
       }
       if (journey.id === "secret-block" && currentStep === 2) {
         return {
-          label: "I've installed and restarted it",
+          label: "Plugin is installed",
+          icon: "play",
           disabled:
             !secretOperations.installCommand ||
             secretOperations.baselinePending,
@@ -479,7 +479,16 @@ function primaryActionFor(
         };
       }
       if (journey.id === "secret-block" && currentStep === 3) {
-        return null;
+        return {
+          label: "Prompt run",
+          icon: "play",
+          disabled: !secretOperations.promptCopied,
+          onClick: () =>
+            send({
+              type: "USER_CHECKPOINT_COMPLETE",
+              result: "Prompt copied · listening for the blocked event",
+            }),
+        };
       }
       return {
         label: "I've completed this step",
@@ -579,9 +588,9 @@ const MCP_CATALOG_PHASES = [
 ] as const;
 
 const SECRET_POLICY_PHASES = [
-  "Detect · enable the Secrets category",
-  "Scope · user prompts, the recommended surface",
-  "Action · deny the request",
+  "Enable the Secrets category",
+  "Scope user prompts",
+  "Deny the request",
 ] as const;
 
 const SECRET_PLUGIN_PHASES = [
@@ -689,14 +698,13 @@ function ProjectGuidePhaseChecklist({
       <div>
         {labels.map((label, index) => {
           const status = statuses[index] ?? "not run";
-          const statusClassName = {
-            "not run": "border-neutral-default text-disabled",
-            queued: "border-neutral-default text-disabled",
-            running: "animate-pulse border-foreground text-foreground",
-            ok: "border-success-default text-default-success",
-            failed: "border-destructive-default text-default-destructive",
+          const indicatorClassName = {
+            "not run": "border-neutral-default",
+            queued: "border-neutral-default",
+            running: "animate-pulse border-foreground",
+            ok: "border-success-default bg-success-default",
+            failed: "border-destructive-default",
           }[status];
-
           return (
             <div
               key={label}
@@ -704,11 +712,12 @@ function ProjectGuidePhaseChecklist({
             >
               <span
                 aria-hidden="true"
-                className={cn("size-3 shrink-0 border", statusClassName)}
+                className={cn("size-3 shrink-0 border", indicatorClassName)}
               />
-              <span className="text-muted-foreground text-sm">{label}</span>
-              <span className="border-border flex-1 border-t" />
-              <span className={cn("text-eyebrow", statusClassName)}>
+              <span className="text-muted-foreground min-w-0 text-sm">
+                {label}
+              </span>
+              <span className="text-eyebrow text-disabled ml-auto shrink-0">
                 {status}
               </span>
             </div>
@@ -1755,7 +1764,7 @@ function JourneySpine({
       aria-label={`Switch to ${journey.title}`}
       aria-controls={controlsId}
       aria-expanded="false"
-      className="flex h-full w-full flex-col items-center gap-3.5 py-5 hover:bg-card/60"
+      className="flex h-full w-full flex-col items-center gap-3.5 py-4 hover:bg-card/60"
     >
       <span
         aria-hidden="true"

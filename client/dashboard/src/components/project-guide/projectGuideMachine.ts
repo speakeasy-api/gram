@@ -295,7 +295,10 @@ function narrativeOutputFor(
 
   entries.push({
     kind: "note",
-    message: `Ready · ${narrativeStepLabel(path, completedCount)}`,
+    message:
+      completedCount === 0
+        ? "Ready to start"
+        : `Ready · ${narrativeStepLabel(path, completedCount)}`,
   });
   return entries;
 }
@@ -373,6 +376,10 @@ export const projectGuideMachine = setup({
       context.activePath === "secret-block" &&
       getProjectGuideCurrentStep(context) === 1 &&
       context.selectedClient !== null,
+    selectingSecretAgent: ({ context, event }) =>
+      context.activePath === "secret-block" &&
+      getProjectGuideCurrentStep(context) === 1 &&
+      event.type === "SELECT_AGENT",
     finalStep: ({ context }) =>
       currentPathIsComplete(context) ||
       Boolean(
@@ -793,6 +800,11 @@ export const projectGuideMachine = setup({
     },
     checkpoint: {
       on: {
+        SELECT_AGENT: {
+          guard: "selectingSecretAgent",
+          target: "running",
+          actions: ["selectAgent", "recordStart", "signalStart"],
+        },
         START: {
           guard: "selectedSecretAgent",
           target: "running",
