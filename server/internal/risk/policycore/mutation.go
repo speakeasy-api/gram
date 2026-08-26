@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
 	"slices"
 
 	"github.com/google/uuid"
@@ -263,8 +262,8 @@ func (c *Core) UpdatePolicy(ctx context.Context, input UpdateMutation) (Mutation
 		}
 		return MutationResult{}, mutationError("lock risk policy", err)
 	}
-	if !locked.UpdatedAt.Time.Equal(input.Current.UpdatedAt.Time) {
-		return MutationResult{}, &StalePolicyError{}
+	if err := requireFreshPolicy(input.Current, locked); err != nil {
+		return MutationResult{}, err
 	}
 	if input.Params.Enabled && input.Params.Action == "block" && slices.Contains(input.Params.Sources, shadowmcp.SourceShadowMCP) {
 		if err := requireSingleBlockingPolicy(ctx, queries, input.Params.ProjectID, input.Params.ID); err != nil {
@@ -388,25 +387,6 @@ func replaceAudience(ctx context.Context, db repo.DBTX, organizationID, policyID
 	return nil
 }
 
-func audiencePrincipalURNs(ctx context.Context, db repo.DBTX, organizationID, policyID string) ([]string, error) {
-	grants, err := authz.ListGrantsForResource(ctx, db, authz.Resource{
-		OrganizationID: organizationID,
-		Scope:          authz.ScopeRiskPolicyEvaluate,
-		ResourceID:     policyID,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("list risk policy audience grants: %w", err)
-	}
-	principalURNs := make([]string, 0, len(grants))
-	for _, grant := range grants {
-		if maps.Equal(grant.Selector, authz.NewSelector(authz.ScopeRiskPolicyEvaluate, policyID)) {
-			principalURNs = append(principalURNs, grant.PrincipalUrn)
-		}
-	}
-	slices.Sort(principalURNs)
-	return slices.Compact(principalURNs), nil
-}
-
 func principalStrings(principals []urn.Principal) []string {
 	values := make([]string, 0, len(principals))
 	for _, principal := range principals {
@@ -419,11 +399,22 @@ func isBlockingShadowPolicy(row repo.RiskPolicy) bool {
 	return row.Enabled && row.Action == "block" && slices.Contains(row.Sources, shadowmcp.SourceShadowMCP)
 }
 
+func requireFreshPolicy(current, locked repo.RiskPolicy) error {
+	if !locked.UpdatedAt.Time.Equal(current.UpdatedAt.Time) {
+		return &StalePolicyError{}
+	}
+	return nil
+}
+
 func requireSingleBlockingPolicy(ctx context.Context, queries *repo.Queries, projectID, excludePolicyID uuid.UUID) error {
 	policies, err := queries.ListEnabledShadowMCPPoliciesByProject(ctx, projectID)
 	if err != nil {
 		return mutationError("list shadow mcp blocking policies", err)
 	}
+	return blockingPolicyConflict(policies, excludePolicyID)
+}
+
+func blockingPolicyConflict(policies []repo.RiskPolicy, excludePolicyID uuid.UUID) error {
 	for _, policy := range policies {
 		if policy.ID == excludePolicyID || policy.Action != "block" {
 			continue
