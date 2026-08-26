@@ -1,7 +1,6 @@
 package replyinbox
 
 import (
-	"context"
 	"log/slog"
 	"testing"
 	"time"
@@ -32,16 +31,6 @@ func setupInboxTest(t *testing.T, replicaID string) *inboxTestEnv {
 
 func setupInboxTestWithDrainGate(t *testing.T, replicaID string, drainGate <-chan struct{}) *inboxTestEnv {
 	t.Helper()
-	return setupInboxTestWithDrainerAndGate(t, replicaID, drainGate, nil)
-}
-
-func setupInboxTestWithDrainer(t *testing.T, replicaID string, drainFunc func(context.Context)) *inboxTestEnv {
-	t.Helper()
-	return setupInboxTestWithDrainerAndGate(t, replicaID, nil, drainFunc)
-}
-
-func setupInboxTestWithDrainerAndGate(t *testing.T, replicaID string, drainGate <-chan struct{}, drainFunc func(context.Context)) *inboxTestEnv {
-	t.Helper()
 	mr := miniredis.RunT(t)
 	client := redis.NewClient(&redis.Options{Addr: mr.Addr(), Protocol: 2})
 	t.Cleanup(func() { _ = client.Close() })
@@ -53,17 +42,15 @@ func setupInboxTestWithDrainerAndGate(t *testing.T, replicaID string, drainGate 
 		ReplicaID:    replicaID,
 		PollInterval: DefaultPollInterval,
 		DrainGate:    drainGate,
-		drainFunc:    drainFunc,
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = inbox.Close() })
 	return &inboxTestEnv{redis: mr, client: client, reader: reader, inbox: inbox, writer: NewWriter(client)}
 }
 
-func waitForWaiter(t *testing.T, inbox *Inbox, scanID string) {
+func waitForWaiter(t *testing.T, inbox *Inbox, _ string) {
 	t.Helper()
 	require.Eventually(t, func() bool {
-		_, ok := inbox.waiters.Load(scanID)
-		return ok
+		return inbox.Snapshot().Waiters >= 1
 	}, time.Second, 5*time.Millisecond)
 }
