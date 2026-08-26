@@ -249,3 +249,36 @@ WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE
 RETURNING *;
+
+-- name: ListGatewayMembersForRemoteSessionIssuer :many
+-- The gateway's remote-backed members that authenticate against a given
+-- authorization server, filtered exactly as ListServableMetaMCPMembers so a
+-- member invisible to the serving path cannot claim a credential either.
+--
+-- Answers "which member is this client's credential for" at consent time. A
+-- client names exactly one remote_session_issuer, so matching it against the
+-- member's own is the whole lookup; the caller still has to fail closed when
+-- this returns none or several, since a grant records one resource.
+--
+-- Joins remote_mcp_servers rather than reading a URL off mcp_servers, which
+-- also excludes tunneled, hosted, and unproxied members: none of them has an
+-- upstream URL a token could be routed to.
+SELECT
+    s.id AS mcp_server_id,
+    s.visibility AS mcp_server_visibility,
+    r.url AS upstream_url
+FROM meta_mcp_server_members m
+JOIN mcp_servers s
+  ON s.id = m.mcp_server_id
+ AND s.project_id = m.project_id
+ AND s.deleted IS FALSE
+ AND s.visibility <> 'disabled'
+JOIN remote_mcp_servers r
+  ON r.id = s.remote_mcp_server_id
+ AND r.project_id = m.project_id
+ AND r.deleted IS FALSE
+WHERE m.meta_mcp_server_id = @meta_mcp_server_id
+  AND m.project_id = @project_id
+  AND m.deleted IS FALSE
+  AND s.remote_session_issuer_id = @remote_session_issuer_id
+ORDER BY m.sort_order, m.created_at, m.id;

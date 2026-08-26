@@ -126,7 +126,27 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		}
 		// Not endpoint.UpstreamResource: under multi-binding that may belong
 		// to a different client's upstream; ambiguity derives "" (no resource).
-		clientResource, rerr := s.remoteChallengeMgr.FallbackResourceForClient(ctx, client.ID)
+		// A gateway's members carry their own issuers while the client is bound
+		// to the gateway's, so the stored derivation finds nothing there and
+		// the member lookup answers instead.
+		var clientResource string
+		var rerr error
+		if endpoint.MetaMcpServerID.Valid {
+			// Member visibility is judged against the consent subject, exactly
+			// like the runtime request the minted session will make.
+			memberCtx, cerr := s.contextForSessionSubject(ctx, endpoint, subject, "consent:"+challengeState.ID, challengeState.ClientID)
+			if cerr != nil {
+				return oops.E(oops.CodeUnexpected, cerr, "stamp consent subject context").LogError(ctx, logger)
+			}
+			clientResource, rerr = s.resolveGatewayMemberResource(memberCtx, logger, endpoint, client.RemoteSessionIssuerID)
+		}
+		// The member lookup wins where it resolves; the stored derivation still
+		// answers for a client bound to a member's own issuer, and for servers
+		// whose issuer has not been recorded yet. It returns "" itself whenever
+		// it is ambiguous, so it can never be worse than "".
+		if rerr == nil && clientResource == "" {
+			clientResource, rerr = s.remoteChallengeMgr.FallbackResourceForClient(ctx, client.ID)
+		}
 		if rerr != nil {
 			return oops.E(oops.CodeUnexpected, rerr, "derive client upstream resource").LogError(ctx, logger)
 		}

@@ -1549,6 +1549,28 @@ func (q *Queries) SetMCPServerRemoteSessionIssuerFixture(ctx context.Context, ar
 	return err
 }
 
+const setMcpServerRemoteSessionIssuerFixture = `-- name: SetMcpServerRemoteSessionIssuerFixture :exec
+UPDATE mcp_servers
+SET remote_session_issuer_id = $1
+WHERE id = $2
+  AND project_id = $3
+`
+
+type SetMcpServerRemoteSessionIssuerFixtureParams struct {
+	RemoteSessionIssuerID uuid.NullUUID
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+}
+
+// Test-only fixture: stamps the denormalised upstream authorization server on
+// an MCP server. Server creation cannot set it — a server has no client
+// bindings yet at that point — so tests seed it after the fact, standing in
+// for the binding resync that writes it in production.
+func (q *Queries) SetMcpServerRemoteSessionIssuerFixture(ctx context.Context, arg SetMcpServerRemoteSessionIssuerFixtureParams) error {
+	_, err := q.db.Exec(ctx, setMcpServerRemoteSessionIssuerFixture, arg.RemoteSessionIssuerID, arg.ID, arg.ProjectID)
+	return err
+}
+
 const setOpenRouterAPIKeyCreatedAtFixture = `-- name: SetOpenRouterAPIKeyCreatedAtFixture :exec
 UPDATE openrouter_api_keys
 SET created_at = $1

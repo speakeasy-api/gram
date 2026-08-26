@@ -543,3 +543,13 @@ WHERE id = @id;
 UPDATE mcp_servers
 SET remote_session_issuer_id = @remote_session_issuer_id
 WHERE id = @id;
+
+-- name: SetMcpServerRemoteSessionIssuerFixture :exec
+-- Test-only fixture: stamps the denormalised upstream authorization server on
+-- an MCP server. Server creation cannot set it — a server has no client
+-- bindings yet at that point — so tests seed it after the fact, standing in
+-- for the binding resync that writes it in production.
+UPDATE mcp_servers
+SET remote_session_issuer_id = @remote_session_issuer_id
+WHERE id = @id
+  AND project_id = @project_id;
