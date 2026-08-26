@@ -1,0 +1,32 @@
+pystreams/src/pystreams/cmd/multi.py
+  s_b390d6ce53b276::t_0e7972addade45 247-253,258
+pystreams/tests/test_risk_enforce.py
+  s_b390d6ce53b276::t_f2385f9f3e853c 228-231,235
+server/internal/risk/enforcereply/inbox.go
+  s_b390d6ce53b276::t_5830022468128b 146
+  s_b390d6ce53b276::t_07bdaf3eedf4e2 76
+server/internal/risk/enforcereply/setup_test.go
+  s_b390d6ce53b276::t_f32461605f2cf5 43
+docs/research/2026-08-18-request-reply-recipes.md
+  s_b390d6ce53b276::t_0309754cddbd99 112-117
+server/internal/risk/enforcereply/inbox_test.go
+  s_b390d6ce53b276::t_105f945f05ca43 126-128,130-131
+  s_b390d6ce53b276::t_f32461605f2cf5 159,196
+  s_b390d6ce53b276::t_d431c96c00cd9e 215-216
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "3faeaff595631601f20994dcff8ec6a8ef4f9833",
+  "prompts": {},
+  "sessions": {
+    "s_b390d6ce53b276": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c7be466b-35a7-46f8-83d3-cbbede48fd92",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
