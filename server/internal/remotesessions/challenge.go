@@ -697,16 +697,13 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 		refreshEnc = &v
 	}
 
-	// expires_in is OPTIONAL per RFC 6749 §5.1. When the upstream omits it we
-	// store NULL — "no known expiry" — rather than fabricating a deadline the
-	// provider never asserted. validateAndRefresh serves that token as-is; a
-	// refresh token does not imply that the access token expires.
+	// A token with no reported expiry — neither expires_in nor a JWT exp —
+	// is stored with NULL access_expires_at, "no known expiry", rather than a
+	// deadline the provider never asserted. validateAndRefresh serves that
+	// token as-is; a refresh token does not imply that the access token
+	// expires.
 	now := time.Now()
-	var accessExpires *time.Time
-	if tok.ExpiresIn > 0 {
-		v := now.Add(time.Duration(tok.ExpiresIn) * time.Second)
-		accessExpires = &v
-	}
+	accessExpires := tok.AccessExpiresAt(now)
 	refreshTimeout, refreshTimeoutReported := tok.RefreshTokenTimeoutSeconds()
 	refreshExpires := expirationDeadline(now, refreshTimeout, refreshTimeoutReported)
 	authorizationLifetime, authorizationLifetimeReported := tok.AuthorizationLifetimeSeconds()

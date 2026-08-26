@@ -583,14 +583,10 @@ func refreshSessionTokens(
 		newRefreshEnc = conv.PtrToPGText(&v)
 	}
 
-	// expires_in absent ⇒ NULL (no known expiry), matching exchangeCode. Never
-	// fabricate a deadline the upstream did not assert.
+	// No reported expiry ⇒ NULL (no known expiry), matching the code
+	// exchange. Never fabricate a deadline the upstream did not assert.
 	now := time.Now()
-	var accessExpires *time.Time
-	if tok.ExpiresIn > 0 {
-		v := now.Add(time.Duration(tok.ExpiresIn) * time.Second)
-		accessExpires = &v
-	}
+	accessExpires := tok.AccessExpiresAt(now)
 	refreshTimeout, refreshTimeoutReported := tok.RefreshTokenTimeoutSeconds()
 	refreshExpires := conv.PtrToPGTimestamptz(expirationDeadline(now, refreshTimeout, refreshTimeoutReported))
 
