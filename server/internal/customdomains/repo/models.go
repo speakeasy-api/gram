@@ -13,6 +13,7 @@ type CustomDomain struct {
 	ID                       uuid.UUID
 	OrganizationID           string
 	Domain                   string
+	Scope                    string
 	Verified                 bool
 	Activated                bool
 	IngressName              pgtype.Text

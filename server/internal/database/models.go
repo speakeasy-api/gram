@@ -510,6 +510,7 @@ type CustomDomain struct {
 	ID                       uuid.UUID
 	OrganizationID           string
 	Domain                   string
+	Scope                    string
 	Verified                 bool
 	Activated                bool
 	IngressName              pgtype.Text
@@ -1485,6 +1486,7 @@ type OrganizationMetadatum struct {
 	FreeTrialEndsAt    pgtype.Timestamptz
 	ScimEnabled        pgtype.Bool
 	SsoEnabled         pgtype.Bool
+	DefaultHost        pgtype.Text
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	DisabledAt         pgtype.Timestamptz
