@@ -246,7 +246,7 @@ describe("ClientsAndSessionsTab", () => {
 
     renderTab(<ClientsAndSessionsTab issuerId="issuer-1" />);
 
-    expect(screen.getByText(/Gram tools only/)).toBeDefined();
+    expect(screen.getByText(/Speakeasy tools only/)).toBeDefined();
   });
 
   it("groups connections by person and can regroup by provider", () => {

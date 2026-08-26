@@ -261,6 +261,15 @@ UPDATE user_session_issuers
 SET client_id_metadata_admission_mode = @client_id_metadata_admission_mode
 WHERE id = @id AND project_id = @project_id::uuid AND deleted IS FALSE;
 
+-- name: SetUserSessionIssuerOrganizationID :exec
+-- Test-only fixture: repoints an issuer's organization so tests can observe
+-- what a child row does when its parent's tenancy no longer matches its own.
+-- No production path moves an issuer between organizations yet, so there is
+-- no other way to reach that state.
+UPDATE user_session_issuers
+SET organization_id = @organization_id
+WHERE id = @id AND project_id = @project_id::uuid AND deleted IS FALSE;
+
 -- name: InsertPluginAssignmentFixture :exec
 -- Test-only fixture: writes a plugin_assignments row with an EXPLICIT
 -- organization_id so tests can seed a cross-tenant/stale assignment that the

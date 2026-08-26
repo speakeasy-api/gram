@@ -628,7 +628,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	// mcp_servers_issuer_required_check.
 	issuerID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	if (ids.RemoteMcpServerID.Valid || ids.TunneledMcpServerID.Valid) && !existing.UserSessionIssuerID.Valid {
-		issuerID, err = mintServerUserSessionIssuer(ctx, dbtx, *authCtx.ProjectID, slug)
+		issuerID, err = mintServerUserSessionIssuer(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, slug)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "mint mcp server issuer").LogError(ctx, logger)
 		}

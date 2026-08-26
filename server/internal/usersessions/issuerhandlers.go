@@ -56,6 +56,7 @@ func (s *Service) CreateUserSessionIssuer(ctx context.Context, payload *gen.Crea
 
 	row, err := repo.New(dbtx).CreateUserSessionIssuer(ctx, repo.CreateUserSessionIssuerParams{
 		ProjectID:          *authCtx.ProjectID,
+		OrganizationID:     conv.ToPGText(authCtx.ActiveOrganizationID),
 		Slug:               payload.Slug,
 		AuthnChallengeMode: payload.AuthnChallengeMode,
 		SessionDuration:    pgtype.Interval{Microseconds: dur.Microseconds(), Days: 0, Months: 0, Valid: true},

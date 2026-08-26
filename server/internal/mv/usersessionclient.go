@@ -5,6 +5,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/clientcred"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -16,6 +17,11 @@ import (
 // was resolved from a Client ID Metadata Document rather than registered via
 // RFC 7591 DCR. For a CIMD row it equals client_id (enforced by the
 // user_session_clients_client_id_metadata_uri_match_check constraint).
+//
+// credential_kind is derived rather than echoed: the declared method alone does
+// not say what the client will be held to, since a method predating the column
+// resolves by whether the row stores a secret. The raw declared value rides
+// along beside it for anyone debugging against the spec.
 //
 // activeSessionCount is supplied by the caller rather than read off the row:
 // it is a tally over user_sessions, which the client queries do not join.
@@ -29,6 +35,8 @@ func BuildUserSessionClientView(row repo.UserSessionClient, activeSessionCount i
 		ClientIDMetadataCacheExpiresAt: conv.PtrEmpty(conv.FromPGTimestamptz(row.ClientIDMetadataCacheExpiresAt)),
 		ClientIDMetadataEtag:           conv.FromPGText[string](row.ClientIDMetadataEtag),
 		ClientName:                     row.ClientName,
+		CredentialKind:                 string(clientcred.Resolve(row.TokenEndpointAuthMethod, row.ClientSecretHash.Valid)),
+		TokenEndpointAuthMethod:        conv.FromPGText[string](row.TokenEndpointAuthMethod),
 		RedirectUris:                   row.RedirectUris,
 		ClientIDIssuedAt:               row.ClientIDIssuedAt.Time.Format(time.RFC3339),
 		ClientSecretExpiresAt:          conv.PtrEmpty(conv.FromPGTimestamptz(row.ClientSecretExpiresAt)),

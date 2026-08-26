@@ -5,6 +5,7 @@ import {
   type ConnectionState,
 } from "@/lib/connection-state";
 import { providerLabel } from "@/lib/provider-label";
+import type { CredentialKind } from "@/lib/user-session-client-credential";
 import { subjectLabel } from "@/lib/user-session-status";
 
 import type { UserSession } from "@gram/client/models/components/usersession.js";
@@ -60,6 +61,28 @@ export type ConnectionGroup = {
    * sessions does not do.
    */
   client?: UserSessionClient;
+
+  /**
+   * Id of the registration this group stands for, under client grouping. Set
+   * from either source: the caller may not have passed `clients` (the
+   * organization and employee pages do not), in which case the group is derived
+   * from sessions alone and this is the only handle on the registration it has.
+   */
+  clientId?: string;
+
+  /**
+   * What the registration must present to authenticate, under client grouping.
+   * Every session in the group was issued through the same registration, so any
+   * of them reports the same kind; a group keyed on a client name because its
+   * sessions carry no client id has none.
+   */
+  credentialKind?: CredentialKind;
+
+  /**
+   * The raw token_endpoint_auth_method the registration declared, under client
+   * grouping. Absent for a registration that predates the recorded method.
+   */
+  declaredAuthMethod?: string;
 };
 
 /**
@@ -129,6 +152,9 @@ export function groupConnections(
         inactive: true,
         identity: undefined,
         client,
+        clientId: client.id,
+        credentialKind: client.credentialKind,
+        declaredAuthMethod: client.tokenEndpointAuthMethod,
       });
     }
   }
@@ -155,6 +181,20 @@ export function groupConnections(
               ? { photoUrl: session.subjectPhotoUrl ?? undefined }
               : undefined,
           client: undefined,
+          // Both read off the session rather than a registration record, which
+          // only the MCP server tab supplies. Every session filed under one
+          // agent group was issued through the same registration, so the first
+          // one to create the group speaks for all of them.
+          clientId:
+            grouping === "client"
+              ? (session.userSessionClientId ?? undefined)
+              : undefined,
+          credentialKind:
+            grouping === "client" ? session.clientCredentialKind : undefined,
+          declaredAuthMethod:
+            grouping === "client"
+              ? session.clientTokenEndpointAuthMethod
+              : undefined,
         };
         groups.set(key, group);
       }
