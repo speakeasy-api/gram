@@ -217,12 +217,14 @@ export function useMcpGuideOperations(): {
   catalogServers: PulseMCPServer[] | undefined;
   client: McpGuideClient;
   connectionPromptCopied: boolean;
+  promptCopied: boolean;
   endpointUrl: string | undefined;
   handleSignal: (
     signal: ProjectGuideOperationSignal,
     report: (report: ProjectGuideOperationReport) => void,
   ) => void;
   markConnectionPromptCopied: () => void;
+  markPromptCopied: () => void;
   mcpServer: McpServer | undefined;
   projectStateError: boolean;
   projectStatePending: boolean;
@@ -243,6 +245,7 @@ export function useMcpGuideOperations(): {
   >(undefined);
   const [client, setClient] = useState<McpGuideClient>("claude");
   const [connectionPromptCopied, setConnectionPromptCopied] = useState(false);
+  const [promptCopied, setPromptCopied] = useState(false);
   const [activeOperation, setActiveOperation] = useState<
     ActiveOperation | undefined
   >(undefined);
@@ -502,7 +505,21 @@ export function useMcpGuideOperations(): {
         return;
       }
       if (signal.type === "prepare") {
-        void captureActivityBaselineRef.current();
+        void captureActivityBaselineRef.current().then((ready) => {
+          if (ready) {
+            report({
+              type: "success",
+              scope: signal.scope,
+              result: `${resolvedName ?? "Selected"} mcp server is now setup`,
+            });
+          } else {
+            report({
+              type: "error",
+              scope: signal.scope,
+              message: "We couldn't prepare the connection yet. Try again.",
+            });
+          }
+        });
         return;
       }
       if (signal.type === "pause") {
@@ -531,7 +548,7 @@ export function useMcpGuideOperations(): {
         if (signal.scope.step === 3) retryActivity();
       }
     },
-    [retryActivity, updateActiveOperation, workflow],
+    [resolvedName, retryActivity, updateActiveOperation, workflow],
   );
 
   useEffect(() => {
@@ -554,7 +571,7 @@ export function useMcpGuideOperations(): {
         operation.report({
           type: "success",
           scope: operation.scope,
-          result: `${resolvedName ?? "Catalog server"} governed endpoint and Default plugin verified`,
+          result: `${resolvedName ?? "Catalog server"} MCP setup ready`,
         });
         return;
       }
@@ -603,7 +620,7 @@ export function useMcpGuideOperations(): {
         operation.report({
           type: "success",
           scope: operation.scope,
-          result: `${resolvedName ?? serverName(selectedServer)} governed endpoint and Default plugin verified`,
+          result: `${resolvedName ?? serverName(selectedServer)} MCP setup ready`,
         });
       } else {
         if (readinessCheckedFor.current.has(key)) return;
@@ -624,7 +641,7 @@ export function useMcpGuideOperations(): {
       operation.report({
         type: "progress",
         scope: operation.scope,
-        message: `Installing ${name} into this project`,
+        message: `Adding ${name} MCP server to this project`,
         progress: 0.5,
       });
       if (extractAuthType(selectedServer) === "oauth") {
@@ -742,9 +759,11 @@ export function useMcpGuideOperations(): {
     catalogServers,
     client,
     connectionPromptCopied,
+    promptCopied,
     endpointUrl,
     handleSignal,
     markConnectionPromptCopied: () => setConnectionPromptCopied(true),
+    markPromptCopied: () => setPromptCopied(true),
     mcpServer,
     projectStateError,
     projectStatePending,
@@ -756,6 +775,7 @@ export function useMcpGuideOperations(): {
     selectServer: (server) => {
       setSelectedServer(server);
       setConnectionPromptCopied(false);
+      setPromptCopied(false);
       activityBaselineRef.current = undefined;
       setActivityBaseline(undefined);
       setBaselineCaptureError(false);
@@ -765,6 +785,7 @@ export function useMcpGuideOperations(): {
     setClient: (nextClient) => {
       setClient(nextClient);
       setConnectionPromptCopied(false);
+      setPromptCopied(false);
     },
     connectionPrompts,
     toolLogsHref: routes.logs.href(),

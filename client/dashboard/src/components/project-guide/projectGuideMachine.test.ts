@@ -61,6 +61,13 @@ function reachCheckpoint(
     scope: latestScope(signals),
     result: "Server installed",
   });
+  if (service.getSnapshot().value === "preparing") {
+    report(service, {
+      type: "success",
+      scope: latestScope(signals),
+      result: "MCP ready",
+    });
+  }
   service.send({
     type: "USER_CHECKPOINT_COMPLETE",
     result: "Endpoint verified",
@@ -110,8 +117,27 @@ describe("project guide coordinator contract", () => {
     ]);
     expect(service.getSnapshot().context.output.at(-1)).toMatchObject({
       kind: "start",
-      message: "Started · Pick and set up a server",
+      message: "Starting…",
     });
+  });
+
+  it("records MCP selection and ignores selection changes during work", () => {
+    const { service, signals } = coordinator();
+    openMcp(service);
+
+    service.send({ type: "SELECT_MCP_SERVER", name: "Linear" });
+    expect(service.getSnapshot().context.output.at(-1)).toMatchObject({
+      kind: "note",
+      message: "Linear selected. Ready to start the journey",
+    });
+
+    service.send({ type: "START" });
+    service.send({ type: "SELECT_MCP_SERVER", name: "Notion" });
+
+    expect(service.getSnapshot().context.output.at(-1)?.message).not.toBe(
+      "Notion selected. Ready to start the journey",
+    );
+    expect(signals).toHaveLength(1);
   });
 
   it("rebuilds the journey narrative at its resume point", () => {
@@ -123,10 +149,10 @@ describe("project guide coordinator contract", () => {
       service.getSnapshot().context.output.map((entry) => entry.message),
     ).toEqual([
       "Server selected",
-      "Next · Connect your client",
+      "Next · Connect your agent to this server",
       "Endpoint verified",
-      "Next · Ask the agent to list the tools",
-      "Ready · Ask the agent to list the tools",
+      "Next · Prompt agent to list the tools",
+      "Ready · Prompt agent to list the tools",
     ]);
   });
 
@@ -195,7 +221,7 @@ describe("project guide coordinator contract", () => {
     });
   });
 
-  it("records success and prepares the MCP activity baseline", () => {
+  it("waits for MCP baseline preparation before advancing", () => {
     const { service, signals } = coordinator();
     openMcp(service);
     service.send({ type: "START" });
@@ -206,17 +232,25 @@ describe("project guide coordinator contract", () => {
     });
 
     const { context } = service.getSnapshot();
-    expect(service.getSnapshot().value).toBe("checkpoint");
-    expect(getProjectGuideCurrentStep(context)).toBe(1);
-    expect(context.completedByPath["third-party-mcp"]).toEqual([0]);
-    expect(context.output.slice(-2).map((entry) => entry.kind)).toEqual([
-      "result",
-      "next",
-    ]);
+    expect(service.getSnapshot().value).toBe("preparing");
+    expect(getProjectGuideCurrentStep(context)).toBe(0);
+    expect(context.completedByPath["third-party-mcp"]).toEqual([]);
     expect(signals.at(-1)).toEqual({
       type: "prepare",
-      scope: { path: "third-party-mcp", step: 1, attempt: 0, runId: 1 },
+      scope: { path: "third-party-mcp", step: 0, attempt: 0, runId: 1 },
     });
+
+    report(service, {
+      type: "success",
+      scope: latestScope(signals),
+      result: "Linear mcp server is now setup",
+    });
+
+    expect(service.getSnapshot().value).toBe("checkpoint");
+    expect(getProjectGuideCurrentStep(service.getSnapshot().context)).toBe(1);
+    expect(
+      service.getSnapshot().context.completedByPath["third-party-mcp"],
+    ).toEqual([0]);
   });
 
   it("waits for an agent before starting Secret Step 2", () => {
@@ -429,6 +463,18 @@ describe("project guide coordinator contract", () => {
         type: "success",
         scope: retry.scope,
         result: "Retry success",
+      },
+    });
+    const preparation = signals.at(-1);
+    if (preparation?.type !== "prepare") {
+      throw new Error("expected MCP preparation");
+    }
+    service.send({
+      type: "ADAPTER_REPORT",
+      report: {
+        type: "success",
+        scope: preparation.scope,
+        result: "MCP ready",
       },
     });
     expect(getProjectGuideCurrentStep(service.getSnapshot().context)).toBe(1);

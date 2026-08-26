@@ -90,6 +90,7 @@ function ProjectGuideContent({
   const secretOperations = useSecretGuideOperations();
   const mcpOperationSignalRef = useRef(mcpOperations.handleSignal);
   const secretOperationSignalRef = useRef(secretOperations.handleSignal);
+  const sendRef = useRef<(event: ProjectGuideEvent) => void>(() => undefined);
   const reportRef = useRef<(report: ProjectGuideOperationReport) => void>(
     () => undefined,
   );
@@ -103,17 +104,17 @@ function ProjectGuideContent({
         if (signal.type === "abort") {
           nextReportAtRef.current = 0;
         }
-        if (signal.type === "start") {
-          nextReportAtRef.current = Math.max(
-            nextReportAtRef.current,
-            Date.now() + PROJECT_GUIDE_MICRO_STEP_DELAY_MS,
-          );
-        }
-        mcpOperationSignalRef.current(signal, reportRef.current);
-        secretOperationSignalRef.current(signal, reportRef.current);
+        const report =
+          signal.type === "prepare"
+            ? (result: ProjectGuideOperationReport) =>
+                sendRef.current({ type: "ADAPTER_REPORT", report: result })
+            : reportRef.current;
+        mcpOperationSignalRef.current(signal, report);
+        secretOperationSignalRef.current(signal, report);
       },
     },
   });
+  sendRef.current = send;
   const reportOperation = useCallback(
     (report: ProjectGuideOperationReport) => {
       const now = Date.now();
@@ -285,13 +286,12 @@ function ProjectGuideContent({
                             currentStep === 2 &&
                             displayState === "checkpoint"
                           ) {
-                            send({
-                              type: "USER_CHECKPOINT_COMPLETE",
-                              result:
-                                "Prompt copied · listening for the governed call",
-                            });
+                            mcpOperations.markPromptCopied();
                           }
                         }}
+                        onMcpServerSelected={(name) =>
+                          send({ type: "SELECT_MCP_SERVER", name })
+                        }
                         onSecretPromptCopied={() => {
                           if (
                             journey.id === "secret-block" &&
@@ -317,6 +317,7 @@ function ProjectGuideContent({
                         accent={PROJECT_GUIDE_FIXTURES[journey.id].accent}
                         isProcessing={
                           displayState === "running" ||
+                          displayState === "preparing" ||
                           displayState === "waiting"
                         }
                         error={guideStepError(
@@ -420,26 +421,34 @@ function primaryActionFor(
         icon: "pause",
         onClick: () => send({ type: "PAUSE" }),
       };
+    case "preparing":
+      return { label: "Preparing the next step…", disabled: true };
     case "checkpoint":
       if (journey.id === "third-party-mcp" && currentStep === 1) {
-        const baselineFailed = mcpOperations.activityBaselineError;
         return {
-          label: baselineFailed ? "Try again" : "I've connected it",
+          label: "Server is installed",
+          icon: "play",
           disabled:
             !mcpOperations.connectionPrompts ||
-            !mcpOperations.connectionPromptCopied ||
-            mcpOperations.activityBaselinePending,
-          onClick: baselineFailed
-            ? () => void mcpOperations.prepareActivityBaseline()
-            : () =>
-                send({
-                  type: "USER_CHECKPOINT_COMPLETE",
-                  result: "Client connected to the governed endpoint",
-                }),
+            !mcpOperations.connectionPromptCopied,
+          onClick: () =>
+            send({
+              type: "USER_CHECKPOINT_COMPLETE",
+              result: "Server added to client",
+            }),
         };
       }
       if (journey.id === "third-party-mcp" && currentStep === 2) {
-        return null;
+        return {
+          label: "Prompt run",
+          icon: "play",
+          disabled: !mcpOperations.promptCopied,
+          onClick: () =>
+            send({
+              type: "USER_CHECKPOINT_COMPLETE",
+              result: "Prompt copied · listening for the governed call",
+            }),
+        };
       }
       if (journey.id === "secret-block" && currentStep === 2) {
         return {
@@ -515,6 +524,7 @@ function ProjectGuideStepContent({
   mcpOperations,
   secretOperations,
   onMcpPromptCopied,
+  onMcpServerSelected,
   onSecretPromptCopied,
   onSelectAgent,
 }: {
@@ -526,6 +536,7 @@ function ProjectGuideStepContent({
   mcpOperations: McpGuideOperations;
   secretOperations: SecretGuideOperations;
   onMcpPromptCopied: () => void;
+  onMcpServerSelected: (name: string) => void;
   onSecretPromptCopied: () => void;
   onSelectAgent: (client: SecretGuideClient) => void;
 }): JSX.Element {
@@ -539,6 +550,7 @@ function ProjectGuideStepContent({
         error={error}
         operations={mcpOperations}
         onMcpPromptCopied={onMcpPromptCopied}
+        onMcpServerSelected={onMcpServerSelected}
       />
     );
   }
@@ -872,6 +884,7 @@ function ProjectGuideMcpStepContent({
   error,
   operations,
   onMcpPromptCopied,
+  onMcpServerSelected,
 }: {
   journey: JourneyMeta;
   step: number;
@@ -880,6 +893,7 @@ function ProjectGuideMcpStepContent({
   error: string | null;
   operations: McpGuideOperations;
   onMcpPromptCopied: () => void;
+  onMcpServerSelected: (name: string) => void;
 }): JSX.Element {
   return (
     <div className="grid gap-3 pt-3">
@@ -893,6 +907,7 @@ function ProjectGuideMcpStepContent({
         error={error}
         operations={operations}
         onMcpPromptCopied={onMcpPromptCopied}
+        onMcpServerSelected={onMcpServerSelected}
       />
     </div>
   );
@@ -905,6 +920,7 @@ function McpStepBody({
   error,
   operations,
   onMcpPromptCopied,
+  onMcpServerSelected,
 }: {
   step: number;
   displayState: ProjectGuideDisplayState;
@@ -912,6 +928,7 @@ function McpStepBody({
   error: string | null;
   operations: McpGuideOperations;
   onMcpPromptCopied: () => void;
+  onMcpServerSelected: (name: string) => void;
 }): JSX.Element | null {
   switch (step) {
     case 0:
@@ -921,6 +938,7 @@ function McpStepBody({
           operationProgress={operationProgress}
           error={error}
           operations={operations}
+          onMcpServerSelected={onMcpServerSelected}
         />
       );
     case 1:
@@ -944,11 +962,13 @@ function McpCatalogSelection({
   operationProgress,
   error,
   operations,
+  onMcpServerSelected,
 }: {
   displayState: ProjectGuideDisplayState;
   operationProgress: number | null;
   error: string | null;
   operations: McpGuideOperations;
+  onMcpServerSelected: (name: string) => void;
 }): JSX.Element {
   if (operations.catalogPending) {
     return (
@@ -980,7 +1000,11 @@ function McpCatalogSelection({
               key={server.registrySpecifier}
               type="button"
               aria-pressed={selected}
-              onClick={() => operations.selectServer(server)}
+              disabled={displayState !== "ready" && displayState !== "error"}
+              onClick={() => {
+                operations.selectServer(server);
+                onMcpServerSelected(name);
+              }}
               className={cn(
                 "border-border flex items-center gap-2 border px-3 py-2 text-left",
                 selected && "border-foreground",
@@ -1222,7 +1246,7 @@ function guideStepError(
     if (step === 0 && mcpOperations.catalogError) {
       return "Could not load the automatic catalog servers.";
     }
-    if (step === 1 && mcpOperations.activityBaselineError) {
+    if (step === 0 && mcpOperations.activityBaselineError) {
       return "We couldn't prepare the connection yet. Try again.";
     }
     return null;

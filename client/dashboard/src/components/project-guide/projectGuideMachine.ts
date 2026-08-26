@@ -20,6 +20,7 @@ export type ProjectGuideDisplayState =
   | "opening"
   | "ready"
   | "running"
+  | "preparing"
   | "checkpoint"
   | "waiting"
   | "paused"
@@ -80,6 +81,7 @@ export type ProjectGuideEvent =
   | { type: "SWITCH"; path: JourneyId; resumeStep: number }
   | { type: "BACK" }
   | { type: "START" }
+  | { type: "SELECT_MCP_SERVER"; name: string }
   | { type: "SELECT_AGENT"; client: string }
   | { type: "PAUSE" }
   | { type: "RESUME" }
@@ -100,7 +102,7 @@ export type ProjectGuideMachineContext = {
   attempt: number;
   runId: number;
   pausedFrom: "running" | "waiting";
-  errorFrom: "running" | "waiting";
+  errorFrom: "running" | "preparing" | "waiting";
   selectedClient: string | null;
   nextOutputId: number;
   onSignal?: (signal: ProjectGuideOperationSignal) => void;
@@ -144,6 +146,15 @@ const NARRATIVE_STEP_RESULTS: Record<JourneyId, readonly string[]> = {
     "Observability plugin installed",
     "Blocked risk event recorded",
     "Blocked risk event recorded",
+  ],
+};
+
+const NARRATIVE_STEP_LABELS: Partial<Record<JourneyId, readonly string[]>> = {
+  "third-party-mcp": [
+    "Pick a server",
+    "Connect your agent to this server",
+    "Prompt agent to list the tools",
+    "Watch the first governed call",
   ],
 };
 
@@ -214,6 +225,14 @@ function stepLabel(context: ProjectGuideMachineContext, offset = 0): string {
   );
 }
 
+function narrativeStepLabel(path: JourneyId, step: number): string {
+  return (
+    NARRATIVE_STEP_LABELS[path]?.[step] ??
+    JOURNEY_BY_ID[path].steps[step] ??
+    "Journey complete"
+  );
+}
+
 function pathStepCount(path: JourneyId): number {
   return JOURNEY_BY_ID[path].steps.length;
 }
@@ -266,14 +285,17 @@ function narrativeOutputFor(
         NARRATIVE_STEP_RESULTS[path][index] ??
         `Completed · ${journey.steps[index]}`,
     });
-    const nextLabel = journey.steps[index + 1];
-    if (nextLabel)
-      entries.push({ kind: "next", message: `Next · ${nextLabel}` });
+    if (journey.steps[index + 1]) {
+      entries.push({
+        kind: "next",
+        message: `Next · ${narrativeStepLabel(path, index + 1)}`,
+      });
+    }
   }
 
   entries.push({
     kind: "note",
-    message: `Ready · ${journey.steps[completedCount] ?? "Journey complete"}`,
+    message: `Ready · ${narrativeStepLabel(path, completedCount)}`,
   });
   return entries;
 }
@@ -382,8 +404,14 @@ export const projectGuideMachine = setup({
     currentSuccessBeforeCheckpoint: ({ context, event }) =>
       isCurrentReport(context, event, "success") &&
       stepMode(context, 1) === "checkpoint",
+    currentSuccessBeforeMcpPreparation: ({ context, event }) =>
+      context.activePath === "third-party-mcp" &&
+      getProjectGuideCurrentStep(context) === 0 &&
+      isCurrentReport(context, event, "success") &&
+      stepMode(context, 1) === "checkpoint",
     pausedWhileWaiting: ({ context }) => context.pausedFrom === "waiting",
     erroredWhileWaiting: ({ context }) => context.errorFrom === "waiting",
+    erroredWhilePreparing: ({ context }) => context.errorFrom === "preparing",
     listenTimedOut: ({ event }) =>
       event.type === "LISTEN_TICK" &&
       event.elapsedSeconds >= LISTEN_TIMEOUT_SECONDS,
@@ -417,12 +445,24 @@ export const projectGuideMachine = setup({
     selectAgent: assign(({ event }) =>
       event.type === "SELECT_AGENT" ? { selectedClient: event.client } : {},
     ),
+    recordMcpServerSelected: assign(({ context, event }) => {
+      if (event.type !== "SELECT_MCP_SERVER") return {};
+      return appendOutput(context, [
+        {
+          kind: "note",
+          message: `${event.name} selected. Ready to start the journey`,
+        },
+      ]);
+    }),
     recordStart: assign(({ context }) => {
       const mode = stepMode(context);
+      const message =
+        context.activePath === "third-party-mcp" &&
+        getProjectGuideCurrentStep(context) === 0
+          ? "Starting…"
+          : `Started · ${stepLabel(context)}`;
       return {
-        ...appendOutput(context, [
-          { kind: "start", message: `Started · ${stepLabel(context)}` },
-        ]),
+        ...appendOutput(context, [{ kind: "start", message }]),
         error: null,
         operationProgress: null,
         attempt: 0,
@@ -455,7 +495,9 @@ export const projectGuideMachine = setup({
       }
       if (!context.activePath) return {};
       const nextStep = getProjectGuideCurrentStep(context) + 1;
-      const nextLabel = JOURNEY_BY_ID[context.activePath].steps[nextStep];
+      const nextLabel = JOURNEY_BY_ID[context.activePath].steps[nextStep]
+        ? narrativeStepLabel(context.activePath, nextStep)
+        : undefined;
       const entries: Array<Omit<ProjectGuideOutputEntry, "id">> = [
         {
           kind: "result",
@@ -543,6 +585,7 @@ export const projectGuideMachine = setup({
         : {},
     ),
     rememberRunningError: assign({ errorFrom: "running" }),
+    rememberPreparingError: assign({ errorFrom: "preparing" }),
     rememberWaitingError: assign({ errorFrom: "waiting" }),
     rememberRunningPause: assign({ pausedFrom: "running" }),
     rememberWaitingPause: assign({ pausedFrom: "waiting" }),
@@ -669,6 +712,7 @@ export const projectGuideMachine = setup({
     },
     ready: {
       on: {
+        SELECT_MCP_SERVER: { actions: "recordMcpServerSelected" },
         START: [
           {
             guard: "currentOperation",
@@ -695,6 +739,11 @@ export const projectGuideMachine = setup({
             actions: "recordProgress",
           },
           {
+            guard: "currentSuccessBeforeMcpPreparation",
+            target: "preparing",
+            actions: "signalPrepareMcp",
+          },
+          {
             guard: "currentErrorReport",
             target: "error",
             actions: ["rememberRunningError", "recordError"],
@@ -712,7 +761,7 @@ export const projectGuideMachine = setup({
           {
             guard: "currentSuccessBeforeCheckpoint",
             target: "checkpoint",
-            actions: ["recordSuccessAndAdvance", "signalPrepareMcp"],
+            actions: "recordSuccessAndAdvance",
           },
           {
             guard: "currentSuccessReport",
@@ -724,6 +773,22 @@ export const projectGuideMachine = setup({
           target: "paused",
           actions: ["rememberRunningPause", "signalPause"],
         },
+      },
+    },
+    preparing: {
+      on: {
+        ADAPTER_REPORT: [
+          {
+            guard: "currentSuccessReport",
+            target: "checkpoint",
+            actions: "recordSuccessAndAdvance",
+          },
+          {
+            guard: "currentErrorReport",
+            target: "error",
+            actions: ["rememberPreparingError", "recordError"],
+          },
+        ],
       },
     },
     checkpoint: {
@@ -810,7 +875,13 @@ export const projectGuideMachine = setup({
     },
     error: {
       on: {
+        SELECT_MCP_SERVER: { actions: "recordMcpServerSelected" },
         RETRY: [
+          {
+            guard: "erroredWhilePreparing",
+            target: "preparing",
+            actions: ["retry", "signalPrepareMcp"],
+          },
           {
             guard: "erroredWhileWaiting",
             target: "waiting",

@@ -150,9 +150,11 @@ function resetMcpOperations(): void {
     catalogServers: [catalogServer],
     client: "claude",
     connectionPromptCopied: true,
+    promptCopied: false,
     endpointUrl: "https://api.example/mcp/linear-endpoint",
     handleSignal: vi.fn(),
     markConnectionPromptCopied: vi.fn(),
+    markPromptCopied: vi.fn(),
     mcpServer: {
       id: "mcp-server-id",
       slug: "linear-governed",
@@ -351,7 +353,7 @@ describe("ProjectGuide", () => {
     expect(screen.getByText("Install it into this project")).toBeTruthy();
     expect(
       screen.getByRole("log", { name: "Journey A activity" }).textContent,
-    ).toContain("Ready · Pick and set up a server");
+    ).toContain("Ready · Pick a server");
 
     fireEvent.click(switchControl);
 
@@ -392,7 +394,7 @@ describe("ProjectGuide", () => {
     ]);
     expect(
       screen.getByRole("log", { name: "Journey A activity" }).textContent,
-    ).toContain("Started · Pick and set up a server");
+    ).toContain("Starting…");
   });
 
   it("paces automated MCP sub-steps before advancing the step", async () => {
@@ -402,6 +404,14 @@ describe("ProjectGuide", () => {
         signal: ProjectGuideOperationSignal,
         report: (report: ProjectGuideOperationReport) => void,
       ) => {
+        if (signal.type === "prepare") {
+          report({
+            type: "success",
+            scope: signal.scope,
+            result: "Linear mcp server is now setup",
+          });
+          return;
+        }
         if (signal.type !== "start" || signal.scope.step !== 0) return;
         report({
           type: "progress",
@@ -412,7 +422,7 @@ describe("ProjectGuide", () => {
         report({
           type: "progress",
           scope: signal.scope,
-          message: "Install it into this project",
+          message: "Adding Linear MCP server to this project",
           progress: 0.5,
         });
         report({
@@ -429,13 +439,30 @@ describe("ProjectGuide", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
 
+    expect(
+      (
+        screen.getByRole("button", {
+          name: /Linear.*2 tools/,
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+
     const activity = screen.getByRole("log", { name: "Journey A activity" });
-    expect(activity.textContent).not.toContain("Read the server's tool list");
-    await act(() => vi.advanceTimersByTime(PROJECT_GUIDE_MICRO_STEP_DELAY_MS));
+    await act(() => vi.advanceTimersByTime(0));
     expect(activity.textContent).toContain("Read the server's tool list");
-    expect(activity.textContent).not.toContain("Install it into this project");
-    await act(() => vi.advanceTimersByTime(PROJECT_GUIDE_MICRO_STEP_DELAY_MS));
-    expect(activity.textContent).toContain("Install it into this project");
+    expect(activity.textContent).not.toContain(
+      "Adding Linear MCP server to this project",
+    );
+    await act(() =>
+      vi.advanceTimersByTime(PROJECT_GUIDE_MICRO_STEP_DELAY_MS - 1),
+    );
+    expect(activity.textContent).not.toContain(
+      "Adding Linear MCP server to this project",
+    );
+    await act(() => vi.advanceTimersByTime(1));
+    expect(activity.textContent).toContain(
+      "Adding Linear MCP server to this project",
+    );
     expect(screen.getByTestId("project-guide-run").dataset.displayState).toBe(
       "running",
     );
@@ -456,6 +483,14 @@ describe("ProjectGuide", () => {
       ) => {
         report = sendReport;
         activeScope = signal.scope;
+        if (signal.type === "prepare") {
+          sendReport({
+            type: "success",
+            scope: signal.scope,
+            result: "Linear mcp server is now setup",
+          });
+          return;
+        }
         if (signal.type !== "start") return;
         if (signal.scope.step === 0) {
           sendReport({
@@ -473,7 +508,7 @@ describe("ProjectGuide", () => {
         }
       },
     );
-    render(<ProjectGuide />);
+    const view = render(<ProjectGuide />);
 
     fireEvent.click(
       screen.getByRole("button", { name: /Govern a third-party MCP/ }),
@@ -484,10 +519,16 @@ describe("ProjectGuide", () => {
     expect(screen.getByTestId("project-guide-run").dataset.displayState).toBe(
       "checkpoint",
     );
-    fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
-    expect(screen.queryByRole("button", { name: "Sent it" })).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Server is installed",
+      }),
+    );
     await advanceGuideDelay();
     fireEvent.click(screen.getByRole("button", { name: "copy" }));
+    mcpOperations.current.promptCopied = true;
+    view.rerender(<ProjectGuide />);
+    fireEvent.click(screen.getByRole("button", { name: "Prompt run" }));
 
     expect(screen.getByTestId("project-guide-run").dataset.displayState).toBe(
       "waiting",
@@ -495,10 +536,10 @@ describe("ProjectGuide", () => {
     expect(screen.queryByText("Your turn · Connect your client")).toBeNull();
     expect(
       screen.getByRole("log", { name: "Journey A activity" }).textContent,
-    ).toContain("Next · Connect your client");
+    ).toContain("Next · Connect your agent to this server");
     expect(
       screen.getByRole("log", { name: "Journey A activity" }).textContent,
-    ).toContain("Next · Connect your client");
+    ).toContain("Next · Connect your agent to this server");
     if (!activeScope) throw new Error("expected waiting operation scope");
     const waitingScope = activeScope;
 
@@ -546,14 +587,28 @@ describe("ProjectGuide", () => {
           void (
             mcpOperations.current
               .prepareActivityBaseline as () => Promise<boolean>
-          )();
+          )().then((ready) => {
+            if (ready) {
+              report({
+                type: "success",
+                scope: signal.scope,
+                result: "Linear mcp server is now setup",
+              });
+            } else {
+              report({
+                type: "error",
+                scope: signal.scope,
+                message: "We couldn't prepare the connection yet. Try again.",
+              });
+            }
+          });
           return;
         }
         if (signal.type === "start" && signal.scope.step === 0) {
           report({
             type: "success",
             scope: signal.scope,
-            result: "Governed endpoint and Default plugin verified",
+            result: "Linear mcp server is now setup",
           });
         }
       },
@@ -572,21 +627,54 @@ describe("ProjectGuide", () => {
     expect(mcpOperations.current.handleSignal).toHaveBeenCalledWith(
       expect.objectContaining({
         type: "prepare",
-        scope: { path: "third-party-mcp", step: 1, attempt: 0, runId: 1 },
+        scope: { path: "third-party-mcp", step: 0, attempt: 0, runId: 1 },
       }),
       expect.any(Function),
     );
     expect(screen.queryByText(/first list the available tools/)).toBeNull();
+    expect(screen.getByTestId("project-guide-run").dataset.displayState).toBe(
+      "preparing",
+    );
 
     await act(async () => baseline.resolve(true));
 
-    fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
+    expect(
+      screen.getByRole("log", { name: "Journey A activity" }).textContent,
+    ).toContain("Linear mcp server is now setup");
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Server is installed",
+      }),
+    );
     expect(
       screen.getByRole("heading", { name: "Ask the agent to list the tools" }),
     ).toBeTruthy();
     expect(
       mcpOperations.current.prepareActivityBaseline,
     ).toHaveBeenCalledOnce();
+  });
+
+  it("does not recapture the MCP baseline from the client checkpoint", () => {
+    statusByJourney.current["third-party-mcp"] = "in-progress";
+    mcpOperations.current.activityBaselineError = true;
+    render(<ProjectGuide />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Server is installed",
+      }),
+    );
+
+    expect(
+      mcpOperations.current.prepareActivityBaseline,
+    ).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("heading", { name: "Ask the agent to list the tools" }),
+    ).toBeTruthy();
   });
 
   it("awaits the hook and risk baseline before exposing the secret prompt", async () => {
@@ -655,6 +743,14 @@ describe("ProjectGuide", () => {
         signal: ProjectGuideOperationSignal,
         report: (report: ProjectGuideOperationReport) => void,
       ) => {
+        if (signal.type === "prepare") {
+          report({
+            type: "success",
+            scope: signal.scope,
+            result: "Linear mcp server is now setup",
+          });
+          return;
+        }
         if (signal.type === "start" && signal.scope.step < 2) {
           report({
             type: "success",
@@ -673,16 +769,25 @@ describe("ProjectGuide", () => {
     );
     mcpOperations.current.handleSignal = handleSignal;
 
-    render(<ProjectGuide />);
+    const view = render(<ProjectGuide />);
     fireEvent.click(
       screen.getByRole("button", { name: /Govern a third-party MCP/ }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
     await advanceGuideDelay();
-    fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
-    await advanceGuideDelay();
-    expect(screen.getByText(/first list the available tools/)).toBeTruthy();
-    fireEvent.click(screen.getByText(/first list the available tools/));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Server is installed",
+      }),
+    );
+    expect(
+      (screen.getByRole("button", { name: "Prompt run" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "copy" }));
+    mcpOperations.current.promptCopied = true;
+    view.rerender(<ProjectGuide />);
+    fireEvent.click(screen.getByRole("button", { name: "Prompt run" }));
 
     const activity = screen.getByRole("log", { name: "Journey A activity" });
     await advanceGuideDelay();
@@ -702,6 +807,14 @@ describe("ProjectGuide", () => {
         signal: ProjectGuideOperationSignal,
         report: (report: ProjectGuideOperationReport) => void,
       ) => {
+        if (signal.type === "prepare") {
+          report({
+            type: "success",
+            scope: signal.scope,
+            result: "Linear mcp server is now setup",
+          });
+          return;
+        }
         if (signal.type === "start" && signal.scope.step < 2) {
           report({
             type: "success",
@@ -720,15 +833,21 @@ describe("ProjectGuide", () => {
     );
     mcpOperations.current.handleSignal = handleSignal;
 
-    render(<ProjectGuide />);
+    const view = render(<ProjectGuide />);
     fireEvent.click(
       screen.getByRole("button", { name: /Govern a third-party MCP/ }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
     await advanceGuideDelay();
-    fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
-    await advanceGuideDelay();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Server is installed",
+      }),
+    );
     fireEvent.click(screen.getByRole("button", { name: "copy" }));
+    mcpOperations.current.promptCopied = true;
+    view.rerender(<ProjectGuide />);
+    fireEvent.click(screen.getByRole("button", { name: "Prompt run" }));
     await advanceGuideDelay();
 
     expect(
@@ -1097,7 +1216,9 @@ describe("ProjectGuide", () => {
     expect(
       screen.getByRole("log", { name: "Journey A activity" }).textContent,
     ).toContain("Server selected");
-    expect(screen.getByText("Ready · Connect your client")).toBeTruthy();
+    expect(
+      screen.getByText("Ready · Connect your agent to this server"),
+    ).toBeTruthy();
     expect(
       screen.queryByText(
         "Endpoint verified, client connected, no calls recorded.",
@@ -1294,6 +1415,13 @@ describe("ProjectGuide", () => {
         signal: ProjectGuideOperationSignal,
         report: (report: ProjectGuideOperationReport) => void,
       ) => {
+        if (signal.type === "prepare") {
+          report({
+            type: "success",
+            scope: signal.scope,
+            result: "Linear mcp server is now setup",
+          });
+        }
         if (signal.type === "start" && signal.scope.step === 0) {
           report({
             type: "success",
@@ -1328,7 +1456,7 @@ describe("ProjectGuide", () => {
     );
     mcpOperations.current.handleSignal = handleSignal;
 
-    render(<ProjectGuide />);
+    const view = render(<ProjectGuide />);
     fireEvent.click(
       screen.getByRole("button", { name: /Govern a third-party MCP/ }),
     );
@@ -1337,6 +1465,9 @@ describe("ProjectGuide", () => {
     expect(mcpOperations.current.selectServer).toHaveBeenCalledWith(
       catalogServer,
     );
+    expect(
+      screen.getByRole("log", { name: "Journey A activity" }).textContent,
+    ).toContain("Linear selected. Ready to start the journey");
     fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
     await advanceGuideDelay();
 
@@ -1360,7 +1491,16 @@ describe("ProjectGuide", () => {
       screen.queryByRole("link", { name: "View Linear MCP server" }),
     ).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
+    expect(
+      screen
+        .getByRole("button", { name: "Server is installed" })
+        .querySelector("svg"),
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Server is installed",
+      }),
+    );
     await advanceGuideDelay();
     expect(
       screen.getByText((_, element) => {
@@ -1373,8 +1513,21 @@ describe("ProjectGuide", () => {
         );
       }),
     ).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Sent it" })).toBeNull();
+    expect(
+      (screen.getByRole("button", { name: "Prompt run" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(
+      screen.getByRole("button", { name: "Prompt run" }).querySelector("svg"),
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "copy" }));
+    mcpOperations.current.promptCopied = true;
+    view.rerender(<ProjectGuide />);
+    expect(
+      (screen.getByRole("button", { name: "Prompt run" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Prompt run" }));
     await advanceGuideDelay();
     expect(
       screen.getByRole("heading", { name: "The path is governed." }),
@@ -1535,6 +1688,14 @@ describe("ProjectGuide", () => {
         signal: ProjectGuideOperationSignal,
         report: (report: ProjectGuideOperationReport) => void,
       ) => {
+        if (signal.type === "prepare") {
+          report({
+            type: "success",
+            scope: signal.scope,
+            result: "Linear mcp server is now setup",
+          });
+          return;
+        }
         if (signal.type === "start" && signal.scope.step < 2) {
           report({
             type: "success",
@@ -1735,6 +1896,14 @@ describe("ProjectGuide", () => {
         signal: ProjectGuideOperationSignal,
         report: (report: ProjectGuideOperationReport) => void,
       ) => {
+        if (signal.type === "prepare") {
+          report({
+            type: "success",
+            scope: signal.scope,
+            result: "Linear mcp server is now setup",
+          });
+          return;
+        }
         if (signal.type === "start" && signal.scope.step < 2) {
           report({
             type: "success",
@@ -1747,15 +1916,22 @@ describe("ProjectGuide", () => {
     );
     mcpOperations.current.handleSignal = handleSignal;
 
-    render(<ProjectGuide />);
+    const view = render(<ProjectGuide />);
     fireEvent.click(
       screen.getByRole("button", { name: /Govern a third-party MCP/ }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
     await advanceGuideDelay();
-    fireEvent.click(screen.getByRole("button", { name: "I've connected it" }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Server is installed",
+      }),
+    );
     await advanceGuideDelay();
     fireEvent.click(screen.getByRole("button", { name: "copy" }));
+    mcpOperations.current.promptCopied = true;
+    view.rerender(<ProjectGuide />);
+    fireEvent.click(screen.getByRole("button", { name: "Prompt run" }));
 
     act(() => {
       vi.advanceTimersByTime(LISTEN_TIMEOUT_SECONDS * 1_000);
