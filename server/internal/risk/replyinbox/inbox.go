@@ -116,8 +116,7 @@ type Inbox struct {
 	tracer    trace.Tracer
 	metrics   inboxMetrics
 	options   redis.Options
-	clientMu  sync.Mutex
-	client    *redis.Client
+	client    atomic.Pointer[redis.Client]
 	replicaID string
 	key       string
 	block     time.Duration
@@ -135,8 +134,9 @@ type Inbox struct {
 	shutdown  chan struct{}
 	closeOnce sync.Once
 
-	mu      sync.Mutex
-	waiters map[string]*waiter
+	// scan id -> *waiter. Load/store churn is per scan, not per reply, and
+	// the router only ever Loads, which is sync.Map's optimized case.
+	waiters sync.Map
 }
 
 // waiter follows the net/rpc client shape: the router only looks a waiter up
@@ -197,7 +197,7 @@ func New(
 		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk/replyinbox"),
 		metrics:         metrics,
 		options:         redisOptions,
-		client:          client,
+		client:          atomic.Pointer[redis.Client]{},
 		replicaID:       cfg.ReplicaID,
 		key:             InboxKey(cfg.ReplicaID),
 		block:           cfg.BlockTimeout,
@@ -212,10 +212,9 @@ func New(
 		done:            make(chan struct{}),
 		shutdown:        make(chan struct{}),
 		closeOnce:       sync.Once{},
-		clientMu:        sync.Mutex{},
-		mu:              sync.Mutex{},
-		waiters:         make(map[string]*waiter),
+		waiters:         sync.Map{},
 	}
+	inbox.client.Store(client)
 	drainFunc := inbox.drain
 	if cfg.drainFunc != nil {
 		drainFunc = cfg.drainFunc
@@ -227,13 +226,12 @@ func New(
 
 // Snapshot returns load counters without retaining a Redis connection.
 func (i *Inbox) Snapshot() Stats {
-	i.mu.Lock()
-	waiters := len(i.waiters)
-	i.mu.Unlock()
-
-	i.clientMu.Lock()
-	pool := i.client.PoolStats()
-	i.clientMu.Unlock()
+	waiters := 0
+	i.waiters.Range(func(_, _ any) bool {
+		waiters++
+		return true
+	})
+	pool := i.client.Load().PoolStats()
 
 	return Stats{
 		Waiters:         waiters,
@@ -344,21 +342,11 @@ func (i *Inbox) register(scanID string, lanes []Lane) (*waiter, func(), error) {
 		lanes: requested,
 		done:  make(chan *riskv1.EnforcementReply, len(lanes)+duplicateReplySlack),
 	}
-	i.mu.Lock()
-	if _, exists := i.waiters[scanID]; exists {
-		i.mu.Unlock()
+	if _, exists := i.waiters.LoadOrStore(scanID, w); exists {
 		return nil, nil, fmt.Errorf("scan %s: %w", scanID, ErrDuplicateWaiter)
 	}
-	i.waiters[scanID] = w
-	i.mu.Unlock()
-
-	var once sync.Once
 	release := func() {
-		once.Do(func() {
-			i.mu.Lock()
-			delete(i.waiters, scanID)
-			i.mu.Unlock()
-		})
+		i.waiters.Delete(scanID)
 	}
 	return w, release, nil
 }
@@ -516,19 +504,22 @@ func (i *Inbox) drain(ctx context.Context) {
 }
 
 func (i *Inbox) redisClient() *redis.Client {
-	i.clientMu.Lock()
-	defer i.clientMu.Unlock()
-	return i.client
+	return i.client.Load()
 }
 
+// replaceClient swaps in a fresh client after a transient Redis error. Only
+// the drainer calls it, and Close waits for the drainer to exit before
+// closing the current client, so the compare-and-swap cannot race a close.
 func (i *Inbox) replaceClient(ctx context.Context, stale *redis.Client) {
-	i.clientMu.Lock()
-	defer i.clientMu.Unlock()
-	if i.client != stale || ctx.Err() != nil {
+	if ctx.Err() != nil {
 		return
 	}
-	_ = i.client.Close()
-	i.client = redis.NewClient(&i.options)
+	fresh := redis.NewClient(&i.options)
+	if !i.client.CompareAndSwap(stale, fresh) {
+		_ = fresh.Close()
+		return
+	}
+	_ = stale.Close()
 }
 
 func (i *Inbox) route(ctx context.Context, raw string) {
@@ -539,11 +530,14 @@ func (i *Inbox) route(ctx context.Context, raw string) {
 	}
 	i.metrics.replies.Add(ctx, 1, metric.WithAttributes(attribute.String("status", statusLabel(reply.GetStatus()))))
 
-	i.mu.Lock()
-	w := i.waiters[reply.GetScanId()]
-	i.mu.Unlock()
-	if w == nil {
+	value, ok := i.waiters.Load(reply.GetScanId())
+	if !ok {
 		// The scan already completed or timed out and released its waiter.
+		i.recordOrphan(ctx)
+		return
+	}
+	w, ok := value.(*waiter)
+	if !ok {
 		i.recordOrphan(ctx)
 		return
 	}
@@ -566,15 +560,14 @@ func statusLabel(status riskv1.EnforcementStatus) string {
 }
 
 // Close stops the drainer, releases any blocked waiters, and closes the
-// dedicated Redis client.
+// dedicated Redis client. The client closes only after the drainer has
+// exited, so it cannot race a replaceClient swap; the wait is bounded by the
+// BLPOP block timeout.
 func (i *Inbox) Close() error {
 	i.closeOnce.Do(func() { close(i.shutdown) })
 	i.cancel()
-	i.clientMu.Lock()
-	err := i.client.Close()
-	i.clientMu.Unlock()
 	<-i.done
-	if err != nil {
+	if err := i.client.Load().Close(); err != nil {
 		return fmt.Errorf("close reply inbox redis: %w", err)
 	}
 	return nil
