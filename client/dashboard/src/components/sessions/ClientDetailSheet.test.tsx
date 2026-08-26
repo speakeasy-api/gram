@@ -21,7 +21,10 @@ const {
   refreshMutate: vi.fn(),
   hasScope: vi.fn(),
   refreshHookOptions: {} as {
-    options?: { onError?: (error: unknown) => Promise<void> };
+    options?: {
+      onSuccess?: (data: unknown) => Promise<void>;
+      onError?: (error: unknown) => Promise<void>;
+    };
   },
 }));
 
@@ -40,6 +43,7 @@ vi.mock("@gram/client/react-query/userSessionClients.js", () => ({
 
 vi.mock("@gram/client/react-query/refreshUserSessionClientCIMD.js", () => ({
   useRefreshUserSessionClientCIMDMutation: (options?: {
+    onSuccess?: (data: unknown) => Promise<void>;
     onError?: (error: unknown) => Promise<void>;
   }) => {
     refreshHookOptions.options = options;
@@ -183,6 +187,34 @@ describe("ClientDetailSheet", () => {
     expect(refreshMutate).toHaveBeenCalledWith({
       request: { id: "client-1", gramProject: "project-1" },
     });
+  });
+
+  // The sheet reads its detail from a project-scoped key, so a refresh that
+  // seeded an unscoped one would land where nothing is watching and the panel
+  // would keep showing the pre-refresh copy.
+  it("seeds the refreshed view under the key the sheet reads", async () => {
+    renderSheetForId("client-1", cimdClient(), "analytics");
+
+    const fresh = cimdClient({ clientName: "Refreshed Name" });
+    await refreshHookOptions.options?.onSuccess?.(fresh);
+
+    expect(setUserSessionClientData).toHaveBeenCalledWith(
+      expect.anything(),
+      [{ id: "client-1", gramProject: "analytics" }],
+      fresh,
+    );
+  });
+
+  it("invalidates the same key after a failed refresh", async () => {
+    renderSheetForId("client-1", cimdClient(), "analytics");
+
+    await refreshHookOptions.options?.onError?.(new Error("boom"));
+
+    expect(invalidateUserSessionClient).toHaveBeenCalledWith(
+      expect.anything(),
+      [{ id: "client-1", gramProject: "analytics" }],
+      expect.objectContaining({ refetchType: "all" }),
+    );
   });
 
   it("hides the refresh button without project write access", () => {

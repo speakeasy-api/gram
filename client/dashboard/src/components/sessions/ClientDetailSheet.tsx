@@ -202,7 +202,14 @@ function CimdMetadataPanel({
       // The endpoint returns the freshly re-read view; seed it so the sheet
       // updates without waiting on a refetch, then invalidate the listing,
       // whose rows carry the same fields.
-      setUserSessionClientData(queryClient, [{ id: client.id }], data);
+      // Keyed exactly as the sheet's own query reads it: seeded without the
+      // project, the fresh view lands under a key nothing is watching and the
+      // panel keeps showing the pre-refresh copy.
+      setUserSessionClientData(
+        queryClient,
+        [{ id: client.id, gramProject }],
+        data,
+      );
       await invalidateAllUserSessionClients(queryClient, {
         refetchType: "all",
       });
@@ -217,9 +224,11 @@ function CimdMetadataPanel({
       // rejections (cooldown, DCR, missing) refetch unchanged data, which is
       // harmless.
       await Promise.all([
-        invalidateUserSessionClient(queryClient, [{ id: client.id }], {
-          refetchType: "all",
-        }),
+        invalidateUserSessionClient(
+          queryClient,
+          [{ id: client.id, gramProject }],
+          { refetchType: "all" },
+        ),
         invalidateAllUserSessionClients(queryClient, {
           refetchType: "all",
         }),
