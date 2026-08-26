@@ -523,6 +523,7 @@ var _ = Service("admin", func() {
 			Response(StatusOK)
 		})
 
+		shared.CursorPagination()
 		Meta("openapi:operationId", "adminListOrganizationActivity")
 	})
 

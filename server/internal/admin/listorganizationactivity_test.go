@@ -146,10 +146,6 @@ func TestListOrganizationActivity_ScopeAndResponse(t *testing.T) {
 	bad := "not-a-cursor"
 	_, err = svc.ListOrganizationActivity(ctx, &gen.ListOrganizationActivityPayload{OrganizationID: "org_activity_target", Cursor: &bad})
 	assertOopsCode(t, err, oops.CodeBadRequest)
-
-	insertActivity(t, ctx, conn, activitySeed{organizationID: "org_activity_target", subjectType: "project", action: "invalid-metadata", metadata: []byte("[]")})
-	_, err = svc.ListOrganizationActivity(ctx, &gen.ListOrganizationActivityPayload{OrganizationID: "org_activity_target"})
-	assertOopsCode(t, err, oops.CodeUnexpected)
 }
 
 func TestListOrganizationActivity_NewestFirstWithDistinctTimestamps(t *testing.T) {
@@ -218,6 +214,29 @@ func TestListOrganizationActivity_PaginationEqualTimestampsUsesSeqDescending(t *
 	require.Equal(t, inserted[0], second.Logs[0].ID)
 }
 
+func TestListOrganizationActivity_OmitsNonObjectMetadata(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newTestAdminService(t)
+	seedOrg(t, ctx, conn, orgFixture{id: "org_activity_non_object_metadata", name: "Metadata", slug: "activity-metadata"})
+
+	for _, metadata := range [][]byte{[]byte("[]"), []byte(`"metadata"`), []byte("1"), []byte("true")} {
+		insertActivity(t, ctx, conn, activitySeed{
+			organizationID: "org_activity_non_object_metadata",
+			subjectType:    "project",
+			action:         "project:update",
+			metadata:       metadata,
+		})
+	}
+
+	result, err := svc.ListOrganizationActivity(ctx, &gen.ListOrganizationActivityPayload{OrganizationID: "org_activity_non_object_metadata"})
+	require.NoError(t, err)
+	require.Len(t, result.Logs, 4)
+	for _, log := range result.Logs {
+		require.Nil(t, log.Metadata)
+	}
+}
+
 func TestAdminActivityLog_ResponseMapping(t *testing.T) {
 	t.Parallel()
 
@@ -229,7 +248,7 @@ func TestAdminActivityLog_ResponseMapping(t *testing.T) {
 		CreatedAt:     pgtype.Timestamptz{Time: createdAt, Valid: true},
 	}
 
-	for _, metadata := range [][]byte{nil, {}, []byte("null")} {
+	for _, metadata := range [][]byte{nil, {}, []byte("null"), []byte("[]"), []byte(`"metadata"`), []byte("1"), []byte("true")} {
 		row := base
 		row.Metadata = metadata
 		log, err := adminActivityLog(row)
@@ -241,10 +260,6 @@ func TestAdminActivityLog_ResponseMapping(t *testing.T) {
 
 	for name, metadata := range map[string][]byte{
 		"malformed": []byte("{"),
-		"array":     []byte("[]"),
-		"string":    []byte(`"metadata"`),
-		"number":    []byte("1"),
-		"boolean":   []byte("true"),
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

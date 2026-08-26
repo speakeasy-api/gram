@@ -772,9 +772,11 @@ func (s *Service) ListOrganizationActivity(ctx context.Context, payload *gen.Lis
 func adminActivityLog(row auditrepo.ListAuditLogsRow) (*gen.AuditLog, error) {
 	var metadata map[string]any
 	if len(row.Metadata) > 0 {
-		if err := json.Unmarshal(row.Metadata, &metadata); err != nil {
+		var decoded any
+		if err := json.Unmarshal(row.Metadata, &decoded); err != nil {
 			return nil, fmt.Errorf("unmarshal metadata: %w", err)
 		}
+		metadata, _ = decoded.(map[string]any)
 	}
 
 	actorDisplayName := conv.FromPGText[string](row.ActorDisplayName)

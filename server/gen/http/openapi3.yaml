@@ -279,90 +279,98 @@ paths:
                                 $ref: '#/components/schemas/Error'
     /admin/organization.activity:
         get:
-            tags:
-                - admin
-            summary: listOrganizationActivity admin
             description: Lists activity belonging to an organization for admin operators.
             operationId: adminListOrganizationActivity
             parameters:
-                - name: organization_id
-                  in: query
+                - allowEmptyValue: true
                   description: Organization ID.
-                  allowEmptyValue: true
+                  in: query
+                  name: organization_id
                   required: true
                   schema:
-                    type: string
                     description: Organization ID.
-                - name: cursor
-                  in: query
-                  description: Cursor for paginating through organization activity.
-                  allowEmptyValue: true
-                  schema:
                     type: string
+                - allowEmptyValue: true
+                  description: Cursor for paginating through organization activity.
+                  in: query
+                  name: cursor
+                  schema:
                     description: Cursor for paginating through organization activity.
+                    type: string
             responses:
                 "200":
-                    description: OK response.
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/AdminListOrganizationActivityResult'
+                    description: OK response.
                 "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
                     description: 'bad_request: request is invalid'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
                 "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
                     description: 'unauthorized: unauthorized access'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
                 "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
                     description: 'forbidden: permission denied'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
                 "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
                     description: 'not_found: resource not found'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
                 "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
                     description: 'conflict: resource already exists'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
                 "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
                     description: 'unsupported_media: unsupported media type'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
                 "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
                     description: 'invalid: request contains one or more invalidation fields'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
                 "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
                     description: 'unexpected: an unexpected error occurred'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
                 "502":
-                    description: 'gateway_error: an unexpected error occurred'
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
             security:
                 - admin_auth_header_Authorization: []
+            summary: listOrganizationActivity admin
+            tags:
+                - admin
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: cursor
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_cursor
+                type: cursor
     /admin/organization.cancelStripeSubscription:
         post:
             tags:
