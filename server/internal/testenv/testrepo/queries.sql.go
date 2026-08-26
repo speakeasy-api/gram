@@ -388,6 +388,20 @@ func (q *Queries) ForceSoftDeleteOrganizationUserRelationshipsFixture(ctx contex
 	return err
 }
 
+const forceSoftDeleteRemoteSessionIssuerFixture = `-- name: ForceSoftDeleteRemoteSessionIssuerFixture :exec
+UPDATE remote_session_issuers
+SET deleted_at = clock_timestamp()
+WHERE id = $1
+`
+
+// Tombstones a remote session issuer regardless of its clients. Production
+// deletes refuse while a live client references it, so this is the only way to
+// build the state the derivation must reject.
+func (q *Queries) ForceSoftDeleteRemoteSessionIssuerFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, forceSoftDeleteRemoteSessionIssuerFixture, id)
+	return err
+}
+
 const forceSoftDeleteUser = `-- name: ForceSoftDeleteUser :exec
 UPDATE users
 SET deleted_at = clock_timestamp()
@@ -1514,6 +1528,24 @@ type SetFunctionToolVariablesParams struct {
 
 func (q *Queries) SetFunctionToolVariables(ctx context.Context, arg SetFunctionToolVariablesParams) error {
 	_, err := q.db.Exec(ctx, setFunctionToolVariables, arg.Variables, arg.ID, arg.ProjectID)
+	return err
+}
+
+const setMCPServerRemoteSessionIssuerFixture = `-- name: SetMCPServerRemoteSessionIssuerFixture :exec
+UPDATE mcp_servers
+SET remote_session_issuer_id = $1
+WHERE id = $2
+`
+
+type SetMCPServerRemoteSessionIssuerFixtureParams struct {
+	RemoteSessionIssuerID uuid.NullUUID
+	ID                    uuid.UUID
+}
+
+// Writes the derived column directly, so a test can assert that a rejected
+// resync left an existing value alone rather than merely never setting one.
+func (q *Queries) SetMCPServerRemoteSessionIssuerFixture(ctx context.Context, arg SetMCPServerRemoteSessionIssuerFixtureParams) error {
+	_, err := q.db.Exec(ctx, setMCPServerRemoteSessionIssuerFixture, arg.RemoteSessionIssuerID, arg.ID)
 	return err
 }
 
