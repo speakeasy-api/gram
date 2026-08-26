@@ -108,7 +108,7 @@ type CustomDomain struct {
 	// unhealthy.
 	HealthStatus *string
 	// The reason the domain was last observed as unhealthy. One of: dns_not_found,
-	// dns_target_mismatch, resource_missing, certificate_missing,
+	// dns_target_mismatch, caa_forbidden, resource_missing, certificate_missing,
 	// certificate_not_ready, certificate_expired, certificate_invalid,
 	// check_failed.
 	HealthIssue *string

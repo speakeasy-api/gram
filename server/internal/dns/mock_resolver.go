@@ -21,6 +21,7 @@ type MockResolverConfig struct {
 	LookupNSFunc     func(ctx context.Context, name string) ([]*net.NS, error)
 	LookupSRVFunc    func(ctx context.Context, service, proto, name string) (string, []*net.SRV, error)
 	LookupTXTFunc    func(ctx context.Context, name string) ([]string, error)
+	LookupCAAFunc    func(ctx context.Context, name string) ([]CAA, error)
 }
 
 // MockResolver implements [Resolver] with configurable function fields for
@@ -36,6 +37,7 @@ type MockResolver struct {
 	lookupNSFunc     func(ctx context.Context, name string) ([]*net.NS, error)
 	lookupSRVFunc    func(ctx context.Context, service, proto, name string) (string, []*net.SRV, error)
 	lookupTXTFunc    func(ctx context.Context, name string) ([]string, error)
+	lookupCAAFunc    func(ctx context.Context, name string) ([]CAA, error)
 }
 
 // NewMockResolver creates a [MockResolver] from the given configuration. Any
@@ -52,6 +54,7 @@ func NewMockResolver(cfg MockResolverConfig) *MockResolver {
 		lookupNSFunc:     cfg.LookupNSFunc,
 		lookupSRVFunc:    cfg.LookupSRVFunc,
 		lookupTXTFunc:    cfg.LookupTXTFunc,
+		lookupCAAFunc:    cfg.LookupCAAFunc,
 	}
 
 	if m.lookupAddrFunc == nil {
@@ -102,6 +105,13 @@ func NewMockResolver(cfg MockResolverConfig) *MockResolver {
 	if m.lookupTXTFunc == nil {
 		m.lookupTXTFunc = func(context.Context, string) ([]string, error) {
 			return nil, errors.New("MockResolver: LookupTXTFunc not implemented")
+		}
+	}
+	if m.lookupCAAFunc == nil {
+		// No CAA records: any CA may issue. Existing tests that never
+		// configured CAA keep that RFC 8659 default.
+		m.lookupCAAFunc = func(context.Context, string) ([]CAA, error) {
+			return nil, nil
 		}
 	}
 
@@ -156,4 +166,8 @@ func (m *MockResolver) LookupSRV(ctx context.Context, service, proto, name strin
 
 func (m *MockResolver) LookupTXT(ctx context.Context, name string) ([]string, error) {
 	return m.lookupTXTFunc(ctx, name)
+}
+
+func (m *MockResolver) LookupCAA(ctx context.Context, name string) ([]CAA, error) {
+	return m.lookupCAAFunc(ctx, name)
 }

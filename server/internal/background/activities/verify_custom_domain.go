@@ -209,6 +209,19 @@ func (d *VerifyCustomDomain) Do(ctx context.Context, args VerifyCustomDomainArgs
 		}
 	}
 
+	caaIssue, err := checkCustomDomainCAA(ctx, d.resolver, domain.Domain)
+	if err != nil {
+		return noResult, oops.E(oops.CodeUnexpected, err, "failed to check CAA records for %s", domain.Domain).LogError(ctx, d.logger)
+	}
+	if caaIssue == customdomains.HealthIssueCAAForbidden {
+		d.logger.InfoContext(ctx, "custom domain CAA records do not authorize Let's Encrypt",
+			attr.SlogURLDomain(domain.Domain))
+		return VerifyCustomDomainResult{
+			Status: VerifyStatusDNSPending,
+			Reason: fmt.Sprintf("CAA records do not allow Let's Encrypt; add %s", dns.ExpectedLetsEncryptCAA),
+		}, nil
+	}
+
 	txtName := "_gram." + domain.Domain
 	txts, err := d.resolver.LookupTXT(ctx, txtName)
 	if err != nil {

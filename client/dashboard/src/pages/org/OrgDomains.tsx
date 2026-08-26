@@ -101,6 +101,8 @@ const healthIssueMessages: Record<string, string> = {
     "We couldn't find DNS records for this domain. Set this record with your DNS provider:",
   dns_target_mismatch:
     "This domain's DNS does not resolve to the expected target. If the domain sits behind a proxy or CDN, traffic may still work; otherwise set this DNS record:",
+  caa_forbidden:
+    "CAA records for this domain do not allow Let's Encrypt to issue a TLS certificate. Add this CAA record:",
   resource_missing:
     "The routing configuration for this domain is missing. Run the check again to confirm the problem persists.",
   certificate_missing:
@@ -114,6 +116,12 @@ const healthIssueMessages: Record<string, string> = {
   check_failed:
     "We couldn't complete the latest health check. Run it again to confirm whether the domain is healthy.",
 };
+
+const LETS_ENCRYPT_CAA_RECORD = '0 issue "letsencrypt.org"';
+
+function customDomainCAARecord(domainName: string): string {
+  return `${domainName} CAA ${LETS_ENCRYPT_CAA_RECORD}`;
+}
 
 function customDomainHealthMessage(issue?: string): string {
   return issue
@@ -139,6 +147,7 @@ function CustomDomainHealthMessage({
 }) {
   const showsExpectedRecord =
     issue === "dns_not_found" || issue === "dns_target_mismatch";
+  const showsCAARecord = issue === "caa_forbidden";
   const useARecord = recordType === "a" && (aRecords?.length ?? 0) > 0;
   return (
     <>
@@ -151,6 +160,12 @@ function CustomDomainHealthMessage({
               ? `${domainName} A ${aRecords?.join(", ")}`
               : `${domainName} CNAME ${cnameTarget || getCustomDomainCNAME()}`}
           </code>
+        </>
+      )}
+      {showsCAARecord && (
+        <>
+          {" "}
+          <code className="break-all">{customDomainCAARecord(domainName)}</code>
         </>
       )}
     </>
@@ -1339,6 +1354,46 @@ function OrgDomainsInner() {
                 >
                   <Button.Icon>
                     {isTxtCopied ? (
+                      <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </Button.Icon>
+                </Button>
+              </div>
+            </div>
+            <div>
+              <Text
+                variant="body"
+                className="mb-2 block text-lg font-extrabold"
+              >
+                CAA records
+              </Text>
+              <Text variant="body" className="text-muted-foreground mb-2">
+                If this domain already has CAA records — common when migrating
+                from Google or another certificate issuer — add a CAA record
+                that allows Let's Encrypt. Skip this if you have no CAA
+                records.
+              </Text>
+              <div className="bg-muted mt-2 flex items-center space-x-2 p-3">
+                <code className="flex-1 break-all">
+                  {customDomainCAARecord(subdomain)}
+                </code>
+                <Button
+                  aria-label={
+                    copiedRecordValue === customDomainCAARecord(subdomain)
+                      ? "CAA value copied"
+                      : "Copy CAA value"
+                  }
+                  variant="tertiary"
+                  size="sm"
+                  onClick={() =>
+                    void handleCopyRecordValue(customDomainCAARecord(subdomain))
+                  }
+                  className="shrink-0"
+                >
+                  <Button.Icon>
+                    {copiedRecordValue === customDomainCAARecord(subdomain) ? (
                       <CheckCircle2 className="h-4 w-4 text-green-500" />
                     ) : (
                       <Copy className="h-4 w-4" />
