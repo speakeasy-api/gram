@@ -121,10 +121,11 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 		}
 	}
 	for _, result := range results {
-		if _, err := result.Get(waitCtx); err != nil {
-			if errors.Is(err, context.DeadlineExceeded) {
-				return d.inbox.awaitRegistered(waitCtx, scanID, w, started)
-			}
+		_, err := result.Get(waitCtx)
+		switch {
+		case errors.Is(err, context.DeadlineExceeded):
+			return d.inbox.awaitRegistered(waitCtx, scanID, w, started)
+		case err != nil:
 			return Outcome{}, fmt.Errorf("publish enforcement request: %w", err)
 		}
 	}
