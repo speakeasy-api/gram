@@ -118,20 +118,6 @@ func TestServerErrorFailsOpenWithCachedSetting(t *testing.T) {
 	require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
 }
 
-// TestServerErrorBlocksWithoutCachedSetting: absent any cached choice the
-// default posture stays fail closed on 5xx.
-func TestServerErrorBlocksWithoutCachedSetting(t *testing.T) {
-	shrinkRetryBudget(t)
-	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
-		return http.StatusServiceUnavailable, decision{Decision: "", Reason: "", Message: ""}
-	})
-	cfg := authedConfig(t, fs.URL)
-
-	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
-
-	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`)
-}
-
 // TestServerErrorBlocksWhenCachedFailClosed: an explicit fail-closed choice
 // blocks on 5xx like the default.
 func TestServerErrorBlocksWhenCachedFailClosed(t *testing.T) {
@@ -161,11 +147,13 @@ func TestUnreachableFailsOpenWithCachedSetting(t *testing.T) {
 	require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
 }
 
-// TestUnreachableBlocksWithoutCachedSetting mirrors the default posture for a
-// dead server.
-func TestUnreachableBlocksWithoutCachedSetting(t *testing.T) {
+// TestUnreachableBlocksWhenCachedFailClosed mirrors the default posture for a
+// dead server once a posture has been cached (a never-cached machine instead
+// gets the cold-start pass — see TestColdStartNoCacheFailsOpen).
+func TestUnreachableBlocksWhenCachedFailClosed(t *testing.T) {
 	fs := newFakeServer(t, nil)
 	cfg := authedConfig(t, fs.URL)
+	writeOrgSettings(cfg, false)
 	fs.Close()
 
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
@@ -379,4 +367,56 @@ func TestFailOpenEnvOverride(t *testing.T) {
 
 	require.Equal(t, 0, res.ExitCode)
 	require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
+}
+
+// TestColdStartNoCacheFailsOpen: a machine that has never cached an org
+// posture must not brick on its first gate during a control-plane outage.
+func TestColdStartNoCacheFailsOpen(t *testing.T) {
+	shrinkRetryBudget(t)
+	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
+		return http.StatusServiceUnavailable, decision{Decision: "", Reason: "", Message: ""}
+	})
+	cfg := authedConfig(t, fs.URL)
+
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+
+	require.Equal(t, 0, res.ExitCode)
+	require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
+}
+
+// TestStaleCacheIsNotAColdStart: a present-but-expired posture keeps the
+// fail-closed default — only a never-cached machine gets the cold-start pass.
+func TestStaleCacheIsNotAColdStart(t *testing.T) {
+	shrinkRetryBudget(t)
+	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
+		return http.StatusServiceUnavailable, decision{Decision: "", Reason: "", Message: ""}
+	})
+	cfg := authedConfig(t, fs.URL)
+	seedOrgSettings(t, cfg, true, orgSettingsMaxAge+time.Hour)
+
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+
+	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`, "stale cache must not fail open")
+}
+
+// TestGateBudgetBeatsHangingServer: a hanging control plane must resolve the
+// gate within gateSendBudget — fail-closed here (posture cached) — instead of
+// riding the full sendBudget past the provider-side deadline.
+func TestGateBudgetBeatsHangingServer(t *testing.T) {
+	shrinkRetryBudget(t)
+	release := make(chan struct{})
+	defer close(release)
+	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
+		<-release
+		return http.StatusServiceUnavailable, decision{Decision: "", Reason: "", Message: ""}
+	})
+	cfg := authedConfig(t, fs.URL)
+	seedOrgSettings(t, cfg, false, time.Minute)
+
+	start := time.Now()
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+	elapsed := time.Since(start)
+
+	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`, "fail-closed posture must block")
+	require.Less(t, elapsed, 8*time.Second, "gate verdict must resolve within the gate budget")
 }
