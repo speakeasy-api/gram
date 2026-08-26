@@ -225,6 +225,7 @@ func TestRefreshUserSessionClientCIMD(t *testing.T) {
 
 	ctx, ti, ds, seeded := newRefreshTestSetup(t, "refresh-client-issuer")
 	backdateFetchedAt(t, ctx, ti, seeded.ID)
+	requireOrganizationID(t, ctx, seeded.OrganizationID)
 
 	ds.set(t, func(ds *cimdDocServer) {
 		ds.etag = `"v1"`

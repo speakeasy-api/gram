@@ -2,11 +2,15 @@ package usersessions_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -34,6 +38,7 @@ func TestUpsertUserSessionClientFromCIMD_RefreshesAuthMethod(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, "none", seeded.TokenEndpointAuthMethod.String)
+	requireOrganizationID(t, ctx, seeded.OrganizationID)
 
 	// The same client_id again, as an authorize-time refresh would, this time
 	// declaring an asymmetric method.
@@ -51,6 +56,74 @@ func TestUpsertUserSessionClientFromCIMD_RefreshesAuthMethod(t *testing.T) {
 	require.Equal(t, "Renamed", refreshed.ClientName)
 	require.True(t, refreshed.TokenEndpointAuthMethod.Valid)
 	require.Equal(t, "private_key_jwt", refreshed.TokenEndpointAuthMethod.String)
+	requireOrganizationID(t, ctx, refreshed.OrganizationID)
+}
+
+// An authorize-time refresh fills in a client's organization when it has none
+// but never moves one it already carries. The DO UPDATE branch leaves
+// project_id untouched, so adopting the issuer's current organization instead
+// would leave a row whose two tenancy columns name different owners.
+func TestUpsertUserSessionClientFromCIMD_KeepsOrganizationOnRefresh(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	issuerID := seedIssuer(t, ctx, ti, "cimd-org-refresh")
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	documentURL := "https://org-refresh.example.com/oauth/client.json"
+	queries := repo.New(ti.conn)
+
+	seeded, err := queries.UpsertUserSessionClientFromCIMD(ctx, repo.UpsertUserSessionClientFromCIMDParams{
+		UserSessionIssuerID:     issuerID,
+		ClientID:                documentURL,
+		ClientName:              "Original Name",
+		RedirectUris:            []string{"https://org-refresh.example.com/cb"},
+		CacheTtlSeconds:         3600,
+		ClientIDMetadataEtag:    pgtype.Text{String: `"v1"`, Valid: true},
+		TokenEndpointAuthMethod: "none",
+	})
+	require.NoError(t, err)
+	requireOrganizationID(t, ctx, seeded.OrganizationID)
+
+	// Repoint the issuer at a second organization, the only way to make the
+	// parent's tenancy disagree with the child's.
+	otherOrgID := "org-" + uuid.NewString()
+	trialStart := time.Now().UTC()
+	testQueries := testrepo.New(ti.conn)
+	require.NoError(t, testQueries.CreateOrganizationMetadataFixture(ctx, testrepo.CreateOrganizationMetadataFixtureParams{
+		ID:                 otherOrgID,
+		Name:               "Other Org",
+		Slug:               "other-org-" + uuid.NewString()[:8],
+		GramAccountType:    "free",
+		WorkosID:           pgtype.Text{String: "", Valid: false},
+		Whitelisted:        false,
+		FreeTrialStartedAt: pgtype.Timestamptz{Time: trialStart, InfinityModifier: 0, Valid: true},
+		FreeTrialEndsAt:    pgtype.Timestamptz{Time: trialStart.Add(14 * 24 * time.Hour), InfinityModifier: 0, Valid: true},
+		DisabledAt:         pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: 0, Valid: false},
+		CreatedAt:          pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: 0, Valid: false},
+	}))
+	require.NoError(t, testQueries.SetUserSessionIssuerOrganizationID(ctx, testrepo.SetUserSessionIssuerOrganizationIDParams{
+		OrganizationID: conv.ToPGText(otherOrgID),
+		ID:             issuerID,
+		ProjectID:      *authCtx.ProjectID,
+	}))
+
+	refreshed, err := queries.UpsertUserSessionClientFromCIMD(ctx, repo.UpsertUserSessionClientFromCIMDParams{
+		UserSessionIssuerID:     issuerID,
+		ClientID:                documentURL,
+		ClientName:              "Renamed",
+		RedirectUris:            []string{"https://org-refresh.example.com/cb"},
+		CacheTtlSeconds:         3600,
+		ClientIDMetadataEtag:    pgtype.Text{String: `"v2"`, Valid: true},
+		TokenEndpointAuthMethod: "none",
+	})
+	require.NoError(t, err)
+	require.Equal(t, seeded.ID, refreshed.ID, "the refresh must update the same row, not insert a second one")
+	require.Equal(t, "Renamed", refreshed.ClientName, "the refresh must still replace mutable metadata")
+	require.Equal(t, seeded.OrganizationID.String, refreshed.OrganizationID.String, "a refresh must not move the client to the issuer's new organization")
+	require.Equal(t, seeded.ProjectID, refreshed.ProjectID)
 }
 
 // A refresh replaces both key-source columns wholesale, writing the unused

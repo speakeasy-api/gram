@@ -349,6 +349,21 @@ func seedUserSessionConsent(t *testing.T, ctx context.Context, conn *pgxpool.Poo
 	return row, nil
 }
 
+// requireOrganizationID asserts that a row carries the organization tenancy of
+// the test's auth context. Every user-session row is written with its
+// organization alongside its project, either supplied by the writer or derived
+// from the row's parent, so a NULL here means a write path skipped it.
+func requireOrganizationID(t *testing.T, ctx context.Context, got pgtype.Text) {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotEmpty(t, authCtx.ActiveOrganizationID)
+
+	require.True(t, got.Valid, "organization_id must not be NULL")
+	require.Equal(t, authCtx.ActiveOrganizationID, got.String)
+}
+
 // seedIssuer creates an issuer with the given slug and returns its id.
 func seedIssuer(t *testing.T, ctx context.Context, ti *testInstance, slug string) uuid.UUID {
 	t.Helper()

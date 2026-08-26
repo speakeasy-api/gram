@@ -1612,6 +1612,27 @@ func (q *Queries) SetUserSessionIssuerCIMDAdmissionMode(ctx context.Context, arg
 	return err
 }
 
+const setUserSessionIssuerOrganizationID = `-- name: SetUserSessionIssuerOrganizationID :exec
+UPDATE user_session_issuers
+SET organization_id = $1
+WHERE id = $2 AND project_id = $3::uuid AND deleted IS FALSE
+`
+
+type SetUserSessionIssuerOrganizationIDParams struct {
+	OrganizationID pgtype.Text
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+}
+
+// Test-only fixture: repoints an issuer's organization so tests can observe
+// what a child row does when its parent's tenancy no longer matches its own.
+// No production path moves an issuer between organizations yet, so there is
+// no other way to reach that state.
+func (q *Queries) SetUserSessionIssuerOrganizationID(ctx context.Context, arg SetUserSessionIssuerOrganizationIDParams) error {
+	_, err := q.db.Exec(ctx, setUserSessionIssuerOrganizationID, arg.OrganizationID, arg.ID, arg.ProjectID)
+	return err
+}
+
 const setWorkosLastEventIDFixture = `-- name: SetWorkosLastEventIDFixture :exec
 UPDATE organization_metadata
 SET workos_last_event_id = $1

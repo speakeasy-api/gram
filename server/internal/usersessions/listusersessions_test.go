@@ -30,8 +30,9 @@ func TestListUserSessions(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, principal := range []urn.SessionSubject{urn.NewUserSubject("p1"), urn.NewUserSubject("p2"), urn.NewUserSubject("p3")} {
-		_, err := seedUserSession(t, ctx, ti.conn, uuid.MustParse(issuer.ID), principal)
+		session, err := seedUserSession(t, ctx, ti.conn, uuid.MustParse(issuer.ID), principal)
 		require.NoError(t, err)
+		requireOrganizationID(t, ctx, session.OrganizationID)
 	}
 
 	got, err := ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{
