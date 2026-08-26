@@ -14,9 +14,9 @@ RUN cargo build --locked --manifest-path ./agents/runner/Cargo.toml --release --
 
 FROM ${RUNNER_SOURCE} AS runner-artifact
 
-FROM oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS bun
+FROM oven/bun:1.4.0@sha256:5ff609364c049b54eb0ff560ec96319729a972078ef2c755d758f0c6ef89c2d6 AS bun
 
-FROM oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS sandbox-deps
+FROM oven/bun:1.4.0@sha256:5ff609364c049b54eb0ff560ec96319729a972078ef2c755d758f0c6ef89c2d6 AS sandbox-deps
 WORKDIR /sandbox
 COPY agents/runtime-image/sandbox/package.json agents/runtime-image/sandbox/bun.lock ./
 RUN bun install --production --frozen-lockfile
