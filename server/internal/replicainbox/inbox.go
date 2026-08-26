@@ -4,7 +4,7 @@
 // correlation id, and one supervised drainer per process routes them to
 // in-process waiters. Waiters fold one reply per distinct lane, so a caller
 // that fans a request out to several responders collects exactly one answer
-// from each. The risk enforcement path (internal/risk/replyinbox) is the
+// from each. The risk enforcement path (internal/risk/enforcereply) is the
 // first instantiation.
 package replicainbox
 

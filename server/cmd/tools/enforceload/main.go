@@ -31,7 +31,7 @@ import (
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/risk"
-	"github.com/speakeasy-api/gram/server/internal/risk/replyinbox"
+	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
 )
 
@@ -285,10 +285,10 @@ func runReplyPoint(
 ) (sweepResult, error) {
 	pointCtx, cancel := context.WithTimeout(ctx, cfg.timeout)
 	defer cancel()
-	inbox, err := replyinbox.New(pointCtx, logger, otel.GetTracerProvider(), otel.GetMeterProvider(), replyinbox.Config{
+	inbox, err := enforcereply.New(pointCtx, logger, otel.GetTracerProvider(), otel.GetMeterProvider(), enforcereply.Config{
 		RedisOptions: redisOptions,
 		ReplicaID:    "load-" + uuid.NewString(),
-		PollInterval: replyinbox.DefaultPollInterval,
+		PollInterval: enforcereply.DefaultPollInterval,
 		DrainGate:    nil,
 	})
 	if err != nil {
@@ -296,11 +296,11 @@ func runReplyPoint(
 	}
 	defer func() {
 		_ = inbox.Close()
-		_ = redisClient.Del(context.WithoutCancel(ctx), replyinbox.InboxKey(inbox.ReplicaID())).Err()
+		_ = redisClient.Del(context.WithoutCancel(ctx), enforcereply.InboxKey(inbox.ReplicaID())).Err()
 	}()
 
 	monitor := startSampler(pointCtx, redisClient, inbox, cfg.sampleInterval)
-	writer := replyinbox.NewWriter(redisClient)
+	writer := enforcereply.NewWriter(redisClient)
 	outcomes := make(chan awaitOutcome, concurrency)
 	lanes := syntheticLanes(cfg.expected)
 	var dispatchUnixNano atomic.Int64
@@ -385,10 +385,10 @@ func runPauseProbe(
 	pointCtx, cancel := context.WithTimeout(ctx, cfg.timeout+cfg.pauseDuration)
 	defer cancel()
 	drainGate := make(chan struct{})
-	inbox, err := replyinbox.New(pointCtx, logger, otel.GetTracerProvider(), otel.GetMeterProvider(), replyinbox.Config{
+	inbox, err := enforcereply.New(pointCtx, logger, otel.GetTracerProvider(), otel.GetMeterProvider(), enforcereply.Config{
 		RedisOptions: redisOptions,
 		ReplicaID:    "load-pause-" + uuid.NewString(),
-		PollInterval: replyinbox.DefaultPollInterval,
+		PollInterval: enforcereply.DefaultPollInterval,
 		DrainGate:    drainGate,
 	})
 	if err != nil {
@@ -401,11 +401,11 @@ func runPauseProbe(
 			close(drainGate)
 		}
 		_ = inbox.Close()
-		_ = redisClient.Del(context.WithoutCancel(ctx), replyinbox.InboxKey(inbox.ReplicaID())).Err()
+		_ = redisClient.Del(context.WithoutCancel(ctx), enforcereply.InboxKey(inbox.ReplicaID())).Err()
 	}()
 
 	monitor := startSampler(pointCtx, redisClient, inbox, cfg.sampleInterval)
-	writer := replyinbox.NewWriter(redisClient)
+	writer := enforcereply.NewWriter(redisClient)
 	outcomes := make(chan awaitOutcome, cfg.pauseBacklog)
 	lane := syntheticLanes(1)[0]
 	var dispatchUnixNano atomic.Int64
@@ -413,7 +413,7 @@ func runPauseProbe(
 	for scan := range cfg.pauseBacklog {
 		scanID := fmt.Sprintf("pause-%d", scan)
 		go func() {
-			outcome, awaitErr := inbox.Await(pointCtx, scanID, []replyinbox.Lane{lane})
+			outcome, awaitErr := inbox.Await(pointCtx, scanID, []enforcereply.Lane{lane})
 			started := time.Unix(0, dispatchUnixNano.Load())
 			outcomes <- awaitOutcome{duration: time.Since(started), deadline: outcome.Deadline, err: awaitErr}
 		}()
@@ -440,11 +440,11 @@ func runPauseProbe(
 		}()
 	}
 	writers.Wait()
-	backlogAtRelease, backlogErr := redisClient.LLen(pointCtx, replyinbox.InboxKey(inbox.ReplicaID())).Result()
+	backlogAtRelease, backlogErr := redisClient.LLen(pointCtx, enforcereply.InboxKey(inbox.ReplicaID())).Result()
 	if backlogErr != nil {
 		return sweepResult{}, fmt.Errorf("read paused inbox depth: %w", backlogErr)
 	}
-	ttl, ttlErr := redisClient.TTL(pointCtx, replyinbox.InboxKey(inbox.ReplicaID())).Result()
+	ttl, ttlErr := redisClient.TTL(pointCtx, enforcereply.InboxKey(inbox.ReplicaID())).Result()
 	if ttlErr != nil {
 		return sweepResult{}, fmt.Errorf("read paused inbox TTL: %w", ttlErr)
 	}
@@ -509,7 +509,7 @@ func newFullLoop(ctx context.Context, logger *slog.Logger, redisClient *redis.Cl
 	handler, err := gitleaks.NewEnforceHandler(
 		logger,
 		otel.GetMeterProvider(),
-		replyinbox.NewWriter(redisClient),
+		enforcereply.NewWriter(redisClient),
 		func(tenantID string, message []byte) (string, error) {
 			sum, _, fingerprintErr := fingerprinter.TenantedHS256(tenantID, message)
 			return risk.EncodeFingerprint(sum), fingerprintErr
@@ -552,10 +552,10 @@ func runFullPoint(
 ) (sweepResult, error) {
 	pointCtx, cancel := context.WithTimeout(ctx, cfg.timeout)
 	defer cancel()
-	inbox, err := replyinbox.New(pointCtx, logger, otel.GetTracerProvider(), otel.GetMeterProvider(), replyinbox.Config{
+	inbox, err := enforcereply.New(pointCtx, logger, otel.GetTracerProvider(), otel.GetMeterProvider(), enforcereply.Config{
 		RedisOptions: redisOptions,
 		ReplicaID:    "load-full-" + uuid.NewString(),
-		PollInterval: replyinbox.DefaultPollInterval,
+		PollInterval: enforcereply.DefaultPollInterval,
 		DrainGate:    nil,
 	})
 	if err != nil {
@@ -563,9 +563,9 @@ func runFullPoint(
 	}
 	defer func() {
 		_ = inbox.Close()
-		_ = redisClient.Del(context.WithoutCancel(ctx), replyinbox.InboxKey(inbox.ReplicaID())).Err()
+		_ = redisClient.Del(context.WithoutCancel(ctx), enforcereply.InboxKey(inbox.ReplicaID())).Err()
 	}()
-	dispatcher, err := replyinbox.NewDispatcher(pointCtx, loop.broker, inbox, replyinbox.DispatcherConfig{WaitTimeout: cfg.timeout})
+	dispatcher, err := enforcereply.NewDispatcher(pointCtx, loop.broker, inbox, enforcereply.DispatcherConfig{WaitTimeout: cfg.timeout})
 	if err != nil {
 		return sweepResult{}, fmt.Errorf("create dispatcher: %w", err)
 	}
@@ -580,7 +580,7 @@ func runFullPoint(
 	ready := sync.WaitGroup{}
 	ready.Add(concurrency)
 	outcomes := make(chan awaitOutcome, concurrency)
-	lane := replyinbox.Lane{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_GITLEAKS, PolicyID: ""}
+	lane := enforcereply.Lane{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_GITLEAKS, PolicyID: ""}
 	const fakeSecret = "wJalrXUtnFEMIbKp7MDoRZfiCYqTvHgNsQ8xLcWd" //nolint:gosec // Synthetic gitleaks fixture.
 	const fakeAccessKeyID = "ASIAZ2XY3WNBQR5TUVWX"
 	content := "AccessKeyId: " + fakeAccessKeyID + ", SecretAccessKey: " + fakeSecret
@@ -589,11 +589,11 @@ func runFullPoint(
 			ready.Done()
 			<-gate
 			started := time.Now()
-			outcome, dispatchErr := dispatcher.Dispatch(pointCtx, replyinbox.DispatchRequest{
+			outcome, dispatchErr := dispatcher.Dispatch(pointCtx, enforcereply.DispatchRequest{
 				OrganizationID: "load-org",
 				ProjectID:      "load-project",
 				Content:        content,
-				Lanes:          []replyinbox.Lane{lane},
+				Lanes:          []enforcereply.Lane{lane},
 			})
 			reply := outcome.ByLane[lane]
 			if dispatchErr == nil && !outcome.Deadline && (!outcome.Complete || reply == nil || reply.GetStatus() != riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK || len(reply.GetFindings()) == 0) {
@@ -630,24 +630,24 @@ func runFullPoint(
 	return result, nil
 }
 
-func syntheticLanes(count int) []replyinbox.Lane {
-	lanes := make([]replyinbox.Lane, 0, count)
+func syntheticLanes(count int) []enforcereply.Lane {
+	lanes := make([]enforcereply.Lane, 0, count)
 	for index := range count {
 		switch index {
 		case 0:
-			lanes = append(lanes, replyinbox.Lane{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_GITLEAKS, PolicyID: ""})
+			lanes = append(lanes, enforcereply.Lane{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_GITLEAKS, PolicyID: ""})
 		case 1:
-			lanes = append(lanes, replyinbox.Lane{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_PRESIDIO, PolicyID: ""})
+			lanes = append(lanes, enforcereply.Lane{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_PRESIDIO, PolicyID: ""})
 		case 2:
-			lanes = append(lanes, replyinbox.Lane{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_PROMPT_INJECTION, PolicyID: ""})
+			lanes = append(lanes, enforcereply.Lane{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_PROMPT_INJECTION, PolicyID: ""})
 		default:
-			lanes = append(lanes, replyinbox.Lane{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_JUDGE, PolicyID: fmt.Sprintf("synthetic-policy-%d", index-2)})
+			lanes = append(lanes, enforcereply.Lane{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_JUDGE, PolicyID: fmt.Sprintf("synthetic-policy-%d", index-2)})
 		}
 	}
 	return lanes
 }
 
-func syntheticReply(scanID string, lane replyinbox.Lane, findingCount, replyIndex int) *riskv1.EnforcementReply {
+func syntheticReply(scanID string, lane enforcereply.Lane, findingCount, replyIndex int) *riskv1.EnforcementReply {
 	findings := make([]*riskv1.EnforcementFinding, 0, findingCount)
 	for findingIndex := range findingCount {
 		findings = append(findings, riskv1.EnforcementFinding_builder{
@@ -679,7 +679,7 @@ func syntheticReply(scanID string, lane replyinbox.Lane, findingCount, replyInde
 	}.Build()
 }
 
-func waitForWaiters(ctx context.Context, inbox *replyinbox.Inbox, expected int) error {
+func waitForWaiters(ctx context.Context, inbox *enforcereply.Inbox, expected int) error {
 	ticker := time.NewTicker(100 * time.Microsecond)
 	defer ticker.Stop()
 	for {
@@ -694,7 +694,7 @@ func waitForWaiters(ctx context.Context, inbox *replyinbox.Inbox, expected int) 
 	}
 }
 
-func waitForDrainAccounting(ctx context.Context, inbox *replyinbox.Inbox, expected uint64) {
+func waitForDrainAccounting(ctx context.Context, inbox *enforcereply.Inbox, expected uint64) {
 	ticker := time.NewTicker(100 * time.Microsecond)
 	defer ticker.Stop()
 	for inbox.Snapshot().DrainedReplies < expected {
@@ -706,7 +706,7 @@ func waitForDrainAccounting(ctx context.Context, inbox *replyinbox.Inbox, expect
 	}
 }
 
-func startSampler(ctx context.Context, client *redis.Client, inbox *replyinbox.Inbox, interval time.Duration) *sampler {
+func startSampler(ctx context.Context, client *redis.Client, inbox *enforcereply.Inbox, interval time.Duration) *sampler {
 	sampleCtx, cancel := context.WithCancel(ctx)
 	stats := &sampleStats{
 		redisClientsBase: 0,
@@ -742,8 +742,8 @@ func (s *sampler) stop() {
 	<-s.done
 }
 
-func collectSample(ctx context.Context, client *redis.Client, inbox *replyinbox.Inbox, stats *sampleStats) {
-	if depth, err := client.LLen(ctx, replyinbox.InboxKey(inbox.ReplicaID())).Result(); err == nil {
+func collectSample(ctx context.Context, client *redis.Client, inbox *enforcereply.Inbox, stats *sampleStats) {
+	if depth, err := client.LLen(ctx, enforcereply.InboxKey(inbox.ReplicaID())).Result(); err == nil {
 		storeMax(&stats.inboxDepth, depth)
 	}
 	if clients, err := client.ClientList(ctx).Result(); err == nil {
@@ -842,7 +842,7 @@ func buildResult(
 	}
 }
 
-func populateRedisStats(result *sweepResult, snapshot replyinbox.Stats, samples *sampleStats) {
+func populateRedisStats(result *sweepResult, snapshot enforcereply.Stats, samples *sampleStats) {
 	result.orphans = snapshot.OrphanedReplies
 	result.drainBatches = snapshot.DrainBatches
 	result.drainedReplies = snapshot.DrainedReplies

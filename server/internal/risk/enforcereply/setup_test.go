@@ -1,4 +1,4 @@
-package replyinbox
+package enforcereply
 
 import (
 	"log/slog"
@@ -21,7 +21,7 @@ type inboxTestEnv struct {
 }
 
 func newTestLogger() *slog.Logger {
-	return slog.Default() //nolint:forbidigo // testenv imports replyinbox through scanner fixtures.
+	return slog.Default() //nolint:forbidigo // testenv imports enforcereply through scanner fixtures.
 }
 
 func setupInboxTest(t *testing.T, replicaID string) *inboxTestEnv {

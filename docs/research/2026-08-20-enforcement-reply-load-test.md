@@ -14,7 +14,7 @@ A forced one-second drainer pause accumulated 24,999 queued small replies and th
 
 The harness is `server/cmd/tools/enforceload`. It creates a fresh replica inbox for each sweep point and reports one CSV row per point plus a terminal summary.
 
-Reply-leg mode registers every `Await` before releasing one synthetic scanner goroutine per scan. Each scanner waits for the configured simulated latency, then writes one to five replies through the real `replyinbox.Writer`. RTT begins when the synthetic requests are released and ends when each `Await` receives its last expected reply. Waiter registration time is reported separately. The measured runs used zero simulated scan latency so scanner time did not obscure the reply leg.
+Reply-leg mode registers every `Await` before releasing one synthetic scanner goroutine per scan. Each scanner waits for the configured simulated latency, then writes one to five replies through the real `enforcereply.Writer` (named `replyinbox` at test time). RTT begins when the synthetic requests are released and ends when each `Await` receives its last expected reply. Waiter registration time is reported separately. The measured runs used zero simulated scan latency so scanner time did not obscure the reply leg.
 
 Full-loop mode publishes through the local Pub/Sub emulator, invokes the real gitleaks enforcement handler, writes the reply to Redis, and completes through the same inbox drainer and waiter. These values are a functional and local-emulator stress check only.
 

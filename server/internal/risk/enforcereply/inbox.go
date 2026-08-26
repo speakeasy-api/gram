@@ -1,7 +1,7 @@
-// Package replyinbox binds the generic replica inbox
+// Package enforcereply binds the generic replica inbox
 // (internal/replicainbox) to risk enforcement: EnforcementReply payloads,
 // scanner/policy lanes, and the risk URN and metric namespaces.
-package replyinbox
+package enforcereply
 
 import (
 	"context"

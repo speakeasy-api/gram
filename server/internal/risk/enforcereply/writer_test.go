@@ -1,4 +1,4 @@
-package replyinbox
+package enforcereply
 
 import (
 	"testing"

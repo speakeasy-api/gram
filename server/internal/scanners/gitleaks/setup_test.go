@@ -13,17 +13,17 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/risk"
-	"github.com/speakeasy-api/gram/server/internal/risk/replyinbox"
+	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-func newReplyWriter(t *testing.T) (*miniredis.Miniredis, *redis.Client, *replyinbox.Writer) {
+func newReplyWriter(t *testing.T) (*miniredis.Miniredis, *redis.Client, *enforcereply.Writer) {
 	t.Helper()
 	mr := miniredis.RunT(t)
 	client := redis.NewClient(&redis.Options{Addr: mr.Addr(), Protocol: 2})
 	t.Cleanup(func() { _ = client.Close() })
-	return mr, client, replyinbox.NewWriter(client)
+	return mr, client, enforcereply.NewWriter(client)
 }
 
 func newTestFingerprinter(t *testing.T) risk.Fingerprinter {
@@ -34,7 +34,7 @@ func newTestFingerprinter(t *testing.T) risk.Fingerprinter {
 	return fingerprinter
 }
 
-func newTestEnforceHandler(t *testing.T, meterProvider metric.MeterProvider, writer *replyinbox.Writer, maxRequestAge time.Duration) (*gitleaks.EnforceHandler, risk.Fingerprinter) {
+func newTestEnforceHandler(t *testing.T, meterProvider metric.MeterProvider, writer *enforcereply.Writer, maxRequestAge time.Duration) (*gitleaks.EnforceHandler, risk.Fingerprinter) {
 	t.Helper()
 	fingerprinter := newTestFingerprinter(t)
 	handler, err := gitleaks.NewEnforceHandler(

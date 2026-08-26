@@ -25,7 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk"
-	"github.com/speakeasy-api/gram/server/internal/risk/replyinbox"
+	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
 )
 
@@ -69,10 +69,10 @@ func run() error {
 	defer o11y.NoLogDefer(pubsubClient.Close)
 	broker := gcp.NewEmulatedPubSub(logger, projectID, pubsubClient, gen.Descriptors)
 
-	inbox, err := replyinbox.New(ctx, logger, otel.GetTracerProvider(), otel.GetMeterProvider(), replyinbox.Config{
+	inbox, err := enforcereply.New(ctx, logger, otel.GetTracerProvider(), otel.GetMeterProvider(), enforcereply.Config{
 		RedisOptions: redisOptions,
 		ReplicaID:    "",
-		PollInterval: replyinbox.DefaultPollInterval,
+		PollInterval: enforcereply.DefaultPollInterval,
 		DrainGate:    nil,
 	})
 	if err != nil {
@@ -87,7 +87,7 @@ func run() error {
 	handler, err := gitleaks.NewEnforceHandler(
 		logger,
 		otel.GetMeterProvider(),
-		replyinbox.NewWriter(redisClient),
+		enforcereply.NewWriter(redisClient),
 		func(tenantID string, message []byte) (string, error) {
 			sum, _, fingerprintErr := fingerprinter.TenantedHS256(tenantID, message)
 			return risk.EncodeFingerprint(sum), fingerprintErr
@@ -114,7 +114,7 @@ func run() error {
 		return <-receiveDone
 	}
 
-	dispatcher, err := replyinbox.NewDispatcher(ctx, broker, inbox, replyinbox.DispatcherConfig{WaitTimeout: replyinbox.DefaultWaitTimeout})
+	dispatcher, err := enforcereply.NewDispatcher(ctx, broker, inbox, enforcereply.DispatcherConfig{WaitTimeout: enforcereply.DefaultWaitTimeout})
 	if err != nil {
 		_ = stopAndWait()
 		return fmt.Errorf("create enforcement dispatcher: %w", err)
@@ -127,12 +127,12 @@ func run() error {
 
 	const fakeSecret = "wJalrXUtnFEMIbKp7MDoRZfiCYqTvHgNsQ8xLcWd" //nolint:gosec // Synthetic gitleaks fixture.
 	const fakeAccessKeyID = "ASIAZ2XY3WNBQR5TUVWX"
-	lane := replyinbox.Lane{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_GITLEAKS, PolicyID: ""}
-	outcome, err := dispatcher.Dispatch(ctx, replyinbox.DispatchRequest{
+	lane := enforcereply.Lane{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_GITLEAKS, PolicyID: ""}
+	outcome, err := dispatcher.Dispatch(ctx, enforcereply.DispatchRequest{
 		OrganizationID: "prototype-org",
 		ProjectID:      "prototype-project",
 		Content:        "AccessKeyId: " + fakeAccessKeyID + ", SecretAccessKey: " + fakeSecret,
-		Lanes:          []replyinbox.Lane{lane},
+		Lanes:          []enforcereply.Lane{lane},
 	})
 	if err != nil {
 		_ = stopAndWait()

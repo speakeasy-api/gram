@@ -56,7 +56,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
-	"github.com/speakeasy-api/gram/server/internal/risk/replyinbox"
+	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
@@ -417,7 +417,7 @@ func newStreamsCommand() *cli.Command {
 			gitleaksEnforceHandler, err := gitleaks.NewEnforceHandler(
 				logger,
 				meterProvider,
-				replyinbox.NewWriter(redisClient),
+				enforcereply.NewWriter(redisClient),
 				func(tenantID string, message []byte) (string, error) {
 					sum, _, fingerprintErr := riskFingerprinter.TenantedHS256(tenantID, message)
 					return risk.EncodeFingerprint(sum), fingerprintErr

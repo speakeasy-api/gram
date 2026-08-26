@@ -16,7 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/maskdisplay"
-	"github.com/speakeasy-api/gram/server/internal/risk/replyinbox"
+	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
@@ -40,7 +40,7 @@ type EnforceHandlerConfig struct {
 // EnforceHandler scans one inline request and writes a safe correlated reply.
 type EnforceHandler struct {
 	logger        *slog.Logger
-	writer        *replyinbox.Writer
+	writer        *enforcereply.Writer
 	scanner       *Scanner
 	fingerprint   FingerprintFinding
 	metrics       enforceHandlerMetrics
@@ -52,7 +52,7 @@ type EnforceHandler struct {
 func NewEnforceHandler(
 	logger *slog.Logger,
 	meterProvider metric.MeterProvider,
-	writer *replyinbox.Writer,
+	writer *enforcereply.Writer,
 	fingerprint FingerprintFinding,
 	cfg EnforceHandlerConfig,
 ) (*EnforceHandler, error) {
@@ -97,7 +97,7 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.GitleaksEnforceme
 	if m.GetProjectId() == "" {
 		return errors.New("enforcement project id is required")
 	}
-	_, scanID, err := replyinbox.ParseReplyURN(m.GetReplyUrn())
+	_, scanID, err := enforcereply.ParseReplyURN(m.GetReplyUrn())
 	if err != nil {
 		return fmt.Errorf("parse enforcement reply urn: %w", err)
 	}
@@ -106,11 +106,11 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.GitleaksEnforceme
 	var findings []scanners.Finding
 	status := riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK
 	reason := ""
-	if len(m.GetContent()) > replyinbox.MaxContentBytes {
+	if len(m.GetContent()) > enforcereply.MaxContentBytes {
 		// Dispatcher enforces this budget too; a request that bypasses it must
 		// not buy an unbounded scan.
 		status = riskv1.EnforcementStatus_ENFORCEMENT_STATUS_ERROR
-		reason = fmt.Sprintf("enforcement content is %d bytes; maximum is %d bytes", len(m.GetContent()), replyinbox.MaxContentBytes)
+		reason = fmt.Sprintf("enforcement content is %d bytes; maximum is %d bytes", len(m.GetContent()), enforcereply.MaxContentBytes)
 	} else {
 		var scanErr error
 		findings, scanErr = h.scanner.Scan(ctx, m.GetContent())

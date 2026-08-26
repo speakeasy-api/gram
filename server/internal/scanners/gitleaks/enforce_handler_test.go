@@ -12,7 +12,7 @@ import (
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/risk"
-	"github.com/speakeasy-api/gram/server/internal/risk/replyinbox"
+	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
 )
 
@@ -28,14 +28,14 @@ func TestEnforceHandlerWritesSafePepperedReply(t *testing.T) {
 		ProjectId:      new("project-safe"),
 		OrganizationId: new("org-safe"),
 		CreatedAt:      new(time.Now().UTC().Format(time.RFC3339Nano)),
-		ReplyUrn:       new(replyinbox.ReplyURN("replica-safe", "scan-safe")),
+		ReplyUrn:       new(enforcereply.ReplyURN("replica-safe", "scan-safe")),
 		Content:        new(content),
 	}.Build()
 	deliveryAttempt := 2
 	require.NoError(t, handler.Handle(t.Context(), request, gcp.MessageMetadata{DeliveryAttempt: &deliveryAttempt}))
-	require.Equal(t, 60*time.Second, mr.TTL(replyinbox.InboxKey("replica-safe")))
+	require.Equal(t, 60*time.Second, mr.TTL(enforcereply.InboxKey("replica-safe")))
 
-	payload, err := client.LPop(t.Context(), replyinbox.InboxKey("replica-safe")).Bytes()
+	payload, err := client.LPop(t.Context(), enforcereply.InboxKey("replica-safe")).Bytes()
 	require.NoError(t, err)
 	require.NotContains(t, string(payload), fakeSecret)
 	reply := new(riskv1.EnforcementReply)
@@ -74,12 +74,12 @@ func TestEnforceHandlerAcknowledgesStaleRequest(t *testing.T) {
 		ProjectId:      new("project-stale"),
 		OrganizationId: new("org-stale"),
 		CreatedAt:      new(time.Now().Add(-31 * time.Second).UTC().Format(time.RFC3339Nano)),
-		ReplyUrn:       new(replyinbox.ReplyURN("replica-stale", "scan-stale")),
+		ReplyUrn:       new(enforcereply.ReplyURN("replica-stale", "scan-stale")),
 		Content:        new(fakeSecret),
 	}.Build()
 
 	require.NoError(t, handler.Handle(t.Context(), request, gcp.MessageMetadata{DeliveryAttempt: nil}))
-	require.False(t, mr.Exists(replyinbox.InboxKey("replica-stale")))
+	require.False(t, mr.Exists(enforcereply.InboxKey("replica-stale")))
 	require.Equal(t, int64(1), counterValue(t, reader, "risk.enforcement.gitleaks.stale_dropped"))
 }
 
@@ -95,7 +95,7 @@ func TestEnforceHandlerAcknowledgesReplyWriteFailure(t *testing.T) {
 		ProjectId:      new("project-write-failure"),
 		OrganizationId: new("org-write-failure"),
 		CreatedAt:      new(time.Now().UTC().Format(time.RFC3339Nano)),
-		ReplyUrn:       new(replyinbox.ReplyURN("replica-write-failure", "scan-write-failure")),
+		ReplyUrn:       new(enforcereply.ReplyURN("replica-write-failure", "scan-write-failure")),
 		Content:        new("safe content"),
 	}.Build()
 
@@ -114,7 +114,7 @@ func TestEnforceHandlerRejectsMalformedCreatedAt(t *testing.T) {
 		ProjectId:      new("project-malformed"),
 		OrganizationId: new("org-malformed"),
 		CreatedAt:      new("not-a-timestamp"),
-		ReplyUrn:       new(replyinbox.ReplyURN("replica-malformed", "scan-malformed")),
+		ReplyUrn:       new(enforcereply.ReplyURN("replica-malformed", "scan-malformed")),
 		Content:        new("safe content"),
 	}.Build()
 
