@@ -131,6 +131,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		// the member lookup answers instead.
 		var clientResource string
 		var rerr error
+		claimedByMember := false
 		if endpoint.MetaMcpServerID.Valid {
 			// Member visibility is judged against the consent subject, exactly
 			// like the runtime request the minted session will make.
@@ -138,13 +139,15 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 			if cerr != nil {
 				return oops.E(oops.CodeUnexpected, cerr, "stamp consent subject context").LogError(ctx, logger)
 			}
-			clientResource, rerr = s.resolveGatewayMemberResource(memberCtx, logger, endpoint, client.RemoteSessionIssuerID)
+			clientResource, claimedByMember, rerr = s.resolveGatewayMemberResource(memberCtx, logger, endpoint, client.RemoteSessionIssuerID)
 		}
-		// The member lookup wins where it resolves; the stored derivation still
-		// answers for a client bound to a member's own issuer, and for servers
-		// whose issuer has not been recorded yet. It returns "" itself whenever
-		// it is ambiguous, so it can never be worse than "".
-		if rerr == nil && clientResource == "" {
+		// The stored derivation answers only when no member claimed the issuer
+		// — for a client bound to a member's own issuer, and for servers the
+		// sync has not recorded yet. Gate on the claim rather than on an empty
+		// resource: a gateway that declined to choose between two members has
+		// decided, and falling back would qualify the credential to one of them
+		// anyway, defeating the guard that produced the empty value.
+		if rerr == nil && !claimedByMember {
 			clientResource, rerr = s.remoteChallengeMgr.FallbackResourceForClient(ctx, client.ID)
 		}
 		if rerr != nil {

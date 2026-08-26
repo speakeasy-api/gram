@@ -243,6 +243,61 @@ func TestServeConsentAction_GatewayConnectSharedIssuerSendsNoResource(t *testing
 	require.Empty(t, mintedRemoteLoginState(t, ctx, fx, loc.Query().Get("state")).Resource)
 }
 
+// Declining to choose between two members is a decision, not a miss, so the
+// stored derivation must not then qualify the credential to one of them. This
+// is the case the plain shared-issuer test cannot reach: here the client is
+// also bound to a member's own issuer, so the fallback has a real answer to
+// give and the guard is the only thing standing between it and the grant.
+func TestServeConsentAction_GatewayConnectAmbiguityIsNotUndoneByTheFallback(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx, metaServerID := seedGatewayConsentEndpoint(t, "aim87-ambig-fb-gw")
+
+	// A member-owned issuer that the stored derivation can resolve on its own.
+	memberIssuer := createUserSessionIssuer(t, ctx, fx.ti.conn, fx.projectID)
+	attachConsentRemoteMcpServer(t, ctx, fx.ti.conn, fx.projectID, memberIssuer, "aim87-ambig-fb-srv", consentUpstreamA)
+
+	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-ambig-fb", "", []uuid.UUID{fx.shared, memberIssuer})
+	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
+
+	// Positive control: with no gateway member claiming the issuer, the
+	// fallback does answer for this client.
+	require.Equal(t, consentUpstreamA, postConnectAction(t, fx, clientID).Query().Get("resource"),
+		"the stored derivation must be able to answer, or this test proves nothing")
+
+	// Now two members behind that one authorization server.
+	createGatewayMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-ambig-fb-a", "https://ambig-a.example.com/mcp", conv.ToNullUUID(issuerID), 0)
+	createGatewayMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-ambig-fb-b", "https://ambig-b.example.com/mcp", conv.ToNullUUID(issuerID), 1)
+
+	loc := postConnectAction(t, fx, clientID)
+	_, hasResource := loc.Query()["resource"]
+	require.False(t, hasResource, "an ambiguous gateway must not fall back to a resource it already refused to choose")
+	require.Empty(t, mintedRemoteLoginState(t, ctx, fx, loc.Query().Get("state")).Resource)
+}
+
+// A member the caller cannot see still claimed the credential, so the fallback
+// must not qualify it to something else on that member's behalf.
+func TestServeConsentAction_GatewayConnectInvisibleClaimBlocksTheFallback(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx, metaServerID := seedGatewayConsentEndpoint(t, "aim87-invis-gw")
+
+	memberIssuer := createUserSessionIssuer(t, ctx, fx.ti.conn, fx.projectID)
+	attachConsentRemoteMcpServer(t, ctx, fx.ti.conn, fx.projectID, memberIssuer, "aim87-invis-srv", consentUpstreamA)
+
+	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-invis", "", []uuid.UUID{fx.shared, memberIssuer})
+	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
+
+	require.Equal(t, consentUpstreamA, postConnectAction(t, fx, clientID).Query().Get("resource"),
+		"the stored derivation must be able to answer, or this test proves nothing")
+
+	createGatewayMemberWithVisibility(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-invis-member", "https://invisible.example.com/mcp", conv.ToNullUUID(issuerID), 0, "private")
+
+	loc := postConnectAction(t, fx, clientID)
+	_, hasResource := loc.Query()["resource"]
+	require.False(t, hasResource, "a member the subject cannot see still claims the issuer, so nothing weaker may qualify it")
+}
+
 // Two members fronting one URL are one routing destination, so they collapse
 // rather than reading as ambiguous: routeUpstreamToken keys on the URL.
 func TestServeConsentAction_GatewayConnectMembersSharingOneURLCollapse(t *testing.T) {

@@ -10,6 +10,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -20,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 // resolveGatewayMemberResource returns the upstream URL of the gateway member
@@ -34,10 +36,16 @@ import (
 // change without Gram knowing, and a mismatch would surface as a token-routing
 // failure rather than a configuration one.
 //
-// Fails closed: no match and several members leave "", which the connect arm
-// treats exactly as an underivable resource. A NULL remote_session_issuer_id
-// simply matches nothing, so a server the sync has not reached yet resolves to
-// "" and behaves as it does today.
+// The second return reports whether this gateway answered at all: true when
+// some member claims the issuer, false when none does. It is a different
+// question from "is the resource non-empty". An ambiguous gateway answers
+// ("", true), because declining to qualify the credential is a decision — the
+// caller must not then reach for a weaker signal and qualify it anyway. Only a
+// genuine no-match lets the stored per-client derivation answer instead.
+//
+// Fails closed: no match and several members both leave "". A NULL
+// remote_session_issuer_id simply matches nothing, so a server the sync has not
+// reached yet resolves to "" and behaves as it does today.
 //
 // The returned error is a database or grant-load fault only; the connect arm
 // turns it into a failed consent rather than minting an unqualified grant.
@@ -46,9 +54,9 @@ func (s *Service) resolveGatewayMemberResource(
 	logger *slog.Logger,
 	endpoint *ResolvedMcpEndpoint,
 	remoteSessionIssuerID uuid.UUID,
-) (string, error) {
+) (string, bool, error) {
 	if remoteSessionIssuerID == uuid.Nil {
-		return "", nil
+		return "", false, nil
 	}
 
 	rows, err := metamcprepo.New(s.db).ListGatewayMembersForRemoteSessionIssuer(ctx, metamcprepo.ListGatewayMembersForRemoteSessionIssuerParams{
@@ -57,12 +65,18 @@ func (s *Service) resolveGatewayMemberResource(
 		RemoteSessionIssuerID: uuid.NullUUID{UUID: remoteSessionIssuerID, Valid: true},
 	})
 	if err != nil {
-		return "", fmt.Errorf("list gateway members for remote session issuer: %w", err)
+		return "", false, fmt.Errorf("list gateway members for remote session issuer: %w", err)
+	}
+	// Claimed by the gateway, before RBAC: a member the caller cannot see still
+	// claimed this credential, and letting the fallback qualify it to something
+	// else would hand the credential to a member that never claimed it.
+	if len(rows) == 0 {
+		return "", false, nil
 	}
 
 	candidates, err := s.authorizedGatewayMembers(ctx, endpoint, rows)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 
 	resource := ""
@@ -81,16 +95,17 @@ func (s *Service) resolveGatewayMemberResource(
 			// there is nothing to record that would route both correctly.
 			logger.WarnContext(ctx, "gateway members share an authorization server; credential cannot be qualified to one member",
 				attr.SlogMetaMcpServerID(endpoint.MetaMcpServerID.UUID.String()),
-				attr.SlogOAuthIssuer(remoteSessionIssuerID.String()),
+				attr.SlogRemoteSessionIssuerID(remoteSessionIssuerID.String()),
+				attr.SlogMcpServerID(row.McpServerID.String()),
 			)
-			return "", nil
+			return "", true, nil
 		}
 	}
-	return resource, nil
+	return resource, true, nil
 }
 
 // authorizedGatewayMembers drops the members the connecting subject holds no
-// mcp:connect on, as resolveMetaMemberSnapshot does for the serving path. A
+// mcp:connect on, mirroring authorizeProxyBackendAccess on the serving path. A
 // member the caller cannot reach must neither claim their credential — the
 // resolved URL is echoed to them and sent to the authorization server — nor
 // contest the claim of a member they can.
@@ -111,13 +126,20 @@ func (s *Service) authorizedGatewayMembers(
 	authorized := make([]metamcprepo.ListGatewayMembersForRemoteSessionIssuerRow, 0, len(rows))
 	for _, row := range rows {
 		// Only proxy backends reach here, so mcp:connect is keyed on the
-		// mcp_servers id (see grantResourceIdForMcpServer). Any visibility
+		// mcp_servers id, as authorizeProxyBackendAccess keys it. Any visibility
 		// other than the two known values fails closed.
 		switch row.McpServerVisibility {
 		case mcpservers.VisibilityPublic:
 		case mcpservers.VisibilityPrivate:
+			// Only a denial drops a member. A fault must not, because dropping
+			// narrows the candidate set, and a narrower set is how two members
+			// that should have read as ambiguous become one confident answer —
+			// the serving path propagates these for the same reason.
 			if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, row.McpServerID.String(), endpoint.ProjectID.String())); err != nil {
-				continue
+				if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && shareable.Code == oops.CodeForbidden {
+					continue
+				}
+				return nil, fmt.Errorf("authorize gateway member access: %w", err)
 			}
 		default:
 			continue
