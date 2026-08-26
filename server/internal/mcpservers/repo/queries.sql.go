@@ -848,6 +848,59 @@ func (q *Queries) LockMCPServersByIDs(ctx context.Context, arg LockMCPServersByI
 	return items, nil
 }
 
+const resyncMCPServerRemoteSessionIssuers = `-- name: ResyncMCPServerRemoteSessionIssuers :execrows
+WITH resolved AS (
+    SELECT input.user_session_issuer_id,
+           CASE WHEN count(DISTINCT c.remote_session_issuer_id) = 1
+                THEN (array_agg(DISTINCT c.remote_session_issuer_id))[1]
+           END AS remote_session_issuer_id
+    FROM unnest($1::uuid[]) AS input(user_session_issuer_id)
+    LEFT JOIN remote_session_client_user_session_issuers AS link
+           ON link.user_session_issuer_id = input.user_session_issuer_id
+    LEFT JOIN remote_session_clients AS c
+           ON c.id = link.remote_session_client_id
+          AND c.deleted IS FALSE
+    GROUP BY input.user_session_issuer_id
+)
+UPDATE mcp_servers AS s
+SET remote_session_issuer_id = resolved.remote_session_issuer_id,
+    updated_at = clock_timestamp()
+FROM resolved
+JOIN user_session_issuers AS usi
+  ON usi.id = resolved.user_session_issuer_id
+WHERE s.user_session_issuer_id = resolved.user_session_issuer_id
+  AND s.project_id = usi.project_id
+  AND s.deleted IS FALSE
+  AND s.remote_session_issuer_id IS DISTINCT FROM resolved.remote_session_issuer_id
+`
+
+// Recomputes mcp_servers.remote_session_issuer_id from the live client
+// bindings on each named user session issuer, so the column tracks the
+// authorization server an MCP server's upstream actually authenticates
+// against without any caller having to derive it.
+//
+// Exactly one distinct remote session issuer across the bound clients stamps
+// it; none or several leave it NULL. Several is representable — AIS-137
+// dropped the one-client-per-user-session-issuer index, so a user session
+// issuer may bind clients across distinct remote issuers — and a scalar column
+// cannot name which, so it names none and the readers fail closed.
+//
+// Clients are only ever soft-deleted and their issuers likewise, so `deleted
+// IS FALSE` is the removal signal here; the FK's ON DELETE SET NULL never
+// fires and cannot be relied on to clear a stale value.
+//
+// Tenancy is self-qualifying rather than a caller parameter: the issuer must
+// belong to the same project as the server it stamps. That keeps the
+// cross-project admin and issuer-migration callers correct without letting one
+// project's issuer reach another project's server.
+func (q *Queries) ResyncMCPServerRemoteSessionIssuers(ctx context.Context, userSessionIssuerIds []uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, resyncMCPServerRemoteSessionIssuers, userSessionIssuerIds)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setMCPServerToolMetadata = `-- name: SetMCPServerToolMetadata :many
 WITH input AS (
     SELECT

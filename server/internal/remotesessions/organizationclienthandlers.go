@@ -626,6 +626,11 @@ func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.Delet
 
 	txRepo := repo.New(dbtx)
 
+	boundUserIssuerIDs, err := txRepo.ListUserSessionIssuersBoundToClient(ctx, clientID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "list user session issuers bound to client").LogError(ctx, logger)
+	}
+
 	deleted, err := txRepo.DeleteOrganizationRemoteSessionClient(ctx, repo.DeleteOrganizationRemoteSessionClientParams{
 		ID:             clientID,
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
@@ -635,6 +640,12 @@ func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.Delet
 			return nil
 		}
 		return oops.E(oops.CodeUnexpected, err, "delete organization admin remote session client").LogError(ctx, logger)
+	}
+
+	// The client is only soft-deleted, so its bindings survive it; nothing else
+	// clears the value those bindings used to justify.
+	if err := ResyncMCPServerRemoteSessionIssuers(ctx, dbtx, boundUserIssuerIDs); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "resync mcp server remote session issuers").LogError(ctx, logger)
 	}
 
 	cascaded, err := txRepo.SoftDeleteRemoteSessionsByClientID(ctx, deleted.ID)
@@ -737,6 +748,10 @@ func (s *Service) RemoveClientFromMcpServer(ctx context.Context, payload *orgcli
 	}
 	if affected == 0 {
 		return oops.E(oops.CodeNotFound, nil, "mcp server is not attached to this client").LogError(ctx, logger)
+	}
+
+	if err := ResyncMCPServerRemoteSessionIssuers(ctx, dbtx, []uuid.UUID{server.UserSessionIssuerID.UUID}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "resync mcp server remote session issuers").LogError(ctx, logger)
 	}
 
 	if err := s.auditLogger.LogRemoteSessionClientDetachMcpServer(ctx, dbtx, audit.LogRemoteSessionClientDetachMcpServerEvent{

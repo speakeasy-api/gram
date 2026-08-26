@@ -1037,7 +1037,7 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orgissuersgen.Migr
 		return nil, err
 	}
 
-	clientsMigrated, err := runIssuerMigration(ctx, txRepo, logger, source, target)
+	clientsMigrated, err := runIssuerMigration(ctx, dbtx, txRepo, logger, source, target)
 	if err != nil {
 		return nil, err
 	}

@@ -339,7 +339,7 @@ func lockIssuersForMigration(ctx context.Context, r *repo.Queries, issuerIDs ...
 // Callers must already hold the advisory locks from lockIssuersForMigration and
 // have re-read both issuers under a row lock, so that the rows validated here
 // cannot change before the transaction commits.
-func runIssuerMigration(ctx context.Context, r *repo.Queries, logger *slog.Logger, source, target repo.RemoteSessionIssuer) (int64, error) {
+func runIssuerMigration(ctx context.Context, tx repo.DBTX, r *repo.Queries, logger *slog.Logger, source, target repo.RemoteSessionIssuer) (int64, error) {
 	preflight, err := buildMigratePreflight(ctx, r, source, target)
 	if err != nil {
 		return 0, oops.E(oops.CodeUnexpected, err, "build remote session issuer migrate preflight").LogError(ctx, logger)
@@ -353,12 +353,25 @@ func runIssuerMigration(ctx context.Context, r *repo.Queries, logger *slog.Logge
 		return 0, oops.E(oops.CodeConflict, nil, "both issuers already have a client bound to the same MCP server (%s); detach one client per server and retry", strings.Join(preflight.conflictingMcpServerNames, ", ")).LogError(ctx, logger)
 	}
 
+	// Read the affected user session issuers before the re-point: afterwards
+	// the clients name the target, so the source no longer reaches them.
+	affected, err := r.ListUserSessionIssuersBoundToRemoteIssuer(ctx, source.ID)
+	if err != nil {
+		return 0, oops.E(oops.CodeUnexpected, err, "list user session issuers bound to source issuer").LogError(ctx, logger)
+	}
+
 	clientsMigrated, err := r.UpdateRemoteSessionClientsToRemoteSessionIssuer(ctx, repo.UpdateRemoteSessionClientsToRemoteSessionIssuerParams{
 		TargetIssuerID: target.ID,
 		SourceIssuerID: source.ID,
 	})
 	if err != nil {
 		return 0, oops.E(oops.CodeUnexpected, err, "repoint remote session clients to target issuer").LogError(ctx, logger)
+	}
+
+	// The bindings did not move but what they resolve to did, so every server
+	// behind them now derives the target issuer.
+	if err := ResyncMCPServerRemoteSessionIssuers(ctx, tx, affected); err != nil {
+		return 0, oops.E(oops.CodeUnexpected, err, "resync mcp server remote session issuers").LogError(ctx, logger)
 	}
 
 	return clientsMigrated, nil

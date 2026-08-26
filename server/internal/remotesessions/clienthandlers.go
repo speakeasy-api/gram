@@ -341,6 +341,10 @@ func (s *Service) finalizeClientCreate(
 		}
 	}
 
+	if err := ResyncMCPServerRemoteSessionIssuers(ctx, dbtx, userIssuerIDs); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resync mcp server remote session issuers").LogError(ctx, logger)
+	}
+
 	if err := s.auditLogger.LogRemoteSessionClientCreate(ctx, dbtx, audit.LogRemoteSessionClientCreateEvent{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
@@ -629,7 +633,7 @@ func (s *Service) AttachUserSessionIssuer(ctx context.Context, payload *gen.Atta
 		return nil, oops.E(oops.CodeUnexpected, err, "attach remote session client to user session issuer").LogError(ctx, logger)
 	}
 
-	return s.commitClientAttachmentChange(ctx, logger, dbtx, txRepo, *authCtx, clientID, func(ctx context.Context, dbtx pgx.Tx) error {
+	return s.commitClientAttachmentChange(ctx, logger, dbtx, txRepo, *authCtx, clientID, []uuid.UUID{userIssuerID}, func(ctx context.Context, dbtx pgx.Tx) error {
 		return s.auditLogger.LogRemoteSessionClientAttachUserSessionIssuer(ctx, dbtx, audit.LogRemoteSessionClientUserSessionIssuerAttachmentEvent{
 			OrganizationID:         authCtx.ActiveOrganizationID,
 			ProjectID:              *authCtx.ProjectID,
@@ -713,7 +717,7 @@ func (s *Service) DetachUserSessionIssuer(ctx context.Context, payload *gen.Deta
 		return nil, oops.E(oops.CodeUnexpected, err, "detach remote session client from user session issuer").LogError(ctx, logger)
 	}
 
-	return s.commitClientAttachmentChange(ctx, logger, dbtx, txRepo, *authCtx, clientID, func(ctx context.Context, dbtx pgx.Tx) error {
+	return s.commitClientAttachmentChange(ctx, logger, dbtx, txRepo, *authCtx, clientID, []uuid.UUID{userIssuerID}, func(ctx context.Context, dbtx pgx.Tx) error {
 		return s.auditLogger.LogRemoteSessionClientDetachUserSessionIssuer(ctx, dbtx, audit.LogRemoteSessionClientUserSessionIssuerAttachmentEvent{
 			OrganizationID:         authCtx.ActiveOrganizationID,
 			ProjectID:              *authCtx.ProjectID,
@@ -738,8 +742,13 @@ func (s *Service) commitClientAttachmentChange(
 	txRepo *repo.Queries,
 	authCtx contextvalues.AuthContext,
 	clientID uuid.UUID,
+	touchedUserIssuerIDs []uuid.UUID,
 	auditFn func(ctx context.Context, dbtx pgx.Tx) error,
 ) (*types.RemoteSessionClient, error) {
+	if err := ResyncMCPServerRemoteSessionIssuers(ctx, dbtx, touchedUserIssuerIDs); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resync mcp server remote session issuers").LogError(ctx, logger)
+	}
+
 	updated, err := txRepo.GetRemoteSessionClientByID(ctx, repo.GetRemoteSessionClientByIDParams{
 		ID:             clientID,
 		ProjectID:      *authCtx.ProjectID,
@@ -794,6 +803,22 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 
 	txRepo := repo.New(dbtx)
 
+	// Read the bindings before anything removes them: once the client is
+	// soft-deleted and its attachments purged there is nothing left to derive
+	// the affected servers' issuer from.
+	var boundUserIssuerIDs []uuid.UUID
+	switch bound, berr := txRepo.GetRemoteSessionClientByID(ctx, repo.GetRemoteSessionClientByIDParams{
+		ID:             clientID,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+	}); {
+	case berr == nil:
+		boundUserIssuerIDs = bound.UserSessionIssuerIds
+	case errors.Is(berr, pgx.ErrNoRows):
+	default:
+		return oops.E(oops.CodeUnexpected, berr, "get remote session client").LogError(ctx, logger)
+	}
+
 	deleted, err := txRepo.DeleteRemoteSessionClient(ctx, repo.DeleteRemoteSessionClientParams{
 		ID:        clientID,
 		ProjectID: conv.ToNullUUID(*authCtx.ProjectID),
@@ -818,6 +843,10 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 			"failed to delete user session issuer attachments for remote session client %s",
 			deleted.ID,
 		).LogError(ctx, logger)
+	}
+
+	if err := ResyncMCPServerRemoteSessionIssuers(ctx, dbtx, boundUserIssuerIDs); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "resync mcp server remote session issuers").LogError(ctx, logger)
 	}
 
 	cascaded, err := txRepo.SoftDeleteRemoteSessionsByClientID(ctx, deleted.ID)

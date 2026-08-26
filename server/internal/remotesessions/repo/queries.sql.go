@@ -4155,6 +4155,69 @@ func (q *Queries) ListTenantRemoteSessionIssuersByIssuerURL(ctx context.Context,
 	return items, nil
 }
 
+const listUserSessionIssuersBoundToClient = `-- name: ListUserSessionIssuersBoundToClient :many
+SELECT link.user_session_issuer_id
+FROM remote_session_client_user_session_issuers AS link
+WHERE link.remote_session_client_id = $1
+`
+
+// The user session issuers a client is bound to, for resyncing
+// mcp_servers.remote_session_issuer_id when the client itself changes rather
+// than its bindings. Soft-deleting a client leaves its bindings in place, so
+// this still returns them and the resync recomputes to NULL.
+func (q *Queries) ListUserSessionIssuersBoundToClient(ctx context.Context, remoteSessionClientID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listUserSessionIssuersBoundToClient, remoteSessionClientID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var user_session_issuer_id uuid.UUID
+		if err := rows.Scan(&user_session_issuer_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_session_issuer_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserSessionIssuersBoundToRemoteIssuer = `-- name: ListUserSessionIssuersBoundToRemoteIssuer :many
+SELECT DISTINCT link.user_session_issuer_id
+FROM remote_session_client_user_session_issuers AS link
+JOIN remote_session_clients AS c
+  ON c.id = link.remote_session_client_id
+WHERE c.remote_session_issuer_id = $1
+`
+
+// Every user session issuer reachable from a remote issuer through the client
+// bindings. Feeds the mcp_servers.remote_session_issuer_id resync after a bulk
+// client re-point, which changes what those servers derive without touching
+// the bindings themselves. Deliberately counts soft-deleted clients too: a
+// server whose only client just went away still needs its stale value cleared.
+func (q *Queries) ListUserSessionIssuersBoundToRemoteIssuer(ctx context.Context, remoteSessionIssuerID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listUserSessionIssuersBoundToRemoteIssuer, remoteSessionIssuerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var user_session_issuer_id uuid.UUID
+		if err := rows.Scan(&user_session_issuer_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_session_issuer_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockRemoteSessionClientForSessionWrite = `-- name: LockRemoteSessionClientForSessionWrite :one
 SELECT id
 FROM remote_session_clients

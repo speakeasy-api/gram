@@ -359,6 +359,9 @@ func (s *CatalogIdentityProviderAttachmentService) createAndAttachClient(ctx con
 	if err := q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: client.ID, UserSessionIssuerID: userSessionIssuerID}); err != nil {
 		return false, fmt.Errorf("attach identity-provider client to registered MCP: %w", err)
 	}
+	if err := remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, tx, []uuid.UUID{userSessionIssuerID}); err != nil {
+		return false, fmt.Errorf("resync mcp server remote session issuers: %w", err)
+	}
 	if err := s.audit.LogRemoteSessionClientCreate(ctx, tx, audit.LogRemoteSessionClientCreateEvent{
 		OrganizationID:         principal.OrganizationID,
 		ProjectID:              project.ID,

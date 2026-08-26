@@ -270,6 +270,12 @@ func (r *UpstreamRevoker) DetachUserSessionIssuerFromClients(ctx context.Context
 		return nil, fmt.Errorf("delete remote session client attachments for user session issuer: %w", err)
 	}
 
+	// The bindings this issuer's servers derived their upstream authorization
+	// server from are gone, so the denormalised column has to go with them.
+	if err := ResyncMCPServerRemoteSessionIssuers(ctx, tx, []uuid.UUID{userSessionIssuerID}); err != nil {
+		return nil, err
+	}
+
 	return creds, nil
 }
 

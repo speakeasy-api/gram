@@ -815,7 +815,7 @@ func (s *Service) MigrateToGlobalIssuer(ctx context.Context, payload *adminrsgen
 		return nil, err
 	}
 
-	clientsMigrated, err := runIssuerMigration(ctx, txRepo, logger, source, target)
+	clientsMigrated, err := runIssuerMigration(ctx, dbtx, txRepo, logger, source, target)
 	if err != nil {
 		return nil, err
 	}
@@ -1084,12 +1084,23 @@ func (s *Service) DeleteGlobalClient(ctx context.Context, payload *adminrsgen.De
 
 	txRepo := repo.New(dbtx)
 
+	boundUserIssuerIDs, err := txRepo.ListUserSessionIssuersBoundToClient(ctx, clientID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "list user session issuers bound to client").LogError(ctx, logger)
+	}
+
 	deleted, err := txRepo.DeleteGlobalRemoteSessionClient(ctx, clientID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil
 		}
 		return oops.E(oops.CodeUnexpected, err, "delete global remote session client").LogError(ctx, logger)
+	}
+
+	// A global client carries no bindings when created, but a project can
+	// attach one later, so the servers behind it still have to be recomputed.
+	if err := ResyncMCPServerRemoteSessionIssuers(ctx, dbtx, boundUserIssuerIDs); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "resync mcp server remote session issuers").LogError(ctx, logger)
 	}
 
 	cascaded, err := txRepo.SoftDeleteRemoteSessionsByClientID(ctx, deleted.ID)

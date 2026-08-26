@@ -2238,3 +2238,24 @@ WHERE subject_urn = @subject_urn
   AND remote_session_client_id = @remote_session_client_id
   AND deleted IS FALSE
   AND (last_used_at IS NULL OR last_used_at <= @used_cutoff::timestamptz);
+
+-- name: ListUserSessionIssuersBoundToRemoteIssuer :many
+-- Every user session issuer reachable from a remote issuer through the client
+-- bindings. Feeds the mcp_servers.remote_session_issuer_id resync after a bulk
+-- client re-point, which changes what those servers derive without touching
+-- the bindings themselves. Deliberately counts soft-deleted clients too: a
+-- server whose only client just went away still needs its stale value cleared.
+SELECT DISTINCT link.user_session_issuer_id
+FROM remote_session_client_user_session_issuers AS link
+JOIN remote_session_clients AS c
+  ON c.id = link.remote_session_client_id
+WHERE c.remote_session_issuer_id = @remote_session_issuer_id;
+
+-- name: ListUserSessionIssuersBoundToClient :many
+-- The user session issuers a client is bound to, for resyncing
+-- mcp_servers.remote_session_issuer_id when the client itself changes rather
+-- than its bindings. Soft-deleting a client leaves its bindings in place, so
+-- this still returns them and the resync recomputes to NULL.
+SELECT link.user_session_issuer_id
+FROM remote_session_client_user_session_issuers AS link
+WHERE link.remote_session_client_id = @remote_session_client_id;
