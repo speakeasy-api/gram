@@ -14,12 +14,15 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 )
+
+const issuerResyncTimeout = 10 * time.Second
 
 // ResyncMCPServerRemoteSessionIssuers recomputes the denormalised issuer for
 // every MCP server in projectID carrying one of userIssuerIDs. Safe with
@@ -48,6 +51,10 @@ func ResyncMCPServerRemoteSessionIssuers(ctx context.Context, dbtx mcpserversrep
 // mutation it follows has already committed, so a failure is logged rather
 // than returned and the stale value it leaves is recoverable.
 func BestEffortResyncMCPServerRemoteSessionIssuers(ctx context.Context, logger *slog.Logger, db mcpserversrepo.DBTX, organizationID string, projectID uuid.UUID, userIssuerIDs []uuid.UUID) {
+	// Detached from request cancellation like RevokeAllDetached: already committed.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), issuerResyncTimeout)
+	defer cancel()
+
 	if err := ResyncMCPServerRemoteSessionIssuers(ctx, db, organizationID, projectID, userIssuerIDs); err != nil {
 		logger.ErrorContext(ctx, "resync mcp server remote session issuers", attr.SlogError(err))
 	}
