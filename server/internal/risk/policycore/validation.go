@@ -52,10 +52,17 @@ func ValidateAction(action string) error {
 }
 
 func ValidateSources(sources []string) error {
+	allowed := []string{
+		ra.SourceGitleaks,
+		ra.SourcePresidio,
+		shadowmcp.SourceShadowMCP,
+		shadowmcp.SourceDestructiveTool,
+		ra.SourceCLIDestructive,
+		ra.SourcePromptInjection,
+		ra.SourceAccountIdentity,
+	}
 	for _, source := range sources {
-		switch source {
-		case ra.SourceGitleaks, ra.SourcePresidio, shadowmcp.SourceShadowMCP, shadowmcp.SourceDestructiveTool, ra.SourceCLIDestructive, ra.SourcePromptInjection, ra.SourceAccountIdentity:
-		default:
+		if !slices.Contains(allowed, source) {
 			return fmt.Errorf("source %q is not a recognized policy source", source)
 		}
 	}
