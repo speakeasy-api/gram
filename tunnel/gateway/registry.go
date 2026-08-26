@@ -26,6 +26,7 @@ type registry struct {
 
 type sessEntry struct {
 	id      string
+	keyHash string
 	session *yamux.Session
 	// proxy is the session-scoped reverse proxy reused across forwards; its
 	// transport dials a fresh yamux substream per request, so sharing the
@@ -43,9 +44,10 @@ func newRegistry() *registry {
 	}
 }
 
-func (r *registry) add(tunnelID, sessionID string, s *yamux.Session, proxy http.Handler, connection route.Connection) func() {
+func (r *registry) add(tunnelID, sessionID, keyHash string, s *yamux.Session, proxy http.Handler, connection route.Connection) func() {
 	entry := &sessEntry{
 		id:               sessionID,
+		keyHash:          keyHash,
 		session:          s,
 		proxy:            proxy,
 		connection:       connection,
@@ -60,19 +62,23 @@ func (r *registry) add(tunnelID, sessionID string, s *yamux.Session, proxy http.
 	r.mu.Unlock()
 
 	return func() {
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		list := r.sessions[tunnelID]
-		for i, e := range list {
-			if e == entry {
-				r.sessions[tunnelID] = append(list[:i], list[i+1:]...)
-				break
-			}
+		r.remove(tunnelID, entry)
+	}
+}
+
+func (r *registry) remove(tunnelID string, entry *sessEntry) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	list := r.sessions[tunnelID]
+	for i, candidate := range list {
+		if candidate == entry {
+			r.sessions[tunnelID] = append(list[:i], list[i+1:]...)
+			break
 		}
-		if len(r.sessions[tunnelID]) == 0 {
-			delete(r.sessions, tunnelID)
-			delete(r.rr, tunnelID)
-		}
+	}
+	if len(r.sessions[tunnelID]) == 0 {
+		delete(r.sessions, tunnelID)
+		delete(r.rr, tunnelID)
 	}
 }
 

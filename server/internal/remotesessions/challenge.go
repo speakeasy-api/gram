@@ -716,7 +716,7 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 		if !stranded {
 			return
 		}
-		m.revoker.RevokeUnstoredDetached(ctx, state.RemoteSessionClientID, tok.AccessToken, tok.RefreshToken)
+		m.revoker.RevokeUnstoredDetached(ctx, state.RemoteSessionClientID, tok.AccessToken, tok.RefreshToken, tunnelID)
 	}()
 
 	accessEnc, err := m.enc.Encrypt([]byte(tok.AccessToken))

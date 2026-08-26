@@ -301,7 +301,7 @@ func (r *UpstreamRevoker) RevokeDetached(ctx context.Context, cred RevokedCreden
 	revokeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), upstreamRevokeTimeout)
 	defer cancel()
 
-	r.revoke(revokeCtx, cred.RemoteSessionClientID, cred.tokens())
+	r.revoke(revokeCtx, cred.RemoteSessionClientID, cred.tokens(), nil)
 }
 
 // RevokeUnstoredDetached is RevokeDetached for a pair Gram exchanged upstream
@@ -314,11 +314,11 @@ func (r *UpstreamRevoker) RevokeDetached(ctx context.Context, cred RevokedCreden
 // row means no revoke path can ever find it again. That includes failing to
 // encrypt it, which is why this takes the tokens in the clear — at that point
 // the ciphertext the stored form wants does not exist.
-func (r *UpstreamRevoker) RevokeUnstoredDetached(ctx context.Context, clientID uuid.UUID, accessToken string, refreshToken string) {
+func (r *UpstreamRevoker) RevokeUnstoredDetached(ctx context.Context, clientID uuid.UUID, accessToken string, refreshToken string, tunnelID uuid.NullUUID) {
 	revokeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), upstreamRevokeTimeout)
 	defer cancel()
 
-	r.revoke(revokeCtx, clientID, revocationTokens{access: accessToken, refresh: refreshToken, encrypted: false})
+	r.revoke(revokeCtx, clientID, revocationTokens{access: accessToken, refresh: refreshToken, encrypted: false}, &tunnelID)
 }
 
 // RevokeAllDetached runs upstream revocations for a batch of sessions that have
@@ -375,7 +375,7 @@ func (r *UpstreamRevoker) RevokeAllDetached(ctx context.Context, creds []Revoked
 			revokeCtx, cancelOne := context.WithTimeout(batchCtx, upstreamRevokeTimeout)
 			defer cancelOne()
 
-			r.revoke(revokeCtx, cred.RemoteSessionClientID, cred.tokens())
+			r.revoke(revokeCtx, cred.RemoteSessionClientID, cred.tokens(), nil)
 			return nil
 		})
 	}
@@ -400,11 +400,11 @@ func (r *UpstreamRevoker) RevokeAllDetached(ctx context.Context, creds []Revoked
 // revoke performs the whole sequence for one session and reports exactly one
 // outcome, on both a span and the metric. Split from RevokeDetached so the bulk
 // path can drive it directly under the batch's own budget and concurrency limit.
-func (r *UpstreamRevoker) revoke(ctx context.Context, clientID uuid.UUID, tokens revocationTokens) {
+func (r *UpstreamRevoker) revoke(ctx context.Context, clientID uuid.UUID, tokens revocationTokens, tunnelID *uuid.NullUUID) {
 	ctx, span := r.tracer.Start(ctx, "remote_session.upstream_revoke")
 	defer span.End()
 
-	issuerURL, outcome := r.revokeOnce(ctx, clientID, tokens)
+	issuerURL, outcome := r.revokeOnce(ctx, clientID, tokens, tunnelID)
 
 	// Reported in one place so the span and the metric can never disagree about
 	// how a revocation ended. Without a span the revocation is only visible in a
@@ -417,7 +417,7 @@ func (r *UpstreamRevoker) revoke(ctx context.Context, clientID uuid.UUID, tokens
 // revokeOnce runs the sequence and reports where it stopped. The returned
 // issuer URL attributes the outcome, and is empty when the revocation failed
 // before any issuer could be identified.
-func (r *UpstreamRevoker) revokeOnce(ctx context.Context, clientID uuid.UUID, tokens revocationTokens) (issuerURL string, outcome remotesessionmetrics.RevokeOutcome) {
+func (r *UpstreamRevoker) revokeOnce(ctx context.Context, clientID uuid.UUID, tokens revocationTokens, tunnelID *uuid.NullUUID) (issuerURL string, outcome remotesessionmetrics.RevokeOutcome) {
 	logger := r.logger.With(
 		attr.SlogRemoteSessionClientID(clientID.String()),
 	)
@@ -498,7 +498,11 @@ func (r *UpstreamRevoker) revokeOnce(ctx context.Context, clientID uuid.UUID, to
 		return client.IssuerUrl, remotesessionmetrics.RevokeOutcomeInternal
 	}
 
-	doer, err := upstreamHTTPDoer(r.client, r.tunnels, client.TunneledMcpServerID)
+	transport := client.TunneledMcpServerID
+	if tunnelID != nil {
+		transport = *tunnelID
+	}
+	doer, err := upstreamHTTPDoer(r.client, r.tunnels, transport)
 	if err != nil {
 		logger.WarnContext(ctx, "upstream revoke: no transport to the identity provider", attr.SlogError(err))
 		return client.IssuerUrl, remotesessionmetrics.RevokeOutcomeUnreachable

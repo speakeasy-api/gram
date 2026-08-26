@@ -138,7 +138,7 @@ func (c *HTTPClient) Do(req *http.Request, tunnelID string) (*http.Response, err
 				unpublishErr = errors.Join(unpublishErr, fmt.Errorf("unpublish stale tunnel route: %w", err))
 			}
 			exclude[addr] = struct{}{}
-		case wire.TunnelErrorTunnelBusy:
+		case wire.TunnelErrorTunnelBusy, wire.TunnelErrorActiveCheckFailed:
 			drainAndClose(resp)
 			exclude[addr] = struct{}{}
 		default:
@@ -180,6 +180,7 @@ func buildForward(req *http.Request, body []byte, gatewayURL, tunnelID, forwardT
 	}
 	forward.Header.Set(wire.HeaderTunnelID, tunnelID)
 	forward.Header.Set(wire.HeaderTunnelForwardToken, forwardToken)
+	forward.Header.Set(wire.HeaderTunnelRequireActive, "1")
 	return forward, nil
 }
 

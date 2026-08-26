@@ -60,6 +60,7 @@ func TestHTTPClientForwardsPathQueryBodyAndHeaders(t *testing.T) {
 	require.Equal(t, "tenant=t1", got.URL.RawQuery)
 	require.Equal(t, "tunnel-1", got.Header.Get(wire.HeaderTunnelID))
 	require.Equal(t, "forward-token", got.Header.Get(wire.HeaderTunnelForwardToken))
+	require.Equal(t, "1", got.Header.Get(wire.HeaderTunnelRequireActive))
 	require.NotEqual(t, "as.customer.internal", got.Host)
 	require.Equal(t, "grant_type=authorization_code", *seenBody.Load())
 }
@@ -192,6 +193,38 @@ func TestHTTPClientSubstreamFailedIsNeverReplayed(t *testing.T) {
 	require.Equal(t, http.StatusBadGateway, resp.StatusCode)
 	require.Equal(t, wire.TunnelErrorSubstreamFailed, resp.Header.Get(ErrorHeader))
 	require.Equal(t, int64(1), requests.Load())
+}
+
+func TestHTTPClientActiveCheckFailureFailsOverWithoutUnpublishing(t *testing.T) {
+	t.Parallel()
+
+	var requests atomic.Int64
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if requests.Add(1) == 1 {
+			w.Header().Set(wire.HeaderTunnelError, wire.TunnelErrorActiveCheckFailed)
+			w.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+	gatewayA := httptest.NewServer(handler)
+	defer gatewayA.Close()
+	gatewayB := httptest.NewServer(handler)
+	defer gatewayB.Close()
+
+	routes := route.NewRouteTable()
+	require.NoError(t, routes.Publish(t.Context(), "tunnel-1", gatewayA.URL, time.Minute))
+	require.NoError(t, routes.Publish(t.Context(), "tunnel-1", gatewayB.URL, time.Minute))
+
+	resp, err := newTestHTTPClient(t, routes).Do(tokenRequest(t, "https://as.customer.internal/oauth/token"), "tunnel-1")
+	require.NoError(t, err)
+	defer func() { require.NoError(t, resp.Body.Close()) }()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, int64(2), requests.Load())
+
+	candidates, err := routes.Candidates(t.Context(), "tunnel-1")
+	require.NoError(t, err)
+	require.Len(t, candidates, 2)
 }
 
 func TestHTTPClientNoRoutes(t *testing.T) {
