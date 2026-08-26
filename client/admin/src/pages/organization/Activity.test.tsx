@@ -1,6 +1,8 @@
+import { QueryClient } from "@tanstack/react-query";
 import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { organizationActivityQuery } from "@/lib/adminQueries";
 import { Activity } from "@/pages/organization/Activity";
 import { anActivityLog, anOrganization } from "@/test/fixtures";
 import { renderWithApp } from "@/test/harness";
@@ -178,6 +180,49 @@ describe("Activity", () => {
     ).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
     expect(mocks.listOrganizationActivity).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps rows and prevents duplicate retries after a refresh failure", async () => {
+    const retry = deferred<{ logs: ReturnType<typeof anActivityLog>[] }>();
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    mocks.listOrganizationActivity
+      .mockResolvedValueOnce({
+        logs: [anActivityLog({ id: "event-1", action: "event-1" })],
+      })
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockReturnValueOnce(retry.promise);
+    await renderWithApp(<Activity org={ORG} />, { queryClient });
+    await screen.findByText("event-1");
+
+    await queryClient
+      .refetchQueries({
+        queryKey: organizationActivityQuery(ORG.id).queryKey,
+        type: "active",
+      })
+      .catch(() => undefined);
+
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "Unable to refresh activity",
+    );
+    expect(screen.getByText("event-1")).toBeTruthy();
+    expect(screen.queryByText("Unable to load more activity")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Retry refresh" }));
+
+    const retrying = await screen.findByRole("button", {
+      name: "Retrying refresh...",
+    });
+    expect(retrying.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(retrying);
+    expect(mocks.listOrganizationActivity).toHaveBeenCalledTimes(3);
+
+    retry.resolve({
+      logs: [anActivityLog({ id: "event-2", action: "event-2" })],
+    });
+    await screen.findByText("event-2");
+    expect(screen.queryByText("event-1")).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("appends two rows per page in exact order, exactly once", async () => {

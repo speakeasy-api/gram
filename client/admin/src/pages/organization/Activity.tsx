@@ -132,6 +132,19 @@ export function Activity({ org }: { org: AdminOrganization }): JSX.Element {
           ))}
         </ol>
       )}
+      {query.isRefetchError ? (
+        <div role="alert" className="flex items-center gap-2">
+          <p className="text-destructive text-sm">Unable to refresh activity</p>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={query.isRefetching}
+            onClick={() => void query.refetch()}
+          >
+            {query.isRefetching ? "Retrying refresh..." : "Retry refresh"}
+          </Button>
+        </div>
+      ) : null}
       {query.isFetchNextPageError ? (
         <div role="alert" className="flex items-center gap-2">
           <p className="text-destructive text-sm">
