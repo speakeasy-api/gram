@@ -103,8 +103,8 @@ func TestValidateResourceIndicators_RejectsMismatchAfterAMatch(t *testing.T) {
 func TestValidateResourceIndicators_RejectsPresentButEmpty(t *testing.T) {
 	t.Parallel()
 	// `resource=` is a malformed value, not an omission: RFC 8707 §2 requires
-	// any value sent to be an absolute URI. Accepting it would reintroduce the
-	// silent-acceptance this validation exists to remove.
+	// any value sent to be an absolute URI. Accepting it would be exactly the
+	// silent acceptance this validation exists to remove.
 	requireInvalidTarget(t, oauthwire.ValidateResourceIndicators([]string{""}, canonicalResource))
 }
 
