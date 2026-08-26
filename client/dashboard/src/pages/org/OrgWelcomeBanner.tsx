@@ -35,7 +35,7 @@ import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useRecordPlatformMCPDashboardCtaEventMutation } from "@gram/client/react-query/recordPlatformMCPDashboardCtaEvent.js";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { Link } from "react-router";
 
 // Matches the page column OrgHome applies to everything below the banner.
@@ -43,19 +43,6 @@ const COLUMN_CLASS = "mx-auto w-full max-w-7xl px-8";
 
 const CARD_SHELL_CLASS =
   "group bg-card border-border hover:border-foreground relative flex min-h-[250px] flex-col gap-3 overflow-hidden border px-6.5 pt-7.5 pb-6.5 no-underline transition-colors hover:no-underline";
-
-function bannerGridClass(columnCount: number): string {
-  // One card must not stretch the row: keep it on a 2-col grid so the
-  // empty second column caps width at 50%. Two cards fill that grid.
-  // Three sit in thirds, still under the 50% max.
-  switch (columnCount) {
-    case 1:
-    case 2:
-      return "lg:grid-cols-2";
-    default:
-      return "lg:grid-cols-3";
-  }
-}
 
 type RouteCard = {
   id: WelcomeCardId;
@@ -125,96 +112,80 @@ export function OrgWelcomeBanner(): JSX.Element | null {
   const recommendedId = recommendedWelcomeCardId(cardIds);
 
   const projectRoutes = useRoutes({ projectSlug: startProject?.slug });
-
-  const cards: RouteCard[] = useMemo(() => {
-    const pad = (n: number) => String(n).padStart(2, "0");
-    const platformMcpHref = `${orgRoutes.platformMcp.href()}?setup=1&entrySource=organization_home`;
-
-    return cardIds.map((id, i) => {
-      const recommended = id === recommendedId;
-      const index = pad(i + 1);
-      switch (id) {
-        case "demo":
-          return {
-            id,
-            index,
-            title: "Explore the demo org",
-            body: "A read-only organization with two weeks of simulated agent traffic, spend, and blocked calls.",
-            cta: "Enter demo org",
-            meta: "Read-only · simulated data",
-            to: projectRoutes.exploreDemo.href(),
-            recommended,
-          };
-        case "guide":
-          return {
-            id,
-            index,
-            title: "Project guide",
-            body: "Get to one observable win: a governed MCP call, or a prompt you watch get blocked.",
-            cta: "Open the guide",
-            meta: "~5 min · guided tour",
-            to: PROJECT_GUIDE_ENTRY_PATH,
-            recommended,
-          };
-        case "enterprise":
-          return {
-            id,
-            index,
-            title: setupStarted
-              ? "Continue enterprise rollout"
-              : "Start enterprise rollout",
-            body: "SSO, directory sync, agent platforms, and policies — the wizard walks the whole sequence.",
-            cta: setupStarted ? "Resume rollout" : "Begin rollout",
-            meta: "8 steps · resumable",
-            to: orgRoutes.setup.href(),
-            recommended,
-            onClick: markSetupStarted,
-          };
-        case "platformMcp":
-          return {
-            id,
-            index,
-            title: "Platform MCP setup",
-            body: "Install Speakeasy in Claude, Cursor, or Codex so the agent can work against this org.",
-            cta: "Set up Platform MCP",
-            meta: "5 agents supported",
-            to: platformMcpHref,
-            recommended,
-            onClick: () => {
-              recordCta.mutate({
-                request: {
-                  recordDashboardCtaEventRequestBody: {
-                    action: Action.Selected,
-                    surface: Surface.OrganizationHome,
-                  },
+  const platformMcpHref = `${orgRoutes.platformMcp.href()}?setup=1&entrySource=organization_home`;
+  const cards: RouteCard[] = cardIds.map((id, i) => {
+    const recommended = id === recommendedId;
+    const index = String(i + 1).padStart(2, "0");
+    switch (id) {
+      case "demo":
+        return {
+          id,
+          index,
+          title: "Explore the demo org",
+          body: "A read-only organization with two weeks of simulated agent traffic, spend, and blocked calls.",
+          cta: "Enter demo org",
+          meta: "Read-only · simulated data",
+          to: projectRoutes.exploreDemo.href(),
+          recommended,
+        };
+      case "guide":
+        return {
+          id,
+          index,
+          title: "Project guide",
+          body: "Get to one observable win: a governed MCP call, or a prompt you watch get blocked.",
+          cta: "Open the guide",
+          meta: "~5 min · guided tour",
+          to: PROJECT_GUIDE_ENTRY_PATH,
+          recommended,
+        };
+      case "enterprise":
+        return {
+          id,
+          index,
+          title: setupStarted
+            ? "Continue enterprise rollout"
+            : "Start enterprise rollout",
+          body: "SSO, directory sync, agent platforms, and policies — the wizard walks the whole sequence.",
+          cta: setupStarted ? "Resume rollout" : "Begin rollout",
+          meta: "8 steps · resumable",
+          to: orgRoutes.setup.href(),
+          recommended,
+          onClick: markSetupStarted,
+        };
+      case "platformMcp":
+        return {
+          id,
+          index,
+          title: "Platform MCP setup",
+          body: "Install Speakeasy in Claude, Cursor, or Codex so the agent can work against this org.",
+          cta: "Set up Platform MCP",
+          meta: "5 agents supported",
+          to: platformMcpHref,
+          recommended,
+          onClick: () => {
+            recordCta.mutate({
+              request: {
+                recordDashboardCtaEventRequestBody: {
+                  action: Action.Selected,
+                  surface: Surface.OrganizationHome,
                 },
-              });
-            },
-          };
-        case "defaultProject":
-          return {
-            id,
-            index,
-            title: startProject ? startProject.name : "Your project",
-            body: "Jump back into the project you were last working in.",
-            cta: "Open project",
-            to: startProject
-              ? projectRoutes.home.href()
-              : orgRoutes.home.href(),
-            recommended,
-          };
-      }
-    });
-  }, [
-    cardIds,
-    recommendedId,
-    orgRoutes,
-    projectRoutes,
-    setupStarted,
-    markSetupStarted,
-    startProject,
-    recordCta,
-  ]);
+              },
+            });
+          },
+        };
+      case "defaultProject":
+        return {
+          id,
+          index,
+          title: startProject ? startProject.name : "Your project",
+          body: "Jump back into the project you were last working in.",
+          cta: "Open project",
+          to: startProject ? projectRoutes.home.href() : orgRoutes.home.href(),
+          recommended,
+        };
+    }
+  });
 
   const showAnnouncement =
     announcement !== null && !isTrial && !announcementDismissed;
@@ -275,7 +246,8 @@ export function OrgWelcomeBanner(): JSX.Element | null {
           <div
             className={cn(
               "grid grid-cols-1 gap-4 lg:-mt-20",
-              bannerGridClass(columnCount),
+              // One/two cards stay on 2-col so a lone card caps at 50%.
+              columnCount > 2 ? "lg:grid-cols-3" : "lg:grid-cols-2",
             )}
           >
             {cards.map((card) => (

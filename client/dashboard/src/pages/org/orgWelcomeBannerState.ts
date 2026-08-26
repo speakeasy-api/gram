@@ -25,26 +25,12 @@ export type OverviewZeroDataSummary = {
 export function selectWelcomeCardIds(
   input: WelcomeBannerInputs,
 ): WelcomeCardId[] {
-  if (input.isTrial) {
-    const cards: WelcomeCardId[] = ["demo", "guide"];
-    if (input.canSetUpOrg) cards.push("enterprise");
-    return cards;
-  }
-
-  if (input.isZeroData) {
-    const cards: WelcomeCardId[] = ["guide"];
-    if (input.canSetUpOrg) cards.push("enterprise");
-    return cards;
-  }
-
+  const enterprise: WelcomeCardId[] = input.canSetUpOrg ? ["enterprise"] : [];
+  if (input.isTrial) return ["demo", "guide", ...enterprise];
+  if (input.isZeroData) return ["guide", ...enterprise];
   if (input.isAdmin) {
-    const cards: WelcomeCardId[] = [
-      input.platformMcpEnabled ? "platformMcp" : "guide",
-    ];
-    if (input.canSetUpOrg) cards.push("enterprise");
-    return cards;
+    return [input.platformMcpEnabled ? "platformMcp" : "guide", ...enterprise];
   }
-
   return ["defaultProject"];
 }
 
