@@ -59,6 +59,10 @@ func (s *Service) ListToolSchemaStaticValues(ctx context.Context, payload *gen.L
 
 	tools := make([]*gen.ToolSchemaStaticValues, 0)
 	for _, tool := range described.Tools {
+		if conv.IsProxyTool(tool) {
+			return nil, oops.E(oops.CodeConflict, nil, "toolset contains live external MCP tool schemas that cannot be reviewed")
+		}
+
 		base, err := conv.ToBaseTool(tool)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "read tool schema").LogError(ctx, s.logger)

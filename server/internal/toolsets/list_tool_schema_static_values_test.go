@@ -4,13 +4,20 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	deployments_repo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
+	externalmcp_repo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
+	externalmcp_types "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestToolsetsService_ListToolSchemaStaticValues(t *testing.T) {
@@ -83,6 +90,80 @@ func TestToolsetsService_ListToolSchemaStaticValues_Empty(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, result.Tools)
 	require.NotNil(t, result.Tools)
+}
+
+func TestToolsetsService_ListToolSchemaStaticValues_RejectsProxyTools(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	toolset, err := toolsets_repo.New(ti.conn).CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		Name:           "Proxy Schema Review",
+		Slug:           "proxy-schema-review",
+	})
+	require.NoError(t, err)
+
+	deploymentID, err := deployments_repo.New(ti.conn).InsertDeployment(ctx, deployments_repo.InsertDeploymentParams{
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         "test-user",
+		IdempotencyKey: uuid.NewString(),
+	})
+	require.NoError(t, err)
+	require.NoError(t, deployments_repo.New(ti.conn).CreateDeploymentStatus(ctx, deployments_repo.CreateDeploymentStatusParams{
+		DeploymentID: deploymentID,
+		Status:       "completed",
+	}))
+
+	registryID, err := externalmcp_repo.New(ti.conn).CreateMCPRegistry(ctx, externalmcp_repo.CreateMCPRegistryParams{
+		Name: "proxy-schema-review",
+		Url:  "https://example.com/mcp",
+	})
+	require.NoError(t, err)
+	attachment, err := externalmcp_repo.New(ti.conn).CreateExternalMCPAttachment(ctx, externalmcp_repo.CreateExternalMCPAttachmentParams{
+		DeploymentID:            deploymentID,
+		RegistryID:              uuid.NullUUID{UUID: registryID, Valid: true},
+		Name:                    "Proxy Schema Review",
+		Slug:                    "proxy-schema-review",
+		RegistryServerSpecifier: "proxy-schema-review",
+	})
+	require.NoError(t, err)
+
+	toolURN := "tools:externalmcp:proxy-schema-review:proxy"
+	_, err = externalmcp_repo.New(ti.conn).CreateExternalMCPToolDefinition(ctx, externalmcp_repo.CreateExternalMCPToolDefinitionParams{
+		ExternalMcpAttachmentID:    attachment.ID,
+		ToolUrn:                    toolURN,
+		Type:                       "proxy",
+		RemoteUrl:                  "https://example.com/mcp",
+		TransportType:              externalmcp_types.TransportTypeStreamableHTTP,
+		RequiresOauth:              false,
+		OauthVersion:               "none",
+		OauthAuthorizationEndpoint: pgtype.Text{},
+		OauthTokenEndpoint:         pgtype.Text{},
+		OauthRegistrationEndpoint:  pgtype.Text{},
+		OauthScopesSupported:       []string{},
+	})
+	require.NoError(t, err)
+	parsedURN, err := urn.ParseTool(toolURN)
+	require.NoError(t, err)
+	_, err = toolsets_repo.New(ti.conn).CreateToolsetVersion(ctx, toolsets_repo.CreateToolsetVersionParams{
+		ToolsetID:    toolset.ID,
+		Version:      1,
+		ToolUrns:     []urn.Tool{parsedURN},
+		ResourceUrns: []urn.Resource{},
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.ListToolSchemaStaticValues(ctx, &gen.ListToolSchemaStaticValuesPayload{Slug: "proxy-schema-review"})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeConflict, oopsErr.Code)
+	require.ErrorContains(t, err, "live external MCP tool schemas")
 }
 
 func TestToolsetsService_ListToolSchemaStaticValues_NotFound(t *testing.T) {

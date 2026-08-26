@@ -73,4 +73,7 @@ func TestStaticValues_RejectsMalformedSchema(t *testing.T) {
 
 	_, err := StaticValues([]byte(`{"type": "object", "properties": `))
 	require.ErrorContains(t, err, "decode schema")
+
+	_, err = StaticValues([]byte(`{"type": "object"} {"type": "string"}`))
+	require.ErrorContains(t, err, "decode schema: trailing data")
 }

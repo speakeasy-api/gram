@@ -10,6 +10,10 @@ vi.mock("@gram/client/react-query/listToolSchemaStaticValues.js", () => ({
   useListToolSchemaStaticValues,
 }));
 
+vi.mock("@/contexts/Sdk", () => ({
+  useProjectSlugForRequests: () => "test-project",
+}));
+
 // moonshine's bundle imports lucide-react/dynamicIconImports which can't be
 // resolved in the test environment (no package exports map). Mock the whole
 // package so Button renders as a plain <button>.
@@ -58,7 +62,7 @@ describe("PublicMcpWarningDialog", () => {
                 valueJson: '"example-value"',
               },
               {
-                schemaPath: "/properties/nullable",
+                schemaPath: "",
                 keyword: "const",
                 valueJson: "null",
               },
@@ -88,8 +92,19 @@ describe("PublicMcpWarningDialog", () => {
     expect(screen.getByText("example")).toBeTruthy();
     expect(screen.getByText("/properties/api_key")).toBeTruthy();
     expect(screen.getByText('"example-value"')).toBeTruthy();
+    expect(screen.getByText("(root)")).toBeTruthy();
     expect(screen.getByText("null")).toBeTruthy();
     expect(screen.getByText("9007199254740993")).toBeTruthy();
+
+    expect(useListToolSchemaStaticValues).toHaveBeenCalledWith(
+      { slug: "public-server", gramProject: "test-project" },
+      undefined,
+      expect.objectContaining({
+        enabled: true,
+        retry: false,
+        throwOnError: false,
+      }),
+    );
 
     const link = screen.getByRole("link", {
       name: /Review in "Default Environment"/,

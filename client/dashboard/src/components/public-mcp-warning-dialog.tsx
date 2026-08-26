@@ -7,6 +7,7 @@ import {
 import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
+import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useListToolSchemaStaticValues } from "@gram/client/react-query/listToolSchemaStaticValues.js";
 import { ExternalLink, ShieldAlert } from "lucide-react";
 
@@ -29,8 +30,9 @@ export function PublicMcpWarningDialog({
   environmentSlug,
   variableNames,
 }: PublicMcpWarningDialogProps): JSX.Element {
+  const gramProject = useProjectSlugForRequests();
   const staticValues = useListToolSchemaStaticValues(
-    { slug: toolsetSlug },
+    { slug: toolsetSlug, gramProject },
     undefined,
     {
       enabled: isOpen,
@@ -152,7 +154,7 @@ export function PublicMcpWarningDialog({
                                 {value.keyword}
                               </span>
                               <code className="text-muted-foreground break-all text-xs">
-                                {value.schemaPath || "/"}
+                                {value.schemaPath || "(root)"}
                               </code>
                             </div>
                             <pre className="bg-muted/30 overflow-x-auto p-2 font-mono text-xs whitespace-pre-wrap break-all">

@@ -3,7 +3,9 @@ package jsonschema
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"slices"
 	"sort"
 	"strings"
@@ -44,6 +46,9 @@ func StaticValues(schema []byte) ([]StaticValue, error) {
 	var root any
 	if err := dec.Decode(&root); err != nil {
 		return nil, fmt.Errorf("decode schema: %w", err)
+	}
+	if err := dec.Decode(new(json.RawMessage)); !errors.Is(err, io.EOF) {
+		return nil, fmt.Errorf("decode schema: trailing data")
 	}
 
 	values := make([]StaticValue, 0)
@@ -139,7 +144,7 @@ func encodeValueJSON(value any) (string, error) {
 	enc.SetEscapeHTML(false)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(value); err != nil {
-		return "", err
+		return "", fmt.Errorf("encode JSON: %w", err)
 	}
 	return strings.TrimSuffix(encoded.String(), "\n"), nil
 }
