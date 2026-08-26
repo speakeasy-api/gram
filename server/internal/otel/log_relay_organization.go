@@ -7,43 +7,140 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/sync/singleflight"
 
-	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/database"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 )
 
 const (
-	logRelayOrganizationSlugCacheTTL = 5 * time.Minute
-	logRelayOrganizationSlugTimeout  = time.Second
+	// A short TTL limits rollout and recovery staleness while still removing
+	// database and PostHog lookups from the per-batch hot path.
+	logRelayOrganizationGateCacheTTL = 30 * time.Second
+
+	// The subscriber sees logs from every organization, so cap the long tail of
+	// inactive organizations without evicting the normal working set.
+	logRelayOrganizationGateMaxSize = 4096
 )
 
 type logRelayOrganizationSlugResolver interface {
 	OrganizationSlug(ctx context.Context, organizationID string) (string, error)
 }
 
-type postgresLogRelayOrganizationSlugResolver struct {
-	db    database.DBTX
-	cache cache.TypedCacheObject[cachedLogRelayOrganizationSlug]
-	loads singleflight.Group
+type logRelayOrganizationGate interface {
+	Enabled(ctx context.Context, organizationID string) bool
 }
 
-func newPostgresLogRelayOrganizationSlugResolver(
+type cachedLogRelayOrganizationGate struct {
+	logger        *slog.Logger
+	features      feature.Provider
+	organizations logRelayOrganizationSlugResolver
+	enabled       *expirable.LRU[string, bool]
+	loads         singleflight.Group
+}
+
+func newLogRelayOrganizationGate(
 	logger *slog.Logger,
 	db database.DBTX,
-	cacheImpl cache.Cache,
-) *postgresLogRelayOrganizationSlugResolver {
-	return &postgresLogRelayOrganizationSlugResolver{
-		db: db,
-		cache: cache.NewTypedObjectCache[cachedLogRelayOrganizationSlug](
-			logger,
-			cacheImpl,
-			cache.SuffixNone,
-		),
-		loads: singleflight.Group{},
+	features feature.Provider,
+) *cachedLogRelayOrganizationGate {
+	return newCachedLogRelayOrganizationGate(
+		logger,
+		features,
+		&postgresLogRelayOrganizationSlugResolver{db: db},
+		logRelayOrganizationGateMaxSize,
+		logRelayOrganizationGateCacheTTL,
+	)
+}
+
+func newCachedLogRelayOrganizationGate(
+	logger *slog.Logger,
+	features feature.Provider,
+	organizations logRelayOrganizationSlugResolver,
+	maxSize int,
+	ttl time.Duration,
+) *cachedLogRelayOrganizationGate {
+	return &cachedLogRelayOrganizationGate{
+		logger:        logger,
+		features:      features,
+		organizations: organizations,
+		enabled:       expirable.NewLRU[string, bool](maxSize, nil, ttl),
+		loads:         singleflight.Group{},
 	}
+}
+
+func (g *cachedLogRelayOrganizationGate) Enabled(ctx context.Context, organizationID string) bool {
+	if organizationID == "" {
+		return false
+	}
+	if enabled, ok := g.enabled.Get(organizationID); ok {
+		return enabled
+	}
+
+	value, _, _ := g.loads.Do(organizationID, func() (any, error) {
+		if enabled, ok := g.enabled.Get(organizationID); ok {
+			return enabled, nil
+		}
+
+		// Cache unavailable evaluations as disabled. This both fails closed and
+		// prevents an upstream outage from causing a lookup for every batch;
+		// the short TTL bounds recovery delay.
+		enabled := g.evaluate(ctx, organizationID)
+		g.enabled.Add(organizationID, enabled)
+		return enabled, nil
+	})
+	enabled, ok := value.(bool)
+	if !ok {
+		g.logger.WarnContext(
+			ctx,
+			"read cached customer log relay feature flag",
+			attr.SlogOrganizationID(organizationID),
+			attr.SlogError(fmt.Errorf("unexpected result type %T", value)),
+		)
+		return false
+	}
+	return enabled
+}
+
+func (g *cachedLogRelayOrganizationGate) evaluate(ctx context.Context, organizationID string) bool {
+	organizationSlug, err := g.organizations.OrganizationSlug(ctx, organizationID)
+	if err != nil {
+		g.logger.WarnContext(
+			ctx,
+			"resolve organization for customer log relay feature flag",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(organizationID),
+		)
+		return false
+	}
+	if organizationSlug == "" {
+		return false
+	}
+
+	enabled, err := g.features.IsFlagEnabled(
+		ctx,
+		feature.FlagOTELLogCustomerRelay,
+		organizationID,
+		feature.OrgProjectGroups(organizationSlug, ""),
+	)
+	if err != nil {
+		g.logger.WarnContext(
+			ctx,
+			"evaluate customer log relay feature flag",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(organizationID),
+		)
+		return false
+	}
+	return enabled
+}
+
+type postgresLogRelayOrganizationSlugResolver struct {
+	db database.DBTX
 }
 
 func (r *postgresLogRelayOrganizationSlugResolver) OrganizationSlug(
@@ -54,71 +151,12 @@ func (r *postgresLogRelayOrganizationSlugResolver) OrganizationSlug(
 		return "", nil
 	}
 
-	lookupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), logRelayOrganizationSlugTimeout)
-	defer cancel()
-
-	cacheKey := logRelayOrganizationSlugCacheKey(organizationID)
-	if cached, err := r.cache.Get(lookupCtx, cacheKey); err == nil {
-		return cached.Slug, nil
+	organization, err := organizationsrepo.New(r.db).GetOrganizationMetadata(ctx, organizationID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
 	}
-
-	results := r.loads.DoChan(cacheKey, func() (any, error) {
-		if cached, err := r.cache.Get(lookupCtx, cacheKey); err == nil {
-			return cached.Slug, nil
-		}
-
-		slug := ""
-		organization, err := organizationsrepo.New(r.db).GetOrganizationMetadata(lookupCtx, organizationID)
-		switch {
-		case errors.Is(err, pgx.ErrNoRows):
-		case err != nil:
-			return "", fmt.Errorf("get organization metadata: %w", err)
-		default:
-			slug = organization.Slug
-		}
-
-		if err := r.cache.Store(lookupCtx, cachedLogRelayOrganizationSlug{
-			OrganizationID: organizationID,
-			Slug:           slug,
-		}); err != nil {
-			return "", fmt.Errorf("cache organization slug: %w", err)
-		}
-		return slug, nil
-	})
-
-	var result singleflight.Result
-	select {
-	case result = <-results:
-	case <-lookupCtx.Done():
-		select {
-		case result = <-results:
-		default:
-			return "", fmt.Errorf("resolve organization slug: %w", lookupCtx.Err())
-		}
+	if err != nil {
+		return "", fmt.Errorf("get organization metadata: %w", err)
 	}
-
-	slug, ok := result.Val.(string)
-	if !ok {
-		return "", fmt.Errorf("resolve organization slug: unexpected result type %T", result.Val)
-	}
-	return slug, result.Err
-}
-
-type cachedLogRelayOrganizationSlug struct {
-	OrganizationID string `json:"organization_id"`
-	Slug           string `json:"slug"`
-}
-
-var _ cache.CacheableObject[cachedLogRelayOrganizationSlug] = (*cachedLogRelayOrganizationSlug)(nil)
-
-func (c cachedLogRelayOrganizationSlug) CacheKey() string {
-	return logRelayOrganizationSlugCacheKey(c.OrganizationID)
-}
-
-func (cachedLogRelayOrganizationSlug) TTL() time.Duration {
-	return logRelayOrganizationSlugCacheTTL
-}
-
-func logRelayOrganizationSlugCacheKey(organizationID string) string {
-	return "otelLogRelayOrganizationSlug:v1:" + organizationID
+	return organization.Slug, nil
 }
