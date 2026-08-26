@@ -201,6 +201,11 @@ func (r *memberResponseRecorder) Flush() {}
 // callProxiedMember performs one JSON-RPC request against a proxied member
 // and returns the upstream's result or error object. Every upstream-side
 // failure comes back as *metaMemberError so callers degrade member-scoped.
+//
+// Handshake-first: session-ful upstreams reject bare requests only in-band,
+// which cannot be distinguished reliably from a real tool error, so every
+// call opens with initialize — a stateless upstream simply answers it and
+// returns no session id. A per-call session is torn down best-effort.
 func (s *Service) callProxiedMember(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -212,48 +217,41 @@ func (s *Service) callProxiedMember(
 	ctx, cancel := context.WithTimeout(ctx, s.metaRuntime.MemberCallTimeout)
 	defer cancel()
 
+	initBody, err := marshalUpstreamRequest(mcpjsonrpc.StringID("gram-gateway-init"), "initialize", map[string]any{
+		"protocolVersion": metaMemberUpstreamProtocolVersion,
+		"capabilities":    map[string]any{},
+		"clientInfo":      map[string]string{"name": "gram-gateway", "version": "1"},
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshal upstream initialize: %w", err)
+	}
+	initRec, err := s.memberExchange(ctx, dial, member, initBody, "")
+	if err != nil {
+		return nil, nil, err
+	}
+	if initRec.status == http.StatusUnauthorized || initRec.status == http.StatusForbidden {
+		return nil, nil, &metaMemberError{message: fmt.Sprintf("server %q requires authentication; connect it before calling its tools", member.slug)}
+	}
+	if initRec.status < http.StatusOK || initRec.status >= http.StatusMultipleChoices {
+		return nil, nil, memberUpstreamFailure(member, initRec.status)
+	}
+	sessionID := initRec.header.Get(proxy.McpSessionIDHeader)
+	if sessionID != "" {
+		ackBody := []byte(`{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}`)
+		if _, aerr := s.memberExchange(ctx, dial, member, ackBody, sessionID); aerr != nil {
+			return nil, nil, aerr
+		}
+		defer s.closeMemberSession(ctx, logger, dial, member, sessionID)
+	}
+
 	requestID := mcpjsonrpc.StringID("gram-gateway-" + method)
 	target, err := marshalUpstreamRequest(requestID, method, params)
 	if err != nil {
 		return nil, nil, fmt.Errorf("marshal upstream %s request: %w", method, err)
 	}
-
-	rec, err := s.memberExchange(ctx, dial, member, target, "")
+	rec, err := s.memberExchange(ctx, dial, member, target, sessionID)
 	if err != nil {
 		return nil, nil, err
-	}
-
-	sessionID := ""
-	if isSessionRequired(rec) {
-		// Inline handshake: initialize, acknowledge, replay — all inside the
-		// same member deadline.
-		initBody, ierr := marshalUpstreamRequest(mcpjsonrpc.StringID("gram-gateway-init"), "initialize", map[string]any{
-			"protocolVersion": metaMemberUpstreamProtocolVersion,
-			"capabilities":    map[string]any{},
-			"clientInfo":      map[string]string{"name": "gram-gateway", "version": "1"},
-		})
-		if ierr != nil {
-			return nil, nil, fmt.Errorf("marshal upstream initialize: %w", ierr)
-		}
-		initRec, ierr2 := s.memberExchange(ctx, dial, member, initBody, "")
-		if ierr2 != nil {
-			return nil, nil, ierr2
-		}
-		if initRec.status < http.StatusOK || initRec.status >= http.StatusMultipleChoices {
-			return nil, nil, memberUpstreamFailure(member, initRec.status)
-		}
-		sessionID = initRec.header.Get(proxy.McpSessionIDHeader)
-		if sessionID != "" {
-			ackBody := []byte(`{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}`)
-			if _, aerr := s.memberExchange(ctx, dial, member, ackBody, sessionID); aerr != nil {
-				return nil, nil, aerr
-			}
-			defer s.closeMemberSession(ctx, logger, dial, member, sessionID)
-		}
-		rec, err = s.memberExchange(ctx, dial, member, target, sessionID)
-		if err != nil {
-			return nil, nil, err
-		}
 	}
 
 	if rec.status == http.StatusUnauthorized || rec.status == http.StatusForbidden {
@@ -320,12 +318,6 @@ func (s *Service) closeMemberSession(ctx context.Context, logger *slog.Logger, d
 	if err := serveProxyBackend(httptest.NewRecorder(), req, p); err != nil {
 		logger.DebugContext(ctx, "close gateway member session", attr.SlogError(err), attr.SlogMcpServerID(member.serverID.String()))
 	}
-}
-
-// isSessionRequired reports the SDK-shaped session-required rejection of a
-// sessionless request: 400/404 before any session was presented.
-func isSessionRequired(rec *memberResponseRecorder) bool {
-	return rec.status == http.StatusBadRequest || rec.status == http.StatusNotFound
 }
 
 func memberUpstreamFailure(member metaMember, status int) error {

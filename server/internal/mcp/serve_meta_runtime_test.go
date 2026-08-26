@@ -344,7 +344,10 @@ func TestServePublic_MetaEndpoint_ListServers_StatusByBackend(t *testing.T) {
 	require.Equal(t, "unknown", statuses[proxiedSlug], "proxied members stay unknown until the proxied runtime lands")
 }
 
-func TestServePublic_MetaEndpoint_DrillDown_ProxiedMember_NotImplemented(t *testing.T) {
+// A proxied member is drill-down navigable end to end: describe_server and
+// describe_tools read its live tools/list, and an unauthenticated anonymous
+// gateway still answers deterministically.
+func TestServePublic_MetaEndpoint_DrillDown_ProxiedMember(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -353,17 +356,31 @@ func TestServePublic_MetaEndpoint_DrillDown_ProxiedMember_NotImplemented(t *test
 
 	slug := "meta-" + uuid.NewString()
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+	upstream := newRecordingUpstream(t, "ping")
 	proxiedSlug := "member-remote-" + uuid.NewString()[:8]
-	seedMetaMember(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "remote member", proxiedSlug, 1, mcpservers.VisibilityPrivate)
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "remote member", proxiedSlug, 1, upstream.url)
 
-	for tool, arguments := range map[string]map[string]any{
-		"describe_server": {"server": proxiedSlug},
-		"describe_tools":  {"tools": []string{proxiedSlug + "--anything"}},
-		"execute_tool":    {"name": proxiedSlug + "--anything", "arguments": map[string]any{}},
-	} {
-		envelope := callMetaTool(t, ctx, ti, slug, tool, arguments)
-		require.Contains(t, string(envelope["error"]), "not yet available for proxied member servers", "tool %s must answer deterministically", tool)
-	}
+	envelope := callMetaTool(t, ctx, ti, slug, "describe_server", map[string]any{"server": proxiedSlug})
+	require.Contains(t, string(envelope["result"]), proxiedSlug+"--ping",
+		"describe_server must qualify the proxied member's live tool names")
+
+	envelope = callMetaTool(t, ctx, ti, slug, "describe_tools", map[string]any{"tools": []string{proxiedSlug + "--ping"}})
+	require.Contains(t, string(envelope["result"]), `"inputSchema"`,
+		"describe_tools must return the proxied tool's schema")
+	require.NotContains(t, string(envelope["result"]), `"failed"`,
+		"a healthy member must not be reported failed")
+
+	// An unreachable member degrades member-scoped in describe_tools rather
+	// than failing the whole call.
+	deadSlug := "member-dead-" + uuid.NewString()[:8]
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "dead member", deadSlug, 2, "http://127.0.0.1:1/mcp")
+	envelope = callMetaTool(t, ctx, ti, slug, "describe_tools", map[string]any{
+		"tools": []string{proxiedSlug + "--ping", deadSlug + "--anything"},
+	})
+	body := string(envelope["result"])
+	require.Contains(t, body, proxiedSlug+"--ping", "the healthy member must still be described")
+	require.Contains(t, body, `"failed"`, "the dead member must land in failed")
+	require.Contains(t, body, deadSlug, "failed must name the dead member")
 }
 
 // A membership row pointing at a slugless server (legacy pre-2026-05 rows;
