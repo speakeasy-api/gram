@@ -490,6 +490,14 @@ func TestExtendTrial_WritesAnAuditEntry(t *testing.T) {
 	require.WithinDuration(t, after.EndsAt.Time, metadata.TrialEndsAt, 0, "the entry must carry the end date the row holds now")
 	require.True(t, metadata.TrialEndsAt.After(metadata.PreviousTrialEndsAt), "an extension must read forwards")
 
+	var beforeSnapshot, afterSnapshot struct {
+		TrialEndsAt time.Time `json:"trial_ends_at"`
+	}
+	require.NoError(t, json.Unmarshal(entry.BeforeSnapshot, &beforeSnapshot))
+	require.NoError(t, json.Unmarshal(entry.AfterSnapshot, &afterSnapshot))
+	require.WithinDuration(t, before.EndsAt.Time, beforeSnapshot.TrialEndsAt, 0)
+	require.WithinDuration(t, after.EndsAt.Time, afterSnapshot.TrialEndsAt, 0)
+
 	// The trial lifecycle event; any other would deliver this to nobody.
 	_, err = audittestrepo.New(conn).GetLatestOutboxPayloadByOrg(ctx, audittestrepo.GetLatestOutboxPayloadByOrgParams{
 		OrganizationID: "org_ext_audit",
