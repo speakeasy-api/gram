@@ -27,7 +27,11 @@ import (
 )
 
 const (
-	DefaultBlockTimeout = time.Second
+	// DefaultPollInterval paces LPOP polling while scans are in flight. It
+	// bounds the added reply pickup latency and is noise against the
+	// enforcement deadline; with no waiters registered the drainer does not
+	// poll at all.
+	DefaultPollInterval = 25 * time.Millisecond
 	defaultReplyTTL     = 60 * time.Second
 	defaultDrainCount   = 128
 	defaultPoolSize     = 2
@@ -39,7 +43,7 @@ const (
 
 var ErrDuplicateWaiter = errors.New("enforcement reply waiter already registered")
 
-// Config controls a replica's dedicated blocking Redis client.
+// Config controls a replica's dedicated reply-drain Redis client.
 type Config struct {
 	// RedisOptions are copied before reply-inbox settings are applied.
 	RedisOptions redis.Options
@@ -47,15 +51,16 @@ type Config struct {
 	// ReplicaID identifies the process in reply URNs and Redis inbox keys.
 	ReplicaID string
 
-	// BlockTimeout bounds each BLPOP so cancellation and reconnects are observed.
-	// go-redis v9 gives blocking commands an internal BlockTimeout+10s socket
-	// read deadline; RedisOptions.ReadTimeout does not control BLPOP. A TCP stall
-	// beyond that margin can still lose an element popped by Redis, so callers
-	// must retain a deadline and apply their configured failure mode.
-	BlockTimeout time.Duration
+	// PollInterval paces non-blocking LPOP polling while waiters are
+	// registered. Polling instead of BLPOP keeps ordinary read-timeout and
+	// pool-reconnect semantics (a timed-out poll leaves the element in the
+	// list, unlike a blocking pop racing its socket deadline) at the cost of
+	// up to one interval of reply pickup latency.
+	PollInterval time.Duration
 
-	// DrainGate blocks routing after BLPOP until the channel closes. It is nil
-	// in production and supports controlled backlog tests without stopping Redis.
+	// DrainGate blocks routing after a drained batch until the channel
+	// closes. It is nil in production and supports controlled backlog tests
+	// without stopping Redis.
 	DrainGate <-chan struct{}
 
 	drainFunc func(context.Context)
@@ -115,12 +120,16 @@ type Inbox struct {
 	logger    *slog.Logger
 	tracer    trace.Tracer
 	metrics   inboxMetrics
-	options   redis.Options
-	client    atomic.Pointer[redis.Client]
+	client    *redis.Client
 	replicaID string
 	key       string
-	block     time.Duration
+	poll      time.Duration
 	drainGate <-chan struct{}
+
+	// activeWaiters gates polling: with no scans in flight the drainer sleeps
+	// on wake instead of issuing idle LPOPs.
+	activeWaiters atomic.Int64
+	wake          chan struct{}
 
 	orphanedReplies atomic.Uint64
 	drainBatches    atomic.Uint64
@@ -166,11 +175,8 @@ func New(
 	if cfg.ReplicaID == "" {
 		cfg.ReplicaID = uuid.NewString()
 	}
-	if cfg.BlockTimeout <= 0 {
-		cfg.BlockTimeout = DefaultBlockTimeout
-	}
-	if cfg.BlockTimeout < time.Second {
-		return nil, fmt.Errorf("reply inbox block timeout %s must be at least 1s", cfg.BlockTimeout)
+	if cfg.PollInterval <= 0 {
+		cfg.PollInterval = DefaultPollInterval
 	}
 	if !validReplicaID(cfg.ReplicaID) {
 		return nil, fmt.Errorf("invalid reply inbox replica id %q", cfg.ReplicaID)
@@ -196,12 +202,13 @@ func New(
 		logger:          logger.With(attr.SlogComponent("enforcement-reply-inbox")),
 		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk/replyinbox"),
 		metrics:         metrics,
-		options:         redisOptions,
-		client:          atomic.Pointer[redis.Client]{},
+		client:          client,
 		replicaID:       cfg.ReplicaID,
 		key:             InboxKey(cfg.ReplicaID),
-		block:           cfg.BlockTimeout,
+		poll:            cfg.PollInterval,
 		drainGate:       cfg.DrainGate,
+		activeWaiters:   atomic.Int64{},
+		wake:            make(chan struct{}, 1),
 		orphanedReplies: atomic.Uint64{},
 		drainBatches:    atomic.Uint64{},
 		drainedReplies:  atomic.Uint64{},
@@ -214,7 +221,6 @@ func New(
 		closeOnce:       sync.Once{},
 		waiters:         sync.Map{},
 	}
-	inbox.client.Store(client)
 	drainFunc := inbox.drain
 	if cfg.drainFunc != nil {
 		drainFunc = cfg.drainFunc
@@ -231,7 +237,7 @@ func (i *Inbox) Snapshot() Stats {
 		waiters++
 		return true
 	})
-	pool := i.client.Load().PoolStats()
+	pool := i.client.PoolStats()
 
 	return Stats{
 		Waiters:         waiters,
@@ -345,8 +351,16 @@ func (i *Inbox) register(scanID string, lanes []Lane) (*waiter, func(), error) {
 	if _, exists := i.waiters.LoadOrStore(scanID, w); exists {
 		return nil, nil, fmt.Errorf("scan %s: %w", scanID, ErrDuplicateWaiter)
 	}
+	i.activeWaiters.Add(1)
+	// Nudge the drainer out of its idle sleep; the buffer coalesces nudges.
+	select {
+	case i.wake <- struct{}{}:
+	default:
+	}
 	release := func() {
-		i.waiters.Delete(scanID)
+		if _, loaded := i.waiters.LoadAndDelete(scanID); loaded {
+			i.activeWaiters.Add(-1)
+		}
 	}
 	return w, release, nil
 }
@@ -446,29 +460,34 @@ func invokeDrainer(ctx context.Context, run func(context.Context)) (panicked boo
 	return false, nil, ""
 }
 
+// drain polls the inbox with non-blocking LPOPs while scans are in flight and
+// sleeps on wake otherwise, so an idle replica issues no Redis commands.
+// Ordinary commands keep the client's read timeout and the pool's automatic
+// reconnection, so a transient error needs only a paced retry: a timed-out
+// pop leaves the elements in the list for the next cycle.
 func (i *Inbox) drain(ctx context.Context) {
 	for ctx.Err() == nil {
-		client := i.redisClient()
-		first, err := client.BLPop(ctx, i.block, i.key).Result()
-		switch {
-		case errors.Is(err, redis.Nil):
-			continue
-		case err != nil:
-			if ctx.Err() != nil {
-				return
-			}
-			timer := time.NewTimer(reconnectBackoff)
+		if i.activeWaiters.Load() == 0 {
 			select {
 			case <-ctx.Done():
-				timer.Stop()
 				return
-			case <-timer.C:
+			case <-i.wake:
 			}
-			i.replaceClient(ctx, client)
 			continue
 		}
 
-		if len(first) == 2 {
+		batchSize := uint64(0)
+		for {
+			rest, err := i.client.LPopCount(ctx, i.key, defaultDrainCount).Result()
+			if errors.Is(err, redis.Nil) || len(rest) == 0 {
+				break
+			}
+			if err != nil {
+				if !sleepOrDone(ctx, reconnectBackoff) {
+					return
+				}
+				break
+			}
 			if i.drainGate != nil {
 				select {
 				case <-ctx.Done():
@@ -476,22 +495,12 @@ func (i *Inbox) drain(ctx context.Context) {
 				case <-i.drainGate:
 				}
 			}
-
-			batchSize := uint64(1)
-			i.route(ctx, first[1])
-			for {
-				rest, err := client.LPopCount(ctx, i.key, defaultDrainCount).Result()
-				if errors.Is(err, redis.Nil) || len(rest) == 0 {
-					break
-				}
-				if err != nil {
-					break
-				}
-				batchSize += uint64(len(rest))
-				for _, raw := range rest {
-					i.route(ctx, raw)
-				}
+			batchSize += uint64(len(rest))
+			for _, raw := range rest {
+				i.route(ctx, raw)
 			}
+		}
+		if batchSize > 0 {
 			i.drainBatches.Add(1)
 			i.drainedReplies.Add(batchSize)
 			for previous := i.maxDrainBatch.Load(); batchSize > previous; previous = i.maxDrainBatch.Load() {
@@ -500,26 +509,22 @@ func (i *Inbox) drain(ctx context.Context) {
 				}
 			}
 		}
+		if !sleepOrDone(ctx, i.poll) {
+			return
+		}
 	}
 }
 
-func (i *Inbox) redisClient() *redis.Client {
-	return i.client.Load()
-}
-
-// replaceClient swaps in a fresh client after a transient Redis error. Only
-// the drainer calls it, and Close waits for the drainer to exit before
-// closing the current client, so the compare-and-swap cannot race a close.
-func (i *Inbox) replaceClient(ctx context.Context, stale *redis.Client) {
-	if ctx.Err() != nil {
-		return
+// sleepOrDone pauses for d and reports false when ctx ended first.
+func sleepOrDone(ctx context.Context, d time.Duration) bool {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
 	}
-	fresh := redis.NewClient(&i.options)
-	if !i.client.CompareAndSwap(stale, fresh) {
-		_ = fresh.Close()
-		return
-	}
-	_ = stale.Close()
 }
 
 func (i *Inbox) route(ctx context.Context, raw string) {
@@ -567,7 +572,7 @@ func (i *Inbox) Close() error {
 	i.closeOnce.Do(func() { close(i.shutdown) })
 	i.cancel()
 	<-i.done
-	if err := i.client.Load().Close(); err != nil {
+	if err := i.client.Close(); err != nil {
 		return fmt.Errorf("close reply inbox redis: %w", err)
 	}
 	return nil

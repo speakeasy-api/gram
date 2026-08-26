@@ -288,7 +288,7 @@ func runReplyPoint(
 	inbox, err := replyinbox.New(pointCtx, logger, otel.GetTracerProvider(), otel.GetMeterProvider(), replyinbox.Config{
 		RedisOptions: redisOptions,
 		ReplicaID:    "load-" + uuid.NewString(),
-		BlockTimeout: replyinbox.DefaultBlockTimeout,
+		PollInterval: replyinbox.DefaultPollInterval,
 		DrainGate:    nil,
 	})
 	if err != nil {
@@ -388,7 +388,7 @@ func runPauseProbe(
 	inbox, err := replyinbox.New(pointCtx, logger, otel.GetTracerProvider(), otel.GetMeterProvider(), replyinbox.Config{
 		RedisOptions: redisOptions,
 		ReplicaID:    "load-pause-" + uuid.NewString(),
-		BlockTimeout: replyinbox.DefaultBlockTimeout,
+		PollInterval: replyinbox.DefaultPollInterval,
 		DrainGate:    drainGate,
 	})
 	if err != nil {
@@ -555,7 +555,7 @@ func runFullPoint(
 	inbox, err := replyinbox.New(pointCtx, logger, otel.GetTracerProvider(), otel.GetMeterProvider(), replyinbox.Config{
 		RedisOptions: redisOptions,
 		ReplicaID:    "load-full-" + uuid.NewString(),
-		BlockTimeout: replyinbox.DefaultBlockTimeout,
+		PollInterval: replyinbox.DefaultPollInterval,
 		DrainGate:    nil,
 	})
 	if err != nil {

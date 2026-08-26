@@ -72,7 +72,7 @@ func run() error {
 	inbox, err := replyinbox.New(ctx, logger, otel.GetTracerProvider(), otel.GetMeterProvider(), replyinbox.Config{
 		RedisOptions: redisOptions,
 		ReplicaID:    "",
-		BlockTimeout: replyinbox.DefaultBlockTimeout,
+		PollInterval: replyinbox.DefaultPollInterval,
 		DrainGate:    nil,
 	})
 	if err != nil {
