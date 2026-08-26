@@ -216,8 +216,8 @@ func (l *Logger) logBulk(ctx context.Context, writeCtx context.Context, params [
 		return 0, fmt.Errorf("insert telemetry logs: %w", err)
 	}
 
-	// Shadow dual-write: mirror the rows onto Pub/Sub only after ClickHouse
-	// accepted them, so the shadow stream never contains rows the ledger
+	// Mirror rows onto the canonical OTEL ingest topic only after ClickHouse
+	// accepted them, so the OTEL stream never contains rows the legacy ledger
 	// rejected. Best-effort and non-blocking.
 	l.logPublisher.PublishLogs(ctx, logParams)
 

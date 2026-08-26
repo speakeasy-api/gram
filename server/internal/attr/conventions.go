@@ -609,6 +609,8 @@ const (
 	GenAIUsagePromptTokensKey             = attribute.Key("gen_ai.usage.prompt_tokens")
 	GenAIUsageCompletionTokensKey         = attribute.Key("gen_ai.usage.completion_tokens")
 	GenAIRequestIsStreamingKey            = attribute.Key("gen_ai.request.is_streaming")
+	HookTurnIDKey                         = attribute.Key("gram.hook.turn_id")
+	HookUsagePresentFieldsKey             = attribute.Key("gram.hook.usage.present_fields")
 
 	CursorUsageEventHashKey = attribute.Key("cursor.event_hash")
 	CursorChargedCentsKey   = attribute.Key("cursor.charged_cents")

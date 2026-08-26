@@ -9,7 +9,11 @@
 // and leave a freshly seeded developer staring at an empty org.
 package devidentity
 
-import "github.com/google/uuid"
+import (
+	"strings"
+
+	"github.com/google/uuid"
+)
 
 const (
 	// DefaultOrgName is the display name of the dev-idp's default org.
@@ -21,6 +25,9 @@ const (
 	// default "Speakeasy" org. Matches production format so Gram-side's
 	// organization_metadata.workos_id looks realistic in local dev.
 	DefaultOrgWorkosID = "org_devidp_speakeasy"
+
+	// WorkOSUserIDPrefix identifies user subjects emitted by the dev IDP.
+	WorkOSUserIDPrefix = "user_devidp_"
 )
 
 // userIDNamespace is a fixed UUID v5 namespace used to derive deterministic
@@ -32,4 +39,9 @@ var userIDNamespace = uuid.MustParse("a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d")
 // DeterministicUserID returns a stable UUID v5 derived from the given email.
 func DeterministicUserID(email string) uuid.UUID {
 	return uuid.NewSHA1(userIDNamespace, []byte(email))
+}
+
+// WorkOSUserID formats an internal dev-IDP UUID as a WorkOS-shaped subject.
+func WorkOSUserID(id uuid.UUID) string {
+	return WorkOSUserIDPrefix + strings.ReplaceAll(id.String(), "-", "")
 }

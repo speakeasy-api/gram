@@ -15,6 +15,7 @@ const AREA_BY_PAGE_SLUG: Record<string, NavArea> = {
   // Observe
   costs: "Observe",
   insights: "Observe",
+  explore: "Observe",
   "agent-sessions": "Observe",
   "org-memory": "Observe",
   logs: "Observe",

@@ -194,6 +194,13 @@ trackedFiles:
   src/funcs/environmentsSetSourceLink.ts: {}
   src/funcs/environmentsSetToolsetLink.ts: {}
   src/funcs/environmentsUpdateBySlug.ts: {}
+  src/funcs/exploreCreateSavedQuery.ts: {}
+  src/funcs/exploreDeleteSavedQuery.ts: {}
+  src/funcs/exploreDimensionValues.ts: {}
+  src/funcs/exploreListSavedQueries.ts: {}
+  src/funcs/exploreMeta.ts: {}
+  src/funcs/exploreQuery.ts: {}
+  src/funcs/exploreUpdateSavedQuery.ts: {}
   src/funcs/externalCredentialsCreateAwsIam.ts: {}
   src/funcs/externalCredentialsCreateGcpIam.ts: {}
   src/funcs/externalCredentialsDeleteAwsIam.ts: {}
@@ -760,6 +767,7 @@ trackedFiles:
   src/models/components/createriskpolicybypassrequestrequestbody.ts: {}
   src/models/components/createriskpolicyrequestbody.ts: {}
   src/models/components/createroleform.ts: {}
+  src/models/components/createsavedqueryrequestbody.ts: {}
   src/models/components/createserverandmcpserverresult.ts: {}
   src/models/components/createserverform.ts: {}
   src/models/components/createserverheaderform.ts: {}
@@ -801,6 +809,7 @@ trackedFiles:
   src/models/components/deviceintegrationproviderschedule.ts: {}
   src/models/components/deviceintegrationschedulestate.ts: {}
   src/models/components/deviceintegrationtestconnectionresult.ts: {}
+  src/models/components/dimensionvaluesresponsebody.ts: {}
   src/models/components/disableopenrouterkeyrequestbody.ts: {}
   src/models/components/discoverprotectedresourcemetadatarequestbody.ts: {}
   src/models/components/dismissskillsuggestionrequestbody.ts: {}
@@ -823,6 +832,15 @@ trackedFiles:
   src/models/components/evolveform.ts: {}
   src/models/components/evolveresult.ts: {}
   src/models/components/exchangerequestbody.ts: {}
+  src/models/components/explorecalculation.ts: {}
+  src/models/components/exploredatasetschema.ts: {}
+  src/models/components/explorefieldmeta.ts: {}
+  src/models/components/explorefilter.ts: {}
+  src/models/components/exploregroupexpression.ts: {}
+  src/models/components/exploremetaresult.ts: {}
+  src/models/components/explorequeryresult.ts: {}
+  src/models/components/explorerow.ts: {}
+  src/models/components/exploresavedquery.ts: {}
   src/models/components/exportmcpmetadatarequestbody.ts: {}
   src/models/components/exprcompileresult.ts: {}
   src/models/components/externalcredentialsummary.ts: {}
@@ -1015,6 +1033,7 @@ trackedFiles:
   src/models/components/listrolegrant.ts: {}
   src/models/components/listrolesresult.ts: {}
   src/models/components/listrootmcpserversresponsebody.ts: {}
+  src/models/components/listsavedqueriesresponsebody.ts: {}
   src/models/components/listscopesresult.ts: {}
   src/models/components/listserverheadersresult.ts: {}
   src/models/components/listserversresponsebody.ts: {}
@@ -1170,6 +1189,7 @@ trackedFiles:
   src/models/components/querymeasures.ts: {}
   src/models/components/querypayload.ts: {}
   src/models/components/querypoint.ts: {}
+  src/models/components/queryrequestbody.ts: {}
   src/models/components/queryresult.ts: {}
   src/models/components/queryrow.ts: {}
   src/models/components/queryseries.ts: {}
@@ -1459,6 +1479,7 @@ trackedFiles:
   src/models/components/updateriskexclusionrequestbody.ts: {}
   src/models/components/updateriskpolicyrequestbody.ts: {}
   src/models/components/updateroleform.ts: {}
+  src/models/components/updatesavedqueryrequestbody.ts: {}
   src/models/components/updateserverform.ts: {}
   src/models/components/updateserverheaderform.ts: {}
   src/models/components/updateshadowmcpinventoryservernameform.ts: {}
@@ -1666,6 +1687,13 @@ trackedFiles:
   src/models/operations/enterdemo.ts: {}
   src/models/operations/evaluatepromptguardrail.ts: {}
   src/models/operations/evolvedeployment.ts: {}
+  src/models/operations/explorecreatesavedquery.ts: {}
+  src/models/operations/exploredeletesavedquery.ts: {}
+  src/models/operations/exploredimensionvalues.ts: {}
+  src/models/operations/explorelistsavedqueries.ts: {}
+  src/models/operations/exploremeta.ts: {}
+  src/models/operations/explorequery.ts: {}
+  src/models/operations/exploreupdatesavedquery.ts: {}
   src/models/operations/exportmcpmetadata.ts: {}
   src/models/operations/fetchglobalremotesessionissuermetadata.ts: {}
   src/models/operations/fetchimagefromurl.ts: {}
@@ -2301,6 +2329,17 @@ trackedFiles:
   src/react-query/ensureMcpServerReview.ts: {}
   src/react-query/enterDemo.ts: {}
   src/react-query/evolveDeployment.ts: {}
+  src/react-query/exploreCreateSavedQuery.ts: {}
+  src/react-query/exploreDeleteSavedQuery.ts: {}
+  src/react-query/exploreDimensionValues.core.ts: {}
+  src/react-query/exploreDimensionValues.ts: {}
+  src/react-query/exploreListSavedQueries.core.ts: {}
+  src/react-query/exploreListSavedQueries.ts: {}
+  src/react-query/exploreMeta.core.ts: {}
+  src/react-query/exploreMeta.ts: {}
+  src/react-query/exploreQuery.core.ts: {}
+  src/react-query/exploreQuery.ts: {}
+  src/react-query/exploreUpdateSavedQuery.ts: {}
   src/react-query/exportMcpMetadata.ts: {}
   src/react-query/featuresSet.ts: {}
   src/react-query/fetchGlobalRemoteSessionIssuerMetadata.ts: {}
@@ -3004,6 +3043,7 @@ trackedFiles:
   src/sdk/evals.ts: {}
   src/sdk/events.ts: {}
   src/sdk/exclusions.ts: {}
+  src/sdk/explore.ts: {}
   src/sdk/expr.ts: {}
   src/sdk/external.ts: {}
   src/sdk/externalcredentials.ts: {}
@@ -4844,6 +4884,82 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  exploreCreateSavedQuery:
+    speakeasy-default-explore-create-saved-query:
+      requestBody:
+        application/json: {"calculations": [], "chart_type": "area", "dataset": "turn_usage", "filters": [{"dimension": "model", "op": "in", "values": ["<value 1>", "<value 2>", "<value 3>"]}], "group_by": ["model", "user_key"], "group_expressions": [{"dimension": "model", "name": "Is Claude", "op": "in", "values": ["<value 1>", "<value 2>"]}], "limit": 0, "name": "Input tokens by model", "sort_desc": true, "window": "7d"}
+      responses:
+        "200":
+          application/json: {"calculations": [], "chart_type": "line", "created_at": "2025-11-21T12:11:35.243Z", "dataset": "turn_usage", "filters": [], "granularity_seconds": 684032, "group_by": ["model", "user_key"], "group_expressions": [{"dimension": "model", "name": "Is Claude", "op": "in", "values": ["<value 1>", "<value 2>"]}], "id": "4cd68950-38ac-4a52-93c8-ea30a06b1975", "limit": 0, "name": "Input tokens by model", "sort_by": "<value>", "sort_desc": true, "updated_at": "2025-02-08T02:04:16.236Z", "window": "7d"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  exploreDeleteSavedQuery:
+    speakeasy-default-explore-delete-saved-query:
+      parameters:
+        query:
+          id: "e06c1edb-8e18-458d-87cb-2953b41a32a4"
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  exploreDimensionValues:
+    speakeasy-default-explore-dimension-values:
+      parameters:
+        query:
+          dataset: "turn_usage"
+          dimension: "model"
+          from: "2025-11-11T10:34:30.131Z"
+          to: "2025-05-21T20:25:02.626Z"
+      responses:
+        "200":
+          application/json: {"values": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  exploreListSavedQueries:
+    speakeasy-default-explore-list-saved-queries:
+      responses:
+        "200":
+          application/json: {"queries": [{"calculations": [{"column": "input_tokens", "op": "SUM"}], "chart_type": "bar", "created_at": "2024-06-28T09:24:28.089Z", "dataset": "turn_usage", "filters": [{"dimension": "model", "op": "in", "values": ["<value 1>"]}], "granularity_seconds": 813385, "group_by": ["model", "user_key"], "group_expressions": [{"dimension": "model", "name": "Is Claude", "op": "in", "values": ["<value 1>", "<value 2>"]}], "id": "40a85ac8-d610-4b7a-b57d-6dc10dcb0e05", "limit": 0, "name": "Input tokens by model", "sort_by": "<value>", "sort_desc": true, "updated_at": "2024-03-16T21:10:14.712Z", "window": "7d"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  exploreMeta:
+    speakeasy-default-explore-meta:
+      responses:
+        "200":
+          application/json: {"datasets": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  exploreQuery:
+    speakeasy-default-explore-query:
+      requestBody:
+        application/json: {"calculations": [{"column": "input_tokens", "op": "SUM"}], "dataset": "turn_usage", "filters": [{"dimension": "model", "op": "in", "values": ["<value 1>", "<value 2>", "<value 3>"]}], "from": "2026-08-01T00:00:00Z", "group_by": ["model", "user_key"], "group_expressions": [{"dimension": "model", "name": "Is Claude", "op": "in", "values": ["<value 1>"]}], "limit": 0, "sort_desc": true, "to": "2026-08-08T00:00:00Z"}
+      responses:
+        "200":
+          application/json: {"calculations": ["<value 1>"], "dataset": "user_usage", "granularity_seconds": 485618, "group_by": ["<value 1>"], "rows": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  exploreUpdateSavedQuery:
+    speakeasy-default-explore-update-saved-query:
+      requestBody:
+        application/json: {"calculations": [{"column": "input_tokens", "op": "SUM"}], "chart_type": "area", "dataset": "turn_usage", "filters": [{"dimension": "model", "op": "in", "values": []}], "group_by": ["model", "user_key"], "group_expressions": [{"dimension": "model", "name": "Is Claude", "op": "in", "values": ["<value 1>", "<value 2>", "<value 3>"]}], "id": "2667dbda-832d-4b9a-b4a2-c853c62528a1", "limit": 0, "name": "Input tokens by model", "sort_desc": true, "window": "7d"}
+      responses:
+        "200":
+          application/json: {"calculations": [], "chart_type": "number", "created_at": "2025-03-21T00:51:50.944Z", "dataset": "turn_usage", "filters": [{"dimension": "model", "op": "in", "values": []}], "granularity_seconds": 926671, "group_by": ["model", "user_key"], "group_expressions": [], "id": "29d30850-69c2-4da3-92a3-d5e2e987e5a3", "limit": 0, "name": "Input tokens by model", "sort_by": "<value>", "sort_desc": true, "updated_at": "2024-05-08T16:16:27.901Z", "window": "7d"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   exportMcpMetadata:
     speakeasy-default-export-mcp-metadata:
       requestBody:

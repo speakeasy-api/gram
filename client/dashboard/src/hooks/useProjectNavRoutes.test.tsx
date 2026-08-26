@@ -34,6 +34,7 @@ const routes = {
   detectionRules: route("Detection Rules", "detection-rules"),
   employees: route("Employees", "employees"),
   environments: route("Environments", "environments"),
+  explore: route("Explore", "explore"),
   home: route("Home", ""),
   insights: route("Insights", "insights"),
   logs: route("Logs", "logs"),

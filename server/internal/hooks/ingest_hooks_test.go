@@ -665,6 +665,62 @@ func TestCanonicalAgentTurnIDRejectsProviderWithoutSharedIdentity(t *testing.T) 
 	require.Empty(t, canonicalAgentTurnID(payload))
 }
 
+func TestIngestStampsCanonicalTurnAndExplicitUsagePresence(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	enableHookTelemetryLogger(t, ctx, ti)
+	authCtx := hookAuthContext(t, ctx)
+
+	sessionID := "usage-presence-" + uuid.NewString()
+	turnID := "turn-1"
+	message := "completed response"
+	inputTokens := 50
+	outputTokens := 0
+	payload := canonicalIngestPayload("opencode", "assistant.responded", sessionID)
+	payload.Session.TurnID = &turnID
+	payload.Data = &gen.HookIngestData{
+		Message: &gen.HookMessageData{Text: &message},
+		Usage: &gen.HookUsageData{
+			InputTokens:      &inputTokens,
+			OutputTokens:     &outputTokens,
+			CacheReadTokens:  nil,
+			CacheWriteTokens: nil,
+			Cost:             nil,
+			LoopCount:        nil,
+			Status:           nil,
+		},
+	}
+
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", result.Decision)
+
+	var storedTurnID string
+	var presentFields []string
+	var storedOutputTokens int64
+	require.Eventually(t, func() bool {
+		err = ti.chConn.QueryRow(ctx, `
+			SELECT
+				toString(attributes.gram.hook.turn_id),
+				JSONExtract(
+					ifNull(toJSONString(attributes.gram.hook.usage.present_fields), '[]'),
+					'Array(String)'
+				),
+				toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens))
+			FROM telemetry_logs
+			WHERE gram_project_id = ?
+			  AND toString(attributes.gram.hook.turn_id) = ?
+			LIMIT 1
+		`, *authCtx.ProjectID, "opencode:turn-1").Scan(&storedTurnID, &presentFields, &storedOutputTokens)
+		return err == nil
+	}, 2*time.Second, 50*time.Millisecond)
+
+	require.Equal(t, "opencode:turn-1", storedTurnID)
+	require.Equal(t, []string{"input_tokens", "output_tokens"}, presentFields)
+	require.Zero(t, storedOutputTokens)
+}
+
 func TestIngest_SkillActivationIsAcceptedAsFeatureEvent(t *testing.T) {
 	t.Parallel()
 

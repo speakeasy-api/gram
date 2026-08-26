@@ -1199,6 +1199,9 @@ func (s *Service) writeCanonicalTelemetry(ctx context.Context, payload *gen.Inge
 	if toolCallID := canonicalToolCallID(payload); toolCallID != "" {
 		attrs[attr.GenAIToolCallIDKey] = toolCallID
 	}
+	if turnID := canonicalAgentTurnID(payload); turnID != "" {
+		attrs[attr.HookTurnIDKey] = turnID
+	}
 	if input := canonicalToolInput(payload); input != nil {
 		attrs[attr.GenAIToolCallArgumentsKey] = jsonString(input)
 	}
@@ -1215,21 +1218,28 @@ func (s *Service) writeCanonicalTelemetry(ctx context.Context, payload *gen.Inge
 		attrs[attr.ToolCallDurationKey] = time.Duration(*tool.DurationMs * float64(time.Millisecond)).Seconds()
 	}
 	if usage := canonicalUsageData(payload); usage != nil {
+		presentFields := make([]string, 0, 5)
 		if usage.InputTokens != nil {
 			attrs[attr.GenAIUsageInputTokensKey] = *usage.InputTokens
+			presentFields = append(presentFields, "input_tokens")
 		}
 		if usage.OutputTokens != nil {
 			attrs[attr.GenAIUsageOutputTokensKey] = *usage.OutputTokens
+			presentFields = append(presentFields, "output_tokens")
 		}
 		if usage.CacheReadTokens != nil {
 			attrs[attr.GenAIUsageCacheReadInputTokensKey] = *usage.CacheReadTokens
+			presentFields = append(presentFields, "cache_read_tokens")
 		}
 		if usage.CacheWriteTokens != nil {
 			attrs[attr.GenAIUsageCacheCreationInputTokensKey] = *usage.CacheWriteTokens
+			presentFields = append(presentFields, "cache_write_tokens")
 		}
 		if usage.Cost != nil {
 			attrs[attr.GenAIUsageCostKey] = *usage.Cost
+			presentFields = append(presentFields, "cost_usd")
 		}
+		attrs[attr.HookUsagePresentFieldsKey] = presentFields
 	}
 	if mcp := canonicalMCPData(payload); mcp != nil {
 		if server := strings.TrimSpace(conv.PtrValOr(mcp.ServerIdentity, "")); server != "" {

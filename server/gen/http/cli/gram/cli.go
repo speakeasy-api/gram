@@ -37,6 +37,7 @@ import (
 	deviceintegrationsc "github.com/speakeasy-api/gram/server/gen/http/device_integrations/client"
 	domainsc "github.com/speakeasy-api/gram/server/gen/http/domains/client"
 	environmentsc "github.com/speakeasy-api/gram/server/gen/http/environments/client"
+	explorec "github.com/speakeasy-api/gram/server/gen/http/explore/client"
 	externalc "github.com/speakeasy-api/gram/server/gen/http/external/client"
 	externalcredentialsc "github.com/speakeasy-api/gram/server/gen/http/external_credentials/client"
 	externalkeysc "github.com/speakeasy-api/gram/server/gen/http/external_keys/client"
@@ -120,6 +121,7 @@ func UsageCommands() []string {
 		"device-integrations (list-providers|get-config|upsert-config|delete-config|test-connection|list-schedules|set-schedule-enabled|retry-schedule|list-managed-devices|get-coverage)",
 		"domains (get-domain|list-domains|create-domain|update-domain|set-root-mcp-endpoint|list-root-mcp-servers|check-health|delete-domain|list-mcp-endpoints)",
 		"environments (create-environment|list-environments|update-environment|clone-environment|delete-environment|set-source-environment-link|delete-source-environment-link|get-source-environment|set-toolset-environment-link|delete-toolset-environment-link|get-toolset-environment)",
+		"explore (meta|query|dimension-values|list-saved-queries|create-saved-query|update-saved-query|delete-saved-query)",
 		"external-credentials (create-aws-iam-credential|update-aws-iam-credential|create-gcp-iam-credential|update-gcp-iam-credential|list-external-credentials|list-aws-iam-credentials|list-gcp-iam-credentials|get-aws-iam-credential|get-gcp-iam-credential|verify-gcp-iam-credential|get-gcp-setup-info|delete-aws-iam-credential|delete-gcp-iam-credential)",
 		"external-keys (create-aws-kms-key|update-aws-kms-key|create-gcp-kms-key|update-gcp-kms-key|list-external-keys|list-aws-kms-keys|list-gcp-kms-keys|get-aws-kms-key|get-gcp-kms-key|verify-gcp-kms-key|delete-aws-kms-key|delete-gcp-kms-key)",
 		"mcp-registries (clear-cache|list-registries|list-catalog|get-server-details|get-setup-docs)",
@@ -1033,6 +1035,37 @@ func ParseEndpoint(
 		environmentsGetToolsetEnvironmentToolsetIDFlag        = environmentsGetToolsetEnvironmentFlags.String("toolset-id", "REQUIRED", "")
 		environmentsGetToolsetEnvironmentSessionTokenFlag     = environmentsGetToolsetEnvironmentFlags.String("session-token", "", "")
 		environmentsGetToolsetEnvironmentProjectSlugInputFlag = environmentsGetToolsetEnvironmentFlags.String("project-slug-input", "", "")
+
+		exploreFlags = flag.NewFlagSet("explore", flag.ContinueOnError)
+
+		exploreMetaFlags            = flag.NewFlagSet("meta", flag.ExitOnError)
+		exploreMetaSessionTokenFlag = exploreMetaFlags.String("session-token", "", "")
+
+		exploreQueryFlags            = flag.NewFlagSet("query", flag.ExitOnError)
+		exploreQueryBodyFlag         = exploreQueryFlags.String("body", "REQUIRED", "")
+		exploreQuerySessionTokenFlag = exploreQueryFlags.String("session-token", "", "")
+
+		exploreDimensionValuesFlags            = flag.NewFlagSet("dimension-values", flag.ExitOnError)
+		exploreDimensionValuesDatasetFlag      = exploreDimensionValuesFlags.String("dataset", "REQUIRED", "")
+		exploreDimensionValuesDimensionFlag    = exploreDimensionValuesFlags.String("dimension", "REQUIRED", "")
+		exploreDimensionValuesFromFlag         = exploreDimensionValuesFlags.String("from", "REQUIRED", "")
+		exploreDimensionValuesToFlag           = exploreDimensionValuesFlags.String("to", "REQUIRED", "")
+		exploreDimensionValuesSessionTokenFlag = exploreDimensionValuesFlags.String("session-token", "", "")
+
+		exploreListSavedQueriesFlags            = flag.NewFlagSet("list-saved-queries", flag.ExitOnError)
+		exploreListSavedQueriesSessionTokenFlag = exploreListSavedQueriesFlags.String("session-token", "", "")
+
+		exploreCreateSavedQueryFlags            = flag.NewFlagSet("create-saved-query", flag.ExitOnError)
+		exploreCreateSavedQueryBodyFlag         = exploreCreateSavedQueryFlags.String("body", "REQUIRED", "")
+		exploreCreateSavedQuerySessionTokenFlag = exploreCreateSavedQueryFlags.String("session-token", "", "")
+
+		exploreUpdateSavedQueryFlags            = flag.NewFlagSet("update-saved-query", flag.ExitOnError)
+		exploreUpdateSavedQueryBodyFlag         = exploreUpdateSavedQueryFlags.String("body", "REQUIRED", "")
+		exploreUpdateSavedQuerySessionTokenFlag = exploreUpdateSavedQueryFlags.String("session-token", "", "")
+
+		exploreDeleteSavedQueryFlags            = flag.NewFlagSet("delete-saved-query", flag.ExitOnError)
+		exploreDeleteSavedQueryIDFlag           = exploreDeleteSavedQueryFlags.String("id", "REQUIRED", "")
+		exploreDeleteSavedQuerySessionTokenFlag = exploreDeleteSavedQueryFlags.String("session-token", "", "")
 
 		externalCredentialsFlags = flag.NewFlagSet("external-credentials", flag.ContinueOnError)
 
@@ -3891,6 +3924,15 @@ func ParseEndpoint(
 	environmentsDeleteToolsetEnvironmentLinkFlags.Usage = environmentsDeleteToolsetEnvironmentLinkUsage
 	environmentsGetToolsetEnvironmentFlags.Usage = environmentsGetToolsetEnvironmentUsage
 
+	exploreFlags.Usage = exploreUsage
+	exploreMetaFlags.Usage = exploreMetaUsage
+	exploreQueryFlags.Usage = exploreQueryUsage
+	exploreDimensionValuesFlags.Usage = exploreDimensionValuesUsage
+	exploreListSavedQueriesFlags.Usage = exploreListSavedQueriesUsage
+	exploreCreateSavedQueryFlags.Usage = exploreCreateSavedQueryUsage
+	exploreUpdateSavedQueryFlags.Usage = exploreUpdateSavedQueryUsage
+	exploreDeleteSavedQueryFlags.Usage = exploreDeleteSavedQueryUsage
+
 	externalCredentialsFlags.Usage = externalCredentialsUsage
 	externalCredentialsCreateAwsIamCredentialFlags.Usage = externalCredentialsCreateAwsIamCredentialUsage
 	externalCredentialsUpdateAwsIamCredentialFlags.Usage = externalCredentialsUpdateAwsIamCredentialUsage
@@ -4535,6 +4577,8 @@ func ParseEndpoint(
 			svcf = domainsFlags
 		case "environments":
 			svcf = environmentsFlags
+		case "explore":
+			svcf = exploreFlags
 		case "external-credentials":
 			svcf = externalCredentialsFlags
 		case "external-keys":
@@ -5193,6 +5237,31 @@ func ParseEndpoint(
 
 			case "get-toolset-environment":
 				epf = environmentsGetToolsetEnvironmentFlags
+
+			}
+
+		case "explore":
+			switch epn {
+			case "meta":
+				epf = exploreMetaFlags
+
+			case "query":
+				epf = exploreQueryFlags
+
+			case "dimension-values":
+				epf = exploreDimensionValuesFlags
+
+			case "list-saved-queries":
+				epf = exploreListSavedQueriesFlags
+
+			case "create-saved-query":
+				epf = exploreCreateSavedQueryFlags
+
+			case "update-saved-query":
+				epf = exploreUpdateSavedQueryFlags
+
+			case "delete-saved-query":
+				epf = exploreDeleteSavedQueryFlags
 
 			}
 
@@ -7413,6 +7482,31 @@ func ParseEndpoint(
 			case "get-toolset-environment":
 				endpoint = c.GetToolsetEnvironment()
 				data, err = environmentsc.BuildGetToolsetEnvironmentPayload(*environmentsGetToolsetEnvironmentToolsetIDFlag, *environmentsGetToolsetEnvironmentSessionTokenFlag, *environmentsGetToolsetEnvironmentProjectSlugInputFlag)
+			}
+		case "explore":
+			c := explorec.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "meta":
+				endpoint = c.Meta()
+				data, err = explorec.BuildMetaPayload(*exploreMetaSessionTokenFlag)
+			case "query":
+				endpoint = c.Query()
+				data, err = explorec.BuildQueryPayload(*exploreQueryBodyFlag, *exploreQuerySessionTokenFlag)
+			case "dimension-values":
+				endpoint = c.DimensionValues()
+				data, err = explorec.BuildDimensionValuesPayload(*exploreDimensionValuesDatasetFlag, *exploreDimensionValuesDimensionFlag, *exploreDimensionValuesFromFlag, *exploreDimensionValuesToFlag, *exploreDimensionValuesSessionTokenFlag)
+			case "list-saved-queries":
+				endpoint = c.ListSavedQueries()
+				data, err = explorec.BuildListSavedQueriesPayload(*exploreListSavedQueriesSessionTokenFlag)
+			case "create-saved-query":
+				endpoint = c.CreateSavedQuery()
+				data, err = explorec.BuildCreateSavedQueryPayload(*exploreCreateSavedQueryBodyFlag, *exploreCreateSavedQuerySessionTokenFlag)
+			case "update-saved-query":
+				endpoint = c.UpdateSavedQuery()
+				data, err = explorec.BuildUpdateSavedQueryPayload(*exploreUpdateSavedQueryBodyFlag, *exploreUpdateSavedQuerySessionTokenFlag)
+			case "delete-saved-query":
+				endpoint = c.DeleteSavedQuery()
+				data, err = explorec.BuildDeleteSavedQueryPayload(*exploreDeleteSavedQueryIDFlag, *exploreDeleteSavedQuerySessionTokenFlag)
 			}
 		case "external-credentials":
 			c := externalcredentialsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -12806,6 +12900,164 @@ func environmentsGetToolsetEnvironmentUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "environments get-toolset-environment --toolset-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// exploreUsage displays the usage of the explore command and its subcommands.
+func exploreUsage() {
+	fmt.Fprintln(os.Stderr, `Authority-aware ad-hoc analytics over canonical event and usage datasets, with saved queries.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] explore COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    meta: Describe the labeled semantic datasets and typed fields available to Explore.`)
+	fmt.Fprintln(os.Stderr, `    query: Run an organization-scoped query over one semantic dataset. Observations are canonicalized by field authority before filters, grouping, and calculations.`)
+	fmt.Fprintln(os.Stderr, `    dimension-values: List a semantic dataset dimension's most frequent canonical values inside a time window.`)
+	fmt.Fprintln(os.Stderr, `    list-saved-queries: List the organization's saved Explore queries.`)
+	fmt.Fprintln(os.Stderr, `    create-saved-query: Save a dataset-and-calculations query to the organization's dashboard.`)
+	fmt.Fprintln(os.Stderr, `    update-saved-query: Update a saved dataset-and-calculations query in place.`)
+	fmt.Fprintln(os.Stderr, `    delete-saved-query: Delete a saved Explore query.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s explore COMMAND --help\n", os.Args[0])
+}
+func exploreMetaUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] explore meta", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Describe the labeled semantic datasets and typed fields available to Explore.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "explore meta --session-token \"abc123\"")
+}
+
+func exploreQueryUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] explore query", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Run an organization-scoped query over one semantic dataset. Observations are canonicalized by field authority before filters, grouping, and calculations.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "explore query --body '{\n      \"calculations\": [\n         {\n            \"column\": \"input_tokens\",\n            \"op\": \"SUM\"\n         }\n      ],\n      \"dataset\": \"turn_usage\",\n      \"filters\": [\n         {\n            \"dimension\": \"model\",\n            \"op\": \"not_in\",\n            \"values\": [\n               \"abc123\"\n            ]\n         }\n      ],\n      \"from\": \"2026-08-01T00:00:00Z\",\n      \"granularity_seconds\": 1,\n      \"group_by\": [\n         \"model\",\n         \"user_key\"\n      ],\n      \"group_expressions\": [\n         {\n            \"dimension\": \"model\",\n            \"name\": \"Is Claude\",\n            \"op\": \"not_in\",\n            \"values\": [\n               \"abc123\"\n            ]\n         }\n      ],\n      \"limit\": 1,\n      \"sort_by\": \"abc123\",\n      \"sort_desc\": false,\n      \"to\": \"2026-08-08T00:00:00Z\"\n   }' --session-token \"abc123\"")
+}
+
+func exploreDimensionValuesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] explore dimension-values", os.Args[0])
+	fmt.Fprint(os.Stderr, " -dataset STRING")
+	fmt.Fprint(os.Stderr, " -dimension STRING")
+	fmt.Fprint(os.Stderr, " -from STRING")
+	fmt.Fprint(os.Stderr, " -to STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List a semantic dataset dimension's most frequent canonical values inside a time window.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -dataset STRING: `)
+	fmt.Fprintln(os.Stderr, `    -dimension STRING: `)
+	fmt.Fprintln(os.Stderr, `    -from STRING: `)
+	fmt.Fprintln(os.Stderr, `    -to STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "explore dimension-values --dataset \"turn_usage\" --dimension \"model\" --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --session-token \"abc123\"")
+}
+
+func exploreListSavedQueriesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] explore list-saved-queries", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the organization's saved Explore queries.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "explore list-saved-queries --session-token \"abc123\"")
+}
+
+func exploreCreateSavedQueryUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] explore create-saved-query", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Save a dataset-and-calculations query to the organization's dashboard.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "explore create-saved-query --body '{\n      \"calculations\": [\n         {\n            \"column\": \"input_tokens\",\n            \"op\": \"SUM\"\n         }\n      ],\n      \"chart_type\": \"bar\",\n      \"dataset\": \"turn_usage\",\n      \"filters\": [\n         {\n            \"dimension\": \"model\",\n            \"op\": \"not_in\",\n            \"values\": [\n               \"abc123\"\n            ]\n         }\n      ],\n      \"granularity_seconds\": 1,\n      \"group_by\": [\n         \"model\",\n         \"user_key\"\n      ],\n      \"group_expressions\": [\n         {\n            \"dimension\": \"model\",\n            \"name\": \"Is Claude\",\n            \"op\": \"not_in\",\n            \"values\": [\n               \"abc123\"\n            ]\n         }\n      ],\n      \"limit\": 1,\n      \"name\": \"Input tokens by model\",\n      \"sort_by\": \"abc123\",\n      \"sort_desc\": false,\n      \"window\": \"7d\"\n   }' --session-token \"abc123\"")
+}
+
+func exploreUpdateSavedQueryUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] explore update-saved-query", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Update a saved dataset-and-calculations query in place.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "explore update-saved-query --body '{\n      \"calculations\": [\n         {\n            \"column\": \"input_tokens\",\n            \"op\": \"SUM\"\n         }\n      ],\n      \"chart_type\": \"bar\",\n      \"dataset\": \"turn_usage\",\n      \"filters\": [\n         {\n            \"dimension\": \"model\",\n            \"op\": \"not_in\",\n            \"values\": [\n               \"abc123\"\n            ]\n         }\n      ],\n      \"granularity_seconds\": 1,\n      \"group_by\": [\n         \"model\",\n         \"user_key\"\n      ],\n      \"group_expressions\": [\n         {\n            \"dimension\": \"model\",\n            \"name\": \"Is Claude\",\n            \"op\": \"not_in\",\n            \"values\": [\n               \"abc123\"\n            ]\n         }\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"limit\": 1,\n      \"name\": \"Input tokens by model\",\n      \"sort_by\": \"abc123\",\n      \"sort_desc\": false,\n      \"window\": \"7d\"\n   }' --session-token \"abc123\"")
+}
+
+func exploreDeleteSavedQueryUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] explore delete-saved-query", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Delete a saved Explore query.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "explore delete-saved-query --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
 }
 
 // externalCredentialsUsage displays the usage of the external-credentials

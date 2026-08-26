@@ -18028,6 +18028,638 @@ paths:
             x-speakeasy-name-override: updateBySlug
             x-speakeasy-react-hook:
                 name: UpdateEnvironment
+    /rpc/explore.createSavedQuery:
+        post:
+            description: Save a dataset-and-calculations query to the organization's dashboard.
+            operationId: exploreCreateSavedQuery
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateSavedQueryRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ExploreSavedQuery'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: createSavedQuery explore
+            tags:
+                - explore
+            x-speakeasy-name-override: createSavedQuery
+            x-speakeasy-react-hook:
+                name: ExploreCreateSavedQuery
+    /rpc/explore.deleteSavedQuery:
+        delete:
+            description: Delete a saved Explore query.
+            operationId: exploreDeleteSavedQuery
+            parameters:
+                - allowEmptyValue: true
+                  description: Saved query ID
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: Saved query ID
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: deleteSavedQuery explore
+            tags:
+                - explore
+            x-speakeasy-name-override: deleteSavedQuery
+            x-speakeasy-react-hook:
+                name: ExploreDeleteSavedQuery
+    /rpc/explore.dimensionValues:
+        get:
+            description: List a semantic dataset dimension's most frequent canonical values inside a time window.
+            operationId: exploreDimensionValues
+            parameters:
+                - allowEmptyValue: true
+                  description: Semantic dataset carrying the dimension
+                  example: turn_usage
+                  in: query
+                  name: dataset
+                  required: true
+                  schema:
+                    description: Semantic dataset carrying the dimension
+                    example: turn_usage
+                    type: string
+                - allowEmptyValue: true
+                  description: Dimension to list values for
+                  example: model
+                  in: query
+                  name: dimension
+                  required: true
+                  schema:
+                    description: Dimension to list values for
+                    example: model
+                    type: string
+                - allowEmptyValue: true
+                  description: Start time in ISO 8601 format
+                  in: query
+                  name: from
+                  required: true
+                  schema:
+                    description: Start time in ISO 8601 format
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: End time in ISO 8601 format
+                  in: query
+                  name: to
+                  required: true
+                  schema:
+                    description: End time in ISO 8601 format
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DimensionValuesResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: dimensionValues explore
+            tags:
+                - explore
+            x-speakeasy-name-override: dimensionValues
+            x-speakeasy-react-hook:
+                name: ExploreDimensionValues
+                type: query
+    /rpc/explore.listSavedQueries:
+        get:
+            description: List the organization's saved Explore queries.
+            operationId: exploreListSavedQueries
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListSavedQueriesResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listSavedQueries explore
+            tags:
+                - explore
+            x-speakeasy-name-override: listSavedQueries
+            x-speakeasy-react-hook:
+                name: ExploreListSavedQueries
+                type: query
+    /rpc/explore.meta:
+        get:
+            description: Describe the labeled semantic datasets and typed fields available to Explore.
+            operationId: exploreMeta
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ExploreMetaResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: meta explore
+            tags:
+                - explore
+            x-speakeasy-name-override: meta
+            x-speakeasy-react-hook:
+                name: ExploreMeta
+                type: query
+    /rpc/explore.query:
+        post:
+            description: Run an organization-scoped query over one semantic dataset. Observations are canonicalized by field authority before filters, grouping, and calculations.
+            operationId: exploreQuery
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/QueryRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ExploreQueryResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: query explore
+            tags:
+                - explore
+            x-speakeasy-name-override: query
+            x-speakeasy-react-hook:
+                name: ExploreQuery
+                type: query
+    /rpc/explore.updateSavedQuery:
+        post:
+            description: Update a saved dataset-and-calculations query in place.
+            operationId: exploreUpdateSavedQuery
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateSavedQueryRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ExploreSavedQuery'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: updateSavedQuery explore
+            tags:
+                - explore
+            x-speakeasy-name-override: updateSavedQuery
+            x-speakeasy-react-hook:
+                name: ExploreUpdateSavedQuery
     /rpc/external.receiveWorkOSWebhook:
         post:
             description: Receive and enqueue a WorkOS webhook event.
@@ -66019,6 +66651,88 @@ components:
             required:
                 - name
                 - grants
+        CreateSavedQueryRequestBody:
+            type: object
+            properties:
+                calculations:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ExploreCalculation'
+                    description: Aggregate op(column) calculations to compute over the dataset
+                chart_type:
+                    type: string
+                    description: How the dashboard renders the results
+                    enum:
+                        - line
+                        - bar
+                        - area
+                        - table
+                        - number
+                dataset:
+                    type: string
+                    description: Semantic dataset to query
+                    example: turn_usage
+                    enum:
+                        - events
+                        - turn_usage
+                        - user_usage
+                filters:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ExploreFilter'
+                    description: Filter predicates on canonical fields. All are ANDed together.
+                granularity_seconds:
+                    type: integer
+                    description: Timeseries bucket width in seconds. Zero or omitted aggregates the whole range into a table.
+                    format: int64
+                group_by:
+                    type: array
+                    items:
+                        type: string
+                    description: Dimensions to break results down by, in order. Empty returns a single aggregate group.
+                    example:
+                        - model
+                        - user_key
+                group_expressions:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ExploreGroupExpression'
+                    description: Named conditional grouping axes evaluated independently on canonical rows. Each produces true and false groups without filtering rows.
+                limit:
+                    type: integer
+                    description: Keep at most this many table rows after ranking. Zero keeps everything.
+                    default: 0
+                    format: int64
+                    minimum: 0
+                name:
+                    type: string
+                    description: Display name of the saved query
+                    example: Input tokens by model
+                    minLength: 1
+                    maxLength: 200
+                sort_by:
+                    type: string
+                    description: Calculation used to rank table rows, referenced by canonical name such as SUM(input_tokens). Must be requested by the query and is ignored for timeseries.
+                sort_desc:
+                    type: boolean
+                    description: Sort descending when sort_by is set.
+                    default: true
+                window:
+                    type: string
+                    description: Relative time window the query runs over
+                    example: 7d
+                    enum:
+                        - 1h
+                        - 24h
+                        - 7d
+                        - 30d
+                        - 90d
+            required:
+                - name
+                - chart_type
+                - window
+                - dataset
+                - calculations
         CreateServerAndMcpServerResult:
             type: object
             properties:
@@ -67227,6 +67941,16 @@ components:
             description: Outcome of probing the provider with the stored credentials.
             required:
                 - ok
+        DimensionValuesResponseBody:
+            type: object
+            properties:
+                values:
+                    type: array
+                    items:
+                        type: string
+                    description: Distinct non-empty values, most frequent first, capped at 50
+            required:
+                - values
         DisableOpenRouterKeyRequestBody:
             type: object
             properties:
@@ -67765,6 +68489,356 @@ components:
                     example: dev@acme.corp
             required:
                 - email
+        ExploreCalculation:
+            type: object
+            properties:
+                column:
+                    type: string
+                    description: Target field. Omit for COUNT.
+                    example: input_tokens
+                op:
+                    type: string
+                    description: Aggregate operation
+                    example: SUM
+                    enum:
+                        - COUNT
+                        - COUNT_DISTINCT
+                        - SUM
+                        - AVG
+                        - MIN
+                        - MAX
+                        - P50
+                        - P95
+                        - P99
+            description: One aggregate operation over a semantic dataset field.
+            required:
+                - op
+        ExploreDatasetSchema:
+            type: object
+            properties:
+                category:
+                    type: string
+                    description: Customer-facing dataset category
+                    enum:
+                        - event
+                        - usage
+                description:
+                    type: string
+                    description: What the dataset contains
+                fields:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ExploreFieldMeta'
+                    description: Typed fields in display order
+                grain:
+                    type: string
+                    description: What one canonical row represents
+                label:
+                    type: string
+                    description: Customer-facing display name
+                    example: Turn usage
+                name:
+                    type: string
+                    description: Stable dataset ID
+                    enum:
+                        - events
+                        - turn_usage
+                        - user_usage
+            description: One labeled semantic dataset and its typed fields.
+            required:
+                - name
+                - label
+                - category
+                - description
+                - grain
+                - fields
+        ExploreFieldMeta:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: What the field carries
+                filter_ops:
+                    type: array
+                    items:
+                        type: string
+                    description: Row-filter operators legal on the field
+                label:
+                    type: string
+                    description: Customer-facing display name
+                    example: Input tokens
+                name:
+                    type: string
+                    description: Stable field name
+                    example: input_tokens
+                role:
+                    type: string
+                    description: Field role
+                    enum:
+                        - dimension
+                        - measure
+                type:
+                    type: string
+                    description: Value type
+                    enum:
+                        - string
+                        - float
+                        - int
+                unit:
+                    type: string
+                    description: Measure unit, or empty for dimensions
+            description: One labeled, typed field of a semantic dataset.
+            required:
+                - name
+                - label
+                - type
+                - role
+                - unit
+                - description
+                - filter_ops
+        ExploreFilter:
+            type: object
+            properties:
+                dimension:
+                    type: string
+                    description: 'Field to filter on: a dimension, or a measure for numeric operators'
+                    example: model
+                op:
+                    type: string
+                    description: Filter operator. String fields take in, not_in, contains, or exists. Measures take eq, neq, gt, gte, lt, or lte.
+                    default: in
+                    enum:
+                        - in
+                        - not_in
+                        - contains
+                        - exists
+                        - eq
+                        - neq
+                        - gt
+                        - gte
+                        - lt
+                        - lte
+                values:
+                    type: array
+                    items:
+                        type: string
+                    description: Operator operands. Numeric comparisons and contains use the first value. Exists ignores values.
+            description: One filter predicate over a canonical dataset field.
+            required:
+                - dimension
+                - values
+        ExploreGroupExpression:
+            type: object
+            properties:
+                dimension:
+                    type: string
+                    description: Field whose value is tested
+                    example: model
+                name:
+                    type: string
+                    description: Customer-facing name returned in the result group_by tuple
+                    example: Is Claude
+                    minLength: 1
+                    maxLength: 200
+                op:
+                    type: string
+                    description: Type-appropriate predicate operator. String fields take in, not_in, contains, or exists. Measures take eq, neq, gt, gte, lt, or lte.
+                    default: in
+                    enum:
+                        - in
+                        - not_in
+                        - contains
+                        - exists
+                        - eq
+                        - neq
+                        - gt
+                        - gte
+                        - lt
+                        - lte
+                values:
+                    type: array
+                    items:
+                        type: string
+                    description: Predicate operands. Numeric comparisons and contains use the first value. Exists ignores values.
+            description: One named conditional grouping axis evaluated over a canonical dataset field.
+            required:
+                - name
+                - dimension
+                - values
+        ExploreMetaResult:
+            type: object
+            properties:
+                datasets:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ExploreDatasetSchema'
+                    description: Labeled semantic dataset schemas in display order
+            description: Semantic datasets available to Explore.
+            required:
+                - datasets
+        ExploreQueryResult:
+            type: object
+            properties:
+                calculations:
+                    type: array
+                    items:
+                        type: string
+                    description: Canonical names of the calculations answered, in request order
+                dataset:
+                    type: string
+                    description: Semantic dataset that answered the query
+                    enum:
+                        - events
+                        - turn_usage
+                        - user_usage
+                granularity_seconds:
+                    type: integer
+                    description: Timeseries bucket width. Zero for table queries.
+                    format: int64
+                group_by:
+                    type: array
+                    items:
+                        type: string
+                    description: Group-by dimensions answered, in request order
+                rows:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ExploreRow'
+                    description: Rows ordered by bucket and group for timeseries, or by sort_by for tables
+            description: Result of an Explore query.
+            required:
+                - calculations
+                - dataset
+                - group_by
+                - granularity_seconds
+                - rows
+        ExploreRow:
+            type: object
+            properties:
+                bucket:
+                    type: string
+                    description: Timeseries bucket start in ISO 8601. Empty for whole-range table queries.
+                group:
+                    type: array
+                    items:
+                        type: string
+                    description: Group values parallel to group_by. Empty string means the canonical dimension is empty.
+                values:
+                    type: object
+                    description: Values keyed by canonical calculation name, such as SUM(input_tokens).
+                    additionalProperties:
+                        type: number
+                        format: double
+            description: One result row of an Explore query.
+            required:
+                - bucket
+                - group
+                - values
+        ExploreSavedQuery:
+            type: object
+            properties:
+                calculations:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ExploreCalculation'
+                    description: Aggregate op(column) calculations to compute over the dataset
+                chart_type:
+                    type: string
+                    description: How the dashboard renders the results
+                    enum:
+                        - line
+                        - bar
+                        - area
+                        - table
+                        - number
+                created_at:
+                    type: string
+                    description: Creation time in ISO 8601 format
+                    format: date-time
+                dataset:
+                    type: string
+                    description: Semantic dataset to query
+                    example: turn_usage
+                    enum:
+                        - events
+                        - turn_usage
+                        - user_usage
+                filters:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ExploreFilter'
+                    description: Filter predicates on canonical fields. All are ANDed together.
+                granularity_seconds:
+                    type: integer
+                    description: Timeseries bucket width in seconds. Zero or omitted aggregates the whole range into a table.
+                    format: int64
+                group_by:
+                    type: array
+                    items:
+                        type: string
+                    description: Dimensions to break results down by, in order. Empty returns a single aggregate group.
+                    example:
+                        - model
+                        - user_key
+                group_expressions:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ExploreGroupExpression'
+                    description: Named conditional grouping axes evaluated independently on canonical rows. Each produces true and false groups without filtering rows.
+                id:
+                    type: string
+                    description: Saved query ID
+                    format: uuid
+                limit:
+                    type: integer
+                    description: Keep at most this many table rows after ranking. Zero keeps everything.
+                    default: 0
+                    format: int64
+                    minimum: 0
+                name:
+                    type: string
+                    description: Display name of the saved query
+                    example: Input tokens by model
+                    minLength: 1
+                    maxLength: 200
+                sort_by:
+                    type: string
+                    description: Calculation used to rank table rows, referenced by canonical name such as SUM(input_tokens). Must be requested by the query and is ignored for timeseries.
+                sort_desc:
+                    type: boolean
+                    description: Sort descending when sort_by is set.
+                    default: true
+                updated_at:
+                    type: string
+                    description: Last update time in ISO 8601 format
+                    format: date-time
+                window:
+                    type: string
+                    description: Relative time window the query runs over
+                    example: 7d
+                    enum:
+                        - 1h
+                        - 24h
+                        - 7d
+                        - 30d
+                        - 90d
+            description: A saved dataset-and-calculations query with a chart type and relative window.
+            required:
+                - id
+                - name
+                - chart_type
+                - window
+                - dataset
+                - calculations
+                - group_by
+                - group_expressions
+                - filters
+                - granularity_seconds
+                - sort_by
+                - sort_desc
+                - limit
+                - created_at
+                - updated_at
         ExportMcpMetadataRequestBody:
             type: object
             properties:
@@ -72242,6 +73316,16 @@ components:
                         $ref: '#/components/schemas/RootMcpServerOption'
             required:
                 - mcp_servers
+        ListSavedQueriesResponseBody:
+            type: object
+            properties:
+                queries:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ExploreSavedQuery'
+                    description: Saved queries, most recently updated first
+            required:
+                - queries
         ListScopesResult:
             type: object
             properties:
@@ -76205,6 +77289,72 @@ components:
             required:
                 - bucket_time_unix_nano
                 - measures
+        QueryRequestBody:
+            type: object
+            properties:
+                calculations:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ExploreCalculation'
+                    description: Aggregate op(column) calculations to compute over the dataset
+                dataset:
+                    type: string
+                    description: Semantic dataset to query
+                    example: turn_usage
+                    enum:
+                        - events
+                        - turn_usage
+                        - user_usage
+                filters:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ExploreFilter'
+                    description: Filter predicates on canonical fields. All are ANDed together.
+                from:
+                    type: string
+                    description: Start time in ISO 8601 format
+                    example: "2026-08-01T00:00:00Z"
+                    format: date-time
+                granularity_seconds:
+                    type: integer
+                    description: Timeseries bucket width in seconds. Zero or omitted aggregates the whole range into a table.
+                    format: int64
+                group_by:
+                    type: array
+                    items:
+                        type: string
+                    description: Dimensions to break results down by, in order. Empty returns a single aggregate group.
+                    example:
+                        - model
+                        - user_key
+                group_expressions:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ExploreGroupExpression'
+                    description: Named conditional grouping axes evaluated independently on canonical rows. Each produces true and false groups without filtering rows.
+                limit:
+                    type: integer
+                    description: Keep at most this many table rows after ranking. Zero keeps everything.
+                    default: 0
+                    format: int64
+                    minimum: 0
+                sort_by:
+                    type: string
+                    description: Calculation used to rank table rows, referenced by canonical name such as SUM(input_tokens). Must be requested by the query and is ignored for timeseries.
+                sort_desc:
+                    type: boolean
+                    description: Sort descending when sort_by is set.
+                    default: true
+                to:
+                    type: string
+                    description: End time in ISO 8601 format
+                    example: "2026-08-08T00:00:00Z"
+                    format: date-time
+            required:
+                - from
+                - to
+                - dataset
+                - calculations
         QueryResult:
             type: object
             properties:
@@ -85385,6 +86535,93 @@ components:
                     description: Scope grants to remove.
             required:
                 - id
+        UpdateSavedQueryRequestBody:
+            type: object
+            properties:
+                calculations:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ExploreCalculation'
+                    description: Aggregate op(column) calculations to compute over the dataset
+                chart_type:
+                    type: string
+                    description: How the dashboard renders the results
+                    enum:
+                        - line
+                        - bar
+                        - area
+                        - table
+                        - number
+                dataset:
+                    type: string
+                    description: Semantic dataset to query
+                    example: turn_usage
+                    enum:
+                        - events
+                        - turn_usage
+                        - user_usage
+                filters:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ExploreFilter'
+                    description: Filter predicates on canonical fields. All are ANDed together.
+                granularity_seconds:
+                    type: integer
+                    description: Timeseries bucket width in seconds. Zero or omitted aggregates the whole range into a table.
+                    format: int64
+                group_by:
+                    type: array
+                    items:
+                        type: string
+                    description: Dimensions to break results down by, in order. Empty returns a single aggregate group.
+                    example:
+                        - model
+                        - user_key
+                group_expressions:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ExploreGroupExpression'
+                    description: Named conditional grouping axes evaluated independently on canonical rows. Each produces true and false groups without filtering rows.
+                id:
+                    type: string
+                    description: Saved query ID
+                    format: uuid
+                limit:
+                    type: integer
+                    description: Keep at most this many table rows after ranking. Zero keeps everything.
+                    default: 0
+                    format: int64
+                    minimum: 0
+                name:
+                    type: string
+                    description: Display name of the saved query
+                    example: Input tokens by model
+                    minLength: 1
+                    maxLength: 200
+                sort_by:
+                    type: string
+                    description: Calculation used to rank table rows, referenced by canonical name such as SUM(input_tokens). Must be requested by the query and is ignored for timeseries.
+                sort_desc:
+                    type: boolean
+                    description: Sort descending when sort_by is set.
+                    default: true
+                window:
+                    type: string
+                    description: Relative time window the query runs over
+                    example: 7d
+                    enum:
+                        - 1h
+                        - 24h
+                        - 7d
+                        - 30d
+                        - 90d
+            required:
+                - id
+                - name
+                - chart_type
+                - window
+                - dataset
+                - calculations
         UpdateSecurityVariableDisplayNameForm:
             type: object
             properties:
@@ -86950,6 +88187,8 @@ tags:
       description: Manage custom domains for gram.
     - name: environments
       description: Managing toolset environments.
+    - name: explore
+      description: Authority-aware ad-hoc analytics over canonical event and usage datasets, with saved queries.
     - name: externalCredentials
       description: Manage organization-level external credentials — how Gram authenticates into a customer's AWS or GCP account.
     - name: externalKeys

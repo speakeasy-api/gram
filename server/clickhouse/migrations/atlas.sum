@@ -1,4 +1,4 @@
-h1:UEPn6rvO3RUhV/B5oL+/FLaqpF9xE5k18ASwjVAPd5U=
+h1:vdefDsFWH5/9vwi6FM2TCoH8/SoPfe2Ls7PtW2u347I=
 20251013090028_initial.sql h1:I90GAjfJN/3i4nLe4AThT5OW/Qgc0+5LOI2jZ6WQZME=
 20251028141444_add_indexes.sql h1:CDwn2EdBZ7Nrn9hx5vYguR1ljlP5hTxiOI6n/I25Cpk=
 20251029120230_add_other_indexes.sql h1:3EtD+3hW8+s5me23va+BdfiIKmfQKOdv4glrQ34fle4=
@@ -96,3 +96,4 @@ h1:UEPn6rvO3RUhV/B5oL+/FLaqpF9xE5k18ASwjVAPd5U=
 20260817165146_add-risk-findings-suppression-reason.sql h1:0MOXyO3mr5+cUxRk4azh2z18RYgUIIOYRoLPIPSUEbU=
 20260821180402_add-risk-findings-event-kind.sql h1:1NyIucg2KfdbPn1PqiPfLpzMf62hgy7Zogmk0uuZzu0=
 20260824192245_otel-event-feed-tables.sql h1:fC4u4OnBq3d3Dwcq7VmWp4J8YwSSNXUKfhA55C04ZkQ=
+20260826003429_authority-telemetry-tables.sql h1:iVRMkbPDEEXZiuZUWHIo9GVKvHeEtpxA2ST1EiyVj1M=

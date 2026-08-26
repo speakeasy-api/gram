@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/users"
 )
 
 // Fixed local-only material. These are deliberately well-known constants, not
@@ -147,7 +148,7 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		args []any
 	}{
 		{"link org to the dev-idp", localLinkWorkOSOrgSQL, []any{spec.OrgID, spec.WorkOSOrgID}},
-		{"adopt developer", localAdoptDeveloperSQL, []any{spec.OrgID, dev.ID, dev.Email, dev.Name}},
+		{"adopt developer", localAdoptDeveloperSQL, []any{spec.OrgID, dev.ID, dev.Email, dev.Name, dev.WorkOSID}},
 		{"grant session visibility", localSessionVisibilitySQL, []any{spec.OrgID, dev.ID}},
 		{"enable platform mcp", localPlatformMCPFeatureSQL, []any{spec.OrgID}},
 		{"api key", localAPIKeySQL, []any{spec.OrgID, spec.ProjectID(), dev.ID, localAPIKeyID(), LocalAPIKeyName, apiKeyHash, apiKey[:len(auth.APIKeyPrefix(env))+5]}},
@@ -223,15 +224,16 @@ func StaleOverrideVars() []string {
 
 // developer is the local user the fixtures adopt into the org.
 type developer struct {
-	ID    string
-	Email string
-	Name  string
+	ID       string
+	WorkOSID string
+	Email    string
+	Name     string
 }
 
 // resolveDeveloper mirrors the dev-idp's default-user bootstrap: the git
-// committer identity, with the user id derived from the email. Deriving it
-// rather than asking the dev-idp means the seed can run before anyone has
-// logged in — which is the normal case on a fresh database.
+// committer identity, formatted as the WorkOS subject the auth path receives.
+// Deriving it rather than asking the dev-idp means the seed can run before
+// anyone has logged in — which is the normal case on a fresh database.
 func resolveDeveloper(ctx context.Context, email string) (developer, error) {
 	if email == "" {
 		out, err := exec.CommandContext(ctx, "git", "config", "--get", "user.email").Output()
@@ -251,10 +253,12 @@ func resolveDeveloper(ctx context.Context, email string) (developer, error) {
 		}
 	}
 
+	workosID := devidentity.WorkOSUserID(devidentity.DeterministicUserID(email))
 	return developer{
-		ID:    devidentity.DeterministicUserID(email).String(),
-		Email: email,
-		Name:  name,
+		ID:       users.UserIDFromWorkOSID(workosID),
+		WorkOSID: workosID,
+		Email:    email,
+		Name:     name,
 	}, nil
 }
 
@@ -295,13 +299,13 @@ SET workos_id = $2, updated_at = clock_timestamp()
 WHERE id = $1 AND workos_id IS DISTINCT FROM $2
 `
 
-// You, as a real member. users.workos_id doubles as the WorkOS subject the
-// dev-idp will present at login, and the dev-idp uses the same user id there,
-// so the row survives your first real login unchanged.
+// You, as a real member. users.id follows the auth path's UUID derivation and
+// users.workos_id stores the WorkOS subject the dev-idp presents at login, so
+// either login or seeding can happen first without creating competing rows.
 const localAdoptDeveloperSQL = `
 WITH dev AS (
   INSERT INTO users (id, email, display_name, workos_id, admin)
-  VALUES ($2, $3, $4, $2, TRUE)
+  VALUES ($2, $3, $4, $5, TRUE)
   ON CONFLICT (id) DO UPDATE
     SET email = EXCLUDED.email, display_name = EXCLUDED.display_name,
         workos_id = COALESCE(users.workos_id, EXCLUDED.workos_id),

@@ -48,6 +48,7 @@ import (
 
 	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
 	"github.com/speakeasy-api/gram/dev-idp/internal/defaultuser"
+	"github.com/speakeasy-api/gram/dev-idp/pkg/devidentity"
 )
 
 // invitationLifetime is how long an emulated invitation stays in the
@@ -1556,7 +1557,7 @@ func nullableString(s string) sql.NullString {
 	return sql.NullString{String: s, Valid: true}
 }
 
-const workosUserIDPrefix = "user_devidp_"
+const workosUserIDPrefix = devidentity.WorkOSUserIDPrefix
 
 const workosOrgIDPrefix = "org_devidp_"
 
@@ -1581,7 +1582,7 @@ func orgSlug(name string) string {
 // workosUserID formats an internal UUID as a WorkOS-style user ID.
 // Real WorkOS returns IDs like "user_01J5C09..."; we use "user_devidp_<hex>".
 func workosUserID(id uuid.UUID) string {
-	return workosUserIDPrefix + strings.ReplaceAll(id.String(), "-", "")
+	return devidentity.WorkOSUserID(id)
 }
 
 // resolveUserID parses a WorkOS-style user ID back to a UUID.

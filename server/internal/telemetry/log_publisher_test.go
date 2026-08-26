@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
+	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -23,28 +23,28 @@ import (
 // capture race-clean regardless.
 type recordCapture struct {
 	mu      sync.Mutex
-	records []*telemetryv1.LogRecord
+	records []*otelv1.InboundLogRecord
 }
 
-func (c *recordCapture) add(rec *telemetryv1.LogRecord) {
+func (c *recordCapture) add(rec *otelv1.InboundLogRecord) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.records = append(c.records, rec)
 }
 
-func (c *recordCapture) all() []*telemetryv1.LogRecord {
+func (c *recordCapture) all() []*otelv1.InboundLogRecord {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	out := make([]*telemetryv1.LogRecord, len(c.records))
+	out := make([]*otelv1.InboundLogRecord, len(c.records))
 	copy(out, c.records)
 	return out
 }
 
-func newCapturingMockPublisher(result any) (*gcp.MockPublisher[*telemetryv1.LogRecord], *recordCapture) {
+func newCapturingMockPublisher(result any) (*gcp.MockPublisher[*otelv1.InboundLogRecord], *recordCapture) {
 	capture := &recordCapture{mu: sync.Mutex{}, records: nil}
-	mockPub := gcp.NewMockPublisher[*telemetryv1.LogRecord]()
+	mockPub := gcp.NewMockPublisher[*otelv1.InboundLogRecord]()
 	mockPub.On("Publish", mock.Anything, mock.Anything).Return(result).Run(func(args mock.Arguments) {
-		rec, ok := args.Get(1).(*telemetryv1.LogRecord)
+		rec, ok := args.Get(1).(*otelv1.InboundLogRecord)
 		if ok {
 			capture.add(rec)
 		}
@@ -55,7 +55,7 @@ func newCapturingMockPublisher(result any) (*gcp.MockPublisher[*telemetryv1.LogR
 // newShadowTestLogger builds a Logger backed by the shared test ClickHouse
 // whose shadow publisher uses the given publisher. The LogPublisher is
 // returned alongside so tests can await its ack drains.
-func newShadowTestLogger(t *testing.T, ctx context.Context, ti *testInstance, pub gcp.Publisher[*telemetryv1.LogRecord]) (*telemetry.Logger, *telemetry.LogPublisher) {
+func newShadowTestLogger(t *testing.T, ctx context.Context, ti *testInstance, pub gcp.Publisher[*otelv1.InboundLogRecord]) (*telemetry.Logger, *telemetry.LogPublisher) {
 	t.Helper()
 
 	logger := testenv.NewLogger(t)
@@ -84,10 +84,10 @@ func fetchLog(t *testing.T, ctx context.Context, client *repo.Queries, projectID
 	return logs[0]
 }
 
-// TestLogPublisher_MirrorsRowsToPubSub verifies the core invariant of the
-// shadow dual-write: every row that lands in telemetry_logs is published to
-// Pub/Sub with the same id and content.
-func TestLogPublisher_MirrorsRowsToPubSub(t *testing.T) {
+// TestLogPublisher_PublishesCanonicalOTELRows verifies the ingestion seam:
+// every internal telemetry row is converted to the canonical inbound OTEL
+// shape with stable identity, authenticated tenancy, and typed attributes.
+func TestLogPublisher_PublishesCanonicalOTELRows(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
@@ -117,9 +117,9 @@ func TestLogPublisher_MirrorsRowsToPubSub(t *testing.T) {
 	records := capture.all()
 	require.Len(t, records, 2)
 
-	recordsByID := make(map[string]*telemetryv1.LogRecord, len(records))
+	recordsByID := make(map[string]*otelv1.InboundLogRecord, len(records))
 	for _, rec := range records {
-		recordsByID[rec.GetId()] = rec
+		recordsByID[rec.GetRecordId()] = rec
 	}
 	for _, chLog := range []struct {
 		id        string
@@ -131,17 +131,18 @@ func TestLogPublisher_MirrorsRowsToPubSub(t *testing.T) {
 	} {
 		rec, ok := recordsByID[chLog.id]
 		require.True(t, ok, "published records must carry the ClickHouse row id")
-		require.Equal(t, chLog.projectID, rec.GetGramProjectId())
-		require.Equal(t, chLog.urn, rec.GetGramUrn())
-		require.Equal(t, timestamp.UnixNano(), rec.GetTimeUnixNano())
-		require.Contains(t, rec.GetAttributesJson(), chLog.urn)
-		require.NotEmpty(t, rec.GetResourceAttributesJson())
-		require.Equal(t, "gram-server", rec.GetServiceName())
-		// Rows without trace context keep the nullable columns unset.
-		require.False(t, rec.HasTraceId())
-		require.False(t, rec.HasSpanId())
-		require.False(t, rec.HasGramChatId())
+		require.Equal(t, chLog.projectID, rec.GetProvenance().GetProjectId())
+		require.Equal(t, ti.orgID, rec.GetProvenance().GetOrganizationId())
+		require.Equal(t, uint64(timestamp.UnixNano()), rec.GetTimeUnixNano())
+		require.Equal(t, chLog.urn, inboundStringAttribute(rec.GetAttributes(), string(attr.ToolURNKey)))
+		require.Equal(t, ti.orgID, inboundStringAttribute(rec.GetAttributes(), string(attr.OrganizationIDKey)))
+		require.Equal(t, "gram-server", inboundStringAttribute(rec.GetResource().GetAttributes(), string(attr.ServiceNameKey)))
+		// Rows without trace context keep the canonical byte fields empty.
+		require.Empty(t, rec.GetTraceId())
+		require.Empty(t, rec.GetSpanId())
+		require.Empty(t, inboundStringAttribute(rec.GetAttributes(), string(attr.GenAIConversationIDKey)))
 		require.True(t, rec.HasSeverityText(), "severity defaults to INFO through the Logger")
+		require.Equal(t, otelv1.InboundLogRecord_SEVERITY_NUMBER_INFO, rec.GetSeverityNumber())
 	}
 
 	// Await the batch's ack drain so no goroutine outlives the test.
@@ -175,8 +176,8 @@ func TestLogPublisher_PublishesDespiteCanceledContext(t *testing.T) {
 		Body:                 "",
 		TraceID:              nil,
 		SpanID:               nil,
-		Attributes:           "{}",
-		ResourceAttributes:   "{}",
+		Attributes:           `{"gram.org.id":"org-1"}`,
+		ResourceAttributes:   `{"service.name":"gram-server"}`,
 		GramProjectID:        "project-1",
 		GramDeploymentID:     nil,
 		GramFunctionID:       nil,
@@ -189,7 +190,7 @@ func TestLogPublisher_PublishesDespiteCanceledContext(t *testing.T) {
 
 	records := capture.all()
 	require.Len(t, records, 1)
-	require.Equal(t, "log-id-1", records[0].GetId())
+	require.Equal(t, "log-id-1", records[0].GetRecordId())
 }
 
 // TestLogPublisher_PublishFailureDoesNotAffectWrite verifies the best-effort
@@ -223,4 +224,13 @@ func TestLogPublisher_PublishFailureDoesNotAffectWrite(t *testing.T) {
 	// Await the drain so the failure path (error log) fully executes within
 	// the test's lifetime.
 	logPub.WaitForPublishDrains()
+}
+
+func inboundStringAttribute(attributes []*otelv1.InboundLogRecord_KeyValue, key string) string {
+	for _, attribute := range attributes {
+		if attribute.GetKey() == key {
+			return attribute.GetValue().GetStringValue()
+		}
+	}
+	return ""
 }

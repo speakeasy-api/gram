@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
+	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -58,7 +58,7 @@ func insertStagedRowForTest(t *testing.T, ctx context.Context, queries *telemetr
 		TraceID:              nil,
 		SpanID:               nil,
 		Attributes:           string(attrs),
-		ResourceAttributes:   "{}",
+		ResourceAttributes:   `{"service.name":"claude-code"}`,
 		GramProjectID:        fx.projectID.String(),
 		GramDeploymentID:     nil,
 		GramFunctionID:       nil,
@@ -534,21 +534,19 @@ func TestPromoteStagedTelemetry_DedupSkipsAlreadyPromotedRows(t *testing.T) {
 	}, 3*time.Second, 50*time.Millisecond)
 }
 
-// TestPromoteStagedTelemetry_ShadowPublishesPromotedRows verifies the shadow
-// dual-write on the promotion path: rows this pass inserts into telemetry_logs
-// are published to Pub/Sub with their staged ids preserved, while rows the
-// dedup guard skips (already promoted by an earlier crashed pass) are not
-// re-published by the cleanup pass.
-func TestPromoteStagedTelemetry_ShadowPublishesPromotedRows(t *testing.T) {
+// TestPromoteStagedTelemetry_PublishesPromotedRowsToOTEL verifies that promoted
+// provider records enter the canonical OTEL pipeline with their staged ids
+// preserved, while rows skipped by the dedup guard are not republished.
+func TestPromoteStagedTelemetry_PublishesPromotedRowsToOTEL(t *testing.T) {
 	t.Parallel()
 
 	var publishedMu sync.Mutex
 	published := make([]string, 0, 2)
-	mockPub := gcp.NewMockPublisher[*telemetryv1.LogRecord]()
+	mockPub := gcp.NewMockPublisher[*otelv1.InboundLogRecord]()
 	mockPub.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult()).Run(func(args mock.Arguments) {
-		if rec, ok := args.Get(1).(*telemetryv1.LogRecord); ok {
+		if rec, ok := args.Get(1).(*otelv1.InboundLogRecord); ok {
 			publishedMu.Lock()
-			published = append(published, rec.GetId())
+			published = append(published, rec.GetRecordId())
 			publishedMu.Unlock()
 		}
 	})

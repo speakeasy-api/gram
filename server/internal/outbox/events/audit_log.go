@@ -34,6 +34,7 @@ var (
 	DeviceIntegrationV1                    = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.device_integration_event_v1", "Emitted when changes to device integration configs are made")
 	DeploymentV1                           = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.deployment_event_v1", "Emitted when changes to deployments are made")
 	EnvironmentV1                          = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.environment_event_v1", "Emitted when changes to environments are made")
+	ExploreSavedQueryV1                    = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.explore_saved_query_event_v1", "Emitted when Explore saved queries are changed")
 	GcpIamCredentialV1                     = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.gcp_iam_credential_event_v1", "Emitted when changes to GCP IAM external credentials are made")
 	GcpKmsKeyV1                            = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.gcp_kms_key_event_v1", "Emitted when changes to GCP KMS external keys are made")
 	JsonWebKeyV1                           = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.json_web_key_event_v1", "Emitted when changes to published JSON Web Keys are made")

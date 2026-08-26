@@ -26,6 +26,7 @@ var All = []outbox.EventRegistration{
 	DeploymentV1,
 	DeviceIntegrationV1,
 	EnvironmentV1,
+	ExploreSavedQueryV1,
 	GcpIamCredentialV1,
 	GcpKmsKeyV1,
 	JsonWebKeySetV1,

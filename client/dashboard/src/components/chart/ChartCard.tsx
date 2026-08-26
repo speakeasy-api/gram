@@ -25,6 +25,11 @@ export type ChartCardProps = {
   onExpand: (id: string | null) => void;
   isZoomed?: boolean;
   onResetZoom?: () => void;
+  /**
+   * Extra header controls rendered before the zoom/expand buttons — e.g.
+   * per-widget edit/delete actions on dashboard cards.
+   */
+  actions?: ReactNode;
   children: ReactNode;
 };
 
@@ -39,6 +44,7 @@ export function ChartCard({
   onExpand,
   isZoomed,
   onResetZoom,
+  actions,
   children,
 }: ChartCardProps): ReactNode {
   const isExpanded = expandedChart === chartId;
@@ -57,6 +63,7 @@ export function ChartCard({
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text-eyebrow">{title}</h3>
         <div className="flex items-center gap-2">
+          {actions}
           {isZoomed && onResetZoom && (
             <ChartButton onClick={onResetZoom} ariaLabel="Reset zoom">
               <Icon name="rotate-ccw" />

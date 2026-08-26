@@ -275,7 +275,7 @@ func NewActivities(
 		panic(fmt.Errorf("new analyze batch: %w", err))
 	}
 
-	telemetryLogPublisher := telemetry.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.TelemetryLogs)
+	telemetryLogPublisher := telemetry.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.OTELLogs)
 
 	// Directory changes tighten identity-map staleness via an immediate sync
 	// trigger; workers without a Temporal env fall back to the schedule alone.

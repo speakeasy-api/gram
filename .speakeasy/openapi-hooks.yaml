@@ -790,6 +790,8 @@ tags:
     description: Manage custom domains for gram.
   - name: environments
     description: Managing toolset environments.
+  - name: explore
+    description: Authority-aware ad-hoc analytics over canonical event and usage datasets, with saved queries.
   - name: externalCredentials
     description: Manage organization-level external credentials — how Gram authenticates into a customer's AWS or GCP account.
   - name: externalKeys

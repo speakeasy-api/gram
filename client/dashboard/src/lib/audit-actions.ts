@@ -49,6 +49,9 @@ export const AUDIT_ACTIONS = [
   "environment:create",
   "environment:delete",
   "environment:update",
+  "explore_saved_query:create",
+  "explore_saved_query:delete",
+  "explore_saved_query:update",
   "gcp_iam_credential:create",
   "gcp_iam_credential:delete",
   "gcp_iam_credential:update",
@@ -357,6 +360,13 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated environment";
     case "environment:delete":
       return "deleted environment";
+
+    case "explore_saved_query:create":
+      return "created Explore saved query";
+    case "explore_saved_query:update":
+      return "updated Explore saved query";
+    case "explore_saved_query:delete":
+      return "deleted Explore saved query";
 
     case "litellm_instance:create":
       return "created LiteLLM instance";

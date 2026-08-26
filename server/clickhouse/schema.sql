@@ -106,6 +106,537 @@ CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_billing_mode ON telemetry_logs
 -- evaluate and bloom filters cannot.
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_event_urn ON telemetry_logs (event_urn) TYPE set(0) GRANULARITY 4;
 
+CREATE TABLE IF NOT EXISTS otel_logs (
+    -- Tenancy, stamped by the ingest edge from authenticated state.
+    organization_id String COMMENT 'Organization the record belongs to, from the provenance stamped at the ingest edge.' CODEC(ZSTD),
+    project_id String COMMENT 'Project the record was ingested under, from the provenance stamped at the ingest edge.' CODEC(ZSTD),
+
+    -- Timing
+    time_unix_nano Int64 COMMENT 'Unix time (ns) when the event occurred. The writer substitutes observed_time_unix_nano when the producer sent 0 and drops records with neither, so this is never epoch zero.' CODEC(Delta, ZSTD),
+    observed_time_unix_nano Int64 COMMENT 'Unix time (ns) when the event was observed by the collection system. 0 when the producer omitted it.' CODEC(Delta, ZSTD),
+    timestamp DateTime64(9) DEFAULT fromUnixTimestamp64Nano(time_unix_nano) COMMENT 'Human-readable timestamp derived from time_unix_nano.',
+
+    -- Source
+    source LowCardinality(String) COMMENT 'Canonicalized producer surface derived from resource service.name at write time (e.g. claude-code, litellm). unknown when the resource carries no service.name.',
+
+    -- Trace context
+    trace_id String COMMENT 'Hex-encoded W3C trace id (32 chars). Empty when the record has no span context.' CODEC(ZSTD),
+    span_id String COMMENT 'Hex-encoded span id (16 chars). Empty when the record has no span context.' CODEC(ZSTD),
+
+    -- Log fields
+    event_name String COMMENT 'Event name for records that represent a named event (OTLP 1.5+). Empty otherwise.' CODEC(ZSTD),
+    severity_text LowCardinality(String) COMMENT 'Producer-supplied severity text (DEBUG, INFO, WARN, ERROR, FATAL). Empty when unclassified.',
+    severity_number Int32 COMMENT 'OTLP SeverityNumber enum value (1-24). 0 when unspecified.',
+    body String COMMENT 'Log body. String bodies are stored verbatim and structured bodies are JSON-encoded.' CODEC(ZSTD),
+    log_attributes JSON COMMENT 'Log record attributes, including Gram enrichments applied by the transform pipeline.' CODEC(ZSTD),
+    flags UInt32 COMMENT 'W3C trace flags for the emitting span context.',
+
+    -- Resource / scope context
+    resource_attributes JSON COMMENT 'Attributes of the resource that produced the record.' CODEC(ZSTD),
+    resource_schema_url String COMMENT 'Schema URL of the resource. Empty when not reported.' CODEC(ZSTD),
+    scope_name LowCardinality(String) COMMENT 'Instrumentation scope name. The transform pipeline rewrites this to com.speakeasy.ai.logging and keeps the producer scope in log_attributes under speakeasy.original_instrumentation_scope.name.',
+    scope_version String COMMENT 'Instrumentation scope version. Empty when not reported.' CODEC(ZSTD),
+    scope_attributes JSON COMMENT 'Instrumentation scope attributes.' CODEC(ZSTD)
+) ENGINE = MergeTree
+PARTITION BY toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))
+ORDER BY (organization_id, time_unix_nano)
+TTL fromUnixTimestamp64Nano(time_unix_nano) + INTERVAL 90 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'Normalized OTel log records teed off the gram.otel.v1.LogRecord topic after transform/enrichment, powering the org-scoped Event Feed. Ingestion is at-least-once, so Pub/Sub redelivery can produce duplicate rows and readers must tolerate them.';
+
+-- organization_id leads the ORDER BY, so no index is needed for it.
+CREATE INDEX IF NOT EXISTS idx_otel_logs_trace_id ON otel_logs (trace_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_otel_logs_event_name ON otel_logs (event_name) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_otel_logs_source ON otel_logs (source) TYPE set(0) GRANULARITY 4;
+CREATE INDEX IF NOT EXISTS idx_otel_logs_severity ON otel_logs (severity_text) TYPE set(0) GRANULARITY 4;
+
+-- Authority-aware Explore facts are append-only observations. Readers
+-- canonicalize rows by natural_id at query time, so these remain plain
+-- MergeTree tables rather than replacing or aggregating engines.
+CREATE TABLE IF NOT EXISTS chat_events (
+    project_id UUID COMMENT 'Gram project that owns the observation.',
+    natural_id String COMMENT 'Stable finest-grain identity shared by observations of the same event.',
+    src_event_id UUID COMMENT 'Deterministic fingerprint of the canonical otel_logs source row.',
+    occurred_at DateTime64(9, 'UTC') COMMENT 'Time the source event occurred.',
+    observed_at DateTime64(9, 'UTC') COMMENT 'Time Gram observed the source event.',
+    source_channel LowCardinality(String) COMMENT 'Observation channel such as provider_otel or agent_hook.',
+
+    event_name LowCardinality(Nullable(String)) COMMENT 'Normalized event name, or NULL when absent from the source.',
+    provider LowCardinality(Nullable(String)) COMMENT 'AI provider of the observed traffic, or NULL when absent from the source.',
+    surface LowCardinality(Nullable(String)) COMMENT 'Product surface that emitted the traffic, or NULL when absent from the source.',
+    account_type LowCardinality(Nullable(String)) COMMENT 'Provider account classification, or NULL when absent from the source.',
+    user_key Nullable(String) COMMENT 'User identity stamped by the source, or NULL when absent from the source.',
+    session_id Nullable(String) COMMENT 'Agent session or conversation identity, or NULL when absent from the source.',
+    turn_id Nullable(String) COMMENT 'Turn identity within the session, or NULL when absent from the source.',
+    query_source LowCardinality(Nullable(String)) COMMENT 'How the turn was initiated, or NULL when absent from the source.',
+    request_model LowCardinality(Nullable(String)) COMMENT 'Model requested from the provider, or NULL when absent from the source.',
+    response_model LowCardinality(Nullable(String)) COMMENT 'Model reported in the provider response, or NULL when absent from the source.',
+    tool_name Nullable(String) COMMENT 'Tool invoked by the event, or NULL when absent from the source.',
+    mcp_server Nullable(String) COMMENT 'MCP server parsed from a Claude MCP tool name, or NULL when unavailable.',
+    skill_name Nullable(String) COMMENT 'Skill activated by the event, or NULL when absent from the source.',
+    status LowCardinality(Nullable(String)) COMMENT 'Normalized event outcome, or NULL when absent from the source.',
+    terminal LowCardinality(Nullable(String)) COMMENT 'Terminal or host application reported by the source, or NULL when absent from the source.',
+    duration_ms Nullable(Int64) COMMENT 'Duration reported by the source in milliseconds, or NULL when absent from the source.'
+) ENGINE = MergeTree
+PARTITION BY toYYYYMM(occurred_at)
+ORDER BY (project_id, toDate(occurred_at), ifNull(event_name, ''), occurred_at, natural_id, src_event_id)
+TTL occurred_at + INTERVAL 90 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'Append-only normalized agent event observations for authority-aware Explore queries';
+
+CREATE TABLE IF NOT EXISTS chat_measurements (
+    project_id UUID COMMENT 'Gram project that owns the observation.',
+    measurement_name LowCardinality(String) COMMENT 'Semantic measurement grain such as turn_usage or user_usage.',
+    natural_id String COMMENT 'Stable identity shared by observations of one logical measurement.',
+    component_id String COMMENT 'Stable request, total, or report-part identity within the logical measurement.',
+    src_event_id UUID COMMENT 'Deterministic fingerprint of the canonical otel_logs source row.',
+    occurred_at DateTime64(9, 'UTC') COMMENT 'Time the measurement occurred or its report interval started.',
+    observed_at DateTime64(9, 'UTC') COMMENT 'Time Gram observed the measurement.',
+    source_channel LowCardinality(String) COMMENT 'Observation channel such as provider_otel, agent_hook, or provider_api.',
+    observation_kind Enum8('component' = 1, 'total' = 2, 'report' = 3) COMMENT 'How the row contributes to canonicalization at its semantic grain.',
+
+    granularity LowCardinality(Nullable(String)) COMMENT 'Native provider reporting interval, or NULL when not applicable or absent from the source.',
+    provider LowCardinality(Nullable(String)) COMMENT 'AI provider of the measured traffic, or NULL when absent from the source.',
+    surface LowCardinality(Nullable(String)) COMMENT 'Product surface represented by the measurement, or NULL when absent from the source.',
+    account_type LowCardinality(Nullable(String)) COMMENT 'Provider account classification, or NULL when absent from the source.',
+    user_key Nullable(String) COMMENT 'User identity represented by the measurement, or NULL when absent from the source.',
+    session_id Nullable(String) COMMENT 'Agent session or conversation identity, or NULL when not applicable or absent from the source.',
+    turn_id Nullable(String) COMMENT 'Turn identity within the session, or NULL when not applicable or absent from the source.',
+    query_source LowCardinality(Nullable(String)) COMMENT 'How the turn was initiated, or NULL when not applicable or absent from the source.',
+    request_model LowCardinality(Nullable(String)) COMMENT 'Model requested from the provider, or NULL when absent from the source.',
+    response_model LowCardinality(Nullable(String)) COMMENT 'Model reported in the provider response, or NULL when absent from the source.',
+
+    cost_usd Nullable(Decimal(18, 8)) COMMENT 'Cost in US dollars, or NULL when absent from the source.',
+    input_tokens Nullable(UInt64) COMMENT 'Non-cached input tokens, or NULL when absent from the source.',
+    output_tokens Nullable(UInt64) COMMENT 'Output tokens, or NULL when absent from the source.',
+    cache_read_tokens Nullable(UInt64) COMMENT 'Input tokens read from cache, or NULL when absent from the source.',
+    cache_write_tokens Nullable(UInt64) COMMENT 'Input tokens written to cache, or NULL when absent from the source.'
+) ENGINE = MergeTree
+PARTITION BY toYYYYMM(occurred_at)
+ORDER BY (project_id, measurement_name, toDate(occurred_at), occurred_at, natural_id, component_id, source_channel, src_event_id)
+TTL occurred_at + INTERVAL 90 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'Append-only wide usage measurements partitioned into semantic grains by measurement_name';
+
+-- Agent-hook observations are canonical OTEL log rows emitted by Gram's
+-- telemetry logger through the shared transform pipeline.
+CREATE MATERIALIZED VIEW IF NOT EXISTS chat_events_anthropic_agent_hook_mv TO chat_events AS
+WITH
+    startsWith(toString(log_attributes.gram.event.urn), 'urn:telemetry:agent_hook:log:')
+        AND (
+            toString(log_attributes.gram.provider) = 'anthropic'
+            OR (
+                toString(log_attributes.gram.provider) = ''
+                AND toString(log_attributes.gram.hook.source) IN ('claude', 'claude-code', 'claude-code-desktop', 'cowork')
+            )
+        ) AS is_anthropic_agent_hook,
+    lower(toString(log_attributes.gram.hook.event)) AS normalized_event_name,
+    toString(log_attributes.gen_ai.tool.call.id) AS normalized_tool_call_id,
+    toString(log_attributes.gen_ai.message.id) AS normalized_message_id,
+    toString(log_attributes.gen_ai.conversation.id) AS normalized_session_id,
+    toString(log_attributes.gram.hook.turn_id) AS normalized_turn_id,
+    toString(log_attributes.gram.tool.name) AS normalized_tool_name,
+    if(
+        startsWith(normalized_tool_name, 'mcp__'),
+        arrayElement(splitByString('__', normalized_tool_name), 2),
+        ''
+    ) AS normalized_mcp_server,
+    if(
+        JSONHas(toString(log_attributes), 'gen_ai', 'request', 'model'),
+        toString(log_attributes.gen_ai.request.model),
+        CAST(NULL AS Nullable(String))
+    ) AS normalized_request_model,
+    if(
+        JSONHas(toString(log_attributes), 'gen_ai', 'response', 'model'),
+        toString(log_attributes.gen_ai.response.model),
+        CAST(NULL AS Nullable(String))
+    ) AS normalized_response_model,
+    reinterpretAsUUID(MD5(toString(tuple(
+        organization_id,
+        otel_logs.project_id,
+        time_unix_nano,
+        observed_time_unix_nano,
+        source,
+        trace_id,
+        span_id,
+        otel_logs.event_name,
+        severity_text,
+        severity_number,
+        body,
+        toJSONString(log_attributes),
+        flags,
+        toJSONString(resource_attributes),
+        resource_schema_url,
+        scope_name,
+        scope_version,
+        toJSONString(scope_attributes)
+    )))) AS source_event_id,
+    multiIf(
+        normalized_tool_call_id != '', concat('tool:', normalized_tool_call_id),
+        normalized_message_id != '', concat('message:', normalized_message_id),
+        normalized_session_id != ''
+            AND normalized_event_name IN ('sessionstart', 'sessionend', 'sessionstop'),
+            concat(
+                'session-event:',
+                toString(length(normalized_session_id)), ':', normalized_session_id,
+                ':', normalized_event_name
+            ),
+        concat('bronze:', toString(source_event_id))
+    ) AS source_natural_id
+SELECT
+    toUUID(otel_logs.project_id) AS project_id,
+    source_natural_id AS natural_id,
+    source_event_id AS src_event_id,
+    fromUnixTimestamp64Nano(time_unix_nano) AS occurred_at,
+    fromUnixTimestamp64Nano(if(
+        observed_time_unix_nano = 0,
+        time_unix_nano,
+        observed_time_unix_nano
+    )) AS observed_at,
+    'agent_hook' AS source_channel,
+    if(
+        JSONHas(toString(log_attributes), 'gram', 'hook', 'event'),
+        normalized_event_name,
+        NULL
+    ) AS event_name,
+    if(
+        JSONHas(toString(log_attributes), 'gram', 'provider'),
+        toString(log_attributes.gram.provider),
+        NULL
+    ) AS provider,
+    if(
+        JSONHas(toString(log_attributes), 'gram', 'hook', 'source'),
+        toString(log_attributes.gram.hook.source),
+        NULL
+    ) AS surface,
+    if(
+        JSONHas(toString(log_attributes), 'gram', 'account_type'),
+        toString(log_attributes.gram.account_type),
+        NULL
+    ) AS account_type,
+    if(
+        JSONHas(toString(log_attributes), 'user', 'email'),
+        toString(log_attributes.user.email),
+        NULL
+    ) AS user_key,
+    if(
+        JSONHas(toString(log_attributes), 'gen_ai', 'conversation', 'id'),
+        normalized_session_id,
+        NULL
+    ) AS session_id,
+    if(
+        JSONHas(toString(log_attributes), 'gram', 'hook', 'turn_id'),
+        normalized_turn_id,
+        NULL
+    ) AS turn_id,
+    if(
+        JSONHas(toString(log_attributes), 'query_source'),
+        toString(log_attributes.query_source),
+        NULL
+    ) AS query_source,
+    normalized_request_model AS request_model,
+    normalized_response_model AS response_model,
+    if(
+        normalized_event_name IN ('pretooluse', 'posttooluse')
+            AND JSONHas(toString(log_attributes), 'gram', 'tool', 'name'),
+        normalized_tool_name,
+        NULL
+    ) AS tool_name,
+    if(
+        normalized_event_name IN ('pretooluse', 'posttooluse'),
+        if(normalized_mcp_server != '', normalized_mcp_server, NULL),
+        NULL
+    ) AS mcp_server,
+    if(
+        toString(log_attributes.gram.tool.name) = 'Skill'
+            AND JSONHas(toString(log_attributes.gen_ai.tool.call.arguments), 'skill'),
+        JSONExtractString(toString(log_attributes.gen_ai.tool.call.arguments), 'skill'),
+        NULL
+    ) AS skill_name,
+    CAST(NULL AS Nullable(String)) AS status,
+    CAST(NULL AS Nullable(String)) AS terminal,
+    CAST(NULL AS Nullable(Int64)) AS duration_ms
+FROM otel_logs
+WHERE is_anthropic_agent_hook;
+
+-- The agent-hook half of the Anthropic turn-usage adapter consumes the same
+-- canonical OTEL raw table as the provider channel.
+CREATE MATERIALIZED VIEW IF NOT EXISTS chat_measurements_anthropic_turn_usage_agent_hook_mv TO chat_measurements AS
+WITH
+    startsWith(toString(log_attributes.gram.event.urn), 'urn:telemetry:agent_hook:log:')
+        AND (
+            toString(log_attributes.gram.provider) = 'anthropic'
+            OR (
+                toString(log_attributes.gram.provider) = ''
+                AND toString(log_attributes.gram.hook.source) IN ('claude', 'claude-code', 'claude-code-desktop', 'cowork')
+            )
+        ) AS is_anthropic_agent_hook,
+    lower(toString(log_attributes.gram.hook.event)) AS normalized_event_name,
+    toString(log_attributes.gen_ai.conversation.id) AS normalized_session_id,
+    toString(log_attributes.gram.hook.turn_id) AS normalized_turn_id,
+    JSONExtract(
+        ifNull(toJSONString(log_attributes.gram.hook.usage.present_fields), '[]'),
+        'Array(String)'
+    ) AS normalized_usage_fields,
+    if(
+        JSONHas(toString(log_attributes), 'gen_ai', 'request', 'model'),
+        toString(log_attributes.gen_ai.request.model),
+        CAST(NULL AS Nullable(String))
+    ) AS normalized_request_model,
+    if(
+        JSONHas(toString(log_attributes), 'gen_ai', 'response', 'model'),
+        toString(log_attributes.gen_ai.response.model),
+        CAST(NULL AS Nullable(String))
+    ) AS normalized_response_model,
+    reinterpretAsUUID(MD5(toString(tuple(
+        organization_id,
+        otel_logs.project_id,
+        time_unix_nano,
+        observed_time_unix_nano,
+        source,
+        trace_id,
+        span_id,
+        otel_logs.event_name,
+        severity_text,
+        severity_number,
+        body,
+        toJSONString(log_attributes),
+        flags,
+        toJSONString(resource_attributes),
+        resource_schema_url,
+        scope_name,
+        scope_version,
+        toJSONString(scope_attributes)
+    )))) AS source_event_id,
+    concat(
+        'turn:',
+        toString(length(normalized_session_id)), ':', normalized_session_id,
+        ':', toString(length(normalized_turn_id)), ':', normalized_turn_id
+    ) AS source_natural_id,
+    'completed-turn-total' AS source_component_id
+SELECT
+    toUUID(otel_logs.project_id) AS project_id,
+    'turn_usage' AS measurement_name,
+    source_natural_id AS natural_id,
+    source_component_id AS component_id,
+    source_event_id AS src_event_id,
+    fromUnixTimestamp64Nano(time_unix_nano) AS occurred_at,
+    fromUnixTimestamp64Nano(if(
+        observed_time_unix_nano = 0,
+        time_unix_nano,
+        observed_time_unix_nano
+    )) AS observed_at,
+    'agent_hook' AS source_channel,
+    'total' AS observation_kind,
+    CAST(NULL AS Nullable(String)) AS granularity,
+    if(
+        JSONHas(toString(log_attributes), 'gram', 'provider'),
+        toString(log_attributes.gram.provider),
+        NULL
+    ) AS provider,
+    if(
+        JSONHas(toString(log_attributes), 'gram', 'hook', 'source'),
+        toString(log_attributes.gram.hook.source),
+        NULL
+    ) AS surface,
+    if(
+        JSONHas(toString(log_attributes), 'gram', 'account_type'),
+        toString(log_attributes.gram.account_type),
+        NULL
+    ) AS account_type,
+    if(
+        JSONHas(toString(log_attributes), 'user', 'email'),
+        toString(log_attributes.user.email),
+        NULL
+    ) AS user_key,
+    normalized_session_id AS session_id,
+    normalized_turn_id AS turn_id,
+    if(
+        JSONHas(toString(log_attributes), 'query_source'),
+        toString(log_attributes.query_source),
+        NULL
+    ) AS query_source,
+    normalized_request_model AS request_model,
+    normalized_response_model AS response_model,
+    if(
+        has(normalized_usage_fields, 'cost_usd'),
+        toDecimal64OrZero(toString(log_attributes.gen_ai.usage.cost), 8),
+        NULL
+    ) AS cost_usd,
+    if(
+        has(normalized_usage_fields, 'input_tokens'),
+        toUInt64(greatest(toInt64OrZero(toString(log_attributes.gen_ai.usage.input_tokens)), 0)),
+        NULL
+    ) AS input_tokens,
+    if(
+        has(normalized_usage_fields, 'output_tokens'),
+        toUInt64(greatest(toInt64OrZero(toString(log_attributes.gen_ai.usage.output_tokens)), 0)),
+        NULL
+    ) AS output_tokens,
+    if(
+        has(normalized_usage_fields, 'cache_read_tokens'),
+        toUInt64(greatest(toInt64OrZero(toString(log_attributes.gen_ai.usage.cache_read.input_tokens)), 0)),
+        NULL
+    ) AS cache_read_tokens,
+    if(
+        has(normalized_usage_fields, 'cache_write_tokens'),
+        toUInt64(greatest(toInt64OrZero(toString(log_attributes.gen_ai.usage.cache_creation.input_tokens)), 0)),
+        NULL
+    ) AS cache_write_tokens
+FROM otel_logs
+WHERE is_anthropic_agent_hook
+  AND normalized_event_name = 'afteragentresponse'
+  AND normalized_session_id != ''
+  AND normalized_turn_id != ''
+  AND length(normalized_usage_fields) > 0;
+
+-- Anthropic provider API cost and token rows are partial observations of the
+-- same user and reporting interval. Presence markers in the identity preserve
+-- absent versus explicitly empty model values.
+CREATE MATERIALIZED VIEW IF NOT EXISTS chat_measurements_anthropic_user_usage_provider_api_mv TO chat_measurements AS
+WITH
+    toString(log_attributes.gram.event.urn) AS normalized_event_urn,
+    toString(log_attributes.gram.resource.urn) AS normalized_resource_urn,
+    toString(log_attributes.gram.provider) AS normalized_provider,
+    toString(log_attributes.gram.hook.source) AS normalized_surface,
+    toString(log_attributes.gram.external_org_id) AS normalized_external_org_id,
+    toString(log_attributes.gram.account_type) AS normalized_account_type,
+    if(
+        toString(log_attributes.gram.external_user.id) != '',
+        toString(log_attributes.gram.external_user.id),
+        toString(log_attributes.user.email)
+    ) AS normalized_user_key,
+    JSONHas(toString(log_attributes), 'gen_ai', 'request', 'model') AS request_model_present,
+    JSONHas(toString(log_attributes), 'gen_ai', 'response', 'model') AS response_model_present,
+    toString(log_attributes.gen_ai.request.model) AS normalized_request_model,
+    toString(log_attributes.gen_ai.response.model) AS normalized_response_model,
+    reinterpretAsUUID(MD5(toString(tuple(
+        organization_id,
+        otel_logs.project_id,
+        time_unix_nano,
+        observed_time_unix_nano,
+        source,
+        trace_id,
+        span_id,
+        otel_logs.event_name,
+        severity_text,
+        severity_number,
+        body,
+        toJSONString(log_attributes),
+        flags,
+        toJSONString(resource_attributes),
+        resource_schema_url,
+        scope_name,
+        scope_version,
+        toJSONString(scope_attributes)
+    )))) AS source_event_id,
+    concat(
+        'provider-report:',
+        toString(time_unix_nano),
+        ':', toString(length(normalized_provider)), ':', normalized_provider,
+        ':', toString(length(normalized_surface)), ':', normalized_surface,
+        ':', toString(length(normalized_external_org_id)), ':', normalized_external_org_id,
+        ':', toString(length(normalized_account_type)), ':', normalized_account_type,
+        ':', toString(length(normalized_user_key)), ':', normalized_user_key,
+        ':request-model:', toString(request_model_present),
+        ':', toString(length(normalized_request_model)), ':', normalized_request_model,
+        ':response-model:', toString(response_model_present),
+        ':', toString(length(normalized_response_model)), ':', normalized_response_model
+    ) AS source_natural_id
+SELECT
+    toUUID(otel_logs.project_id) AS project_id,
+    'user_usage' AS measurement_name,
+    source_natural_id AS natural_id,
+    if(
+        normalized_resource_urn = 'claude_chat:cost:metrics',
+        'provider-report-cost',
+        'provider-report-usage'
+    ) AS component_id,
+    source_event_id AS src_event_id,
+    fromUnixTimestamp64Nano(time_unix_nano) AS occurred_at,
+    fromUnixTimestamp64Nano(if(
+        observed_time_unix_nano = 0,
+        time_unix_nano,
+        observed_time_unix_nano
+    )) AS observed_at,
+    'provider_api' AS source_channel,
+    'report' AS observation_kind,
+    'minute' AS granularity,
+    if(
+        JSONHas(toString(log_attributes), 'gram', 'provider'),
+        normalized_provider,
+        NULL
+    ) AS provider,
+    if(
+        JSONHas(toString(log_attributes), 'gram', 'hook', 'source'),
+        normalized_surface,
+        NULL
+    ) AS surface,
+    if(
+        JSONHas(toString(log_attributes), 'gram', 'account_type'),
+        normalized_account_type,
+        NULL
+    ) AS account_type,
+    if(
+        JSONHas(toString(log_attributes), 'gram', 'external_user', 'id')
+            OR JSONHas(toString(log_attributes), 'user', 'email'),
+        normalized_user_key,
+        NULL
+    ) AS user_key,
+    CAST(NULL AS Nullable(String)) AS session_id,
+    CAST(NULL AS Nullable(String)) AS turn_id,
+    CAST(NULL AS Nullable(String)) AS query_source,
+    if(request_model_present, normalized_request_model, NULL) AS request_model,
+    if(response_model_present, normalized_response_model, NULL) AS response_model,
+    if(
+        normalized_resource_urn = 'claude_chat:cost:metrics'
+            AND JSONHas(toString(log_attributes), 'gen_ai', 'usage', 'cost'),
+        toDecimal64OrZero(toString(log_attributes.gen_ai.usage.cost), 8),
+        NULL
+    ) AS cost_usd,
+    if(
+        normalized_resource_urn = 'claude_chat:usage:metrics'
+            AND JSONHas(toString(log_attributes), 'gen_ai', 'usage', 'input_tokens'),
+        toUInt64(greatest(toInt64OrZero(toString(log_attributes.gen_ai.usage.input_tokens)), 0)),
+        NULL
+    ) AS input_tokens,
+    if(
+        normalized_resource_urn = 'claude_chat:usage:metrics'
+            AND JSONHas(toString(log_attributes), 'gen_ai', 'usage', 'output_tokens'),
+        toUInt64(greatest(toInt64OrZero(toString(log_attributes.gen_ai.usage.output_tokens)), 0)),
+        NULL
+    ) AS output_tokens,
+    if(
+        normalized_resource_urn = 'claude_chat:usage:metrics'
+            AND JSONHas(toString(log_attributes), 'gen_ai', 'usage', 'cache_read', 'input_tokens'),
+        toUInt64(greatest(toInt64OrZero(toString(log_attributes.gen_ai.usage.cache_read.input_tokens)), 0)),
+        NULL
+    ) AS cache_read_tokens,
+    if(
+        normalized_resource_urn = 'claude_chat:usage:metrics'
+            AND JSONHas(toString(log_attributes), 'gen_ai', 'usage', 'cache_creation', 'input_tokens'),
+        toUInt64(greatest(toInt64OrZero(toString(log_attributes.gen_ai.usage.cache_creation.input_tokens)), 0)),
+        NULL
+    ) AS cache_write_tokens
+FROM otel_logs
+WHERE startsWith(normalized_event_urn, 'urn:telemetry:provider_api:')
+  AND normalized_resource_urn IN ('claude_chat:cost:metrics', 'claude_chat:usage:metrics')
+  AND (
+      (
+          normalized_resource_urn = 'claude_chat:cost:metrics'
+          AND JSONHas(toString(log_attributes), 'gen_ai', 'usage', 'cost')
+      )
+      OR (
+          normalized_resource_urn = 'claude_chat:usage:metrics'
+          AND (
+              JSONHas(toString(log_attributes), 'gen_ai', 'usage', 'input_tokens')
+              OR JSONHas(toString(log_attributes), 'gen_ai', 'usage', 'output_tokens')
+              OR JSONHas(toString(log_attributes), 'gen_ai', 'usage', 'cache_read', 'input_tokens')
+              OR JSONHas(toString(log_attributes), 'gen_ai', 'usage', 'cache_creation', 'input_tokens')
+          )
+      )
+  );
+
 -- telemetry_logs_staging parks Claude OTEL api_request rows whose inline MCP
 -- attribution was redacted (mcp_server.name = 'custom') until the
 -- transcript-derived attribution for the request arrives via hooks (or a
@@ -1532,50 +2063,6 @@ CREATE TABLE IF NOT EXISTS identity_map_staging (
 ) ENGINE = Join(ANY, LEFT, org_id, email_lower)
 COMMENT 'Staging twin of identity_map. The sync worker rebuilds this table then swaps it live with EXCHANGE TABLES so readers never observe a partial map.';
 
-CREATE TABLE IF NOT EXISTS otel_logs (
-    -- Tenancy, stamped by the ingest edge from authenticated state.
-    organization_id String COMMENT 'Organization the record belongs to, from the provenance stamped at the ingest edge.' CODEC(ZSTD),
-    project_id String COMMENT 'Project the record was ingested under, from the provenance stamped at the ingest edge.' CODEC(ZSTD),
-
-    -- Timing
-    time_unix_nano Int64 COMMENT 'Unix time (ns) when the event occurred. The writer substitutes observed_time_unix_nano when the producer sent 0 and drops records with neither, so this is never epoch zero.' CODEC(Delta, ZSTD),
-    observed_time_unix_nano Int64 COMMENT 'Unix time (ns) when the event was observed by the collection system. 0 when the producer omitted it.' CODEC(Delta, ZSTD),
-    timestamp DateTime64(9) DEFAULT fromUnixTimestamp64Nano(time_unix_nano) COMMENT 'Human-readable timestamp derived from time_unix_nano.',
-
-    -- Source
-    source LowCardinality(String) COMMENT 'Canonicalized producer surface derived from resource service.name at write time (e.g. claude-code, litellm). unknown when the resource carries no service.name.',
-
-    -- Trace context
-    trace_id String COMMENT 'Hex-encoded W3C trace id (32 chars). Empty when the record has no span context.' CODEC(ZSTD),
-    span_id String COMMENT 'Hex-encoded span id (16 chars). Empty when the record has no span context.' CODEC(ZSTD),
-
-    -- Log fields
-    event_name String COMMENT 'Event name for records that represent a named event (OTLP 1.5+). Empty otherwise.' CODEC(ZSTD),
-    severity_text LowCardinality(String) COMMENT 'Producer-supplied severity text (DEBUG, INFO, WARN, ERROR, FATAL). Empty when unclassified.',
-    severity_number Int32 COMMENT 'OTLP SeverityNumber enum value (1-24). 0 when unspecified.',
-    body String COMMENT 'Log body. String bodies are stored verbatim and structured bodies are JSON-encoded.' CODEC(ZSTD),
-    log_attributes JSON COMMENT 'Log record attributes, including Gram enrichments applied by the transform pipeline.' CODEC(ZSTD),
-    flags UInt32 COMMENT 'W3C trace flags for the emitting span context.',
-
-    -- Resource / scope context
-    resource_attributes JSON COMMENT 'Attributes of the resource that produced the record.' CODEC(ZSTD),
-    resource_schema_url String COMMENT 'Schema URL of the resource. Empty when not reported.' CODEC(ZSTD),
-    scope_name LowCardinality(String) COMMENT 'Instrumentation scope name. The transform pipeline rewrites this to com.speakeasy.ai.logging and keeps the producer scope in log_attributes under speakeasy.original_instrumentation_scope.name.',
-    scope_version String COMMENT 'Instrumentation scope version. Empty when not reported.' CODEC(ZSTD),
-    scope_attributes JSON COMMENT 'Instrumentation scope attributes.' CODEC(ZSTD)
-) ENGINE = MergeTree
-PARTITION BY toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))
-ORDER BY (organization_id, time_unix_nano)
-TTL fromUnixTimestamp64Nano(time_unix_nano) + INTERVAL 90 DAY
-SETTINGS index_granularity = 8192
-COMMENT 'Normalized OTel log records teed off the gram.otel.v1.LogRecord topic after transform/enrichment, powering the org-scoped Event Feed. Ingestion is at-least-once, so Pub/Sub redelivery can produce duplicate rows and readers must tolerate them.';
-
--- organization_id leads the ORDER BY, so no index is needed for it.
-CREATE INDEX IF NOT EXISTS idx_otel_logs_trace_id ON otel_logs (trace_id) TYPE bloom_filter(0.01) GRANULARITY 1;
-CREATE INDEX IF NOT EXISTS idx_otel_logs_event_name ON otel_logs (event_name) TYPE bloom_filter(0.01) GRANULARITY 1;
-CREATE INDEX IF NOT EXISTS idx_otel_logs_source ON otel_logs (source) TYPE set(0) GRANULARITY 4;
-CREATE INDEX IF NOT EXISTS idx_otel_logs_severity ON otel_logs (severity_text) TYPE set(0) GRANULARITY 4;
-
 CREATE TABLE IF NOT EXISTS otel_traces (
     -- Tenancy, stamped by the ingest edge from authenticated state.
     organization_id String COMMENT 'Organization the span belongs to, from the provenance stamped at the ingest edge.' CODEC(ZSTD),
@@ -1617,3 +2104,294 @@ COMMENT 'Normalized OTel spans teed off the gram.otel.v1.Span topic after transf
 CREATE INDEX IF NOT EXISTS idx_otel_traces_trace_id ON otel_traces (trace_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_otel_traces_span_name ON otel_traces (span_name) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_otel_traces_source ON otel_traces (source) TYPE set(0) GRANULARITY 4;
+
+-- This otel_logs trigger is the provider-OTel half of the Anthropic event
+-- adapter. Its deterministic source id folds at-least-once redeliveries before
+-- Explore counts canonical natural ids.
+CREATE MATERIALIZED VIEW IF NOT EXISTS chat_events_anthropic_provider_otel_mv TO chat_events AS
+WITH
+    lower(if(
+        otel_logs.event_name != '',
+        otel_logs.event_name,
+        toString(log_attributes.event.name)
+    )) AS normalized_event_name,
+    toString(log_attributes.request_id) AS normalized_request_id,
+    toString(log_attributes.tool_use_id) AS normalized_tool_call_id,
+    toString(log_attributes.message.id) AS normalized_message_id,
+    toString(log_attributes.session.id) AS normalized_session_id,
+    toString(log_attributes.prompt.id) AS normalized_turn_id,
+    toString(log_attributes.tool_name) AS normalized_tool_name,
+    if(
+        startsWith(normalized_tool_name, 'mcp__'),
+        arrayElement(splitByString('__', normalized_tool_name), 2),
+        ''
+    ) AS normalized_mcp_server,
+    if(
+        JSONHas(toString(log_attributes), 'gen_ai', 'request', 'model'),
+        toString(log_attributes.gen_ai.request.model),
+        if(
+            JSONHas(toString(log_attributes), 'model'),
+            toString(log_attributes.model),
+            CAST(NULL AS Nullable(String))
+        )
+    ) AS normalized_request_model,
+    if(
+        JSONHas(toString(log_attributes), 'gen_ai', 'response', 'model'),
+        toString(log_attributes.gen_ai.response.model),
+        CAST(NULL AS Nullable(String))
+    ) AS normalized_response_model,
+    reinterpretAsUUID(MD5(toString(tuple(
+        organization_id,
+        otel_logs.project_id,
+        time_unix_nano,
+        observed_time_unix_nano,
+        source,
+        trace_id,
+        span_id,
+        otel_logs.event_name,
+        severity_text,
+        severity_number,
+        body,
+        toJSONString(log_attributes),
+        flags,
+        toJSONString(resource_attributes),
+        resource_schema_url,
+        scope_name,
+        scope_version,
+        toJSONString(scope_attributes)
+    )))) AS source_event_id,
+    multiIf(
+        normalized_request_id != '', concat('request:', normalized_request_id),
+        normalized_tool_call_id != '', concat('tool:', normalized_tool_call_id),
+        normalized_message_id != '', concat('message:', normalized_message_id),
+        normalized_session_id != ''
+            AND normalized_turn_id != ''
+            AND normalized_event_name IN ('user_prompt', 'assistant_response'),
+            concat(
+                'turn-event:',
+                toString(length(normalized_session_id)), ':', normalized_session_id,
+                ':', toString(length(normalized_turn_id)), ':', normalized_turn_id,
+                ':', normalized_event_name
+            ),
+        concat('bronze:', toString(source_event_id))
+    ) AS source_natural_id
+SELECT
+    toUUID(otel_logs.project_id) AS project_id,
+    source_natural_id AS natural_id,
+    source_event_id AS src_event_id,
+    fromUnixTimestamp64Nano(time_unix_nano) AS occurred_at,
+    fromUnixTimestamp64Nano(if(
+        observed_time_unix_nano = 0,
+        time_unix_nano,
+        observed_time_unix_nano
+    )) AS observed_at,
+    'provider_otel' AS source_channel,
+    if(
+        otel_logs.event_name != '' OR JSONHas(toString(log_attributes), 'event', 'name'),
+        normalized_event_name,
+        NULL
+    ) AS event_name,
+    if(
+        JSONHas(toString(log_attributes), 'gram', 'provider'),
+        toString(log_attributes.gram.provider),
+        NULL
+    ) AS provider,
+    source AS surface,
+    if(
+        JSONHas(toString(log_attributes), 'gram', 'account_type'),
+        toString(log_attributes.gram.account_type),
+        NULL
+    ) AS account_type,
+    if(
+        JSONHas(toString(log_attributes), 'user', 'email'),
+        toString(log_attributes.user.email),
+        NULL
+    ) AS user_key,
+    if(
+        JSONHas(toString(log_attributes), 'session', 'id'),
+        normalized_session_id,
+        NULL
+    ) AS session_id,
+    if(
+        JSONHas(toString(log_attributes), 'prompt', 'id'),
+        normalized_turn_id,
+        NULL
+    ) AS turn_id,
+    if(
+        JSONHas(toString(log_attributes), 'query_source'),
+        toString(log_attributes.query_source),
+        NULL
+    ) AS query_source,
+    normalized_request_model AS request_model,
+    normalized_response_model AS response_model,
+    if(
+        JSONHas(toString(log_attributes), 'tool_name'),
+        normalized_tool_name,
+        NULL
+    ) AS tool_name,
+    if(normalized_mcp_server != '', normalized_mcp_server, NULL) AS mcp_server,
+    if(
+        toString(log_attributes.gram.tool.name) = 'Skill'
+            AND JSONHas(toString(log_attributes.gen_ai.tool.call.arguments), 'skill'),
+        JSONExtractString(toString(log_attributes.gen_ai.tool.call.arguments), 'skill'),
+        NULL
+    ) AS skill_name,
+    if(
+        normalized_event_name = 'api_error'
+            OR JSONHas(toString(log_attributes), 'success')
+            OR JSONHas(toString(log_attributes), 'status'),
+        multiIf(
+            normalized_event_name = 'api_error', 'error',
+            toString(log_attributes.success) = 'true', 'success',
+            toString(log_attributes.success) = 'false', 'error',
+            toString(log_attributes.status)
+        ),
+        NULL
+    ) AS status,
+    if(
+        JSONHas(toString(log_attributes), 'terminal', 'type'),
+        toString(log_attributes.terminal.type),
+        NULL
+    ) AS terminal,
+    if(
+        JSONHas(toString(log_attributes), 'duration_ms'),
+        toInt64OrZero(toString(log_attributes.duration_ms)),
+        NULL
+    ) AS duration_ms
+FROM otel_logs
+WHERE source = 'claude-code';
+
+-- This otel_logs trigger is the provider-OTel half of the Anthropic turn-usage
+-- adapter. Each request remains a component; the Explore read path deduplicates
+-- replayed components before summing the turn.
+CREATE MATERIALIZED VIEW IF NOT EXISTS chat_measurements_anthropic_turn_usage_provider_otel_mv TO chat_measurements AS
+WITH
+    lower(if(
+        otel_logs.event_name != '',
+        otel_logs.event_name,
+        toString(log_attributes.event.name)
+    )) AS normalized_event_name,
+    toString(log_attributes.request_id) AS normalized_request_id,
+    toString(log_attributes.session.id) AS normalized_session_id,
+    toString(log_attributes.prompt.id) AS normalized_turn_id,
+    if(
+        JSONHas(toString(log_attributes), 'gen_ai', 'request', 'model'),
+        toString(log_attributes.gen_ai.request.model),
+        if(
+            JSONHas(toString(log_attributes), 'model'),
+            toString(log_attributes.model),
+            CAST(NULL AS Nullable(String))
+        )
+    ) AS normalized_request_model,
+    if(
+        JSONHas(toString(log_attributes), 'gen_ai', 'response', 'model'),
+        toString(log_attributes.gen_ai.response.model),
+        CAST(NULL AS Nullable(String))
+    ) AS normalized_response_model,
+    reinterpretAsUUID(MD5(toString(tuple(
+        organization_id,
+        otel_logs.project_id,
+        time_unix_nano,
+        observed_time_unix_nano,
+        source,
+        trace_id,
+        span_id,
+        otel_logs.event_name,
+        severity_text,
+        severity_number,
+        body,
+        toJSONString(log_attributes),
+        flags,
+        toJSONString(resource_attributes),
+        resource_schema_url,
+        scope_name,
+        scope_version,
+        toJSONString(scope_attributes)
+    )))) AS source_event_id,
+    concat(
+        'turn:',
+        toString(length(normalized_session_id)), ':', normalized_session_id,
+        ':', toString(length(normalized_turn_id)), ':', normalized_turn_id
+    ) AS source_natural_id,
+    if(
+        normalized_request_id != '',
+        concat('request:', normalized_request_id),
+        concat('bronze:', toString(source_event_id))
+    ) AS source_component_id
+SELECT
+    toUUID(otel_logs.project_id) AS project_id,
+    'turn_usage' AS measurement_name,
+    source_natural_id AS natural_id,
+    source_component_id AS component_id,
+    source_event_id AS src_event_id,
+    fromUnixTimestamp64Nano(time_unix_nano) AS occurred_at,
+    fromUnixTimestamp64Nano(if(
+        observed_time_unix_nano = 0,
+        time_unix_nano,
+        observed_time_unix_nano
+    )) AS observed_at,
+    'provider_otel' AS source_channel,
+    'component' AS observation_kind,
+    CAST(NULL AS Nullable(String)) AS granularity,
+    if(
+        JSONHas(toString(log_attributes), 'gram', 'provider'),
+        toString(log_attributes.gram.provider),
+        NULL
+    ) AS provider,
+    source AS surface,
+    if(
+        JSONHas(toString(log_attributes), 'gram', 'account_type'),
+        toString(log_attributes.gram.account_type),
+        NULL
+    ) AS account_type,
+    if(
+        JSONHas(toString(log_attributes), 'user', 'email'),
+        toString(log_attributes.user.email),
+        NULL
+    ) AS user_key,
+    normalized_session_id AS session_id,
+    normalized_turn_id AS turn_id,
+    if(
+        JSONHas(toString(log_attributes), 'query_source'),
+        toString(log_attributes.query_source),
+        NULL
+    ) AS query_source,
+    normalized_request_model AS request_model,
+    normalized_response_model AS response_model,
+    if(
+        JSONHas(toString(log_attributes), 'cost_usd'),
+        toDecimal64OrZero(toString(log_attributes.cost_usd), 8),
+        NULL
+    ) AS cost_usd,
+    if(
+        JSONHas(toString(log_attributes), 'input_tokens'),
+        toUInt64(greatest(toInt64OrZero(toString(log_attributes.input_tokens)), 0)),
+        NULL
+    ) AS input_tokens,
+    if(
+        JSONHas(toString(log_attributes), 'output_tokens'),
+        toUInt64(greatest(toInt64OrZero(toString(log_attributes.output_tokens)), 0)),
+        NULL
+    ) AS output_tokens,
+    if(
+        JSONHas(toString(log_attributes), 'cache_read_tokens'),
+        toUInt64(greatest(toInt64OrZero(toString(log_attributes.cache_read_tokens)), 0)),
+        NULL
+    ) AS cache_read_tokens,
+    if(
+        JSONHas(toString(log_attributes), 'cache_creation_tokens'),
+        toUInt64(greatest(toInt64OrZero(toString(log_attributes.cache_creation_tokens)), 0)),
+        NULL
+    ) AS cache_write_tokens
+FROM otel_logs
+WHERE source = 'claude-code'
+  AND normalized_event_name = 'api_request'
+  AND normalized_session_id != ''
+  AND normalized_turn_id != ''
+  AND (
+      JSONHas(toString(log_attributes), 'cost_usd')
+      OR JSONHas(toString(log_attributes), 'input_tokens')
+      OR JSONHas(toString(log_attributes), 'output_tokens')
+      OR JSONHas(toString(log_attributes), 'cache_read_tokens')
+      OR JSONHas(toString(log_attributes), 'cache_creation_tokens')
+  );

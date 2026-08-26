@@ -767,6 +767,19 @@ type EnvironmentEntry struct {
 	UpdatedAt     pgtype.Timestamptz
 }
 
+type ExploreSavedQuery struct {
+	ID             uuid.UUID
+	OrganizationID string
+	Name           string
+	ChartType      string
+	TimeWindow     string
+	Spec           []byte
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
 type ExternalCredential struct {
 	ID             uuid.UUID
 	OrganizationID pgtype.Text

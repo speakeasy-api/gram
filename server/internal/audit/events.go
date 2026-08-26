@@ -26,6 +26,7 @@ const (
 	subjectTypeDeployment                  subjectType = "deployment"
 	subjectTypeDeviceIntegration           subjectType = "device_integration_config"
 	subjectTypeEnvironment                 subjectType = "environment"
+	subjectTypeExploreSavedQuery           subjectType = "explore_saved_query"
 	subjectTypeGcpIamCredential            subjectType = "gcp_iam_credential"
 	subjectTypeGcpKmsKey                   subjectType = "gcp_kms_key"
 	subjectTypeJsonWebKey                  subjectType = "json_web_key"

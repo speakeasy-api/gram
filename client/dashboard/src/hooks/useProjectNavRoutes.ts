@@ -84,6 +84,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       { route: routes.employees, scope: observe },
       { route: routes.costs, scope: observe },
       { route: routes.insights, scope: observe },
+      { route: routes.explore, scope: observe },
       { route: routes.agentSessions, scope: observe },
       ...(isOrgMemoryEnabled
         ? [{ route: routes.orgMemory, scope: observe }]

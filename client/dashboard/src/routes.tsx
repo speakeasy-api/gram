@@ -55,6 +55,7 @@ import {
   InsightsHooksPage,
   InsightsRoot,
 } from "./pages/insights/Insights";
+import { ExplorePage } from "./pages/explore/Explore";
 import Costs from "./pages/costs/Costs";
 import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
 import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
@@ -586,6 +587,13 @@ const ROUTE_STRUCTURE = {
     icon: "layout-dashboard",
     component: InsightsRoot,
     indexComponent: InsightsHooksPage,
+  },
+  explore: {
+    title: "Explore",
+    url: "explore",
+    icon: "telescope",
+    stage: "preview",
+    component: ExplorePage,
   },
   employees: {
     title: "Employee Enrollment",

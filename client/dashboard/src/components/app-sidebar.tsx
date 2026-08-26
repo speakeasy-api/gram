@@ -190,6 +190,7 @@ export function AppSidebar({
             items={[
               { item: routes.costs, ...accessFor(routes.costs) },
               { item: routes.insights, ...accessFor(routes.insights) },
+              { item: routes.explore, ...accessFor(routes.explore) },
               {
                 item: routes.agentSessions,
                 ...accessFor(routes.agentSessions),

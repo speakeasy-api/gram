@@ -25,6 +25,7 @@ import { Deployments } from "./deployments.js";
 import { DeviceIntegrations } from "./deviceintegrations.js";
 import { Domains } from "./domains.js";
 import { Environments } from "./environments.js";
+import { Explore } from "./explore.js";
 import { External } from "./external.js";
 import { ExternalCredentials } from "./externalcredentials.js";
 import { ExternalKeys } from "./externalkeys.js";
@@ -199,6 +200,11 @@ export class Gram extends ClientSDK {
   private _environments?: Environments;
   get environments(): Environments {
     return (this._environments ??= new Environments(this._options));
+  }
+
+  private _explore?: Explore;
+  get explore(): Explore {
+    return (this._explore ??= new Explore(this._options));
   }
 
   private _external?: External;
