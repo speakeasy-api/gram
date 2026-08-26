@@ -797,20 +797,6 @@ func (s *Service) MigrateToGlobalIssuer(ctx context.Context, payload *adminrsgen
 		return nil, err
 	}
 
-	// A tenant source issuer belongs to exactly one organization, which is what
-	// bounds the resync below; this surface refuses a global source.
-	affectedOrganizationID, err := resolveIssuerOrganizationID(ctx, txRepo, source)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "resolve owning organization for source issuer").LogError(ctx, logger)
-	}
-
-	// Before lockIssuersForMigration: the reverse order deadlocks against a
-	// concurrent client create or attach.
-	affectedUserIssuerIDs, err := prepareIssuerMigrationResync(ctx, dbtx, txRepo, source.ID, affectedOrganizationID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "prepare issuer migration resync").LogError(ctx, logger)
-	}
-
 	// Serialize against a concurrent client attach on either issuer before
 	// reading the conflict set, so the set we act on cannot go stale under us.
 	// Nothing in the schema enforces the one-client-per-(user_session_issuer,
@@ -829,15 +815,13 @@ func (s *Service) MigrateToGlobalIssuer(ctx context.Context, payload *adminrsgen
 		return nil, err
 	}
 
-	clientsMigrated, err := runIssuerMigration(ctx, dbtx, txRepo, logger, source, target, affectedOrganizationID, affectedUserIssuerIDs)
+	clientsMigrated, err := runIssuerMigration(ctx, txRepo, logger, source, target)
 	if err != nil {
 		return nil, err
 	}
 
 	// The source now has no active clients, so the delete guard that the
-	// tenant-facing deletes apply is satisfied by construction, and nothing can
-	// add one back: validateNewClientIssuers takes the client-binding lock held
-	// here before reading the issuer, so a racing create 404s or waits.
+	// tenant-facing deletes apply is satisfied by construction.
 	deleted, err := txRepo.DeleteTenantRemoteSessionIssuer(ctx, source.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "soft-delete migrated remote session issuer").LogError(ctx, logger)
@@ -845,6 +829,20 @@ func (s *Service) MigrateToGlobalIssuer(ctx context.Context, payload *adminrsgen
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+	}
+
+	// A legacy project-scoped issuer carries no organization_id of its own, so
+	// resolve it from the owning project rather than logging a blank tenant for
+	// the very rows convergence most often touches.
+	affectedOrganizationID := conv.FromPGTextOrEmpty[string](deleted.OrganizationID)
+	if affectedOrganizationID == "" && deleted.ProjectID.Valid {
+		if orgID, err := repo.New(s.db).GetProjectOrganizationID(ctx, deleted.ProjectID.UUID); err != nil {
+			// The migration has already committed; an unresolvable owner degrades
+			// the log rather than the outcome.
+			logger.WarnContext(ctx, "could not resolve owning organization for migrated issuer", attr.SlogError(err))
+		} else {
+			affectedOrganizationID = orgID
+		}
 	}
 
 	// This log line is the only durable record of the operation, and unlike every
@@ -1092,22 +1090,6 @@ func (s *Service) DeleteGlobalClient(ctx context.Context, payload *adminrsgen.De
 			return nil
 		}
 		return oops.E(oops.CodeUnexpected, err, "delete global remote session client").LogError(ctx, logger)
-	}
-
-	// A global client carries no bindings and no tenant can add one, so there is
-	// nothing to resync — and no tenant to scope a resync to. Checked rather
-	// than assumed: the invariant lives in another file's query and the join
-	// table has no tenancy column. A row here strands MCP servers on a value
-	// nothing can recompute.
-	boundUserIssuerIDs, err := txRepo.ListUserSessionIssuersBoundToClient(ctx, deleted.ID)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "list user session issuers bound to client").LogError(ctx, logger)
-	}
-	if len(boundUserIssuerIDs) > 0 {
-		logger.ErrorContext(ctx, "global remote session client had user session issuer bindings; mcp server issuer derivations may be stale",
-			attr.SlogRemoteSessionClientID(deleted.ID.String()),
-			attr.SlogRemoteSessionClientBindingCount(len(boundUserIssuerIDs)),
-		)
 	}
 
 	cascaded, err := txRepo.SoftDeleteRemoteSessionsByClientID(ctx, deleted.ID)

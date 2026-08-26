@@ -4155,79 +4155,7 @@ func (q *Queries) ListTenantRemoteSessionIssuersByIssuerURL(ctx context.Context,
 	return items, nil
 }
 
-const listUserSessionIssuersBoundToClient = `-- name: ListUserSessionIssuersBoundToClient :many
-SELECT link.user_session_issuer_id
-FROM remote_session_client_user_session_issuers AS link
-WHERE link.remote_session_client_id = $1
-ORDER BY link.user_session_issuer_id
-`
-
-// Unscoped, for the platform-admin DeleteGlobalClient, whose client sits in the
-// global partition. An integrity assertion, not a resync input: the expected
-// result is empty and any row is logged as unrepairable here.
-func (q *Queries) ListUserSessionIssuersBoundToClient(ctx context.Context, remoteSessionClientID uuid.UUID) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, listUserSessionIssuersBoundToClient, remoteSessionClientID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var user_session_issuer_id uuid.UUID
-		if err := rows.Scan(&user_session_issuer_id); err != nil {
-			return nil, err
-		}
-		items = append(items, user_session_issuer_id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listUserSessionIssuersBoundToOrganizationClient = `-- name: ListUserSessionIssuersBoundToOrganizationClient :many
-SELECT link.user_session_issuer_id
-FROM remote_session_client_user_session_issuers AS link
-JOIN remote_session_clients AS c
-  ON c.id = link.remote_session_client_id
-JOIN remote_session_issuers AS i
-  ON i.id = c.remote_session_issuer_id
-WHERE link.remote_session_client_id = $1
-  AND (i.organization_id = $2 OR c.organization_id = $2)
-ORDER BY link.user_session_issuer_id
-`
-
-type ListUserSessionIssuersBoundToOrganizationClientParams struct {
-	RemoteSessionClientID uuid.UUID
-	OrganizationID        pgtype.Text
-}
-
-// For the organization-admin DeleteClient: a client is the organization's when
-// either it or its issuer names the organization. Deliberately a superset of
-// what that delete acts on — resyncing an already-gone binding is a no-op,
-// missing one is not.
-func (q *Queries) ListUserSessionIssuersBoundToOrganizationClient(ctx context.Context, arg ListUserSessionIssuersBoundToOrganizationClientParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, listUserSessionIssuersBoundToOrganizationClient, arg.RemoteSessionClientID, arg.OrganizationID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var user_session_issuer_id uuid.UUID
-		if err := rows.Scan(&user_session_issuer_id); err != nil {
-			return nil, err
-		}
-		items = append(items, user_session_issuer_id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listUserSessionIssuersBoundToProjectClient = `-- name: ListUserSessionIssuersBoundToProjectClient :many
-
 SELECT link.user_session_issuer_id
 FROM remote_session_client_user_session_issuers AS link
 JOIN remote_session_clients AS c
@@ -4242,68 +4170,11 @@ type ListUserSessionIssuersBoundToProjectClientParams struct {
 	ProjectID             uuid.NullUUID
 }
 
-// The three queries below answer "which user session issuers does this
-// client's deletion change the derivation of", and differ only in the tenancy
-// each caller can prove. Each one's predicate must stay identical to the delete
-// it precedes: a read narrower than its delete strands servers on a value
-// nothing can recompute.
-//
-// All three run BEFORE that delete, because the derivation locks they feed must
-// precede every row lock. Ordered because callers take one lock per id.
-// For DeleteRemoteSessionClient. Mirrors the purge that follows it, which is
-// keyed on the client and its project and takes every binding the client holds.
+// The bindings DeleteRemoteSessionClient is about to purge, read first so the
+// post-commit resync knows which issuers to recompute. Mirrors the purge's own
+// predicate exactly: narrower would miss bindings the purge still deletes.
 func (q *Queries) ListUserSessionIssuersBoundToProjectClient(ctx context.Context, arg ListUserSessionIssuersBoundToProjectClientParams) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, listUserSessionIssuersBoundToProjectClient, arg.RemoteSessionClientID, arg.ProjectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var user_session_issuer_id uuid.UUID
-		if err := rows.Scan(&user_session_issuer_id); err != nil {
-			return nil, err
-		}
-		items = append(items, user_session_issuer_id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listUserSessionIssuersBoundToRemoteIssuer = `-- name: ListUserSessionIssuersBoundToRemoteIssuer :many
-SELECT DISTINCT link.user_session_issuer_id
-FROM remote_session_client_user_session_issuers AS link
-JOIN remote_session_clients AS c
-  ON c.id = link.remote_session_client_id
-JOIN user_session_issuers AS usi
-  ON usi.id = link.user_session_issuer_id
-LEFT JOIN projects AS usi_project
-  ON usi_project.id = usi.project_id
-WHERE c.remote_session_issuer_id = $1
-  AND COALESCE(usi_project.organization_id, usi.organization_id) = $2::text
-ORDER BY link.user_session_issuer_id
-`
-
-type ListUserSessionIssuersBoundToRemoteIssuerParams struct {
-	RemoteSessionIssuerID uuid.UUID
-	OrganizationID        string
-}
-
-// Every user session issuer reachable from a remote issuer through the client
-// bindings. Only caller is the issuer migration, which re-points clients and so
-// changes what the servers behind them derive without touching the bindings.
-//
-// Soft-deleted clients count on purpose: a tombstoned client still names an
-// issuer whose stale value has to be recomputed.
-//
-// Scoped by organization, not project: a re-point moves the client itself, so
-// every project behind it derives a new value.
-//
-// Ordered because callers take one advisory lock per returned id.
-func (q *Queries) ListUserSessionIssuersBoundToRemoteIssuer(ctx context.Context, arg ListUserSessionIssuersBoundToRemoteIssuerParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, listUserSessionIssuersBoundToRemoteIssuer, arg.RemoteSessionIssuerID, arg.OrganizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -4403,32 +4274,6 @@ SELECT pg_advisory_xact_lock(hashtextextended(($1::uuid)::text, 0))
 // id order so two concurrent migrations cannot deadlock.
 func (q *Queries) LockRemoteSessionIssuerForClientBinding(ctx context.Context, remoteSessionIssuerID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, lockRemoteSessionIssuerForClientBinding, remoteSessionIssuerID)
-	return err
-}
-
-const lockUserSessionIssuerForRemoteIssuerDerivation = `-- name: LockUserSessionIssuerForRemoteIssuerDerivation :exec
-SELECT pg_advisory_xact_lock(hashtextextended('user_session_issuer_derivation:' || ($1::uuid)::text, 0))
-`
-
-// Serializes every writer that can change what
-// mcp_servers.remote_session_issuer_id derives to for one user session issuer.
-// LockRemoteSessionIssuerForClientBinding does not cover this: it keys on the
-// REMOTE issuer, and one user session issuer may bind clients across several.
-//
-// The key is salted because the sibling lock hashes bare uuids into the same
-// advisory key space.
-//
-// LOCK ORDER: this must be the FIRST lock a transaction takes, before any
-// mcp_servers, remote_session_clients or binding row lock. DeleteMcpServer
-// locks mcp_servers then reaches the resync's client rows while every
-// remotesessions writer goes the other way; only taking this first breaks the
-// cycle. Callers taking more than one MUST sort ascending.
-//
-// Takes no tenant scope, deliberately: a tenancy predicate would yield no row
-// for anything it rejects and so silently take NO lock. Every write it guards
-// is separately bounded by the caller's ResyncScope.
-func (q *Queries) LockUserSessionIssuerForRemoteIssuerDerivation(ctx context.Context, userSessionIssuerID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, lockUserSessionIssuerForRemoteIssuerDerivation, userSessionIssuerID)
 	return err
 }
 
@@ -5010,23 +4855,6 @@ func (q *Queries) TouchRemoteSessionLastUsed(ctx context.Context, arg TouchRemot
 		arg.UsedCutoff,
 	)
 	return err
-}
-
-const tryLockUserSessionIssuerForRemoteIssuerDerivation = `-- name: TryLockUserSessionIssuerForRemoteIssuerDerivation :one
-SELECT pg_try_advisory_xact_lock(hashtextextended('user_session_issuer_derivation:' || ($1::uuid)::text, 0))
-`
-
-// Non-blocking form, for the one caller that reaches for a derivation lock
-// while already holding LockRemoteSessionIssuerForClientBinding: the issuer
-// migration. Blocking there would invert the lock order above and deadlock, so
-// it fails as a retryable conflict instead.
-//
-// The key expression must stay byte-identical to the blocking form's.
-func (q *Queries) TryLockUserSessionIssuerForRemoteIssuerDerivation(ctx context.Context, userSessionIssuerID uuid.UUID) (bool, error) {
-	row := q.db.QueryRow(ctx, tryLockUserSessionIssuerForRemoteIssuerDerivation, userSessionIssuerID)
-	var pg_try_advisory_xact_lock bool
-	err := row.Scan(&pg_try_advisory_xact_lock)
-	return pg_try_advisory_xact_lock, err
 }
 
 const updateGlobalRemoteSessionClient = `-- name: UpdateGlobalRemoteSessionClient :one

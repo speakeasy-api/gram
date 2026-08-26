@@ -520,15 +520,6 @@ SELECT blob_url, consumed_at
 FROM session_handoff_links
 WHERE token = @token;
 
--- name: CreateOrganizationTierUserSessionIssuerFixture :one
--- Mints an organization-tier user session issuer (project_id NULL). No
--- production path creates one yet, but the derivation must handle the shape:
--- the arm that skips it also skips clearing a value written while the issuer
--- was project-scoped.
-INSERT INTO user_session_issuers (project_id, organization_id, slug, authn_challenge_mode, session_duration)
-VALUES (NULL, @organization_id, @slug, 'interactive', @session_duration)
-RETURNING id;
-
 -- name: ForceSoftDeleteRemoteSessionIssuerFixture :exec
 -- Tombstones a remote session issuer regardless of its clients. Production
 -- deletes refuse while a live client references it, so this is the only way to

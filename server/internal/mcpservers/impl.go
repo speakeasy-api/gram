@@ -802,28 +802,6 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 
 	txRepo := repo.New(dbtx)
 
-	// LOCK ORDER. This is the only transaction that locks mcp_servers and then
-	// reaches remote_session_clients, through the issuer cascade below. Every
-	// remotesessions writer goes the other way, so the derivation lock must be
-	// taken here ahead of every row lock or the two orders form a cycle.
-	//
-	// That needs the issuer id before the row lock that would confirm it, so
-	// read it unlocked and re-check under the lock below.
-	preLockServer, err := txRepo.GetMCPServerByIDAndProjectID(ctx, repo.GetMCPServerByIDAndProjectIDParams{
-		ID:        serverID,
-		ProjectID: *authCtx.ProjectID,
-	})
-	switch {
-	case err == nil:
-		if err := remotesessions.LockUserSessionIssuersForRemoteIssuerDerivation(ctx, dbtx, nullUUIDSlice(preLockServer.UserSessionIssuerID)); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "lock user session issuers for remote issuer derivation").LogError(ctx, logger)
-		}
-	case errors.Is(err, pgx.ErrNoRows):
-		// Leave the NotFound to the locked read below.
-	default:
-		return oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, logger)
-	}
-
 	affectedDomainIDs, err := mcpendpointsrepo.New(dbtx).ListCustomDomainIDsByMCPServerID(ctx, mcpendpointsrepo.ListCustomDomainIDsByMCPServerIDParams{
 		McpServerID: serverID,
 		ProjectID:   *authCtx.ProjectID,
@@ -841,23 +819,14 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "lock mcp endpoints").LogError(ctx, logger)
 	}
-	lockedServer, err := txRepo.LockMCPServerByIDAndProjectID(ctx, repo.LockMCPServerByIDAndProjectIDParams{
+	if _, err := txRepo.LockMCPServerByIDAndProjectID(ctx, repo.LockMCPServerByIDAndProjectIDParams{
 		ID:        serverID,
 		ProjectID: *authCtx.ProjectID,
-	})
-	if err != nil {
+	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeNotFound, err, "mcp server not found").LogError(ctx, logger)
 		}
 		return oops.E(oops.CodeUnexpected, err, "lock mcp server").LogError(ctx, logger)
-	}
-
-	// A concurrent update can attach an issuer to a server the pre-read saw
-	// without one. Bail rather than hold the wrong lock: taking the right one
-	// now is the out-of-order acquisition this ordering exists to prevent. A
-	// retry succeeds, the issuer being visible to the pre-read by then.
-	if lockedServer.UserSessionIssuerID != preLockServer.UserSessionIssuerID {
-		return oops.E(oops.CodeConflict, nil, "mcp server changed while preparing the delete; retry").LogError(ctx, logger)
 	}
 	// Post-server-lock read is the authoritative root set: the server FOR SHARE in root selection means no new root can commit past this point, and rows here carry pre-delete is_domain_root.
 	rootEndpoints, err := mcpendpointsrepo.New(dbtx).LockMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.LockMCPEndpointsByMCPServerIDParams{
@@ -1346,13 +1315,4 @@ func verifyServerReferenceOwnership(
 	}
 
 	return nil
-}
-
-// nullUUIDSlice renders an optional id as the zero-or-one element slice the
-// batch lock helpers take.
-func nullUUIDSlice(id uuid.NullUUID) []uuid.UUID {
-	if !id.Valid {
-		return nil
-	}
-	return []uuid.UUID{id.UUID}
 }

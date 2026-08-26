@@ -1018,14 +1018,6 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orgissuersgen.Migr
 		return nil, err
 	}
 
-	// Before lockIssuersForMigration: the reverse order deadlocks against a
-	// concurrent client create or attach. loadMigrationPair already established
-	// both issuers as this organization's.
-	affectedUserIssuerIDs, err := prepareIssuerMigrationResync(ctx, dbtx, txRepo, source.ID, authCtx.ActiveOrganizationID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "prepare issuer migration resync").LogError(ctx, logger)
-	}
-
 	// Serialize against a concurrent client attach on either issuer before
 	// reading the conflict set, so the set we act on cannot go stale under us.
 	// Nothing in the schema enforces the one-client-per-(user_session_issuer,
@@ -1045,15 +1037,13 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orgissuersgen.Migr
 		return nil, err
 	}
 
-	clientsMigrated, err := runIssuerMigration(ctx, dbtx, txRepo, logger, source, target, authCtx.ActiveOrganizationID, affectedUserIssuerIDs)
+	clientsMigrated, err := runIssuerMigration(ctx, txRepo, logger, source, target)
 	if err != nil {
 		return nil, err
 	}
 
 	// The source now has no active clients, so the delete guard that
-	// DeleteIssuer applies is satisfied by construction, and nothing can add one
-	// back: validateNewClientIssuers takes the client-binding lock held here
-	// before reading the issuer, so a racing create 404s or waits.
+	// DeleteIssuer applies is satisfied by construction.
 	deleted, err := txRepo.DeleteOrganizationRemoteSessionIssuer(ctx, repo.DeleteOrganizationRemoteSessionIssuerParams{
 		ID:             source.ID,
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),

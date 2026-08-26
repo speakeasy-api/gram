@@ -302,11 +302,6 @@ func (s *CatalogIdentityProviderAttachmentService) createAndAttachClient(ctx con
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := remotesessionsrepo.New(tx)
-	// Before the remote-issuer advisory lock: the derivation lock is the first
-	// lock every writer on this data takes.
-	if err := remotesessions.LockUserSessionIssuersForRemoteIssuerDerivation(ctx, tx, []uuid.UUID{userSessionIssuerID}); err != nil {
-		return false, fmt.Errorf("lock user session issuer derivation: %w", err)
-	}
 	if err := q.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
 		return false, fmt.Errorf("lock identity provider for client attachment: %w", err)
 	}
@@ -363,9 +358,6 @@ func (s *CatalogIdentityProviderAttachmentService) createAndAttachClient(ctx con
 	}
 	if err := q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: client.ID, UserSessionIssuerID: userSessionIssuerID}); err != nil {
 		return false, fmt.Errorf("attach identity-provider client to registered MCP: %w", err)
-	}
-	if err := remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, tx, remotesessions.ProjectResyncScope(principal.OrganizationID, project.ID), []uuid.UUID{userSessionIssuerID}); err != nil {
-		return false, fmt.Errorf("resync mcp server remote session issuers: %w", err)
 	}
 	if err := s.audit.LogRemoteSessionClientCreate(ctx, tx, audit.LogRemoteSessionClientCreateEvent{
 		OrganizationID:         principal.OrganizationID,

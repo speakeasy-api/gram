@@ -8,10 +8,8 @@ package remotesessions_test
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -52,24 +50,6 @@ func seedServerOnIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, p
 	return server.ID
 }
 
-// createOrgTierUserSessionIssuer creates an organization-tier user session
-// issuer (project_id NULL). No repo method mints one yet, but the resync must
-// handle the shape: the arm that skips it also skips clearing.
-func createOrgTierUserSessionIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID, slug string) uuid.UUID {
-	t.Helper()
-
-	id, err := testrepo.New(conn).CreateOrganizationTierUserSessionIssuerFixture(ctx, testrepo.CreateOrganizationTierUserSessionIssuerFixtureParams{
-		OrganizationID:  conv.ToPGText(organizationID),
-		Slug:            slug,
-		SessionDuration: pgtype.Interval{Microseconds: int64(time.Hour / time.Microsecond), Days: 0, Months: 0, Valid: true},
-	})
-	require.NoError(t, err)
-	return id
-}
-
-// softDeleteRemoteIssuer tombstones a remote session issuer directly. Every
-// handler refuses to delete one while a live client references it, so this is
-// the only way to build the state the derivation has to reject.
 func softDeleteRemoteIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, remoteIssuerID uuid.UUID) {
 	t.Helper()
 
@@ -95,9 +75,9 @@ func stampIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, serverID
 	}))
 }
 
-func resync(t *testing.T, ctx context.Context, conn *pgxpool.Pool, scope remotesessions.ResyncScope, userIssuerIDs ...uuid.UUID) {
+func resync(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, projectID uuid.UUID, userIssuerIDs ...uuid.UUID) {
 	t.Helper()
-	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, conn, scope, userIssuerIDs))
+	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, conn, organizationID, projectID, userIssuerIDs))
 }
 
 func TestResyncMCPServerRemoteSessionIssuers(t *testing.T) {
@@ -109,7 +89,6 @@ func TestResyncMCPServerRemoteSessionIssuers(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 	projectID := *authCtx.ProjectID
 	orgID := authCtx.ActiveOrganizationID
-	scope := remotesessions.ProjectResyncScope(orgID, projectID)
 
 	t.Run("one bound client stamps its issuer", func(t *testing.T) {
 		t.Parallel()
@@ -119,7 +98,7 @@ func TestResyncMCPServerRemoteSessionIssuers(t *testing.T) {
 		require.False(t, storedIssuer(t, ctx, ti.conn, projectID, serverID).Valid, "a fresh server names no issuer")
 
 		_, remoteIssuerID := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-sync-one")
-		resync(t, ctx, ti.conn, scope, userIssuerID)
+		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
 
 		require.Equal(t, uuid.NullUUID{UUID: remoteIssuerID, Valid: true}, storedIssuer(t, ctx, ti.conn, projectID, serverID))
 	})
@@ -131,13 +110,13 @@ func TestResyncMCPServerRemoteSessionIssuers(t *testing.T) {
 		serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "sync-two")
 
 		seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-sync-two-a")
-		resync(t, ctx, ti.conn, scope, userIssuerID)
+		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
 		require.True(t, storedIssuer(t, ctx, ti.conn, projectID, serverID).Valid, "one issuer stamps, or the second adds nothing")
 
 		// AIS-137 dropped the one-client-per-user-session-issuer index, so this
 		// is representable; a scalar column cannot say which, so it says none.
 		seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-sync-two-b")
-		resync(t, ctx, ti.conn, scope, userIssuerID)
+		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
 		require.False(t, storedIssuer(t, ctx, ti.conn, projectID, serverID).Valid, "an ambiguous derivation must fail closed, not pick one")
 	})
 
@@ -148,7 +127,7 @@ func TestResyncMCPServerRemoteSessionIssuers(t *testing.T) {
 		serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "sync-del")
 
 		clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-sync-del")
-		resync(t, ctx, ti.conn, scope, userIssuerID)
+		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
 		require.True(t, storedIssuer(t, ctx, ti.conn, projectID, serverID).Valid)
 
 		// The binding row survives the soft delete, so nothing but the resync
@@ -159,7 +138,7 @@ func TestResyncMCPServerRemoteSessionIssuers(t *testing.T) {
 			ProjectID: conv.ToNullUUID(projectID),
 		})
 		require.NoError(t, err)
-		resync(t, ctx, ti.conn, scope, userIssuerID)
+		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
 
 		require.False(t, storedIssuer(t, ctx, ti.conn, projectID, serverID).Valid, "a soft-deleted client must not keep qualifying a server")
 	})
@@ -172,14 +151,14 @@ func TestResyncMCPServerRemoteSessionIssuers(t *testing.T) {
 
 		_, deadIssuerID := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-sync-dead")
 		softDeleteRemoteIssuer(t, ctx, ti.conn, deadIssuerID)
-		resync(t, ctx, ti.conn, scope, userIssuerID)
+		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
 		require.False(t, storedIssuer(t, ctx, ti.conn, projectID, serverID).Valid,
 			"the runtime resolver skips a tombstoned issuer, so the column must not name one")
 
 		// With the tombstoned issuer excluded, a single live client is
 		// unambiguous rather than one of two.
 		_, liveIssuerID := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-sync-live")
-		resync(t, ctx, ti.conn, scope, userIssuerID)
+		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
 		require.Equal(t, uuid.NullUUID{UUID: liveIssuerID, Valid: true}, storedIssuer(t, ctx, ti.conn, projectID, serverID))
 	})
 
@@ -195,7 +174,7 @@ func TestResyncMCPServerRemoteSessionIssuers(t *testing.T) {
 		otherProjectID := createProject(t, ctx, ti.conn, "sync-xclient-project")
 		seedActiveClient(t, ctx, ti.conn, otherProjectID, userIssuerID, orgID, "rsi-sync-xclient")
 
-		resync(t, ctx, ti.conn, scope, userIssuerID)
+		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
 		require.False(t, storedIssuer(t, ctx, ti.conn, projectID, serverID).Valid,
 			"a client owned by another project must not qualify this project's server")
 	})
@@ -212,7 +191,7 @@ func TestResyncMCPServerRemoteSessionIssuers(t *testing.T) {
 
 		strandedServerID := seedServerOnIssuer(t, ctx, ti.conn, projectID, foreignIssuerID, "sync-xissuer")
 
-		resync(t, ctx, ti.conn, remotesessions.OrganizationResyncScope(orgID), foreignIssuerID)
+		resync(t, ctx, ti.conn, orgID, projectID, foreignIssuerID)
 		require.False(t, storedIssuer(t, ctx, ti.conn, projectID, strandedServerID).Valid,
 			"an issuer owned by another project must not reach this project's server")
 
@@ -220,7 +199,7 @@ func TestResyncMCPServerRemoteSessionIssuers(t *testing.T) {
 		// assertion above is about tenancy and not about the row being
 		// unreachable for some other reason.
 		ownServerID := seedServerOnIssuer(t, ctx, ti.conn, otherProjectID, foreignIssuerID, "sync-xissuer-own")
-		resync(t, ctx, ti.conn, remotesessions.OrganizationResyncScope(orgID), foreignIssuerID)
+		resync(t, ctx, ti.conn, orgID, otherProjectID, foreignIssuerID)
 		require.Equal(t, uuid.NullUUID{UUID: foreignRemoteIssuerID, Valid: true},
 			storedIssuer(t, ctx, ti.conn, otherProjectID, ownServerID))
 	})
@@ -236,12 +215,12 @@ func TestResyncMCPServerRemoteSessionIssuers(t *testing.T) {
 		// caller's own scope is the only thing standing between a stray id and
 		// a cross-tenant write.
 		otherOrgID := createOrganization(t, ctx, ti.conn, "sync-xorg-other")
-		resync(t, ctx, ti.conn, remotesessions.OrganizationResyncScope(otherOrgID), userIssuerID)
+		resync(t, ctx, ti.conn, otherOrgID, projectID, userIssuerID)
 		require.False(t, storedIssuer(t, ctx, ti.conn, projectID, serverID).Valid,
 			"a caller outside the organization must not write its servers")
 
 		// And the same call from the owning organization does write it.
-		resync(t, ctx, ti.conn, scope, userIssuerID)
+		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
 		require.True(t, storedIssuer(t, ctx, ti.conn, projectID, serverID).Valid)
 	})
 
@@ -253,28 +232,28 @@ func TestResyncMCPServerRemoteSessionIssuers(t *testing.T) {
 		serverID := seedServerOnIssuer(t, ctx, ti.conn, otherProjectID, userIssuerID, "sync-narrow")
 		seedActiveClient(t, ctx, ti.conn, otherProjectID, userIssuerID, orgID, "rsi-sync-narrow")
 
-		resync(t, ctx, ti.conn, scope, userIssuerID)
+		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
 		require.False(t, storedIssuer(t, ctx, ti.conn, otherProjectID, serverID).Valid,
 			"a project scope must not widen to a sibling project in the same organization")
 
-		resync(t, ctx, ti.conn, remotesessions.ProjectResyncScope(orgID, otherProjectID), userIssuerID)
+		resync(t, ctx, ti.conn, orgID, otherProjectID, userIssuerID)
 		require.True(t, storedIssuer(t, ctx, ti.conn, otherProjectID, serverID).Valid)
 	})
 
-	t.Run("an organization-tier issuer is stamped and cleared", func(t *testing.T) {
+	t.Run("an organization-level client counts toward a project issuer", func(t *testing.T) {
 		t.Parallel()
 
-		// project_id is NULL, so s.project_id = usi.project_id matches nothing.
-		// Fails closed for stamping but open for clearing — the dangerous half.
-		orgIssuerID := createOrgTierUserSessionIssuer(t, ctx, ti.conn, orgID, "usi-sync-orgtier")
-		serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, orgIssuerID, "sync-orgtier")
+		// The attach surface lets a project admin bind an org-level client to
+		// their own issuer, so the derivation must count it — and stop counting
+		// it once it is gone.
+		userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-sync-orgclient")
+		serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "sync-orgclient")
 
-		orgRemoteIssuerID := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, orgID, "rsi-sync-orgtier")
-		clientID := seedOrgLevelRemoteClient(t, ctx, ti.conn, orgID, orgRemoteIssuerID, "cid-sync-orgtier", orgIssuerID)
+		orgRemoteIssuerID := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, orgID, "rsi-sync-orgclient")
+		clientID := seedOrgLevelRemoteClient(t, ctx, ti.conn, orgID, orgRemoteIssuerID, "cid-sync-orgclient", userIssuerID)
 
-		resync(t, ctx, ti.conn, scope, orgIssuerID)
-		require.Equal(t, uuid.NullUUID{UUID: orgRemoteIssuerID, Valid: true}, storedIssuer(t, ctx, ti.conn, projectID, serverID),
-			"an organization-tier issuer must reach the servers in its organization's projects")
+		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
+		require.Equal(t, uuid.NullUUID{UUID: orgRemoteIssuerID, Valid: true}, storedIssuer(t, ctx, ti.conn, projectID, serverID))
 
 		_, err := repo.New(ti.conn).DeleteOrganizationRemoteSessionClient(ctx, repo.DeleteOrganizationRemoteSessionClientParams{
 			ID:             clientID,
@@ -282,9 +261,8 @@ func TestResyncMCPServerRemoteSessionIssuers(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		resync(t, ctx, ti.conn, scope, orgIssuerID)
-		require.False(t, storedIssuer(t, ctx, ti.conn, projectID, serverID).Valid,
-			"clearing is the half that fails open when the organization arm is missing")
+		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
+		require.False(t, storedIssuer(t, ctx, ti.conn, projectID, serverID).Valid)
 	})
 
 	t.Run("resync is idempotent and safe on unknown issuers", func(t *testing.T) {
@@ -294,12 +272,12 @@ func TestResyncMCPServerRemoteSessionIssuers(t *testing.T) {
 		serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "sync-idem")
 		seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-sync-idem")
 
-		resync(t, ctx, ti.conn, scope, userIssuerID)
+		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
 		first := storedIssuer(t, ctx, ti.conn, projectID, serverID)
-		resync(t, ctx, ti.conn, scope, userIssuerID, uuid.New())
+		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID, uuid.New())
 		require.Equal(t, first, storedIssuer(t, ctx, ti.conn, projectID, serverID))
 
-		require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, scope, nil), "an empty set is a no-op, not an error")
+		require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, nil), "an empty set is a no-op, not an error")
 	})
 
 	t.Run("a resync without a tenant scope is rejected", func(t *testing.T) {
@@ -310,26 +288,19 @@ func TestResyncMCPServerRemoteSessionIssuers(t *testing.T) {
 		_, remoteIssuerID := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-sync-noscope")
 		stampIssuer(t, ctx, ti.conn, serverID, remoteIssuerID)
 
-		// The zero ResyncScope is what a caller that forgot to pass one would
-		// produce, and it must not read as "every tenant".
-		err := remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, remotesessions.ResyncScope{}, []uuid.UUID{userIssuerID})
-		require.Error(t, err)
+		// A missing scope is a caller bug and must not read as "every tenant" —
+		// even with the empty id set that would otherwise short-circuit.
+		require.Error(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, "", projectID, []uuid.UUID{userIssuerID}))
+		require.Error(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, uuid.Nil, []uuid.UUID{userIssuerID}))
+		require.Error(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, "", uuid.Nil, nil))
 		require.Equal(t, uuid.NullUUID{UUID: remoteIssuerID, Valid: true}, storedIssuer(t, ctx, ti.conn, projectID, serverID),
 			"a rejected resync must not have written anything")
-
-		// An empty set is the one input that would otherwise slip past the
-		// scope check, and a caller holding one is no more entitled to skip
-		// its scope than any other.
-		require.Error(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, remotesessions.ResyncScope{}, nil),
-			"a missing scope is a caller bug whatever the id set happens to be")
 	})
 }
 
-// TestListUserSessionIssuersBoundToClient_Scoping covers the reads the three
-// client deletes take before proving ownership, so the tenancy has to live in
-// the query. The platform-admin form is deliberately unscoped — an integrity
-// assertion, not a resync input.
-func TestListUserSessionIssuersBoundToClient_Scoping(t *testing.T) {
+// The read DeleteRemoteSessionClient takes before its purge: the tenancy has
+// to live in the query, since an unowned client must yield nothing.
+func TestListUserSessionIssuersBoundToProjectClient_Scoping(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -358,30 +329,4 @@ func TestListUserSessionIssuersBoundToClient_Scoping(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Empty(t, foreign, "a sibling project must not read another project's client's bindings")
-
-	orgIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-bindscope-org")
-	orgRemoteIssuerID := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, orgID, "rsi-bindscope-org")
-	orgClientID := seedOrgLevelRemoteClient(t, ctx, ti.conn, orgID, orgRemoteIssuerID, "cid-bindscope-org", orgIssuerID)
-
-	ownedByOrg, err := q.ListUserSessionIssuersBoundToOrganizationClient(ctx, repo.ListUserSessionIssuersBoundToOrganizationClientParams{
-		RemoteSessionClientID: orgClientID,
-		OrganizationID:        conv.ToPGText(orgID),
-	})
-	require.NoError(t, err)
-	require.Equal(t, []uuid.UUID{orgIssuerID}, ownedByOrg)
-
-	otherOrgID := createOrganization(t, ctx, ti.conn, "bindscope-other-org")
-	foreignByOrg, err := q.ListUserSessionIssuersBoundToOrganizationClient(ctx, repo.ListUserSessionIssuersBoundToOrganizationClientParams{
-		RemoteSessionClientID: orgClientID,
-		OrganizationID:        conv.ToPGText(otherOrgID),
-	})
-	require.NoError(t, err)
-	require.Empty(t, foreignByOrg, "another organization must not read this organization's client's bindings")
-
-	// The unscoped form still reports everything, which is the whole point of
-	// keeping it: the platform-admin delete uses it to notice bindings that
-	// should be impossible on a global client.
-	unscoped, err := q.ListUserSessionIssuersBoundToClient(ctx, orgClientID)
-	require.NoError(t, err)
-	require.Equal(t, []uuid.UUID{orgIssuerID}, unscoped)
 }

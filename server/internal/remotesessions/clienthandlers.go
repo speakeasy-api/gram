@@ -152,12 +152,6 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 
 	txRepo := repo.New(dbtx)
 
-	// Before validateNewClientIssuers takes the remote-issuer advisory lock: the
-	// derivation lock is first in every transaction, advisory locks included.
-	if err := LockUserSessionIssuersForRemoteIssuerDerivation(ctx, dbtx, userIssuerIDs); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "lock user session issuers for remote issuer derivation").LogError(ctx, logger)
-	}
-
 	if _, err := s.validateNewClientIssuers(ctx, logger, txRepo, *authCtx.ProjectID, authCtx.ActiveOrganizationID, issuerID, userIssuerIDs); err != nil {
 		return nil, err
 	}
@@ -217,11 +211,6 @@ func (s *Service) CreateCimd(ctx context.Context, payload *gen.CreateCimdPayload
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
-
-	// Derivation lock first, as on the create path.
-	if err := LockUserSessionIssuersForRemoteIssuerDerivation(ctx, dbtx, userIssuerIDs); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "lock user session issuers for remote issuer derivation").LogError(ctx, logger)
-	}
 
 	issuer, err := s.validateNewClientIssuers(ctx, logger, txRepo, *authCtx.ProjectID, authCtx.ActiveOrganizationID, issuerID, userIssuerIDs)
 	if err != nil {
@@ -352,10 +341,6 @@ func (s *Service) finalizeClientCreate(
 		}
 	}
 
-	if err := ResyncMCPServerRemoteSessionIssuers(ctx, dbtx, ProjectResyncScope(authCtx.ActiveOrganizationID, *authCtx.ProjectID), userIssuerIDs); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "resync mcp server remote session issuers").LogError(ctx, logger)
-	}
-
 	if err := s.auditLogger.LogRemoteSessionClientCreate(ctx, dbtx, audit.LogRemoteSessionClientCreateEvent{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
@@ -371,6 +356,10 @@ func (s *Service) finalizeClientCreate(
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
+
+	// Post-commit and best-effort: a failed recompute leaves a stale value the
+	// next binding change heals, not a failed create.
+	BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, userIssuerIDs)
 
 	view, err := mv.BuildRemoteSessionClientView(created, userIssuerIDs)
 	if err != nil {
@@ -605,12 +594,6 @@ func (s *Service) AttachUserSessionIssuer(ctx context.Context, payload *gen.Atta
 
 	txRepo := repo.New(dbtx)
 
-	// First lock in the transaction, before the client read and the guard's
-	// remote-issuer advisory lock.
-	if err := LockUserSessionIssuersForRemoteIssuerDerivation(ctx, dbtx, []uuid.UUID{userIssuerID}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "lock user session issuers for remote issuer derivation").LogError(ctx, logger)
-	}
-
 	// Resolve the client (the project's own or an organization-level client in
 	// the project's org) so a project admin can attach an org-level client to
 	// their own user_session_issuer.
@@ -697,13 +680,6 @@ func (s *Service) DetachUserSessionIssuer(ctx context.Context, payload *gen.Deta
 
 	txRepo := repo.New(dbtx)
 
-	// First lock in the transaction, and this path takes no other: without it two
-	// concurrent detaches each recompute from a snapshot holding the other's
-	// binding.
-	if err := LockUserSessionIssuersForRemoteIssuerDerivation(ctx, dbtx, []uuid.UUID{userIssuerID}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "lock user session issuers for remote issuer derivation").LogError(ctx, logger)
-	}
-
 	// Resolve the client (the project's own or an organization-level client in
 	// the project's org) before mutating the project-agnostic join table, so a
 	// project admin can detach an org-level client from their own
@@ -769,10 +745,6 @@ func (s *Service) commitClientAttachmentChange(
 	touchedUserIssuerIDs []uuid.UUID,
 	auditFn func(ctx context.Context, dbtx pgx.Tx) error,
 ) (*types.RemoteSessionClient, error) {
-	if err := ResyncMCPServerRemoteSessionIssuers(ctx, dbtx, ProjectResyncScope(authCtx.ActiveOrganizationID, *authCtx.ProjectID), touchedUserIssuerIDs); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "resync mcp server remote session issuers").LogError(ctx, logger)
-	}
-
 	updated, err := txRepo.GetRemoteSessionClientByID(ctx, repo.GetRemoteSessionClientByIDParams{
 		ID:             clientID,
 		ProjectID:      *authCtx.ProjectID,
@@ -794,6 +766,10 @@ func (s *Service) commitClientAttachmentChange(
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
+
+	// Post-commit and best-effort: a failed recompute leaves a stale value the
+	// next binding change heals, not a failed request.
+	BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, touchedUserIssuerIDs)
 
 	return afterView, nil
 }
@@ -827,26 +803,6 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 
 	txRepo := repo.New(dbtx)
 
-	// Read the bindings before the purge removes them — this path, unlike the
-	// organization and platform deletes, purges attachments outright. Scoped to
-	// the purge's own predicate; narrowing further would destroy bindings it
-	// never reported.
-	//
-	// Runs before the delete proves ownership, because the derivation locks must
-	// precede every row lock. Discloses nothing: an unowned client yields the
-	// empty set and the delete answers the caller either way.
-	boundUserIssuerIDs, err := txRepo.ListUserSessionIssuersBoundToProjectClient(ctx, repo.ListUserSessionIssuersBoundToProjectClientParams{
-		RemoteSessionClientID: clientID,
-		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
-	})
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "list user session issuers bound to client").LogError(ctx, logger)
-	}
-
-	if err := LockUserSessionIssuersForRemoteIssuerDerivation(ctx, dbtx, boundUserIssuerIDs); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "lock user session issuers for remote issuer derivation").LogError(ctx, logger)
-	}
-
 	deleted, err := txRepo.DeleteRemoteSessionClient(ctx, repo.DeleteRemoteSessionClientParams{
 		ID:        clientID,
 		ProjectID: conv.ToNullUUID(*authCtx.ProjectID),
@@ -856,6 +812,16 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 			return nil
 		}
 		return oops.E(oops.CodeUnexpected, err, "delete remote session client").LogError(ctx, logger)
+	}
+
+	// Read the bindings before the purge removes them, so the post-commit
+	// resync knows which issuers to recompute.
+	boundUserIssuerIDs, err := txRepo.ListUserSessionIssuersBoundToProjectClient(ctx, repo.ListUserSessionIssuersBoundToProjectClientParams{
+		RemoteSessionClientID: clientID,
+		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "list user session issuers bound to client").LogError(ctx, logger)
 	}
 
 	if err := txRepo.DeleteUserSessionIssuerAttachmentsForRemoteSessionClient(
@@ -871,10 +837,6 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 			"failed to delete user session issuer attachments for remote session client %s",
 			deleted.ID,
 		).LogError(ctx, logger)
-	}
-
-	if err := ResyncMCPServerRemoteSessionIssuers(ctx, dbtx, ProjectResyncScope(authCtx.ActiveOrganizationID, *authCtx.ProjectID), boundUserIssuerIDs); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "resync mcp server remote session issuers").LogError(ctx, logger)
 	}
 
 	cascaded, err := txRepo.SoftDeleteRemoteSessionsByClientID(ctx, deleted.ID)
@@ -902,6 +864,8 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 	// upstream tokens are revoked on the same best-effort terms as an explicit
 	// revoke: post-commit, bounded, never surfaced to the caller.
 	s.revoker.RevokeAllDetached(ctx, revokedCredentials(cascaded))
+
+	BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, boundUserIssuerIDs)
 
 	return nil
 }

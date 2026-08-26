@@ -230,13 +230,6 @@ func (r *UpstreamRevoker) SoftDeleteSubjectSessions(ctx context.Context, tx repo
 func (r *UpstreamRevoker) DetachUserSessionIssuerFromClients(ctx context.Context, tx repo.DBTX, userSessionIssuerID uuid.UUID, projectID uuid.UUID, organizationID string) ([]RevokedCredentials, error) {
 	q := repo.New(tx)
 
-	// Before the client row locks below; callers must not hold a row lock on
-	// mcp_servers or remote_session_clients on arrival. Both callers resolved
-	// their id under projectID, so there is no foreign id to take.
-	if err := LockUserSessionIssuersForRemoteIssuerDerivation(ctx, tx, []uuid.UUID{userSessionIssuerID}); err != nil {
-		return nil, err
-	}
-
 	if _, err := q.LockRemoteSessionClientsBoundToUserSessionIssuer(ctx, repo.LockRemoteSessionClientsBoundToUserSessionIssuerParams{
 		UserSessionIssuerID: userSessionIssuerID,
 		ProjectID:           projectID,
@@ -275,11 +268,6 @@ func (r *UpstreamRevoker) DetachUserSessionIssuerFromClients(ctx context.Context
 		ProjectID:           projectID,
 	}); err != nil {
 		return nil, fmt.Errorf("delete remote session client attachments for user session issuer: %w", err)
-	}
-
-	// The bindings the servers derived from are gone; the column goes with them.
-	if err := ResyncMCPServerRemoteSessionIssuers(ctx, tx, ProjectResyncScope(organizationID, projectID), []uuid.UUID{userSessionIssuerID}); err != nil {
-		return nil, err
 	}
 
 	return creds, nil

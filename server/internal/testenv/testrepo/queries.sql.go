@@ -208,29 +208,6 @@ func (q *Queries) CreateOrganizationMetadataFixture(ctx context.Context, arg Cre
 	return err
 }
 
-const createOrganizationTierUserSessionIssuerFixture = `-- name: CreateOrganizationTierUserSessionIssuerFixture :one
-INSERT INTO user_session_issuers (project_id, organization_id, slug, authn_challenge_mode, session_duration)
-VALUES (NULL, $1, $2, 'interactive', $3)
-RETURNING id
-`
-
-type CreateOrganizationTierUserSessionIssuerFixtureParams struct {
-	OrganizationID  pgtype.Text
-	Slug            string
-	SessionDuration pgtype.Interval
-}
-
-// Mints an organization-tier user session issuer (project_id NULL). No
-// production path creates one yet, but the derivation must handle the shape:
-// the arm that skips it also skips clearing a value written while the issuer
-// was project-scoped.
-func (q *Queries) CreateOrganizationTierUserSessionIssuerFixture(ctx context.Context, arg CreateOrganizationTierUserSessionIssuerFixtureParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, createOrganizationTierUserSessionIssuerFixture, arg.OrganizationID, arg.Slug, arg.SessionDuration)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
-}
-
 const createOrganizationUserRelationshipFixture = `-- name: CreateOrganizationUserRelationshipFixture :exec
 INSERT INTO organization_user_relationships (organization_id, user_id)
 VALUES ($1, $2::text)

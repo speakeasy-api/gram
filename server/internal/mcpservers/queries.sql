@@ -322,21 +322,20 @@ RETURNING *;
 -- bindings on each named user session issuer. Exactly one distinct remote
 -- issuer stamps it; none or several leave it NULL and readers fail closed.
 --
+-- Best effort: runs post-commit outside the mutating transaction, so it takes
+-- no advisory lock and a raced run merely leaves a stale value, which the
+-- consent-time lookup degrades on and the next run heals.
+--
 -- Clients and issuers are only ever soft-deleted, so `deleted IS FALSE` is the
--- removal signal; the column's ON DELETE SET NULL never fires. `i.deleted IS
--- FALSE` keeps this identical to ListRemoteSessionClientsForUserSessionIssuer,
--- which picks the credential at serve time — the column must never name an
+-- removal signal; the column's ON DELETE SET NULL never fires. The filters
+-- mirror the serve-time credential resolver: the column must never name an
 -- issuer that resolver would refuse.
 --
--- The ids arrive from untenanted join tables and prove nothing on their own,
--- so tenancy is enforced on three axes: the caller's own scope; the issuer's
--- tenancy covering the server it stamps, including the org-tier arm, without
--- which clearing fails open; and which clients count, the issuer's tenant only.
---
--- PRECONDITION: the caller holds
--- LockUserSessionIssuerForRemoteIssuerDerivation for every id in the array,
--- taken before any row lock. Without it two writers compute from snapshots
--- missing each other's binding and last commit wins.
+-- Tenancy: the ids arrive from an untenanted join table, so the derivation is
+-- pinned to the caller's own project — a foreign id derives no row and writes
+-- nothing — and only that project's servers are written. Organization-level
+-- clients of the caller's organization count toward the derivation, matching
+-- what the attach surface permits.
 WITH resolved AS (
     SELECT input.user_session_issuer_id,
            CASE WHEN count(DISTINCT i.id) = 1
@@ -345,16 +344,14 @@ WITH resolved AS (
     FROM unnest(@user_session_issuer_ids::uuid[]) AS input(user_session_issuer_id)
     JOIN user_session_issuers AS usi
       ON usi.id = input.user_session_issuer_id
-    LEFT JOIN projects AS usi_project
-           ON usi_project.id = usi.project_id
+     AND usi.project_id = @project_id::uuid
     LEFT JOIN remote_session_client_user_session_issuers AS link
            ON link.user_session_issuer_id = input.user_session_issuer_id
     LEFT JOIN remote_session_clients AS c
            ON c.id = link.remote_session_client_id
           AND c.deleted IS FALSE
           AND (c.project_id = usi.project_id
-               OR (c.project_id IS NULL
-                   AND c.organization_id = COALESCE(usi_project.organization_id, usi.organization_id)))
+               OR (c.project_id IS NULL AND c.organization_id = @organization_id::text))
     LEFT JOIN remote_session_issuers AS i
            ON i.id = c.remote_session_issuer_id
           AND i.deleted IS FALSE
@@ -364,24 +361,12 @@ UPDATE mcp_servers AS s
 SET remote_session_issuer_id = resolved.remote_session_issuer_id,
     updated_at = clock_timestamp()
 FROM resolved
-JOIN user_session_issuers AS usi
-  ON usi.id = resolved.user_session_issuer_id
 WHERE s.user_session_issuer_id = resolved.user_session_issuer_id
-  -- Axis 1: caller scope. EXISTS because UPDATE ... FROM cannot reference the
-  -- target table in a FROM-item join condition.
+  AND s.project_id = @project_id::uuid
+  -- Belt and suspenders on the caller's org/project pair agreeing.
   AND EXISTS (SELECT 1
-              FROM projects AS caller_project
-              WHERE caller_project.id = s.project_id
-                AND caller_project.organization_id = @organization_id::text)
-  AND (sqlc.narg('project_id')::uuid IS NULL
-       OR s.project_id = sqlc.narg('project_id')::uuid)
-  -- Axis 2: the issuer's tenancy must cover the server it stamps.
-  AND (s.project_id = usi.project_id
-       OR (usi.project_id IS NULL
-           AND usi.organization_id IS NOT NULL
-           AND EXISTS (SELECT 1
-                       FROM projects AS issuer_project
-                       WHERE issuer_project.id = s.project_id
-                         AND issuer_project.organization_id = usi.organization_id)))
+              FROM projects AS p
+              WHERE p.id = s.project_id
+                AND p.organization_id = @organization_id::text)
   AND s.deleted IS FALSE
   AND s.remote_session_issuer_id IS DISTINCT FROM resolved.remote_session_issuer_id;

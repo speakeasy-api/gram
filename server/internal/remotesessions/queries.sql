@@ -2239,71 +2239,10 @@ WHERE subject_urn = @subject_urn
   AND deleted IS FALSE
   AND (last_used_at IS NULL OR last_used_at <= @used_cutoff::timestamptz);
 
--- name: LockUserSessionIssuerForRemoteIssuerDerivation :exec
--- Serializes every writer that can change what
--- mcp_servers.remote_session_issuer_id derives to for one user session issuer.
--- LockRemoteSessionIssuerForClientBinding does not cover this: it keys on the
--- REMOTE issuer, and one user session issuer may bind clients across several.
---
--- The key is salted because the sibling lock hashes bare uuids into the same
--- advisory key space.
---
--- LOCK ORDER: this must be the FIRST lock a transaction takes, before any
--- mcp_servers, remote_session_clients or binding row lock. DeleteMcpServer
--- locks mcp_servers then reaches the resync's client rows while every
--- remotesessions writer goes the other way; only taking this first breaks the
--- cycle. Callers taking more than one MUST sort ascending.
---
--- Takes no tenant scope, deliberately: a tenancy predicate would yield no row
--- for anything it rejects and so silently take NO lock. Every write it guards
--- is separately bounded by the caller's ResyncScope.
-SELECT pg_advisory_xact_lock(hashtextextended('user_session_issuer_derivation:' || (@user_session_issuer_id::uuid)::text, 0));
-
--- name: TryLockUserSessionIssuerForRemoteIssuerDerivation :one
--- Non-blocking form, for the one caller that reaches for a derivation lock
--- while already holding LockRemoteSessionIssuerForClientBinding: the issuer
--- migration. Blocking there would invert the lock order above and deadlock, so
--- it fails as a retryable conflict instead.
---
--- The key expression must stay byte-identical to the blocking form's.
-SELECT pg_try_advisory_xact_lock(hashtextextended('user_session_issuer_derivation:' || (@user_session_issuer_id::uuid)::text, 0));
-
--- name: ListUserSessionIssuersBoundToRemoteIssuer :many
--- Every user session issuer reachable from a remote issuer through the client
--- bindings. Only caller is the issuer migration, which re-points clients and so
--- changes what the servers behind them derive without touching the bindings.
---
--- Soft-deleted clients count on purpose: a tombstoned client still names an
--- issuer whose stale value has to be recomputed.
---
--- Scoped by organization, not project: a re-point moves the client itself, so
--- every project behind it derives a new value.
---
--- Ordered because callers take one advisory lock per returned id.
-SELECT DISTINCT link.user_session_issuer_id
-FROM remote_session_client_user_session_issuers AS link
-JOIN remote_session_clients AS c
-  ON c.id = link.remote_session_client_id
-JOIN user_session_issuers AS usi
-  ON usi.id = link.user_session_issuer_id
-LEFT JOIN projects AS usi_project
-  ON usi_project.id = usi.project_id
-WHERE c.remote_session_issuer_id = @remote_session_issuer_id
-  AND COALESCE(usi_project.organization_id, usi.organization_id) = @organization_id::text
-ORDER BY link.user_session_issuer_id;
-
--- The three queries below answer "which user session issuers does this
--- client's deletion change the derivation of", and differ only in the tenancy
--- each caller can prove. Each one's predicate must stay identical to the delete
--- it precedes: a read narrower than its delete strands servers on a value
--- nothing can recompute.
---
--- All three run BEFORE that delete, because the derivation locks they feed must
--- precede every row lock. Ordered because callers take one lock per id.
-
 -- name: ListUserSessionIssuersBoundToProjectClient :many
--- For DeleteRemoteSessionClient. Mirrors the purge that follows it, which is
--- keyed on the client and its project and takes every binding the client holds.
+-- The bindings DeleteRemoteSessionClient is about to purge, read first so the
+-- post-commit resync knows which issuers to recompute. Mirrors the purge's own
+-- predicate exactly: narrower would miss bindings the purge still deletes.
 SELECT link.user_session_issuer_id
 FROM remote_session_client_user_session_issuers AS link
 JOIN remote_session_clients AS c
@@ -2312,26 +2251,3 @@ WHERE link.remote_session_client_id = @remote_session_client_id
   AND c.project_id = @project_id
 ORDER BY link.user_session_issuer_id;
 
--- name: ListUserSessionIssuersBoundToOrganizationClient :many
--- For the organization-admin DeleteClient: a client is the organization's when
--- either it or its issuer names the organization. Deliberately a superset of
--- what that delete acts on — resyncing an already-gone binding is a no-op,
--- missing one is not.
-SELECT link.user_session_issuer_id
-FROM remote_session_client_user_session_issuers AS link
-JOIN remote_session_clients AS c
-  ON c.id = link.remote_session_client_id
-JOIN remote_session_issuers AS i
-  ON i.id = c.remote_session_issuer_id
-WHERE link.remote_session_client_id = @remote_session_client_id
-  AND (i.organization_id = @organization_id OR c.organization_id = @organization_id)
-ORDER BY link.user_session_issuer_id;
-
--- name: ListUserSessionIssuersBoundToClient :many
--- Unscoped, for the platform-admin DeleteGlobalClient, whose client sits in the
--- global partition. An integrity assertion, not a resync input: the expected
--- result is empty and any row is logged as unrepairable here.
-SELECT link.user_session_issuer_id
-FROM remote_session_client_user_session_issuers AS link
-WHERE link.remote_session_client_id = @remote_session_client_id
-ORDER BY link.user_session_issuer_id;

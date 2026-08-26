@@ -21,7 +21,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/remotesessionprovider"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
@@ -269,9 +268,6 @@ func (c *ClientConfigurator) createOrReuseClient(ctx context.Context, request pl
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	queries := remotesessionsrepo.New(tx)
-	if err := remotesessions.LockUserSessionIssuersForRemoteIssuerDerivation(ctx, tx, []uuid.UUID{request.UserSessionIssuerID}); err != nil {
-		return fmt.Errorf("lock local fixture user-session issuer derivation: %w", err)
-	}
 	if err := queries.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
 		return fmt.Errorf("lock local fixture client: %w", err)
 	}
@@ -310,9 +306,6 @@ func (c *ClientConfigurator) createOrReuseClient(ctx context.Context, request pl
 	if err := queries.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: client.ID, UserSessionIssuerID: request.UserSessionIssuerID}); err != nil {
 		return fmt.Errorf("attach local fixture client: %w", err)
 	}
-	if err := remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, tx, remotesessions.ProjectResyncScope(request.OrganizationID, request.ProjectID), []uuid.UUID{request.UserSessionIssuerID}); err != nil {
-		return fmt.Errorf("resync local fixture mcp server issuers: %w", err)
-	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit local fixture client transaction: %w", err)
 	}
@@ -326,9 +319,6 @@ func (c *ClientConfigurator) attachClient(ctx context.Context, request platformm
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	queries := remotesessionsrepo.New(tx)
-	if err := remotesessions.LockUserSessionIssuersForRemoteIssuerDerivation(ctx, tx, []uuid.UUID{request.UserSessionIssuerID}); err != nil {
-		return fmt.Errorf("lock local fixture user-session issuer derivation: %w", err)
-	}
 	if err := queries.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
 		return fmt.Errorf("lock local fixture client attachment: %w", err)
 	}
@@ -340,9 +330,6 @@ func (c *ClientConfigurator) attachClient(ctx context.Context, request platformm
 	}
 	if err := queries.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: clientID, UserSessionIssuerID: request.UserSessionIssuerID}); err != nil {
 		return fmt.Errorf("attach local fixture client: %w", err)
-	}
-	if err := remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, tx, remotesessions.ProjectResyncScope(request.OrganizationID, request.ProjectID), []uuid.UUID{request.UserSessionIssuerID}); err != nil {
-		return fmt.Errorf("resync local fixture mcp server issuers: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit local fixture client attachment: %w", err)
