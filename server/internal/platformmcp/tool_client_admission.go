@@ -18,7 +18,7 @@ type GetMCPClientAdmissionToolInput struct {
 type SetMCPClientAdmissionToolInput struct {
 	ProjectSlug    string `json:"project_slug" jsonschema:"explicit AICP project slug that owns the reviewed MCP registration"`
 	RegistrationID string `json:"registration_id" jsonschema:"Platform MCP registration ID returned by register_catalog_mcp or register_remote_mcp"`
-	Mode           string `json:"mode" jsonschema:"enum=presets,enum=open,enum=disabled,admission policy for MCP clients that identify themselves with a client ID metadata document"`
+	Mode           string `json:"mode" jsonschema:"admission policy for MCP clients that identify themselves with a client ID metadata document; one of presets, open, or disabled"`
 	Confirmed      bool   `json:"confirmed" jsonschema:"set true only after the user explicitly confirms this exact admission mode for this exact MCP; the change takes effect for every MCP client of the server"`
 }
 
