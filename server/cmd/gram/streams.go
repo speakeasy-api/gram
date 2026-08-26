@@ -521,12 +521,25 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("failed to create pubsub publisher for otel logs: %w", err)
 			}
 
+			metricPub, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &otelv1.Metric{})
+			if err != nil {
+				return fmt.Errorf("failed to create pubsub publisher for otel metrics: %w", err)
+			}
+
 			spanPub, err = gcp.PubSubPublisherForMessage(ctx, psbroker, &otelv1.Span{})
 			if err != nil {
 				return fmt.Errorf("failed to create pubsub publisher for otel spans: %w", err)
 			}
 
 			logRelayHandler := otelsvc.NewLogRelayHandler(
+				logger,
+				meterProvider,
+				replicaDB,
+				encryptionClient,
+				guardianPolicy,
+			)
+
+			metricRelayHandler := otelsvc.NewMetricRelayHandler(
 				logger,
 				meterProvider,
 				replicaDB,
@@ -564,6 +577,11 @@ func newStreamsCommand() *cli.Command {
 					replicaDB,
 					cache.NewRedisCacheAdapter(redisClient),
 				))
+				mustReceive(rg, &otelv1.InboundMetric{}, &otelv1.InboundMetricTransformer{}, otelsvc.NewMetricTransformHandler(
+					logger,
+					meterProvider,
+					metricPub,
+				))
 				mustReceive(rg, &otelv1.InboundSpan{}, &otelv1.InboundSpanTransformer{}, otelsvc.NewSpanTransformHandler(
 					logger,
 					meterProvider,
@@ -572,6 +590,7 @@ func newStreamsCommand() *cli.Command {
 					cache.NewRedisCacheAdapter(redisClient),
 				))
 				mustReceiveBatchWithResult(rg, &otelv1.LogRecord{}, &otelv1.LogRelay{}, logRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
+				mustReceiveBatchWithResult(rg, &otelv1.Metric{}, &otelv1.MetricRelay{}, metricRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
 				mustReceiveBatchWithResult(rg, &otelv1.Span{}, &otelv1.SpanRelay{}, spanRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
 
 				// Event feed tee: mirror the normalized OTEL topics into the

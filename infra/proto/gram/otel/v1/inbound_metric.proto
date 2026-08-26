@@ -1,0 +1,211 @@
+edition = "2024";
+
+package gram.otel.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1;otelv1";
+
+// InboundMetric is an OTLP metric received by Gram's ingest edge.
+//
+// NOTICE: THIS IS A CARBON COPY OF `./metric.proto` AND MUST BE KEPT IN SYNC.
+//
+// OTLP fields retain their exact field numbers and wire types. Gram-only fields
+// live at 1000+, where an OTLP parser treats them as unknown fields.
+message InboundMetric {
+  reserved 4, 6, 8;
+
+  string name = 1;
+  string description = 2;
+  string unit = 3;
+
+  oneof data {
+    Gauge gauge = 5;
+    Sum sum = 7;
+    Histogram histogram = 9;
+    ExponentialHistogram exponential_histogram = 10;
+    Summary summary = 11;
+  }
+
+  repeated KeyValue metadata = 12;
+
+  Resource resource = 1000;
+  string resource_schema_url = 1001;
+  InstrumentationScope scope = 1002;
+  string scope_schema_url = 1003;
+  Provenance provenance = 1004;
+
+  message Provenance {
+    string source = 1;
+    string organization_id = 2;
+    string project_id = 3;
+  }
+
+  message Resource {
+    reserved 3;
+
+    repeated KeyValue attributes = 1;
+    uint32 dropped_attributes_count = 2;
+  }
+
+  message InstrumentationScope {
+    string name = 1;
+    string version = 2;
+    repeated KeyValue attributes = 3;
+    uint32 dropped_attributes_count = 4;
+  }
+
+  message Gauge {
+    repeated NumberDataPoint data_points = 1;
+  }
+
+  message Sum {
+    repeated NumberDataPoint data_points = 1;
+    AggregationTemporality aggregation_temporality = 2;
+    bool is_monotonic = 3;
+  }
+
+  message Histogram {
+    repeated HistogramDataPoint data_points = 1;
+    AggregationTemporality aggregation_temporality = 2;
+  }
+
+  message ExponentialHistogram {
+    repeated ExponentialHistogramDataPoint data_points = 1;
+    AggregationTemporality aggregation_temporality = 2;
+  }
+
+  message Summary {
+    repeated SummaryDataPoint data_points = 1;
+  }
+
+  enum AggregationTemporality {
+    AGGREGATION_TEMPORALITY_UNSPECIFIED = 0;
+    AGGREGATION_TEMPORALITY_DELTA = 1;
+    AGGREGATION_TEMPORALITY_CUMULATIVE = 2;
+  }
+
+  enum DataPointFlags {
+    DATA_POINT_FLAGS_DO_NOT_USE = 0;
+    DATA_POINT_FLAGS_NO_RECORDED_VALUE_MASK = 1;
+  }
+
+  message NumberDataPoint {
+    reserved 1;
+
+    repeated KeyValue attributes = 7;
+    fixed64 start_time_unix_nano = 2;
+    fixed64 time_unix_nano = 3;
+
+    oneof value {
+      double as_double = 4;
+      sfixed64 as_int = 6;
+    }
+
+    repeated Exemplar exemplars = 5;
+    uint32 flags = 8;
+  }
+
+  message HistogramDataPoint {
+    reserved 1;
+
+    repeated KeyValue attributes = 9;
+    fixed64 start_time_unix_nano = 2;
+    fixed64 time_unix_nano = 3;
+    fixed64 count = 4;
+    double sum = 5;
+    repeated fixed64 bucket_counts = 6;
+    repeated double explicit_bounds = 7;
+    repeated Exemplar exemplars = 8;
+    uint32 flags = 10;
+    double min = 11;
+    double max = 12;
+  }
+
+  message ExponentialHistogramDataPoint {
+    repeated KeyValue attributes = 1;
+    fixed64 start_time_unix_nano = 2;
+    fixed64 time_unix_nano = 3;
+    fixed64 count = 4;
+    double sum = 5;
+    sint32 scale = 6;
+    fixed64 zero_count = 7;
+    Buckets positive = 8;
+    Buckets negative = 9;
+    uint32 flags = 10;
+    repeated Exemplar exemplars = 11;
+    double min = 12;
+    double max = 13;
+    double zero_threshold = 14;
+
+    message Buckets {
+      sint32 offset = 1;
+      repeated uint64 bucket_counts = 2;
+    }
+  }
+
+  message SummaryDataPoint {
+    reserved 1;
+
+    repeated KeyValue attributes = 7;
+    fixed64 start_time_unix_nano = 2;
+    fixed64 time_unix_nano = 3;
+    fixed64 count = 4;
+    double sum = 5;
+    repeated ValueAtQuantile quantile_values = 6;
+    uint32 flags = 8;
+
+    message ValueAtQuantile {
+      double quantile = 1;
+      double value = 2;
+    }
+  }
+
+  message Exemplar {
+    reserved 1;
+
+    repeated KeyValue filtered_attributes = 7;
+    fixed64 time_unix_nano = 2;
+
+    oneof value {
+      double as_double = 3;
+      sfixed64 as_int = 6;
+    }
+
+    bytes span_id = 4;
+    bytes trace_id = 5;
+  }
+
+  message AnyValue {
+    reserved 8;
+
+    oneof value {
+      string string_value = 1;
+      bool bool_value = 2;
+      int64 int_value = 3;
+      double double_value = 4;
+      ArrayValue array_value = 5;
+      KeyValueList kvlist_value = 6;
+      bytes bytes_value = 7;
+    }
+  }
+
+  message ArrayValue {
+    repeated AnyValue values = 1;
+  }
+
+  message KeyValueList {
+    repeated KeyValue values = 1;
+  }
+
+  message KeyValue {
+    reserved 3;
+
+    string key = 1;
+    AnyValue value = 2;
+  }
+
+  option (gcp.pubsub.v1.topic) = {
+    retention_hint: {seconds: 604800 /* 7 days */}
+  };
+}

@@ -266,6 +266,253 @@ func BuildLogsStreamPayload(payload any, fpath string) (*otel.LogsRequestData, e
 	}, nil
 }
 
+// BuildMetricsRequest instantiates a HTTP request object with method and path
+// set to call the "otel" service "metrics" endpoint
+func (c *Client) BuildMetricsRequest(ctx context.Context, v any) (*http.Request, error) {
+	var (
+		body io.Reader
+	)
+	rd, ok := v.(*otel.MetricsRequestData)
+	if !ok {
+		return nil, goahttp.ErrInvalidType("otel", "metrics", "otel.MetricsRequestData", v)
+	}
+	body = rd.Body
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: MetricsOtelPath()}
+	req, err := http.NewRequest("POST", u.String(), body)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("otel", "metrics", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeMetricsRequest returns an encoder for requests sent to the otel
+// metrics server.
+func EncodeMetricsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		data, ok := v.(*otel.MetricsRequestData)
+		if !ok {
+			return goahttp.ErrInvalidType("otel", "metrics", "*otel.MetricsRequestData", v)
+		}
+		p := data.Payload
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		if p.ContentEncoding != nil {
+			head := *p.ContentEncoding
+			req.Header.Set("Content-Encoding", head)
+		}
+		return nil
+	}
+}
+
+// DecodeMetricsResponse returns a decoder for responses returned by the otel
+// metrics endpoint. restoreBody controls whether the response body should be
+// restored after having been read.
+// DecodeMetricsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeMetricsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body MetricsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("otel", "metrics", err)
+			}
+			err = ValidateMetricsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("otel", "metrics", err)
+			}
+			return nil, NewMetricsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body MetricsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("otel", "metrics", err)
+			}
+			err = ValidateMetricsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("otel", "metrics", err)
+			}
+			return nil, NewMetricsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body MetricsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("otel", "metrics", err)
+			}
+			err = ValidateMetricsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("otel", "metrics", err)
+			}
+			return nil, NewMetricsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body MetricsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("otel", "metrics", err)
+			}
+			err = ValidateMetricsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("otel", "metrics", err)
+			}
+			return nil, NewMetricsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body MetricsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("otel", "metrics", err)
+			}
+			err = ValidateMetricsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("otel", "metrics", err)
+			}
+			return nil, NewMetricsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body MetricsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("otel", "metrics", err)
+			}
+			err = ValidateMetricsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("otel", "metrics", err)
+			}
+			return nil, NewMetricsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body MetricsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("otel", "metrics", err)
+			}
+			err = ValidateMetricsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("otel", "metrics", err)
+			}
+			return nil, NewMetricsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body MetricsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("otel", "metrics", err)
+				}
+				err = ValidateMetricsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("otel", "metrics", err)
+				}
+				return nil, NewMetricsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body MetricsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("otel", "metrics", err)
+				}
+				err = ValidateMetricsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("otel", "metrics", err)
+				}
+				return nil, NewMetricsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("otel", "metrics", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body MetricsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("otel", "metrics", err)
+			}
+			err = ValidateMetricsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("otel", "metrics", err)
+			}
+			return nil, NewMetricsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("otel", "metrics", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// // BuildMetricsStreamPayload creates a streaming endpoint request payload from
+// the method payload and the path to the file to be streamed
+func BuildMetricsStreamPayload(payload any, fpath string) (*otel.MetricsRequestData, error) {
+	f, err := os.Open(fpath)
+	if err != nil {
+		return nil, err
+	}
+	return &otel.MetricsRequestData{
+		Payload: payload.(*otel.MetricsPayload),
+		Body:    f,
+	}, nil
+}
+
 // BuildTracesRequest instantiates a HTTP request object with method and path
 // set to call the "otel" service "traces" endpoint
 func (c *Client) BuildTracesRequest(ctx context.Context, v any) (*http.Request, error) {
