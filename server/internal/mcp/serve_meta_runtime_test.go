@@ -351,7 +351,7 @@ func TestServePublic_MetaEndpoint_ListServers_StatusByBackend(t *testing.T) {
 	require.Equal(t, "unknown", statuses[proxiedSlug], "remote members stay unknown until cached health exists")
 	require.Equal(t, "unavailable", statuses[tunneledSlug], "a tunneled member with no live route is unavailable")
 
-	require.NoError(t, ti.tunnelRoutes.Publish(ctx, tunnelID.String(), "http://meta MCP.internal.example:8443", time.Hour))
+	require.NoError(t, ti.tunnelRoutes.Publish(ctx, tunnelID.String(), "http://tunnel-gateway.internal.example:8443", time.Hour))
 	statuses = listStatuses()
 	require.Equal(t, "available", statuses[tunneledSlug], "a published route flips the tunneled member to available")
 	require.Equal(t, "unknown", statuses[proxiedSlug], "route publication must not disturb the remote member's status")
