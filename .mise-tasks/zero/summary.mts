@@ -200,6 +200,7 @@ await pokeDockerService(
   "clickhouse",
   "ClickHouse",
   `http://localhost:${clickhouseHTTPPort}`,
+  true,
 );
 
 const devIdpPort = process.env["GRAM_DEVIDP_PORT"] ?? "35291";

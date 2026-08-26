@@ -2,7 +2,7 @@ version: "3.8"
 
 services:
   clickhouse:
-    image: clickhouse/clickhouse-server:latest
+    image: clickhouse/clickhouse-server:26.7.5.10@sha256:800e82865530eb2f1c4bc1b960e43b435fd9b2d83b4bd04a2564a5cfd88fdb6e
     container_name: clickhouse-dev
     ports:
       - "8124:8123" # HTTP interface

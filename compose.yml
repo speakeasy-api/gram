@@ -1,9 +1,7 @@
 # Per-worktree infra. `git:workinit` sets a unique COMPOSE_PROJECT_NAME and
-# `zero:remap-ports` remaps the host ports, so each worktree gets its own
-# Postgres, Redis, and ClickHouse without colliding.
-# Services shared safely through explicit worktree namespaces live in
-# compose.shared.yml and run once for the whole machine: Temporal, Pub/Sub,
-# Presidio, and the LGTM observability stack.
+# `zero:remap-ports` remaps host ports so each worktree gets isolated Postgres
+# and Redis services. Namespace-safe services live once in compose.shared.yml:
+# ClickHouse, Temporal, Pub/Sub, Presidio, and LGTM.
 name: ${COMPOSE_PROJECT_NAME:-gram}
 
 services:
@@ -56,25 +54,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
-
-  clickhouse:
-    build:
-      context: ./local/clickhouse
-    restart: unless-stopped
-    ports:
-      - "${CLICKHOUSE_HTTP_PORT}:8123"
-      - "${CLICKHOUSE_NATIVE_PORT}:9440"
-    environment:
-      CLICKHOUSE_DB: default
-      CLICKHOUSE_USER: gram
-      CLICKHOUSE_PASSWORD: gram
-      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
-    volumes:
-      - clickhouse_data:/var/lib/clickhouse
-    ulimits:
-      nofile:
-        soft: 262144
-        hard: 262144
 
   mcp-registry-db:
     profiles: [local-registry]
@@ -136,8 +115,6 @@ volumes:
   postgres_data:
     driver: local
   cache_data:
-    driver: local
-  clickhouse_data:
     driver: local
   mcp_registry_data:
     driver: local

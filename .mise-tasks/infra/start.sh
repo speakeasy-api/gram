@@ -80,45 +80,48 @@ if [ -n "$host_arch" ]; then
     fi
 fi
 
-# This worktree's own stack, first — with --remove-orphans. Pre-existing
-# worktrees can still run Temporal, Pub/Sub, or Presidio containers that
-# compose.yml no longer declares. Removing this worktree's copies before
-# asserting the shared services frees fixed ports in the main tree and removes
-# obsolete remapped copies elsewhere. Profile-gated services (litellm, tunnel,
-# local-registry) remain declared in compose.yml and are not treated as orphans.
+# Remove a stale singleton that still owns a fixed shared port. The read loop is
+# portable to Bash 3.2 on macOS; BSD xargs has no -r/--no-run-if-empty.
+remove_non_shared_container_on_port() {
+  local service="$1" port="$2"
+  docker ps -a --filter "label=com.docker.compose.service=${service}" --filter "publish=${port}" \
+    --format '{{.Label "com.docker.compose.project"}} {{.ID}}' 2>/dev/null \
+    | awk '$1 != "gram-shared" { print $2 }' \
+    | while IFS= read -r container_id; do
+        [ -n "$container_id" ] && docker rm -f "$container_id"
+      done > /dev/null 2>&1
+}
+
+# Remove obsolete fixed-port ClickHouse containers before gram-shared binds
+# 8123. Remapped containers are removed below as compose orphans; old volumes
+# remain available as rollback data.
+remove_non_shared_container_on_port clickhouse 8123 || true
+
+# ClickHouse is a hard dependency of migrations and local/demo seed.
+docker compose -f compose.shared.yml -p gram-shared up -d --wait --wait-timeout 30 clickhouse || exit 1
+
+# Database identifiers cannot be parameterized in CREATE DATABASE. Validate the
+# effective name before quoting it, including explicit overrides.
+clickhouse_database="${CLICKHOUSE_DATABASE:-default}"
+if [[ ! "$clickhouse_database" =~ ^[a-z][a-z0-9_]*$ ]]; then
+  echo "❌ Invalid CLICKHOUSE_DATABASE '$clickhouse_database'; expected [a-z][a-z0-9_]*." >&2
+  exit 1
+fi
+docker compose -f compose.shared.yml -p gram-shared exec -T clickhouse \
+  clickhouse-client --user gram --password gram --database default \
+  --query "CREATE DATABASE IF NOT EXISTS \`${clickhouse_database}\`" || exit 1
+
+# Start this worktree's remaining services after ClickHouse is ready.
 docker compose up -d --remove-orphans || exit 1
 
-# One-time migration: free host port 5050 for the shared analyzer. Before the
-# shared stack existed, the main tree ran its own gram-presidio bound to 5050
-# under its own compose project (the main tree never remaps PRESIDIO_PORT). The
-# --remove-orphans above only touches THIS worktree's project, so that stale
-# container would keep 5050 and block the shared `up` below. Remove ONLY the
-# non-`gram-shared` container that actually holds 5050 — scoping by the port
-# keeps this from touching a sibling worktree's still-in-use analyzer bound to
-# its own remapped port, which the sibling's app is still pointed at until it
-# runs `git:worksync`. Idempotent: once migrated there is nothing to remove.
-docker ps -a --filter "label=com.docker.compose.service=gram-presidio" --filter "publish=5050" \
-  --format '{{.Label "com.docker.compose.project"}} {{.ID}}' 2>/dev/null \
-  | awk '$1 != "gram-shared" { print $2 }' \
-  | xargs -r docker rm -f > /dev/null 2>&1 || true
+# Free fixed ports held by obsolete non-shared singleton containers. Remapped
+# sibling worktrees keep running until their own git:worksync/infra:start.
+remove_non_shared_container_on_port gram-presidio 5050 || true
+remove_non_shared_container_on_port pubsub-emulator 8088 || true
 
-# One-time migration: the main tree previously bound its per-worktree Pub/Sub
-# emulator to the shared port. Remove only a non-shared emulator actually
-# publishing 8088. Sibling worktrees on remapped ports keep running until their
-# next git:worksync/infra:start migration.
-docker ps -a --filter "label=com.docker.compose.service=pubsub-emulator" --filter "publish=8088" \
-  --format '{{.Label "com.docker.compose.project"}} {{.ID}}' 2>/dev/null \
-  | awk '$1 != "gram-shared" { print $2 }' \
-  | xargs -r docker rm -f > /dev/null 2>&1 || true
-
-# One-time migration: Temporal now runs under the shared project too. Remove
-# only a non-shared Temporal container publishing the fixed gRPC port. Sibling
-# worktrees on remapped ports keep running until their next
-# git:worksync/infra:start migration.
-docker ps -a --filter "label=com.docker.compose.service=gram-temporal" --filter "publish=7233" \
-  --format '{{.Label "com.docker.compose.project"}} {{.ID}}' 2>/dev/null \
-  | awk '$1 != "gram-shared" { print $2 }' \
-  | xargs -r docker rm -f > /dev/null 2>&1 || true
+# Temporal now runs under the shared project too. Remove only a non-shared
+# container publishing the fixed gRPC port; remapped siblings keep running.
+remove_non_shared_container_on_port gram-temporal 7233 || true
 
 # Pub/Sub is required by the local streams processes, and Temporal is required
 # by seeding and every background worker. Wait for both healthchecks so a
@@ -267,10 +270,3 @@ wait_for() {
 # Use psql to wait for the database to be ready
 wait_for "Postgres" gram-db \
     docker compose exec -T gram-db psql -U "$DB_USER" -d "$DB_NAME" -c "SELECT 1"
-
-# ClickHouse takes longer than Postgres to accept queries. Migrations run
-# immediately after infra starts, so without waiting here the first ClickHouse
-# migration can fail with a connection EOF.
-wait_for "ClickHouse" clickhouse \
-    docker compose exec -T clickhouse clickhouse-client --user "$CLICKHOUSE_USERNAME" --password "$CLICKHOUSE_PASSWORD" -q "SELECT 1"
-

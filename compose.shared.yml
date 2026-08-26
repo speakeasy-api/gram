@@ -1,18 +1,16 @@
 # Shared infra — one copy across ALL git worktrees.
 #
+# ClickHouse is shared at the server and volume level. Each worktree uses its
+# own validated database name, so table and migration state stay isolated.
+#
 # Temporal is stateful and shared. `git:workinit` gives every worktree a unique
 # TEMPORAL_NAMESPACE, so identical workflow IDs and task queues remain isolated.
 # The default namespace belongs to the main tree.
 #
-# Pub/Sub is stateful too, but its fully-qualified resource paths include a
-# project ID. `git:workinit` gives every worktree a unique GRAM_GCP_PROJECT_ID,
-# so one emulator can safely host identical topic and subscription IDs for all
-# trees.
-#
-# Presidio is stateless and expensive to duplicate. LGTM separates intermixed
-# telemetry with OTEL_RESOURCE_ATTRIBUTES=worktree=$COMPOSE_PROJECT_NAME.
-# `git:workinit` writes all worktree dimensions; `mise.toml` holds the main tree
-# defaults.
+# Pub/Sub resource paths include a per-worktree project ID, allowing one shared
+# emulator to host identical topic and subscription IDs for every worktree.
+# Presidio is stateless and expensive to duplicate. LGTM separates telemetry
+# with OTEL_RESOURCE_ATTRIBUTES=worktree=$COMPOSE_PROJECT_NAME.
 #
 # Always manage this file under its fixed project:
 #
@@ -22,7 +20,8 @@
 # Host ports are hardcoded literals, not interpolated per-worktree variables.
 # This prevents a worktree carrying stale remapped ports from republishing a
 # shared container elsewhere and fragmenting the stack. Keep the literals in
-# sync with mise.toml: Temporal 7233/8233, Pub/Sub 8088, Presidio 5050, LGTM
+# sync with mise.toml: ClickHouse 8123/9440, Temporal 7233/8233, Pub/Sub 8088,
+# Presidio 5050, LGTM
 # 13000/13200/13100/9099, and OTLP 4317/4318.
 #
 # Every port is bound to 127.0.0.1. These unauthenticated local development
@@ -120,6 +119,44 @@ services:
       retries: 15
       start_period: 2s
 
+  clickhouse:
+    image: clickhouse/clickhouse-server:26.7.5.10@sha256:800e82865530eb2f1c4bc1b960e43b435fd9b2d83b4bd04a2564a5cfd88fdb6e
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8123:8123"
+      - "127.0.0.1:9440:9440"
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: gram
+      CLICKHOUSE_PASSWORD: gram
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    volumes:
+      - ./local/clickhouse/config.d/config.xml:/etc/clickhouse-server/config.d/gram-config.xml:ro
+      - ./local/clickhouse/config.d/limits.xml:/etc/clickhouse-server/config.d/gram-limits.xml:ro
+      - ./local/clickhouse/config.d/ssl.xml:/etc/clickhouse-server/config.d/gram-ssl.xml:ro
+      - ./local/clickhouse/users.d/dev_profile.xml:/etc/clickhouse-server/users.d/gram-dev-profile.xml:ro
+      - ./local/clickhouse/certs:/etc/clickhouse-server/certs:ro
+      - clickhouse_data:/var/lib/clickhouse
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "clickhouse-client",
+          "--user",
+          "gram",
+          "--password",
+          "gram",
+          "--query",
+          "SELECT 1",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 6
+
   gram-presidio:
     image: mcr.microsoft.com/presidio-analyzer:2.2.362
     restart: unless-stopped
@@ -172,6 +209,8 @@ services:
 
 volumes:
   temporal_data:
+    driver: local
+  clickhouse_data:
     driver: local
   lgtm_data:
     driver: local

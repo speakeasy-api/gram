@@ -27,12 +27,9 @@ echo $$ > "$marker"
 rm -f "$failed"
 trap 'code=$?; rm -f "$marker"; [ "$code" -eq 0 ] || echo "$code" > "$failed"' EXIT
 
-# Re-booting a worktree whose stack is already running fails for a reason that
-# has nothing to do with the worktree: `mise run start` kills the previous
-# daemons, pitchfork records the kill as a daemon failure, `start` reports
-# failure, and `zero` never reaches `mise run seed` -- leaving the org on the
-# demo gate. Stop cleanly first so a retry is a real retry. No-op on a fresh
-# worktree, where nothing is running yet.
+# Re-booting a worktree whose stack is already running can make pitchfork treat
+# intentional replacement of old daemons as a failure. Stop cleanly first so a
+# retry is a real retry. No-op on a fresh worktree.
 mise run stop || true
 
 # INFRA_READINESS_TIMEOUT is raised from its 30s default because a new worktree
@@ -46,23 +43,4 @@ mise run stop || true
 # synchronously (only background Temporal risk activities do, and they already
 # retry), and infra:start treats the wait as advisory anyway. An interactive
 # `./zero` keeps the wait so its success message stays honest.
-if INFRA_READINESS_TIMEOUT=300 PRESIDIO_READINESS_TIMEOUT=0 ./zero --agent; then
-    exit 0
-fi
-
-# `mise run seed` is `zero`'s last step, and the one that fills the org with
-# data and lifts it off the demo gate -- a boot that stops here leaves a
-# dashboard that looks broken. It talks only to Postgres and ClickHouse (no
-# server, no dev-idp handshake), so the remaining failure mode is a database
-# still settling on a cold volume. Retry the seed alone -- if `zero` failed
-# earlier than seeding, these retries fail too and the boot is reported failed
-# anyway.
-for delay in 15 30 60; do
-    sleep "$delay"
-    echo "Retrying seed after a ${delay}s wait..."
-    if mise run seed; then
-        exit 0
-    fi
-done
-
-exit 1
+INFRA_READINESS_TIMEOUT=300 PRESIDIO_READINESS_TIMEOUT=0 ./zero --agent
