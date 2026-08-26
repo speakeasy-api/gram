@@ -438,7 +438,7 @@ func (src *codexCloudSource) writeFile(ctx context.Context, file codexapi.LogFil
 		}
 	}
 
-	rows := make([]chatrepo.CreateExternalChatMessageParams, 0, len(admitted))
+	rows := make([]ChatOTELMessage, 0, len(admitted))
 	for i, event := range admitted {
 		var role, content string
 		switch event.EventDetails.DetailType {
@@ -456,37 +456,40 @@ func (src *codexCloudSource) writeFile(ctx context.Context, file codexapi.LogFil
 			return err
 		}
 
-		rows = append(rows, chatrepo.CreateExternalChatMessageParams{
-			ChatID:            src.chatIDs[event.EventDetails.SessionID],
-			Role:              role,
-			ProjectID:         src.cfg.ProjectID,
-			Content:           content,
-			ContentRaw:        nil,
-			ContentAssetUrl:   pgtype.Text{String: "", Valid: false},
-			StorageError:      pgtype.Text{String: "", Valid: false},
-			Model:             conv.ToPGTextEmpty(event.EventDetails.Model),
-			MessageID:         pgtype.Text{String: "", Valid: false},
-			ToolCallID:        pgtype.Text{String: "", Valid: false},
-			UserID:            conv.ToPGText(userID),
-			ExternalUserID:    conv.ToPGText(event.Actor.UserID),
-			ExternalMessageID: conv.ToPGText(event.EventID),
-			FinishReason:      conv.ToPGTextEmpty(event.EventDetails.Status),
-			ToolCalls:         nil,
-			// Per-turn token_usage from the feed is deliberately dropped:
-			// cloud tokens meter through the compliance COSTS promotion, and
-			// recording them here as well would double count.
-			PromptTokens:     0,
-			CompletionTokens: 0,
-			TotalTokens:      0,
-			Origin:           pgtype.Text{String: "", Valid: false},
-			// The client_id (CODEX_WEB) is the closest surface signal the
-			// feed carries; it rides this column for per-client analysis.
-			UserAgent:   conv.ToPGTextEmpty(event.ClientID),
-			IpAddress:   pgtype.Text{String: "", Valid: false},
-			Source:      conv.ToPGText(codexCloudSourceSlug),
-			ContentHash: nil,
-			Generation:  0,
-			CreatedAt:   conv.ToPGTimestamptz(admittedAt[i]),
+		rows = append(rows, ChatOTELMessage{
+			Row: chatrepo.CreateExternalChatMessageParams{
+				ChatID:            src.chatIDs[event.EventDetails.SessionID],
+				Role:              role,
+				ProjectID:         src.cfg.ProjectID,
+				Content:           content,
+				ContentRaw:        nil,
+				ContentAssetUrl:   pgtype.Text{String: "", Valid: false},
+				StorageError:      pgtype.Text{String: "", Valid: false},
+				Model:             conv.ToPGTextEmpty(event.EventDetails.Model),
+				MessageID:         pgtype.Text{String: "", Valid: false},
+				ToolCallID:        pgtype.Text{String: "", Valid: false},
+				UserID:            conv.ToPGText(userID),
+				ExternalUserID:    conv.ToPGText(event.Actor.UserID),
+				ExternalMessageID: conv.ToPGText(event.EventID),
+				FinishReason:      conv.ToPGTextEmpty(event.EventDetails.Status),
+				ToolCalls:         nil,
+				// Per-turn token_usage from the feed is deliberately dropped:
+				// cloud tokens meter through the compliance COSTS promotion, and
+				// recording them here as well would double count.
+				PromptTokens:     0,
+				CompletionTokens: 0,
+				TotalTokens:      0,
+				Origin:           pgtype.Text{String: "", Valid: false},
+				// The client_id (CODEX_WEB) is the closest surface signal the
+				// feed carries; it rides this column for per-client analysis.
+				UserAgent:   conv.ToPGTextEmpty(event.ClientID),
+				IpAddress:   pgtype.Text{String: "", Valid: false},
+				Source:      conv.ToPGText(codexCloudSourceSlug),
+				ContentHash: nil,
+				Generation:  0,
+				CreatedAt:   conv.ToPGTimestamptz(admittedAt[i]),
+			},
+			ExternalUserEmail: event.Actor.UserEmail,
 		})
 	}
 	if len(rows) == 0 {
@@ -498,7 +501,7 @@ func (src *codexCloudSource) writeFile(ctx context.Context, file codexapi.LogFil
 	// rows again even though the insert dedupes them, and downstream
 	// consumers dedupe on the deterministic record id.
 	src.svc.mirror.PublishMessages(ctx, src.cfg, rows)
-	written, err := src.svc.writer.WriteExternal(ctx, src.cfg.ProjectID, rows)
+	written, err := src.svc.writer.WriteExternal(ctx, src.cfg.ProjectID, chatOTELMessageRows(rows))
 	src.progressMu.Lock()
 	src.progress.MessagesWritten += written
 	src.progressMu.Unlock()

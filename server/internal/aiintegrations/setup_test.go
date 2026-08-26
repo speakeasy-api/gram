@@ -96,3 +96,12 @@ func (p *captureOTELLogPublisher) Sent() []*otelv1.InboundLogRecord {
 	copy(out, p.sent)
 	return out
 }
+
+func mirrorRecordAttr(record *otelv1.InboundLogRecord, key string) (string, bool) {
+	for _, kv := range record.GetAttributes() {
+		if kv.GetKey() == key {
+			return kv.GetValue().GetStringValue(), true
+		}
+	}
+	return "", false
+}

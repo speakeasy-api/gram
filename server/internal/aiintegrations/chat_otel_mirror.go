@@ -45,6 +45,29 @@ const (
 // record id and downstream consumers can dedupe.
 var chatOTELRecordNamespace = uuid.MustParse("5f2ac9a7-1f7d-4c15-9f28-3f4be3a1d0b6")
 
+// ChatOTELMessage is the mirror boundary input for one imported compliance
+// chat message. Row carries the Postgres write shape (including native
+// ExternalUserID); ExternalUserEmail carries the provider actor email when the
+// feed reported one. Gram's internally resolved UserID lives only on Row and
+// is never mirrored.
+type ChatOTELMessage struct {
+	Row               chatrepo.CreateExternalChatMessageParams
+	ExternalUserEmail string
+}
+
+// chatOTELMessageRows extracts the Postgres write params from a mirror
+// envelope slice.
+func chatOTELMessageRows(msgs []ChatOTELMessage) []chatrepo.CreateExternalChatMessageParams {
+	if len(msgs) == 0 {
+		return nil
+	}
+	rows := make([]chatrepo.CreateExternalChatMessageParams, len(msgs))
+	for i, msg := range msgs {
+		rows[i] = msg.Row
+	}
+	return rows
+}
+
 // ChatOTELMirror mirrors fetched compliance chat messages onto the
 // gram.otel.v1.InboundLogRecord Pub/Sub topic, feeding the OTEL log pipeline
 // (transform/enrichment, ClickHouse event feed, relay) alongside the primary
@@ -71,12 +94,12 @@ func NewChatOTELMirror(logger *slog.Logger, pub gcp.Publisher[*otelv1.InboundLog
 	}
 }
 
-// PublishMessages mirrors fetched chat message rows onto the OTEL log topic.
+// PublishMessages mirrors fetched chat messages onto the OTEL log topic.
 // Callers publish before writing the rows to Postgres, so a retried batch may
 // publish the same rows again; record ids are deterministic so downstream
 // consumers can dedupe.
-func (m *ChatOTELMirror) PublishMessages(ctx context.Context, cfg Config, rows []chatrepo.CreateExternalChatMessageParams) {
-	if len(rows) == 0 {
+func (m *ChatOTELMirror) PublishMessages(ctx context.Context, cfg Config, msgs []ChatOTELMessage) {
+	if len(msgs) == 0 {
 		return
 	}
 
@@ -85,9 +108,9 @@ func (m *ChatOTELMirror) PublishMessages(ctx context.Context, cfg Config, rows [
 	// settings and chatOTELPublishAckTimeout bound the work instead.
 	ctx = context.WithoutCancel(ctx)
 
-	results := make([]gcp.PublishResult, len(rows))
-	for i, row := range rows {
-		results[i] = m.pub.Publish(ctx, chatMessageLogRecord(cfg, row))
+	results := make([]gcp.PublishResult, len(msgs))
+	for i, msg := range msgs {
+		results[i] = m.pub.Publish(ctx, chatMessageLogRecord(cfg, msg))
 	}
 
 	m.drains.Add(1)
@@ -114,13 +137,15 @@ func (m *ChatOTELMirror) drainPublishAcks(ctx context.Context, results []gcp.Pub
 	}
 }
 
-// chatMessageLogRecord maps one fetched chat message row to its inbound OTEL
-// log record, in the wire shape the dialect.ComplianceLog interpreter reads.
+// chatMessageLogRecord maps one mirror envelope to its inbound OTEL log
+// record, in the wire shape the dialect.ComplianceLog interpreter reads.
 // Every derived field is deterministic — the record id comes from the same
 // (chat_id, external_message_id) pair that dedupes the Postgres import and
 // both timestamps come from the row's created_at — so a replayed publish
-// produces an identical record.
-func chatMessageLogRecord(cfg Config, row chatrepo.CreateExternalChatMessageParams) *otelv1.InboundLogRecord {
+// produces an identical record. Only native provider identity is forwarded:
+// ExternalUserID and ExternalUserEmail; Row.UserID is never read.
+func chatMessageLogRecord(cfg Config, msg ChatOTELMessage) *otelv1.InboundLogRecord {
+	row := msg.Row
 	recordID := uuid.NewSHA1(chatOTELRecordNamespace, []byte(row.ChatID.String()+"/"+row.ExternalMessageID.String)).String()
 	timeNano := uint64(row.CreatedAt.Time.UnixNano())
 
@@ -131,6 +156,9 @@ func chatMessageLogRecord(cfg Config, row chatrepo.CreateExternalChatMessagePara
 	}
 	if row.ExternalUserID.String != "" {
 		attrs = append(attrs, chatOTELStringAttr(dialect.ComplianceLogUserIDAttr, row.ExternalUserID.String))
+	}
+	if msg.ExternalUserEmail != "" {
+		attrs = append(attrs, chatOTELStringAttr(dialect.ComplianceLogUserEmailAttr, msg.ExternalUserEmail))
 	}
 	if row.Model.String != "" {
 		attrs = append(attrs, chatOTELStringAttr(chatOTELModelAttr, row.Model.String))

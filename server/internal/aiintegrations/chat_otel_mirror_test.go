@@ -29,7 +29,7 @@ func mirrorTestRow(chatID uuid.UUID, role, content, externalMessageID string) ch
 		Model:             conv.ToPGText("gpt-5.5"),
 		MessageID:         pgtype.Text{String: "", Valid: false},
 		ToolCallID:        pgtype.Text{String: "", Valid: false},
-		UserID:            pgtype.Text{String: "", Valid: false},
+		UserID:            conv.ToPGText("gram-internal-user-id"),
 		ExternalUserID:    conv.ToPGText("external-user-id"),
 		ExternalMessageID: conv.ToPGText(externalMessageID),
 		FinishReason:      pgtype.Text{String: "", Valid: false},
@@ -47,24 +47,18 @@ func mirrorTestRow(chatID uuid.UUID, role, content, externalMessageID string) ch
 	}
 }
 
-func mirrorRecordAttr(record *otelv1.InboundLogRecord, key string) (string, bool) {
-	for _, kv := range record.GetAttributes() {
-		if kv.GetKey() == key {
-			return kv.GetValue().GetStringValue(), true
-		}
-	}
-	return "", false
-}
-
 func TestChatMessageLogRecordMapsRowDeterministically(t *testing.T) {
 	t.Parallel()
 
 	cfg := chatgptConversationConfig()
 	chatID := uuid.MustParse("77777777-7777-4777-8777-777777777777")
-	row := mirrorTestRow(chatID, "user", "what is our refund policy?", "msg_1")
+	msg := ChatOTELMessage{
+		Row:               mirrorTestRow(chatID, "user", "what is our refund policy?", "msg_1"),
+		ExternalUserEmail: "user@example.invalid",
+	}
 
-	record := chatMessageLogRecord(cfg, row)
-	replayed := chatMessageLogRecord(cfg, row)
+	record := chatMessageLogRecord(cfg, msg)
+	replayed := chatMessageLogRecord(cfg, msg)
 
 	// The record id is a UUID derived from (chat_id, external_message_id):
 	// stable across replays so downstream consumers can dedupe.
@@ -72,7 +66,9 @@ func TestChatMessageLogRecordMapsRowDeterministically(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, record.GetRecordId(), replayed.GetRecordId())
 
-	other := chatMessageLogRecord(cfg, mirrorTestRow(chatID, "user", "what is our refund policy?", "msg_2"))
+	other := chatMessageLogRecord(cfg, ChatOTELMessage{
+		Row: mirrorTestRow(chatID, "user", "what is our refund policy?", "msg_2"),
+	})
 	require.NotEqual(t, record.GetRecordId(), other.GetRecordId())
 
 	// Both timestamps come from the row's created_at, never publish time.
@@ -97,9 +93,16 @@ func TestChatMessageLogRecordMapsRowDeterministically(t *testing.T) {
 	userID, ok := mirrorRecordAttr(record, dialect.ComplianceLogUserIDAttr)
 	require.True(t, ok)
 	require.Equal(t, "external-user-id", userID)
+	email, ok := mirrorRecordAttr(record, dialect.ComplianceLogUserEmailAttr)
+	require.True(t, ok)
+	require.Equal(t, "user@example.invalid", email)
 	model, ok := mirrorRecordAttr(record, "gen_ai.request.model")
 	require.True(t, ok)
 	require.Equal(t, "gpt-5.5", model)
+
+	for _, kv := range record.GetAttributes() {
+		require.NotEqual(t, "gram-internal-user-id", kv.GetValue().GetStringValue())
+	}
 
 	require.Len(t, record.GetResource().GetAttributes(), 1)
 	require.Equal(t, "service.name", record.GetResource().GetAttributes()[0].GetKey())
@@ -110,6 +113,71 @@ func TestChatMessageLogRecordMapsRowDeterministically(t *testing.T) {
 	require.Equal(t, cfg.ProjectID.String(), record.GetProvenance().GetProjectId())
 }
 
+func TestChatMessageLogRecordProviderIdentityVariants(t *testing.T) {
+	t.Parallel()
+
+	cfg := chatgptConversationConfig()
+	chatID := uuid.New()
+
+	t.Run("id only", func(t *testing.T) {
+		t.Parallel()
+		msg := mirrorTestRow(chatID, "user", "hello", "msg_id_only")
+		msg.ExternalUserID = conv.ToPGText("provider-user-id")
+		msg.UserID = conv.ToPGText("gram-user-should-not-mirror")
+		record := chatMessageLogRecord(cfg, ChatOTELMessage{Row: msg})
+
+		gotID, ok := mirrorRecordAttr(record, dialect.ComplianceLogUserIDAttr)
+		require.True(t, ok)
+		require.Equal(t, "provider-user-id", gotID)
+		_, ok = mirrorRecordAttr(record, dialect.ComplianceLogUserEmailAttr)
+		require.False(t, ok)
+		for _, kv := range record.GetAttributes() {
+			require.NotEqual(t, "gram-user-should-not-mirror", kv.GetValue().GetStringValue())
+		}
+	})
+
+	t.Run("email only", func(t *testing.T) {
+		t.Parallel()
+		msg := mirrorTestRow(chatID, "user", "hello", "msg_email_only")
+		msg.ExternalUserID = pgtype.Text{String: "", Valid: false}
+		msg.UserID = conv.ToPGText("gram-user-should-not-mirror")
+		record := chatMessageLogRecord(cfg, ChatOTELMessage{
+			Row:               msg,
+			ExternalUserEmail: "actor@example.invalid",
+		})
+
+		_, ok := mirrorRecordAttr(record, dialect.ComplianceLogUserIDAttr)
+		require.False(t, ok)
+		gotEmail, ok := mirrorRecordAttr(record, dialect.ComplianceLogUserEmailAttr)
+		require.True(t, ok)
+		require.Equal(t, "actor@example.invalid", gotEmail)
+		for _, kv := range record.GetAttributes() {
+			require.NotEqual(t, "gram-user-should-not-mirror", kv.GetValue().GetStringValue())
+		}
+	})
+
+	t.Run("both", func(t *testing.T) {
+		t.Parallel()
+		msg := mirrorTestRow(chatID, "user", "hello", "msg_both")
+		msg.ExternalUserID = conv.ToPGText("provider-user-id")
+		msg.UserID = conv.ToPGText("gram-user-should-not-mirror")
+		record := chatMessageLogRecord(cfg, ChatOTELMessage{
+			Row:               msg,
+			ExternalUserEmail: "actor@example.invalid",
+		})
+
+		gotID, ok := mirrorRecordAttr(record, dialect.ComplianceLogUserIDAttr)
+		require.True(t, ok)
+		require.Equal(t, "provider-user-id", gotID)
+		gotEmail, ok := mirrorRecordAttr(record, dialect.ComplianceLogUserEmailAttr)
+		require.True(t, ok)
+		require.Equal(t, "actor@example.invalid", gotEmail)
+		for _, kv := range record.GetAttributes() {
+			require.NotEqual(t, "gram-user-should-not-mirror", kv.GetValue().GetStringValue())
+		}
+	})
+}
+
 func TestChatMessageLogRecordOmitsUnknownOptionalAttributes(t *testing.T) {
 	t.Parallel()
 
@@ -118,9 +186,11 @@ func TestChatMessageLogRecordOmitsUnknownOptionalAttributes(t *testing.T) {
 	row.ExternalUserID = pgtype.Text{String: "", Valid: false}
 	row.Model = pgtype.Text{String: "", Valid: false}
 
-	record := chatMessageLogRecord(cfg, row)
+	record := chatMessageLogRecord(cfg, ChatOTELMessage{Row: row})
 
 	_, ok := mirrorRecordAttr(record, dialect.ComplianceLogUserIDAttr)
+	require.False(t, ok)
+	_, ok = mirrorRecordAttr(record, dialect.ComplianceLogUserEmailAttr)
 	require.False(t, ok)
 	_, ok = mirrorRecordAttr(record, "gen_ai.request.model")
 	require.False(t, ok)
@@ -128,6 +198,21 @@ func TestChatMessageLogRecordOmitsUnknownOptionalAttributes(t *testing.T) {
 	role, ok := mirrorRecordAttr(record, dialect.ComplianceLogRoleAttr)
 	require.True(t, ok)
 	require.Equal(t, "assistant", role)
+}
+
+func TestChatOTELMessageRowsExtractsPostgresParams(t *testing.T) {
+	t.Parallel()
+
+	chatID := uuid.New()
+	msgs := []ChatOTELMessage{
+		{Row: mirrorTestRow(chatID, "user", "one", "msg_1"), ExternalUserEmail: "a@example.invalid"},
+		{Row: mirrorTestRow(chatID, "assistant", "two", "msg_2"), ExternalUserEmail: "a@example.invalid"},
+	}
+	rows := chatOTELMessageRows(msgs)
+	require.Len(t, rows, 2)
+	require.Equal(t, "one", rows[0].Content)
+	require.Equal(t, "two", rows[1].Content)
+	require.Nil(t, chatOTELMessageRows(nil))
 }
 
 func TestChatOTELMirrorPublishesEveryRow(t *testing.T) {
@@ -138,9 +223,9 @@ func TestChatOTELMirrorPublishesEveryRow(t *testing.T) {
 	cfg := chatgptConversationConfig()
 	chatID := uuid.New()
 
-	mirror.PublishMessages(t.Context(), cfg, []chatrepo.CreateExternalChatMessageParams{
-		mirrorTestRow(chatID, "user", "hello", "msg_1"),
-		mirrorTestRow(chatID, "assistant", "hi there", "msg_2"),
+	mirror.PublishMessages(t.Context(), cfg, []ChatOTELMessage{
+		{Row: mirrorTestRow(chatID, "user", "hello", "msg_1"), ExternalUserEmail: "user@example.invalid"},
+		{Row: mirrorTestRow(chatID, "assistant", "hi there", "msg_2"), ExternalUserEmail: "user@example.invalid"},
 	})
 	mirror.drains.Wait()
 
@@ -148,6 +233,9 @@ func TestChatOTELMirrorPublishesEveryRow(t *testing.T) {
 	require.Len(t, sent, 2)
 	require.Equal(t, "hello", sent[0].GetBody().GetStringValue())
 	require.Equal(t, "hi there", sent[1].GetBody().GetStringValue())
+	email, ok := mirrorRecordAttr(sent[0], dialect.ComplianceLogUserEmailAttr)
+	require.True(t, ok)
+	require.Equal(t, "user@example.invalid", email)
 
 	// Nothing to mirror publishes nothing.
 	mirror.PublishMessages(t.Context(), cfg, nil)

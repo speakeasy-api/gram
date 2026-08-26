@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -160,6 +161,15 @@ func TestChatGPTConversationProcessPageWritesChatAndMessagesIdempotently(t *test
 	require.Equal(t, "What is our refund policy?", mirrored[0].GetBody().GetStringValue())
 	require.Equal(t, orgID, mirrored[0].GetProvenance().GetOrganizationId())
 	require.Equal(t, project.ID.String(), mirrored[0].GetProvenance().GetProjectId())
+	gotUserID, ok := mirrorRecordAttr(mirrored[0], dialect.ComplianceLogUserIDAttr)
+	require.True(t, ok)
+	require.Equal(t, "oai_user_1", gotUserID)
+	gotEmail, ok := mirrorRecordAttr(mirrored[0], dialect.ComplianceLogUserEmailAttr)
+	require.True(t, ok)
+	require.Equal(t, "ada@example.com", gotEmail)
+	for _, kv := range mirrored[0].GetAttributes() {
+		require.NotEqual(t, userRow.ID, kv.GetValue().GetStringValue())
+	}
 
 	// Replaying the same file must not duplicate messages: the insert
 	// dedupes on (chat_id, external_message_id).
