@@ -105,9 +105,9 @@ linters:
           - gosec
         text: G306
       # NOT a false positive: the local development seed deliberately provisions
-      # well-known API and tunnel keys so mise.toml can ship them as defaults.
-      # They only ever exist in a developer's own database, and both carry a
-      # `local` marker in their prefix. See seed/demo/README.md.
+      # a well-known API key so mise.toml can ship it as a default. It only
+      # ever exists in a developer's own database, and it carries a `local`
+      # marker in its prefix. See seed/demo/README.md.
       - path: internal/demoseed/(local|mcpapp)\.go
         linters:
           - gosec

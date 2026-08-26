@@ -94,12 +94,12 @@ needs and the shared demo org must never have:
   a direct `chat:read` grant (Admin deliberately omits it, and without it the
   Agent Sessions list would hide every seeded chat because they belong to the
   fictional teammates).
-- **Fixed credentials.** A `seed-key` API key and the Postgres-MCP tunnel key,
-  both well-known constants rather than generated values — so `mise.toml` ships
-  `GRAM_API_KEY` and `TUNNEL_LOCAL_*` as checked-in defaults and nothing is
-  written back into `mise.local.toml` after a seed run. `server/.golangci.yaml`
-  carries a narrow, commented `G101` exemption for them: they are genuinely
-  hardcoded credentials, deliberately, scoped to one developer's database.
+- **Fixed credentials.** A `seed-key` API key, a well-known constant rather
+  than a generated value — so `mise.toml` ships `GRAM_API_KEY` as a checked-in
+  default and nothing is written back into `mise.local.toml` after a seed run.
+  `server/.golangci.yaml` carries a narrow, commented `G101` exemption for it:
+  it is a genuinely hardcoded credential, deliberately, scoped to one
+  developer's database.
 - **A default environment**, the global `Gram Recommended` MCP registry row
   (not tenant-scoped, so it cannot live in the seed proper), and the
   Playground's MCP App: a Gram Function zipped in-memory from

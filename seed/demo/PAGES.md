@@ -41,13 +41,12 @@ Status: `[x]` seeded + verified · `[~]` seeded, not yet verified · `[ ]` not s
 These come from `server/internal/demoseed/local.go` after the seed, so they are
 present in a developer's org and deliberately absent from the shared demo org.
 
-| Page               | Backing data                                                                      |
-| ------------------ | --------------------------------------------------------------------------------- |
-| Environments       | One `Default` environment                                                         |
-| Sources → tunnels  | `tunneled_mcp_servers` + issuer + `mcp_servers`/`mcp_endpoints` fixed-key fixture |
-| Playground MCP App | Functions deployment + UI resource, zipped from `demoseed/mcpapp/`                |
-| API keys           | The well-known `seed-key`                                                         |
-| Catalog            | The global `Gram Recommended` registry row                                        |
+| Page               | Backing data                                                       |
+| ------------------ | ------------------------------------------------------------------ |
+| Environments       | One `Default` environment                                          |
+| Playground MCP App | Functions deployment + UI resource, zipped from `demoseed/mcpapp/` |
+| API keys           | The well-known `seed-key`                                          |
+| Catalog            | The global `Gram Recommended` registry row                         |
 
 ## Not seeded (deliberate)
 
