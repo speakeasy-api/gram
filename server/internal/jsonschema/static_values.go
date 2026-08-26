@@ -17,9 +17,9 @@ type StaticValue struct {
 	// Keyword is one of const, default, enum, example, or examples.
 	Keyword string
 
-	// Value is the decoded JSON value. Numbers remain json.Number values so
-	// callers can render them without losing precision.
-	Value any
+	// ValueJSON is the JSON-encoded value. Keeping it encoded preserves null
+	// and number precision across API clients.
+	ValueJSON string
 }
 
 var staticValueKeywords = []string{"const", "default", "enum", "example", "examples"}
@@ -47,7 +47,9 @@ func StaticValues(schema []byte) ([]StaticValue, error) {
 	}
 
 	values := make([]StaticValue, 0)
-	collectStaticValues(root, nil, &values)
+	if err := collectStaticValues(root, nil, &values); err != nil {
+		return nil, err
+	}
 	sort.Slice(values, func(i, j int) bool {
 		if values[i].SchemaPath != values[j].SchemaPath {
 			return values[i].SchemaPath < values[j].SchemaPath
@@ -58,18 +60,22 @@ func StaticValues(schema []byte) ([]StaticValue, error) {
 	return values, nil
 }
 
-func collectStaticValues(node any, path []string, values *[]StaticValue) {
+func collectStaticValues(node any, path []string, values *[]StaticValue) error {
 	schema, ok := node.(map[string]any)
 	if !ok {
-		return
+		return nil
 	}
 
 	for _, keyword := range staticValueKeywords {
 		if value, ok := schema[keyword]; ok {
+			encoded, err := encodeValueJSON(value)
+			if err != nil {
+				return fmt.Errorf("encode %s value at %s: %w", keyword, jsonPointer(path), err)
+			}
 			*values = append(*values, StaticValue{
 				SchemaPath: jsonPointer(path),
 				Keyword:    keyword,
-				Value:      value,
+				ValueJSON:  encoded,
 			})
 		}
 	}
@@ -80,7 +86,9 @@ func collectStaticValues(node any, path []string, values *[]StaticValue) {
 			continue
 		}
 		for _, name := range sortedMapKeys(children) {
-			collectStaticValues(children[name], appendPath(path, keyword, name), values)
+			if err := collectStaticValues(children[name], appendPath(path, keyword, name), values); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -89,12 +97,16 @@ func collectStaticValues(node any, path []string, values *[]StaticValue) {
 		if keyword == "items" {
 			if children, ok := child.([]any); ok {
 				for i, item := range children {
-					collectStaticValues(item, appendPath(path, keyword, fmt.Sprintf("%d", i)), values)
+					if err := collectStaticValues(item, appendPath(path, keyword, fmt.Sprintf("%d", i)), values); err != nil {
+						return err
+					}
 				}
 				continue
 			}
 		}
-		collectStaticValues(child, appendPath(path, keyword), values)
+		if err := collectStaticValues(child, appendPath(path, keyword), values); err != nil {
+			return err
+		}
 	}
 
 	for _, keyword := range schemaArrayKeywords {
@@ -103,16 +115,33 @@ func collectStaticValues(node any, path []string, values *[]StaticValue) {
 			continue
 		}
 		for i, child := range children {
-			collectStaticValues(child, appendPath(path, keyword, fmt.Sprintf("%d", i)), values)
+			if err := collectStaticValues(child, appendPath(path, keyword, fmt.Sprintf("%d", i)), values); err != nil {
+				return err
+			}
 		}
 	}
 
 	// Draft 7 dependencies may contain either property-name arrays or schemas.
 	if dependencies, ok := schema["dependencies"].(map[string]any); ok {
 		for _, name := range sortedMapKeys(dependencies) {
-			collectStaticValues(dependencies[name], appendPath(path, "dependencies", name), values)
+			if err := collectStaticValues(dependencies[name], appendPath(path, "dependencies", name), values); err != nil {
+				return err
+			}
 		}
 	}
+
+	return nil
+}
+
+func encodeValueJSON(value any) (string, error) {
+	var encoded bytes.Buffer
+	enc := json.NewEncoder(&encoded)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(value); err != nil {
+		return "", err
+	}
+	return strings.TrimSuffix(encoded.String(), "\n"), nil
 }
 
 func appendPath(path []string, tokens ...string) []string {

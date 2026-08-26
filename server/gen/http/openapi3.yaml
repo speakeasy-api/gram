@@ -83063,12 +83063,14 @@ components:
                 schema_path:
                     type: string
                     description: JSON Pointer to the schema object containing the keyword
-                value:
-                    description: The literal JSON value; null is a valid value
+                value_json:
+                    type: string
+                    description: JSON-encoded literal value, preserving null and number precision
             description: A literal value carried by a JSON Schema keyword.
             required:
                 - schema_path
                 - keyword
+                - value_json
         ToolSchemaStaticValues:
             type: object
             properties:

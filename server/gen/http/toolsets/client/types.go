@@ -3968,8 +3968,8 @@ type ToolSchemaStaticValueResponseBody struct {
 	SchemaPath *string `form:"schema_path,omitempty" json:"schema_path,omitempty" xml:"schema_path,omitempty"`
 	// The JSON Schema keyword containing the value
 	Keyword *string `form:"keyword,omitempty" json:"keyword,omitempty" xml:"keyword,omitempty"`
-	// The literal JSON value; null is a valid value
-	Value any `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
+	// JSON-encoded literal value, preserving null and number precision
+	ValueJSON *string `form:"value_json,omitempty" json:"value_json,omitempty" xml:"value_json,omitempty"`
 }
 
 // ExternalOAuthServerFormRequestBody is used to define fields on request body
@@ -12816,6 +12816,9 @@ func ValidateToolSchemaStaticValueResponseBody(body *ToolSchemaStaticValueRespon
 	}
 	if body.Keyword == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("keyword", "body"))
+	}
+	if body.ValueJSON == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("value_json", "body"))
 	}
 	return
 }

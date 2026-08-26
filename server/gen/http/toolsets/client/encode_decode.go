@@ -4188,7 +4188,7 @@ func unmarshalToolSchemaStaticValueResponseBodyToToolsetsToolSchemaStaticValue(v
 	res := &toolsets.ToolSchemaStaticValue{
 		SchemaPath: *v.SchemaPath,
 		Keyword:    *v.Keyword,
-		Value:      v.Value,
+		ValueJSON:  *v.ValueJSON,
 	}
 
 	return res

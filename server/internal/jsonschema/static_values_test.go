@@ -1,7 +1,6 @@
 package jsonschema
 
 import (
-	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -18,7 +17,7 @@ func TestStaticValues(t *testing.T) {
 				"const": "fixed",
 				"default": "fallback",
 				"enum": ["fixed", "other"],
-				"example": "sample",
+				"example": "<sample&>",
 				"examples": ["one", "two"]
 			},
 			"default": {
@@ -41,15 +40,15 @@ func TestStaticValues(t *testing.T) {
 	}`))
 	require.NoError(t, err)
 	require.Equal(t, []StaticValue{
-		{SchemaPath: "/$defs/Choice", Keyword: "default", Value: map[string]any{"mode": "fast"}},
-		{SchemaPath: "/$defs/Nullable", Keyword: "const", Value: nil},
-		{SchemaPath: "/properties/choice/oneOf/0", Keyword: "const", Value: "a"},
-		{SchemaPath: "/properties/default/properties/nested", Keyword: "const", Value: json.Number("9007199254740993")},
-		{SchemaPath: "/properties/header~1value", Keyword: "const", Value: "fixed"},
-		{SchemaPath: "/properties/header~1value", Keyword: "default", Value: "fallback"},
-		{SchemaPath: "/properties/header~1value", Keyword: "enum", Value: []any{"fixed", "other"}},
-		{SchemaPath: "/properties/header~1value", Keyword: "example", Value: "sample"},
-		{SchemaPath: "/properties/header~1value", Keyword: "examples", Value: []any{"one", "two"}},
+		{SchemaPath: "/$defs/Choice", Keyword: "default", ValueJSON: "{\n  \"mode\": \"fast\"\n}"},
+		{SchemaPath: "/$defs/Nullable", Keyword: "const", ValueJSON: "null"},
+		{SchemaPath: "/properties/choice/oneOf/0", Keyword: "const", ValueJSON: `"a"`},
+		{SchemaPath: "/properties/default/properties/nested", Keyword: "const", ValueJSON: "9007199254740993"},
+		{SchemaPath: "/properties/header~1value", Keyword: "const", ValueJSON: `"fixed"`},
+		{SchemaPath: "/properties/header~1value", Keyword: "default", ValueJSON: `"fallback"`},
+		{SchemaPath: "/properties/header~1value", Keyword: "enum", ValueJSON: "[\n  \"fixed\",\n  \"other\"\n]"},
+		{SchemaPath: "/properties/header~1value", Keyword: "example", ValueJSON: `"<sample&>"`},
+		{SchemaPath: "/properties/header~1value", Keyword: "examples", ValueJSON: "[\n  \"one\",\n  \"two\"\n]"},
 	}, values)
 }
 
@@ -65,7 +64,7 @@ func TestStaticValues_DoesNotInterpretExampleDataAsSchema(t *testing.T) {
 	}`))
 	require.NoError(t, err)
 	require.Equal(t, []StaticValue{
-		{SchemaPath: "", Keyword: "example", Value: map[string]any{"default": "instance data", "const": "instance data"}},
+		{SchemaPath: "", Keyword: "example", ValueJSON: "{\n  \"const\": \"instance data\",\n  \"default\": \"instance data\"\n}"},
 	}, values)
 }
 

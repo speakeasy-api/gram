@@ -404,8 +404,8 @@ var ToolSchemaStaticValue = Type("ToolSchemaStaticValue", func() {
 	Description("A literal value carried by a JSON Schema keyword.")
 	Attribute("schema_path", String, "JSON Pointer to the schema object containing the keyword")
 	Attribute("keyword", String, "The JSON Schema keyword containing the value")
-	Attribute("value", Any, "The literal JSON value; null is a valid value")
-	Required("schema_path", "keyword")
+	Attribute("value_json", String, "JSON-encoded literal value, preserving null and number precision")
+	Required("schema_path", "keyword", "value_json")
 })
 
 var ToolSchemaStaticValues = Type("ToolSchemaStaticValues", func() {

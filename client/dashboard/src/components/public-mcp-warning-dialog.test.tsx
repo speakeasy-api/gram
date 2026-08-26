@@ -55,7 +55,17 @@ describe("PublicMcpWarningDialog", () => {
               {
                 schemaPath: "/properties/api_key",
                 keyword: "example",
-                value: "example-value",
+                valueJson: '"example-value"',
+              },
+              {
+                schemaPath: "/properties/nullable",
+                keyword: "const",
+                valueJson: "null",
+              },
+              {
+                schemaPath: "/properties/large_id",
+                keyword: "const",
+                valueJson: "9007199254740993",
               },
             ],
           },
@@ -77,7 +87,9 @@ describe("PublicMcpWarningDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: /get_weather/ }));
     expect(screen.getByText("example")).toBeTruthy();
     expect(screen.getByText("/properties/api_key")).toBeTruthy();
-    expect(screen.getByText("example-value")).toBeTruthy();
+    expect(screen.getByText('"example-value"')).toBeTruthy();
+    expect(screen.getByText("null")).toBeTruthy();
+    expect(screen.getByText("9007199254740993")).toBeTruthy();
 
     const link = screen.getByRole("link", {
       name: /Review in "Default Environment"/,

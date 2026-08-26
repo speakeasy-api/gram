@@ -1,7 +1,6 @@
 package toolsets_test
 
 import (
-	"encoding/json"
 	"testing"
 
 	"github.com/google/uuid"
@@ -50,22 +49,22 @@ func TestToolsetsService_ListToolSchemaStaticValues(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, result.Tools)
 
-	var defaults map[string]any
+	var defaults map[string]string
 	for _, tool := range result.Tools {
 		if tool.ToolName != "static_values_doc_get_todos" {
 			continue
 		}
-		defaults = map[string]any{}
+		defaults = map[string]string{}
 		for _, value := range tool.Values {
 			if value.Keyword == "default" {
-				defaults[value.SchemaPath] = value.Value
+				defaults[value.SchemaPath] = value.ValueJSON
 			}
 		}
 	}
 
-	require.Equal(t, map[string]any{
-		"/properties/queryParameters/properties/limit":  json.Number("20"),
-		"/properties/queryParameters/properties/offset": json.Number("0"),
+	require.Equal(t, map[string]string{
+		"/properties/queryParameters/properties/limit":  "20",
+		"/properties/queryParameters/properties/offset": "0",
 	}, defaults)
 }
 

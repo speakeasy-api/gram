@@ -3962,8 +3962,8 @@ type ToolSchemaStaticValueResponseBody struct {
 	SchemaPath string `form:"schema_path" json:"schema_path" xml:"schema_path"`
 	// The JSON Schema keyword containing the value
 	Keyword string `form:"keyword" json:"keyword" xml:"keyword"`
-	// The literal JSON value; null is a valid value
-	Value any `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
+	// JSON-encoded literal value, preserving null and number precision
+	ValueJSON string `form:"value_json" json:"value_json" xml:"value_json"`
 }
 
 // ToolsetOriginRequestBody is used to define fields on request body types.

@@ -21,9 +21,9 @@ export type ToolSchemaStaticValue = {
    */
   schemaPath: string;
   /**
-   * The literal JSON value; null is a valid value
+   * JSON-encoded literal value, preserving null and number precision
    */
-  value?: any | undefined;
+  valueJson: string;
 };
 
 /** @internal */
@@ -34,11 +34,12 @@ export const ToolSchemaStaticValue$inboundSchema: z.ZodMiniType<
   z.object({
     keyword: z.string(),
     schema_path: z.string(),
-    value: z.optional(z.any()),
+    value_json: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
       "schema_path": "schemaPath",
+      "value_json": "valueJson",
     });
   }),
 );

@@ -4130,7 +4130,7 @@ func marshalToolsetsToolSchemaStaticValueToToolSchemaStaticValueResponseBody(v *
 	res := &ToolSchemaStaticValueResponseBody{
 		SchemaPath: v.SchemaPath,
 		Keyword:    v.Keyword,
-		Value:      v.Value,
+		ValueJSON:  v.ValueJSON,
 	}
 
 	return res

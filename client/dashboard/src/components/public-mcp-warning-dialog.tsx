@@ -20,11 +20,6 @@ interface PublicMcpWarningDialogProps {
   variableNames: string[];
 }
 
-function formatStaticValue(value: unknown): string {
-  if (typeof value === "string") return value;
-  return JSON.stringify(value, null, 2) ?? String(value);
-}
-
 export function PublicMcpWarningDialog({
   isOpen,
   onClose,
@@ -161,7 +156,7 @@ export function PublicMcpWarningDialog({
                               </code>
                             </div>
                             <pre className="bg-muted/30 overflow-x-auto p-2 font-mono text-xs whitespace-pre-wrap break-all">
-                              {formatStaticValue(value.value)}
+                              {value.valueJson}
                             </pre>
                           </div>
                         ))}

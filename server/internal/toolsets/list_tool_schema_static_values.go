@@ -77,7 +77,7 @@ func (s *Service) ListToolSchemaStaticValues(ctx context.Context, payload *gen.L
 			values = append(values, &gen.ToolSchemaStaticValue{
 				SchemaPath: staticValue.SchemaPath,
 				Keyword:    staticValue.Keyword,
-				Value:      staticValue.Value,
+				ValueJSON:  staticValue.ValueJSON,
 			})
 		}
 

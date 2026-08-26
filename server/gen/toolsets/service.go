@@ -247,8 +247,8 @@ type ToolSchemaStaticValue struct {
 	SchemaPath string
 	// The JSON Schema keyword containing the value
 	Keyword string
-	// The literal JSON value; null is a valid value
-	Value any
+	// JSON-encoded literal value, preserving null and number precision
+	ValueJSON string
 }
 
 // Static values found in one tool input schema.
