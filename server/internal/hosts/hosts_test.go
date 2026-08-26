@@ -180,6 +180,35 @@ func TestNew_RejectsMissingConfiguration(t *testing.T) {
 
 	_, err = hosts.ParseList("//app.getgram.ai")
 	require.Error(t, err)
+
+	// A non-HTTP scheme renders a URL nothing can follow.
+	_, err = hosts.New(logger, conn, mustParse(t, "ftp://app.getgram.ai"), nil, canonical)
+	require.Error(t, err)
+}
+
+// A configured base path belongs to every URL rendered from the deployment, so
+// stripping it would silently move them.
+func TestBasePathIsPreserved(t *testing.T) {
+	t.Parallel()
+
+	conn := newConn(t)
+	canonical := mustParse(t, "https://app.getgram.ai/gram")
+
+	h, err := hosts.New(testenv.NewLogger(t), conn, canonical, nil, mustParse(t, "https://callback.example.com/oauth"))
+	require.NoError(t, err)
+
+	require.Equal(t, "https://app.getgram.ai/gram", h.Canonical().String())
+	require.Equal(t, "https://callback.example.com/oauth", h.OutboundCallback().String())
+
+	// Membership still answers on the host alone, which is all a Host header
+	// carries.
+	require.True(t, h.IsPlatform("app.getgram.ai"))
+	require.True(t, h.IsPlatform("callback.example.com"))
+
+	// A resolved host is rendered on the canonical scheme and base path.
+	req := httptest.NewRequest(http.MethodGet, "https://callback.example.com/test", nil)
+	req.Host = "callback.example.com"
+	require.Equal(t, "https://callback.example.com/gram", h.Resolve(t.Context(), req, "").String())
 }
 
 func TestNewFromConfig(t *testing.T) {

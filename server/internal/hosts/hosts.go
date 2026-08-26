@@ -39,11 +39,18 @@ import (
 // Hosts answers host questions for one deployment. Construct it once at
 // startup with New and share it; it holds no per-request state.
 type Hosts struct {
-	logger           *slog.Logger
-	db               *pgxpool.Pool
+	logger *slog.Logger
+	db     *pgxpool.Pool
+
+	// canonical and outboundCallback keep whatever base path they were
+	// configured with. Callers join onto them, so dropping a configured prefix
+	// would silently move every URL rendered from them.
 	canonical        *url.URL
-	platform         []*url.URL
 	outboundCallback *url.URL
+
+	// platform holds scheme+host only: it exists to answer host membership,
+	// where a path would never match a Host header.
+	platform []*url.URL
 }
 
 // New builds the host model for a deployment.
@@ -85,9 +92,9 @@ func New(logger *slog.Logger, db *pgxpool.Pool, canonical *url.URL, platform []*
 	return &Hosts{
 		logger:           logger.With(attr.SlogComponent("hosts")),
 		db:               db,
-		canonical:        origin(canonical),
+		canonical:        clone(canonical),
+		outboundCallback: clone(outboundCallback),
 		platform:         all,
-		outboundCallback: origin(outboundCallback),
 	}, nil
 }
 
@@ -114,13 +121,14 @@ func NewFromConfig(logger *slog.Logger, db *pgxpool.Pool, canonical *url.URL, pl
 
 // validate rejects a URL that cannot be rendered as an absolute public one. A
 // scheme-relative URL such as //app.getgram.ai parses without error and has a
-// host, so the host check alone would let it through.
+// host, so the host check alone would let it through, and a non-HTTP scheme
+// would render a URL no browser or Authorization Server can follow.
 func validate(what string, u *url.URL) error {
 	switch {
 	case u == nil || u.Host == "":
 		return fmt.Errorf("hosts: %s is required", what)
-	case u.Scheme == "":
-		return fmt.Errorf("hosts: %s %q has no scheme", what, u.String())
+	case u.Scheme != "http" && u.Scheme != "https":
+		return fmt.Errorf("hosts: %s %q must be an http or https url", what, u.String())
 	default:
 		return nil
 	}
@@ -149,7 +157,8 @@ func ParseList(raw string) ([]*url.URL, error) {
 }
 
 // Canonical is the deployment's primary host: the fallback for every URL that
-// has no better host to render with.
+// has no better host to render with. Returned with its configured base path
+// intact, so callers can join onto it.
 func (h *Hosts) Canonical() *url.URL { return clone(h.canonical) }
 
 // PlatformHosts is every first-party host the deployment answers on, canonical
@@ -239,11 +248,13 @@ func (h *Hosts) Resolve(ctx context.Context, req *http.Request, organizationID s
 	return h.Canonical()
 }
 
-// at renders a host as a URL on the canonical scheme. Platform hosts and custom
-// domains share the deployment's scheme (https everywhere but local dev), so
-// there is nothing per-host to carry.
+// at renders a host as a URL on the canonical scheme and base path. Platform
+// hosts and custom domains share the deployment's scheme (https everywhere but
+// local dev) and its path prefix, so there is nothing per-host to carry.
 func (h *Hosts) at(host string) *url.URL {
-	return &url.URL{Scheme: h.canonical.Scheme, Host: strings.ToLower(host)}
+	rendered := *h.canonical
+	rendered.Host = strings.ToLower(host)
+	return &rendered
 }
 
 // defaultHost is the organization's configured default host, empty when unset
