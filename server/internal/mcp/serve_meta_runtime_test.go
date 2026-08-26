@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -325,23 +326,35 @@ func TestServePublic_MetaEndpoint_ListServers_StatusByBackend(t *testing.T) {
 	hostedMember := seedHostedMetaMember(t, ctx, ti, meta.ID, "hosted member", 1, mcpservers.VisibilityPublic, "alpha_tool")
 	proxiedSlug := "member-remote-" + uuid.NewString()[:8]
 	seedMetaMember(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "remote member", proxiedSlug, 2, mcpservers.VisibilityPrivate)
+	tunneledSlug := "member-tunnel-" + uuid.NewString()[:8]
+	tunnelID := seedTunneledMetaMember(t, ctx, ti, *authCtx.ProjectID, meta.ID, "tunneled member", tunneledSlug, 3)
 
-	envelope := callMetaTool(t, ctx, ti, slug, "list_servers", map[string]any{})
-	result := decodeMetaToolResult(t, envelope)
+	listStatuses := func() map[string]string {
+		envelope := callMetaTool(t, ctx, ti, slug, "list_servers", map[string]any{})
+		result := decodeMetaToolResult(t, envelope)
+		var listed struct {
+			Servers []struct {
+				Slug   string `json:"slug"`
+				Status string `json:"status"`
+			} `json:"servers"`
+		}
+		require.NoError(t, json.Unmarshal(result.StructuredContent, &listed))
+		statuses := map[string]string{}
+		for _, server := range listed.Servers {
+			statuses[server.Slug] = server.Status
+		}
+		return statuses
+	}
 
-	var listed struct {
-		Servers []struct {
-			Slug   string `json:"slug"`
-			Status string `json:"status"`
-		} `json:"servers"`
-	}
-	require.NoError(t, json.Unmarshal(result.StructuredContent, &listed))
-	statuses := map[string]string{}
-	for _, server := range listed.Servers {
-		statuses[server.Slug] = server.Status
-	}
+	statuses := listStatuses()
 	require.Equal(t, "available", statuses[hostedMember.slug], "hosted members execute in-process and are always available")
-	require.Equal(t, "unknown", statuses[proxiedSlug], "proxied members stay unknown until the proxied runtime lands")
+	require.Equal(t, "unknown", statuses[proxiedSlug], "remote members stay unknown until cached health exists")
+	require.Equal(t, "unavailable", statuses[tunneledSlug], "a tunneled member with no live route is unavailable")
+
+	require.NoError(t, ti.tunnelRoutes.Publish(ctx, tunnelID.String(), "http://gateway.internal.example:8443", time.Hour))
+	statuses = listStatuses()
+	require.Equal(t, "available", statuses[tunneledSlug], "a published route flips the tunneled member to available")
+	require.Equal(t, "unknown", statuses[proxiedSlug], "route publication must not disturb the remote member's status")
 }
 
 // A proxied member is drill-down navigable end to end: describe_server and

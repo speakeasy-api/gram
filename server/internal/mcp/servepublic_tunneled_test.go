@@ -49,6 +49,9 @@ type fakeTunnelGateway struct {
 
 	mu       sync.Mutex
 	forwards []http.Header
+	// forwardBodies holds each forward's request body, index-aligned with
+	// forwards, so assertions can target a specific exchange.
+	forwardBodies []string
 }
 
 func (g *fakeTunnelGateway) lastForward() http.Header {
@@ -64,9 +67,26 @@ func (g *fakeTunnelGateway) forwardCount() int {
 	return len(g.forwards)
 }
 
+// forwardFor returns the headers of the most recent forward whose body
+// contains substr, failing the test when none matched.
+func (g *fakeTunnelGateway) forwardFor(substr string) http.Header {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	for i := len(g.forwardBodies) - 1; i >= 0; i-- {
+		if strings.Contains(g.forwardBodies[i], substr) {
+			return g.forwards[i]
+		}
+	}
+	require.Failf(g.t, "no forward matched", "no forwarded request body contains %q", substr)
+	return nil
+}
+
 func (g *fakeTunnelGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	buf := &bytes.Buffer{}
+	_, _ = buf.ReadFrom(r.Body)
 	g.mu.Lock()
 	g.forwards = append(g.forwards, r.Header.Clone())
+	g.forwardBodies = append(g.forwardBodies, buf.String())
 	g.mu.Unlock()
 
 	exact := strings.TrimSpace(r.Header.Get(wire.HeaderTunnelAgentSession))
@@ -93,9 +113,6 @@ func (g *fakeTunnelGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		return
 	case http.MethodPost:
-		body := make([]byte, 0, 1024)
-		buf := bytes.NewBuffer(body)
-		_, _ = buf.ReadFrom(r.Body)
 		if strings.Contains(buf.String(), `"initialize"`) {
 			if g.backendSessionID != "" {
 				w.Header().Set("Mcp-Session-Id", g.backendSessionID)
@@ -106,6 +123,11 @@ func (g *fakeTunnelGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		if g.backendSessionID != "" && r.Header.Get("Mcp-Session-Id") != g.backendSessionID {
 			http.Error(w, "unknown session", http.StatusNotFound)
+			return
+		}
+		if strings.Contains(buf.String(), `"tools/call"`) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprint(w, `{"jsonrpc":"2.0","id":"gram-gateway-tools/call","result":{"content":[{"type":"text","text":"pong through the tunnel"}],"isError":false}}`)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
