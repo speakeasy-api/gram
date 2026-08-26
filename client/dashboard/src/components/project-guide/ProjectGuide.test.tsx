@@ -402,6 +402,14 @@ describe("ProjectGuide", () => {
         signal: ProjectGuideOperationSignal,
         report: (report: ProjectGuideOperationReport) => void,
       ) => {
+        if (signal.type === "prepare") {
+          report({
+            type: "success",
+            scope: signal.scope,
+            result: "Linear mcp server is now setup",
+          });
+          return;
+        }
         if (signal.type !== "start" || signal.scope.step !== 0) return;
         report({
           type: "progress",
@@ -456,6 +464,14 @@ describe("ProjectGuide", () => {
       ) => {
         report = sendReport;
         activeScope = signal.scope;
+        if (signal.type === "prepare") {
+          sendReport({
+            type: "success",
+            scope: signal.scope,
+            result: "Linear mcp server is now setup",
+          });
+          return;
+        }
         if (signal.type !== "start") return;
         if (signal.scope.step === 0) {
           sendReport({
@@ -546,7 +562,21 @@ describe("ProjectGuide", () => {
           void (
             mcpOperations.current
               .prepareActivityBaseline as () => Promise<boolean>
-          )();
+          )().then((ready) => {
+            if (ready) {
+              report({
+                type: "success",
+                scope: signal.scope,
+                result: "Linear mcp server is now setup",
+              });
+            } else {
+              report({
+                type: "error",
+                scope: signal.scope,
+                message: "We couldn't prepare the connection yet. Try again.",
+              });
+            }
+          });
           return;
         }
         if (signal.type === "start" && signal.scope.step === 0) {
@@ -572,11 +602,14 @@ describe("ProjectGuide", () => {
     expect(mcpOperations.current.handleSignal).toHaveBeenCalledWith(
       expect.objectContaining({
         type: "prepare",
-        scope: { path: "third-party-mcp", step: 1, attempt: 0, runId: 1 },
+        scope: { path: "third-party-mcp", step: 0, attempt: 0, runId: 1 },
       }),
       expect.any(Function),
     );
     expect(screen.queryByText(/first list the available tools/)).toBeNull();
+    expect(screen.getByTestId("project-guide-run").dataset.displayState).toBe(
+      "preparing",
+    );
 
     await act(async () => baseline.resolve(true));
 
@@ -655,6 +688,14 @@ describe("ProjectGuide", () => {
         signal: ProjectGuideOperationSignal,
         report: (report: ProjectGuideOperationReport) => void,
       ) => {
+        if (signal.type === "prepare") {
+          report({
+            type: "success",
+            scope: signal.scope,
+            result: "Linear mcp server is now setup",
+          });
+          return;
+        }
         if (signal.type === "start" && signal.scope.step < 2) {
           report({
             type: "success",
@@ -702,6 +743,14 @@ describe("ProjectGuide", () => {
         signal: ProjectGuideOperationSignal,
         report: (report: ProjectGuideOperationReport) => void,
       ) => {
+        if (signal.type === "prepare") {
+          report({
+            type: "success",
+            scope: signal.scope,
+            result: "Linear mcp server is now setup",
+          });
+          return;
+        }
         if (signal.type === "start" && signal.scope.step < 2) {
           report({
             type: "success",
@@ -1294,6 +1343,13 @@ describe("ProjectGuide", () => {
         signal: ProjectGuideOperationSignal,
         report: (report: ProjectGuideOperationReport) => void,
       ) => {
+        if (signal.type === "prepare") {
+          report({
+            type: "success",
+            scope: signal.scope,
+            result: "Linear mcp server is now setup",
+          });
+        }
         if (signal.type === "start" && signal.scope.step === 0) {
           report({
             type: "success",
@@ -1535,6 +1591,14 @@ describe("ProjectGuide", () => {
         signal: ProjectGuideOperationSignal,
         report: (report: ProjectGuideOperationReport) => void,
       ) => {
+        if (signal.type === "prepare") {
+          report({
+            type: "success",
+            scope: signal.scope,
+            result: "Linear mcp server is now setup",
+          });
+          return;
+        }
         if (signal.type === "start" && signal.scope.step < 2) {
           report({
             type: "success",
@@ -1735,6 +1799,14 @@ describe("ProjectGuide", () => {
         signal: ProjectGuideOperationSignal,
         report: (report: ProjectGuideOperationReport) => void,
       ) => {
+        if (signal.type === "prepare") {
+          report({
+            type: "success",
+            scope: signal.scope,
+            result: "Linear mcp server is now setup",
+          });
+          return;
+        }
         if (signal.type === "start" && signal.scope.step < 2) {
           report({
             type: "success",

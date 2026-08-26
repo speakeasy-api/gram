@@ -90,6 +90,7 @@ function ProjectGuideContent({
   const secretOperations = useSecretGuideOperations();
   const mcpOperationSignalRef = useRef(mcpOperations.handleSignal);
   const secretOperationSignalRef = useRef(secretOperations.handleSignal);
+  const sendRef = useRef<(event: ProjectGuideEvent) => void>(() => undefined);
   const reportRef = useRef<(report: ProjectGuideOperationReport) => void>(
     () => undefined,
   );
@@ -109,11 +110,17 @@ function ProjectGuideContent({
             Date.now() + PROJECT_GUIDE_MICRO_STEP_DELAY_MS,
           );
         }
-        mcpOperationSignalRef.current(signal, reportRef.current);
-        secretOperationSignalRef.current(signal, reportRef.current);
+        const report =
+          signal.type === "prepare"
+            ? (result: ProjectGuideOperationReport) =>
+                sendRef.current({ type: "ADAPTER_REPORT", report: result })
+            : reportRef.current;
+        mcpOperationSignalRef.current(signal, report);
+        secretOperationSignalRef.current(signal, report);
       },
     },
   });
+  sendRef.current = send;
   const reportOperation = useCallback(
     (report: ProjectGuideOperationReport) => {
       const now = Date.now();
@@ -317,6 +324,7 @@ function ProjectGuideContent({
                         accent={PROJECT_GUIDE_FIXTURES[journey.id].accent}
                         isProcessing={
                           displayState === "running" ||
+                          displayState === "preparing" ||
                           displayState === "waiting"
                         }
                         error={guideStepError(
@@ -420,6 +428,8 @@ function primaryActionFor(
         icon: "pause",
         onClick: () => send({ type: "PAUSE" }),
       };
+    case "preparing":
+      return { label: "Preparing the next step…", disabled: true };
     case "checkpoint":
       if (journey.id === "third-party-mcp" && currentStep === 1) {
         const baselineFailed = mcpOperations.activityBaselineError;
@@ -427,8 +437,7 @@ function primaryActionFor(
           label: baselineFailed ? "Try again" : "I've connected it",
           disabled:
             !mcpOperations.connectionPrompts ||
-            !mcpOperations.connectionPromptCopied ||
-            mcpOperations.activityBaselinePending,
+            !mcpOperations.connectionPromptCopied,
           onClick: baselineFailed
             ? () => void mcpOperations.prepareActivityBaseline()
             : () =>
@@ -1222,7 +1231,7 @@ function guideStepError(
     if (step === 0 && mcpOperations.catalogError) {
       return "Could not load the automatic catalog servers.";
     }
-    if (step === 1 && mcpOperations.activityBaselineError) {
+    if (step === 0 && mcpOperations.activityBaselineError) {
       return "We couldn't prepare the connection yet. Try again.";
     }
     return null;

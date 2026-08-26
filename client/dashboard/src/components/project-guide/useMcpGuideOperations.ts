@@ -502,7 +502,21 @@ export function useMcpGuideOperations(): {
         return;
       }
       if (signal.type === "prepare") {
-        void captureActivityBaselineRef.current();
+        void captureActivityBaselineRef.current().then((ready) => {
+          if (ready) {
+            report({
+              type: "success",
+              scope: signal.scope,
+              result: `${resolvedName ?? "Selected"} mcp server is now setup`,
+            });
+          } else {
+            report({
+              type: "error",
+              scope: signal.scope,
+              message: "We couldn't prepare the connection yet. Try again.",
+            });
+          }
+        });
         return;
       }
       if (signal.type === "pause") {
@@ -531,7 +545,7 @@ export function useMcpGuideOperations(): {
         if (signal.scope.step === 3) retryActivity();
       }
     },
-    [retryActivity, updateActiveOperation, workflow],
+    [resolvedName, retryActivity, updateActiveOperation, workflow],
   );
 
   useEffect(() => {

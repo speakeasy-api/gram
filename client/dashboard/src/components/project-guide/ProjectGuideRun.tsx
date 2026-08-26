@@ -39,6 +39,8 @@ function stepStateLabel(displayState: ProjectGuideDisplayState): string {
   switch (displayState) {
     case "running":
       return "running";
+    case "preparing":
+      return "preparing";
     case "waiting":
       return "listening";
     case "paused":
