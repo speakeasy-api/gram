@@ -1,4 +1,4 @@
-import type { JSX, ReactNode } from "react";
+import { useMemo, useState, type JSX, type ReactNode } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 
@@ -92,60 +92,94 @@ function formatChangedValue(value: unknown): string {
   return JSON.stringify(value);
 }
 
-function ChangedFields({ before, after }: { before: unknown; after: unknown }) {
-  const changes = computeChangedFields(before, after);
+function ChangedFieldRow({ change }: { change: ChangedField }) {
+  return (
+    <div
+      className="border-border/50 flex items-start gap-3 border-b px-3 py-2 last:border-b-0"
+      data-field={change.field}
+      role="listitem"
+    >
+      <span className="text-muted-foreground w-[140px] shrink-0 pt-0.5 font-mono text-xs font-medium">
+        {change.field}
+      </span>
+      <div className="flex min-w-0 flex-1 flex-wrap items-start gap-2">
+        <span className="max-w-full bg-red-50 px-2 py-0.5 font-mono text-xs break-all text-red-700 line-through dark:bg-red-950 dark:text-red-400">
+          {formatChangedValue(change.oldValue)}
+        </span>
+        <span className="text-muted-foreground pt-0.5 text-xs">→</span>
+        <span className="max-w-full bg-emerald-50 px-2 py-0.5 font-mono text-xs break-all text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">
+          {formatChangedValue(change.newValue)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function ActivityDiff({
+  before,
+  after,
+  changes,
+}: {
+  before: unknown;
+  after: unknown;
+  changes: ChangedField[];
+}) {
+  const [showRawDiff, setShowRawDiff] = useState(false);
+
+  if (showRawDiff) {
+    return (
+      <section aria-label="Raw diff">
+        <button
+          type="button"
+          className="mb-2 text-xs text-blue-500 hover:underline"
+          onClick={() => setShowRawDiff(false)}
+        >
+          View structured diff
+        </button>
+        <dl className="grid gap-2 sm:grid-cols-2">
+          <JsonDetail label="Before snapshot" value={before} />
+          <JsonDetail label="After snapshot" value={after} />
+        </dl>
+      </section>
+    );
+  }
 
   return (
-    <section>
-      <h3 className="text-sm font-medium">Changed fields</h3>
-      {changes.length === 0 ? (
-        <p className="text-muted-foreground mt-1 text-sm">No changed fields.</p>
-      ) : (
-        <div className="mt-1 overflow-x-auto rounded-md border">
-          <table
-            aria-label="Changed fields"
-            className="w-full text-left text-xs"
-          >
-            <thead className="bg-muted text-muted-foreground">
-              <tr>
-                <th className="px-2 py-1.5 font-medium" scope="col">
-                  Field
-                </th>
-                <th className="px-2 py-1.5 font-medium" scope="col">
-                  Before
-                </th>
-                <th className="px-2 py-1.5 font-medium" scope="col">
-                  After
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {changes.map((change) => (
-                <tr className="border-t align-top" key={change.field}>
-                  <td className="px-2 py-1.5 font-mono font-medium">
-                    {change.field}
-                  </td>
-                  <td className="max-w-80 px-2 py-1.5">
-                    <code className="whitespace-pre-wrap break-all text-red-700 dark:text-red-400">
-                      {formatChangedValue(change.oldValue)}
-                    </code>
-                  </td>
-                  <td className="max-w-80 px-2 py-1.5">
-                    <code className="whitespace-pre-wrap break-all text-green-700 dark:text-green-400">
-                      {formatChangedValue(change.newValue)}
-                    </code>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+    <section aria-label="Changed fields">
+      <div className="flex items-center gap-2 py-1">
+        <h3 className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">
+          Changed fields
+        </h3>
+        <div className="bg-border h-px flex-1" />
+        <span className="text-muted-foreground text-[11px]">
+          {changes.length} field{changes.length === 1 ? "" : "s"} changed
+        </span>
+      </div>
+      <div className="bg-background border" role="list">
+        {changes.map((change) => (
+          <ChangedFieldRow key={change.field} change={change} />
+        ))}
+      </div>
+      <button
+        type="button"
+        className="mt-2 text-xs text-blue-500 hover:underline"
+        onClick={() => setShowRawDiff(true)}
+      >
+        View raw diff
+      </button>
     </section>
   );
 }
 
 function ActivityItem({ log }: { log: AdminAuditLog }): JSX.Element {
+  const [diffExpanded, setDiffExpanded] = useState(false);
+  const changes = useMemo(
+    () => computeChangedFields(log.before_snapshot, log.after_snapshot),
+    [log.before_snapshot, log.after_snapshot],
+  );
+  const showDiff = changes.length > 0;
+  const diffId = `activity-diff-${log.id}`;
+
   return (
     <li className="rounded-lg border p-3">
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
@@ -157,48 +191,53 @@ function ActivityItem({ log }: { log: AdminAuditLog }): JSX.Element {
         <span className="text-muted-foreground">→</span>
         <span>{subjectName(log)}</span>
         <span className="text-muted-foreground">via {log.acting_surface}</span>
+        {showDiff && (
+          <button
+            type="button"
+            className="ml-2 text-xs text-blue-500 hover:underline"
+            aria-controls={diffId}
+            aria-expanded={diffExpanded}
+            onClick={() => setDiffExpanded((expanded) => !expanded)}
+          >
+            {diffExpanded ? "Hide diff ▴" : "Show diff ▾"}
+          </button>
+        )}
       </div>
+      {showDiff && diffExpanded && (
+        <div id={diffId} className="pt-2">
+          <ActivityDiff
+            before={log.before_snapshot}
+            after={log.after_snapshot}
+            changes={changes}
+          />
+        </div>
+      )}
       <details className="mt-2">
         <summary className="text-muted-foreground cursor-pointer text-sm">
           Event details for {log.action}
         </summary>
-        <div className="mt-2 space-y-3">
-          <ChangedFields
-            before={log.before_snapshot}
-            after={log.after_snapshot}
-          />
-          <dl className="grid gap-2 sm:grid-cols-2">
-            {log.project_id && (
-              <Detail label="Project ID">{log.project_id}</Detail>
-            )}
-            {log.project_slug && (
-              <Detail label="Project slug">{log.project_slug}</Detail>
-            )}
-            <Detail label="Actor type">{log.actor_type}</Detail>
-            <Detail label="Actor ID">{log.actor_id}</Detail>
-            {log.actor_slug && (
-              <Detail label="Actor slug">{log.actor_slug}</Detail>
-            )}
-            <Detail label="Subject type">{log.subject_type}</Detail>
-            <Detail label="Subject ID">{log.subject_id}</Detail>
-            {log.subject_slug && (
-              <Detail label="Subject slug">{log.subject_slug}</Detail>
-            )}
-            {log.acting_client_id && (
-              <Detail label="Acting client ID">{log.acting_client_id}</Detail>
-            )}
-            <JsonDetail label="Metadata" value={log.metadata} />
-          </dl>
-          <details>
-            <summary className="text-muted-foreground cursor-pointer text-sm">
-              Raw snapshots
-            </summary>
-            <dl className="mt-2 grid gap-2 sm:grid-cols-2">
-              <JsonDetail label="Before snapshot" value={log.before_snapshot} />
-              <JsonDetail label="After snapshot" value={log.after_snapshot} />
-            </dl>
-          </details>
-        </div>
+        <dl className="mt-2 grid gap-2 sm:grid-cols-2">
+          {log.project_id && (
+            <Detail label="Project ID">{log.project_id}</Detail>
+          )}
+          {log.project_slug && (
+            <Detail label="Project slug">{log.project_slug}</Detail>
+          )}
+          <Detail label="Actor type">{log.actor_type}</Detail>
+          <Detail label="Actor ID">{log.actor_id}</Detail>
+          {log.actor_slug && (
+            <Detail label="Actor slug">{log.actor_slug}</Detail>
+          )}
+          <Detail label="Subject type">{log.subject_type}</Detail>
+          <Detail label="Subject ID">{log.subject_id}</Detail>
+          {log.subject_slug && (
+            <Detail label="Subject slug">{log.subject_slug}</Detail>
+          )}
+          {log.acting_client_id && (
+            <Detail label="Acting client ID">{log.acting_client_id}</Detail>
+          )}
+          <JsonDetail label="Metadata" value={log.metadata} />
+        </dl>
       </details>
     </li>
   );

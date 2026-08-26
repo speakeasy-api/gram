@@ -115,12 +115,10 @@ describe("Activity", () => {
     ]) {
       expect(screen.queryAllByText(value).length).toBeGreaterThan(0);
     }
-    expect(screen.getByText(/"days": 7/)).toBeTruthy();
-    expect(screen.getByText(/"days": 14/)).toBeTruthy();
     expect(screen.getByText(/"approved": true/)).toBeTruthy();
   });
 
-  it("shows sorted changed, added, removed, and complex fields", async () => {
+  it("toggles a structured diff from the activity summary row", async () => {
     mocks.listOrganizationActivity.mockResolvedValue({
       logs: [
         anActivityLog({
@@ -141,31 +139,80 @@ describe("Activity", () => {
     });
 
     await renderWithApp(<Activity org={ORG} />);
-    fireEvent.click(
-      await screen.findByText(
-        "Event details for organization:settings_updated",
-      ),
-    );
 
-    const table = screen.getByRole("table", { name: "Changed fields" });
-    expect(
-      within(table)
-        .getAllByRole("row")
-        .slice(1)
-        .map((row) => within(row).getAllByRole("cell")[0]?.textContent),
-    ).toEqual(["added", "alpha", "complex", "removed", "zeta"]);
+    const showDiff = await screen.findByRole("button", { name: "Show diff ▾" });
+    const summary = showDiff.closest("li > div");
+    expect(summary).toBeTruthy();
+    expect(showDiff.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByText("Changed fields")).toBeNull();
 
-    const rows = within(table).getAllByRole("row").slice(1);
-    expect(rows[0]?.textContent).toContain("(none)true");
-    expect(rows[1]?.textContent).toContain("nullfalse");
-    expect(rows[2]?.textContent).toContain(
-      '{"nested":["old"]}{"nested":["new"]}',
+    fireEvent.click(showDiff);
+
+    const hideDiff = screen.getByRole("button", { name: "Hide diff ▴" });
+    expect(hideDiff.getAttribute("aria-expanded")).toBe("true");
+    expect(summary?.nextElementSibling?.getAttribute("id")).toBe(
+      showDiff.getAttribute("aria-controls"),
     );
-    expect(rows[3]?.textContent).toContain("gone(none)");
-    expect(rows[4]?.textContent).toContain("beforeafter");
+    expect(screen.getByText("Changed fields").className).toContain("uppercase");
+    expect(screen.getByText("5 fields changed")).toBeTruthy();
+
+    const changedFields = screen.getByRole("region", {
+      name: "Changed fields",
+    });
+    const rows = within(changedFields).getAllByRole("listitem");
+    expect(rows.map((row) => row.getAttribute("data-field"))).toEqual([
+      "added",
+      "alpha",
+      "complex",
+      "removed",
+      "zeta",
+    ]);
+    expect(within(rows[4]!).getByText("zeta").className).toContain("w-[140px]");
+    expect(within(rows[4]!).getByText("before").className).toContain(
+      "line-through",
+    );
+    expect(within(rows[4]!).getByText("before").className).toContain(
+      "bg-red-50",
+    );
+    expect(within(rows[4]!).getByText("→")).toBeTruthy();
+    expect(within(rows[4]!).getByText("after").className).toContain(
+      "bg-emerald-50",
+    );
+    expect(rows[0]?.textContent).toBe("added(none)→true");
+    expect(rows[1]?.textContent).toBe("alphanull→false");
+    expect(rows[2]?.textContent).toBe(
+      'complex{"nested":["old"]}→{"nested":["new"]}',
+    );
+    expect(rows[3]?.textContent).toBe("removedgone→(none)");
   });
 
-  it("shows no-change copy, raw snapshots disclosure, and separate metadata", async () => {
+  it("switches between structured and raw before/after snapshots", async () => {
+    mocks.listOrganizationActivity.mockResolvedValue({
+      logs: [
+        anActivityLog({
+          before_snapshot: { days: 7 },
+          after_snapshot: { days: 14 },
+        }),
+      ],
+    });
+    await renderWithApp(<Activity org={ORG} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Show diff ▾" }));
+    fireEvent.click(screen.getByRole("button", { name: "View raw diff" }));
+
+    expect(screen.getByText("Before snapshot")).toBeTruthy();
+    expect(screen.getByText(/"days": 7/)).toBeTruthy();
+    expect(screen.getByText("After snapshot")).toBeTruthy();
+    expect(screen.getByText(/"days": 14/)).toBeTruthy();
+    expect(screen.queryByText("Changed fields")).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "View structured diff" }),
+    );
+    expect(screen.getByText("Changed fields")).toBeTruthy();
+    expect(screen.queryByText("Before snapshot")).toBeNull();
+  });
+
+  it("omits diff UI without changes and preserves Event details metadata", async () => {
     const snapshot = { unchanged: "same" };
     mocks.listOrganizationActivity.mockResolvedValue({
       logs: [
@@ -178,27 +225,21 @@ describe("Activity", () => {
     });
 
     await renderWithApp(<Activity org={ORG} />);
+    expect(screen.queryByRole("button", { name: /diff/ })).toBeNull();
+    expect(screen.queryByText("Changed fields")).toBeNull();
+
     fireEvent.click(
       await screen.findByText(
         "Event details for organization:settings_updated",
       ),
     );
-
-    expect(screen.getByText("No changed fields.")).toBeTruthy();
-    expect(screen.queryByRole("table", { name: "Changed fields" })).toBeNull();
-
-    const rawSummary = screen.getByText("Raw snapshots");
-    const rawDetails = rawSummary.closest("details");
-    expect(rawDetails?.hasAttribute("open")).toBe(false);
-    expect(rawDetails?.textContent).not.toContain("request-placeholder");
-    fireEvent.click(rawSummary);
-    expect(rawDetails?.hasAttribute("open")).toBe(true);
-    expect(rawDetails?.textContent).toContain('"unchanged": "same"');
-
+    expect(screen.getByText("Actor ID")).toBeTruthy();
+    expect(screen.getByText("Subject ID")).toBeTruthy();
     expect(screen.getByText("Metadata")).toBeTruthy();
     expect(
       screen.getByText(/"request_id": "request-placeholder"/),
     ).toBeTruthy();
+    expect(screen.queryByText("Raw snapshots")).toBeNull();
   });
 
   it("shows only the initial loading state while the first page is pending", async () => {
