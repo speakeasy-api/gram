@@ -19,7 +19,9 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/streams"
@@ -39,6 +41,8 @@ type LogRelayHandler struct {
 	recordsDropped metric.Int64Counter
 	recordsFailed  metric.Int64Counter
 	relay          *signalRelay
+	features       feature.Provider
+	organizations  logRelayOrganizationSlugResolver
 }
 
 type logProvenanceKey struct {
@@ -63,6 +67,8 @@ func NewLogRelayHandler(
 	readReplica *pgxpool.Pool,
 	encryptionClient *encryption.Client,
 	policy *guardian.Policy,
+	features feature.Provider,
+	cacheImpl cache.Cache,
 ) *LogRelayHandler {
 	logger = logger.With(attr.SlogComponent("log-relay-handler"))
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/otel")
@@ -92,6 +98,12 @@ func NewLogRelayHandler(
 			"/v1/logs",
 			"log",
 		),
+		features: features,
+		organizations: newPostgresLogRelayOrganizationSlugResolver(
+			logger.With(attr.SlogCacheNamespace("otel_log_relay_organization")),
+			readReplica,
+			cacheImpl,
+		),
 	}
 }
 
@@ -118,6 +130,7 @@ func (h *LogRelayHandler) handleBatch(ctx context.Context, messages []logRelayMe
 		h.recordDroppedLogs(ctx, invalid, relayReasonInvalid)
 	}
 
+	relayEnabledByOrganization := make(map[string]bool)
 	type destinationResult struct {
 		destination *relayDestination
 		err         error
@@ -130,6 +143,40 @@ func (h *LogRelayHandler) handleBatch(ctx context.Context, messages []logRelayMe
 	deliveries := make([]destinationDelivery, 0, len(groups))
 
 	for _, provenanceGroup := range groups {
+		organizationID := provenanceGroup.key.organizationID
+		enabled, evaluated := relayEnabledByOrganization[organizationID]
+		if !evaluated {
+			organizationSlug, err := h.organizations.OrganizationSlug(ctx, organizationID)
+			if err != nil {
+				logger.WarnContext(
+					ctx,
+					"resolve organization for customer log relay feature flag",
+					attr.SlogError(err),
+					attr.SlogOrganizationID(organizationID),
+				)
+			} else if organizationSlug != "" {
+				enabled, err = h.features.IsFlagEnabled(
+					ctx,
+					feature.FlagOTELLogCustomerRelay,
+					organizationID,
+					feature.OrgProjectGroups(organizationSlug, ""),
+				)
+				if err != nil {
+					enabled = false
+					logger.WarnContext(
+						ctx,
+						"evaluate customer log relay feature flag",
+						attr.SlogError(err),
+						attr.SlogOrganizationID(organizationID),
+					)
+				}
+			}
+			relayEnabledByOrganization[organizationID] = enabled
+		}
+		if !enabled {
+			continue
+		}
+
 		result, ok := destinations[provenanceGroup.key.organizationID]
 		if !ok {
 			result.destination, result.err = h.relay.destinationForOrganization(ctx, provenanceGroup.key.organizationID)

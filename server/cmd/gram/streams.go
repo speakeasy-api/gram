@@ -532,6 +532,8 @@ func newStreamsCommand() *cli.Command {
 				replicaDB,
 				encryptionClient,
 				guardianPolicy,
+				featureFlags,
+				cache.NewRedisCacheAdapter(redisClient),
 			)
 
 			spanRelayHandler := otelsvc.NewSpanRelayHandler(

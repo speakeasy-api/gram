@@ -1,6 +1,8 @@
 package otel
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -17,6 +19,8 @@ import (
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
@@ -34,6 +38,60 @@ type capturedLogRelayRequest struct {
 type logRelayRequestCapture struct {
 	mu       sync.Mutex
 	requests []capturedLogRelayRequest
+}
+
+type logRelayFeatureFlagCall struct {
+	flag       feature.Flag
+	distinctID string
+	groups     map[string]string
+}
+
+type logRelayFeatureFlagResult struct {
+	enabled bool
+	err     error
+}
+
+type logRelayTestFeatureProvider struct {
+	results       map[string]logRelayFeatureFlagResult
+	defaultResult logRelayFeatureFlagResult
+	calls         []logRelayFeatureFlagCall
+}
+
+func (p *logRelayTestFeatureProvider) IsFlagEnabled(_ context.Context, flag feature.Flag, distinctID string, groups map[string]string) (bool, error) {
+	p.calls = append(p.calls, logRelayFeatureFlagCall{
+		flag:       flag,
+		distinctID: distinctID,
+		groups:     groups,
+	})
+	result, ok := p.results[distinctID]
+	if !ok {
+		result = p.defaultResult
+	}
+	return result.enabled, result.err
+}
+
+func (p *logRelayTestFeatureProvider) IsFlagEnabledLocal(context.Context, feature.Flag, string, map[string]string, map[string]string) (bool, error) {
+	return false, nil
+}
+
+func (p *logRelayTestFeatureProvider) FlagPayload(context.Context, feature.Flag, string, map[string]string) ([]byte, error) {
+	return nil, nil
+}
+
+type logRelayOrganizationSlugResult struct {
+	slug string
+	err  error
+}
+
+type logRelayTestOrganizationSlugResolver struct {
+	results map[string]logRelayOrganizationSlugResult
+	calls   []string
+}
+
+func (r *logRelayTestOrganizationSlugResolver) OrganizationSlug(_ context.Context, organizationID string) (string, error) {
+	r.calls = append(r.calls, organizationID)
+	result := r.results[organizationID]
+	return result.slug, result.err
 }
 
 func (c *logRelayRequestCapture) handler(w http.ResponseWriter, r *http.Request) {
@@ -60,6 +118,120 @@ func (c *logRelayRequestCapture) snapshot() []capturedLogRelayRequest {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return slices.Clone(c.requests)
+}
+
+func TestLogRelayHandlerGatesMixedBatchByOrganization(t *testing.T) {
+	t.Parallel()
+
+	capture := &logRelayRequestCapture{mu: sync.Mutex{}, requests: nil}
+	server := httptest.NewServer(http.HandlerFunc(capture.handler))
+	t.Cleanup(server.Close)
+	flags := &logRelayTestFeatureProvider{
+		results: map[string]logRelayFeatureFlagResult{
+			testLogOrganizationID:      {enabled: true, err: nil},
+			testLogOtherOrganizationID: {enabled: false, err: nil},
+		},
+		defaultResult: logRelayFeatureFlagResult{enabled: false, err: nil},
+		calls:         nil,
+	}
+	organizations := &logRelayTestOrganizationSlugResolver{
+		results: map[string]logRelayOrganizationSlugResult{
+			testLogOrganizationID:      {slug: "enabled-org", err: nil},
+			testLogOtherOrganizationID: {slug: "disabled-org", err: nil},
+		},
+		calls: nil,
+	}
+	handler := newLogRelayTestHandlerWithFeatures(t, testenv.NewMeterProvider(t), flags, organizations)
+	cacheLogRelayTestDestination(t, handler, testLogOrganizationID, server.URL, map[string]string{"X-Customer": "enabled"})
+	cacheLogRelayTestDestination(t, handler, testLogOtherOrganizationID, server.URL, map[string]string{"X-Customer": "disabled"})
+
+	messages, failures := logRelayTestMessages(
+		relayTestLogRecord("enabled-1", testLogOrganizationID, testLogProjectID, 0),
+		relayTestLogRecord("disabled", testLogOtherOrganizationID, testLogOtherProjectID, 0),
+		relayTestLogRecord("enabled-2", testLogOrganizationID, testLogOtherProjectID, 0),
+	)
+	require.NoError(t, handler.handleBatch(t.Context(), messages))
+	for _, failure := range failures {
+		require.NoError(t, failure)
+	}
+
+	requests := capture.snapshot()
+	require.Len(t, requests, 2)
+	for _, request := range requests {
+		require.Equal(t, "enabled", request.customer)
+	}
+	require.Equal(t, []logRelayFeatureFlagCall{
+		{
+			flag:       feature.FlagOTELLogCustomerRelay,
+			distinctID: testLogOrganizationID,
+			groups:     feature.OrgProjectGroups("enabled-org", ""),
+		},
+		{
+			flag:       feature.FlagOTELLogCustomerRelay,
+			distinctID: testLogOtherOrganizationID,
+			groups:     feature.OrgProjectGroups("disabled-org", ""),
+		},
+	}, flags.calls)
+	require.Equal(t, []string{testLogOrganizationID, testLogOtherOrganizationID}, organizations.calls)
+}
+
+func TestLogRelayHandlerIsolatesFlagEvaluationFailureWithinBatch(t *testing.T) {
+	t.Parallel()
+
+	capture := &logRelayRequestCapture{mu: sync.Mutex{}, requests: nil}
+	server := httptest.NewServer(http.HandlerFunc(capture.handler))
+	t.Cleanup(server.Close)
+	flags := &logRelayTestFeatureProvider{
+		results: map[string]logRelayFeatureFlagResult{
+			testLogOrganizationID:      {enabled: true, err: nil},
+			testLogOtherOrganizationID: {enabled: false, err: errors.New("evaluate flag")},
+		},
+		defaultResult: logRelayFeatureFlagResult{enabled: false, err: nil},
+		calls:         nil,
+	}
+	organizations := &logRelayTestOrganizationSlugResolver{
+		results: map[string]logRelayOrganizationSlugResult{
+			testLogOrganizationID:      {slug: "enabled-org", err: nil},
+			testLogOtherOrganizationID: {slug: "error-org", err: nil},
+			testLogThirdOrganizationID: {slug: "missing-org", err: nil},
+		},
+		calls: nil,
+	}
+	handler := newLogRelayTestHandlerWithFeatures(t, testenv.NewMeterProvider(t), flags, organizations)
+	cacheLogRelayTestDestination(t, handler, testLogOrganizationID, server.URL, map[string]string{"X-Customer": "enabled"})
+	cacheLogRelayTestDestination(t, handler, testLogOtherOrganizationID, server.URL, map[string]string{"X-Customer": "error"})
+	cacheLogRelayTestDestination(t, handler, testLogThirdOrganizationID, server.URL, map[string]string{"X-Customer": "missing"})
+
+	messages, failures := logRelayTestMessages(
+		relayTestLogRecord("enabled", testLogOrganizationID, testLogProjectID, 0),
+		relayTestLogRecord("evaluation-error", testLogOtherOrganizationID, testLogOtherProjectID, 0),
+		relayTestLogRecord("missing-flag", testLogThirdOrganizationID, testLogThirdProjectID, 0),
+	)
+	require.NoError(t, handler.handleBatch(t.Context(), messages))
+	for _, failure := range failures {
+		require.NoError(t, failure)
+	}
+
+	requests := capture.snapshot()
+	require.Len(t, requests, 1)
+	require.Equal(t, "enabled", requests[0].customer)
+	require.Equal(t, []logRelayFeatureFlagCall{
+		{
+			flag:       feature.FlagOTELLogCustomerRelay,
+			distinctID: testLogOrganizationID,
+			groups:     feature.OrgProjectGroups("enabled-org", ""),
+		},
+		{
+			flag:       feature.FlagOTELLogCustomerRelay,
+			distinctID: testLogOtherOrganizationID,
+			groups:     feature.OrgProjectGroups("error-org", ""),
+		},
+		{
+			flag:       feature.FlagOTELLogCustomerRelay,
+			distinctID: testLogThirdOrganizationID,
+			groups:     feature.OrgProjectGroups("missing-org", ""),
+		},
+	}, flags.calls)
 }
 
 func TestLogRelayHandlerGroupsByProvenanceAndCachesDestinations(t *testing.T) {
@@ -309,15 +481,42 @@ func logRelayTestMessages(records ...*otelv1.LogRecord) ([]logRelayMessage, []er
 
 func newLogRelayTestHandler(t *testing.T, meterProvider metric.MeterProvider) *LogRelayHandler {
 	t.Helper()
+	features := &logRelayTestFeatureProvider{
+		results:       nil,
+		defaultResult: logRelayFeatureFlagResult{enabled: true, err: nil},
+		calls:         nil,
+	}
+	organizations := &logRelayTestOrganizationSlugResolver{
+		results: map[string]logRelayOrganizationSlugResult{
+			testLogOrganizationID:      {slug: "org-a", err: nil},
+			testLogOtherOrganizationID: {slug: "org-b", err: nil},
+			testLogThirdOrganizationID: {slug: "org-c", err: nil},
+		},
+		calls: nil,
+	}
+	return newLogRelayTestHandlerWithFeatures(t, meterProvider, features, organizations)
+}
+
+func newLogRelayTestHandlerWithFeatures(
+	t *testing.T,
+	meterProvider metric.MeterProvider,
+	features feature.Provider,
+	organizations logRelayOrganizationSlugResolver,
+) *LogRelayHandler {
+	t.Helper()
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 	require.NoError(t, err)
-	return NewLogRelayHandler(
+	handler := NewLogRelayHandler(
 		testenv.NewLogger(t),
 		meterProvider,
 		nil,
 		testenv.NewEncryptionClient(t),
 		policy,
+		features,
+		cache.NoopCache,
 	)
+	handler.organizations = organizations
+	return handler
 }
 
 func cacheLogRelayTestDestination(
