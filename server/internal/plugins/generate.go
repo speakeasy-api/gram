@@ -1736,10 +1736,10 @@ const COMMAND =
     ? ["powershell.exe", "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", join(ROOT, "hooks", "bootstrap.ps1"), ...SERVE_ARGS]
     : ["bash", join(ROOT, "hooks", "bootstrap.sh"), ...SERVE_ARGS]
 const HOOKS = ["before_tool_call", "after_tool_call", "before_agent_run", "session_start", "session_end", "agent_end", "llm_output", "gateway_start", "gateway_stop"]
-    // 10s gate wall: the daemon's deadline is 90% of this and the relay's
-    // network budget is 5s, so a fail-closed verdict always lands first and
-    // no hook stalls the agent longer than ~10s.
-    const GATE_TIMEOUT_MS = { before_tool_call: 10000, before_agent_run: 10000 }
+// 10s gate wall: the daemon's deadline is 90% of this and the relay's
+// network budget is 5s, so a fail-closed verdict always lands first and
+// no hook stalls the agent longer than ~10s.
+const GATE_TIMEOUT_MS = { before_tool_call: 10000, before_agent_run: 10000 }
 const DEFAULT_TIMEOUT_MS = 30000
 // The relay resolves the org's fail-open posture in-process; shim-level
 // fail-closed covers the binary being unavailable (mirrors cursor failClosed).
