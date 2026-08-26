@@ -976,6 +976,104 @@ func TestServeInstallPage_ClaudeDesktop_WithSecurityInputs(t *testing.T) {
 	assert.NotContains(t, body, "For Teams &amp; Enterprise", "should not render the Teams & Enterprise admin connector footer")
 }
 
+// TestServeInstallPage_AntigravityClients_NoSecurityInputs verifies the hosted
+// install page offers Antigravity CLI and Antigravity IDE (replacing Gemini CLI)
+// with the documented mcp_config.json / serverUrl snippet.
+func TestServeInstallPage_AntigravityClients_NoSecurityInputs(t *testing.T) {
+	t.Parallel()
+	ctx, testInstance := newTestMCPMetadataService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	mcpSlug := "antigravity-public-" + uuid.New().String()[:8]
+	toolset, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Public Antigravity Toolset",
+		Slug:                   mcpSlug,
+		McpSlug:                conv.ToPGText(mcpSlug),
+		Description:            conv.ToPGText("public toolset with no security inputs"),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+
+	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+		McpIsPublic: true,
+		ID:          toolset.ID,
+		ProjectID:   toolset.ProjectID,
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", mcpSlug)
+	req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	err = testInstance.service.ServeInstallPage(rr, req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	body := rr.Body.String()
+	assert.Contains(t, body, `data-install-target="antigravity-cli"`)
+	assert.Contains(t, body, `data-install-target="antigravity-ide"`)
+	assert.Contains(t, body, "Antigravity CLI")
+	assert.Contains(t, body, "Antigravity IDE")
+	assert.Contains(t, body, `"serverUrl"`, "Antigravity remote servers use serverUrl, not url")
+	assert.Contains(t, body, "~/.gemini/config/mcp_config.json")
+	assert.Contains(t, body, ".agents/mcp_config.json")
+	assert.NotContains(t, body, "Gemini CLI")
+	assert.NotContains(t, body, "gemini mcp add")
+	assert.NotContains(t, body, `data-install-target="gemini-cli"`)
+	assert.NotContains(t, body, `"headers"`, "public servers without security inputs should omit the headers object")
+}
+
+// TestServeInstallPage_AntigravityClients_WithSecurityInputs verifies Antigravity
+// install snippets include HTTP headers in mcp_config.json when the server
+// requires credentials.
+func TestServeInstallPage_AntigravityClients_WithSecurityInputs(t *testing.T) {
+	t.Parallel()
+	ctx, testInstance := newTestMCPMetadataService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	mcpSlug := "antigravity-private-" + uuid.New().String()[:8]
+	_, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Private Antigravity Toolset",
+		Slug:                   mcpSlug,
+		McpSlug:                conv.ToPGText(mcpSlug),
+		Description:            conv.ToPGText("private toolset producing security inputs via gram security mode"),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", mcpSlug)
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	err = testInstance.service.ServeInstallPage(rr, req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	body := rr.Body.String()
+	assert.Contains(t, body, `data-install-target="antigravity-cli"`)
+	assert.Contains(t, body, `data-install-target="antigravity-ide"`)
+	assert.Contains(t, body, `"serverUrl"`)
+	assert.Contains(t, body, `"headers"`)
+	assert.Contains(t, body, "your-")
+	assert.Contains(t, body, "${VAR}", "should mention Antigravity env-var expansion")
+}
+
 // TestServeInstallPage_PrivateWithGramOAuth_NoAuthorizationHeader regression-tests
 // AGE-1962: a private MCP server with a Gram OAuth proxy attached must not render
 // the GRAM_KEY Authorization header (or gram-environment) in the install snippets.
