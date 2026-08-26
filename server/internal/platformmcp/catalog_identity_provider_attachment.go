@@ -55,10 +55,10 @@ type CatalogIdentityProviderAttachment interface {
 }
 
 type CatalogIdentityProviderAttachmentService struct {
-	db        *pgxpool.Pool
-	enc       *encryption.Client
-	policy    *guardian.Policy
-	audit     *audit.Logger
+	db     *pgxpool.Pool
+	enc    *encryption.Client
+	policy *guardian.Policy
+	audit  *audit.Logger
 	// outboundCallbackURL is the deployment's pinned outbound callback host,
 	// which is what dynamic client registration publishes upstream as its
 	// redirect target. Not the canonical host: registrations outlive it.

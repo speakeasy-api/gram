@@ -188,7 +188,7 @@ func NewChallengeManager(
 
 		outboundCallbackURL: serverURL,
 
-		revoker:   NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy),
+		revoker: NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy),
 		authorizeInterceptors: []interceptors.AuthorizeInterceptor{
 			interceptors.NewGoogle(logger),
 		},

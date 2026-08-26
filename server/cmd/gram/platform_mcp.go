@@ -45,13 +45,13 @@ import (
 )
 
 type platformMCPConfig struct {
-	Logger                 *slog.Logger
-	MeterProvider          metric.MeterProvider
-	TracerProvider         trace.TracerProvider
-	Mux                    goahttp.Muxer
-	DB                     *pgxpool.Pool
-	Redis                  *redis.Client
-	ServerURL              *url.URL
+	Logger         *slog.Logger
+	MeterProvider  metric.MeterProvider
+	TracerProvider trace.TracerProvider
+	Mux            goahttp.Muxer
+	DB             *pgxpool.Pool
+	Redis          *redis.Client
+	ServerURL      *url.URL
 	// OutboundCallbackURL is the deployment's pinned outbound OAuth callback
 	// host. Everything advertised to an upstream provider renders on it rather
 	// than on ServerURL, which may move.
