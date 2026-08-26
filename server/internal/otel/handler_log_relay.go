@@ -194,7 +194,7 @@ func (h *LogRelayHandler) handleBatch(ctx context.Context, messages []logRelayMe
 					h.recordDroppedLogs(ctx, len(item.batch.items), reason)
 				}
 
-				logger.ErrorContext(
+				logger.WarnContext(
 					ctx,
 					"relay otel logs",
 					attr.SlogError(err),
