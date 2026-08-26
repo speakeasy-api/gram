@@ -81,6 +81,7 @@ type RegistrationService struct {
 	directRemoteInspector      DirectRemoteInspector
 	lifecycleMetadata          *LifecycleMetadataService
 	lifecycleVisibility        *LifecycleVisibilityService
+	clientAdmission            *ClientAdmissionService
 	budgets                    OperationBudgets
 	telemetry                  LifecycleTelemetry
 }
@@ -168,6 +169,63 @@ func (s *RegistrationService) UpdateMCPMetadata(ctx context.Context, principal P
 		return UpdateMCPMetadataResult{}, ErrRegistrationUnavailable
 	}
 	return s.lifecycleMetadata.Update(ctx, principal, input)
+}
+
+// WithClientAdmission enables reading and setting the CIMD client admission
+// policy of a registered MCP's session issuer over MCP, which is otherwise
+// reachable only from the dashboard's Authentication settings.
+func (s *RegistrationService) WithClientAdmission(clientAdmission *ClientAdmissionService) *RegistrationService {
+	if s != nil {
+		s.clientAdmission = clientAdmission
+	}
+	return s
+}
+
+func (s *RegistrationService) GetClientAdmission(ctx context.Context, principal Principal, projectSlug, registrationID string) (ClientAdmission, error) {
+	project, parsedID, err := s.clientAdmissionTarget(ctx, principal, projectSlug, registrationID)
+	if err != nil {
+		return ClientAdmission{}, err
+	}
+	return s.clientAdmission.Get(ctx, principal, project, parsedID)
+}
+
+// SetClientAdmission applies a confirmed admission-mode change. Confirmation is
+// enforced at the tool boundary; this path assumes it and only verifies that
+// the caller may act on the registration.
+func (s *RegistrationService) SetClientAdmission(ctx context.Context, principal Principal, projectSlug, registrationID, mode string) (ClientAdmission, error) {
+	project, parsedID, err := s.clientAdmissionTarget(ctx, principal, projectSlug, registrationID)
+	if err != nil {
+		return ClientAdmission{}, err
+	}
+	return s.clientAdmission.Set(ctx, principal, project, parsedID, mode)
+}
+
+// clientAdmissionTarget applies the shared preconditions of both admission
+// paths: an available deployment, the caller's operation budget, the rollout
+// gate, and an eligible project.
+func (s *RegistrationService) clientAdmissionTarget(ctx context.Context, principal Principal, projectSlug, registrationID string) (ResolvedProject, uuid.UUID, error) {
+	if s == nil || s.gate == nil || s.store == nil || !s.clientAdmission.valid() || !s.budgets.LifecycleMetadata.valid() || projectSlug == "" || registrationID == "" {
+		return ResolvedProject{}, uuid.Nil, ErrClientAdmissionUnavailable
+	}
+	parsedID, err := uuid.Parse(registrationID)
+	if err != nil {
+		return ResolvedProject{}, uuid.Nil, ErrClientAdmissionInvalid
+	}
+	if err := s.budgets.LifecycleMetadata.Allow(ctx, principal); err != nil {
+		return ResolvedProject{}, uuid.Nil, err
+	}
+	enabled, err := s.gate.Enabled(ctx, principal.OrganizationID, projectSlug)
+	if err != nil {
+		return ResolvedProject{}, uuid.Nil, fmt.Errorf("check client admission gate: %w", err)
+	}
+	if !enabled {
+		return ResolvedProject{}, uuid.Nil, ErrRegistrationUnavailable
+	}
+	project, err := s.store.ResolveProject(ctx, principal.OrganizationID, projectSlug)
+	if err != nil {
+		return ResolvedProject{}, uuid.Nil, fmt.Errorf("resolve client admission project: %w", err)
+	}
+	return project, parsedID, nil
 }
 
 func (s *RegistrationService) WithLifecycleVisibility(visibility *LifecycleVisibilityService) *RegistrationService {

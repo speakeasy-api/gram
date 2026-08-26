@@ -35,7 +35,7 @@ func registerUnavailableIdentityProviderTool(reg *Registrar) {
 		Name:        "attach_platform_mcp_identity_provider",
 		Title:       "Attach Platform MCP Identity Provider",
 		Description: "Attach a reviewed MCP's discovered remote identity provider. Provider attachment is not available in the current preview.",
-	}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableTool("identity_provider_attachment"))
+	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("identity_provider_attachment"))
 }
 
 func registerIdentityProviderTool(reg *Registrar, registrations *RegistrationService) {
@@ -44,9 +44,11 @@ func registerIdentityProviderTool(reg *Registrar, registrations *RegistrationSer
 		Title:       "Attach Platform MCP Identity Provider",
 		Description: "Attach one reviewed MCP registration's discovered remote identity provider. Ask for explicit user confirmation before calling this tool. It derives provider metadata and dynamic client registration from the persisted MCP source. Non-secret provider URLs may be returned, but it never accepts or returns credentials, OAuth codes, tokens, client secrets, passwords, or API keys. After success, immediately present authorization_url as a clickable link and tell the user to open it and use Connect or Authorize.",
 	}, ToolMeta{
-		// Provider setup is connection-scoped, which a connection-less surface
-		// cannot satisfy. The assistant returns the normal dashboard handoff.
-		Audiences: externalOnly, ProjectScope: ProjectScopeExplicit,
+		// Connection-less: the registration is resolved by user and project,
+		// the operation is serialised per user, and the authorization step the
+		// result hands back is a dashboard URL the user opens under their own
+		// session. Nothing here needs the caller's OAuth connection.
+		Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit,
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input AttachPlatformMCPIdentityProviderToolInput) (*mcp.CallToolResult, AttachPlatformMCPIdentityProviderToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {

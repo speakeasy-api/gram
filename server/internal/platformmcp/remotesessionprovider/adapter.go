@@ -307,8 +307,11 @@ func validConnectionPair(connectionID, generation uuid.UUID) bool {
 	return (connectionID == uuid.Nil) == (generation == uuid.Nil)
 }
 
+// A readiness probe accepts a connection-less caller on the same terms a setup
+// request does: identity comes from the user, and a half-populated connection
+// pair is rejected as an incomplete identity rather than treated as absent.
 func validateReadinessRequest(request platformmcp.ProviderReadinessProbeRequest) error {
-	if request.UserID == "" || request.OrganizationID == "" || request.ProjectID == uuid.Nil || request.RegistrationID == uuid.Nil || request.UserSessionIssuerID == uuid.Nil || request.ConnectionID == uuid.Nil || request.Generation == uuid.Nil {
+	if request.UserID == "" || request.OrganizationID == "" || request.ProjectID == uuid.Nil || request.RegistrationID == uuid.Nil || request.UserSessionIssuerID == uuid.Nil || !validConnectionPair(request.ConnectionID, request.Generation) {
 		return platformmcp.ErrReadinessInvalid
 	}
 	return nil
