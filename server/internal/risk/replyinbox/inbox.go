@@ -374,6 +374,12 @@ func (i *Inbox) awaitRegistered(ctx context.Context, scanID string, w *waiter, s
 		i.metrics.roundTrip.Record(ctx, time.Since(started).Seconds())
 	}()
 
+	// The drainer's route() is the only other writer to w: it fills w.replies
+	// under w.mu (one entry per distinct lane, duplicates dropped) and signals
+	// notify after each accepted reply. Each pass re-checks completion, so the
+	// loop exits once every requested lane has replied; notify has capacity 1
+	// and coalesces, which is safe because the check counts state rather than
+	// signals.
 	for {
 		w.mu.Lock()
 		if len(w.replies) == len(w.lanes) {
