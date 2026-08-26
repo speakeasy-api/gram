@@ -79,7 +79,7 @@ func registerDistributionTools(reg *Registrar, onboarding *OnboardingService, di
 			Plugin:           distribution.Plugin,
 			Attached:         distribution.AttachmentLive,
 			PublicationState: distribution.PublicationState,
-			Message:          "This MCP server is now part of the " + distribution.Plugin + " plugin, so the people it is shared with will get it. Install or refresh that project's package, then try one of its tools to confirm it works.",
+			Message:          distributionOutcomeMessage(distribution.Plugin, distribution.PublicationState, false),
 		}, nil
 	})
 
@@ -123,7 +123,7 @@ func registerDistributionTools(reg *Registrar, onboarding *OnboardingService, di
 			Plugin:           distribution.Plugin,
 			Attached:         distribution.AttachmentLive,
 			PublicationState: distribution.PublicationState,
-			Message:          "This MCP server is no longer part of the " + distribution.Plugin + " plugin, so the people it was shared with will stop getting it. Refresh that project's package for the change to reach them.",
+			Message:          distributionOutcomeMessage(distribution.Plugin, distribution.PublicationState, true),
 		}, nil
 	})
 }
@@ -155,4 +155,31 @@ func distributionToolError(err error) (*mcp.CallToolResult, bool) {
 		return nil, false
 	}
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(content)}}, IsError: true}, true
+}
+
+// distributionOutcomeMessage says what actually reached people, not merely what
+// was recorded. Membership can commit while publishing the package fails, which
+// leaves the change real in the project and absent from every installed client.
+// The server instructions tell the model not to narrate publication_state on its
+// own, so this message is the only account the administrator hears — claiming
+// delivery unconditionally would make a failed publish silent.
+func distributionOutcomeMessage(plugin, publicationState string, removed bool) string {
+	membership := "This MCP server is now part of the " + plugin + " plugin"
+	if removed {
+		membership = "This MCP server is no longer part of the " + plugin + " plugin"
+	}
+	switch publicationState {
+	case publicationStateCurrent:
+		if removed {
+			return membership + ", and the people it was shared with will stop getting it. Refresh that project's package for the change to reach them."
+		}
+		return membership + ", and the people it is shared with will get it. Install or refresh that project's package, then try one of its tools to confirm it works."
+	case publicationStatePending:
+		return membership + ". The package that carries that change to people has not finished updating yet, so check again shortly."
+	default:
+		if removed {
+			return membership + ", but the package that carries that change to people could not be updated, so they may still have it. Publish it again from the dashboard."
+		}
+		return membership + ", but the package that carries it to people could not be updated, so they do not have it yet. Publish it again from the dashboard."
+	}
 }
