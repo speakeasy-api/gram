@@ -110,7 +110,7 @@ export function Activity({ org }: { org: AdminOrganization }): JSX.Element {
       <h2 className="text-lg font-semibold">Activity</h2>
       {query.isPending ? (
         <p className="text-muted-foreground text-sm">Loading activity...</p>
-      ) : query.isError && logs.length === 0 ? (
+      ) : query.isError && query.data === undefined ? (
         <div role="alert" className="flex items-center gap-2">
           <p className="text-destructive text-sm">Unable to load activity</p>
           <Button

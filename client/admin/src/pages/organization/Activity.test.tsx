@@ -147,6 +147,30 @@ describe("Activity", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
+  it("keeps the empty state and shows only the refresh error after a failed refetch", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    mocks.listOrganizationActivity
+      .mockResolvedValueOnce({ logs: [] })
+      .mockRejectedValueOnce(new Error("offline"));
+    await renderWithApp(<Activity org={ORG} />, { queryClient });
+    await screen.findByText("No activity for this organization");
+
+    await queryClient
+      .invalidateQueries({
+        queryKey: organizationActivityQuery(ORG.id).queryKey,
+      })
+      .catch(() => undefined);
+
+    expect(await screen.findByText("Unable to refresh activity")).toBeTruthy();
+    expect(screen.getByText("No activity for this organization")).toBeTruthy();
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+    expect(screen.queryByText(/^Unable to load activity$/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Retry refresh" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+  });
+
   it("shows only an alert and retry control after an initial failure", async () => {
     mocks.listOrganizationActivity
       .mockRejectedValueOnce(new Error("offline"))
