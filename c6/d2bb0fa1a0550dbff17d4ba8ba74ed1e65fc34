@@ -1,0 +1,38 @@
+pystreams/tests/test_risk_enforce.py
+  s_b390d6ce53b276::t_2f005d88354942 177-179
+  s_b390d6ce53b276::t_bc62da6bf5c08d 228-238
+pystreams/src/pystreams/risk/enforce_handler.py
+  s_b390d6ce53b276::t_c5681cd7873420 158-162
+docs/pubsub-topology.md
+  s_b390d6ce53b276::t_e861bb90dec053 217-218
+  s_b390d6ce53b276::t_11d54f1fdc9ff2 161-164
+infra/internal/diagram/diagram.go
+  s_b390d6ce53b276::t_2b912cf5d1be85 568
+infra/proto/gram/risk/v1/presidio_enforcer.proto
+  s_b390d6ce53b276::t_05dc2a43bf20f3 11-15
+server/internal/risk/replyinbox/dispatch.go
+  s_b390d6ce53b276::t_c3d6bd2462d5d4 66-68
+pystreams/src/pystreams/cmd/multi.py
+  s_b390d6ce53b276::t_6d17ed95cdf38f 244-249,254
+  s_b390d6ce53b276::t_39d0907faa2848 167-169,174-175,177-180
+pystreams/src/pystreams/risk/fingerprint.py
+  s_b390d6ce53b276::t_3499333534512f 23-28
+  s_b390d6ce53b276::t_524695306e4bdd 54-57,67-68
+  s_b390d6ce53b276::t_5091b256197eb7 114,119-124
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "c6d2bb0fa1a0550dbff17d4ba8ba74ed1e65fc34",
+  "prompts": {},
+  "sessions": {
+    "s_b390d6ce53b276": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c7be466b-35a7-46f8-83d3-cbbede48fd92",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
