@@ -203,7 +203,8 @@ func (h *MetricRelayHandler) handleBatch(ctx context.Context, messages []metricR
 			return nil
 		})
 	}
-	exportGroup.Wait()
+	// Export workers classify delivery failures per item and always return nil.
+	_ = exportGroup.Wait()
 	return nil
 }
 

@@ -98,11 +98,15 @@ func TestMetricsRejectsTooManyFlattenedMetricsBeforePublishing(t *testing.T) {
 		scopeMetrics.Metrics[i] = metric
 	}
 	require.Less(t, proto.Size(request), maxOTLPExportBytes)
+	raw, err := proto.Marshal(request)
+	require.NoError(t, err)
+	_, err = decodeOTLPMetricExport(raw, new(otelv1.InboundMetric_Provenance))
+	require.ErrorContains(t, err, "metric export exceeds maximum count of 10000 metrics")
 
 	publisher := gcp.NewMockPublisher[*otelv1.InboundMetric]()
-	err := ingestMetricTestExport(t, request, publisher)
+	err = ingestMetricTestExport(t, request, publisher)
 
-	require.ErrorContains(t, err, "metric export exceeds maximum count of 10000 metrics")
+	require.ErrorContains(t, err, "invalid OTLP metric export")
 	publisher.AssertNotCalled(t, "Publish", mock.Anything, mock.Anything)
 }
 
@@ -122,11 +126,15 @@ func TestMetricsRejectsExpandedExportBeforePublishing(t *testing.T) {
 		scopeMetrics.Metrics[i] = metric
 	}
 	require.Less(t, proto.Size(request), maxOTLPExportBytes)
+	raw, err := proto.Marshal(request)
+	require.NoError(t, err)
+	_, err = decodeOTLPMetricExport(raw, new(otelv1.InboundMetric_Provenance))
+	require.ErrorContains(t, err, "normalized metric export exceeds maximum size")
 
 	publisher := gcp.NewMockPublisher[*otelv1.InboundMetric]()
-	err := ingestMetricTestExport(t, request, publisher)
+	err = ingestMetricTestExport(t, request, publisher)
 
-	require.ErrorContains(t, err, "normalized metric export exceeds maximum size")
+	require.ErrorContains(t, err, "invalid OTLP metric export")
 	publisher.AssertNotCalled(t, "Publish", mock.Anything, mock.Anything)
 }
 
