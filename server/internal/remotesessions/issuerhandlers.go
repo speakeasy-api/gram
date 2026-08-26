@@ -78,7 +78,8 @@ type rfc8414Document struct {
 // empty value as the clear sentinel.
 func resolveIssuerTunnelBinding(ctx context.Context, logger *slog.Logger, q *repo.Queries, authCtx *contextvalues.AuthContext, projectID uuid.NullUUID, raw *string) (uuid.NullUUID, error) {
 	none := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	if raw == nil || strings.TrimSpace(*raw) == "" {
+	raw = normalizeOptionalTunnelBinding(raw)
+	if raw == nil || *raw == "" {
 		return none, nil
 	}
 	if !authCtx.IsAdmin {
@@ -102,6 +103,14 @@ func resolveIssuerTunnelBinding(ctx context.Context, logger *slog.Logger, q *rep
 		return none, oops.E(oops.CodeUnexpected, err, "get tunneled mcp server").LogError(ctx, logger)
 	}
 	return uuid.NullUUID{UUID: tunnelID, Valid: true}, nil
+}
+
+func normalizeOptionalTunnelBinding(raw *string) *string {
+	if raw == nil {
+		return nil
+	}
+	normalized := strings.TrimSpace(*raw)
+	return &normalized
 }
 
 // FetchRemoteSessionIssuerMetadata fetches the upstream issuer's RFC 8414
@@ -421,15 +430,16 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 	if payload.Issuer != nil && *payload.Issuer == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "issuer cannot be set to empty").LogError(ctx, logger)
 	}
-	if payload.TunneledMcpServerID != nil && !authCtx.IsAdmin {
+	tunneledMcpServerID := normalizeOptionalTunnelBinding(payload.TunneledMcpServerID)
+	if tunneledMcpServerID != nil && !authCtx.IsAdmin {
 		return nil, oops.E(oops.CodeForbidden, nil, "changing an identity provider's MCP tunnel binding requires a platform admin").LogError(ctx, logger)
 	}
 
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
-	if v := conv.PtrValOr(payload.TunneledMcpServerID, ""); v != "" {
-		if _, err := resolveIssuerTunnelBinding(ctx, logger, repo.New(s.db), authCtx, uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true}, payload.TunneledMcpServerID); err != nil {
+	if v := conv.PtrValOr(tunneledMcpServerID, ""); v != "" {
+		if _, err := resolveIssuerTunnelBinding(ctx, logger, repo.New(s.db), authCtx, uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true}, tunneledMcpServerID); err != nil {
 			return nil, err
 		}
 	}
@@ -523,7 +533,7 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 		ClientIDMetadataDocumentSupported: conv.PtrToPGBool(payload.ClientIDMetadataDocumentSupported),
 		Oidc:                              conv.PtrToPGBool(payload.Oidc),
 		Passthrough:                       conv.PtrToPGBool(payload.Passthrough),
-		TunneledMcpServerID:               conv.PtrToPGText(payload.TunneledMcpServerID),
+		TunneledMcpServerID:               conv.PtrToPGText(tunneledMcpServerID),
 		ID:                                issuerID,
 		ProjectID:                         uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 	})

@@ -101,17 +101,22 @@ type RemoteLoginState struct {
 	// OrganizationID scopes the callback's client lookup so an organization-level
 	// client (project_id NULL) bound to this project's user_session_issuer
 	// resolves on the way back. Empty for in-flight states minted before it.
-	OrganizationID        string              `json:"organization_id,omitempty"`
-	UserSessionIssuerID   uuid.UUID           `json:"user_session_issuer_id"`
-	RemoteSessionClientID uuid.UUID           `json:"remote_session_client_id"`
-	TokenEndpoint         string              `json:"token_endpoint"`
-	TunneledMcpServerID   string              `json:"tunneled_mcp_server_id,omitempty"`
-	TransportSelected     bool                `json:"transport_selected,omitempty"`
-	RedirectURI           string              `json:"redirect_uri"`
-	CodeVerifier          string              `json:"code_verifier"`
-	Resource              string              `json:"resource,omitempty"`
-	Subject               *urn.SessionSubject `json:"subject,omitempty"`
-	McpSlug               string              `json:"mcp_slug"`
+	OrganizationID        string    `json:"organization_id,omitempty"`
+	UserSessionIssuerID   uuid.UUID `json:"user_session_issuer_id"`
+	RemoteSessionClientID uuid.UUID `json:"remote_session_client_id"`
+	TokenEndpoint         string    `json:"token_endpoint"`
+	TunneledMcpServerID   string    `json:"tunneled_mcp_server_id,omitempty"`
+
+	// TransportSelected marks TunneledMcpServerID as the security-sensitive
+	// transport snapshot chosen before the authorization redirect. An empty
+	// tunnel ID snapshots direct egress. False identifies legacy cached states
+	// that must fall back to the issuer's current persisted binding.
+	TransportSelected bool                `json:"transport_selected,omitempty"`
+	RedirectURI       string              `json:"redirect_uri"`
+	CodeVerifier      string              `json:"code_verifier"`
+	Resource          string              `json:"resource,omitempty"`
+	Subject           *urn.SessionSubject `json:"subject,omitempty"`
+	McpSlug           string              `json:"mcp_slug"`
 	// RouteBase is "mcp" or "x/mcp" — drives the post-callback redirect
 	// to /<RouteBase>/{slug}/connect. Empty values fall back to "mcp"
 	// for in-flight states minted before this field landed.
@@ -674,6 +679,11 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "the remote session client is misconfigured").LogError(ctx, logger)
 	}
+
+	// Bind the code exchange to the transport selected before redirecting the
+	// user. A binding change during the OAuth flow must not reroute the code or
+	// client credentials. Cached states created before TransportSelected existed
+	// retain their historical behavior by using the issuer's current binding.
 	tunnelID := clientRow.TunneledMcpServerID
 	if state.TransportSelected {
 		tunnelID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}

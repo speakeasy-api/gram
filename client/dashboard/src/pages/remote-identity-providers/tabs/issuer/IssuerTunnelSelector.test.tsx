@@ -2,17 +2,15 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const isPlatformAdmin = vi.fn();
-const listProjects = vi.fn();
 const listTunnels = vi.fn();
 const onChange = vi.fn<(value: string) => void>();
 
 vi.mock("@/contexts/Auth", () => ({
   useIsPlatformAdmin: () => isPlatformAdmin(),
-  useOrganization: () => ({ id: "org_1" }),
-}));
-
-vi.mock("@gram/client/react-query/listProjects.js", () => ({
-  useListProjects: (...args: unknown[]) => listProjects(...args),
+  useOrganization: () => ({
+    id: "org_1",
+    projects: [{ id: "project_1", name: "Project One", slug: "default" }],
+  }),
 }));
 
 vi.mock("@gram/client/react-query/tunneledMcpServers.js", () => ({
@@ -24,17 +22,11 @@ import { IssuerTunnelSelector } from "./IssuerTunnelSelector";
 afterEach(() => {
   cleanup();
   isPlatformAdmin.mockReset();
-  listProjects.mockReset();
   listTunnels.mockReset();
   onChange.mockReset();
 });
 
 function setQueryResults(): void {
-  listProjects.mockReturnValue({
-    data: {
-      projects: [{ id: "project_1", name: "Project One", slug: "default" }],
-    },
-  });
   listTunnels.mockReturnValue({
     data: { tunneledMcpServers: [] },
     error: null,
@@ -87,5 +79,8 @@ describe("IssuerTunnelSelector", () => {
       gramProject: "default",
     });
     expect(listTunnels.mock.calls[0]?.[2]).toMatchObject({ enabled: true });
+    expect(
+      screen.getByText(/OAuth paths are delivered to the tunnel agent/),
+    ).toBeTruthy();
   });
 });

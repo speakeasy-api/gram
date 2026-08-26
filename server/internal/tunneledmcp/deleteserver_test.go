@@ -13,7 +13,7 @@ import (
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
-func TestDeleteServerClearsRemoteSessionIssuerBinding(t *testing.T) {
+func TestDeleteServerRetainsRemoteSessionIssuerBinding(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -52,5 +52,6 @@ func TestDeleteServerClearsRemoteSessionIssuerBinding(t *testing.T) {
 		IncludeGlobal:         false,
 	})
 	require.NoError(t, err)
-	require.False(t, issuer.TunneledMcpServerID.Valid)
+	require.True(t, issuer.TunneledMcpServerID.Valid)
+	require.Equal(t, server.ID, issuer.TunneledMcpServerID.UUID)
 }

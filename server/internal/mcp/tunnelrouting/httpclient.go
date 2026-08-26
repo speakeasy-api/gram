@@ -28,8 +28,10 @@ const maxForwardAttempts = 3
 // HTTPClient sends ordinary HTTP requests through an MCP tunnel: it selects a
 // live gateway route for the tunnel, rewrites the request onto the gateway
 // address, and attaches the forwarding headers. The request URL's scheme and
-// host are identity only — the tunnel agent pins them from its local
-// configuration, so only the path and query reach the customer network.
+// host are identity only. The agent preserves the request path and query but
+// delivers them to the origin pinned by TUNNEL_LOCAL_MCP_URL. Deployments with
+// separate MCP and authorization-server origins therefore need a local reverse
+// proxy at that URL to route both services by path.
 //
 // This is the transport for Gram's back-channel calls to authorization
 // servers that sit inside a customer network (token exchange, refresh,

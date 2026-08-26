@@ -190,9 +190,10 @@ func newWorkerCommand() *cli.Command {
 			Required: false,
 		},
 		&cli.StringFlag{
-			Name:    "tunnel-forward-token",
-			Usage:   "Shared secret presented to the tunnel gateway forward listener to authenticate gram-worker; unset means tunnel-bound token refreshes fail closed",
-			EnvVars: []string{"GRAM_TUNNEL_FORWARD_TOKEN"},
+			Name:     "tunnel-forward-token",
+			Usage:    "Shared secret presented to the tunnel gateway forward listener to authenticate gram-worker",
+			Required: true,
+			EnvVars:  []string{"GRAM_TUNNEL_FORWARD_TOKEN"},
 		},
 		&cli.StringSliceFlag{
 			Name:    "tunnel-gateway-cidr-blocks",

@@ -47,6 +47,19 @@ MCP client
 The caller never supplies the tunnel ID. Gram derives it from the project-scoped
 MCP server row and overwrites any inbound tunnel header before forwarding.
 
+## OAuth Back-Channel Requests
+
+An issuer bound to a tunnel uses the same agent for persisted metadata refresh,
+dynamic client registration, token exchange, refresh, and revocation. Gram
+preserves each OAuth request's path and query, but the agent delivers the request
+to the origin pinned by `TUNNEL_LOCAL_MCP_URL`; the original URL's scheme and
+host are not used inside the customer network.
+
+If the MCP server and authorization server run on separate origins, point
+`TUNNEL_LOCAL_MCP_URL` at a local reverse proxy that routes their paths to the
+appropriate services. A tunnel agent cannot select separate upstream origins
+for MCP and OAuth traffic on its own.
+
 ## State
 
 Postgres is durable control-plane state:

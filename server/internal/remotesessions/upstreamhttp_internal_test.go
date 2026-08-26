@@ -44,4 +44,30 @@ func TestUpstreamHTTPDoerTunnelBindingWithoutTransportErrors(t *testing.T) {
 	require.Nil(t, doer)
 }
 
+func TestUpstreamHTTPDoerRetainedBindingWithoutLiveRouteFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	direct := &recordingHTTPDoer{}
+	tunnels := tunnelrouting.NewHTTPClient(route.NewRouteTable(), "forward-token", guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)), nil)
+	doer, err := upstreamHTTPDoer(direct, tunnels, uuid.NullUUID{UUID: uuid.New(), Valid: true})
+	require.NoError(t, err)
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "https://idp.internal/oauth/token", nil)
+	require.NoError(t, err)
+	resp, err := doer.Do(req) //nolint:bodyclose // no live route returns no response
+	require.ErrorIs(t, err, tunnelrouting.ErrNoTunnelRoute)
+	require.Nil(t, resp)
+	require.False(t, direct.called)
+}
+
+type recordingHTTPDoer struct {
+	called bool
+}
+
+func (d *recordingHTTPDoer) Do(*http.Request) (*http.Response, error) {
+	d.called = true
+	return nil, nil
+}
+
 var _ httpDoer = (*http.Client)(nil)
+var _ httpDoer = (*recordingHTTPDoer)(nil)

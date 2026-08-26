@@ -10,7 +10,6 @@ import {
 import { Text } from "@/components/ui/Text";
 import { useIsPlatformAdmin, useOrganization } from "@/contexts/Auth";
 import { formatTunneledMcpDisplay } from "@/lib/sources";
-import { useListProjects } from "@gram/client/react-query/listProjects.js";
 import { useTunneledMcpServers } from "@gram/client/react-query/tunneledMcpServers.js";
 import { useId } from "react";
 
@@ -29,12 +28,7 @@ export function IssuerTunnelSelector({
   const selectId = useId();
   const organization = useOrganization();
   const canConfigure = isPlatformAdmin && projectId !== "";
-  const projectsQuery = useListProjects(
-    { organizationId: organization.id },
-    undefined,
-    { enabled: canConfigure },
-  );
-  const projectSlug = projectsQuery.data?.projects.find(
+  const projectSlug = organization.projects.find(
     (project) => project.id === projectId,
   )?.slug;
   const tunnelsQuery = useTunneledMcpServers(
@@ -48,7 +42,7 @@ export function IssuerTunnelSelector({
   }
 
   const tunnels = tunnelsQuery.data?.tunneledMcpServers ?? [];
-  const loadError = projectsQuery.error ?? tunnelsQuery.error;
+  const loadError = tunnelsQuery.error;
   const selectedTunnelIsUnavailable =
     value !== "" && !tunnels.some((tunnel) => tunnel.id === value);
 
@@ -88,8 +82,11 @@ export function IssuerTunnelSelector({
           </SelectContent>
         </Select>
         <Text small muted>
-          Routes metadata discovery, token exchange, refresh, revocation, and
-          dynamic client registration through the selected project tunnel.
+          Routes persisted metadata refresh, token exchange, refresh,
+          revocation, and dynamic client registration through the selected
+          project tunnel. OAuth paths are delivered to the tunnel agent's
+          configured local target, so use a local reverse proxy when the MCP
+          server and identity provider use separate origins.
         </Text>
         {loadError && (
           <Text

@@ -17,6 +17,7 @@ import {
 import { isNotFoundError } from "@/lib/errors";
 import { deriveRemoteSessionIssuerNameFromUrl } from "@/lib/sources";
 import {
+  dynamicClientRegistrationAvailability,
   narrowTokenEndpointAuthMethod,
   pickPreferredAuthMethod,
 } from "@/pages/mcp/x/tabs/settings/sections/authentication/issuerFormUtils";
@@ -26,6 +27,8 @@ type AutoConfigureAuthInput = {
   authedFetch: AuthedFetch;
   remoteMcpServer: RemoteMcpServer;
   mcpServer: McpServer;
+  isPlatformAdmin: boolean;
+  projectSlug: string;
   /**
    * Per-request SDK options (e.g. a gram-project header for cross-project
    * installs) applied to every management API call made during auto-config.
@@ -54,6 +57,8 @@ export async function autoConfigureRemoteMcpAuth({
   authedFetch,
   remoteMcpServer,
   mcpServer,
+  isPlatformAdmin,
+  projectSlug,
   options,
 }: AutoConfigureAuthInput): Promise<AutoConfigureAuthResult> {
   // Every remote-backed server gets its USI at setup; auto-config only attaches
@@ -63,6 +68,11 @@ export async function autoConfigureRemoteMcpAuth({
   if (!userSessionIssuerId) {
     return skipped("No user session issuer is linked to this server.", false);
   }
+  const requestHeaders = options?.headers ?? options?.fetchOptions?.headers;
+  const routedProjectSlug =
+    (requestHeaders
+      ? new Headers(requestHeaders).get("gram-project")
+      : null) ?? projectSlug;
 
   let protectedResourceMetadata: ProtectedResourceMetadata | undefined;
   try {
@@ -91,51 +101,16 @@ export async function autoConfigureRemoteMcpAuth({
     return skipped(SILENT_NO_METADATA_MESSAGE, false);
   }
 
-  let draft: RemoteSessionIssuerDraft;
-  try {
-    draft = await client.remoteSessionIssuers.fetchMetadata(
-      {
-        fetchIssuerMetadataRequestBody: {
-          issuer: protectedResourceMetadata.authorizationServers[0],
-        },
-      },
-      undefined,
-      options,
-    );
-  } catch (error) {
-    console.info("Remote MCP auth-server discovery failed.", {
-      remoteMcpServerId: remoteMcpServer.id,
-      issuer: protectedResourceMetadata.authorizationServers[0],
-      error,
-    });
-    return skipped(
-      "OAuth metadata was found, but the authorization server could not be discovered.",
-      true,
-    );
-  }
-
-  // Checked before the issuer is looked up, not after. A miss below creates the
-  // issuer, and one created for an upstream that cannot do dynamic client
-  // registration could never receive a client — so a server without DCR must
-  // bail out before anything is written.
-  if (!draft.registrationEndpoint) {
-    return skipped(
-      "OAuth metadata was found, but automatic authentication setup requires dynamic client registration.",
-      true,
-    );
-  }
-
-  // Ask the server whether this upstream already has an identity provider — in
-  // this project, inherited from the organization, or in the platform catalog.
-  // A 404 is the normal answer for a new upstream and means "create one". The
-  // lookup lives server-side so that the tier precedence and the URL
-  // normalization behind it have a single definition, rather than every caller
-  // scanning the issuer list and matching URLs itself.
+  const issuerURL = protectedResourceMetadata.authorizationServers[0];
   const resourceSlug = buildUserSessionResourceSlug(mcpServer.slug ?? "mcp");
+
+  // Reuse a saved issuer before attempting direct discovery. Private issuers
+  // can already carry manually configured endpoints and a tunnel binding even
+  // when their metadata document is unreachable from cloud egress.
   let remoteSessionIssuer: RemoteSessionIssuer | null;
   try {
     remoteSessionIssuer = await client.remoteSessionIssuers.get(
-      { issuer: draft.issuer },
+      { issuer: issuerURL },
       undefined,
       options,
     );
@@ -143,7 +118,7 @@ export async function autoConfigureRemoteMcpAuth({
     if (!isNotFoundError(error)) {
       console.info("Remote MCP identity provider lookup failed.", {
         remoteMcpServerId: remoteMcpServer.id,
-        issuer: draft.issuer,
+        issuer: issuerURL,
         error,
       });
       return skipped(
@@ -152,6 +127,53 @@ export async function autoConfigureRemoteMcpAuth({
       );
     }
     remoteSessionIssuer = null;
+  }
+
+  let draft: RemoteSessionIssuerDraft | null = null;
+  if (!remoteSessionIssuer?.registrationEndpoint?.trim()) {
+    try {
+      draft = await client.remoteSessionIssuers.fetchMetadata(
+        {
+          fetchIssuerMetadataRequestBody: { issuer: issuerURL },
+        },
+        undefined,
+        options,
+      );
+    } catch (error) {
+      console.info("Remote MCP auth-server discovery failed.", {
+        remoteMcpServerId: remoteMcpServer.id,
+        issuer: issuerURL,
+        error,
+      });
+      return skipped(
+        "OAuth metadata was found, but the authorization server could not be discovered.",
+        true,
+      );
+    }
+  }
+
+  // Prefer the saved endpoint when an operator has supplied one manually. A
+  // lookup miss can only use discovery. Keep this check before issuer creation
+  // so an upstream without DCR never leaves an unusable issuer behind.
+  const registrationEndpoint =
+    remoteSessionIssuer?.registrationEndpoint?.trim() ||
+    draft?.registrationEndpoint?.trim();
+  const dcrAvailability = dynamicClientRegistrationAvailability({
+    registrationEndpoint,
+    tunneled: !!remoteSessionIssuer?.tunneledMcpServerId,
+    isPlatformAdmin,
+  });
+  if (dcrAvailability.permissionRestricted) {
+    return skipped(
+      "Automatic authentication setup cannot use tunneled dynamic client registration without platform admin access. Configure Manual credentials or CIMD from the Authentication tab.",
+      true,
+    );
+  }
+  if (!dcrAvailability.available || !registrationEndpoint) {
+    return skipped(
+      "OAuth metadata was found, but automatic authentication setup requires dynamic client registration.",
+      true,
+    );
   }
 
   // An issuer that predates discovery may carry no endpoints, and reusing one
@@ -168,15 +190,27 @@ export async function autoConfigureRemoteMcpAuth({
   }
   if (
     !remoteSessionIssuer &&
-    (!draft.authorizationEndpoint || !draft.tokenEndpoint)
+    (!draft?.authorizationEndpoint || !draft.tokenEndpoint)
   ) {
     return skipped(
       "OAuth metadata was found, but it is missing required OAuth endpoints.",
       true,
     );
   }
+  const issuerScopes =
+    remoteSessionIssuer?.scopesSupported ?? draft?.scopesSupported;
+  const issuerAuthMethods =
+    remoteSessionIssuer?.tokenEndpointAuthMethodsSupported ??
+    draft?.tokenEndpointAuthMethodsSupported ??
+    [];
 
   if (!remoteSessionIssuer) {
+    if (!draft) {
+      return skipped(
+        "OAuth metadata was found, but the authorization server could not be discovered.",
+        true,
+      );
+    }
     try {
       remoteSessionIssuer = await client.remoteSessionIssuers.create(
         {
@@ -218,24 +252,23 @@ export async function autoConfigureRemoteMcpAuth({
 
   const scopes = preferredScopes(
     protectedResourceMetadata.scopesSupported,
-    draft.scopesSupported,
+    issuerScopes,
   );
-  const preferredAuthMethod = pickPreferredAuthMethod(
-    draft.tokenEndpointAuthMethodsSupported ?? [],
-  );
+  const preferredAuthMethod = pickPreferredAuthMethod(issuerAuthMethods);
 
   let registered;
   try {
     registered = await proxyRegisterUpstreamClient(authedFetch, {
-      registrationEndpoint: draft.registrationEndpoint,
+      registrationEndpoint,
       scope: scopes.length > 0 ? scopes.join(" ") : undefined,
       tokenEndpointAuthMethod: preferredAuthMethod,
       tunneledMcpServerId: remoteSessionIssuer.tunneledMcpServerId,
+      projectSlug: routedProjectSlug,
     });
   } catch (error) {
     console.info("Remote MCP upstream DCR failed.", {
       remoteMcpServerId: remoteMcpServer.id,
-      registrationEndpoint: draft.registrationEndpoint,
+      registrationEndpoint,
       error,
     });
     return skipped(

@@ -77,11 +77,3 @@ SET
     updated_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
-
--- name: ClearRemoteSessionIssuerBindings :exec
-UPDATE remote_session_issuers
-SET
-    tunneled_mcp_server_id = NULL,
-    updated_at = clock_timestamp()
-WHERE tunneled_mcp_server_id = @id::uuid
-  AND project_id = @project_id::uuid;

@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	orgissuersgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_issuers"
 	gen "github.com/speakeasy-api/gram/server/gen/remote_session_issuers"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -84,9 +85,10 @@ func TestUpdateRemoteSessionIssuer_TunnelBindingSetAndClear(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 
 	adminCtx := withAdmin(t, ctx)
+	paddedTunnelID := "  " + tunnelID.String() + "  "
 	updated, err := ti.service.UpdateRemoteSessionIssuer(adminCtx, &gen.UpdateRemoteSessionIssuerPayload{
 		ID:                  created.ID,
-		TunneledMcpServerID: conv.PtrEmpty(tunnelID.String()),
+		TunneledMcpServerID: &paddedTunnelID,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, updated.TunneledMcpServerID)
@@ -100,10 +102,42 @@ func TestUpdateRemoteSessionIssuer_TunnelBindingSetAndClear(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, updated.TunneledMcpServerID)
 
-	empty := ""
+	empty := " \t "
 	updated, err = ti.service.UpdateRemoteSessionIssuer(adminCtx, &gen.UpdateRemoteSessionIssuerPayload{
 		ID:                  created.ID,
 		TunneledMcpServerID: &empty,
+	})
+	require.NoError(t, err)
+	require.Nil(t, updated.TunneledMcpServerID)
+}
+
+func TestUpdateIssuer_TunnelBindingNormalizesSetAndClear(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := authCtx.ProjectID.String()
+	created, err := ti.service.CreateIssuer(ctx, newCreateIssuerPayload("idp-org-tunnel-update", &projectID))
+	require.NoError(t, err)
+	require.Nil(t, created.TunneledMcpServerID)
+
+	tunnelID := seedTunneledMcpServer(t, ctx, ti)
+	adminCtx := withAdmin(t, ctx)
+	paddedTunnelID := "\n" + tunnelID.String() + "\t"
+	updated, err := ti.service.UpdateIssuer(adminCtx, &orgissuersgen.UpdateIssuerPayload{
+		ID:                  created.ID,
+		TunneledMcpServerID: &paddedTunnelID,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated.TunneledMcpServerID)
+	require.Equal(t, tunnelID.String(), *updated.TunneledMcpServerID)
+
+	whitespace := " \n\t "
+	updated, err = ti.service.UpdateIssuer(adminCtx, &orgissuersgen.UpdateIssuerPayload{
+		ID:                  created.ID,
+		TunneledMcpServerID: &whitespace,
 	})
 	require.NoError(t, err)
 	require.Nil(t, updated.TunneledMcpServerID)

@@ -534,13 +534,6 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 		return oops.E(oops.CodeUnexpected, err, "delete tunneled mcp server").LogError(ctx, logger)
 	}
 
-	if err := txRepo.ClearRemoteSessionIssuerBindings(ctx, repo.ClearRemoteSessionIssuerBindingsParams{
-		ID:        serverID,
-		ProjectID: *authCtx.ProjectID,
-	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "clear remote session issuer tunnel bindings").LogError(ctx, logger)
-	}
-
 	if err := s.audit.LogTunneledMcpServerDelete(ctx, dbtx, audit.LogTunneledMcpServerDeleteEvent{
 		OrganizationID:        authCtx.ActiveOrganizationID,
 		ProjectID:             *authCtx.ProjectID,

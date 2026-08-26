@@ -12,25 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const clearRemoteSessionIssuerBindings = `-- name: ClearRemoteSessionIssuerBindings :exec
-UPDATE remote_session_issuers
-SET
-    tunneled_mcp_server_id = NULL,
-    updated_at = clock_timestamp()
-WHERE tunneled_mcp_server_id = $1::uuid
-  AND project_id = $2::uuid
-`
-
-type ClearRemoteSessionIssuerBindingsParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
-}
-
-func (q *Queries) ClearRemoteSessionIssuerBindings(ctx context.Context, arg ClearRemoteSessionIssuerBindingsParams) error {
-	_, err := q.db.Exec(ctx, clearRemoteSessionIssuerBindings, arg.ID, arg.ProjectID)
-	return err
-}
-
 const countActiveServersByOrganizationID = `-- name: CountActiveServersByOrganizationID :one
 SELECT COUNT(*)
 FROM tunneled_mcp_servers

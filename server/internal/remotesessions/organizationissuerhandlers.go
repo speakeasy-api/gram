@@ -402,7 +402,8 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orgissuersgen.Updat
 	if payload.Issuer != nil && *payload.Issuer == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "issuer cannot be set to empty").LogError(ctx, logger)
 	}
-	if payload.TunneledMcpServerID != nil && !authCtx.IsAdmin {
+	tunneledMcpServerID := normalizeOptionalTunnelBinding(payload.TunneledMcpServerID)
+	if tunneledMcpServerID != nil && !authCtx.IsAdmin {
 		return nil, oops.E(oops.CodeForbidden, nil, "changing an identity provider's MCP tunnel binding requires a platform admin").LogError(ctx, logger)
 	}
 
@@ -470,8 +471,8 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orgissuersgen.Updat
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization admin remote session issuer").LogError(ctx, logger)
 	}
-	if v := conv.PtrValOr(payload.TunneledMcpServerID, ""); v != "" {
-		if _, err := resolveIssuerTunnelBinding(ctx, logger, txRepo, authCtx, existing.ProjectID, payload.TunneledMcpServerID); err != nil {
+	if v := conv.PtrValOr(tunneledMcpServerID, ""); v != "" {
+		if _, err := resolveIssuerTunnelBinding(ctx, logger, txRepo, authCtx, existing.ProjectID, tunneledMcpServerID); err != nil {
 			return nil, err
 		}
 	}
@@ -500,7 +501,7 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orgissuersgen.Updat
 		ClientIDMetadataDocumentSupported: conv.PtrToPGBool(payload.ClientIDMetadataDocumentSupported),
 		Oidc:                              conv.PtrToPGBool(payload.Oidc),
 		Passthrough:                       conv.PtrToPGBool(payload.Passthrough),
-		TunneledMcpServerID:               conv.PtrToPGText(payload.TunneledMcpServerID),
+		TunneledMcpServerID:               conv.PtrToPGText(tunneledMcpServerID),
 		ID:                                issuerID,
 		OrganizationID:                    conv.ToPGText(authCtx.ActiveOrganizationID),
 	})

@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -27,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"goa.design/goa/v3/security"
 )
 
 // proxyRegisterMaxBodyBytes caps both the inbound request body and the upstream
@@ -221,7 +223,49 @@ func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) er
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "authentication required").LogError(ctx, s.logger)
 	}
+
+	projectScheme := security.APIKeyScheme{
+		Name:           constants.ProjectSlugSecuritySchema,
+		Scopes:         []string{},
+		RequiredScopes: []string{},
+	}
+	authedCtx, err = s.auth.Authorize(authedCtx, r.Header.Get(constants.ProjectHeader), &projectScheme)
+	if err != nil {
+		// Project authorization resolves the requested project before enforcing
+		// project:read. Organization administrators may legitimately lack that
+		// project grant, so admit them only when resolution succeeded inside their
+		// active organization; RequireAny below still gates the mutation itself.
+		resolved, ok := contextvalues.GetAuthContext(authedCtx)
+		if !ok || resolved == nil || resolved.ProjectID == nil || s.authz.Require(authedCtx, authz.Check{
+			Scope:        authz.ScopeOrgAdmin,
+			ResourceKind: "",
+			ResourceID:   resolved.ActiveOrganizationID,
+			Dimensions:   nil,
+		}) != nil {
+			return oops.E(oops.CodeUnauthorized, err, "unauthorized access").LogError(authedCtx, s.logger)
+		}
+	}
 	ctx = authedCtx
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.RequireAny(ctx,
+		authz.Check{
+			Scope:        authz.ScopeProjectWrite,
+			ResourceKind: "",
+			ResourceID:   authCtx.ProjectID.String(),
+			Dimensions:   nil,
+		},
+		authz.Check{
+			Scope:        authz.ScopeOrgAdmin,
+			ResourceKind: "",
+			ResourceID:   authCtx.ActiveOrganizationID,
+			Dimensions:   nil,
+		},
+	); err != nil {
+		return err
+	}
 
 	if s.policy == nil {
 		return oops.E(oops.CodeUnexpected, nil, "proxy register handler is not configured").LogError(ctx, s.logger)
@@ -240,10 +284,6 @@ func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) er
 	if req.TunneledMcpServerID != nil {
 		if strings.TrimSpace(*req.TunneledMcpServerID) == "" {
 			return oops.E(oops.CodeBadRequest, nil, "tunneled_mcp_server_id cannot be empty").LogError(ctx, s.logger)
-		}
-		authCtx, ok := contextvalues.GetAuthContext(ctx)
-		if !ok || authCtx == nil || authCtx.ProjectID == nil {
-			return oops.C(oops.CodeUnauthorized)
 		}
 		if !authCtx.IsAdmin {
 			return oops.E(oops.CodeForbidden, nil, "registering a client through an MCP tunnel requires a platform admin").LogError(ctx, s.logger)
