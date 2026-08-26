@@ -63,9 +63,7 @@ func setupInboxTestWithDrainerAndGate(t *testing.T, replicaID string, drainGate 
 func waitForWaiter(t *testing.T, inbox *Inbox, scanID string) {
 	t.Helper()
 	require.Eventually(t, func() bool {
-		inbox.mu.Lock()
-		defer inbox.mu.Unlock()
-		_, ok := inbox.waiters[scanID]
+		_, ok := inbox.waiters.Load(scanID)
 		return ok
 	}, time.Second, 5*time.Millisecond)
 }

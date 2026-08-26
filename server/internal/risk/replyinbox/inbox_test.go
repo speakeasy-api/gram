@@ -255,7 +255,7 @@ func TestDrainerReconnectsAndDrainsQueuedReply(t *testing.T) {
 	te.redis.Ctx = miniCtx
 	te.redis.CtxCancel = miniCancel
 	require.NoError(t, te.redis.Restart())
-	require.Equal(t, te.inbox.client.Options().Addr, te.redis.Addr())
+	require.Equal(t, te.inbox.client.Load().Options().Addr, te.redis.Addr())
 	te.client = redis.NewClient(&redis.Options{Addr: te.redis.Addr(), Protocol: 2})
 	t.Cleanup(func() { _ = te.client.Close() })
 	te.writer = NewWriter(te.client)
@@ -270,7 +270,7 @@ func TestDedicatedClientUsesBoundedPool(t *testing.T) {
 	t.Parallel()
 
 	te := setupInboxTest(t, "replica-options")
-	require.Equal(t, defaultPoolSize, te.inbox.client.Options().PoolSize)
+	require.Equal(t, defaultPoolSize, te.inbox.client.Load().Options().PoolSize)
 }
 
 func TestDrainerSupervisorRestartsAfterPanic(t *testing.T) {
