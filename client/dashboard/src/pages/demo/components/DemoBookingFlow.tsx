@@ -45,11 +45,20 @@ function useCalBranding() {
     void (async () => {
       const cal = await getCalApi();
       if (cancelled) return;
-      cal("ui", {
-        theme: "light",
-        hideEventTypeDetails: true,
-        cssVarsPerTheme: { light: CAL_BRAND_VARS, dark: CAL_BRAND_VARS },
-      });
+      // Cal runs "ui" through `doInIframe`, which throws ("iframe doesn't
+      // exist ...") when the embed iframe was never created or was already
+      // removed — a mount race or a fast unmount. Branding is best-effort
+      // styling, so swallow that third-party throw instead of letting it
+      // surface as an unhandled error on the book-a-demo gate.
+      try {
+        cal("ui", {
+          theme: "light",
+          hideEventTypeDetails: true,
+          cssVarsPerTheme: { light: CAL_BRAND_VARS, dark: CAL_BRAND_VARS },
+        });
+      } catch {
+        // The calendar still mounts through <Cal>; only the styling is lost.
+      }
     })();
     return () => {
       cancelled = true;

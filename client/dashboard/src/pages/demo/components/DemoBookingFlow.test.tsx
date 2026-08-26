@@ -160,6 +160,31 @@ describe("DemoBookingFlow", () => {
     ]);
   });
 
+  // Cal's "ui" instruction throws when the embed iframe is missing (mount race
+  // or removed iframe); that throw must not reach the book-a-demo gate.
+  it("contains a throw from Cal's ui instruction", async () => {
+    let rejected = false;
+    const onReject = () => {
+      rejected = true;
+    };
+    process.on("unhandledRejection", onReject);
+    calUiMock.mockImplementationOnce(() => {
+      throw new Error(
+        "iframe doesn't exist. createIframe must be called before doInIframe",
+      );
+    });
+
+    render(<DemoBookingFlow />);
+    await waitFor(() => expect(calUiMock).toHaveBeenCalled());
+    await new Promise((resolve) => {
+      setTimeout(resolve, 0);
+    });
+
+    expect(rejected).toBe(false);
+    expect(screen.getByTestId("cal-embed")).toBeTruthy();
+    process.off("unhandledRejection", onReject);
+  });
+
   it("footnotes the details it handed the embed", () => {
     render(<DemoBookingFlow />);
     expect(
