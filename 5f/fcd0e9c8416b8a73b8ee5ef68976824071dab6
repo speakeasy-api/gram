@@ -1,0 +1,35 @@
+pystreams/src/pystreams/cmd/multi.py
+  s_b390d6ce53b276::t_0e7972addade45 247-253,258
+pystreams/tests/test_risk_enforce.py
+  s_b390d6ce53b276::t_f2385f9f3e853c 228-231,235
+server/internal/risk/replyinbox/inbox.go
+  s_b390d6ce53b276::t_11c7a521e05f41 563-565,570
+  s_b390d6ce53b276::t_8c8b1afa568f98 345,349
+  s_b390d6ce53b276::t_31dc2b4226015a 119
+  s_b390d6ce53b276::t_bb6d422d8207e9 533-534,539-540
+  s_b390d6ce53b276::t_2aa5a0943e759d 200,215,217
+  s_b390d6ce53b276::t_33b573c4a0fdcc 507,510-512,514-519,522
+  s_b390d6ce53b276::t_fb332e3a54e7b3 137-139
+  s_b390d6ce53b276::t_5830022468128b 229-234
+  s_b390d6ce53b276::t_62d77af8f0cab2 541-543
+server/internal/risk/replyinbox/inbox_test.go
+  s_b390d6ce53b276::t_e8cd0dbcac2ed0 258,273
+server/internal/risk/replyinbox/setup_test.go
+  s_b390d6ce53b276::t_5f7b53a34fe424 66
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "5ffcd0e9c8416b8a73b8ee5ef68976824071dab6",
+  "prompts": {},
+  "sessions": {
+    "s_b390d6ce53b276": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c7be466b-35a7-46f8-83d3-cbbede48fd92",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
