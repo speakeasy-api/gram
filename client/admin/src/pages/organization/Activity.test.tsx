@@ -1,5 +1,5 @@
 import { QueryClient } from "@tanstack/react-query";
-import { cleanup, fireEvent, screen } from "@testing-library/react";
+import { cleanup, fireEvent, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { organizationActivityQuery } from "@/lib/adminQueries";
@@ -118,6 +118,87 @@ describe("Activity", () => {
     expect(screen.getByText(/"days": 7/)).toBeTruthy();
     expect(screen.getByText(/"days": 14/)).toBeTruthy();
     expect(screen.getByText(/"approved": true/)).toBeTruthy();
+  });
+
+  it("shows sorted changed, added, removed, and complex fields", async () => {
+    mocks.listOrganizationActivity.mockResolvedValue({
+      logs: [
+        anActivityLog({
+          before_snapshot: {
+            zeta: "before",
+            removed: "gone",
+            complex: { nested: ["old"] },
+            alpha: null,
+          },
+          after_snapshot: {
+            zeta: "after",
+            added: true,
+            complex: { nested: ["new"] },
+            alpha: false,
+          },
+        }),
+      ],
+    });
+
+    await renderWithApp(<Activity org={ORG} />);
+    fireEvent.click(
+      await screen.findByText(
+        "Event details for organization:settings_updated",
+      ),
+    );
+
+    const table = screen.getByRole("table", { name: "Changed fields" });
+    expect(
+      within(table)
+        .getAllByRole("row")
+        .slice(1)
+        .map((row) => within(row).getAllByRole("cell")[0]?.textContent),
+    ).toEqual(["added", "alpha", "complex", "removed", "zeta"]);
+
+    const rows = within(table).getAllByRole("row").slice(1);
+    expect(rows[0]?.textContent).toContain("(none)true");
+    expect(rows[1]?.textContent).toContain("nullfalse");
+    expect(rows[2]?.textContent).toContain(
+      '{"nested":["old"]}{"nested":["new"]}',
+    );
+    expect(rows[3]?.textContent).toContain("gone(none)");
+    expect(rows[4]?.textContent).toContain("beforeafter");
+  });
+
+  it("shows no-change copy, raw snapshots disclosure, and separate metadata", async () => {
+    const snapshot = { unchanged: "same" };
+    mocks.listOrganizationActivity.mockResolvedValue({
+      logs: [
+        anActivityLog({
+          before_snapshot: snapshot,
+          after_snapshot: snapshot,
+          metadata: { request_id: "request-placeholder" },
+        }),
+      ],
+    });
+
+    await renderWithApp(<Activity org={ORG} />);
+    fireEvent.click(
+      await screen.findByText(
+        "Event details for organization:settings_updated",
+      ),
+    );
+
+    expect(screen.getByText("No changed fields.")).toBeTruthy();
+    expect(screen.queryByRole("table", { name: "Changed fields" })).toBeNull();
+
+    const rawSummary = screen.getByText("Raw snapshots");
+    const rawDetails = rawSummary.closest("details");
+    expect(rawDetails?.hasAttribute("open")).toBe(false);
+    expect(rawDetails?.textContent).not.toContain("request-placeholder");
+    fireEvent.click(rawSummary);
+    expect(rawDetails?.hasAttribute("open")).toBe(true);
+    expect(rawDetails?.textContent).toContain('"unchanged": "same"');
+
+    expect(screen.getByText("Metadata")).toBeTruthy();
+    expect(
+      screen.getByText(/"request_id": "request-placeholder"/),
+    ).toBeTruthy();
   });
 
   it("shows only the initial loading state while the first page is pending", async () => {

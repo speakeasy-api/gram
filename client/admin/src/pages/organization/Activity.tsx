@@ -38,13 +38,110 @@ function Detail({ label, children }: { label: string; children: ReactNode }) {
 }
 
 function JsonDetail({ label, value }: { label: string; value: unknown }) {
-  if (value == null) return null;
+  if (value === undefined) return null;
   return (
     <Detail label={label}>
       <pre className="bg-muted mt-1 overflow-x-auto whitespace-pre-wrap break-words rounded-md p-2 font-mono text-xs">
         {JSON.stringify(value, null, 2)}
       </pre>
     </Detail>
+  );
+}
+
+type ChangedField = {
+  field: string;
+  oldValue: unknown;
+  newValue: unknown;
+};
+
+function computeChangedFields(before: unknown, after: unknown): ChangedField[] {
+  const beforeObject =
+    before != null && typeof before === "object"
+      ? (before as Record<string, unknown>)
+      : {};
+  const afterObject =
+    after != null && typeof after === "object"
+      ? (after as Record<string, unknown>)
+      : {};
+  const fields = new Set([
+    ...Object.keys(beforeObject),
+    ...Object.keys(afterObject),
+  ]);
+
+  return [...fields]
+    .filter(
+      (field) =>
+        JSON.stringify(beforeObject[field]) !==
+        JSON.stringify(afterObject[field]),
+    )
+    .map((field) => ({
+      field,
+      oldValue: beforeObject[field],
+      newValue: afterObject[field],
+    }))
+    .sort((left, right) => left.field.localeCompare(right.field));
+}
+
+function formatChangedValue(value: unknown): string {
+  if (value === undefined) return "(none)";
+  if (value === null) return "null";
+  if (typeof value === "string") return value;
+  if (typeof value === "boolean" || typeof value === "number") {
+    return String(value);
+  }
+  return JSON.stringify(value);
+}
+
+function ChangedFields({ before, after }: { before: unknown; after: unknown }) {
+  const changes = computeChangedFields(before, after);
+
+  return (
+    <section>
+      <h3 className="text-sm font-medium">Changed fields</h3>
+      {changes.length === 0 ? (
+        <p className="text-muted-foreground mt-1 text-sm">No changed fields.</p>
+      ) : (
+        <div className="mt-1 overflow-x-auto rounded-md border">
+          <table
+            aria-label="Changed fields"
+            className="w-full text-left text-xs"
+          >
+            <thead className="bg-muted text-muted-foreground">
+              <tr>
+                <th className="px-2 py-1.5 font-medium" scope="col">
+                  Field
+                </th>
+                <th className="px-2 py-1.5 font-medium" scope="col">
+                  Before
+                </th>
+                <th className="px-2 py-1.5 font-medium" scope="col">
+                  After
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {changes.map((change) => (
+                <tr className="border-t align-top" key={change.field}>
+                  <td className="px-2 py-1.5 font-mono font-medium">
+                    {change.field}
+                  </td>
+                  <td className="max-w-80 px-2 py-1.5">
+                    <code className="whitespace-pre-wrap break-all text-red-700 dark:text-red-400">
+                      {formatChangedValue(change.oldValue)}
+                    </code>
+                  </td>
+                  <td className="max-w-80 px-2 py-1.5">
+                    <code className="whitespace-pre-wrap break-all text-green-700 dark:text-green-400">
+                      {formatChangedValue(change.newValue)}
+                    </code>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -65,30 +162,43 @@ function ActivityItem({ log }: { log: AdminAuditLog }): JSX.Element {
         <summary className="text-muted-foreground cursor-pointer text-sm">
           Event details for {log.action}
         </summary>
-        <dl className="mt-2 grid gap-2 sm:grid-cols-2">
-          {log.project_id && (
-            <Detail label="Project ID">{log.project_id}</Detail>
-          )}
-          {log.project_slug && (
-            <Detail label="Project slug">{log.project_slug}</Detail>
-          )}
-          <Detail label="Actor type">{log.actor_type}</Detail>
-          <Detail label="Actor ID">{log.actor_id}</Detail>
-          {log.actor_slug && (
-            <Detail label="Actor slug">{log.actor_slug}</Detail>
-          )}
-          <Detail label="Subject type">{log.subject_type}</Detail>
-          <Detail label="Subject ID">{log.subject_id}</Detail>
-          {log.subject_slug && (
-            <Detail label="Subject slug">{log.subject_slug}</Detail>
-          )}
-          {log.acting_client_id && (
-            <Detail label="Acting client ID">{log.acting_client_id}</Detail>
-          )}
-          <JsonDetail label="Before snapshot" value={log.before_snapshot} />
-          <JsonDetail label="After snapshot" value={log.after_snapshot} />
-          <JsonDetail label="Metadata" value={log.metadata} />
-        </dl>
+        <div className="mt-2 space-y-3">
+          <ChangedFields
+            before={log.before_snapshot}
+            after={log.after_snapshot}
+          />
+          <dl className="grid gap-2 sm:grid-cols-2">
+            {log.project_id && (
+              <Detail label="Project ID">{log.project_id}</Detail>
+            )}
+            {log.project_slug && (
+              <Detail label="Project slug">{log.project_slug}</Detail>
+            )}
+            <Detail label="Actor type">{log.actor_type}</Detail>
+            <Detail label="Actor ID">{log.actor_id}</Detail>
+            {log.actor_slug && (
+              <Detail label="Actor slug">{log.actor_slug}</Detail>
+            )}
+            <Detail label="Subject type">{log.subject_type}</Detail>
+            <Detail label="Subject ID">{log.subject_id}</Detail>
+            {log.subject_slug && (
+              <Detail label="Subject slug">{log.subject_slug}</Detail>
+            )}
+            {log.acting_client_id && (
+              <Detail label="Acting client ID">{log.acting_client_id}</Detail>
+            )}
+            <JsonDetail label="Metadata" value={log.metadata} />
+          </dl>
+          <details>
+            <summary className="text-muted-foreground cursor-pointer text-sm">
+              Raw snapshots
+            </summary>
+            <dl className="mt-2 grid gap-2 sm:grid-cols-2">
+              <JsonDetail label="Before snapshot" value={log.before_snapshot} />
+              <JsonDetail label="After snapshot" value={log.after_snapshot} />
+            </dl>
+          </details>
+        </div>
       </details>
     </li>
   );
