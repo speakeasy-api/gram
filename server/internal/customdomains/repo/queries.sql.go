@@ -217,6 +217,49 @@ func (q *Queries) EnsureCustomDomainResourceNames(ctx context.Context, arg Ensur
 	return result.RowsAffected(), nil
 }
 
+const getActiveAppScopedCustomDomainForOrganization = `-- name: GetActiveAppScopedCustomDomainForOrganization :one
+SELECT id, organization_id, domain, scope, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
+FROM custom_domains
+WHERE organization_id = $1
+  AND scope = 'app'
+  AND verified IS TRUE
+  AND activated IS TRUE
+  AND deleted IS FALSE
+LIMIT 1
+`
+
+// The one domain an organization may serve the full control plane on. Read on
+// every host resolution, so a domain that is deleted or deactivated makes the
+// organization fall back to the canonical host without a data migration.
+func (q *Queries) GetActiveAppScopedCustomDomainForOrganization(ctx context.Context, organizationID string) (CustomDomain, error) {
+	row := q.db.QueryRow(ctx, getActiveAppScopedCustomDomainForOrganization, organizationID)
+	var i CustomDomain
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Domain,
+		&i.Scope,
+		&i.Verified,
+		&i.Activated,
+		&i.IngressName,
+		&i.CertSecretName,
+		&i.ProvisionerKind,
+		&i.IpAllowlist,
+		&i.OpenaiAppsChallengeToken,
+		&i.HealthStatus,
+		&i.HealthIssue,
+		&i.HealthCheckedAt,
+		&i.UnhealthySince,
+		&i.CertificateExpiresAt,
+		&i.ConsecutiveFailures,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getCustomDomainByDomain = `-- name: GetCustomDomainByDomain :one
 SELECT id, organization_id, domain, scope, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, created_at, updated_at, deleted_at, deleted
 FROM custom_domains

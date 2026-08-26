@@ -45,13 +45,17 @@ import (
 )
 
 type platformMCPConfig struct {
-	Logger                 *slog.Logger
-	MeterProvider          metric.MeterProvider
-	TracerProvider         trace.TracerProvider
-	Mux                    goahttp.Muxer
-	DB                     *pgxpool.Pool
-	Redis                  *redis.Client
-	ServerURL              *url.URL
+	Logger         *slog.Logger
+	MeterProvider  metric.MeterProvider
+	TracerProvider trace.TracerProvider
+	Mux            goahttp.Muxer
+	DB             *pgxpool.Pool
+	Redis          *redis.Client
+	ServerURL      *url.URL
+	// OutboundCallbackURL is the deployment's pinned outbound OAuth callback
+	// host. Everything advertised to an upstream provider renders on it rather
+	// than on ServerURL, which may move.
+	OutboundCallbackURL    *url.URL
 	DashboardURL           *url.URL
 	Environment            string
 	JWTSigningKey          string
@@ -267,7 +271,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithOperationBudgets(budgets).
 		WithReadiness(readiness).
 		WithDashboardURL(config.DashboardURL).
-		WithIdentityProviderAttachment(platformmcp.NewCatalogIdentityProviderAttachmentService(config.DB, config.Encryption, config.GuardianPolicy, config.AuditLogger, config.ServerURL)).
+		WithIdentityProviderAttachment(platformmcp.NewCatalogIdentityProviderAttachmentService(config.DB, config.Encryption, config.GuardianPolicy, config.AuditLogger, config.OutboundCallbackURL)).
 		WithClientAdmission(platformmcp.NewClientAdmissionService(config.DB, config.AuditLogger)).
 		WithTelemetry(telemetry)
 	dashboardSetupStarter := platformmcp.NewDashboardSetupService(store, registrationGate, authorizer, adapters, budgets.SetupStart)
@@ -329,8 +333,10 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 // covered it, and the model would be left to invent the steps.
 func platformMCPSetupResources(config platformMCPConfig) ([]platformmcp.SetupResource, error) {
 	// The one redirect_uri for every provider and slug, derived the same way
-	// externalmcp, remotesessions, and the dashboard derive it.
-	callbackURL := config.ServerURL.JoinPath("mcp", "remote_login_callback").String()
+	// externalmcp, remotesessions, and the dashboard derive it: from the pinned
+	// outbound callback host, because a provider's registration outlives any
+	// change to the canonical host.
+	callbackURL := config.OutboundCallbackURL.JoinPath("mcp", "remote_login_callback").String()
 	resources, err := setupcorpus.Build(setupcorpus.Options{OAuthCallbackURL: callbackURL})
 	if err != nil {
 		return nil, fmt.Errorf("build platform mcp setup corpus: %w", err)
@@ -581,7 +587,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithOperationBudgets(budgets).
 		WithReadiness(readiness).
 		WithDashboardURL(config.DashboardURL).
-		WithIdentityProviderAttachment(platformmcp.NewCatalogIdentityProviderAttachmentService(config.DB, config.Encryption, config.GuardianPolicy, config.AuditLogger, config.ServerURL)).
+		WithIdentityProviderAttachment(platformmcp.NewCatalogIdentityProviderAttachmentService(config.DB, config.Encryption, config.GuardianPolicy, config.AuditLogger, config.OutboundCallbackURL)).
 		WithClientAdmission(platformmcp.NewClientAdmissionService(config.DB, config.AuditLogger)).
 		WithTelemetry(telemetry)
 	dashboardSetupStarter := platformmcp.NewDashboardSetupService(store, registrationGate, authorizer, adapters, budgets.SetupStart)

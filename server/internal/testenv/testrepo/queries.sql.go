@@ -250,6 +250,44 @@ func (q *Queries) CreateRemoteMCPServerMaterializationFailureTriggerFixture(ctx 
 	return err
 }
 
+const createScopedCustomDomainFixture = `-- name: CreateScopedCustomDomainFixture :exec
+INSERT INTO custom_domains (
+    organization_id,
+    domain,
+    scope,
+    verified,
+    activated
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5
+)
+`
+
+type CreateScopedCustomDomainFixtureParams struct {
+	OrganizationID string
+	Domain         string
+	Scope          string
+	Verified       bool
+	Activated      bool
+}
+
+// Test-only fixture for seeding a custom domain at a chosen scope and
+// verification state. CreateCustomDomain writes neither, so host-resolution
+// tests cannot build their fixtures with it.
+func (q *Queries) CreateScopedCustomDomainFixture(ctx context.Context, arg CreateScopedCustomDomainFixtureParams) error {
+	_, err := q.db.Exec(ctx, createScopedCustomDomainFixture,
+		arg.OrganizationID,
+		arg.Domain,
+		arg.Scope,
+		arg.Verified,
+		arg.Activated,
+	)
+	return err
+}
+
 const deferDeviceIntegrationSyncsFixture = `-- name: DeferDeviceIntegrationSyncsFixture :exec
 UPDATE device_integration_syncs s
 SET next_poll_after = clock_timestamp() + interval '1 hour'
@@ -1552,6 +1590,26 @@ type SetOrgWebhookConfigParams struct {
 // Sets the Svix app ID and webhooks_enabled flag on an organization.
 func (q *Queries) SetOrgWebhookConfig(ctx context.Context, arg SetOrgWebhookConfigParams) error {
 	_, err := q.db.Exec(ctx, setOrgWebhookConfig, arg.SvixAppID, arg.WebhooksEnabled, arg.OrganizationID)
+	return err
+}
+
+const setOrganizationDefaultHostFixture = `-- name: SetOrganizationDefaultHostFixture :exec
+UPDATE organization_metadata
+SET default_host = $1::text
+WHERE id = $2
+`
+
+type SetOrganizationDefaultHostFixtureParams struct {
+	DefaultHost pgtype.Text
+	ID          string
+}
+
+// Test-only fixture for seeding an organization's default host. Deliberately
+// kept out of CreateOrganizationMetadataFixture for the same reason as
+// SetWorkosLastEventIDFixture: a column added mid-list renumbers every
+// positional placeholder after it.
+func (q *Queries) SetOrganizationDefaultHostFixture(ctx context.Context, arg SetOrganizationDefaultHostFixtureParams) error {
+	_, err := q.db.Exec(ctx, setOrganizationDefaultHostFixture, arg.DefaultHost, arg.ID)
 	return err
 }
 

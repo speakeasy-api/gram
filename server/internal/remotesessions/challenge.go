@@ -141,6 +141,11 @@ type ChallengeManager struct {
 	refresher *RefreshService
 	serverURL *url.URL
 
+	// outboundCallbackURL is the host every outbound redirect_uri and CIMD
+	// client_id is rendered on. See Service.outboundCallbackURL: pinned apart
+	// from serverURL because upstream providers hold these values.
+	outboundCallbackURL *url.URL
+
 	// revoker pushes RFC 7009 revocations upstream when the consent screen
 	// disconnects a remote session, so the provider drops the tokens rather
 	// than only Gram forgetting them.
@@ -180,12 +185,25 @@ func NewChallengeManager(
 		locks:     cacheImpl,
 		refresher: NewRefreshService(logger, meterProvider, db, enc, policy, cacheImpl),
 		serverURL: serverURL,
-		revoker:   NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy),
+
+		outboundCallbackURL: serverURL,
+
+		revoker: NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy),
 		authorizeInterceptors: []interceptors.AuthorizeInterceptor{
 			interceptors.NewGoogle(logger),
 		},
 		metrics: remotesessionmetrics.NewAuthorize(logger, meterProvider),
 	}
+}
+
+// WithOutboundCallbackURL pins the host every outbound redirect_uri and CIMD
+// client_id is rendered on. Returns the manager so it can be chained onto the
+// constructor.
+func (m *ChallengeManager) WithOutboundCallbackURL(u *url.URL) *ChallengeManager {
+	if u != nil {
+		m.outboundCallbackURL = u
+	}
+	return m
 }
 
 // Client is the joined view of a remote_session_client + its
@@ -808,7 +826,7 @@ func (m *ChallengeManager) callbackURL(routeBase string) string {
 	if routeBase == "" {
 		routeBase = canonicalCallbackRouteBase
 	}
-	return strings.TrimRight(m.serverURL.String(), "/") + "/" + routeBase + "/remote_login_callback"
+	return strings.TrimRight(m.outboundCallbackURL.String(), "/") + "/" + routeBase + "/remote_login_callback"
 }
 
 // legacyCallbackURL is the oauth_proxy_servers-era redirect_uri. Used only for
@@ -816,7 +834,7 @@ func (m *ChallengeManager) callbackURL(routeBase string) string {
 // this path; HandleLegacyProxyCallback forwards them into
 // /mcp/remote_login_callback.
 func (m *ChallengeManager) legacyCallbackURL() string {
-	return strings.TrimRight(m.serverURL.String(), "/") + "/oauth/callback"
+	return strings.TrimRight(m.outboundCallbackURL.String(), "/") + "/oauth/callback"
 }
 
 // HandleLegacyProxyCallback is the shim behind `GET /oauth/callback`, the
@@ -826,7 +844,7 @@ func (m *ChallengeManager) legacyCallbackURL() string {
 // code, error) unchanged to the canonical /mcp/remote_login_callback, where the
 // remote-session flow finishes the exchange.
 func (m *ChallengeManager) HandleLegacyProxyCallback(w http.ResponseWriter, r *http.Request) error {
-	target := strings.TrimRight(m.serverURL.String(), "/") + "/" + canonicalCallbackRouteBase + "/remote_login_callback"
+	target := strings.TrimRight(m.outboundCallbackURL.String(), "/") + "/" + canonicalCallbackRouteBase + "/remote_login_callback"
 	if raw := r.URL.RawQuery; raw != "" {
 		target += "?" + raw
 	}

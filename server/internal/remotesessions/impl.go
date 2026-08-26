@@ -59,6 +59,14 @@ type Service struct {
 	serverURL    *url.URL
 	refresher    *RefreshService
 	revoker      *UpstreamRevoker
+
+	// outboundCallbackURL is the host advertised to upstream OAuth providers:
+	// the redirect_uri sent on every outbound authorize and the client_id URL
+	// published in CIMD documents. Pinned independently of serverURL because
+	// those values live on customer OAuth apps and vendor allowlists we cannot
+	// migrate. Defaults to serverURL, which is what a single-host deployment
+	// wants; WithOutboundCallbackURL pins it elsewhere.
+	outboundCallbackURL *url.URL
 }
 
 var (
@@ -95,7 +103,18 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		serverURL:    serverURL,
 		refresher:    refresher,
 		revoker:      NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy),
+
+		outboundCallbackURL: serverURL,
 	}
+}
+
+// WithOutboundCallbackURL pins the host advertised to upstream OAuth providers.
+// Returns the service so it can be chained onto the constructor.
+func (s *Service) WithOutboundCallbackURL(u *url.URL) *Service {
+	if u != nil {
+		s.outboundCallbackURL = u
+	}
+	return s
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {

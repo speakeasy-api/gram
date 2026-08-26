@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/hosts"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpclient"
@@ -89,6 +90,16 @@ func newWorkerCommand() *cli.Command {
 			Usage:    "The public URL of the server",
 			EnvVars:  []string{"GRAM_SERVER_URL"},
 			Required: true,
+		},
+		&cli.StringFlag{
+			Name:    "platform-hosts",
+			Usage:   "Comma-separated list of first-party hosts this deployment answers on, as full URLs. The server-url host is always included. Requests on any of them skip the custom-domain lookup",
+			EnvVars: []string{"GRAM_PLATFORM_HOSTS"},
+		},
+		&cli.StringFlag{
+			Name:    "outbound-callback-url",
+			Usage:   "The base URL advertised to upstream OAuth providers as Gram's redirect target and CIMD client_id. Pinned independently of server-url because upstream registrations and vendor allowlists hold this value. Defaults to server-url, which is what a single-host deployment wants",
+			EnvVars: []string{"GRAM_OUTBOUND_CALLBACK_URL"},
 		},
 		&cli.StringFlag{
 			Name:     "environment",
@@ -718,6 +729,11 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("failed to parse server url: %w", err)
 			}
 
+			platformHosts, err := hosts.NewFromConfig(logger, db, serverURL, c.String("platform-hosts"), c.String("outbound-callback-url"))
+			if err != nil {
+				return fmt.Errorf("failed to build host model: %w", err)
+			}
+
 			pylonClient, err := pylon.NewPylon(logger, c.String("pylon-verification-secret"))
 			if err != nil {
 				return fmt.Errorf("failed to create pylon client: %w", err)
@@ -785,7 +801,7 @@ func newWorkerCommand() *cli.Command {
 				guardianPolicy,
 				cache.NewRedisCacheAdapter(redisClient),
 				serverURL,
-			)
+			).WithOutboundCallbackURL(platformHosts.OutboundCallback())
 
 			mcpService := mcp.NewService(
 				logger,
