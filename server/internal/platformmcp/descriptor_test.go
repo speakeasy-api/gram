@@ -1,7 +1,9 @@
 package platformmcp
 
 import (
+	"context"
 	"encoding/json"
+	"sync/atomic"
 	"testing"
 
 	"github.com/google/jsonschema-go/jsonschema"
@@ -57,6 +59,100 @@ func TestAudienceFilterSelectsPerTool(t *testing.T) {
 
 	require.Equal(t, []string{"both", "external-only"}, names(registrar.For(AudienceExternal)))
 	require.Equal(t, []string{"both"}, names(registrar.For(AudienceAssistant)))
+}
+
+type explicitSchemaInput struct {
+	Mode string `json:"mode"`
+}
+
+type explicitSchemaOutput struct {
+	Mode string `json:"mode"`
+}
+
+func TestAddToolExplicitInputSchemaIsAuthoritative(t *testing.T) {
+	t.Parallel()
+
+	server := mcp.NewServer(&mcp.Implementation{Name: "schema-test", Version: "0.0.1"}, nil)
+	registrar := newRegistrar(server)
+	var calls atomic.Int32
+	schema := &jsonschema.Schema{
+		Type: "object",
+		Properties: map[string]*jsonschema.Schema{
+			"mode": {Type: "string", Enum: []any{"safe"}, Default: json.RawMessage(`"safe"`)},
+		},
+		AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
+	}
+	addTool(registrar, &mcp.Tool{Name: "explicit_schema", InputSchema: schema}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, func(_ context.Context, _ *mcp.CallToolRequest, input explicitSchemaInput) (*mcp.CallToolResult, explicitSchemaOutput, error) {
+		calls.Add(1)
+		return nil, explicitSchemaOutput(input), nil
+	})
+
+	descriptor := registrar.Descriptors()[0]
+	expected, err := json.Marshal(schema)
+	require.NoError(t, err)
+	require.JSONEq(t, string(expected), string(descriptor.InputSchema))
+
+	_, err = descriptor.Invoke(t.Context(), json.RawMessage(`{"mode":"unsafe"}`))
+	require.ErrorContains(t, err, "arguments do not match the tool schema")
+	require.Zero(t, calls.Load())
+
+	out, err := descriptor.Invoke(t.Context(), nil)
+	require.NoError(t, err)
+	require.Equal(t, explicitSchemaOutput{Mode: "safe"}, out)
+	require.EqualValues(t, 1, calls.Load())
+
+	out, err = descriptor.Invoke(t.Context(), json.RawMessage(`{"mode":"safe"}`))
+	require.NoError(t, err)
+	require.Equal(t, explicitSchemaOutput{Mode: "safe"}, out)
+	require.EqualValues(t, 2, calls.Load())
+
+	clientTransport, serverTransport := mcp.NewInMemoryTransports()
+	serverSession, err := server.Connect(t.Context(), serverTransport, nil)
+	require.NoError(t, err)
+	defer func() { _ = serverSession.Close() }()
+	client := mcp.NewClient(&mcp.Implementation{Name: "schema-client", Version: "0.0.1"}, nil)
+	session, err := client.Connect(t.Context(), clientTransport, nil)
+	require.NoError(t, err)
+	defer func() { _ = session.Close() }()
+
+	listed, err := session.ListTools(t.Context(), nil)
+	require.NoError(t, err)
+	require.Len(t, listed.Tools, 1)
+	listedSchema, err := json.Marshal(listed.Tools[0].InputSchema)
+	require.NoError(t, err)
+	require.JSONEq(t, string(expected), string(listedSchema))
+
+	refused, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: "explicit_schema", Arguments: map[string]any{"mode": "unsafe"}})
+	require.NoError(t, err)
+	require.True(t, refused.IsError)
+	require.EqualValues(t, 2, calls.Load())
+
+	accepted, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: "explicit_schema", Arguments: map[string]any{}})
+	require.NoError(t, err)
+	require.False(t, accepted.IsError)
+	require.Equal(t, map[string]any{"mode": "safe"}, accepted.StructuredContent)
+	require.EqualValues(t, 3, calls.Load())
+}
+
+func TestAddToolInfersInputSchemaWhenUnset(t *testing.T) {
+	t.Parallel()
+
+	server := mcp.NewServer(&mcp.Implementation{Name: "inferred-test", Version: "0.0.1"}, nil)
+	registrar := newRegistrar(server)
+	addTool(registrar, &mcp.Tool{Name: "inferred_schema"}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, func(_ context.Context, _ *mcp.CallToolRequest, input explicitSchemaInput) (*mcp.CallToolResult, explicitSchemaOutput, error) {
+		return nil, explicitSchemaOutput(input), nil
+	})
+
+	inferred, err := jsonschema.For[explicitSchemaInput](nil)
+	require.NoError(t, err)
+	expected, err := json.Marshal(inferred)
+	require.NoError(t, err)
+	require.JSONEq(t, string(expected), string(registrar.Descriptors()[0].InputSchema))
+
+	_, err = registrar.Descriptors()[0].Invoke(t.Context(), json.RawMessage(`{"mode":42}`))
+	require.ErrorContains(t, err, "arguments do not match the tool schema")
+	_, err = registrar.Descriptors()[0].Invoke(t.Context(), json.RawMessage(`{"mode":"safe"}`))
+	require.NoError(t, err)
 }
 
 func names(descriptors []Descriptor) []string {
