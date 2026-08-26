@@ -9,7 +9,7 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class MeterReading(_message.Message):
-    __slots__ = ("id", "organization_id", "project_id", "meter_id", "operation_id", "unit", "quantity", "occurred_at", "attributes", "corrects_reading_id", "meter_version", "kind", "produced_at", "measurement_method", "adjustment_reason", "source")
+    __slots__ = ("id", "organization_id", "project_id", "meter_id", "operation_id", "unit", "value", "occurred_at", "attributes", "corrects_reading_id", "meter_version", "kind", "produced_at", "measurement_method", "adjustment_reason", "source")
     class Kind(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
         __slots__ = ()
         KIND_UNSPECIFIED: _ClassVar[MeterReading.Kind]
@@ -31,7 +31,7 @@ class MeterReading(_message.Message):
     METER_ID_FIELD_NUMBER: _ClassVar[int]
     OPERATION_ID_FIELD_NUMBER: _ClassVar[int]
     UNIT_FIELD_NUMBER: _ClassVar[int]
-    QUANTITY_FIELD_NUMBER: _ClassVar[int]
+    VALUE_FIELD_NUMBER: _ClassVar[int]
     OCCURRED_AT_FIELD_NUMBER: _ClassVar[int]
     ATTRIBUTES_FIELD_NUMBER: _ClassVar[int]
     CORRECTS_READING_ID_FIELD_NUMBER: _ClassVar[int]
@@ -47,7 +47,7 @@ class MeterReading(_message.Message):
     meter_id: str
     operation_id: str
     unit: str
-    quantity: int
+    value: int
     occurred_at: str
     attributes: _containers.ScalarMap[str, str]
     corrects_reading_id: str
@@ -57,4 +57,4 @@ class MeterReading(_message.Message):
     measurement_method: str
     adjustment_reason: str
     source: str
-    def __init__(self, id: _Optional[str] = ..., organization_id: _Optional[str] = ..., project_id: _Optional[str] = ..., meter_id: _Optional[str] = ..., operation_id: _Optional[str] = ..., unit: _Optional[str] = ..., quantity: _Optional[int] = ..., occurred_at: _Optional[str] = ..., attributes: _Optional[_Mapping[str, str]] = ..., corrects_reading_id: _Optional[str] = ..., meter_version: _Optional[int] = ..., kind: _Optional[_Union[MeterReading.Kind, str]] = ..., produced_at: _Optional[str] = ..., measurement_method: _Optional[str] = ..., adjustment_reason: _Optional[str] = ..., source: _Optional[str] = ...) -> None: ...
+    def __init__(self, id: _Optional[str] = ..., organization_id: _Optional[str] = ..., project_id: _Optional[str] = ..., meter_id: _Optional[str] = ..., operation_id: _Optional[str] = ..., unit: _Optional[str] = ..., value: _Optional[int] = ..., occurred_at: _Optional[str] = ..., attributes: _Optional[_Mapping[str, str]] = ..., corrects_reading_id: _Optional[str] = ..., meter_version: _Optional[int] = ..., kind: _Optional[_Union[MeterReading.Kind, str]] = ..., produced_at: _Optional[str] = ..., measurement_method: _Optional[str] = ..., adjustment_reason: _Optional[str] = ..., source: _Optional[str] = ...) -> None: ...

@@ -23,8 +23,8 @@ message MeterReading {
   string operation_id = 5;
   string unit = 6;
 
-  // Quantity is signed. Usage is positive; adjustments may add or subtract.
-  int64 quantity = 7;
+  // Value is signed. Usage is positive; adjustments may add or subtract.
+  int64 value = 7;
 
   // OccurredAt is the billing-effective UTC timestamp in RFC3339Nano format.
   string occurred_at = 8;

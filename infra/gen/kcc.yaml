@@ -73,7 +73,7 @@ pubsub:
           string meter_id = 4;
           string operation_id = 5;
           string unit = 6;
-          int64 quantity = 7;
+          int64 value = 7;
           string occurred_at = 8;
           map<string, string> attributes = 9;
           string corrects_reading_id = 10;

@@ -76,7 +76,7 @@ type MeterReading struct {
 	xxx_hidden_MeterId           *string                `protobuf:"bytes,4,opt,name=meter_id,json=meterId"`
 	xxx_hidden_OperationId       *string                `protobuf:"bytes,5,opt,name=operation_id,json=operationId"`
 	xxx_hidden_Unit              *string                `protobuf:"bytes,6,opt,name=unit"`
-	xxx_hidden_Quantity          int64                  `protobuf:"varint,7,opt,name=quantity"`
+	xxx_hidden_Value             int64                  `protobuf:"varint,7,opt,name=value"`
 	xxx_hidden_OccurredAt        *string                `protobuf:"bytes,8,opt,name=occurred_at,json=occurredAt"`
 	xxx_hidden_Attributes        map[string]string      `protobuf:"bytes,9,rep,name=attributes" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	xxx_hidden_CorrectsReadingId *string                `protobuf:"bytes,10,opt,name=corrects_reading_id,json=correctsReadingId"`
@@ -177,9 +177,9 @@ func (x *MeterReading) GetUnit() string {
 	return ""
 }
 
-func (x *MeterReading) GetQuantity() int64 {
+func (x *MeterReading) GetValue() int64 {
 	if x != nil {
-		return x.xxx_hidden_Quantity
+		return x.xxx_hidden_Value
 	}
 	return 0
 }
@@ -297,8 +297,8 @@ func (x *MeterReading) SetUnit(v string) {
 	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 16)
 }
 
-func (x *MeterReading) SetQuantity(v int64) {
-	x.xxx_hidden_Quantity = v
+func (x *MeterReading) SetValue(v int64) {
+	x.xxx_hidden_Value = v
 	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 16)
 }
 
@@ -388,7 +388,7 @@ func (x *MeterReading) HasUnit() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 5)
 }
 
-func (x *MeterReading) HasQuantity() bool {
+func (x *MeterReading) HasValue() bool {
 	if x == nil {
 		return false
 	}
@@ -481,9 +481,9 @@ func (x *MeterReading) ClearUnit() {
 	x.xxx_hidden_Unit = nil
 }
 
-func (x *MeterReading) ClearQuantity() {
+func (x *MeterReading) ClearValue() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 6)
-	x.xxx_hidden_Quantity = 0
+	x.xxx_hidden_Value = 0
 }
 
 func (x *MeterReading) ClearOccurredAt() {
@@ -535,8 +535,8 @@ type MeterReading_builder struct {
 	MeterId        *string
 	OperationId    *string
 	Unit           *string
-	// Quantity is signed. Usage is positive; adjustments may add or subtract.
-	Quantity *int64
+	// Value is signed. Usage is positive; adjustments may add or subtract.
+	Value *int64
 	// OccurredAt is the billing-effective UTC timestamp in RFC3339Nano format.
 	OccurredAt *string
 	// Attributes are non-authoritative diagnostic dimensions. Rating must use
@@ -586,9 +586,9 @@ func (b0 MeterReading_builder) Build() *MeterReading {
 		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 16)
 		x.xxx_hidden_Unit = b.Unit
 	}
-	if b.Quantity != nil {
+	if b.Value != nil {
 		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 16)
-		x.xxx_hidden_Quantity = *b.Quantity
+		x.xxx_hidden_Value = *b.Value
 	}
 	if b.OccurredAt != nil {
 		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 16)
@@ -630,7 +630,7 @@ var File_gram_metering_v1_meter_reading_proto protoreflect.FileDescriptor
 
 const file_gram_metering_v1_meter_reading_proto_rawDesc = "" +
 	"\n" +
-	"$gram/metering/v1/meter_reading.proto\x12\x10gram.metering.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xf7\x05\n" +
+	"$gram/metering/v1/meter_reading.proto\x12\x10gram.metering.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xf1\x05\n" +
 	"\fMeterReading\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12'\n" +
 	"\x0forganization_id\x18\x02 \x01(\tR\x0eorganizationId\x12\x1d\n" +
@@ -638,8 +638,8 @@ const file_gram_metering_v1_meter_reading_proto_rawDesc = "" +
 	"project_id\x18\x03 \x01(\tR\tprojectId\x12\x19\n" +
 	"\bmeter_id\x18\x04 \x01(\tR\ameterId\x12!\n" +
 	"\foperation_id\x18\x05 \x01(\tR\voperationId\x12\x12\n" +
-	"\x04unit\x18\x06 \x01(\tR\x04unit\x12\x1a\n" +
-	"\bquantity\x18\a \x01(\x03R\bquantity\x12\x1f\n" +
+	"\x04unit\x18\x06 \x01(\tR\x04unit\x12\x14\n" +
+	"\x05value\x18\a \x01(\x03R\x05value\x12\x1f\n" +
 	"\voccurred_at\x18\b \x01(\tR\n" +
 	"occurredAt\x12N\n" +
 	"\n" +
