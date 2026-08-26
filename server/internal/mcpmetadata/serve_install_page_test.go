@@ -32,6 +32,7 @@ import (
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	tools_repo "github.com/speakeasy-api/gram/server/internal/tools/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -1448,6 +1449,86 @@ func TestServeInstallPage_McpServer_RemoteBacked_PublicRenders(t *testing.T) {
 	assert.Contains(t, body, endpointSlug, "rendered page should reference the mcp_endpoint slug")
 	assert.Contains(t, body, "Connect to Remote MCP", "instructions from mcp_server-keyed metadata should render")
 	assert.Contains(t, body, docURL, "docs URL from mcp_server-keyed metadata should render")
+}
+
+func TestServeInstallPage_McpServer_TunneledPublic_NoOAuthSteps(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPMetadataService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	tunneledServer, err := tunneledmcprepo.New(ti.conn).CreateServer(ctx, tunneledmcprepo.CreateServerParams{
+		ID:        uuid.New(),
+		ProjectID: *authCtx.ProjectID,
+		Name:      "Public Tunneled MCP Server",
+		KeyHash:   "test-key-hash",
+		KeyPrefix: "test-key-prefix",
+	})
+	require.NoError(t, err)
+
+	issuer := createUserSessionIssuer(t, ctx, ti, *authCtx.ProjectID)
+	endpointSlug := "tunneled-mcp-public-" + uuid.NewString()[:8]
+	createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
+		name:                "Tunneled MCP Public",
+		visibility:          mcpservers.VisibilityPublic,
+		endpointSlug:        endpointSlug,
+		tunneledMcpServerID: uuid.NullUUID{UUID: tunneledServer.ID, Valid: true},
+		userSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
+	})
+
+	req := httptest.NewRequest("GET", "/mcp/"+endpointSlug+"/install", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", endpointSlug)
+	req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, ti.service.ServeInstallPage(rr, req))
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	body := rr.Body.String()
+	assert.NotContains(t, body, "codex mcp login")
+	assert.NotContains(t, body, "so authenticate with it before use")
+}
+
+func TestServeInstallPage_McpServer_TunneledPrivate_ShowsOAuthSteps(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPMetadataService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	tunneledServer, err := tunneledmcprepo.New(ti.conn).CreateServer(ctx, tunneledmcprepo.CreateServerParams{
+		ID:        uuid.New(),
+		ProjectID: *authCtx.ProjectID,
+		Name:      "Private Tunneled MCP Server",
+		KeyHash:   "test-key-hash",
+		KeyPrefix: "test-key-prefix",
+	})
+	require.NoError(t, err)
+
+	issuer := createUserSessionIssuer(t, ctx, ti, *authCtx.ProjectID)
+	endpointSlug := "tunneled-mcp-private-" + uuid.NewString()[:8]
+	createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
+		name:                "Tunneled MCP Private",
+		visibility:          mcpservers.VisibilityPrivate,
+		endpointSlug:        endpointSlug,
+		tunneledMcpServerID: uuid.NullUUID{UUID: tunneledServer.ID, Valid: true},
+		userSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
+	})
+
+	req := httptest.NewRequest("GET", "/mcp/"+endpointSlug+"/install", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", endpointSlug)
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, ti.service.ServeInstallPage(rr, req))
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	assert.Contains(t, rr.Body.String(), "codex mcp login")
 }
 
 // TestServeInstallPage_McpServer_RemoteBacked_PrivateRedirectsToLogin
