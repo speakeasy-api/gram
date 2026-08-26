@@ -92,8 +92,8 @@ func New(logger *slog.Logger, db *pgxpool.Pool, canonical *url.URL, platform []*
 	return &Hosts{
 		logger:           logger.With(attr.SlogComponent("hosts")),
 		db:               db,
-		canonical:        clone(canonical),
-		outboundCallback: clone(outboundCallback),
+		canonical:        base(canonical),
+		outboundCallback: base(outboundCallback),
 		platform:         all,
 	}, nil
 }
@@ -129,6 +129,10 @@ func validate(what string, u *url.URL) error {
 		return fmt.Errorf("hosts: %s is required", what)
 	case u.Scheme != "http" && u.Scheme != "https":
 		return fmt.Errorf("hosts: %s %q must be an http or https url", what, u.String())
+	case u.User != nil:
+		// Credentials in a configured URL would be copied into every URL
+		// rendered from it, including ones sent to upstream providers.
+		return fmt.Errorf("hosts: %s must not carry userinfo", what)
 	default:
 		return nil
 	}
@@ -292,10 +296,17 @@ func (h *Hosts) appScopedDomain(ctx context.Context, organizationID string) stri
 	return domain.Domain
 }
 
-// origin strips everything but scheme and host, so a configured URL with a
-// trailing path or query cannot leak into a rendered one.
+// origin strips everything but scheme and host, for the platform-host set,
+// where membership is answered against a Host header.
 func origin(u *url.URL) *url.URL {
 	return &url.URL{Scheme: u.Scheme, Host: strings.ToLower(u.Host)}
+}
+
+// base keeps scheme, host, and path. A query or fragment on a configured URL
+// would end up before the path every caller joins onto, so the callback path
+// would land after it and the redirect would break.
+func base(u *url.URL) *url.URL {
+	return &url.URL{Scheme: u.Scheme, Host: strings.ToLower(u.Host), Path: u.Path}
 }
 
 func clone(u *url.URL) *url.URL {

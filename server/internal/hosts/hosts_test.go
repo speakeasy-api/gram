@@ -200,6 +200,18 @@ func TestBasePathIsPreserved(t *testing.T) {
 	require.Equal(t, "https://app.getgram.ai/gram", h.Canonical().String())
 	require.Equal(t, "https://callback.example.com/oauth", h.OutboundCallback().String())
 
+	// A query or fragment sits before the path callers join onto, so it is
+	// dropped rather than carried into every rendered URL.
+	withNoise, err := hosts.New(testenv.NewLogger(t), conn,
+		mustParse(t, "https://app.getgram.ai/gram?trace=1#top"), nil, mustParse(t, "https://callback.example.com/oauth?x=1"))
+	require.NoError(t, err)
+	require.Equal(t, "https://app.getgram.ai/gram", withNoise.Canonical().String())
+	require.Equal(t, "https://callback.example.com/oauth", withNoise.OutboundCallback().String())
+
+	// Credentials would be copied into URLs sent upstream.
+	_, err = hosts.New(testenv.NewLogger(t), conn, mustParse(t, "https://user:pass@app.getgram.ai"), nil, canonical)
+	require.Error(t, err)
+
 	// Membership still answers on the host alone, which is all a Host header
 	// carries.
 	require.True(t, h.IsPlatform("app.getgram.ai"))
