@@ -43,11 +43,42 @@ func (p *captureEnforcementPublisher) Stop(context.Context) error {
 	return nil
 }
 
+type capturePresidioPublisher struct {
+	messages  []*riskv1.PresidioEnforcement
+	onPublish func(context.Context, *riskv1.PresidioEnforcement, map[string]string) error
+}
+
+func (p *capturePresidioPublisher) Publish(ctx context.Context, message *riskv1.PresidioEnforcement, options ...gcp.PublishOption) gcp.PublishResult {
+	var opts gcp.PublishOptions
+	for _, option := range options {
+		option(&opts)
+	}
+	p.messages = append(p.messages, message)
+	if p.onPublish != nil {
+		if err := p.onPublish(ctx, message, maps.Clone(opts.Attributes)); err != nil {
+			return gcp.NewErrPublishResult(err)
+		}
+	}
+	return gcp.NewSuccessPublishResult()
+}
+
+func (p *capturePresidioPublisher) Stop(context.Context) error {
+	return nil
+}
+
 func testDispatcher(inbox *Inbox, publisher *captureEnforcementPublisher, waitTimeout time.Duration) *Dispatcher {
-	requester := redisinbox.NewRequestBroker(inbox, publisher)
+	return testDispatcherWithPresidio(inbox, publisher, &capturePresidioPublisher{messages: nil, onPublish: nil}, waitTimeout)
+}
+
+func testDispatcherWithPresidio(inbox *Inbox, gitleaksPub *captureEnforcementPublisher, presidioPub *capturePresidioPublisher, waitTimeout time.Duration) *Dispatcher {
+	gitleaksReq := redisinbox.NewRequestBroker(inbox, gitleaksPub)
+	presidioReq := redisinbox.NewRequestBroker(inbox, presidioPub)
 	return &Dispatcher{
-		gitleaks:    &typedEnforcementLane[*riskv1.GitleaksEnforcement]{broker: requester},
-		close:       requester.Close,
+		gitleaks: &typedEnforcementLane[*riskv1.GitleaksEnforcement]{broker: gitleaksReq},
+		presidio: &typedEnforcementLane[*riskv1.PresidioEnforcement]{broker: presidioReq},
+		close: func(ctx context.Context) error {
+			return errors.Join(gitleaksReq.Close(ctx), presidioReq.Close(ctx))
+		},
 		waitTimeout: waitTimeout,
 	}
 }
@@ -99,6 +130,46 @@ func TestDispatchPublishesTenantContextAndReplyMetadata(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, uuid.Version(7), parsedCorrelationID.Version())
 	require.NotEqual(t, message.GetRequestId(), correlationID)
+}
+
+func TestDispatchFansOutGitleaksAndPresidioLanes(t *testing.T) {
+	t.Parallel()
+
+	te := setupInboxTest(t, "replica-dispatch-presidio")
+	gitleaksPub := &captureEnforcementPublisher{messages: nil, attributes: nil, onPublish: nil}
+	gitleaksPub.onPublish = func(ctx context.Context, _ *riskv1.GitleaksEnforcement, attributes map[string]string) error {
+		replyURN := attributes[requestreply.ReplyURNAttribute]
+		_, correlationID, err := ParseReplyURN(replyURN)
+		if err != nil {
+			return err
+		}
+		return te.writer.Reply(ctx, replyURN, testReply(correlationID, gitleaksLane, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK))
+	}
+	presidioPub := &capturePresidioPublisher{messages: nil, onPublish: nil}
+	presidioPub.onPublish = func(ctx context.Context, _ *riskv1.PresidioEnforcement, attributes map[string]string) error {
+		replyURN := attributes[requestreply.ReplyURNAttribute]
+		_, correlationID, err := ParseReplyURN(replyURN)
+		if err != nil {
+			return err
+		}
+		return te.writer.Reply(ctx, replyURN, testReply(correlationID, presidioLane, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK))
+	}
+	dispatcher := testDispatcherWithPresidio(te.inbox, gitleaksPub, presidioPub, time.Second)
+
+	outcome, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
+		OrganizationID: "org-presidio",
+		ProjectID:      "project-presidio",
+		Content:        "safe content",
+		Lanes:          []Lane{gitleaksLane, presidioLane},
+	})
+	require.NoError(t, err)
+	require.True(t, outcome.Complete)
+	require.NotNil(t, outcome.ByLane[gitleaksLane])
+	require.NotNil(t, outcome.ByLane[presidioLane])
+	require.Len(t, presidioPub.messages, 1)
+	message := presidioPub.messages[0]
+	require.Equal(t, "org-presidio", message.GetOrganizationId())
+	require.Equal(t, "project-presidio", message.GetProjectId())
 }
 
 func TestDispatchDeadlineIsNormalPartialOutcome(t *testing.T) {

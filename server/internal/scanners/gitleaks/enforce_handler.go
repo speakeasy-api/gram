@@ -88,7 +88,9 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.GitleaksEnforceme
 	if err != nil {
 		return fmt.Errorf("parse enforcement created_at: %w", err)
 	}
-	if time.Since(createdAt) > h.maxRequestAge {
+	// Symmetric window: a far-future stamp is as suspect as a stale one, while
+	// ordinary clock skew stays within the allowance.
+	if age := time.Since(createdAt); age > h.maxRequestAge || age < -h.maxRequestAge {
 		h.metrics.staleDropped.Add(ctx, 1)
 		return nil
 	}
