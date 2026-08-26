@@ -64,6 +64,14 @@ CREATE TABLE IF NOT EXISTS organization_metadata (
 
   scim_enabled boolean DEFAULT FALSE,
   sso_enabled boolean DEFAULT FALSE,
+
+  -- The host customer-facing URLs are rendered with for this organization.
+  -- NULL means the deployment's canonical host. A non-NULL value must be a
+  -- configured platform host or the org's own active app-scoped custom domain;
+  -- that rule lives in application code and is re-checked on read, so deleting
+  -- the domain falls back to the canonical host without a data migration.
+  default_host TEXT,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   disabled_at timestamptz,
@@ -1543,6 +1551,10 @@ CREATE TABLE IF NOT EXISTS custom_domains (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
   domain TEXT NOT NULL,
+  -- What the domain serves: 'mcp' (MCP server endpoints only) or 'app' (the
+  -- full control plane). Allowed values live in application code. Existing rows
+  -- predate the distinction and are all 'mcp', which the default backfills.
+  scope TEXT NOT NULL DEFAULT 'mcp',
   verified BOOLEAN NOT NULL DEFAULT FALSE,
   activated BOOLEAN NOT NULL DEFAULT FALSE,
   -- Generic resource identifier: Ingress name (provisioner_kind='ingress') or HTTPRoute name (provisioner_kind='gateway').
@@ -1580,8 +1592,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS custom_domains_domain_key
 ON custom_domains (domain)
 WHERE deleted IS FALSE;
 
-CREATE UNIQUE INDEX IF NOT EXISTS custom_domains_organization_id_key
-ON custom_domains (organization_id)
+CREATE UNIQUE INDEX IF NOT EXISTS custom_domains_organization_id_scope_key
+ON custom_domains (organization_id, scope)
 WHERE deleted IS FALSE;
 
 -- External OAuth Server Metadata (RFC 8414 compliant)
