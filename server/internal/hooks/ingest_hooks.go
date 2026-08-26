@@ -553,7 +553,8 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 	}
 
 	// Spend gate runs before any risk-policy evaluation, for every adapter
-	// with a per-provider enforcement surface (claude, codex, cursor) — the
+	// with a per-provider enforcement surface (claude, codex, cursor, openclaw)
+	// — the
 	// risk scans below already run adapter-agnostically, and an over-budget
 	// actor is over budget regardless of which agent carries the event.
 	// Adapters are self-reported slugs, so this remains a cooperative-client
