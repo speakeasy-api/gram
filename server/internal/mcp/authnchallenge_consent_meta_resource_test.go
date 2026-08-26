@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	tunneledmcp_repo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
@@ -144,7 +145,7 @@ func stampRemoteSessionIssuer(t *testing.T, ctx context.Context, conn *pgxpool.P
 	if !remoteIssuerID.Valid {
 		return
 	}
-	stamped, err := testrepo.New(conn).SetMcpServerRemoteSessionIssuerFixture(ctx, testrepo.SetMcpServerRemoteSessionIssuerFixtureParams{
+	stamped, err := testrepo.New(conn).SetMCPServerRemoteSessionIssuerFixture(ctx, testrepo.SetMCPServerRemoteSessionIssuerFixtureParams{
 		RemoteSessionIssuerID: remoteIssuerID,
 		ID:                    mcpServerID,
 		ProjectID:             projectID,
@@ -676,4 +677,50 @@ func TestServeConsentAction_NonMetaEndpointKeepsPerClientDerivation(t *testing.T
 
 	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "aim87-plain", "", []uuid.UUID{shared, memberIssuer})
 	require.Equal(t, consentUpstreamA, postConnectAction(t, fx, clientID).Query().Get("resource"))
+}
+
+// The sync and the lookup meet only in production: every other test stamps the
+// member column through a fixture. Here the real resync derives it from a
+// client binding, and consent must resolve the member from what it wrote.
+func TestServeConsentAction_MetaMCPConnectResolvesFromTheRealResync(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx, metaServerID := seedMetaConsentEndpoint(t, "aim87-composed-gw")
+	projectID, orgID := consentTestTenant(t, ctx)
+
+	// Unstamped on purpose: only the resync may write the column here.
+	member := createMetaMember(t, ctx, fx.ti.conn, projectID, metaServerID, "aim87-composed-member", "https://aim87-composed.example.com/mcp", uuid.NullUUID{}, 0)
+
+	// The meta MCP's connecting client, bound to the shared issuer.
+	gatewayClientID := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, "aim87-composed", "", []uuid.UUID{fx.shared})
+	rsiID := clientRemoteIssuerID(t, ctx, fx.ti.conn, projectID, orgID, gatewayClientID)
+
+	// The member's own identity-provider config: a client on the same
+	// authorization server, bound to the member's own user session issuer.
+	memberServer, err := mcpservers_repo.New(fx.ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{
+		ID:        member.mcpServerID,
+		ProjectID: projectID,
+	})
+	require.NoError(t, err)
+	require.True(t, memberServer.UserSessionIssuerID.Valid)
+	memberIssuerID := memberServer.UserSessionIssuerID.UUID
+
+	memberClient, err := remotesessions_repo.New(fx.ti.conn).CreateRemoteSessionClient(ctx, remotesessions_repo.CreateRemoteSessionClientParams{
+		ProjectID:             conv.ToNullUUID(projectID),
+		OrganizationID:        conv.ToPGTextEmpty(orgID),
+		RemoteSessionIssuerID: rsiID,
+		ClientID:              "aim87-composed-member-client",
+	})
+	require.NoError(t, err)
+	require.NoError(t, remotesessions_repo.New(fx.ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: memberClient.ID,
+		UserSessionIssuerID:   memberIssuerID,
+	}))
+
+	// The production write path.
+	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, fx.ti.conn, orgID, projectID, []uuid.UUID{memberIssuerID}))
+
+	loc := postConnectAction(t, fx, gatewayClientID)
+	require.Equal(t, "https://aim87-composed.example.com/mcp", loc.Query().Get("resource"),
+		"the member must resolve from the value the resync wrote, not from any fixture")
 }

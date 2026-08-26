@@ -1531,25 +1531,7 @@ func (q *Queries) SetFunctionToolVariables(ctx context.Context, arg SetFunctionT
 	return err
 }
 
-const setMCPServerRemoteSessionIssuerFixture = `-- name: SetMCPServerRemoteSessionIssuerFixture :exec
-UPDATE mcp_servers
-SET remote_session_issuer_id = $1
-WHERE id = $2
-`
-
-type SetMCPServerRemoteSessionIssuerFixtureParams struct {
-	RemoteSessionIssuerID uuid.NullUUID
-	ID                    uuid.UUID
-}
-
-// Writes the derived column directly, so a test can assert that a rejected
-// resync left an existing value alone rather than merely never setting one.
-func (q *Queries) SetMCPServerRemoteSessionIssuerFixture(ctx context.Context, arg SetMCPServerRemoteSessionIssuerFixtureParams) error {
-	_, err := q.db.Exec(ctx, setMCPServerRemoteSessionIssuerFixture, arg.RemoteSessionIssuerID, arg.ID)
-	return err
-}
-
-const setMcpServerRemoteSessionIssuerFixture = `-- name: SetMcpServerRemoteSessionIssuerFixture :execrows
+const setMCPServerRemoteSessionIssuerFixture = `-- name: SetMCPServerRemoteSessionIssuerFixture :execrows
 UPDATE mcp_servers
 SET remote_session_issuer_id = $1
 WHERE id = $2
@@ -1557,7 +1539,7 @@ WHERE id = $2
   AND deleted IS FALSE
 `
 
-type SetMcpServerRemoteSessionIssuerFixtureParams struct {
+type SetMCPServerRemoteSessionIssuerFixtureParams struct {
 	RemoteSessionIssuerID uuid.NullUUID
 	ID                    uuid.UUID
 	ProjectID             uuid.UUID
@@ -1569,8 +1551,8 @@ type SetMcpServerRemoteSessionIssuerFixtureParams struct {
 //
 // Returns the row count so the caller can insist the stamp landed: one that
 // matched nothing would otherwise let a negative test pass vacuously.
-func (q *Queries) SetMcpServerRemoteSessionIssuerFixture(ctx context.Context, arg SetMcpServerRemoteSessionIssuerFixtureParams) (int64, error) {
-	result, err := q.db.Exec(ctx, setMcpServerRemoteSessionIssuerFixture, arg.RemoteSessionIssuerID, arg.ID, arg.ProjectID)
+func (q *Queries) SetMCPServerRemoteSessionIssuerFixture(ctx context.Context, arg SetMCPServerRemoteSessionIssuerFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setMCPServerRemoteSessionIssuerFixture, arg.RemoteSessionIssuerID, arg.ID, arg.ProjectID)
 	if err != nil {
 		return 0, err
 	}
