@@ -396,9 +396,20 @@ func (s *RefreshService) refresh(
 	return RefreshResult{Session: latest, AccessToken: plain, Outcome: remotesessionmetrics.RefreshOutcomeAdoptedConcurrentWinner, IssuerURL: ""}, client.IssuerUrl, nil
 }
 
+// accessTokenExpirySkew is the window before access_expires_at within which a
+// stored access token is already treated as expired. It absorbs clock drift
+// against the upstream and the time the proxied call itself takes: a token
+// that expires mid-request is rejected upstream exactly as an expired one is,
+// so refreshing a moment early costs one refresh grant where forwarding the
+// token costs the caller a failed tool call.
+const accessTokenExpirySkew = 30 * time.Second
+
+// accessTokenUsable reports whether sess's stored access token can be
+// forwarded at now: the authorization is live and either no access expiry is
+// known or the deadline is more than accessTokenExpirySkew away.
 func accessTokenUsable(sess remotesessions_repo.RemoteSession, now time.Time) bool {
 	return authorizationUsable(sess, now) &&
-		(!sess.AccessExpiresAt.Valid || sess.AccessExpiresAt.Time.After(now))
+		(!sess.AccessExpiresAt.Valid || sess.AccessExpiresAt.Time.After(now.Add(accessTokenExpirySkew)))
 }
 
 func refreshTokenUsable(sess remotesessions_repo.RemoteSession, now time.Time) bool {
