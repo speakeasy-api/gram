@@ -87,12 +87,17 @@ func (s *Service) CreateGcpIamPlatformCredential(ctx context.Context, payload *a
 		return nil, oops.E(oops.CodeUnexpected, err, "error creating platform external credential").LogError(ctx, logger)
 	}
 
+	// The platform tier screens no impersonation target at all, so it has
+	// nothing to be exempted from. These rows also carry a NULL organization_id,
+	// which no external key can join to, so they are never screened at runtime
+	// either.
 	gcp, err := q.CreateGcpIamCredential(ctx, repo.CreateGcpIamCredentialParams{
 		ExternalCredentialID:      ec.ID,
 		ImpersonateServiceAccount: cols.ImpersonateServiceAccount,
 		WifPoolID:                 cols.WifPoolID,
 		WifProviderID:             cols.WifProviderID,
 		WifProjectNumber:          cols.WifProjectNumber,
+		SkipProjectVerification:   false,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error creating platform gcp iam credential").LogError(ctx, logger)
@@ -172,6 +177,7 @@ func (s *Service) UpdateGcpIamPlatformCredential(ctx context.Context, payload *a
 		WifPoolID:                 cols.WifPoolID,
 		WifProviderID:             cols.WifProviderID,
 		WifProjectNumber:          cols.WifProjectNumber,
+		SkipProjectVerification:   false,
 		ExternalCredentialID:      id,
 	})
 	if err != nil {

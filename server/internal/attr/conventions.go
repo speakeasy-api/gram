@@ -408,6 +408,8 @@ const (
 	WorkOSSSOEnabledKey               = attribute.Key("gram.workos.sso_enabled")
 	WorkOSSCIMEnabledKey              = attribute.Key("gram.workos.scim_enabled")
 	WorkOSDirectoryUserIDKey          = attribute.Key("gram.workos.directory_user_id")
+	ExternalCredentialIDKey           = attribute.Key("gram.external_credential.id")
+	GCPImpersonateServiceAccountKey   = attribute.Key("gram.gcp.impersonate_service_account")
 	WorkOSDirectoryGroupIDKey         = attribute.Key("gram.workos.directory_group_id")
 	OutcomeKey                        = attribute.Key("gram.outcome")
 	PackageNameKey                    = attribute.Key("gram.package.name")
@@ -1612,6 +1614,18 @@ func SlogWorkOSOrganizationID(v string) slog.Attr {
 
 func WorkOSUserID(v string) attribute.KeyValue { return WorkOSUserIDKey.String(v) }
 func SlogWorkOSUserID(v string) slog.Attr      { return slog.String(string(WorkOSUserIDKey), v) }
+
+func ExternalCredentialID(v string) attribute.KeyValue { return ExternalCredentialIDKey.String(v) }
+func SlogExternalCredentialID(v string) slog.Attr {
+	return slog.String(string(ExternalCredentialIDKey), v)
+}
+
+func GCPImpersonateServiceAccount(v string) attribute.KeyValue {
+	return GCPImpersonateServiceAccountKey.String(v)
+}
+func SlogGCPImpersonateServiceAccount(v string) slog.Attr {
+	return slog.String(string(GCPImpersonateServiceAccountKey), v)
+}
 
 func WorkOSLinkedUserID(v string) attribute.KeyValue { return WorkOSLinkedUserIDKey.String(v) }
 func SlogWorkOSLinkedUserID(v string) slog.Attr {
