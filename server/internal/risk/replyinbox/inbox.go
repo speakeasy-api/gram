@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"maps"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -32,6 +31,9 @@ const (
 	defaultDrainCount   = 128
 	defaultPoolSize     = 2
 	reconnectBackoff    = 100 * time.Millisecond
+	// duplicateReplySlack sizes waiter buffers beyond the lane count so
+	// redelivered duplicates cannot displace a distinct lane's reply.
+	duplicateReplySlack = 8
 )
 
 var ErrDuplicateWaiter = errors.New("enforcement reply waiter already registered")
@@ -136,12 +138,12 @@ type Inbox struct {
 	waiters map[string]*waiter
 }
 
+// waiter follows the net/rpc client shape: the router only looks a waiter up
+// and sends into its buffered channel; folding, lane refusal, and duplicate
+// dropping all happen on the awaiting goroutine.
 type waiter struct {
-	mu      sync.Mutex
-	lanes   map[Lane]struct{}
-	replies map[Lane]*riskv1.EnforcementReply
-	notify  chan struct{}
-	closed  bool
+	lanes map[Lane]struct{}
+	done  chan *riskv1.EnforcementReply
 }
 
 type inboxMetrics struct {
@@ -341,12 +343,12 @@ func (i *Inbox) register(scanID string, lanes []Lane) (*waiter, func(), error) {
 		}
 		requested[lane] = struct{}{}
 	}
+	// Buffered past the lane count so at-least-once redeliveries cannot crowd
+	// a distinct lane's reply out of the buffer; the router's send never
+	// blocks, and overflow beyond the slack is dropped and counted.
 	w := &waiter{
-		mu:      sync.Mutex{},
-		lanes:   requested,
-		replies: make(map[Lane]*riskv1.EnforcementReply, len(lanes)),
-		notify:  make(chan struct{}, 1),
-		closed:  false,
+		lanes: requested,
+		done:  make(chan *riskv1.EnforcementReply, len(lanes)+duplicateReplySlack),
 	}
 	i.mu.Lock()
 	if _, exists := i.waiters[scanID]; exists {
@@ -374,51 +376,36 @@ func (i *Inbox) awaitRegistered(ctx context.Context, scanID string, w *waiter, s
 		i.metrics.roundTrip.Record(ctx, time.Since(started).Seconds())
 	}()
 
-	// The drainer's route() is the only other writer to w: it fills w.replies
-	// under w.mu (one entry per distinct lane, duplicates dropped) and signals
-	// notify after each accepted reply. Each pass re-checks completion, so the
-	// loop exits once every requested lane has replied; notify has capacity 1
-	// and coalesces, which is safe because the check counts state rather than
-	// signals.
-	for {
-		w.mu.Lock()
-		if len(w.replies) == len(w.lanes) {
-			w.closed = true
-			outcome := waiterOutcome(w, true, false)
-			w.mu.Unlock()
-			return outcome, nil
-		}
-		w.mu.Unlock()
-
+	// The router only sends raw replies into w.done; this loop owns all
+	// per-scan state. It folds one reply per distinct requested lane,
+	// refuses unrequested lanes (counted as orphans), and drops duplicate
+	// redeliveries, exiting once every lane has answered.
+	byLane := make(map[Lane]*riskv1.EnforcementReply, len(w.lanes))
+	for len(byLane) < len(w.lanes) {
 		select {
 		case <-ctx.Done():
-			w.mu.Lock()
-			w.closed = true
-			deadline := errors.Is(ctx.Err(), context.DeadlineExceeded)
-			outcome := waiterOutcome(w, false, deadline)
-			w.mu.Unlock()
 			ctxErr := ctx.Err()
 			span.SetStatus(codes.Error, ctxErr.Error())
-			if deadline {
-				return outcome, nil
+			if errors.Is(ctxErr, context.DeadlineExceeded) {
+				return Outcome{ByLane: byLane, Complete: false, Deadline: true}, nil
 			}
-			return outcome, fmt.Errorf("await enforcement replies: %w", ctxErr)
+			return Outcome{ByLane: byLane, Complete: false, Deadline: false}, fmt.Errorf("await enforcement replies: %w", ctxErr)
 		case <-i.shutdown:
-			w.mu.Lock()
-			w.closed = true
-			outcome := waiterOutcome(w, false, false)
-			w.mu.Unlock()
 			span.SetStatus(codes.Error, "reply inbox closed")
-			return outcome, fmt.Errorf("await enforcement replies: reply inbox closed")
-		case <-w.notify:
+			return Outcome{ByLane: byLane, Complete: false, Deadline: false}, fmt.Errorf("await enforcement replies: reply inbox closed")
+		case reply := <-w.done:
+			lane := Lane{Scanner: reply.GetScanner(), PolicyID: reply.GetPolicyId()}
+			if _, requested := w.lanes[lane]; !requested {
+				i.recordOrphan(ctx)
+				continue
+			}
+			if _, duplicate := byLane[lane]; duplicate {
+				continue
+			}
+			byLane[lane] = reply
 		}
 	}
-}
-
-func waiterOutcome(w *waiter, complete, deadline bool) Outcome {
-	byLane := make(map[Lane]*riskv1.EnforcementReply, len(w.replies))
-	maps.Copy(byLane, w.replies)
-	return Outcome{ByLane: byLane, Complete: complete, Deadline: deadline}
+	return Outcome{ByLane: byLane, Complete: true, Deadline: false}, nil
 }
 
 // String returns a stable diagnostic representation of a lane.
@@ -558,40 +545,21 @@ func (i *Inbox) route(ctx context.Context, raw string) {
 	}
 	i.metrics.replies.Add(ctx, 1, metric.WithAttributes(attribute.String("status", statusLabel(reply.GetStatus()))))
 
-	lane := Lane{Scanner: reply.GetScanner(), PolicyID: reply.GetPolicyId()}
 	i.mu.Lock()
 	w := i.waiters[reply.GetScanId()]
-	if w == nil {
-		i.mu.Unlock()
-		i.recordOrphan(ctx)
-		return
-	}
-
-	w.mu.Lock()
-	if w.closed {
-		w.mu.Unlock()
-		i.mu.Unlock()
-		i.recordOrphan(ctx)
-		return
-	}
-	if _, requested := w.lanes[lane]; !requested {
-		w.mu.Unlock()
-		i.mu.Unlock()
-		i.recordOrphan(ctx)
-		return
-	}
-	if _, duplicate := w.replies[lane]; duplicate {
-		w.mu.Unlock()
-		i.mu.Unlock()
-		return
-	}
-	w.replies[lane] = reply
-	w.mu.Unlock()
-	select {
-	case w.notify <- struct{}{}:
-	default:
-	}
 	i.mu.Unlock()
+	if w == nil {
+		// The scan already completed or timed out and released its waiter.
+		i.recordOrphan(ctx)
+		return
+	}
+	select {
+	case w.done <- reply:
+	default:
+		// The buffer absorbs the lane count plus duplicate slack; overflow
+		// means a redelivery storm and dropping is the safe disposition.
+		i.recordOrphan(ctx)
+	}
 }
 
 func (i *Inbox) recordOrphan(ctx context.Context) {
