@@ -134,6 +134,16 @@ describe("mergeUserSummaries", () => {
     expect(merged!.accountTypes).toEqual(["team", "personal"]);
   });
 
+  it("collapses a page-boundary duplicate before summing", () => {
+    const merged = mergeUserSummaries([
+      makeSummary({ userId: "ada@example.com", totalInputTokens: 100 }),
+      makeSummary({ userId: "ada@example.com", totalInputTokens: 100 }),
+      makeSummary({ userId: "user-id-1", totalInputTokens: 40 }),
+    ]);
+
+    expect(merged!.totalInputTokens).toBe(140);
+  });
+
   it("does not double-count an account listed on two summaries", () => {
     const account = {
       provider: "anthropic",

@@ -151,6 +151,14 @@ function groupSummariesByMember(
   groups: { member: AccessMember; matched: UserSummary[] }[];
   unmatched: UserSummary[];
 } {
+  // Cursor pagination can re-serve the page-boundary group; keep the first
+  // instance of each key so duplicates cannot double into any bucket.
+  const seenKeys = new Set<string>();
+  summaries = summaries.filter((summary) => {
+    if (seenKeys.has(summary.userId)) return false;
+    seenKeys.add(summary.userId);
+    return true;
+  });
   const summaryByUserId = new Map(
     summaries.map((summary) => [summary.userId, summary]),
   );

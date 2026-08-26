@@ -6,7 +6,16 @@ import type { UserSummary } from "@gram/client/models/components/usersummary.js"
 // detail page renders. Mirrors the per-member merge the employees list does
 // client-side.
 export function mergeUserSummaries(users: UserSummary[]): UserSummary | null {
-  const [base, ...rest] = users;
+  // Cursor pagination can re-serve the page-boundary group (the cursor lookup
+  // subquery does not apply the outer query's filters), so collapse to one
+  // summary per key before summing.
+  const seen = new Set<string>();
+  const distinct = users.filter((u) => {
+    if (seen.has(u.userId)) return false;
+    seen.add(u.userId);
+    return true;
+  });
+  const [base, ...rest] = distinct;
   if (base == null) return null;
   if (rest.length === 0) return base;
 
