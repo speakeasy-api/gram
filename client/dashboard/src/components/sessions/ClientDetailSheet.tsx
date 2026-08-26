@@ -11,6 +11,7 @@ import {
 import { invalidateAllUserSessionClients } from "@gram/client/react-query/userSessionClients.js";
 
 import { Button } from "@/components/ui/Button";
+import { Skeleton } from "@/components/ui/Skeleton";
 import {
   Sheet,
   SheetContent,
@@ -23,9 +24,14 @@ import { useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { safeExternalHttpUrl } from "@/lib/safe-external-url";
 import {
+  CREDENTIAL_KIND_PRESENTATION,
+  declaredAuthMethodValue,
+} from "@/lib/user-session-client-credential";
+import {
   clientDocumentOrigin,
   userSessionClientSource,
 } from "@/lib/user-session-client-source";
+import { ClientCredentialBadge } from "./ClientCredentialBadge";
 import { ClientSourceBadge } from "./ClientSourceBadge";
 
 /**
@@ -35,22 +41,63 @@ import { ClientSourceBadge } from "./ClientSourceBadge";
  * DCR rows get the base detail without the CIMD panel.
  */
 export function ClientDetailSheet({
+  clientId,
   client,
+  projectSlug,
   open,
   onOpenChange,
 }: {
   /**
-   * The listing row, rendered immediately while the per-client query runs so
-   * opening the sheet never shows an empty panel.
+   * The registration to show. Enough on its own: only one of the surfaces that
+   * opens this sheet holds a whole record, so the id is what they all share.
    */
-  client: UserSessionClient;
+  clientId: string;
+  /**
+   * The listing row, when the caller has one, rendered immediately while the
+   * per-client query runs so opening the sheet never shows an empty panel.
+   */
+  client?: UserSessionClient;
+  /**
+   * Project the lookup is scoped to. Required from a surface whose route
+   * carries no project slug, where the SDK would otherwise stamp the request
+   * with the literal "default" and the lookup would miss; a route that names
+   * its project can leave this unset.
+   */
+  projectSlug?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }): JSX.Element {
-  const detailQuery = useUserSessionClient({ id: client.id }, undefined, {
-    enabled: open,
-  });
+  const detailQuery = useUserSessionClient(
+    { id: clientId, gramProject: projectSlug },
+    undefined,
+    { enabled: open },
+  );
   const detail = detailQuery.data ?? client;
+
+  if (!detail) {
+    return (
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <SheetContent className="w-full gap-0 overflow-y-auto sm:max-w-lg">
+          <SheetHeader>
+            <SheetTitle>Registration</SheetTitle>
+            <SheetDescription>
+              {detailQuery.isError
+                ? "This registration could not be loaded."
+                : "Loading…"}
+            </SheetDescription>
+          </SheetHeader>
+          {detailQuery.isError ? null : (
+            <div className="flex flex-col gap-4 px-4 pb-6">
+              {Array.from({ length: 4 }).map((_, index) => (
+                <Skeleton key={index} className="h-10 w-full" />
+              ))}
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+    );
+  }
+
   const origin = clientDocumentOrigin(detail);
 
   return (
@@ -62,6 +109,10 @@ export function ClientDetailSheet({
               {detail.clientName}
             </SheetTitle>
             <ClientSourceBadge client={detail} />
+            <ClientCredentialBadge
+              kind={detail.credentialKind}
+              declaredMethod={detail.tokenEndpointAuthMethod}
+            />
           </div>
           {/* client_name is client-chosen; the origin is the part of a CIMD
               client's identity it cannot forge, so it stays in view here just
@@ -80,6 +131,18 @@ export function ClientDetailSheet({
             </DetailField>
             <DetailField label="Registered">
               <Text small>{format(detail.clientIdIssuedAt, "PP p")}</Text>
+            </DetailField>
+            {/* Stated for every kind, unlike the listing, which badges only the
+                two worth interrupting a scan for. This is where "public" and
+                "secret" become distinguishable, and where the raw protocol
+                value is written out rather than left to a tooltip. */}
+            <DetailField label="Authentication">
+              <Text small>
+                {CREDENTIAL_KIND_PRESENTATION[detail.credentialKind].label}
+              </Text>
+              <Text small muted className="font-mono">
+                {declaredAuthMethodValue(detail.tokenEndpointAuthMethod)}
+              </Text>
             </DetailField>
             <DetailField label="Active sessions">
               <Text small>{detail.activeSessionCount}</Text>
@@ -151,9 +214,9 @@ function CimdMetadataPanel({
         Metadata document
       </Text>
       <Text small muted>
-        This client is identified by a metadata document it hosts. Gram caches
-        the document and enforces the values extracted from it; refreshing
-        discards the cached copy and re-reads the document in full.
+        This client is identified by a metadata document it hosts. Speakeasy
+        caches the document and enforces the values extracted from it;
+        refreshing discards the cached copy and re-reads the document in full.
       </Text>
       <div className="flex flex-col gap-4">
         <DetailField label="Source URL">

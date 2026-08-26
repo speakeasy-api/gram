@@ -11,6 +11,8 @@ import {
   type ConnectionGroup,
   type ConnectionGrouping,
 } from "@/components/connections/groupConnections";
+import { ClientCredentialBadge } from "@/components/sessions/ClientCredentialBadge";
+import { ClientDetailSheet } from "@/components/sessions/ClientDetailSheet";
 import { RevokeClientDialog } from "@/components/sessions/RevokeClientDialog";
 import { RevokeSessionDialog } from "@/components/sessions/RevokeSessionDialog";
 import { RevokeSessionsDialog } from "@/components/sessions/RevokeSessionsDialog";
@@ -250,6 +252,15 @@ function ConnectionSubRow({
             <ClientIcon label={label} />
           )}
           <span className="text-foreground truncate text-sm">{label}</span>
+          {/* Only where the row names an agent. A sub-row names a person under
+              provider and agent grouping alike, and a person has no credential
+              of their own. */}
+          {childIsPerson ? null : (
+            <ClientCredentialBadge
+              kind={session.clientCredentialKind}
+              declaredMethod={session.clientTokenEndpointAuthMethod}
+            />
+          )}
         </span>
 
         <SimpleTooltip tooltip={connectionDeadlineLabel(session, now)}>
@@ -293,22 +304,45 @@ function ConnectionGroupRow({
   now,
   canRevoke,
   onRevoked,
+  projectSlug,
 }: {
   group: ConnectionGroup;
   grouping: ConnectionGrouping;
   /** Ticking clock, so a row's state ages with the page rather than freezing. */
   now: number;
+  /** Project the registration lookup is scoped to; see the list's own prop. */
+  projectSlug?: string;
   canRevoke: boolean;
   onRevoked: () => void;
 }): JSX.Element {
   const [expanded, setExpanded] = useState(false);
   const [revokeAllOpen, setRevokeAllOpen] = useState(false);
   const [revokeClientOpen, setRevokeClientOpen] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
+  // The sheet runs a query hook of its own, so it is mounted on first open
+  // rather than with the row — a long roster would otherwise stand up one per
+  // registration. It stays mounted afterwards so closing still animates.
+  const [detailMounted, setDetailMounted] = useState(false);
 
   const providers = grouping === "provider" ? [] : providerNames(group);
 
   const actions = [
-    ...(group.revocableIds.length > 0
+    // Reading a registration needs project read, which every viewer of this
+    // list already holds, so this one is offered whether or not they can
+    // revoke. It is the only action a read-only viewer gets, and without it
+    // they would have no menu at all.
+    ...(group.clientId
+      ? [
+          {
+            label: "View registration",
+            onClick: () => {
+              setDetailMounted(true);
+              setDetailOpen(true);
+            },
+          },
+        ]
+      : []),
+    ...(canRevoke && group.revocableIds.length > 0
       ? [
           {
             label: "Revoke all connections",
@@ -317,7 +351,7 @@ function ConnectionGroupRow({
           },
         ]
       : []),
-    ...(group.client
+    ...(canRevoke && group.client
       ? [
           {
             label: "Revoke registration",
@@ -384,8 +418,16 @@ function ConnectionGroupRow({
 
           <GroupIcon group={group} />
 
-          <span className="text-foreground truncate text-sm font-medium">
-            {group.label}
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="text-foreground truncate text-sm font-medium">
+              {group.label}
+            </span>
+            {/* Absent unless the row names a registration, which is what
+                grouping by agent makes it. */}
+            <ClientCredentialBadge
+              kind={group.credentialKind}
+              declaredMethod={group.declaredAuthMethod}
+            />
           </span>
 
           <span className="text-muted-foreground hidden truncate text-xs sm:block">
@@ -405,12 +447,12 @@ function ConnectionGroupRow({
                 </span>
               </SimpleTooltip>
             ) : grouping !== "provider" ? (
-              // Said rather than left blank: reaching only Gram-native tools is
-              // a real state, and an empty slot beside every other row's
-              // provider count reads as data we failed to load.
+              // Said rather than left blank: reaching only native tools is a
+              // real state, and an empty slot beside every other row's provider
+              // count reads as data we failed to load.
               <span className="text-muted-foreground/70">
                 {" "}
-                · Gram tools only
+                · Speakeasy tools only
               </span>
             ) : null}
           </span>
@@ -427,9 +469,7 @@ function ConnectionGroupRow({
         </button>
 
         <span className={CONNECTION_ACTIONS_SLOT}>
-          {canRevoke && actions.length > 0 ? (
-            <MoreActions actions={actions} />
-          ) : null}
+          {actions.length > 0 ? <MoreActions actions={actions} /> : null}
         </span>
       </div>
 
@@ -484,6 +524,18 @@ function ConnectionGroupRow({
           onRevoked={onRevoked}
         />
       ) : null}
+
+      {/* The registration record is only handed to this list by the MCP server
+          tab; elsewhere the sheet has nothing but the id and fetches the rest. */}
+      {group.clientId && detailMounted ? (
+        <ClientDetailSheet
+          clientId={group.clientId}
+          client={group.client}
+          projectSlug={projectSlug}
+          open={detailOpen}
+          onOpenChange={setDetailOpen}
+        />
+      ) : null}
     </div>
   );
 }
@@ -500,6 +552,7 @@ export function ConnectionsList({
   canRevoke,
   onRevoked,
   clients,
+  projectSlug,
 }: {
   sessions: UserSession[];
   grouping: ConnectionGrouping;
@@ -511,6 +564,13 @@ export function ConnectionsList({
    * grouping is derived from sessions.
    */
   clients?: UserSessionClient[];
+  /**
+   * Project to scope the registration lookup to, for a surface whose route
+   * carries no project slug. The organization page is the one such caller: it
+   * chooses a project through a filter, while the SDK would otherwise stamp the
+   * request with the literal "default" and the lookup would miss.
+   */
+  projectSlug?: string;
 }): JSX.Element {
   const now = useNow();
   const { active, inactive } = useMemo(
@@ -529,6 +589,7 @@ export function ConnectionsList({
           now={now}
           canRevoke={canRevoke}
           onRevoked={onRevoked}
+          projectSlug={projectSlug}
         />
       ))}
     </div>
