@@ -537,9 +537,15 @@ UPDATE remote_session_issuers
 SET deleted_at = clock_timestamp()
 WHERE id = @id;
 
--- name: SetMCPServerRemoteSessionIssuerFixture :exec
--- Writes the derived column directly, so a test can assert that a rejected
--- resync left an existing value alone rather than merely never setting one.
+-- name: SetMCPServerRemoteSessionIssuerFixture :execrows
+-- Test-only fixture: stamps the denormalised upstream authorization server on
+-- an MCP server. Server creation cannot set it — no client bindings exist yet —
+-- so tests seed it after the fact, standing in for the binding resync.
+--
+-- Returns the row count so the caller can insist the stamp landed: one that
+-- matched nothing would otherwise let a negative test pass vacuously.
 UPDATE mcp_servers
 SET remote_session_issuer_id = @remote_session_issuer_id
-WHERE id = @id;
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE;

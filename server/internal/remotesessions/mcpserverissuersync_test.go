@@ -66,13 +66,16 @@ func storedIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, project
 	return server.RemoteSessionIssuerID
 }
 
-func stampIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, serverID, remoteIssuerID uuid.UUID) {
+func stampIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, serverID, remoteIssuerID uuid.UUID) {
 	t.Helper()
 
-	require.NoError(t, testrepo.New(conn).SetMCPServerRemoteSessionIssuerFixture(ctx, testrepo.SetMCPServerRemoteSessionIssuerFixtureParams{
+	stamped, err := testrepo.New(conn).SetMCPServerRemoteSessionIssuerFixture(ctx, testrepo.SetMCPServerRemoteSessionIssuerFixtureParams{
 		ID:                    serverID,
+		ProjectID:             projectID,
 		RemoteSessionIssuerID: conv.ToNullUUID(remoteIssuerID),
-	}))
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), stamped, "the issuer stamp must land on exactly one live server")
 }
 
 func resync(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, projectID uuid.UUID, userIssuerIDs ...uuid.UUID) {
@@ -286,7 +289,7 @@ func TestResyncMCPServerRemoteSessionIssuers(t *testing.T) {
 		userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-sync-noscope")
 		serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "sync-noscope")
 		_, remoteIssuerID := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-sync-noscope")
-		stampIssuer(t, ctx, ti.conn, serverID, remoteIssuerID)
+		stampIssuer(t, ctx, ti.conn, projectID, serverID, remoteIssuerID)
 
 		// A missing scope is a caller bug and must not read as "every tenant" —
 		// even with the empty id set that would otherwise short-circuit.

@@ -1531,22 +1531,32 @@ func (q *Queries) SetFunctionToolVariables(ctx context.Context, arg SetFunctionT
 	return err
 }
 
-const setMCPServerRemoteSessionIssuerFixture = `-- name: SetMCPServerRemoteSessionIssuerFixture :exec
+const setMCPServerRemoteSessionIssuerFixture = `-- name: SetMCPServerRemoteSessionIssuerFixture :execrows
 UPDATE mcp_servers
 SET remote_session_issuer_id = $1
 WHERE id = $2
+  AND project_id = $3
+  AND deleted IS FALSE
 `
 
 type SetMCPServerRemoteSessionIssuerFixtureParams struct {
 	RemoteSessionIssuerID uuid.NullUUID
 	ID                    uuid.UUID
+	ProjectID             uuid.UUID
 }
 
-// Writes the derived column directly, so a test can assert that a rejected
-// resync left an existing value alone rather than merely never setting one.
-func (q *Queries) SetMCPServerRemoteSessionIssuerFixture(ctx context.Context, arg SetMCPServerRemoteSessionIssuerFixtureParams) error {
-	_, err := q.db.Exec(ctx, setMCPServerRemoteSessionIssuerFixture, arg.RemoteSessionIssuerID, arg.ID)
-	return err
+// Test-only fixture: stamps the denormalised upstream authorization server on
+// an MCP server. Server creation cannot set it — no client bindings exist yet —
+// so tests seed it after the fact, standing in for the binding resync.
+//
+// Returns the row count so the caller can insist the stamp landed: one that
+// matched nothing would otherwise let a negative test pass vacuously.
+func (q *Queries) SetMCPServerRemoteSessionIssuerFixture(ctx context.Context, arg SetMCPServerRemoteSessionIssuerFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setMCPServerRemoteSessionIssuerFixture, arg.RemoteSessionIssuerID, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const setOpenRouterAPIKeyCreatedAtFixture = `-- name: SetOpenRouterAPIKeyCreatedAtFixture :exec
