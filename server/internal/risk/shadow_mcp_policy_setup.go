@@ -6,7 +6,6 @@ import (
 	"slices"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -85,20 +84,6 @@ func validateShadowMCPBlockedURLs(disposition string, rawURLs []string) ([]strin
 		return nil, oops.E(oops.CodeInvalid, nil, "shadow mcp blocked urls require an allow_all shadow mcp policy")
 	}
 	return canonicalURLs, nil
-}
-
-// effectiveShadowMCPDisposition resolves the stored disposition column for a
-// policy: block_all when unset on a blocking shadow MCP policy (rows created
-// before the column existed), empty for policies where a disposition does not
-// apply.
-func effectiveShadowMCPDisposition(disposition pgtype.Text, sources []string, action string) string {
-	if action != "block" || !slices.Contains(sources, shadowmcp.SourceShadowMCP) {
-		return ""
-	}
-	if disposition.Valid && disposition.String != "" {
-		return disposition.String
-	}
-	return ShadowMCPDispositionBlockAll
 }
 
 // loadShadowMCPBlockedURLs reads the canonical blocked-URL set of an

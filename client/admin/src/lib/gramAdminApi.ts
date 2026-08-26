@@ -234,6 +234,42 @@ export type ListOrganizationsResult = {
   next_cursor?: string;
 };
 
+export type AdminAuditLog = {
+  id: string;
+  project_id?: string;
+  project_slug?: string;
+  actor_id: string;
+  actor_type: string;
+  actor_display_name?: string;
+  actor_slug?: string;
+  action: string;
+  acting_surface: string;
+  acting_client_id?: string;
+  subject_id: string;
+  subject_type: string;
+  subject_display_name?: string;
+  subject_slug?: string;
+  before_snapshot?: unknown;
+  after_snapshot?: unknown;
+  metadata?: Record<string, unknown>;
+  created_at: string;
+};
+
+export type ListOrganizationActivityResult = {
+  logs: AdminAuditLog[];
+  next_cursor?: string;
+};
+
+export function listOrganizationActivity(
+  organizationID: string,
+  cursor?: string,
+): Promise<ListOrganizationActivityResult> {
+  const qs = toSearchParams({ organization_id: organizationID, cursor });
+  return gramAdminFetch<ListOrganizationActivityResult>(
+    `/admin/organization.activity?${qs.toString()}`,
+  );
+}
+
 // Each filter is a repeated parameter the server reads as a set, and an absent
 // one means no filter of that kind: no account_types is every type, no
 // trial_states is every state, no disabled_states is active organizations only.

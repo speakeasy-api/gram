@@ -856,13 +856,17 @@ ORDER BY buckets.bucket_start ASC, categories.category ASC;
 -- (project_id, id WHERE risk_analyzed_at IS NULL), which shrinks toward
 -- zero at steady state. The id >= @id_lower_bound bound (a UUIDv7 lower
 -- bound computed from the configured lookback) further limits the scan to
--- recent messages, reusing the same partial index ordering.
+-- recent messages, reusing the same partial index ordering. Oldest-first:
+-- under a backlog above the batch limit, newest-first would keep serving
+-- fresh messages while units nearing the lookback's edge age out without a
+-- retry; ascending order drains the window fairly and costs at most the
+-- lookback in added freshness latency.
 SELECT cm.id
 FROM chat_messages cm
 WHERE cm.project_id = @project_id
   AND cm.risk_analyzed_at IS NULL
   AND cm.id >= @id_lower_bound
-ORDER BY cm.id DESC
+ORDER BY cm.id ASC
 LIMIT @batch_limit;
 
 -- name: MarkMessagesRiskAnalyzed :exec
@@ -874,13 +878,14 @@ WHERE id = ANY(@message_ids::uuid[])
 -- name: FetchUnanalyzedContentPartIDs :many
 -- Scans the partial index chat_content_parts_risk_analyzed_at_null_idx
 -- (project_id, id WHERE risk_analyzed_at IS NULL), mirroring the chat_messages
--- unanalyzed sweep for non-turn content.
+-- unanalyzed sweep for non-turn content, including its oldest-first order so
+-- a backlog cannot starve units nearing the lookback's edge.
 SELECT ccp.id
 FROM chat_content_parts ccp
 WHERE ccp.project_id = @project_id
   AND ccp.risk_analyzed_at IS NULL
   AND ccp.id >= @id_lower_bound
-ORDER BY ccp.id DESC
+ORDER BY ccp.id ASC
 LIMIT @batch_limit;
 
 -- name: MarkContentPartsRiskAnalyzed :exec
@@ -1098,17 +1103,40 @@ DO UPDATE SET
 WHERE EXCLUDED.found IS TRUE
   AND risk_results.found IS FALSE;
 
--- name: DeleteRiskResultsForMessages :exec
+-- name: DeleteRiskResultsForUnits :many
+-- Replaces a batch's rows across both anchor kinds in one statement.
+-- Returns the identity and dismissal columns of what the re-analysis
+-- replaced: the writer recomputes each row's deterministic id from the
+-- identity columns to learn which findings an earlier committed attempt
+-- already announced (their webhook outbox events must not be re-emitted) and
+-- which carried a manual dismissal to re-stamp onto the reinserted rows.
+-- Recomputing from identity rather than trusting the stored id keeps rows
+-- written before ids became deterministic (random UUIDs) on the same footing
+-- as new ones. Heavy payload columns (match aside, which is identity) stay
+-- out of the RETURNING set.
 DELETE FROM risk_results
 WHERE risk_policy_id = @risk_policy_id
   AND project_id = @project_id
-  AND chat_message_id = ANY(@message_ids::uuid[]);
+  AND (chat_message_id = ANY(@message_ids::uuid[])
+    OR chat_content_part_id = ANY(@content_part_ids::uuid[]))
+RETURNING id, risk_policy_version, chat_message_id, chat_content_part_id,
+  found, source, rule_id, description, match, start_pos, end_pos,
+  dead_letter_reason, false_positive_at, false_positive_reason;
 
--- name: DeleteRiskResultsForContentParts :exec
-DELETE FROM risk_results
-WHERE risk_policy_id = @risk_policy_id
-  AND project_id = @project_id
-  AND chat_content_part_id = ANY(@content_part_ids::uuid[]);
+-- name: RestoreRiskResultFalsePositiveState :exec
+-- Re-stamps manual dismissals onto re-analyzed rows in the same transaction
+-- that replaced them. Ids that were not reinserted (the finding disappeared)
+-- match nothing, so a vanished finding's dismissal dies with it.
+UPDATE risk_results
+SET false_positive_at = v.false_positive_at
+  , false_positive_reason = NULLIF(v.false_positive_reason, '')
+FROM (
+    SELECT UNNEST(@ids::uuid[]) AS id
+         , UNNEST(@false_positive_ats::timestamptz[]) AS false_positive_at
+         , UNNEST(@false_positive_reasons::text[]) AS false_positive_reason
+) v
+WHERE risk_results.id = v.id
+  AND risk_results.project_id = @project_id;
 
 -- name: GetRiskResultByID :one
 -- Single-row lookup backing risk.results.unmask: fetch a result's raw match
@@ -1580,9 +1608,10 @@ WHERE project_id = @project_id
   AND id = ANY(@ids::uuid[]);
 
 -- name: MarkRiskResultsFalsePositive :many
--- Returns full rows (not just id): the caller republishes each one onto the
--- findings topic to append a ClickHouse state-change row, and needs the
--- finding content (source/rule_id/match/...) to build that message.
+-- Returns the full rows the UPDATE actually changed: they drive audit logging
+-- and the ClickHouse mirror's outbox enqueue, both inside the same
+-- transaction as this UPDATE, so a retry that changes nothing correctly
+-- audits and mirrors nothing.
 UPDATE risk_results
 SET false_positive_at = clock_timestamp()
   , false_positive_reason = sqlc.narg(reason)

@@ -44,6 +44,35 @@ func BuildLogsPayload(otelLogsApikeyToken string, otelLogsProjectSlugInput strin
 	return v, nil
 }
 
+// BuildMetricsPayload builds the payload for the otel metrics endpoint from
+// CLI flags.
+func BuildMetricsPayload(otelMetricsApikeyToken string, otelMetricsProjectSlugInput string, otelMetricsContentEncoding string) (*otel.MetricsPayload, error) {
+	var apikeyToken *string
+	{
+		if otelMetricsApikeyToken != "" {
+			apikeyToken = &otelMetricsApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if otelMetricsProjectSlugInput != "" {
+			projectSlugInput = &otelMetricsProjectSlugInput
+		}
+	}
+	var contentEncoding *string
+	{
+		if otelMetricsContentEncoding != "" {
+			contentEncoding = &otelMetricsContentEncoding
+		}
+	}
+	v := &otel.MetricsPayload{}
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+	v.ContentEncoding = contentEncoding
+
+	return v, nil
+}
+
 // BuildTracesPayload builds the payload for the otel traces endpoint from CLI
 // flags.
 func BuildTracesPayload(otelTracesApikeyToken string, otelTracesProjectSlugInput string, otelTracesContentEncoding string) (*otel.TracesPayload, error) {

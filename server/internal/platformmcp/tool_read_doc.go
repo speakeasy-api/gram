@@ -35,8 +35,8 @@ type ReadGramDocToolOutput struct {
 func registerReadDocTool(reg *Registrar) {
 	addTool(reg, &mcp.Tool{
 		Name:        "read_gram_doc",
-		Title:       "Read Gram Doc",
-		Description: "Read one reviewed Speakeasy AICP guide in full by its gram:// resource URI, as returned by search_gram_docs. Returns guide_unavailable when no reviewed guide stands behind that URI: say so and hand the user the canonical links rather than inventing steps.",
+		Title:       "Read a Setup Guide",
+		Description: "Read one reviewed Speakeasy setup guide in full, by the gram:// URI search_gram_docs returned. Constraints: returns guide_unavailable when no reviewed guide stands behind that URI — say so and hand the user the canonical links rather than inventing steps.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{
 		// Assistant-only. External clients read the same content through

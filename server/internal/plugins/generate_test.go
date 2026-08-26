@@ -121,6 +121,9 @@ func TestGeneratePluginPackagesIncludesPlatformMCPOnlyWhenEnabled(t *testing.T) 
 	require.NotContains(t, string(claudeSkill), "register_platform_mcp_for_project", "the shipped skill must name only canonical tools")
 	require.NotContains(t, string(claudeSkill), "add_platform_mcp_to_default_plugin", "exact-plugin distribution remains rollout-gated")
 	require.Contains(t, string(claudeSkill), "For a managed project assistant, call `get_mcp_readiness` without `force`", "assistants must not be instructed to force connection-bound readiness probes")
+	require.Contains(t, string(claudeSkill), "get_mcp_client_admission")
+	require.Contains(t, string(claudeSkill), "set_mcp_client_admission")
+	require.Contains(t, string(claudeSkill), "`confirmed: true`", "an admission mode change is confirmed before it is written")
 
 	remoteURLSkill := files["platform-mcp/skills/add-mcp-from-remote-url/SKILL.md"]
 	require.Contains(t, string(remoteURLSkill), "inspect_mcp_candidate")
@@ -130,6 +133,8 @@ func TestGeneratePluginPackagesIncludesPlatformMCPOnlyWhenEnabled(t *testing.T) 
 	require.NotContains(t, string(remoteURLSkill), "get_platform_mcp_onboarding_status", "the shipped skill must name only canonical tools")
 	require.NotContains(t, string(remoteURLSkill), "add_platform_mcp_to_default_plugin", "exact-plugin distribution remains rollout-gated")
 	require.Contains(t, string(remoteURLSkill), "For an external Platform MCP client, call `get_mcp_readiness`", "managed assistants must stop after their dashboard handoff")
+	require.Contains(t, string(remoteURLSkill), "get_mcp_client_admission")
+	require.Contains(t, string(remoteURLSkill), "set_mcp_client_admission")
 	require.NotContains(t, string(remoteURLSkill), "probe_remote_mcp", "the shipped skill must name only our registered tools")
 	require.NotContains(t, string(remoteURLSkill), "register_remote_mcp_for_project", "the shipped skill must name only our registered tools")
 
@@ -2140,6 +2145,17 @@ func TestGenerateOpenClawObservabilityPluginPackage(t *testing.T) {
 		"(reply?.timedOut || reply?.error) && FAIL_CLOSED",
 	} {
 		require.Contains(t, string(shim), want)
+	}
+	// History-sized fields the daemon never reads are stripped pre-pipe: pin
+	// the strip logic itself, not just the call site.
+	if !strings.Contains(string(shim), "const event = slimEvent(hook, rawEvent)") {
+		t.Error("every hook payload must pass through slimEvent")
+	}
+	if !strings.Contains(string(shim), `if (hook === "agent_end" || hook === "before_agent_run") {`) {
+		t.Error("slimEvent must target the history-bearing hooks")
+	}
+	if !strings.Contains(string(shim), "const { messages, ...rest } = event") {
+		t.Error("slimEvent must drop event.messages")
 	}
 	// Package installs reject TypeScript entries; the shim must stay plain JS.
 	require.NotContains(t, string(shim), ": ChildProcess")

@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -648,7 +649,7 @@ func TestRefreshRemoteSession_DerivesPerClientFallbackResource(t *testing.T) {
 
 	result, err := fx.mgr.RefreshRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID)
 	require.NoError(t, err)
-	require.Equal(t, remotesessions.RefreshOutcomeRefreshed, result.Outcome)
+	require.Equal(t, remotesessionmetrics.RefreshOutcomeRefreshed, result.Outcome)
 	require.Equal(t, int64(1), refreshCount.Load())
 	require.Equal(t, tokenPostCapture{HasResource: true, Resource: "https://upstream-refresh.example.com"}, captured.Load())
 }
@@ -726,7 +727,7 @@ func TestRefreshRemoteSession_StoredResourceWinsOverDerivation(t *testing.T) {
 
 	result, err := fx.mgr.RefreshRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID)
 	require.NoError(t, err)
-	require.Equal(t, remotesessions.RefreshOutcomeRefreshed, result.Outcome)
+	require.Equal(t, remotesessionmetrics.RefreshOutcomeRefreshed, result.Outcome)
 	require.Equal(t, tokenPostCapture{HasResource: true, Resource: "https://stored-winner.example.com"}, captured.Load())
 }
 
@@ -744,7 +745,7 @@ func TestRefreshRemoteSession_AmbiguousDerivationSendsNoResource(t *testing.T) {
 
 	result, err := fx.mgr.RefreshRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID)
 	require.NoError(t, err)
-	require.Equal(t, remotesessions.RefreshOutcomeRefreshed, result.Outcome)
+	require.Equal(t, remotesessionmetrics.RefreshOutcomeRefreshed, result.Outcome)
 	require.Equal(t, tokenPostCapture{HasResource: false, Resource: ""}, captured.Load())
 }
 
@@ -818,7 +819,7 @@ func TestRefreshRemoteSession_FindsGrantMintedByDifferentIssuer(t *testing.T) {
 
 	result, err := fx.mgr.RefreshRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID)
 	require.NoError(t, err)
-	require.Equal(t, remotesessions.RefreshOutcomeRefreshed, result.Outcome)
+	require.Equal(t, remotesessionmetrics.RefreshOutcomeRefreshed, result.Outcome)
 	require.Equal(t, "rotated-access", result.AccessToken)
 	require.Equal(t, fx.issuerA, result.Session.UserSessionIssuerID)
 	require.Equal(t, int64(1), refreshCount.Load())
@@ -840,7 +841,7 @@ func TestRefreshRemoteSession_FindsGrantAfterMintingIssuerSoftDeleted(t *testing
 
 	result, err := fx.mgr.RefreshRemoteSession(ctx, fx.subject, fx.projectID, fx.organizationID, fx.issuerB, fx.clientID)
 	require.NoError(t, err)
-	require.Equal(t, remotesessions.RefreshOutcomeRefreshed, result.Outcome)
+	require.Equal(t, remotesessionmetrics.RefreshOutcomeRefreshed, result.Outcome)
 	require.Equal(t, "rotated-after-delete", result.AccessToken)
 	require.Equal(t, fx.issuerA, result.Session.UserSessionIssuerID)
 	require.Equal(t, int64(1), refreshCount.Load())

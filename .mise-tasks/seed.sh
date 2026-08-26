@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-#MISE description="Seed the local development organization (data + your user, API key, tunnel)"
+#MISE description="Seed the local development organization (data + your user, API key)"
 #MISE dir="{{ config_root }}"
 
 set -euo pipefail
@@ -11,6 +11,6 @@ set -euo pipefail
 #
 # Idempotent and fast, so there is no completion marker to short-circuit on —
 # just run it. Everything it used to write back into mise.local.toml
-# (GRAM_API_KEY, TUNNEL_LOCAL_*) is now a fixed value checked into mise.toml.
+# (GRAM_API_KEY) is now a fixed value checked into mise.toml.
 cd server
 exec go run . demo-seed --local "$@"

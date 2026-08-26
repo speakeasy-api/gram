@@ -12,7 +12,7 @@ func registerListProjectsTool(reg *Registrar, reader Reader) {
 	addTool(reg, &mcp.Tool{
 		Name:        "list_projects",
 		Title:       "List Projects",
-		Description: "List projects in the selected organization. Results contain only project identifiers, names, and slugs.",
+		Description: "List the projects in this organization. A project is where an administrator's MCP servers and skills are kept before anyone receives them. Constraints: results carry only project identifiers, names, and slugs.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListProjectsInput) (*mcp.CallToolResult, ListProjectsOutput, error) {
 		principal, err := principalFromToolContext(ctx)

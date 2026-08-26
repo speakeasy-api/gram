@@ -9,6 +9,7 @@ import (
 	"cloud.google.com/go/pubsub/v2"
 
 	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	pingv2 "github.com/speakeasy-api/gram/infra/gen/gram/ping/v2"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
@@ -26,12 +27,18 @@ type Topic string
 const (
 	// GramAuthzV1Challenge publishes to gram-authz-v1-challenge.
 	GramAuthzV1Challenge Topic = "gram.authz.v1.Challenge"
+	// GramMeteringV1MeterReading publishes to gram-metering-v1-meter-reading.
+	GramMeteringV1MeterReading Topic = "gram.metering.v1.MeterReading"
 	// GramOtelV1InboundLogRecord publishes to gram-otel-v1-inbound-log-record.
 	GramOtelV1InboundLogRecord Topic = "gram.otel.v1.InboundLogRecord"
+	// GramOtelV1InboundMetric publishes to gram-otel-v1-inbound-metric.
+	GramOtelV1InboundMetric Topic = "gram.otel.v1.InboundMetric"
 	// GramOtelV1InboundSpan publishes to gram-otel-v1-inbound-span.
 	GramOtelV1InboundSpan Topic = "gram.otel.v1.InboundSpan"
 	// GramOtelV1LogRecord publishes to gram-otel-v1-log-record.
 	GramOtelV1LogRecord Topic = "gram.otel.v1.LogRecord"
+	// GramOtelV1Metric publishes to gram-otel-v1-metric.
+	GramOtelV1Metric Topic = "gram.otel.v1.Metric"
 	// GramOtelV1Span publishes to gram-otel-v1-span.
 	GramOtelV1Span Topic = "gram.otel.v1.Span"
 	// GramPingV2Message publishes to gram-ping-v2-message.
@@ -58,9 +65,12 @@ const (
 func All() []Topic {
 	return []Topic{
 		GramAuthzV1Challenge,
+		GramMeteringV1MeterReading,
 		GramOtelV1InboundLogRecord,
+		GramOtelV1InboundMetric,
 		GramOtelV1InboundSpan,
 		GramOtelV1LogRecord,
+		GramOtelV1Metric,
 		GramOtelV1Span,
 		GramPingV2Message,
 		GramRiskV1CustomRulesAnalysis,
@@ -79,12 +89,18 @@ func Lookup(name string) (Topic, bool) {
 	switch Topic(name) {
 	case GramAuthzV1Challenge:
 		return GramAuthzV1Challenge, true
+	case GramMeteringV1MeterReading:
+		return GramMeteringV1MeterReading, true
 	case GramOtelV1InboundLogRecord:
 		return GramOtelV1InboundLogRecord, true
+	case GramOtelV1InboundMetric:
+		return GramOtelV1InboundMetric, true
 	case GramOtelV1InboundSpan:
 		return GramOtelV1InboundSpan, true
 	case GramOtelV1LogRecord:
 		return GramOtelV1LogRecord, true
+	case GramOtelV1Metric:
+		return GramOtelV1Metric, true
 	case GramOtelV1Span:
 		return GramOtelV1Span, true
 	case GramPingV2Message:
@@ -118,12 +134,18 @@ func newPublisher(ctx context.Context, broker gcp.PublisherBroker, topic Topic, 
 	switch topic {
 	case GramAuthzV1Challenge:
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &authzv1.Challenge{}, gcp.WithEncodedPublishSettings(settings))
+	case GramMeteringV1MeterReading:
+		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &meteringv1.MeterReading{}, gcp.WithEncodedPublishSettings(settings))
 	case GramOtelV1InboundLogRecord:
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &otelv1.InboundLogRecord{}, gcp.WithEncodedPublishSettings(settings))
+	case GramOtelV1InboundMetric:
+		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &otelv1.InboundMetric{}, gcp.WithEncodedPublishSettings(settings))
 	case GramOtelV1InboundSpan:
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &otelv1.InboundSpan{}, gcp.WithEncodedPublishSettings(settings))
 	case GramOtelV1LogRecord:
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &otelv1.LogRecord{}, gcp.WithEncodedPublishSettings(settings))
+	case GramOtelV1Metric:
+		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &otelv1.Metric{}, gcp.WithEncodedPublishSettings(settings))
 	case GramOtelV1Span:
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &otelv1.Span{}, gcp.WithEncodedPublishSettings(settings))
 	case GramPingV2Message:

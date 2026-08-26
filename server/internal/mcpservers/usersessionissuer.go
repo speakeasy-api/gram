@@ -53,6 +53,7 @@ func buildUserSessionResourceSlug(baseSlug string) (string, error) {
 func mintServerUserSessionIssuer(
 	ctx context.Context,
 	dbtx pgx.Tx,
+	organizationID string,
 	projectID uuid.UUID,
 	serverSlug string,
 ) (uuid.NullUUID, error) {
@@ -63,6 +64,7 @@ func mintServerUserSessionIssuer(
 
 	issuer, err := usersessionsrepo.New(dbtx).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
 		ProjectID:          projectID,
+		OrganizationID:     conv.ToPGText(organizationID),
 		Slug:               issuerSlug,
 		AuthnChallengeMode: "interactive",
 		SessionDuration: pgtype.Interval{

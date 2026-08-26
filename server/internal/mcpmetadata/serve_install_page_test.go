@@ -26,12 +26,14 @@ import (
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	metamcp_repo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/metamcp/visibility"
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	tools_repo "github.com/speakeasy-api/gram/server/internal/tools/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -976,6 +978,104 @@ func TestServeInstallPage_ClaudeDesktop_WithSecurityInputs(t *testing.T) {
 	assert.NotContains(t, body, "For Teams &amp; Enterprise", "should not render the Teams & Enterprise admin connector footer")
 }
 
+// TestServeInstallPage_AntigravityClients_NoSecurityInputs verifies the hosted
+// install page offers Antigravity CLI and Antigravity IDE (replacing Gemini CLI)
+// with the documented mcp_config.json / serverUrl snippet.
+func TestServeInstallPage_AntigravityClients_NoSecurityInputs(t *testing.T) {
+	t.Parallel()
+	ctx, testInstance := newTestMCPMetadataService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	mcpSlug := "antigravity-public-" + uuid.New().String()[:8]
+	toolset, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Public Antigravity Toolset",
+		Slug:                   mcpSlug,
+		McpSlug:                conv.ToPGText(mcpSlug),
+		Description:            conv.ToPGText("public toolset with no security inputs"),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+
+	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+		McpIsPublic: true,
+		ID:          toolset.ID,
+		ProjectID:   toolset.ProjectID,
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", mcpSlug)
+	req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	err = testInstance.service.ServeInstallPage(rr, req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	body := rr.Body.String()
+	assert.Contains(t, body, `data-install-target="antigravity-cli"`)
+	assert.Contains(t, body, `data-install-target="antigravity-ide"`)
+	assert.Contains(t, body, "Antigravity CLI")
+	assert.Contains(t, body, "Antigravity IDE")
+	assert.Contains(t, body, `"serverUrl"`, "Antigravity remote servers use serverUrl, not url")
+	assert.Contains(t, body, "~/.gemini/config/mcp_config.json")
+	assert.Contains(t, body, ".agents/mcp_config.json")
+	assert.NotContains(t, body, "Gemini CLI")
+	assert.NotContains(t, body, "gemini mcp add")
+	assert.NotContains(t, body, `data-install-target="gemini-cli"`)
+	assert.NotContains(t, body, `"headers"`, "public servers without security inputs should omit the headers object")
+}
+
+// TestServeInstallPage_AntigravityClients_WithSecurityInputs verifies Antigravity
+// install snippets include HTTP headers in mcp_config.json when the server
+// requires credentials.
+func TestServeInstallPage_AntigravityClients_WithSecurityInputs(t *testing.T) {
+	t.Parallel()
+	ctx, testInstance := newTestMCPMetadataService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	mcpSlug := "antigravity-private-" + uuid.New().String()[:8]
+	_, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Private Antigravity Toolset",
+		Slug:                   mcpSlug,
+		McpSlug:                conv.ToPGText(mcpSlug),
+		Description:            conv.ToPGText("private toolset producing security inputs via gram security mode"),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", mcpSlug)
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	err = testInstance.service.ServeInstallPage(rr, req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	body := rr.Body.String()
+	assert.Contains(t, body, `data-install-target="antigravity-cli"`)
+	assert.Contains(t, body, `data-install-target="antigravity-ide"`)
+	assert.Contains(t, body, `"serverUrl"`)
+	assert.Contains(t, body, `"headers"`)
+	assert.Contains(t, body, "your-")
+	assert.Contains(t, body, "${VAR}", "should mention Antigravity env-var expansion")
+}
+
 // TestServeInstallPage_PrivateWithGramOAuth_NoAuthorizationHeader regression-tests
 // AGE-1962: a private MCP server with a Gram OAuth proxy attached must not render
 // the GRAM_KEY Authorization header (or gram-environment) in the install snippets.
@@ -1352,6 +1452,86 @@ func TestServeInstallPage_McpServer_RemoteBacked_PublicRenders(t *testing.T) {
 	assert.Contains(t, body, docURL, "docs URL from mcp_server-keyed metadata should render")
 }
 
+func TestServeInstallPage_McpServer_TunneledPublic_NoOAuthSteps(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPMetadataService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	tunneledServer, err := tunneledmcprepo.New(ti.conn).CreateServer(ctx, tunneledmcprepo.CreateServerParams{
+		ID:        uuid.New(),
+		ProjectID: *authCtx.ProjectID,
+		Name:      "Public Tunneled MCP Server",
+		KeyHash:   "test-key-hash",
+		KeyPrefix: "test-key-prefix",
+	})
+	require.NoError(t, err)
+
+	issuer := createUserSessionIssuer(t, ctx, ti, *authCtx.ProjectID)
+	endpointSlug := "tunneled-mcp-public-" + uuid.NewString()[:8]
+	createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
+		name:                "Tunneled MCP Public",
+		visibility:          mcpservers.VisibilityPublic,
+		endpointSlug:        endpointSlug,
+		tunneledMcpServerID: uuid.NullUUID{UUID: tunneledServer.ID, Valid: true},
+		userSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
+	})
+
+	req := httptest.NewRequest("GET", "/mcp/"+endpointSlug+"/install", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", endpointSlug)
+	req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, ti.service.ServeInstallPage(rr, req))
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	body := rr.Body.String()
+	assert.NotContains(t, body, "codex mcp login")
+	assert.NotContains(t, body, "so authenticate with it before use")
+}
+
+func TestServeInstallPage_McpServer_TunneledPrivate_ShowsOAuthSteps(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPMetadataService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	tunneledServer, err := tunneledmcprepo.New(ti.conn).CreateServer(ctx, tunneledmcprepo.CreateServerParams{
+		ID:        uuid.New(),
+		ProjectID: *authCtx.ProjectID,
+		Name:      "Private Tunneled MCP Server",
+		KeyHash:   "test-key-hash",
+		KeyPrefix: "test-key-prefix",
+	})
+	require.NoError(t, err)
+
+	issuer := createUserSessionIssuer(t, ctx, ti, *authCtx.ProjectID)
+	endpointSlug := "tunneled-mcp-private-" + uuid.NewString()[:8]
+	createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
+		name:                "Tunneled MCP Private",
+		visibility:          mcpservers.VisibilityPrivate,
+		endpointSlug:        endpointSlug,
+		tunneledMcpServerID: uuid.NullUUID{UUID: tunneledServer.ID, Valid: true},
+		userSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
+	})
+
+	req := httptest.NewRequest("GET", "/mcp/"+endpointSlug+"/install", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", endpointSlug)
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, ti.service.ServeInstallPage(rr, req))
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	assert.Contains(t, rr.Body.String(), "codex mcp login")
+}
+
 // TestServeInstallPage_McpServer_RemoteBacked_PrivateRedirectsToLogin
 // asserts that a private Remote-MCP-backed install page redirects an
 // unauthenticated request to /login rather than serving the page or 404.
@@ -1726,6 +1906,7 @@ func TestServeInstallPage_MetaBackedEndpoint_ReturnsNotFound(t *testing.T) {
 		ProjectID:           *authCtx.ProjectID,
 		Name:                "install page gateway",
 		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:          visibility.Private,
 	})
 	require.NoError(t, err)
 

@@ -383,7 +383,7 @@ const platformMCPGeneratorVersion = "2"
 // line when it pins a new binary, because new checksums always change the
 // rendered bootstrap script. Any other change to hooks generation needs a
 // manual bump, which the Plugin Generate Check CI workflow enforces.
-const hooksGeneratorVersion = "33"
+const hooksGeneratorVersion = "34"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -1795,6 +1795,20 @@ export default {
       })
     }
 
+    // The daemon never reads these history-sized fields (finalMessage/usage
+    // ride the llm_output splice), and an oversized frame is dropped at the
+    // serve loop's size cap — strip them before they reach the pipe. The
+    // canonical shim also strips llm_input.historyMessages; this shim never
+    // subscribes llm_input, so that branch is omitted here.
+    const slimEvent = (hook, event) => {
+      if (event == null || typeof event !== "object") return event
+      if (hook === "agent_end" || hook === "before_agent_run") {
+        const { messages, ...rest } = event
+        return rest
+      }
+      return event
+    }
+
     const sanitizeCtx = (hook, ctx) => {
       if (hook !== "gateway_start" && hook !== "gateway_stop") return ctx
       // Gateway hooks hand plugins the full config including auth secrets;
@@ -1817,7 +1831,8 @@ export default {
 
     for (const hook of HOOKS) {
       const gateTimeoutMs = GATE_TIMEOUT_MS[hook]
-      api.on(hook, (event, ctx) => {
+      api.on(hook, (rawEvent, ctx) => {
+        const event = slimEvent(hook, rawEvent)
         if (hook === "llm_output") {
           const texts = Array.isArray(event?.assistantTexts) ? event.assistantTexts : []
           const key = event?.runId ?? event?.sessionId ?? ""

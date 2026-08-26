@@ -246,7 +246,9 @@ func TestServePublic_MetaEndpoint_ExecuteTool_HostedMember_Dispatches(t *testing
 		Message string `json:"message"`
 	}
 	require.NoError(t, json.Unmarshal(envelope["error"], &rpcErr))
-	require.Equal(t, int(oops.MCPCodeInternalError), rpcErr.Code)
+	// The fixture tool has no server URL, which real execution rejects as
+	// invalid; what matters is that dispatch reached execution at all.
+	require.Equal(t, int(oops.MCPCodeInvalidParams), rpcErr.Code)
 	require.NotContains(t, rpcErr.Message, "unknown server")
 	require.NotContains(t, rpcErr.Message, "tool not found")
 }

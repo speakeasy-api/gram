@@ -841,6 +841,18 @@ type UserSessionResponseBody struct {
 	// ID Metadata Document (CIMD) hosted at this URL, rather than registered via
 	// RFC 7591 DCR. Null for DCR clients and for sessions with no bound client.
 	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
+	// What the client that established this session must present to authenticate:
+	// 'public' (nothing), 'secret' (a client secret), 'key' (an assertion signed
+	// by its published key), or 'misconfigured'. Derived by the same rule the
+	// token endpoint enforces. Null only when the session has no bound client,
+	// which is the case for API key and anonymous subjects; a bound client always
+	// resolves to one of the four.
+	ClientCredentialKind *string `form:"client_credential_kind,omitempty" json:"client_credential_kind,omitempty" xml:"client_credential_kind,omitempty"`
+	// The raw RFC 7591 token_endpoint_auth_method the client declared, for
+	// debugging against the spec. Null both for a session with no bound client and
+	// for a client registered before the value was recorded;
+	// client_credential_kind separates those cases and is what should be displayed.
+	ClientTokenEndpointAuthMethod *string `form:"client_token_endpoint_auth_method,omitempty" json:"client_token_endpoint_auth_method,omitempty" xml:"client_token_endpoint_auth_method,omitempty"`
 	// Subject kind: 'user', 'apikey', or 'anonymous'.
 	SubjectType *string `form:"subject_type,omitempty" json:"subject_type,omitempty" xml:"subject_type,omitempty"`
 	// Resolved human-readable name of the subject, if known.
@@ -2657,6 +2669,11 @@ func ValidateUserSessionResponseBody(body *UserSessionResponseBody) (err error) 
 	}
 	if body.UserSessionClientID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_client_id", *body.UserSessionClientID, goa.FormatUUID))
+	}
+	if body.ClientCredentialKind != nil {
+		if !(*body.ClientCredentialKind == "public" || *body.ClientCredentialKind == "secret" || *body.ClientCredentialKind == "key" || *body.ClientCredentialKind == "misconfigured") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_credential_kind", *body.ClientCredentialKind, []any{"public", "secret", "key", "misconfigured"}))
+		}
 	}
 	if body.RevokedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.revoked_at", *body.RevokedAt, goa.FormatDateTime))

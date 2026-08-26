@@ -64,9 +64,11 @@ func toolsCallRequestFromUserRequest(req *UserRequest) (*ToolsCallRequest, bool)
 	}
 
 	params := &mcp.CallToolParamsRaw{
-		Arguments: nil,
-		Meta:      nil,
-		Name:      "",
+		Arguments:      nil,
+		Meta:           nil,
+		Name:           "",
+		InputResponses: nil,
+		RequestState:   "",
 	}
 	if err := json.Unmarshal(rpcReq.Params, params); err != nil {
 		return nil, false

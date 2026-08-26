@@ -165,8 +165,9 @@ const liveStateCond = "excluded_at IS NULL AND false_positive_at IS NULL"
 //
 // Dedup, always on: the table is a plain append-only MergeTree fed by
 // at-least-once Pub/Sub delivery, so redelivered rows sharing an id are
-// expected; inserted_at DESC in the sort order plus LIMIT 1 BY id keeps the
-// latest-inserted copy. With UniqueMatch the LIMIT BY key widens to
+// expected; latestCopyOrderSQL in the sort order plus LIMIT 1 BY id keeps the
+// winning copy (state-change copies outrank finding copies, latest inserted
+// within a rank). With UniqueMatch the LIMIT BY key widens to
 // (risk_policy_id, rule_id, tenant-fingerprint) keeping the newest occurrence,
 // which subsumes the id dedup (duplicates share the whole key).
 func (q *Queries) ListRiskFindings(ctx context.Context, p ListRiskFindingsParams) ([]RiskFindingListRow, error) {
@@ -207,7 +208,7 @@ func (q *Queries) ListRiskFindings(ctx context.Context, p ListRiskFindingsParams
 	} else if p.NonAssistant {
 		sb = sb.Where("assistant_id = ''")
 	}
-	sb = sb.OrderBy("message_created_at DESC", "id DESC", "inserted_at DESC")
+	sb = sb.OrderBy("message_created_at DESC", "id DESC", latestCopyOrderSQL)
 
 	// cursorCond resumes strictly after a prior page's last row; both branches
 	// below share it so the cursor shape cannot drift between them.
@@ -294,7 +295,7 @@ func (q *Queries) CountRiskFindings(ctx context.Context, p ListRiskFindingsParam
 	if err != nil {
 		return 0, err
 	}
-	inner = inner.OrderBy("inserted_at DESC").Suffix("LIMIT 1 BY id")
+	inner = inner.OrderBy(latestCopyOrderSQL).Suffix("LIMIT 1 BY id")
 	sb := sq.Select("count() AS findings").
 		FromSelect(inner, "latest").
 		Where(liveStateCond)

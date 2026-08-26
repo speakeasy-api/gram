@@ -756,8 +756,6 @@ components:
 tags:
   - name: access
     description: Manage roles, team member access control, and authorization challenge events.
-  - name: admin
-    description: Operations supporting admin tasks, protected by Google workspace auth.
   - name: agent
     description: Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies most of these endpoints (it implies 'agent_user'), so existing installs keep working during the transition. The content-bearing session-portability endpoints — getSessionMeta and createSessionHandoff — refuse it and require a per-user key.
   - name: aiIntegrations
@@ -772,6 +770,8 @@ tags:
     description: Manage assistants and their runtime configuration.
   - name: auditlogs
     description: Manages audit logs in Gram.
+  - name: admin
+    description: Operations supporting admin tasks, protected by Google workspace auth.
   - name: auth
     description: Managed auth for gram producers and dashboard.
   - name: businessMemories

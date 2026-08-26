@@ -17,6 +17,7 @@ import (
 // Client is the "otel" service client.
 type Client struct {
 	LogsEndpoint           goa.Endpoint
+	MetricsEndpoint        goa.Endpoint
 	TracesEndpoint         goa.Endpoint
 	ListEventLogEndpoint   goa.Endpoint
 	GetEventVolumeEndpoint goa.Endpoint
@@ -24,9 +25,10 @@ type Client struct {
 }
 
 // NewClient initializes a "otel" service client given the endpoints.
-func NewClient(logs, traces, listEventLog, getEventVolume, getEventFacets goa.Endpoint) *Client {
+func NewClient(logs, metrics, traces, listEventLog, getEventVolume, getEventFacets goa.Endpoint) *Client {
 	return &Client{
 		LogsEndpoint:           logs,
+		MetricsEndpoint:        metrics,
 		TracesEndpoint:         traces,
 		ListEventLogEndpoint:   listEventLog,
 		GetEventVolumeEndpoint: getEventVolume,
@@ -49,6 +51,24 @@ func NewClient(logs, traces, listEventLog, getEventVolume, getEventFacets goa.En
 //   - error: internal error
 func (c *Client) Logs(ctx context.Context, p *LogsPayload, req io.ReadCloser) (err error) {
 	_, err = c.LogsEndpoint(ctx, &LogsRequestData{Payload: p, Body: req})
+	return
+}
+
+// Metrics calls the "metrics" endpoint of the "otel" service.
+// Metrics may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) Metrics(ctx context.Context, p *MetricsPayload, req io.ReadCloser) (err error) {
+	_, err = c.MetricsEndpoint(ctx, &MetricsRequestData{Payload: p, Body: req})
 	return
 }
 

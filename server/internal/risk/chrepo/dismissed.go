@@ -93,8 +93,9 @@ func dismissedRiskFindingsLatest(p ListDismissedRiskFindingsParams, innerColumns
 		Where("organization_id = ?", p.OrganizationID).
 		Where("project_id = ?", p.ProjectID).
 		// LIMIT BY takes the first row per key in the current order, so
-		// inserted_at DESC makes that the latest copy.
-		OrderBy("inserted_at DESC").
+		// latestCopyOrderSQL makes that the winning copy (state-change copies
+		// outrank finding copies, latest inserted within a rank).
+		OrderBy(latestCopyOrderSQL).
 		Suffix("LIMIT 1 BY id")
 
 	sb := sq.Select(outerColumns...).

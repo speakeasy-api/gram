@@ -25,7 +25,7 @@
     "@clack/prompts": "1.7.0",
     "@datadog/datadog-ci": "^5.22.0",
     "@types/fs-extra": "^11.0.4",
-    "@types/node": "^24.13.2",
+    "@types/node": "^24.13.3",
     "confbox": "^0.2.4",
     "get-port-please": "^3.2.0",
     "oxfmt": "^0.63.0",

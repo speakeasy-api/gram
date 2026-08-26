@@ -8,7 +8,7 @@ import (
 )
 
 type UpdateMCPVisibilityToolInput struct {
-	ProjectSlug     string `json:"project_slug" jsonschema:"explicit AICP project slug that owns the Platform-managed MCP"`
+	ProjectSlug     string `json:"project_slug" jsonschema:"explicit project slug that owns the Platform-managed MCP"`
 	RegistrationID  string `json:"registration_id" jsonschema:"Platform registration ID returned by find_mcp or get_mcp"`
 	MCPID           string `json:"mcp_id" jsonschema:"configured MCP ID returned by find_mcp or get_mcp"`
 	ExpectedVersion string `json:"expected_version" jsonschema:"opaque version returned by find_mcp, get_mcp, or a previous lifecycle update"`
@@ -36,14 +36,14 @@ func registerLifecycleVisibilityTools(reg *Registrar, registrations *Registratio
 	}{
 		{
 			name:        "disable_mcp",
-			title:       "Disable MCP",
-			description: "Disable one complete Platform-managed MCP. The MCP remains registered and every existing plugin attachment remains unchanged; no plugin is created or removed.",
+			title:       "Turn Off an MCP Server",
+			description: "Turn off one fully set-up MCP server, so people stop being able to use it. It stays in the project and every plugin that carries it keeps carrying it; no plugin is created or removed.",
 			call:        registrations.DisableMCP,
 		},
 		{
 			name:        "enable_mcp",
-			title:       "Enable MCP",
-			description: "Re-enable one disabled Platform-managed MCP. The MCP is not attached to any plugin; existing attachments are republished. Connected external callers perform a fresh readiness probe; the managed assistant returns its own persisted readiness evidence because it has no OAuth connection. On an idempotent retry, the result reports current persisted visibility while readiness and publication remain best-effort observations.",
+			title:       "Turn On an MCP Server",
+			description: "Turn one disabled MCP server back on. It is not added to any plugin; the plugins that already carry it are republished, so the people it is shared with get it again. Constraints: connected external callers get a fresh authenticated check, while a managed project assistant returns its own stored evidence instead, because it has no OAuth connection. On an idempotent retry, the result reports current stored visibility while the check and the republish remain best-effort observations.",
 			call:        registrations.EnableMCP,
 		},
 	} {
@@ -70,8 +70,8 @@ func registerLifecycleVisibilityTools(reg *Registrar, registrations *Registratio
 
 func registerUnavailableLifecycleVisibilityTools(reg *Registrar) {
 	for _, tool := range []struct{ name, title, description string }{
-		{"disable_mcp", "Disable MCP", "Disable one Platform-managed MCP. Visibility controls are not available in the current preview."},
-		{"enable_mcp", "Enable MCP", "Enable one Platform-managed MCP. Visibility controls are not available in the current preview."},
+		{"disable_mcp", "Turn Off an MCP Server", "Turn off one MCP server. This is not switched on for your organization yet."},
+		{"enable_mcp", "Turn On an MCP Server", "Turn one MCP server back on. This is not switched on for your organization yet."},
 	} {
 		addTool(reg, &mcp.Tool{Name: tool.name, Title: tool.title, Description: tool.description}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("mcp_lifecycle_visibility"))
 	}

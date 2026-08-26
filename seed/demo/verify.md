@@ -64,6 +64,17 @@ where a value is expected.
    count of 0 (a newly-emerged signal); top users render as
    `*@demo.getgram.ai` emails, not raw ids.
 
+10. **MCP connections** — on the **Acme Partner Gateway** server's _Clients and
+    Sessions_ tab, five registered agents and five connections. Grouped by
+    **Agent**: `Partner Reconciliation Agent` carries a green
+    **Key-authenticated** badge, `Vendor Sync (misconfigured)` a red **Cannot
+    authenticate** one, and the remaining three carry none (a missing badge on
+    the first two means the credential columns did not land). `Acme Legacy
+Connector` appears under **Inactive** with no connections. Its row menu's
+    **View registration** opens the detail sheet with an **Authentication**
+    field. The organization **MCP Sessions** page shows the same five
+    connections and the same two badges.
+
 ## On failure
 
 Fix the seed SQL (see rules in `PAGES.md`), re-run `mise run seed:demo`,

@@ -96,6 +96,7 @@ func seedPrivateToolsetWithIssuer(
 
 	issuer, err := usersessions_repo.New(ti.conn).CreateUserSessionIssuer(ctx, usersessions_repo.CreateUserSessionIssuerParams{
 		ProjectID:          *authCtx.ProjectID,
+		OrganizationID:     conv.ToPGText(authCtx.ActiveOrganizationID),
 		Slug:               slug + "-issuer",
 		AuthnChallengeMode: "chain",
 		SessionDuration:    pgtype.Interval{Microseconds: 3600 * 1e6, Valid: true},

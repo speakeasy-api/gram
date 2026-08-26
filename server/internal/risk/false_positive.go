@@ -2,21 +2,22 @@ package risk
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
-	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 	"github.com/speakeasy-api/gram/server/gen/types"
-	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/outbox"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
@@ -31,7 +32,8 @@ const maxFalsePositiveBatch = 500
 
 // parseResultIDs converts the payload's result_ids strings to uuid.UUID,
 // rejecting the request if any entry is malformed or the batch exceeds
-// maxFalsePositiveBatch.
+// maxFalsePositiveBatch. Duplicates are dropped so the returned slice is a
+// set and every id counts once toward the UPDATE and the mirror.
 func parseResultIDs(raw []string) ([]uuid.UUID, error) {
 	if len(raw) == 0 {
 		return nil, oops.E(oops.CodeInvalid, nil, "result_ids must not be empty")
@@ -40,11 +42,16 @@ func parseResultIDs(raw []string) ([]uuid.UUID, error) {
 		return nil, oops.E(oops.CodeInvalid, nil, "too many result_ids (max %d)", maxFalsePositiveBatch)
 	}
 	ids := make([]uuid.UUID, 0, len(raw))
+	seen := make(map[uuid.UUID]struct{}, len(raw))
 	for _, r := range raw {
 		id, err := uuid.Parse(r)
 		if err != nil {
 			return nil, oops.E(oops.CodeInvalid, err, "invalid result id %q", r)
 		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
 		ids = append(ids, id)
 	}
 	return ids, nil
@@ -93,11 +100,13 @@ func (s *Service) MarkRiskResultsFalsePositive(ctx context.Context, payload *gen
 		}
 	}
 
+	if err := enqueueFalsePositiveMirror(ctx, dbtx, authCtx.ActiveOrganizationID, marked); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "record dismissal in the findings store").LogError(ctx, s.logger)
+	}
+
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit mark risk results false positive").LogError(ctx, s.logger)
 	}
-
-	s.mirrorFalsePositiveToClickHouse(ctx, marked)
 
 	return nil
 }
@@ -144,56 +153,69 @@ func (s *Service) UnmarkRiskResultsFalsePositive(ctx context.Context, payload *g
 		}
 	}
 
+	if err := enqueueFalsePositiveMirror(ctx, dbtx, authCtx.ActiveOrganizationID, restored); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "record restore in the findings store").LogError(ctx, s.logger)
+	}
+
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit unmark risk results false positive").LogError(ctx, s.logger)
 	}
 
-	s.mirrorFalsePositiveToClickHouse(ctx, restored)
-
 	return nil
 }
 
-// mirrorFalsePositiveToClickHouse republishes each affected result onto the
-// shared findings topic (the same one scanners publish to) so
-// FindingCHWriter appends a fresh risk_findings row recording the result's
-// new suppression state — set for a mark, cleared for an unmark, read
-// straight off the row the UPDATE ... RETURNING already gave us. The mark
-// state is published twice over during the suppression convergence:
-// excluded_at/excluded_reason=manual/excluded_detail are the converged
-// fields, false_positive_at the legacy one the read paths still filter on.
-// Best-effort and detached from the request: Postgres already committed and
-// remains the source of truth, so a publish failure here only delays when
-// the change is reflected in ClickHouse-backed reads, never the RPC.
-func (s *Service) mirrorFalsePositiveToClickHouse(ctx context.Context, rows []repo.RiskResult) {
-	if s.findingsPub == nil || len(rows) == 0 {
-		return
+// enqueueFalsePositiveMirror appends each state change to the transactional
+// outbox using the caller's transaction: the relay publishes the same
+// riskv1.Finding message the scanners produce onto the shared findings topic,
+// where FindingCHWriter appends a fresh risk_findings row recording the
+// result's new suppression state — set for a mark, cleared for an unmark. The
+// mark state is published twice over during the suppression convergence:
+// excluded_at/excluded_reason=manual/excluded_detail are the converged fields,
+// false_positive_at the legacy one the read paths still filter on.
+// Enqueued-at-commit rather than published post-commit, so the mirror is
+// atomic with the Postgres state change: no publish step remains that can fail
+// after the caller has been told the change happened, and a retried RPC whose
+// UPDATE matches nothing has nothing to repair — the original request either
+// committed (mirror durably enqueued) or changed nothing at all.
+func enqueueFalsePositiveMirror(ctx context.Context, dbtx pgx.Tx, orgID string, rows []repo.RiskResult) error {
+	if len(rows) == 0 {
+		return nil
 	}
 
-	detached := context.WithoutCancel(ctx)
-	go func() {
-		results := make([]gcp.PublishResult, 0, len(rows))
-		for _, row := range rows {
-			results = append(results, s.findingsPub.Publish(detached, fpMirrorMessage(row)))
+	msgs := make([]outbox.Message, 0, len(rows))
+	for _, row := range rows {
+		// A row carrying an exclusion stamp is suppressed by the exclusion
+		// pipeline, which owns its ClickHouse identity: mirroring a manual
+		// suppression (or an unsuppression) over it would overwrite the rule
+		// suppression at read time, resurfacing or re-labeling a finding the
+		// exclusion still covers. Postgres keeps the mark either way.
+		if row.ExcludedAt.Valid {
+			continue
 		}
-
-		for _, res := range results {
-			waitCtx, cancel := context.WithTimeout(detached, 10*time.Second)
-			_, err := res.Get(waitCtx)
-			cancel()
-			if err != nil {
-				s.logger.ErrorContext(detached, "failed to mirror false positive state to clickhouse", attr.SlogError(err))
-			}
-		}
-	}()
+		msgs = append(msgs, outbox.Message{
+			Proto:      fpMirrorMessage(row),
+			PublicID:   uuid.Nil,
+			Attributes: nil,
+		})
+	}
+	if len(msgs) == 0 {
+		return nil
+	}
+	if _, err := outbox.PublishBatch(ctx, dbtx, orgID, msgs); err != nil {
+		return fmt.Errorf("enqueue suppression state change: %w", err)
+	}
+	return nil
 }
 
-// fpMirrorMessage renders one UPDATE ... RETURNING row as the finding message
-// the mirror republishes. falsePositiveAt doubles as the converged
+// fpMirrorMessage renders one risk_results row as the finding message the
+// mirror republishes. falsePositiveAt doubles as the converged
 // excluded_at: same timestamp on a mark (with excluded_reason=manual and the
 // user-supplied reason as excluded_detail), all empty on an unmark. An unmark
 // republish deliberately carries no excluded state so the CH writer re-runs
 // its exclusion check and re-stamps rule suppression when an active exclusion
-// still matches, instead of resurfacing the finding.
+// still matches, instead of resurfacing the finding. The event kind marks the
+// message as a state change either way, so read-time dedup ranks it above the
+// finding's scanner copies and a redelivered scanner row cannot undo it.
 func fpMirrorMessage(row repo.RiskResult) *riskv1.Finding {
 	id := row.ID.String()
 	projectID := row.ProjectID.String()
@@ -206,7 +228,9 @@ func fpMirrorMessage(row repo.RiskResult) *riskv1.Finding {
 	var falsePositiveAt string
 	excludedReason := ""
 	excludedDetail := ""
+	eventKind := chrepo.EventKindUnsuppression
 	if row.FalsePositiveAt.Valid {
+		eventKind = chrepo.EventKindSuppression
 		// RFC3339Nano, not RFC3339: the plain layout truncates
 		// clock_timestamp()'s fractional seconds, and the DateTime64(9)
 		// columns this lands in can hold the full precision. The writer's
@@ -240,6 +264,7 @@ func fpMirrorMessage(row repo.RiskResult) *riskv1.Finding {
 		ExcludedReason:    &excludedReason,
 		ExcludedDetail:    &excludedDetail,
 		Surface:           &surface,
+		EventKind:         &eventKind,
 	}.Build()
 }
 

@@ -24,6 +24,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -85,12 +86,16 @@ func seedFreshIssuerToolset(t *testing.T, ctx context.Context, ti *testInstance)
 func allowCustomCimdURL(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsets_repo.Toolset, clientID string) {
 	t.Helper()
 
-	_, err := usersessions_repo.New(ti.conn).CreateUserSessionIssuerCimdClient(ctx, usersessions_repo.CreateUserSessionIssuerCimdClientParams{
+	row, err := usersessions_repo.New(ti.conn).CreateUserSessionIssuerCimdClient(ctx, usersessions_repo.CreateUserSessionIssuerCimdClientParams{
 		ProjectID:           toolset.ProjectID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
 		ClientIDMetadataUri: clientID,
 	})
 	require.NoError(t, err)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.Equal(t, authCtx.ActiveOrganizationID, row.OrganizationID.String, "the grant must inherit its issuer's organization")
 }
 
 // revokeCustomCimdURL soft-deletes an issuer's custom CIMD URL, the

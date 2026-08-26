@@ -346,6 +346,60 @@ func TestListRiskResults_ClickHouseUniqueMatchPagination(t *testing.T) {
 // copy, let the stale live copy win the dedup, and retro-hidden findings
 // would keep showing on the list while overview and signals already hide
 // them.
+// TestListRiskResults_ClickHouseRedeliveryCannotUndoDismissal pins the
+// event-kind ranking end to end: after a manual dismissal appends its
+// suppression copy, a redelivered scanner copy of the same finding lands with
+// a fresher inserted_at but must not win the per-id dedup — the finding stays
+// off the live listing and on the Dismissed tab.
+func TestListRiskResults_ClickHouseRedeliveryCannotUndoDismissal(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ti.flags.SetFlag(feature.FlagRiskListFromClickHouse, authCtx.ActiveOrganizationID, true)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("List CH Redelivery")})
+	require.NoError(t, err)
+
+	base := time.Now().UTC().AddDate(0, 0, -7).Truncate(time.Hour)
+	createdAt := base.Add(4 * time.Hour)
+	chatID, msgID := seedChatWithUser(t, ti, projectID, orgID, "alice@example.com")
+
+	finding := chListFinding(t, projectID, orgID, chatID, msgID, policy.ID, createdAt, base.Add(time.Hour), "gitleaks", "secret.github_pat", "alice@example.com", "<redacted len=7 sha=aaaaaaaa>", "fp-1", "")
+	finding.EventKind = chrepo.EventKindFinding
+	chQueries := chrepo.New(ti.chConn)
+	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{finding}))
+
+	// The manual dismissal appends its suppression copy.
+	suppressed := finding
+	dismissedAt := createdAt.Add(time.Minute)
+	suppressed.ExcludedAt = &dismissedAt
+	suppressed.FalsePositiveAt = &dismissedAt
+	suppressed.ExcludedReason = chrepo.ExcludedReasonManual
+	suppressed.EventKind = chrepo.EventKindSuppression
+	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{suppressed}))
+
+	// The redelivered scanner copy: same id, fresher inserted_at, no
+	// suppression stamps.
+	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{finding}))
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	page, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{})
+	require.NoError(t, err)
+	require.Empty(t, page.Results, "the suppression copy outranks the redelivered scanner copy")
+	require.Zero(t, page.TotalCount)
+
+	dismissed, err := ti.service.ListDismissedRiskResults(ctx, &gen.ListDismissedRiskResultsPayload{})
+	require.NoError(t, err)
+	require.Len(t, dismissed.Results, 1)
+	require.Equal(t, finding.ID.String(), dismissed.Results[0].ID)
+}
+
 func TestListRiskResults_ClickHouseRetroFlagCopies(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)

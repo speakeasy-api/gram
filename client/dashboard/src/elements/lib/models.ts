@@ -33,6 +33,7 @@ export const MODELS = [
   "x-ai/grok-4.20",
   "qwen/qwen3.7-max",
   "qwen/qwen3-coder",
+  "z-ai/glm-5.3-flash",
   "moonshotai/kimi-k2.6",
   "moonshotai/kimi-k2.5",
   "mistralai/mistral-medium-3-5",

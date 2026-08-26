@@ -102,3 +102,79 @@ func TestBuildUserSessionView_AnonymousHasNoName(t *testing.T) {
 	require.Equal(t, "anonymous", got.SubjectType)
 	require.Nil(t, got.SubjectDisplayName)
 }
+
+func TestBuildUserSessionView_ResolvesClientCredentialKind(t *testing.T) {
+	t.Parallel()
+
+	row := repo.ListUserSessionsByProjectIDRow{
+		ID:                            uuid.New(),
+		UserSessionIssuerID:           uuid.New(),
+		UserSessionClientID:           uuid.NullUUID{UUID: uuid.New(), Valid: true},
+		SubjectUrn:                    urn.NewUserSubject("user-123"),
+		Jti:                           "jti-1",
+		RefreshExpiresAt:              ts(time.Now()),
+		ExpiresAt:                     ts(time.Now()),
+		CreatedAt:                     ts(time.Now()),
+		UpdatedAt:                     ts(time.Now()),
+		IssuerSlug:                    "my-issuer",
+		ClientTokenEndpointAuthMethod: pgtype.Text{String: "private_key_jwt", Valid: true},
+		ClientHasSecret:               false,
+	}
+
+	got := BuildUserSessionView(row, nil)
+
+	require.NotNil(t, got.ClientCredentialKind)
+	require.Equal(t, "key", *got.ClientCredentialKind)
+	require.NotNil(t, got.ClientTokenEndpointAuthMethod)
+	require.Equal(t, "private_key_jwt", *got.ClientTokenEndpointAuthMethod)
+}
+
+// A client that predates the token_endpoint_auth_method column still resolves
+// to a kind, off the secret it stores. Reporting it as unknown would tell an
+// operator less than the token endpoint already knows.
+func TestBuildUserSessionView_LegacyClientResolvesOffStoredSecret(t *testing.T) {
+	t.Parallel()
+
+	row := repo.ListUserSessionsByProjectIDRow{
+		ID:                  uuid.New(),
+		UserSessionIssuerID: uuid.New(),
+		UserSessionClientID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
+		SubjectUrn:          urn.NewUserSubject("user-123"),
+		Jti:                 "jti-1",
+		RefreshExpiresAt:    ts(time.Now()),
+		ExpiresAt:           ts(time.Now()),
+		CreatedAt:           ts(time.Now()),
+		UpdatedAt:           ts(time.Now()),
+		IssuerSlug:          "my-issuer",
+		ClientHasSecret:     true,
+	}
+
+	got := BuildUserSessionView(row, nil)
+
+	require.NotNil(t, got.ClientCredentialKind)
+	require.Equal(t, "secret", *got.ClientCredentialKind)
+	require.Nil(t, got.ClientTokenEndpointAuthMethod, "a row that declared nothing must not report a declared method")
+}
+
+// The join that lifts the client columns is a LEFT JOIN, so an unbound session
+// reads exactly like a legacy client row. Neither field may be reported.
+func TestBuildUserSessionView_NoBoundClientReportsNoCredentialFields(t *testing.T) {
+	t.Parallel()
+
+	row := repo.ListUserSessionsByProjectIDRow{
+		ID:                  uuid.New(),
+		UserSessionIssuerID: uuid.New(),
+		SubjectUrn:          urn.NewAPIKeySubject(uuid.New()),
+		Jti:                 "jti-1",
+		RefreshExpiresAt:    ts(time.Now()),
+		ExpiresAt:           ts(time.Now()),
+		CreatedAt:           ts(time.Now()),
+		UpdatedAt:           ts(time.Now()),
+		IssuerSlug:          "my-issuer",
+	}
+
+	got := BuildUserSessionView(row, nil)
+
+	require.Nil(t, got.ClientCredentialKind)
+	require.Nil(t, got.ClientTokenEndpointAuthMethod)
+}

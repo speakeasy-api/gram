@@ -16,6 +16,7 @@ func BuildMetaMcpServerView(server repo.MetaMcpServer) *types.MetaMcpServer {
 		ProjectID:           server.ProjectID.String(),
 		Name:                server.Name,
 		UserSessionIssuerID: conv.FromNullableUUID(server.UserSessionIssuerID),
+		Visibility:          types.MetaMcpServerVisibility(server.Visibility),
 		CreatedAt:           conv.FromPGTimestamptz(server.CreatedAt),
 		UpdatedAt:           conv.FromPGTimestamptz(server.UpdatedAt),
 	}

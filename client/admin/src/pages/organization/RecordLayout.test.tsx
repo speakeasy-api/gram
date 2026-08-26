@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   getOrganization: vi.fn(),
   listOrganizationProjects: vi.fn(),
   listOrganizationMembers: vi.fn(),
+  listOrganizationActivity: vi.fn(),
   enableOrganization: vi.fn(),
 }));
 
@@ -26,6 +27,7 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
     getOrganization: mocks.getOrganization,
     listOrganizationProjects: mocks.listOrganizationProjects,
     listOrganizationMembers: mocks.listOrganizationMembers,
+    listOrganizationActivity: mocks.listOrganizationActivity,
     enableOrganization: mocks.enableOrganization,
   };
 });
@@ -50,6 +52,8 @@ beforeEach(() => {
   mocks.listOrganizationProjects.mockResolvedValue({ projects: [] });
   mocks.listOrganizationMembers.mockReset();
   mocks.listOrganizationMembers.mockResolvedValue({ members: [] });
+  mocks.listOrganizationActivity.mockReset();
+  mocks.listOrganizationActivity.mockResolvedValue({ logs: [] });
   mocks.enableOrganization.mockReset();
 });
 
@@ -79,6 +83,32 @@ describe("RecordLayout", () => {
     expect(await screen.findByRole("heading", { name: ORG.name })).toBeTruthy();
   });
 
+  it("keeps record context around the activity view and requests by explicit ID", async () => {
+    mocks.listOrganizationActivity.mockImplementation(
+      (organizationID: string) =>
+        organizationID === ORG.id
+          ? Promise.resolve({ logs: [] })
+          : Promise.reject(
+              new Error(`unexpected organization ${organizationID}`),
+            ),
+    );
+
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}/activity`,
+    });
+
+    expect(await screen.findByRole("heading", { name: ORG.name })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Activity" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: /Open in Dashboard/ }),
+    ).toBeTruthy();
+    expect(mocks.listOrganizationActivity).toHaveBeenCalledTimes(1);
+    expect(mocks.listOrganizationActivity).toHaveBeenCalledWith(
+      ORG.id,
+      undefined,
+    );
+  });
+
   it("renders the record name on every view, not only the index", async () => {
     await renderRouteTree(routeTree, {
       initialPath: `/organizations/${ORG.slug}/members`,
@@ -90,7 +120,7 @@ describe("RecordLayout", () => {
   // The claim that the header and the callout are record chrome rather than
   // part of Overview. Without it, putting both inside `Overview.tsx` passes
   // every other test in this file.
-  it.each(["", "/projects", "/members"])(
+  it.each(["", "/activity", "/projects", "/members"])(
     "renders the header and the callout above the view at %s",
     async (view) => {
       mocks.getOrganization.mockResolvedValue(TRIALLING);

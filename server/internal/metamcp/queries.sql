@@ -14,13 +14,15 @@ INSERT INTO meta_mcp_servers (
     organization_id,
     project_id,
     name,
-    user_session_issuer_id
+    user_session_issuer_id,
+    visibility
 )
 VALUES (
     @organization_id,
     @project_id,
     @name,
-    sqlc.narg('user_session_issuer_id')
+    sqlc.narg('user_session_issuer_id'),
+    @visibility
 )
 RETURNING *;
 
@@ -60,10 +62,13 @@ WHERE organization_id = @organization_id
 ORDER BY created_at DESC, id DESC;
 
 -- name: UpdateMetaMCPServer :one
--- Full-record replace: a null user_session_issuer_id clears the reference.
+-- Full-record replace: a null user_session_issuer_id clears the reference. A
+-- null visibility preserves the stored value so callers that do not manage
+-- visibility cannot re-enable a disabled gateway.
 UPDATE meta_mcp_servers
 SET name = @name,
     user_session_issuer_id = sqlc.narg('user_session_issuer_id'),
+    visibility = COALESCE(sqlc.narg('visibility'), visibility),
     updated_at = clock_timestamp()
 WHERE id = @id
   AND organization_id = @organization_id
@@ -261,3 +266,34 @@ WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE
 RETURNING *;
+
+-- name: ListMetaMCPMembersForRemoteSessionIssuer :many
+-- The meta MCP's remote-backed members that authenticate against a given
+-- authorization server, filtered exactly as ListServableMetaMCPMembers so a
+-- member invisible to the serving path cannot claim a credential either.
+--
+-- A client names exactly one remote_session_issuer, so matching it against the
+-- member's own is the whole lookup; the caller still fails closed on none or
+-- several, since a grant records one resource.
+--
+-- Joins remote_mcp_servers rather than reading a URL off mcp_servers, which also
+-- excludes tunneled, hosted, and unproxied members: none has an upstream URL.
+SELECT
+    s.id AS mcp_server_id,
+    s.visibility AS mcp_server_visibility,
+    r.url AS upstream_url
+FROM meta_mcp_server_members m
+JOIN mcp_servers s
+  ON s.id = m.mcp_server_id
+ AND s.project_id = m.project_id
+ AND s.deleted IS FALSE
+ AND s.visibility <> 'disabled'
+JOIN remote_mcp_servers r
+  ON r.id = s.remote_mcp_server_id
+ AND r.project_id = m.project_id
+ AND r.deleted IS FALSE
+WHERE m.meta_mcp_server_id = @meta_mcp_server_id
+  AND m.project_id = @project_id
+  AND m.deleted IS FALSE
+  AND s.remote_session_issuer_id = @remote_session_issuer_id
+ORDER BY m.sort_order, m.created_at, m.id;
