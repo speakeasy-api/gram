@@ -84,11 +84,6 @@ function computeChangedFields(before: unknown, after: unknown): ChangedField[] {
 
 function formatChangedValue(value: unknown): string {
   if (value === undefined) return "(none)";
-  if (value === null) return "null";
-  if (typeof value === "string") return value;
-  if (typeof value === "boolean" || typeof value === "number") {
-    return String(value);
-  }
   return JSON.stringify(value);
 }
 

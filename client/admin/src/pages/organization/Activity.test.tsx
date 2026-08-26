@@ -168,14 +168,14 @@ describe("Activity", () => {
       "zeta",
     ]);
     expect(within(rows[4]!).getByText("zeta").className).toContain("w-[140px]");
-    expect(within(rows[4]!).getByText("before").className).toContain(
+    expect(within(rows[4]!).getByText('"before"').className).toContain(
       "line-through",
     );
-    expect(within(rows[4]!).getByText("before").className).toContain(
+    expect(within(rows[4]!).getByText('"before"').className).toContain(
       "bg-red-50",
     );
     expect(within(rows[4]!).getByText("→")).toBeTruthy();
-    expect(within(rows[4]!).getByText("after").className).toContain(
+    expect(within(rows[4]!).getByText('"after"').className).toContain(
       "bg-emerald-50",
     );
     expect(rows[0]?.textContent).toBe("added(none)→true");
@@ -183,7 +183,45 @@ describe("Activity", () => {
     expect(rows[2]?.textContent).toBe(
       'complex{"nested":["old"]}→{"nested":["new"]}',
     );
-    expect(rows[3]?.textContent).toBe("removedgone→(none)");
+    expect(rows[3]?.textContent).toBe('removed"gone"→(none)');
+  });
+
+  it("renders an empty string as a visible JSON string in a changed field", async () => {
+    mocks.listOrganizationActivity.mockResolvedValue({
+      logs: [
+        anActivityLog({
+          before_snapshot: { value: "before" },
+          after_snapshot: { value: "" },
+        }),
+      ],
+    });
+
+    await renderWithApp(<Activity org={ORG} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Show diff ▾" }));
+
+    const changedField = within(
+      screen.getByRole("region", { name: "Changed fields" }),
+    ).getByRole("listitem");
+    expect(changedField.textContent).toBe('value"before"→""');
+  });
+
+  it("distinguishes a primitive from its string representation", async () => {
+    mocks.listOrganizationActivity.mockResolvedValue({
+      logs: [
+        anActivityLog({
+          before_snapshot: { value: true },
+          after_snapshot: { value: "true" },
+        }),
+      ],
+    });
+
+    await renderWithApp(<Activity org={ORG} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Show diff ▾" }));
+
+    const changedField = within(
+      screen.getByRole("region", { name: "Changed fields" }),
+    ).getByRole("listitem");
+    expect(changedField.textContent).toBe('valuetrue→"true"');
   });
 
   it("switches between structured and raw before/after snapshots", async () => {
