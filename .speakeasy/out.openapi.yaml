@@ -53626,6 +53626,115 @@ paths:
       x-speakeasy-name-override: listToolFilters
       x-speakeasy-react-hook:
         name: ListToolsetToolFilters
+  /rpc/toolsets.listToolSchemaStaticValues:
+    get:
+      description: 'List every const, default, enum, example, and examples value in each tool input schema. The result is deliberately mechanical: clients decide how to present or interpret the values. This supports reviewing the exact schema contents before changing how a toolset is shared.'
+      operationId: listToolsetToolSchemaStaticValues
+      parameters:
+        - allowEmptyValue: true
+          description: The slug of the toolset
+          in: query
+          name: slug
+          required: true
+          schema:
+            description: A short url-friendly label that uniquely identifies a resource.
+            maxLength: 40
+            pattern: ^[a-z0-9_-]{1,128}$
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListToolSchemaStaticValuesResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: listToolSchemaStaticValues toolsets
+      tags:
+        - toolsets
+      x-speakeasy-name-override: listToolSchemaStaticValues
+      x-speakeasy-react-hook:
+        name: ListToolSchemaStaticValues
   /rpc/toolsets.removeOAuthServer:
     post:
       description: Remove OAuth server association from a toolset
@@ -71440,6 +71549,16 @@ components:
       description: Result type for listing tool metadata
       required:
         - tools
+    ListToolSchemaStaticValuesResult:
+      type: object
+      properties:
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolSchemaStaticValues'
+          description: Per-tool static values for tools whose input schemas contain at least one matching keyword
+      required:
+        - tools
     ListToolUsageTracesPayload:
       type: object
       properties:
@@ -81583,6 +81702,42 @@ components:
         - failure_count
         - avg_latency_ms
         - failure_rate
+    ToolSchemaStaticValue:
+      type: object
+      properties:
+        keyword:
+          type: string
+          description: The JSON Schema keyword containing the value
+        schema_path:
+          type: string
+          description: JSON Pointer to the schema object containing the keyword
+        value_json:
+          type: string
+          description: JSON-encoded literal value, preserving null and number precision
+      description: A literal value carried by a JSON Schema keyword.
+      required:
+        - schema_path
+        - keyword
+        - value_json
+    ToolSchemaStaticValues:
+      type: object
+      properties:
+        tool_name:
+          type: string
+          description: The tool name
+        tool_urn:
+          type: string
+          description: The tool URN
+        values:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolSchemaStaticValue'
+          description: Static values in the tool input schema
+      description: Static values found in one tool input schema.
+      required:
+        - tool_urn
+        - tool_name
+        - values
     ToolUsage:
       type: object
       properties:
