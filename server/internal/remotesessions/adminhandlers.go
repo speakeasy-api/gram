@@ -837,7 +837,11 @@ func (s *Service) MigrateToGlobalIssuer(ctx context.Context, payload *adminrsgen
 	}
 
 	// The source now has no active clients, so the delete guard that the
-	// tenant-facing deletes apply is satisfied by construction.
+	// tenant-facing deletes apply is satisfied by construction. Nothing can add
+	// one back before the commit either: validateNewClientIssuers takes the
+	// source issuer's client-binding lock — the one held here — before it so
+	// much as reads the issuer, so a racing create either 404s on the tombstone
+	// or is still waiting.
 	deleted, err := txRepo.DeleteTenantRemoteSessionIssuer(ctx, source.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "soft-delete migrated remote session issuer").LogError(ctx, logger)

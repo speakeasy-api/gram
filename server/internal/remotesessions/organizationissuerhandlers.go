@@ -1052,7 +1052,11 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orgissuersgen.Migr
 	}
 
 	// The source now has no active clients, so the delete guard that
-	// DeleteIssuer applies is satisfied by construction.
+	// DeleteIssuer applies is satisfied by construction. Nothing can add one
+	// back before the commit either: validateNewClientIssuers takes the source
+	// issuer's client-binding lock — the one held here — before it so much as
+	// reads the issuer, so a racing create either 404s on the tombstone or is
+	// still waiting.
 	deleted, err := txRepo.DeleteOrganizationRemoteSessionIssuer(ctx, repo.DeleteOrganizationRemoteSessionIssuerParams{
 		ID:             source.ID,
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),

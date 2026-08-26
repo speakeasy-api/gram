@@ -3,6 +3,7 @@ package remotesessions
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -342,14 +343,23 @@ func resolveIssuerOrganizationID(ctx context.Context, r *repo.Queries, issuer re
 }
 
 // prepareIssuerMigrationResync reads the user session issuers a re-point will
-// change the derivation of, and takes their derivation locks.
+// change the derivation of, and takes their derivation locks. It is the first
+// of two halves; extendIssuerMigrationResync is the second and is not optional.
 //
 // Both steps must happen before lockIssuersForMigration: every other writer
 // takes the derivation lock before the remote-issuer one, so a migration that
 // took them the other way round would deadlock against a concurrent client
-// create or attach. Reading the set that early means a binding added in the
-// window between this read and the re-point is not covered here — the writer
-// that adds it holds the same derivation lock and recomputes it itself.
+// create or attach.
+//
+// Reading the set this early leaves a window. A client create or attach that
+// binds a user session issuer U to a client on the source, and commits between
+// this read and lockIssuersForMigration, is not in the set: it takes U's
+// derivation lock (free, U is not in the set) and the source's client-binding
+// lock (also free, the migration has not reached it), recomputes U to the
+// source — which is still what the client points at — and commits. The
+// re-point that follows moves that client to the target without recomputing U,
+// so U's servers keep naming a source that is then soft-deleted, and stop
+// resolving. extendIssuerMigrationResync closes exactly that window.
 func prepareIssuerMigrationResync(ctx context.Context, tx repo.DBTX, r *repo.Queries, sourceID uuid.UUID, organizationID string) ([]uuid.UUID, error) {
 	affected, err := r.ListUserSessionIssuersBoundToRemoteIssuer(ctx, repo.ListUserSessionIssuersBoundToRemoteIssuerParams{
 		RemoteSessionIssuerID: sourceID,
@@ -364,6 +374,67 @@ func prepareIssuerMigrationResync(ctx context.Context, tx repo.DBTX, r *repo.Que
 	}
 
 	return affected, nil
+}
+
+// errIssuerMigrationContended reports that a user session issuer appeared in
+// the window and its derivation lock is held elsewhere, so this migration
+// cannot cover it without waiting out of order. The handlers map it to a
+// retryable conflict.
+var errIssuerMigrationContended = errors.New("a client binding on the source issuer changed while the migration was starting")
+
+// extendIssuerMigrationResync re-reads the affected set now that the source
+// issuer's client-binding lock is held, and returns it unioned with what
+// prepareIssuerMigrationResync already locked.
+//
+// The re-read is complete and stays complete. Every path that binds a user
+// session issuer to a client on an issuer takes that issuer's client-binding
+// lock first — guardSingleClientPerRemoteIssuer on the attach paths,
+// validateNewClientIssuers unconditionally on the create paths, and the
+// platform catalog and local fixture attachments explicitly — so while the
+// migration holds the source's lock no further binding on it can commit, and
+// anything that committed inside the window has committed by definition: it
+// held the same lock the migration now holds.
+//
+// The newly-visible ids are locked with the try-form. Blocking on them would
+// invert the global lock order — every other writer takes a derivation lock
+// and then waits on the client-binding lock this transaction is holding — and
+// Postgres would resolve that as a deadlock rather than a wait. Failing the
+// migration instead is honest and cheap: it is an admin operation, the
+// contention window is the few statements between one writer's commit and the
+// next's derivation lock, and the retry starts from a read that already
+// includes the new binding.
+func extendIssuerMigrationResync(ctx context.Context, tx repo.DBTX, r *repo.Queries, sourceID uuid.UUID, organizationID string, locked []uuid.UUID) ([]uuid.UUID, error) {
+	current, err := r.ListUserSessionIssuersBoundToRemoteIssuer(ctx, repo.ListUserSessionIssuersBoundToRemoteIssuerParams{
+		RemoteSessionIssuerID: sourceID,
+		OrganizationID:        organizationID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("re-read user session issuers bound to source issuer: %w", err)
+	}
+
+	var added []uuid.UUID
+	for _, id := range current {
+		if !slices.Contains(locked, id) {
+			added = append(added, id)
+		}
+	}
+
+	if len(added) > 0 {
+		acquired, err := TryLockUserSessionIssuersForRemoteIssuerDerivation(ctx, tx, added)
+		if err != nil {
+			return nil, err
+		}
+		if !acquired {
+			return nil, errIssuerMigrationContended
+		}
+	}
+
+	// The union rather than the re-read alone: an id whose only binding on the
+	// source was detached inside the window is no longer in current, but its
+	// lock is held and recomputing it is a no-op when the detacher already did.
+	union := slices.Concat(locked, added)
+	slices.SortFunc(union, func(a, b uuid.UUID) int { return bytes.Compare(a[:], b[:]) })
+	return slices.Compact(union), nil
 }
 
 // runIssuerMigration applies the guards every migration shares and then
@@ -385,7 +456,20 @@ func prepareIssuerMigrationResync(ctx context.Context, tx repo.DBTX, r *repo.Que
 // prepareIssuerMigrationResync, which supplies affectedUserIssuerIDs and holds
 // their derivation locks; organizationID bounds the resync to the one
 // organization a tenant source issuer can belong to.
+//
+// The second half of that resync preparation happens here rather than in each
+// surface, because it can only run once lockIssuersForMigration has returned
+// and a surface that forgot it would look correct in every test that does not
+// race.
 func runIssuerMigration(ctx context.Context, tx repo.DBTX, r *repo.Queries, logger *slog.Logger, source, target repo.RemoteSessionIssuer, organizationID string, affectedUserIssuerIDs []uuid.UUID) (int64, error) {
+	affectedUserIssuerIDs, err := extendIssuerMigrationResync(ctx, tx, r, source.ID, organizationID, affectedUserIssuerIDs)
+	switch {
+	case errors.Is(err, errIssuerMigrationContended):
+		return 0, oops.E(oops.CodeConflict, err, "a client binding on the source issuer changed while the migration was starting; retry").LogError(ctx, logger)
+	case err != nil:
+		return 0, oops.E(oops.CodeUnexpected, err, "extend issuer migration resync").LogError(ctx, logger)
+	}
+
 	preflight, err := buildMigratePreflight(ctx, r, source, target)
 	if err != nil {
 		return 0, oops.E(oops.CodeUnexpected, err, "build remote session issuer migrate preflight").LogError(ctx, logger)

@@ -832,18 +832,20 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 	// Read the bindings before anything removes them: this path, unlike the
 	// organization and platform deletes, purges the attachments outright, so
 	// afterwards there is nothing left to derive the affected servers' issuer
-	// from. Read them unscoped, matching the two sibling delete handlers: the
-	// purge below is keyed on the client alone and takes every binding it
-	// holds, so a read narrowed to this project's issuers (as
-	// GetRemoteSessionClientByID's subquery is) would destroy bindings it never
-	// reported and strand those servers on a value nothing can recompute.
+	// from. The read is scoped to this project's own clients, which is exactly
+	// the purge's own predicate — narrowing it further, to this project's user
+	// session issuers, would destroy bindings it never reported and strand
+	// those servers on a value nothing can recompute.
 	//
-	// This runs before the delete establishes that the caller owns the client,
-	// because the derivation locks below have to precede every row lock and
-	// cannot be taken without the set. That is not an IDOR: the ids are never
-	// returned to the caller, an advisory lock reveals nothing, and the resync
-	// they feed is bounded by the caller's own scope, not by this list.
-	boundUserIssuerIDs, err := txRepo.ListUserSessionIssuersBoundToClient(ctx, clientID)
+	// It still runs before the delete establishes that the caller owns the
+	// client, because the derivation locks below have to precede every row lock
+	// and cannot be taken without the set. Nothing is disclosed by that: a
+	// client this project does not own yields the empty set, and the delete
+	// below is what answers the caller either way.
+	boundUserIssuerIDs, err := txRepo.ListUserSessionIssuersBoundToProjectClient(ctx, repo.ListUserSessionIssuersBoundToProjectClientParams{
+		RemoteSessionClientID: clientID,
+		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
+	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "list user session issuers bound to client").LogError(ctx, logger)
 	}

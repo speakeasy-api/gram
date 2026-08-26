@@ -234,6 +234,13 @@ func (r *UpstreamRevoker) DetachUserSessionIssuerFromClients(ctx context.Context
 	// on mcp_servers or remote_session_clients themselves before reaching here
 	// — DeleteMcpServer is the one that used to, and now takes this same lock
 	// before its own row locks.
+	//
+	// The lock carries no tenancy of its own and needs none here: both callers
+	// arrive holding an id they have already resolved under projectID — one
+	// from a project-scoped DeleteUserSessionIssuer, the other off a
+	// project-scoped MCP server read — so there is no foreign id to take. See
+	// LockUserSessionIssuersForRemoteIssuerDerivation for why the primitive is
+	// scopeless in general.
 	if err := LockUserSessionIssuersForRemoteIssuerDerivation(ctx, tx, []uuid.UUID{userSessionIssuerID}); err != nil {
 		return nil, err
 	}

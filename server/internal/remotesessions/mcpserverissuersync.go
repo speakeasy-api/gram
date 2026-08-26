@@ -63,23 +63,57 @@ func OrganizationResyncScope(organizationID string) ResyncScope {
 //
 // Call this before taking any row lock in the transaction, and over the same
 // ids the later resync will be given.
+//
+// Takes no tenant scope and does not need one. It acquires advisory locks on a
+// salted hash of each id and nothing else: no row is read, none is written,
+// and a lock's existence is not observable to anyone who is not already
+// contending for the same id. Locking an id from outside the caller's tenancy
+// therefore costs that tenant at most the contention of one transaction that,
+// on every path here, aborts a statement or two later on its own ownership
+// check. What the lock protects against — a wrong derived value — is bounded
+// separately, by the caller's ResyncScope. Scoping the lock query itself would
+// be actively worse: a tenancy predicate yields no row for anything it rejects,
+// so the lock would be silently skipped rather than refused.
 func LockUserSessionIssuersForRemoteIssuerDerivation(ctx context.Context, dbtx repo.DBTX, userIssuerIDs []uuid.UUID) error {
-	if len(userIssuerIDs) == 0 {
-		return nil
-	}
-
-	ordered := slices.Clone(userIssuerIDs)
-	slices.SortFunc(ordered, func(a, b uuid.UUID) int { return bytes.Compare(a[:], b[:]) })
-	ordered = slices.Compact(ordered)
-
 	q := repo.New(dbtx)
-	for _, id := range ordered {
+	for _, id := range orderedDerivationLockIDs(userIssuerIDs) {
 		if err := q.LockUserSessionIssuerForRemoteIssuerDerivation(ctx, id); err != nil {
 			return fmt.Errorf("lock user session issuer %s for remote issuer derivation: %w", id, err)
 		}
 	}
 
 	return nil
+}
+
+// TryLockUserSessionIssuersForRemoteIssuerDerivation is the non-blocking form,
+// reporting false the moment one of the locks is held elsewhere. Only for a
+// caller that must reach for a derivation lock while already holding a lock
+// that other derivation-lock holders wait on, where blocking would deadlock;
+// everywhere else the blocking form is correct and this one would turn routine
+// contention into a spurious failure.
+func TryLockUserSessionIssuersForRemoteIssuerDerivation(ctx context.Context, dbtx repo.DBTX, userIssuerIDs []uuid.UUID) (bool, error) {
+	q := repo.New(dbtx)
+	for _, id := range orderedDerivationLockIDs(userIssuerIDs) {
+		acquired, err := q.TryLockUserSessionIssuerForRemoteIssuerDerivation(ctx, id)
+		if err != nil {
+			return false, fmt.Errorf("try lock user session issuer %s for remote issuer derivation: %w", id, err)
+		}
+		if !acquired {
+			return false, nil
+		}
+	}
+
+	return true, nil
+}
+
+// orderedDerivationLockIDs sorts and de-duplicates a lock set. Ascending order
+// is what keeps two callers with overlapping sets from deadlocking against each
+// other, and it has to hold for the try-form too: a partial acquisition there
+// is still held for the rest of the transaction.
+func orderedDerivationLockIDs(userIssuerIDs []uuid.UUID) []uuid.UUID {
+	ordered := slices.Clone(userIssuerIDs)
+	slices.SortFunc(ordered, func(a, b uuid.UUID) int { return bytes.Compare(a[:], b[:]) })
+	return slices.Compact(ordered)
 }
 
 // ResyncMCPServerRemoteSessionIssuers recomputes the denormalised issuer for
@@ -93,11 +127,15 @@ func LockUserSessionIssuersForRemoteIssuerDerivation(ctx context.Context, dbtx r
 // the sets are read from untenanted join tables, so a foreign id is a fact
 // about the data, not a caller error.
 func ResyncMCPServerRemoteSessionIssuers(ctx context.Context, dbtx mcpserversrepo.DBTX, scope ResyncScope, userIssuerIDs []uuid.UUID) error {
-	if len(userIssuerIDs) == 0 {
-		return nil
-	}
+	// Ahead of the empty-set shortcut: a caller that forgot its scope is a bug
+	// whichever set it happens to be holding, and letting the empty case
+	// through would make the guarantee depend on the data rather than on the
+	// call.
 	if scope.organizationID == "" {
 		return fmt.Errorf("resync mcp server remote session issuers: no organization scope")
+	}
+	if len(userIssuerIDs) == 0 {
+		return nil
 	}
 
 	if _, err := mcpserversrepo.New(dbtx).ResyncMCPServerRemoteSessionIssuers(ctx, mcpserversrepo.ResyncMCPServerRemoteSessionIssuersParams{

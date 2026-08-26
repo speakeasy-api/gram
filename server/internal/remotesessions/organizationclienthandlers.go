@@ -627,10 +627,14 @@ func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.Delet
 	txRepo := repo.New(dbtx)
 
 	// Read the bindings, then lock them, before the delete below takes the
-	// client row lock: the derivation lock has to precede every row lock. The
-	// read is unscoped and precedes the ownership check for that reason; the
-	// resync it feeds is bounded by the caller's organization regardless.
-	boundUserIssuerIDs, err := txRepo.ListUserSessionIssuersBoundToClient(ctx, clientID)
+	// client row lock: the derivation lock has to precede every row lock, which
+	// is why this precedes the delete that proves ownership. The read carries
+	// the delete's own organization-reachability predicate, so a client outside
+	// this organization yields the empty set rather than a set of foreign ids.
+	boundUserIssuerIDs, err := txRepo.ListUserSessionIssuersBoundToOrganizationClient(ctx, repo.ListUserSessionIssuersBoundToOrganizationClientParams{
+		RemoteSessionClientID: clientID,
+		OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
+	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "list user session issuers bound to client").LogError(ctx, logger)
 	}

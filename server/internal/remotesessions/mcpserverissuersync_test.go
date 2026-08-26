@@ -323,5 +323,74 @@ func TestResyncMCPServerRemoteSessionIssuers(t *testing.T) {
 		require.Error(t, err)
 		require.Equal(t, uuid.NullUUID{UUID: remoteIssuerID, Valid: true}, storedIssuer(t, ctx, ti.conn, projectID, serverID),
 			"a rejected resync must not have written anything")
+
+		// An empty set is the one input that would otherwise slip past the
+		// scope check, and a caller holding one is no more entitled to skip
+		// its scope than any other.
+		require.Error(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, remotesessions.ResyncScope{}, nil),
+			"a missing scope is a caller bug whatever the id set happens to be")
 	})
+}
+
+// TestListUserSessionIssuersBoundToClient_Scoping covers the reads the three
+// client deletes take before they have proven anything: they run ahead of the
+// ownership check because the derivation locks they feed must precede every row
+// lock, so the tenancy has to be in the query itself. The platform-admin form
+// is deliberately unscoped, having no tenant to scope to, and is an integrity
+// assertion rather than a resync input.
+func TestListUserSessionIssuersBoundToClient_Scoping(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	q := repo.New(ti.conn)
+
+	userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-bindscope")
+	clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-bindscope")
+
+	owned, err := q.ListUserSessionIssuersBoundToProjectClient(ctx, repo.ListUserSessionIssuersBoundToProjectClientParams{
+		RemoteSessionClientID: clientID,
+		ProjectID:             conv.ToNullUUID(projectID),
+	})
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{userIssuerID}, owned, "the owning project sees the bindings its delete will purge")
+
+	otherProjectID := createProject(t, ctx, ti.conn, "bindscope-other-project")
+	foreign, err := q.ListUserSessionIssuersBoundToProjectClient(ctx, repo.ListUserSessionIssuersBoundToProjectClientParams{
+		RemoteSessionClientID: clientID,
+		ProjectID:             conv.ToNullUUID(otherProjectID),
+	})
+	require.NoError(t, err)
+	require.Empty(t, foreign, "a sibling project must not read another project's client's bindings")
+
+	orgIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-bindscope-org")
+	orgRemoteIssuerID := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, orgID, "rsi-bindscope-org")
+	orgClientID := seedOrgLevelRemoteClient(t, ctx, ti.conn, orgID, orgRemoteIssuerID, "cid-bindscope-org", orgIssuerID)
+
+	ownedByOrg, err := q.ListUserSessionIssuersBoundToOrganizationClient(ctx, repo.ListUserSessionIssuersBoundToOrganizationClientParams{
+		RemoteSessionClientID: orgClientID,
+		OrganizationID:        conv.ToPGText(orgID),
+	})
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{orgIssuerID}, ownedByOrg)
+
+	otherOrgID := createOrganization(t, ctx, ti.conn, "bindscope-other-org")
+	foreignByOrg, err := q.ListUserSessionIssuersBoundToOrganizationClient(ctx, repo.ListUserSessionIssuersBoundToOrganizationClientParams{
+		RemoteSessionClientID: orgClientID,
+		OrganizationID:        conv.ToPGText(otherOrgID),
+	})
+	require.NoError(t, err)
+	require.Empty(t, foreignByOrg, "another organization must not read this organization's client's bindings")
+
+	// The unscoped form still reports everything, which is the whole point of
+	// keeping it: the platform-admin delete uses it to notice bindings that
+	// should be impossible on a global client.
+	unscoped, err := q.ListUserSessionIssuersBoundToClient(ctx, orgClientID)
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{orgIssuerID}, unscoped)
 }
