@@ -5,9 +5,6 @@
 package database
 
 import (
-	"database/sql/driver"
-	"fmt"
-
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	pgvector_go "github.com/pgvector/pgvector-go"
@@ -16,48 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/tools/repo/models"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
-
-type DataExportSensitiveData string
-
-const (
-	DataExportSensitiveDataExclude DataExportSensitiveData = "exclude"
-	DataExportSensitiveDataInclude DataExportSensitiveData = "include"
-)
-
-func (e *DataExportSensitiveData) Scan(src interface{}) error {
-	switch s := src.(type) {
-	case []byte:
-		*e = DataExportSensitiveData(s)
-	case string:
-		*e = DataExportSensitiveData(s)
-	default:
-		return fmt.Errorf("unsupported scan type for DataExportSensitiveData: %T", src)
-	}
-	return nil
-}
-
-type NullDataExportSensitiveData struct {
-	DataExportSensitiveData DataExportSensitiveData
-	Valid                   bool // Valid is true if DataExportSensitiveData is not NULL
-}
-
-// Scan implements the Scanner interface.
-func (ns *NullDataExportSensitiveData) Scan(value interface{}) error {
-	if value == nil {
-		ns.DataExportSensitiveData, ns.Valid = "", false
-		return nil
-	}
-	ns.Valid = true
-	return ns.DataExportSensitiveData.Scan(value)
-}
-
-// Value implements the driver Valuer interface.
-func (ns NullDataExportSensitiveData) Value() (driver.Value, error) {
-	if !ns.Valid {
-		return nil, nil
-	}
-	return string(ns.DataExportSensitiveData), nil
-}
 
 type AgentExecution struct {
 	ID           string
@@ -581,7 +536,7 @@ type DataExportRoute struct {
 	DataSource        string
 	Enabled           bool
 	OtelDestinationID uuid.NullUUID
-	SensitiveData     NullDataExportSensitiveData
+	SensitiveData     pgtype.Text
 	CreatedAt         pgtype.Timestamptz
 	UpdatedAt         pgtype.Timestamptz
 	DeletedAt         pgtype.Timestamptz

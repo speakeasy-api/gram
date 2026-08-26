@@ -1,5 +1,3 @@
--- Create enum type "data_export_sensitive_data"
-CREATE TYPE "data_export_sensitive_data" AS ENUM ('exclude', 'include');
 -- Create "otel_destinations" table
 CREATE TABLE "otel_destinations" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -26,7 +24,7 @@ CREATE TABLE "data_export_routes" (
   "data_source" text NOT NULL,
   "enabled" boolean NOT NULL DEFAULT true,
   "otel_destination_id" uuid NULL,
-  "sensitive_data" "data_export_sensitive_data" NULL DEFAULT 'exclude',
+  "sensitive_data" text NULL DEFAULT 'exclude',
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "deleted_at" timestamptz NULL,

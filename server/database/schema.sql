@@ -4092,11 +4092,9 @@ CREATE INDEX IF NOT EXISTS otel_destinations_project_id_idx
   ON otel_destinations (project_id)
   WHERE deleted IS FALSE;
 
-CREATE TYPE data_export_sensitive_data AS ENUM ('exclude', 'include');
-
 -- Declarative routes from a class of project data to an OTLP destination.
--- data_source values are intentionally validated in the application so adding
--- a new source does not require a migration.
+-- data_source and sensitive_data values are intentionally validated in the
+-- application so adding a new source or policy does not require a migration.
 CREATE TABLE IF NOT EXISTS data_export_routes (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
@@ -4104,7 +4102,7 @@ CREATE TABLE IF NOT EXISTS data_export_routes (
   data_source TEXT NOT NULL,
   enabled boolean NOT NULL DEFAULT true,
   otel_destination_id uuid,
-  sensitive_data data_export_sensitive_data DEFAULT 'exclude',
+  sensitive_data TEXT DEFAULT 'exclude',
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -4116,8 +4114,9 @@ CREATE TABLE IF NOT EXISTS data_export_routes (
   CONSTRAINT data_export_routes_destination_tenant_fkey FOREIGN KEY (organization_id, project_id, otel_destination_id) REFERENCES otel_destinations (organization_id, project_id, id) ON DELETE RESTRICT
 );
 
--- A project can have at most one non-deleted forwarding rule per source. An
--- enabled flag controls delivery without allowing a second competing route.
+-- A project can have at most one non-deleted export route per source. Supporting
+-- multiple destinations per source requires destination-specific delivery state
+-- so retrying one failed destination does not redeliver to successful ones.
 CREATE UNIQUE INDEX IF NOT EXISTS data_export_routes_project_source_key
   ON data_export_routes (project_id, data_source)
   WHERE deleted IS FALSE;
