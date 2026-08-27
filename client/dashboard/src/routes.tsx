@@ -30,6 +30,7 @@ import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
 import UserSessions from "./pages/org/UserSessions";
 import EventFeed from "./pages/data/EventFeed";
+import DataExports from "./pages/data-exports/DataExports";
 import DeviceAgent, { DeviceAgentRoot } from "./pages/device-agent/DeviceAgent";
 import MdmIntegrationDetail from "./pages/org/device-integrations/MdmIntegrationDetail";
 import EnvironmentPage from "./pages/environments/Environment";
@@ -669,6 +670,12 @@ const ROUTE_STRUCTURE = {
     url: "logs",
     icon: "logs",
     component: LogsRoot,
+  },
+  dataExports: {
+    title: "Exports",
+    url: "data/exports",
+    icon: "database",
+    component: DataExports,
   },
   agentSessions: {
     title: "Agent Sessions",
