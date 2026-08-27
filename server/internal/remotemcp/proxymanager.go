@@ -41,9 +41,9 @@ type ProxyManager struct {
 	posthog        *posthog.Posthog
 	telemLogger    *tm.Logger
 
-	proxyMetrics     *proxy.Metrics
-	mcpMetrics       *ProxyMetrics
-	identityCoverage *mcptoolexecution.IdentityCoverageCheckpoint
+	proxyMetrics         *proxy.Metrics
+	mcpMetrics           *ProxyMetrics
+	killswitchCheckpoint ToolsCallKillswitchCheckpoint
 
 	// requestOTELCounterInterceptor emits the shared per-request census
 	// counter (mcp.request) for the remote- and tunnel-backed /x/mcp traffic,
@@ -83,6 +83,7 @@ func NewProxyManager(
 	toolDispositions ToolDispositionResolver,
 	platformMCPSelectedUseRecorder toolcallobserver.SuccessRecorder,
 	witnessStore *toolfilter.SessionToolWitnessStore,
+	killswitchCheckpoint *mcptoolexecution.Checkpoint,
 ) *ProxyManager {
 	logger = logger.With(attr.SlogComponent("remotemcp"))
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/remotemcp")
@@ -97,7 +98,7 @@ func NewProxyManager(
 		telemLogger:                           telemLogger,
 		proxyMetrics:                          proxy.NewMetrics(meter, logger),
 		mcpMetrics:                            mcpMetrics,
-		identityCoverage:                      mcptoolexecution.NewIdentityCoverageCheckpoint(db, mcpMetrics),
+		killswitchCheckpoint:                  killswitchCheckpoint.WithIdentityCoverageRecorder(mcpMetrics),
 		requestOTELCounterInterceptor:         NewRequestOTELCounterInterceptor(mcpmetrics.NewRequestCounter(meter, logger)),
 		toolDispositions:                      toolDispositions,
 		toolsCallUsageLimitsInterceptor:       NewToolsCallUsageLimitsInterceptor(billingRepo, logger),
@@ -202,11 +203,18 @@ func (f *ProxyManager) BuildTarget(
 	// anything scoped to an identity or a risk policy. It is a no-op for
 	// the arguments that don't carry it.
 	toolsCallReqInterceptors := []proxy.ToolsCallRequestInterceptor{
-		NewToolsCallOTELCounterInterceptor(f.mcpMetrics, f.identityCoverage, identity, organizationID, logger),
+		NewToolsCallOTELCounterInterceptor(f.mcpMetrics, nil, identity, organizationID, logger),
+	}
+	if visibility == mcpservers.VisibilityPrivate {
+		toolsCallReqInterceptors = append(toolsCallReqInterceptors,
+			NewToolsCallKillswitchInterceptor(f.killswitchCheckpoint, organizationID, identity.McpServerID, logger),
+		)
+	}
+	toolsCallReqInterceptors = append(toolsCallReqInterceptors,
 		f.toolsCallUsageLimitsInterceptor,
 		NewToolsCallStripToolsetIDInterceptor(logger),
 		clickHouseLogInterceptor,
-	}
+	)
 	if visibility == mcpservers.VisibilityPrivate {
 		toolsCallReqInterceptors = append(toolsCallReqInterceptors,
 			NewToolsCallAuthzInterceptor(f.authz, f.toolDispositions, identity.McpServerID, projectID, logger),
