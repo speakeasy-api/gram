@@ -327,7 +327,7 @@ export function PlatformMCPInstallWalkthrough({
   const queryClient = useQueryClient();
   const { fetch: authFetch } = useFetcher();
   const [client, setClient] = useState<ClientFamily>(initialClient);
-  const [method, setMethod] = useState<PlatformMCPInstallMethod>(
+  const [selectedMethod, setMethod] = useState<PlatformMCPInstallMethod>(
     initialMethod ?? "marketplace",
   );
   const [isDownloading, setIsDownloading] = useState(false);
@@ -357,6 +357,12 @@ export function PlatformMCPInstallWalkthrough({
   }, [initialMethod]);
 
   const packageStatus = status.data;
+  // An agent with no reviewed package has exactly one route, so the packaged
+  // methods stay unreachable for it however the state got there: while the
+  // package status is still loading, on an explicit initialMethod, or in the
+  // render before the effect below settles. Deriving the method closes all
+  // three at once instead of guarding each place one is read.
+  const method = supportsPackages(client) ? selectedMethod : "manual";
   const supportsMarketplace = supportsPackages(client) && client !== "opencode";
   const marketplaceReady =
     supportsMarketplace &&
@@ -383,16 +389,12 @@ export function PlatformMCPInstallWalkthrough({
       setMethod("marketplace");
     } else if (marketplaceReady) {
       setMethod("marketplace");
-    } else if (
-      supportsPackages(client) &&
-      packageStatus?.directDownloadAvailable
-    ) {
+    } else if (packageStatus?.directDownloadAvailable) {
       setMethod("download");
     } else {
       setMethod("manual");
     }
   }, [
-    client,
     initialMethod,
     marketplaceReady,
     packageStatus?.directDownloadAvailable,

@@ -78,6 +78,25 @@ describe("PlatformMCPInstallWalkthrough", () => {
     ).toBeTruthy();
   });
 
+  it("keeps the other agent on the MCP config even when asked for a package", () => {
+    // initialMethod names a packaged route the agent has no package for. The
+    // walkthrough must not honour it — doing so rendered a download step for a
+    // "platform-mcp-null.zip" that no endpoint serves.
+    render(
+      <PlatformMCPInstallWalkthrough
+        initialClient="other"
+        initialMethod="download"
+        mcpUrl={MCP_URL}
+      />,
+    );
+
+    expect(
+      screen.getByText("Add Platform MCP as a remote MCP server"),
+    ).toBeTruthy();
+    expect(screen.queryByText(/\.zip/)).toBeNull();
+    expect(screen.queryByText(/marketplace add/)).toBeNull();
+  });
+
   it("keeps the packaged routes open for a certified agent", () => {
     render(
       <PlatformMCPInstallWalkthrough
