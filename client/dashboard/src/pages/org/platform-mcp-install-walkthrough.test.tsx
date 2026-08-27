@@ -86,7 +86,7 @@ describe("PlatformMCPInstallWalkthrough", () => {
       ),
     ).toBeTruthy();
     expect(
-      screen.getByText("/plugin install platform-mcp@speakeasy"),
+      screen.getByText("/plugin install speakeasy@speakeasy"),
     ).toBeTruthy();
   });
 });

@@ -46,7 +46,15 @@ const PLATFORM_MCP_INSTALL_CLIENTS: PlatformMCPInstallClient[] = [
 
 export type PlatformMCPInstallMethod = "marketplace" | "manual";
 
-const PLATFORM_MCP_PLUGIN_NAME = "platform-mcp";
+// The plugin name and the MCP server name are what an agent concatenates into
+// the label beside every tool call — Claude Code renders
+// "plugin:speakeasy:platform". These mirror the generated packages in
+// server/internal/plugins/generate.go; the Cursor and Codex packages keep a
+// client suffix because all package roots share one repository.
+const PLATFORM_MCP_PLUGIN_NAME = "speakeasy";
+const PLATFORM_MCP_SERVER_NAME = "platform";
+const PLATFORM_MCP_CURSOR_PLUGIN_NAME = "speakeasy-cursor";
+const PLATFORM_MCP_CODEX_PLUGIN_NAME = "speakeasy-codex";
 
 // Platform MCP ships from one public repository for every organization. It
 // carries no credentials and no organization identity — access is decided at
@@ -73,13 +81,13 @@ type PlatformMCPInstallWalkthroughProps = {
 
 function manualConfig(client: ClientFamily, mcpUrl: string): string {
   if (client === "codex") {
-    return `[mcp_servers.${PLATFORM_MCP_PLUGIN_NAME}]\nurl = "${mcpUrl}"`;
+    return `[mcp_servers.${PLATFORM_MCP_SERVER_NAME}]\nurl = "${mcpUrl}"`;
   }
   if (client === "opencode") {
     return JSON.stringify(
       {
         mcp: {
-          [PLATFORM_MCP_PLUGIN_NAME]: {
+          [PLATFORM_MCP_SERVER_NAME]: {
             type: "remote",
             url: mcpUrl,
             enabled: true,
@@ -93,7 +101,7 @@ function manualConfig(client: ClientFamily, mcpUrl: string): string {
   return JSON.stringify(
     {
       mcpServers: {
-        [PLATFORM_MCP_PLUGIN_NAME]: {
+        [PLATFORM_MCP_SERVER_NAME]: {
           type: "http",
           url: mcpUrl,
         },
@@ -242,7 +250,7 @@ function marketplaceSteps(client: ClientFamily): InstallStep[] {
         title: "Install Platform MCP for your account",
         description:
           "Find Platform MCP in the imported marketplace and install it for your Cursor account. Do not require it for the whole team unless your organization has made that separate rollout decision.",
-        code: "platform-mcp-cursor",
+        code: PLATFORM_MCP_CURSOR_PLUGIN_NAME,
         language: "text",
       },
       {
@@ -263,8 +271,7 @@ function marketplaceSteps(client: ClientFamily): InstallStep[] {
       },
       {
         title: "Install the Platform MCP package",
-        description:
-          "Open /plugins, find platform-mcp-codex in the Speakeasy marketplace, and install it for your account. ChatGPT Codex and the Codex CLI must each be verified separately; the Codex IDE extension remains a manual recovery path until certified.",
+        description: `Open /plugins, find ${PLATFORM_MCP_CODEX_PLUGIN_NAME} in the Speakeasy marketplace, and install it for your account. ChatGPT Codex and the Codex CLI must each be verified separately; the Codex IDE extension remains a manual recovery path until certified.`,
         code: "codex /plugins",
       },
       {
@@ -286,8 +293,8 @@ function marketplaceSteps(client: ClientFamily): InstallStep[] {
       {
         title: "Copy the OpenCode package into your config directory",
         description:
-          "Copy opencode-plugins/platform-mcp into ~/.config/opencode for your account, or into .opencode for one repository. This installs both the loader and the reviewed skill path.",
-        code: `cp -R platform-mcp/opencode-plugins/${PLATFORM_MCP_PLUGIN_NAME}/. ~/.config/opencode/`,
+          "Copy opencode-plugins/speakeasy into ~/.config/opencode for your account, or into .opencode for one repository. This installs both the loader and the reviewed skill path.",
+        code: `cp -R marketplace/opencode-plugins/${PLATFORM_MCP_PLUGIN_NAME}/. ~/.config/opencode/`,
       },
       {
         title: "Restart OpenCode and complete OAuth",

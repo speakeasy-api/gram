@@ -6,7 +6,7 @@ import (
 )
 
 // PublicMarketplaceName is the marketplace identifier users type when
-// installing a first-party plugin (`platform-mcp@speakeasy`). It is fixed: the
+// installing a first-party plugin (`speakeasy@speakeasy`). It is fixed: the
 // public repository is a single global artifact, not an org-derived one, and it
 // is the umbrella every first-party plugin is published under so registering it
 // once carries future plugins too.
@@ -131,9 +131,9 @@ func generatePublicMarketplaceManifests(files map[string][]byte, cfg GenerateCon
 		Owner:    owner,
 		Metadata: &marketplaceMetadata{PluginRoot: cursorPluginRoot},
 		Plugins: []marketplaceEntry{{
-			Name:        "platform-mcp-cursor",
+			Name:        platformMCPCursorPluginName,
 			DisplayName: "", // Cursor carries the display name in its own plugin.json.
-			Source:      "platform-mcp-cursor",
+			Source:      platformMCPCursorPluginName,
 			Description: platformMCPDescription,
 		}},
 	})
@@ -146,7 +146,7 @@ func generatePublicMarketplaceManifests(files map[string][]byte, cfg GenerateCon
 		Name:      PublicMarketplaceName,
 		Interface: codexInterface{DisplayName: platformMCPDisplayName, ShortDescription: platformMCPDescription},
 		Plugins: []codexMarketplaceEntry{{
-			Name: "platform-mcp-codex",
+			Name: platformMCPCodexPluginName,
 			Source: codexMarketplaceSource{
 				Source: "local",
 				Path:   "./" + platformMCPCodexPluginRoot,
@@ -186,7 +186,7 @@ func publicMarketplaceReadme() []byte {
 	b.WriteString("```\n")
 	b.WriteString("codex plugin marketplace add " + PublicMarketplaceRepoURL + "\n")
 	b.WriteString("```\n\n")
-	b.WriteString("Then open `/plugins` and install `platform-mcp-codex`.\n\n")
+	b.WriteString("Then open `/plugins` and install `" + platformMCPCodexPluginName + "`.\n\n")
 
 	b.WriteString("## Cursor\n\n")
 	b.WriteString("In the Cursor dashboard for a team you administer, go to Settings → Plugins → Import and paste:\n\n")
