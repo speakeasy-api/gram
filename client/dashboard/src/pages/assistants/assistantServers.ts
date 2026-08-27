@@ -7,7 +7,9 @@ export function assistantAttachedServerSlugs(assistant: {
   mcpServers?: ReadonlyArray<{ mcpServerSlug: string }>;
 }): string[] {
   return [
-    ...assistant.toolsets.map((toolset) => toolset.toolsetSlug),
-    ...(assistant.mcpServers ?? []).map((server) => server.mcpServerSlug),
+    ...new Set([
+      ...assistant.toolsets.map((toolset) => toolset.toolsetSlug),
+      ...(assistant.mcpServers ?? []).map((server) => server.mcpServerSlug),
+    ]),
   ];
 }

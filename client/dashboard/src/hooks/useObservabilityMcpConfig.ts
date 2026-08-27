@@ -1,14 +1,18 @@
-import { useProject, useSession } from "@/contexts/Auth";
+import { useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
-import { internalMcpUrl } from "@/hooks/useToolsetUrl";
 import { getServerURL } from "@/lib/utils";
-import type { ElementsConfig, MCPServerEntry, ToolsFilter } from "@/elements";
+import type { ElementsConfig, ToolsFilter } from "@/elements";
 import { chatSessionsCreate } from "@gram/client/funcs/chatSessionsCreate";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
+import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useCallback, useMemo } from "react";
-import { isNoMcpAccessConfigured } from "./projectAssistantAccess";
+import { observabilityMcpEntries } from "./observabilityMcpEntries";
+import {
+  isNoMcpAccessConfigured,
+  settledListCount,
+} from "./projectAssistantAccess";
 
 interface ObservabilityMcpConfigOptions {
   toolsToInclude: ToolsFilter;
@@ -16,8 +20,8 @@ interface ObservabilityMcpConfigOptions {
 
 /**
  * Hook to generate MCP configuration for AI Insights copilot features.
- * Connects to all toolsets in the current project and filters tools
- * based on the provided filter function.
+ * Connects to project toolsets and directly hosted MCP servers, then
+ * filters tools based on the provided filter function.
  */
 export function useObservabilityMcpConfig({
   toolsToInclude,
@@ -26,11 +30,25 @@ export function useObservabilityMcpConfig({
   "variant" | "welcome" | "theme"
 > {
   const { projectSlug } = useSlugs();
-  const project = useProject();
   const client = useGramContext();
   const { session } = useSession();
-  const { data: toolsetsData, isLoading: isLoadingToolsets } =
-    useListToolsets();
+  const enabled = Boolean(projectSlug);
+  const request = projectSlug ? { gramProject: projectSlug } : undefined;
+  const { data: toolsetsData, isLoading: toolsetsLoading } = useListToolsets(
+    request,
+    undefined,
+    { enabled },
+  );
+  const { data: mcpServersData, isLoading: mcpServersLoading } = useMcpServers(
+    request,
+    undefined,
+    { enabled },
+  );
+  const { data: endpointsData, isLoading: endpointsLoading } = useMcpEndpoints(
+    request,
+    undefined,
+    { enabled },
+  );
 
   const getSession = useCallback(async (): Promise<string> => {
     const res = await chatSessionsCreate(
@@ -50,24 +68,32 @@ export function useObservabilityMcpConfig({
     return res.value?.clientToken ?? "";
   }, [client, projectSlug]);
 
-  // Build MCP server entries for all project toolsets
-  const mcps = useMemo<MCPServerEntry[] | undefined>(() => {
-    if (isLoadingToolsets || !toolsetsData?.toolsets?.length) {
-      return undefined;
-    }
-
-    return toolsetsData.toolsets.flatMap((toolset) => {
-      const url = internalMcpUrl({ slug: project.slug }, toolset);
-      if (!url) return [];
-      return [
-        {
-          url,
-          name: toolset.slug,
-          environment: toolset.defaultEnvironmentSlug,
-        },
-      ];
-    });
-  }, [toolsetsData?.toolsets, project.slug, isLoadingToolsets]);
+  // Undefined while listings are in flight; `[]` when settled empty so the
+  // picker can tell "still loading" from "no servers attached".
+  const mcps = useMemo(
+    () =>
+      projectSlug
+        ? observabilityMcpEntries({
+            projectSlug,
+            serverURL: getServerURL(),
+            toolsetsLoading,
+            toolsets: toolsetsData?.toolsets,
+            mcpServersLoading,
+            mcpServers: mcpServersData?.mcpServers,
+            endpointsLoading,
+            endpoints: endpointsData?.mcpEndpoints,
+          })
+        : undefined,
+    [
+      projectSlug,
+      toolsetsLoading,
+      toolsetsData?.toolsets,
+      mcpServersLoading,
+      mcpServersData?.mcpServers,
+      endpointsLoading,
+      endpointsData?.mcpEndpoints,
+    ],
+  );
 
   return useMemo(() => {
     if (!projectSlug) {
@@ -94,7 +120,7 @@ export function useObservabilityMcpConfig({
         GRAM_APIKEY_HEADER_GRAM_KEY: "",
         GRAM_PROJECT_SLUG_HEADER_GRAM_PROJECT: projectSlug,
       },
-      ...(mcps && mcps.length > 0 && { mcps }),
+      ...(mcps !== undefined && { mcps }),
     };
   }, [toolsToInclude, getSession, session, projectSlug, mcps]);
 }
@@ -120,15 +146,12 @@ export function useNoToolsetsConfigured(projectSlug?: string): boolean {
   return isNoMcpAccessConfigured({
     projectSlug,
     toolsetsLoading,
-    toolsetCount:
-      toolsetsData === undefined
-        ? undefined
-        : (toolsetsData.toolsets?.length ?? 0),
+    toolsetCount: settledListCount(toolsetsData, toolsetsData?.toolsets),
     mcpServersLoading,
-    mcpServerCount:
-      mcpServersData === undefined
-        ? undefined
-        : (mcpServersData.mcpServers?.length ?? 0),
+    mcpServerCount: settledListCount(
+      mcpServersData,
+      mcpServersData?.mcpServers,
+    ),
     toolsetsFailed,
     mcpServersFailed,
   });

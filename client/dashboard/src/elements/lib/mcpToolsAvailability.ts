@@ -75,6 +75,21 @@ export function mcpToolsWelcomeSubtitle(
 }
 
 /**
+ * Host config for MCP servers: omitted (`mcp` and `mcps` both unset) is
+ * unknown, `mcps: []` is settled-empty, and a URL or non-empty list is some.
+ */
+export type ComposerMcpServersPresence = "unknown" | "none" | "some";
+
+export function composerMcpServersPresence(
+  mcp: string | undefined,
+  mcps: ReadonlyArray<unknown> | undefined,
+): ComposerMcpServersPresence {
+  if (Boolean(mcp) || (mcps !== undefined && mcps.length > 0)) return "some";
+  if (mcps !== undefined) return "none";
+  return "unknown";
+}
+
+/**
  * True while tools/list has not settled. A disabled query (no servers yet)
  * is not pending — that is a settled empty, not an in-flight list.
  */
@@ -93,10 +108,11 @@ export function composerContextToolsEmptyMessage(
   loading: boolean,
   tools: Record<string, unknown> | undefined,
   error: unknown,
-  toolsQueryEnabled: boolean,
+  servers: ComposerMcpServersPresence,
 ): string {
-  if (!toolsQueryEnabled) return NO_CONTEXT_SERVERS_MESSAGE;
-  if (mcpToolsListPending(loading, tools, error, toolsQueryEnabled)) {
+  if (servers === "unknown") return "Loading tools…";
+  if (servers === "none") return NO_CONTEXT_SERVERS_MESSAGE;
+  if (mcpToolsListPending(loading, tools, error, true)) {
     return "Loading tools…";
   }
   if (error) return CONTEXT_TOOLS_LOAD_FAILED_MESSAGE;

@@ -94,6 +94,7 @@ import { getApiUrl } from "@/elements/lib/api";
 import { dictationAdapter } from "@/elements/lib/dictation";
 import {
   composerContextToolsEmptyMessage,
+  composerMcpServersPresence,
   mcpToolsAvailability,
   mcpToolsListPending,
   mcpToolsSendBlocked,
@@ -1338,14 +1339,15 @@ const ComposerContextPicker: FC = () => {
       composerConfig.toolMentions.enabled !== false);
 
   const tools = useMemo(() => toolSetToMentionableTools(mcpTools), [mcpTools]);
-  const toolsQueryEnabled =
-    Boolean(config.mcp) || (config.mcps?.length ?? 0) > 0;
-  const toolsListPending = mcpToolsListPending(
-    mcpToolsLoading,
-    mcpTools,
-    mcpToolsError,
-    toolsQueryEnabled,
-  );
+  const serversPresence = composerMcpServersPresence(config.mcp, config.mcps);
+  const toolsListPending =
+    serversPresence === "unknown" ||
+    mcpToolsListPending(
+      mcpToolsLoading,
+      mcpTools,
+      mcpToolsError,
+      serversPresence === "some",
+    );
 
   const categories = useMemo<ToolCategory[]>(() => {
     const grouped = new Map<string, MentionableTool[]>();
@@ -1644,7 +1646,7 @@ const ComposerContextPicker: FC = () => {
                       mcpToolsLoading,
                       mcpTools,
                       mcpToolsError,
-                      toolsQueryEnabled,
+                      serversPresence,
                     )}
                     onSelect={insertMention}
                   />

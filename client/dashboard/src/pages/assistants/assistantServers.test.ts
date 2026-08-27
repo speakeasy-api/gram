@@ -35,6 +35,15 @@ describe("assistantAttachedServerSlugs", () => {
     ).toEqual(["github", "remote-docs"]);
   });
 
+  it("dedupes overlapping toolset and MCP server slugs", () => {
+    expect(
+      assistantAttachedServerSlugs({
+        toolsets: [{ toolsetSlug: "github" }],
+        mcpServers: [{ mcpServerSlug: "github" }],
+      }),
+    ).toEqual(["github"]);
+  });
+
   it("treats a missing mcpServers array as empty", () => {
     expect(
       assistantAttachedServerSlugs({

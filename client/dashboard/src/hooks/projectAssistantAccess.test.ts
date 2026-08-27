@@ -1,8 +1,27 @@
 import { describe, expect, it } from "vitest";
 import {
   isNoMcpAccessConfigured,
+  settledListCount,
   showProjectAssistantConnecting,
 } from "./projectAssistantAccess";
+
+describe("settledListCount", () => {
+  it("stays unknown when the query has no data", () => {
+    expect(settledListCount(undefined, undefined)).toBeUndefined();
+    expect(settledListCount(undefined, [])).toBeUndefined();
+  });
+
+  it("does not treat a settled empty list as unknown", () => {
+    expect(settledListCount({ mcpServers: [] }, [])).toBe(0);
+    expect(settledListCount({ mcpServers: undefined }, undefined)).toBe(0);
+  });
+
+  it("counts a settled list", () => {
+    expect(settledListCount({ mcpServers: [{ id: "1" }] }, [{ id: "1" }])).toBe(
+      1,
+    );
+  });
+});
 
 describe("isNoMcpAccessConfigured", () => {
   const settledEmpty = {

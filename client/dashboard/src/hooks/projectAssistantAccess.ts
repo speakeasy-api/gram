@@ -1,4 +1,16 @@
 /**
+ * Length of a settled list. `undefined` data (loading, failed, or unknown)
+ * stays unknown — do not fall back to `?? 0`.
+ */
+export function settledListCount(
+  data: unknown,
+  items: readonly unknown[] | undefined,
+): number | undefined {
+  if (data === undefined) return undefined;
+  return items?.length ?? 0;
+}
+
+/**
  * True when the project has neither toolsets nor MCP servers. Either
  * attachment kind is enough for the Project Assistant to have tools.
  * Returns false while either list is still loading, failed, or unknown so
