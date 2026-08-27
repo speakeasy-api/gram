@@ -302,6 +302,32 @@ func TestMaskFindingSpansWithholdsOnMissingMatchText(t *testing.T) {
 	require.Equal(t, withheldContentPlaceholder, masks.content[messageID])
 }
 
+// A span entry that omits its per-span match still masks with the finding's
+// primary match: the display must render the partial-mask form of that
+// resolved text, never an empty replacement that silently deletes the bytes.
+func TestMaskFindingSpansUsesResolvedMatchForDisplay(t *testing.T) {
+	t.Parallel()
+
+	messageID := uuid.New()
+	content := "aaaaSECRETbbbb"
+	spans := `[{"field":"content","start_pos":4,"end_pos":10}]`
+
+	masks := maskFindingSpans(
+		[]platformrepo.ListOwnedChatTranscriptMessagesForRecallRow{recallMessageRow(messageID, "user", content)},
+		[]platformrepo.ListRiskFindingSpansForRecallRow{{
+			ChatMessageID: uuid.NullUUID{UUID: messageID, Valid: true},
+			Source:        "gitleaks",
+			RuleID:        pgtype.Text{String: "secret.generic", Valid: true},
+			Match:         pgtype.Text{String: "SECRET", Valid: true},
+			Spans:         []byte(spans),
+		}},
+	)
+
+	require.Equal(t, 0, masks.withheld)
+	expected := "aaaa" + maskdisplay.Display("gitleaks", "secret.generic", "SECRET") + "bbbb"
+	require.Equal(t, expected, masks.content[messageID], "the mask renders the resolved match's display form, not an empty replacement")
+}
+
 func TestMaskFindingSpansCollapsesIdenticalDuplicateSpans(t *testing.T) {
 	t.Parallel()
 

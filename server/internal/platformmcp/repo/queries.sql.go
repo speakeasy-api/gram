@@ -4951,6 +4951,12 @@ WHERE cm.chat_id = $1
   AND c.user_id = $4::text
   AND c.deleted IS FALSE
   AND (ua.id IS NULL OR ua.account_type <> 'personal')
+  AND cm.generation = (
+    SELECT COALESCE(MAX(generation), 0)
+    FROM chat_messages
+    WHERE chat_id = $1
+      AND project_id = $2
+  )
   AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
 ORDER BY cm.created_at ASC, cm.seq ASC, rr.id ASC
 `
@@ -4976,6 +4982,9 @@ type ListRiskFindingSpansForRecallRow struct {
 // rows only (the digest does not render content parts), with the canonical
 // suppression filters from risk's ListRiskResultsByChatFound: found, not
 // excluded, not swept as false positive, policy still enabled and not deleted.
+// Latest generation only, matching the transcript read: findings on
+// superseded generations mask nothing the digest renders, so loading them
+// would only let long, repeatedly compacted sessions inflate the scan.
 func (q *Queries) ListRiskFindingSpansForRecall(ctx context.Context, arg ListRiskFindingSpansForRecallParams) ([]ListRiskFindingSpansForRecallRow, error) {
 	rows, err := q.db.Query(ctx, listRiskFindingSpansForRecall,
 		arg.ChatID,

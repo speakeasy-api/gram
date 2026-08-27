@@ -171,6 +171,12 @@ func TestSessionRecallListReturnsOnlyOwnedSessions(t *testing.T) {
 	seedRecallChat(t, ctx, conn, project.ID, principal.OrganizationID, principal.UserID, "ses_"+uuid.NewString(), "personal account session", uuid.NullUUID{UUID: personalAccountID, Valid: true})
 	seedRecallChat(t, ctx, conn, project.ID, principal.OrganizationID, principal.UserID, "ses_"+uuid.NewString(), "unclassified account session", uuid.NullUUID{UUID: unclassifiedAccountID, Valid: true})
 
+	// A deleted chat the caller owns: the c.deleted IS FALSE predicate must
+	// drop it from the list and refuse a direct continue.
+	deletedSession := "ses_" + uuid.NewString()
+	deletedChatID := seedRecallChat(t, ctx, conn, project.ID, principal.OrganizationID, principal.UserID, deletedSession, "deleted own session", uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	require.NoError(t, testrepo.New(conn).SoftDeleteChatFixture(ctx, deletedChatID))
+
 	out, err := svc.ListMySessions(ctx, principal, ListMySessionsInput{Limit: 0})
 	require.NoError(t, err)
 	require.Len(t, out.Sessions, 2)
@@ -184,6 +190,10 @@ func TestSessionRecallListReturnsOnlyOwnedSessions(t *testing.T) {
 	require.Equal(t, ownedSession, byChatID[ownedChatID.String()].SessionID, "the harness-native session id is served, not the chat uuid")
 	require.Equal(t, "fix flaky auth test", byChatID[ownedChatID.String()].Title)
 	require.Equal(t, project.Slug, byChatID[ownedChatID.String()].ProjectSlug)
+	require.NotContains(t, byChatID, deletedChatID.String())
+
+	_, err = svc.ContinueSession(ctx, principal, ContinueSessionInput{SessionID: deletedSession})
+	require.ErrorIs(t, err, errSessionNotFound, "a deleted own session refuses exactly like a foreign one")
 }
 
 // Cases 2, 3, and 4: the digest carries the lineage byline and the

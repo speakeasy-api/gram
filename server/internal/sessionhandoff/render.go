@@ -170,6 +170,11 @@ func Render(t *Transcript, opts Options) Handoff {
 	}
 
 	firstPrompt := firstUserText(t.Turns)
+	if firstPrompt == "" && len(t.Turns) > 0 {
+		// The section renders a placeholder; say so instead of letting the
+		// caller overstate what the handoff carries.
+		fidelity.Warnings = append(fidelity.Warnings, "no substantive user prompt was recorded; the original task is not stated")
+	}
 	if bounded := clip(firstPrompt, maxContextSection); bounded != firstPrompt {
 		firstPrompt = bounded
 		fidelity.Warnings = append(fidelity.Warnings, "the original task statement was too large and appears clipped")

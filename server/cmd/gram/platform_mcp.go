@@ -221,9 +221,9 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 			Connection:   ratelimit.New(limitStore, platformmcp.PluginsConnectionLimitName, ratelimit.PerMinute(platformmcp.PluginQueriesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 			Organization: ratelimit.New(limitStore, platformmcp.PluginsOrganizationLimitName, ratelimit.PerMinute(platformmcp.PluginQueriesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		},
-		// Metered separately and lower: this is the only read that reaches
-		// personal data, so exhausting it must not be possible by spending the
-		// ordinary diagnostic allowance.
+		// Metered separately and lower: personal-data reads (this and session
+		// recall below, each on its own budget) must not be fundable by
+		// spending the ordinary diagnostic allowance.
 		SensitiveDiagnostics: platformmcp.OperationBudget{
 			Connection:   ratelimit.New(limitStore, platformmcp.SensitiveDiagnosticsConnectionLimitName, ratelimit.PerMinute(platformmcp.SensitiveDiagnosticQueriesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 			Organization: ratelimit.New(limitStore, platformmcp.SensitiveDiagnosticsOrganizationLimitName, ratelimit.PerMinute(platformmcp.SensitiveDiagnosticQueriesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
@@ -543,9 +543,9 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 			Connection:   ratelimit.New(limitStore, platformmcp.PluginsConnectionLimitName, ratelimit.PerMinute(platformmcp.PluginQueriesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 			Organization: ratelimit.New(limitStore, platformmcp.PluginsOrganizationLimitName, ratelimit.PerMinute(platformmcp.PluginQueriesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		},
-		// Metered separately and lower: this is the only read that reaches
-		// personal data, so exhausting it must not be possible by spending the
-		// ordinary diagnostic allowance.
+		// Metered separately and lower: personal-data reads (this and session
+		// recall below, each on its own budget) must not be fundable by
+		// spending the ordinary diagnostic allowance.
 		SensitiveDiagnostics: platformmcp.OperationBudget{
 			Connection:   ratelimit.New(limitStore, platformmcp.SensitiveDiagnosticsConnectionLimitName, ratelimit.PerMinute(platformmcp.SensitiveDiagnosticQueriesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 			Organization: ratelimit.New(limitStore, platformmcp.SensitiveDiagnosticsOrganizationLimitName, ratelimit.PerMinute(platformmcp.SensitiveDiagnosticQueriesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),

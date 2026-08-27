@@ -454,9 +454,12 @@ func maskFindingSpans(rows []platformrepo.ListOwnedChatTranscriptMessagesForReca
 					expected = conv.FromPGTextOrEmpty[string](finding.Match)
 				}
 				ms.spans = append(ms.spans, contentMaskSpan{
-					start:   entry.StartPos,
-					end:     entry.EndPos,
-					display: maskdisplay.Display(finding.Source, ruleID, entry.Match),
+					start: entry.StartPos,
+					end:   entry.EndPos,
+					// The resolved match, not entry.Match: a span entry with
+					// no per-span match would otherwise render an empty
+					// display, deleting the bytes instead of masking them.
+					display: maskdisplay.Display(finding.Source, ruleID, expected),
 					match:   expected,
 				})
 			case scanners.SurfaceDerived, scanners.SurfaceNone:

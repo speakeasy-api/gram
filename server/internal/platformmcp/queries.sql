@@ -2508,6 +2508,9 @@ LIMIT @row_limit;
 -- rows only (the digest does not render content parts), with the canonical
 -- suppression filters from risk's ListRiskResultsByChatFound: found, not
 -- excluded, not swept as false positive, policy still enabled and not deleted.
+-- Latest generation only, matching the transcript read: findings on
+-- superseded generations mask nothing the digest renders, so loading them
+-- would only let long, repeatedly compacted sessions inflate the scan.
 SELECT rr.chat_message_id, rr.source, rr.rule_id, rr.match, rr.spans, rr.start_pos, rr.end_pos
 FROM risk_results rr
 JOIN chat_messages cm ON cm.id = rr.chat_message_id
@@ -2520,6 +2523,12 @@ WHERE cm.chat_id = @chat_id
   AND c.user_id = @user_id::text
   AND c.deleted IS FALSE
   AND (ua.id IS NULL OR ua.account_type <> 'personal')
+  AND cm.generation = (
+    SELECT COALESCE(MAX(generation), 0)
+    FROM chat_messages
+    WHERE chat_id = @chat_id
+      AND project_id = @project_id
+  )
   AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
 ORDER BY cm.created_at ASC, cm.seq ASC, rr.id ASC;
 
