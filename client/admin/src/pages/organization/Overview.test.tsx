@@ -163,6 +163,7 @@ describe("Overview", () => {
     expect(
       within(facts).getByText("Ends").nextElementSibling?.textContent,
     ).toBe(new Date(trialEndsAt).toLocaleDateString());
+    expect(screen.getAllByText("State")).toHaveLength(1);
 
     // The defaulted pair is gone from the page, not merely unread: an operator
     // who sees "Free trial ends" reads a date no organization ever earned.
@@ -660,6 +661,31 @@ describe("Overview", () => {
       ).toBeNull();
     },
   );
+
+  it("keeps converted trial facts in Details without showing the side panel", async () => {
+    const convertedAt = "2026-08-20T00:00:00Z";
+    mocks.getOrganization.mockResolvedValue({
+      ...ORG,
+      trial_state: "converted",
+      trial_converted_at: convertedAt,
+    });
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    await screen.findByRole("heading", { name: "Details" });
+    const details = panelNamed("Details");
+    expect(
+      within(details).getByText("State").nextElementSibling?.textContent,
+    ).toBe("Converted");
+    expect(
+      within(details).getByText("Conversion date").nextElementSibling
+        ?.textContent,
+    ).toBe(new Date(convertedAt).toLocaleDateString());
+    expect(
+      screen.queryByRole("heading", { name: "Enterprise trial" }),
+    ).toBeNull();
+  });
 
   it("scopes trial and lifecycle actions to their new panels", async () => {
     await renderRouteTree(routeTree, {

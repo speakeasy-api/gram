@@ -249,6 +249,11 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
               {fmtDateShort(org.disabled_at)}
             </span>
           </Row>
+          {org.trial_state === "converted" && (
+            <Row label="Trial">
+              <TrialFacts org={org} />
+            </Row>
+          )}
         </Panel>
 
         <Panel
