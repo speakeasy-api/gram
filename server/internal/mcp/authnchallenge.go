@@ -38,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -332,6 +333,28 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token string, en
 	return newCtx, &subject, toolSelection, nil
 }
 
+// identityForSessionSubject maps a validated user-session subject to its
+// authentication provenance. Only a concrete user subject yields
+// authoritative acting-user provenance; a user subject with no ID yields
+// none at all rather than a hollow authoritative claim. Assistant-runtime
+// tokens never reach this mapping — their acceptance path stamps
+// KindAssistant directly even though it mints a user-shaped subject.
+func identityForSessionSubject(subject urn.SessionSubject) (mcpidentity.Identity, bool) {
+	switch subject.Kind {
+	case urn.SessionSubjectKindUser:
+		if subject.ID == "" {
+			return mcpidentity.Identity{Kind: "", UserID: ""}, false
+		}
+		return mcpidentity.AuthenticatedUser(subject.ID), true
+	case urn.SessionSubjectKindAPIKey:
+		return mcpidentity.Identity{Kind: mcpidentity.KindAPIKey, UserID: ""}, true
+	case urn.SessionSubjectKindAnonymous:
+		return mcpidentity.Identity{Kind: mcpidentity.KindAnonymous, UserID: ""}, true
+	default:
+		return mcpidentity.Identity{Kind: "", UserID: ""}, false
+	}
+}
+
 // contextForSessionSubject stamps the request context for a resolved session
 // subject: the OAuth client id when known, and — for non-anonymous subjects —
 // the endpoint-org AuthContext that downstream RBAC and telemetry read.
@@ -360,6 +383,10 @@ func (s *Service) contextForSessionSubject(
 	// the connection, and an anonymous session is a real connection whose
 	// principal happens to be unknown.
 	s.touchUserSessionLastUsed(ctx, endpoint, sessionID)
+
+	if provenance, ok := identityForSessionSubject(subject); ok {
+		ctx = mcpidentity.WithIdentity(ctx, provenance)
+	}
 
 	if subject.Kind == urn.SessionSubjectKindAnonymous {
 		return ctx, nil
@@ -497,7 +524,11 @@ func (s *Service) ApplyIssuerGate(
 		// the same user in project B.
 		if assistCtx, claims, aerr := s.assistantTokens.Authorize(ctx, authToken); aerr == nil && claims.ProjectID == endpoint.ProjectID.String() {
 			ssubj := urn.NewUserSubject(claims.UserID)
-			newCtx, subject = assistCtx, &ssubj
+			// The subject reads as a user so downstream session plumbing
+			// works, but the credential was an assistant-runtime token: its
+			// provenance stays KindAssistant and must never be treated as an
+			// authoritative acting user.
+			newCtx, subject = mcpidentity.WithIdentity(assistCtx, mcpidentity.Identity{Kind: mcpidentity.KindAssistant, UserID: ""}), &ssubj
 		}
 	}
 	if subject == nil {

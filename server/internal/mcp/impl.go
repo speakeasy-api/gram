@@ -62,6 +62,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/sessionclientinfo"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
+	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
@@ -1448,13 +1449,22 @@ func (s *Service) TryPublicIdentityAuth(ctx context.Context, r *http.Request, is
 // is true — today that path is exercised only by toolset-backed flows so
 // the resource is a toolset id; remote-backend callers pass false and the
 // id is decorative.
+//
+// Each successful strategy stamps its mcpidentity provenance here, at the
+// point of credential validation: assistant tokens are KindAssistant, API
+// keys (either scope) are KindAPIKey, and chat-session tokens are
+// KindChatSession. None of these credentials proves an acting Gram user, so
+// none stamps KindUserSession — even though every strategy populates an
+// AuthContext whose user-shaped fields exist for attribution only. A token
+// rejected by every strategy leaves the context unstamped, so downstream
+// checkpoints classify the request as unattributed.
 func (s *Service) authenticateToken(ctx context.Context, token string, oauthResourceID uuid.UUID, isOAuthCapable bool) (context.Context, error) {
 	if token == "" {
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
 
 	if authorizedCtx, _, err := s.assistantTokens.Authorize(ctx, token); err == nil {
-		return authorizedCtx, nil
+		return mcpidentity.WithIdentity(authorizedCtx, mcpidentity.Identity{Kind: mcpidentity.KindAssistant, UserID: ""}), nil
 	}
 
 	var err error
@@ -1468,7 +1478,7 @@ func (s *Service) authenticateToken(ctx context.Context, token string, oauthReso
 
 	ctx, err = s.auth.Authorize(ctx, token, &sc)
 	if err == nil {
-		return ctx, nil
+		return mcpidentity.WithIdentity(ctx, mcpidentity.Identity{Kind: mcpidentity.KindAPIKey, UserID: ""}), nil
 	}
 
 	// Strategy 3: Try API key authentication (chat scope fallback)
@@ -1479,13 +1489,13 @@ func (s *Service) authenticateToken(ctx context.Context, token string, oauthReso
 	}
 	ctx, err = s.auth.Authorize(ctx, token, &sc)
 	if err == nil {
-		return ctx, nil
+		return mcpidentity.WithIdentity(ctx, mcpidentity.Identity{Kind: mcpidentity.KindAPIKey, UserID: ""}), nil
 	}
 
 	// Strategy 4: Try Chat Sessions Token authentication
 	ctx, err = s.chatSessionsManager.Authorize(ctx, token)
 	if err == nil {
-		return ctx, nil
+		return mcpidentity.WithIdentity(ctx, mcpidentity.Identity{Kind: mcpidentity.KindChatSession, UserID: ""}), nil
 	}
 
 	return ctx, oops.E(oops.CodeUnauthorized, errors.New("failed to authorize token using any strategy"), "failed to authorize").LogWarn(ctx, s.logger, attr.SlogToolsetID(oauthResourceID.String()))
