@@ -52,6 +52,11 @@ func (t tokenResponse) RefreshTokenTimeoutSeconds() (int64, bool) {
 // on JWT access tokens, and some providers rely on it instead of ever sending
 // expires_in.
 //
+// A zero expires_in is treated as unreported. Read literally it would describe
+// a token that expired as it was issued, turning every request into a refresh
+// grant — or a reconnect prompt when no refresh token exists — for providers
+// that send 0 to mean the token never expires.
+//
 // The JWT is decoded without signature verification. exp only schedules a
 // refresh and never authorizes anything, so a forged value can at worst move
 // one refresh attempt earlier or later.

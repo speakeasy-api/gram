@@ -126,3 +126,21 @@ func TestTokenResponseAccessExpiresAt_PastExpIsReported(t *testing.T) {
 	require.NotNil(t, deadline)
 	require.WithinDuration(t, exp, *deadline, time.Second)
 }
+
+func TestTokenResponseAccessExpiresAt_ZeroExpiresInIsUnreported(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 8, 26, 12, 0, 0, 0, time.UTC)
+	exp := now.Add(24 * time.Hour)
+	tok := tokenResponse{
+		AccessToken: mintJWT(t, jwt.MapClaims{"exp": exp.Unix()}),
+		ExpiresIn:   0,
+	}
+
+	deadline := tok.AccessExpiresAt(now)
+	require.NotNil(t, deadline, "expires_in: 0 must fall through to the JWT exp rather than expire the token on arrival")
+	require.WithinDuration(t, exp, *deadline, time.Second)
+
+	require.Nil(t, (tokenResponse{AccessToken: "xoxp-opaque", ExpiresIn: 0}).AccessExpiresAt(now),
+		"expires_in: 0 on an opaque token is no known expiry")
+}
