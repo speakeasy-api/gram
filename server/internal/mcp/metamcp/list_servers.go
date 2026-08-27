@@ -3,7 +3,7 @@ package metamcp
 // Member connection states. Hosted (toolset-backed) members execute
 // in-process, so they are always available; proxied members report
 // StatusUnknown until the runtime holds live member sessions to report on
-// (AGE-3291 PR 2).
+// (AIM-87).
 const (
 	StatusUnknown   = "unknown"
 	StatusAvailable = "available"

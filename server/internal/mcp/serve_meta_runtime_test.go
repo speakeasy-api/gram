@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -27,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	variations_repo "github.com/speakeasy-api/gram/server/internal/variations/repo"
 )
 
@@ -576,10 +578,26 @@ func TestServePublic_MetaEndpoint_DescribeServer_FiltersRBACHiddenTools(t *testi
 	envelope := callMetaTool(t, partialCtx, ti, slug, "describe_server", map[string]any{"server": member.slug})
 	result := decodeMetaToolResult(t, envelope)
 	var described struct {
-		Tools []any `json:"tools"`
+		Tools []struct {
+			Name string `json:"name"`
+		} `json:"tools"`
 	}
 	require.NoError(t, json.Unmarshal(result.StructuredContent, &described))
 	require.Empty(t, described.Tools)
+
+	// Positive control: a grant naming the tool admits it, so the filter is
+	// consulting grants rather than hiding everything.
+	grantedSelector := authz.NewSelector(authz.ScopeMCPConnect, member.toolsetID.String())
+	grantedSelector[authz.SelectorKeyTool] = "alpha_tool"
+	grantedCtx := authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeMCPConnect,
+		Selector: grantedSelector,
+	})
+	envelope = callMetaTool(t, grantedCtx, ti, slug, "describe_server", map[string]any{"server": member.slug})
+	result = decodeMetaToolResult(t, envelope)
+	require.NoError(t, json.Unmarshal(result.StructuredContent, &described))
+	require.Len(t, described.Tools, 1)
+	require.Equal(t, member.slug+"--alpha_tool", described.Tools[0].Name)
 }
 
 // Toolset-level gate parity with ServeToolsetResolved's connection check: an
@@ -614,6 +632,21 @@ func TestServePublic_MetaEndpoint_PrivateToolset_NoConnectGrant_ReadsUnknown(t *
 		})
 		require.Contains(t, string(envelope["error"]), "unknown server", "execute_tool with %s", name)
 	}
+
+	// Positive control: a toolset-level grant opens both describe and
+	// execute, so the gate consults grants rather than refusing everyone.
+	grantedCtx := authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeMCPConnect,
+		Selector: authz.NewSelector(authz.ScopeMCPConnect, member.toolsetID.String()),
+	})
+	envelope := callMetaTool(t, grantedCtx, ti, slug, "describe_server", map[string]any{"server": member.slug})
+	require.NotContains(t, string(envelope["error"]), "unknown server")
+	envelope = callMetaTool(t, grantedCtx, ti, slug, "execute_tool", map[string]any{
+		"name":      member.slug + "--alpha_tool",
+		"arguments": map[string]any{},
+	})
+	require.NotContains(t, string(envelope["error"]), "unknown server",
+		"a granted subject must reach execution")
 }
 
 // A member whose server carries an unrecognized visibility value is filtered
@@ -667,4 +700,58 @@ func TestServePublic_MetaEndpoint_Anonymous_PrivateToolsetMemberHidden(t *testin
 
 	envelope = callMetaTool(t, anonCtx, ti, slug, "describe_server", map[string]any{"server": member.slug})
 	require.Contains(t, string(envelope["error"]), "unknown server")
+}
+
+// A meta session holding several member credentials — the normal state once
+// per-member consent qualifies one credential per member — must not break
+// hosted execution: the hosted member simply runs without a remote-session
+// token instead of failing the whole call.
+func TestServePublic_MetaEndpoint_ExecuteTool_HostedMember_MultiCredentialSession(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	sharedIssuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	slug := "meta-multicred-" + uuid.NewString()[:8]
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, slug, sharedIssuerID)
+	hosted := seedHostedMetaMember(t, ctx, ti, meta.ID, "hosted member", 1, mcpservers.VisibilityPublic, "alpha_tool")
+
+	clientA := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "multicred-a", "", []uuid.UUID{sharedIssuerID})
+	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "multicred-b", "", []uuid.UUID{sharedIssuerID})
+	subject := urn.NewUserSubject("multicred-user-" + uuid.NewString())
+	insertRemoteSessionAccessToken(t, ctx, ti, sharedIssuerID, clientA, subject, "token-a", time.Now().Add(time.Hour))
+	insertRemoteSessionAccessToken(t, ctx, ti, sharedIssuerID, clientB, subject, "token-b", time.Now().Add(time.Hour))
+
+	bearer, jti, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{
+		Subject:  subject,
+		Audience: urn.NewUserSessionIssuer(sharedIssuerID).String(),
+		Issuer:   ti.serverURL.String() + "/mcp/" + slug,
+		Lifetime: time.Hour,
+	})
+	require.NoError(t, err)
+	persistTestUserSession(t, ti, sharedIssuerID, subject, jti)
+
+	w, err := servePublicHTTP(t, context.Background(), ti, slug, makeMetaRPCBody(t, "tools/call", map[string]any{
+		"name":      "execute_tool",
+		"arguments": map[string]any{"name": hosted.slug + "--alpha_tool", "arguments": map[string]any{}},
+	}), bearer, nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
+	envelope := decodeRPCResponse(t, w)
+
+	var rpcErr struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+	}
+	require.NoError(t, json.Unmarshal(envelope["error"], &rpcErr))
+	// The fixture tool has no server URL, so execution still fails as invalid
+	// params — the point is that the multi-credential map no longer aborts
+	// dispatch before execution.
+	require.Equal(t, int(oops.MCPCodeInvalidParams), rpcErr.Code)
+	require.NotContains(t, rpcErr.Message, "remote-session upstream tokens")
 }
