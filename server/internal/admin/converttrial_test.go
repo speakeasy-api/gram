@@ -214,12 +214,28 @@ func (n *concurrentTrialNotifier) inactiveCount() int {
 	return len(n.inactive)
 }
 
+func waitForBlockedBackendCount(t *testing.T, ctx context.Context, conn *pgxpool.Pool, want int64) {
+	t.Helper()
+
+	require.Eventually(t, func() bool {
+		var blocked int64
+		err := conn.QueryRow(ctx, `
+			SELECT count(*)
+			FROM pg_stat_activity
+			WHERE datname = current_database()
+			  AND wait_event_type = 'Lock'
+		`).Scan(&blocked)
+		return err == nil && blocked >= want
+	}, 5*time.Second, 10*time.Millisecond, "expected at least %d blocked backends", want)
+}
+
 func TestMarkEnterpriseTrialConverted_AuditFailureRollsBackConversionAndRestoration(t *testing.T) {
 	t.Parallel()
 
 	ctx, svc, conn, _ := newRearmService(t)
-	orgID := "org_convert_audit_atomic"
+	orgID := "org_convert_audit_atomic_" + uuid.NewString()
 	seedDemotedTrial(t, ctx, conn, orgID, "enterprise")
+	seedDisabledTrialRuntimeFeatures(t, ctx, svc, conn, orgID)
 	before := readTrial(t, ctx, conn, orgID)
 	outboxBefore, err := testrepo.New(conn).CountOutboxEntriesByEventType(ctx, string(events.OrganizationEnterpriseTrialV1.EventType()))
 	require.NoError(t, err)
@@ -240,10 +256,23 @@ func TestMarkEnterpriseTrialConverted_AuditFailureRollsBackConversionAndRestorat
 	require.NoError(t, err)
 	require.Equal(t, outboxBefore, outboxAfter)
 	require.Empty(t, notifier.inactive)
+	for _, feature := range productfeatures.TrialRuntimeFeatures {
+		enabled, featureErr := svc.productFeatures.IsFeatureEnabled(ctx, orgID, feature)
+		require.NoError(t, featureErr)
+		require.False(t, enabled, "%s restoration must roll back with the rejected audit", feature)
+	}
+	for _, keyType := range openrouter.AllKeyTypes {
+		key := readOpenRouterKey(t, ctx, conn, orgID, keyType)
+		require.EqualValues(t, 100, key.MonthlyCredits, "pre-commit upstream limit work is intentionally durable")
+		require.NotContains(t, key.DisableCauses, string(openrouter.DisableCauseTrialDemotion), "pre-commit key-cause work is intentionally durable")
+		require.False(t, key.Disabled)
+	}
 }
 
 func TestMarkEnterpriseTrialConverted_ConcurrentAndReplayedCallsCommitOneConversion(t *testing.T) { //nolint:paralleltest // Coordinates writers against one trial row.
-	ctx, svc, conn, _ := newRearmService(t)
+	baseCtx, svc, conn, _ := newRearmService(t)
+	ctx, cancel := context.WithTimeout(baseCtx, 10*time.Second)
+	defer cancel()
 	const orgID = "org_convert_concurrent"
 	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: "Concurrent Conversion", slug: "concurrent-conversion", accountType: "enterprise", whitelisted: true})
 	seedTrial(t, ctx, conn, trialFixture{orgID: orgID, endsAt: time.Now().UTC().Add(24 * time.Hour)})
@@ -252,30 +281,39 @@ func TestMarkEnterpriseTrialConverted_ConcurrentAndReplayedCallsCommitOneConvers
 
 	before, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialConverted)
 	require.NoError(t, err)
+	first := make(chan error, 1)
+	second := make(chan error, 1)
 
-	const calls = 2
-	start := make(chan struct{})
-	results := make(chan error, calls)
-	var wg sync.WaitGroup
-	for range calls {
-		wg.Go(func() {
-			<-start
+	err = keybillinglock.WithAcquireTimeout(ctx, testenv.NewLogger(t), conn, orgID, openrouter.KeyTypeChat, time.Second, func(_ *pgxpool.Conn) error {
+		go func() {
 			_, callErr := svc.MarkEnterpriseTrialConverted(ctx, &gen.MarkEnterpriseTrialConvertedPayload{ID: orgID})
-			results <- callErr
-		})
-	}
-	close(start)
-	wg.Wait()
-	close(results)
+			first <- callErr
+		}()
+		waitForBlockedBackendCount(t, ctx, conn, 1) // first owns the trial row and waits for chat
 
-	for callErr := range results {
-		require.NoError(t, callErr)
+		go func() {
+			_, callErr := svc.MarkEnterpriseTrialConverted(ctx, &gen.MarkEnterpriseTrialConvertedPayload{ID: orgID})
+			second <- callErr
+		}()
+		waitForBlockedBackendCount(t, ctx, conn, 2) // second waits for the first writer's trial row
+		return nil
+	})
+	require.NoError(t, err)
+
+	for index, result := range []<-chan error{first, second} {
+		select {
+		case callErr := <-result:
+			require.NoError(t, callErr, "conversion call %d", index+1)
+		case <-time.After(5 * time.Second):
+			t.Fatalf("conversion call %d did not complete", index+1)
+		}
 	}
-	require.True(t, readTrial(t, ctx, conn, orgID).ConvertedAt.Valid)
+	trial := readTrial(t, ctx, conn, orgID)
+	require.True(t, trial.ConvertedAt.Valid)
 	after, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialConverted)
 	require.NoError(t, err)
 	require.Equal(t, before+1, after)
-	require.Equal(t, calls, notifier.inactiveCount(), "every successful conversion replay must enqueue TrialInactive")
+	require.Equal(t, 2, notifier.inactiveCount(), "every successful conversion replay must enqueue TrialInactive")
 }
 
 func TestMarkEnterpriseTrialConverted_UpstreamFailureRollsBackAndRetryConverges(t *testing.T) {
@@ -304,6 +342,19 @@ func TestMarkEnterpriseTrialConverted_UpstreamFailureRollsBackAndRetryConverges(
 	require.Equal(t, "free", state.GramAccountType)
 	require.False(t, state.Whitelisted)
 	require.Empty(t, notifier.inactive)
+	for _, feature := range productfeatures.TrialRuntimeFeatures {
+		enabled, featureErr := svc.productFeatures.IsFeatureEnabled(ctx, orgID, feature)
+		require.NoError(t, featureErr)
+		require.False(t, enabled, "%s admission must remain disabled after upstream failure", feature)
+	}
+	chatAfterFailure := readOpenRouterKey(t, ctx, conn, orgID, openrouter.KeyTypeChat)
+	require.EqualValues(t, 100, chatAfterFailure.MonthlyCredits)
+	require.NotContains(t, chatAfterFailure.DisableCauses, string(openrouter.DisableCauseTrialDemotion))
+	require.False(t, chatAfterFailure.Disabled)
+	internalAfterFailure := readOpenRouterKey(t, ctx, conn, orgID, openrouter.KeyTypeInternal)
+	require.EqualValues(t, 37, internalAfterFailure.MonthlyCredits)
+	require.Contains(t, internalAfterFailure.DisableCauses, string(openrouter.DisableCauseTrialDemotion))
+	require.True(t, internalAfterFailure.Disabled)
 
 	auditAfterFailure, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialConverted)
 	require.NoError(t, err)
@@ -320,6 +371,17 @@ func TestMarkEnterpriseTrialConverted_UpstreamFailureRollsBackAndRetryConverges(
 	require.Equal(t, "enterprise", state.GramAccountType)
 	require.True(t, state.Whitelisted)
 	require.Equal(t, []string{orgID}, notifier.inactive)
+	for _, feature := range productfeatures.TrialRuntimeFeatures {
+		enabled, featureErr := svc.productFeatures.IsFeatureEnabled(ctx, orgID, feature)
+		require.NoError(t, featureErr)
+		require.True(t, enabled, "%s admission must converge after retry", feature)
+	}
+	for _, keyType := range openrouter.AllKeyTypes {
+		key := readOpenRouterKey(t, ctx, conn, orgID, keyType)
+		require.EqualValues(t, 100, key.MonthlyCredits)
+		require.NotContains(t, key.DisableCauses, string(openrouter.DisableCauseTrialDemotion))
+		require.False(t, key.Disabled)
+	}
 
 	auditAfterRetry, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialConverted)
 	require.NoError(t, err)
@@ -330,32 +392,41 @@ func TestMarkEnterpriseTrialConverted_UpstreamFailureRollsBackAndRetryConverges(
 }
 
 func TestMarkEnterpriseTrialConverted_TrialRowPrecedesChatAndInternalKeyLocks(t *testing.T) { //nolint:paralleltest // Deliberately coordinates lock owners.
-	ctx, svc, conn, _ := newRearmService(t)
+	baseCtx, svc, conn, _ := newRearmService(t)
+	ctx, cancel := context.WithTimeout(baseCtx, 10*time.Second)
+	defer cancel()
 	const orgID = "org_convert_lock_order"
 	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: "Lock Order", slug: "lock-order", accountType: "enterprise", whitelisted: true})
 	seedTrial(t, ctx, conn, trialFixture{orgID: orgID, endsAt: time.Now().UTC().Add(24 * time.Hour)})
 
 	trialOwner := testenv.BeginTx(t, ctx, conn)
+	defer func() { _ = trialOwner.Rollback(baseCtx) }()
 	lockedID, err := repo.New(trialOwner).LockTrialForUpdate(ctx, orgID)
 	require.NoError(t, err)
 	require.Equal(t, orgID, lockedID)
 
 	converted := make(chan error, 1)
-	go func() {
-		_, conversionErr := svc.MarkEnterpriseTrialConverted(ctx, &gen.MarkEnterpriseTrialConvertedPayload{ID: orgID})
-		converted <- conversionErr
-	}()
-	testenv.WaitForBlockedBackend(t, ctx, conn)
-
 	logger := testenv.NewLogger(t)
-	err = keybillinglock.WithAcquireTimeout(ctx, logger, conn, orgID, openrouter.KeyTypeChat, time.Second, func(_ *pgxpool.Conn) error {
-		return keybillinglock.WithAcquireTimeout(ctx, logger, conn, orgID, openrouter.KeyTypeInternal, time.Second, func(_ *pgxpool.Conn) error {
-			return trialOwner.Commit(ctx)
-		})
+	err = keybillinglock.WithAcquireTimeout(ctx, logger, conn, orgID, openrouter.KeyTypeInternal, time.Second, func(_ *pgxpool.Conn) error {
+		go func() {
+			_, conversionErr := svc.MarkEnterpriseTrialConverted(ctx, &gen.MarkEnterpriseTrialConvertedPayload{ID: orgID})
+			converted <- conversionErr
+		}()
+		waitForBlockedBackendCount(t, ctx, conn, 1)
+
+		// While conversion waits for the trial row, neither key lock may be held.
+		chatErr := keybillinglock.WithAcquireTimeout(ctx, logger, conn, orgID, openrouter.KeyTypeChat, 250*time.Millisecond, func(_ *pgxpool.Conn) error { return nil })
+		require.NoError(t, chatErr)
+		require.NoError(t, trialOwner.Commit(ctx))
+
+		// The internal lock remains ours. A correct conversion therefore takes chat
+		// and waits here; an internal-before-chat implementation leaves chat free.
+		require.Eventually(t, func() bool {
+			chatErr = keybillinglock.WithAcquireTimeout(ctx, logger, conn, orgID, openrouter.KeyTypeChat, 100*time.Millisecond, func(_ *pgxpool.Conn) error { return nil })
+			return errors.Is(chatErr, keybillinglock.ErrAcquireTimeout)
+		}, 3*time.Second, 10*time.Millisecond, "conversion must hold chat before waiting for internal")
+		return nil
 	})
-	if err != nil {
-		require.NoError(t, trialOwner.Rollback(ctx))
-	}
 	require.NoError(t, err)
 
 	select {
@@ -367,12 +438,15 @@ func TestMarkEnterpriseTrialConverted_TrialRowPrecedesChatAndInternalKeyLocks(t 
 }
 
 func TestMarkEnterpriseTrialConverted_SerializesBehindTrialDemotion(t *testing.T) { //nolint:paralleltest // Coordinates two lifecycle writers.
-	ctx, svc, conn, _ := newRearmService(t)
+	baseCtx, svc, conn, _ := newRearmService(t)
+	ctx, cancel := context.WithTimeout(baseCtx, 10*time.Second)
+	defer cancel()
 	const orgID = "org_convert_after_demotion"
 	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: "Demotion Race", slug: "demotion-race", accountType: "enterprise", whitelisted: true})
 	seedTrial(t, ctx, conn, trialFixture{orgID: orgID, endsAt: time.Now().UTC().Add(-24 * time.Hour)})
 
 	demotionTx := testenv.BeginTx(t, ctx, conn)
+	defer func() { _ = demotionTx.Rollback(baseCtx) }()
 	demotionQueries := trialsRepo.New(demotionTx)
 	_, err := demotionQueries.MarkTrialDemoted(ctx, orgID)
 	require.NoError(t, err)
@@ -384,7 +458,7 @@ func TestMarkEnterpriseTrialConverted_SerializesBehindTrialDemotion(t *testing.T
 		_, conversionErr := svc.MarkEnterpriseTrialConverted(ctx, &gen.MarkEnterpriseTrialConvertedPayload{ID: orgID})
 		converted <- conversionErr
 	}()
-	testenv.WaitForBlockedBackend(t, ctx, conn)
+	waitForBlockedBackendCount(t, ctx, conn, 1)
 	require.NoError(t, demotionTx.Commit(ctx))
 
 	select {
@@ -402,11 +476,14 @@ func TestMarkEnterpriseTrialConverted_SerializesBehindTrialDemotion(t *testing.T
 }
 
 func TestMarkEnterpriseTrialConverted_SerializesBehindTrialRearm(t *testing.T) { //nolint:paralleltest // Coordinates two lifecycle writers.
-	ctx, svc, conn, _ := newRearmService(t)
+	baseCtx, svc, conn, _ := newRearmService(t)
+	ctx, cancel := context.WithTimeout(baseCtx, 10*time.Second)
+	defer cancel()
 	const orgID = "org_convert_after_rearm"
 	seedDemotedTrial(t, ctx, conn, orgID, "enterprise")
 
 	rearmTx := testenv.BeginTx(t, ctx, conn)
+	defer func() { _ = rearmTx.Rollback(baseCtx) }()
 	rearmQueries := trialsRepo.New(rearmTx)
 	_, err := rearmQueries.RearmTrial(ctx, trialsRepo.RearmTrialParams{OrganizationID: orgID, RearmForDays: 14})
 	require.NoError(t, err)
@@ -418,7 +495,7 @@ func TestMarkEnterpriseTrialConverted_SerializesBehindTrialRearm(t *testing.T) {
 		_, conversionErr := svc.MarkEnterpriseTrialConverted(ctx, &gen.MarkEnterpriseTrialConvertedPayload{ID: orgID})
 		converted <- conversionErr
 	}()
-	testenv.WaitForBlockedBackend(t, ctx, conn)
+	waitForBlockedBackendCount(t, ctx, conn, 1)
 	require.NoError(t, rearmTx.Commit(ctx))
 
 	select {
@@ -433,13 +510,18 @@ func TestMarkEnterpriseTrialConverted_SerializesBehindTrialRearm(t *testing.T) {
 }
 
 func TestMarkEnterpriseTrialConverted_SerializesWithBillingCauseMutation(t *testing.T) { //nolint:paralleltest // Coordinates the chat-key lock holder and conversion.
-	ctx, svc, conn, _ := newRearmService(t)
+	baseCtx, svc, conn, _ := newRearmService(t)
+	ctx, cancel := context.WithTimeout(baseCtx, 10*time.Second)
+	defer cancel()
 	const orgID = "org_convert_cause_race"
 	seedDemotedTrial(t, ctx, conn, orgID, "enterprise")
 
 	mutationStarted := make(chan struct{})
 	releaseMutation := make(chan struct{})
 	mutationDone := make(chan error, 1)
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(releaseMutation) }) }
+	defer release()
 	go func() {
 		mutationDone <- keybillinglock.WithAcquireTimeout(ctx, testenv.NewLogger(t), conn, orgID, openrouter.KeyTypeChat, time.Second, func(keyConn *pgxpool.Conn) error {
 			for _, cause := range []openrouter.DisableCause{openrouter.DisableCauseAdminLock, openrouter.DisableCauseBillingInactive} {
@@ -449,20 +531,36 @@ func TestMarkEnterpriseTrialConverted_SerializesWithBillingCauseMutation(t *test
 				}
 			}
 			close(mutationStarted)
-			<-releaseMutation
-			return nil
+			select {
+			case <-releaseMutation:
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			}
 		})
 	}()
-	<-mutationStarted
+	select {
+	case <-mutationStarted:
+	case mutationErr := <-mutationDone:
+		require.NoError(t, mutationErr)
+		t.Fatal("billing mutation exited before acquiring the chat lock")
+	case <-time.After(3 * time.Second):
+		t.Fatal("billing mutation did not acquire the chat lock")
+	}
 
 	converted := make(chan error, 1)
 	go func() {
 		_, conversionErr := svc.MarkEnterpriseTrialConverted(ctx, &gen.MarkEnterpriseTrialConvertedPayload{ID: orgID})
 		converted <- conversionErr
 	}()
-	testenv.WaitForBlockedBackend(t, ctx, conn)
-	close(releaseMutation)
-	require.NoError(t, <-mutationDone)
+	waitForBlockedBackendCount(t, ctx, conn, 1)
+	release()
+	select {
+	case mutationErr := <-mutationDone:
+		require.NoError(t, mutationErr)
+	case <-time.After(3 * time.Second):
+		t.Fatal("billing mutation did not release the chat lock")
+	}
 
 	select {
 	case err := <-converted:
