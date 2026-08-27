@@ -172,6 +172,13 @@ func (r *Runtime) WithOAuthTelemetry(telemetry OAuthTelemetry) *Runtime {
 	return r
 }
 
+func (r *Runtime) WithRiskTelemetry(telemetry RiskTelemetry) *Runtime {
+	if r != nil && r.registrar != nil {
+		r.registrar.withRiskTelemetry(telemetry)
+	}
+	return r
+}
+
 func (r *Runtime) recordAuthOutcome(ctx context.Context, outcome, reason string) {
 	if r.telemetry != nil {
 		r.telemetry.Record(ctx, OAuthEvent{Operation: "runtime_auth", Outcome: outcome, Reason: reason})

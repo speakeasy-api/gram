@@ -85,7 +85,7 @@ func TestRiskMutationAdmissionDistinguishesMissingProjectFromResolverOutage(t *t
 		wantErr  error
 	}{
 		{name: "missing project", resolve: ErrRiskReadNotFound, wantCode: "not_found", wantErr: ErrRiskMutationNotFound},
-		{name: "resolver outage", resolve: backendFailure, wantCode: unavailableCode, wantErr: ErrRiskMutationUnavailable},
+		{name: "resolver outage", resolve: backendFailure, wantCode: "unavailable", wantErr: ErrRiskMutationUnavailable},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
@@ -101,6 +101,33 @@ func TestRiskMutationAdmissionDistinguishesMissingProjectFromResolverOutage(t *t
 			if errors.Is(test.resolve, backendFailure) {
 				require.ErrorIs(t, err, backendFailure)
 			}
+		})
+	}
+}
+
+func TestRiskMutationAdmissionDistinguishesDisabledFlagFromFlagOutage(t *testing.T) {
+	t.Parallel()
+
+	project := ResolvedProject{ID: uuid.New(), Slug: "project"}
+	for _, test := range []struct {
+		name     string
+		flags    *riskMutationFlagProvider
+		wantCode string
+	}{
+		{name: "disabled", flags: &riskMutationFlagProvider{evaluation: feature.EvaluationDisabled}, wantCode: unavailableCode},
+		{name: "provider outage", flags: &riskMutationFlagProvider{err: errors.New("flag provider unavailable")}, wantCode: "unavailable"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			controls := &RiskMutationControls{
+				flags: test.flags, organizations: riskMutationOrganizationResolver{slug: "organization-slug"},
+				projects: &stubRiskProjects{project: project, expected: []riskProjectCall{{organizationID: "organization", projectSlug: project.Slug}}},
+				budget:   OperationBudget{Connection: &recordingOperationLimiter{}, Organization: &recordingOperationLimiter{}}, receipts: &RiskMutationReceiptStore{}, versions: &riskVersionCodec{key: []byte("key")},
+			}
+			_, err := controls.Admit(t.Context(), Principal{UserID: "user", OrganizationID: "organization"}, project.Slug)
+			var mutationErr *RiskMutationError
+			require.ErrorAs(t, err, &mutationErr)
+			require.Equal(t, test.wantCode, mutationErr.Code)
 		})
 	}
 }

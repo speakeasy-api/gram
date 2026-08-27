@@ -82,6 +82,7 @@ type Descriptor struct {
 // returns these as an error result; a direct caller receives this error, so
 // the reason survives instead of being replaced by an empty payload.
 type ToolRefusalError struct {
+	Code    string
 	Payload string
 }
 
@@ -134,13 +135,20 @@ func (d ResourceDescriptor) Read(ctx context.Context) (string, error) {
 // admitted audience are built from a single pass rather than two lists that can
 // drift.
 type Registrar struct {
-	server      *mcp.Server
-	descriptors []Descriptor
-	resources   []ResourceDescriptor
+	server        *mcp.Server
+	descriptors   []Descriptor
+	resources     []ResourceDescriptor
+	riskTelemetry RiskTelemetry
 }
 
 func newRegistrar(server *mcp.Server) *Registrar {
-	return &Registrar{server: server, descriptors: nil, resources: nil}
+	return &Registrar{server: server, descriptors: nil, resources: nil, riskTelemetry: noopRiskTelemetry{}}
+}
+
+func (r *Registrar) withRiskTelemetry(telemetry RiskTelemetry) {
+	if r != nil && telemetry != nil {
+		r.riskTelemetry = telemetry
+	}
 }
 
 // Descriptors returns everything registered, before any audience filter.
@@ -286,10 +294,10 @@ func refusalFromResult(result *mcp.CallToolResult) (*ToolRefusalError, bool) {
 	}
 	for _, content := range result.Content {
 		if text, ok := content.(*mcp.TextContent); ok && text.Text != "" {
-			return &ToolRefusalError{Payload: text.Text}, true
+			return &ToolRefusalError{Code: "", Payload: text.Text}, true
 		}
 	}
-	return &ToolRefusalError{Payload: `{"code":"` + unavailableCode + `"}`}, true
+	return &ToolRefusalError{Code: unavailableCode, Payload: `{"code":"` + unavailableCode + `"}`}, true
 }
 
 // prepareInputSchema returns one schema for all three consumers: MCP transport

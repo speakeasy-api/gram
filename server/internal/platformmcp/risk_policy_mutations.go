@@ -865,7 +865,7 @@ func riskMutationToolRefusal[Out any](err error) (*mcp.CallToolResult, Out, erro
 	if marshalErr != nil {
 		return nil, zero, fmt.Errorf("encode risk mutation refusal: %w", marshalErr)
 	}
-	return nil, zero, &ToolRefusalError{Payload: string(payload)}
+	return nil, zero, &ToolRefusalError{Code: mutation.Code, Payload: string(payload)}
 }
 
 func mapRiskPolicyMutationError(err error) error {
