@@ -11,6 +11,22 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const acquireOpenRouterBillingLock = `-- name: AcquireOpenRouterBillingLock :exec
+SELECT pg_advisory_xact_lock(
+    hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0)
+)
+`
+
+type AcquireOpenRouterBillingLockParams struct {
+	KeyType        string
+	OrganizationID string
+}
+
+func (q *Queries) AcquireOpenRouterBillingLock(ctx context.Context, arg AcquireOpenRouterBillingLockParams) error {
+	_, err := q.db.Exec(ctx, acquireOpenRouterBillingLock, arg.KeyType, arg.OrganizationID)
+	return err
+}
+
 const compareAndSetClassification = `-- name: CompareAndSetClassification :execrows
 UPDATE openrouter_api_keys
 SET disable_causes = $1::text[],
@@ -243,6 +259,11 @@ WITH candidates AS (
   WHERE k.disable_causes IS NULL
     AND k.deleted IS FALSE
     AND (k.organization_id, k.key_type) > ($1::text, $2::text)
+    -- Billing writers lock in advisory-then-row order. Try the same advisory
+    -- lock before FOR UPDATE so concurrent batches skip rather than deadlock.
+    AND pg_try_advisory_xact_lock(
+      hashtextextended('openrouter-' || k.key_type || '-billing:' || k.organization_id, 0)
+    )
   ORDER BY k.organization_id, k.key_type
   LIMIT $3::int
   FOR UPDATE OF k SKIP LOCKED

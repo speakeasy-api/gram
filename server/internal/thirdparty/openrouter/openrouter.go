@@ -564,27 +564,58 @@ func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, key
 }
 
 func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyType KeyType, limit *int) (int, error) {
-	return o.refreshAPIKeyLimit(ctx, o.db, orgID, keyType, limit, false)
+	return o.refreshAPIKeyLimitInTx(ctx, orgID, keyType, limit, false)
 }
 
 // RefreshAPIKeyLimitWithDB is RefreshAPIKeyLimit using db for every local read
 // and write. Callers holding a session advisory lock must use the same
 // connection rather than acquiring a second pool connection while locked.
 func (o *OpenRouter) RefreshAPIKeyLimitWithDB(ctx context.Context, db DBTX, orgID string, keyType KeyType, limit *int) (int, error) {
-	return o.refreshAPIKeyLimit(ctx, db, orgID, keyType, limit, false)
+	return o.refreshAPIKeyLimitWithLock(ctx, db, orgID, keyType, limit, false)
 }
 
 // ReinstateAPIKeyLimit refreshes a key while explicitly allowing a disabled
 // key to come back when its caller needs the policy default resolved from nil.
 func (o *OpenRouter) ReinstateAPIKeyLimit(ctx context.Context, orgID string, keyType KeyType, limit *int) (int, error) {
-	return o.refreshAPIKeyLimit(ctx, o.db, orgID, keyType, limit, true)
+	return o.refreshAPIKeyLimitInTx(ctx, orgID, keyType, limit, true)
 }
 
 // ReinstateAPIKeyLimitWithDB is ReinstateAPIKeyLimit using db for every local
 // read and write. Callers holding a session advisory lock must pass that same
 // connection instead of making the pool acquire a second connection.
 func (o *OpenRouter) ReinstateAPIKeyLimitWithDB(ctx context.Context, db DBTX, orgID string, keyType KeyType, limit *int) (int, error) {
-	return o.refreshAPIKeyLimit(ctx, db, orgID, keyType, limit, true)
+	return o.refreshAPIKeyLimitWithLock(ctx, db, orgID, keyType, limit, true)
+}
+
+func (o *OpenRouter) refreshAPIKeyLimitInTx(ctx context.Context, orgID string, keyType KeyType, limit *int, reinstate bool) (int, error) {
+	tx, err := o.db.Begin(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("begin OpenRouter key refresh: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	refreshed, err := o.refreshAPIKeyLimitWithLock(ctx, tx, orgID, keyType, limit, reinstate)
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("commit OpenRouter key refresh: %w", err)
+	}
+	return refreshed, nil
+}
+
+func (o *OpenRouter) refreshAPIKeyLimitWithLock(ctx context.Context, db DBTX, orgID string, keyType KeyType, limit *int, reinstate bool) (int, error) {
+	keyType = keyType.OrDefault()
+	if err := keyType.Validate(); err != nil {
+		return 0, fmt.Errorf("refresh openrouter key limit: %w", err)
+	}
+	if err := repo.New(db).AcquireOpenRouterBillingLock(ctx, repo.AcquireOpenRouterBillingLockParams{
+		OrganizationID: orgID,
+		KeyType:        string(keyType),
+	}); err != nil {
+		return 0, fmt.Errorf("lock OpenRouter key refresh: %w", err)
+	}
+	return o.refreshAPIKeyLimit(ctx, db, orgID, keyType, limit, reinstate)
 }
 
 func (o *OpenRouter) refreshAPIKeyLimit(ctx context.Context, db DBTX, orgID string, keyType KeyType, limit *int, reinstate bool) (int, error) {
