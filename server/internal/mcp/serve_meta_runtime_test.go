@@ -10,13 +10,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/auth/identity"
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -441,47 +446,95 @@ func TestServePublic_MetaEndpoint_NotificationWithBadVersionIsDropped(t *testing
 	require.Empty(t, w.Body.String())
 }
 
-// Challenge-resumption resolver (buildResolvedMetaMcpEndpointByRef) arms.
-func TestBuildResolvedMetaMcpEndpointByRef(t *testing.T) {
+// Challenge-resumption arms of the meta endpoint resolver, driven through
+// the public surface that invokes it: HandleIDPCallback resuming a cached
+// challenge. Resolution runs before the IDP code exchange, so the fail-closed
+// arms need no identity mock.
+func TestHandleIDPCallback_MetaEndpointResumption(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
+	newChallenge := func(t *testing.T, ctx context.Context, ti *testInstance, slug string, issuerID uuid.UUID, metaID uuid.UUID) string {
+		t.Helper()
+		challengeID := uuid.NewString()
+		require.NoError(t, ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
+			ID:                  challengeID,
+			UserSessionIssuerID: issuerID,
+			Endpoint: mcp.EndpointRef{
+				McpSlug:         slug,
+				MetaMcpServerID: uuid.NullUUID{UUID: metaID, Valid: true},
+			},
+			ClientID:            "test-client",
+			RedirectURI:         "http://localhost:3000/callback",
+			State:               "client-state",
+			CodeChallenge:       "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+			CodeChallengeMethod: "S256",
+			CSRFToken:           "csrf-token",
+			CreatedAt:           time.Now(),
+		}))
+		return challengeID
+	}
+	driveCallback := func(t *testing.T, ti *testInstance, slug, challengeID string) (*httptest.ResponseRecorder, error) {
+		t.Helper()
+		q := url.Values{"state": {challengeID}, "code": {"idp-auth-code-123"}}
+		req := httptest.NewRequest(http.MethodGet, "/mcp/"+slug+"/idp_callback?"+q.Encode(), nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("mcpSlug", slug)
+		req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+		w := httptest.NewRecorder()
+		return w, ti.service.HandleIDPCallback(w, req)
+	}
 
-	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
-	slug := "meta-" + uuid.NewString()
-	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, issuerID)
-
-	t.Run("resolves with denormalized org", func(t *testing.T) {
+	t.Run("resumes onto the meta endpoint", func(t *testing.T) {
 		t.Parallel()
-		endpoint, err := ti.service.BuildResolvedMcpEndpointByRefForTest(ctx, mcp.EndpointRef{
-			McpSlug:         slug,
-			MetaMcpServerID: uuid.NullUUID{UUID: meta.ID, Valid: true},
-		})
+		mock := &mockIdentityResolver{
+			exchangeResult:  &identity.IDPUserInfo{Sub: "idp-user-123", Email: "test@example.com", Name: "Test User"},
+			upsertResult:    "user-" + uuid.NewString()[:8],
+			hasAccessResult: &sessions.Organization{ID: "org-id-placeholder", Name: "Test Org"},
+			hasAccessEmail:  "test@example.com",
+			hasAccessOK:     true,
+		}
+		ctx, ti := newTestMCPServiceWithIdentityResolver(t, mock)
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+		issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
+		slug := "meta-" + uuid.NewString()
+		meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, issuerID)
+
+		challengeID := newChallenge(t, ctx, ti, slug, issuerID, meta.ID)
+		w, err := driveCallback(t, ti, slug, challengeID)
 		require.NoError(t, err)
-		require.Equal(t, authCtx.ActiveOrganizationID, endpoint.OrganizationID, "org id must come from the denormalized meta row")
-		require.Equal(t, issuerID, endpoint.UserSessionIssuerID)
-		require.Equal(t, "mcp", endpoint.RouteBase, "empty ref RouteBase defaults to mcp")
+		require.Equal(t, http.StatusFound, w.Code)
+		require.Contains(t, w.Header().Get("Location"), "/connect", "resolution must succeed and hand off to consent")
 	})
 
 	t.Run("fails closed on re-pointed endpoint", func(t *testing.T) {
 		t.Parallel()
-		_, err := ti.service.BuildResolvedMcpEndpointByRefForTest(ctx, mcp.EndpointRef{
-			McpSlug:         slug,
-			MetaMcpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
-		})
-		require.ErrorIs(t, err, mcp.ErrToolsetEndpointMismatchForTest)
+		ctx, ti := newTestMCPService(t)
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+		issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
+		slug := "meta-" + uuid.NewString()
+		createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, issuerID)
+
+		// The cached challenge claims a different meta server than the one
+		// the endpoint currently resolves to.
+		challengeID := newChallenge(t, ctx, ti, slug, issuerID, uuid.New())
+		_, err := driveCallback(t, ti, slug, challengeID)
+		require.ErrorContains(t, err, "authn challenge endpoint does not match",
+			"a challenge must not resume onto a re-pointed endpoint")
 	})
 
 	t.Run("issuer detached closes in-flight challenges", func(t *testing.T) {
 		t.Parallel()
-		ungatedSlug := "meta-" + uuid.NewString()
-		ungated := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, ungatedSlug, uuid.Nil)
-		_, err := ti.service.BuildResolvedMcpEndpointByRefForTest(ctx, mcp.EndpointRef{
-			McpSlug:         ungatedSlug,
-			MetaMcpServerID: uuid.NullUUID{UUID: ungated.ID, Valid: true},
-		})
+		ctx, ti := newTestMCPService(t)
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+		issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
+		slug := "meta-" + uuid.NewString()
+		ungated := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+
+		challengeID := newChallenge(t, ctx, ti, slug, issuerID, ungated.ID)
+		_, err := driveCallback(t, ti, slug, challengeID)
 		require.ErrorContains(t, err, "not found")
 	})
 }
