@@ -328,6 +328,8 @@ type Provisioner interface {
 	// the reinstatement path: a key that DisableAPIKey turned off comes back
 	// enabled, upstream and locally.
 	RefreshAPIKeyLimit(ctx context.Context, orgID string, keyType KeyType, limit *int) (int, error)
+	AddAPIKeyDisableCause(ctx context.Context, orgID string, keyType KeyType, cause DisableCause) (DisableCauseChange, error)
+	RemoveAPIKeyDisableCause(ctx context.Context, orgID string, keyType KeyType, cause DisableCause, limit *int) (int, DisableCauseChange, error)
 
 	// DisableAPIKey turns the org's key off upstream and records that locally,
 	// after which ProvisionAPIKey refuses it with ErrPlatformKeyDisabled. The
@@ -820,6 +822,109 @@ func (o *OpenRouter) AddAPIKeyDisableCause(ctx context.Context, orgID string, ke
 		return DisableCauseChange{}, err
 	}
 	return result, nil
+}
+
+// RemoveAPIKeyDisableCause removes only cause. Standalone calls serialize with
+// all compliant key mutations through the established per-key billing lock.
+func (o *OpenRouter) RemoveAPIKeyDisableCause(ctx context.Context, orgID string, keyType KeyType, cause DisableCause, limit *int) (int, DisableCauseChange, error) {
+	keyType = keyType.OrDefault()
+	if err := keyType.Validate(); err != nil {
+		return 0, DisableCauseChange{}, fmt.Errorf("remove OpenRouter API key disable cause: %w", err)
+	}
+	if err := cause.Validate(); err != nil {
+		return 0, DisableCauseChange{}, fmt.Errorf("remove OpenRouter API key disable cause: %w", err)
+	}
+	if limit != nil && *limit <= 0 {
+		return 0, DisableCauseChange{}, errors.New("remove OpenRouter API key disable cause: monthly credits must be positive")
+	}
+
+	var keyLimit int
+	var change DisableCauseChange
+	err := o.withOpenRouterKeyBillingLock(ctx, orgID, keyType, func(conn *pgxpool.Conn) error {
+		var removeErr error
+		keyLimit, change, removeErr = o.removeAPIKeyDisableCauseWithDB(ctx, conn, orgID, keyType, cause, limit)
+		return removeErr
+	})
+	if err != nil {
+		return 0, DisableCauseChange{}, err
+	}
+	return keyLimit, change, nil
+}
+
+// RemoveAPIKeyDisableCauseWithDB uses db for every local read and write. The
+// caller must hold the established per-key billing advisory lock.
+func (o *OpenRouter) RemoveAPIKeyDisableCauseWithDB(ctx context.Context, db DBTX, orgID string, keyType KeyType, cause DisableCause, limit *int) (int, DisableCauseChange, error) {
+	keyType = keyType.OrDefault()
+	if err := keyType.Validate(); err != nil {
+		return 0, DisableCauseChange{}, fmt.Errorf("remove OpenRouter API key disable cause: %w", err)
+	}
+	if err := cause.Validate(); err != nil {
+		return 0, DisableCauseChange{}, fmt.Errorf("remove OpenRouter API key disable cause: %w", err)
+	}
+	if limit != nil && *limit <= 0 {
+		return 0, DisableCauseChange{}, errors.New("remove OpenRouter API key disable cause: monthly credits must be positive")
+	}
+	return o.removeAPIKeyDisableCauseWithDB(ctx, db, orgID, keyType, cause, limit)
+}
+
+func (o *OpenRouter) removeAPIKeyDisableCauseWithDB(ctx context.Context, db DBTX, orgID string, keyType KeyType, cause DisableCause, limit *int) (int, DisableCauseChange, error) {
+	keyRepo := repo.New(db)
+	key, err := keyRepo.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(keyType)})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return 0, DisableCauseChange{}, nil
+	case err != nil:
+		return 0, DisableCauseChange{}, fmt.Errorf("read OpenRouter key before removing disable cause: %w", err)
+	case key.DisableCauses == nil:
+		return 0, DisableCauseChange{}, errors.New("cannot remove OpenRouter disable cause from unclassified key")
+	case !slices.Contains(key.DisableCauses, string(cause)):
+		return int(key.MonthlyCredits), DisableCauseChange{}, nil
+	}
+
+	accessChanged := len(key.DisableCauses) == 1
+	keyLimit := int(key.MonthlyCredits)
+	limitChanged := false
+	if accessChanged {
+		if limit != nil {
+			keyLimit = *limit
+		} else if key.MonthlyCredits == 0 {
+			org, orgErr := orgRepo.New(db).GetOrganizationMetadata(ctx, orgID)
+			if orgErr != nil {
+				return 0, DisableCauseChange{}, oops.E(oops.CodeUnexpected, orgErr, "failed to get organization").LogError(ctx, o.logger)
+			}
+			keyLimit = o.defaultLimitForOrg(ctx, db, org)
+		}
+		limitChanged = int64(keyLimit) != key.MonthlyCredits
+
+		patch := updateKeyRequest{Disabled: new(false)}
+		if limitChanged {
+			creditLimit := float64(keyLimit)
+			patch.Limit = &creditLimit
+			patch.LimitReset = "monthly"
+		}
+		patchCtx, cancel := context.WithTimeout(ctx, upstreamKeyPatchTimeout)
+		response, patchErr := o.patchOpenRouterAPIKey(patchCtx, key.KeyHash, patch)
+		cancel()
+		if patchErr != nil {
+			return 0, DisableCauseChange{}, fmt.Errorf("enable upstream OpenRouter API key: %w", patchErr)
+		}
+		if response.Data.Hash != key.KeyHash {
+			return 0, DisableCauseChange{}, errors.New("remove OpenRouter API key disable cause: upstream key identity changed")
+		}
+	}
+
+	_, err = keyRepo.RemoveOpenRouterAPIKeyDisableCause(ctx, repo.RemoveOpenRouterAPIKeyDisableCauseParams{
+		OrganizationID: orgID, KeyType: string(keyType), KeyHash: key.KeyHash, DisableCause: string(cause),
+		MonthlyCredits: int64(keyLimit), UpdateMonthlyCredits: limitChanged,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, DisableCauseChange{}, errors.New("OpenRouter key changed concurrently while removing disable cause")
+	}
+	if err != nil {
+		return 0, DisableCauseChange{}, fmt.Errorf("persist OpenRouter API key disable cause removal: %w", err)
+	}
+
+	return keyLimit, DisableCauseChange{CauseChanged: true, KeyAccessChanged: accessChanged}, nil
 }
 
 func (o *OpenRouter) withOpenRouterKeyBillingLock(ctx context.Context, orgID string, keyType KeyType, operation func(*pgxpool.Conn) error) error {

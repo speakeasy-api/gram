@@ -61,6 +61,14 @@ func (m *mockProvisioner) ProvisionedKeyTypes() []KeyType {
 	return out
 }
 
+func (m *mockProvisioner) AddAPIKeyDisableCause(context.Context, string, KeyType, DisableCause) (DisableCauseChange, error) {
+	return DisableCauseChange{}, nil
+}
+
+func (m *mockProvisioner) RemoveAPIKeyDisableCause(context.Context, string, KeyType, DisableCause, *int) (int, DisableCauseChange, error) {
+	return 0, DisableCauseChange{}, nil
+}
+
 func (m *mockProvisioner) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyType KeyType, limit *int) (int, error) {
 	return 0, nil
 }

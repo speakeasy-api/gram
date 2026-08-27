@@ -89,6 +89,44 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE
 RETURNING *;
 
+-- name: RemoveOpenRouterAPIKeyDisableCause :one
+UPDATE openrouter_api_keys
+SET disable_causes = CASE
+      WHEN @disable_cause::text = ANY(disable_causes) THEN ARRAY(
+        SELECT cause
+        FROM unnest(array_remove(disable_causes, @disable_cause::text)) AS causes(cause)
+        GROUP BY cause
+        ORDER BY CASE cause
+          WHEN 'admin_lock' THEN 1
+          WHEN 'trial_demotion' THEN 2
+          WHEN 'billing_inactive' THEN 3
+          ELSE 4
+        END, cause
+      )
+      ELSE disable_causes
+    END,
+    disabled = CASE
+      WHEN @disable_cause::text = ANY(disable_causes)
+        THEN cardinality(array_remove(disable_causes, @disable_cause::text)) > 0
+      ELSE disabled
+    END,
+    monthly_credits = CASE
+      WHEN @disable_cause::text = ANY(disable_causes) AND @update_monthly_credits::boolean
+        THEN @monthly_credits::bigint
+      ELSE monthly_credits
+    END,
+    updated_at = CASE
+      WHEN @disable_cause::text = ANY(disable_causes)
+        THEN GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
+      ELSE updated_at
+    END
+WHERE organization_id = @organization_id
+  AND key_type = @key_type
+  AND key_hash = @key_hash
+  AND disable_causes IS NOT NULL
+  AND deleted IS FALSE
+RETURNING *;
+
 -- name: DisableOpenRouterAPIKey :exec
 -- Locks the key down without deleting it, so a reinstated organization keeps
 -- the same upstream key and its ceiling. ProvisionAPIKey reads this flag and
