@@ -4,9 +4,16 @@ export type McpToolsAvailability = "loading" | "ready" | "unavailable";
 export const NO_MCP_TOOLS_MESSAGE =
   "No tools loaded from this server — connect authentication to test it.";
 
-/** Shown in the composer @-picker when tools/list settled empty or failed. */
-export const NO_CONTEXT_TOOLS_MESSAGE =
-  "No tools loaded from attached servers.";
+/** Composer @-picker: no MCP servers on the assistant, so tools/list never ran. */
+export const NO_CONTEXT_SERVERS_MESSAGE = "No MCP servers attached.";
+
+/** Composer @-picker: tools/list failed after servers were attached. */
+export const CONTEXT_TOOLS_LOAD_FAILED_MESSAGE =
+  "Couldn't load tools from attached servers.";
+
+/** Composer @-picker: tools/list settled with zero tools. */
+export const CONTEXT_TOOLS_EMPTY_MESSAGE =
+  "Attached servers didn't return any tools.";
 
 /**
  * Distinguishes in-flight tools/list from a settled empty/error result so
@@ -77,8 +84,8 @@ export function mcpToolsListPending(
   error: unknown,
   toolsQueryEnabled: boolean,
 ): boolean {
-  if (loading) return true;
   if (!toolsQueryEnabled) return false;
+  if (loading) return true;
   return mcpToolsAvailability(loading, tools, error) === "loading";
 }
 
@@ -88,7 +95,10 @@ export function composerContextToolsEmptyMessage(
   error: unknown,
   toolsQueryEnabled: boolean,
 ): string {
-  return mcpToolsListPending(loading, tools, error, toolsQueryEnabled)
-    ? "Loading tools…"
-    : NO_CONTEXT_TOOLS_MESSAGE;
+  if (!toolsQueryEnabled) return NO_CONTEXT_SERVERS_MESSAGE;
+  if (mcpToolsListPending(loading, tools, error, toolsQueryEnabled)) {
+    return "Loading tools…";
+  }
+  if (error) return CONTEXT_TOOLS_LOAD_FAILED_MESSAGE;
+  return CONTEXT_TOOLS_EMPTY_MESSAGE;
 }

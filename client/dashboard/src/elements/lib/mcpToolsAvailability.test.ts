@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   composerContextToolsEmptyMessage,
+  CONTEXT_TOOLS_EMPTY_MESSAGE,
+  CONTEXT_TOOLS_LOAD_FAILED_MESSAGE,
   mcpToolsAvailability,
   mcpToolsListPending,
   mcpToolsSendBlocked,
   mcpToolsSendTooltip,
   mcpToolsWelcomeSubtitle,
-  NO_CONTEXT_TOOLS_MESSAGE,
+  NO_CONTEXT_SERVERS_MESSAGE,
   NO_MCP_TOOLS_MESSAGE,
 } from "./mcpToolsAvailability";
 
@@ -74,10 +76,13 @@ describe("composerContextToolsEmptyMessage", () => {
     );
   });
 
-  it("explains a settled empty or failed tools/list instead of vanishing", () => {
+  it("explains a settled empty tools/list", () => {
     expect(composerContextToolsEmptyMessage(false, {}, null, true)).toBe(
-      NO_CONTEXT_TOOLS_MESSAGE,
+      CONTEXT_TOOLS_EMPTY_MESSAGE,
     );
+  });
+
+  it("explains a failed tools/list", () => {
     expect(
       composerContextToolsEmptyMessage(
         false,
@@ -85,15 +90,18 @@ describe("composerContextToolsEmptyMessage", () => {
         new Error("401"),
         true,
       ),
-    ).toBe(NO_CONTEXT_TOOLS_MESSAGE);
+    ).toBe(CONTEXT_TOOLS_LOAD_FAILED_MESSAGE);
   });
 
-  it("does not spin forever when the tools query is disabled", () => {
+  it("explains when no servers are attached", () => {
     expect(
       composerContextToolsEmptyMessage(false, undefined, null, false),
-    ).toBe(NO_CONTEXT_TOOLS_MESSAGE);
+    ).toBe(NO_CONTEXT_SERVERS_MESSAGE);
+    expect(composerContextToolsEmptyMessage(true, undefined, null, false)).toBe(
+      NO_CONTEXT_SERVERS_MESSAGE,
+    );
     expect(mcpToolsListPending(false, undefined, null, false)).toBe(false);
-    expect(mcpToolsListPending(true, undefined, null, false)).toBe(true);
+    expect(mcpToolsListPending(true, undefined, null, false)).toBe(false);
   });
 });
 
