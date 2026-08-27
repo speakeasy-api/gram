@@ -232,11 +232,12 @@ func (a *Adapter) probe(ctx context.Context, descriptor Descriptor, token string
 	httpClient.Transport = authRT
 
 	client := mcp.NewClient(&mcp.Implementation{
-		Name:       "platform-mcp-readiness",
-		Title:      "",
-		Version:    "1.0.0",
-		WebsiteURL: "",
-		Icons:      nil,
+		Name:        "platform-mcp-readiness",
+		Title:       "",
+		Description: "",
+		Version:     "1.0.0",
+		WebsiteURL:  "",
+		Icons:       nil,
 	}, nil)
 	session, err := client.Connect(ctx, &mcp.StreamableClientTransport{
 		Endpoint:             descriptor.StreamableHTTPURL,

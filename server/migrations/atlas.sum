@@ -1,4 +1,4 @@
-h1:nk1elBBZDeQJdvv0yvILssh2SD5eGVz9ocNSd8/90cE=
+h1:0SS6aJBPNoT2Q+L77fTMQxgWFp7/hLl3V7n4Y0SAaDM=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -367,4 +367,6 @@ h1:nk1elBBZDeQJdvv0yvILssh2SD5eGVz9ocNSd8/90cE=
 20260825202304_add-mcp-server-remote-session-issuer.sql h1:mGS8dAfAZECcILMlipui+QDySif0d0s+KAgEmp3CZQE=
 20260825204553_expand-user-session-issuers-org-tier.sql h1:kJ01dQVvnahFE3UaA2zZx+58ij7KzCuBHYkozcHCCqQ=
 20260825221933_gcp-iam-credentials-add-skip-project-verification.sql h1:DZOWCldTGLdSq4DlHGhu2wnFhLiqVffCgOKC8LoGzkE=
-20260826155659_data_export_routes.sql h1:kMtT74M7rlQbvOLdGwFXrtwNz50PcorCdd877k8fXPE=
+20260826163849_drop-mcp-server-authorization-exclusivity.sql h1:kTyvUQ+UXxaRY6PirpiwKX23Uq1VvLn5j5LxOHUXu3g=
+20260826174212_add-mcp-servers-user-session-issuer-index.sql h1:bV8x2GJNJerKXp7s1VyyO0GBQygI7ZPXwSdDbhrIftE=
+20260827075204_data_export_routes.sql h1:0jz+w0IdJEIku/z1IFA4Ycpp69EcWegR4tKUJE4F6Ys=

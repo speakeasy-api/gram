@@ -52,6 +52,18 @@ type GetUserSessionClientResponseBody struct {
 	// extracted from its metadata document. Client-controlled and unverified; do
 	// not present it as an identity.
 	ClientName string `form:"client_name" json:"client_name" xml:"client_name"`
+	// What the client must present to authenticate: 'public' (nothing), 'secret'
+	// (a client secret), 'key' (an assertion signed by its published key), or
+	// 'misconfigured'. Derived by the same rule the token endpoint enforces, so it
+	// reads what the client will actually be held to rather than what it declared.
+	// 'misconfigured' means the registration contradicts itself and the client
+	// cannot authenticate at all.
+	CredentialKind string `form:"credential_kind" json:"credential_kind" xml:"credential_kind"`
+	// The raw RFC 7591 token_endpoint_auth_method the client declared, for
+	// debugging against the spec. Null for a client registered before the value
+	// was recorded, which is not the same as declaring 'none' -- credential_kind
+	// resolves both cases and is what should be displayed.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
 	// Validated on every /authorize.
 	RedirectUris     []string `form:"redirect_uris" json:"redirect_uris" xml:"redirect_uris"`
 	ClientIDIssuedAt string   `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
@@ -97,6 +109,18 @@ type RefreshUserSessionClientCIMDResponseBody struct {
 	// extracted from its metadata document. Client-controlled and unverified; do
 	// not present it as an identity.
 	ClientName string `form:"client_name" json:"client_name" xml:"client_name"`
+	// What the client must present to authenticate: 'public' (nothing), 'secret'
+	// (a client secret), 'key' (an assertion signed by its published key), or
+	// 'misconfigured'. Derived by the same rule the token endpoint enforces, so it
+	// reads what the client will actually be held to rather than what it declared.
+	// 'misconfigured' means the registration contradicts itself and the client
+	// cannot authenticate at all.
+	CredentialKind string `form:"credential_kind" json:"credential_kind" xml:"credential_kind"`
+	// The raw RFC 7591 token_endpoint_auth_method the client declared, for
+	// debugging against the spec. Null for a client registered before the value
+	// was recorded, which is not the same as declaring 'none' -- credential_kind
+	// resolves both cases and is what should be displayed.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
 	// Validated on every /authorize.
 	RedirectUris     []string `form:"redirect_uris" json:"redirect_uris" xml:"redirect_uris"`
 	ClientIDIssuedAt string   `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
@@ -901,6 +925,18 @@ type UserSessionClientResponseBody struct {
 	// extracted from its metadata document. Client-controlled and unverified; do
 	// not present it as an identity.
 	ClientName string `form:"client_name" json:"client_name" xml:"client_name"`
+	// What the client must present to authenticate: 'public' (nothing), 'secret'
+	// (a client secret), 'key' (an assertion signed by its published key), or
+	// 'misconfigured'. Derived by the same rule the token endpoint enforces, so it
+	// reads what the client will actually be held to rather than what it declared.
+	// 'misconfigured' means the registration contradicts itself and the client
+	// cannot authenticate at all.
+	CredentialKind string `form:"credential_kind" json:"credential_kind" xml:"credential_kind"`
+	// The raw RFC 7591 token_endpoint_auth_method the client declared, for
+	// debugging against the spec. Null for a client registered before the value
+	// was recorded, which is not the same as declaring 'none' -- credential_kind
+	// resolves both cases and is what should be displayed.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
 	// Validated on every /authorize.
 	RedirectUris     []string `form:"redirect_uris" json:"redirect_uris" xml:"redirect_uris"`
 	ClientIDIssuedAt string   `form:"client_id_issued_at" json:"client_id_issued_at" xml:"client_id_issued_at"`
@@ -949,6 +985,8 @@ func NewGetUserSessionClientResponseBody(res *types.UserSessionClient) *GetUserS
 		ClientIDMetadataCacheExpiresAt: res.ClientIDMetadataCacheExpiresAt,
 		ClientIDMetadataEtag:           res.ClientIDMetadataEtag,
 		ClientName:                     res.ClientName,
+		CredentialKind:                 res.CredentialKind,
+		TokenEndpointAuthMethod:        res.TokenEndpointAuthMethod,
 		ClientIDIssuedAt:               res.ClientIDIssuedAt,
 		ClientSecretExpiresAt:          res.ClientSecretExpiresAt,
 		CreatedAt:                      res.CreatedAt,
@@ -979,6 +1017,8 @@ func NewRefreshUserSessionClientCIMDResponseBody(res *types.UserSessionClient) *
 		ClientIDMetadataCacheExpiresAt: res.ClientIDMetadataCacheExpiresAt,
 		ClientIDMetadataEtag:           res.ClientIDMetadataEtag,
 		ClientName:                     res.ClientName,
+		CredentialKind:                 res.CredentialKind,
+		TokenEndpointAuthMethod:        res.TokenEndpointAuthMethod,
 		ClientIDIssuedAt:               res.ClientIDIssuedAt,
 		ClientSecretExpiresAt:          res.ClientSecretExpiresAt,
 		CreatedAt:                      res.CreatedAt,

@@ -6,6 +6,7 @@ import { otelGetEventFacets } from "../funcs/otelGetEventFacets.js";
 import { otelGetEventVolume } from "../funcs/otelGetEventVolume.js";
 import { otelListEventLog } from "../funcs/otelListEventLog.js";
 import { otelUploadLogs } from "../funcs/otelUploadLogs.js";
+import { otelUploadMetrics } from "../funcs/otelUploadMetrics.js";
 import { otelUploadTraces } from "../funcs/otelUploadTraces.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { GetEventFacetsResult } from "../models/components/geteventfacetsresult.js";
@@ -28,6 +29,10 @@ import {
   UploadLogsSecurity,
 } from "../models/operations/uploadlogs.js";
 import {
+  UploadMetricsRequest,
+  UploadMetricsSecurity,
+} from "../models/operations/uploadmetrics.js";
+import {
   UploadTracesRequest,
   UploadTracesSecurity,
 } from "../models/operations/uploadtraces.js";
@@ -46,6 +51,25 @@ export class Otel extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(otelUploadLogs(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * metrics otel
+   *
+   * @remarks
+   * Endpoint to receive OTEL metrics data from LLM providers and harnesses.
+   */
+  async uploadMetrics(
+    request?: UploadMetricsRequest | undefined,
+    security?: UploadMetricsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(otelUploadMetrics(
       this,
       request,
       security,

@@ -34,14 +34,15 @@ const ProvenanceSource = "speakeasy"
 type FeatureChecker func(ctx context.Context, organizationID string) (bool, error)
 
 type Service struct {
-	logger        *slog.Logger
-	tracer        trace.Tracer
-	auth          *auth.Auth
-	authz         *authz.Engine
-	chRepo        *chrepo.Queries
-	logsEnabled   FeatureChecker
-	logPublisher  gcp.Publisher[*otelv1.InboundLogRecord]
-	spanPublisher gcp.Publisher[*otelv1.InboundSpan]
+	logger          *slog.Logger
+	tracer          trace.Tracer
+	auth            *auth.Auth
+	authz           *authz.Engine
+	chRepo          *chrepo.Queries
+	logsEnabled     FeatureChecker
+	logPublisher    gcp.Publisher[*otelv1.InboundLogRecord]
+	metricPublisher gcp.Publisher[*otelv1.InboundMetric]
+	spanPublisher   gcp.Publisher[*otelv1.InboundSpan]
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -57,16 +58,18 @@ func NewService(
 	logsEnabled FeatureChecker,
 	spanPublisher gcp.Publisher[*otelv1.InboundSpan],
 	logPublisher gcp.Publisher[*otelv1.InboundLogRecord],
+	metricPublisher gcp.Publisher[*otelv1.InboundMetric],
 ) *Service {
 	return &Service{
-		logger:        logger,
-		tracer:        tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/otel"),
-		auth:          auth.New(logger, db, sessions, authzEngine),
-		authz:         authzEngine,
-		chRepo:        chrepo.New(chConn),
-		logsEnabled:   logsEnabled,
-		logPublisher:  logPublisher,
-		spanPublisher: spanPublisher,
+		logger:          logger,
+		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/otel"),
+		auth:            auth.New(logger, db, sessions, authzEngine),
+		authz:           authzEngine,
+		chRepo:          chrepo.New(chConn),
+		logsEnabled:     logsEnabled,
+		logPublisher:    logPublisher,
+		metricPublisher: metricPublisher,
+		spanPublisher:   spanPublisher,
 	}
 }
 

@@ -4444,6 +4444,18 @@ func (q *Queries) ListUserEmailsByIDs(ctx context.Context, arg ListUserEmailsByI
 	return items, nil
 }
 
+const lockRiskPolicyMutations = `-- name: LockRiskPolicyMutations :exec
+SELECT pg_advisory_xact_lock(hashtextextended('risk-policy:' || $1::text, 0))
+`
+
+// Serialize all policy writes in one project. The single enabled blocking
+// Shadow MCP policy invariant spans multiple rows, so a row lock alone cannot
+// protect concurrent creates or enable/disable transitions.
+func (q *Queries) LockRiskPolicyMutations(ctx context.Context, projectID string) error {
+	_, err := q.db.Exec(ctx, lockRiskPolicyMutations, projectID)
+	return err
+}
+
 const markContentPartsRiskAnalyzed = `-- name: MarkContentPartsRiskAnalyzed :exec
 UPDATE chat_content_parts
 SET risk_analyzed_at = clock_timestamp()

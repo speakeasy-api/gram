@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcp_repo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	metamcp_visibility "github.com/speakeasy-api/gram/server/internal/metamcp/visibility"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -326,10 +327,11 @@ func NewResolvedMcpEndpointFromMcpServer(
 // NewResolvedMcpEndpointFromMetaMcpServer materialises a ResolvedMcpEndpoint
 // from a resolved (mcp_endpoint, meta_mcp_server) pair plus the owning
 // project's organisation id. Caller is responsible for first checking
-// metaServer.UserSessionIssuerID.Valid. Meta MCP servers have no visibility
-// column, so IsPublic reflects only whether an issuer gates the endpoint.
-// AudienceURN is bound to the issuer URN, matching the generic-server
-// constructor, so tokens stay portable between backends under one issuer.
+// metaServer.UserSessionIssuerID.Valid. AudienceURN is bound to the issuer URN,
+// matching the generic-server constructor, so tokens stay portable between
+// backends under one issuer. IsPublic is always false: a gateway's visibility
+// vocabulary has no anonymous state, and one with no issuer is already refused
+// by RequireUserSessionIssuer.
 func NewResolvedMcpEndpointFromMetaMcpServer(
 	mcpEndpoint *mcpendpoints_repo.McpEndpoint,
 	metaServer *metamcp_repo.MetaMcpServer,
@@ -341,7 +343,7 @@ func NewResolvedMcpEndpointFromMetaMcpServer(
 		// Stamped by RequireUserSessionIssuer, which every path runs next.
 		CIMDAdmissionModeRaw: pgtype.Text{String: "", Valid: false},
 		CustomDomainID:       mcpEndpoint.CustomDomainID,
-		IsPublic:             !metaServer.UserSessionIssuerID.Valid,
+		IsPublic:             false,
 		McpServerID:          uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		MetaMcpServerID:      uuid.NullUUID{UUID: metaServer.ID, Valid: true},
 		OrganizationID:       organizationID,
@@ -545,6 +547,11 @@ func (s *Service) buildResolvedMetaMcpEndpointByRef(ctx context.Context, ref End
 	}
 	if !metaServer.UserSessionIssuerID.Valid {
 		// An issuer detached mid-flow closes in-flight challenges.
+		return nil, oops.E(oops.CodeNotFound, nil, "not found")
+	}
+	if metaServer.Visibility == metamcp_visibility.Disabled {
+		// A gateway disabled mid-flow closes in-flight challenges, matching
+		// the generic-server branch's visibility check.
 		return nil, oops.E(oops.CodeNotFound, nil, "not found")
 	}
 	project, err := projects_repo.New(s.db).GetProjectByID(ctx, mcpEndpoint.ProjectID)

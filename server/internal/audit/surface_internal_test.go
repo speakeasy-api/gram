@@ -41,6 +41,19 @@ func TestActingIdentityFromContext_Derivation(t *testing.T) {
 			surface: SurfaceDashboard,
 		},
 		{
+			name: "an admin session is the admin app",
+			ctx: func(t *testing.T) context.Context {
+				t.Helper()
+				return contextvalues.SetAdminAuthContext(t.Context(), &contextvalues.AdminAuthContext{
+					SessionID:   "admin_session_test",
+					OIDCSubject: "admin_subject_test",
+					Name:        "Test Operator",
+					Email:       "operator@example.com",
+				})
+			},
+			surface: SurfaceAdmin,
+		},
+		{
 			name: "an API key is not the dashboard",
 			ctx: func(t *testing.T) context.Context {
 				t.Helper()
@@ -156,6 +169,7 @@ func TestActingIdentityFromContext_ClientIDOnlyFromOAuthClient(t *testing.T) {
 func TestKnownSurfaces_AreLowCardinality(t *testing.T) {
 	t.Parallel()
 
-	require.Len(t, knownSurfaces, 5)
+	require.Len(t, knownSurfaces, 6)
 	require.Contains(t, knownSurfaces, SurfaceUnknown)
+	require.Contains(t, knownSurfaces, SurfaceAdmin)
 }

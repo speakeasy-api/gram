@@ -70,11 +70,12 @@ func TestLogsPublishesFlattenedRecordsWithAuthenticatedProvenance(t *testing.T) 
 		published = record
 	}).Return(gcp.NewSuccessPublishResult()).Once()
 	service := &Service{
-		logger:        testenv.NewLogger(t),
-		tracer:        testenv.NewTracerProvider(t).Tracer("test"),
-		auth:          nil,
-		logPublisher:  publisher,
-		spanPublisher: nil,
+		logger:          testenv.NewLogger(t),
+		tracer:          testenv.NewTracerProvider(t).Tracer("test"),
+		auth:            nil,
+		logPublisher:    publisher,
+		metricPublisher: nil,
+		spanPublisher:   nil,
 	}
 	projectID := uuid.MustParse(testLogProjectID)
 	ctx := contextvalues.SetAuthContext(t.Context(), testOTELAuthContext(projectID))
@@ -125,11 +126,12 @@ func TestLogsStampsObservedTimeWhenMissing(t *testing.T) {
 		published = record
 	}).Return(gcp.NewSuccessPublishResult()).Once()
 	service := &Service{
-		logger:        testenv.NewLogger(t),
-		tracer:        testenv.NewTracerProvider(t).Tracer("test"),
-		auth:          nil,
-		logPublisher:  publisher,
-		spanPublisher: nil,
+		logger:          testenv.NewLogger(t),
+		tracer:          testenv.NewTracerProvider(t).Tracer("test"),
+		auth:            nil,
+		logPublisher:    publisher,
+		metricPublisher: nil,
+		spanPublisher:   nil,
 	}
 	projectID := uuid.MustParse(testLogProjectID)
 	ctx := contextvalues.SetAuthContext(t.Context(), testOTELAuthContext(projectID))
@@ -167,11 +169,12 @@ func TestLogsRejectsInvalidExportBeforePublishing(t *testing.T) {
 	publisher := gcp.NewMockPublisher[*otelv1.InboundLogRecord]()
 	publisher.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult()).Maybe()
 	service := &Service{
-		logger:        testenv.NewLogger(t),
-		tracer:        testenv.NewTracerProvider(t).Tracer("test"),
-		auth:          nil,
-		logPublisher:  publisher,
-		spanPublisher: nil,
+		logger:          testenv.NewLogger(t),
+		tracer:          testenv.NewTracerProvider(t).Tracer("test"),
+		auth:            nil,
+		logPublisher:    publisher,
+		metricPublisher: nil,
+		spanPublisher:   nil,
 	}
 	projectID := uuid.MustParse(testLogProjectID)
 	ctx := contextvalues.SetAuthContext(t.Context(), testOTELAuthContext(projectID))
@@ -206,11 +209,12 @@ func TestLogsRejectsRecordOverMaximumSizeBeforePublishing(t *testing.T) {
 	publisher := gcp.NewMockPublisher[*otelv1.InboundLogRecord]()
 	publisher.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult()).Maybe()
 	service := &Service{
-		logger:        testenv.NewLogger(t),
-		tracer:        testenv.NewTracerProvider(t).Tracer("test"),
-		auth:          nil,
-		logPublisher:  publisher,
-		spanPublisher: nil,
+		logger:          testenv.NewLogger(t),
+		tracer:          testenv.NewTracerProvider(t).Tracer("test"),
+		auth:            nil,
+		logPublisher:    publisher,
+		metricPublisher: nil,
+		spanPublisher:   nil,
 	}
 	projectID := uuid.MustParse(testLogProjectID)
 	ctx := contextvalues.SetAuthContext(t.Context(), testOTELAuthContext(projectID))

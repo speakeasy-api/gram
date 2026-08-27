@@ -56,6 +56,37 @@ pubsub:
       type: PROTOCOL_BUFFER
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-metering-v1-meter-reading
+    name: gram-metering-v1-meter-reading
+    spec:
+      definition: |
+        edition = "2024";
+        message MeterReading {
+          enum Kind {
+            KIND_UNSPECIFIED = 0;
+            KIND_USAGE = 1;
+            KIND_ADJUSTMENT = 2;
+          }
+          string id = 1;
+          string organization_id = 2;
+          string project_id = 3;
+          string meter_id = 4;
+          string operation_id = 5;
+          string unit = 6;
+          int64 value = 7;
+          string occurred_at = 8;
+          map<string, string> attributes = 9;
+          string corrects_reading_id = 10;
+          uint32 meter_version = 11;
+          Kind kind = 12;
+          string produced_at = 13;
+          string measurement_method = 14;
+          string adjustment_reason = 15;
+          string source = 16;
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-inbound-log-record
     name: gram-otel-v1-inbound-log-record
     spec:
@@ -122,6 +153,171 @@ pubsub:
             SEVERITY_NUMBER_FATAL2 = 22;
             SEVERITY_NUMBER_FATAL3 = 23;
             SEVERITY_NUMBER_FATAL4 = 24;
+          }
+          message AnyValue {
+            reserved 8;
+            oneof value {
+              string string_value = 1;
+              bool bool_value = 2;
+              int64 int_value = 3;
+              double double_value = 4;
+              ArrayValue array_value = 5;
+              KeyValueList kvlist_value = 6;
+              bytes bytes_value = 7;
+            }
+          }
+          message ArrayValue {
+            repeated AnyValue values = 1;
+          }
+          message KeyValueList {
+            repeated KeyValue values = 1;
+          }
+          message KeyValue {
+            reserved 3;
+            string key = 1;
+            AnyValue value = 2;
+          }
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-inbound-metric
+    name: gram-otel-v1-inbound-metric
+    spec:
+      definition: |
+        edition = "2024";
+        message InboundMetric {
+          reserved 4, 6, 8;
+          string name = 1;
+          string description = 2;
+          string unit = 3;
+          oneof data {
+            Gauge gauge = 5;
+            Sum sum = 7;
+            Histogram histogram = 9;
+            ExponentialHistogram exponential_histogram = 10;
+            Summary summary = 11;
+          }
+          repeated KeyValue metadata = 12;
+          Resource resource = 1000;
+          string resource_schema_url = 1001;
+          InstrumentationScope scope = 1002;
+          string scope_schema_url = 1003;
+          Provenance provenance = 1004;
+          message Provenance {
+            string source = 1;
+            string organization_id = 2;
+            string project_id = 3;
+          }
+          message Resource {
+            reserved 3;
+            repeated KeyValue attributes = 1;
+            uint32 dropped_attributes_count = 2;
+          }
+          message InstrumentationScope {
+            string name = 1;
+            string version = 2;
+            repeated KeyValue attributes = 3;
+            uint32 dropped_attributes_count = 4;
+          }
+          message Gauge {
+            repeated NumberDataPoint data_points = 1;
+          }
+          message Sum {
+            repeated NumberDataPoint data_points = 1;
+            AggregationTemporality aggregation_temporality = 2;
+            bool is_monotonic = 3;
+          }
+          message Histogram {
+            repeated HistogramDataPoint data_points = 1;
+            AggregationTemporality aggregation_temporality = 2;
+          }
+          message ExponentialHistogram {
+            repeated ExponentialHistogramDataPoint data_points = 1;
+            AggregationTemporality aggregation_temporality = 2;
+          }
+          message Summary {
+            repeated SummaryDataPoint data_points = 1;
+          }
+          enum AggregationTemporality {
+            AGGREGATION_TEMPORALITY_UNSPECIFIED = 0;
+            AGGREGATION_TEMPORALITY_DELTA = 1;
+            AGGREGATION_TEMPORALITY_CUMULATIVE = 2;
+          }
+          enum DataPointFlags {
+            DATA_POINT_FLAGS_DO_NOT_USE_UNSPECIFIED = 0;
+            DATA_POINT_FLAGS_NO_RECORDED_VALUE_MASK = 1;
+          }
+          message NumberDataPoint {
+            reserved 1;
+            repeated KeyValue attributes = 7;
+            fixed64 start_time_unix_nano = 2;
+            fixed64 time_unix_nano = 3;
+            oneof value {
+              double as_double = 4;
+              sfixed64 as_int = 6;
+            }
+            repeated Exemplar exemplars = 5;
+            uint32 flags = 8;
+          }
+          message HistogramDataPoint {
+            reserved 1;
+            repeated KeyValue attributes = 9;
+            fixed64 start_time_unix_nano = 2;
+            fixed64 time_unix_nano = 3;
+            fixed64 count = 4;
+            double sum = 5;
+            repeated fixed64 bucket_counts = 6;
+            repeated double explicit_bounds = 7;
+            repeated Exemplar exemplars = 8;
+            uint32 flags = 10;
+            double min = 11;
+            double max = 12;
+          }
+          message ExponentialHistogramDataPoint {
+            repeated KeyValue attributes = 1;
+            fixed64 start_time_unix_nano = 2;
+            fixed64 time_unix_nano = 3;
+            fixed64 count = 4;
+            double sum = 5;
+            sint32 scale = 6;
+            fixed64 zero_count = 7;
+            Buckets positive = 8;
+            Buckets negative = 9;
+            uint32 flags = 10;
+            repeated Exemplar exemplars = 11;
+            double min = 12;
+            double max = 13;
+            double zero_threshold = 14;
+            message Buckets {
+              sint32 offset = 1;
+              repeated uint64 bucket_counts = 2;
+            }
+          }
+          message SummaryDataPoint {
+            reserved 1;
+            repeated KeyValue attributes = 7;
+            fixed64 start_time_unix_nano = 2;
+            fixed64 time_unix_nano = 3;
+            fixed64 count = 4;
+            double sum = 5;
+            repeated ValueAtQuantile quantile_values = 6;
+            uint32 flags = 8;
+            message ValueAtQuantile {
+              double quantile = 1;
+              double value = 2;
+            }
+          }
+          message Exemplar {
+            reserved 1;
+            repeated KeyValue filtered_attributes = 7;
+            fixed64 time_unix_nano = 2;
+            oneof value {
+              double as_double = 3;
+              sfixed64 as_int = 6;
+            }
+            bytes span_id = 4;
+            bytes trace_id = 5;
           }
           message AnyValue {
             reserved 8;
@@ -323,6 +519,171 @@ pubsub:
             SEVERITY_NUMBER_FATAL2 = 22;
             SEVERITY_NUMBER_FATAL3 = 23;
             SEVERITY_NUMBER_FATAL4 = 24;
+          }
+          message AnyValue {
+            reserved 8;
+            oneof value {
+              string string_value = 1;
+              bool bool_value = 2;
+              int64 int_value = 3;
+              double double_value = 4;
+              ArrayValue array_value = 5;
+              KeyValueList kvlist_value = 6;
+              bytes bytes_value = 7;
+            }
+          }
+          message ArrayValue {
+            repeated AnyValue values = 1;
+          }
+          message KeyValueList {
+            repeated KeyValue values = 1;
+          }
+          message KeyValue {
+            reserved 3;
+            string key = 1;
+            AnyValue value = 2;
+          }
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-metric
+    name: gram-otel-v1-metric
+    spec:
+      definition: |
+        edition = "2024";
+        message Metric {
+          reserved 4, 6, 8;
+          string name = 1;
+          string description = 2;
+          string unit = 3;
+          oneof data {
+            Gauge gauge = 5;
+            Sum sum = 7;
+            Histogram histogram = 9;
+            ExponentialHistogram exponential_histogram = 10;
+            Summary summary = 11;
+          }
+          repeated KeyValue metadata = 12;
+          Resource resource = 1000;
+          string resource_schema_url = 1001;
+          InstrumentationScope scope = 1002;
+          string scope_schema_url = 1003;
+          Provenance provenance = 1004;
+          message Provenance {
+            string source = 1;
+            string organization_id = 2;
+            string project_id = 3;
+          }
+          message Resource {
+            reserved 3;
+            repeated KeyValue attributes = 1;
+            uint32 dropped_attributes_count = 2;
+          }
+          message InstrumentationScope {
+            string name = 1;
+            string version = 2;
+            repeated KeyValue attributes = 3;
+            uint32 dropped_attributes_count = 4;
+          }
+          message Gauge {
+            repeated NumberDataPoint data_points = 1;
+          }
+          message Sum {
+            repeated NumberDataPoint data_points = 1;
+            AggregationTemporality aggregation_temporality = 2;
+            bool is_monotonic = 3;
+          }
+          message Histogram {
+            repeated HistogramDataPoint data_points = 1;
+            AggregationTemporality aggregation_temporality = 2;
+          }
+          message ExponentialHistogram {
+            repeated ExponentialHistogramDataPoint data_points = 1;
+            AggregationTemporality aggregation_temporality = 2;
+          }
+          message Summary {
+            repeated SummaryDataPoint data_points = 1;
+          }
+          enum AggregationTemporality {
+            AGGREGATION_TEMPORALITY_UNSPECIFIED = 0;
+            AGGREGATION_TEMPORALITY_DELTA = 1;
+            AGGREGATION_TEMPORALITY_CUMULATIVE = 2;
+          }
+          enum DataPointFlags {
+            DATA_POINT_FLAGS_DO_NOT_USE_UNSPECIFIED = 0;
+            DATA_POINT_FLAGS_NO_RECORDED_VALUE_MASK = 1;
+          }
+          message NumberDataPoint {
+            reserved 1;
+            repeated KeyValue attributes = 7;
+            fixed64 start_time_unix_nano = 2;
+            fixed64 time_unix_nano = 3;
+            oneof value {
+              double as_double = 4;
+              sfixed64 as_int = 6;
+            }
+            repeated Exemplar exemplars = 5;
+            uint32 flags = 8;
+          }
+          message HistogramDataPoint {
+            reserved 1;
+            repeated KeyValue attributes = 9;
+            fixed64 start_time_unix_nano = 2;
+            fixed64 time_unix_nano = 3;
+            fixed64 count = 4;
+            double sum = 5;
+            repeated fixed64 bucket_counts = 6;
+            repeated double explicit_bounds = 7;
+            repeated Exemplar exemplars = 8;
+            uint32 flags = 10;
+            double min = 11;
+            double max = 12;
+          }
+          message ExponentialHistogramDataPoint {
+            repeated KeyValue attributes = 1;
+            fixed64 start_time_unix_nano = 2;
+            fixed64 time_unix_nano = 3;
+            fixed64 count = 4;
+            double sum = 5;
+            sint32 scale = 6;
+            fixed64 zero_count = 7;
+            Buckets positive = 8;
+            Buckets negative = 9;
+            uint32 flags = 10;
+            repeated Exemplar exemplars = 11;
+            double min = 12;
+            double max = 13;
+            double zero_threshold = 14;
+            message Buckets {
+              sint32 offset = 1;
+              repeated uint64 bucket_counts = 2;
+            }
+          }
+          message SummaryDataPoint {
+            reserved 1;
+            repeated KeyValue attributes = 7;
+            fixed64 start_time_unix_nano = 2;
+            fixed64 time_unix_nano = 3;
+            fixed64 count = 4;
+            double sum = 5;
+            repeated ValueAtQuantile quantile_values = 6;
+            uint32 flags = 8;
+            message ValueAtQuantile {
+              double quantile = 1;
+              double value = 2;
+            }
+          }
+          message Exemplar {
+            reserved 1;
+            repeated KeyValue filtered_attributes = 7;
+            fixed64 time_unix_nano = 2;
+            oneof value {
+              double as_double = 3;
+              sfixed64 as_int = 6;
+            }
+            bytes span_id = 4;
+            bytes trace_id = 5;
           }
           message AnyValue {
             reserved 8;
@@ -696,6 +1057,24 @@ pubsub:
         name: gram-authz-v1-challenge
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-metering-v1-meter-reading-ch-writer
+      topic_proto_message: gram-metering-v1-meter-reading
+    name: gram-metering-v1-meter-reading-ch-writer
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-metering-v1-meter-reading-ch-writer-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 2678400s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-metering-v1-meter-reading
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-inbound-log-record-transformer
       topic_proto_message: gram-otel-v1-inbound-log-record
     name: gram-otel-v1-inbound-log-record-transformer
@@ -712,6 +1091,24 @@ pubsub:
         minimumBackoff: 10s
       topicRef:
         name: gram-otel-v1-inbound-log-record
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-inbound-metric-transformer
+      topic_proto_message: gram-otel-v1-inbound-metric
+    name: gram-otel-v1-inbound-metric-transformer
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-otel-v1-inbound-metric-transformer-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 604800s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 60s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-otel-v1-inbound-metric
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-inbound-span-transformer
@@ -766,6 +1163,24 @@ pubsub:
         minimumBackoff: 10s
       topicRef:
         name: gram-otel-v1-log-record
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-metric-relay
+      topic_proto_message: gram-otel-v1-metric
+    name: gram-otel-v1-metric-relay
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-otel-v1-metric-relay-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 604800s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 60s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-otel-v1-metric
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-span-event-ch-writer
@@ -973,6 +1388,22 @@ pubsub:
     spec: {}
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-metering-v1-meter-reading
+    name: gram-metering-v1-meter-reading
+    spec:
+      messageRetentionDuration: 2678400s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-metering-v1-meter-reading
+  - labels:
+      dlq_for: gram-metering-v1-meter-reading-ch-writer
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-metering-v1-meter-reading-ch-writer
+    name: gram-metering-v1-meter-reading-ch-writer-dlq
+    spec: {}
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-inbound-log-record
     name: gram-otel-v1-inbound-log-record
     spec:
@@ -985,6 +1416,22 @@ pubsub:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-inbound-log-record-transformer
     name: gram-otel-v1-inbound-log-record-transformer-dlq
+    spec: {}
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-inbound-metric
+    name: gram-otel-v1-inbound-metric
+    spec:
+      messageRetentionDuration: 604800s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-otel-v1-inbound-metric
+  - labels:
+      dlq_for: gram-otel-v1-inbound-metric-transformer
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-inbound-metric-transformer
+    name: gram-otel-v1-inbound-metric-transformer-dlq
     spec: {}
   - labels:
       managed_by: proto-pubsub-orchestrator
@@ -1022,6 +1469,22 @@ pubsub:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-log-relay
     name: gram-otel-v1-log-relay-dlq
+    spec: {}
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-metric
+    name: gram-otel-v1-metric
+    spec:
+      messageRetentionDuration: 604800s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-otel-v1-metric
+  - labels:
+      dlq_for: gram-otel-v1-metric-relay
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-metric-relay
+    name: gram-otel-v1-metric-relay-dlq
     spec: {}
   - labels:
       managed_by: proto-pubsub-orchestrator

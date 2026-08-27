@@ -10,8 +10,9 @@ import (
 )
 
 type metrics struct {
-	logEnricherDuration  metric.Float64Histogram
-	spanEnricherDuration metric.Float64Histogram
+	logEnricherDuration    metric.Float64Histogram
+	metricEnricherDuration metric.Float64Histogram
+	spanEnricherDuration   metric.Float64Histogram
 }
 
 func newMetrics(logger *slog.Logger, meterProvider metric.MeterProvider) *metrics {
@@ -28,7 +29,17 @@ func newMetrics(logger *slog.Logger, meterProvider metric.MeterProvider) *metric
 		logger.ErrorContext(ctx, "failed to create metric", attr.SlogMetricName(meterLogEnricherDuration), attr.SlogError(err))
 	}
 
-	enricherDuration, err := meter.Float64Histogram(
+	metricEnricherDuration, err := meter.Float64Histogram(
+		meterMetricEnricherDuration,
+		metric.WithDescription("Duration of a single metric enricher in seconds"),
+		metric.WithUnit("s"),
+		metric.WithExplicitBucketBoundaries(0.01, 0.05, 0.25, 1, 2, 5),
+	)
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to create metric", attr.SlogMetricName(meterMetricEnricherDuration), attr.SlogError(err))
+	}
+
+	spanEnricherDuration, err := meter.Float64Histogram(
 		meterSpanEnricherDuration,
 		metric.WithDescription("Duration of a single span enricher in seconds"),
 		metric.WithUnit("s"),
@@ -39,8 +50,9 @@ func newMetrics(logger *slog.Logger, meterProvider metric.MeterProvider) *metric
 	}
 
 	return &metrics{
-		logEnricherDuration:  logEnricherDuration,
-		spanEnricherDuration: enricherDuration,
+		logEnricherDuration:    logEnricherDuration,
+		metricEnricherDuration: metricEnricherDuration,
+		spanEnricherDuration:   spanEnricherDuration,
 	}
 }
 
@@ -54,6 +66,21 @@ func (m *metrics) recordLogEnricherDuration(ctx context.Context, enricherName st
 		duration,
 		metric.WithAttributes(
 			attr.OTELLogEnricherName(enricherName),
+			attr.Outcome(outcome),
+		),
+	)
+}
+
+func (m *metrics) recordMetricEnricherDuration(ctx context.Context, enricherName string, duration float64, outcome o11y.Outcome) {
+	if m.metricEnricherDuration == nil {
+		return
+	}
+
+	m.metricEnricherDuration.Record(
+		ctx,
+		duration,
+		metric.WithAttributes(
+			attr.OTELMetricEnricherName(enricherName),
 			attr.Outcome(outcome),
 		),
 	)

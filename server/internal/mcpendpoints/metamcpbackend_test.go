@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/metamcp/visibility"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -31,6 +32,7 @@ func seedMetaMcpServer(t *testing.T, ctx context.Context, ti *testInstance, proj
 		ProjectID:           projectID,
 		Name:                "endpoint-backed meta",
 		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:          visibility.Private,
 	})
 	require.NoError(t, err)
 
@@ -305,4 +307,37 @@ func TestBySlugAndCustomDomain_ResolvesMetaBackedEndpoint(t *testing.T) {
 	require.NotNil(t, meta)
 	require.Equal(t, metaID, meta.ID)
 	require.Equal(t, slug, endpoint.Slug)
+}
+
+func TestBySlugAndCustomDomain_HidesDisabledMeta(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	meta, err := metamcprepo.New(ti.conn).CreateMetaMCPServer(ctx, metamcprepo.CreateMetaMCPServerParams{
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		ProjectID:           *authCtx.ProjectID,
+		Name:                "disabled meta",
+		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:          visibility.Disabled,
+	})
+	require.NoError(t, err)
+
+	slug := authCtx.OrganizationSlug + "-meta-disabled"
+	_, err = ti.service.CreateMcpEndpoint(ctx, &gen.CreateMcpEndpointPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		CustomDomainID:   nil,
+		McpServerID:      nil,
+		MetaMcpServerID:  conv.PtrEmpty(meta.ID.String()),
+		Slug:             types.McpEndpointSlug(slug),
+	})
+	require.NoError(t, err)
+
+	_, _, _, err = mcpendpoints.BySlugAndCustomDomain(ctx, ti.conn, testenv.NewLogger(t), slug)
+	requireOopsCode(t, err, oops.CodeNotFound)
 }

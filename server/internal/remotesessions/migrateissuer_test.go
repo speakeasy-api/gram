@@ -401,7 +401,7 @@ func TestGetIssuerMigratePreflight_ReportsEndpointMismatch(t *testing.T) {
 	preflight, err := ti.service.GetIssuerMigratePreflight(ctx, migratePreflightPayload(sourceID, targetID.String()))
 	require.NoError(t, err)
 	require.False(t, preflight.CanMigrate)
-	require.ElementsMatch(t, []string{"issuer", "token_endpoint", "authorization_endpoint"}, preflight.EndpointMismatches)
+	require.ElementsMatch(t, []string{"issuer", "token_endpoint", "authorization_endpoint"}, mismatchedFields(preflight.EndpointMismatches))
 }
 
 // TestGetIssuerMigratePreflight_ReportsConflictingBindings proves the preflight

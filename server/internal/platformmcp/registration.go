@@ -758,6 +758,7 @@ func (s *RegistrationStore) createPrivateRegistrationComponents(ctx context.Cont
 	}
 	issuer, err := usersessionsrepo.New(tx).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
 		ProjectID:          project.ID,
+		OrganizationID:     conv.ToPGText(registration.OrganizationID),
 		Slug:               "platform-mcp-issuer-" + suffix,
 		AuthnChallengeMode: "interactive",
 		SessionDuration: pgtype.Interval{

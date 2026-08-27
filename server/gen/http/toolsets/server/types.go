@@ -331,6 +331,14 @@ type ListToolFiltersResponseBody struct {
 	Excluded []*ToolFilterToolResponseBody `form:"excluded" json:"excluded" xml:"excluded"`
 }
 
+// ListToolSchemaStaticValuesResponseBody is the type of the "toolsets" service
+// "listToolSchemaStaticValues" endpoint HTTP response body.
+type ListToolSchemaStaticValuesResponseBody struct {
+	// Per-tool static values for tools whose input schemas contain at least one
+	// matching keyword
+	Tools []*ToolSchemaStaticValuesResponseBody `form:"tools" json:"tools" xml:"tools"`
+}
+
 // CloneToolsetResponseBody is the type of the "toolsets" service
 // "cloneToolset" endpoint HTTP response body.
 type CloneToolsetResponseBody struct {
@@ -1956,6 +1964,196 @@ type ListToolFiltersUnexpectedResponseBody struct {
 // service "listToolFilters" endpoint HTTP response body for the
 // "gateway_error" error.
 type ListToolFiltersGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolSchemaStaticValuesUnauthorizedResponseBody is the type of the
+// "toolsets" service "listToolSchemaStaticValues" endpoint HTTP response body
+// for the "unauthorized" error.
+type ListToolSchemaStaticValuesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolSchemaStaticValuesForbiddenResponseBody is the type of the
+// "toolsets" service "listToolSchemaStaticValues" endpoint HTTP response body
+// for the "forbidden" error.
+type ListToolSchemaStaticValuesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolSchemaStaticValuesBadRequestResponseBody is the type of the
+// "toolsets" service "listToolSchemaStaticValues" endpoint HTTP response body
+// for the "bad_request" error.
+type ListToolSchemaStaticValuesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolSchemaStaticValuesNotFoundResponseBody is the type of the "toolsets"
+// service "listToolSchemaStaticValues" endpoint HTTP response body for the
+// "not_found" error.
+type ListToolSchemaStaticValuesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolSchemaStaticValuesConflictResponseBody is the type of the "toolsets"
+// service "listToolSchemaStaticValues" endpoint HTTP response body for the
+// "conflict" error.
+type ListToolSchemaStaticValuesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolSchemaStaticValuesUnsupportedMediaResponseBody is the type of the
+// "toolsets" service "listToolSchemaStaticValues" endpoint HTTP response body
+// for the "unsupported_media" error.
+type ListToolSchemaStaticValuesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolSchemaStaticValuesInvalidResponseBody is the type of the "toolsets"
+// service "listToolSchemaStaticValues" endpoint HTTP response body for the
+// "invalid" error.
+type ListToolSchemaStaticValuesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolSchemaStaticValuesInvariantViolationResponseBody is the type of the
+// "toolsets" service "listToolSchemaStaticValues" endpoint HTTP response body
+// for the "invariant_violation" error.
+type ListToolSchemaStaticValuesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolSchemaStaticValuesUnexpectedResponseBody is the type of the
+// "toolsets" service "listToolSchemaStaticValues" endpoint HTTP response body
+// for the "unexpected" error.
+type ListToolSchemaStaticValuesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListToolSchemaStaticValuesGatewayErrorResponseBody is the type of the
+// "toolsets" service "listToolSchemaStaticValues" endpoint HTTP response body
+// for the "gateway_error" error.
+type ListToolSchemaStaticValuesGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3746,6 +3944,28 @@ type ToolFilterToolResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 }
 
+// ToolSchemaStaticValuesResponseBody is used to define fields on response body
+// types.
+type ToolSchemaStaticValuesResponseBody struct {
+	// The tool URN
+	ToolUrn string `form:"tool_urn" json:"tool_urn" xml:"tool_urn"`
+	// The tool name
+	ToolName string `form:"tool_name" json:"tool_name" xml:"tool_name"`
+	// Static values in the tool input schema
+	Values []*ToolSchemaStaticValueResponseBody `form:"values" json:"values" xml:"values"`
+}
+
+// ToolSchemaStaticValueResponseBody is used to define fields on response body
+// types.
+type ToolSchemaStaticValueResponseBody struct {
+	// JSON Pointer to the schema object containing the keyword
+	SchemaPath string `form:"schema_path" json:"schema_path" xml:"schema_path"`
+	// The JSON Schema keyword containing the value
+	Keyword string `form:"keyword" json:"keyword" xml:"keyword"`
+	// JSON-encoded literal value, preserving null and number precision
+	ValueJSON string `form:"value_json" json:"value_json" xml:"value_json"`
+}
+
 // ToolsetOriginRequestBody is used to define fields on request body types.
 type ToolsetOriginRequestBody struct {
 	// The globally unique registry specifier this toolset originated from
@@ -4241,6 +4461,26 @@ func NewListToolFiltersResponseBody(res *types.ListToolFiltersResult) *ListToolF
 		}
 	} else {
 		body.Excluded = []*ToolFilterToolResponseBody{}
+	}
+	return body
+}
+
+// NewListToolSchemaStaticValuesResponseBody builds the HTTP response body from
+// the result of the "listToolSchemaStaticValues" endpoint of the "toolsets"
+// service.
+func NewListToolSchemaStaticValuesResponseBody(res *toolsets.ListToolSchemaStaticValuesResult) *ListToolSchemaStaticValuesResponseBody {
+	body := &ListToolSchemaStaticValuesResponseBody{}
+	if res.Tools != nil {
+		body.Tools = make([]*ToolSchemaStaticValuesResponseBody, len(res.Tools))
+		for i, val := range res.Tools {
+			if val == nil {
+				body.Tools[i] = nil
+				continue
+			}
+			body.Tools[i] = marshalToolsetsToolSchemaStaticValuesToToolSchemaStaticValuesResponseBody(val)
+		}
+	} else {
+		body.Tools = []*ToolSchemaStaticValuesResponseBody{}
 	}
 	return body
 }
@@ -5918,6 +6158,156 @@ func NewListToolFiltersGatewayErrorResponseBody(res *goa.ServiceError) *ListTool
 	return body
 }
 
+// NewListToolSchemaStaticValuesUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "listToolSchemaStaticValues" endpoint
+// of the "toolsets" service.
+func NewListToolSchemaStaticValuesUnauthorizedResponseBody(res *goa.ServiceError) *ListToolSchemaStaticValuesUnauthorizedResponseBody {
+	body := &ListToolSchemaStaticValuesUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolSchemaStaticValuesForbiddenResponseBody builds the HTTP response
+// body from the result of the "listToolSchemaStaticValues" endpoint of the
+// "toolsets" service.
+func NewListToolSchemaStaticValuesForbiddenResponseBody(res *goa.ServiceError) *ListToolSchemaStaticValuesForbiddenResponseBody {
+	body := &ListToolSchemaStaticValuesForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolSchemaStaticValuesBadRequestResponseBody builds the HTTP response
+// body from the result of the "listToolSchemaStaticValues" endpoint of the
+// "toolsets" service.
+func NewListToolSchemaStaticValuesBadRequestResponseBody(res *goa.ServiceError) *ListToolSchemaStaticValuesBadRequestResponseBody {
+	body := &ListToolSchemaStaticValuesBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolSchemaStaticValuesNotFoundResponseBody builds the HTTP response
+// body from the result of the "listToolSchemaStaticValues" endpoint of the
+// "toolsets" service.
+func NewListToolSchemaStaticValuesNotFoundResponseBody(res *goa.ServiceError) *ListToolSchemaStaticValuesNotFoundResponseBody {
+	body := &ListToolSchemaStaticValuesNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolSchemaStaticValuesConflictResponseBody builds the HTTP response
+// body from the result of the "listToolSchemaStaticValues" endpoint of the
+// "toolsets" service.
+func NewListToolSchemaStaticValuesConflictResponseBody(res *goa.ServiceError) *ListToolSchemaStaticValuesConflictResponseBody {
+	body := &ListToolSchemaStaticValuesConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolSchemaStaticValuesUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "listToolSchemaStaticValues" endpoint
+// of the "toolsets" service.
+func NewListToolSchemaStaticValuesUnsupportedMediaResponseBody(res *goa.ServiceError) *ListToolSchemaStaticValuesUnsupportedMediaResponseBody {
+	body := &ListToolSchemaStaticValuesUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolSchemaStaticValuesInvalidResponseBody builds the HTTP response
+// body from the result of the "listToolSchemaStaticValues" endpoint of the
+// "toolsets" service.
+func NewListToolSchemaStaticValuesInvalidResponseBody(res *goa.ServiceError) *ListToolSchemaStaticValuesInvalidResponseBody {
+	body := &ListToolSchemaStaticValuesInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolSchemaStaticValuesInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "listToolSchemaStaticValues" endpoint
+// of the "toolsets" service.
+func NewListToolSchemaStaticValuesInvariantViolationResponseBody(res *goa.ServiceError) *ListToolSchemaStaticValuesInvariantViolationResponseBody {
+	body := &ListToolSchemaStaticValuesInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolSchemaStaticValuesUnexpectedResponseBody builds the HTTP response
+// body from the result of the "listToolSchemaStaticValues" endpoint of the
+// "toolsets" service.
+func NewListToolSchemaStaticValuesUnexpectedResponseBody(res *goa.ServiceError) *ListToolSchemaStaticValuesUnexpectedResponseBody {
+	body := &ListToolSchemaStaticValuesUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListToolSchemaStaticValuesGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "listToolSchemaStaticValues" endpoint
+// of the "toolsets" service.
+func NewListToolSchemaStaticValuesGatewayErrorResponseBody(res *goa.ServiceError) *ListToolSchemaStaticValuesGatewayErrorResponseBody {
+	body := &ListToolSchemaStaticValuesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewCheckMCPSlugAvailabilityUnauthorizedResponseBody builds the HTTP response
 // body from the result of the "checkMCPSlugAvailability" endpoint of the
 // "toolsets" service.
@@ -6930,6 +7320,18 @@ func NewGetToolsetPayload(slug string, sessionToken *string, apikeyToken *string
 // payload.
 func NewListToolFiltersPayload(slug string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.ListToolFiltersPayload {
 	v := &toolsets.ListToolFiltersPayload{}
+	v.Slug = types.Slug(slug)
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewListToolSchemaStaticValuesPayload builds a toolsets service
+// listToolSchemaStaticValues endpoint payload.
+func NewListToolSchemaStaticValuesPayload(slug string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *toolsets.ListToolSchemaStaticValuesPayload {
+	v := &toolsets.ListToolSchemaStaticValuesPayload{}
 	v.Slug = types.Slug(slug)
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
