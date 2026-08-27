@@ -68,6 +68,12 @@ WHERE id = @id
   AND deleted IS FALSE
 FOR UPDATE;
 
+-- name: LockRiskPolicyMutations :exec
+-- Serialize all policy writes in one project. The single enabled blocking
+-- Shadow MCP policy invariant spans multiple rows, so a row lock alone cannot
+-- protect concurrent creates or enable/disable transitions.
+SELECT pg_advisory_xact_lock(hashtextextended('risk-policy:' || @project_id::text, 0));
+
 -- name: GetRiskPolicyNameIncludingDeleted :one
 SELECT name
 FROM risk_policies

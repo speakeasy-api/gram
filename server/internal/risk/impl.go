@@ -53,7 +53,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/customrules"
-	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
 	"github.com/speakeasy-api/gram/server/internal/risk/recommendedscopes"
@@ -217,12 +216,24 @@ func NewService(
 ) *Service {
 	logger = logger.With(attr.SlogComponent("risk"))
 
+	var policyCacheInvalidator policycore.PolicyCacheInvalidator
+	if shadowMCPClient != nil {
+		policyCacheInvalidator = shadowMCPClient
+	}
+
 	return &Service{
-		tracer:                       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk"),
-		logger:                       logger,
-		db:                           db,
-		repo:                         repo.New(db),
-		policies:                     policycore.New(db),
+		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk"),
+		logger: logger,
+		db:     db,
+		repo:   repo.New(db),
+		policies: policycore.New(db, policycore.MutationDependencies{
+			Transactor:       db,
+			Auditor:          policyMutationAuditor{logger: auditLogger},
+			Approvals:        approvalIntake,
+			ReconcileURLs:    policycore.ReconcilePolicyURLs(reconcileShadowMCPPolicyURLs),
+			Signaler:         signaler,
+			CacheInvalidator: policyCacheInvalidator,
+		}),
 		auth:                         auth.New(logger, db, sessions, authzEngine),
 		authz:                        authzEngine,
 		signaler:                     signaler,
@@ -372,8 +383,6 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 			return nil, oops.E(oops.CodeInvalid, err, "invalid policy audience")
 		}
 	}
-	audiencePrincipalURNs := principalStrings(audiencePrincipals)
-
 	enabled := true
 	if payload.Enabled != nil {
 		enabled = *payload.Enabled
@@ -382,12 +391,6 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 	shadowMCPDisposition := conv.PtrValOr(payload.ShadowMcpDisposition, "")
 	if err := validateShadowMCPDisposition(shadowMCPDisposition, sources, action); err != nil {
 		return nil, err
-	}
-
-	if enabled && action == "block" && slices.Contains(sources, shadowmcp.SourceShadowMCP) {
-		if err := requireSingleShadowMCPBlockingPolicy(ctx, s.repo, *authCtx.ProjectID, uuid.Nil); err != nil {
-			return nil, err
-		}
 	}
 
 	var shadowMCPAllowedURLs []string
@@ -469,118 +472,47 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		}
 	}
 
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-
-	row, err := repo.New(dbtx).CreateRiskPolicy(ctx, repo.CreateRiskPolicyParams{
-		ID:                   id,
-		ProjectID:            *authCtx.ProjectID,
-		OrganizationID:       authCtx.ActiveOrganizationID,
-		Name:                 name,
-		PolicyType:           policyType,
-		Sources:              sources,
-		PresidioEntities:     createPolicyDetectionField(policyType, payload.PresidioEntities),
-		AnalyzerConfig:       analyzerConfig,
-		PromptInjectionRules: createPolicyDetectionField(policyType, payload.PromptInjectionRules),
-		DisabledRules:        createPolicyDetectionField(policyType, payload.DisabledRules),
-		CustomRuleIds:        createPolicyDetectionField(policyType, payload.CustomRuleIds),
-		MessageTypes:         payload.MessageTypes,
-		ScopeInclude:         conv.PtrToPGText(payload.ScopeInclude),
-		ScopeExempt:          conv.PtrToPGText(payload.ScopeExempt),
-		Enabled:              enabled,
-		Action:               action,
-		AudienceType:         audienceType,
-		ShadowMcpDisposition: conv.ToPGTextEmpty(shadowMCPDisposition),
-		AutoName:             autoName,
-		UserMessage:          conv.PtrToPGTextEmpty(payload.UserMessage),
-		Prompt:               prompt,
-		ModelConfig:          modelConfig,
-		// Create payload applies the Goa Default(5), so Score always carries a value.
-		Score: pgtype.Float8{Float64: payload.Score, Valid: true},
+	result, err := s.policies.CreatePolicy(ctx, policycore.CreateMutation{
+		Params: repo.CreateRiskPolicyParams{
+			ID:                   id,
+			ProjectID:            *authCtx.ProjectID,
+			OrganizationID:       authCtx.ActiveOrganizationID,
+			Name:                 name,
+			PolicyType:           policyType,
+			Sources:              sources,
+			PresidioEntities:     createPolicyDetectionField(policyType, payload.PresidioEntities),
+			AnalyzerConfig:       analyzerConfig,
+			PromptInjectionRules: createPolicyDetectionField(policyType, payload.PromptInjectionRules),
+			DisabledRules:        createPolicyDetectionField(policyType, payload.DisabledRules),
+			CustomRuleIds:        createPolicyDetectionField(policyType, payload.CustomRuleIds),
+			MessageTypes:         payload.MessageTypes,
+			ScopeInclude:         conv.PtrToPGText(payload.ScopeInclude),
+			ScopeExempt:          conv.PtrToPGText(payload.ScopeExempt),
+			Enabled:              enabled,
+			Action:               action,
+			AudienceType:         audienceType,
+			ShadowMcpDisposition: conv.ToPGTextEmpty(shadowMCPDisposition),
+			AutoName:             autoName,
+			UserMessage:          conv.PtrToPGTextEmpty(payload.UserMessage),
+			Prompt:               prompt,
+			ModelConfig:          modelConfig,
+			Score:                pgtype.Float8{Float64: payload.Score, Valid: true},
+		},
+		AudiencePrincipals: audiencePrincipals,
+		AllowedURLs:        shadowMCPAllowedURLs,
+		AllowedURLsSet:     payload.ShadowMcpAllowedUrls != nil,
+		BlockedURLs:        shadowMCPBlockedURLs,
+		BlockedURLsSet:     payload.ShadowMcpBlockedUrls != nil,
+		Actor: policycore.Actor{
+			Principal:   urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			DisplayName: authCtx.Email,
+			Slug:        nil,
+		},
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "create risk policy").LogError(ctx, s.logger)
+		return nil, s.policyMutationError(ctx, err)
 	}
-
-	if err := syncRiskPolicyAudienceGrants(ctx, dbtx, authCtx.ActiveOrganizationID, row.ID.String(), audienceType, audiencePrincipalURNs); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "sync risk policy audience").LogError(ctx, s.logger)
-	}
-	if payload.ShadowMcpAllowedUrls != nil {
-		if err := s.reconcileShadowMCPPolicyURLs(ctx, dbtx, policybypass.ReconcilePolicyURLsInput{
-			OrganizationID: authCtx.ActiveOrganizationID,
-			PolicyID:       row.ID.String(),
-			Scope:          authz.ScopeRiskPolicyBypass,
-			DesiredURLs:    shadowMCPAllowedURLs,
-			Principals:     audiencePrincipals,
-			// No preserve set on create: the replay below re-derives every
-			// standing decision's grants over whatever this list wrote.
-			PreserveURLs: nil,
-		}); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "reconcile shadow mcp policy allowed urls").LogError(ctx, s.logger)
-		}
-	}
-	if payload.ShadowMcpBlockedUrls != nil {
-		// Block rules apply to everyone in the project: the grant audience is
-		// always the all-users principal, independent of the policy audience.
-		if err := s.reconcileShadowMCPPolicyURLs(ctx, dbtx, policybypass.ReconcilePolicyURLsInput{
-			OrganizationID: authCtx.ActiveOrganizationID,
-			PolicyID:       row.ID.String(),
-			Scope:          authz.ScopeRiskPolicyBlock,
-			DesiredURLs:    shadowMCPBlockedURLs,
-			Principals:     []urn.Principal{authz.AllUsersPrincipal()},
-			PreserveURLs:   nil,
-		}); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "reconcile shadow mcp policy blocked urls").LogError(ctx, s.logger)
-		}
-	}
-
-	// A blocking policy created after decisions were recorded must honor
-	// them: an approval's grant state is derived here, in the same
-	// transaction, so ordering never decides what a decision means. This
-	// runs after the explicit allow/block URL lists — a standing decision is
-	// the institutional record and wins a per-URL conflict with a list typed
-	// into this form; the admin re-decides to change it.
-	if s.approvalIntake != nil && enabled && action == "block" && slices.Contains(sources, shadowmcp.SourceShadowMCP) {
-		if err := s.approvalIntake.ReconcileStandingDecisionsForPolicy(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, row.ID); err != nil {
-			// An inexpressible blast radius is the caller's error, already in
-			// the boundary shape this handler returns; wrapping it would
-			// bury the explanation the admin needs.
-			var shareable *oops.ShareableError
-			if errors.As(err, &shareable) {
-				return nil, err //nolint:wrapcheck // shareable errors pass the boundary intact
-			}
-			return nil, oops.E(oops.CodeUnexpected, err, "honor standing approval decisions on policy create").LogError(ctx, s.logger)
-		}
-	}
-
-	if err := s.audit.LogRiskPolicyCreate(ctx, dbtx, audit.LogRiskPolicyCreateEvent{
-		OrganizationID:   authCtx.ActiveOrganizationID,
-		ProjectID:        *authCtx.ProjectID,
-		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName: authCtx.Email,
-		ActorSlug:        nil,
-		RiskPolicyID:     row.ID,
-		RiskPolicyName:   row.Name,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log risk policy create").LogError(ctx, s.logger)
-	}
-
-	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit risk policy create").LogError(ctx, s.logger)
-	}
-
-	if s.shadowMCPClient != nil {
-		s.shadowMCPClient.Invalidate(ctx, row.ProjectID)
-	}
-
-	if enabled {
-		_ = s.signaler.Signal(ctx, row.ProjectID)
-	}
-
-	return s.policyToType(ctx, row)
+	return s.policyToType(ctx, result.Row)
 }
 
 func (s *Service) ListRiskPolicies(ctx context.Context, payload *gen.ListRiskPoliciesPayload) (*gen.ListRiskPoliciesResult, error) {
@@ -951,8 +883,6 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 			return nil, oops.E(oops.CodeInvalid, err, "invalid policy audience")
 		}
 	}
-	audiencePrincipalURNs = principalStrings(audiencePrincipals)
-
 	// The disposition is immutable: accept only the policy's current effective
 	// value (so form round-trips stay valid); anything else is a posture
 	// switch, which requires delete + recreate. A policy with an explicitly
@@ -964,11 +894,6 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		return nil, oops.E(oops.CodeInvalid, nil, "cannot change the sources or action of a shadow mcp policy with a disposition; delete and recreate the policy instead")
 	}
 
-	if enabled && action == "block" && slices.Contains(sources, shadowmcp.SourceShadowMCP) {
-		if err := requireSingleShadowMCPBlockingPolicy(ctx, s.repo, *authCtx.ProjectID, current.ID); err != nil {
-			return nil, err
-		}
-	}
 	if payload.ShadowMcpDisposition != nil {
 		if effectiveDisposition == "" {
 			return nil, oops.E(oops.CodeInvalid, nil, "shadow mcp disposition requires a blocking shadow mcp policy")
@@ -1056,153 +981,48 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		return nil, err
 	}
 
-	currentAudiencePrincipalURNs, err := s.policies.AudiencePrincipalURNs(ctx, authCtx.ActiveOrganizationID, current.ID.String())
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "load risk policy audience snapshot").LogError(ctx, s.logger)
-	}
-	snapshotBefore := policyRowSnapshotWithAudience(current, currentAudiencePrincipalURNs)
-
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-
-	row, err := repo.New(dbtx).UpdateRiskPolicy(ctx, repo.UpdateRiskPolicyParams{
-		ID:                   id,
-		ProjectID:            *authCtx.ProjectID,
-		Name:                 name,
-		Sources:              sources,
-		PresidioEntities:     presidioEntities,
-		AnalyzerConfig:       analyzerConfig,
-		PromptInjectionRules: promptInjectionRules,
-		DisabledRules:        disabledRules,
-		CustomRuleIds:        customRuleIds,
-		MessageTypes:         messageTypes,
-		ScopeInclude:         scopeInclude,
-		ScopeExempt:          scopeExempt,
-		Enabled:              enabled,
-		Action:               action,
-		AudienceType:         audienceType,
-		AutoName:             autoName,
-		UserMessage:          userMessage,
-		Prompt:               prompt,
-		ModelConfig:          modelConfig,
-		// Omit (nil) preserves the current score; the query COALESCEs to the
-		// existing column value. Never contributes to the version bump.
-		Score: conv.PtrToPGFloat8(payload.Score),
+	result, err := s.policies.UpdatePolicy(ctx, policycore.UpdateMutation{
+		Current: current,
+		Params: repo.UpdateRiskPolicyParams{
+			ID:                   id,
+			ProjectID:            *authCtx.ProjectID,
+			Name:                 name,
+			Sources:              sources,
+			PresidioEntities:     presidioEntities,
+			AnalyzerConfig:       analyzerConfig,
+			PromptInjectionRules: promptInjectionRules,
+			DisabledRules:        disabledRules,
+			CustomRuleIds:        customRuleIds,
+			MessageTypes:         messageTypes,
+			ScopeInclude:         scopeInclude,
+			ScopeExempt:          scopeExempt,
+			Enabled:              enabled,
+			Action:               action,
+			AudienceType:         audienceType,
+			AutoName:             autoName,
+			UserMessage:          userMessage,
+			Prompt:               prompt,
+			ModelConfig:          modelConfig,
+			Score:                conv.PtrToPGFloat8(payload.Score),
+		},
+		AudiencePrincipals:   audiencePrincipals,
+		AudienceChanged:      audienceUpdateRequested,
+		AllowedURLs:          shadowMCPAllowedURLs,
+		AllowedURLsSet:       payload.ShadowMcpAllowedUrls != nil,
+		BlockedURLs:          shadowMCPBlockedURLs,
+		BlockedURLsSet:       payload.ShadowMcpBlockedUrls != nil,
+		EffectiveDisposition: effectiveDisposition,
+		SupersedeDecisions:   payload.SupersedeDecisions != nil && *payload.SupersedeDecisions,
+		Actor: policycore.Actor{
+			Principal:   urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			DisplayName: authCtx.Email,
+			Slug:        nil,
+		},
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "update risk policy").LogError(ctx, s.logger)
+		return nil, s.policyMutationError(ctx, err)
 	}
-
-	if err := syncRiskPolicyAudienceGrants(ctx, dbtx, authCtx.ActiveOrganizationID, row.ID.String(), audienceType, audiencePrincipalURNs); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "sync risk policy audience").LogError(ctx, s.logger)
-	}
-
-	wasBlocking := current.Enabled && current.Action == "block" && slices.Contains(current.Sources, shadowmcp.SourceShadowMCP)
-	nowBlocking := enabled && action == "block" && slices.Contains(sources, shadowmcp.SourceShadowMCP)
-
-	// The conflict review runs exactly where the replay below does not: on a
-	// policy that was and stays blocking, this edit is the only writer of
-	// URL grant state, so it must not displace a standing decision without
-	// the caller's explicit confirmation. Standing URLs are preserved
-	// through the reconcile either way.
-	var preserveDecisionURLs map[string]struct{}
-	if s.approvalIntake != nil && wasBlocking && nowBlocking {
-		review, err := s.approvalIntake.ReviewShadowMCPPolicyURLEdit(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, current.ID, effectiveDisposition, shadowMCPAllowedURLs, shadowMCPBlockedURLs)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "review shadow mcp policy url edit").LogError(ctx, s.logger)
-		}
-		if len(review.Conflicts) > 0 {
-			if payload.SupersedeDecisions == nil || !*payload.SupersedeDecisions {
-				names := make([]string, 0, len(review.Conflicts))
-				for _, conflict := range review.Conflicts {
-					names = append(names, conflict.TargetRaw)
-				}
-				return nil, oops.E(oops.CodeConflict, nil, "This change contradicts recorded access decisions for %s. Confirm superseding those decisions to proceed.", strings.Join(names, ", "))
-			}
-			if err := s.approvalIntake.SupersedeShadowMCPDecisions(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, review.Conflicts, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), authCtx.Email); err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "supersede contradicted decisions").LogError(ctx, s.logger)
-			}
-		}
-		if len(review.StandingURLs) > 0 {
-			preserveDecisionURLs = make(map[string]struct{}, len(review.StandingURLs))
-			for _, serverURL := range review.StandingURLs {
-				preserveDecisionURLs[serverURL] = struct{}{}
-			}
-		}
-	}
-
-	if payload.ShadowMcpAllowedUrls != nil || audienceUpdateRequested {
-		if err := s.reconcileShadowMCPPolicyURLs(ctx, dbtx, policybypass.ReconcilePolicyURLsInput{
-			OrganizationID: authCtx.ActiveOrganizationID,
-			PolicyID:       row.ID.String(),
-			Scope:          authz.ScopeRiskPolicyBypass,
-			DesiredURLs:    shadowMCPAllowedURLs,
-			Principals:     audiencePrincipals,
-			PreserveURLs:   preserveDecisionURLs,
-		}); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "reconcile shadow mcp policy allowed urls").LogError(ctx, s.logger)
-		}
-	}
-	if payload.ShadowMcpBlockedUrls != nil {
-		// Block rules apply to everyone in the project: the grant audience is
-		// always the all-users principal, independent of the policy audience.
-		if err := s.reconcileShadowMCPPolicyURLs(ctx, dbtx, policybypass.ReconcilePolicyURLsInput{
-			OrganizationID: authCtx.ActiveOrganizationID,
-			PolicyID:       row.ID.String(),
-			Scope:          authz.ScopeRiskPolicyBlock,
-			DesiredURLs:    shadowMCPBlockedURLs,
-			Principals:     []urn.Principal{authz.AllUsersPrincipal()},
-			PreserveURLs:   preserveDecisionURLs,
-		}); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "reconcile shadow mcp policy blocked urls").LogError(ctx, s.logger)
-		}
-	}
-
-	// An update can transition a policy into blocking (enable it, or change
-	// its action) — the moment it starts enforcing, the standing decisions
-	// apply to it exactly as they would to a newly created one. The replay
-	// is idempotent, so firing on any transition into the blocking state is
-	// safe even when stale grants survive a disable/enable cycle.
-	if s.approvalIntake != nil && nowBlocking && !wasBlocking {
-		if err := s.approvalIntake.ReconcileStandingDecisionsForPolicy(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, row.ID); err != nil {
-			// Same shareable pass-through as the create path: the radius
-			// rejection reaches the caller with its explanation intact.
-			var shareable *oops.ShareableError
-			if errors.As(err, &shareable) {
-				return nil, err //nolint:wrapcheck // shareable errors pass the boundary intact
-			}
-			return nil, oops.E(oops.CodeUnexpected, err, "honor standing approval decisions on policy update").LogError(ctx, s.logger)
-		}
-	}
-
-	if err := s.audit.LogRiskPolicyUpdate(ctx, dbtx, audit.LogRiskPolicyUpdateEvent{
-		OrganizationID:   authCtx.ActiveOrganizationID,
-		ProjectID:        *authCtx.ProjectID,
-		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName: authCtx.Email,
-		ActorSlug:        nil,
-		RiskPolicyID:     row.ID,
-		RiskPolicyName:   row.Name,
-		SnapshotBefore:   snapshotBefore,
-		SnapshotAfter:    policyRowSnapshotWithAudience(row, audiencePrincipalURNs),
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log risk policy update").LogError(ctx, s.logger)
-	}
-
-	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit risk policy update").LogError(ctx, s.logger)
-	}
-
-	if s.shadowMCPClient != nil {
-		s.shadowMCPClient.Invalidate(ctx, row.ProjectID)
-	}
-
-	_ = s.signaler.Signal(ctx, row.ProjectID)
-
-	return s.policyToType(ctx, row)
+	return s.policyToType(ctx, result.Row)
 }
 
 func (s *Service) DeleteRiskPolicy(ctx context.Context, payload *gen.DeleteRiskPolicyPayload) error {
@@ -3700,10 +3520,6 @@ func buildSessionQuarantine(row repo.SessionQuarantine) *gen.SessionQuarantine {
 		ReleasedAt:     releasedAt,
 		ReleasedBy:     conv.FromPGText[string](row.ReleasedBy),
 	}
-}
-
-func policyRowSnapshotWithAudience(row repo.RiskPolicy, audiencePrincipalURNs []string) *types.RiskPolicy {
-	return policyToGoa(policycore.AuditSnapshot(policycore.Project(row, audiencePrincipalURNs, nil)))
 }
 
 func customDetectionRuleToType(row repo.RiskCustomDetectionRule) *types.RiskCustomDetectionRule {
