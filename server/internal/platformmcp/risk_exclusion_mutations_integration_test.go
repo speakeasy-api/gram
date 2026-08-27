@@ -64,7 +64,7 @@ func TestRiskExclusionMutationHandlersCreateUpdateReplayAndRedact(t *testing.T) 
 	secret := "sensitive-value"
 	createInput := map[string]any{
 		"project_slug": project.Slug, "match_type": "exact", "match_value": secret,
-		"enabled": true, "rule_id_filter": "secret.aws_access_key", "source_filter": "gitleaks",
+		"enabled": true, "rule_id_filter": "secret.aws_secret_access_key", "source_filter": "gitleaks",
 		"idempotency_key": "create-exclusion-key",
 	}
 	_, created, err := handlers.CreateExclusion(ctx, nil, createInput)
@@ -78,7 +78,7 @@ func TestRiskExclusionMutationHandlersCreateUpdateReplayAndRedact(t *testing.T) 
 	stored, err := riskrepo.New(conn).GetRiskExclusion(ctx, riskrepo.GetRiskExclusionParams{ID: exclusionID, ProjectID: project.ID})
 	require.NoError(t, err)
 	require.Equal(t, secret, stored.MatchValue)
-	require.Equal(t, "secret.aws_access_key", stored.RuleIDFilter.String)
+	require.Equal(t, "secret.aws_secret_access_key", stored.RuleIDFilter.String)
 	require.Equal(t, "gitleaks", stored.SourceFilter.String)
 
 	createAudit, err := audittest.LatestAuditLogByAction(ctx, conn, audit.ActionRiskExclusionCreate)

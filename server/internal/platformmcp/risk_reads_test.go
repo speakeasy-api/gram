@@ -172,6 +172,20 @@ func TestRiskReadProjectionsOmitSensitivePolicyFields(t *testing.T) {
 	require.NotContains(t, text, "custom.rule")
 }
 
+func TestRiskExclusionFingerprintIsProjectScoped(t *testing.T) {
+	t.Parallel()
+
+	service := testRiskReadService(t, &stubRiskProjects{}, &stubRiskPolicies{}, &stubRiskExclusions{})
+	value := "sensitive-value"
+	projectID := uuid.New()
+	fingerprint := service.fingerprintValue(projectID, value)
+	repeated := service.fingerprintValue(projectID, value)
+
+	require.Equal(t, fingerprint, repeated)
+	require.NotEqual(t, fingerprint, service.fingerprintValue(uuid.New(), value))
+	require.NotContains(t, fingerprint, value)
+}
+
 func TestRiskExclusionProjectionRedactsExactAndRegex(t *testing.T) {
 	t.Parallel()
 

@@ -1,16 +1,40 @@
 package exclusioncore
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
+
+type recordingTransactor struct {
+	beginCalls int
+}
+
+func (t *recordingTransactor) Begin(context.Context) (pgx.Tx, error) {
+	t.beginCalls++
+	return nil, nil
+}
+
+func TestCreateValidatesBeforeOpeningTransaction(t *testing.T) {
+	t.Parallel()
+
+	transactor := &recordingTransactor{}
+	core := New(nil, MutationDependencies{Transactor: transactor})
+
+	_, err := core.Create(t.Context(), CreateMutation{Params: repo.CreateRiskExclusionParams{MatchType: "exact", MatchValue: ""}})
+
+	var validationErr *ValidationError
+	require.ErrorAs(t, err, &validationErr)
+	require.Zero(t, transactor.beginCalls)
+}
 
 func TestValidateMatchValue(t *testing.T) {
 	t.Parallel()

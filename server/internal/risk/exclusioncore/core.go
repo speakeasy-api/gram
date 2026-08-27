@@ -266,6 +266,9 @@ type DeleteAuditEvent struct {
 }
 
 func (c *Core) Create(ctx context.Context, input CreateMutation) (Exclusion, error) {
+	if err := ValidateMatchValue(input.Params.MatchType, input.Params.MatchValue); err != nil {
+		return Exclusion{}, err
+	}
 	deps, err := c.requireMutationDependencies()
 	if err != nil {
 		return Exclusion{}, err

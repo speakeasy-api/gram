@@ -499,7 +499,7 @@ func (s *RiskReadService) exclusionSummary(exclusion exclusioncore.Exclusion) (R
 	}
 	switch exclusion.MatchType {
 	case "exact", "regex":
-		result.MatchFingerprint = s.fingerprintValue(exclusion.MatchValue)
+		result.MatchFingerprint = s.fingerprintValue(exclusion.ProjectID, exclusion.MatchValue)
 		result.MatchLength = utf8.RuneCountInString(exclusion.MatchValue)
 		if exclusion.MatchType == "regex" {
 			unsupported = append(unsupported, "legacy_regex")
@@ -552,8 +552,10 @@ func (s *RiskReadService) exclusionSummary(exclusion exclusioncore.Exclusion) (R
 	return result, nil
 }
 
-func (s *RiskReadService) fingerprintValue(value string) string {
+func (s *RiskReadService) fingerprintValue(projectID uuid.UUID, value string) string {
 	mac := hmac.New(sha256.New, s.redactionKey)
+	_, _ = mac.Write([]byte(projectID.String()))
+	_, _ = mac.Write([]byte{'\x00'})
 	_, _ = mac.Write([]byte(value))
 	return "hmac-sha256:" + hex.EncodeToString(mac.Sum(nil)[:16])
 }

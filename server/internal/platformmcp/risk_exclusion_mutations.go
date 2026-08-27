@@ -187,7 +187,7 @@ func (s *riskExclusionMutationService) prepareCreate(principal Principal, projec
 	if input.MatchType != "exact" {
 		input.MatchValue = strings.TrimSpace(input.MatchValue)
 	}
-	if input.MatchValue == "" || input.MatchType == "regex" {
+	if strings.TrimSpace(input.MatchValue) == "" || input.MatchType == "regex" {
 		return preparedRiskExclusionCreate{}, invalidRiskExclusionRequest()
 	}
 
@@ -304,10 +304,11 @@ func nullableRiskExclusionText(value string) pgtype.Text {
 func mapRiskExclusionMutationError(err error) error {
 	var mutation *RiskMutationError
 	var validation *exclusioncore.ValidationError
+	var regexLimit *exclusioncore.RegexLimitError
 	switch {
 	case errors.As(err, &mutation):
 		return mutation
-	case errors.As(err, &validation):
+	case errors.As(err, &validation), errors.As(err, &regexLimit):
 		return invalidRiskExclusionRequest()
 	case errors.Is(err, exclusioncore.ErrPolicyNotFound), errors.Is(err, exclusioncore.ErrExclusionNotFound), errors.Is(err, pgx.ErrNoRows):
 		return &RiskMutationError{Code: "not_found", Message: "The requested risk exclusion or policy was not found.", Cause: fmt.Errorf("%w: %w", ErrRiskMutationNotFound, err)}
