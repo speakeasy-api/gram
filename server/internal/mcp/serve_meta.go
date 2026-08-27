@@ -4,8 +4,7 @@
 // declarations — and exposes the fixed meta MCP tool contract (list_servers,
 // describe_server, describe_tools, execute_tool). Hosted (toolset-backed)
 // members serve the full drill-down through the in-process tool dispatch;
-// proxied (remote/tunneled) members answer a deterministic not-implemented
-// error on the drill-down tools until their runtime lands (AIM-87).
+// proxied (remote/tunneled) members through their own upstream sessions.
 
 package mcp
 

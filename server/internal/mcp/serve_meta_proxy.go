@@ -165,11 +165,9 @@ func (s *Service) dialMetaMember(
 	}
 }
 
-// memberAttributionContext gives member exchanges the identity the billing,
-// limits, and telemetry interceptors read. An issuer-gated authenticated
-// caller already carries one; otherwise the calls are attributed to the
-// endpoint's own organization, as hosted dispatch attributes to the
-// toolset's. Best effort: attribution must never fail the call.
+// memberAttributionContext gives member exchanges the identity billing and
+// telemetry read: the caller's own when authenticated, else the endpoint's
+// organization. Best effort: attribution must never fail the call.
 func (s *Service) memberAttributionContext(ctx context.Context, logger *slog.Logger, gate *metaGateContext) context.Context {
 	if _, ok := contextvalues.GetAuthContext(ctx); ok {
 		return ctx
@@ -210,7 +208,6 @@ type memberResponseRecorder struct {
 	status    int
 	body      bytes.Buffer
 	truncated bool
-	limit     int
 }
 
 func newMemberResponseRecorder() *memberResponseRecorder {
@@ -219,7 +216,6 @@ func newMemberResponseRecorder() *memberResponseRecorder {
 		status:    http.StatusOK,
 		body:      bytes.Buffer{},
 		truncated: false,
-		limit:     metamcp.MaxMemberResponseBytes,
 	}
 }
 
@@ -228,7 +224,7 @@ func (r *memberResponseRecorder) Header() http.Header { return r.header }
 func (r *memberResponseRecorder) WriteHeader(status int) { r.status = status }
 
 func (r *memberResponseRecorder) Write(p []byte) (int, error) {
-	remaining := r.limit - r.body.Len()
+	remaining := metamcp.MaxMemberResponseBytes - r.body.Len()
 	if remaining <= 0 {
 		r.truncated = true
 		return len(p), nil
@@ -368,10 +364,6 @@ func (s *Service) callProxiedMember(
 func (s *Service) memberExchange(ctx context.Context, build memberProxyBuilder, member metaMember, body []byte, sessionID string) (*memberResponseRecorder, error) {
 	p, err := build(ctx)
 	if err != nil {
-		var memberErr *metaMemberError
-		if errors.As(err, &memberErr) {
-			return nil, err
-		}
 		// A tunnel with no live route is a member outage, not a meta MCP bug.
 		return nil, &metaMemberError{message: fmt.Sprintf("server %q is not reachable right now", member.slug)}
 	}
@@ -543,8 +535,7 @@ func (s *Service) executeProxiedMemberTool(
 	bs, err := json.Marshal(&result[json.RawMessage]{
 		ID:     req.ID,
 		Result: upstreamResult,
-		// The member's identity, matching the hosted arm's contract that a
-		// result's _meta identity stays the member's.
+		// The result's _meta identity stays the member's, as on hosted.
 		serverIdentity: serverInfo{Name: member.slug, Version: "0.0.0"},
 	})
 	if err != nil {
@@ -585,10 +576,7 @@ func (s *Service) describeProxiedMember(ctx context.Context, logger *slog.Logger
 	ctx = s.memberAttributionContext(ctx, logger, gate)
 	build, err := s.dialMetaMember(ctx, logger, *gate, member, gate.callerIdentity())
 	if err != nil {
-		var memberErr *metaMemberError
-		if errors.As(err, &memberErr) {
-			return nil, err
-		}
+		// Member-scoped errors stay detectable through the %w chain.
 		return nil, fmt.Errorf("dial meta MCP member: %w", err)
 	}
 
@@ -634,8 +622,7 @@ func (s *Service) describeProxiedMember(ctx context.Context, logger *slog.Logger
 				continue
 			}
 			entries = append(entries, entry)
-			// Duplicate names drop entirely, matching the hosted catalog's
-			// rule; the tombstone keeps a third occurrence out too.
+			// Duplicates drop entirely, matching the hosted catalog's rule.
 			if _, gone := dropped[entry.Name]; gone {
 				continue
 			}
@@ -652,8 +639,7 @@ func (s *Service) describeProxiedMember(ctx context.Context, logger *slog.Logger
 		cursor = listing.NextCursor
 	}
 
-	// Rebuild entries from the kept set so duplicates vanish from
-	// describe_server output exactly as the hosted path's do.
+	// Rebuild entries from the kept set, matching the hosted path's output.
 	catalog := &memberCatalog{entries: make([]*toolListEntry, 0, len(byName)), byName: byName}
 	for _, entry := range entries {
 		if kept, ok := byName[entry.Name]; ok && kept == entry {

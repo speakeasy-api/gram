@@ -111,47 +111,16 @@ func TestServePublic_MetaEndpoint_ExecuteTool_TunneledMemberForwardsLoneToken(t 
 	forwarded := gateway.forwardFor(`"tools/call"`)
 	require.Equal(t, "Bearer token-tunnel", forwarded.Get("Authorization"),
 		"the lone empty-resource token must reach the tunnel gateway as the member's bearer")
-}
 
-// A second stored token makes the tunneled member's credential unroutable —
-// no recorded resource can discriminate tunnels — so the call fails
-// member-scoped and the tunnel gateway sees no new forward.
-func TestServePublic_MetaEndpoint_ExecuteTool_TunneledMemberAmbiguousTokensFailClosed(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-	projectID := *authCtx.ProjectID
-	orgID := authCtx.ActiveOrganizationID
-
-	sharedIssuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
-	metaSlug := "meta-tunnel-ambig-" + uuid.NewString()[:8]
-	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, sharedIssuerID)
-
-	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", legacy: false, dead: false, challenge: ""}
-	tunnelID := seedTunneledMetaMember(t, ctx, ti, projectID, meta.ID, "Tunneled member", "member-tunnel", 0)
-	gatewayServer := httptest.NewServer(gateway)
-	t.Cleanup(gatewayServer.Close)
-	require.NoError(t, ti.tunnelRoutes.Publish(ctx, tunnelID.String(), gatewayServer.URL, time.Hour))
-
-	clientA := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-tunnel-ambig-a", "", []uuid.UUID{sharedIssuerID})
-	subject := urn.NewUserSubject("meta-tunnel-ambig-user-" + uuid.NewString())
-	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientA, subject, "token-tunnel", "")
-
-	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject)
-
-	rpc := executeMetaTool(t, ti, metaSlug, bearer, "member-tunnel--ping")
-	_, isError := metaToolResultText(t, rpc)
-	require.False(t, isError, "the lone-token call must succeed before the map turns ambiguous")
+	// A second stored token makes the credential unroutable — no recorded
+	// resource can discriminate tunnels — so the call fails member-scoped
+	// and the tunnel gateway sees no new forward.
 	forwardsBefore := gateway.forwardCount()
-
 	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-tunnel-ambig-b", "", []uuid.UUID{sharedIssuerID})
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientB, subject, "token-elsewhere", "https://elsewhere.example.com/mcp")
 
 	rpc = executeMetaTool(t, ti, metaSlug, bearer, "member-tunnel--ping")
-	text, isError := metaToolResultText(t, rpc)
+	text, isError = metaToolResultText(t, rpc)
 	require.True(t, isError, "an ambiguous credential map must fail the tunneled member call")
 	require.Contains(t, text, "not configured unambiguously")
 	require.Equal(t, forwardsBefore, gateway.forwardCount(), "the failed call must not produce any tunnel forward")

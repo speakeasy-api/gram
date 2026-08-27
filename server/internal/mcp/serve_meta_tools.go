@@ -1,7 +1,7 @@
 // Meta MCP drill-down tools over hosted (toolset-backed) members. Execution
 // reuses handleToolsCall, so billing, guardian, RBAC, audit, and telemetry
-// apply as on direct calls. Proxied members answer not-implemented until
-// AIM-87's proxied-member dispatch.
+// apply as on direct calls. Proxied members dispatch through their own
+// upstream sessions (serve_meta_proxy.go).
 
 package mcp
 
@@ -434,7 +434,10 @@ func (s *Service) buildMemberDispatch(
 }
 
 // hostedMemberTokens narrows a gate's token map to what a hosted member may
-// receive: exactly one token with no recorded resource. A resource-qualified
+// receive: exactly one token with no recorded resource. The tunneled arm of
+// routeMetaMemberToken applies the same rule, so on a mixed gateway one
+// unqualified credential reaches both; recording synthetic tunnel resources
+// (AIM-87 follow-up) is what will split them. A resource-qualified
 // token belongs to the member it was consented for, and several tokens are
 // unroutable without a scheme-to-issuer mapping; both cases yield no token.
 func hostedMemberTokens(tokens map[uuid.UUID]remotesessions.UpstreamToken) map[uuid.UUID]remotesessions.UpstreamToken {
