@@ -236,15 +236,13 @@ func (s *Service) GetEventVolume(ctx context.Context, payload *gen.GetEventVolum
 	interval := calculateEventInterval(timeStart, timeEnd)
 
 	rows, err := s.chRepo.GetEventVolume(ctx, chrepo.GetEventVolumeParams{
-		EventLogFilters: chrepo.EventLogFilters{
-			OrganizationID: orgID,
-			TimeStart:      timeStart,
-			TimeEnd:        timeEnd,
-			Kinds:          payload.Kinds,
-			Sources:        payload.Sources,
-			Names:          payload.Names,
-			Search:         conv.PtrValOr(payload.Search, ""),
-		},
+		OrganizationID:  orgID,
+		TimeStart:       timeStart,
+		TimeEnd:         timeEnd,
+		Kinds:           payload.Kinds,
+		Sources:         payload.Sources,
+		Names:           payload.Names,
+		Search:          conv.PtrValOr(payload.Search, ""),
 		IntervalSeconds: interval,
 	})
 	if err != nil {

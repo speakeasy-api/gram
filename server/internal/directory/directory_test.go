@@ -331,7 +331,7 @@ func TestServiceDirectoryAssociations(t *testing.T) {
 	attributes, err := service.ListActiveAttributeValues(ctx, organizationID)
 	require.NoError(t, err)
 	require.Equal(t, []directory.AttributeValueSummary{
-		{AttributeValue: directory.AttributeValue{Key: "department", Value: "engineering"}, MemberCount: 1},
+		{Key: "department", Value: "engineering", MemberCount: 1},
 	}, attributes)
 
 	exists, err := service.GroupExists(ctx, organizationID, group.ID)

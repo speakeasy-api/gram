@@ -242,8 +242,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 // invalid_request if err is something else (shouldn't happen — Validate
 // returns *oauthwire.Error).
 func writeAuthorizeOAuthError(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, status int, err error) error {
-	var oauthErr *oauthwire.Error
-	if errors.As(err, &oauthErr) {
+	if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
 		return writeAuthorizeError(ctx, w, logger, status, oauthErr.Code, oauthErr.Description)
 	}
 	return writeAuthorizeError(ctx, w, logger, status, "invalid_request", err.Error())
@@ -262,8 +261,7 @@ func writeAuthorizeOAuthError(ctx context.Context, w http.ResponseWriter, logger
 func redirectAuthorizeOAuthError(ctx context.Context, w http.ResponseWriter, r *http.Request, logger *slog.Logger, issuer, redirectURI, originalState, failureReason string, err error) error {
 	code := "invalid_request"
 	description := err.Error()
-	var oauthErr *oauthwire.Error
-	if errors.As(err, &oauthErr) {
+	if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
 		code = oauthErr.Code
 		description = oauthErr.Description
 	}

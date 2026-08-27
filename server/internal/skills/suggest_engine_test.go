@@ -507,8 +507,8 @@ func TestSuggestionActivityMakesModelFailureNonRetryable(t *testing.T) {
 	analyzer := backgroundactivities.NewSkillSuggestionAnalyzer(ti.conn, engine, nil)
 
 	_, err := analyzer.AnalyzeSkillSuggestion(ctx, backgroundactivities.AnalyzeSkillSuggestionParams{
-		SkillSuggestionIdentity: backgroundactivities.SkillSuggestionIdentity{ProjectID: ti.projectID, SkillID: uuid.MustParse(created.Skill.ID), Force: false},
-		Now:                     now,
+		ProjectID: ti.projectID, SkillID: uuid.MustParse(created.Skill.ID), Force: false,
+		Now: now,
 	})
 	require.Error(t, err)
 	var appErr *temporal.ApplicationError

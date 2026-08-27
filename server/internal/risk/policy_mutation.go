@@ -49,13 +49,11 @@ func (a policyMutationAuditor) LogPolicyUpdate(ctx context.Context, db repo.DBTX
 }
 
 func (s *Service) policyMutationError(ctx context.Context, err error) error {
-	var shareable *oops.ShareableError
-	if errors.As(err, &shareable) {
+	if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
 		return shareable
 	}
 
-	var conflict *policycore.DecisionConflictError
-	if errors.As(err, &conflict) {
+	if conflict, ok := errors.AsType[*policycore.DecisionConflictError](err); ok {
 		return oops.E(
 			oops.CodeConflict,
 			nil,
@@ -64,13 +62,11 @@ func (s *Service) policyMutationError(ctx context.Context, err error) error {
 		)
 	}
 
-	var stale *policycore.StalePolicyError
-	if errors.As(err, &stale) {
+	if _, ok := errors.AsType[*policycore.StalePolicyError](err); ok {
 		return oops.E(oops.CodeConflict, err, "risk policy changed during update; reload and retry")
 	}
 
-	var blockingConflict *policycore.BlockingPolicyConflictError
-	if errors.As(err, &blockingConflict) {
+	if blockingConflict, ok := errors.AsType[*policycore.BlockingPolicyConflictError](err); ok {
 		return oops.E(
 			oops.CodeConflict,
 			nil,
@@ -82,8 +78,7 @@ func (s *Service) policyMutationError(ctx context.Context, err error) error {
 		return oops.E(oops.CodeNotFound, err, "risk policy not found").LogError(ctx, s.logger)
 	}
 
-	var mutation *policycore.MutationError
-	if errors.As(err, &mutation) {
+	if mutation, ok := errors.AsType[*policycore.MutationError](err); ok {
 		return oops.E(oops.CodeUnexpected, mutation.Cause, "%s", mutation.Message).LogError(ctx, s.logger)
 	}
 	return oops.E(oops.CodeUnexpected, err, "mutate risk policy").LogError(ctx, s.logger)

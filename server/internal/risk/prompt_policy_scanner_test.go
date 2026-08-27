@@ -85,13 +85,11 @@ func insertPromptBasedBlockPolicyWithConfig(t *testing.T, ti *testInstance, ctx 
 	})
 	require.NoError(t, err)
 	require.NoError(t, authz.GrantResourceToPrincipals(ctx, ti.conn, authz.ResourceGrant{
-		Resource: authz.Resource{
-			OrganizationID: authCtx.ActiveOrganizationID,
-			Scope:          authz.ScopeRiskPolicyEvaluate,
-			ResourceID:     policy.ID.String(),
-		},
-		Principals: []urn.Principal{authz.AllUsersPrincipal()},
-		Selector:   authz.NewSelector(authz.ScopeRiskPolicyEvaluate, policy.ID.String()),
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Scope:          authz.ScopeRiskPolicyEvaluate,
+		ResourceID:     policy.ID.String(),
+		Principals:     []urn.Principal{authz.AllUsersPrincipal()},
+		Selector:       authz.NewSelector(authz.ScopeRiskPolicyEvaluate, policy.ID.String()),
 	}))
 }
 

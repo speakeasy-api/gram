@@ -69,8 +69,8 @@ func toolsListResponseFromRemoteMessage(request *ToolsListRequest, msg *RemoteMe
 	}
 
 	result := &mcp.ListToolsResult{
-		Meta:       nil,
-		Cacheable:  mcp.Cacheable{TTLMs: 0, CacheScope: ""},
+		Meta:  nil,
+		TTLMs: 0, CacheScope: "",
 		NextCursor: "",
 		Tools:      nil,
 	}

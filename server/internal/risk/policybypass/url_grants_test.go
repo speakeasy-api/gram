@@ -137,22 +137,18 @@ func TestReconcilePolicyURLsRemovesMixedSelectorForDeselectedURL(t *testing.T) {
 	mixedSelector[authz.SelectorKeyServerIdentity] = "shadow-server"
 
 	require.NoError(t, authz.ReplaceGrantAudience(ctx, conn, authz.ResourceGrant{
-		Resource: authz.Resource{
-			OrganizationID: organizationID,
-			Scope:          authz.ScopeRiskPolicyBypass,
-			ResourceID:     policyID,
-		},
-		Principals: []urn.Principal{principal},
-		Selector:   mixedSelector,
+		OrganizationID: organizationID,
+		Scope:          authz.ScopeRiskPolicyBypass,
+		ResourceID:     policyID,
+		Principals:     []urn.Principal{principal},
+		Selector:       mixedSelector,
 	}))
 	require.NoError(t, authz.ReplaceGrantAudience(ctx, conn, authz.ResourceGrant{
-		Resource: authz.Resource{
-			OrganizationID: organizationID,
-			Scope:          authz.ScopeRiskPolicyBypass,
-			ResourceID:     policyID,
-		},
-		Principals: []urn.Principal{principal},
-		Selector:   authz.NewSelector(authz.ScopeRiskPolicyBypass, policyID),
+		OrganizationID: organizationID,
+		Scope:          authz.ScopeRiskPolicyBypass,
+		ResourceID:     policyID,
+		Principals:     []urn.Principal{principal},
+		Selector:       authz.NewSelector(authz.ScopeRiskPolicyBypass, policyID),
 	}))
 
 	require.NoError(t, ReconcilePolicyURLs(ctx, conn, ReconcilePolicyURLsInput{
@@ -187,13 +183,11 @@ func TestReconcilePolicyURLsNormalizesMixedSelectorForRetainedURL(t *testing.T) 
 	mixedSelector[authz.SelectorKeyServerIdentity] = "shadow-server"
 
 	require.NoError(t, authz.ReplaceGrantAudience(ctx, conn, authz.ResourceGrant{
-		Resource: authz.Resource{
-			OrganizationID: organizationID,
-			Scope:          authz.ScopeRiskPolicyBypass,
-			ResourceID:     policyID,
-		},
-		Principals: []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, "old-user")},
-		Selector:   mixedSelector,
+		OrganizationID: organizationID,
+		Scope:          authz.ScopeRiskPolicyBypass,
+		ResourceID:     policyID,
+		Principals:     []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, "old-user")},
+		Selector:       mixedSelector,
 	}))
 
 	newPrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, "security-admins")
@@ -247,13 +241,11 @@ func TestRevokePolicyURLPreservesUnrelatedGrants(t *testing.T) {
 	require.NoError(t, ReplacePolicyURLAudience(ctx, conn, organizationID, authz.ScopeRiskPolicyBypass, policyID, keepURL, []urn.Principal{principal}))
 	require.NoError(t, ReplacePolicyURLAudience(ctx, conn, organizationID, authz.ScopeRiskPolicyBypass, otherPolicyID, targetURL, []urn.Principal{principal}))
 	require.NoError(t, authz.ReplaceGrantAudience(ctx, conn, authz.ResourceGrant{
-		Resource: authz.Resource{
-			OrganizationID: organizationID,
-			Scope:          authz.ScopeRiskPolicyBypass,
-			ResourceID:     policyID,
-		},
-		Principals: []urn.Principal{principal},
-		Selector:   authz.NewSelector(authz.ScopeRiskPolicyBypass, policyID),
+		OrganizationID: organizationID,
+		Scope:          authz.ScopeRiskPolicyBypass,
+		ResourceID:     policyID,
+		Principals:     []urn.Principal{principal},
+		Selector:       authz.NewSelector(authz.ScopeRiskPolicyBypass, policyID),
 	}))
 
 	require.NoError(t, RevokePolicyURL(ctx, conn, organizationID, authz.ScopeRiskPolicyBypass, policyID, targetURL))

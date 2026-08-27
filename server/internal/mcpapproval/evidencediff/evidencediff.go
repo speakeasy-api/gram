@@ -107,7 +107,6 @@ type subset struct {
 
 func project(document evidence.Document) subset {
 	s := subset{
-		AuthorityGathered:   true,
 		AuthorityMode:       "",
 		Scopes:              []string{},
 		DynamicRegistration: false,
@@ -115,12 +114,12 @@ func project(document evidence.Document) subset {
 		AdvisoriesGathered:  false,
 		KnownAdvisories:     0,
 		AdvisoryIDs:         []string{},
-	}
 
-	// Gathered-ness comes from the gap list, not from the section being
-	// present: a server that publishes no OAuth metadata gathers cleanly to a
-	// nil section, and that absence is itself the finding.
-	s.AuthorityGathered = !slices.Contains(document.Gaps, evidence.GapAuthorityProbe)
+		// Gathered-ness comes from the gap list, not from the section being
+		// present: a server that publishes no OAuth metadata gathers cleanly to a
+		// nil section, and that absence is itself the finding.
+		AuthorityGathered: !slices.Contains(document.Gaps, evidence.GapAuthorityProbe),
+	}
 	if authority := document.Authority; authority != nil && s.AuthorityGathered {
 		s.AuthorityMode = authority.Mode
 		s.Scopes = append(s.Scopes, authority.Scopes...)

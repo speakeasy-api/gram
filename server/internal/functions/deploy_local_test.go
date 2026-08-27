@@ -97,20 +97,18 @@ export async function handleResources({ uri, input }) {
 
 	invocationID := uuid.New()
 	toolReq, err := runner.ToolCall(ctx, functions.RunnerToolCallRequest{
-		RunnerBaseRequest: functions.RunnerBaseRequest{
-			InvocationID:      invocationID,
-			OrganizationID:    "org-123",
-			OrganizationSlug:  "organization-123",
-			ProjectID:         projectID,
-			ProjectSlug:       "demo-project",
-			DeploymentID:      deploymentID,
-			FunctionsID:       functionID,
-			FunctionsAccessID: accessID,
-			Input:             json.RawMessage(`{"query":"hello"}`),
-			Environment:       map[string]string{},
-		},
-		ToolURN:  urn.NewTool(urn.ToolKindFunction, "demo", "show_dashboard"),
-		ToolName: "show_dashboard",
+		InvocationID:      invocationID,
+		OrganizationID:    "org-123",
+		OrganizationSlug:  "organization-123",
+		ProjectID:         projectID,
+		ProjectSlug:       "demo-project",
+		DeploymentID:      deploymentID,
+		FunctionsID:       functionID,
+		FunctionsAccessID: accessID,
+		Input:             json.RawMessage(`{"query":"hello"}`),
+		Environment:       map[string]string{},
+		ToolURN:           urn.NewTool(urn.ToolKindFunction, "demo", "show_dashboard"),
+		ToolName:          "show_dashboard",
 	})
 	require.NoError(t, err)
 
@@ -127,21 +125,19 @@ export async function handleResources({ uri, input }) {
 	require.JSONEq(t, `{"query":"hello","ok":true}`, string(toolBody))
 
 	resourceReq, err := runner.ReadResource(ctx, functions.RunnerResourceReadRequest{
-		RunnerBaseRequest: functions.RunnerBaseRequest{
-			InvocationID:      invocationID,
-			OrganizationID:    "org-123",
-			OrganizationSlug:  "organization-123",
-			ProjectID:         projectID,
-			ProjectSlug:       "demo-project",
-			DeploymentID:      deploymentID,
-			FunctionsID:       functionID,
-			FunctionsAccessID: accessID,
-			Input:             json.RawMessage(`{"query":"hello"}`),
-			Environment:       map[string]string{},
-		},
-		ResourceURN:  urn.NewResource(urn.ResourceKindFunction, "demo", "ui://demo/dashboard"),
-		ResourceURI:  "ui://demo/dashboard",
-		ResourceName: "dashboard",
+		InvocationID:      invocationID,
+		OrganizationID:    "org-123",
+		OrganizationSlug:  "organization-123",
+		ProjectID:         projectID,
+		ProjectSlug:       "demo-project",
+		DeploymentID:      deploymentID,
+		FunctionsID:       functionID,
+		FunctionsAccessID: accessID,
+		Input:             json.RawMessage(`{"query":"hello"}`),
+		Environment:       map[string]string{},
+		ResourceURN:       urn.NewResource(urn.ResourceKindFunction, "demo", "ui://demo/dashboard"),
+		ResourceURI:       "ui://demo/dashboard",
+		ResourceName:      "dashboard",
 	})
 	require.NoError(t, err)
 

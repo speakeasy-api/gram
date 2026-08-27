@@ -17,7 +17,7 @@ type Logging struct {
 
 func (l *Logging) InterceptWorkflow(ctx workflow.Context, next interceptor.WorkflowInboundInterceptor) interceptor.WorkflowInboundInterceptor {
 	return &workflowLogExecution{
-		WorkflowInboundInterceptorBase: interceptor.WorkflowInboundInterceptorBase{Next: next},
+		Next: next,
 	}
 }
 
@@ -26,7 +26,7 @@ func (l *Logging) InterceptActivity(
 	next interceptor.ActivityInboundInterceptor,
 ) interceptor.ActivityInboundInterceptor {
 	return &activityLogExecution{
-		ActivityInboundInterceptorBase: interceptor.ActivityInboundInterceptorBase{Next: next},
+		Next: next,
 	}
 }
 

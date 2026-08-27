@@ -334,8 +334,7 @@ func (s *Service) probeListTools(probeCtx context.Context, serverURL string) *ge
 		MaxResponseBytes: listToolsMaxResponseBytes,
 	})
 	if err != nil {
-		var authErr *externalmcp.AuthRejectedError
-		if errors.As(err, &authErr) {
+		if _, ok := errors.AsType[*externalmcp.AuthRejectedError](err); ok {
 			return &gen.ListUnproxiedMcpServerToolsResult{
 				Status:  "auth_required",
 				Tools:   []*gen.UnproxiedMcpServerTool{},
@@ -352,8 +351,7 @@ func (s *Service) probeListTools(probeCtx context.Context, serverURL string) *ge
 
 	discovered, err := client.ListTools(probeCtx)
 	if err != nil {
-		var authErr *externalmcp.AuthRejectedError
-		if errors.As(err, &authErr) {
+		if _, ok := errors.AsType[*externalmcp.AuthRejectedError](err); ok {
 			return &gen.ListUnproxiedMcpServerToolsResult{
 				Status:  "auth_required",
 				Tools:   []*gen.UnproxiedMcpServerTool{},

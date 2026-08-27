@@ -85,22 +85,20 @@ func (m *MockResolver) handleQuery(ctx context.Context, raw []byte) []byte {
 	}
 
 	resp := dnsmessage.Message{
-		Header: dnsmessage.Header{
-			ID:                 query.ID,
-			Response:           true,
-			OpCode:             0,
-			Authoritative:      false,
-			Truncated:          false,
-			RecursionDesired:   query.RecursionDesired,
-			RecursionAvailable: true,
-			AuthenticData:      false,
-			CheckingDisabled:   false,
-			RCode:              dnsmessage.RCodeSuccess,
-		},
-		Questions:   query.Questions,
-		Answers:     answers,
-		Authorities: nil,
-		Additionals: nil,
+		ID:                 query.ID,
+		Response:           true,
+		OpCode:             0,
+		Authoritative:      false,
+		Truncated:          false,
+		RecursionDesired:   query.RecursionDesired,
+		RecursionAvailable: true,
+		AuthenticData:      false,
+		CheckingDisabled:   false,
+		RCode:              dnsmessage.RCodeSuccess,
+		Questions:          query.Questions,
+		Answers:            answers,
+		Authorities:        nil,
+		Additionals:        nil,
 	}
 
 	packed, err := resp.Pack()
@@ -303,22 +301,20 @@ func (m *MockResolver) answersForQuestion(ctx context.Context, q dnsmessage.Ques
 // discarded since DNS wire format cannot carry error messages.
 func (m *MockResolver) buildSERVFAIL(reqHeader dnsmessage.Header, q *dnsmessage.Question, _ error) []byte {
 	resp := dnsmessage.Message{
-		Header: dnsmessage.Header{
-			ID:                 reqHeader.ID,
-			Response:           true,
-			OpCode:             0,
-			Authoritative:      false,
-			Truncated:          false,
-			RecursionDesired:   false,
-			RecursionAvailable: false,
-			AuthenticData:      false,
-			CheckingDisabled:   false,
-			RCode:              dnsmessage.RCodeServerFailure,
-		},
-		Questions:   nil,
-		Answers:     nil,
-		Authorities: nil,
-		Additionals: nil,
+		ID:                 reqHeader.ID,
+		Response:           true,
+		OpCode:             0,
+		Authoritative:      false,
+		Truncated:          false,
+		RecursionDesired:   false,
+		RecursionAvailable: false,
+		AuthenticData:      false,
+		CheckingDisabled:   false,
+		RCode:              dnsmessage.RCodeServerFailure,
+		Questions:          nil,
+		Answers:            nil,
+		Authorities:        nil,
+		Additionals:        nil,
 	}
 
 	if q != nil {

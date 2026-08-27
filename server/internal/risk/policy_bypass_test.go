@@ -211,13 +211,11 @@ func TestPolicyBypassEvaluator_AudienceSemantics(t *testing.T) {
 	selector := authz.NewSelector(authz.ScopeRiskPolicyBypass, allUsersPolicyID)
 	selector[authz.SelectorKeyServerURL] = allUsersURL
 	require.NoError(t, authz.GrantResourceToPrincipals(ctx, ti.conn, authz.ResourceGrant{
-		Resource: authz.Resource{
-			OrganizationID: authCtx.ActiveOrganizationID,
-			Scope:          authz.ScopeRiskPolicyBypass,
-			ResourceID:     allUsersPolicyID,
-		},
-		Principals: []urn.Principal{authz.AllUsersPrincipal()},
-		Selector:   selector,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Scope:          authz.ScopeRiskPolicyBypass,
+		ResourceID:     allUsersPolicyID,
+		Principals:     []urn.Principal{authz.AllUsersPrincipal()},
+		Selector:       selector,
 	}))
 
 	allUsersTarget := risk.ShadowMCPServerPolicyBypassTarget(allUsersURL, "", allUsersURL)
@@ -256,13 +254,11 @@ func TestPolicyBypassEvaluator_AudienceSemantics(t *testing.T) {
 	rolePrincipal := seedRiskPolicyBypassOrganizationRole(t, ti, authCtx.ActiveOrganizationID, roleSlug)
 	seedRiskPolicyBypassRoleAssignment(t, ti, authCtx.ActiveOrganizationID, authCtx.UserID, roleSlug)
 	require.NoError(t, authz.GrantResourceToPrincipals(ctx, ti.conn, authz.ResourceGrant{
-		Resource: authz.Resource{
-			OrganizationID: authCtx.ActiveOrganizationID,
-			Scope:          authz.ScopeRiskPolicyBypass,
-			ResourceID:     rolePolicyID,
-		},
-		Principals: []urn.Principal{rolePrincipal},
-		Selector:   roleSelector,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Scope:          authz.ScopeRiskPolicyBypass,
+		ResourceID:     rolePolicyID,
+		Principals:     []urn.Principal{rolePrincipal},
+		Selector:       roleSelector,
 	}))
 
 	roleTarget := risk.ShadowMCPServerPolicyBypassTarget(roleURL, "", roleURL)
@@ -300,13 +296,11 @@ func TestPolicyBypassEvaluator_LegacyCombinedGrantMatchesCanonicalURLTarget(t *t
 	selector[authz.SelectorKeyServerURL] = serverURL
 	selector[authz.SelectorKeyServerIdentity] = "legacy-alias"
 	require.NoError(t, authz.GrantResourceToPrincipals(ctx, ti.conn, authz.ResourceGrant{
-		Resource: authz.Resource{
-			OrganizationID: authCtx.ActiveOrganizationID,
-			Scope:          authz.ScopeRiskPolicyBypass,
-			ResourceID:     policyID,
-		},
-		Principals: []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)},
-		Selector:   selector,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Scope:          authz.ScopeRiskPolicyBypass,
+		ResourceID:     policyID,
+		Principals:     []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)},
+		Selector:       selector,
 	}))
 
 	target := risk.ShadowMCPPolicyBypassTarget(shadowmcp.AccessEvidence{
@@ -336,24 +330,20 @@ func TestPolicyBypassEvaluator_UnresolvedTargetMatchesOnlyWholePolicyGrant(t *te
 	scopedSelector := authz.NewSelector(authz.ScopeRiskPolicyBypass, scopedPolicyID)
 	scopedSelector[authz.SelectorKeyServerURL] = "https://mcp.example.com/scoped"
 	require.NoError(t, authz.GrantResourceToPrincipals(ctx, ti.conn, authz.ResourceGrant{
-		Resource: authz.Resource{
-			OrganizationID: authCtx.ActiveOrganizationID,
-			Scope:          authz.ScopeRiskPolicyBypass,
-			ResourceID:     scopedPolicyID,
-		},
-		Principals: []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)},
-		Selector:   scopedSelector,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Scope:          authz.ScopeRiskPolicyBypass,
+		ResourceID:     scopedPolicyID,
+		Principals:     []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)},
+		Selector:       scopedSelector,
 	}))
 
 	wholePolicyID := "policy_whole_unresolved"
 	require.NoError(t, authz.GrantResourceToPrincipals(ctx, ti.conn, authz.ResourceGrant{
-		Resource: authz.Resource{
-			OrganizationID: authCtx.ActiveOrganizationID,
-			Scope:          authz.ScopeRiskPolicyBypass,
-			ResourceID:     wholePolicyID,
-		},
-		Principals: []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)},
-		Selector:   authz.NewSelector(authz.ScopeRiskPolicyBypass, wholePolicyID),
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Scope:          authz.ScopeRiskPolicyBypass,
+		ResourceID:     wholePolicyID,
+		Principals:     []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)},
+		Selector:       authz.NewSelector(authz.ScopeRiskPolicyBypass, wholePolicyID),
 	}))
 
 	scopedEvaluation := risk.PolicyBypassEvaluation{

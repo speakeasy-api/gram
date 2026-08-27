@@ -183,13 +183,11 @@ func revokePolicyURLGrants(
 			return fmt.Errorf("parse policy url grant principal: %w", err)
 		}
 		if err := authz.RevokeResourceFromPrincipals(ctx, db, authz.ResourceGrant{
-			Resource: authz.Resource{
-				OrganizationID: organizationID,
-				Scope:          scope,
-				ResourceID:     policyID,
-			},
-			Principals: []urn.Principal{principal},
-			Selector:   grant.Selector,
+			OrganizationID: organizationID,
+			Scope:          scope,
+			ResourceID:     policyID,
+			Principals:     []urn.Principal{principal},
+			Selector:       grant.Selector,
 		}); err != nil {
 			return fmt.Errorf("revoke policy url grant selector: %w", err)
 		}
@@ -208,13 +206,11 @@ func ReplacePolicyURLAudience(
 	principals []urn.Principal,
 ) error {
 	if err := authz.ReplaceGrantAudience(ctx, db, authz.ResourceGrant{
-		Resource: authz.Resource{
-			OrganizationID: organizationID,
-			Scope:          scope,
-			ResourceID:     policyID,
-		},
-		Principals: principals,
-		Selector:   URLSelector(scope, policyID, canonicalURL),
+		OrganizationID: organizationID,
+		Scope:          scope,
+		ResourceID:     policyID,
+		Principals:     principals,
+		Selector:       URLSelector(scope, policyID, canonicalURL),
 	}); err != nil {
 		return fmt.Errorf("replace policy url audience: %w", err)
 	}
@@ -231,13 +227,11 @@ func RevokePolicyURL(
 	canonicalURL string,
 ) error {
 	if err := authz.ReplaceGrantAudience(ctx, db, authz.ResourceGrant{
-		Resource: authz.Resource{
-			OrganizationID: organizationID,
-			Scope:          scope,
-			ResourceID:     policyID,
-		},
-		Principals: nil,
-		Selector:   URLSelector(scope, policyID, canonicalURL),
+		OrganizationID: organizationID,
+		Scope:          scope,
+		ResourceID:     policyID,
+		Principals:     nil,
+		Selector:       URLSelector(scope, policyID, canonicalURL),
 	}); err != nil {
 		return fmt.Errorf("revoke policy url: %w", err)
 	}

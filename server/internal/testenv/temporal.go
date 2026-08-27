@@ -165,10 +165,10 @@ func NewTemporalEnvironment(t *testing.T, devserver *testsuite.DevServer) (*serv
 		return nil, fmt.Errorf("register temporal namespace: %w", err)
 	}
 
-	clientOptions := client.Options{}
-	clientOptions.HostPort = devserver.FrontendHostPort()
-	clientOptions.Namespace = namespace
-	clientOptions.Logger = NewLogger(t)
+	clientOptions := client.Options{
+		HostPort:  devserver.FrontendHostPort(),
+		Namespace: namespace,
+		Logger:    NewLogger(t)}
 
 	temporalClient, err := client.DialContext(t.Context(), clientOptions)
 	if err != nil {

@@ -69,8 +69,8 @@ func resourcesReadResponseFromRemoteMessage(request *ResourcesReadRequest, msg *
 	}
 
 	result := &mcp.ReadResourceResult{
-		Meta:          nil,
-		Cacheable:     mcp.Cacheable{TTLMs: 0, CacheScope: ""},
+		Meta:  nil,
+		TTLMs: 0, CacheScope: "",
 		Contents:      nil,
 		InputRequests: nil,
 		RequestState:  "",

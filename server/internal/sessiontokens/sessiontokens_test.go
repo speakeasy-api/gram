@@ -131,7 +131,7 @@ func TestSigner_ValidateExactAudienceRejectsAdditionalAudience(t *testing.T) {
 	t.Parallel()
 
 	signer := sessiontokens.NewSigner("test-jwt-secret")
-	claims := sessiontokens.SessionClaims{RegisteredClaims: jwt.RegisteredClaims{Subject: urn.NewUserSubject("user-1").String(), Audience: jwt.ClaimStrings{"platform-mcp", "other-resource"}, ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)), ID: "jti-multiple-audiences"}}
+	claims := sessiontokens.SessionClaims{Subject: urn.NewUserSubject("user-1").String(), Audience: jwt.ClaimStrings{"platform-mcp", "other-resource"}, ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)), ID: "jti-multiple-audiences"}
 	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte("test-jwt-secret"))
 	require.NoError(t, err)
 
@@ -159,20 +159,20 @@ func TestSigner_RejectsUnexpectedAlgorithmAndMissingRequiredClaims(t *testing.T)
 	t.Parallel()
 
 	signer := sessiontokens.NewSigner("test-jwt-secret")
-	claims := sessiontokens.SessionClaims{RegisteredClaims: jwt.RegisteredClaims{Subject: urn.NewUserSubject("user-1").String(), Audience: jwt.ClaimStrings{"platform-mcp"}, ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)), ID: "jti-1"}}
+	claims := sessiontokens.SessionClaims{Subject: urn.NewUserSubject("user-1").String(), Audience: jwt.ClaimStrings{"platform-mcp"}, ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)), ID: "jti-1"}
 	wrongAlgorithm := jwt.NewWithClaims(jwt.SigningMethodHS512, claims)
 	wrongAlgorithmToken, err := wrongAlgorithm.SignedString([]byte("test-jwt-secret"))
 	require.NoError(t, err)
 	_, err = signer.ValidateBearer(t.Context(), wrongAlgorithmToken, "platform-mcp", neverRevoked{})
 	require.ErrorIs(t, err, jwt.ErrTokenSignatureInvalid)
 
-	missingExpiry := jwt.NewWithClaims(jwt.SigningMethodHS256, sessiontokens.SessionClaims{RegisteredClaims: jwt.RegisteredClaims{Subject: urn.NewUserSubject("user-1").String(), Audience: jwt.ClaimStrings{"platform-mcp"}, ID: "jti-2"}})
+	missingExpiry := jwt.NewWithClaims(jwt.SigningMethodHS256, sessiontokens.SessionClaims{Subject: urn.NewUserSubject("user-1").String(), Audience: jwt.ClaimStrings{"platform-mcp"}, ID: "jti-2"})
 	missingExpiryToken, err := missingExpiry.SignedString([]byte("test-jwt-secret"))
 	require.NoError(t, err)
 	_, err = signer.ValidateBearer(t.Context(), missingExpiryToken, "platform-mcp", neverRevoked{})
 	require.ErrorIs(t, err, jwt.ErrTokenRequiredClaimMissing)
 
-	missingJTI := jwt.NewWithClaims(jwt.SigningMethodHS256, sessiontokens.SessionClaims{RegisteredClaims: jwt.RegisteredClaims{Subject: urn.NewUserSubject("user-1").String(), Audience: jwt.ClaimStrings{"platform-mcp"}, ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour))}})
+	missingJTI := jwt.NewWithClaims(jwt.SigningMethodHS256, sessiontokens.SessionClaims{Subject: urn.NewUserSubject("user-1").String(), Audience: jwt.ClaimStrings{"platform-mcp"}, ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour))})
 	missingJTIToken, err := missingJTI.SignedString([]byte("test-jwt-secret"))
 	require.NoError(t, err)
 	_, err = signer.ValidateBearer(t.Context(), missingJTIToken, "platform-mcp", neverRevoked{})

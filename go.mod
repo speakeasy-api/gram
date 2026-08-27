@@ -1,6 +1,6 @@
 module github.com/speakeasy-api/gram
 
-go 1.26.5
+go 1.27.0
 
 tool goa.design/goa/v3/cmd/goa
 

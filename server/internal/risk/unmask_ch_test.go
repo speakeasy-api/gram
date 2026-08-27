@@ -883,9 +883,8 @@ func TestUnmaskRiskResult_ClickHouseCustomDerivedFieldScoped(t *testing.T) {
 		matchLen:      uint32(len(server)),
 		matchRedacted: "paym**ts",
 		surface:       "derived",
-	}
 
-	base.field = "tool.server"
+		field: "tool.server"}
 	serverRow := insertUnmaskFinding(t, ti, base)
 
 	base.id = uuid.Nil

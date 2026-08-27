@@ -277,7 +277,7 @@ func relaySkillEvent(t *testing.T, content []byte) (*agenthooks.ToolPostEvent, s
 	input, err := json.Marshal(map[string]string{"skill": "dno-441-relay-capture"})
 	require.NoError(t, err)
 	return &agenthooks.ToolPostEvent{
-		Event:  agenthooks.Event{Provider: agenthooks.ProviderClaudeCode, Kind: agenthooks.KindToolPost, Session: agenthooks.SessionInfo{CWD: cwd}},
+		Provider: agenthooks.ProviderClaudeCode, Kind: agenthooks.KindToolPost, Session: agenthooks.SessionInfo{CWD: cwd},
 		Tool:   agenthooks.ToolCall{Name: "Skill", Input: input},
 		Output: output,
 		Failed: false,

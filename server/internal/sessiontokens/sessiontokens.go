@@ -76,16 +76,14 @@ func (s *Signer) Mint(params MintParams) (token string, jti string, err error) {
 	}
 
 	claims := SessionClaims{
-		RegisteredClaims: jwt.RegisteredClaims{
-			ID:        jti,
-			Issuer:    params.Issuer,
-			Subject:   params.Subject.String(),
-			Audience:  jwt.ClaimStrings{params.Audience},
-			IssuedAt:  jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(expiresAt),
-			NotBefore: nil,
-		},
-		ClientID: params.ClientID,
+		ID:        jti,
+		Issuer:    params.Issuer,
+		Subject:   params.Subject.String(),
+		Audience:  jwt.ClaimStrings{params.Audience},
+		IssuedAt:  jwt.NewNumericDate(now),
+		ExpiresAt: jwt.NewNumericDate(expiresAt),
+		NotBefore: nil,
+		ClientID:  params.ClientID,
 	}
 
 	t := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -99,16 +97,14 @@ func (s *Signer) Mint(params MintParams) (token string, jti string, err error) {
 // Validate parses and verifies a signed token for the expected audience.
 func (s *Signer) Validate(token, expectedAudience string) (*SessionClaims, error) {
 	claims := SessionClaims{
-		RegisteredClaims: jwt.RegisteredClaims{
-			Issuer:    "",
-			Subject:   "",
-			Audience:  nil,
-			ExpiresAt: nil,
-			NotBefore: nil,
-			IssuedAt:  nil,
-			ID:        "",
-		},
-		ClientID: "",
+		Issuer:    "",
+		Subject:   "",
+		Audience:  nil,
+		ExpiresAt: nil,
+		NotBefore: nil,
+		IssuedAt:  nil,
+		ID:        "",
+		ClientID:  "",
 	}
 	parsed, err := jwt.ParseWithClaims(token, &claims, func(*jwt.Token) (any, error) {
 		return s.key, nil
@@ -182,16 +178,14 @@ func validSuppliedJTI(jti string) bool {
 // signature is required before the caller can affect the revocation cache.
 func (s *Signer) VerifiedJTI(token string) (string, error) {
 	claims := SessionClaims{
-		RegisteredClaims: jwt.RegisteredClaims{
-			Issuer:    "",
-			Subject:   "",
-			Audience:  nil,
-			ExpiresAt: nil,
-			NotBefore: nil,
-			IssuedAt:  nil,
-			ID:        "",
-		},
-		ClientID: "",
+		Issuer:    "",
+		Subject:   "",
+		Audience:  nil,
+		ExpiresAt: nil,
+		NotBefore: nil,
+		IssuedAt:  nil,
+		ID:        "",
+		ClientID:  "",
 	}
 	_, err := jwt.ParseWithClaims(token, &claims, func(t *jwt.Token) (any, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {

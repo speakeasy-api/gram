@@ -1021,8 +1021,7 @@ func writeTokenSuccess(ctx context.Context, w http.ResponseWriter, logger *slog.
 // invalid_request if err is something else (shouldn't happen — Validate
 // returns *oauthwire.Error).
 func writeTokenOAuthError(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, status int, err error) error {
-	var oauthErr *oauthwire.Error
-	if errors.As(err, &oauthErr) {
+	if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
 		return writeTokenError(ctx, w, logger, status, oauthErr.Code, oauthErr.Description)
 	}
 	return writeTokenError(ctx, w, logger, status, "invalid_request", err.Error())

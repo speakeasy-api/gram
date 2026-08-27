@@ -601,18 +601,16 @@ func (h *Handler) signIDToken(ctx context.Context, queries *repo.Queries, userID
 
 	now := time.Now()
 	claims := idTokenClaims{
-		Email:   user.Email,
-		Name:    user.DisplayName,
-		Picture: pgTextOrEmpty(user.PhotoUrl),
-		RegisteredClaims: jwt.RegisteredClaims{
-			ID:        uuid.New().String(),
-			Issuer:    h.issuer(),
-			Subject:   userID.String(),
-			Audience:  jwt.ClaimStrings{clientID},
-			IssuedAt:  jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(now.Add(idTokenLifetime)),
-			NotBefore: nil,
-		},
+		Email:     user.Email,
+		Name:      user.DisplayName,
+		Picture:   pgTextOrEmpty(user.PhotoUrl),
+		ID:        uuid.New().String(),
+		Issuer:    h.issuer(),
+		Subject:   userID.String(),
+		Audience:  jwt.ClaimStrings{clientID},
+		IssuedAt:  jwt.NewNumericDate(now),
+		ExpiresAt: jwt.NewNumericDate(now.Add(idTokenLifetime)),
+		NotBefore: nil,
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)

@@ -15,7 +15,7 @@ type InjectExecutionInfo struct {
 
 func (*InjectExecutionInfo) InterceptWorkflow(ctx workflow.Context, next interceptor.WorkflowInboundInterceptor) interceptor.WorkflowInboundInterceptor {
 	return &workflowInjectExecutionInfo{
-		WorkflowInboundInterceptorBase: interceptor.WorkflowInboundInterceptorBase{Next: next},
+		Next: next,
 	}
 }
 
@@ -24,7 +24,7 @@ func (*InjectExecutionInfo) InterceptActivity(
 	next interceptor.ActivityInboundInterceptor,
 ) interceptor.ActivityInboundInterceptor {
 	return &activityInjectExecutionInfo{
-		ActivityInboundInterceptorBase: interceptor.ActivityInboundInterceptorBase{Next: next},
+		Next: next,
 	}
 }
 

@@ -174,10 +174,8 @@ func (s *Service) ListActiveAttributeValues(ctx context.Context, organizationID 
 	attributes := make([]AttributeValueSummary, 0, len(rows))
 	for _, row := range rows {
 		attributes = append(attributes, AttributeValueSummary{
-			AttributeValue: AttributeValue{
-				Key:   row.AttributeKey,
-				Value: row.AttributeValue,
-			},
+			Key:         row.AttributeKey,
+			Value:       row.AttributeValue,
 			MemberCount: row.MemberCount,
 		})
 	}

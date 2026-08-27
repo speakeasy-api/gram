@@ -16,7 +16,7 @@ type Recovery struct {
 
 func (*Recovery) InterceptWorkflow(ctx workflow.Context, next interceptor.WorkflowInboundInterceptor) interceptor.WorkflowInboundInterceptor {
 	return &workflowRecovery{
-		WorkflowInboundInterceptorBase: interceptor.WorkflowInboundInterceptorBase{Next: next},
+		Next: next,
 	}
 }
 
@@ -25,7 +25,7 @@ func (*Recovery) InterceptActivity(
 	next interceptor.ActivityInboundInterceptor,
 ) interceptor.ActivityInboundInterceptor {
 	return &activityRecovery{
-		ActivityInboundInterceptorBase: interceptor.ActivityInboundInterceptorBase{Next: next},
+		Next: next,
 	}
 }
 

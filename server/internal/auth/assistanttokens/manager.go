@@ -137,15 +137,13 @@ func (m *Manager) Generate(input GenerateInput) (string, error) {
 		UserID:      input.UserID,
 		AssistantID: input.AssistantID.String(),
 		ThreadID:    threadClaim,
-		RegisteredClaims: jwt.RegisteredClaims{
-			Issuer:    issuer,
-			Subject:   input.AssistantID.String(),
-			Audience:  nil,
-			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
-			NotBefore: nil,
-			IssuedAt:  jwt.NewNumericDate(now),
-			ID:        "",
-		},
+		Issuer:      issuer,
+		Subject:     input.AssistantID.String(),
+		Audience:    nil,
+		ExpiresAt:   jwt.NewNumericDate(now.Add(ttl)),
+		NotBefore:   nil,
+		IssuedAt:    jwt.NewNumericDate(now),
+		ID:          "",
 	})
 
 	signed, err := token.SignedString([]byte(m.jwtSecret))
@@ -181,15 +179,13 @@ func (m *Manager) GenerateMCPAuthFlow(input MCPAuthFlowInput) (string, error) {
 		CodeVerifier:      input.CodeVerifier,
 		TokenEndpoint:     input.TokenEndpoint,
 		OAuthServerIssuer: input.OAuthServerIssuer,
-		RegisteredClaims: jwt.RegisteredClaims{
-			Issuer:    mcpAuthFlowIssuer,
-			Subject:   input.AssistantID.String(),
-			Audience:  nil,
-			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
-			NotBefore: nil,
-			IssuedAt:  jwt.NewNumericDate(now),
-			ID:        attemptID,
-		},
+		Issuer:            mcpAuthFlowIssuer,
+		Subject:           input.AssistantID.String(),
+		Audience:          nil,
+		ExpiresAt:         jwt.NewNumericDate(now.Add(ttl)),
+		NotBefore:         nil,
+		IssuedAt:          jwt.NewNumericDate(now),
+		ID:                attemptID,
 	})
 
 	signed, err := token.SignedString([]byte(m.jwtSecret))
@@ -220,15 +216,13 @@ func (m *Manager) ValidateMCPAuthFlow(tokenString string) (*MCPAuthFlowClaims, e
 		CodeVerifier:      "",
 		TokenEndpoint:     "",
 		OAuthServerIssuer: "",
-		RegisteredClaims: jwt.RegisteredClaims{
-			Issuer:    "",
-			Subject:   "",
-			Audience:  nil,
-			ExpiresAt: nil,
-			NotBefore: nil,
-			IssuedAt:  nil,
-			ID:        "",
-		},
+		Issuer:            "",
+		Subject:           "",
+		Audience:          nil,
+		ExpiresAt:         nil,
+		NotBefore:         nil,
+		IssuedAt:          nil,
+		ID:                "",
 	}, func(token *jwt.Token) (any, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
@@ -264,15 +258,13 @@ func (m *Manager) Validate(tokenString string) (*Claims, error) {
 		UserID:      "",
 		AssistantID: "",
 		ThreadID:    "",
-		RegisteredClaims: jwt.RegisteredClaims{
-			Issuer:    "",
-			Subject:   "",
-			Audience:  nil,
-			ExpiresAt: nil,
-			NotBefore: nil,
-			IssuedAt:  nil,
-			ID:        "",
-		},
+		Issuer:      "",
+		Subject:     "",
+		Audience:    nil,
+		ExpiresAt:   nil,
+		NotBefore:   nil,
+		IssuedAt:    nil,
+		ID:          "",
 	}, func(token *jwt.Token) (any, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])

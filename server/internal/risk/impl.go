@@ -2599,8 +2599,7 @@ func validateDetectionScopes(eng *celenv.Engine, specs []*types.RiskDetectionSco
 	}
 	out, err := policycore.ValidateDetectionScopes(eng, inputs)
 	if err != nil {
-		var validationErr *policycore.ValidationError
-		if errors.As(err, &validationErr) {
+		if validationErr, ok := errors.AsType[*policycore.ValidationError](err); ok {
 			return nil, oops.E(oops.CodeInvalid, validationErr.Cause, "%s", validationErr.Message)
 		}
 		return nil, oops.E(oops.CodeInvalid, err, "%s", err)

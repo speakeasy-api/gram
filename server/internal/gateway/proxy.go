@@ -429,21 +429,19 @@ func (tp *ToolProxy) doFunction(
 	}
 
 	req, err := tp.functions.ToolCall(ctx, functions.RunnerToolCallRequest{
-		RunnerBaseRequest: functions.RunnerBaseRequest{
-			InvocationID:      invocationID,
-			OrganizationID:    descriptor.OrganizationID,
-			OrganizationSlug:  descriptor.OrganizationSlug,
-			ProjectID:         projectID,
-			ProjectSlug:       descriptor.ProjectSlug,
-			DeploymentID:      deploymentID,
-			FunctionsID:       functionID,
-			FunctionsAccessID: accessID,
-			Input:             input,
-			Environment:       payloadEnv,
-		},
-		ToolURN:  descriptor.URN,
-		ToolName: descriptor.Name,
-		Meta:     toolCallMeta(env.MCPClient),
+		InvocationID:      invocationID,
+		OrganizationID:    descriptor.OrganizationID,
+		OrganizationSlug:  descriptor.OrganizationSlug,
+		ProjectID:         projectID,
+		ProjectSlug:       descriptor.ProjectSlug,
+		DeploymentID:      deploymentID,
+		FunctionsID:       functionID,
+		FunctionsAccessID: accessID,
+		Input:             input,
+		Environment:       payloadEnv,
+		ToolURN:           descriptor.URN,
+		ToolName:          descriptor.Name,
+		Meta:              toolCallMeta(env.MCPClient),
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to create function tool call request").LogError(ctx, logger)

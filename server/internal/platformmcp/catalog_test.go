@@ -51,9 +51,8 @@ func TestHasUnresolvedRemoteTemplate(t *testing.T) {
 func TestCatalogDetailsUseSnakeCaseJSONKeys(t *testing.T) {
 	t.Parallel()
 
-	encoded, err := json.Marshal(CatalogDetails{CatalogCandidate: CatalogCandidate{
-		ProviderKey: "provider", CatalogRef: "reviewed/mcp", ToolCount: 1, SetupIntent: "authorize",
-	}, Transport: "streamable-http", ToolNames: []string{"tool"}})
+	encoded, err := json.Marshal(CatalogDetails{
+		ProviderKey: "provider", CatalogRef: "reviewed/mcp", ToolCount: 1, SetupIntent: "authorize", Transport: "streamable-http", ToolNames: []string{"tool"}})
 
 	require.NoError(t, err)
 	require.JSONEq(t, `{"provider_key":"provider","catalog_ref":"reviewed/mcp","name":"","description":"","version":"","tool_count":1,"setup_intent":"authorize","transport":"streamable-http","tool_names":["tool"],"configuration":null,"requires_dashboard_setup":false}`, string(encoded))

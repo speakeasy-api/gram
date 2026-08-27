@@ -775,14 +775,12 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 	}
 
 	filters := chrepo.ChallengeListFilters{
-		ChallengeFilters: chrepo.ChallengeFilters{
-			OrganizationID: authCtx.ActiveOrganizationID,
-			ProjectID:      payload.ProjectID,
-			Outcome:        payload.Outcome,
-			PrincipalURN:   payload.PrincipalUrn,
-			Scope:          payload.Scope,
-			MemberUserIDs:  memberIDs,
-		},
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      payload.ProjectID,
+		Outcome:        payload.Outcome,
+		PrincipalURN:   payload.PrincipalUrn,
+		Scope:          payload.Scope,
+		MemberUserIDs:  memberIDs,
 		Limit:          uint64(payload.Limit),  //nolint:gosec // Goa validates 1..200
 		Offset:         uint64(payload.Offset), //nolint:gosec // Goa validates >= 0
 		SkipPagination: skipPagination,
@@ -998,14 +996,12 @@ func (s *Service) ListChallengeBuckets(ctx context.Context, payload *gen.ListCha
 	}
 
 	filters := chrepo.ChallengeBucketFilters{
-		ChallengeFilters: chrepo.ChallengeFilters{
-			OrganizationID: authCtx.ActiveOrganizationID,
-			ProjectID:      payload.ProjectID,
-			Outcome:        payload.Outcome,
-			PrincipalURN:   payload.PrincipalUrn,
-			Scope:          payload.Scope,
-			MemberUserIDs:  memberIDs,
-		},
+		OrganizationID:       authCtx.ActiveOrganizationID,
+		ProjectID:            payload.ProjectID,
+		Outcome:              payload.Outcome,
+		PrincipalURN:         payload.PrincipalUrn,
+		Scope:                payload.Scope,
+		MemberUserIDs:        memberIDs,
 		Resolved:             payload.Resolved,
 		ResolvedChallengeIDs: resolvedChallengeIDs,
 		Limit:                uint64(payload.Limit),  //nolint:gosec // Goa validates 1..200

@@ -77,8 +77,8 @@ func TestIngest_ShadowMCPDenyCarriesBlockEffect(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	ti.service.riskScanner = blockEffectShadowMCPScanner{
-		ingestUserScopedShadowMCPScanner: ingestUserScopedShadowMCPScanner{userID: authCtx.UserID},
-		policyID:                         uuid.NewString(),
+		userID:   authCtx.UserID,
+		policyID: uuid.NewString(),
 	}
 
 	result, err := ti.service.Ingest(ctx, shadowMCPDenyPayload("block-effect-shadow-deny", "call-effect-1"))
@@ -167,8 +167,8 @@ func TestIngest_ShadowMCPDenyWithoutLinkCarriesNoBlockEffect(t *testing.T) {
 	require.True(t, ok)
 
 	ti.service.riskScanner = blockEffectShadowMCPScanner{
-		ingestUserScopedShadowMCPScanner: ingestUserScopedShadowMCPScanner{userID: authCtx.UserID},
-		policyID:                         uuid.NewString(),
+		userID:   authCtx.UserID,
+		policyID: uuid.NewString(),
 	}
 	ti.service.siteURL = nil
 
@@ -189,8 +189,8 @@ func TestIngest_DuplicateDeliveryBlockEffectOmitsBlockURL(t *testing.T) {
 	require.True(t, ok)
 
 	ti.service.riskScanner = blockEffectShadowMCPScanner{
-		ingestUserScopedShadowMCPScanner: ingestUserScopedShadowMCPScanner{userID: authCtx.UserID},
-		policyID:                         uuid.NewString(),
+		userID:   authCtx.UserID,
+		policyID: uuid.NewString(),
 	}
 
 	idempotencyKey := "block-effect-dup-" + uuid.NewString()

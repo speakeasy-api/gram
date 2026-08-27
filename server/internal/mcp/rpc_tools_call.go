@@ -504,8 +504,7 @@ func toolCallRejection(ctx context.Context, logger *slog.Logger, err error, args
 // The response writer starts at 200 because successful tool implementations may
 // write only a body, so failures that occur before WriteHeader must update it.
 func recordToolCallErrorStatus(ctx context.Context, rw *toolCallResponseWriter, err error) {
-	var shareableErr *oops.ShareableError
-	if errors.As(err, &shareableErr) {
+	if shareableErr, ok := errors.AsType[*oops.ShareableError](err); ok {
 		rw.statusCode = shareableErr.HTTPStatus(ctx)
 	}
 }

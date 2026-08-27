@@ -124,8 +124,7 @@ func (t Tool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Rea
 	if err != nil {
 		// A refusal carries its own payload and is returned to the model as
 		// the tool's answer; anything else is a failure of this call.
-		var refusal *platformmcp.ToolRefusalError
-		if errors.As(err, &refusal) {
+		if refusal, ok := errors.AsType[*platformmcp.ToolRefusalError](err); ok {
 			if _, writeErr := wr.Write([]byte(refusal.Payload)); writeErr != nil {
 				return fmt.Errorf("write platform tool refusal: %w", writeErr)
 			}

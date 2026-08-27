@@ -24,15 +24,13 @@ func GenerateSignedAssetToken(jwtSecret string, assetID, projectID uuid.UUID, tt
 	claims := SignedAssetClaims{
 		AssetID:   assetID.String(),
 		ProjectID: projectID.String(),
-		RegisteredClaims: jwt.RegisteredClaims{
-			ID:        jti,
-			Issuer:    "",
-			Subject:   "",
-			Audience:  nil,
-			IssuedAt:  jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(expiry),
-			NotBefore: nil,
-		},
+		ID:        jti,
+		Issuer:    "",
+		Subject:   "",
+		Audience:  nil,
+		IssuedAt:  jwt.NewNumericDate(now),
+		ExpiresAt: jwt.NewNumericDate(expiry),
+		NotBefore: nil,
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
