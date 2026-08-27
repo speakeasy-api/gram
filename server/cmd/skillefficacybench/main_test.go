@@ -44,7 +44,7 @@ func TestLoadBenchSetRejectsStalePromptVersion(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, b, 0o600))
 
 	_, err = loadBenchSet(path)
-	require.EqualError(t, err, `corpus prompt version "stale" does not match production "v2"`)
+	require.EqualError(t, err, `corpus prompt version "stale" does not match production "v3"`)
 }
 
 func TestBuildRequestMatchesProductionJudgeSettings(t *testing.T) {

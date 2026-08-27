@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 	"unicode/utf8"
+
+	domainskills "github.com/speakeasy-api/gram/server/internal/skills"
 )
 
 const (
@@ -22,21 +24,38 @@ const (
 // (server/clickhouse/schema.sql:957). Anything else normalizes to null.
 var roiConfidenceValues = []string{"low", "med", "high"}
 
+// recommendationConfidenceValues is deliberately separate from ROI confidence:
+// it qualifies whether raw feedback evidence is reliable enough to retain.
+var recommendationConfidenceValues = []string{"low", "med", "high"}
+
 // verdictFlags is the sink's flags_valid CHECK domain
 // (server/clickhouse/schema.sql:958). Unknown flags are dropped.
 var verdictFlags = []string{"ignored", "misapplied", "partially_followed", "harmful"}
 
+// recommendationOutcomes deliberately excludes helped: recommendations are raw
+// non-positive feedback candidates, not active feedback records.
+var recommendationOutcomes = []string{"partially_helped", "did_not_help", "misleading", "harmful"}
+
+// RawRecommendation is evidence the judge recommends for downstream feedback
+// handling. It is not a find/replace edit or an edit suggestion.
+type RawRecommendation struct {
+	Outcome    string `json:"outcome"`
+	Note       string `json:"note"`
+	Confidence string `json:"confidence"`
+}
+
 // Verdict is the judge's structured answer. Field names and shapes match
-// VerdictSchema; ParseVerdict validates the required shape before decoding it,
-// and the normalized value maps one-to-one onto skill_efficacy_scores
-// (server/clickhouse/schema.sql:943-950).
+// VerdictSchema; ParseVerdict validates the required shape before decoding it.
+// The score fields map onto skill_efficacy_scores; Recommendations remain raw
+// judge output for possible downstream handling.
 type Verdict struct {
-	Score           float64  `json:"score"`
-	Rationale       string   `json:"rationale"`
-	EstTurnsSaved   *float64 `json:"est_turns_saved"`
-	EstMinutesSaved *float64 `json:"est_minutes_saved"`
-	ROIConfidence   *string  `json:"roi_confidence"`
-	Flags           []string `json:"flags"`
+	Score           float64             `json:"score"`
+	Rationale       string              `json:"rationale"`
+	EstTurnsSaved   *float64            `json:"est_turns_saved"`
+	EstMinutesSaved *float64            `json:"est_minutes_saved"`
+	ROIConfidence   *string             `json:"roi_confidence"`
+	Flags           []string            `json:"flags"`
+	Recommendations []RawRecommendation `json:"recommendations"`
 }
 
 // ParseVerdict decodes the judge's raw structured output and normalizes it.
@@ -50,6 +69,7 @@ func ParseVerdict(raw string) (Verdict, error) {
 		"est_minutes_saved": true,
 		"roi_confidence":    true,
 		"flags":             false,
+		"recommendations":   false,
 	}
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &fields); err != nil {
@@ -67,6 +87,9 @@ func ParseVerdict(raw string) (Verdict, error) {
 		if _, ok := fields[name]; !ok {
 			return Verdict{}, fmt.Errorf("parse efficacy verdict: missing field %q: %w", name, ErrModelFailure)
 		}
+	}
+	if err := validateRawRecommendations(fields["recommendations"]); err != nil {
+		return Verdict{}, err
 	}
 
 	var v Verdict
@@ -109,6 +132,30 @@ func (v Verdict) Normalize() (Verdict, error) {
 		}
 	}
 
+	recommendations := make([]RawRecommendation, 0, len(v.Recommendations))
+	seenRecommendations := make(map[RawRecommendation]struct{}, len(v.Recommendations))
+	for i, recommendation := range v.Recommendations {
+		if !slices.Contains(recommendationOutcomes, recommendation.Outcome) {
+			return Verdict{}, fmt.Errorf("efficacy verdict recommendation %d has invalid outcome %q: %w", i, recommendation.Outcome, ErrModelFailure)
+		}
+		if !slices.Contains(recommendationConfidenceValues, recommendation.Confidence) {
+			return Verdict{}, fmt.Errorf("efficacy verdict recommendation %d has invalid confidence %q: %w", i, recommendation.Confidence, ErrModelFailure)
+		}
+		note := []rune(strings.TrimSpace(recommendation.Note))
+		if len(note) == 0 {
+			return Verdict{}, fmt.Errorf("efficacy verdict recommendation %d has an empty note: %w", i, ErrModelFailure)
+		}
+		if len(note) > domainskills.MaxFeedbackNoteRunes {
+			note = note[:domainskills.MaxFeedbackNoteRunes]
+		}
+		normalized := RawRecommendation{Outcome: recommendation.Outcome, Note: string(note), Confidence: recommendation.Confidence}
+		if _, ok := seenRecommendations[normalized]; ok {
+			continue
+		}
+		seenRecommendations[normalized] = struct{}{}
+		recommendations = append(recommendations, normalized)
+	}
+
 	return Verdict{
 		Score:           max(0, min(1, v.Score)),
 		Rationale:       rationale,
@@ -116,7 +163,32 @@ func (v Verdict) Normalize() (Verdict, error) {
 		EstMinutesSaved: normalizeROIEstimate(v.EstMinutesSaved),
 		ROIConfidence:   roiConfidence,
 		Flags:           flags,
+		Recommendations: recommendations,
 	}, nil
+}
+
+func validateRawRecommendations(raw json.RawMessage) error {
+	var recommendations []map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &recommendations); err != nil {
+		return fmt.Errorf("parse efficacy verdict recommendations: %w: %w", ErrModelFailure, err)
+	}
+	required := []string{"outcome", "note", "confidence"}
+	for i, recommendation := range recommendations {
+		for name, value := range recommendation {
+			if !slices.Contains(required, name) {
+				return fmt.Errorf("parse efficacy verdict recommendation %d: unknown field %q: %w", i, name, ErrModelFailure)
+			}
+			if bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+				return fmt.Errorf("parse efficacy verdict recommendation %d: field %q must not be null: %w", i, name, ErrModelFailure)
+			}
+		}
+		for _, name := range required {
+			if _, ok := recommendation[name]; !ok {
+				return fmt.Errorf("parse efficacy verdict recommendation %d: missing field %q: %w", i, name, ErrModelFailure)
+			}
+		}
+	}
+	return nil
 }
 
 // normalizeROIEstimate keeps an estimate only when the sink would accept it:

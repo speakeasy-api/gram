@@ -18,6 +18,7 @@ import (
 
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	domainskills "github.com/speakeasy-api/gram/server/internal/skills"
 	"github.com/speakeasy-api/gram/server/internal/skills/repo"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -237,10 +238,21 @@ func (f *flakyChats) ListChatTranscriptMessagesPage(ctx context.Context, arg cha
 	return rows, nil
 }
 
+type stubSuggestionSignaler struct {
+	calls [][2]uuid.UUID
+	err   error
+}
+
+func (s *stubSuggestionSignaler) Signal(_ context.Context, projectID, skillID uuid.UUID) error {
+	s.calls = append(s.calls, [2]uuid.UUID{projectID, skillID})
+	return s.err
+}
+
 type publishHarness struct {
 	fixture    efficacyFixture
 	scores     *telemetryrepo.Queries
 	judge      *stubJudge
+	signaler   *stubSuggestionSignaler
 	claimToken uuid.UUID
 }
 
@@ -251,13 +263,13 @@ func newPublishHarness(t *testing.T, name string) publishHarness {
 	conn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	return publishHarness{fixture: fixture, scores: telemetryrepo.New(conn), judge: newStubJudge(), claimToken: uuid.New()}
+	return publishHarness{fixture: fixture, scores: telemetryrepo.New(conn), judge: newStubJudge(), signaler: &stubSuggestionSignaler{}, claimToken: uuid.New()}
 }
 
 func (h publishHarness) publisher(t *testing.T, scores ScoreSink) *Publisher {
 	t.Helper()
 
-	return NewPublisher(testenv.NewLogger(t), testenv.NewTracerProvider(t), h.fixture.db, scores, h.judge)
+	return NewPublisher(testenv.NewLogger(t), testenv.NewTracerProvider(t), h.fixture.db, scores, h.judge, h.signaler)
 }
 
 // today is the reservation day every fixture row spends on unless a test
@@ -464,6 +476,79 @@ func TestPublishScoresReservedEvaluationOnce(t *testing.T) {
 	require.Equal(t, PublishResult{Loaded: 0, AlreadyPublished: 0, Scored: 0, ModelFailures: 0, Failed: 0, Retryable: 0}, replay)
 	require.Equal(t, 1, h.judge.calls[SurfaceDev], "a replay must not pay for inference again")
 	require.Equal(t, []string{evaluation.ID.String()}, h.publishedIDs(t, evaluation))
+}
+
+func TestPublishPersistsHighConfidenceRecommendationsIdempotently(t *testing.T) {
+	t.Parallel()
+	h := newPublishHarness(t, "skill_efficacy_publish_recommendations")
+	evaluation := h.reserve(t, "claude-session-recommendations", "claude-code")
+	judged := okVerdict()
+	judged.Verdict.Recommendations = []RawRecommendation{
+		{Outcome: "did_not_help", Note: "low confidence evidence", Confidence: "low"},
+		{Outcome: "misleading", Note: "first durable recommendation", Confidence: "high"},
+		{Outcome: "harmful", Note: "second durable recommendation", Confidence: "high"},
+	}
+	h.judge.results[SurfaceDev] = judged
+
+	failed, err := h.publisher(t, failingSink{ScoreSink: h.scores, err: errors.New("clickhouse unavailable")}).Publish(
+		t.Context(), h.fixture.projectID, evaluation.ClaimToken, []uuid.UUID{evaluation.ID}, nil,
+	)
+	require.ErrorIs(t, err, ErrRetryable)
+	require.Equal(t, 1, failed.Retryable)
+	require.Empty(t, h.publishedIDs(t, evaluation))
+	require.Equal(t, [][2]uuid.UUID{{h.fixture.projectID, evaluation.SkillID}}, h.signaler.calls)
+
+	retry, err := h.publisher(t, h.scores).Publish(t.Context(), h.fixture.projectID, evaluation.ClaimToken, []uuid.UUID{evaluation.ID}, nil)
+	require.NoError(t, err)
+	require.Equal(t, 1, retry.Scored)
+	require.Len(t, h.signaler.calls, 2, "one workflow signal is sent after each complete durable write attempt")
+
+	var count int
+	require.NoError(t, h.fixture.db.QueryRow(t.Context(), `SELECT COUNT(*) FROM skill_feedback WHERE project_id = $1 AND skill_id = $2`, h.fixture.projectID, evaluation.SkillID).Scan(&count))
+	require.Equal(t, 2, count, "deterministic ids make the retry a project-scoped no-op")
+
+	for position, expected := range judged.Verdict.Recommendations {
+		if expected.Confidence != "high" {
+			continue
+		}
+		expectedID := uuid.NewSHA1(evaluation.ID, fmt.Appendf(nil, "skill-efficacy-recommendation:%d", position))
+		var skillVersionID uuid.UUID
+		var source, outcome string
+		var note, sessionID, userID, userEmail pgtype.Text
+		err := h.fixture.db.QueryRow(t.Context(), `
+SELECT skill_version_id, source, outcome, note, session_id, user_id, user_email
+FROM skill_feedback
+WHERE project_id = $1 AND id = $2
+`, h.fixture.projectID, expectedID).Scan(&skillVersionID, &source, &outcome, &note, &sessionID, &userID, &userEmail)
+		require.NoError(t, err)
+		require.Equal(t, evaluation.SkillVersionID, skillVersionID)
+		require.Equal(t, string(domainskills.FeedbackSourceDev), source)
+		require.Equal(t, expected.Outcome, outcome)
+		require.Equal(t, expected.Note, note.String)
+		require.Equal(t, evaluation.ChatID.String(), sessionID.String)
+		require.False(t, userID.Valid)
+		require.False(t, userEmail.Valid)
+	}
+}
+
+func TestPublishSignalFailureLeavesFeedbackDurableAndStillScores(t *testing.T) {
+	t.Parallel()
+	h := newPublishHarness(t, "skill_efficacy_publish_signal_failure")
+	evaluation := h.reserve(t, "claude-session-signal-failure", "claude-code")
+	judged := okVerdict()
+	judged.Verdict.Recommendations = []RawRecommendation{{Outcome: "did_not_help", Note: "durable evidence", Confidence: "high"}}
+	h.judge.results[SurfaceDev] = judged
+	h.signaler.err = errors.New("temporal unavailable")
+
+	result, err := h.publisher(t, h.scores).Publish(t.Context(), h.fixture.projectID, evaluation.ClaimToken, []uuid.UUID{evaluation.ID}, nil)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Scored)
+	require.Equal(t, []string{evaluation.ID.String()}, h.publishedIDs(t, evaluation), "the daily sweep covers a failed best-effort workflow signal")
+
+	var count int
+	require.NoError(t, h.fixture.db.QueryRow(t.Context(), `SELECT COUNT(*) FROM skill_feedback WHERE project_id = $1 AND skill_id = $2`, h.fixture.projectID, evaluation.SkillID).Scan(&count))
+	require.Equal(t, 1, count)
+	require.Len(t, h.signaler.calls, 1)
 }
 
 // The subject of a reservation can be deleted while the batch is in flight, so
@@ -982,7 +1067,7 @@ func TestPublishModelFailureRecordsClassNotProviderDetail(t *testing.T) {
 	h.judge.errs[SurfaceDev] = fmt.Errorf("openrouter rejected efficacy judge request: %w: 400 %s", ErrModelFailure, echoed)
 
 	var logs bytes.Buffer
-	publisher := NewPublisher(slog.New(slog.NewJSONHandler(&logs, nil)), testenv.NewTracerProvider(t), h.fixture.db, h.scores, h.judge)
+	publisher := NewPublisher(slog.New(slog.NewJSONHandler(&logs, nil)), testenv.NewTracerProvider(t), h.fixture.db, h.scores, h.judge, h.signaler)
 
 	result, err := publisher.Publish(t.Context(), h.fixture.projectID, evaluation.ClaimToken, []uuid.UUID{evaluation.ID}, nil)
 	require.NoError(t, err)

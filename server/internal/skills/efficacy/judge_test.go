@@ -124,7 +124,7 @@ func TestJudgeCallReturnsNormalizedVerdict(t *testing.T) {
 
 	client := &mockCompletionClient{}
 	client.On("GetObjectCompletion", mock.Anything, mock.Anything).
-		Return(judgeResponse(`{"score":1.4,"rationale":"linter ran first","est_turns_saved":1,"est_minutes_saved":null,"roi_confidence":"low","flags":[]}`), nil).Once()
+		Return(judgeResponse(`{"score":1.4,"rationale":"linter ran first","est_turns_saved":1,"est_minutes_saved":null,"roi_confidence":"low","flags":[],"recommendations":[]}`), nil).Once()
 
 	got, err := newTestJudge(t, client).call(t.Context(), testJudgeInput())
 
@@ -145,7 +145,7 @@ func TestJudgeCallBillsInternalKeyAndEfficacySource(t *testing.T) {
 		Run(func(args mock.Arguments) {
 			captured, _ = args.Get(1).(openrouter.ObjectCompletionRequest)
 		}).
-		Return(judgeResponse(`{"score":0.5,"rationale":"ok","est_turns_saved":null,"est_minutes_saved":null,"roi_confidence":null,"flags":[]}`), nil).Once()
+		Return(judgeResponse(`{"score":0.5,"rationale":"ok","est_turns_saved":null,"est_minutes_saved":null,"roi_confidence":null,"flags":[],"recommendations":[]}`), nil).Once()
 
 	_, err := newTestJudge(t, client).call(t.Context(), testJudgeInput())
 
@@ -357,6 +357,7 @@ func TestVerdictSchemaIsStrictOverEveryVerdictField(t *testing.T) {
 		EstMinutesSaved: nil,
 		ROIConfidence:   nil,
 		Flags:           nil,
+		Recommendations: nil,
 	})
 	require.NoError(t, err)
 	var fields map[string]any
@@ -365,6 +366,25 @@ func TestVerdictSchemaIsStrictOverEveryVerdictField(t *testing.T) {
 		require.Contains(t, properties, name)
 	}
 	require.Len(t, properties, len(fields))
+
+	recommendations, ok := properties["recommendations"].(map[string]any)
+	require.True(t, ok)
+	items, ok := recommendations["items"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, false, items["additionalProperties"])
+	recommendationProperties, ok := items["properties"].(map[string]any)
+	require.True(t, ok)
+	recommendationRequired, ok := items["required"].([]string)
+	require.True(t, ok)
+	require.ElementsMatch(t, []string{"outcome", "note", "confidence"}, recommendationRequired)
+	require.Len(t, recommendationProperties, len(recommendationRequired))
+	outcomeSchema, ok := recommendationProperties["outcome"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, recommendationOutcomes, outcomeSchema["enum"])
+	confidenceSchema, ok := recommendationProperties["confidence"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, roiConfidenceValues, confidenceSchema["enum"])
+	require.Contains(t, SystemPrompt, "These are evidence, not find/replace edits or edit suggestions.")
 }
 
 func (m *mockCompletionClient) ResolveKey(_ context.Context, _ string, _ string, _ billing.ModelUsageSource, _ openrouter.KeyType) (openrouter.ResolvedKey, error) {

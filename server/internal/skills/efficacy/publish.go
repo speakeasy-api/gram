@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	domainskills "github.com/speakeasy-api/gram/server/internal/skills"
 	"github.com/speakeasy-api/gram/server/internal/skills/repo"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -33,6 +34,10 @@ const (
 	// of MaxReservedClaimBatch cannot outlive the claim that owns its rows even
 	// when every step in it hangs.
 	publishEvaluationTimeout = 2 * time.Minute
+	// recommendationSignalTimeout matches the existing feedback recorder: a
+	// workflow wake-up is best effort because the daily sweep is the durable
+	// fallback once recommendation rows have committed.
+	recommendationSignalTimeout = time.Second
 	// transcriptPageSize is how many messages one backwards step of the
 	// transcript loader reads. It is small because the loader overshoots by at
 	// most one page: the page that pushes the rendering over its budget is the
@@ -54,6 +59,8 @@ var modelFailureClass = ErrModelFailure.Error()
 // the attempt is charged to bound that payment, not to blame the model.
 const sinkFailureClass = "skill efficacy score sink failure"
 
+const recommendationSinkFailureClass = "skill efficacy recommendation sink failure"
+
 const validationFailureClass = "skill efficacy row validation failure"
 
 // TranscriptSource reads one chat's messages a page at a time, newest first.
@@ -73,6 +80,11 @@ type ScoreSink interface {
 // JudgeClient scores one session. Satisfied by *Judge.
 type JudgeClient interface {
 	Judge(ctx context.Context, in JudgeInput) (JudgeResult, error)
+}
+
+// SuggestionSignaler starts or wakes the existing skill suggestion workflow.
+type SuggestionSignaler interface {
+	Signal(ctx context.Context, projectID, skillID uuid.UUID) error
 }
 
 // PublishResult reports what one publication pass did with the reserved
@@ -98,19 +110,20 @@ type PublishResult struct {
 
 // Publisher judges reserved evaluations and publishes their scores.
 type Publisher struct {
-	logger *slog.Logger
-	tracer trace.Tracer
-	db     *pgxpool.Pool
-	chats  TranscriptSource
-	scores ScoreSink
-	judge  JudgeClient
+	logger   *slog.Logger
+	tracer   trace.Tracer
+	db       *pgxpool.Pool
+	chats    TranscriptSource
+	scores   ScoreSink
+	judge    JudgeClient
+	signaler SuggestionSignaler
 	// evaluationTimeout is publishEvaluationTimeout, held on the struct so a test
 	// can shorten the bound it is asserting on.
 	evaluationTimeout time.Duration
 }
 
 // NewPublisher constructs a Publisher.
-func NewPublisher(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, scores ScoreSink, judge JudgeClient) *Publisher {
+func NewPublisher(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, scores ScoreSink, judge JudgeClient, signaler SuggestionSignaler) *Publisher {
 	return &Publisher{
 		logger:            logger.With(attr.SlogComponent("skill-efficacy-publisher")),
 		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/skills/efficacy"),
@@ -118,14 +131,16 @@ func NewPublisher(logger *slog.Logger, tracerProvider trace.TracerProvider, db *
 		chats:             chatrepo.New(db),
 		scores:            scores,
 		judge:             judge,
+		signaler:          signaler,
 		evaluationTimeout: publishEvaluationTimeout,
 	}
 }
 
 // Publish judges the given reserved evaluations and writes their scores.
 //
-// Publication order per evaluation is existence guard → judge → synchronous
-// insert → mark scored, and the guard runs for the WHOLE batch before any judge
+// Publication order per evaluation is existence guard → judge → durable high-confidence
+// recommendation writes → one suggestion signal → synchronous score insert → mark
+// scored, and the guard runs for the WHOLE batch before any judge
 // call: a retry that follows a crash between insert and mark must not pay for
 // inference a second time. The score id is the evaluation id, so every physical
 // retry has the same logical event identity and analytical reads collapse it.
@@ -405,6 +420,21 @@ func (p *Publisher) publishOne(ctx context.Context, projectID uuid.UUID, claimTo
 		return nil
 	}
 
+	if err := p.persistRecommendations(ctx, projectID, input, judged.Verdict.Recommendations); err != nil {
+		terminal, chargeErr := p.chargeAttempt(ctx, projectID, claimToken, input, recommendationSinkFailureClass, MaxModelAttempts)
+		switch {
+		case chargeErr != nil:
+			result.Retryable++
+			return errors.Join(fmt.Errorf("persist skill efficacy recommendations: %w: %w", ErrRetryable, err), chargeErr)
+		case terminal:
+			result.Failed++
+			return nil
+		default:
+			result.Retryable++
+			return fmt.Errorf("persist skill efficacy recommendations: %w: %w", ErrRetryable, err)
+		}
+	}
+
 	// One row per insert: a CHECK the normalizer somehow let through terminates
 	// only its own evaluation instead of dropping or retrying the whole batch.
 	if err := p.scores.InsertSkillEfficacyScores(ctx, []telemetryrepo.SkillEfficacyScore{scoreRow(projectID, input, judged)}); err != nil {
@@ -447,6 +477,66 @@ func (p *Publisher) publishOne(ctx context.Context, projectID uuid.UUID, claimTo
 	}
 
 	result.Scored++
+	return nil
+}
+
+func (p *Publisher) persistRecommendations(ctx context.Context, projectID uuid.UUID, input repo.GetSkillEfficacyJudgeInputsRow, recommendations []RawRecommendation) error {
+	highConfidence := make([]int, 0, len(recommendations))
+	for position, recommendation := range recommendations {
+		if recommendation.Confidence == "high" {
+			highConfidence = append(highConfidence, position)
+		}
+	}
+	if len(highConfidence) == 0 {
+		return nil
+	}
+
+	tx, err := p.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin skill efficacy recommendation transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	source := domainskills.FeedbackSourceAssistant
+	if input.Surface == SurfaceDev {
+		source = domainskills.FeedbackSourceDev
+	}
+
+	queries := repo.New(tx)
+	for _, position := range highConfidence {
+		recommendation := recommendations[position]
+		id := uuid.NewSHA1(input.ID, fmt.Appendf(nil, "skill-efficacy-recommendation:%d", position))
+		_, err := queries.CreateSkillFeedback(ctx, repo.CreateSkillFeedbackParams{
+			ID:             uuid.NullUUID{UUID: id, Valid: true},
+			ProjectID:      projectID,
+			SkillID:        uuid.NullUUID{UUID: input.SkillID, Valid: true},
+			SkillVersionID: uuid.NullUUID{UUID: input.SkillVersionID, Valid: true},
+			SkillName:      input.SkillName,
+			Source:         string(source),
+			Outcome:        recommendation.Outcome,
+			Note:           conv.ToPGText(recommendation.Note),
+			SessionID:      conv.ToPGText(input.ChatID.String()),
+		})
+		if err != nil {
+			return fmt.Errorf("persist skill efficacy recommendation: %w", err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit skill efficacy recommendations: %w", err)
+	}
+
+	if p.signaler != nil {
+		signalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), recommendationSignalTimeout)
+		defer cancel()
+		if err := p.signaler.Signal(signalCtx, projectID, input.SkillID); err != nil {
+			p.logger.ErrorContext(signalCtx, "signal skill suggestion after efficacy recommendations",
+				attr.SlogError(err),
+				attr.SlogProjectID(projectID.String()),
+				attr.SlogResourceID(input.SkillID.String()),
+			)
+		}
+	}
+
 	return nil
 }
 

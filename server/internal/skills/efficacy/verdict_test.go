@@ -7,6 +7,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/stretchr/testify/require"
+
+	domainskills "github.com/speakeasy-api/gram/server/internal/skills"
 )
 
 func TestParseVerdictNormalizesModelOutput(t *testing.T) {
@@ -14,7 +16,8 @@ func TestParseVerdictNormalizesModelOutput(t *testing.T) {
 
 	got, err := ParseVerdict(`
 		{"score":0.75,"rationale":" the agent followed the skill ","est_turns_saved":2,
-		 "est_minutes_saved":7.5,"roi_confidence":"med","flags":["partially_followed"]}
+		 "est_minutes_saved":7.5,"roi_confidence":"med","flags":["partially_followed"],
+		 "recommendations":[{"outcome":"partially_helped","note":"The skill omitted the final verification step.","confidence":"high"}]}
 	`)
 
 	require.NoError(t, err)
@@ -26,6 +29,7 @@ func TestParseVerdictNormalizesModelOutput(t *testing.T) {
 	require.InDelta(t, 7.5, *got.EstMinutesSaved, 0)
 	require.Equal(t, new("med"), got.ROIConfidence)
 	require.Equal(t, []string{"partially_followed"}, got.Flags)
+	require.Equal(t, []RawRecommendation{{Outcome: "partially_helped", Note: "The skill omitted the final verification step.", Confidence: "high"}}, got.Recommendations)
 }
 
 func TestParseVerdictRejectsUnparseableOutput(t *testing.T) {
@@ -42,9 +46,9 @@ func TestParseVerdictRequiresTheStructuredOutputShape(t *testing.T) {
 	invalid := []string{
 		`{}`,
 		`null`,
-		`{"score":0.5,"rationale":"ok","est_turns_saved":null,"est_minutes_saved":null,"roi_confidence":null}`,
-		`{"score":null,"rationale":"ok","est_turns_saved":null,"est_minutes_saved":null,"roi_confidence":null,"flags":[]}`,
-		`{"score":0.5,"rationale":"ok","est_turns_saved":null,"est_minutes_saved":null,"roi_confidence":null,"flags":[],"extra":true}`,
+		`{"score":0.5,"rationale":"ok","est_turns_saved":null,"est_minutes_saved":null,"roi_confidence":null,"recommendations":[]}`,
+		`{"score":null,"rationale":"ok","est_turns_saved":null,"est_minutes_saved":null,"roi_confidence":null,"flags":[],"recommendations":[]}`,
+		`{"score":0.5,"rationale":"ok","est_turns_saved":null,"est_minutes_saved":null,"roi_confidence":null,"flags":[],"recommendations":[],"extra":true}`,
 	}
 	for _, raw := range invalid {
 		_, err := ParseVerdict(raw)
@@ -55,12 +59,33 @@ func TestParseVerdictRequiresTheStructuredOutputShape(t *testing.T) {
 func TestParseVerdictAcceptsExplicitNullNullableFields(t *testing.T) {
 	t.Parallel()
 
-	got, err := ParseVerdict(`{"score":0.5,"rationale":"ok","est_turns_saved":null,"est_minutes_saved":null,"roi_confidence":null,"flags":[]}`)
+	got, err := ParseVerdict(`{"score":0.5,"rationale":"ok","est_turns_saved":null,"est_minutes_saved":null,"roi_confidence":null,"flags":[],"recommendations":[]}`)
 	require.NoError(t, err)
 	require.InDelta(t, 0.5, got.Score, 0)
 	require.Nil(t, got.EstTurnsSaved)
 	require.Nil(t, got.EstMinutesSaved)
 	require.Nil(t, got.ROIConfidence)
+	require.Empty(t, got.Recommendations)
+}
+
+func TestParseVerdictRequiresStrictRecommendationShape(t *testing.T) {
+	t.Parallel()
+
+	invalidRecommendations := []string{
+		`null`,
+		`[null]`,
+		`[{"outcome":"did_not_help","note":"irrelevant"}]`,
+		`[{"outcome":"did_not_help","note":null,"confidence":"high"}]`,
+		`[{"outcome":"helped","note":"useful","confidence":"high"}]`,
+		`[{"outcome":"did_not_help","note":"   ","confidence":"high"}]`,
+		`[{"outcome":"did_not_help","note":"irrelevant","confidence":"certain"}]`,
+		`[{"outcome":"did_not_help","note":"irrelevant","confidence":"high","extra":true}]`,
+	}
+	for _, recommendations := range invalidRecommendations {
+		raw := `{"score":0.5,"rationale":"ok","est_turns_saved":null,"est_minutes_saved":null,"roi_confidence":null,"flags":[],"recommendations":` + recommendations + `}`
+		_, err := ParseVerdict(raw)
+		require.ErrorIs(t, err, ErrModelFailure)
+	}
 }
 
 func TestNormalizeVerdictRejectsNonFiniteScore(t *testing.T) {
@@ -118,6 +143,35 @@ func TestNormalizeVerdictKeepsZeroROIEstimate(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, got.EstTurnsSaved)
 	require.InDelta(t, 0.0, *got.EstTurnsSaved, 0)
+}
+
+func TestNormalizeVerdictNormalizesAndExactlyDeduplicatesRecommendations(t *testing.T) {
+	t.Parallel()
+
+	longNote := strings.Repeat("é", domainskills.MaxFeedbackNoteRunes+1)
+	first := RawRecommendation{Outcome: "did_not_help", Note: longNote, Confidence: "high"}
+	differentNote := RawRecommendation{Outcome: "did_not_help", Note: "different evidence", Confidence: "high"}
+	differentConfidence := RawRecommendation{Outcome: "did_not_help", Note: "different evidence", Confidence: "low"}
+	got, err := (Verdict{Score: 0.5, Recommendations: []RawRecommendation{first, first, differentNote, differentConfidence}}).Normalize()
+
+	require.NoError(t, err)
+	require.Len(t, got.Recommendations, 3)
+	require.Equal(t, domainskills.MaxFeedbackNoteRunes, utf8.RuneCountInString(got.Recommendations[0].Note))
+	require.True(t, utf8.ValidString(got.Recommendations[0].Note))
+	require.Equal(t, differentNote, got.Recommendations[1])
+	require.Equal(t, differentConfidence, got.Recommendations[2])
+}
+
+func TestNormalizeVerdictRejectsInvalidRecommendationDomains(t *testing.T) {
+	t.Parallel()
+
+	for _, recommendation := range []RawRecommendation{
+		{Outcome: "helped", Note: "useful", Confidence: "high"},
+		{Outcome: "did_not_help", Note: "irrelevant", Confidence: "certain"},
+	} {
+		_, err := (Verdict{Score: 0.5, Recommendations: []RawRecommendation{recommendation}}).Normalize()
+		require.ErrorIs(t, err, ErrModelFailure)
+	}
 }
 
 func TestNormalizeVerdictDropsUnknownAndDuplicateFlags(t *testing.T) {
