@@ -94,8 +94,8 @@ func TestStripLeadingEnvelopesRemovesOpenClawStackedBlocks(t *testing.T) {
 
 	input := openclawConversationInfo +
 		"\n\nReply target of current user message (untrusted, for context):\n```json\n{\"body\": \"earlier\"}\n```" +
-		"\n\nChat history since last reply (untrusted, for context):\n[1] alice: hi\n[2] bob: yo" +
-		"\n\nRecent messages (untrusted, chronological, oldest first):\n[3] carol: hey" +
+		"\n\nChat history since last reply (untrusted, for context):\n#1 alice: hi\n#2 bob: yo" +
+		"\n\nRecent messages (untrusted, chronological, oldest first):\n#3 carol: hey" +
 		"\n\nsummarize the thread"
 	require.Equal(t, "summarize the thread", chat.StripLeadingEnvelopes(input))
 }
@@ -111,5 +111,19 @@ func TestStripLeadingEnvelopesLeavesUnterminatedOpenClawFence(t *testing.T) {
 	t.Parallel()
 
 	input := "Conversation info (untrusted metadata):\n```json\n{\"chat_id\": \"x\"\n\nping"
+	require.Equal(t, input, chat.StripLeadingEnvelopes(input))
+}
+
+func TestStripLeadingEnvelopesKeepsTextRightAfterOpenClawHistory(t *testing.T) {
+	t.Parallel()
+
+	input := "Chat history since last reply (untrusted, for context):\n#1 alice: hi\n#2 bob: yo\ncan you continue"
+	require.Equal(t, "can you continue", chat.StripLeadingEnvelopes(input))
+}
+
+func TestStripLeadingEnvelopesLeavesHumanTimestampWithoutEnvelope(t *testing.T) {
+	t.Parallel()
+
+	input := "[Mon 2024-05-01 09:30] could we move the sync?"
 	require.Equal(t, input, chat.StripLeadingEnvelopes(input))
 }

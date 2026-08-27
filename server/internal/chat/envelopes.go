@@ -22,19 +22,24 @@ import (
 // a tag a user types mid-message is preserved; the non-greedy body stops at the
 // first close tag.
 // OpenClaw prepends its own envelope to channel-originated turns (Discord /
-// Slack / Telegram): an optional "[Thu 2026-08-27 13:51 EDT]" timestamp, a
-// "Delivery: …" hint line, "<Label> (untrusted…):" headers over a ```json
-// fence (Conversation info, Sender, Reply target, …), and blank-line-terminated
-// chat-history / chat-window paragraphs. The hooks relay strips these before
-// ingest on current installs; this covers turns stored before it did and any
-// install still bootstrapping an older hooks binary.
-var leadingEnvelopeRE = regexp.MustCompile(`(?s)^(?:` +
+// Slack / Telegram): a "Delivery: …" hint line, "<Label> (untrusted…):"
+// headers over a ```json fence (Conversation info, Sender, Reply target, …),
+// and chat-history / chat-window paragraphs whose every line is
+// "[#id ts] sender: text" (the entry shape bounds the paragraph so a human
+// line right after it survives). An optional "[Thu 2026-08-27 13:51 EDT]"
+// timestamp stamps the head of the whole text; it is only removed when an
+// envelope element follows, so a human message that opens with a
+// timestamp-shaped bracket is left alone. The hooks relay strips all of this
+// before ingest on current installs; this covers turns stored before it did
+// and any install still bootstrapping an older hooks binary.
+var leadingEnvelopeRE = regexp.MustCompile(`(?s)^` +
+	`(?:\s*\[(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) \d{4}-\d{2}-\d{2} \d{2}:\d{2}[^\]\n]*\] *)?` +
+	`(?:` +
 	`\s*<message-context>.*?</message-context>\s*` +
 	`|\s*<notification>.*?</notification>\s*` +
-	`|\s*\[[A-Za-z]{3} \d{4}-\d{2}-\d{2} \d{2}:\d{2}[^\]\n]*\] *` +
 	"|\\s*Delivery: (?:to send a message, use the `message` tool\\.|Final assistant text is not automatically delivered in this run\\.[^\\n]*|No visible reply is delivered automatically in this run[^\\n]*)\\s*" +
 	"|\\s*[^\\n]* \\(untrusted[^)\\n]*\\):\\n```json\\n.*?\\n```\\s*" +
-	`|\s*[^\n]* \(untrusted(?:, chronological[^)\n]*|, for context)\):\n(?:[^\n]+(?:\n|$))*\s*` +
+	`|\s*[^\n]* \(untrusted(?:, chronological[^)\n]*|, for context)\):\n(?:[^\n:]+: [^\n]*(?:\n|$))*\s*` +
 	`)+`)
 
 // StripLeadingEnvelopes removes any leading harness framing so downstream LLM
