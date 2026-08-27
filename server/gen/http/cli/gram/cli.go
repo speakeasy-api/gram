@@ -16635,7 +16635,7 @@ func adminOpenRouterKeysUsage() {
 	fmt.Fprintln(os.Stderr, `    list-keys: List every organization's platform OpenRouter keys. Requires platform admin.`)
 	fmt.Fprintln(os.Stderr, `    get-key-usage: Fetch an organization's live credit usage from OpenRouter for one key. Requires platform admin.`)
 	fmt.Fprintln(os.Stderr, `    disable-key: Lock down an organization's platform OpenRouter key, upstream and locally. Requires platform admin.`)
-	fmt.Fprintln(os.Stderr, `    enable-key: Reinstate a disabled platform OpenRouter key, upstream and locally, keeping its recorded credit ceiling. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr, `    enable-key: Remove the platform-admin lock from an OpenRouter key, preserving any automatic disable causes and its recorded credit ceiling. Requires platform admin.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s admin-open-router-keys COMMAND --help\n", os.Args[0])
@@ -16709,7 +16709,7 @@ func adminOpenRouterKeysEnableKeyUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Reinstate a disabled platform OpenRouter key, upstream and locally, keeping its recorded credit ceiling. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr, `Remove the platform-admin lock from an OpenRouter key, preserving any automatic disable causes and its recorded credit ceiling. Requires platform admin.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)

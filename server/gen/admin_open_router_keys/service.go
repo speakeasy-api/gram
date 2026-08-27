@@ -25,8 +25,9 @@ type Service interface {
 	// Lock down an organization's platform OpenRouter key, upstream and locally.
 	// Requires platform admin.
 	DisableKey(context.Context, *DisableKeyPayload) (res *AdminOpenRouterKey, err error)
-	// Reinstate a disabled platform OpenRouter key, upstream and locally, keeping
-	// its recorded credit ceiling. Requires platform admin.
+	// Remove the platform-admin lock from an OpenRouter key, preserving any
+	// automatic disable causes and its recorded credit ceiling. Requires platform
+	// admin.
 	EnableKey(context.Context, *EnableKeyPayload) (res *AdminOpenRouterKey, err error)
 }
 
@@ -68,8 +69,10 @@ type AdminOpenRouterKey struct {
 	KeyType string
 	// Monthly credit ceiling last mirrored from OpenRouter.
 	MonthlyCredits int64
-	// Whether the key is locked down (refused locally and disabled upstream).
+	// Whether one or more active causes keep the key disabled.
 	Disabled bool
+	// Independent reasons that keep the key disabled.
+	DisableCauses []string
 	// When the key row was created.
 	CreatedAt string
 	// When the key row was last updated.
@@ -92,7 +95,7 @@ type EnableKeyPayload struct {
 	SessionToken *string
 	// Organization that owns the key.
 	OrganizationID string
-	// Key type to enable.
+	// Key type from which to remove the platform-admin lock.
 	KeyType string
 }
 

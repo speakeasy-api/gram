@@ -41,6 +41,18 @@ func TestListKeys_ReturnsSeededKeys(t *testing.T) {
 	adminCtx := withAdmin(t, ctx)
 
 	orgID := seedKey(t, ctx, ti, "list", "chat", "sk-or-list")
+	for _, cause := range []openrouter.DisableCause{
+		openrouter.DisableCauseAdminLock,
+		openrouter.DisableCauseTrialDemotion,
+		openrouter.DisableCauseBillingInactive,
+	} {
+		_, err := orgrepo.New(ti.conn).AddOpenRouterAPIKeyDisableCause(ctx, orgrepo.AddOpenRouterAPIKeyDisableCauseParams{
+			DisableCause:   string(cause),
+			OrganizationID: orgID,
+			KeyType:        "chat",
+		})
+		require.NoError(t, err)
+	}
 
 	res, err := ti.service.ListKeys(adminCtx, &gen.ListKeysPayload{SessionToken: nil})
 	require.NoError(t, err)
@@ -54,7 +66,8 @@ func TestListKeys_ReturnsSeededKeys(t *testing.T) {
 	require.NotNil(t, found)
 	require.Equal(t, "chat", found.KeyType)
 	require.Equal(t, int64(5), found.MonthlyCredits)
-	require.False(t, found.Disabled)
+	require.True(t, found.Disabled)
+	require.ElementsMatch(t, []string{"admin_lock", "trial_demotion", "billing_inactive"}, found.DisableCauses)
 }
 
 func TestGetKeyUsage_DecryptsStoredCiphertext(t *testing.T) {
@@ -140,10 +153,62 @@ func TestDisableKey_MarksDisabledAndAudits(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, view.Disabled)
+	require.Equal(t, []string{string(openrouter.DisableCauseAdminLock)}, view.DisableCauses)
+	require.Len(t, ti.provisioner.disableAccessCalls, 1)
 
 	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOpenRouterAPIKeyDisable)
 	require.NoError(t, err)
 	require.Equal(t, before+1, after)
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionOpenRouterAPIKeyDisable)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"disabled":false,"disable_causes":[]}`, string(record.BeforeSnapshot))
+	require.JSONEq(t, `{"disabled":true,"disable_causes":["admin_lock"]}`, string(record.AfterSnapshot))
+	require.NotContains(t, string(record.BeforeSnapshot), "sk-or-disable")
+	require.NotContains(t, string(record.AfterSnapshot), "sk-or-disable")
+}
+
+func TestDisableKey_AddsAdminLockWhenAutomaticCauseAlreadyDisablesKey(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	adminCtx := withAdmin(t, ctx)
+	orgID := seedKey(t, ctx, ti, "disable-layered", "chat", "sk-or-disable-layered")
+	_, err := orgrepo.New(ti.conn).AddOpenRouterAPIKeyDisableCause(ctx, orgrepo.AddOpenRouterAPIKeyDisableCauseParams{
+		DisableCause: string(openrouter.DisableCauseTrialDemotion), OrganizationID: orgID, KeyType: "chat",
+	})
+	require.NoError(t, err)
+	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOpenRouterAPIKeyDisable)
+	require.NoError(t, err)
+
+	view, err := ti.service.DisableKey(adminCtx, &gen.DisableKeyPayload{OrganizationID: orgID, KeyType: "chat"})
+	require.NoError(t, err)
+	require.True(t, view.Disabled)
+	require.ElementsMatch(t, []string{"trial_demotion", "admin_lock"}, view.DisableCauses)
+	require.Empty(t, ti.provisioner.disableAccessCalls, "effective access was already disabled")
+	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOpenRouterAPIKeyDisable)
+	require.NoError(t, err)
+	require.Equal(t, before+1, after, "cause changes must be audited even without access changes")
+}
+
+func TestDisableKey_AdminLockRetryIsIdempotentAndNotAudited(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	adminCtx := withAdmin(t, ctx)
+	orgID := seedKey(t, ctx, ti, "disable-retry", "chat", "sk-or-disable-retry")
+	payload := &gen.DisableKeyPayload{OrganizationID: orgID, KeyType: "chat"}
+	_, err := ti.service.DisableKey(adminCtx, payload)
+	require.NoError(t, err)
+	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOpenRouterAPIKeyDisable)
+	require.NoError(t, err)
+
+	view, err := ti.service.DisableKey(adminCtx, payload)
+	require.NoError(t, err)
+	require.Equal(t, []string{"admin_lock"}, view.DisableCauses)
+	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOpenRouterAPIKeyDisable)
+	require.NoError(t, err)
+	require.Equal(t, before, after)
+	require.Len(t, ti.provisioner.disableAccessCalls, 1)
 }
 
 func TestEnableKey_ReinstatesWithRecordedLimit(t *testing.T) {
@@ -174,11 +239,67 @@ func TestEnableKey_ReinstatesWithRecordedLimit(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.False(t, view.Disabled)
+	require.NotNil(t, view.DisableCauses, "required array must serialize as [] rather than null")
+	require.Empty(t, view.DisableCauses)
 	require.EqualValues(t, recordedLimit, view.MonthlyCredits, "recorded ceiling must be kept on reinstatement")
+	require.Len(t, ti.provisioner.enableAccessCalls, 1)
 
 	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOpenRouterAPIKeyEnable)
 	require.NoError(t, err)
 	require.Equal(t, before+1, after)
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionOpenRouterAPIKeyEnable)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"disabled":true,"disable_causes":["admin_lock"]}`, string(record.BeforeSnapshot))
+	require.JSONEq(t, `{"disabled":false,"disable_causes":[]}`, string(record.AfterSnapshot))
+	require.NotContains(t, string(record.BeforeSnapshot), "sk-or-enable")
+	require.NotContains(t, string(record.AfterSnapshot), "sk-or-enable")
+}
+
+func TestEnableKey_RemovesOnlyAdminLockWhenAutomaticCauseRemains(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	adminCtx := withAdmin(t, ctx)
+	orgID := seedKey(t, ctx, ti, "enable-layered", "chat", "sk-or-enable-layered")
+	queries := orgrepo.New(ti.conn)
+	for _, cause := range []openrouter.DisableCause{openrouter.DisableCauseAdminLock, openrouter.DisableCauseTrialDemotion} {
+		_, err := queries.AddOpenRouterAPIKeyDisableCause(ctx, orgrepo.AddOpenRouterAPIKeyDisableCauseParams{DisableCause: string(cause), OrganizationID: orgID, KeyType: "chat"})
+		require.NoError(t, err)
+	}
+	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOpenRouterAPIKeyEnable)
+	require.NoError(t, err)
+
+	view, err := ti.service.EnableKey(adminCtx, &gen.EnableKeyPayload{OrganizationID: orgID, KeyType: "chat"})
+	require.NoError(t, err)
+	require.True(t, view.Disabled)
+	require.Equal(t, []string{"trial_demotion"}, view.DisableCauses)
+	require.Empty(t, ti.provisioner.enableAccessCalls, "automatic cause keeps effective access disabled")
+	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOpenRouterAPIKeyEnable)
+	require.NoError(t, err)
+	require.Equal(t, before+1, after, "cause removal must be audited even without access changes")
+}
+
+func TestEnableKey_WithoutAdminLockIsIdempotentAndPreservesAutomaticCauses(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	adminCtx := withAdmin(t, ctx)
+	orgID := seedKey(t, ctx, ti, "enable-no-lock", "chat", "sk-or-enable-no-lock")
+	_, err := orgrepo.New(ti.conn).AddOpenRouterAPIKeyDisableCause(ctx, orgrepo.AddOpenRouterAPIKeyDisableCauseParams{
+		DisableCause: string(openrouter.DisableCauseBillingInactive), OrganizationID: orgID, KeyType: "chat",
+	})
+	require.NoError(t, err)
+	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOpenRouterAPIKeyEnable)
+	require.NoError(t, err)
+
+	view, err := ti.service.EnableKey(adminCtx, &gen.EnableKeyPayload{OrganizationID: orgID, KeyType: "chat"})
+	require.NoError(t, err)
+	require.True(t, view.Disabled)
+	require.Equal(t, []string{"billing_inactive"}, view.DisableCauses)
+	require.Empty(t, ti.provisioner.enableAccessCalls)
+	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOpenRouterAPIKeyEnable)
+	require.NoError(t, err)
+	require.Equal(t, before, after)
 }
 
 func TestEnableKey_ReinstatesLegacyZeroSecurityKeyAtPaygPolicy(t *testing.T) {
@@ -212,7 +333,8 @@ func TestEnableKey_ReinstatesLegacyZeroSecurityKeyAtPaygPolicy(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, view.Disabled)
 	require.EqualValues(t, expected, view.MonthlyCredits)
-	require.Equal(t, []string{orgID + "/" + string(openrouter.KeyTypeInternal)}, ti.provisioner.refreshCalls)
+	require.Equal(t, []string{orgID + "/" + string(openrouter.KeyTypeInternal) + "/" + string(openrouter.DisableCauseAdminLock)}, ti.provisioner.removeCauseCalls)
+	require.Empty(t, ti.provisioner.refreshCalls)
 }
 
 func TestEnableKey_ReinstatesLegacyZeroTrialKeyAtTrialPolicy(t *testing.T) {

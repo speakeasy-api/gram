@@ -9,6 +9,7 @@ SELECT
     om.gram_account_type,
     k.key_type,
     k.monthly_credits,
+    k.disable_causes,
     k.disabled,
     k.created_at,
     k.updated_at
@@ -25,6 +26,7 @@ SELECT
     om.gram_account_type,
     k.key_type,
     k.monthly_credits,
+    k.disable_causes,
     k.disabled,
     k.created_at,
     k.updated_at

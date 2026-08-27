@@ -19,6 +19,7 @@ SELECT
     om.gram_account_type,
     k.key_type,
     k.monthly_credits,
+    k.disable_causes,
     k.disabled,
     k.created_at,
     k.updated_at
@@ -41,6 +42,7 @@ type GetOpenRouterAPIKeyForAdminRow struct {
 	GramAccountType  string
 	KeyType          string
 	MonthlyCredits   int64
+	DisableCauses    []string
 	Disabled         bool
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
@@ -56,6 +58,7 @@ func (q *Queries) GetOpenRouterAPIKeyForAdmin(ctx context.Context, arg GetOpenRo
 		&i.GramAccountType,
 		&i.KeyType,
 		&i.MonthlyCredits,
+		&i.DisableCauses,
 		&i.Disabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -71,6 +74,7 @@ SELECT
     om.gram_account_type,
     k.key_type,
     k.monthly_credits,
+    k.disable_causes,
     k.disabled,
     k.created_at,
     k.updated_at
@@ -87,6 +91,7 @@ type ListOpenRouterAPIKeysForAdminRow struct {
 	GramAccountType  string
 	KeyType          string
 	MonthlyCredits   int64
+	DisableCauses    []string
 	Disabled         bool
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
@@ -111,6 +116,7 @@ func (q *Queries) ListOpenRouterAPIKeysForAdmin(ctx context.Context) ([]ListOpen
 			&i.GramAccountType,
 			&i.KeyType,
 			&i.MonthlyCredits,
+			&i.DisableCauses,
 			&i.Disabled,
 			&i.CreatedAt,
 			&i.UpdatedAt,

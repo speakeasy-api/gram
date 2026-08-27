@@ -15,14 +15,17 @@ import (
 
 var AdminKey = Type("AdminOpenRouterKey", func() {
 	Description("One organization's platform OpenRouter key of a given type, without its key material.")
-	Required("organization_id", "organization_name", "organization_slug", "gram_account_type", "key_type", "monthly_credits", "disabled", "created_at", "updated_at")
+	Required("organization_id", "organization_name", "organization_slug", "gram_account_type", "key_type", "monthly_credits", "disabled", "disable_causes", "created_at", "updated_at")
 	Attribute("organization_id", String, "Organization that owns the key.")
 	Attribute("organization_name", String, "Display name of the owning organization.")
 	Attribute("organization_slug", String, "Slug of the owning organization.")
 	Attribute("gram_account_type", String, "The organization's Gram account type (e.g. free, pro, enterprise).")
 	Attribute("key_type", String, "Which upstream key this row provisions: 'chat' pays for customer-facing completions, 'internal' pays for platform-initiated LLM usage.")
 	Attribute("monthly_credits", Int64, "Monthly credit ceiling last mirrored from OpenRouter.")
-	Attribute("disabled", Boolean, "Whether the key is locked down (refused locally and disabled upstream).")
+	Attribute("disabled", Boolean, "Whether one or more active causes keep the key disabled.")
+	Attribute("disable_causes", ArrayOf(String, func() {
+		Enum("admin_lock", "trial_demotion", "billing_inactive")
+	}), "Independent reasons that keep the key disabled.")
 	Attribute("created_at", String, "When the key row was created.", func() { Format(FormatDateTime) })
 	Attribute("updated_at", String, "When the key row was last updated.", func() { Format(FormatDateTime) })
 })
@@ -114,12 +117,12 @@ var _ = Service("adminOpenRouterKeys", func() {
 	})
 
 	Method("enableKey", func() {
-		Description("Reinstate a disabled platform OpenRouter key, upstream and locally, keeping its recorded credit ceiling. Requires platform admin.")
+		Description("Remove the platform-admin lock from an OpenRouter key, preserving any automatic disable causes and its recorded credit ceiling. Requires platform admin.")
 
 		Payload(func() {
 			security.SessionPayload()
 			Attribute("organization_id", String, "Organization that owns the key.")
-			Attribute("key_type", String, "Key type to enable.", func() { Enum("chat", "internal") })
+			Attribute("key_type", String, "Key type from which to remove the platform-admin lock.", func() { Enum("chat", "internal") })
 			Required("organization_id", "key_type")
 			// Named explicitly: the disable and enable payloads are
 			// structurally identical and Goa deduplicates request bodies by

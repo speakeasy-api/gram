@@ -26,7 +26,7 @@ type DisableKeyRequestBody struct {
 type EnableKeyRequestBody struct {
 	// Organization that owns the key.
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	// Key type to enable.
+	// Key type from which to remove the platform-admin lock.
 	KeyType string `form:"key_type" json:"key_type" xml:"key_type"`
 }
 
@@ -66,8 +66,10 @@ type DisableKeyResponseBody struct {
 	KeyType *string `form:"key_type,omitempty" json:"key_type,omitempty" xml:"key_type,omitempty"`
 	// Monthly credit ceiling last mirrored from OpenRouter.
 	MonthlyCredits *int64 `form:"monthly_credits,omitempty" json:"monthly_credits,omitempty" xml:"monthly_credits,omitempty"`
-	// Whether the key is locked down (refused locally and disabled upstream).
+	// Whether one or more active causes keep the key disabled.
 	Disabled *bool `form:"disabled,omitempty" json:"disabled,omitempty" xml:"disabled,omitempty"`
+	// Independent reasons that keep the key disabled.
+	DisableCauses []string `form:"disable_causes,omitempty" json:"disable_causes,omitempty" xml:"disable_causes,omitempty"`
 	// When the key row was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the key row was last updated.
@@ -90,8 +92,10 @@ type EnableKeyResponseBody struct {
 	KeyType *string `form:"key_type,omitempty" json:"key_type,omitempty" xml:"key_type,omitempty"`
 	// Monthly credit ceiling last mirrored from OpenRouter.
 	MonthlyCredits *int64 `form:"monthly_credits,omitempty" json:"monthly_credits,omitempty" xml:"monthly_credits,omitempty"`
-	// Whether the key is locked down (refused locally and disabled upstream).
+	// Whether one or more active causes keep the key disabled.
 	Disabled *bool `form:"disabled,omitempty" json:"disabled,omitempty" xml:"disabled,omitempty"`
+	// Independent reasons that keep the key disabled.
+	DisableCauses []string `form:"disable_causes,omitempty" json:"disable_causes,omitempty" xml:"disable_causes,omitempty"`
 	// When the key row was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the key row was last updated.
@@ -848,8 +852,10 @@ type AdminOpenRouterKeyResponseBody struct {
 	KeyType *string `form:"key_type,omitempty" json:"key_type,omitempty" xml:"key_type,omitempty"`
 	// Monthly credit ceiling last mirrored from OpenRouter.
 	MonthlyCredits *int64 `form:"monthly_credits,omitempty" json:"monthly_credits,omitempty" xml:"monthly_credits,omitempty"`
-	// Whether the key is locked down (refused locally and disabled upstream).
+	// Whether one or more active causes keep the key disabled.
 	Disabled *bool `form:"disabled,omitempty" json:"disabled,omitempty" xml:"disabled,omitempty"`
+	// Independent reasons that keep the key disabled.
+	DisableCauses []string `form:"disable_causes,omitempty" json:"disable_causes,omitempty" xml:"disable_causes,omitempty"`
 	// When the key row was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the key row was last updated.
@@ -1218,6 +1224,10 @@ func NewDisableKeyAdminOpenRouterKeyOK(body *DisableKeyResponseBody) *adminopenr
 		CreatedAt:        *body.CreatedAt,
 		UpdatedAt:        *body.UpdatedAt,
 	}
+	v.DisableCauses = make([]string, len(body.DisableCauses))
+	for i, val := range body.DisableCauses {
+		v.DisableCauses[i] = val
+	}
 
 	return v
 }
@@ -1385,6 +1395,10 @@ func NewEnableKeyAdminOpenRouterKeyOK(body *EnableKeyResponseBody) *adminopenrou
 		Disabled:         *body.Disabled,
 		CreatedAt:        *body.CreatedAt,
 		UpdatedAt:        *body.UpdatedAt,
+	}
+	v.DisableCauses = make([]string, len(body.DisableCauses))
+	for i, val := range body.DisableCauses {
+		v.DisableCauses[i] = val
 	}
 
 	return v
@@ -1592,11 +1606,19 @@ func ValidateDisableKeyResponseBody(body *DisableKeyResponseBody) (err error) {
 	if body.Disabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("disabled", "body"))
 	}
+	if body.DisableCauses == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("disable_causes", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	for _, e := range body.DisableCauses {
+		if !(e == "admin_lock" || e == "trial_demotion" || e == "billing_inactive") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disable_causes[*]", e, []any{"admin_lock", "trial_demotion", "billing_inactive"}))
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -1631,11 +1653,19 @@ func ValidateEnableKeyResponseBody(body *EnableKeyResponseBody) (err error) {
 	if body.Disabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("disabled", "body"))
 	}
+	if body.DisableCauses == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("disable_causes", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	for _, e := range body.DisableCauses {
+		if !(e == "admin_lock" || e == "trial_demotion" || e == "billing_inactive") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disable_causes[*]", e, []any{"admin_lock", "trial_demotion", "billing_inactive"}))
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -2630,11 +2660,19 @@ func ValidateAdminOpenRouterKeyResponseBody(body *AdminOpenRouterKeyResponseBody
 	if body.Disabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("disabled", "body"))
 	}
+	if body.DisableCauses == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("disable_causes", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	for _, e := range body.DisableCauses {
+		if !(e == "admin_lock" || e == "trial_demotion" || e == "billing_inactive") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disable_causes[*]", e, []any{"admin_lock", "trial_demotion", "billing_inactive"}))
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

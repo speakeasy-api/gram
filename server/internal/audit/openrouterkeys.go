@@ -36,6 +36,13 @@ type OpenRouterAPIKeySpendCapSnapshot struct {
 	MonthlyCredits int64 `json:"monthly_credits"`
 }
 
+// OpenRouterAPIKeyDisableSnapshot captures only effective access and its
+// independent causes. Key material is deliberately excluded.
+type OpenRouterAPIKeyDisableSnapshot struct {
+	Disabled      bool     `json:"disabled"`
+	DisableCauses []string `json:"disable_causes"`
+}
+
 type LogOpenRouterAPIKeyDisableEvent struct {
 	OrganizationID string
 
@@ -46,6 +53,9 @@ type LogOpenRouterAPIKeyDisableEvent struct {
 	OpenRouterAPIKeyURN urn.OpenRouterAPIKey
 
 	KeyType string
+
+	OpenRouterAPIKeySnapshotBefore *OpenRouterAPIKeyDisableSnapshot
+	OpenRouterAPIKeySnapshotAfter  *OpenRouterAPIKeyDisableSnapshot
 }
 
 // LogOpenRouterAPIKeyDisable records the platform-admin lockdown of the key,
@@ -64,6 +74,9 @@ type LogOpenRouterAPIKeyEnableEvent struct {
 	OpenRouterAPIKeyURN urn.OpenRouterAPIKey
 
 	KeyType string
+
+	OpenRouterAPIKeySnapshotBefore *OpenRouterAPIKeyDisableSnapshot
+	OpenRouterAPIKeySnapshotAfter  *OpenRouterAPIKeyDisableSnapshot
 }
 
 // LogOpenRouterAPIKeyEnable records the platform-admin reinstatement of a
@@ -148,12 +161,23 @@ type openRouterAPIKeyEventFields struct {
 	ActorSlug           *string
 	OpenRouterAPIKeyURN urn.OpenRouterAPIKey
 	KeyType             string
+
+	OpenRouterAPIKeySnapshotBefore *OpenRouterAPIKeyDisableSnapshot
+	OpenRouterAPIKeySnapshotAfter  *OpenRouterAPIKeyDisableSnapshot
 }
 
 func (l *Logger) logOpenRouterAPIKeyEvent(ctx context.Context, dbtx repo.DBTX, action Action, fields openRouterAPIKeyEventFields) error {
 	metadata, err := json.Marshal(openRouterAPIKeyMetadata{KeyType: fields.KeyType, OperationID: ""})
 	if err != nil {
 		return fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+	beforeSnapshot, err := marshalAuditPayload(fields.OpenRouterAPIKeySnapshotBefore)
+	if err != nil {
+		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
+	}
+	afterSnapshot, err := marshalAuditPayload(fields.OpenRouterAPIKeySnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
 	}
 
 	entry := repo.InsertAuditLogParams{
@@ -172,8 +196,8 @@ func (l *Logger) logOpenRouterAPIKeyEvent(ctx context.Context, dbtx repo.DBTX, a
 		SubjectDisplayName: conv.ToPGTextEmpty(""),
 		SubjectSlug:        conv.ToPGTextEmpty(""),
 
-		BeforeSnapshot: nil,
-		AfterSnapshot:  nil,
+		BeforeSnapshot: beforeSnapshot,
+		AfterSnapshot:  afterSnapshot,
 		Metadata:       metadata,
 	}
 

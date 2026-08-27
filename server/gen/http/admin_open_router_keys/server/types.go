@@ -26,7 +26,7 @@ type DisableKeyRequestBody struct {
 type EnableKeyRequestBody struct {
 	// Organization that owns the key.
 	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	// Key type to enable.
+	// Key type from which to remove the platform-admin lock.
 	KeyType *string `form:"key_type,omitempty" json:"key_type,omitempty" xml:"key_type,omitempty"`
 }
 
@@ -66,8 +66,10 @@ type DisableKeyResponseBody struct {
 	KeyType string `form:"key_type" json:"key_type" xml:"key_type"`
 	// Monthly credit ceiling last mirrored from OpenRouter.
 	MonthlyCredits int64 `form:"monthly_credits" json:"monthly_credits" xml:"monthly_credits"`
-	// Whether the key is locked down (refused locally and disabled upstream).
+	// Whether one or more active causes keep the key disabled.
 	Disabled bool `form:"disabled" json:"disabled" xml:"disabled"`
+	// Independent reasons that keep the key disabled.
+	DisableCauses []string `form:"disable_causes" json:"disable_causes" xml:"disable_causes"`
 	// When the key row was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the key row was last updated.
@@ -90,8 +92,10 @@ type EnableKeyResponseBody struct {
 	KeyType string `form:"key_type" json:"key_type" xml:"key_type"`
 	// Monthly credit ceiling last mirrored from OpenRouter.
 	MonthlyCredits int64 `form:"monthly_credits" json:"monthly_credits" xml:"monthly_credits"`
-	// Whether the key is locked down (refused locally and disabled upstream).
+	// Whether one or more active causes keep the key disabled.
 	Disabled bool `form:"disabled" json:"disabled" xml:"disabled"`
+	// Independent reasons that keep the key disabled.
+	DisableCauses []string `form:"disable_causes" json:"disable_causes" xml:"disable_causes"`
 	// When the key row was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the key row was last updated.
@@ -848,8 +852,10 @@ type AdminOpenRouterKeyResponseBody struct {
 	KeyType string `form:"key_type" json:"key_type" xml:"key_type"`
 	// Monthly credit ceiling last mirrored from OpenRouter.
 	MonthlyCredits int64 `form:"monthly_credits" json:"monthly_credits" xml:"monthly_credits"`
-	// Whether the key is locked down (refused locally and disabled upstream).
+	// Whether one or more active causes keep the key disabled.
 	Disabled bool `form:"disabled" json:"disabled" xml:"disabled"`
+	// Independent reasons that keep the key disabled.
+	DisableCauses []string `form:"disable_causes" json:"disable_causes" xml:"disable_causes"`
 	// When the key row was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the key row was last updated.
@@ -900,6 +906,14 @@ func NewDisableKeyResponseBody(res *adminopenrouterkeys.AdminOpenRouterKey) *Dis
 		CreatedAt:        res.CreatedAt,
 		UpdatedAt:        res.UpdatedAt,
 	}
+	if res.DisableCauses != nil {
+		body.DisableCauses = make([]string, len(res.DisableCauses))
+		for i, val := range res.DisableCauses {
+			body.DisableCauses[i] = val
+		}
+	} else {
+		body.DisableCauses = []string{}
+	}
 	return body
 }
 
@@ -916,6 +930,14 @@ func NewEnableKeyResponseBody(res *adminopenrouterkeys.AdminOpenRouterKey) *Enab
 		Disabled:         res.Disabled,
 		CreatedAt:        res.CreatedAt,
 		UpdatedAt:        res.UpdatedAt,
+	}
+	if res.DisableCauses != nil {
+		body.DisableCauses = make([]string, len(res.DisableCauses))
+		for i, val := range res.DisableCauses {
+			body.DisableCauses[i] = val
+		}
+	} else {
+		body.DisableCauses = []string{}
 	}
 	return body
 }

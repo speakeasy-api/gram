@@ -965,6 +965,10 @@ func unmarshalAdminOpenRouterKeyResponseBodyToAdminopenrouterkeysAdminOpenRouter
 		CreatedAt:        *v.CreatedAt,
 		UpdatedAt:        *v.UpdatedAt,
 	}
+	res.DisableCauses = make([]string, len(v.DisableCauses))
+	for i, val := range v.DisableCauses {
+		res.DisableCauses[i] = val
+	}
 
 	return res
 }
