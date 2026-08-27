@@ -1,6 +1,6 @@
 # Temporal workflow as the enforcement reply channel: spike results
 
-Date: 2026-08-26. Spike for AIS-402, evaluated against the Redis replica-inbox reply path on `vishal/ais-402-enforcement-reply-core` (see `docs/research/2026-08-18-request-reply-recipes.md` and `docs/research/2026-08-20-enforcement-reply-load-test.md` on that branch). Spike code: `server/cmd/tools/temporalreply` on this branch, throwaway.
+Date: 2026-08-26. Spike for AIS-402, evaluated against the Redis inbox reply path on `vishal/ais-402-enforcement-reply-core` (see `docs/research/2026-08-18-request-reply-recipes.md` and `docs/research/2026-08-20-enforcement-reply-load-test.md` on that branch). Spike code: `server/cmd/tools/temporalreply` on this branch, throwaway.
 
 ## Verdict
 
@@ -9,10 +9,10 @@ The Temporal shape works and is pleasant to express: per-lane folding, duplicate
 - Reply-leg latency is 15x to 35x the Redis inbox at the same local concurrency, on Temporal's best-case backend (in-memory dev server persistence). p99 at 100 concurrent 5-lane scans: 335 ms vs 10.0 ms for Redis.
 - One realistic scan costs 26 history events, 6 workflow tasks, and a dozen persistence writes, versus one pipelined `RPUSH`+`EXPIRE` per reply and a shared `LPOP` poll.
 - It puts the Temporal cluster and the gram-worker fleet on an interactive single-digit-seconds gate. Worker deploys, task queue backlog, and namespace rate limits all become enforcement-latency events.
-- Temporal's actual value, durable execution that survives process death, buys nothing here: the reply's only consumer is an in-memory waiter inside one HTTP request. If the replica dies, the workflow durably completes to nobody. The same restart caveat accepted for the replica inbox applies, minus every cost above.
+- Temporal's actual value, durable execution that survives process death, buys nothing here: the reply's only consumer is an in-memory waiter inside one HTTP request. If the replica dies, the workflow durably completes to nobody. The same restart caveat accepted for the Redis inbox applies, minus every cost above.
 - The clean-scan question (below) forces a dedicated completion topic anyway, so the design cannot even reuse the shared Finding topic to earn back some simplicity.
 
-The recipes doc scored Temporal as "unproven for this use" from documentation alone. The spike upgrades that to measured: keep the Redis replica inbox.
+The recipes doc scored Temporal as "unproven for this use" from documentation alone. The spike upgrades that to measured: keep the Redis inbox.
 
 ## What was built
 

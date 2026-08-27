@@ -106,9 +106,9 @@ Implication: the hybrid is defensible (it reuses our existing fan-out and scanne
 
 ## Addendum: implemented topology (2026-08-20)
 
-Further design discussion selected the replica-inbox topology, option (b) in shape, but backed by a Redis list instead of pub/sub. One drainer per replica provides O(1) connections and immediate waiter wakeup while retaining list persistence, the property that ruled out Redis pub/sub.
+Further design discussion selected the Redis inbox topology, option (b) in shape, backed by a Redis list instead of pub/sub. One drainer per replica provides O(1) connections and immediate waiter wakeup while retaining list persistence, the property that ruled out Redis pub/sub.
 
-The lifecycle complexity scored against option (b) was accepted knowingly. Process restarts may drop in-flight replies because the corresponding HTTP requests and in-process waiters die with that process. The BLPOP-per-scan design remains the documented fallback if replica-inbox lifecycle or throughput behavior proves unsuitable.
+The lifecycle complexity scored against option (b) was accepted knowingly. Process restarts may drop in-flight replies because the corresponding HTTP requests and in-process waiters die with that process. The BLPOP-per-scan design remains the documented fallback if Redis inbox lifecycle or throughput behavior proves unsuitable.
 
 ## Addendum: waiter-aware polling replaces BLPOP (2026-08-26)
 

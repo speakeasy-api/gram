@@ -68,19 +68,19 @@ class EnforcementDiagnostics(_message.Message):
     def __init__(self, scan_duration_ms: _Optional[int] = ..., consumer_id: _Optional[str] = ..., delivery_attempt: _Optional[int] = ...) -> None: ...
 
 class EnforcementReply(_message.Message):
-    __slots__ = ("scan_id", "scanner", "status", "reason", "findings", "diagnostics", "policy_id")
-    SCAN_ID_FIELD_NUMBER: _ClassVar[int]
+    __slots__ = ("correlation_id", "scanner", "status", "reason", "findings", "diagnostics", "policy_id")
+    CORRELATION_ID_FIELD_NUMBER: _ClassVar[int]
     SCANNER_FIELD_NUMBER: _ClassVar[int]
     STATUS_FIELD_NUMBER: _ClassVar[int]
     REASON_FIELD_NUMBER: _ClassVar[int]
     FINDINGS_FIELD_NUMBER: _ClassVar[int]
     DIAGNOSTICS_FIELD_NUMBER: _ClassVar[int]
     POLICY_ID_FIELD_NUMBER: _ClassVar[int]
-    scan_id: str
+    correlation_id: str
     scanner: EnforcementScanner
     status: EnforcementStatus
     reason: str
     findings: _containers.RepeatedCompositeFieldContainer[EnforcementFinding]
     diagnostics: EnforcementDiagnostics
     policy_id: str
-    def __init__(self, scan_id: _Optional[str] = ..., scanner: _Optional[_Union[EnforcementScanner, str]] = ..., status: _Optional[_Union[EnforcementStatus, str]] = ..., reason: _Optional[str] = ..., findings: _Optional[_Iterable[_Union[EnforcementFinding, _Mapping]]] = ..., diagnostics: _Optional[_Union[EnforcementDiagnostics, _Mapping]] = ..., policy_id: _Optional[str] = ...) -> None: ...
+    def __init__(self, correlation_id: _Optional[str] = ..., scanner: _Optional[_Union[EnforcementScanner, str]] = ..., status: _Optional[_Union[EnforcementStatus, str]] = ..., reason: _Optional[str] = ..., findings: _Optional[_Iterable[_Union[EnforcementFinding, _Mapping]]] = ..., diagnostics: _Optional[_Union[EnforcementDiagnostics, _Mapping]] = ..., policy_id: _Optional[str] = ...) -> None: ...

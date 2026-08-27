@@ -2,6 +2,7 @@ package enforcereply
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +12,7 @@ import (
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/redisinbox"
 )
 
 type captureEnforcementPublisher struct {
@@ -32,15 +34,31 @@ func (p *captureEnforcementPublisher) Stop(context.Context) error {
 	return nil
 }
 
+func testDispatcher(inbox *Inbox, publisher *captureEnforcementPublisher, waitTimeout time.Duration) *Dispatcher {
+	requester := redisinbox.NewRequestBroker(inbox, publisher)
+	return &Dispatcher{
+		gitleaks:    &typedEnforcementLane[*riskv1.GitleaksEnforcement]{broker: requester},
+		close:       requester.Close,
+		waitTimeout: waitTimeout,
+	}
+}
+
 func TestDispatchStampsTenantContextAndFoldsOutcome(t *testing.T) {
 	t.Parallel()
 
 	te := setupInboxTest(t, "replica-dispatch")
 	publisher := &captureEnforcementPublisher{messages: nil, onPublish: nil}
 	publisher.onPublish = func(ctx context.Context, message *riskv1.GitleaksEnforcement) error {
-		return te.writer.Write(ctx, message.GetReplyUrn(), testReply(message.GetRequestId(), gitleaksLane, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK))
+		if te.inbox.Snapshot().Waiters != 1 {
+			return errors.New("publisher observed request without a registered waiter")
+		}
+		_, correlationID, err := ParseReplyURN(message.GetReplyUrn())
+		if err != nil {
+			return err
+		}
+		return te.writer.Reply(ctx, message.GetReplyUrn(), testReply(correlationID, gitleaksLane, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK))
 	}
-	dispatcher := &Dispatcher{inbox: te.inbox, gitleaksPub: publisher, waitTimeout: time.Second}
+	dispatcher := testDispatcher(te.inbox, publisher, time.Second)
 
 	outcome, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
 		OrganizationID: "org-dispatch",
@@ -60,11 +78,15 @@ func TestDispatchStampsTenantContextAndFoldsOutcome(t *testing.T) {
 	require.NotEmpty(t, message.GetCreatedAt())
 	_, err = time.Parse(time.RFC3339Nano, message.GetCreatedAt())
 	require.NoError(t, err)
-	_, err = uuid.Parse(message.GetRequestId())
+	requestID, err := uuid.Parse(message.GetRequestId())
 	require.NoError(t, err)
-	_, scanID, err := ParseReplyURN(message.GetReplyUrn())
+	require.Equal(t, uuid.Version(7), requestID.Version())
+	_, correlationID, err := ParseReplyURN(message.GetReplyUrn())
 	require.NoError(t, err)
-	require.Equal(t, message.GetRequestId(), scanID)
+	parsedCorrelationID, err := uuid.Parse(correlationID)
+	require.NoError(t, err)
+	require.Equal(t, uuid.Version(7), parsedCorrelationID.Version())
+	require.NotEqual(t, message.GetRequestId(), correlationID)
 }
 
 func TestDispatchDeadlineIsNormalPartialOutcome(t *testing.T) {
@@ -72,7 +94,7 @@ func TestDispatchDeadlineIsNormalPartialOutcome(t *testing.T) {
 
 	te := setupInboxTest(t, "replica-dispatch-deadline")
 	publisher := &captureEnforcementPublisher{messages: nil, onPublish: nil}
-	dispatcher := &Dispatcher{inbox: te.inbox, gitleaksPub: publisher, waitTimeout: 25 * time.Millisecond}
+	dispatcher := testDispatcher(te.inbox, publisher, 25*time.Millisecond)
 
 	outcome, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
 		OrganizationID: "org-deadline",
@@ -92,7 +114,7 @@ func TestDispatchRejectsOversizedContent(t *testing.T) {
 
 	te := setupInboxTest(t, "replica-dispatch-oversized")
 	publisher := &captureEnforcementPublisher{messages: nil, onPublish: nil}
-	dispatcher := &Dispatcher{inbox: te.inbox, gitleaksPub: publisher, waitTimeout: time.Second}
+	dispatcher := testDispatcher(te.inbox, publisher, time.Second)
 
 	_, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
 		OrganizationID: "org-oversized",
@@ -109,7 +131,7 @@ func TestDispatchRejectsDuplicateLane(t *testing.T) {
 
 	te := setupInboxTest(t, "replica-dispatch-duplicate")
 	publisher := &captureEnforcementPublisher{messages: nil, onPublish: nil}
-	dispatcher := &Dispatcher{inbox: te.inbox, gitleaksPub: publisher, waitTimeout: time.Second}
+	dispatcher := testDispatcher(te.inbox, publisher, time.Second)
 
 	_, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
 		OrganizationID: "org-duplicate",

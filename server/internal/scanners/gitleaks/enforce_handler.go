@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/requestreply"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
 	"github.com/speakeasy-api/gram/server/internal/risk/maskdisplay"
@@ -40,7 +41,7 @@ type EnforceHandlerConfig struct {
 // EnforceHandler scans one inline request and writes a safe correlated reply.
 type EnforceHandler struct {
 	logger        *slog.Logger
-	writer        *enforcereply.Writer
+	writer        requestreply.ReplyBroker[*riskv1.EnforcementReply]
 	scanner       *Scanner
 	fingerprint   FingerprintFinding
 	metrics       enforceHandlerMetrics
@@ -52,7 +53,7 @@ type EnforceHandler struct {
 func NewEnforceHandler(
 	logger *slog.Logger,
 	meterProvider metric.MeterProvider,
-	writer *enforcereply.Writer,
+	writer requestreply.ReplyBroker[*riskv1.EnforcementReply],
 	fingerprint FingerprintFinding,
 	cfg EnforceHandlerConfig,
 ) (*EnforceHandler, error) {
@@ -97,7 +98,7 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.GitleaksEnforceme
 	if m.GetProjectId() == "" {
 		return errors.New("enforcement project id is required")
 	}
-	_, scanID, err := enforcereply.ParseReplyURN(m.GetReplyUrn())
+	_, correlationID, err := enforcereply.ParseReplyURN(m.GetReplyUrn())
 	if err != nil {
 		return fmt.Errorf("parse enforcement reply urn: %w", err)
 	}
@@ -150,18 +151,18 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.GitleaksEnforceme
 		deliveryAttempt = conv.SafeInt32(*meta.DeliveryAttempt)
 	}
 	reply := riskv1.EnforcementReply_builder{
-		ScanId:   new(scanID),
-		Scanner:  new(riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_GITLEAKS),
-		Status:   new(status),
-		Reason:   new(conv.TruncateString(reason, maxReplyReasonRunes)),
-		Findings: replyFindings,
+		CorrelationId: new(correlationID),
+		Scanner:       new(riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_GITLEAKS),
+		Status:        new(status),
+		Reason:        new(conv.TruncateString(reason, maxReplyReasonRunes)),
+		Findings:      replyFindings,
 		Diagnostics: riskv1.EnforcementDiagnostics_builder{
 			ScanDurationMs:  new(time.Since(started).Milliseconds()),
 			ConsumerId:      new(h.consumerID),
 			DeliveryAttempt: new(deliveryAttempt),
 		}.Build(),
 	}.Build()
-	if err := h.writer.Write(ctx, m.GetReplyUrn(), reply); err != nil {
+	if err := h.writer.Reply(ctx, m.GetReplyUrn(), reply); err != nil {
 		h.metrics.replyWriteErrors.Add(ctx, 1)
 		h.logger.ErrorContext(ctx, "write gitleaks enforcement reply; acknowledging request", attr.SlogError(err))
 		return nil

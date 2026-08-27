@@ -4,7 +4,7 @@ Date: 2026-08-20
 
 ## Result
 
-The replica inbox, single drainer, and waiter map completed every tested Redis-only sweep without a timeout, error, or orphan. The first clear small-reply knee appeared around a burst of 2,500 replies. Above that point, completion rate settled around 90,000 to 100,000 replies/s and p99 grew with queue size. At the requested maximum of 5,000 scans expecting five replies each, the drainer routed 25,000 replies with 257.4 ms p99.
+The Redis inbox, single drainer, and waiter map completed every tested Redis-only sweep without a timeout, error, or orphan. The first clear small-reply knee appeared around a burst of 2,500 replies. Above that point, completion rate settled around 90,000 to 100,000 replies/s and p99 grew with queue size. At the requested maximum of 5,000 scans expecting five replies each, the drainer routed 25,000 replies with 257.4 ms p99.
 
 Waiters did not consume Redis connections. At 5,000 concurrent waits, the dedicated drainer used one connection while the shared writer pool reached its configured 128-connection cap. Registering all 5,000 real waiters took 6.5 ms in the baseline run. A mirrored five-round map probe measured 187 ns/op for the mutex map and 154 ns/op for `sync.Map`, only a 1.21x difference at this deliberately extreme concurrency.
 
@@ -12,9 +12,9 @@ A forced one-second drainer pause accumulated 24,999 queued small replies and th
 
 ## Method
 
-The harness is `server/cmd/tools/enforceload`. It creates a fresh replica inbox for each sweep point and reports one CSV row per point plus a terminal summary.
+The harness is `server/cmd/tools/enforceload`. It creates a fresh Redis inbox for each sweep point and reports one CSV row per point plus a terminal summary.
 
-Reply-leg mode registers every `Await` before releasing one synthetic scanner goroutine per scan. Each scanner waits for the configured simulated latency, then writes one to five replies through the real `enforcereply.Writer` (named `replyinbox` at test time). RTT begins when the synthetic requests are released and ends when each `Await` receives its last expected reply. Waiter registration time is reported separately. The measured runs used zero simulated scan latency so scanner time did not obscure the reply leg.
+Reply-leg mode directly registers one 1:1 waiter per synthetic lane before releasing one scanner goroutine per scan. Each scanner waits for the configured simulated latency, then writes one to five independently correlated replies through the real `enforcereply.Writer`. RTT begins when the synthetic requests are released and ends when the scan's final waiter receives its reply. Waiter registration time is reported separately. The measured runs used zero simulated scan latency so scanner time did not obscure the reply leg.
 
 Full-loop mode publishes through the local Pub/Sub emulator, invokes the real gitleaks enforcement handler, writes the reply to Redis, and completes through the same inbox drainer and waiter. These values are a functional and local-emulator stress check only.
 

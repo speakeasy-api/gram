@@ -656,18 +656,18 @@ func (b0 EnforcementDiagnostics_builder) Build() *EnforcementDiagnostics {
 
 // EnforcementReply transits Redis only and never contains raw matched text.
 type EnforcementReply struct {
-	state                  protoimpl.MessageState  `protogen:"opaque.v1"`
-	xxx_hidden_ScanId      *string                 `protobuf:"bytes,1,opt,name=scan_id,json=scanId"`
-	xxx_hidden_Scanner     EnforcementScanner      `protobuf:"varint,2,opt,name=scanner,enum=gram.risk.v1.EnforcementScanner"`
-	xxx_hidden_Status      EnforcementStatus       `protobuf:"varint,3,opt,name=status,enum=gram.risk.v1.EnforcementStatus"`
-	xxx_hidden_Reason      *string                 `protobuf:"bytes,4,opt,name=reason"`
-	xxx_hidden_Findings    *[]*EnforcementFinding  `protobuf:"bytes,5,rep,name=findings"`
-	xxx_hidden_Diagnostics *EnforcementDiagnostics `protobuf:"bytes,6,opt,name=diagnostics"`
-	xxx_hidden_PolicyId    *string                 `protobuf:"bytes,7,opt,name=policy_id,json=policyId"`
-	XXX_raceDetectHookData protoimpl.RaceDetectHookData
-	XXX_presence           [1]uint32
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	state                    protoimpl.MessageState  `protogen:"opaque.v1"`
+	xxx_hidden_CorrelationId *string                 `protobuf:"bytes,1,opt,name=correlation_id,json=correlationId"`
+	xxx_hidden_Scanner       EnforcementScanner      `protobuf:"varint,2,opt,name=scanner,enum=gram.risk.v1.EnforcementScanner"`
+	xxx_hidden_Status        EnforcementStatus       `protobuf:"varint,3,opt,name=status,enum=gram.risk.v1.EnforcementStatus"`
+	xxx_hidden_Reason        *string                 `protobuf:"bytes,4,opt,name=reason"`
+	xxx_hidden_Findings      *[]*EnforcementFinding  `protobuf:"bytes,5,rep,name=findings"`
+	xxx_hidden_Diagnostics   *EnforcementDiagnostics `protobuf:"bytes,6,opt,name=diagnostics"`
+	xxx_hidden_PolicyId      *string                 `protobuf:"bytes,7,opt,name=policy_id,json=policyId"`
+	XXX_raceDetectHookData   protoimpl.RaceDetectHookData
+	XXX_presence             [1]uint32
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *EnforcementReply) Reset() {
@@ -695,10 +695,10 @@ func (x *EnforcementReply) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-func (x *EnforcementReply) GetScanId() string {
+func (x *EnforcementReply) GetCorrelationId() string {
 	if x != nil {
-		if x.xxx_hidden_ScanId != nil {
-			return *x.xxx_hidden_ScanId
+		if x.xxx_hidden_CorrelationId != nil {
+			return *x.xxx_hidden_CorrelationId
 		}
 		return ""
 	}
@@ -759,8 +759,8 @@ func (x *EnforcementReply) GetPolicyId() string {
 	return ""
 }
 
-func (x *EnforcementReply) SetScanId(v string) {
-	x.xxx_hidden_ScanId = &v
+func (x *EnforcementReply) SetCorrelationId(v string) {
+	x.xxx_hidden_CorrelationId = &v
 	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 7)
 }
 
@@ -792,7 +792,7 @@ func (x *EnforcementReply) SetPolicyId(v string) {
 	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 7)
 }
 
-func (x *EnforcementReply) HasScanId() bool {
+func (x *EnforcementReply) HasCorrelationId() bool {
 	if x == nil {
 		return false
 	}
@@ -834,9 +834,9 @@ func (x *EnforcementReply) HasPolicyId() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 6)
 }
 
-func (x *EnforcementReply) ClearScanId() {
+func (x *EnforcementReply) ClearCorrelationId() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
-	x.xxx_hidden_ScanId = nil
+	x.xxx_hidden_CorrelationId = nil
 }
 
 func (x *EnforcementReply) ClearScanner() {
@@ -866,22 +866,22 @@ func (x *EnforcementReply) ClearPolicyId() {
 type EnforcementReply_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
-	ScanId      *string
-	Scanner     *EnforcementScanner
-	Status      *EnforcementStatus
-	Reason      *string
-	Findings    []*EnforcementFinding
-	Diagnostics *EnforcementDiagnostics
-	PolicyId    *string
+	CorrelationId *string
+	Scanner       *EnforcementScanner
+	Status        *EnforcementStatus
+	Reason        *string
+	Findings      []*EnforcementFinding
+	Diagnostics   *EnforcementDiagnostics
+	PolicyId      *string
 }
 
 func (b0 EnforcementReply_builder) Build() *EnforcementReply {
 	m0 := &EnforcementReply{}
 	b, x := &b0, m0
 	_, _ = b, x
-	if b.ScanId != nil {
+	if b.CorrelationId != nil {
 		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 7)
-		x.xxx_hidden_ScanId = b.ScanId
+		x.xxx_hidden_CorrelationId = b.CorrelationId
 	}
 	if b.Scanner != nil {
 		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 7)
@@ -927,9 +927,9 @@ const file_gram_risk_v1_enforcement_reply_proto_rawDesc = "" +
 	"\x10scan_duration_ms\x18\x01 \x01(\x03R\x0escanDurationMs\x12\x1f\n" +
 	"\vconsumer_id\x18\x02 \x01(\tR\n" +
 	"consumerId\x12)\n" +
-	"\x10delivery_attempt\x18\x03 \x01(\x05R\x0fdeliveryAttempt\"\xdb\x02\n" +
-	"\x10EnforcementReply\x12\x17\n" +
-	"\ascan_id\x18\x01 \x01(\tR\x06scanId\x12:\n" +
+	"\x10delivery_attempt\x18\x03 \x01(\x05R\x0fdeliveryAttempt\"\xe9\x02\n" +
+	"\x10EnforcementReply\x12%\n" +
+	"\x0ecorrelation_id\x18\x01 \x01(\tR\rcorrelationId\x12:\n" +
 	"\ascanner\x18\x02 \x01(\x0e2 .gram.risk.v1.EnforcementScannerR\ascanner\x127\n" +
 	"\x06status\x18\x03 \x01(\x0e2\x1f.gram.risk.v1.EnforcementStatusR\x06status\x12\x16\n" +
 	"\x06reason\x18\x04 \x01(\tR\x06reason\x12<\n" +

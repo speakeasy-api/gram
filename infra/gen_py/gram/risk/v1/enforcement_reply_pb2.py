@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n$gram/risk/v1/enforcement_reply.proto\x12\x0cgram.risk.v1\"\xc4\x02\n\x12\x45nforcementFinding\x12\x17\n\x07rule_id\x18\x01 \x01(\tR\x06ruleId\x12\x1a\n\x08\x63\x61tegory\x18\x02 \x01(\tR\x08\x63\x61tegory\x12\x14\n\x05score\x18\x03 \x01(\x01R\x05score\x12\x1b\n\tstart_pos\x18\x04 \x01(\x05R\x08startPos\x12\x17\n\x07\x65nd_pos\x18\x05 \x01(\x05R\x06\x65ndPos\x12\x18\n\x07surface\x18\x06 \x01(\tR\x07surface\x12\x14\n\x05\x66ield\x18\x07 \x01(\tR\x05\x66ield\x12\x12\n\x04path\x18\x08 \x01(\tR\x04path\x12 \n\x0ctool_call_id\x18\t \x01(\tR\ntoolCallId\x12%\n\x0emasked_preview\x18\n \x01(\tR\rmaskedPreview\x12 \n\x0b\x66ingerprint\x18\x0b \x01(\tR\x0b\x66ingerprint\"\x8e\x01\n\x16\x45nforcementDiagnostics\x12(\n\x10scan_duration_ms\x18\x01 \x01(\x03R\x0escanDurationMs\x12\x1f\n\x0b\x63onsumer_id\x18\x02 \x01(\tR\nconsumerId\x12)\n\x10\x64\x65livery_attempt\x18\x03 \x01(\x05R\x0f\x64\x65liveryAttempt\"\xdb\x02\n\x10\x45nforcementReply\x12\x17\n\x07scan_id\x18\x01 \x01(\tR\x06scanId\x12:\n\x07scanner\x18\x02 \x01(\x0e\x32 .gram.risk.v1.EnforcementScannerR\x07scanner\x12\x37\n\x06status\x18\x03 \x01(\x0e\x32\x1f.gram.risk.v1.EnforcementStatusR\x06status\x12\x16\n\x06reason\x18\x04 \x01(\tR\x06reason\x12<\n\x08\x66indings\x18\x05 \x03(\x0b\x32 .gram.risk.v1.EnforcementFindingR\x08\x66indings\x12\x46\n\x0b\x64iagnostics\x18\x06 \x01(\x0b\x32$.gram.risk.v1.EnforcementDiagnosticsR\x0b\x64iagnostics\x12\x1b\n\tpolicy_id\x18\x07 \x01(\tR\x08policyId*\xc6\x01\n\x12\x45nforcementScanner\x12#\n\x1f\x45NFORCEMENT_SCANNER_UNSPECIFIED\x10\x00\x12 \n\x1c\x45NFORCEMENT_SCANNER_GITLEAKS\x10\x01\x12 \n\x1c\x45NFORCEMENT_SCANNER_PRESIDIO\x10\x02\x12(\n$ENFORCEMENT_SCANNER_PROMPT_INJECTION\x10\x03\x12\x1d\n\x19\x45NFORCEMENT_SCANNER_JUDGE\x10\x04*\x94\x01\n\x11\x45nforcementStatus\x12\"\n\x1e\x45NFORCEMENT_STATUS_UNSPECIFIED\x10\x00\x12\x19\n\x15\x45NFORCEMENT_STATUS_OK\x10\x01\x12\x1c\n\x18\x45NFORCEMENT_STATUS_ERROR\x10\x02\x12\"\n\x1e\x45NFORCEMENT_STATUS_DEAD_LETTER\x10\x03\x42=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\x08\x65\x64itionsp\xe9\x07')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n$gram/risk/v1/enforcement_reply.proto\x12\x0cgram.risk.v1\"\xc4\x02\n\x12\x45nforcementFinding\x12\x17\n\x07rule_id\x18\x01 \x01(\tR\x06ruleId\x12\x1a\n\x08\x63\x61tegory\x18\x02 \x01(\tR\x08\x63\x61tegory\x12\x14\n\x05score\x18\x03 \x01(\x01R\x05score\x12\x1b\n\tstart_pos\x18\x04 \x01(\x05R\x08startPos\x12\x17\n\x07\x65nd_pos\x18\x05 \x01(\x05R\x06\x65ndPos\x12\x18\n\x07surface\x18\x06 \x01(\tR\x07surface\x12\x14\n\x05\x66ield\x18\x07 \x01(\tR\x05\x66ield\x12\x12\n\x04path\x18\x08 \x01(\tR\x04path\x12 \n\x0ctool_call_id\x18\t \x01(\tR\ntoolCallId\x12%\n\x0emasked_preview\x18\n \x01(\tR\rmaskedPreview\x12 \n\x0b\x66ingerprint\x18\x0b \x01(\tR\x0b\x66ingerprint\"\x8e\x01\n\x16\x45nforcementDiagnostics\x12(\n\x10scan_duration_ms\x18\x01 \x01(\x03R\x0escanDurationMs\x12\x1f\n\x0b\x63onsumer_id\x18\x02 \x01(\tR\nconsumerId\x12)\n\x10\x64\x65livery_attempt\x18\x03 \x01(\x05R\x0f\x64\x65liveryAttempt\"\xe9\x02\n\x10\x45nforcementReply\x12%\n\x0e\x63orrelation_id\x18\x01 \x01(\tR\rcorrelationId\x12:\n\x07scanner\x18\x02 \x01(\x0e\x32 .gram.risk.v1.EnforcementScannerR\x07scanner\x12\x37\n\x06status\x18\x03 \x01(\x0e\x32\x1f.gram.risk.v1.EnforcementStatusR\x06status\x12\x16\n\x06reason\x18\x04 \x01(\tR\x06reason\x12<\n\x08\x66indings\x18\x05 \x03(\x0b\x32 .gram.risk.v1.EnforcementFindingR\x08\x66indings\x12\x46\n\x0b\x64iagnostics\x18\x06 \x01(\x0b\x32$.gram.risk.v1.EnforcementDiagnosticsR\x0b\x64iagnostics\x12\x1b\n\tpolicy_id\x18\x07 \x01(\tR\x08policyId*\xc6\x01\n\x12\x45nforcementScanner\x12#\n\x1f\x45NFORCEMENT_SCANNER_UNSPECIFIED\x10\x00\x12 \n\x1c\x45NFORCEMENT_SCANNER_GITLEAKS\x10\x01\x12 \n\x1c\x45NFORCEMENT_SCANNER_PRESIDIO\x10\x02\x12(\n$ENFORCEMENT_SCANNER_PROMPT_INJECTION\x10\x03\x12\x1d\n\x19\x45NFORCEMENT_SCANNER_JUDGE\x10\x04*\x94\x01\n\x11\x45nforcementStatus\x12\"\n\x1e\x45NFORCEMENT_STATUS_UNSPECIFIED\x10\x00\x12\x19\n\x15\x45NFORCEMENT_STATUS_OK\x10\x01\x12\x1c\n\x18\x45NFORCEMENT_STATUS_ERROR\x10\x02\x12\"\n\x1e\x45NFORCEMENT_STATUS_DEAD_LETTER\x10\x03\x42=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\x08\x65\x64itionsp\xe9\x07')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -32,14 +32,14 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'gram.risk.v1.enforcement_re
 if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1'
-  _globals['_ENFORCEMENTSCANNER']._serialized_start=877
-  _globals['_ENFORCEMENTSCANNER']._serialized_end=1075
-  _globals['_ENFORCEMENTSTATUS']._serialized_start=1078
-  _globals['_ENFORCEMENTSTATUS']._serialized_end=1226
+  _globals['_ENFORCEMENTSCANNER']._serialized_start=891
+  _globals['_ENFORCEMENTSCANNER']._serialized_end=1089
+  _globals['_ENFORCEMENTSTATUS']._serialized_start=1092
+  _globals['_ENFORCEMENTSTATUS']._serialized_end=1240
   _globals['_ENFORCEMENTFINDING']._serialized_start=55
   _globals['_ENFORCEMENTFINDING']._serialized_end=379
   _globals['_ENFORCEMENTDIAGNOSTICS']._serialized_start=382
   _globals['_ENFORCEMENTDIAGNOSTICS']._serialized_end=524
   _globals['_ENFORCEMENTREPLY']._serialized_start=527
-  _globals['_ENFORCEMENTREPLY']._serialized_end=874
+  _globals['_ENFORCEMENTREPLY']._serialized_end=888
 # @@protoc_insertion_point(module_scope)

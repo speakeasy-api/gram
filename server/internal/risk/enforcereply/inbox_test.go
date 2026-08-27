@@ -13,22 +13,19 @@ import (
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 )
 
-var (
-	gitleaksLane = Lane{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_GITLEAKS, PolicyID: ""}
-	presidioLane = Lane{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_PRESIDIO, PolicyID: ""}
-)
+var gitleaksLane = Lane{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_GITLEAKS, PolicyID: ""}
 
 type awaitResult struct {
-	outcome Outcome
-	err     error
+	reply *riskv1.EnforcementReply
+	err   error
 }
 
-func testReply(scanID string, lane Lane, status riskv1.EnforcementStatus) *riskv1.EnforcementReply {
+func testReply(correlationID string, lane Lane, status riskv1.EnforcementStatus) *riskv1.EnforcementReply {
 	return riskv1.EnforcementReply_builder{
-		ScanId:   new(scanID),
-		Scanner:  new(lane.Scanner),
-		Status:   new(status),
-		PolicyId: new(lane.PolicyID),
+		CorrelationId: new(correlationID),
+		Scanner:       new(lane.Scanner),
+		Status:        new(status),
+		PolicyId:      new(lane.PolicyID),
 	}.Build()
 }
 
@@ -38,98 +35,57 @@ func TestAwaitHappyPath(t *testing.T) {
 	te := setupInboxTest(t, "replica-a")
 	result := make(chan awaitResult, 1)
 	go func() {
-		outcome, err := te.inbox.Await(t.Context(), "scan-a", []Lane{gitleaksLane})
-		result <- awaitResult{outcome: outcome, err: err}
+		reply, err := te.inbox.Await(t.Context(), "correlation-a")
+		result <- awaitResult{reply: reply, err: err}
 	}()
-	waitForWaiter(t, te.inbox, "scan-a")
-	require.NoError(t, te.writer.Write(t.Context(), te.inbox.URN("scan-a"), testReply("scan-a", gitleaksLane, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK)))
+	waitForWaiter(t, te.inbox, "correlation-a")
+	require.NoError(t, te.writer.Reply(t.Context(), te.inbox.URN("correlation-a"), testReply("correlation-a", gitleaksLane, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK)))
 
 	got := <-result
 	require.NoError(t, got.err)
-	require.True(t, got.outcome.Complete)
-	require.False(t, got.outcome.Deadline)
-	require.Equal(t, "scan-a", got.outcome.ByLane[gitleaksLane].GetScanId())
+	require.Equal(t, "correlation-a", got.reply.GetCorrelationId())
 }
 
-func TestAwaitDeadlineReturnsPartialOutcome(t *testing.T) {
+func TestAwaitDeadlineReturnsContextError(t *testing.T) {
 	t.Parallel()
 
-	te := setupInboxTest(t, "replica-partial")
-	ctx, cancel := context.WithTimeout(t.Context(), 150*time.Millisecond)
+	te := setupInboxTest(t, "replica-deadline")
+	ctx, cancel := context.WithTimeout(t.Context(), 25*time.Millisecond)
 	defer cancel()
-	result := make(chan awaitResult, 1)
-	go func() {
-		outcome, err := te.inbox.Await(ctx, "scan-partial", []Lane{gitleaksLane, presidioLane})
-		result <- awaitResult{outcome: outcome, err: err}
-	}()
-	waitForWaiter(t, te.inbox, "scan-partial")
-	require.NoError(t, te.writer.Write(t.Context(), te.inbox.URN("scan-partial"), testReply("scan-partial", gitleaksLane, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK)))
-
-	got := <-result
-	require.NoError(t, got.err)
-	require.False(t, got.outcome.Complete)
-	require.True(t, got.outcome.Deadline)
-	require.Len(t, got.outcome.ByLane, 1)
-	require.NotNil(t, got.outcome.ByLane[gitleaksLane])
+	reply, err := te.inbox.Await(ctx, "correlation-deadline")
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.Nil(t, reply)
+	require.Zero(t, te.inbox.Snapshot().Waiters)
 }
 
-func TestAwaitDeduplicatesScannerRedelivery(t *testing.T) {
+func TestFirstReplyWinsAndDuplicateIsOrphaned(t *testing.T) {
 	t.Parallel()
 
 	te := setupInboxTest(t, "replica-dedupe")
-	result := make(chan awaitResult, 1)
-	go func() {
-		outcome, err := te.inbox.Await(t.Context(), "scan-dedupe", []Lane{gitleaksLane, presidioLane})
-		result <- awaitResult{outcome: outcome, err: err}
-	}()
-	waitForWaiter(t, te.inbox, "scan-dedupe")
-	first := testReply("scan-dedupe", gitleaksLane, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK)
-	require.NoError(t, te.writer.Write(t.Context(), te.inbox.URN("scan-dedupe"), first))
-	require.NoError(t, te.writer.Write(t.Context(), te.inbox.URN("scan-dedupe"), testReply("scan-dedupe", gitleaksLane, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_ERROR)))
-	require.Never(t, func() bool {
-		return len(result) > 0
-	}, 50*time.Millisecond, 5*time.Millisecond)
-	require.NoError(t, te.writer.Write(t.Context(), te.inbox.URN("scan-dedupe"), testReply("scan-dedupe", presidioLane, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK)))
+	w, release, err := te.inbox.Register("correlation-dedupe")
+	require.NoError(t, err)
+	defer release()
+	first := testReply("correlation-dedupe", gitleaksLane, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK)
+	second := testReply("correlation-dedupe", gitleaksLane, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_ERROR)
+	require.NoError(t, te.writer.Reply(t.Context(), te.inbox.URN("correlation-dedupe"), first))
+	require.NoError(t, te.writer.Reply(t.Context(), te.inbox.URN("correlation-dedupe"), second))
 
-	got := <-result
-	require.NoError(t, got.err)
-	require.True(t, got.outcome.Complete)
-	require.Len(t, got.outcome.ByLane, 2)
-	require.Equal(t, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK, got.outcome.ByLane[gitleaksLane].GetStatus())
-}
-
-func TestAwaitKeysJudgeLanesByPolicy(t *testing.T) {
-	t.Parallel()
-
-	te := setupInboxTest(t, "replica-judge")
-	judgeOne := Lane{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_JUDGE, PolicyID: "policy-one"}
-	judgeTwo := Lane{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_JUDGE, PolicyID: "policy-two"}
-	result := make(chan awaitResult, 1)
-	go func() {
-		outcome, err := te.inbox.Await(t.Context(), "scan-judge", []Lane{judgeOne, judgeTwo})
-		result <- awaitResult{outcome: outcome, err: err}
-	}()
-	waitForWaiter(t, te.inbox, "scan-judge")
-	require.NoError(t, te.writer.Write(t.Context(), te.inbox.URN("scan-judge"), testReply("scan-judge", judgeOne, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK)))
-	require.NoError(t, te.writer.Write(t.Context(), te.inbox.URN("scan-judge"), testReply("scan-judge", judgeTwo, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK)))
-
-	got := <-result
-	require.NoError(t, got.err)
-	require.True(t, got.outcome.Complete)
-	require.Len(t, got.outcome.ByLane, 2)
+	got, err := te.inbox.AwaitRegistered(t.Context(), "correlation-dedupe", w, time.Now())
+	require.NoError(t, err)
+	require.Equal(t, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK, got.GetStatus())
+	require.Eventually(t, func() bool {
+		return te.inbox.Snapshot().OrphanedReplies == 1
+	}, time.Second, 5*time.Millisecond)
 }
 
 func TestOrphanReplyIsDroppedAndCounted(t *testing.T) {
 	t.Parallel()
 
 	te := setupInboxTest(t, "replica-orphan")
-	// The drainer only polls while a scan is in flight; an unrelated live
-	// waiter keeps it draining so the orphan is observed rather than left to
-	// expire with the list TTL.
-	_, release, err := te.inbox.Register("scan-live", []Lane{gitleaksLane})
+	_, release, err := te.inbox.Register("correlation-live")
 	require.NoError(t, err)
 	defer release()
-	require.NoError(t, te.writer.Write(t.Context(), te.inbox.URN("scan-orphan"), testReply("scan-orphan", gitleaksLane, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK)))
+	require.NoError(t, te.writer.Reply(t.Context(), te.inbox.URN("correlation-orphan"), testReply("correlation-orphan", gitleaksLane, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK)))
 
 	require.Eventually(t, func() bool {
 		var metrics metricdata.ResourceMetrics
@@ -162,29 +118,28 @@ func TestReplicaInboxesDoNotCross(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = inboxTwo.Close() })
 
-	ctxTwo, cancelTwo := context.WithTimeout(t.Context(), 150*time.Millisecond)
+	ctxTwo, cancelTwo := context.WithTimeout(t.Context(), 50*time.Millisecond)
 	defer cancelTwo()
 	resultOne := make(chan awaitResult, 1)
 	resultTwo := make(chan awaitResult, 1)
 	go func() {
-		outcome, awaitErr := te.inbox.Await(t.Context(), "same-scan", []Lane{gitleaksLane})
-		resultOne <- awaitResult{outcome: outcome, err: awaitErr}
+		reply, awaitErr := te.inbox.Await(t.Context(), "same-correlation")
+		resultOne <- awaitResult{reply: reply, err: awaitErr}
 	}()
 	go func() {
-		outcome, awaitErr := inboxTwo.Await(ctxTwo, "same-scan", []Lane{gitleaksLane})
-		resultTwo <- awaitResult{outcome: outcome, err: awaitErr}
+		reply, awaitErr := inboxTwo.Await(ctxTwo, "same-correlation")
+		resultTwo <- awaitResult{reply: reply, err: awaitErr}
 	}()
-	waitForWaiter(t, te.inbox, "same-scan")
-	waitForWaiter(t, inboxTwo, "same-scan")
-	require.NoError(t, te.writer.Write(t.Context(), te.inbox.URN("same-scan"), testReply("same-scan", gitleaksLane, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK)))
+	waitForWaiter(t, te.inbox, "same-correlation")
+	waitForWaiter(t, inboxTwo, "same-correlation")
+	require.NoError(t, te.writer.Reply(t.Context(), te.inbox.URN("same-correlation"), testReply("same-correlation", gitleaksLane, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK)))
 
 	one := <-resultOne
 	require.NoError(t, one.err)
-	require.True(t, one.outcome.Complete)
+	require.NotNil(t, one.reply)
 	two := <-resultTwo
-	require.NoError(t, two.err)
-	require.True(t, two.outcome.Deadline)
-	require.Empty(t, two.outcome.ByLane)
+	require.ErrorIs(t, two.err, context.DeadlineExceeded)
+	require.Nil(t, two.reply)
 }
 
 func TestInvalidReplicaIDIsRejected(t *testing.T) {
@@ -207,24 +162,22 @@ func TestDrainerReconnectsAndDrainsQueuedReply(t *testing.T) {
 	defer cancel()
 	result := make(chan awaitResult, 1)
 	go func() {
-		outcome, err := te.inbox.Await(ctx, "scan-reconnect", []Lane{gitleaksLane})
-		result <- awaitResult{outcome: outcome, err: err}
+		reply, err := te.inbox.Await(ctx, "correlation-reconnect")
+		result <- awaitResult{reply: reply, err: err}
 	}()
-	waitForWaiter(t, te.inbox, "scan-reconnect")
+	waitForWaiter(t, te.inbox, "correlation-reconnect")
 
-	// Take Redis down mid-wait: the drainer's paced polls fail until the
-	// restart, then the pool reconnects on its own with no client swap.
 	te.redis.Close()
 	require.NoError(t, te.client.Close())
 	require.NoError(t, te.redis.Restart())
 	te.client = redis.NewClient(&redis.Options{Addr: te.redis.Addr(), Protocol: 2})
 	t.Cleanup(func() { _ = te.client.Close() })
 	te.writer = NewWriter(te.client)
-	require.NoError(t, te.writer.Write(ctx, te.inbox.URN("scan-reconnect"), testReply("scan-reconnect", gitleaksLane, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK)))
+	require.NoError(t, te.writer.Reply(ctx, te.inbox.URN("correlation-reconnect"), testReply("correlation-reconnect", gitleaksLane, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK)))
 
 	got := <-result
 	require.NoError(t, got.err)
-	require.True(t, got.outcome.Complete)
+	require.NotNil(t, got.reply)
 }
 
 func TestDrainGateExposesBacklogAndDrainStats(t *testing.T) {
@@ -234,11 +187,11 @@ func TestDrainGateExposesBacklogAndDrainStats(t *testing.T) {
 	te := setupInboxTestWithDrainGate(t, "replica-gated", drainGate)
 	result := make(chan awaitResult, 1)
 	go func() {
-		outcome, err := te.inbox.Await(t.Context(), "scan-gated", []Lane{gitleaksLane})
-		result <- awaitResult{outcome: outcome, err: err}
+		reply, err := te.inbox.Await(t.Context(), "correlation-gated")
+		result <- awaitResult{reply: reply, err: err}
 	}()
-	waitForWaiter(t, te.inbox, "scan-gated")
-	require.NoError(t, te.writer.Write(t.Context(), te.inbox.URN("scan-gated"), testReply("scan-gated", gitleaksLane, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK)))
+	waitForWaiter(t, te.inbox, "correlation-gated")
+	require.NoError(t, te.writer.Reply(t.Context(), te.inbox.URN("correlation-gated"), testReply("correlation-gated", gitleaksLane, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK)))
 	require.Eventually(t, func() bool {
 		values, err := te.redis.List(InboxKey("replica-gated"))
 		return err != nil || len(values) == 0
@@ -251,7 +204,7 @@ func TestDrainGateExposesBacklogAndDrainStats(t *testing.T) {
 
 	got := <-result
 	require.NoError(t, got.err)
-	require.True(t, got.outcome.Complete)
+	require.NotNil(t, got.reply)
 	require.Eventually(t, func() bool {
 		return te.inbox.Snapshot().DrainedReplies == 1
 	}, time.Second, 5*time.Millisecond)
@@ -260,4 +213,13 @@ func TestDrainGateExposesBacklogAndDrainStats(t *testing.T) {
 	require.Equal(t, uint64(1), drained.MaxDrainBatch)
 	require.Equal(t, uint64(0), drained.OrphanedReplies)
 	require.NotNil(t, drained.RedisPool)
+}
+
+func TestWriterRejectsMismatchedCorrelation(t *testing.T) {
+	t.Parallel()
+
+	te := setupInboxTest(t, "replica-mismatch")
+	err := te.writer.Reply(t.Context(), te.inbox.URN("expected"), testReply("other", gitleaksLane, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK))
+	require.Error(t, err)
+	require.NotErrorIs(t, err, context.Canceled)
 }

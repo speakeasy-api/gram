@@ -1,4 +1,4 @@
-package replicainbox
+package redisinbox
 
 import (
 	"context"
@@ -19,12 +19,12 @@ import (
 // toyReply exercises the generic inbox with a payload unrelated to risk
 // enforcement, proving the package carries no risk coupling.
 type toyReply struct {
-	ID   string `json:"id"`
-	Lane string `json:"lane"`
+	ID    string `json:"id"`
+	Value string `json:"value"`
 }
 
-func toyCodec() Codec[string, toyReply] {
-	return Codec[string, toyReply]{
+func toyCodec() Codec[toyReply] {
+	return Codec[toyReply]{
 		Decode: func(raw []byte) (toyReply, error) {
 			var r toyReply
 			if err := json.Unmarshal(raw, &r); err != nil {
@@ -40,7 +40,6 @@ func toyCodec() Codec[string, toyReply] {
 			return payload, nil
 		},
 		CorrelationID: func(r toyReply) string { return r.ID },
-		Lane:          func(r toyReply) string { return r.Lane },
 		StatusLabel:   nil,
 	}
 }
@@ -48,7 +47,7 @@ func toyCodec() Codec[string, toyReply] {
 type toyEnv struct {
 	redis  *miniredis.Miniredis
 	client *redis.Client
-	inbox  *Inbox[string, toyReply]
+	inbox  *Inbox[toyReply]
 	writer *Writer[toyReply]
 }
 
@@ -60,7 +59,7 @@ func setupToyInbox(t *testing.T, replicaID string, drainFunc func(context.Contex
 	reader := sdkmetric.NewManualReader()
 	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
 	t.Cleanup(func() { _ = meterProvider.Shutdown(t.Context()) })
-	inbox, err := New(t.Context(), slog.Default(), otel.GetTracerProvider(), meterProvider, Config[string, toyReply]{ //nolint:forbidigo // toy test logger
+	inbox, err := New(t.Context(), slog.Default(), otel.GetTracerProvider(), meterProvider, Config[toyReply]{ //nolint:forbidigo // toy test logger
 		RedisOptions: redis.Options{Addr: mr.Addr(), Protocol: 2},
 		ReplicaID:    replicaID,
 		PollInterval: DefaultPollInterval,
@@ -89,57 +88,53 @@ func TestToyInstantiationRoundTrip(t *testing.T) {
 
 	te := setupToyInbox(t, "toy-replica", nil)
 	type result struct {
-		outcome Outcome[string, toyReply]
-		err     error
+		reply toyReply
+		err   error
 	}
 	done := make(chan result, 1)
 	go func() {
-		outcome, err := te.inbox.Await(t.Context(), "req-1", []string{"alpha", "beta"})
-		done <- result{outcome: outcome, err: err}
+		reply, err := te.inbox.Await(t.Context(), "req-1")
+		done <- result{reply: reply, err: err}
 	}()
 	require.Eventually(t, func() bool {
 		return te.inbox.Snapshot().Waiters == 1
 	}, time.Second, 5*time.Millisecond)
-	require.NoError(t, te.writer.Write(t.Context(), te.inbox.URN("req-1"), toyReply{ID: "req-1", Lane: "alpha"}))
-	require.NoError(t, te.writer.Write(t.Context(), te.inbox.URN("req-1"), toyReply{ID: "req-1", Lane: "beta"}))
+	require.NoError(t, te.writer.Reply(t.Context(), te.inbox.URN("req-1"), toyReply{ID: "req-1", Value: "alpha"}))
 
 	got := <-done
 	require.NoError(t, got.err)
-	require.True(t, got.outcome.Complete)
-	require.Equal(t, "alpha", got.outcome.ByLane["alpha"].Lane)
-	require.Equal(t, "beta", got.outcome.ByLane["beta"].Lane)
+	require.Equal(t, "alpha", got.reply.Value)
 }
 
 func TestReplyAfterReleaseIsCountedAsOrphan(t *testing.T) {
 	t.Parallel()
 
 	te := setupToyInbox(t, "toy-released", nil)
-	_, release, err := te.inbox.Register("req-released", []string{"alpha"})
+	_, release, err := te.inbox.Register("req-released")
 	require.NoError(t, err)
 	release()
 
-	raw, err := json.Marshal(toyReply{ID: "req-released", Lane: "alpha"})
+	raw, err := json.Marshal(toyReply{ID: "req-released", Value: "alpha"})
 	require.NoError(t, err)
 	te.inbox.route(t.Context(), string(raw))
 
 	require.Equal(t, uint64(1), te.inbox.Snapshot().OrphanedReplies)
 }
 
-func TestReplyOverflowingWaiterBufferIsCountedAsOrphan(t *testing.T) {
+func TestDuplicateReplyIsCountedAsOrphan(t *testing.T) {
 	t.Parallel()
 
 	te := setupToyInbox(t, "toy-overflow", nil)
-	w, release, err := te.inbox.Register("req-overflow", []string{"alpha"})
+	w, release, err := te.inbox.Register("req-overflow")
 	require.NoError(t, err)
 	defer release()
 
-	raw, err := json.Marshal(toyReply{ID: "req-overflow", Lane: "alpha"})
+	raw, err := json.Marshal(toyReply{ID: "req-overflow", Value: "alpha"})
 	require.NoError(t, err)
-	for range cap(w.reply) + 1 {
-		te.inbox.route(t.Context(), string(raw))
-	}
+	te.inbox.route(t.Context(), string(raw))
+	te.inbox.route(t.Context(), string(raw))
 
-	require.Len(t, w.reply, cap(w.reply))
+	require.Len(t, w.reply, 1)
 	require.Equal(t, uint64(1), te.inbox.Snapshot().OrphanedReplies)
 }
 
@@ -171,7 +166,7 @@ func TestDrainerSupervisorRestartsAfterPanic(t *testing.T) {
 func TestMissingCodecOrNamespaceIsRejected(t *testing.T) {
 	t.Parallel()
 
-	_, err := New(t.Context(), slog.Default(), otel.GetTracerProvider(), otel.GetMeterProvider(), Config[string, toyReply]{ //nolint:forbidigo // toy test logger
+	_, err := New(t.Context(), slog.Default(), otel.GetTracerProvider(), otel.GetMeterProvider(), Config[toyReply]{ //nolint:forbidigo // toy test logger
 		RedisOptions: redis.Options{Addr: "127.0.0.1:1"},
 		ReplicaID:    "toy",
 		PollInterval: DefaultPollInterval,
@@ -179,13 +174,13 @@ func TestMissingCodecOrNamespaceIsRejected(t *testing.T) {
 		Keyspace:     "toy:inbox",
 		MetricPrefix: "toy.requests",
 		Component:    "",
-		Codec:        Codec[string, toyReply]{Decode: nil, Encode: nil, CorrelationID: nil, Lane: nil, StatusLabel: nil},
+		Codec:        Codec[toyReply]{Decode: nil, Encode: nil, CorrelationID: nil, StatusLabel: nil},
 		DrainGate:    nil,
 		drainFunc:    nil,
 	})
 	require.ErrorContains(t, err, "codec")
 
-	cfg := Config[string, toyReply]{
+	cfg := Config[toyReply]{
 		RedisOptions: redis.Options{Addr: "127.0.0.1:1"},
 		ReplicaID:    "toy",
 		PollInterval: DefaultPollInterval,

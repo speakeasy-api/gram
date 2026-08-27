@@ -89,6 +89,12 @@ type awaitOutcome struct {
 	err      error
 }
 
+type registeredReplyWait struct {
+	id      string
+	waiter  *enforcereply.Waiter
+	release func()
+}
+
 type sampleStats struct {
 	redisClientsBase int64
 	redisMemoryBase  int64
@@ -303,29 +309,55 @@ func runReplyPoint(
 	writer := enforcereply.NewWriter(redisClient)
 	outcomes := make(chan awaitOutcome, concurrency)
 	lanes := syntheticLanes(cfg.expected)
-	var dispatchUnixNano atomic.Int64
 	registrationStarted := time.Now()
+	waits := make([][]registeredReplyWait, concurrency)
 	for scan := range concurrency {
-		scanID := fmt.Sprintf("reply-%d-%d", concurrency, scan)
-		go func() {
-			outcome, awaitErr := inbox.Await(pointCtx, scanID, lanes)
-			started := time.Unix(0, dispatchUnixNano.Load())
-			outcomes <- awaitOutcome{duration: time.Since(started), deadline: outcome.Deadline, err: awaitErr}
-		}()
+		waits[scan] = make([]registeredReplyWait, 0, len(lanes))
+		for laneIndex := range lanes {
+			correlationID := fmt.Sprintf("reply-%d-%d-%d", concurrency, scan, laneIndex)
+			waiter, release, registerErr := inbox.Register(correlationID)
+			if registerErr != nil {
+				for _, scanWaits := range waits {
+					for _, wait := range scanWaits {
+						wait.release()
+					}
+				}
+				return sweepResult{}, fmt.Errorf("register reply waiter: %w", registerErr)
+			}
+			waits[scan] = append(waits[scan], registeredReplyWait{id: correlationID, waiter: waiter, release: release})
+		}
 	}
-	if err := waitForWaiters(pointCtx, inbox, concurrency); err != nil {
+	defer func() {
+		for _, scanWaits := range waits {
+			for _, wait := range scanWaits {
+				wait.release()
+			}
+		}
+	}()
+	if err := waitForWaiters(pointCtx, inbox, concurrency*len(lanes)); err != nil {
 		return sweepResult{}, err
 	}
 	registration := time.Since(registrationStarted)
 	dispatchStarted := time.Now()
-	dispatchUnixNano.Store(dispatchStarted.UnixNano())
+	for scan := range concurrency {
+		go func() {
+			var awaitErr error
+			for _, wait := range waits[scan] {
+				_, awaitErr = inbox.AwaitRegistered(pointCtx, wait.id, wait.waiter, dispatchStarted)
+				wait.release()
+				if awaitErr != nil {
+					break
+				}
+			}
+			outcomes <- awaitOutcome{duration: time.Since(dispatchStarted), deadline: errors.Is(awaitErr, context.DeadlineExceeded), err: awaitErr}
+		}()
+	}
 
 	var writerErrors atomic.Int64
 	var writtenReplies atomic.Uint64
 	var scanners sync.WaitGroup
 	scanners.Add(concurrency)
 	for scan := range concurrency {
-		scanID := fmt.Sprintf("reply-%d-%d", concurrency, scan)
 		go func() {
 			defer scanners.Done()
 			if cfg.scanLatency > 0 {
@@ -338,8 +370,9 @@ func runReplyPoint(
 				}
 			}
 			for replyIndex, lane := range lanes {
-				reply := syntheticReply(scanID, lane, cfg.findings, replyIndex)
-				if writeErr := writer.Write(pointCtx, inbox.URN(scanID), reply); writeErr != nil {
+				correlationID := waits[scan][replyIndex].id
+				reply := syntheticReply(correlationID, lane, cfg.findings, replyIndex)
+				if writeErr := writer.Reply(pointCtx, inbox.URN(correlationID), reply); writeErr != nil {
 					writerErrors.Add(1)
 					return
 				}
@@ -408,31 +441,45 @@ func runPauseProbe(
 	writer := enforcereply.NewWriter(redisClient)
 	outcomes := make(chan awaitOutcome, cfg.pauseBacklog)
 	lane := syntheticLanes(1)[0]
-	var dispatchUnixNano atomic.Int64
 	registrationStarted := time.Now()
+	waits := make([]registeredReplyWait, 0, cfg.pauseBacklog)
 	for scan := range cfg.pauseBacklog {
-		scanID := fmt.Sprintf("pause-%d", scan)
-		go func() {
-			outcome, awaitErr := inbox.Await(pointCtx, scanID, []enforcereply.Lane{lane})
-			started := time.Unix(0, dispatchUnixNano.Load())
-			outcomes <- awaitOutcome{duration: time.Since(started), deadline: outcome.Deadline, err: awaitErr}
-		}()
+		correlationID := fmt.Sprintf("pause-%d", scan)
+		waiter, release, registerErr := inbox.Register(correlationID)
+		if registerErr != nil {
+			for _, wait := range waits {
+				wait.release()
+			}
+			return sweepResult{}, fmt.Errorf("register paused reply waiter: %w", registerErr)
+		}
+		waits = append(waits, registeredReplyWait{id: correlationID, waiter: waiter, release: release})
 	}
+	defer func() {
+		for _, wait := range waits {
+			wait.release()
+		}
+	}()
 	if err := waitForWaiters(pointCtx, inbox, cfg.pauseBacklog); err != nil {
 		return sweepResult{}, err
 	}
 	registration := time.Since(registrationStarted)
 	dispatchStarted := time.Now()
-	dispatchUnixNano.Store(dispatchStarted.UnixNano())
+	for scan := range cfg.pauseBacklog {
+		go func() {
+			_, awaitErr := inbox.AwaitRegistered(pointCtx, waits[scan].id, waits[scan].waiter, dispatchStarted)
+			waits[scan].release()
+			outcomes <- awaitOutcome{duration: time.Since(dispatchStarted), deadline: errors.Is(awaitErr, context.DeadlineExceeded), err: awaitErr}
+		}()
+	}
 	var writers sync.WaitGroup
 	var writerErrors atomic.Int64
 	var writtenReplies atomic.Uint64
 	writers.Add(cfg.pauseBacklog)
 	for scan := range cfg.pauseBacklog {
-		scanID := fmt.Sprintf("pause-%d", scan)
 		go func() {
 			defer writers.Done()
-			if writeErr := writer.Write(pointCtx, inbox.URN(scanID), syntheticReply(scanID, lane, cfg.findings, 0)); writeErr != nil {
+			correlationID := waits[scan].id
+			if writeErr := writer.Reply(pointCtx, inbox.URN(correlationID), syntheticReply(correlationID, lane, cfg.findings, 0)); writeErr != nil {
 				writerErrors.Add(1)
 				return
 			}
@@ -647,7 +694,7 @@ func syntheticLanes(count int) []enforcereply.Lane {
 	return lanes
 }
 
-func syntheticReply(scanID string, lane enforcereply.Lane, findingCount, replyIndex int) *riskv1.EnforcementReply {
+func syntheticReply(correlationID string, lane enforcereply.Lane, findingCount, replyIndex int) *riskv1.EnforcementReply {
 	findings := make([]*riskv1.EnforcementFinding, 0, findingCount)
 	for findingIndex := range findingCount {
 		findings = append(findings, riskv1.EnforcementFinding_builder{
@@ -665,12 +712,12 @@ func syntheticReply(scanID string, lane enforcereply.Lane, findingCount, replyIn
 		}.Build())
 	}
 	return riskv1.EnforcementReply_builder{
-		ScanId:   new(scanID),
-		Scanner:  new(lane.Scanner),
-		Status:   new(riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK),
-		Reason:   new(""),
-		Findings: findings,
-		PolicyId: new(lane.PolicyID),
+		CorrelationId: new(correlationID),
+		Scanner:       new(lane.Scanner),
+		Status:        new(riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK),
+		Reason:        new(""),
+		Findings:      findings,
+		PolicyId:      new(lane.PolicyID),
 		Diagnostics: riskv1.EnforcementDiagnostics_builder{
 			ScanDurationMs:  new(int64(0)),
 			ConsumerId:      new(fmt.Sprintf("synthetic-%d", replyIndex)),

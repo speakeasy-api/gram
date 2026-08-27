@@ -41,7 +41,7 @@ message EnforcementDiagnostics {
 
 // EnforcementReply transits Redis only and never contains raw matched text.
 message EnforcementReply {
-  string scan_id = 1;
+  string correlation_id = 1;
   EnforcementScanner scanner = 2;
   EnforcementStatus status = 3;
   string reason = 4; // Scanner error summary, limited to 256 Unicode characters.

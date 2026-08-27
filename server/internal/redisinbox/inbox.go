@@ -1,12 +1,9 @@
-// Package replicainbox implements a generic request-reply rendezvous over a
-// per-replica Redis list. Each process owns one list; downstream responders
+// Package redisinbox implements a generic 1:1 request-reply rendezvous over
+// a per-replica Redis list. Each process owns one list; downstream responders
 // append encoded replies addressed by a URN carrying the replica and a
 // correlation id, and one supervised drainer per process routes them to
-// in-process waiters. Waiters fold one reply per distinct lane, so a caller
-// that fans a request out to several responders collects exactly one answer
-// from each. The risk enforcement path (internal/risk/enforcereply) is the
-// first instantiation.
-package replicainbox
+// in-process waiters. The first reply for a correlation id wins.
+package redisinbox
 
 import (
 	"context"
@@ -41,16 +38,15 @@ const (
 	defaultDrainCount = 128
 	defaultPoolSize   = 2
 	reconnectBackoff  = 100 * time.Millisecond
-	// duplicateReplySlack sizes waiter buffers beyond the lane count so
-	// redelivered duplicates cannot displace a distinct lane's reply.
+	// duplicateReplySlack preserves non-blocking channel headroom around the
+	// first reply while redelivered duplicates are classified as orphans.
 	duplicateReplySlack = 8
 )
 
 var ErrDuplicateWaiter = errors.New("reply waiter already registered")
 
-// Codec adapts one reply type to the inbox: how it serializes, which request
-// it answers, and which lane of that request it settles.
-type Codec[K comparable, R any] struct {
+// Codec adapts one reply type to the inbox.
+type Codec[R any] struct {
 	// Decode parses one Redis list element into a reply.
 	Decode func([]byte) (R, error)
 
@@ -60,23 +56,20 @@ type Codec[K comparable, R any] struct {
 	// CorrelationID returns the request id the reply answers.
 	CorrelationID func(R) string
 
-	// Lane returns the distinct slot of the request this reply settles.
-	Lane func(R) K
-
 	// StatusLabel optionally labels the replies counter metric; nil records
 	// the counter without a status attribute.
 	StatusLabel func(R) string
 }
 
-func (c Codec[K, R]) validate() error {
-	if c.Decode == nil || c.Encode == nil || c.CorrelationID == nil || c.Lane == nil {
-		return errors.New("reply codec must set Decode, Encode, CorrelationID, and Lane")
+func (c Codec[R]) validate() error {
+	if c.Decode == nil || c.Encode == nil || c.CorrelationID == nil {
+		return errors.New("reply codec must set Decode, Encode, and CorrelationID")
 	}
 	return nil
 }
 
 // Config controls one replica's inbox: its Redis client, identity, and codec.
-type Config[K comparable, R any] struct {
+type Config[R any] struct {
 	// RedisOptions are copied before inbox settings are applied.
 	RedisOptions redis.Options
 
@@ -106,7 +99,7 @@ type Config[K comparable, R any] struct {
 	Component string
 
 	// Codec adapts the reply type.
-	Codec Codec[K, R]
+	Codec Codec[R]
 
 	// DrainGate blocks routing after a drained batch until the channel
 	// closes. It is nil in production and supports controlled backlog tests
@@ -116,24 +109,13 @@ type Config[K comparable, R any] struct {
 	drainFunc func(context.Context)
 }
 
-// Outcome folds complete and deadline-limited replies by lane.
-type Outcome[K comparable, R any] struct {
-	// ByLane contains the first reply received for each requested lane.
-	ByLane map[K]R
-
-	// Complete reports whether every requested lane replied.
-	Complete bool
-
-	// Deadline reports that the wait ceiling elapsed before all lanes replied.
-	Deadline bool
-}
-
 // Stats is a point-in-time snapshot of inbox load and Redis pool state.
 type Stats struct {
 	// Waiters is the number of requests currently registered in this process.
 	Waiters int
 
-	// OrphanedReplies is the number of decoded replies with no local waiter.
+	// OrphanedReplies is the number of decoded replies not delivered to a local
+	// waiter.
 	OrphanedReplies uint64
 
 	// DrainBatches is the number of poll cycles that routed at least one reply.
@@ -156,13 +138,13 @@ type Stats struct {
 }
 
 // Inbox owns one replica-scoped drainer and its in-process waiter map.
-type Inbox[K comparable, R any] struct {
+type Inbox[R any] struct {
 	logger    *slog.Logger
 	tracer    trace.Tracer
 	metrics   inboxMetrics
 	spanName  string
 	idAttr    string
-	codec     Codec[K, R]
+	codec     Codec[R]
 	client    *redis.Client
 	replicaID string
 	urnNS     string
@@ -192,12 +174,11 @@ type Inbox[K comparable, R any] struct {
 	waiters sync.Map
 }
 
-// Waiter follows the net/rpc client shape: the router only looks a waiter up
-// and sends into its buffered channel; folding, lane refusal, and duplicate
-// dropping all happen on the awaiting goroutine.
-type Waiter[K comparable, R any] struct {
-	lanes map[K]struct{}
-	reply chan R
+// Waiter follows the net/rpc client shape: the router looks a waiter up and
+// sends its first reply into a buffered channel.
+type Waiter[R any] struct {
+	reply     chan R
+	delivered atomic.Bool
 }
 
 type inboxMetrics struct {
@@ -209,13 +190,13 @@ type inboxMetrics struct {
 }
 
 // New starts one Redis drainer for a stable process replica id.
-func New[K comparable, R any](
+func New[R any](
 	ctx context.Context,
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
 	meterProvider metric.MeterProvider,
-	cfg Config[K, R],
-) (*Inbox[K, R], error) {
+	cfg Config[R],
+) (*Inbox[R], error) {
 	if err := cfg.Codec.validate(); err != nil {
 		return nil, err
 	}
@@ -223,7 +204,7 @@ func New[K comparable, R any](
 		return nil, errors.New("reply inbox namespace, keyspace, and metric prefix are required")
 	}
 	if cfg.Component == "" {
-		cfg.Component = "replica-inbox"
+		cfg.Component = "redis-inbox"
 	}
 	if cfg.ReplicaID == "" {
 		cfg.ReplicaID = uuid.NewString()
@@ -251,12 +232,12 @@ func New[K comparable, R any](
 	}
 
 	drainCtx, cancel := context.WithCancel(ctx) //nolint:gosec // cancel is retained on the Inbox and called in Close
-	inbox := &Inbox[K, R]{
+	inbox := &Inbox[R]{
 		logger:          logger.With(attr.SlogComponent(cfg.Component)),
-		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/replicainbox"),
+		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/redisinbox"),
 		metrics:         metrics,
 		spanName:        cfg.MetricPrefix + ".await",
-		idAttr:          cfg.MetricPrefix + ".scan_id",
+		idAttr:          cfg.MetricPrefix + ".correlation_id",
 		codec:           cfg.Codec,
 		client:          client,
 		replicaID:       cfg.ReplicaID,
@@ -288,7 +269,7 @@ func New[K comparable, R any](
 }
 
 // Snapshot returns load counters without retaining a Redis connection.
-func (i *Inbox[K, R]) Snapshot() Stats {
+func (i *Inbox[R]) Snapshot() Stats {
 	waiters := 0
 	i.waiters.Range(func(_, _ any) bool {
 		waiters++
@@ -309,7 +290,7 @@ func (i *Inbox[K, R]) Snapshot() Stats {
 }
 
 func newInboxMetrics(meterProvider metric.MeterProvider, prefix string) (inboxMetrics, error) {
-	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/replicainbox")
+	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/redisinbox")
 	roundTrip, err := meter.Float64Histogram(
 		prefix+".round_trip_duration",
 		metric.WithDescription("End-to-end request-reply duration in seconds"),
@@ -329,7 +310,7 @@ func newInboxMetrics(meterProvider metric.MeterProvider, prefix string) (inboxMe
 	}
 	orphaned, err := meter.Int64Counter(
 		prefix+".orphaned_replies",
-		metric.WithDescription("Total replies without a local waiter"),
+		metric.WithDescription("Total replies not delivered to a local waiter"),
 		metric.WithUnit("{reply}"),
 	)
 	if err != nil {
@@ -367,21 +348,22 @@ func validReplicaID(value string) bool {
 }
 
 // ReplicaID returns the stable id represented by this inbox.
-func (i *Inbox[K, R]) ReplicaID() string {
+func (i *Inbox[R]) ReplicaID() string {
 	return i.replicaID
 }
 
 // URN returns the return address for id on this replica.
-func (i *Inbox[K, R]) URN(id string) string {
+func (i *Inbox[R]) URN(id string) string {
 	return URN(i.urnNS, i.replicaID, id)
 }
 
-// Await waits for one reply from every distinct lane or until ctx ends.
-func (i *Inbox[K, R]) Await(ctx context.Context, id string, lanes []K) (Outcome[K, R], error) {
+// Await waits for the first reply for id or until ctx ends.
+func (i *Inbox[R]) Await(ctx context.Context, id string) (R, error) {
 	started := time.Now()
-	w, release, err := i.Register(id, lanes)
+	w, release, err := i.Register(id)
 	if err != nil {
-		return Outcome[K, R]{}, err
+		var zero R
+		return zero, err
 	}
 	defer release()
 	return i.AwaitRegistered(ctx, id, w, started)
@@ -390,20 +372,12 @@ func (i *Inbox[K, R]) Await(ctx context.Context, id string, lanes []K) (Outcome[
 // Register installs a waiter before the request is published, so a fast reply
 // cannot race an unregistered waiter. The returned release is idempotent and
 // must run once the wait ends.
-func (i *Inbox[K, R]) Register(id string, lanes []K) (*Waiter[K, R], func(), error) {
-	requested := make(map[K]struct{}, len(lanes))
-	for _, lane := range lanes {
-		if _, duplicate := requested[lane]; duplicate {
-			return nil, nil, fmt.Errorf("duplicate reply lane %v", lane)
-		}
-		requested[lane] = struct{}{}
-	}
-	// Buffered past the lane count so at-least-once redeliveries cannot crowd
-	// a distinct lane's reply out of the buffer; the router's send never
-	// blocks, and overflow beyond the slack is dropped and counted.
-	w := &Waiter[K, R]{
-		lanes: requested,
-		reply: make(chan R, len(lanes)+duplicateReplySlack),
+func (i *Inbox[R]) Register(id string) (*Waiter[R], func(), error) {
+	// Duplicate slack keeps at-least-once redeliveries from blocking the
+	// router. The delivered flag ensures only the first reply enters it.
+	w := &Waiter[R]{
+		reply:     make(chan R, 1+duplicateReplySlack),
+		delivered: atomic.Bool{},
 	}
 	if _, exists := i.waiters.LoadOrStore(id, w); exists {
 		return nil, nil, fmt.Errorf("request %s: %w", id, ErrDuplicateWaiter)
@@ -422,48 +396,31 @@ func (i *Inbox[K, R]) Register(id string, lanes []K) (*Waiter[K, R], func(), err
 	return w, release, nil
 }
 
-// AwaitRegistered folds replies for a waiter installed by Register. started
+// AwaitRegistered waits on a waiter installed by Register. started
 // anchors the round-trip metric at the moment the request began.
-func (i *Inbox[K, R]) AwaitRegistered(ctx context.Context, id string, w *Waiter[K, R], started time.Time) (Outcome[K, R], error) {
+func (i *Inbox[R]) AwaitRegistered(ctx context.Context, id string, w *Waiter[R], started time.Time) (R, error) {
 	ctx, span := i.tracer.Start(ctx, i.spanName, trace.WithAttributes(attribute.String(i.idAttr, id)))
 	defer span.End()
 	defer func() {
 		i.metrics.roundTrip.Record(ctx, time.Since(started).Seconds())
 	}()
 
-	// The router only sends raw replies into w.reply; this loop owns all
-	// per-request state. It folds one reply per distinct requested lane,
-	// refuses unrequested lanes (counted as orphans), and drops duplicate
-	// redeliveries, exiting once every lane has answered.
-	byLane := make(map[K]R, len(w.lanes))
-	for len(byLane) < len(w.lanes) {
-		select {
-		case <-ctx.Done():
-			ctxErr := ctx.Err()
-			span.SetStatus(codes.Error, ctxErr.Error())
-			if errors.Is(ctxErr, context.DeadlineExceeded) {
-				return Outcome[K, R]{ByLane: byLane, Complete: false, Deadline: true}, nil
-			}
-			return Outcome[K, R]{ByLane: byLane, Complete: false, Deadline: false}, fmt.Errorf("await replies: %w", ctxErr)
-		case <-i.shutdown:
-			span.SetStatus(codes.Error, "reply inbox closed")
-			return Outcome[K, R]{ByLane: byLane, Complete: false, Deadline: false}, fmt.Errorf("await replies: reply inbox closed")
-		case reply := <-w.reply:
-			lane := i.codec.Lane(reply)
-			if _, requested := w.lanes[lane]; !requested {
-				i.recordOrphan(ctx)
-				continue
-			}
-			if _, duplicate := byLane[lane]; duplicate {
-				continue
-			}
-			byLane[lane] = reply
-		}
+	select {
+	case <-ctx.Done():
+		ctxErr := ctx.Err()
+		span.SetStatus(codes.Error, ctxErr.Error())
+		var zero R
+		return zero, ctxErr //nolint:wrapcheck // Await returns the context error as part of its contract.
+	case <-i.shutdown:
+		span.SetStatus(codes.Error, "reply inbox closed")
+		var zero R
+		return zero, errors.New("await reply: reply inbox closed")
+	case reply := <-w.reply:
+		return reply, nil
 	}
-	return Outcome[K, R]{ByLane: byLane, Complete: true, Deadline: false}, nil
 }
 
-func (i *Inbox[K, R]) superviseDrainer(ctx context.Context, run func(context.Context)) {
+func (i *Inbox[R]) superviseDrainer(ctx context.Context, run func(context.Context)) {
 	defer close(i.done)
 	metricCtx := context.WithoutCancel(ctx)
 	for ctx.Err() == nil {
@@ -512,7 +469,7 @@ func invokeDrainer(ctx context.Context, run func(context.Context)) (panicked boo
 // Ordinary commands keep the client's read timeout and the pool's automatic
 // reconnection, so a transient error needs only a paced retry: a timed-out
 // pop leaves the elements in the list for the next cycle.
-func (i *Inbox[K, R]) drain(ctx context.Context) {
+func (i *Inbox[R]) drain(ctx context.Context) {
 	for ctx.Err() == nil {
 		if i.activeWaiters.Load() == 0 {
 			select {
@@ -574,7 +531,7 @@ func sleepOrDone(ctx context.Context, d time.Duration) bool {
 	}
 }
 
-func (i *Inbox[K, R]) route(ctx context.Context, raw string) {
+func (i *Inbox[R]) route(ctx context.Context, raw string) {
 	reply, err := i.codec.Decode([]byte(raw))
 	if err != nil {
 		i.logger.WarnContext(ctx, "discard malformed reply", attr.SlogError(err))
@@ -592,21 +549,23 @@ func (i *Inbox[K, R]) route(ctx context.Context, raw string) {
 		i.recordOrphan(ctx)
 		return
 	}
-	w, ok := value.(*Waiter[K, R])
+	w, ok := value.(*Waiter[R])
 	if !ok {
+		i.recordOrphan(ctx)
+		return
+	}
+	if !w.delivered.CompareAndSwap(false, true) {
 		i.recordOrphan(ctx)
 		return
 	}
 	select {
 	case w.reply <- reply:
 	default:
-		// The buffer absorbs the lane count plus duplicate slack; overflow
-		// means a redelivery storm and dropping is the safe disposition.
 		i.recordOrphan(ctx)
 	}
 }
 
-func (i *Inbox[K, R]) recordOrphan(ctx context.Context) {
+func (i *Inbox[R]) recordOrphan(ctx context.Context) {
 	i.metrics.orphaned.Add(ctx, 1)
 	i.orphanedReplies.Add(1)
 }
@@ -615,7 +574,7 @@ func (i *Inbox[K, R]) recordOrphan(ctx context.Context) {
 // dedicated Redis client. The client closes only after the drainer has
 // exited, so an in-flight poll cannot race the close; the wait is bounded by
 // one poll interval.
-func (i *Inbox[K, R]) Close() error {
+func (i *Inbox[R]) Close() error {
 	i.closeOnce.Do(func() { close(i.shutdown) })
 	i.cancel()
 	<-i.done

@@ -1,4 +1,4 @@
-package replicainbox
+package redisinbox
 
 import (
 	"context"
@@ -26,7 +26,7 @@ type WriterConfig[R any] struct {
 	// Encode serializes a reply.
 	Encode func(R) ([]byte, error)
 
-	// CorrelationID returns the request id a reply answers, verified against
+	// CorrelationID returns the correlation id a reply answers, verified against
 	// the return address before the write is honored.
 	CorrelationID func(R) string
 }
@@ -45,8 +45,8 @@ func NewWriter[R any](client *redis.Client, cfg WriterConfig[R]) *Writer[R] {
 	return &Writer[R]{client: client, cfg: cfg}
 }
 
-// Write marshals reply and atomically pipelines RPUSH with the inbox TTL.
-func (w *Writer[R]) Write(ctx context.Context, urn string, reply R) error {
+// Reply marshals reply and atomically pipelines RPUSH with the inbox TTL.
+func (w *Writer[R]) Reply(ctx context.Context, urn string, reply R) error {
 	replicaID, id, err := ParseURN(w.cfg.URNNamespace, urn)
 	if err != nil {
 		return err
@@ -75,7 +75,7 @@ func URN(namespace, replicaID, id string) string {
 	return urnPrefix + namespace + ":" + replicaID + ":" + id
 }
 
-// ParseURN extracts the replica and request ids from a return address,
+// ParseURN extracts the replica and correlation ids from a return address,
 // rejecting addresses from other namespaces or with invalid components.
 func ParseURN(namespace, value string) (string, string, error) {
 	prefix := urnPrefix + namespace + ":"

@@ -40,7 +40,7 @@ func TestEnforceHandlerWritesSafePepperedReply(t *testing.T) {
 	require.NotContains(t, string(payload), fakeSecret)
 	reply := new(riskv1.EnforcementReply)
 	require.NoError(t, proto.Unmarshal(payload, reply))
-	require.Equal(t, "scan-safe", reply.GetScanId())
+	require.Equal(t, "scan-safe", reply.GetCorrelationId())
 	require.Equal(t, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK, reply.GetStatus())
 	require.Equal(t, int32(2), reply.GetDiagnostics().GetDeliveryAttempt())
 	require.NotEmpty(t, reply.GetDiagnostics().GetConsumerId())
