@@ -6,22 +6,38 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/metric"
 
 	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	authzrepo "github.com/speakeasy-api/gram/server/internal/authz/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/streams"
 )
 
+const (
+	meterChallengeCHWriterSkipped  = "gram.authz_ch_writer.challenges_skipped"
+	meterChallengeCHWriterInserted = "gram.authz_ch_writer.challenges_inserted"
+)
+
+// ChallengeInserter writes a batch of challenge rows to ClickHouse.
+// *authzrepo.Queries satisfies it; tests supply a fake.
+type ChallengeInserter interface {
+	InsertChallenges(ctx context.Context, rows []authzrepo.ChallengeRow) error
+}
+
 // ChallengeCHWriter consumes authz challenge events from Pub/Sub and persists
-// them to ClickHouse. Invalid messages are poison records: they are logged and
-// acknowledged, while ClickHouse failures are returned for redelivery.
+// them to ClickHouse in batches. Invalid messages are poison records: they are
+// logged and acknowledged, while ClickHouse failures are returned so the batch
+// is redelivered.
 type ChallengeCHWriter struct {
-	logger *slog.Logger
-	conn   clickhouse.Conn
+	logger             *slog.Logger
+	inserter           ChallengeInserter
+	challengesSkipped  metric.Int64Counter
+	challengesInserted metric.Int64Counter
 }
 
 const (
@@ -31,27 +47,65 @@ const (
 
 func NewChallengeCHWriter(
 	logger *slog.Logger,
-	conn clickhouse.Conn,
+	meterProvider metric.MeterProvider,
+	inserter ChallengeInserter,
 ) *ChallengeCHWriter {
+	logger = logger.With(attr.SlogComponent("authz-challenge-ch-writer"))
+	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/authz")
+	challengesSkipped, err := meter.Int64Counter(
+		meterChallengeCHWriterSkipped,
+		metric.WithDescription("Authz challenge messages dropped by the ClickHouse writer as unprocessable"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create metric", attr.SlogMetricName(meterChallengeCHWriterSkipped), attr.SlogError(err))
+	}
+	challengesInserted, err := meter.Int64Counter(
+		meterChallengeCHWriterInserted,
+		metric.WithDescription("Authz challenge rows the ClickHouse writer attempted to insert"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create metric", attr.SlogMetricName(meterChallengeCHWriterInserted), attr.SlogError(err))
+	}
+
 	return &ChallengeCHWriter{
-		logger: logger.With(attr.SlogComponent("authz-challenge-ch-writer")),
-		conn:   conn,
+		logger:             logger,
+		inserter:           inserter,
+		challengesSkipped:  challengesSkipped,
+		challengesInserted: challengesInserted,
 	}
 }
 
-func (w *ChallengeCHWriter) Handle(ctx context.Context, message *authzv1.Challenge, _ gcp.MessageMetadata) error {
-	row, err := challengeRowFromMessage(message)
-	if err != nil {
-		w.logger.ErrorContext(ctx, "invalid authz challenge message",
-			attr.SlogError(err),
-			attr.SlogValueString(message.GetId()),
-		)
+var _ streams.BatchHandler[*authzv1.Challenge] = (*ChallengeCHWriter)(nil)
+
+func (w *ChallengeCHWriter) HandleBatch(ctx context.Context, messages []*authzv1.Challenge, _ []gcp.MessageMetadata) error {
+	rows := make([]authzrepo.ChallengeRow, 0, len(messages))
+	for _, message := range messages {
+		row, err := challengeRowFromMessage(message)
+		if err != nil {
+			w.logger.ErrorContext(ctx, "skipping unprocessable authz challenge message",
+				attr.SlogError(err),
+				attr.SlogValueString(message.GetId()),
+			)
+			if w.challengesSkipped != nil {
+				w.challengesSkipped.Add(ctx, 1)
+			}
+			continue
+		}
+		rows = append(rows, row)
+	}
+
+	if len(rows) == 0 {
 		return nil
 	}
 
-	if err := authzrepo.New(w.conn).InsertChallenge(ctx, row); err != nil {
-		return fmt.Errorf("insert authz challenge: %w", err)
+	err := w.inserter.InsertChallenges(ctx, rows)
+	if w.challengesInserted != nil {
+		w.challengesInserted.Add(ctx, int64(len(rows)), metric.WithAttributes(attr.Outcome(o11y.OutcomeFromError(err))))
 	}
+	if err != nil {
+		return fmt.Errorf("insert authz challenges: %w", err)
+	}
+
 	return nil
 }
 
