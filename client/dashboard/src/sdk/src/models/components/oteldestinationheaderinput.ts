@@ -5,7 +5,7 @@
 import * as z from "zod/v4-mini";
 
 /**
- * An HTTP header supplied for an OTEL destination. On update, omit value to preserve the encrypted value stored for the same case-insensitive name.
+ * An HTTP header supplied when updating an OTEL destination. Omit value to preserve the encrypted value stored for the same case-insensitive name.
  */
 export type OtelDestinationHeaderInput = {
   /**
@@ -13,7 +13,7 @@ export type OtelDestinationHeaderInput = {
    */
   name: string;
   /**
-   * Write-only header value. Omit on update to preserve an existing value; provide an empty string to clear it.
+   * Write-only header value. Omit to preserve an existing value; provide an empty string to clear it.
    */
   value?: string | undefined;
 };

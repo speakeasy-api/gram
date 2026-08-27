@@ -1964,6 +1964,30 @@ func unmarshalOtelDestinationHeaderResponseBodyToDataexportsOtelDestinationHeade
 	return res
 }
 
+// marshalDataexportsCreateOtelDestinationHeaderInputToCreateOtelDestinationHeaderInputRequestBody
+// builds a value of type *CreateOtelDestinationHeaderInputRequestBody from a
+// value of type *dataexports.CreateOtelDestinationHeaderInput.
+func marshalDataexportsCreateOtelDestinationHeaderInputToCreateOtelDestinationHeaderInputRequestBody(v *dataexports.CreateOtelDestinationHeaderInput) *CreateOtelDestinationHeaderInputRequestBody {
+	res := &CreateOtelDestinationHeaderInputRequestBody{
+		Name:  v.Name,
+		Value: v.Value,
+	}
+
+	return res
+}
+
+// marshalCreateOtelDestinationHeaderInputRequestBodyToDataexportsCreateOtelDestinationHeaderInput
+// builds a value of type *dataexports.CreateOtelDestinationHeaderInput from a
+// value of type *CreateOtelDestinationHeaderInputRequestBody.
+func marshalCreateOtelDestinationHeaderInputRequestBodyToDataexportsCreateOtelDestinationHeaderInput(v *CreateOtelDestinationHeaderInputRequestBody) *dataexports.CreateOtelDestinationHeaderInput {
+	res := &dataexports.CreateOtelDestinationHeaderInput{
+		Name:  v.Name,
+		Value: v.Value,
+	}
+
+	return res
+}
+
 // marshalDataexportsOtelDestinationHeaderInputToOtelDestinationHeaderInputRequestBody
 // builds a value of type *OtelDestinationHeaderInputRequestBody from a value
 // of type *dataexports.OtelDestinationHeaderInput.

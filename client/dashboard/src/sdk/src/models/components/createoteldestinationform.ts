@@ -6,10 +6,10 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 import {
-  OtelDestinationHeaderInput,
-  OtelDestinationHeaderInput$Outbound,
-  OtelDestinationHeaderInput$outboundSchema,
-} from "./oteldestinationheaderinput.js";
+  CreateOtelDestinationHeaderInput,
+  CreateOtelDestinationHeaderInput$Outbound,
+  CreateOtelDestinationHeaderInput$outboundSchema,
+} from "./createoteldestinationheaderinput.js";
 
 /**
  * Sensitive-data policy.
@@ -32,9 +32,9 @@ export type CreateOtelDestinationForm = {
    */
   endpointUrl: string;
   /**
-   * Write-only headers. Values are required for new header names.
+   * Write-only headers.
    */
-  headers: Array<OtelDestinationHeaderInput>;
+  headers: Array<CreateOtelDestinationHeaderInput>;
   /**
    * Sensitive-data policy.
    */
@@ -48,7 +48,7 @@ export const SensitiveData$outboundSchema: z.ZodMiniEnum<typeof SensitiveData> =
 /** @internal */
 export type CreateOtelDestinationForm$Outbound = {
   endpoint_url: string;
-  headers: Array<OtelDestinationHeaderInput$Outbound>;
+  headers: Array<CreateOtelDestinationHeaderInput$Outbound>;
   sensitive_data: string;
 };
 
@@ -59,7 +59,7 @@ export const CreateOtelDestinationForm$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     endpointUrl: z.string(),
-    headers: z.array(OtelDestinationHeaderInput$outboundSchema),
+    headers: z.array(CreateOtelDestinationHeaderInput$outboundSchema),
     sensitiveData: z._default(SensitiveData$outboundSchema, "exclude"),
   }),
   z.transform((v) => {

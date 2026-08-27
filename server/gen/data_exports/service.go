@@ -56,6 +56,14 @@ const ServiceName = "dataExports"
 // MethodKey key.
 var MethodNames = [8]string{"listOtelDestinations", "createOtelDestination", "updateOtelDestination", "deleteOtelDestination", "listRoutes", "createRoute", "updateRoute", "deleteRoute"}
 
+// An HTTP header supplied when creating an OTEL destination.
+type CreateOtelDestinationHeaderInput struct {
+	// Header name.
+	Name string
+	// Write-only header value.
+	Value string
+}
+
 // CreateOtelDestinationPayload is the payload type of the dataExports service
 // createOtelDestination method.
 type CreateOtelDestinationPayload struct {
@@ -66,8 +74,8 @@ type CreateOtelDestinationPayload struct {
 	EndpointURL string
 	// Sensitive-data policy.
 	SensitiveData string
-	// Write-only headers. Values are required for new header names.
-	Headers []*OtelDestinationHeaderInput
+	// Write-only headers.
+	Headers []*CreateOtelDestinationHeaderInput
 }
 
 // CreateRoutePayload is the payload type of the dataExports service
@@ -180,13 +188,13 @@ type OtelDestinationHeader struct {
 	HasValue bool
 }
 
-// An HTTP header supplied for an OTEL destination. On update, omit value to
+// An HTTP header supplied when updating an OTEL destination. Omit value to
 // preserve the encrypted value stored for the same case-insensitive name.
 type OtelDestinationHeaderInput struct {
 	// Header name.
 	Name string
-	// Write-only header value. Omit on update to preserve an existing value;
-	// provide an empty string to clear it.
+	// Write-only header value. Omit to preserve an existing value; provide an
+	// empty string to clear it.
 	Value *string
 }
 

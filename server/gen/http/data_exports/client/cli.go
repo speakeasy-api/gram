@@ -94,16 +94,16 @@ func BuildCreateOtelDestinationPayload(dataExportsCreateOtelDestinationBody stri
 		}
 	}
 	if body.Headers != nil {
-		v.Headers = make([]*dataexports.OtelDestinationHeaderInput, len(body.Headers))
+		v.Headers = make([]*dataexports.CreateOtelDestinationHeaderInput, len(body.Headers))
 		for i, val := range body.Headers {
 			if val == nil {
 				v.Headers[i] = nil
 				continue
 			}
-			v.Headers[i] = marshalOtelDestinationHeaderInputRequestBodyToDataexportsOtelDestinationHeaderInput(val)
+			v.Headers[i] = marshalCreateOtelDestinationHeaderInputRequestBodyToDataexportsCreateOtelDestinationHeaderInput(val)
 		}
 	} else {
-		v.Headers = []*dataexports.OtelDestinationHeaderInput{}
+		v.Headers = []*dataexports.CreateOtelDestinationHeaderInput{}
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

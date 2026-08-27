@@ -127,7 +127,18 @@ func (s *Service) CreateOtelDestination(ctx context.Context, payload *gen.Create
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid sensitive_data")
 	}
-	headers, err := normalizeHeaderInputs(payload.Headers, nil)
+	headerInputs := make([]destinationHeaderInput, len(payload.Headers))
+	for i, input := range payload.Headers {
+		if input != nil {
+			headerInputs[i] = destinationHeaderInput{
+				name:     input.Name,
+				value:    input.Value,
+				hasValue: true,
+				valid:    true,
+			}
+		}
+	}
+	headers, err := normalizeHeaderInputs(headerInputs, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -222,7 +233,19 @@ func (s *Service) UpdateOtelDestination(ctx context.Context, payload *gen.Update
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "decode OTEL destination sensitive-data policy").LogError(ctx, logger)
 	}
-	headers, err := normalizeHeaderInputs(payload.Headers, existingHeaders)
+	headerInputs := make([]destinationHeaderInput, len(payload.Headers))
+	for i, input := range payload.Headers {
+		if input == nil {
+			continue
+		}
+
+		headerInputs[i] = destinationHeaderInput{name: input.Name, valid: true}
+		if input.Value != nil {
+			headerInputs[i].value = *input.Value
+			headerInputs[i].hasValue = true
+		}
+	}
+	headers, err := normalizeHeaderInputs(headerInputs, existingHeaders)
 	if err != nil {
 		return nil, err
 	}

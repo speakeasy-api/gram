@@ -79,7 +79,7 @@ func createOtelDestination(t *testing.T, ctx context.Context, ti *testInstance, 
 		ProjectSlugInput: nil,
 		EndpointURL:      endpointURL,
 		SensitiveData:    sensitiveData,
-		Headers:          []*gen.OtelDestinationHeaderInput{}})
+		Headers:          []*gen.CreateOtelDestinationHeaderInput{}})
 	require.NoError(t, err)
 	return destination
 }

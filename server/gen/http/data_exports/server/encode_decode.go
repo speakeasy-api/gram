@@ -1907,6 +1907,18 @@ func marshalDataexportsOtelDestinationHeaderToOtelDestinationHeaderResponseBody(
 	return res
 }
 
+// unmarshalCreateOtelDestinationHeaderInputRequestBodyToDataexportsCreateOtelDestinationHeaderInput
+// builds a value of type *dataexports.CreateOtelDestinationHeaderInput from a
+// value of type *CreateOtelDestinationHeaderInputRequestBody.
+func unmarshalCreateOtelDestinationHeaderInputRequestBodyToDataexportsCreateOtelDestinationHeaderInput(v *CreateOtelDestinationHeaderInputRequestBody) *dataexports.CreateOtelDestinationHeaderInput {
+	res := &dataexports.CreateOtelDestinationHeaderInput{
+		Name:  *v.Name,
+		Value: *v.Value,
+	}
+
+	return res
+}
+
 // unmarshalOtelDestinationHeaderInputRequestBodyToDataexportsOtelDestinationHeaderInput
 // builds a value of type *dataexports.OtelDestinationHeaderInput from a value
 // of type *OtelDestinationHeaderInputRequestBody.

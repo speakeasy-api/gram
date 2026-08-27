@@ -59,6 +59,26 @@ describe("AUDIT_ACTIONS", () => {
     expect(staticActionPhrase("organization:enterprise_trial_converted")).toBe(
       "converted enterprise trial for",
     );
+  it("describes data export actions", () => {
+    expect(
+      (
+        [
+          "data_export_route:create",
+          "data_export_route:update",
+          "data_export_route:delete",
+          "otel_destination:create",
+          "otel_destination:update",
+          "otel_destination:delete",
+        ] as const
+      ).map((action) => staticActionPhrase(action)),
+    ).toEqual([
+      "created data export route",
+      "updated data export route",
+      "deleted data export route",
+      "created OpenTelemetry destination",
+      "updated OpenTelemetry destination",
+      "deleted OpenTelemetry destination",
+    ]);
   });
 
   it("rejects actions it doesn't know", () => {

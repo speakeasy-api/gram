@@ -18,10 +18,15 @@ const (
 	ActionOtelDestinationDelete Action = "otel_destination:delete"
 )
 
+type OtelDestinationHeaderSnapshot struct {
+	Name     string `json:"name"`
+	HasValue bool   `json:"has_value"`
+}
+
 type OtelDestinationSnapshot struct {
-	EndpointURL   string   `json:"endpoint_url"`
-	HeaderNames   []string `json:"header_names"`
-	SensitiveData string   `json:"sensitive_data"`
+	EndpointURL   string                          `json:"endpoint_url"`
+	Headers       []OtelDestinationHeaderSnapshot `json:"headers"`
+	SensitiveData string                          `json:"sensitive_data"`
 }
 
 type LogOtelDestinationCreateEvent struct {

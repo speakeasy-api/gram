@@ -27,6 +27,20 @@ func TestOtelDestinationRoundTrip(t *testing.T) {
 	require.Equal(t, id, decoded.ID)
 }
 
+func TestOtelDestinationValidatesCurrentID(t *testing.T) {
+	t.Parallel()
+
+	destination := urn.NewOtelDestination(uuid.New())
+	destination.ID = uuid.Nil
+
+	_, err := json.Marshal(destination)
+	require.ErrorIs(t, err, urn.ErrInvalid)
+	_, err = destination.MarshalText()
+	require.ErrorIs(t, err, urn.ErrInvalid)
+	_, err = destination.Value()
+	require.ErrorIs(t, err, urn.ErrInvalid)
+}
+
 func TestDataExportRouteRoundTrip(t *testing.T) {
 	t.Parallel()
 	id := uuid.New()
@@ -42,4 +56,18 @@ func TestDataExportRouteRoundTrip(t *testing.T) {
 	var decoded urn.DataExportRoute
 	require.NoError(t, json.Unmarshal(encoded, &decoded))
 	require.Equal(t, id, decoded.ID)
+}
+
+func TestDataExportRouteValidatesCurrentID(t *testing.T) {
+	t.Parallel()
+
+	route := urn.NewDataExportRoute(uuid.New())
+	route.ID = uuid.Nil
+
+	_, err := json.Marshal(route)
+	require.ErrorIs(t, err, urn.ErrInvalid)
+	_, err = route.MarshalText()
+	require.ErrorIs(t, err, urn.ErrInvalid)
+	_, err = route.Value()
+	require.ErrorIs(t, err, urn.ErrInvalid)
 }

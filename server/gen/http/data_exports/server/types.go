@@ -19,8 +19,8 @@ type CreateOtelDestinationRequestBody struct {
 	EndpointURL *string `form:"endpoint_url,omitempty" json:"endpoint_url,omitempty" xml:"endpoint_url,omitempty"`
 	// Sensitive-data policy.
 	SensitiveData *string `form:"sensitive_data,omitempty" json:"sensitive_data,omitempty" xml:"sensitive_data,omitempty"`
-	// Write-only headers. Values are required for new header names.
-	Headers []*OtelDestinationHeaderInputRequestBody `form:"headers,omitempty" json:"headers,omitempty" xml:"headers,omitempty"`
+	// Write-only headers.
+	Headers []*CreateOtelDestinationHeaderInputRequestBody `form:"headers,omitempty" json:"headers,omitempty" xml:"headers,omitempty"`
 }
 
 // UpdateOtelDestinationRequestBody is the type of the "dataExports" service
@@ -1679,13 +1679,22 @@ type DataExportRouteResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// CreateOtelDestinationHeaderInputRequestBody is used to define fields on
+// request body types.
+type CreateOtelDestinationHeaderInputRequestBody struct {
+	// Header name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Write-only header value.
+	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
+}
+
 // OtelDestinationHeaderInputRequestBody is used to define fields on request
 // body types.
 type OtelDestinationHeaderInputRequestBody struct {
 	// Header name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// Write-only header value. Omit on update to preserve an existing value;
-	// provide an empty string to clear it.
+	// Write-only header value. Omit to preserve an existing value; provide an
+	// empty string to clear it.
 	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
 }
 
@@ -2992,13 +3001,13 @@ func NewCreateOtelDestinationPayload(body *CreateOtelDestinationRequestBody, ses
 	if body.SensitiveData == nil {
 		v.SensitiveData = "exclude"
 	}
-	v.Headers = make([]*dataexports.OtelDestinationHeaderInput, len(body.Headers))
+	v.Headers = make([]*dataexports.CreateOtelDestinationHeaderInput, len(body.Headers))
 	for i, val := range body.Headers {
 		if val == nil {
 			v.Headers[i] = nil
 			continue
 		}
-		v.Headers[i] = unmarshalOtelDestinationHeaderInputRequestBodyToDataexportsOtelDestinationHeaderInput(val)
+		v.Headers[i] = unmarshalCreateOtelDestinationHeaderInputRequestBodyToDataexportsCreateOtelDestinationHeaderInput(val)
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -3120,7 +3129,7 @@ func ValidateCreateOtelDestinationRequestBody(body *CreateOtelDestinationRequest
 	}
 	for _, e := range body.Headers {
 		if e != nil {
-			if err2 := ValidateOtelDestinationHeaderInputRequestBody(e); err2 != nil {
+			if err2 := ValidateCreateOtelDestinationHeaderInputRequestBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -3191,6 +3200,18 @@ func ValidateUpdateRouteRequestBody(body *UpdateRouteRequestBody) (err error) {
 	}
 	if body.OtelDestinationID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.otel_destination_id", *body.OtelDestinationID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateCreateOtelDestinationHeaderInputRequestBody runs the validations
+// defined on CreateOtelDestinationHeaderInputRequestBody
+func ValidateCreateOtelDestinationHeaderInputRequestBody(body *CreateOtelDestinationHeaderInputRequestBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Value == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("value", "body"))
 	}
 	return
 }

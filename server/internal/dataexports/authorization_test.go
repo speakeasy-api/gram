@@ -42,7 +42,7 @@ func TestDestinationAndRouteMutationsRequireProjectWrite(t *testing.T) {
 
 	projectRead := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeProjectRead, authCtx.ProjectID.String()))
 	_, err := ti.service.CreateOtelDestination(projectRead, &gen.CreateOtelDestinationPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		EndpointURL: "https://denied.example.test", SensitiveData: "exclude", Headers: []*gen.OtelDestinationHeaderInput{}})
+		EndpointURL: "https://denied.example.test", SensitiveData: "exclude", Headers: []*gen.CreateOtelDestinationHeaderInput{}})
 	requireOopsCode(t, err, oops.CodeForbidden)
 	_, err = ti.service.CreateRoute(projectRead, &gen.CreateRoutePayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 		DataSource: "otel_logs", Enabled: true, OtelDestinationID: &destination.ID})
@@ -50,7 +50,7 @@ func TestDestinationAndRouteMutationsRequireProjectWrite(t *testing.T) {
 
 	orgAdmin := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID))
 	_, err = ti.service.CreateOtelDestination(orgAdmin, &gen.CreateOtelDestinationPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		EndpointURL: "https://org-admin-denied.example.test", SensitiveData: "exclude", Headers: []*gen.OtelDestinationHeaderInput{}})
+		EndpointURL: "https://org-admin-denied.example.test", SensitiveData: "exclude", Headers: []*gen.CreateOtelDestinationHeaderInput{}})
 	requireOopsCode(t, err, oops.CodeForbidden)
 	_, err = ti.service.CreateRoute(orgAdmin, &gen.CreateRoutePayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 		DataSource: "otel_logs", Enabled: true, OtelDestinationID: &destination.ID})
@@ -58,7 +58,7 @@ func TestDestinationAndRouteMutationsRequireProjectWrite(t *testing.T) {
 
 	projectWrite := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeProjectWrite, authCtx.ProjectID.String()))
 	_, err = ti.service.CreateOtelDestination(projectWrite, &gen.CreateOtelDestinationPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		EndpointURL: "https://allowed.example.test", SensitiveData: "exclude", Headers: []*gen.OtelDestinationHeaderInput{}})
+		EndpointURL: "https://allowed.example.test", SensitiveData: "exclude", Headers: []*gen.CreateOtelDestinationHeaderInput{}})
 	require.NoError(t, err)
 	_, err = ti.service.CreateRoute(projectWrite, &gen.CreateRoutePayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 		DataSource: "otel_logs", Enabled: true, OtelDestinationID: &destination.ID})

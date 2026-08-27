@@ -11,21 +11,10 @@ import (
 
 type OtelDestination struct {
 	ID uuid.UUID
-
-	checked bool
-	err     error
 }
 
 func NewOtelDestination(id uuid.UUID) OtelDestination {
-	c := OtelDestination{
-		ID:      id,
-		checked: false,
-		err:     nil,
-	}
-
-	_ = c.validate()
-
-	return c
+	return OtelDestination{ID: id}
 }
 
 func ParseOtelDestination(value string) (OtelDestination, error) {
@@ -140,16 +129,9 @@ func (u *OtelDestination) UnmarshalText(text []byte) error {
 	return nil
 }
 
-func (u *OtelDestination) validate() error {
-	if u.checked {
-		return u.err
-	}
-
-	u.checked = true
-
+func (u OtelDestination) validate() error {
 	if u.ID == uuid.Nil {
-		u.err = fmt.Errorf("%w: empty id", ErrInvalid)
-		return u.err
+		return fmt.Errorf("%w: empty id", ErrInvalid)
 	}
 
 	return nil

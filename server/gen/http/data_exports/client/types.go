@@ -19,8 +19,8 @@ type CreateOtelDestinationRequestBody struct {
 	EndpointURL string `form:"endpoint_url" json:"endpoint_url" xml:"endpoint_url"`
 	// Sensitive-data policy.
 	SensitiveData string `form:"sensitive_data" json:"sensitive_data" xml:"sensitive_data"`
-	// Write-only headers. Values are required for new header names.
-	Headers []*OtelDestinationHeaderInputRequestBody `form:"headers" json:"headers" xml:"headers"`
+	// Write-only headers.
+	Headers []*CreateOtelDestinationHeaderInputRequestBody `form:"headers" json:"headers" xml:"headers"`
 }
 
 // UpdateOtelDestinationRequestBody is the type of the "dataExports" service
@@ -1661,13 +1661,22 @@ type OtelDestinationHeaderResponseBody struct {
 	HasValue *bool `form:"has_value,omitempty" json:"has_value,omitempty" xml:"has_value,omitempty"`
 }
 
+// CreateOtelDestinationHeaderInputRequestBody is used to define fields on
+// request body types.
+type CreateOtelDestinationHeaderInputRequestBody struct {
+	// Header name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// Write-only header value.
+	Value string `form:"value" json:"value" xml:"value"`
+}
+
 // OtelDestinationHeaderInputRequestBody is used to define fields on request
 // body types.
 type OtelDestinationHeaderInputRequestBody struct {
 	// Header name.
 	Name string `form:"name" json:"name" xml:"name"`
-	// Write-only header value. Omit on update to preserve an existing value;
-	// provide an empty string to clear it.
+	// Write-only header value. Omit to preserve an existing value; provide an
+	// empty string to clear it.
 	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
 }
 
@@ -1703,16 +1712,16 @@ func NewCreateOtelDestinationRequestBody(p *dataexports.CreateOtelDestinationPay
 		}
 	}
 	if p.Headers != nil {
-		body.Headers = make([]*OtelDestinationHeaderInputRequestBody, len(p.Headers))
+		body.Headers = make([]*CreateOtelDestinationHeaderInputRequestBody, len(p.Headers))
 		for i, val := range p.Headers {
 			if val == nil {
 				body.Headers[i] = nil
 				continue
 			}
-			body.Headers[i] = marshalDataexportsOtelDestinationHeaderInputToOtelDestinationHeaderInputRequestBody(val)
+			body.Headers[i] = marshalDataexportsCreateOtelDestinationHeaderInputToCreateOtelDestinationHeaderInputRequestBody(val)
 		}
 	} else {
-		body.Headers = []*OtelDestinationHeaderInputRequestBody{}
+		body.Headers = []*CreateOtelDestinationHeaderInputRequestBody{}
 	}
 	return body
 }

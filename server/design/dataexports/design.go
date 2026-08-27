@@ -191,10 +191,17 @@ var OtelDestinationHeader = Type("OtelDestinationHeader", func() {
 	Required("name", "has_value")
 })
 
-var OtelDestinationHeaderInput = Type("OtelDestinationHeaderInput", func() {
-	Description("An HTTP header supplied for an OTEL destination. On update, omit value to preserve the encrypted value stored for the same case-insensitive name.")
+var CreateOtelDestinationHeaderInput = Type("CreateOtelDestinationHeaderInput", func() {
+	Description("An HTTP header supplied when creating an OTEL destination.")
 	Attribute("name", String, "Header name.")
-	Attribute("value", String, "Write-only header value. Omit on update to preserve an existing value; provide an empty string to clear it.")
+	Attribute("value", String, "Write-only header value.")
+	Required("name", "value")
+})
+
+var OtelDestinationHeaderInput = Type("OtelDestinationHeaderInput", func() {
+	Description("An HTTP header supplied when updating an OTEL destination. Omit value to preserve the encrypted value stored for the same case-insensitive name.")
+	Attribute("name", String, "Header name.")
+	Attribute("value", String, "Write-only header value. Omit to preserve an existing value; provide an empty string to clear it.")
 	Required("name")
 })
 
@@ -233,7 +240,7 @@ var CreateOtelDestinationForm = Type("CreateOtelDestinationForm", func() {
 		Enum("exclude", "include")
 		Default("exclude")
 	})
-	Attribute("headers", ArrayOf(OtelDestinationHeaderInput), "Write-only headers. Values are required for new header names.")
+	Attribute("headers", ArrayOf(CreateOtelDestinationHeaderInput), "Write-only headers.")
 	Required("endpoint_url", "headers")
 })
 

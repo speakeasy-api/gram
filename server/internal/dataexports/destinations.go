@@ -10,7 +10,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"golang.org/x/net/http/httpguts"
 
-	gen "github.com/speakeasy-api/gram/server/gen/data_exports"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -52,7 +51,7 @@ func validateDestinationURL(raw string) (string, error) {
 	if parsed.Scheme != "http" && parsed.Scheme != "https" {
 		return "", oops.E(oops.CodeInvalid, nil, "endpoint_url must use http or https")
 	}
-	if parsed.Host == "" {
+	if parsed.Hostname() == "" {
 		return "", oops.E(oops.CodeInvalid, nil, "endpoint_url must include a host")
 	}
 	if parsed.User != nil {
@@ -61,11 +60,21 @@ func validateDestinationURL(raw string) (string, error) {
 	if strings.Contains(raw, "#") {
 		return "", oops.E(oops.CodeInvalid, nil, "endpoint_url must not include a fragment")
 	}
+	if parsed.RawQuery != "" || parsed.ForceQuery {
+		return "", oops.E(oops.CodeInvalid, nil, "endpoint_url must not include a query")
+	}
 
 	return parsed.String(), nil
 }
 
-func normalizeHeaderInputs(inputs []*gen.OtelDestinationHeaderInput, existing map[string]string) (map[string]string, error) {
+type destinationHeaderInput struct {
+	name     string
+	value    string
+	hasValue bool
+	valid    bool
+}
+
+func normalizeHeaderInputs(inputs []destinationHeaderInput, existing map[string]string) (map[string]string, error) {
 	headers := make(map[string]string, len(inputs))
 	seen := make(map[string]struct{}, len(inputs))
 	existingByFoldedName := make(map[string]string, len(existing))
@@ -73,11 +82,11 @@ func normalizeHeaderInputs(inputs []*gen.OtelDestinationHeaderInput, existing ma
 		existingByFoldedName[strings.ToLower(name)] = value
 	}
 	for _, input := range inputs {
-		if input == nil {
+		if !input.valid {
 			return nil, oops.E(oops.CodeInvalid, nil, "header entry cannot be null")
 		}
 
-		name := strings.TrimSpace(input.Name)
+		name := strings.TrimSpace(input.name)
 		if !httpguts.ValidHeaderFieldName(name) {
 			return nil, oops.E(oops.CodeInvalid, nil, "invalid header name %q", name)
 		}
@@ -87,8 +96,11 @@ func normalizeHeaderInputs(inputs []*gen.OtelDestinationHeaderInput, existing ma
 		}
 		seen[folded] = struct{}{}
 
-		if input.Value != nil {
-			headers[name] = *input.Value
+		if input.hasValue {
+			if !httpguts.ValidHeaderFieldValue(input.value) {
+				return nil, oops.E(oops.CodeInvalid, nil, "invalid value for header %q", name)
+			}
+			headers[name] = input.value
 			continue
 		}
 
@@ -139,15 +151,20 @@ func (s *Service) decryptHeaders(stored pgtype.Text) (map[string]string, error) 
 }
 
 func destinationSnapshot(endpointURL string, headers map[string]string, policy sensitiveData) *audit.OtelDestinationSnapshot {
-	names := make([]string, 0, len(headers))
-	for name := range headers {
-		names = append(names, name)
+	headersSnapshot := make([]audit.OtelDestinationHeaderSnapshot, 0, len(headers))
+	for name, value := range headers {
+		headersSnapshot = append(headersSnapshot, audit.OtelDestinationHeaderSnapshot{
+			Name:     name,
+			HasValue: value != "",
+		})
 	}
-	sort.Strings(names)
+	sort.Slice(headersSnapshot, func(i, j int) bool {
+		return headersSnapshot[i].Name < headersSnapshot[j].Name
+	})
 
 	return &audit.OtelDestinationSnapshot{
 		EndpointURL:   endpointURL,
-		HeaderNames:   names,
+		Headers:       headersSnapshot,
 		SensitiveData: string(policy),
 	}
 }
