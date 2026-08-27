@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
+	"github.com/speakeasy-api/gram/server/internal/risk/exclusioncore"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycatalog"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
@@ -104,9 +105,18 @@ type preparedRiskPolicyCreate struct {
 	params     riskrepo.CreateRiskPolicyParams
 }
 
-// NewRiskPolicyMutationHandlers activates only policy create/update. Exclusion
-// callbacks remain nil and therefore retain the stable feature_unavailable stubs.
+// NewRiskPolicyMutationHandlers retains the policy-only composition used by the
+// preceding rollout slice.
 func NewRiskPolicyMutationHandlers(db *pgxpool.Pool, controls *RiskMutationControls, policies *policycore.Core) (*RiskMutationHandlers, error) {
+	return newRiskMutationHandlers(db, controls, policies, nil)
+}
+
+// NewRiskMutationHandlers activates policy and exclusion mutation callbacks.
+func NewRiskMutationHandlers(db *pgxpool.Pool, controls *RiskMutationControls, policies *policycore.Core, exclusions *exclusioncore.Core) (*RiskMutationHandlers, error) {
+	return newRiskMutationHandlers(db, controls, policies, exclusions)
+}
+
+func newRiskMutationHandlers(db *pgxpool.Pool, controls *RiskMutationControls, policies *policycore.Core, exclusions *exclusioncore.Core) (*RiskMutationHandlers, error) {
 	if db == nil || controls == nil || policies == nil {
 		return nil, ErrRiskMutationUnavailable
 	}
@@ -114,14 +124,20 @@ func NewRiskPolicyMutationHandlers(db *pgxpool.Pool, controls *RiskMutationContr
 	if err != nil {
 		return nil, fmt.Errorf("build risk policy mutation catalog: %w", err)
 	}
-	service := &riskPolicyMutationService{db: db, controls: controls, policies: policies, catalog: catalog}
-	return &RiskMutationHandlers{
+	policyService := &riskPolicyMutationService{db: db, controls: controls, policies: policies, catalog: catalog}
+	handlers := &RiskMutationHandlers{
 		Controls:        controls,
-		CreatePolicy:    service.createPolicyTool,
-		UpdatePolicy:    service.updatePolicyTool,
+		CreatePolicy:    policyService.createPolicyTool,
+		UpdatePolicy:    policyService.updatePolicyTool,
 		CreateExclusion: nil,
 		UpdateExclusion: nil,
-	}, nil
+	}
+	if exclusions != nil {
+		exclusionService := newRiskExclusionMutationService(controls, exclusions, catalog)
+		handlers.CreateExclusion = exclusionService.createExclusionTool
+		handlers.UpdateExclusion = exclusionService.updateExclusionTool
+	}
+	return handlers, nil
 }
 
 func (s *riskPolicyMutationService) createPolicyTool(ctx context.Context, _ *mcp.CallToolRequest, raw map[string]any) (*mcp.CallToolResult, CreateRiskPolicyToolOutput, error) {

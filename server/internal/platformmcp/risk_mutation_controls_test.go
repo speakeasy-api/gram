@@ -124,6 +124,18 @@ func TestRiskMutationAdmissionConnectionlessAssistantUsesOrganizationBudget(t *t
 	require.Equal(t, []string{"organization"}, organization.keys)
 }
 
+func TestRiskExclusionMutationErrorPreservesConflict(t *testing.T) {
+	t.Parallel()
+
+	conflict := riskMutationConflict("The risk exclusion changed after it was read.")
+	mapped := mapRiskExclusionMutationError(conflict)
+
+	require.Same(t, conflict, mapped)
+	var mutation *RiskMutationError
+	require.ErrorAs(t, mapped, &mutation)
+	require.Equal(t, "conflict", mutation.Code)
+}
+
 func TestRiskMutationInputHashIsCanonicalAndOperationSeparated(t *testing.T) {
 	t.Parallel()
 

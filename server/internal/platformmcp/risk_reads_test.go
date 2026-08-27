@@ -82,10 +82,13 @@ func testRiskReadService(t *testing.T, projects riskProjectResolver, policies *s
 	require.NoError(t, err)
 	cursor, err := newRiskCursorCodec("test-key")
 	require.NoError(t, err)
+	versions, err := newRiskVersionCodec("test-key")
+	require.NoError(t, err)
 	return &RiskReadService{
 		projects: projects, policies: policies, exclusions: exclusions,
 		cursor: cursor, catalog: catalog, catalogFingerprint: fingerprint,
 		redactionKey:     []byte("0123456789abcdef0123456789abcdef"),
+		versions:         versions,
 		loadPolicyDetail: policies.loadDetail,
 	}
 }
@@ -184,6 +187,7 @@ func TestRiskExclusionProjectionRedactsExactAndRegex(t *testing.T) {
 	output, err := service.ListExclusions(t.Context(), testRiskPrincipal("user"), ListRiskExclusionsInput{ProjectID: project.ID.String()})
 	require.NoError(t, err)
 	require.Len(t, output.Exclusions, 4)
+	require.NotEmpty(t, output.Exclusions[0].Version)
 	require.Empty(t, output.Exclusions[0].MatchValue)
 	require.NotEmpty(t, output.Exclusions[0].MatchFingerprint)
 	require.Equal(t, len([]rune("sensitive-exact")), output.Exclusions[0].MatchLength)

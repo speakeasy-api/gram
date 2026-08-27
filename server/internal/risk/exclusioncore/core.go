@@ -266,9 +266,6 @@ type DeleteAuditEvent struct {
 }
 
 func (c *Core) Create(ctx context.Context, input CreateMutation) (Exclusion, error) {
-	if err := ValidateMatchValue(input.Params.MatchType, input.Params.MatchValue); err != nil {
-		return Exclusion{}, err
-	}
 	deps, err := c.requireMutationDependencies()
 	if err != nil {
 		return Exclusion{}, err
@@ -279,6 +276,34 @@ func (c *Core) Create(ctx context.Context, input CreateMutation) (Exclusion, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	exclusion, err := c.createInTransaction(ctx, tx, input, deps)
+	if err != nil {
+		return Exclusion{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Exclusion{}, mutationError("commit risk exclusion create", err)
+	}
+	c.AfterCommit(ctx, exclusion)
+	return exclusion, nil
+}
+
+// CreateInTransaction applies the exclusion row and audit to a caller-owned
+// transaction. The caller owns commit and must invoke AfterCommit afterward.
+func (c *Core) CreateInTransaction(ctx context.Context, tx pgx.Tx, input CreateMutation) (Exclusion, error) {
+	deps, err := c.requireMutationDependencies()
+	if err != nil {
+		return Exclusion{}, err
+	}
+	if tx == nil {
+		return Exclusion{}, mutationError("risk exclusion mutation transaction is not configured", nil)
+	}
+	return c.createInTransaction(ctx, tx, input, deps)
+}
+
+func (c *Core) createInTransaction(ctx context.Context, tx pgx.Tx, input CreateMutation, deps *MutationDependencies) (Exclusion, error) {
+	if err := ValidateMatchValue(input.Params.MatchType, input.Params.MatchValue); err != nil {
+		return Exclusion{}, err
+	}
 	queries := repo.New(tx)
 	if err := queries.LockRiskExclusionMutations(ctx, input.Params.ProjectID.String()); err != nil {
 		return Exclusion{}, mutationError("lock risk exclusion mutations", err)
@@ -303,12 +328,6 @@ func (c *Core) Create(ctx context.Context, input CreateMutation) (Exclusion, err
 	}); err != nil {
 		return Exclusion{}, mutationError("log risk exclusion create", err)
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return Exclusion{}, mutationError("commit risk exclusion create", err)
-	}
-	if deps.AfterCommit != nil {
-		deps.AfterCommit(ctx, row.ProjectID, row.ID)
-	}
 	return exclusion, nil
 }
 
@@ -323,6 +342,31 @@ func (c *Core) Toggle(ctx context.Context, input ToggleMutation) (Exclusion, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	exclusion, err := c.toggleInTransaction(ctx, tx, input, deps)
+	if err != nil {
+		return Exclusion{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Exclusion{}, mutationError("commit risk exclusion toggle", err)
+	}
+	c.AfterCommit(ctx, exclusion)
+	return exclusion, nil
+}
+
+// ToggleInTransaction applies an enabled-only update and audit to a caller-owned
+// transaction. validate runs after the row is locked and before it is changed.
+func (c *Core) ToggleInTransaction(ctx context.Context, tx pgx.Tx, input ToggleMutation, validate func(Exclusion) error) (Exclusion, error) {
+	deps, err := c.requireMutationDependencies()
+	if err != nil {
+		return Exclusion{}, err
+	}
+	if tx == nil {
+		return Exclusion{}, mutationError("risk exclusion mutation transaction is not configured", nil)
+	}
+	return c.toggleInTransaction(ctx, tx, input, deps, validate)
+}
+
+func (c *Core) toggleInTransaction(ctx context.Context, tx pgx.Tx, input ToggleMutation, deps *MutationDependencies, validators ...func(Exclusion) error) (Exclusion, error) {
 	queries := repo.New(tx)
 	if err := queries.LockRiskExclusionMutations(ctx, input.ProjectID.String()); err != nil {
 		return Exclusion{}, mutationError("lock risk exclusion mutations", err)
@@ -334,6 +378,14 @@ func (c *Core) Toggle(ctx context.Context, input ToggleMutation) (Exclusion, err
 		}
 		return Exclusion{}, mutationError("lock risk exclusion", err)
 	}
+	beforeExclusion := Project(before)
+	for _, validate := range validators {
+		if validate != nil {
+			if err := validate(beforeExclusion); err != nil {
+				return Exclusion{}, err
+			}
+		}
+	}
 	if err := enforceRegexLimit(ctx, queries, input.ProjectID, before.RiskPolicyID, uuid.NullUUID{UUID: input.ID, Valid: true}, before.MatchType, input.Enabled); err != nil {
 		return Exclusion{}, err
 	}
@@ -341,7 +393,6 @@ func (c *Core) Toggle(ctx context.Context, input ToggleMutation) (Exclusion, err
 	if err != nil {
 		return Exclusion{}, mutationError("toggle risk exclusion", err)
 	}
-	beforeExclusion := Project(before)
 	afterExclusion := Project(row)
 	if err := deps.Auditor.LogExclusionUpdate(ctx, tx, UpdateAuditEvent{
 		OrganizationID: row.OrganizationID,
@@ -353,13 +404,17 @@ func (c *Core) Toggle(ctx context.Context, input ToggleMutation) (Exclusion, err
 	}); err != nil {
 		return Exclusion{}, mutationError("log risk exclusion toggle", err)
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return Exclusion{}, mutationError("commit risk exclusion toggle", err)
-	}
-	if deps.AfterCommit != nil {
-		deps.AfterCommit(ctx, row.ProjectID, row.ID)
-	}
 	return afterExclusion, nil
+}
+
+// AfterCommit starts best-effort reconciliation after the transaction containing
+// the exclusion, audit, and any outer receipt has committed.
+func (c *Core) AfterCommit(ctx context.Context, exclusion Exclusion) {
+	deps, err := c.requireMutationDependencies()
+	if err != nil || deps.AfterCommit == nil {
+		return
+	}
+	deps.AfterCommit(ctx, exclusion.ProjectID, exclusion.ID)
 }
 
 func toggleUpdateParams(before repo.RiskExclusion, enabled bool) repo.UpdateRiskExclusionParams {
