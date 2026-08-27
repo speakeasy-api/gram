@@ -478,11 +478,12 @@ func TestProxy_Post_OopsShareableErrorSurfacesThroughInterceptorWrap(t *testing.
 	require.NoError(t, p.Post(rr, req))
 	require.Equal(t, http.StatusOK, rr.Code)
 
-	// CodeForbidden must map to RejectCodeInvalidRequest (-32600), matching
-	// the existing /mcp endpoint's NewErrorFromCause table. -32603
+	// CodeForbidden must map to MCPCodeForbidden (-32003), matching the /mcp
+	// endpoint's NewErrorFromCause table (oops.Code.MCPCode). A usage-limit
+	// denial has to report the same code on both surfaces. -32603
 	// (RejectCodeInternalError) would indicate the run* helpers replaced the
 	// interceptor's code with CodeUnexpected before the chain walk.
-	require.Contains(t, rr.Body.String(), `"code":-32600`, "inner CodeForbidden must propagate through the interceptor wrap")
+	require.Contains(t, rr.Body.String(), `"code":-32003`, "inner CodeForbidden must map to the shared Forbidden code")
 	require.Contains(t, rr.Body.String(), "tool usage limit reached", "inner ShareableError.Error message must propagate")
 }
 

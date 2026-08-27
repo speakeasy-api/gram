@@ -98,25 +98,13 @@ func RejectErrorFromCause(err error) *RejectError {
 	}
 }
 
-// rejectCodeForOops mirrors the mapping used by the /mcp endpoint's
-// NewErrorFromCause so an oops.ShareableError leaving an interceptor
-// produces the same JSON-RPC code regardless of which surface (the public
-// /mcp server or the /x/mcp proxy) it traversed.
+// rejectCodeForOops maps a Gram domain-error class to the JSON-RPC code carried
+// on the wire. It delegates to oops.Code.MCPCode, the same table the /mcp
+// endpoint's NewErrorFromCause uses, so an oops.ShareableError leaving an
+// interceptor produces the same code on the public /mcp server and the /x/mcp
+// proxy. Sharing the one table stops the two surfaces from drifting apart; the
+// RejectCode* constants above stay numerically equal to the MCPCode* constants
+// they mirror.
 func rejectCodeForOops(code oops.Code) int {
-	switch code {
-	case oops.CodeBadRequest:
-		return RejectCodeParseError
-	case oops.CodeUnauthorized,
-		oops.CodeForbidden,
-		oops.CodeConflict,
-		oops.CodeUnsupportedMedia,
-		oops.CodeNotFound:
-		return RejectCodeInvalidRequest
-	case oops.CodeInvalid:
-		return RejectCodeInvalidParams
-	case oops.CodeUnexpected:
-		return RejectCodeInternalError
-	default:
-		return RejectCodeInternalError
-	}
+	return int(code.MCPCode())
 }

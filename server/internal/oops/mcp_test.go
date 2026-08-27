@@ -90,6 +90,29 @@ func TestMCPError_MarshalJSON(t *testing.T) {
 	require.NotContains(t, errorBody, "data")
 }
 
+func TestMCPError_MarshalJSON_IncludesData(t *testing.T) {
+	t.Parallel()
+
+	err := &MCPError{
+		ID:      mcpjsonrpc.NumberID(1),
+		Code:    MCPCodeForbidden,
+		Message: "blocked by tool-usage policy",
+		Data:    map[string]any{"reason": "policy"},
+	}
+
+	data, marshalErr := json.Marshal(err)
+	require.NoError(t, marshalErr)
+
+	var response map[string]any
+	unmarshalErr := json.Unmarshal(data, &response)
+	require.NoError(t, unmarshalErr)
+
+	errorBody, ok := response["error"].(map[string]any)
+	require.True(t, ok)
+	require.InDelta(t, -32003, errorBody["code"], 0)
+	require.Equal(t, map[string]any{"reason": "policy"}, errorBody["data"])
+}
+
 func TestCodeMCPCode(t *testing.T) {
 	t.Parallel()
 

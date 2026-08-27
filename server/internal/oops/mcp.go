@@ -102,6 +102,13 @@ type MCPError struct {
 	ID      mcpjsonrpc.ID
 	Code    MCPCode
 	Message string
+
+	// Data is an optional structured payload surfaced in the JSON-RPC error
+	// response's "data" field. It must be JSON-marshalable and, like Message,
+	// is user-facing, so sanitize before populating. When nil the "data" field
+	// is omitted. This mirrors the proxy surface's RejectError.Data so a policy
+	// rejection can carry the same structured payload on both surfaces.
+	Data any
 }
 
 func NewMCPErrorFromCause(id mcpjsonrpc.ID, source error) *MCPError {
@@ -144,6 +151,9 @@ func (e *MCPError) MarshalJSON() ([]byte, error) {
 	errorBody := map[string]any{
 		"code":    e.Code,
 		"message": e.message(),
+	}
+	if e.Data != nil {
+		errorBody["data"] = e.Data
 	}
 
 	payload := map[string]any{
