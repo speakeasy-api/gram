@@ -2151,6 +2151,15 @@ func TestGenerateOpenClawObservabilityPluginPackage(t *testing.T) {
 	if !strings.Contains(string(shim), "const event = slimEvent(hook, rawEvent)") {
 		t.Error("every hook payload must pass through slimEvent")
 	}
+	// The gate budget chain (5s relay < ~9s daemon < 10s shim) collapses if
+	// this drifts: a slower shim wall would let gates stall the agent, a
+	// faster one would race the relay's fail-closed verdict.
+	if !strings.Contains(string(shim), "const GATE_TIMEOUT_MS = { before_tool_call: 10000, before_agent_run: 10000 }") {
+		t.Error("gate timeout must stay at the 10s budget")
+	}
+	if !strings.Contains(string(shim), "const FAIL_CLOSED = true") {
+		t.Error("gates must fail closed when the daemon is unreachable")
+	}
 	if !strings.Contains(string(shim), `if (hook === "agent_end" || hook === "before_agent_run") {`) {
 		t.Error("slimEvent must target the history-bearing hooks")
 	}
