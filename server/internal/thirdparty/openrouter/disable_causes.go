@@ -24,6 +24,10 @@ type DisableCauseChange struct {
 	KeyAccessChanged bool
 }
 
+func unchangedDisableCauseChange() DisableCauseChange {
+	return DisableCauseChange{CauseChanged: false, KeyAccessChanged: false}
+}
+
 // EffectiveDisabled preserves legacy access for rows that have not been
 // classified yet. Once disable_causes is non-NULL, the cause set is
 // authoritative even if the rollout mirror has drifted.

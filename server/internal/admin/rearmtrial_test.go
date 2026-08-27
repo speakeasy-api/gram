@@ -94,11 +94,11 @@ func (p *rearmProvisioner) refreshAPIKeyLimit(ctx context.Context, orgID string,
 	// What the real RefreshAPIKeyLimit does locally.
 	if p.conn != nil {
 		if _, err := orrepo.New(p.conn).UpdateOpenRouterKey(ctx, orrepo.UpdateOpenRouterKeyParams{
-			OrganizationID:  orgID,
-			KeyType:         string(keyType),
-			MonthlyCredits:  int64(conv.PtrValOr(limit, 0)),
-			KeyHash:         "hash-" + orgID + "-" + string(keyType),
-			ReinstateLegacy: true,
+			OrganizationID: orgID,
+			KeyType:        string(keyType),
+			MonthlyCredits: int64(conv.PtrValOr(limit, 0)),
+			KeyHash:        "hash-" + orgID + "-" + string(keyType),
+			Reinstate:      true,
 		}); err != nil {
 			return 0, fmt.Errorf("reinstate %s key: %w", keyType, err)
 		}

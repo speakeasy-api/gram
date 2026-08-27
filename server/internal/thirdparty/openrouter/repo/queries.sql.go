@@ -301,7 +301,7 @@ SET disable_causes = CASE
     END,
     disabled = CASE
       WHEN $1::text = ANY(disable_causes)
-        THEN cardinality(array_remove(disable_causes, $1::text)) > 0
+        AND cardinality(array_remove(disable_causes, $1::text)) = 0 THEN FALSE
       ELSE disabled
     END,
     monthly_credits = CASE

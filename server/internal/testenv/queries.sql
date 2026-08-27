@@ -554,6 +554,13 @@ SET disabled = @disabled,
 WHERE organization_id = @organization_id
   AND key_type = @key_type;
 
+-- name: SetOpenRouterAPIKeyHashFixture :exec
+-- Test-only fixture: simulates key rotation between an upstream response and CAS.
+UPDATE openrouter_api_keys
+SET key_hash = @key_hash
+WHERE organization_id = @organization_id
+  AND key_type = @key_type;
+
 -- name: SeedOpenRouterSpendRangeFixture :exec
 -- Test-only fixture: records one exact daily spend amount across an inclusive
 -- UTC date range.
