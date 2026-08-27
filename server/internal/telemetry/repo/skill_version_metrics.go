@@ -202,10 +202,14 @@ func requireSkillVersionFilters(builder squirrel.SelectBuilder, versionFilters [
 }
 
 func buildSkillVersionMetricsQuery(arg AttributeMetricsQueryParams, timeseries bool) (string, []any, error) {
-	if !attributeMeasureSet[arg.SortBy] {
+	// llm_tokens is a computed rank (input + output), same as the attribute
+	// metrics path.
+	sortExpr := measureAliasPrefix + arg.SortBy
+	if arg.SortBy == SortByLLMTokens {
+		sortExpr = "(" + measureAliasPrefix + "total_input_tokens + " + measureAliasPrefix + "total_output_tokens)"
+	} else if !attributeMeasureSet[arg.SortBy] {
 		return "", nil, fmt.Errorf("unknown sort_by measure %q", arg.SortBy)
-	}
-	if !skillVersionSortMeasures[arg.SortBy] {
+	} else if !skillVersionSortMeasures[arg.SortBy] {
 		return "", nil, fmt.Errorf("sort_by measure %q is not supported for skill version grouping", arg.SortBy)
 	}
 
@@ -273,7 +277,7 @@ func buildSkillVersionMetricsQuery(arg AttributeMetricsQueryParams, timeseries b
 		outer = outer.GroupBy(groupColumns...)
 	}
 	if !timeseries {
-		outer = outer.OrderBy(measureAliasPrefix + arg.SortBy + " DESC")
+		outer = outer.OrderBy(sortExpr + " DESC")
 	}
 
 	outer = withCanonicalFoldSettings(outer, canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg))

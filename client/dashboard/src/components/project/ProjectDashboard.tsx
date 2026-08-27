@@ -285,8 +285,7 @@ export function ProjectDashboard(): JSX.Element {
             r.groupValue !== "Other" &&
             llmTokens(r.measures) > 0,
         )
-        // The server ranks by the TUM total_tokens measure; re-rank by the
-        // displayed LLM tokens so order matches the numbers shown.
+        // Server already ranks by llm_tokens; kept as a formality.
         .sort((a, b) => llmTokens(b.measures) - llmTokens(a.measures))
         .slice(0, 5)
         .map((r) => ({
