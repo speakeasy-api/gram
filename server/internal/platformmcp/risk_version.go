@@ -36,15 +36,23 @@ func newRiskVersionCodec(keyMaterial string) (*riskVersionCodec, error) {
 }
 
 // RiskPolicyVersionState is the complete locked policy state needed for an
-// optimistic-concurrency token. Grant-backed URLs, standing-decision state, and
-// canonical analyzer JSON are included because they can change enforcement
-// without changing the policy's public summary. They remain inside the HMAC.
+// optimistic-concurrency token. Grant-backed URL selectors and audiences,
+// standing-decision state, and canonical analyzer JSON are included because
+// they can change enforcement without changing the policy's public summary.
+// They remain inside the HMAC.
 type RiskPolicyVersionState struct {
 	Policy                policycore.Policy
 	AnalyzerConfig        json.RawMessage
-	AllowedURLs           []string
-	BlockedURLs           []string
+	AllowedURLGrants      []RiskPolicyVersionGrant
+	BlockedURLGrants      []RiskPolicyVersionGrant
 	StandingDecisionState []string
+}
+
+// RiskPolicyVersionGrant captures the complete enforcement identity of one URL
+// grant. The principal and canonical selector remain inside the opaque HMAC.
+type RiskPolicyVersionGrant struct {
+	PrincipalURN string          `json:"principal_urn"`
+	Selector     json.RawMessage `json:"selector"`
 }
 
 // PolicyVersion authenticates the complete transport-neutral persisted policy
@@ -72,18 +80,16 @@ func (c *riskVersionCodec) PolicyVersion(input RiskPolicyVersionState) (string, 
 	state.Policy.MessageTypes = sortedStrings(state.Policy.MessageTypes)
 	state.Policy.AudiencePrincipalURNs = sortedStrings(state.Policy.AudiencePrincipalURNs)
 	state.Policy.DetectionScopes = slices.Clone(state.Policy.DetectionScopes)
-	state.AllowedURLs = sortedStrings(state.AllowedURLs)
-	state.BlockedURLs = sortedStrings(state.BlockedURLs)
+	state.AllowedURLGrants, err = canonicalRiskPolicyVersionGrants(state.AllowedURLGrants)
+	if err != nil {
+		return "", errRiskVersionInvalid
+	}
+	state.BlockedURLGrants, err = canonicalRiskPolicyVersionGrants(state.BlockedURLGrants)
+	if err != nil {
+		return "", errRiskVersionInvalid
+	}
 	state.StandingDecisionState = sortedStrings(state.StandingDecisionState)
-	slices.SortFunc(state.Policy.DetectionScopes, func(a, b policycore.DetectionScope) int {
-		if a.Category < b.Category {
-			return -1
-		}
-		if a.Category > b.Category {
-			return 1
-		}
-		return 0
-	})
+	slices.SortFunc(state.Policy.DetectionScopes, compareDetectionScopes)
 	return c.encode("policy", state)
 }
 
@@ -101,6 +107,60 @@ func (c *riskVersionCodec) ValidPolicyVersion(state RiskPolicyVersionState, toke
 func (c *riskVersionCodec) ValidExclusionVersion(exclusion exclusioncore.Exclusion, token string) bool {
 	expected, err := c.ExclusionVersion(exclusion)
 	return err == nil && hmac.Equal([]byte(expected), []byte(token))
+}
+
+func canonicalRiskPolicyVersionGrants(grants []RiskPolicyVersionGrant) ([]RiskPolicyVersionGrant, error) {
+	result := slices.Clone(grants)
+	for index := range result {
+		selector, err := canonicalJSON(result[index].Selector)
+		if err != nil {
+			return nil, err
+		}
+		result[index].Selector = selector
+	}
+	slices.SortFunc(result, func(a, b RiskPolicyVersionGrant) int {
+		if order := compareStrings(a.PrincipalURN, b.PrincipalURN); order != 0 {
+			return order
+		}
+		return compareStrings(string(a.Selector), string(b.Selector))
+	})
+	return slices.CompactFunc(result, func(a, b RiskPolicyVersionGrant) bool {
+		return a.PrincipalURN == b.PrincipalURN && string(a.Selector) == string(b.Selector)
+	}), nil
+}
+
+func compareDetectionScopes(a, b policycore.DetectionScope) int {
+	if order := compareStrings(a.Category, b.Category); order != 0 {
+		return order
+	}
+	if order := compareOptionalStrings(a.ScopeInclude, b.ScopeInclude); order != 0 {
+		return order
+	}
+	return compareOptionalStrings(a.ScopeExempt, b.ScopeExempt)
+}
+
+func compareOptionalStrings(a, b *string) int {
+	switch {
+	case a == nil && b == nil:
+		return 0
+	case a == nil:
+		return -1
+	case b == nil:
+		return 1
+	default:
+		return compareStrings(*a, *b)
+	}
+}
+
+func compareStrings(a, b string) int {
+	switch {
+	case a < b:
+		return -1
+	case a > b:
+		return 1
+	default:
+		return 0
+	}
 }
 
 func (c *riskVersionCodec) encode(kind string, state any) (string, error) {

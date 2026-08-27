@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -219,10 +220,11 @@ func riskMutationOperation(operation string) bool {
 }
 
 func encodeRiskMutationResult(operation string, result RiskMutationReceiptResult) (json.RawMessage, error) {
-	if result == nil || result.riskMutationReceiptOperation() != operation || !validRiskMutationReceiptResult(result) {
+	normalized, valid := normalizedRiskMutationReceiptResult(result)
+	if !valid || normalized.riskMutationReceiptOperation() != operation || !validRiskMutationReceiptResult(normalized) {
 		return nil, invalidRiskMutationReceiptResult()
 	}
-	payload, err := json.Marshal(result)
+	payload, err := json.Marshal(normalized)
 	if err != nil {
 		return nil, fmt.Errorf("encode risk mutation receipt result: %w", err)
 	}
@@ -230,6 +232,30 @@ func encodeRiskMutationResult(operation string, result RiskMutationReceiptResult
 		return nil, &RiskMutationError{Code: unavailableCode, Message: "The risk mutation result could not be stored safely.", Cause: ErrRiskMutationUnavailable}
 	}
 	return payload, nil
+}
+
+func normalizedRiskMutationReceiptResult(result RiskMutationReceiptResult) (RiskMutationReceiptResult, bool) {
+	switch typed := result.(type) {
+	case CreateRiskPolicyReceiptResult, UpdateRiskPolicyReceiptResult, CreateRiskExclusionReceiptResult, UpdateRiskExclusionReceiptResult:
+		return typed, true
+	case *CreateRiskPolicyReceiptResult:
+		if typed != nil {
+			return *typed, true
+		}
+	case *UpdateRiskPolicyReceiptResult:
+		if typed != nil {
+			return *typed, true
+		}
+	case *CreateRiskExclusionReceiptResult:
+		if typed != nil {
+			return *typed, true
+		}
+	case *UpdateRiskExclusionReceiptResult:
+		if typed != nil {
+			return *typed, true
+		}
+	}
+	return nil, false
 }
 
 func validRiskMutationReceiptResult(result RiskMutationReceiptResult) bool {
@@ -287,12 +313,7 @@ func validRiskReceiptVersion(version string) bool {
 }
 
 func validRiskResultCategory(category string, allowed ...string) bool {
-	for _, value := range allowed {
-		if category == value {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(allowed, category)
 }
 
 func invalidRiskMutationReceiptResult() error {

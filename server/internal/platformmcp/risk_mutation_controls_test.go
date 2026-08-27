@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -143,14 +144,46 @@ func TestRiskVersionTokensAreOpaqueAndStateSensitive(t *testing.T) {
 	codec, err := newRiskVersionCodec("test-key")
 	require.NoError(t, err)
 	prompt := "sensitive prompt material"
-	policy := policycore.Policy{ID: uuid.New(), ProjectID: uuid.New(), OrganizationID: "organization", Name: "policy", PolicyType: "prompt_based", Prompt: &prompt, AudiencePrincipalURNs: []string{"user:two", "user:one"}, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
-	state := RiskPolicyVersionState{Policy: policy, AnalyzerConfig: json.RawMessage(`{"threshold":0.5,"nested":{"enabled":true}}`), AllowedURLs: []string{"https://b.example", "https://a.example"}, StandingDecisionState: []string{"decision:two", "decision:one"}}
+	includeA, includeB := "message.type == 'a'", "message.type == 'b'"
+	exemptA, exemptB := "message.source == 'a'", "message.source == 'b'"
+	policy := policycore.Policy{
+		ID: uuid.New(), ProjectID: uuid.New(), OrganizationID: "organization", Name: "policy", PolicyType: "prompt_based", Prompt: &prompt,
+		AudiencePrincipalURNs: []string{"user:two", "user:one"}, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+		DetectionScopes: []policycore.DetectionScope{
+			{Category: "tool_output", ScopeInclude: &includeB, ScopeExempt: &exemptB},
+			{Category: "tool_output", ScopeInclude: &includeA, ScopeExempt: &exemptA},
+			{Category: "prompt", ScopeInclude: nil, ScopeExempt: nil},
+		},
+	}
+	state := RiskPolicyVersionState{
+		Policy: policy, AnalyzerConfig: json.RawMessage(`{"threshold":0.5,"nested":{"enabled":true}}`),
+		AllowedURLGrants: []RiskPolicyVersionGrant{
+			{PrincipalURN: "user:two", Selector: json.RawMessage(`{"server_url":"https://example.test/mcp","resource_id":"policy"}`)},
+			{PrincipalURN: "user:one", Selector: json.RawMessage(`{"resource_id":"policy","server_url":"https://example.test/mcp"}`)},
+		},
+		BlockedURLGrants:      []RiskPolicyVersionGrant{},
+		StandingDecisionState: []string{"decision:two", "decision:one"},
+	}
 	token, err := codec.PolicyVersion(state)
 	require.NoError(t, err)
-	canonical, err := codec.PolicyVersion(RiskPolicyVersionState{Policy: policy, AnalyzerConfig: json.RawMessage(`{ "nested": { "enabled": true }, "threshold": 0.5 }`), AllowedURLs: []string{"https://a.example", "https://b.example"}, StandingDecisionState: []string{"decision:one", "decision:two"}})
+	canonicalPolicy := policy
+	canonicalPolicy.DetectionScopes = []policycore.DetectionScope{
+		{Category: "prompt", ScopeInclude: nil, ScopeExempt: nil},
+		{Category: "tool_output", ScopeInclude: &includeA, ScopeExempt: &exemptA},
+		{Category: "tool_output", ScopeInclude: &includeB, ScopeExempt: &exemptB},
+	}
+	canonical, err := codec.PolicyVersion(RiskPolicyVersionState{
+		Policy: canonicalPolicy, AnalyzerConfig: json.RawMessage(`{ "nested": { "enabled": true }, "threshold": 0.5 }`),
+		AllowedURLGrants: []RiskPolicyVersionGrant{
+			{PrincipalURN: "user:one", Selector: json.RawMessage(`{ "server_url": "https://example.test/mcp", "resource_id": "policy" }`)},
+			{PrincipalURN: "user:two", Selector: json.RawMessage(`{"resource_id":"policy","server_url":"https://example.test/mcp"}`)},
+		},
+		BlockedURLGrants:      []RiskPolicyVersionGrant{},
+		StandingDecisionState: []string{"decision:one", "decision:two"},
+	})
 	require.NoError(t, err)
 
-	require.Equal(t, token, canonical)
+	require.Equal(t, token, canonical, "canonical ordering must include the complete detection scope state")
 	require.NotContains(t, token, prompt)
 	require.True(t, codec.ValidPolicyVersion(state, token))
 	pending, total := int64(3), int64(10)
@@ -161,7 +194,17 @@ func TestRiskVersionTokensAreOpaqueAndStateSensitive(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, token, progressToken, "read-time analysis progress is not policy concurrency state")
 	policy.Enabled = true
-	require.False(t, codec.ValidPolicyVersion(RiskPolicyVersionState{Policy: policy, AnalyzerConfig: state.AnalyzerConfig, AllowedURLs: state.AllowedURLs, StandingDecisionState: state.StandingDecisionState}, token))
+	require.False(t, codec.ValidPolicyVersion(RiskPolicyVersionState{Policy: policy, AnalyzerConfig: state.AnalyzerConfig, AllowedURLGrants: state.AllowedURLGrants, BlockedURLGrants: state.BlockedURLGrants, StandingDecisionState: state.StandingDecisionState}, token))
+	grantChanged := state
+	grantChanged.AllowedURLGrants = []RiskPolicyVersionGrant{
+		{PrincipalURN: "user:three", Selector: json.RawMessage(`{"resource_id":"policy","server_url":"https://example.test/mcp"}`)},
+		{PrincipalURN: "user:one", Selector: json.RawMessage(`{"resource_id":"policy","server_url":"https://example.test/mcp"}`)},
+	}
+	require.False(t, codec.ValidPolicyVersion(grantChanged, token), "grant audiences are policy concurrency state")
+	grantChanged = state
+	grantChanged.AllowedURLGrants = slices.Clone(state.AllowedURLGrants)
+	grantChanged.AllowedURLGrants[0].Selector = json.RawMessage(`{"resource_id":"policy","server_url":"https://example.test/mcp","server_identity":"other"}`)
+	require.False(t, codec.ValidPolicyVersion(grantChanged, token), "complete grant selectors are policy concurrency state")
 
 	exclusion := exclusioncore.Exclusion{ID: uuid.New(), ProjectID: policy.ProjectID, OrganizationID: "organization", MatchType: "exact", MatchValue: "sensitive exact match", Enabled: true, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
 	exclusionToken, err := codec.ExclusionVersion(exclusion)
@@ -225,9 +268,45 @@ func TestRiskMutationReceiptResultAllowlistCoversEveryOperation(t *testing.T) {
 			t.Parallel()
 			_, err := encodeRiskMutationResult(test.operation, test.valid)
 			require.NoError(t, err)
+			_, err = encodeRiskMutationResult(test.operation, receiptResultPointer(test.valid))
+			require.NoError(t, err, "non-nil pointers to closed receipt projections remain safe")
 			_, err = encodeRiskMutationResult(test.operation, test.invalid)
 			require.ErrorIs(t, err, ErrRiskMutationUnavailable)
 		})
+	}
+
+	for _, test := range []struct {
+		name      string
+		operation string
+		result    RiskMutationReceiptResult
+	}{
+		{name: "create policy", operation: operationCreateRiskPolicy, result: (*CreateRiskPolicyReceiptResult)(nil)},
+		{name: "update policy", operation: operationUpdateRiskPolicy, result: (*UpdateRiskPolicyReceiptResult)(nil)},
+		{name: "create exclusion", operation: operationCreateRiskExclusion, result: (*CreateRiskExclusionReceiptResult)(nil)},
+		{name: "update exclusion", operation: operationUpdateRiskExclusion, result: (*UpdateRiskExclusionReceiptResult)(nil)},
+	} {
+		t.Run("typed nil "+test.name, func(t *testing.T) {
+			t.Parallel()
+			require.NotPanics(t, func() {
+				_, err := encodeRiskMutationResult(test.operation, test.result)
+				require.ErrorIs(t, err, ErrRiskMutationUnavailable)
+			})
+		})
+	}
+}
+
+func receiptResultPointer(result RiskMutationReceiptResult) RiskMutationReceiptResult {
+	switch typed := result.(type) {
+	case CreateRiskPolicyReceiptResult:
+		return &typed
+	case UpdateRiskPolicyReceiptResult:
+		return &typed
+	case CreateRiskExclusionReceiptResult:
+		return &typed
+	case UpdateRiskExclusionReceiptResult:
+		return &typed
+	default:
+		return nil
 	}
 }
 
@@ -258,6 +337,28 @@ func TestRiskMutationHandlerSelectionAcceptsExportedSuccessContract(t *testing.T
 		return
 	}
 	require.Fail(t, "create risk policy descriptor was not registered")
+}
+
+func TestRiskMutationHandlerSelectionRequiresAvailableCatalogForLiveCallbacks(t *testing.T) {
+	t.Parallel()
+
+	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil)
+	registrar := newRegistrar(server)
+	called := false
+	registerRiskMutationHandlers(registrar, policycatalog.Catalog{}, false, &RiskMutationHandlers{
+		Controls: &RiskMutationControls{},
+		CreatePolicy: func(context.Context, *mcp.CallToolRequest, map[string]any) (*mcp.CallToolResult, CreateRiskPolicyToolOutput, error) {
+			called = true
+			return nil, CreateRiskPolicyToolOutput{}, nil
+		},
+	})
+
+	create := descriptorByName(t, registrar, operationCreateRiskPolicy)
+	_, err := create.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), json.RawMessage(`{"project_slug":"default","policy_type":"prompt_based","name":"policy","enabled":true,"prompt":"instruction","idempotency_key":"key"}`))
+	var refusal *ToolRefusalError
+	require.ErrorAs(t, err, &refusal)
+	require.Contains(t, refusal.Payload, `"code":"feature_unavailable"`)
+	require.False(t, called, "catalog failure must keep live callbacks unavailable")
 }
 
 func TestRiskMutationHandlerSelectionDefaultsEveryWriteToStableRefusal(t *testing.T) {

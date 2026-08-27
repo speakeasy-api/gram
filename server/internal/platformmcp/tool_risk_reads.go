@@ -134,7 +134,7 @@ func registerRiskMutationHandlers(reg *Registrar, catalog policycatalog.Catalog,
 	updatePolicy := unavailableRiskMutationTool[UpdateRiskPolicyToolOutput]()
 	createExclusion := unavailableRiskMutationTool[CreateRiskExclusionToolOutput]()
 	updateExclusion := unavailableRiskMutationTool[UpdateRiskExclusionToolOutput]()
-	if handlers != nil && handlers.Controls != nil {
+	if catalogAvailable && handlers != nil && handlers.Controls != nil {
 		if handlers.CreatePolicy != nil {
 			createPolicy = handlers.CreatePolicy
 		}
