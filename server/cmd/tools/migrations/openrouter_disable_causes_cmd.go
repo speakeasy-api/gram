@@ -13,10 +13,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/cmd/tools/migrations/openrouterdisablecauses"
 )
@@ -57,6 +55,7 @@ func parseOpenRouterDisableCausesFlags(args []string, getenv func(string) string
 	validate := fs.Bool("validate", false, "prove the complete live population at one snapshot (not a contract handoff)")
 	manual := fs.Bool("manual-override", false, "read one protected override from stdin")
 	environment := fs.String("environment", "", "explicit target environment")
+	confirmEnvironment := fs.String("confirm-environment", "", "must exactly match environment for every write")
 	confirmProduction := fs.String("confirm-production", "", "must equal production for a production write")
 	confirmManual := fs.Bool("confirm-manual-override", false, "required for manual override mode")
 	validateOverrides := fs.Bool("validate-override-manifest", false, "read the protected manual override manifest from stdin during validation")
@@ -86,6 +85,9 @@ func parseOpenRouterDisableCausesFlags(args []string, getenv func(string) string
 		return openRouterDisableCausesConfig{}, errors.New("batch size and timeouts must be positive and retries nonnegative")
 	}
 	writeMode := *apply || *manual
+	if writeMode && *confirmEnvironment != *environment {
+		return openRouterDisableCausesConfig{}, errors.New("writes require -confirm-environment to exactly match -environment")
+	}
 	if *environment == "production" && writeMode && *confirmProduction != "production" {
 		return openRouterDisableCausesConfig{}, errors.New("production writes require -confirm-production=production")
 	}
@@ -239,41 +241,35 @@ func runOpenRouterDisableCauses(args []string, stdin io.Reader, stdout io.Writer
 		log.Printf("write aggregate openrouter-disable-causes summary: %v", writeErr)
 		return 1
 	}
-	recordOpenRouterDisableCausesMetrics(ctx, commandResult)
 	if err != nil {
-		log.Printf("openrouter-disable-causes blocked; inspect aggregate reason counts")
+		log.Print(blockedOpenRouterDisableCausesLogLine(err))
 		return 1
 	}
 	return 0
 }
 
-func recordOpenRouterDisableCausesMetrics(ctx context.Context, result commandSummary) {
-	meter := otel.Meter("gram.server.cmd.tools.migrations.openrouter-disable-causes")
-	runs, _ := meter.Int64Counter("gram.openrouter_disable_causes.runs")
-	rows, _ := meter.Int64Counter("gram.openrouter_disable_causes.rows")
-	classifications, _ := meter.Int64Counter("gram.openrouter_disable_causes.classifications")
-	ambiguous, _ := meter.Int64Counter("gram.openrouter_disable_causes.ambiguous")
-	validation, _ := meter.Int64Counter("gram.openrouter_disable_causes.validation_failures")
-	batches, _ := meter.Int64Counter("gram.openrouter_disable_causes.batches")
-	lockRetries, _ := meter.Int64Counter("gram.openrouter_disable_causes.lock_retries")
-	duration, _ := meter.Int64Histogram("gram.openrouter_disable_causes.duration_ms", metric.WithUnit("ms"))
-	attrs := metric.WithAttributes(
-		attribute.String("run.id", result.RunID), attribute.String("mode", result.Mode),
-		attribute.String("environment", result.Environment), attribute.String("code.sha", result.CodeSHA),
-		attribute.String("classifier.version", result.ClassifierVersion), attribute.String("result", result.Result),
-	)
-	runs.Add(ctx, 1, attrs)
-	rows.Add(ctx, result.Summary.Scanned, attrs)
-	batches.Add(ctx, result.Summary.Batches, attrs)
-	lockRetries.Add(ctx, result.Summary.LockRetries, attrs)
-	for causeSet, count := range result.Summary.CauseSets {
-		classifications.Add(ctx, count, attrs, metric.WithAttributes(attribute.String("cause_set", causeSet)))
+func blockedOpenRouterDisableCausesLogLine(err error) string {
+	category := "unexpected"
+	switch {
+	case errors.Is(err, openrouterdisablecauses.ErrAmbiguousRows):
+		category = "ambiguous_rows"
+	case errors.Is(err, openrouterdisablecauses.ErrValidationFailed):
+		category = "validation_failed"
+	case errors.Is(err, openrouterdisablecauses.ErrManualOverrideConflict):
+		category = "override_conflict"
+	case isDatabaseOrTimeoutError(err):
+		category = "database_or_timeout"
 	}
-	for reason, count := range result.Summary.Ambiguous {
-		ambiguous.Add(ctx, count, attrs, metric.WithAttributes(attribute.String("reason", reason)))
+	return "openrouter-disable-causes blocked; error_category=" + category + "; inspect aggregate reason counts"
+}
+
+func isDatabaseOrTimeoutError(err error) bool {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return true
 	}
-	for predicate, count := range result.Summary.Validation {
-		validation.Add(ctx, count, attrs, metric.WithAttributes(attribute.String("predicate", predicate)))
+	if _, ok := errors.AsType[*pgconn.PgError](err); ok {
+		return true
 	}
-	duration.Record(ctx, result.ElapsedMS, attrs)
+	var connectErr *pgconn.ConnectError
+	return errors.As(err, &connectErr)
 }

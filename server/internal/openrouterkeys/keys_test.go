@@ -75,8 +75,12 @@ func TestListKeysUsesEffectiveDisabledCompatibility(t *testing.T) {
 	for _, key := range res.Keys {
 		states[key.OrganizationID] = key.Disabled
 	}
-	require.False(t, states[classifiedEnabled])
-	require.True(t, states[classifiedDisabled])
+	enabled, enabledPresent := states[classifiedEnabled]
+	require.True(t, enabledPresent, "classified enabled fixture must be returned")
+	require.False(t, enabled)
+	disabled, disabledPresent := states[classifiedDisabled]
+	require.True(t, disabledPresent, "classified disabled fixture must be returned")
+	require.True(t, disabled)
 }
 
 func TestGetKeyUsage_DecryptsStoredCiphertext(t *testing.T) {
