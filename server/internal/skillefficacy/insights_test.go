@@ -65,9 +65,10 @@ func TestQueryInsightsAggregatesVersionsAndReturnsScoredSessions(t *testing.T) {
 	result, err := ti.service.QueryInsights(ctx, &gen.QueryInsightsPayload{
 		SessionToken: nil, ProjectSlugInput: nil, SkillIds: []string{skillID, skillID},
 		From: new(from.Format(time.RFC3339)), To: new(to.Format(time.RFC3339)),
-		IncludeVersions: &include, IncludeScoredSessions: &include, Cursor: nil, Limit: 20,
+		IncludeVersions: &include, IncludeScoredSessions: &include, IncludeSessionCost: nil, IncludeRegressionSignal: nil, Cursor: nil, Limit: 20,
 	})
 	require.NoError(t, err)
+	require.True(t, reader.queryParams.IncludeSessionUsage)
 	require.Equal(t, []string{skillID}, reader.queryParams.SkillIDs)
 	require.EqualValues(t, 5, result.Insights[0].Metrics.Activations)
 	require.EqualValues(t, 3, result.Insights[0].Metrics.ActivatedSessions)
@@ -97,7 +98,7 @@ func TestQueryInsightsPaginatesScoredSessions(t *testing.T) {
 
 	first, err := ti.service.QueryInsights(ctx, &gen.QueryInsightsPayload{
 		SessionToken: nil, ProjectSlugInput: nil, SkillIds: []string{skillID}, From: new(from.Format(time.RFC3339)), To: new(to.Format(time.RFC3339)),
-		IncludeVersions: nil, IncludeScoredSessions: &include, Cursor: nil, Limit: 1,
+		IncludeVersions: nil, IncludeScoredSessions: &include, IncludeSessionCost: nil, IncludeRegressionSignal: nil, Cursor: nil, Limit: 1,
 	})
 	require.NoError(t, err)
 	require.Len(t, first.ScoredSessions, 1)
@@ -106,7 +107,7 @@ func TestQueryInsightsPaginatesScoredSessions(t *testing.T) {
 
 	_, err = ti.service.QueryInsights(ctx, &gen.QueryInsightsPayload{
 		SessionToken: nil, ProjectSlugInput: nil, SkillIds: []string{skillID}, From: new(from.Format(time.RFC3339)), To: new(to.Format(time.RFC3339)),
-		IncludeVersions: nil, IncludeScoredSessions: &include, Cursor: first.NextCursor, Limit: 1,
+		IncludeVersions: nil, IncludeScoredSessions: &include, IncludeSessionCost: nil, IncludeRegressionSignal: nil, Cursor: first.NextCursor, Limit: 1,
 	})
 	require.NoError(t, err)
 	require.Equal(t, firstID, reader.sessionParams.CursorID)
@@ -122,7 +123,7 @@ func TestQueryInsightsRequiresChatReadForScoredSessions(t *testing.T) {
 
 	_, err := ti.service.QueryInsights(ctx, &gen.QueryInsightsPayload{
 		SessionToken: nil, ProjectSlugInput: nil, SkillIds: []string{uuid.NewString()},
-		From: nil, To: nil, IncludeVersions: nil, IncludeScoredSessions: &include, Cursor: nil, Limit: 20,
+		From: nil, To: nil, IncludeVersions: nil, IncludeScoredSessions: &include, IncludeSessionCost: nil, IncludeRegressionSignal: nil, Cursor: nil, Limit: 20,
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
 	require.Zero(t, reader.queryCalls)
@@ -148,7 +149,7 @@ func TestQueryInsightsWithoutSkillIDsReturnsActiveProjectSkills(t *testing.T) {
 
 	result, err := ti.service.QueryInsights(ctx, &gen.QueryInsightsPayload{
 		SessionToken: nil, ProjectSlugInput: nil, SkillIds: nil,
-		From: nil, To: nil, IncludeVersions: nil, IncludeScoredSessions: nil, Cursor: nil, Limit: 20,
+		From: nil, To: nil, IncludeVersions: nil, IncludeScoredSessions: nil, IncludeSessionCost: nil, IncludeRegressionSignal: nil, Cursor: nil, Limit: 20,
 	})
 	require.NoError(t, err)
 	require.Empty(t, reader.queryParams.SkillIDs)
@@ -168,7 +169,7 @@ func TestQueryInsightsSkipsClickHouseForProjectWithoutSkills(t *testing.T) {
 
 	result, err := ti.service.QueryInsights(ctx, &gen.QueryInsightsPayload{
 		SessionToken: nil, ProjectSlugInput: nil, SkillIds: nil,
-		From: nil, To: nil, IncludeVersions: nil, IncludeScoredSessions: nil, Cursor: nil, Limit: 20,
+		From: nil, To: nil, IncludeVersions: nil, IncludeScoredSessions: nil, IncludeSessionCost: nil, IncludeRegressionSignal: nil, Cursor: nil, Limit: 20,
 	})
 	require.NoError(t, err)
 	require.Empty(t, result.Insights)
@@ -184,7 +185,7 @@ func TestQueryInsightsRequiresSkillIDsBeforeScoredSessionQueries(t *testing.T) {
 
 	_, err := ti.service.QueryInsights(ctx, &gen.QueryInsightsPayload{
 		SessionToken: nil, ProjectSlugInput: nil, SkillIds: nil,
-		From: nil, To: nil, IncludeVersions: nil, IncludeScoredSessions: &include, Cursor: nil, Limit: 20,
+		From: nil, To: nil, IncludeVersions: nil, IncludeScoredSessions: &include, IncludeSessionCost: nil, IncludeRegressionSignal: nil, Cursor: nil, Limit: 20,
 	})
 	requireOopsCode(t, err, oops.CodeInvalid)
 	require.Zero(t, reader.queryCalls)
@@ -198,7 +199,7 @@ func TestQueryInsightsValidatesIDsAndWindow(t *testing.T) {
 
 	_, err := ti.service.QueryInsights(ctx, &gen.QueryInsightsPayload{
 		SessionToken: nil, ProjectSlugInput: nil, SkillIds: []string{"not-a-uuid"},
-		From: nil, To: nil, IncludeVersions: nil, IncludeScoredSessions: nil, Cursor: nil, Limit: 20,
+		From: nil, To: nil, IncludeVersions: nil, IncludeScoredSessions: nil, IncludeSessionCost: nil, IncludeRegressionSignal: nil, Cursor: nil, Limit: 20,
 	})
 	requireOopsCode(t, err, oops.CodeInvalid)
 
@@ -207,7 +208,7 @@ func TestQueryInsightsValidatesIDsAndWindow(t *testing.T) {
 	_, err = ti.service.QueryInsights(ctx, &gen.QueryInsightsPayload{
 		SessionToken: nil, ProjectSlugInput: nil, SkillIds: []string{uuid.NewString()},
 		From: new(from.Format(time.RFC3339)), To: new(to.Format(time.RFC3339)),
-		IncludeVersions: nil, IncludeScoredSessions: nil, Cursor: nil, Limit: 20,
+		IncludeVersions: nil, IncludeScoredSessions: nil, IncludeSessionCost: nil, IncludeRegressionSignal: nil, Cursor: nil, Limit: 20,
 	})
 	requireOopsCode(t, err, oops.CodeInvalid)
 }
@@ -222,14 +223,14 @@ func TestQueryInsightsRejectsInvalidScoredSessionsPagination(t *testing.T) {
 
 	_, err := ti.service.QueryInsights(ctx, &gen.QueryInsightsPayload{
 		SessionToken: nil, ProjectSlugInput: nil, SkillIds: []string{uuid.NewString()}, From: nil, To: nil,
-		IncludeVersions: nil, IncludeScoredSessions: &include, Cursor: &badCursor, Limit: 20,
+		IncludeVersions: nil, IncludeScoredSessions: &include, IncludeSessionCost: nil, IncludeRegressionSignal: nil, Cursor: &badCursor, Limit: 20,
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
 	require.Zero(t, reader.sessionCalls)
 
 	_, err = ti.service.QueryInsights(ctx, &gen.QueryInsightsPayload{
 		SessionToken: nil, ProjectSlugInput: nil, SkillIds: []string{uuid.NewString()}, From: nil, To: nil,
-		IncludeVersions: nil, IncludeScoredSessions: &include, Cursor: nil, Limit: 101,
+		IncludeVersions: nil, IncludeScoredSessions: &include, IncludeSessionCost: nil, IncludeRegressionSignal: nil, Cursor: nil, Limit: 101,
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
 	require.Zero(t, reader.sessionCalls)
@@ -261,7 +262,7 @@ func TestQueryInsightsRegressionSignalUsesSuggestionPolicyAndEffectiveVersions(t
 		{SkillID: skill.ID.String(), SkillVersionID: current.ID.String(), ScoredSessions: 10, ScoreSum: 6},
 	}
 
-	result, err := ti.service.QueryInsights(ctx, &gen.QueryInsightsPayload{SessionToken: nil, ProjectSlugInput: nil, SkillIds: []string{skill.ID.String()}, From: nil, To: nil, IncludeVersions: nil, IncludeScoredSessions: nil, Cursor: nil, Limit: 20})
+	result, err := ti.service.QueryInsights(ctx, &gen.QueryInsightsPayload{SessionToken: nil, ProjectSlugInput: nil, SkillIds: []string{skill.ID.String()}, From: nil, To: nil, IncludeVersions: nil, IncludeScoredSessions: nil, IncludeSessionCost: nil, IncludeRegressionSignal: nil, Cursor: nil, Limit: 20})
 	require.NoError(t, err)
 	signal := result.Insights[0].RegressionSignal
 	require.NotNil(t, signal)
@@ -276,7 +277,7 @@ func TestQueryInsightsRegressionSignalUsesSuggestionPolicyAndEffectiveVersions(t
 
 	_, err = queries.PromoteSkillVersion(ctx, skillsrepo.PromoteSkillVersionParams{ProjectID: *authCtx.ProjectID, SkillID: skill.ID, SkillVersionID: predecessor.ID})
 	require.NoError(t, err)
-	result, err = ti.service.QueryInsights(ctx, &gen.QueryInsightsPayload{SessionToken: nil, ProjectSlugInput: nil, SkillIds: []string{skill.ID.String()}, From: nil, To: nil, IncludeVersions: nil, IncludeScoredSessions: nil, Cursor: nil, Limit: 20})
+	result, err = ti.service.QueryInsights(ctx, &gen.QueryInsightsPayload{SessionToken: nil, ProjectSlugInput: nil, SkillIds: []string{skill.ID.String()}, From: nil, To: nil, IncludeVersions: nil, IncludeScoredSessions: nil, IncludeSessionCost: nil, IncludeRegressionSignal: nil, Cursor: nil, Limit: 20})
 	require.NoError(t, err)
 	signal = result.Insights[0].RegressionSignal
 	require.NotNil(t, signal)
@@ -310,9 +311,40 @@ func TestQueryInsightsRegressionSignalIsNoncomparableBelowPolicyMinimum(t *testi
 		{SkillID: skill.ID.String(), SkillVersionID: versions[1].ID.String(), ScoredSessions: 9, ScoreSum: 1},
 	}
 
-	result, err := ti.service.QueryInsights(ctx, &gen.QueryInsightsPayload{SessionToken: nil, ProjectSlugInput: nil, SkillIds: []string{skill.ID.String()}, From: nil, To: nil, IncludeVersions: nil, IncludeScoredSessions: nil, Cursor: nil, Limit: 20})
+	result, err := ti.service.QueryInsights(ctx, &gen.QueryInsightsPayload{SessionToken: nil, ProjectSlugInput: nil, SkillIds: []string{skill.ID.String()}, From: nil, To: nil, IncludeVersions: nil, IncludeScoredSessions: nil, IncludeSessionCost: nil, IncludeRegressionSignal: nil, Cursor: nil, Limit: 20})
 	require.NoError(t, err)
 	require.NotNil(t, result.Insights[0].RegressionSignal)
 	require.False(t, result.Insights[0].RegressionSignal.Comparable)
 	require.False(t, result.Insights[0].RegressionSignal.Regression)
+}
+
+func TestQueryInsightsCanSkipSessionCostAndRegression(t *testing.T) {
+	reader := &insightsReaderStub{}
+	ctx, ti := newTestServiceWithInsights(t, reader)
+	setSkillsFeature(t, ctx, ti, true)
+	ctx = withProjectGrants(t, ctx, authz.ScopeSkillRead)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	queries := skillsrepo.New(ti.conn)
+	skill, err := queries.CreateSkill(ctx, skillsrepo.CreateSkillParams{
+		ProjectID: *authCtx.ProjectID, Name: "summary-only", DisplayName: "Summary Only", Summary: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	_, err = queries.CreateSkillVersion(ctx, skillsrepo.CreateSkillVersionParams{
+		Content: uuid.NewString(), CanonicalSha256: uuid.NewString(), RawSha256: uuid.NewString(), Description: pgtype.Text{},
+		Metadata: []byte(`{}`), SpecValid: true, ValidationErrors: []byte(`[]`), CreatedByUserID: authCtx.UserID,
+		ProjectID: *authCtx.ProjectID, SkillID: skill.ID,
+	})
+	require.NoError(t, err)
+	include := false
+
+	result, err := ti.service.QueryInsights(ctx, &gen.QueryInsightsPayload{
+		SessionToken: nil, ProjectSlugInput: nil, SkillIds: []string{skill.ID.String()},
+		From: nil, To: nil, IncludeVersions: nil, IncludeScoredSessions: nil,
+		IncludeSessionCost: &include, IncludeRegressionSignal: &include, Cursor: nil, Limit: 20,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, reader.queryCalls)
+	require.False(t, reader.queryParams.IncludeSessionUsage)
+	require.Nil(t, result.Insights[0].RegressionSignal)
 }

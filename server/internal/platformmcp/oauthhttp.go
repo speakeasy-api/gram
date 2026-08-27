@@ -891,7 +891,14 @@ func writeAuthorizationGateError(w http.ResponseWriter, r *http.Request, challen
 		redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "temporarily_unavailable", Description: "organization access could not be verified"})
 		return
 	}
-	redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "organization access is not available"})
+	// The gate and the live org-admin check both deny with ErrForbidden, and
+	// they need different advice: naming the entitlement to someone who simply
+	// is not an admin sends them to a setting that is already on.
+	if errors.Is(err, errPlatformMCPDisabled) {
+		redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "Platform MCP is not enabled for this organization. An organization admin can enable it in the Speakeasy dashboard."})
+		return
+	}
+	redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "Your account does not have organization administrator access to Platform MCP."})
 }
 
 func writeTokenStateError(w http.ResponseWriter, err error, credential string) {

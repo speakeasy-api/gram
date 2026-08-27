@@ -255,8 +255,9 @@ export function ScoredSessions({
   const query = useSkillEfficacyInsights(
     {
       skillIds: [skillId],
-      includeVersions: true,
       includeScoredSessions: true,
+      includeSessionCost: false,
+      includeRegressionSignal: false,
       cursor: cursors[pageIndex],
       limit: SCORED_SESSIONS_PAGE_SIZE,
     },

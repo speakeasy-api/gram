@@ -1,4 +1,5 @@
 import { dateTimeFormatters } from "@/lib/dates";
+import { mergeUserSummaries } from "@/components/observe/mergeUserSummaries";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { Role } from "@gram/client/models/components/role.js";
 import type { UserSummary } from "@gram/client/models/components/usersummary.js";
@@ -128,43 +129,137 @@ export function isUnattributedEmployee(employee: Employee): boolean {
   return employee.id.startsWith("usage:");
 }
 
+// summaryEmail is the email a summary is keyed under, when it has one.
+function summaryEmail(summary: UserSummary): string {
+  return (
+    summary.userEmail || (summary.userId.includes("@") ? summary.userId : "")
+  );
+}
+
+// groupSummariesByMember routes each usage summary to the org member it
+// belongs to. A member's telemetry can split across identity keys: their
+// opaque user_id (e.g. Gram MCP tool calls that carry no email), their
+// directory email (Claude/Cursor usage), and linked provider-account emails
+// (personal-account usage imports). Match all three — otherwise a token-less,
+// email-less id summary shadows the member's token-bearing email summaries,
+// understating them while their real usage is orphaned into the unattributed
+// list (DNO-618, and the account-email leg for personal accounts).
+function groupSummariesByMember(
+  members: AccessMember[],
+  summaries: UserSummary[],
+): {
+  groups: { member: AccessMember; matched: UserSummary[] }[];
+  unmatched: UserSummary[];
+} {
+  // Cursor pagination can re-serve the page-boundary group; keep the first
+  // instance of each key so duplicates cannot double into any bucket.
+  const seenKeys = new Set<string>();
+  summaries = summaries.filter((summary) => {
+    if (seenKeys.has(summary.userId)) return false;
+    seenKeys.add(summary.userId);
+    return true;
+  });
+  const summaryByUserId = new Map(
+    summaries.map((summary) => [summary.userId, summary]),
+  );
+  // All summaries per lowercased email: case-variant keys are the same person.
+  const summariesByEmail = new Map<string, UserSummary[]>();
+  for (const summary of summaries) {
+    const email = summaryEmail(summary).toLowerCase();
+    if (!email) continue;
+    const list = summariesByEmail.get(email);
+    if (list) {
+      list.push(summary);
+    } else {
+      summariesByEmail.set(email, [summary]);
+    }
+  }
+
+  const matchedSummaryIds = new Set<string>();
+  const groups = members.map((member) => {
+    const matched = dedupeSummaries([
+      summaryByUserId.get(member.id),
+      ...(summariesByEmail.get(member.email.toLowerCase()) ?? []),
+    ]);
+    for (const summary of matched) {
+      matchedSummaryIds.add(summary.userId);
+    }
+    return { member, matched };
+  });
+
+  // Second pass: usage under a linked provider-account email keys its own
+  // summary and matches no member id or directory email. Every attached
+  // account carries its directory owner's user id, so route each leftover
+  // summary to that owner's member. An email whose account rows name two
+  // different owners is ambiguous — leave its summary unattributed rather
+  // than credit one person with another's usage (same refusal as the
+  // server's single-owner rule, DNO-509).
+  const ownerByAccountEmail = new Map<string, string | null>();
+  for (const summary of summaries) {
+    for (const account of summary.accounts ?? []) {
+      const email = (account.email ?? "").toLowerCase();
+      const owner = account.userId ?? "";
+      if (!email || !owner) continue;
+      const claimed = ownerByAccountEmail.get(email);
+      if (claimed === undefined) {
+        ownerByAccountEmail.set(email, owner);
+      } else if (claimed !== owner) {
+        ownerByAccountEmail.set(email, null);
+      }
+    }
+  }
+  const groupByMemberId = new Map(groups.map((g) => [g.member.id, g]));
+  for (const summary of summaries) {
+    if (matchedSummaryIds.has(summary.userId)) continue;
+    const email = summaryEmail(summary).toLowerCase();
+    const owner = email ? ownerByAccountEmail.get(email) : undefined;
+    const group = owner ? groupByMemberId.get(owner) : undefined;
+    if (group) {
+      group.matched.push(summary);
+      matchedSummaryIds.add(summary.userId);
+    }
+  }
+
+  return {
+    groups,
+    unmatched: summaries.filter(
+      (summary) => !matchedSummaryIds.has(summary.userId),
+    ),
+  };
+}
+
+// foldSummariesForMembers collapses the raw searchUsers result to one summary
+// per person for pages that render summaries directly (the agents page): each
+// member's matched summaries merge into one keyed by the member id, and
+// unmatched summaries pass through as-is.
+export function foldSummariesForMembers(
+  members: AccessMember[],
+  summaries: UserSummary[],
+): UserSummary[] {
+  const { groups, unmatched } = groupSummariesByMember(members, summaries);
+  const folded: UserSummary[] = [];
+  for (const { member, matched } of groups) {
+    const merged = mergeUserSummaries(matched);
+    if (merged) {
+      folded.push({
+        ...merged,
+        userId: member.id,
+        userEmail: merged.userEmail || member.email,
+      });
+    }
+  }
+  return [...folded, ...unmatched];
+}
+
 export function buildEmployees(
   members: AccessMember[],
   roles: Role[],
   summaries: UserSummary[],
 ): Employee[] {
   const roleNameById = new Map(roles.map((role) => [role.id, role.name]));
-  const summaryByUserId = new Map(
-    summaries.map((summary) => [summary.userId, summary]),
-  );
-  const summaryByEmail = new Map(
-    summaries
-      .map((summary) => {
-        const email =
-          summary.userEmail ||
-          (summary.userId.includes("@") ? summary.userId : "");
-        return email ? ([email.toLowerCase(), summary] as const) : null;
-      })
-      .filter(
-        (entry): entry is readonly [string, UserSummary] => entry != null,
-      ),
-  );
-  const matchedSummaryIds = new Set<string>();
+  const { groups, unmatched } = groupSummariesByMember(members, summaries);
 
-  const employees = members.map((member) => {
-    // A member's telemetry can split across identity keys: their opaque user_id
-    // (e.g. Gram MCP tool calls that carry no email) and their email
-    // (Claude/Cursor usage). Match BOTH and merge — otherwise a token-less,
-    // email-less id summary shadows the member's token-bearing email summary,
-    // showing them enrolled with 0 tokens while their real usage is orphaned
-    // into the unattributed list (DNO-618; regression of the DNO-468 merge).
-    const matched = dedupeSummaries([
-      summaryByUserId.get(member.id),
-      summaryByEmail.get(member.email.toLowerCase()),
-    ]);
-    for (const summary of matched) {
-      matchedSummaryIds.add(summary.userId);
-    }
+  const employees = groups.map(({ member, matched }) => {
     const status: EmployeeStatus =
       matched.length > 0 ? "enrolled" : "not_enrolled";
     const tokenCount = matched.reduce(
@@ -203,31 +298,27 @@ export function buildEmployees(
     };
   });
 
-  const unmatchedUsage = summaries
-    .filter((summary) => !matchedSummaryIds.has(summary.userId))
-    .map((summary) => {
-      const tokenCount = summary.totalInputTokens + summary.totalOutputTokens;
-      const email =
-        summary.userEmail ||
-        (summary.userId.includes("@") ? summary.userId : "");
-      const accounts = accountsFromSummary(summary);
-      return {
-        id: `usage:${summary.userId}`,
-        name: email || summary.userId,
-        email,
-        role: "-",
-        status: "not_enrolled" as const,
-        tokenCount,
-        photoUrl: null,
-        lastActivityTimestamp: Number(
-          BigInt(summary.lastSeenUnixNano) / 1_000_000n,
-        ),
-        lastActivity: formatUnixNano(summary.lastSeenUnixNano),
-        accounts,
-        mostRecentAccount: mostRecentAccount(accounts),
-        hasPersonalAccount: accounts.some((a) => a.accountType === "personal"),
-      };
-    });
+  const unmatchedUsage = unmatched.map((summary) => {
+    const tokenCount = summary.totalInputTokens + summary.totalOutputTokens;
+    const email = summaryEmail(summary);
+    const accounts = accountsFromSummary(summary);
+    return {
+      id: `usage:${summary.userId}`,
+      name: email || summary.userId,
+      email,
+      role: "-",
+      status: "not_enrolled" as const,
+      tokenCount,
+      photoUrl: null,
+      lastActivityTimestamp: Number(
+        BigInt(summary.lastSeenUnixNano) / 1_000_000n,
+      ),
+      lastActivity: formatUnixNano(summary.lastSeenUnixNano),
+      accounts,
+      mostRecentAccount: mostRecentAccount(accounts),
+      hasPersonalAccount: accounts.some((a) => a.accountType === "personal"),
+    };
+  });
 
   return [...employees, ...unmatchedUsage].sort((a, b) => {
     if (a.status !== b.status) {

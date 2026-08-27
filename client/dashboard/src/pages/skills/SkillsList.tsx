@@ -185,7 +185,13 @@ export default function SkillsList(): JSX.Element {
     ? metricSkills
     : (pageQuery.data?.result.skills ?? EMPTY_SKILLS);
   const insightsQuery = useSkillEfficacyInsights(
-    metricSort ? {} : { skillIds: insightSkills.map((skill) => skill.id) },
+    metricSort
+      ? { includeSessionCost: false, includeRegressionSignal: false }
+      : {
+          skillIds: insightSkills.map((skill) => skill.id),
+          includeSessionCost: false,
+          includeRegressionSignal: false,
+        },
     undefined,
     {
       throwOnError: false,
