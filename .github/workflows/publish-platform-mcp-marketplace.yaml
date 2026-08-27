@@ -1,0 +1,90 @@
+name: Publish Platform MCP Marketplace
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "server/internal/plugins/generate.go"
+      - "server/internal/plugins/platform_mcp_public.go"
+      - "server/internal/plugins/platform_mcp_skills/**"
+      - "server/internal/plugins/agent_plugins.go"
+      - "server/cmd/gram/render_platform_mcp.go"
+      - ".github/workflows/publish-platform-mcp-marketplace.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-platform-mcp-marketplace
+  cancel-in-progress: false
+
+env:
+  TARGET_REPO: speakeasy-api/platform-mcp
+  TARGET_BRANCH: main
+  SERVER_URL: https://app.getgram.ai
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Gram repo (source)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: "go.mod"
+          cache: false
+
+      - name: Render the public Platform MCP marketplace
+        working-directory: server
+        env:
+          # run_number is strictly monotonic per workflow, so every publish
+          # stamps a plugin.json version higher than the last and installed
+          # copies refresh. It never resets on re-runs of an older commit.
+          RENDER_VERSION: ${{ github.run_number }}
+        run: |
+          set -euo pipefail
+          go run . render-platform-mcp \
+            --server-url "$SERVER_URL" \
+            --version "$RENDER_VERSION" \
+            --out "$RUNNER_TEMP/render"
+
+      - name: Generate GitHub App Token for Gram Bot
+        id: bot-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.GRAM_BOT_APP_ID }}
+          private-key: ${{ secrets.GRAM_BOT_PRIVATE_KEY }}
+          owner: speakeasy-api
+          repositories: platform-mcp
+
+      - name: Publish to the public marketplace repo
+        env:
+          GH_TOKEN: ${{ steps.bot-token.outputs.token }}
+        run: |
+          set -euo pipefail
+
+          # A plain clone rather than actions/checkout: the target starts life
+          # as an empty repository with no default branch, which checkout
+          # cannot resolve.
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/${TARGET_REPO}.git" "$RUNNER_TEMP/target"
+          cd "$RUNNER_TEMP/target"
+
+          git config user.name "gram-bot[bot]"
+          git config user.email "gram-bot[bot]@users.noreply.github.com"
+          git checkout -B "$TARGET_BRANCH"
+
+          # The render is the complete tree: drop everything tracked first so
+          # removals propagate, then lay the render down.
+          git rm -rq --ignore-unmatch .
+          cp -R "$RUNNER_TEMP/render/." .
+
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No marketplace changes to publish."
+            exit 0
+          fi
+
+          git commit -m "chore: publish Platform MCP marketplace (gram@${GITHUB_SHA:0:12})"
+          git push origin "$TARGET_BRANCH"

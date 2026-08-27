@@ -891,7 +891,7 @@ func writeAuthorizationGateError(w http.ResponseWriter, r *http.Request, challen
 		redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "temporarily_unavailable", Description: "organization access could not be verified"})
 		return
 	}
-	redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "organization access is not available"})
+	redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "Platform MCP is not enabled for this organization. An organization admin can enable it in the Speakeasy dashboard."})
 }
 
 func writeTokenStateError(w http.ResponseWriter, err error, credential string) {

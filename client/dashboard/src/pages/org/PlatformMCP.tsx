@@ -47,7 +47,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useRecordPlatformMCPAgentConfigurationCopiedMutation } from "@gram/client/react-query/recordPlatformMCPAgentConfigurationCopied.js";
 import { useRecordPlatformMCPInstallIntentMutation } from "@gram/client/react-query/recordPlatformMCPInstallIntent.js";
 import { useStartPlatformMCPOnboardingMutation } from "@gram/client/react-query/startPlatformMCPOnboarding.js";
-import { usePlatformMCPPackageStatus } from "@gram/client/react-query/platformMCPPackageStatus.js";
 import {
   SourceSurface,
   type SourceSurface as SourceSurfaceValue,
@@ -1098,20 +1097,9 @@ function PlatformMCPInstallMethodSheet({
   onBack: () => void;
   onSelect: (method: PlatformMCPInstallMethod) => void;
 }): JSX.Element {
-  const status = usePlatformMCPPackageStatus(undefined, undefined, {
-    refetchInterval: 5_000,
-  });
-  const packageStatus = status.data;
   // No reviewed plugin package is built for an agent we have not certified, so
-  // both packaged routes are closed and only the remote MCP config is offered.
+  // the marketplace route is closed and only the remote MCP config is offered.
   const supportsPackages = client.id !== "other";
-  const supportsMarketplace = supportsPackages && client.id !== "opencode";
-  const marketplaceAvailable =
-    supportsMarketplace &&
-    (packageStatus?.freshness === "current" ||
-      packageStatus?.repairAllowed === true);
-  const downloadAvailable =
-    supportsPackages && packageStatus?.directDownloadAvailable === true;
   const methods: Array<{
     id: PlatformMCPInstallMethod;
     title: string;
@@ -1121,17 +1109,9 @@ function PlatformMCPInstallMethodSheet({
     ? [
         {
           id: "marketplace",
-          title: "Install from your organization marketplace",
+          title: "Install from the Speakeasy marketplace",
           description:
-            "Recommended. Install the reviewed plugin and receive future updates from the canonical GitHub marketplace.",
-          disabled: !marketplaceAvailable,
-        },
-        {
-          id: "download",
-          title: `Download the ${client.label} plugin`,
-          description:
-            "Download a credential-free ZIP for your account. Direct packages must be updated manually.",
-          disabled: !downloadAvailable,
+            "Recommended. Install the reviewed plugin and receive future updates from the public GitHub marketplace.",
         },
         {
           id: "manual",
@@ -1140,8 +1120,8 @@ function PlatformMCPInstallMethodSheet({
             "Recovery option. Configure only the remote MCP without the reviewed catalogue workflow skill.",
         },
       ]
-    : // The packaged routes are listed only where a reviewed package exists.
-      // Offering them greyed out here would read as an organization problem
+    : // The marketplace route is listed only where a reviewed package exists.
+      // Offering it greyed out here would read as an organization problem
       // rather than what it is: no plugin is built for an uncertified agent.
       [
         {
@@ -1180,7 +1160,7 @@ function PlatformMCPInstallMethodSheet({
               <button
                 key={method.id}
                 type="button"
-                disabled={method.disabled || status.isLoading}
+                disabled={method.disabled}
                 onClick={() => onSelect(method.id)}
                 className="border-border bg-card hover:border-foreground/20 flex w-full items-center gap-4 border p-4 text-left transition-all disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -1191,7 +1171,7 @@ function PlatformMCPInstallMethodSheet({
                   <p className="text-muted-foreground text-xs">
                     {method.description}
                   </p>
-                  {method.disabled && !status.isLoading ? (
+                  {method.disabled ? (
                     <p className="text-muted-foreground text-xs">
                       Not currently available for this organization.
                     </p>

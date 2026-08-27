@@ -10,7 +10,7 @@ set -euo pipefail
 phase="${1:-read-only}"
 
 read_only() {
-  mise exec -- go test ./server/internal/plugins -run '^TestPluginsService_PublishProject_PlatformMCPAdmissionTransitions$' -count=1
+  mise exec -- go test ./server/internal/plugins -run '^TestPublicPlatformMCPFiles' -count=1
   mise exec -- go test ./server/internal/platformmcp -run '^(TestOAuthHTTPCompletesChallengeStateHandoff|TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents|TestRegistrationStoreDoesNotCountPendingRegistrationsTowardActiveCap|TestRuntimeHandlerRecordsReadyAfterSuccessfulToolsList|TestReadinessToolOutputDoesNotExposeProviderAuthorizationIdentity|TestRepairActionsAreBoundedAndStateSpecific|TestReadinessFreshnessIsSeparateFromState)$' -count=1
 }
 

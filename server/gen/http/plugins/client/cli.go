@@ -445,40 +445,6 @@ func BuildDownloadPluginPackagePayload(pluginsDownloadPluginPackagePluginID stri
 	return v, nil
 }
 
-// BuildDownloadPlatformMCPPluginPayload builds the payload for the plugins
-// downloadPlatformMCPPlugin endpoint from CLI flags.
-func BuildDownloadPlatformMCPPluginPayload(pluginsDownloadPlatformMCPPluginPlatform string, pluginsDownloadPlatformMCPPluginSessionToken string, pluginsDownloadPlatformMCPPluginProjectSlugInput string) (*plugins.DownloadPlatformMCPPluginPayload, error) {
-	var err error
-	var platform string
-	{
-		platform = pluginsDownloadPlatformMCPPluginPlatform
-		if !(platform == "claude" || platform == "cursor" || platform == "codex" || platform == "opencode" || platform == "agent-plugin") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("platform", platform, []any{"claude", "cursor", "codex", "opencode", "agent-plugin"}))
-		}
-		if err != nil {
-			return nil, err
-		}
-	}
-	var sessionToken *string
-	{
-		if pluginsDownloadPlatformMCPPluginSessionToken != "" {
-			sessionToken = &pluginsDownloadPlatformMCPPluginSessionToken
-		}
-	}
-	var projectSlugInput *string
-	{
-		if pluginsDownloadPlatformMCPPluginProjectSlugInput != "" {
-			projectSlugInput = &pluginsDownloadPlatformMCPPluginProjectSlugInput
-		}
-	}
-	v := &plugins.DownloadPlatformMCPPluginPayload{}
-	v.Platform = platform
-	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
-
-	return v, nil
-}
-
 // BuildDownloadObservabilityPluginPayload builds the payload for the plugins
 // downloadObservabilityPlugin endpoint from CLI flags.
 func BuildDownloadObservabilityPluginPayload(pluginsDownloadObservabilityPluginPlatform string, pluginsDownloadObservabilityPluginSessionToken string, pluginsDownloadObservabilityPluginProjectSlugInput string) (*plugins.DownloadObservabilityPluginPayload, error) {
@@ -529,43 +495,6 @@ func BuildDownloadCodexInstallScriptPayload(pluginsDownloadCodexInstallScriptSes
 		}
 	}
 	v := &plugins.DownloadCodexInstallScriptPayload{}
-	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
-
-	return v, nil
-}
-
-// BuildGetPlatformMCPPackageStatusPayload builds the payload for the plugins
-// getPlatformMCPPackageStatus endpoint from CLI flags.
-func BuildGetPlatformMCPPackageStatusPayload(pluginsGetPlatformMCPPackageStatusSessionToken string) (*plugins.GetPlatformMCPPackageStatusPayload, error) {
-	var sessionToken *string
-	{
-		if pluginsGetPlatformMCPPackageStatusSessionToken != "" {
-			sessionToken = &pluginsGetPlatformMCPPackageStatusSessionToken
-		}
-	}
-	v := &plugins.GetPlatformMCPPackageStatusPayload{}
-	v.SessionToken = sessionToken
-
-	return v, nil
-}
-
-// BuildRepairPlatformMCPPackagePayload builds the payload for the plugins
-// repairPlatformMCPPackage endpoint from CLI flags.
-func BuildRepairPlatformMCPPackagePayload(pluginsRepairPlatformMCPPackageSessionToken string, pluginsRepairPlatformMCPPackageProjectSlugInput string) (*plugins.RepairPlatformMCPPackagePayload, error) {
-	var sessionToken *string
-	{
-		if pluginsRepairPlatformMCPPackageSessionToken != "" {
-			sessionToken = &pluginsRepairPlatformMCPPackageSessionToken
-		}
-	}
-	var projectSlugInput *string
-	{
-		if pluginsRepairPlatformMCPPackageProjectSlugInput != "" {
-			projectSlugInput = &pluginsRepairPlatformMCPPackageProjectSlugInput
-		}
-	}
-	v := &plugins.RepairPlatformMCPPackagePayload{}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
