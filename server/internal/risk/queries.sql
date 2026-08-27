@@ -87,6 +87,23 @@ WHERE project_id = @project_id
   AND deleted IS FALSE
 ORDER BY created_at DESC;
 
+-- name: ListRiskPoliciesPage :many
+-- Platform MCP keyset page. The existing unbounded query remains the Goa
+-- compatibility path.
+SELECT *
+FROM risk_policies
+WHERE project_id = @project_id
+  AND deleted IS FALSE
+  AND (
+    sqlc.narg(cursor_created_at)::timestamptz IS NULL
+    OR (created_at, id) < (
+      sqlc.narg(cursor_created_at)::timestamptz,
+      sqlc.narg(cursor_id)::uuid
+    )
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT @page_limit;
+
 -- name: ListEnabledRiskPoliciesByProject :many
 SELECT *
 FROM risk_policies
@@ -1561,6 +1578,24 @@ WHERE project_id = @project_id
   AND deleted IS FALSE
   AND (sqlc.narg(risk_policy_id)::uuid IS NULL OR risk_policy_id = sqlc.narg(risk_policy_id))
 ORDER BY created_at DESC;
+
+-- name: ListRiskExclusionsByProjectPage :many
+-- Platform MCP keyset page. The existing unbounded query remains the Goa
+-- compatibility path.
+SELECT *
+FROM risk_exclusions
+WHERE project_id = @project_id
+  AND deleted IS FALSE
+  AND (sqlc.narg(risk_policy_id)::uuid IS NULL OR risk_policy_id = sqlc.narg(risk_policy_id))
+  AND (
+    sqlc.narg(cursor_created_at)::timestamptz IS NULL
+    OR (created_at, id) < (
+      sqlc.narg(cursor_created_at)::timestamptz,
+      sqlc.narg(cursor_id)::uuid
+    )
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT @page_limit;
 
 -- name: ListEnabledExclusionsForPolicy :many
 -- Exclusions that apply when analyzing/enforcing a given policy: the policy's

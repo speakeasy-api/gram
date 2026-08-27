@@ -215,6 +215,13 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		"set_mcp_client_admission",
 		"disable_mcp",
 		"enable_mcp",
+		"list_risk_policies",
+		"get_risk_policy",
+		"list_risk_exclusions",
+		"create_risk_policy",
+		"update_risk_policy",
+		"create_risk_exclusion",
+		"update_risk_exclusion",
 	} {
 		require.True(t, admitted[name], "tool %q works without a connection and should serve the assistant", name)
 	}

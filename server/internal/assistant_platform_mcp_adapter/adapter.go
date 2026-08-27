@@ -196,6 +196,15 @@ func (t Tool) assistantInputSchema() []byte {
 	if err := json.Unmarshal(t.descriptor.InputSchema, &schema); err != nil {
 		return t.descriptor.InputSchema
 	}
+	hideProjectFields(schema)
+	encoded, err := json.Marshal(schema)
+	if err != nil {
+		return t.descriptor.InputSchema
+	}
+	return encoded
+}
+
+func hideProjectFields(schema map[string]any) {
 	properties, _ := schema["properties"].(map[string]any)
 	for _, field := range []string{"project_slug", "project_id"} {
 		delete(properties, field)
@@ -204,36 +213,55 @@ func (t Tool) assistantInputSchema() []byte {
 		kept := make([]any, 0, len(required))
 		for _, value := range required {
 			name, _ := value.(string)
-			if name == "project_slug" || name == "project_id" {
-				continue
+			if name != "project_slug" && name != "project_id" {
+				kept = append(kept, value)
 			}
-			kept = append(kept, value)
 		}
 		schema["required"] = kept
 	}
-	encoded, err := json.Marshal(schema)
-	if err != nil {
-		return t.descriptor.InputSchema
+	for _, keyword := range []string{"oneOf", "anyOf", "allOf"} {
+		branches, _ := schema[keyword].([]any)
+		for _, branch := range branches {
+			if nested, ok := branch.(map[string]any); ok {
+				hideProjectFields(nested)
+			}
+		}
 	}
-	return encoded
 }
 
-// projectFields reports which project arguments a tool declares, so the policy
-// fills the one that tool actually takes.
+// projectFields reports which project arguments a tool declares, including in
+// discriminated schema branches, so the policy fills the one it actually takes.
 func projectFields(inputSchema []byte) []string {
-	var schema struct {
-		Properties map[string]json.RawMessage `json:"properties"`
-	}
+	var schema map[string]any
 	if err := json.Unmarshal(inputSchema, &schema); err != nil {
 		return nil
 	}
+	found := map[string]bool{}
+	collectProjectFields(schema, found)
 	fields := make([]string, 0, 2)
 	for _, field := range []string{"project_slug", "project_id"} {
-		if _, ok := schema.Properties[field]; ok {
+		if found[field] {
 			fields = append(fields, field)
 		}
 	}
 	return fields
+}
+
+func collectProjectFields(schema map[string]any, found map[string]bool) {
+	properties, _ := schema["properties"].(map[string]any)
+	for _, field := range []string{"project_slug", "project_id"} {
+		if _, ok := properties[field]; ok {
+			found[field] = true
+		}
+	}
+	for _, keyword := range []string{"oneOf", "anyOf", "allOf"} {
+		branches, _ := schema[keyword].([]any)
+		for _, branch := range branches {
+			if nested, ok := branch.(map[string]any); ok {
+				collectProjectFields(nested, found)
+			}
+		}
+	}
 }
 
 // targetPolicyFromContext reads the project the calling assistant belongs to.

@@ -43,6 +43,10 @@ const (
 	// ProjectScopeExplicit: the caller names the project. An external client
 	// spans every project in its organization, so it has to say which.
 	ProjectScopeExplicit
+	// ProjectScopeDefaultable: an external caller may name an exact project or
+	// omit both selectors to use the organization's literal default project. The
+	// assistant still injects its own exact project and hides the selectors.
+	ProjectScopeDefaultable
 )
 
 // ToolMeta is what a tool declares beyond its schemas: who may call it, and
