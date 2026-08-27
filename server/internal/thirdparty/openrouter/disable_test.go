@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -205,6 +206,127 @@ func TestAddAPIKeyDisableCauseRejectsMismatchedUpstreamIdentityWithoutLocalWrite
 	require.NoError(t, err)
 	require.False(t, row.Disabled)
 	require.Empty(t, row.DisableCauses)
+}
+
+func TestAddAPIKeyDisableCauseRejectsRotationAfterValidUpstreamResponse(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+	require.NoError(t, err)
+	upstream.interceptPatch(func() {
+		_, updateErr := queries.UpdateOpenRouterKey(ctx, repo.UpdateOpenRouterKeyParams{
+			MonthlyCredits: 100, KeyHash: "rotated-hash", Reinstate: false,
+			OrganizationID: orgID, KeyType: string(KeyTypeChat),
+		})
+		require.NoError(t, updateErr)
+	})
+
+	_, err = provisioner.AddAPIKeyDisableCause(ctx, orgID, KeyTypeChat, DisableCauseAdminLock)
+	require.ErrorContains(t, err, "changed concurrently")
+
+	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
+	require.NoError(t, err)
+	require.Equal(t, "rotated-hash", row.KeyHash)
+	require.Empty(t, row.DisableCauses)
+}
+
+func TestAddAPIKeyDisableCauseSerializesConcurrentSameCause(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+	require.NoError(t, err)
+
+	firstPatch := make(chan struct{})
+	releasePatch := make(chan struct{})
+	var once sync.Once
+	upstream.interceptPatch(func() {
+		once.Do(func() {
+			close(firstPatch)
+			<-releasePatch
+		})
+	})
+
+	results := make(chan DisableCauseChange, 2)
+	errs := make(chan error, 2)
+	go func() {
+		result, addErr := provisioner.AddAPIKeyDisableCause(ctx, orgID, KeyTypeChat, DisableCauseAdminLock)
+		results <- result
+		errs <- addErr
+	}()
+	<-firstPatch
+	go func() {
+		result, addErr := provisioner.AddAPIKeyDisableCause(ctx, orgID, KeyTypeChat, DisableCauseAdminLock)
+		results <- result
+		errs <- addErr
+	}()
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(releasePatch) }) }
+	t.Cleanup(release)
+	require.Never(t, func() bool { return len(upstream.recorded()) > 1 }, 50*time.Millisecond, 5*time.Millisecond)
+	release()
+
+	require.NoError(t, <-errs)
+	require.NoError(t, <-errs)
+	first, second := <-results, <-results
+	require.NotEqual(t, first.CauseChanged, second.CauseChanged)
+	require.NotEqual(t, first.KeyAccessChanged, second.KeyAccessChanged)
+	require.Len(t, upstream.recorded(), 1)
+	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
+	require.NoError(t, err)
+	require.Equal(t, []string{string(DisableCauseAdminLock)}, row.DisableCauses)
+}
+
+func TestAddAPIKeyDisableCauseCanonicalizesConcurrentDifferentCauses(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+	require.NoError(t, err)
+
+	firstPatch := make(chan struct{})
+	releasePatch := make(chan struct{})
+	upstream.interceptPatch(func() {
+		close(firstPatch)
+		<-releasePatch
+	})
+	type addition struct {
+		change DisableCauseChange
+		err    error
+	}
+	results := make(chan addition, 2)
+	go func() {
+		change, addErr := provisioner.AddAPIKeyDisableCause(ctx, orgID, KeyTypeChat, DisableCauseTrialDemotion)
+		results <- addition{change: change, err: addErr}
+	}()
+	<-firstPatch
+	go func() {
+		change, addErr := provisioner.AddAPIKeyDisableCause(ctx, orgID, KeyTypeChat, DisableCauseAdminLock)
+		results <- addition{change: change, err: addErr}
+	}()
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(releasePatch) }) }
+	t.Cleanup(release)
+	require.Never(t, func() bool { return len(upstream.recorded()) > 1 }, 50*time.Millisecond, 5*time.Millisecond)
+	release()
+
+	first, second := <-results, <-results
+	require.NoError(t, first.err)
+	require.NoError(t, second.err)
+	require.True(t, first.change.CauseChanged)
+	require.True(t, second.change.CauseChanged)
+	require.NotEqual(t, first.change.KeyAccessChanged, second.change.KeyAccessChanged)
+	require.Len(t, upstream.recorded(), 1)
+	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
+	require.NoError(t, err)
+	require.Equal(t, []string{string(DisableCauseAdminLock), string(DisableCauseTrialDemotion)}, row.DisableCauses)
 }
 
 func TestDisableAPIKey_DisablesKeyUpstream(t *testing.T) {

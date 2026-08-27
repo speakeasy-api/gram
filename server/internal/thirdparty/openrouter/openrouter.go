@@ -700,35 +700,95 @@ func (o *OpenRouter) AddAPIKeyDisableCause(ctx context.Context, orgID string, ke
 		return DisableCauseChange{}, fmt.Errorf("add OpenRouter API key disable cause: %w", err)
 	}
 
-	key, err := o.repo.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(keyType)})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return DisableCauseChange{CauseChanged: false, KeyAccessChanged: false}, nil
-	case err != nil:
-		return DisableCauseChange{}, fmt.Errorf("read OpenRouter key before adding disable cause: %w", err)
-	case key.DisableCauses == nil:
-		return DisableCauseChange{}, errors.New("cannot add OpenRouter disable cause to unclassified key")
-	case slices.Contains(key.DisableCauses, string(cause)):
-		return DisableCauseChange{CauseChanged: false, KeyAccessChanged: false}, nil
-	}
+	var result DisableCauseChange
+	err := o.withOpenRouterKeyBillingLock(ctx, orgID, keyType, func(conn *pgxpool.Conn) error {
+		keyRepo := repo.New(conn)
+		key, err := keyRepo.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(keyType)})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			result = DisableCauseChange{CauseChanged: false, KeyAccessChanged: false}
+			return nil
+		case err != nil:
+			return fmt.Errorf("read OpenRouter key before adding disable cause: %w", err)
+		case key.DisableCauses == nil:
+			return errors.New("cannot add OpenRouter disable cause to unclassified key")
+		case slices.Contains(key.DisableCauses, string(cause)):
+			result = DisableCauseChange{CauseChanged: false, KeyAccessChanged: false}
+			return nil
+		}
 
-	accessChanged := len(key.DisableCauses) == 0
-	if accessChanged {
-		patchCtx, cancel := context.WithTimeout(ctx, upstreamKeyPatchTimeout)
-		defer cancel()
-		response, err := o.patchOpenRouterAPIKey(patchCtx, key.KeyHash, updateKeyRequest{Limit: nil, LimitReset: "", Disabled: new(true)})
+		if len(key.DisableCauses) == 0 {
+			patchCtx, cancel := context.WithTimeout(ctx, upstreamKeyPatchTimeout)
+			response, patchErr := o.patchOpenRouterAPIKey(patchCtx, key.KeyHash, updateKeyRequest{Limit: nil, LimitReset: "", Disabled: new(true)})
+			cancel()
+			if patchErr != nil {
+				return fmt.Errorf("disable upstream OpenRouter API key: %w", patchErr)
+			}
+			if response.Data.Hash != key.KeyHash {
+				return errors.New("OpenRouter key identity mismatch after disable")
+			}
+		}
+
+		latest, err := keyRepo.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(keyType)})
+		if err != nil || latest.KeyHash != key.KeyHash || latest.DisableCauses == nil {
+			return errors.New("OpenRouter key changed concurrently while adding disable cause")
+		}
+		if slices.Contains(latest.DisableCauses, string(cause)) {
+			result = DisableCauseChange{CauseChanged: false, KeyAccessChanged: false}
+			return nil
+		}
+		accessChanged := len(latest.DisableCauses) == 0
+		_, err = keyRepo.AddOpenRouterAPIKeyDisableCause(ctx, repo.AddOpenRouterAPIKeyDisableCauseParams{
+			OrganizationID: orgID, KeyType: string(keyType), KeyHash: key.KeyHash, DisableCause: string(cause),
+		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return errors.New("OpenRouter key changed concurrently while adding disable cause")
+		}
 		if err != nil {
-			return DisableCauseChange{}, fmt.Errorf("disable upstream OpenRouter API key: %w", err)
+			return fmt.Errorf("persist OpenRouter API key disable cause: %w", err)
 		}
-		if response.Data.Hash != key.KeyHash {
-			return DisableCauseChange{}, errors.New("OpenRouter key identity mismatch after disable")
-		}
+		result = DisableCauseChange{CauseChanged: true, KeyAccessChanged: accessChanged}
+		return nil
+	})
+	if err != nil {
+		return DisableCauseChange{}, err
 	}
+	return result, nil
+}
 
-	if _, err := o.repo.AddOpenRouterAPIKeyDisableCause(ctx, repo.AddOpenRouterAPIKeyDisableCauseParams{OrganizationID: orgID, KeyType: string(keyType), DisableCause: string(cause)}); err != nil {
-		return DisableCauseChange{}, fmt.Errorf("persist OpenRouter API key disable cause: %w", err)
+func (o *OpenRouter) withOpenRouterKeyBillingLock(ctx context.Context, orgID string, keyType KeyType, operation func(*pgxpool.Conn) error) error {
+	conn, err := o.db.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("acquire connection for OpenRouter key billing lock: %w", err)
 	}
-	return DisableCauseChange{CauseChanged: true, KeyAccessChanged: accessChanged}, nil
+	queries := repo.New(conn)
+	params := repo.AcquireOpenRouterKeyBillingLockParams{OrganizationID: orgID, KeyType: string(keyType)}
+	if err := queries.AcquireOpenRouterKeyBillingLock(ctx, params); err != nil {
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		closeErr := conn.Hijack().Close(cleanupCtx)
+		cancel()
+		if closeErr != nil {
+			o.logger.ErrorContext(ctx, "close connection after OpenRouter key billing lock failure", attr.SlogError(closeErr))
+		}
+		return fmt.Errorf("acquire OpenRouter key billing lock: %w", err)
+	}
+	defer func() {
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		unlocked, releaseErr := queries.ReleaseOpenRouterKeyBillingLock(cleanupCtx, repo.ReleaseOpenRouterKeyBillingLockParams(params))
+		if releaseErr == nil && unlocked {
+			conn.Release()
+			return
+		}
+		if releaseErr == nil {
+			releaseErr = errors.New("lock was not held by this session")
+		}
+		o.logger.ErrorContext(ctx, "release OpenRouter key billing lock", attr.SlogError(releaseErr))
+		if closeErr := conn.Hijack().Close(cleanupCtx); closeErr != nil {
+			o.logger.ErrorContext(ctx, "close connection with unreleased OpenRouter key billing lock", attr.SlogError(closeErr))
+		}
+	}()
+	return operation(conn)
 }
 
 // DisableAPIKeyWithDB is DisableAPIKey using db for every local read and
