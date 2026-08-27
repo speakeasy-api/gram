@@ -2887,7 +2887,6 @@ func (s *ServiceCore) startProcessingLeaseHeartbeat(
 	runtimeID uuid.UUID,
 	eventID uuid.UUID,
 ) func() {
-	//nolint:gosec // cancel is returned and invoked by the caller to stop the heartbeat goroutine
 	hbCtx, cancel := context.WithCancel(ctx)
 	go func() {
 		ticker := time.NewTicker(processingLeaseHeartbeatTick)

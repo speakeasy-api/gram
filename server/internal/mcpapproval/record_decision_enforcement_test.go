@@ -274,11 +274,13 @@ func seedLegacyVariantBypassGrant(t *testing.T, ctx context.Context, ti *testIns
 	selector[authz.SelectorKeyServerIdentity] = "legacy-identity"
 
 	require.NoError(t, authz.GrantResourceToPrincipals(ctx, ti.conn, authz.ResourceGrant{
-		OrganizationID: ti.organizationID,
-		Scope:          authz.ScopeRiskPolicyBypass,
-		ResourceID:     policyID.String(),
-		Principals:     []urn.Principal{principal},
-		Selector:       selector,
+		Resource: authz.Resource{
+			OrganizationID: ti.organizationID,
+			Scope:          authz.ScopeRiskPolicyBypass,
+			ResourceID:     policyID.String(),
+		},
+		Principals: []urn.Principal{principal},
+		Selector:   selector,
 	}))
 }
 

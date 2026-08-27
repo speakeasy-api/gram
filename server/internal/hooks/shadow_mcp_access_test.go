@@ -52,11 +52,13 @@ func TestEnforceShadowMCPToolAccess_BypassGrantAllowsBlockedCall(t *testing.T) {
 	selector := authz.NewSelector(authz.ScopeRiskPolicyBypass, policyID)
 	selector[authz.SelectorKeyServerURL] = serverURL
 	require.NoError(t, authz.GrantResourceToPrincipals(ctx, ti.conn, authz.ResourceGrant{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		Scope:          authz.ScopeRiskPolicyBypass,
-		ResourceID:     policyID,
-		Principals:     []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)},
-		Selector:       selector,
+		Resource: authz.Resource{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			Scope:          authz.ScopeRiskPolicyBypass,
+			ResourceID:     policyID,
+		},
+		Principals: []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)},
+		Selector:   selector,
 	}))
 
 	detail, denied := ti.service.enforceShadowMCPToolAccess(
@@ -85,11 +87,13 @@ func TestEnforceShadowMCPToolAccess_URLScopedBypassGrantDoesNotAllowIdentityOnly
 	selector := authz.NewSelector(authz.ScopeRiskPolicyBypass, policyID)
 	selector[authz.SelectorKeyServerURL] = "https://blocked.example.com/mcp"
 	require.NoError(t, authz.GrantResourceToPrincipals(ctx, ti.conn, authz.ResourceGrant{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		Scope:          authz.ScopeRiskPolicyBypass,
-		ResourceID:     policyID,
-		Principals:     []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)},
-		Selector:       selector,
+		Resource: authz.Resource{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			Scope:          authz.ScopeRiskPolicyBypass,
+			ResourceID:     policyID,
+		},
+		Principals: []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)},
+		Selector:   selector,
 	}))
 
 	detail, denied := ti.service.enforceShadowMCPToolAccess(
@@ -119,11 +123,13 @@ func TestEnforceShadowMCPToolAccess_IdentityScopedBypassGrantAllowsIdentityOnlyT
 	selector := authz.NewSelector(authz.ScopeRiskPolicyBypass, policyID)
 	selector[authz.SelectorKeyServerIdentity] = serverIdentity
 	require.NoError(t, authz.GrantResourceToPrincipals(ctx, ti.conn, authz.ResourceGrant{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		Scope:          authz.ScopeRiskPolicyBypass,
-		ResourceID:     policyID,
-		Principals:     []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)},
-		Selector:       selector,
+		Resource: authz.Resource{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			Scope:          authz.ScopeRiskPolicyBypass,
+			ResourceID:     policyID,
+		},
+		Principals: []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)},
+		Selector:   selector,
 	}))
 
 	detail, denied := ti.service.enforceShadowMCPToolAccess(
@@ -151,11 +157,13 @@ func TestEnforceShadowMCPToolAccess_WholePolicyBypassGrantAllowsIdentityOnlyTarg
 	policyID := uuid.NewString()
 	selector := authz.NewSelector(authz.ScopeRiskPolicyBypass, policyID)
 	require.NoError(t, authz.GrantResourceToPrincipals(ctx, ti.conn, authz.ResourceGrant{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		Scope:          authz.ScopeRiskPolicyBypass,
-		ResourceID:     policyID,
-		Principals:     []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)},
-		Selector:       selector,
+		Resource: authz.Resource{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			Scope:          authz.ScopeRiskPolicyBypass,
+			ResourceID:     policyID,
+		},
+		Principals: []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)},
+		Selector:   selector,
 	}))
 
 	detail, denied := ti.service.enforceShadowMCPToolAccess(
@@ -182,11 +190,13 @@ func TestCanBypassPolicy_EmptyEvidenceDoesNotUseWholePolicyGrant(t *testing.T) {
 	policyID := uuid.NewString()
 	selector := authz.NewSelector(authz.ScopeRiskPolicyBypass, policyID)
 	require.NoError(t, authz.GrantResourceToPrincipals(ctx, ti.conn, authz.ResourceGrant{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		Scope:          authz.ScopeRiskPolicyBypass,
-		ResourceID:     policyID,
-		Principals:     []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)},
-		Selector:       selector,
+		Resource: authz.Resource{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			Scope:          authz.ScopeRiskPolicyBypass,
+			ResourceID:     policyID,
+		},
+		Principals: []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)},
+		Selector:   selector,
 	}))
 
 	target, allowed := ti.service.canBypassPolicy(
@@ -378,11 +388,13 @@ func TestEnforceShadowMCPToolAccess_AllowAllIgnoresBypassGrants(t *testing.T) {
 	selector := authz.NewSelector(authz.ScopeRiskPolicyBypass, policyID)
 	selector[authz.SelectorKeyServerURL] = serverURL
 	require.NoError(t, authz.GrantResourceToPrincipals(ctx, ti.conn, authz.ResourceGrant{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		Scope:          authz.ScopeRiskPolicyBypass,
-		ResourceID:     policyID,
-		Principals:     []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)},
-		Selector:       selector,
+		Resource: authz.Resource{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			Scope:          authz.ScopeRiskPolicyBypass,
+			ResourceID:     policyID,
+		},
+		Principals: []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)},
+		Selector:   selector,
 	}))
 
 	detail, denied := ti.service.enforceShadowMCPToolAccess(

@@ -214,7 +214,7 @@ func (l *pgxLogger) Log(ctx context.Context, level tracelog.LogLevel, msg string
 
 	attr := make([]any, 0, len(data))
 	for k, v := range data {
-		attr = append(attr, slog.Any(k, v))
+		attr = append(attr, slog.Any(k, v)) //nolint:sloglint // pgx supplies dynamic log keys
 	}
 
 	l.logger.Log(ctx, lvl, msg, attr...)

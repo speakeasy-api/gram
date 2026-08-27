@@ -278,13 +278,15 @@ func (c *RegistryCatalog) Inspect(ctx context.Context, providerKey, catalogRef s
 	sort.Strings(toolNames)
 	configuration := catalogConfiguration(details.Headers, details.Variables)
 	return CatalogDetails{
-		ProviderKey:            providerKey,
-		CatalogRef:             catalogRef,
-		Name:                   details.Name,
-		Description:            details.Description,
-		Version:                details.Version,
-		ToolCount:              len(toolNames),
-		SetupIntent:            descriptor.SetupIntent,
+		CatalogCandidate: CatalogCandidate{
+			ProviderKey: providerKey,
+			CatalogRef:  catalogRef,
+			Name:        details.Name,
+			Description: details.Description,
+			Version:     details.Version,
+			ToolCount:   len(toolNames),
+			SetupIntent: descriptor.SetupIntent,
+		},
 		Transport:              string(details.TransportType),
 		ToolNames:              toolNames,
 		Configuration:          configuration,

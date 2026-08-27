@@ -234,8 +234,10 @@ func TestIngressProvisioner_Delete(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = cs.CoreV1().Secrets(ingressTestNamespace).Create(ctx, &corev1.Secret{
-		Name:      result.SecretName,
-		Namespace: ingressTestNamespace,
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      result.SecretName,
+			Namespace: ingressTestNamespace,
+		},
 	}, metav1.CreateOptions{})
 	require.NoError(t, err)
 

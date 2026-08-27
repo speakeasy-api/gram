@@ -33,8 +33,8 @@ func TestListAuditLogs_IncludeAssistantEvents(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	base := repo.ListAuditLogsParams{OrganizationID: orgID, CursorSeq: pgtype.Int8{},
-		IncludeAssistantEvents: false}
+	base := repo.ListAuditLogsParams{OrganizationID: orgID, CursorSeq: pgtype.Int8{}}
+	base.IncludeAssistantEvents = false
 	rows, err := queries.ListAuditLogs(ctx, base)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)

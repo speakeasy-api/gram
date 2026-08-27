@@ -15,12 +15,14 @@ func TestChallengeBucketResolutionQuerySizeIndependentOfResolutionCount(t *testi
 		t.Helper()
 
 		filters := ChallengeBucketFilters{
-			OrganizationID:       "org-id",
-			ProjectID:            nil,
-			Outcome:              nil,
-			PrincipalURN:         nil,
-			Scope:                nil,
-			MemberUserIDs:        nil,
+			ChallengeFilters: ChallengeFilters{
+				OrganizationID: "org-id",
+				ProjectID:      nil,
+				Outcome:        nil,
+				PrincipalURN:   nil,
+				Scope:          nil,
+				MemberUserIDs:  nil,
+			},
 			Resolved:             &resolved,
 			ResolvedChallengeIDs: ids,
 			Limit:                20,

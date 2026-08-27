@@ -343,22 +343,26 @@ func (s *Service) ApproveRiskPolicyBypassRequest(ctx context.Context, payload *g
 			principalsToRevoke := riskPolicyBypassGrantPrincipalDifference(currentPrincipals, principals)
 			if len(principalsToRevoke) > 0 {
 				if err := authz.RevokeResourceFromPrincipals(ctx, dbtx, authz.ResourceGrant{
-					OrganizationID: authCtx.ActiveOrganizationID,
-					Scope:          authz.ScopeRiskPolicyBypass,
-					ResourceID:     current.RiskPolicyID.String(),
-					Principals:     principalsToRevoke,
-					Selector:       selector,
+					Resource: authz.Resource{
+						OrganizationID: authCtx.ActiveOrganizationID,
+						Scope:          authz.ScopeRiskPolicyBypass,
+						ResourceID:     current.RiskPolicyID.String(),
+					},
+					Principals: principalsToRevoke,
+					Selector:   selector,
 				}); err != nil {
 					return nil, oops.E(oops.CodeUnexpected, err, "revoke replaced risk policy bypass grants").LogError(ctx, s.logger)
 				}
 			}
 		}
 		if err := authz.GrantResourceToPrincipals(ctx, dbtx, authz.ResourceGrant{
-			OrganizationID: authCtx.ActiveOrganizationID,
-			Scope:          authz.ScopeRiskPolicyBypass,
-			ResourceID:     current.RiskPolicyID.String(),
-			Principals:     principals,
-			Selector:       selector,
+			Resource: authz.Resource{
+				OrganizationID: authCtx.ActiveOrganizationID,
+				Scope:          authz.ScopeRiskPolicyBypass,
+				ResourceID:     current.RiskPolicyID.String(),
+			},
+			Principals: principals,
+			Selector:   selector,
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "grant risk policy bypass").LogError(ctx, s.logger)
 		}
@@ -505,11 +509,13 @@ func (s *Service) RevokeRiskPolicyBypassRequest(ctx context.Context, payload *ge
 			return nil, oops.E(oops.CodeUnexpected, err, "build risk policy bypass selector").LogError(ctx, s.logger)
 		}
 		if err := authz.RevokeResourceFromPrincipals(ctx, dbtx, authz.ResourceGrant{
-			OrganizationID: authCtx.ActiveOrganizationID,
-			Scope:          authz.ScopeRiskPolicyBypass,
-			ResourceID:     current.RiskPolicyID.String(),
-			Principals:     principals,
-			Selector:       selector,
+			Resource: authz.Resource{
+				OrganizationID: authCtx.ActiveOrganizationID,
+				Scope:          authz.ScopeRiskPolicyBypass,
+				ResourceID:     current.RiskPolicyID.String(),
+			},
+			Principals: principals,
+			Selector:   selector,
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "revoke risk policy bypass").LogError(ctx, s.logger)
 		}

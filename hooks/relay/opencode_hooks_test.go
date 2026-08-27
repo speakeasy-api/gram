@@ -66,12 +66,14 @@ func TestOpenCodePromptSubmittedEnvelope(t *testing.T) {
 
 func TestOpenCodePromptSubmittedEnvelopeCarriesMessageID(t *testing.T) {
 	payload := buildEnvelope(&agenthooks.PromptEvent{
-		Provider:   agenthooks.ProviderOpenCode,
-		Kind:       agenthooks.KindPromptSubmitted,
-		NativeName: "chat.message",
-		Session:    agenthooks.SessionInfo{ID: "oc-sess-1"},
-		Raw:        json.RawMessage(`{"hook":"chat.message","input":{"messageID":"msg-input"},"output":{"message":{"id":"msg-output"}}}`),
-		Prompt:     "deploy to staging",
+		Event: agenthooks.Event{
+			Provider:   agenthooks.ProviderOpenCode,
+			Kind:       agenthooks.KindPromptSubmitted,
+			NativeName: "chat.message",
+			Session:    agenthooks.SessionInfo{ID: "oc-sess-1"},
+			Raw:        json.RawMessage(`{"hook":"chat.message","input":{"messageID":"msg-input"},"output":{"message":{"id":"msg-output"}}}`),
+		},
+		Prompt: "deploy to staging",
 	}, "test-host")
 
 	require.NotNil(t, payload.Session)

@@ -112,19 +112,21 @@ func (tp *ToolProxy) doFunctionResource(
 	}
 
 	req, err := tp.functions.ReadResource(ctx, functions.RunnerResourceReadRequest{
-		InvocationID:      invocationID,
-		OrganizationID:    descriptor.OrganizationID,
-		OrganizationSlug:  descriptor.OrganizationSlug,
-		ProjectID:         projectID,
-		ProjectSlug:       descriptor.ProjectSlug,
-		DeploymentID:      deploymentID,
-		FunctionsID:       functionID,
-		FunctionsAccessID: accessID,
-		Input:             input,
-		Environment:       payloadEnv,
-		ResourceURN:       descriptor.URN,
-		ResourceURI:       descriptor.URI,
-		ResourceName:      descriptor.Name,
+		RunnerBaseRequest: functions.RunnerBaseRequest{
+			InvocationID:      invocationID,
+			OrganizationID:    descriptor.OrganizationID,
+			OrganizationSlug:  descriptor.OrganizationSlug,
+			ProjectID:         projectID,
+			ProjectSlug:       descriptor.ProjectSlug,
+			DeploymentID:      deploymentID,
+			FunctionsID:       functionID,
+			FunctionsAccessID: accessID,
+			Input:             input,
+			Environment:       payloadEnv,
+		},
+		ResourceURN:  descriptor.URN,
+		ResourceURI:  descriptor.URI,
+		ResourceName: descriptor.Name,
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to create function resource call request").LogError(ctx, logger)

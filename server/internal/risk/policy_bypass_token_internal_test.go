@@ -80,13 +80,15 @@ func TestParsePolicyBypassRequestToken_LegacyRPBR1(t *testing.T) {
 		BlockReason:            nil,
 		RiskPolicyID:           "00000000-0000-0000-0000-000000000002",
 		RiskResultID:           nil,
-		Issuer:                 policyBypassRequestTokenIssuer,
-		Subject:                policyBypassRequestTokenSubject,
-		Audience:               nil,
-		ExpiresAt:              jwt.NewNumericDate(now.Add(time.Hour)),
-		NotBefore:              jwt.NewNumericDate(now),
-		IssuedAt:               jwt.NewNumericDate(now),
-		ID:                     uuid.NewString(),
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    policyBypassRequestTokenIssuer,
+			Subject:   policyBypassRequestTokenSubject,
+			Audience:  nil,
+			ExpiresAt: jwt.NewNumericDate(now.Add(time.Hour)),
+			NotBefore: jwt.NewNumericDate(now),
+			IssuedAt:  jwt.NewNumericDate(now),
+			ID:        uuid.NewString(),
+		},
 	}
 	plaintext, err := json.Marshal(claims)
 	require.NoError(t, err)

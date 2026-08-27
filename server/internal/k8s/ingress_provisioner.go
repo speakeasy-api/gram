@@ -165,82 +165,86 @@ func (p *IngressProvisioner) buildIngress(domain string, ipAllowlist []string) (
 	}
 
 	ingress := &networkingv1.Ingress{
-		Name:        k8sName,
-		Namespace:   p.namespace,
-		Annotations: annotations,
-		Labels: map[string]string{
-			managedByLabelKey:    managedByLabelValue,
-			customDomainLabelKey: domain,
-			customDomainRoleKey:  customDomainRoleMain,
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        k8sName,
+			Namespace:   p.namespace,
+			Annotations: annotations,
+			Labels: map[string]string{
+				managedByLabelKey:    managedByLabelValue,
+				customDomainLabelKey: domain,
+				customDomainRoleKey:  customDomainRoleMain,
+			},
 		},
 		Spec: networkingv1.IngressSpec{
 			IngressClassName: &nginxIngressClassName,
 			Rules: []networkingv1.IngressRule{
 				{
 					Host: domain,
-					HTTP: &networkingv1.HTTPIngressRuleValue{
-						Paths: []networkingv1.HTTPIngressPath{
-							{
-								Path:     "/mcp",
-								PathType: &pathTypePrefix,
-								Backend: networkingv1.IngressBackend{
-									Service: &networkingv1.IngressServiceBackend{
-										Name: p.backendService,
-										Port: networkingv1.ServiceBackendPort{Number: 80},
+					IngressRuleValue: networkingv1.IngressRuleValue{
+						HTTP: &networkingv1.HTTPIngressRuleValue{
+							Paths: []networkingv1.HTTPIngressPath{
+								{
+									Path:     "/mcp",
+									PathType: &pathTypePrefix,
+									Backend: networkingv1.IngressBackend{
+										Service: &networkingv1.IngressServiceBackend{
+											Name: p.backendService,
+											Port: networkingv1.ServiceBackendPort{Number: 80},
+										},
 									},
 								},
-							},
-							{
-								Path:     "/oauth",
-								PathType: &pathTypePrefix,
-								Backend: networkingv1.IngressBackend{
-									Service: &networkingv1.IngressServiceBackend{
-										Name: p.backendService,
-										Port: networkingv1.ServiceBackendPort{Number: 80},
+								{
+									Path:     "/oauth",
+									PathType: &pathTypePrefix,
+									Backend: networkingv1.IngressBackend{
+										Service: &networkingv1.IngressServiceBackend{
+											Name: p.backendService,
+											Port: networkingv1.ServiceBackendPort{Number: 80},
+										},
 									},
 								},
-							},
-							{
-								// Public skill share pages (/shared/skills/{token})
-								// are served by the app on custom domains.
-								Path:     "/shared/skills",
-								PathType: &pathTypePrefix,
-								Backend: networkingv1.IngressBackend{
-									Service: &networkingv1.IngressServiceBackend{
-										Name: p.backendService,
-										Port: networkingv1.ServiceBackendPort{Number: 80},
+								{
+									// Public skill share pages (/shared/skills/{token})
+									// are served by the app on custom domains.
+									Path:     "/shared/skills",
+									PathType: &pathTypePrefix,
+									Backend: networkingv1.IngressBackend{
+										Service: &networkingv1.IngressServiceBackend{
+											Name: p.backendService,
+											Port: networkingv1.ServiceBackendPort{Number: 80},
+										},
 									},
 								},
-							},
-							{
-								Path:     "/.well-known/openai-apps-challenge",
-								PathType: &pathTypeExact,
-								Backend: networkingv1.IngressBackend{
-									Service: &networkingv1.IngressServiceBackend{
-										Name: p.backendService,
-										Port: networkingv1.ServiceBackendPort{Number: 80},
+								{
+									Path:     "/.well-known/openai-apps-challenge",
+									PathType: &pathTypeExact,
+									Backend: networkingv1.IngressBackend{
+										Service: &networkingv1.IngressServiceBackend{
+											Name: p.backendService,
+											Port: networkingv1.ServiceBackendPort{Number: 80},
+										},
 									},
 								},
-							},
-							{
-								// NGINX ingress validator rejects .well-known paths with pathType Prefix.
-								// Using regex with ImplementationSpecific bypasses this validation.
-								Path:     `/\.well-known/oauth-authorization-server/mcp(/.*)?`,
-								PathType: &pathTypeImplementationSpecific,
-								Backend: networkingv1.IngressBackend{
-									Service: &networkingv1.IngressServiceBackend{
-										Name: p.backendService,
-										Port: networkingv1.ServiceBackendPort{Number: 80},
+								{
+									// NGINX ingress validator rejects .well-known paths with pathType Prefix.
+									// Using regex with ImplementationSpecific bypasses this validation.
+									Path:     `/\.well-known/oauth-authorization-server/mcp(/.*)?`,
+									PathType: &pathTypeImplementationSpecific,
+									Backend: networkingv1.IngressBackend{
+										Service: &networkingv1.IngressServiceBackend{
+											Name: p.backendService,
+											Port: networkingv1.ServiceBackendPort{Number: 80},
+										},
 									},
 								},
-							},
-							{
-								Path:     `/\.well-known/oauth-protected-resource/mcp(/.*)?`,
-								PathType: &pathTypeImplementationSpecific,
-								Backend: networkingv1.IngressBackend{
-									Service: &networkingv1.IngressServiceBackend{
-										Name: p.backendService,
-										Port: networkingv1.ServiceBackendPort{Number: 80},
+								{
+									Path:     `/\.well-known/oauth-protected-resource/mcp(/.*)?`,
+									PathType: &pathTypeImplementationSpecific,
+									Backend: networkingv1.IngressBackend{
+										Service: &networkingv1.IngressServiceBackend{
+											Name: p.backendService,
+											Port: networkingv1.ServiceBackendPort{Number: 80},
+										},
 									},
 								},
 							},
@@ -272,28 +276,32 @@ func (p *IngressProvisioner) buildRootIngress(name, domain, secretName string, i
 	}
 
 	return &networkingv1.Ingress{
-		Name:        name,
-		Namespace:   p.namespace,
-		Annotations: annotations,
-		Labels: map[string]string{
-			managedByLabelKey:    managedByLabelValue,
-			customDomainLabelKey: domain,
-			customDomainRoleKey:  customDomainRoleRoot,
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        name,
+			Namespace:   p.namespace,
+			Annotations: annotations,
+			Labels: map[string]string{
+				managedByLabelKey:    managedByLabelValue,
+				customDomainLabelKey: domain,
+				customDomainRoleKey:  customDomainRoleRoot,
+			},
 		},
 		Spec: networkingv1.IngressSpec{
 			IngressClassName: &nginxIngressClassName,
 			Rules: []networkingv1.IngressRule{
 				{
 					Host: domain,
-					HTTP: &networkingv1.HTTPIngressRuleValue{
-						Paths: []networkingv1.HTTPIngressPath{
-							{
-								Path:     "/$",
-								PathType: &pathTypeImplementationSpecific,
-								Backend: networkingv1.IngressBackend{
-									Service: &networkingv1.IngressServiceBackend{
-										Name: p.backendService,
-										Port: networkingv1.ServiceBackendPort{Number: 80},
+					IngressRuleValue: networkingv1.IngressRuleValue{
+						HTTP: &networkingv1.HTTPIngressRuleValue{
+							Paths: []networkingv1.HTTPIngressPath{
+								{
+									Path:     "/$",
+									PathType: &pathTypeImplementationSpecific,
+									Backend: networkingv1.IngressBackend{
+										Service: &networkingv1.IngressServiceBackend{
+											Name: p.backendService,
+											Port: networkingv1.ServiceBackendPort{Number: 80},
+										},
 									},
 								},
 							},
@@ -324,28 +332,32 @@ func (p *IngressProvisioner) buildWellKnownRootIngress(name, domain, secretName 
 	}
 
 	return &networkingv1.Ingress{
-		Name:        name,
-		Namespace:   p.namespace,
-		Annotations: annotations,
-		Labels: map[string]string{
-			managedByLabelKey:    managedByLabelValue,
-			customDomainLabelKey: domain,
-			customDomainRoleKey:  customDomainRoleWellKnownRoot,
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        name,
+			Namespace:   p.namespace,
+			Annotations: annotations,
+			Labels: map[string]string{
+				managedByLabelKey:    managedByLabelValue,
+				customDomainLabelKey: domain,
+				customDomainRoleKey:  customDomainRoleWellKnownRoot,
+			},
 		},
 		Spec: networkingv1.IngressSpec{
 			IngressClassName: &nginxIngressClassName,
 			Rules: []networkingv1.IngressRule{
 				{
 					Host: domain,
-					HTTP: &networkingv1.HTTPIngressRuleValue{
-						Paths: []networkingv1.HTTPIngressPath{
-							{
-								Path:     `/\.well-known/(oauth-protected-resource|oauth-authorization-server)$`,
-								PathType: &pathTypeImplementationSpecific,
-								Backend: networkingv1.IngressBackend{
-									Service: &networkingv1.IngressServiceBackend{
-										Name: p.backendService,
-										Port: networkingv1.ServiceBackendPort{Number: 80},
+					IngressRuleValue: networkingv1.IngressRuleValue{
+						HTTP: &networkingv1.HTTPIngressRuleValue{
+							Paths: []networkingv1.HTTPIngressPath{
+								{
+									Path:     `/\.well-known/(oauth-protected-resource|oauth-authorization-server)$`,
+									PathType: &pathTypeImplementationSpecific,
+									Backend: networkingv1.IngressBackend{
+										Service: &networkingv1.IngressServiceBackend{
+											Name: p.backendService,
+											Port: networkingv1.ServiceBackendPort{Number: 80},
+										},
 									},
 								},
 							},

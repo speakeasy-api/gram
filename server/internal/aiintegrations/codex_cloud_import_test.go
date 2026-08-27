@@ -224,9 +224,9 @@ func TestCodexCloudEventCreatedAtCountsFallbacks(t *testing.T) {
 	t.Parallel()
 
 	source := newCodexCloudTestSource(chatgptConversationConfig(), nil)
-	event := codexCloudEvent{
+	event := codexCloudEvent{}
 
-		Timestamp: "2026-07-28T10:00:00Z"}
+	event.Timestamp = "2026-07-28T10:00:00Z"
 	require.Equal(t, time.Date(2026, 7, 28, 10, 0, 0, 0, time.UTC), source.eventCreatedAt(event))
 	require.Zero(t, source.progress.TimestampFallbacks)
 

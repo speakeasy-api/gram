@@ -63,11 +63,13 @@ func riskPolicyAudiencePrincipals(audienceType string, principalURNs []string) (
 
 func clearRiskPolicyAudienceGrants(ctx context.Context, db repo.DBTX, organizationID string, policyID string) error {
 	if err := authz.ReplaceGrantAudience(ctx, db, authz.ResourceGrant{
-		OrganizationID: organizationID,
-		Scope:          authz.ScopeRiskPolicyEvaluate,
-		ResourceID:     policyID,
-		Principals:     nil,
-		Selector:       authz.NewSelector(authz.ScopeRiskPolicyEvaluate, policyID),
+		Resource: authz.Resource{
+			OrganizationID: organizationID,
+			Scope:          authz.ScopeRiskPolicyEvaluate,
+			ResourceID:     policyID,
+		},
+		Principals: nil,
+		Selector:   authz.NewSelector(authz.ScopeRiskPolicyEvaluate, policyID),
 	}); err != nil {
 		return fmt.Errorf("clear risk policy audience grants: %w", err)
 	}

@@ -211,11 +211,13 @@ func newScannerWithPIEngine(t *testing.T, ti *testInstance, flags *feature.InMem
 func grantRiskPolicyToAllUsers(t *testing.T, ti *testInstance, ctx context.Context, organizationID string, policyID uuid.UUID) {
 	t.Helper()
 	require.NoError(t, authz.ReplaceGrantsForResource(ctx, ti.conn, authz.ResourceGrant{
-		OrganizationID: organizationID,
-		Scope:          authz.ScopeRiskPolicyEvaluate,
-		ResourceID:     policyID.String(),
-		Principals:     []urn.Principal{authz.AllUsersPrincipal()},
-		Selector:       nil,
+		Resource: authz.Resource{
+			OrganizationID: organizationID,
+			Scope:          authz.ScopeRiskPolicyEvaluate,
+			ResourceID:     policyID.String(),
+		},
+		Principals: []urn.Principal{authz.AllUsersPrincipal()},
+		Selector:   nil,
 	}))
 }
 

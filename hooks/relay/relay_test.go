@@ -1501,11 +1501,13 @@ func TestEnvelopeReportsBinaryVersion(t *testing.T) {
 	BinaryVersion = "9.9.9"
 
 	payload := buildEnvelope(&agenthooks.PromptEvent{
-		Provider:   agenthooks.ProviderCodex,
-		Kind:       agenthooks.KindPromptSubmitted,
-		NativeName: "UserPromptSubmit",
-		Session:    agenthooks.SessionInfo{ID: "s1"},
-		Prompt:     "hello",
+		Event: agenthooks.Event{
+			Provider:   agenthooks.ProviderCodex,
+			Kind:       agenthooks.KindPromptSubmitted,
+			NativeName: "UserPromptSubmit",
+			Session:    agenthooks.SessionInfo{ID: "s1"},
+		},
+		Prompt: "hello",
 	}, "host")
 
 	require.NotNil(t, payload.Source.AdapterVersion)
@@ -1540,10 +1542,12 @@ func TestSessionOfNamespacesSharedTurnIDs(t *testing.T) {
 
 func TestMCPInventoryEnvelopeRedactsCredentials(t *testing.T) {
 	payload := buildEnvelope(&agenthooks.MCPInventoryEvent{
-		Provider:   agenthooks.ProviderClaudeCode,
-		Kind:       agenthooks.KindMCPInventory,
-		NativeName: "MCPInventory",
-		Session:    agenthooks.SessionInfo{ID: "inventory-session"},
+		Event: agenthooks.Event{
+			Provider:   agenthooks.ProviderClaudeCode,
+			Kind:       agenthooks.KindMCPInventory,
+			NativeName: "MCPInventory",
+			Session:    agenthooks.SessionInfo{ID: "inventory-session"},
+		},
 		Servers: []agenthooks.MCPServer{
 			{Name: "remote", URL: "https://user:password@mcp.example.com/sse?api_key=secret&workspace=acme", Command: ""},
 			{Name: "local", URL: "", Command: "env GITHUB_TOKEN=secret local-mcp --auth token"},
@@ -1622,12 +1626,14 @@ func TestRunnerRelaysIncompleteEmptyMCPInventory(t *testing.T) {
 
 func TestMCPInventoryEnvelopeReportsIncompleteSnapshot(t *testing.T) {
 	payload := buildEnvelope(&agenthooks.MCPInventoryEvent{
-		Provider:   agenthooks.ProviderCodex,
-		Kind:       agenthooks.KindMCPInventory,
-		NativeName: "MCPInventory",
-		Session:    agenthooks.SessionInfo{ID: "partial-inventory-session"},
-		Servers:    []agenthooks.MCPServer{{Name: "known", URL: "https://mcp.example.test"}},
-		Complete:   false,
+		Event: agenthooks.Event{
+			Provider:   agenthooks.ProviderCodex,
+			Kind:       agenthooks.KindMCPInventory,
+			NativeName: "MCPInventory",
+			Session:    agenthooks.SessionInfo{ID: "partial-inventory-session"},
+		},
+		Servers:  []agenthooks.MCPServer{{Name: "known", URL: "https://mcp.example.test"}},
+		Complete: false,
 	}, "host")
 
 	require.NotNil(t, payload.Data)

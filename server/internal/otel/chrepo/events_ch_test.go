@@ -124,13 +124,15 @@ func TestListEventLog_MergesLogsAndSpansNewestFirst(t *testing.T) {
 
 	timeStart, timeEnd := eventTestWindow(base)
 	items, err := queries.ListEventLog(ctx, ListEventLogParams{
-		OrganizationID:     orgID,
-		TimeStart:          timeStart,
-		TimeEnd:            timeEnd,
-		Kinds:              nil,
-		Sources:            nil,
-		Names:              nil,
-		Search:             "",
+		EventLogFilters: EventLogFilters{
+			OrganizationID: orgID,
+			TimeStart:      timeStart,
+			TimeEnd:        timeEnd,
+			Kinds:          nil,
+			Sources:        nil,
+			Names:          nil,
+			Search:         "",
+		},
 		CursorTimeUnixNano: 0,
 		Limit:              10,
 	})
@@ -232,13 +234,15 @@ func TestListEventLog_TruncatesBodyPreview(t *testing.T) {
 
 	timeStart, timeEnd := eventTestWindow(base)
 	items, err := queries.ListEventLog(ctx, ListEventLogParams{
-		OrganizationID:     orgID,
-		TimeStart:          timeStart,
-		TimeEnd:            timeEnd,
-		Kinds:              nil,
-		Sources:            nil,
-		Names:              nil,
-		Search:             "",
+		EventLogFilters: EventLogFilters{
+			OrganizationID: orgID,
+			TimeStart:      timeStart,
+			TimeEnd:        timeEnd,
+			Kinds:          nil,
+			Sources:        nil,
+			Names:          nil,
+			Search:         "",
+		},
 		CursorTimeUnixNano: 0,
 		Limit:              1,
 	})
@@ -368,13 +372,15 @@ func TestGetEventVolume_BucketsLogsAndSpans(t *testing.T) {
 	insertOtelSpan(t, conn, newOtelSpanFixture(orgID, base.Add(time.Minute+5*time.Second).UnixNano()))
 
 	rows, err := queries.GetEventVolume(ctx, GetEventVolumeParams{
-		OrganizationID:  orgID,
-		TimeStart:       base.UnixNano(),
-		TimeEnd:         base.Add(2 * time.Minute).UnixNano(),
-		Kinds:           nil,
-		Sources:         nil,
-		Names:           nil,
-		Search:          "",
+		EventLogFilters: EventLogFilters{
+			OrganizationID: orgID,
+			TimeStart:      base.UnixNano(),
+			TimeEnd:        base.Add(2 * time.Minute).UnixNano(),
+			Kinds:          nil,
+			Sources:        nil,
+			Names:          nil,
+			Search:         "",
+		},
 		IntervalSeconds: 60,
 	})
 	require.NoError(t, err)

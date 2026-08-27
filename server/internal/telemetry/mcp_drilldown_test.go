@@ -62,10 +62,12 @@ func TestGetMCPToolOutcomeBreakdown_SplitsFailuresByTool(t *testing.T) {
 	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	rows, err := ti.chClient.GetMCPToolOutcomeBreakdown(ctx, telemetryRepo.GetMCPToolOutcomeBreakdownParams{
-		GramProjectIDs: []string{projectID},
-		ToolsetSlugs:   []string{"billing"},
-		TimeStart:      now.Add(-time.Hour).UnixNano(),
-		TimeEnd:        now.UnixNano(),
+		GetMCPOutcomeBreakdownParams: telemetryRepo.GetMCPOutcomeBreakdownParams{
+			GramProjectIDs: []string{projectID},
+			ToolsetSlugs:   []string{"billing"},
+			TimeStart:      now.Add(-time.Hour).UnixNano(),
+			TimeEnd:        now.UnixNano(),
+		},
 	})
 	require.NoError(t, err)
 
@@ -217,11 +219,13 @@ func TestListMCPTraceReferences_CapsThePageSize(t *testing.T) {
 	// An unbounded or oversized request is clamped rather than honoured, so a
 	// caller cannot turn drill-down into a bulk export.
 	rows, err := ti.chClient.ListMCPTraceReferences(ctx, telemetryRepo.ListMCPTraceReferencesParams{
-		GramProjectIDs: []string{projectID},
-		ToolsetSlugs:   []string{"billing"},
-		TimeStart:      now.Add(-time.Hour).UnixNano(),
-		TimeEnd:        now.UnixNano(),
-		Limit:          100_000,
+		GetMCPOutcomeBreakdownParams: telemetryRepo.GetMCPOutcomeBreakdownParams{
+			GramProjectIDs: []string{projectID},
+			ToolsetSlugs:   []string{"billing"},
+			TimeStart:      now.Add(-time.Hour).UnixNano(),
+			TimeEnd:        now.UnixNano(),
+		},
+		Limit: 100_000,
 	})
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
@@ -248,10 +252,12 @@ func TestMCPDrilldownTraceIDsAreStable(t *testing.T) {
 	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	params := telemetryRepo.ListMCPTraceReferencesParams{
-		GramProjectIDs: []string{projectID},
-		ToolsetSlugs:   []string{"billing"},
-		TimeStart:      now.Add(-time.Hour).UnixNano(),
-		TimeEnd:        now.UnixNano(),
+		GetMCPOutcomeBreakdownParams: telemetryRepo.GetMCPOutcomeBreakdownParams{
+			GramProjectIDs: []string{projectID},
+			ToolsetSlugs:   []string{"billing"},
+			TimeStart:      now.Add(-time.Hour).UnixNano(),
+			TimeEnd:        now.UnixNano(),
+		},
 	}
 	first, err := ti.chClient.ListMCPTraceReferences(ctx, params)
 	require.NoError(t, err)

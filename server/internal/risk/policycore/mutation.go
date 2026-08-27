@@ -374,11 +374,13 @@ func (c *Core) requireMutationDependencies() (*MutationDependencies, error) {
 
 func replaceAudience(ctx context.Context, db repo.DBTX, organizationID, policyID string, principals []urn.Principal) error {
 	if err := authz.ReplaceGrantAudience(ctx, db, authz.ResourceGrant{
-		OrganizationID: organizationID,
-		Scope:          authz.ScopeRiskPolicyEvaluate,
-		ResourceID:     policyID,
-		Principals:     principals,
-		Selector:       authz.NewSelector(authz.ScopeRiskPolicyEvaluate, policyID),
+		Resource: authz.Resource{
+			OrganizationID: organizationID,
+			Scope:          authz.ScopeRiskPolicyEvaluate,
+			ResourceID:     policyID,
+		},
+		Principals: principals,
+		Selector:   authz.NewSelector(authz.ScopeRiskPolicyEvaluate, policyID),
 	}); err != nil {
 		return fmt.Errorf("replace risk policy audience grants: %w", err)
 	}

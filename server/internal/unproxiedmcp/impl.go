@@ -291,7 +291,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 	// bounding the probe's own context isn't enough to bound *this call's*
 	// latency. The goroutine keeps running to let that cleanup finish
 	// naturally; only the response to the caller is time-boxed.
-	probeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), listToolsTimeout) //nolint:gosec // cancel is deferred inside the goroutine below
+	probeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), listToolsTimeout)
 	resultCh := make(chan *gen.ListUnproxiedMcpServerToolsResult, 1)
 	go func() {
 		defer cancel()

@@ -37,8 +37,8 @@ func TestResolveActivatedSkillPreEventIsNameOnly(t *testing.T) {
 	input, err := json.Marshal(map[string]string{"skill": "review"})
 	require.NoError(t, err)
 	event := &agenthooks.ToolPreEvent{
-		Provider: agenthooks.ProviderClaudeCode, Kind: agenthooks.KindToolPre,
-		Tool: agenthooks.ToolCall{Name: "Skill", Input: input},
+		Event: agenthooks.Event{Provider: agenthooks.ProviderClaudeCode, Kind: agenthooks.KindToolPre},
+		Tool:  agenthooks.ToolCall{Name: "Skill", Input: input},
 	}
 
 	resolved := resolveActivatedSkill(event, activatedSkillPayload("review"))
@@ -69,7 +69,7 @@ func completedClaudeSkillEvent(t *testing.T, name, content string) *agenthooks.T
 	output, err := json.Marshal(content)
 	require.NoError(t, err)
 	return &agenthooks.ToolPostEvent{
-		Provider: agenthooks.ProviderClaudeCode, Kind: agenthooks.KindToolPost,
+		Event:  agenthooks.Event{Provider: agenthooks.ProviderClaudeCode, Kind: agenthooks.KindToolPost},
 		Tool:   agenthooks.ToolCall{Name: "Skill", Input: input},
 		Output: output,
 		Failed: false,
@@ -81,8 +81,8 @@ func codexToolEvent(t *testing.T, cwd, name string, input any) *agenthooks.ToolP
 	encoded, err := json.Marshal(input)
 	require.NoError(t, err)
 	return &agenthooks.ToolPreEvent{
-		Provider: agenthooks.ProviderCodex, Kind: agenthooks.KindToolPre, Session: agenthooks.SessionInfo{CWD: cwd},
-		Tool: agenthooks.ToolCall{Name: name, Canonical: agenthooks.CanonicalToolFor(name), Input: encoded},
+		Event: agenthooks.Event{Provider: agenthooks.ProviderCodex, Kind: agenthooks.KindToolPre, Session: agenthooks.SessionInfo{CWD: cwd}},
+		Tool:  agenthooks.ToolCall{Name: name, Canonical: agenthooks.CanonicalToolFor(name), Input: encoded},
 	}
 }
 

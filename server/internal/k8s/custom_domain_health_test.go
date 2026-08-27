@@ -170,11 +170,11 @@ func TestCheckCustomDomainInfrastructureExpectedRootPresentIsHealthy(t *testing.
 	expiresAt := now.Add(30 * 24 * time.Hour)
 	clients := newCustomDomainHealthTestClients(t, namespace, domain, resourceName, secretName, now.Add(-time.Hour), expiresAt, true)
 	_, err := clients.Clientset.NetworkingV1().Ingresses(namespace).Create(t.Context(), &networkingv1.Ingress{
-		Name: rootName, Namespace: namespace,
+		ObjectMeta: metav1.ObjectMeta{Name: rootName, Namespace: namespace},
 	}, metav1.CreateOptions{})
 	require.NoError(t, err)
 	_, err = clients.Clientset.NetworkingV1().Ingresses(namespace).Create(t.Context(), &networkingv1.Ingress{
-		Name: wellKnownRootName, Namespace: namespace,
+		ObjectMeta: metav1.ObjectMeta{Name: wellKnownRootName, Namespace: namespace},
 	}, metav1.CreateOptions{})
 	require.NoError(t, err)
 
@@ -206,7 +206,7 @@ func TestCheckCustomDomainInfrastructureMissingExpectedWellKnownRootIsUnhealthy(
 	now := time.Now().UTC()
 	clients := newCustomDomainHealthTestClients(t, namespace, domain, resourceName, secretName, now.Add(-time.Hour), now.Add(30*24*time.Hour), true)
 	_, err := clients.Clientset.NetworkingV1().Ingresses(namespace).Create(t.Context(), &networkingv1.Ingress{
-		Name: rootName, Namespace: namespace,
+		ObjectMeta: metav1.ObjectMeta{Name: rootName, Namespace: namespace},
 	}, metav1.CreateOptions{})
 	require.NoError(t, err)
 
@@ -229,16 +229,20 @@ func TestListManagedCustomDomainResourcesReturnsLabeledResources(t *testing.T) {
 	const namespace = "gram-test"
 	clientset := fake.NewSimpleClientset(
 		&networkingv1.Ingress{
-			Name:      "managed-ingress",
-			Namespace: namespace,
-			Labels: map[string]string{
-				managedByLabelKey:    managedByLabelValue,
-				customDomainLabelKey: "managed.example.com",
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "managed-ingress",
+				Namespace: namespace,
+				Labels: map[string]string{
+					managedByLabelKey:    managedByLabelValue,
+					customDomainLabelKey: "managed.example.com",
+				},
 			},
 		},
 		&networkingv1.Ingress{
-			Name:      "unmanaged-ingress",
-			Namespace: namespace,
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "unmanaged-ingress",
+				Namespace: namespace,
+			},
 		},
 	)
 	clients := &KubernetesClients{
@@ -268,10 +272,10 @@ func newCustomDomainHealthTestClients(t *testing.T, namespace, domain, resourceN
 	t.Helper()
 
 	certificatePEM := newCertificatePEM(t, domain, notBefore, expiresAt)
-	ingress := &networkingv1.Ingress{Name: resourceName, Namespace: namespace}
+	ingress := &networkingv1.Ingress{ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: namespace}}
 	secret := &corev1.Secret{
-		Name: secretName, Namespace: namespace,
-		Data: map[string][]byte{corev1.TLSCertKey: certificatePEM},
+		ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: namespace},
+		Data:       map[string][]byte{corev1.TLSCertKey: certificatePEM},
 	}
 	certificate := &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": "cert-manager.io/v1",

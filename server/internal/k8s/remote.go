@@ -45,8 +45,8 @@ func NewRemoteDynamicClient(ctx context.Context, endpoint string, caCert []byte)
 	}
 
 	config := &rest.Config{
-		Host:   host,
-		CAData: caCert,
+		Host:            host,
+		TLSClientConfig: rest.TLSClientConfig{CAData: caCert},
 	}
 	config.Wrap(func(rt http.RoundTripper) http.RoundTripper {
 		return &oauth2.Transport{Source: tokenSource, Base: rt}

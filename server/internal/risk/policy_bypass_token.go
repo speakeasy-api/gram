@@ -232,13 +232,15 @@ func lookupPolicyBypassRequestClaims(ctx context.Context, c cache.Cache, tokenSt
 		BlockReason:            record.BlockReason,
 		RiskPolicyID:           record.RiskPolicyID,
 		RiskResultID:           record.RiskResultID,
-		Issuer:                 policyBypassRequestTokenIssuer,
-		Subject:                policyBypassRequestTokenSubject,
-		Audience:               nil,
-		ExpiresAt:              jwt.NewNumericDate(record.ExpiresAt),
-		NotBefore:              nil,
-		IssuedAt:               nil,
-		ID:                     record.RequestID,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    policyBypassRequestTokenIssuer,
+			Subject:   policyBypassRequestTokenSubject,
+			Audience:  nil,
+			ExpiresAt: jwt.NewNumericDate(record.ExpiresAt),
+			NotBefore: nil,
+			IssuedAt:  nil,
+			ID:        record.RequestID,
+		},
 	}
 	if err := validatePolicyBypassRequestClaims(claims); err != nil {
 		return nil, err

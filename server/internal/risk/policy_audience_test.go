@@ -101,10 +101,12 @@ func TestRiskPolicyAudience_UpdatePreservesScopedGrantsAndRefreshesURLBypassAudi
 	scopedPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, "user_scoped")
 	bypassPrincipal := authz.AllUsersPrincipal()
 	require.NoError(t, authz.GrantResourceToPrincipals(ctx, ti.conn, authz.ResourceGrant{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		Scope:          authz.ScopeRiskPolicyEvaluate,
-		ResourceID:     created.ID,
-		Principals:     []urn.Principal{scopedPrincipal},
+		Resource: authz.Resource{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			Scope:          authz.ScopeRiskPolicyEvaluate,
+			ResourceID:     created.ID,
+		},
+		Principals: []urn.Principal{scopedPrincipal},
 		Selector: authz.Selector{
 			authz.SelectorKeyResourceKind: authz.ResourceKindRiskPolicy,
 			authz.SelectorKeyResourceID:   created.ID,
@@ -112,10 +114,12 @@ func TestRiskPolicyAudience_UpdatePreservesScopedGrantsAndRefreshesURLBypassAudi
 		},
 	}))
 	require.NoError(t, authz.GrantResourceToPrincipals(ctx, ti.conn, authz.ResourceGrant{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		Scope:          authz.ScopeRiskPolicyBypass,
-		ResourceID:     created.ID,
-		Principals:     []urn.Principal{bypassPrincipal},
+		Resource: authz.Resource{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			Scope:          authz.ScopeRiskPolicyBypass,
+			ResourceID:     created.ID,
+		},
+		Principals: []urn.Principal{bypassPrincipal},
 		Selector: authz.Selector{
 			authz.SelectorKeyResourceKind: authz.ResourceKindRiskPolicy,
 			authz.SelectorKeyResourceID:   created.ID,

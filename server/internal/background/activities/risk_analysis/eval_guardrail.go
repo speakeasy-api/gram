@@ -120,17 +120,19 @@ func messageVerdictSkeleton(idx int, msg batchMessage) MessageVerdict {
 		toolName = msg.ToolCalls[0].Function.Name
 	}
 	return MessageVerdict{
-		Index:            idx,
-		Type:             msg.Type,
-		ToolName:         toolName,
-		LatencyMs:        0,
-		Matched:          false,
-		Confidence:       0,
-		Rationale:        "",
-		CostUSD:          0,
-		PromptTokens:     0,
-		CompletionTokens: 0,
-		TotalTokens:      0,
+		Index:     idx,
+		Type:      msg.Type,
+		ToolName:  toolName,
+		LatencyMs: 0,
+		Verdict: promptpolicy.Verdict{
+			Matched:          false,
+			Confidence:       0,
+			Rationale:        "",
+			CostUSD:          0,
+			PromptTokens:     0,
+			CompletionTokens: 0,
+			TotalTokens:      0,
+		},
 	}
 }
 

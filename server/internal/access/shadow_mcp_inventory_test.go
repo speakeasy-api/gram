@@ -905,11 +905,13 @@ func grantShadowMCPInventoryBypass(t *testing.T, ctx context.Context, ti *testIn
 	selector := authz.NewSelector(authz.ScopeRiskPolicyBypass, policyID)
 	selector[authz.SelectorKeyServerURL] = serverURL
 	require.NoError(t, authz.GrantResourceToPrincipals(ctx, ti.conn, authz.ResourceGrant{
-		OrganizationID: organizationID,
-		Scope:          authz.ScopeRiskPolicyBypass,
-		ResourceID:     policyID,
-		Principals:     []urn.Principal{authz.AllUsersPrincipal()},
-		Selector:       selector,
+		Resource: authz.Resource{
+			OrganizationID: organizationID,
+			Scope:          authz.ScopeRiskPolicyBypass,
+			ResourceID:     policyID,
+		},
+		Principals: []urn.Principal{authz.AllUsersPrincipal()},
+		Selector:   selector,
 	}))
 }
 
@@ -919,11 +921,13 @@ func grantShadowMCPInventoryBypassForPrincipals(t *testing.T, ctx context.Contex
 	selector := authz.NewSelector(authz.ScopeRiskPolicyBypass, policyID)
 	selector[authz.SelectorKeyServerURL] = serverURL
 	require.NoError(t, authz.GrantResourceToPrincipals(ctx, ti.conn, authz.ResourceGrant{
-		OrganizationID: organizationID,
-		Scope:          authz.ScopeRiskPolicyBypass,
-		ResourceID:     policyID,
-		Principals:     principals,
-		Selector:       selector,
+		Resource: authz.Resource{
+			OrganizationID: organizationID,
+			Scope:          authz.ScopeRiskPolicyBypass,
+			ResourceID:     policyID,
+		},
+		Principals: principals,
+		Selector:   selector,
 	}))
 }
 
@@ -931,11 +935,13 @@ func grantShadowMCPInventoryPolicyAudience(t *testing.T, ctx context.Context, ti
 	t.Helper()
 
 	require.NoError(t, authz.ReplaceGrantAudience(ctx, ti.conn, authz.ResourceGrant{
-		OrganizationID: organizationID,
-		Scope:          authz.ScopeRiskPolicyEvaluate,
-		ResourceID:     policyID,
-		Principals:     principals,
-		Selector:       authz.NewSelector(authz.ScopeRiskPolicyEvaluate, policyID),
+		Resource: authz.Resource{
+			OrganizationID: organizationID,
+			Scope:          authz.ScopeRiskPolicyEvaluate,
+			ResourceID:     policyID,
+		},
+		Principals: principals,
+		Selector:   authz.NewSelector(authz.ScopeRiskPolicyEvaluate, policyID),
 	}))
 }
 

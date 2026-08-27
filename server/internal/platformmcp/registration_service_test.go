@@ -626,7 +626,7 @@ func (s *recordingRegistrationStore) ResolveRegistrationDashboardSetup(_ context
 
 func (s *recordingRegistrationStore) IssueSetupHandoff(_ context.Context, _ Principal, binding SetupHandoffBinding, _ time.Time) (IssuedSetupHandoff, error) {
 	s.handoffCalls++
-	return IssuedSetupHandoff{ProjectID: binding.ProjectID, RegistrationID: binding.RegistrationID, ProviderKey: binding.ProviderKey, Intent: binding.Intent}, s.err
+	return IssuedSetupHandoff{SetupHandoff: SetupHandoff{ProjectID: binding.ProjectID, RegistrationID: binding.RegistrationID, ProviderKey: binding.ProviderKey, Intent: binding.Intent}}, s.err
 }
 
 type recordingIdentityProviderAttachment struct {

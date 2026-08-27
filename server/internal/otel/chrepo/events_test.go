@@ -35,13 +35,15 @@ func TestBuildListEventLogQuery_MergesBothTables(t *testing.T) {
 	t.Parallel()
 
 	sql, _, err := buildListEventLogQuery(ListEventLogParams{
-		OrganizationID:     "org-under-test",
-		TimeStart:          1,
-		TimeEnd:            2,
-		Kinds:              nil,
-		Sources:            nil,
-		Names:              nil,
-		Search:             "",
+		EventLogFilters: EventLogFilters{
+			OrganizationID: "org-under-test",
+			TimeStart:      1,
+			TimeEnd:        2,
+			Kinds:          nil,
+			Sources:        nil,
+			Names:          nil,
+			Search:         "",
+		},
 		CursorTimeUnixNano: 0,
 		Limit:              10,
 	})
@@ -63,13 +65,15 @@ func TestBuildListEventLogQuery_KindFilterDropsOtherTable(t *testing.T) {
 	t.Parallel()
 
 	logOnly := ListEventLogParams{
-		OrganizationID:     "org-under-test",
-		TimeStart:          1,
-		TimeEnd:            2,
-		Kinds:              []string{EventKindLog},
-		Sources:            nil,
-		Names:              nil,
-		Search:             "",
+		EventLogFilters: EventLogFilters{
+			OrganizationID: "org-under-test",
+			TimeStart:      1,
+			TimeEnd:        2,
+			Kinds:          []string{EventKindLog},
+			Sources:        nil,
+			Names:          nil,
+			Search:         "",
+		},
 		CursorTimeUnixNano: 0,
 		Limit:              10,
 	}
@@ -91,13 +95,15 @@ func TestBuildListEventLogQuery_CursorAddsKeysetPredicate(t *testing.T) {
 	t.Parallel()
 
 	params := ListEventLogParams{
-		OrganizationID:     "org-under-test",
-		TimeStart:          1,
-		TimeEnd:            2,
-		Kinds:              []string{EventKindLog},
-		Sources:            nil,
-		Names:              nil,
-		Search:             "",
+		EventLogFilters: EventLogFilters{
+			OrganizationID: "org-under-test",
+			TimeStart:      1,
+			TimeEnd:        2,
+			Kinds:          []string{EventKindLog},
+			Sources:        nil,
+			Names:          nil,
+			Search:         "",
+		},
 		CursorTimeUnixNano: 0,
 		Limit:              10,
 	}
@@ -116,13 +122,15 @@ func TestBuildListEventLogQuery_SearchMatchesBodyAndNameForLogsOnly(t *testing.T
 	t.Parallel()
 
 	sql, args, err := buildListEventLogQuery(ListEventLogParams{
-		OrganizationID:     "org-under-test",
-		TimeStart:          1,
-		TimeEnd:            2,
-		Kinds:              nil,
-		Sources:            nil,
-		Names:              nil,
-		Search:             "needle",
+		EventLogFilters: EventLogFilters{
+			OrganizationID: "org-under-test",
+			TimeStart:      1,
+			TimeEnd:        2,
+			Kinds:          nil,
+			Sources:        nil,
+			Names:          nil,
+			Search:         "needle",
+		},
 		CursorTimeUnixNano: 0,
 		Limit:              10,
 	})
